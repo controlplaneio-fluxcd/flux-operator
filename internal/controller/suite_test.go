@@ -1,90 +1,108 @@
-/*
-Copyright 2024 Stefan Prodan.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
+// Copyright 2024 Stefan Prodan.
+// SPDX-License-Identifier: AGPL-3.0
 
 package controller
 
 import (
+	"context"
 	"fmt"
+	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
+	"time"
 
-	. "github.com/onsi/ginkgo/v2"
+	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/runtime/conditions"
+	kcheck "github.com/fluxcd/pkg/runtime/conditions/check"
+	"github.com/fluxcd/pkg/runtime/testenv"
+	"github.com/onsi/gomega"
 	. "github.com/onsi/gomega"
-
-	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/rest"
+	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/envtest"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/yaml"
+
+	// +kubebuilder:scaffold:imports
 
 	fluxcdv1alpha1 "github.com/controlplaneio-fluxcd/fluxcd-operator/api/v1alpha1"
-	// +kubebuilder:scaffold:imports
 )
 
-// These tests use Ginkgo (BDD-style Go testing framework). Refer to
-// http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
+var (
+	controllerName = "fluxcd-operator"
+	timeout        = 5 * time.Second
+	testEnv        *testenv.Environment
+	testCtx        = ctrl.SetupSignalHandler()
+)
 
-var cfg *rest.Config
-var k8sClient client.Client
-var testEnv *envtest.Environment
-
-func TestControllers(t *testing.T) {
-	RegisterFailHandler(Fail)
-
-	RunSpecs(t, "Controller Suite")
+func NewTestScheme() *runtime.Scheme {
+	s := runtime.NewScheme()
+	utilruntime.Must(corev1.AddToScheme(s))
+	utilruntime.Must(apiextensionsv1.AddToScheme(s))
+	utilruntime.Must(fluxcdv1alpha1.AddToScheme(s))
+	return s
 }
 
-var _ = BeforeSuite(func() {
-	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
+func TestMain(m *testing.M) {
+	testEnv = testenv.New(
+		testenv.WithCRDPath(
+			filepath.Join("..", "..", "config", "crd", "bases"),
+		),
+		testenv.WithScheme(NewTestScheme()),
+	)
 
-	By("bootstrapping test environment")
-	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases")},
-		ErrorIfCRDPathMissing: true,
+	go func() {
+		fmt.Println("Starting the test environment")
+		if err := testEnv.Start(testCtx); err != nil {
+			panic(fmt.Sprintf("Failed to start the test environment manager: %v", err))
+		}
+	}()
+	<-testEnv.Manager.Elected()
 
-		// The BinaryAssetsDirectory is only required if you want to run the tests directly
-		// without call the makefile target test. If not informed it will look for the
-		// default path defined in controller-runtime which is /usr/local/kubebuilder/.
-		// Note that you must have the required binaries setup under the bin directory to perform
-		// the tests directly. When we run make test it will be setup and used automatically.
-		BinaryAssetsDirectory: filepath.Join("..", "..", "bin", "k8s",
-			fmt.Sprintf("1.30.0-%s-%s", runtime.GOOS, runtime.GOARCH)),
+	code := m.Run()
+
+	fmt.Println("Stopping the test environment")
+	if err := testEnv.Stop(); err != nil {
+		panic(fmt.Sprintf("Failed to stop the test environment: %v", err))
 	}
 
-	var err error
-	// cfg is defined in this file globally.
-	cfg, err = testEnv.Start()
-	Expect(err).NotTo(HaveOccurred())
-	Expect(cfg).NotTo(BeNil())
+	os.Exit(code)
+}
 
-	err = fluxcdv1alpha1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
+func getFluxInstanceReconciler() *FluxInstanceReconciler {
+	return &FluxInstanceReconciler{
+		Client:        testEnv.Client,
+		Scheme:        NewTestScheme(),
+		StatusManager: controllerName,
+		EventRecorder: testEnv.GetEventRecorderFor(controllerName),
+	}
+}
 
-	// +kubebuilder:scaffold:scheme
+func logObjectStatus(t *testing.T, obj client.Object) {
+	u, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
+	status, _, _ := unstructured.NestedFieldCopy(u, "status")
+	sts, _ := yaml.Marshal(status)
+	t.Log(obj.GetName(), "status:\n", string(sts))
+}
 
-	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
-	Expect(err).NotTo(HaveOccurred())
-	Expect(k8sClient).NotTo(BeNil())
+func checkInstanceReadiness(g *gomega.WithT, obj *fluxcdv1alpha1.FluxInstance) {
+	statusCheck := kcheck.NewInProgressChecker(testEnv.Client)
+	statusCheck.DisableFetch = true
+	statusCheck.WithT(g).CheckErr(context.Background(), obj)
+	g.Expect(conditions.IsTrue(obj, meta.ReadyCondition)).To(BeTrue())
+}
 
-})
-
-var _ = AfterSuite(func() {
-	By("tearing down the test environment")
-	err := testEnv.Stop()
-	Expect(err).NotTo(HaveOccurred())
-})
+func getEvents(objName string) []corev1.Event {
+	var result []corev1.Event
+	events := &corev1.EventList{}
+	_ = testEnv.Client.List(context.Background(), events)
+	for _, event := range events.Items {
+		if event.InvolvedObject.Name == objName {
+			result = append(result, event)
+		}
+	}
+	return result
+}

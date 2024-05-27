@@ -1,8 +1,10 @@
-resources:
-- manager.yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+resources:
+- account.yaml
+- deployment.yaml
+- service.yaml
 images:
-- name: controller
-  newName: example.com/fluxcd-operator
+- name: fluxcd-operator
+  newName: ghcr.io/controlplaneio-fluxcd/fluxcd-operator
   newTag: v0.0.1

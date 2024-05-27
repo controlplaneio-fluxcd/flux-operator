@@ -1,0 +1,70 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fluxcd-operator
+  labels:
+    app.kubernetes.io/name: fluxcd-operator
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: fluxcd-operator
+  replicas: 1
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+      labels:
+        app.kubernetes.io/name: fluxcd-operator
+    spec:
+      serviceAccountName: fluxcd-operator
+      terminationGracePeriodSeconds: 10
+      affinity:
+       nodeAffinity:
+         requiredDuringSchedulingIgnoredDuringExecution:
+           nodeSelectorTerms:
+             - matchExpressions:
+               - key: kubernetes.io/os
+                 operator: In
+                 values:
+                   - linux
+      containers:
+      - name: manager
+        image: fluxcd-operator:latest
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - "ALL"
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+        env:
+          - name: RUNTIME_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+        volumeMounts:
+          - name: temp
+            mountPath: /tmp
+      volumes:
+        - name: temp
+          emptyDir: {}

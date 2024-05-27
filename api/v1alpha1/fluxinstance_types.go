@@ -1,41 +1,56 @@
-/*
-Copyright 2024 Stefan Prodan.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
+// Copyright 2024 Stefan Prodan.
+// SPDX-License-Identifier: AGPL-3.0
 
 package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/fluxcd/pkg/apis/kustomize"
+	"github.com/fluxcd/pkg/apis/meta"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+const (
+	FluxInstanceKind      = "FluxInstance"
+	FluxInstanceFinalizer = "finalizers.fluxcd.io"
+)
 
 // FluxInstanceSpec defines the desired state of FluxInstance
 type FluxInstanceSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// Kustomize holds a set of patches that can be applied to the
+	// Flux installation, to customize the way Flux operates.
+	// +optional
+	Kustomize *Kustomize `json:"kustomize,omitempty"`
+}
 
-	// Foo is an example field of FluxInstance. Edit fluxinstance_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+// Kustomize specification.
+type Kustomize struct {
+	// Strategic merge and JSON patches, defined as inline YAML objects,
+	// capable of targeting objects based on kind, label and annotation selectors.
+	// +optional
+	Patches []kustomize.Patch `json:"patches,omitempty"`
 }
 
 // FluxInstanceStatus defines the observed state of FluxInstance
 type FluxInstanceStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	meta.ReconcileRequestStatus `json:",inline"`
+
+	// ObservedGeneration is the last reconciled generation.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+// GetConditions returns the status conditions of the object.
+func (in *FluxInstance) GetConditions() []metav1.Condition {
+	return in.Status.Conditions
+}
+
+// SetConditions sets the status conditions on the object.
+func (in *FluxInstance) SetConditions(conditions []metav1.Condition) {
+	in.Status.Conditions = conditions
 }
 
 // +kubebuilder:object:root=true
