@@ -4,6 +4,10 @@
 package v1alpha1
 
 import (
+	"fmt"
+	"strings"
+	"time"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fluxcd/pkg/apis/kustomize"
@@ -11,8 +15,15 @@ import (
 )
 
 const (
-	FluxInstanceKind      = "FluxInstance"
-	FluxInstanceFinalizer = "finalizers.fluxcd.io"
+	FluxInstanceKind = "FluxInstance"
+	EnabledValue     = "enabled"
+	DisabledValue    = "disabled"
+)
+
+var (
+	Finalizer                = fmt.Sprintf("%s/finalizer", GroupVersion.Group)
+	ReconcileAnnotation      = fmt.Sprintf("%s/reconcile", GroupVersion.Group)
+	ReconcileEveryAnnotation = fmt.Sprintf("%s/reconcileEvery", GroupVersion.Group)
 )
 
 // FluxInstanceSpec defines the desired state of FluxInstance
@@ -51,6 +62,24 @@ func (in *FluxInstance) GetConditions() []metav1.Condition {
 // SetConditions sets the status conditions on the object.
 func (in *FluxInstance) SetConditions(conditions []metav1.Condition) {
 	in.Status.Conditions = conditions
+}
+
+// GetInterval returns the interval at which the object should be reconciled.
+// If no interval is set, the default is 60 minutes.
+func (in *FluxInstance) GetInterval() time.Duration {
+	val, ok := in.GetAnnotations()[ReconcileAnnotation]
+	if ok && strings.ToLower(val) == DisabledValue {
+		return 0
+	}
+	val, ok = in.GetAnnotations()[ReconcileEveryAnnotation]
+	if !ok {
+		return 60 * time.Minute
+	}
+	interval, err := time.ParseDuration(val)
+	if err != nil {
+		return 60 * time.Minute
+	}
+	return interval
 }
 
 // +kubebuilder:object:root=true

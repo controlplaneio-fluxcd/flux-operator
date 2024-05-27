@@ -95,7 +95,10 @@ func main() {
 		Scheme:        mgr.GetScheme(),
 		StatusManager: controllerName,
 		EventRecorder: mgr.GetEventRecorderFor(controllerName),
-	}).SetupWithManager(mgr); err != nil {
+	}).SetupWithManager(mgr,
+		controller.FluxInstanceReconcilerOptions{
+			RateLimiter: runtimeCtrl.GetRateLimiter(rateLimiterOptions),
+		}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", fluxcdv1alpha1.FluxInstanceKind)
 		os.Exit(1)
 	}

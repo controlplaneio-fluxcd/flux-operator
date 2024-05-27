@@ -17,9 +17,8 @@ import (
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
 	kuberecorder "k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	fluxcdv1alpha1 "github.com/controlplaneio-fluxcd/fluxcd-operator/api/v1alpha1"
 )
@@ -41,7 +40,6 @@ type FluxInstanceReconciler struct {
 // move the current state of the cluster closer to the desired state.
 func (r *FluxInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
 	log := ctrl.LoggerFrom(ctx)
-	reconcileStart := time.Now()
 
 	obj := &fluxcdv1alpha1.FluxInstance{}
 	if err := r.Get(ctx, req.NamespacedName, obj); err != nil {
@@ -54,48 +52,76 @@ func (r *FluxInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	// Finalise the reconciliation and report the results.
 	defer func() {
 		if err := r.finalizeStatus(ctx, obj, patcher); err != nil {
+			log.Error(err, "failed to update status")
 			retErr = kerrors.NewAggregate([]error{retErr, err})
-		}
-
-		if conditions.IsReady(obj) {
-			msg := fmt.Sprintf("Reconciliation finished in %s", time.Since(reconcileStart).String())
-			log.Info(msg, "generation", obj.GetGeneration())
-			r.EventRecorder.Event(obj, corev1.EventTypeNormal, meta.SucceededReason, msg)
 		}
 	}()
 
-	// Reconcile the object.
-	reconcileErr := r.reconcile(ctx, obj, patcher)
-	if reconcileErr != nil {
-		return ctrl.Result{}, reconcileErr
+	// Uninstall if the object is under deletion.
+	if !obj.ObjectMeta.DeletionTimestamp.IsZero() {
+		return r.finalize(ctx, obj)
 	}
 
-	// Mark the object as ready.
-	conditions.MarkTrue(obj,
-		meta.ReadyCondition,
-		meta.SucceededReason,
-		fmt.Sprintf("Applied revision: %v", obj.GetGeneration()))
+	// Add the finalizer if it does not exist.
+	if !controllerutil.ContainsFinalizer(obj, fluxcdv1alpha1.Finalizer) {
+		log.Info("Adding finalizer", "finalizer", fluxcdv1alpha1.Finalizer)
+		controllerutil.AddFinalizer(obj, fluxcdv1alpha1.Finalizer)
+		return ctrl.Result{Requeue: true}, nil
+	}
 
-	return ctrl.Result{}, nil
+	// Reconcile the object.
+	return r.reconcile(ctx, obj, patcher)
 }
 
 func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 	obj *fluxcdv1alpha1.FluxInstance,
-	patcher *patch.SerialPatcher) error {
+	patcher *patch.SerialPatcher) (ctrl.Result, error) {
+	log := ctrl.LoggerFrom(ctx)
+	reconcileStart := time.Now()
 
 	// Mark the object as reconciling.
+	msg := "Reconciliation in progress"
 	conditions.MarkUnknown(obj,
 		meta.ReadyCondition,
 		meta.ProgressingReason,
-		"Reconciliation in progress")
+		msg)
 	conditions.MarkReconciling(obj,
 		meta.ProgressingReason,
-		"Reconciliation in progress")
+		msg)
 	if err := r.patch(ctx, obj, patcher); err != nil {
-		return fmt.Errorf("failed to update status: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
+	}
+	r.EventRecorder.Event(obj, corev1.EventTypeNormal, meta.ProgressingReason, msg)
+
+	msg = fmt.Sprintf("Reconciliation finished in %s", time.Since(reconcileStart).String())
+	conditions.MarkTrue(obj,
+		meta.ReadyCondition,
+		meta.SucceededReason,
+		msg)
+	log.Info(msg, "generation", obj.GetGeneration())
+	r.EventRecorder.Event(obj, corev1.EventTypeNormal, meta.ReconciliationSucceededReason, msg)
+
+	result := ctrl.Result{}
+	if obj.GetInterval() > 0 {
+		result.RequeueAfter = obj.GetInterval()
 	}
 
-	return nil
+	return result, nil
+}
+
+func (r *FluxInstanceReconciler) finalize(ctx context.Context,
+	obj *fluxcdv1alpha1.FluxInstance) (ctrl.Result, error) {
+	reconcileStart := time.Now()
+	log := ctrl.LoggerFrom(ctx)
+
+	controllerutil.RemoveFinalizer(obj, fluxcdv1alpha1.Finalizer)
+
+	msg := fmt.Sprintf("Uninstallation completed in %v", time.Since(reconcileStart).String())
+	log.Info(msg)
+	r.EventRecorder.Event(obj, corev1.EventTypeNormal, meta.SucceededReason, msg)
+
+	// Stop reconciliation as the object is being deleted
+	return ctrl.Result{}, nil
 }
 
 func (r *FluxInstanceReconciler) finalizeStatus(ctx context.Context,
@@ -153,14 +179,4 @@ func (r *FluxInstanceReconciler) patch(ctx context.Context,
 	}
 
 	return nil
-}
-
-// SetupWithManager sets up the controller with the Manager.
-func (r *FluxInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&fluxcdv1alpha1.FluxInstance{},
-			builder.WithPredicates(
-				predicate.GenerationChangedPredicate{},
-				predicate.AnnotationChangedPredicate{},
-			)).Complete(r)
 }

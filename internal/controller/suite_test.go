@@ -33,8 +33,9 @@ import (
 
 var (
 	controllerName = "fluxcd-operator"
-	timeout        = 5 * time.Second
+	timeout        = 30 * time.Second
 	testEnv        *testenv.Environment
+	testClient     client.Client
 	testCtx        = ctrl.SetupSignalHandler()
 )
 
@@ -53,6 +54,12 @@ func TestMain(m *testing.M) {
 		),
 		testenv.WithScheme(NewTestScheme()),
 	)
+
+	var err error
+	testClient, err = client.New(testEnv.Config, client.Options{Scheme: NewTestScheme()})
+	if err != nil {
+		panic(fmt.Sprintf("Failed to create test environment client: %v", err))
+	}
 
 	go func() {
 		fmt.Println("Starting the test environment")
@@ -74,7 +81,7 @@ func TestMain(m *testing.M) {
 
 func getFluxInstanceReconciler() *FluxInstanceReconciler {
 	return &FluxInstanceReconciler{
-		Client:        testEnv.Client,
+		Client:        testClient,
 		Scheme:        NewTestScheme(),
 		StatusManager: controllerName,
 		EventRecorder: testEnv.GetEventRecorderFor(controllerName),
@@ -89,7 +96,7 @@ func logObjectStatus(t *testing.T, obj client.Object) {
 }
 
 func checkInstanceReadiness(g *gomega.WithT, obj *fluxcdv1alpha1.FluxInstance) {
-	statusCheck := kcheck.NewInProgressChecker(testEnv.Client)
+	statusCheck := kcheck.NewInProgressChecker(testClient)
 	statusCheck.DisableFetch = true
 	statusCheck.WithT(g).CheckErr(context.Background(), obj)
 	g.Expect(conditions.IsTrue(obj, meta.ReadyCondition)).To(BeTrue())
@@ -98,7 +105,7 @@ func checkInstanceReadiness(g *gomega.WithT, obj *fluxcdv1alpha1.FluxInstance) {
 func getEvents(objName string) []corev1.Event {
 	var result []corev1.Event
 	events := &corev1.EventList{}
-	_ = testEnv.Client.List(context.Background(), events)
+	_ = testClient.List(context.Background(), events)
 	for _, event := range events.Items {
 		if event.InvolvedObject.Name == objName {
 			result = append(result, event)
