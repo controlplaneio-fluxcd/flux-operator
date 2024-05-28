@@ -45,11 +45,11 @@ func TestFluxInstanceReconciler_Install(t *testing.T) {
 	g.Expect(r.Requeue).To(BeTrue())
 
 	// Check if the finalizer was added.
-	result := &fluxcdv1alpha1.FluxInstance{}
-	err = testEnv.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	resultInit := &fluxcdv1alpha1.FluxInstance{}
+	err = testEnv.Get(ctx, client.ObjectKeyFromObject(obj), resultInit)
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(result.Finalizers).To(ContainElement(fluxcdv1alpha1.Finalizer))
-	g.Expect(result.Status.ObservedGeneration).To(BeEquivalentTo(-1))
+	g.Expect(resultInit.Finalizers).To(ContainElement(fluxcdv1alpha1.Finalizer))
+	g.Expect(resultInit.Status.ObservedGeneration).To(BeEquivalentTo(-1))
 
 	r, err = reconciler.Reconcile(ctx, reconcile.Request{
 		NamespacedName: client.ObjectKeyFromObject(obj),
@@ -58,14 +58,13 @@ func TestFluxInstanceReconciler_Install(t *testing.T) {
 	g.Expect(r.Requeue).To(BeFalse())
 
 	// Check if the instance was installed.
-	result = &fluxcdv1alpha1.FluxInstance{}
+	result := &fluxcdv1alpha1.FluxInstance{}
 	err = testEnv.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	logObjectStatus(t, result)
 	checkInstanceReadiness(g, result)
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
-	g.Expect(result.Status.ObservedGeneration).To(BeEquivalentTo(result.Generation))
 
 	// Check if the instance was scheduled for reconciliation.
 	resultP := result.DeepCopy()
@@ -81,6 +80,7 @@ func TestFluxInstanceReconciler_Install(t *testing.T) {
 	})
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(r.RequeueAfter).To(Equal(time.Minute))
+	g.Expect(resultP.Status.ObservedGeneration).To(BeEquivalentTo(resultP.Generation))
 
 	// Check if events were recorded for each step.
 	events := getEvents(result.Name)

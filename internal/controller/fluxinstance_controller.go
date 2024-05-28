@@ -135,6 +135,7 @@ func (r *FluxInstanceReconciler) finalizeStatus(ctx context.Context,
 	// Remove the Reconciling condition if the reconciliation was successful.
 	if conditions.IsTrue(obj, meta.ReadyCondition) {
 		conditions.Delete(obj, meta.ReconcilingCondition)
+		obj.Status.ObservedGeneration = obj.Generation
 	}
 
 	// Set the Reconciling reason to ProgressingWithRetry if the
