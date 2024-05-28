@@ -89,6 +89,7 @@ func TestFluxInstanceReconciler_Install(t *testing.T) {
 	logObjectStatus(t, resultFinal)
 	g.Expect(resultFinal.Status.ObservedGeneration).To(BeEquivalentTo(resultFinal.Generation))
 	g.Expect(resultFinal.Status.LastAttemptedRevision).To(HavePrefix("v2.3.0@sha256:"))
+	g.Expect(resultFinal.Status.LastAppliedRevision).To(BeIdenticalTo(resultFinal.Status.LastAttemptedRevision))
 
 	// Check if events were recorded for each step.
 	events := getEvents(result.Name)
@@ -98,7 +99,7 @@ func TestFluxInstanceReconciler_Install(t *testing.T) {
 	g.Expect(events[1].Reason).To(Equal(meta.ReconciliationSucceededReason))
 	g.Expect(events[1].Message).To(HavePrefix("Reconciliation finished"))
 	g.Expect(events[2].Reason).To(Equal(meta.ReconciliationSucceededReason))
-	g.Expect(events[2].Annotations).To(HaveKeyWithValue(fluxcdv1alpha1.RevisionAnnotation, resultFinal.Status.LastAttemptedRevision))
+	g.Expect(events[2].Annotations).To(HaveKeyWithValue(fluxcdv1alpha1.RevisionAnnotation, resultFinal.Status.LastAppliedRevision))
 
 	err = testClient.Delete(ctx, obj)
 	g.Expect(err).ToNot(HaveOccurred())

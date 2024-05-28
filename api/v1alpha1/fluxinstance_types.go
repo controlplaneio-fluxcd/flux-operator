@@ -24,6 +24,7 @@ var (
 	Finalizer                = fmt.Sprintf("%s/finalizer", GroupVersion.Group)
 	ReconcileAnnotation      = fmt.Sprintf("%s/reconcile", GroupVersion.Group)
 	ReconcileEveryAnnotation = fmt.Sprintf("%s/reconcileEvery", GroupVersion.Group)
+	PruneAnnotation          = fmt.Sprintf("%s/prune", GroupVersion.Group)
 	RevisionAnnotation       = fmt.Sprintf("%s/revision", GroupVersion.Group)
 )
 
@@ -37,6 +38,12 @@ type FluxInstanceSpec struct {
 	// Flux installation, to customize the way Flux operates.
 	// +optional
 	Kustomize *Kustomize `json:"kustomize,omitempty"`
+
+	// Wait instructs the controller to check the health of all the reconciled
+	// resources. Defaults to true.
+	// +kubebuilder:default:=true
+	// +required
+	Wait bool `json:"wait"`
 }
 
 // Distribution specifies the version and container registry to pull images from.
@@ -65,6 +72,23 @@ type Kustomize struct {
 	Patches []kustomize.Patch `json:"patches,omitempty"`
 }
 
+// ResourceInventory contains a list of Kubernetes resource object references
+// that have been applied.
+type ResourceInventory struct {
+	// Entries of Kubernetes resource object references.
+	Entries []ResourceRef `json:"entries"`
+}
+
+// ResourceRef contains the information necessary to locate a resource within a cluster.
+type ResourceRef struct {
+	// ID is the string representation of the Kubernetes resource object's metadata,
+	// in the format '<namespace>_<name>_<group>_<kind>'.
+	ID string `json:"id"`
+
+	// Version is the API version of the Kubernetes resource object's kind.
+	Version string `json:"v"`
+}
+
 // FluxInstanceStatus defines the observed state of FluxInstance
 type FluxInstanceStatus struct {
 	meta.ReconcileRequestStatus `json:",inline"`
@@ -81,6 +105,16 @@ type FluxInstanceStatus struct {
 	// distribution config that was last attempted to reconcile.
 	// +optional
 	LastAttemptedRevision string `json:"lastAttemptedRevision,omitempty"`
+
+	// LastAppliedRevision is the version and digest of the
+	// distribution config that was last reconcile.
+	// +optional
+	LastAppliedRevision string `json:"lastAppliedRevision,omitempty"`
+
+	// Inventory contains a list of Kubernetes resource object references
+	// last applied on the cluster.
+	// +optional
+	Inventory *ResourceInventory `json:"inventory,omitempty"`
 }
 
 // GetConditions returns the status conditions of the object.

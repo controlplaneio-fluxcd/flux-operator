@@ -8,14 +8,18 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/fluxcd/cli-utils/pkg/kstatus/polling"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
+	"github.com/fluxcd/pkg/ssa"
+	"github.com/fluxcd/pkg/ssa/normalize"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
 	kuberecorder "k8s.io/client-go/tools/record"
@@ -26,6 +30,7 @@ import (
 
 	fluxcdv1alpha1 "github.com/controlplaneio-fluxcd/fluxcd-operator/api/v1alpha1"
 	"github.com/controlplaneio-fluxcd/fluxcd-operator/internal/builder"
+	"github.com/controlplaneio-fluxcd/fluxcd-operator/internal/inventory"
 )
 
 // FluxInstanceReconciler reconciles a FluxInstance object
@@ -127,15 +132,28 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 		return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
 	}
 
+	// Apply the distribution manifests.
+	if err := r.apply(ctx, obj, buildResult); err != nil {
+		msg := fmt.Sprintf("reconciliation failed: %s", err.Error())
+		conditions.MarkFalse(obj,
+			meta.ReadyCondition,
+			meta.ReconciliationFailedReason,
+			msg)
+		r.EventRecorder.Event(obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
+
+		return ctrl.Result{}, err
+	}
+
 	// Mark the object as ready.
+	obj.Status.LastAppliedRevision = obj.Status.LastAttemptedRevision
 	msg = fmt.Sprintf("Reconciliation finished in %s", time.Since(reconcileStart).String())
 	conditions.MarkTrue(obj,
 		meta.ReadyCondition,
 		meta.ReconciliationSucceededReason,
 		msg)
-	log.Info(msg, "revision", obj.Status.LastAttemptedRevision)
+	log.Info(msg, "revision", obj.Status.LastAppliedRevision)
 	r.EventRecorder.AnnotatedEventf(obj,
-		map[string]string{fluxcdv1alpha1.RevisionAnnotation: obj.Status.LastAttemptedRevision},
+		map[string]string{fluxcdv1alpha1.RevisionAnnotation: obj.Status.LastAppliedRevision},
 		corev1.EventTypeNormal,
 		meta.ReconciliationSucceededReason,
 		msg)
@@ -191,16 +209,141 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 	return builder.Build(filepath.Join(fluxDir, ver), tmpDir, options)
 }
 
+func (r *FluxInstanceReconciler) apply(ctx context.Context,
+	obj *fluxcdv1alpha1.FluxInstance,
+	buildResult *builder.Result) error {
+	log := ctrl.LoggerFrom(ctx)
+	objects := buildResult.Objects
+	var changeSetLog strings.Builder
+
+	// Create a snapshot of the current inventory.
+	oldInventory := inventory.New()
+	if obj.Status.Inventory != nil {
+		obj.Status.Inventory.DeepCopyInto(oldInventory)
+	}
+
+	// Create a resource manager to reconcile the resources.
+	resourceManager := ssa.NewResourceManager(r.Client, r.StatusPoller, ssa.Owner{
+		Field: r.StatusManager,
+		Group: fluxcdv1alpha1.GroupVersion.Group,
+	})
+	resourceManager.SetOwnerLabels(objects, obj.GetName(), obj.GetNamespace())
+
+	if err := normalize.UnstructuredList(objects); err != nil {
+		return err
+	}
+
+	applyOpts := ssa.DefaultApplyOptions()
+	applyOpts.Force = true
+	resultSet := ssa.NewChangeSet()
+
+	// Apply the resources to the cluster.
+	changeSet, err := resourceManager.ApplyAllStaged(ctx, objects, applyOpts)
+	if err != nil {
+		return err
+	}
+
+	// Filter out the resources that have changed.
+	for _, change := range changeSet.Entries {
+		if HasChanged(change.Action) {
+			resultSet.Add(change)
+			changeSetLog.WriteString(change.String() + "\n")
+		}
+	}
+
+	// Log the changeset.
+	if len(resultSet.Entries) > 0 {
+		log.Info("Server-side apply completed",
+			"output", resultSet.ToMap(), "revision", buildResult.Revision)
+	}
+
+	// Create an inventory from the reconciled resources.
+	newInventory := inventory.New()
+	err = inventory.AddChangeSet(newInventory, changeSet)
+	if err != nil {
+		return err
+	}
+
+	// Set last applied inventory in status.
+	obj.Status.Inventory = newInventory
+
+	// Detect stale resources which are subject to garbage collection.
+	staleObjects, err := inventory.Diff(oldInventory, newInventory)
+	if err != nil {
+		return err
+	}
+
+	// Garbage collect stale resources.
+	if len(staleObjects) > 0 {
+		deleteOpts := ssa.DeleteOptions{
+			PropagationPolicy: metav1.DeletePropagationBackground,
+			Inclusions:        resourceManager.GetOwnerLabels(obj.Name, obj.Namespace),
+			Exclusions: map[string]string{
+				fluxcdv1alpha1.PruneAnnotation: fluxcdv1alpha1.DisabledValue,
+			},
+		}
+
+		deleteSet, err := resourceManager.DeleteAll(ctx, staleObjects, deleteOpts)
+		if err != nil {
+			return err
+		}
+
+		if len(deleteSet.Entries) > 0 {
+			for _, change := range deleteSet.Entries {
+				changeSetLog.WriteString(change.String() + "\n")
+			}
+			log.Info("Garbage collection completed",
+				"output", deleteSet.ToMap(), "revision", buildResult.Revision)
+		}
+	}
+
+	// Wait for the resources to become ready.
+	if obj.Spec.Wait && len(resultSet.Entries) > 0 {
+		if err := resourceManager.WaitForSet(resultSet.ToObjMetadataSet(), ssa.WaitOptions{
+			Interval: 5 * time.Second,
+			Timeout:  5 * time.Minute,
+		}); err != nil {
+			return err
+		}
+		log.Info("Health check completed", "revision", buildResult.Revision)
+	}
+
+	return nil
+}
+
 //nolint:unparam
 func (r *FluxInstanceReconciler) finalize(ctx context.Context,
 	obj *fluxcdv1alpha1.FluxInstance) (ctrl.Result, error) {
 	reconcileStart := time.Now()
 	log := ctrl.LoggerFrom(ctx)
 
-	controllerutil.RemoveFinalizer(obj, fluxcdv1alpha1.Finalizer)
+	if obj.Status.Inventory == nil || len(obj.Status.Inventory.Entries) == 0 {
+		controllerutil.RemoveFinalizer(obj, fluxcdv1alpha1.Finalizer)
+		return ctrl.Result{}, nil
+	}
 
+	resourceManager := ssa.NewResourceManager(r.Client, nil, ssa.Owner{
+		Field: r.StatusManager,
+		Group: fluxcdv1alpha1.GroupVersion.Group,
+	})
+
+	opts := ssa.DeleteOptions{
+		PropagationPolicy: metav1.DeletePropagationBackground,
+		Inclusions:        resourceManager.GetOwnerLabels(obj.Name, obj.Namespace),
+		Exclusions: map[string]string{
+			fluxcdv1alpha1.PruneAnnotation: fluxcdv1alpha1.DisabledValue,
+		},
+	}
+
+	objects, _ := inventory.List(obj.Status.Inventory)
+	changeSet, err := resourceManager.DeleteAll(ctx, objects, opts)
+	if err != nil {
+		log.Error(err, "pruning for deleted resource failed")
+	}
+
+	controllerutil.RemoveFinalizer(obj, fluxcdv1alpha1.Finalizer)
 	msg := fmt.Sprintf("Uninstallation completed in %v", time.Since(reconcileStart).String())
-	log.Info(msg)
+	log.Info(msg, "output", changeSet.ToMap())
 
 	// Stop reconciliation as the object is being deleted.
 	return ctrl.Result{}, nil
@@ -263,4 +406,17 @@ func (r *FluxInstanceReconciler) patch(ctx context.Context,
 	}
 
 	return nil
+}
+
+// HasChanged evaluates the given action and returns true
+// if the action type matches a resource mutation or deletion.
+func HasChanged(action ssa.Action) bool {
+	switch action {
+	case ssa.SkippedAction:
+		return false
+	case ssa.UnchangedAction:
+		return false
+	default:
+		return true
+	}
 }

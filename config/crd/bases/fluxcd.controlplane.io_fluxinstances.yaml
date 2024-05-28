@@ -136,8 +136,15 @@ spec:
                       type: object
                     type: array
                 type: object
+              wait:
+                default: true
+                description: |-
+                  Wait instructs the controller to check the health of all the reconciled
+                  resources. Defaults to true.
+                type: boolean
             required:
             - distribution
+            - wait
             type: object
           status:
             default:
@@ -214,6 +221,39 @@ spec:
                   - type
                   type: object
                 type: array
+              inventory:
+                description: |-
+                  Inventory contains a list of Kubernetes resource object references
+                  last applied on the cluster.
+                properties:
+                  entries:
+                    description: Entries of Kubernetes resource object references.
+                    items:
+                      description: ResourceRef contains the information necessary
+                        to locate a resource within a cluster.
+                      properties:
+                        id:
+                          description: |-
+                            ID is the string representation of the Kubernetes resource object's metadata,
+                            in the format '<namespace>_<name>_<group>_<kind>'.
+                          type: string
+                        v:
+                          description: Version is the API version of the Kubernetes
+                            resource object's kind.
+                          type: string
+                      required:
+                      - id
+                      - v
+                      type: object
+                    type: array
+                required:
+                - entries
+                type: object
+              lastAppliedRevision:
+                description: |-
+                  LastAppliedRevision is the version and digest of the
+                  distribution config that was last reconcile.
+                type: string
               lastAttemptedRevision:
                 description: |-
                   LastAttemptedRevision is the version and digest of the

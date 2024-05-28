@@ -120,6 +120,7 @@ func getEvents(objName string) []corev1.Event {
 
 func getDefaultFluxSpec() fluxcdv1alpha1.FluxInstanceSpec {
 	return fluxcdv1alpha1.FluxInstanceSpec{
+		Wait: false,
 		Distribution: fluxcdv1alpha1.Distribution{
 			Version:  "*",
 			Registry: "ghcr.io/fluxcd",

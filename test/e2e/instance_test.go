@@ -25,13 +25,13 @@ var _ = Describe("FluxInstance", Ordered, func() {
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
 
 				cmd = exec.Command("kubectl", "wait", "FluxInstance/flux", "-n", namespace,
-					"--for=condition=Ready", "--timeout=10s",
+					"--for=condition=Ready", "--timeout=5m",
 				)
 				_, err = utils.Run(cmd)
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
 				return nil
 			}
-			EventuallyWithOffset(1, verifyFluxInstanceReconcile, time.Minute, 3*time.Second).Should(Succeed())
+			EventuallyWithOffset(1, verifyFluxInstanceReconcile, 5*time.Minute, 10*time.Second).Should(Succeed())
 		})
 	})
 
@@ -41,6 +41,15 @@ var _ = Describe("FluxInstance", Ordered, func() {
 			cmd := exec.Command("kubectl", "delete", "-k", "config/samples",
 				"--timeout=30s", "-n", namespace)
 			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			By("source-controller deleted")
+			cmd = exec.Command("kubectl", "get", "deploy/source-controller", "-n", namespace)
+			_, err = utils.Run(cmd)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("not found"))
+			By("namespace exists")
+			cmd = exec.Command("kubectl", "get", "ns", namespace)
+			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})
