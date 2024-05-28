@@ -21,10 +21,6 @@ build() {
   rm -rf manifests.tar.gz
 }
 
-if ! [ -x "$(command -v flux)" ]; then
-  fatal 'flux is not installed'
-fi
-
 for var in "$@"
 do
     build "$var"
