@@ -49,6 +49,7 @@ func TestFluxInstanceReconciler_Install(t *testing.T) {
 	err = testEnv.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(result.Finalizers).To(ContainElement(fluxcdv1alpha1.Finalizer))
+	g.Expect(result.Status.ObservedGeneration).To(BeEquivalentTo(-1))
 
 	r, err = reconciler.Reconcile(ctx, reconcile.Request{
 		NamespacedName: client.ObjectKeyFromObject(obj),
@@ -63,7 +64,8 @@ func TestFluxInstanceReconciler_Install(t *testing.T) {
 
 	logObjectStatus(t, result)
 	checkInstanceReadiness(g, result)
-	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.SucceededReason))
+	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
+	g.Expect(result.Status.ObservedGeneration).To(BeEquivalentTo(result.Generation))
 
 	// Check if the instance was scheduled for reconciliation.
 	resultP := result.DeepCopy()
@@ -82,7 +84,7 @@ func TestFluxInstanceReconciler_Install(t *testing.T) {
 
 	// Check if events were recorded for each step.
 	events := getEvents(result.Name)
-	g.Expect(len(events)).To(Equal(3))
+	g.Expect(events).To(HaveLen(3))
 	g.Expect(events[0].Reason).To(Equal(meta.ProgressingReason))
 	g.Expect(events[1].Reason).To(Equal(meta.ReconciliationSucceededReason))
 	g.Expect(events[2].Reason).To(Equal(meta.ReconciliationSucceededReason))

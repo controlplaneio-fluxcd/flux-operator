@@ -14,7 +14,17 @@ spec:
     singular: fluxinstance
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].message
+      name: Status
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: FluxInstance is the Schema for the fluxinstances API
@@ -107,6 +117,8 @@ spec:
                 type: object
             type: object
           status:
+            default:
+              observedGeneration: -1
             description: FluxInstanceStatus defines the observed state of FluxInstance
             properties:
               conditions:

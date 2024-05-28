@@ -82,15 +82,21 @@ func (in *FluxInstance) GetInterval() time.Duration {
 	return interval
 }
 
+// +kubebuilder:storageversion
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description=""
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",description=""
 
 // FluxInstance is the Schema for the fluxinstances API
 type FluxInstance struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   FluxInstanceSpec   `json:"spec,omitempty"`
+	Spec FluxInstanceSpec `json:"spec,omitempty"`
+
+	// +kubebuilder:default:={"observedGeneration":-1}
 	Status FluxInstanceStatus `json:"status,omitempty"`
 }
 

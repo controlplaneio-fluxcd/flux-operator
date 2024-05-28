@@ -96,7 +96,7 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 	msg = fmt.Sprintf("Reconciliation finished in %s", time.Since(reconcileStart).String())
 	conditions.MarkTrue(obj,
 		meta.ReadyCondition,
-		meta.SucceededReason,
+		meta.ReconciliationSucceededReason,
 		msg)
 	log.Info(msg, "generation", obj.GetGeneration())
 	r.EventRecorder.Event(obj, corev1.EventTypeNormal, meta.ReconciliationSucceededReason, msg)
@@ -109,6 +109,7 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 	return result, nil
 }
 
+//nolint:unparam
 func (r *FluxInstanceReconciler) finalize(ctx context.Context,
 	obj *fluxcdv1alpha1.FluxInstance) (ctrl.Result, error) {
 	reconcileStart := time.Now()
@@ -118,7 +119,6 @@ func (r *FluxInstanceReconciler) finalize(ctx context.Context,
 
 	msg := fmt.Sprintf("Uninstallation completed in %v", time.Since(reconcileStart).String())
 	log.Info(msg)
-	r.EventRecorder.Event(obj, corev1.EventTypeNormal, meta.SucceededReason, msg)
 
 	// Stop reconciliation as the object is being deleted
 	return ctrl.Result{}, nil
@@ -132,11 +132,9 @@ func (r *FluxInstanceReconciler) finalizeStatus(ctx context.Context,
 		obj.Status.LastHandledReconcileAt = v
 	}
 
-	// Remove the Reconciling condition and update the observed generation
-	// if the reconciliation was successful.
+	// Remove the Reconciling condition if the reconciliation was successful.
 	if conditions.IsTrue(obj, meta.ReadyCondition) {
 		conditions.Delete(obj, meta.ReconcilingCondition)
-		obj.Status.ObservedGeneration = obj.Generation
 	}
 
 	// Set the Reconciling reason to ProgressingWithRetry if the
@@ -165,6 +163,10 @@ func (r *FluxInstanceReconciler) patch(ctx context.Context,
 		patch.WithOwnedConditions{Conditions: ownedConditions},
 		patch.WithForceOverwriteConditions{},
 		patch.WithFieldOwner(r.StatusManager),
+	}
+
+	if conditions.IsTrue(obj, meta.ReadyCondition) {
+		patchOpts = append(patchOpts, patch.WithStatusObservedGeneration{})
 	}
 
 	// Patch the object status, conditions and finalizers.
