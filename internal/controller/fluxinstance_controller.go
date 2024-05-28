@@ -120,7 +120,7 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 
 	// Update latest attempted revision.
 	if obj.Status.LastAttemptedRevision != buildResult.Revision {
-		msg := fmt.Sprintf("Upagrading to revision %s", buildResult.Revision)
+		msg := fmt.Sprintf("Upgrading to revision %s", buildResult.Revision)
 		if obj.Status.LastAttemptedRevision == "" {
 			msg = fmt.Sprintf("Installing revision %s", buildResult.Revision)
 		}
@@ -186,6 +186,15 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 	options.Registry = obj.Spec.Distribution.Registry
 	options.ImagePullSecret = obj.Spec.Distribution.ImagePullSecret
 	options.Namespace = obj.GetNamespace()
+
+	if len(obj.Spec.Components) > 0 {
+		options.Components = obj.GetComponents()
+	}
+
+	if obj.Spec.Cluster != nil {
+		options.ClusterDomain = obj.Spec.Cluster.Domain
+		options.NetworkPolicy = obj.Spec.Cluster.NetworkPolicy
+	}
 
 	if obj.Spec.Kustomize != nil && len(obj.Spec.Kustomize.Patches) > 0 {
 		patchesData, err := yaml.Marshal(obj.Spec.Kustomize.Patches)

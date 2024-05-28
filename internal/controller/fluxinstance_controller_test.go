@@ -5,6 +5,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -19,7 +20,7 @@ import (
 	fluxcdv1alpha1 "github.com/controlplaneio-fluxcd/fluxcd-operator/api/v1alpha1"
 )
 
-func TestFluxInstanceReconciler_Install(t *testing.T) {
+func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 	g := NewWithT(t)
 	reconciler := getFluxInstanceReconciler()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -36,6 +37,7 @@ func TestFluxInstanceReconciler_Install(t *testing.T) {
 		Spec: getDefaultFluxSpec(),
 	}
 
+	// Initialize the instance.
 	err = testEnv.Create(ctx, obj)
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -66,12 +68,36 @@ func TestFluxInstanceReconciler_Install(t *testing.T) {
 	checkInstanceReadiness(g, result)
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
 
-	// Check if the instance was scheduled for reconciliation.
+	// Check if the inventory was updated.
+	g.Expect(result.Status.Inventory.Entries).To(ContainElements(
+		fluxcdv1alpha1.ResourceRef{
+			ID:      fmt.Sprintf("%s_source-controller_apps_Deployment", ns.Name),
+			Version: "v1",
+		},
+		fluxcdv1alpha1.ResourceRef{
+			ID:      fmt.Sprintf("%s_kustomize-controller_apps_Deployment", ns.Name),
+			Version: "v1",
+		},
+		fluxcdv1alpha1.ResourceRef{
+			ID:      fmt.Sprintf("%s_helm-controller_apps_Deployment", ns.Name),
+			Version: "v1",
+		},
+		fluxcdv1alpha1.ResourceRef{
+			ID:      fmt.Sprintf("%s_notification-controller_apps_Deployment", ns.Name),
+			Version: "v1",
+		},
+	))
+
+	// Update the instance.
 	resultP := result.DeepCopy()
 	resultP.SetAnnotations(map[string]string{
 		fluxcdv1alpha1.ReconcileAnnotation:      fluxcdv1alpha1.EnabledValue,
 		fluxcdv1alpha1.ReconcileEveryAnnotation: "1m",
 	})
+	resultP.Spec.Components = []fluxcdv1alpha1.Component{"source-controller", "kustomize-controller"}
+	resultP.Spec.Cluster = &fluxcdv1alpha1.Cluster{
+		NetworkPolicy: false,
+	}
 	err = testClient.Patch(ctx, resultP, client.MergeFrom(result))
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -79,6 +105,8 @@ func TestFluxInstanceReconciler_Install(t *testing.T) {
 		NamespacedName: client.ObjectKeyFromObject(obj),
 	})
 	g.Expect(err).ToNot(HaveOccurred())
+
+	// Check if the instance was scheduled for reconciliation.
 	g.Expect(r.RequeueAfter).To(Equal(time.Minute))
 
 	// Check the final status.
@@ -91,15 +119,33 @@ func TestFluxInstanceReconciler_Install(t *testing.T) {
 	g.Expect(resultFinal.Status.LastAttemptedRevision).To(HavePrefix("v2.3.0@sha256:"))
 	g.Expect(resultFinal.Status.LastAppliedRevision).To(BeIdenticalTo(resultFinal.Status.LastAttemptedRevision))
 
+	// Check if the inventory was updated.
+	g.Expect(resultFinal.Status.Inventory.Entries).ToNot(ContainElements(
+		fluxcdv1alpha1.ResourceRef{
+			ID:      fmt.Sprintf("%s_helm-controller_apps_Deployment", ns.Name),
+			Version: "v1",
+		},
+		fluxcdv1alpha1.ResourceRef{
+			ID:      fmt.Sprintf("%s_notification-controller_apps_Deployment", ns.Name),
+			Version: "v1",
+		},
+		fluxcdv1alpha1.ResourceRef{
+			ID:      fmt.Sprintf("%s_allow-egress_networking.k8s.io_NetworkPolicy", ns.Name),
+			Version: "v1",
+		},
+	))
+
 	// Check if events were recorded for each step.
 	events := getEvents(result.Name)
-	g.Expect(events).To(HaveLen(3))
+	g.Expect(events).To(HaveLen(4))
 	g.Expect(events[0].Reason).To(Equal(meta.ProgressingReason))
-	g.Expect(events[0].Message).To(HavePrefix("Installing revision"))
+	g.Expect(events[0].Message).To(HavePrefix("Installing"))
 	g.Expect(events[1].Reason).To(Equal(meta.ReconciliationSucceededReason))
 	g.Expect(events[1].Message).To(HavePrefix("Reconciliation finished"))
-	g.Expect(events[2].Reason).To(Equal(meta.ReconciliationSucceededReason))
-	g.Expect(events[2].Annotations).To(HaveKeyWithValue(fluxcdv1alpha1.RevisionAnnotation, resultFinal.Status.LastAppliedRevision))
+	g.Expect(events[2].Reason).To(Equal(meta.ProgressingReason))
+	g.Expect(events[2].Message).To(HavePrefix("Upgrading"))
+	g.Expect(events[3].Reason).To(Equal(meta.ReconciliationSucceededReason))
+	g.Expect(events[3].Annotations).To(HaveKeyWithValue(fluxcdv1alpha1.RevisionAnnotation, resultFinal.Status.LastAppliedRevision))
 
 	err = testClient.Delete(ctx, obj)
 	g.Expect(err).ToNot(HaveOccurred())

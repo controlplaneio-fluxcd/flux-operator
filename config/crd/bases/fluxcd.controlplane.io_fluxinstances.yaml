@@ -49,6 +49,40 @@ spec:
           spec:
             description: FluxInstanceSpec defines the desired state of FluxInstance
             properties:
+              cluster:
+                description: Cluster holds the configuration for the Kubernetes cluster.
+                properties:
+                  domain:
+                    default: cluster.local
+                    description: |-
+                      Domain is the cluster domain used for generating the FQDN of services.
+                      Defaults to 'cluster.local'.
+                    type: string
+                  networkPolicy:
+                    default: true
+                    description: |-
+                      NetworkPolicy restricts network access to the current namespace.
+                      Defaults to true.
+                    type: boolean
+                required:
+                - domain
+                - networkPolicy
+                type: object
+              components:
+                description: |-
+                  Components is the list of controllers to install.
+                  Defaults to all controllers.
+                items:
+                  description: Component is the name of a controller to install.
+                  enum:
+                  - source-controller
+                  - kustomize-controller
+                  - helm-controller
+                  - notification-controller
+                  - image-reflector-controller
+                  - image-automation-controller
+                  type: string
+                type: array
               distribution:
                 description: Distribution specifies the version and container registry
                   to pull images from.

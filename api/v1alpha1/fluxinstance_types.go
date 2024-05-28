@@ -34,6 +34,15 @@ type FluxInstanceSpec struct {
 	// +required
 	Distribution Distribution `json:"distribution"`
 
+	// Components is the list of controllers to install.
+	// Defaults to all controllers.
+	// +optional
+	Components []Component `json:"components,omitempty"`
+
+	// Cluster holds the configuration for the Kubernetes cluster.
+	// +optional
+	Cluster *Cluster `json:"cluster,omitempty"`
+
 	// Kustomize holds a set of patches that can be applied to the
 	// Flux installation, to customize the way Flux operates.
 	// +optional
@@ -61,6 +70,25 @@ type Distribution struct {
 	// to use for pulling images.
 	// +optional
 	ImagePullSecret string `json:"imagePullSecret,omitempty"`
+}
+
+// Component is the name of a controller to install.
+// +kubebuilder:validation:Enum:=source-controller;kustomize-controller;helm-controller;notification-controller;image-reflector-controller;image-automation-controller
+type Component string
+
+// Cluster holds the configuration for the Kubernetes cluster.
+type Cluster struct {
+	// Domain is the cluster domain used for generating the FQDN of services.
+	// Defaults to 'cluster.local'.
+	// +kubebuilder:default:=cluster.local
+	// +required
+	Domain string `json:"domain"`
+
+	// NetworkPolicy restricts network access to the current namespace.
+	// Defaults to true.
+	// +kubebuilder:default:=true
+	// +required
+	NetworkPolicy bool `json:"networkPolicy"`
 }
 
 // Kustomize holds a set of patches that can be applied to the
@@ -115,6 +143,15 @@ type FluxInstanceStatus struct {
 	// last applied on the cluster.
 	// +optional
 	Inventory *ResourceInventory `json:"inventory,omitempty"`
+}
+
+// GetComponents sets the status conditions on the object.
+func (in *FluxInstance) GetComponents() []string {
+	components := make([]string, len(in.Spec.Components))
+	for i, c := range in.Spec.Components {
+		components[i] = string(c)
+	}
+	return components
 }
 
 // GetConditions returns the status conditions of the object.
