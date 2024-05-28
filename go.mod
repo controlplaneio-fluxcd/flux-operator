@@ -3,6 +3,7 @@ module github.com/controlplaneio-fluxcd/fluxcd-operator
 go 1.22.0
 
 require (
+	github.com/fluxcd/cli-utils v0.36.0-flux.7
 	github.com/fluxcd/pkg/apis/kustomize v1.5.0
 	github.com/fluxcd/pkg/apis/meta v1.5.0
 	github.com/fluxcd/pkg/kustomize v1.11.0
@@ -33,7 +34,6 @@ require (
 	github.com/evanphx/json-patch v5.7.0+incompatible // indirect
 	github.com/evanphx/json-patch/v5 v5.9.0 // indirect
 	github.com/exponent-io/jsonpath v0.0.0-20210407135951-1de76d718b3f // indirect
-	github.com/fluxcd/cli-utils v0.36.0-flux.7 // indirect
 	github.com/fluxcd/pkg/envsubst v1.1.0 // indirect
 	github.com/fluxcd/pkg/sourceignore v0.7.0 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect

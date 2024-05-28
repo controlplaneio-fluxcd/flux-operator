@@ -104,3 +104,70 @@ func TestFluxInstanceReconciler_Install(t *testing.T) {
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 }
+
+func TestFluxInstanceReconciler_InstallFail(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getFluxInstanceReconciler()
+	reconciler.StoragePath = "notfound"
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	obj := &fluxcdv1alpha1.FluxInstance{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ns.Name,
+			Namespace: ns.Name,
+		},
+	}
+
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize the instance.
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Try to install the instance.
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.IsZero()).To(BeTrue())
+
+	// Check if the instance was marked as failed.
+	result := &fluxcdv1alpha1.FluxInstance{}
+	err = testEnv.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	logObjectStatus(t, result)
+	g.Expect(conditions.IsStalled(result)).To(BeTrue())
+	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.BuildFailedReason))
+	g.Expect(conditions.GetMessage(result, meta.ReadyCondition)).To(ContainSubstring("Storage path"))
+
+	// Check if events were recorded for each step.
+	events := getEvents(result.Name)
+	g.Expect(events).To(HaveLen(2))
+	g.Expect(events[0].Reason).To(Equal(meta.ProgressingReason))
+	g.Expect(events[1].Reason).To(Equal(meta.BuildFailedReason))
+	g.Expect(events[1].Message).To(ContainSubstring(reconciler.StoragePath))
+
+	err = testClient.Delete(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.IsZero()).To(BeTrue())
+
+	// Check if the instance was uninstalled.
+	result = &fluxcdv1alpha1.FluxInstance{}
+	err = testEnv.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+}

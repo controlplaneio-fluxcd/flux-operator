@@ -28,6 +28,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o fl
 FROM gcr.io/distroless/static:nonroot
 WORKDIR /
 COPY --from=builder /workspace/fluxcd-operator .
+COPY data/ /data/
 USER 65532:65532
 
 ENTRYPOINT ["/fluxcd-operator"]

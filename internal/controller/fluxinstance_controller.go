@@ -6,8 +6,10 @@ package controller
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
+	"github.com/fluxcd/cli-utils/pkg/kstatus/polling"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
@@ -29,7 +31,9 @@ type FluxInstanceReconciler struct {
 	kuberecorder.EventRecorder
 
 	Scheme        *runtime.Scheme
+	StatusPoller  *polling.StatusPoller
 	StatusManager string
+	StoragePath   string
 }
 
 // +kubebuilder:rbac:groups=fluxcd.controlplane.io,resources=fluxinstances,verbs=get;list;watch;create;update;patch;delete
@@ -93,6 +97,23 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 	}
 	r.EventRecorder.Event(obj, corev1.EventTypeNormal, meta.ProgressingReason, msg)
 
+	// Verify the storage path exists.
+	if _, err := os.Stat(r.StoragePath); os.IsNotExist(err) {
+		msg := fmt.Sprintf("Storage path %s does not exist", r.StoragePath)
+		conditions.MarkFalse(obj,
+			meta.ReadyCondition,
+			meta.BuildFailedReason,
+			msg)
+		conditions.MarkTrue(obj,
+			meta.StalledCondition,
+			meta.BuildFailedReason,
+			msg)
+		log.Error(err, msg)
+		r.EventRecorder.Event(obj, corev1.EventTypeWarning, meta.BuildFailedReason, msg)
+		return ctrl.Result{}, nil
+	}
+
+	// Mark the object as ready.
 	msg = fmt.Sprintf("Reconciliation finished in %s", time.Since(reconcileStart).String())
 	conditions.MarkTrue(obj,
 		meta.ReadyCondition,
@@ -101,6 +122,7 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 	log.Info(msg, "generation", obj.GetGeneration())
 	r.EventRecorder.Event(obj, corev1.EventTypeNormal, meta.ReconciliationSucceededReason, msg)
 
+	// Requeue the reconciliation if the interval is set in annotations.
 	result := ctrl.Result{}
 	if obj.GetInterval() > 0 {
 		result.RequeueAfter = obj.GetInterval()
@@ -120,7 +142,7 @@ func (r *FluxInstanceReconciler) finalize(ctx context.Context,
 	msg := fmt.Sprintf("Uninstallation completed in %v", time.Since(reconcileStart).String())
 	log.Info(msg)
 
-	// Stop reconciliation as the object is being deleted
+	// Stop reconciliation as the object is being deleted.
 	return ctrl.Result{}, nil
 }
 
@@ -132,12 +154,6 @@ func (r *FluxInstanceReconciler) finalizeStatus(ctx context.Context,
 		obj.Status.LastHandledReconcileAt = v
 	}
 
-	// Remove the Reconciling condition if the reconciliation was successful.
-	if conditions.IsTrue(obj, meta.ReadyCondition) {
-		conditions.Delete(obj, meta.ReconcilingCondition)
-		obj.Status.ObservedGeneration = obj.Generation
-	}
-
 	// Set the Reconciling reason to ProgressingWithRetry if the
 	// reconciliation has failed.
 	if conditions.IsFalse(obj, meta.ReadyCondition) &&
@@ -145,6 +161,11 @@ func (r *FluxInstanceReconciler) finalizeStatus(ctx context.Context,
 		rc := conditions.Get(obj, meta.ReconcilingCondition)
 		rc.Reason = meta.ProgressingWithRetryReason
 		conditions.Set(obj, rc)
+	}
+
+	// Remove the Reconciling condition.
+	if conditions.IsTrue(obj, meta.ReadyCondition) || conditions.IsTrue(obj, meta.StalledCondition) {
+		conditions.Delete(obj, meta.ReconcilingCondition)
 	}
 
 	// Patch finalizers, status and conditions.
@@ -166,7 +187,7 @@ func (r *FluxInstanceReconciler) patch(ctx context.Context,
 		patch.WithFieldOwner(r.StatusManager),
 	}
 
-	if conditions.IsTrue(obj, meta.ReadyCondition) {
+	if conditions.IsTrue(obj, meta.ReadyCondition) || conditions.IsTrue(obj, meta.StalledCondition) {
 		patchOpts = append(patchOpts, patch.WithStatusObservedGeneration{})
 	}
 

@@ -6,6 +6,7 @@ package main
 import (
 	"os"
 
+	"github.com/fluxcd/cli-utils/pkg/kstatus/polling"
 	runtimeCtrl "github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/logger"
 	"github.com/fluxcd/pkg/runtime/pprof"
@@ -49,11 +50,13 @@ func main() {
 		enableLeaderElection bool
 		logOptions           logger.Options
 		rateLimiterOptions   runtimeCtrl.RateLimiterOptions
+		storagePath          string
 	)
 
 	flag.IntVar(&concurrent, "concurrent", 4, "The number of concurrent kustomize reconciles.")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&healthAddr, "health-addr", ":8081", "The address the health endpoint binds to.")
+	flag.StringVar(&storagePath, "storage-path", "/data", "The local storage path.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
@@ -93,6 +96,8 @@ func main() {
 	if err = (&controller.FluxInstanceReconciler{
 		Client:        mgr.GetClient(),
 		Scheme:        mgr.GetScheme(),
+		StatusPoller:  polling.NewStatusPoller(mgr.GetClient(), mgr.GetRESTMapper(), polling.Options{}),
+		StoragePath:   storagePath,
 		StatusManager: controllerName,
 		EventRecorder: mgr.GetEventRecorderFor(controllerName),
 	}).SetupWithManager(mgr,

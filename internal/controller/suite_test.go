@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fluxcd/cli-utils/pkg/kstatus/polling"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	kcheck "github.com/fluxcd/pkg/runtime/conditions/check"
@@ -83,6 +84,8 @@ func getFluxInstanceReconciler() *FluxInstanceReconciler {
 	return &FluxInstanceReconciler{
 		Client:        testClient,
 		Scheme:        NewTestScheme(),
+		StatusPoller:  polling.NewStatusPoller(testClient, testEnv.GetRESTMapper(), polling.Options{}),
+		StoragePath:   filepath.Join("..", "..", "data"),
 		StatusManager: controllerName,
 		EventRecorder: testEnv.GetEventRecorderFor(controllerName),
 	}

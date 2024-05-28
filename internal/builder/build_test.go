@@ -17,14 +17,15 @@ import (
 
 func TestBuild_Defaults(t *testing.T) {
 	g := NewWithT(t)
-	srcDir := filepath.Join("testdata", "v1.3.0")
-	goldenFile := filepath.Join("testdata", "v1.3.0-golden", "default.kustomization.yaml")
+	const version = "v1.3.0"
+	options := MakeDefaultOptions()
+	options.Version = version
+
+	srcDir := filepath.Join("testdata", version)
+	goldenFile := filepath.Join("testdata", version+"-golden", "default.kustomization.yaml")
 
 	dstDir, err := testTempDir(t)
 	g.Expect(err).NotTo(HaveOccurred())
-
-	options := MakeDefaultOptions()
-	options.Version = "v1.3.0"
 
 	objects, err := Build(srcDir, dstDir, options)
 	g.Expect(err).NotTo(HaveOccurred())
@@ -46,14 +47,16 @@ func TestBuild_Defaults(t *testing.T) {
 
 func TestBuild_Patches(t *testing.T) {
 	g := NewWithT(t)
-	srcDir := filepath.Join("testdata", "v1.3.0")
-	goldenFile := filepath.Join("testdata", "v1.3.0-golden", "patches.kustomization.yaml")
+	const version = "v1.3.0"
+	options := MakeDefaultOptions()
+	options.Version = version
+
+	srcDir := filepath.Join("testdata", version)
+	goldenFile := filepath.Join("testdata", version+"-golden", "patches.kustomization.yaml")
 
 	dstDir, err := testTempDir(t)
 	g.Expect(err).NotTo(HaveOccurred())
 
-	options := MakeDefaultOptions()
-	options.Version = "v1.3.0"
 	patches := []kustomize.Patch{
 		{
 			Patch: `
@@ -103,13 +106,14 @@ func TestBuild_Patches(t *testing.T) {
 
 func TestBuild_InvalidPatches(t *testing.T) {
 	g := NewWithT(t)
-	srcDir := filepath.Join("testdata", "v1.3.0")
+	const version = "v1.3.0"
+	options := MakeDefaultOptions()
+	options.Version = version
+	srcDir := filepath.Join("testdata", version)
 
 	dstDir, err := testTempDir(t)
 	g.Expect(err).NotTo(HaveOccurred())
 
-	options := MakeDefaultOptions()
-	options.Version = "v1.3.0"
 	patches := []kustomize.Patch{
 		{
 			Patch: `
