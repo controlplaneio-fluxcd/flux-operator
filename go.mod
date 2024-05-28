@@ -3,6 +3,7 @@ module github.com/controlplaneio-fluxcd/fluxcd-operator
 go 1.22.0
 
 require (
+	github.com/Masterminds/semver/v3 v3.2.1
 	github.com/fluxcd/cli-utils v0.36.0-flux.7
 	github.com/fluxcd/pkg/apis/kustomize v1.5.0
 	github.com/fluxcd/pkg/apis/meta v1.5.0
@@ -11,6 +12,7 @@ require (
 	github.com/fluxcd/pkg/ssa v0.39.1
 	github.com/onsi/ginkgo/v2 v2.19.0
 	github.com/onsi/gomega v1.33.1
+	github.com/opencontainers/go-digest v1.0.0
 	github.com/otiai10/copy v1.14.0
 	github.com/spf13/pflag v1.0.5
 	k8s.io/api v0.30.1

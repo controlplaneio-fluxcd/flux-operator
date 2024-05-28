@@ -14,14 +14,14 @@ import (
 	"github.com/fluxcd/pkg/kustomize"
 	"github.com/fluxcd/pkg/ssa"
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
+	"github.com/opencontainers/go-digest"
 	cp "github.com/otiai10/copy"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 // Build copies the source directory to a temporary directory, generates the
 // required manifests and runs kustomize to build the final resources.
 // The function returns a slice of unstructured objects.
-func Build(srcDir, tmpDir string, options Options) ([]*unstructured.Unstructured, error) {
+func Build(srcDir, tmpDir string, options Options) (*Result, error) {
 	if err := cp.Copy(srcDir, tmpDir); err != nil {
 		return nil, err
 	}
@@ -46,7 +46,14 @@ func Build(srcDir, tmpDir string, options Options) ([]*unstructured.Unstructured
 	}
 	sort.Sort(ssa.SortableUnstructureds(objects))
 
-	return objects, nil
+	d := digest.FromBytes(data)
+
+	return &Result{
+		Version:  options.Version,
+		Objects:  objects,
+		Digest:   d.String(),
+		Revision: fmt.Sprintf("%s@%s", options.Version, d.String()),
+	}, nil
 }
 
 func generate(base string, options Options) error {
@@ -70,17 +77,13 @@ func generate(base string, options Options) error {
 		return fmt.Errorf("generate kustomization failed: %w", err)
 	}
 
-	if err := os.MkdirAll(path.Join(base, "roles"), os.ModePerm); err != nil {
-		return fmt.Errorf("generate roles failed: %w", err)
-	}
-
-	if err := execTemplate(options, kustomizationRolesTmpl, path.Join(base, "roles/kustomization.yaml")); err != nil {
-		return fmt.Errorf("generate roles kustomization failed: %w", err)
-	}
-
 	rbacFile := filepath.Join(base, "roles", "rbac.yaml")
-	if err := copyFile(filepath.Join(base, "rbac.yaml"), rbacFile); err != nil {
+	if err := cp.Copy(filepath.Join(base, "rbac.yaml"), rbacFile); err != nil {
 		return fmt.Errorf("generate rbac failed: %w", err)
+	}
+
+	if err := execTemplate(options, kustomizationRolesTmpl, path.Join(base, "roles", "kustomization.yaml")); err != nil {
+		return fmt.Errorf("generate roles kustomization failed: %w", err)
 	}
 
 	// workaround for kustomize not being able to patch the SA in ClusterRoleBindings
@@ -96,19 +99,4 @@ func generate(base string, options Options) error {
 		}
 	}
 	return nil
-}
-
-// MkdirTempAbs creates a tmp dir and returns the absolute path to the dir.
-// This is required since certain OSes like MacOS create temporary files in
-// e.g. `/private/var`, to which `/var` is a symlink.
-func MkdirTempAbs(dir, pattern string) (string, error) {
-	tmpDir, err := os.MkdirTemp(dir, pattern)
-	if err != nil {
-		return "", err
-	}
-	tmpDir, err = filepath.EvalSymlinks(tmpDir)
-	if err != nil {
-		return "", fmt.Errorf("error evaluating symlink: %w", err)
-	}
-	return tmpDir, nil
 }

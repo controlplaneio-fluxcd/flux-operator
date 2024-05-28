@@ -3,10 +3,7 @@
 
 package builder
 
-import (
-	"time"
-)
-
+// Options defines the builder configuration.
 type Options struct {
 	Version                string
 	Namespace              string
@@ -18,15 +15,15 @@ type Options struct {
 	NetworkPolicy          bool
 	LogLevel               string
 	NotificationController string
-	Timeout                time.Duration
 	ClusterDomain          string
 	TolerationKeys         []string
 	Patches                string
 }
 
+// MakeDefaultOptions returns the default builder configuration.
 func MakeDefaultOptions() Options {
 	return Options{
-		Version:   "latest",
+		Version:   "*",
 		Namespace: "flux-system",
 		Components: []string{
 			"source-controller",
@@ -43,7 +40,6 @@ func MakeDefaultOptions() Options {
 		NetworkPolicy:          true,
 		LogLevel:               "info",
 		NotificationController: "notification-controller",
-		Timeout:                time.Minute,
 		ClusterDomain:          "cluster.local",
 	}
 }

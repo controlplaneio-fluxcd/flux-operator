@@ -33,6 +33,7 @@ func TestFluxInstanceReconciler_Install(t *testing.T) {
 			Name:      ns.Name,
 			Namespace: ns.Name,
 		},
+		Spec: getDefaultFluxSpec(),
 	}
 
 	err = testEnv.Create(ctx, obj)
@@ -46,7 +47,7 @@ func TestFluxInstanceReconciler_Install(t *testing.T) {
 
 	// Check if the finalizer was added.
 	resultInit := &fluxcdv1alpha1.FluxInstance{}
-	err = testEnv.Get(ctx, client.ObjectKeyFromObject(obj), resultInit)
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), resultInit)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(resultInit.Finalizers).To(ContainElement(fluxcdv1alpha1.Finalizer))
 	g.Expect(resultInit.Status.ObservedGeneration).To(BeEquivalentTo(-1))
@@ -59,10 +60,9 @@ func TestFluxInstanceReconciler_Install(t *testing.T) {
 
 	// Check if the instance was installed.
 	result := &fluxcdv1alpha1.FluxInstance{}
-	err = testEnv.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	logObjectStatus(t, result)
 	checkInstanceReadiness(g, result)
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
 
@@ -72,7 +72,7 @@ func TestFluxInstanceReconciler_Install(t *testing.T) {
 		fluxcdv1alpha1.ReconcileAnnotation:      fluxcdv1alpha1.EnabledValue,
 		fluxcdv1alpha1.ReconcileEveryAnnotation: "1m",
 	})
-	err = testEnv.Patch(ctx, resultP, client.MergeFrom(result))
+	err = testClient.Patch(ctx, resultP, client.MergeFrom(result))
 	g.Expect(err).ToNot(HaveOccurred())
 
 	r, err = reconciler.Reconcile(ctx, reconcile.Request{
@@ -80,14 +80,25 @@ func TestFluxInstanceReconciler_Install(t *testing.T) {
 	})
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(r.RequeueAfter).To(Equal(time.Minute))
-	g.Expect(resultP.Status.ObservedGeneration).To(BeEquivalentTo(resultP.Generation))
+
+	// Check the final status.
+	resultFinal := &fluxcdv1alpha1.FluxInstance{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), resultFinal)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	logObjectStatus(t, resultFinal)
+	g.Expect(resultFinal.Status.ObservedGeneration).To(BeEquivalentTo(resultFinal.Generation))
+	g.Expect(resultFinal.Status.LastAttemptedRevision).To(HavePrefix("v2.3.0@sha256:"))
 
 	// Check if events were recorded for each step.
 	events := getEvents(result.Name)
 	g.Expect(events).To(HaveLen(3))
 	g.Expect(events[0].Reason).To(Equal(meta.ProgressingReason))
+	g.Expect(events[0].Message).To(HavePrefix("Installing revision"))
 	g.Expect(events[1].Reason).To(Equal(meta.ReconciliationSucceededReason))
+	g.Expect(events[1].Message).To(HavePrefix("Reconciliation finished"))
 	g.Expect(events[2].Reason).To(Equal(meta.ReconciliationSucceededReason))
+	g.Expect(events[2].Annotations).To(HaveKeyWithValue(fluxcdv1alpha1.RevisionAnnotation, resultFinal.Status.LastAttemptedRevision))
 
 	err = testClient.Delete(ctx, obj)
 	g.Expect(err).ToNot(HaveOccurred())
@@ -100,7 +111,7 @@ func TestFluxInstanceReconciler_Install(t *testing.T) {
 
 	// Check if the instance was uninstalled.
 	result = &fluxcdv1alpha1.FluxInstance{}
-	err = testEnv.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 }
@@ -120,9 +131,10 @@ func TestFluxInstanceReconciler_InstallFail(t *testing.T) {
 			Name:      ns.Name,
 			Namespace: ns.Name,
 		},
+		Spec: getDefaultFluxSpec(),
 	}
 
-	err = testEnv.Create(ctx, obj)
+	err = testClient.Create(ctx, obj)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// Initialize the instance.
@@ -141,20 +153,19 @@ func TestFluxInstanceReconciler_InstallFail(t *testing.T) {
 
 	// Check if the instance was marked as failed.
 	result := &fluxcdv1alpha1.FluxInstance{}
-	err = testEnv.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	logObjectStatus(t, result)
 	g.Expect(conditions.IsStalled(result)).To(BeTrue())
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.BuildFailedReason))
-	g.Expect(conditions.GetMessage(result, meta.ReadyCondition)).To(ContainSubstring("Storage path"))
+	g.Expect(conditions.GetMessage(result, meta.ReadyCondition)).To(ContainSubstring(reconciler.StoragePath))
 
 	// Check if events were recorded for each step.
 	events := getEvents(result.Name)
-	g.Expect(events).To(HaveLen(2))
-	g.Expect(events[0].Reason).To(Equal(meta.ProgressingReason))
-	g.Expect(events[1].Reason).To(Equal(meta.BuildFailedReason))
-	g.Expect(events[1].Message).To(ContainSubstring(reconciler.StoragePath))
+	g.Expect(events).To(HaveLen(1))
+	g.Expect(events[0].Reason).To(Equal(meta.BuildFailedReason))
+	g.Expect(events[0].Message).To(ContainSubstring(reconciler.StoragePath))
 
 	err = testClient.Delete(ctx, obj)
 	g.Expect(err).ToNot(HaveOccurred())
@@ -167,7 +178,7 @@ func TestFluxInstanceReconciler_InstallFail(t *testing.T) {
 
 	// Check if the instance was uninstalled.
 	result = &fluxcdv1alpha1.FluxInstance{}
-	err = testEnv.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 }

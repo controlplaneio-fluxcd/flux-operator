@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/fluxcd/cli-utils/pkg/kstatus/polling"
@@ -21,8 +22,10 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/yaml"
 
 	fluxcdv1alpha1 "github.com/controlplaneio-fluxcd/fluxcd-operator/api/v1alpha1"
+	"github.com/controlplaneio-fluxcd/fluxcd-operator/internal/builder"
 )
 
 // FluxInstanceReconciler reconciles a FluxInstance object
@@ -92,14 +95,11 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 	conditions.MarkReconciling(obj,
 		meta.ProgressingReason,
 		msg)
-	if err := r.patch(ctx, obj, patcher); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
-	}
-	r.EventRecorder.Event(obj, corev1.EventTypeNormal, meta.ProgressingReason, msg)
 
-	// Verify the storage path exists.
-	if _, err := os.Stat(r.StoragePath); os.IsNotExist(err) {
-		msg := fmt.Sprintf("Storage path %s does not exist", r.StoragePath)
+	// Build the distribution manifests.
+	buildResult, err := r.build(ctx, obj)
+	if err != nil {
+		msg := fmt.Sprintf("build failed: %s", err.Error())
 		conditions.MarkFalse(obj,
 			meta.ReadyCondition,
 			meta.BuildFailedReason,
@@ -113,14 +113,32 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 		return ctrl.Result{}, nil
 	}
 
+	// Update latest attempted revision.
+	if obj.Status.LastAttemptedRevision != buildResult.Revision {
+		msg := fmt.Sprintf("Upagrading to revision %s", buildResult.Revision)
+		if obj.Status.LastAttemptedRevision == "" {
+			msg = fmt.Sprintf("Installing revision %s", buildResult.Revision)
+		}
+		log.Info(msg)
+		r.EventRecorder.Event(obj, corev1.EventTypeNormal, meta.ProgressingReason, msg)
+		obj.Status.LastAttemptedRevision = buildResult.Revision
+	}
+	if err := r.patch(ctx, obj, patcher); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
+	}
+
 	// Mark the object as ready.
 	msg = fmt.Sprintf("Reconciliation finished in %s", time.Since(reconcileStart).String())
 	conditions.MarkTrue(obj,
 		meta.ReadyCondition,
 		meta.ReconciliationSucceededReason,
 		msg)
-	log.Info(msg, "generation", obj.GetGeneration())
-	r.EventRecorder.Event(obj, corev1.EventTypeNormal, meta.ReconciliationSucceededReason, msg)
+	log.Info(msg, "revision", obj.Status.LastAttemptedRevision)
+	r.EventRecorder.AnnotatedEventf(obj,
+		map[string]string{fluxcdv1alpha1.RevisionAnnotation: obj.Status.LastAttemptedRevision},
+		corev1.EventTypeNormal,
+		meta.ReconciliationSucceededReason,
+		msg)
 
 	// Requeue the reconciliation if the interval is set in annotations.
 	result := ctrl.Result{}
@@ -129,6 +147,48 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 	}
 
 	return result, nil
+}
+
+func (r *FluxInstanceReconciler) build(ctx context.Context,
+	obj *fluxcdv1alpha1.FluxInstance) (*builder.Result, error) {
+	log := ctrl.LoggerFrom(ctx)
+
+	fluxDir := filepath.Join(r.StoragePath, "flux")
+	if _, err := os.Stat(fluxDir); os.IsNotExist(err) {
+		return nil, fmt.Errorf("storage path %s does not exist", fluxDir)
+	}
+
+	ver, err := builder.MatchVersion(fluxDir, obj.Spec.Distribution.Version)
+	if err != nil {
+		return nil, err
+	}
+
+	options := builder.MakeDefaultOptions()
+	options.Version = ver
+	options.Registry = obj.Spec.Distribution.Registry
+	options.ImagePullSecret = obj.Spec.Distribution.ImagePullSecret
+	options.Namespace = obj.GetNamespace()
+
+	if obj.Spec.Kustomize != nil && len(obj.Spec.Kustomize.Patches) > 0 {
+		patchesData, err := yaml.Marshal(obj.Spec.Kustomize.Patches)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse kustomize patches: %w", err)
+		}
+		options.Patches = string(patchesData)
+	}
+
+	tmpDir, err := builder.MkdirTempAbs("", "flux")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create tmp dir: %w", err)
+	}
+
+	defer func() {
+		if err := os.RemoveAll(tmpDir); err != nil {
+			log.Error(err, "failed to remove tmp dir", "dir", tmpDir)
+		}
+	}()
+
+	return builder.Build(filepath.Join(fluxDir, ver), tmpDir, options)
 }
 
 //nolint:unparam

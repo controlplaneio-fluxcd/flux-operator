@@ -3,11 +3,18 @@ kind: FluxInstance
 metadata:
   name: flux
 spec:
+  distribution:
+    version: "2.x"
+    registry: "ghcr.io/fluxcd"
   kustomize:
     patches:
-      - patch: |
-          - op: replace
-            path: /spec/replicas
-            value: 0
-        target:
+      - target:
           kind: Deployment
+          labelSelector: "app.kubernetes.io/component in (kustomize-controller, helm-controller)"
+        patch: |
+          - op: add
+            path: /spec/template/spec/containers/0/args/-
+            value: --concurrent=10
+          - op: add
+            path: /spec/template/spec/containers/0/args/-
+            value: --requeue-dependency=10s

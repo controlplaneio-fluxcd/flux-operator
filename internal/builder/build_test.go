@@ -17,7 +17,7 @@ import (
 
 func TestBuild_Defaults(t *testing.T) {
 	g := NewWithT(t)
-	const version = "v1.3.0"
+	const version = "v2.3.0"
 	options := MakeDefaultOptions()
 	options.Version = version
 
@@ -27,9 +27,9 @@ func TestBuild_Defaults(t *testing.T) {
 	dstDir, err := testTempDir(t)
 	g.Expect(err).NotTo(HaveOccurred())
 
-	objects, err := Build(srcDir, dstDir, options)
+	result, err := Build(srcDir, dstDir, options)
 	g.Expect(err).NotTo(HaveOccurred())
-	g.Expect(objects).NotTo(BeEmpty())
+	g.Expect(result.Objects).NotTo(BeEmpty())
 
 	if os.Getenv("GEN_GOLDEN") == "true" {
 		err = cp.Copy(filepath.Join(dstDir, "kustomization.yaml"), goldenFile)
@@ -47,7 +47,7 @@ func TestBuild_Defaults(t *testing.T) {
 
 func TestBuild_Patches(t *testing.T) {
 	g := NewWithT(t)
-	const version = "v1.3.0"
+	const version = "v2.3.0"
 	options := MakeDefaultOptions()
 	options.Version = version
 
@@ -74,9 +74,10 @@ func TestBuild_Patches(t *testing.T) {
 	g.Expect(err).NotTo(HaveOccurred())
 	options.Patches = string(patchesData)
 
-	objects, err := Build(srcDir, dstDir, options)
+	result, err := Build(srcDir, dstDir, options)
 	g.Expect(err).NotTo(HaveOccurred())
-	g.Expect(objects).NotTo(BeEmpty())
+	g.Expect(result.Objects).NotTo(BeEmpty())
+	g.Expect(result.Revision).To(HavePrefix(version + "@sha256:"))
 
 	if os.Getenv("GEN_GOLDEN") == "true" {
 		err = cp.Copy(filepath.Join(dstDir, "kustomization.yaml"), goldenFile)
@@ -92,7 +93,7 @@ func TestBuild_Patches(t *testing.T) {
 	g.Expect(string(genK)).To(Equal(string(goldenK)))
 
 	found := false
-	for _, obj := range objects {
+	for _, obj := range result.Objects {
 		if obj.GetKind() == "Namespace" {
 			found = true
 			labels := obj.GetLabels()
@@ -106,7 +107,7 @@ func TestBuild_Patches(t *testing.T) {
 
 func TestBuild_InvalidPatches(t *testing.T) {
 	g := NewWithT(t)
-	const version = "v1.3.0"
+	const version = "v2.3.0"
 	options := MakeDefaultOptions()
 	options.Version = version
 	srcDir := filepath.Join("testdata", version)

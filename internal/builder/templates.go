@@ -186,30 +186,6 @@ func execTemplate(obj interface{}, tmpl, filename string) (err error) {
 	return file.Sync()
 }
 
-func copyFile(src, dst string) (err error) {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer func(in *os.File) {
-		err = in.Close()
-	}(in)
-
-	out, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer func(out *os.File) {
-		err = out.Close()
-	}(out)
-
-	_, err = io.Copy(out, in)
-	if err != nil {
-		return err
-	}
-	return out.Close()
-}
-
 func containsItemString(s []string, e string) bool {
 	for _, a := range s {
 		if a == e {

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/fluxcd/cli-utils/pkg/kstatus/polling"
+	"github.com/fluxcd/pkg/apis/kustomize"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	kcheck "github.com/fluxcd/pkg/runtime/conditions/check"
@@ -57,7 +58,7 @@ func TestMain(m *testing.M) {
 	)
 
 	var err error
-	testClient, err = client.New(testEnv.Config, client.Options{Scheme: NewTestScheme()})
+	testClient, err = client.New(testEnv.Config, client.Options{Scheme: NewTestScheme(), Cache: nil})
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create test environment client: %v", err))
 	}
@@ -115,4 +116,27 @@ func getEvents(objName string) []corev1.Event {
 		}
 	}
 	return result
+}
+
+func getDefaultFluxSpec() fluxcdv1alpha1.FluxInstanceSpec {
+	return fluxcdv1alpha1.FluxInstanceSpec{
+		Distribution: fluxcdv1alpha1.Distribution{
+			Version:  "*",
+			Registry: "ghcr.io/fluxcd",
+		},
+		Kustomize: &fluxcdv1alpha1.Kustomize{
+			Patches: []kustomize.Patch{
+				{
+					Target: &kustomize.Selector{
+						Kind: "Deployment",
+					},
+					Patch: `
+- op: replace
+  path: /spec/replicas
+  value: 0
+`,
+				},
+			},
+		},
+	}
 }
