@@ -87,7 +87,7 @@ func getFluxInstanceReconciler() *FluxInstanceReconciler {
 		Client:        testClient,
 		Scheme:        NewTestScheme(),
 		StatusPoller:  polling.NewStatusPoller(testClient, testEnv.GetRESTMapper(), polling.Options{}),
-		StoragePath:   filepath.Join("..", "..", "data"),
+		StoragePath:   filepath.Join("..", "..", "config", "data"),
 		StatusManager: controllerName,
 		EventRecorder: testEnv.GetEventRecorderFor(controllerName),
 	}

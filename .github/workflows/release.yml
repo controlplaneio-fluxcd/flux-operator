@@ -34,8 +34,6 @@ jobs:
       - name: Prepare
         id: prep
         run: |
-          make data
-          
           VERSION="${{ github.event.inputs.tag }}-${GITHUB_SHA::8}"
           if [[ $GITHUB_REF == refs/tags/* ]]; then
             VERSION=${GITHUB_REF/refs\/tags\//}

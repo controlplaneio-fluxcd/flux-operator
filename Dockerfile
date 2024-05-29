@@ -25,7 +25,7 @@ WORKDIR /
 
 # Copy the binary and manifests data.
 COPY --from=builder /workspace/flux-operator .
-COPY data/ /data/
+COPY config/data/ /data/
 
 # Run the operator as a non-root user.
 USER 65532:65532

@@ -1,7 +1,13 @@
+# Copyright 2024 Stefan Prodan.
+# SPDX-License-Identifier: AGPL-3.0
+
 # Makefile for building, testing, and deploying the Flux Operator.
 
 # Image URL to use all building/pushing image targets
 IMG ?= ghcr.io/controlplaneio-fluxcd/flux-operator:latest
+
+# FLUX_VERSION refers to the version of Flux to be vendored.
+FLUX_VERSION = $(shell gh release view --repo fluxcd/flux2 --json tagName -q '.tagName')
 
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder
 # assets to be downloaded by envtest binary.
@@ -29,7 +35,7 @@ all: build
 ##@ Development
 
 .PHONY: manifests
-manifests: data controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
+manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd paths="./..." output:crd:artifacts:config=config/crd/bases
 
 .PHONY: generate
@@ -75,9 +81,9 @@ build: manifests generate fmt vet ## Build manager binary.
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./cmd/main.go
 
-.PHONY: data
-data: ## Download Flux manifests to data dir.
-	hack/data.sh v2.3.0 v2.2.3
+.PHONY: vendor-flux
+vendor-flux: ## Download Flux base manifests to config/flux dir.
+	hack/vendor-flux-manifests.sh $(FLUX_VERSION)
 
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
@@ -93,13 +99,10 @@ docker-push: ## Push docker image with the manager.
 PLATFORMS ?= linux/arm64,linux/amd64
 .PHONY: docker-buildx
 docker-buildx: ## Build and push docker image for the manager for cross-platform support.
-	# copy existing Dockerfile and insert --platform=${BUILDPLATFORM} into Dockerfile.cross, and preserve the original Dockerfile
-	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile > Dockerfile.cross
 	- $(CONTAINER_TOOL) buildx create --name flux-operator-builder
 	$(CONTAINER_TOOL) buildx use flux-operator-builder
 	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile.cross .
 	- $(CONTAINER_TOOL) buildx rm flux-operator-builder
-	rm Dockerfile.cross
 
 .PHONY: build-installer
 build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
