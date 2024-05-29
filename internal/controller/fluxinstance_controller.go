@@ -183,6 +183,12 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 		return nil, err
 	}
 
+	if obj.Status.LastAppliedRevision != "" {
+		if err := builder.IsCompatibleVersion(obj.Status.LastAppliedRevision, ver); err != nil {
+			return nil, err
+		}
+	}
+
 	options := builder.MakeDefaultOptions()
 	options.Version = ver
 	options.Registry = obj.GetDistribution().Registry

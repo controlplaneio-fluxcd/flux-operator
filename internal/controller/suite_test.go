@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/fluxcd/cli-utils/pkg/kstatus/polling"
-	"github.com/fluxcd/pkg/apis/kustomize"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	kcheck "github.com/fluxcd/pkg/runtime/conditions/check"
@@ -118,28 +117,4 @@ func getEvents(objName string) []corev1.Event {
 		}
 	}
 	return result
-}
-
-func getDefaultFluxSpec() fluxcdv1.FluxInstanceSpec {
-	return fluxcdv1.FluxInstanceSpec{
-		Wait: false,
-		Distribution: fluxcdv1.Distribution{
-			Version:  "*",
-			Registry: "ghcr.io/fluxcd",
-		},
-		Kustomize: &fluxcdv1.Kustomize{
-			Patches: []kustomize.Patch{
-				{
-					Target: &kustomize.Selector{
-						Kind: "Deployment",
-					},
-					Patch: `
-- op: replace
-  path: /spec/replicas
-  value: 0
-`,
-				},
-			},
-		},
-	}
 }

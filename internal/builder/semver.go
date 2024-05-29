@@ -8,9 +8,36 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/Masterminds/semver/v3"
 )
+
+// IsCompatibleVersion checks if the version upgrade is compatible.
+// It returns an error if a downgrade to a lower minor version is attempted.
+func IsCompatibleVersion(fromVer, toVer string) error {
+	if strings.Contains(fromVer, "@") {
+		fromVer = strings.Split(fromVer, "@")[0]
+	}
+	from, err := semver.NewVersion(fromVer)
+	if err != nil {
+		return fmt.Errorf("from version '%s' parse error: %w", fromVer, err)
+	}
+
+	if strings.Contains(toVer, "@") {
+		toVer = strings.Split(toVer, "@")[0]
+	}
+	to, err := semver.NewVersion(toVer)
+	if err != nil {
+		return fmt.Errorf("to version '%s' parse error: %w", toVer, err)
+	}
+
+	if to.Major() < from.Major() || to.Minor() < from.Minor() {
+		return fmt.Errorf("downgrading from %s to %s is not supported, reinstall needed", fromVer, toVer)
+	}
+
+	return nil
+}
 
 // MatchVersion returns the latest version dir path that matches the given semver range.
 func MatchVersion(dataDir, semverRange string) (string, error) {
