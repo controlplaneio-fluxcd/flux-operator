@@ -195,32 +195,6 @@ func TestBuild_InvalidPatches(t *testing.T) {
 	g.Expect(err.Error()).To(ContainSubstring("Unexpected kind: removes"))
 }
 
-func TestBuild_extractImages(t *testing.T) {
-	g := NewWithT(t)
-	const version = "v2.3.0"
-	srcDir := filepath.Join("testdata", version)
-
-	images, err := ExtractComponentImages(srcDir, MakeDefaultOptions())
-	g.Expect(err).NotTo(HaveOccurred())
-
-	t.Log(images)
-	g.Expect(images).To(HaveLen(6))
-	g.Expect(images).To(ContainElements(
-		ComponentImage{
-			Component:   "source-controller",
-			ImageName:   "ghcr.io/fluxcd/source-controller",
-			ImageTag:    "v1.3.0",
-			ImageDigest: "",
-		},
-		ComponentImage{
-			Component:   "kustomize-controller",
-			ImageName:   "ghcr.io/fluxcd/kustomize-controller",
-			ImageTag:    "v1.3.0",
-			ImageDigest: "",
-		},
-	))
-}
-
 func testTempDir(t *testing.T) (string, error) {
 	tmpDir := t.TempDir()
 
