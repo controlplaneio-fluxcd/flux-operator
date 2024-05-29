@@ -215,6 +215,13 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 		options.Patches += string(patchesData)
 	}
 
+	srcDir := filepath.Join(fluxDir, ver)
+	images, err := builder.ExtractComponentImages(srcDir, options)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract container images from manifests: %w", err)
+	}
+	options.ComponentImages = images
+
 	tmpDir, err := builder.MkdirTempAbs("", "flux")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create tmp dir: %w", err)
@@ -226,7 +233,7 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 		}
 	}()
 
-	return builder.Build(filepath.Join(fluxDir, ver), tmpDir, options)
+	return builder.Build(srcDir, tmpDir, options)
 }
 
 // apply reconciles the resources in the cluster by performing

@@ -8,6 +8,7 @@ type Options struct {
 	Version                string
 	Namespace              string
 	Components             []string
+	ComponentImages        []ComponentImage
 	EventsAddr             string
 	Registry               string
 	ImagePullSecret        string

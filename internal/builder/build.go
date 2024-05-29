@@ -10,12 +10,15 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/fluxcd/pkg/kustomize"
 	"github.com/fluxcd/pkg/ssa"
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
+	gcname "github.com/google/go-containerregistry/pkg/name"
 	"github.com/opencontainers/go-digest"
 	cp "github.com/otiai10/copy"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 // Build copies the source directory to a temporary directory, generates the
@@ -99,4 +102,51 @@ func generate(base string, options Options) error {
 		}
 	}
 	return nil
+}
+
+// ComponentImage represents a container image used by a component.
+type ComponentImage struct {
+	Component   string
+	ImageName   string
+	ImageTag    string
+	ImageDigest string
+}
+
+// ExtractComponentImages reads the source directory and extracts the container images
+// from the components manifests.
+func ExtractComponentImages(srcDir string, opts Options) ([]ComponentImage, error) {
+	images := make([]ComponentImage, len(opts.Components))
+	for i, component := range opts.Components {
+		d, err := os.ReadFile(filepath.Join(srcDir, fmt.Sprintf("/%s.yaml", component)))
+		if err != nil {
+			return nil, err
+		}
+		objects, err := ssautil.ReadObjects(bytes.NewReader(d))
+		if err != nil {
+			return nil, err
+		}
+		for _, obj := range objects {
+			if obj.GetKind() == "Deployment" {
+				containers, ok, _ := unstructured.NestedSlice(obj.Object, "spec", "template", "spec", "containers")
+				if !ok {
+					return nil, fmt.Errorf("containers not found in %s", obj.GetName())
+				}
+				for _, container := range containers {
+					img := container.(map[string]interface{})["image"].(string)
+					tag, err := gcname.NewTag(img, gcname.WeakValidation)
+					if err != nil {
+						return nil, err
+					}
+
+					images[i] = ComponentImage{
+						Component: component,
+						ImageName: fmt.Sprintf("%s/%s", strings.TrimSuffix(opts.Registry, "/"), component),
+						ImageTag:  tag.Identifier(),
+					}
+				}
+			}
+		}
+	}
+
+	return images, nil
 }
