@@ -21,11 +21,12 @@ const (
 )
 
 var (
-	Finalizer                = fmt.Sprintf("%s/finalizer", GroupVersion.Group)
-	ReconcileAnnotation      = fmt.Sprintf("%s/reconcile", GroupVersion.Group)
-	ReconcileEveryAnnotation = fmt.Sprintf("%s/reconcileEvery", GroupVersion.Group)
-	PruneAnnotation          = fmt.Sprintf("%s/prune", GroupVersion.Group)
-	RevisionAnnotation       = fmt.Sprintf("%s/revision", GroupVersion.Group)
+	Finalizer                  = fmt.Sprintf("%s/finalizer", GroupVersion.Group)
+	ReconcileAnnotation        = fmt.Sprintf("%s/reconcile", GroupVersion.Group)
+	ReconcileEveryAnnotation   = fmt.Sprintf("%s/reconcileEvery", GroupVersion.Group)
+	ReconcileTimeoutAnnotation = fmt.Sprintf("%s/reconcileTimeout", GroupVersion.Group)
+	PruneAnnotation            = fmt.Sprintf("%s/prune", GroupVersion.Group)
+	RevisionAnnotation         = fmt.Sprintf("%s/revision", GroupVersion.Group)
 )
 
 // FluxInstanceSpec defines the desired state of FluxInstance
@@ -39,7 +40,7 @@ type FluxInstanceSpec struct {
 	// +optional
 	Components []Component `json:"components,omitempty"`
 
-	// Cluster holds the configuration for the Kubernetes cluster.
+	// Cluster holds the specification of the Kubernetes cluster.
 	// +optional
 	Cluster *Cluster `json:"cluster,omitempty"`
 
@@ -76,7 +77,7 @@ type Distribution struct {
 // +kubebuilder:validation:Enum:=source-controller;kustomize-controller;helm-controller;notification-controller;image-reflector-controller;image-automation-controller
 type Component string
 
-// Cluster holds the configuration for the Kubernetes cluster.
+// Cluster is the specification for the Kubernetes cluster.
 type Cluster struct {
 	// Domain is the cluster domain used for generating the FQDN of services.
 	// Defaults to 'cluster.local'.
@@ -84,11 +85,22 @@ type Cluster struct {
 	// +required
 	Domain string `json:"domain"`
 
+	// Multitenant enables the multitenancy lockdown.
+	// +optional
+	Multitenant bool `json:"multitenant,omitempty"`
+
 	// NetworkPolicy restricts network access to the current namespace.
 	// Defaults to true.
 	// +kubebuilder:default:=true
 	// +required
 	NetworkPolicy bool `json:"networkPolicy"`
+
+	// Type specifies the distro of the Kubernetes cluster.
+	// Defaults to 'kubernetes'.
+	// +kubebuilder:validation:Enum:=kubernetes;openshift
+	// +kubebuilder:default:=kubernetes
+	// +optional
+	Type string `json:"type,omitempty"`
 }
 
 // Kustomize holds a set of patches that can be applied to the
@@ -121,10 +133,6 @@ type ResourceRef struct {
 type FluxInstanceStatus struct {
 	meta.ReconcileRequestStatus `json:",inline"`
 
-	// ObservedGeneration is the last reconciled generation.
-	// +optional
-	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
-
 	// Conditions contains the readiness conditions of the object.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
@@ -145,13 +153,45 @@ type FluxInstanceStatus struct {
 	Inventory *ResourceInventory `json:"inventory,omitempty"`
 }
 
-// GetComponents sets the status conditions on the object.
+// GetDistribution returns the distribution specification with defaults.
+func (in *FluxInstance) GetDistribution() Distribution {
+	return in.Spec.Distribution
+}
+
+// GetComponents returns the components to install with defaults.
 func (in *FluxInstance) GetComponents() []string {
 	components := make([]string, len(in.Spec.Components))
 	for i, c := range in.Spec.Components {
 		components[i] = string(c)
 	}
+	if len(components) == 0 {
+		components = []string{
+			"source-controller",
+			"kustomize-controller",
+			"helm-controller",
+			"notification-controller",
+		}
+	}
+
 	return components
+}
+
+// GetCluster returns the cluster specification with defaults.
+func (in *FluxInstance) GetCluster() Cluster {
+	cluster := in.Spec.Cluster
+	if cluster == nil {
+		cluster = &Cluster{}
+	}
+	if cluster.Domain == "" {
+		cluster.Domain = "cluster.local"
+	}
+	if cluster.NetworkPolicy {
+		cluster.NetworkPolicy = true
+	}
+	if cluster.Type == "" {
+		cluster.Type = "kubernetes"
+	}
+	return *cluster
 }
 
 // GetConditions returns the status conditions of the object.
@@ -171,15 +211,31 @@ func (in *FluxInstance) GetInterval() time.Duration {
 	if ok && strings.ToLower(val) == DisabledValue {
 		return 0
 	}
+	defaultInterval := 60 * time.Minute
 	val, ok = in.GetAnnotations()[ReconcileEveryAnnotation]
 	if !ok {
-		return 60 * time.Minute
+		return defaultInterval
 	}
 	interval, err := time.ParseDuration(val)
 	if err != nil {
-		return 60 * time.Minute
+		return defaultInterval
 	}
 	return interval
+}
+
+// GetTimeout returns the timeout for the reconciliation process.
+// If no timeout is set, the default is 5 minutes.
+func (in *FluxInstance) GetTimeout() time.Duration {
+	defaultTimeout := 5 * time.Minute
+	val, ok := in.GetAnnotations()[ReconcileTimeoutAnnotation]
+	if !ok {
+		return defaultTimeout
+	}
+	timeout, err := time.ParseDuration(val)
+	if err != nil {
+		return defaultTimeout
+	}
+	return timeout
 }
 
 // +kubebuilder:storageversion
@@ -194,9 +250,7 @@ type FluxInstance struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec FluxInstanceSpec `json:"spec,omitempty"`
-
-	// +kubebuilder:default:={"observedGeneration":-1}
+	Spec   FluxInstanceSpec   `json:"spec,omitempty"`
 	Status FluxInstanceStatus `json:"status,omitempty"`
 }
 

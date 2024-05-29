@@ -35,6 +35,35 @@ var _ = Describe("FluxInstance", Ordered, func() {
 		})
 	})
 
+	Context("upgrade", func() {
+		It("should run successfully", func() {
+			By("reconcile FluxInstance")
+			verifyFluxInstanceReconcile := func() error {
+				cmd := exec.Command("kubectl", "-n", namespace, "patch", "FluxInstance/flux",
+					"--type=json", `-p=[{"op": "replace", "path": "/spec/cluster/multitenant", "value":true}]`,
+				)
+				_, err := utils.Run(cmd)
+				ExpectWithOffset(2, err).NotTo(HaveOccurred())
+
+				cmd = exec.Command("kubectl", "wait", "FluxInstance/flux", "-n", namespace,
+					"--for=condition=Ready", "--timeout=5m",
+				)
+				_, err = utils.Run(cmd)
+				ExpectWithOffset(2, err).NotTo(HaveOccurred())
+
+				cmd = exec.Command("kubectl", "get", "deploy/kustomize-controller",
+					"-n", namespace, "-o=yaml",
+				)
+				output, err := utils.Run(cmd)
+				ExpectWithOffset(2, err).NotTo(HaveOccurred())
+				ExpectWithOffset(2, output).To(ContainSubstring("no-cross-namespace-refs=true"))
+
+				return nil
+			}
+			EventuallyWithOffset(1, verifyFluxInstanceReconcile, 5*time.Minute, 10*time.Second).Should(Succeed())
+		})
+	})
+
 	Context("uninstallation", func() {
 		It("should run successfully", func() {
 			By("delete FluxInstance")

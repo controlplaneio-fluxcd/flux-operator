@@ -1,0 +1,163 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: flux-system
+transformers:
+  - labels.yaml
+resources:
+  - namespace.yaml
+  - policies.yaml
+  - roles
+  - source-controller.yaml
+  - kustomize-controller.yaml
+  - helm-controller.yaml
+  - notification-controller.yaml
+  - image-reflector-controller.yaml
+  - image-automation-controller.yaml
+images:
+  - name: fluxcd/source-controller
+    newName: ghcr.io/fluxcd/source-controller
+  - name: fluxcd/kustomize-controller
+    newName: ghcr.io/fluxcd/kustomize-controller
+  - name: fluxcd/helm-controller
+    newName: ghcr.io/fluxcd/helm-controller
+  - name: fluxcd/notification-controller
+    newName: ghcr.io/fluxcd/notification-controller
+  - name: fluxcd/image-reflector-controller
+    newName: ghcr.io/fluxcd/image-reflector-controller
+  - name: fluxcd/image-automation-controller
+    newName: ghcr.io/fluxcd/image-automation-controller
+patches:
+- path: node-selector.yaml
+  target:
+    kind: Deployment
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: source-controller
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/args/0
+      value: --events-addr=http://notification-controller.flux-system.svc.cluster.local./
+    - op: replace
+      path: /spec/template/spec/containers/0/args/1
+      value: --watch-all-namespaces=true
+    - op: replace
+      path: /spec/template/spec/containers/0/args/2
+      value: --log-level=info
+    - op: replace
+      path: /spec/template/spec/containers/0/args/6
+      value: --storage-adv-addr=source-controller.$(RUNTIME_NAMESPACE).svc.cluster.local.
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: kustomize-controller
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/args/0
+      value: --events-addr=http://notification-controller.flux-system.svc.cluster.local./
+    - op: replace
+      path: /spec/template/spec/containers/0/args/1
+      value: --watch-all-namespaces=true
+    - op: replace
+      path: /spec/template/spec/containers/0/args/2
+      value: --log-level=info
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: helm-controller
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/args/0
+      value: --events-addr=http://notification-controller.flux-system.svc.cluster.local./
+    - op: replace
+      path: /spec/template/spec/containers/0/args/1
+      value: --watch-all-namespaces=true
+    - op: replace
+      path: /spec/template/spec/containers/0/args/2
+      value: --log-level=info
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: notification-controller
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/args/0
+      value: --watch-all-namespaces=true
+    - op: replace
+      path: /spec/template/spec/containers/0/args/1
+      value: --log-level=info
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: image-reflector-controller
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/args/0
+      value: --events-addr=http://notification-controller.flux-system.svc.cluster.local./
+    - op: replace
+      path: /spec/template/spec/containers/0/args/1
+      value: --watch-all-namespaces=true
+    - op: replace
+      path: /spec/template/spec/containers/0/args/2
+      value: --log-level=info
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: image-automation-controller
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/args/0
+      value: --events-addr=http://notification-controller.flux-system.svc.cluster.local./
+    - op: replace
+      path: /spec/template/spec/containers/0/args/1
+      value: --watch-all-namespaces=true
+    - op: replace
+      path: /spec/template/spec/containers/0/args/2
+      value: --log-level=info
+
+- target:
+    kind: Deployment
+  patch: |-
+    - op: remove
+      path: /spec/template/spec/securityContext
+    - op: remove
+      path: /spec/template/spec/containers/0/securityContext/seccompProfile
+    - op: remove
+      path: /spec/template/spec/containers/0/securityContext/runAsNonRoot
+- target:
+    kind: Namespace
+  patch: |-
+    - op: remove
+      path: /metadata/labels/pod-security.kubernetes.io~1warn
+    - op: remove
+      path: /metadata/labels/pod-security.kubernetes.io~1warn-version
+
+- target:
+    kind: Deployment
+    name: "(kustomize-controller|helm-controller|notification-controller|image-reflector-controller|image-automation-controller)"
+  patch: |-
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --no-cross-namespace-refs=true
+- target:
+    kind: Deployment
+    name: "(kustomize-controller)"
+  patch: |-
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --no-remote-bases=true
+- target:
+    kind: Deployment
+    name: "(kustomize-controller|helm-controller)"
+  patch: |-
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --default-service-account=default
+

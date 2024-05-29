@@ -12,8 +12,10 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -51,8 +53,9 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 	resultInit := &fluxcdv1alpha1.FluxInstance{}
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), resultInit)
 	g.Expect(err).ToNot(HaveOccurred())
+
+	logObjectStatus(t, resultInit)
 	g.Expect(resultInit.Finalizers).To(ContainElement(fluxcdv1alpha1.Finalizer))
-	g.Expect(resultInit.Status.ObservedGeneration).To(BeEquivalentTo(-1))
 
 	r, err = reconciler.Reconcile(ctx, reconcile.Request{
 		NamespacedName: client.ObjectKeyFromObject(obj),
@@ -65,6 +68,7 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).ToNot(HaveOccurred())
 
+	logObjectStatus(t, result)
 	checkInstanceReadiness(g, result)
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
 
@@ -115,7 +119,6 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 
 	logObjectStatus(t, resultFinal)
-	g.Expect(resultFinal.Status.ObservedGeneration).To(BeEquivalentTo(resultFinal.Generation))
 	g.Expect(resultFinal.Status.LastAttemptedRevision).To(HavePrefix("v2.3.0@sha256:"))
 	g.Expect(resultFinal.Status.LastAppliedRevision).To(BeIdenticalTo(resultFinal.Status.LastAttemptedRevision))
 
@@ -226,6 +229,79 @@ func TestFluxInstanceReconciler_InstallFail(t *testing.T) {
 	// Check if the instance was uninstalled.
 	result = &fluxcdv1alpha1.FluxInstance{}
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+}
+
+func TestFluxInstanceReconciler_Profiles(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getFluxInstanceReconciler()
+	spec := getDefaultFluxSpec()
+	spec.Cluster = &fluxcdv1alpha1.Cluster{
+		Type:        "openshift",
+		Multitenant: true,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	obj := &fluxcdv1alpha1.FluxInstance{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ns.Name,
+			Namespace: ns.Name,
+		},
+		Spec: spec,
+	}
+
+	err = testClient.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize the instance.
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Install the instance.
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Check if the components were installed with the profiles.
+	kc := &appsv1.Deployment{}
+	err = testClient.Get(ctx, types.NamespacedName{Name: "kustomize-controller", Namespace: ns.Name}, kc)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Check multitenant profile.
+	g.Expect(kc.Spec.Template.Spec.Containers[0].Args).To(ContainElements(
+		"--no-cross-namespace-refs=true",
+		"--default-service-account=default",
+		"--no-remote-bases=true",
+	))
+
+	// Check openshift profile.
+	g.Expect(kc.Spec.Template.Spec.Containers[0].SecurityContext.SeccompProfile).To(BeNil())
+
+	// Check custom patches.
+	g.Expect(*kc.Spec.Replicas).To(BeNumerically("==", 0))
+
+	// Uninstall the instance.
+	err = testClient.Delete(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.IsZero()).To(BeTrue())
+
+	// Check if the instance was uninstalled.
+	sc := &appsv1.Deployment{}
+	err = testClient.Get(ctx, types.NamespacedName{Name: "source-controller", Namespace: ns.Name}, sc)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 }

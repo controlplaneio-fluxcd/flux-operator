@@ -78,6 +78,14 @@ func (r *FluxInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	if !controllerutil.ContainsFinalizer(obj, fluxcdv1alpha1.Finalizer) {
 		log.Info("Adding finalizer", "finalizer", fluxcdv1alpha1.Finalizer)
 		controllerutil.AddFinalizer(obj, fluxcdv1alpha1.Finalizer)
+		msg := "Reconciliation in progress"
+		conditions.MarkUnknown(obj,
+			meta.ReadyCondition,
+			meta.ProgressingReason,
+			msg)
+		conditions.MarkReconciling(obj,
+			meta.ProgressingReason,
+			msg)
 		return ctrl.Result{Requeue: true}, nil
 	}
 
@@ -158,13 +166,7 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 		meta.ReconciliationSucceededReason,
 		msg)
 
-	// Requeue the reconciliation if the interval is set in annotations.
-	result := ctrl.Result{}
-	if obj.GetInterval() > 0 {
-		result.RequeueAfter = obj.GetInterval()
-	}
-
-	return result, nil
+	return requeueAfter(obj), nil
 }
 
 func (r *FluxInstanceReconciler) build(ctx context.Context,
@@ -183,17 +185,18 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 
 	options := builder.MakeDefaultOptions()
 	options.Version = ver
-	options.Registry = obj.Spec.Distribution.Registry
-	options.ImagePullSecret = obj.Spec.Distribution.ImagePullSecret
+	options.Registry = obj.GetDistribution().Registry
+	options.ImagePullSecret = obj.GetDistribution().ImagePullSecret
 	options.Namespace = obj.GetNamespace()
+	options.Components = obj.GetComponents()
+	options.ClusterDomain = obj.GetCluster().Domain
+	options.NetworkPolicy = obj.GetCluster().NetworkPolicy
 
-	if len(obj.Spec.Components) > 0 {
-		options.Components = obj.GetComponents()
+	if obj.GetCluster().Type == "openshift" {
+		options.Patches += builder.ProfileOpenShift
 	}
-
-	if obj.Spec.Cluster != nil {
-		options.ClusterDomain = obj.Spec.Cluster.Domain
-		options.NetworkPolicy = obj.Spec.Cluster.NetworkPolicy
+	if obj.GetCluster().Multitenant {
+		options.Patches += builder.ProfileMultitenant
 	}
 
 	if obj.Spec.Kustomize != nil && len(obj.Spec.Kustomize.Patches) > 0 {
@@ -201,7 +204,7 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse kustomize patches: %w", err)
 		}
-		options.Patches = string(patchesData)
+		options.Patches += string(patchesData)
 	}
 
 	tmpDir, err := builder.MkdirTempAbs("", "flux")
@@ -218,6 +221,9 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 	return builder.Build(filepath.Join(fluxDir, ver), tmpDir, options)
 }
 
+// apply reconciles the resources in the cluster by performing
+// a server-side apply, pruning of stale resources and waiting
+// for the resources to become ready.
 func (r *FluxInstanceReconciler) apply(ctx context.Context,
 	obj *fluxcdv1alpha1.FluxInstance,
 	buildResult *builder.Result) error {
@@ -254,7 +260,7 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 
 	// Filter out the resources that have changed.
 	for _, change := range changeSet.Entries {
-		if HasChanged(change.Action) {
+		if hasChanged(change.Action) {
 			resultSet.Add(change)
 			changeSetLog.WriteString(change.String() + "\n")
 		}
@@ -310,7 +316,7 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 	if obj.Spec.Wait && len(resultSet.Entries) > 0 {
 		if err := resourceManager.WaitForSet(resultSet.ToObjMetadataSet(), ssa.WaitOptions{
 			Interval: 5 * time.Second,
-			Timeout:  5 * time.Minute,
+			Timeout:  obj.GetTimeout(),
 		}); err != nil {
 			return err
 		}
@@ -320,6 +326,8 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 	return nil
 }
 
+// finalize removes the finalizer from the object and prunes the resources.
+//
 //nolint:unparam
 func (r *FluxInstanceReconciler) finalize(ctx context.Context,
 	obj *fluxcdv1alpha1.FluxInstance) (ctrl.Result, error) {
@@ -358,6 +366,7 @@ func (r *FluxInstanceReconciler) finalize(ctx context.Context,
 	return ctrl.Result{}, nil
 }
 
+// finalizeStatus updates the object status and conditions.
 func (r *FluxInstanceReconciler) finalizeStatus(ctx context.Context,
 	obj *fluxcdv1alpha1.FluxInstance,
 	patcher *patch.SerialPatcher) error {
@@ -384,6 +393,7 @@ func (r *FluxInstanceReconciler) finalizeStatus(ctx context.Context,
 	return r.patch(ctx, obj, patcher)
 }
 
+// patch updates the object status, conditions and finalizers.
 func (r *FluxInstanceReconciler) patch(ctx context.Context,
 	obj *fluxcdv1alpha1.FluxInstance,
 	patcher *patch.SerialPatcher) (retErr error) {
@@ -397,10 +407,6 @@ func (r *FluxInstanceReconciler) patch(ctx context.Context,
 		patch.WithOwnedConditions{Conditions: ownedConditions},
 		patch.WithForceOverwriteConditions{},
 		patch.WithFieldOwner(r.StatusManager),
-	}
-
-	if conditions.IsTrue(obj, meta.ReadyCondition) || conditions.IsTrue(obj, meta.StalledCondition) {
-		patchOpts = append(patchOpts, patch.WithStatusObservedGeneration{})
 	}
 
 	// Patch the object status, conditions and finalizers.
@@ -417,9 +423,9 @@ func (r *FluxInstanceReconciler) patch(ctx context.Context,
 	return nil
 }
 
-// HasChanged evaluates the given action and returns true
+// hasChanged evaluates the given action and returns true
 // if the action type matches a resource mutation or deletion.
-func HasChanged(action ssa.Action) bool {
+func hasChanged(action ssa.Action) bool {
 	switch action {
 	case ssa.SkippedAction:
 		return false
@@ -428,4 +434,15 @@ func HasChanged(action ssa.Action) bool {
 	default:
 		return true
 	}
+}
+
+// requeueAfter returns a ctrl.Result with the requeue time set to the
+// interval specified in the object's annotations.
+func requeueAfter(obj *fluxcdv1alpha1.FluxInstance) ctrl.Result {
+	result := ctrl.Result{}
+	if obj.GetInterval() > 0 {
+		result.RequeueAfter = obj.GetInterval()
+	}
+
+	return result
 }

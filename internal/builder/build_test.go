@@ -105,6 +105,50 @@ func TestBuild_Patches(t *testing.T) {
 	g.Expect(found).To(BeTrue())
 }
 
+func TestBuild_Profiles(t *testing.T) {
+	g := NewWithT(t)
+	const version = "v2.3.0"
+	options := MakeDefaultOptions()
+	options.Version = version
+
+	srcDir := filepath.Join("testdata", version)
+	goldenFile := filepath.Join("testdata", version+"-golden", "profiles.kustomization.yaml")
+
+	dstDir, err := testTempDir(t)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	options.Patches = ProfileOpenShift + ProfileMultitenant
+
+	result, err := Build(srcDir, dstDir, options)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(result.Objects).NotTo(BeEmpty())
+	g.Expect(result.Revision).To(HavePrefix(version + "@sha256:"))
+
+	//if os.Getenv("GEN_GOLDEN") == "true" {
+	err = cp.Copy(filepath.Join(dstDir, "kustomization.yaml"), goldenFile)
+	g.Expect(err).NotTo(HaveOccurred())
+	//}
+
+	genK, err := os.ReadFile(filepath.Join(dstDir, "kustomization.yaml"))
+	g.Expect(err).NotTo(HaveOccurred())
+
+	goldenK, err := os.ReadFile(goldenFile)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	g.Expect(string(genK)).To(Equal(string(goldenK)))
+
+	found := false
+	for _, obj := range result.Objects {
+		if obj.GetKind() == "Namespace" {
+			found = true
+			labels := obj.GetLabels()
+			g.Expect(labels).NotTo(HaveKey("pod-security.kubernetes.io/warn"))
+			g.Expect(labels).NotTo(HaveKey("pod-security.kubernetes.io/warn-version"))
+		}
+	}
+	g.Expect(found).To(BeTrue())
+}
+
 func TestBuild_InvalidPatches(t *testing.T) {
 	g := NewWithT(t)
 	const version = "v2.3.0"

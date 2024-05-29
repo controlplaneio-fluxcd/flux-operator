@@ -50,7 +50,7 @@ spec:
             description: FluxInstanceSpec defines the desired state of FluxInstance
             properties:
               cluster:
-                description: Cluster holds the configuration for the Kubernetes cluster.
+                description: Cluster holds the specification of the Kubernetes cluster.
                 properties:
                   domain:
                     default: cluster.local
@@ -58,12 +58,24 @@ spec:
                       Domain is the cluster domain used for generating the FQDN of services.
                       Defaults to 'cluster.local'.
                     type: string
+                  multitenant:
+                    description: Multitenant enables the multitenancy lockdown.
+                    type: boolean
                   networkPolicy:
                     default: true
                     description: |-
                       NetworkPolicy restricts network access to the current namespace.
                       Defaults to true.
                     type: boolean
+                  type:
+                    default: kubernetes
+                    description: |-
+                      Type specifies the distro of the Kubernetes cluster.
+                      Defaults to 'kubernetes'.
+                    enum:
+                    - kubernetes
+                    - openshift
+                    type: string
                 required:
                 - domain
                 - networkPolicy
@@ -181,8 +193,6 @@ spec:
             - wait
             type: object
           status:
-            default:
-              observedGeneration: -1
             description: FluxInstanceStatus defines the observed state of FluxInstance
             properties:
               conditions:
@@ -299,10 +309,6 @@ spec:
                   reconcile request value, so a change of the annotation value
                   can be detected.
                 type: string
-              observedGeneration:
-                description: ObservedGeneration is the last reconciled generation.
-                format: int64
-                type: integer
             type: object
         type: object
     served: true

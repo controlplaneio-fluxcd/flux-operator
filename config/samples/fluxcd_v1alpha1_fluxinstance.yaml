@@ -6,6 +6,18 @@ spec:
   distribution:
     version: "2.x"
     registry: "ghcr.io/fluxcd"
+  components:
+    - source-controller
+    - kustomize-controller
+    - helm-controller
+    - notification-controller
+    - image-reflector-controller
+    - image-automation-controller
+  cluster:
+    type: openshift
+    multitenant: false
+    networkPolicy: true
+    domain: "cluster.local"
   kustomize:
     patches:
       - target:
