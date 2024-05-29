@@ -13,12 +13,14 @@ import (
 	"github.com/fluxcd/pkg/runtime/probes"
 	flag "github.com/spf13/pflag"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	ctrlcache "sigs.k8s.io/controller-runtime/pkg/cache"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlcfg "sigs.k8s.io/controller-runtime/pkg/config"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -85,6 +87,17 @@ func main() {
 		Client: ctrlclient.Options{
 			Cache: &ctrlclient.CacheOptions{
 				DisableFor: []ctrlclient.Object{&corev1.Secret{}, &corev1.ConfigMap{}},
+			},
+		},
+		Cache: ctrlcache.Options{
+			ByObject: map[ctrlclient.Object]ctrlcache.ByObject{
+				&fluxcdv1.FluxInstance{}: {
+					// Only the FluxInstance with the name 'flux' can be reconciled.
+					Field: fields.SelectorFromSet(fields.Set{
+						"metadata.name":      "flux",
+						"metadata.namespace": os.Getenv("RUNTIME_NAMESPACE"),
+					}),
+				},
 			},
 		},
 	})
