@@ -134,6 +134,7 @@ kind: LabelTransformer
 metadata:
   name: labels
 labels:
+  app.kubernetes.io/managed-by: flux-operator
   app.kubernetes.io/instance: {{.Namespace}}
   app.kubernetes.io/version: "{{.Version}}"
   app.kubernetes.io/part-of: flux

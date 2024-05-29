@@ -71,7 +71,7 @@ func (r *FluxInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	// Uninstall if the object is under deletion.
 	if !obj.ObjectMeta.DeletionTimestamp.IsZero() {
-		return r.finalize(ctx, obj)
+		return r.uninstall(ctx, obj)
 	}
 
 	// Add the finalizer if it does not exist.
@@ -324,46 +324,6 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 	}
 
 	return nil
-}
-
-// finalize removes the finalizer from the object and prunes the resources.
-//
-//nolint:unparam
-func (r *FluxInstanceReconciler) finalize(ctx context.Context,
-	obj *fluxcdv1.FluxInstance) (ctrl.Result, error) {
-	reconcileStart := time.Now()
-	log := ctrl.LoggerFrom(ctx)
-
-	if obj.Status.Inventory == nil || len(obj.Status.Inventory.Entries) == 0 {
-		controllerutil.RemoveFinalizer(obj, fluxcdv1.Finalizer)
-		return ctrl.Result{}, nil
-	}
-
-	resourceManager := ssa.NewResourceManager(r.Client, nil, ssa.Owner{
-		Field: r.StatusManager,
-		Group: fluxcdv1.GroupVersion.Group,
-	})
-
-	opts := ssa.DeleteOptions{
-		PropagationPolicy: metav1.DeletePropagationBackground,
-		Inclusions:        resourceManager.GetOwnerLabels(obj.Name, obj.Namespace),
-		Exclusions: map[string]string{
-			fluxcdv1.PruneAnnotation: fluxcdv1.DisabledValue,
-		},
-	}
-
-	objects, _ := inventory.List(obj.Status.Inventory)
-	changeSet, err := resourceManager.DeleteAll(ctx, objects, opts)
-	if err != nil {
-		log.Error(err, "pruning for deleted resource failed")
-	}
-
-	controllerutil.RemoveFinalizer(obj, fluxcdv1.Finalizer)
-	msg := fmt.Sprintf("Uninstallation completed in %v", time.Since(reconcileStart).String())
-	log.Info(msg, "output", changeSet.ToMap())
-
-	// Stop reconciliation as the object is being deleted.
-	return ctrl.Result{}, nil
 }
 
 // finalizeStatus updates the object status and conditions.
