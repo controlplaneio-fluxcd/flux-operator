@@ -1,6 +1,8 @@
 # flux-operator
 
+[![release](https://img.shields.io/github/release/controlplaneio-fluxcd/flux-operator/all.svg)](https://github.com/controlplaneio-fluxcd/flux-operator/releases)
 [![e2e](https://github.com/controlplaneio-fluxcd/flux-operator/actions/workflows/e2e.yaml/badge.svg)](https://github.com/controlplaneio-fluxcd/flux-operator/actions/workflows/e2e.yaml)
+[![license](https://img.shields.io/github/license/controlplaneio-fluxcd/flux-operator.svg)](https://github.com/controlplaneio-fluxcd/flux-operator/blob/main/LICENSE)
 
 The Flux Operator is a Kubernetes CRD controller that manages
 the lifecycle of the [Flux CD](https://fluxcd.io) distribution.
@@ -62,12 +64,12 @@ spec:
     patches:
       - target:
           kind: Deployment
-          labelSelector: "app.kubernetes.io/component in (kustomize-controller, helm-controller)"
+          name: "(kustomize-controller|helm-controller)"
         patch: |
           - op: add
             path: /spec/template/spec/containers/0/args/-
             value: --concurrent=10
           - op: add
             path: /spec/template/spec/containers/0/args/-
-            value: --requeue-dependency=10s
+            value: --requeue-dependency=5s
 ```
