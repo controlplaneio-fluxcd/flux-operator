@@ -17,16 +17,22 @@ resources:
 images:
   - name: fluxcd/source-controller
     newName: ghcr.io/fluxcd/source-controller
+    newTag: v1.3.0
   - name: fluxcd/kustomize-controller
     newName: ghcr.io/fluxcd/kustomize-controller
+    newTag: v1.3.0
   - name: fluxcd/helm-controller
     newName: ghcr.io/fluxcd/helm-controller
+    newTag: v1.0.1
   - name: fluxcd/notification-controller
     newName: ghcr.io/fluxcd/notification-controller
+    newTag: v1.3.0
   - name: fluxcd/image-reflector-controller
     newName: ghcr.io/fluxcd/image-reflector-controller
+    newTag: v0.32.0
   - name: fluxcd/image-automation-controller
     newName: ghcr.io/fluxcd/image-automation-controller
+    newTag: v0.38.0
 patches:
 - path: node-selector.yaml
   target:

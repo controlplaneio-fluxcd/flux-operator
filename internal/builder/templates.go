@@ -33,9 +33,13 @@ resources:
 {{- end }}
 {{- if $registry }}
 images:
-{{- range $i, $component := .Components }}
-  - name: fluxcd/{{$component}}
-    newName: {{$registry}}/{{$component}}
+{{- range .ComponentImages }}
+  - name: fluxcd/{{.Component}}
+    newName: {{.ImageName}}
+    newTag: {{.ImageTag}}
+{{- if .ImageDigest }}
+    digest: {{.ImageDigest}}
+{{- end }}
 {{- end }}
 {{- end }}
 patches:
