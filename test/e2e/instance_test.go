@@ -10,7 +10,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/controlplaneio-fluxcd/fluxcd-operator/test/utils"
+	"github.com/controlplaneio-fluxcd/flux-operator/test/utils"
 )
 
 var _ = Describe("FluxInstance", Ordered, func() {

@@ -1,4 +1,4 @@
-module github.com/controlplaneio-fluxcd/fluxcd-operator
+module github.com/controlplaneio-fluxcd/flux-operator
 
 go 1.22.0
 

@@ -1,2 +1,2 @@
-# fluxcd-operator
+# flux-operator
 Flux CD Operator

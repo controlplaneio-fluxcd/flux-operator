@@ -28,9 +28,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/yaml"
 
-	fluxcdv1alpha1 "github.com/controlplaneio-fluxcd/fluxcd-operator/api/v1alpha1"
-	"github.com/controlplaneio-fluxcd/fluxcd-operator/internal/builder"
-	"github.com/controlplaneio-fluxcd/fluxcd-operator/internal/inventory"
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/builder"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/inventory"
 )
 
 // FluxInstanceReconciler reconciles a FluxInstance object
@@ -53,7 +53,7 @@ type FluxInstanceReconciler struct {
 func (r *FluxInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
 	log := ctrl.LoggerFrom(ctx)
 
-	obj := &fluxcdv1alpha1.FluxInstance{}
+	obj := &fluxcdv1.FluxInstance{}
 	if err := r.Get(ctx, req.NamespacedName, obj); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -75,9 +75,9 @@ func (r *FluxInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	// Add the finalizer if it does not exist.
-	if !controllerutil.ContainsFinalizer(obj, fluxcdv1alpha1.Finalizer) {
-		log.Info("Adding finalizer", "finalizer", fluxcdv1alpha1.Finalizer)
-		controllerutil.AddFinalizer(obj, fluxcdv1alpha1.Finalizer)
+	if !controllerutil.ContainsFinalizer(obj, fluxcdv1.Finalizer) {
+		log.Info("Adding finalizer", "finalizer", fluxcdv1.Finalizer)
+		controllerutil.AddFinalizer(obj, fluxcdv1.Finalizer)
 		msg := "Reconciliation in progress"
 		conditions.MarkUnknown(obj,
 			meta.ReadyCondition,
@@ -94,7 +94,7 @@ func (r *FluxInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request
 }
 
 func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
-	obj *fluxcdv1alpha1.FluxInstance,
+	obj *fluxcdv1.FluxInstance,
 	patcher *patch.SerialPatcher) (ctrl.Result, error) {
 	log := ctrl.LoggerFrom(ctx)
 	reconcileStart := time.Now()
@@ -161,7 +161,7 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 		msg)
 	log.Info(msg, "revision", obj.Status.LastAppliedRevision)
 	r.EventRecorder.AnnotatedEventf(obj,
-		map[string]string{fluxcdv1alpha1.RevisionAnnotation: obj.Status.LastAppliedRevision},
+		map[string]string{fluxcdv1.RevisionAnnotation: obj.Status.LastAppliedRevision},
 		corev1.EventTypeNormal,
 		meta.ReconciliationSucceededReason,
 		msg)
@@ -170,7 +170,7 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 }
 
 func (r *FluxInstanceReconciler) build(ctx context.Context,
-	obj *fluxcdv1alpha1.FluxInstance) (*builder.Result, error) {
+	obj *fluxcdv1.FluxInstance) (*builder.Result, error) {
 	log := ctrl.LoggerFrom(ctx)
 
 	fluxDir := filepath.Join(r.StoragePath, "flux")
@@ -225,7 +225,7 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 // a server-side apply, pruning of stale resources and waiting
 // for the resources to become ready.
 func (r *FluxInstanceReconciler) apply(ctx context.Context,
-	obj *fluxcdv1alpha1.FluxInstance,
+	obj *fluxcdv1.FluxInstance,
 	buildResult *builder.Result) error {
 	log := ctrl.LoggerFrom(ctx)
 	objects := buildResult.Objects
@@ -240,7 +240,7 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 	// Create a resource manager to reconcile the resources.
 	resourceManager := ssa.NewResourceManager(r.Client, r.StatusPoller, ssa.Owner{
 		Field: r.StatusManager,
-		Group: fluxcdv1alpha1.GroupVersion.Group,
+		Group: fluxcdv1.GroupVersion.Group,
 	})
 	resourceManager.SetOwnerLabels(objects, obj.GetName(), obj.GetNamespace())
 
@@ -294,7 +294,7 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 			PropagationPolicy: metav1.DeletePropagationBackground,
 			Inclusions:        resourceManager.GetOwnerLabels(obj.Name, obj.Namespace),
 			Exclusions: map[string]string{
-				fluxcdv1alpha1.PruneAnnotation: fluxcdv1alpha1.DisabledValue,
+				fluxcdv1.PruneAnnotation: fluxcdv1.DisabledValue,
 			},
 		}
 
@@ -330,25 +330,25 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 //
 //nolint:unparam
 func (r *FluxInstanceReconciler) finalize(ctx context.Context,
-	obj *fluxcdv1alpha1.FluxInstance) (ctrl.Result, error) {
+	obj *fluxcdv1.FluxInstance) (ctrl.Result, error) {
 	reconcileStart := time.Now()
 	log := ctrl.LoggerFrom(ctx)
 
 	if obj.Status.Inventory == nil || len(obj.Status.Inventory.Entries) == 0 {
-		controllerutil.RemoveFinalizer(obj, fluxcdv1alpha1.Finalizer)
+		controllerutil.RemoveFinalizer(obj, fluxcdv1.Finalizer)
 		return ctrl.Result{}, nil
 	}
 
 	resourceManager := ssa.NewResourceManager(r.Client, nil, ssa.Owner{
 		Field: r.StatusManager,
-		Group: fluxcdv1alpha1.GroupVersion.Group,
+		Group: fluxcdv1.GroupVersion.Group,
 	})
 
 	opts := ssa.DeleteOptions{
 		PropagationPolicy: metav1.DeletePropagationBackground,
 		Inclusions:        resourceManager.GetOwnerLabels(obj.Name, obj.Namespace),
 		Exclusions: map[string]string{
-			fluxcdv1alpha1.PruneAnnotation: fluxcdv1alpha1.DisabledValue,
+			fluxcdv1.PruneAnnotation: fluxcdv1.DisabledValue,
 		},
 	}
 
@@ -358,7 +358,7 @@ func (r *FluxInstanceReconciler) finalize(ctx context.Context,
 		log.Error(err, "pruning for deleted resource failed")
 	}
 
-	controllerutil.RemoveFinalizer(obj, fluxcdv1alpha1.Finalizer)
+	controllerutil.RemoveFinalizer(obj, fluxcdv1.Finalizer)
 	msg := fmt.Sprintf("Uninstallation completed in %v", time.Since(reconcileStart).String())
 	log.Info(msg, "output", changeSet.ToMap())
 
@@ -368,7 +368,7 @@ func (r *FluxInstanceReconciler) finalize(ctx context.Context,
 
 // finalizeStatus updates the object status and conditions.
 func (r *FluxInstanceReconciler) finalizeStatus(ctx context.Context,
-	obj *fluxcdv1alpha1.FluxInstance,
+	obj *fluxcdv1.FluxInstance,
 	patcher *patch.SerialPatcher) error {
 	// Set the value of the reconciliation request in status.
 	if v, ok := meta.ReconcileAnnotationValue(obj.GetAnnotations()); ok {
@@ -395,7 +395,7 @@ func (r *FluxInstanceReconciler) finalizeStatus(ctx context.Context,
 
 // patch updates the object status, conditions and finalizers.
 func (r *FluxInstanceReconciler) patch(ctx context.Context,
-	obj *fluxcdv1alpha1.FluxInstance,
+	obj *fluxcdv1.FluxInstance,
 	patcher *patch.SerialPatcher) (retErr error) {
 	// Configure the runtime patcher.
 	ownedConditions := []string{
@@ -438,7 +438,7 @@ func hasChanged(action ssa.Action) bool {
 
 // requeueAfter returns a ctrl.Result with the requeue time set to the
 // interval specified in the object's annotations.
-func requeueAfter(obj *fluxcdv1alpha1.FluxInstance) ctrl.Result {
+func requeueAfter(obj *fluxcdv1.FluxInstance) ctrl.Result {
 	result := ctrl.Result{}
 	if obj.GetInterval() > 0 {
 		result.RequeueAfter = obj.GetInterval()

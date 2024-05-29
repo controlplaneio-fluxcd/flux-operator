@@ -12,23 +12,23 @@ import (
 	"github.com/fluxcd/cli-utils/pkg/object"
 	"github.com/fluxcd/pkg/ssa"
 
-	fluxcdv1alpha1 "github.com/controlplaneio-fluxcd/fluxcd-operator/api/v1alpha1"
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
-func New() *fluxcdv1alpha1.ResourceInventory {
-	return &fluxcdv1alpha1.ResourceInventory{
-		Entries: []fluxcdv1alpha1.ResourceRef{},
+func New() *fluxcdv1.ResourceInventory {
+	return &fluxcdv1.ResourceInventory{
+		Entries: []fluxcdv1.ResourceRef{},
 	}
 }
 
 // AddChangeSet extracts the metadata from the given objects and adds it to the inventory.
-func AddChangeSet(inv *fluxcdv1alpha1.ResourceInventory, set *ssa.ChangeSet) error {
+func AddChangeSet(inv *fluxcdv1.ResourceInventory, set *ssa.ChangeSet) error {
 	if set == nil {
 		return nil
 	}
 
 	for _, entry := range set.Entries {
-		inv.Entries = append(inv.Entries, fluxcdv1alpha1.ResourceRef{
+		inv.Entries = append(inv.Entries, fluxcdv1.ResourceRef{
 			ID:      entry.ObjMetadata.String(),
 			Version: entry.GroupVersion,
 		})
@@ -38,7 +38,7 @@ func AddChangeSet(inv *fluxcdv1alpha1.ResourceInventory, set *ssa.ChangeSet) err
 }
 
 // List returns the inventory entries as unstructured.Unstructured objects.
-func List(inv *fluxcdv1alpha1.ResourceInventory) ([]*unstructured.Unstructured, error) {
+func List(inv *fluxcdv1.ResourceInventory) ([]*unstructured.Unstructured, error) {
 	objects := make([]*unstructured.Unstructured, 0)
 
 	if inv.Entries == nil {
@@ -68,7 +68,7 @@ func List(inv *fluxcdv1alpha1.ResourceInventory) ([]*unstructured.Unstructured, 
 
 // ListMetadata returns the inventory entries as object.ObjMetadata objects.
 // nolint:prealloc
-func ListMetadata(inv *fluxcdv1alpha1.ResourceInventory) (object.ObjMetadataSet, error) {
+func ListMetadata(inv *fluxcdv1.ResourceInventory) (object.ObjMetadataSet, error) {
 	var metas []object.ObjMetadata
 	for _, e := range inv.Entries {
 		m, err := object.ParseObjMetadata(e.ID)
@@ -82,8 +82,8 @@ func ListMetadata(inv *fluxcdv1alpha1.ResourceInventory) (object.ObjMetadataSet,
 }
 
 // Diff returns the slice of objects that do not exist in the target inventory.
-func Diff(inv *fluxcdv1alpha1.ResourceInventory, target *fluxcdv1alpha1.ResourceInventory) ([]*unstructured.Unstructured, error) {
-	versionOf := func(i *fluxcdv1alpha1.ResourceInventory, objMetadata object.ObjMetadata) string {
+func Diff(inv *fluxcdv1.ResourceInventory, target *fluxcdv1.ResourceInventory) ([]*unstructured.Unstructured, error) {
+	versionOf := func(i *fluxcdv1.ResourceInventory, objMetadata object.ObjMetadata) string {
 		for _, entry := range i.Entries {
 			if entry.ID == objMetadata.String() {
 				return entry.Version

@@ -3,7 +3,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   labels:
-    app.kubernetes.io/name: fluxcd-operator
+    app.kubernetes.io/name: flux-operator
     app.kubernetes.io/managed-by: kustomize
   name: fluxinstance-editor-role
 rules:

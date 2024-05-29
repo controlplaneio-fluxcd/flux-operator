@@ -1,5 +1,5 @@
 # Image URL to use all building/pushing image targets
-IMG ?= fluxcd-operator:latest
+IMG ?= flux-operator:latest
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.30.0
 
@@ -110,10 +110,10 @@ PLATFORMS ?= linux/arm64,linux/amd64
 docker-buildx: ## Build and push docker image for the manager for cross-platform support
 	# copy existing Dockerfile and insert --platform=${BUILDPLATFORM} into Dockerfile.cross, and preserve the original Dockerfile
 	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile > Dockerfile.cross
-	- $(CONTAINER_TOOL) buildx create --name fluxcd-operator-builder
-	$(CONTAINER_TOOL) buildx use fluxcd-operator-builder
+	- $(CONTAINER_TOOL) buildx create --name flux-operator-builder
+	$(CONTAINER_TOOL) buildx use flux-operator-builder
 	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile.cross .
-	- $(CONTAINER_TOOL) buildx rm fluxcd-operator-builder
+	- $(CONTAINER_TOOL) buildx rm flux-operator-builder
 	rm Dockerfile.cross
 
 .PHONY: build-installer
@@ -138,7 +138,7 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 .PHONY: deploy
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	mkdir -p config/dev && cp config/default/* config/dev
-	cd config/dev && $(KUSTOMIZE) edit set image ghcr.io/controlplaneio-fluxcd/fluxcd-operator=${IMG}
+	cd config/dev && $(KUSTOMIZE) edit set image ghcr.io/controlplaneio-fluxcd/flux-operator=${IMG}
 	$(KUSTOMIZE) build config/dev | $(KUBECTL) apply -f -
 	rm -rf config/dev
 

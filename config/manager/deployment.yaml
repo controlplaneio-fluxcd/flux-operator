@@ -2,22 +2,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: fluxcd-operator
+  name: flux-operator
   labels:
-    app.kubernetes.io/name: fluxcd-operator
+    app.kubernetes.io/name: flux-operator
 spec:
   selector:
     matchLabels:
-      app.kubernetes.io/name: fluxcd-operator
+      app.kubernetes.io/name: flux-operator
   replicas: 1
   template:
     metadata:
       annotations:
         kubectl.kubernetes.io/default-container: manager
       labels:
-        app.kubernetes.io/name: fluxcd-operator
+        app.kubernetes.io/name: flux-operator
     spec:
-      serviceAccountName: fluxcd-operator
+      serviceAccountName: flux-operator
       terminationGracePeriodSeconds: 10
       affinity:
        nodeAffinity:
@@ -30,7 +30,7 @@ spec:
                    - linux
       containers:
       - name: manager
-        image: fluxcd-operator:latest
+        image: flux-operator:latest
         imagePullPolicy: IfNotPresent
         securityContext:
           readOnlyRootFilesystem: true

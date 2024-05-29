@@ -1,7 +1,7 @@
 // Copyright 2024 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-package v1alpha1
+package v1
 
 import (
 	"fmt"

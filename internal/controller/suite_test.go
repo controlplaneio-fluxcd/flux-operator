@@ -31,11 +31,11 @@ import (
 
 	// +kubebuilder:scaffold:imports
 
-	fluxcdv1alpha1 "github.com/controlplaneio-fluxcd/fluxcd-operator/api/v1alpha1"
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
 var (
-	controllerName = "fluxcd-operator"
+	controllerName = "flux-operator"
 	timeout        = 30 * time.Second
 	testEnv        *testenv.Environment
 	testClient     client.Client
@@ -47,7 +47,7 @@ func NewTestScheme() *runtime.Scheme {
 	utilruntime.Must(corev1.AddToScheme(s))
 	utilruntime.Must(appsv1.AddToScheme(s))
 	utilruntime.Must(apiextensionsv1.AddToScheme(s))
-	utilruntime.Must(fluxcdv1alpha1.AddToScheme(s))
+	utilruntime.Must(fluxcdv1.AddToScheme(s))
 	return s
 }
 
@@ -101,7 +101,7 @@ func logObjectStatus(t *testing.T, obj client.Object) {
 	t.Log(obj.GetName(), "status:\n", string(sts))
 }
 
-func checkInstanceReadiness(g *gomega.WithT, obj *fluxcdv1alpha1.FluxInstance) {
+func checkInstanceReadiness(g *gomega.WithT, obj *fluxcdv1.FluxInstance) {
 	statusCheck := kcheck.NewInProgressChecker(testClient)
 	statusCheck.DisableFetch = true
 	statusCheck.WithT(g).CheckErr(context.Background(), obj)
@@ -120,14 +120,14 @@ func getEvents(objName string) []corev1.Event {
 	return result
 }
 
-func getDefaultFluxSpec() fluxcdv1alpha1.FluxInstanceSpec {
-	return fluxcdv1alpha1.FluxInstanceSpec{
+func getDefaultFluxSpec() fluxcdv1.FluxInstanceSpec {
+	return fluxcdv1.FluxInstanceSpec{
 		Wait: false,
-		Distribution: fluxcdv1alpha1.Distribution{
+		Distribution: fluxcdv1.Distribution{
 			Version:  "*",
 			Registry: "ghcr.io/fluxcd",
 		},
-		Kustomize: &fluxcdv1alpha1.Kustomize{
+		Kustomize: &fluxcdv1.Kustomize{
 			Patches: []kustomize.Patch{
 				{
 					Target: &kustomize.Selector{

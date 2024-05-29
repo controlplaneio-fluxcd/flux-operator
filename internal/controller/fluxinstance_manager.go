@@ -10,7 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/ratelimiter"
 
-	fluxcdv1alpha1 "github.com/controlplaneio-fluxcd/fluxcd-operator/api/v1alpha1"
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
 // FluxInstanceReconcilerOptions contains options for the reconciler.
@@ -21,7 +21,7 @@ type FluxInstanceReconcilerOptions struct {
 // SetupWithManager sets up the controller with the Manager.
 func (r *FluxInstanceReconciler) SetupWithManager(mgr ctrl.Manager, opts FluxInstanceReconcilerOptions) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&fluxcdv1alpha1.FluxInstance{},
+		For(&fluxcdv1.FluxInstance{},
 			builder.WithPredicates(
 				predicate.Or(
 					predicate.GenerationChangedPredicate{},

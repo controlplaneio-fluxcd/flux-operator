@@ -23,8 +23,8 @@ import (
 	ctrlcfg "sigs.k8s.io/controller-runtime/pkg/config"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	fluxcdv1alpha1 "github.com/controlplaneio-fluxcd/fluxcd-operator/api/v1alpha1"
-	"github.com/controlplaneio-fluxcd/fluxcd-operator/internal/controller"
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/controller"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -38,7 +38,7 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	utilruntime.Must(fluxcdv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(fluxcdv1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -104,7 +104,7 @@ func main() {
 		controller.FluxInstanceReconcilerOptions{
 			RateLimiter: runtimeCtrl.GetRateLimiter(rateLimiterOptions),
 		}); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", fluxcdv1alpha1.FluxInstanceKind)
+		setupLog.Error(err, "unable to create controller", "controller", fluxcdv1.FluxInstanceKind)
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

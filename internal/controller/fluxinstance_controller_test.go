@@ -19,7 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	fluxcdv1alpha1 "github.com/controlplaneio-fluxcd/fluxcd-operator/api/v1alpha1"
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
 func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
@@ -31,7 +31,7 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 	ns, err := testEnv.CreateNamespace(ctx, "test")
 	g.Expect(err).ToNot(HaveOccurred())
 
-	obj := &fluxcdv1alpha1.FluxInstance{
+	obj := &fluxcdv1.FluxInstance{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ns.Name,
 			Namespace: ns.Name,
@@ -50,12 +50,12 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 	g.Expect(r.Requeue).To(BeTrue())
 
 	// Check if the finalizer was added.
-	resultInit := &fluxcdv1alpha1.FluxInstance{}
+	resultInit := &fluxcdv1.FluxInstance{}
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), resultInit)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	logObjectStatus(t, resultInit)
-	g.Expect(resultInit.Finalizers).To(ContainElement(fluxcdv1alpha1.Finalizer))
+	g.Expect(resultInit.Finalizers).To(ContainElement(fluxcdv1.Finalizer))
 
 	r, err = reconciler.Reconcile(ctx, reconcile.Request{
 		NamespacedName: client.ObjectKeyFromObject(obj),
@@ -64,7 +64,7 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 	g.Expect(r.Requeue).To(BeFalse())
 
 	// Check if the instance was installed.
-	result := &fluxcdv1alpha1.FluxInstance{}
+	result := &fluxcdv1.FluxInstance{}
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -74,19 +74,19 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 
 	// Check if the inventory was updated.
 	g.Expect(result.Status.Inventory.Entries).To(ContainElements(
-		fluxcdv1alpha1.ResourceRef{
+		fluxcdv1.ResourceRef{
 			ID:      fmt.Sprintf("%s_source-controller_apps_Deployment", ns.Name),
 			Version: "v1",
 		},
-		fluxcdv1alpha1.ResourceRef{
+		fluxcdv1.ResourceRef{
 			ID:      fmt.Sprintf("%s_kustomize-controller_apps_Deployment", ns.Name),
 			Version: "v1",
 		},
-		fluxcdv1alpha1.ResourceRef{
+		fluxcdv1.ResourceRef{
 			ID:      fmt.Sprintf("%s_helm-controller_apps_Deployment", ns.Name),
 			Version: "v1",
 		},
-		fluxcdv1alpha1.ResourceRef{
+		fluxcdv1.ResourceRef{
 			ID:      fmt.Sprintf("%s_notification-controller_apps_Deployment", ns.Name),
 			Version: "v1",
 		},
@@ -95,11 +95,11 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 	// Update the instance.
 	resultP := result.DeepCopy()
 	resultP.SetAnnotations(map[string]string{
-		fluxcdv1alpha1.ReconcileAnnotation:      fluxcdv1alpha1.EnabledValue,
-		fluxcdv1alpha1.ReconcileEveryAnnotation: "1m",
+		fluxcdv1.ReconcileAnnotation:      fluxcdv1.EnabledValue,
+		fluxcdv1.ReconcileEveryAnnotation: "1m",
 	})
-	resultP.Spec.Components = []fluxcdv1alpha1.Component{"source-controller", "kustomize-controller"}
-	resultP.Spec.Cluster = &fluxcdv1alpha1.Cluster{
+	resultP.Spec.Components = []fluxcdv1.Component{"source-controller", "kustomize-controller"}
+	resultP.Spec.Cluster = &fluxcdv1.Cluster{
 		NetworkPolicy: false,
 	}
 	err = testClient.Patch(ctx, resultP, client.MergeFrom(result))
@@ -114,7 +114,7 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 	g.Expect(r.RequeueAfter).To(Equal(time.Minute))
 
 	// Check the final status.
-	resultFinal := &fluxcdv1alpha1.FluxInstance{}
+	resultFinal := &fluxcdv1.FluxInstance{}
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), resultFinal)
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -124,15 +124,15 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 
 	// Check if the inventory was updated.
 	g.Expect(resultFinal.Status.Inventory.Entries).ToNot(ContainElements(
-		fluxcdv1alpha1.ResourceRef{
+		fluxcdv1.ResourceRef{
 			ID:      fmt.Sprintf("%s_helm-controller_apps_Deployment", ns.Name),
 			Version: "v1",
 		},
-		fluxcdv1alpha1.ResourceRef{
+		fluxcdv1.ResourceRef{
 			ID:      fmt.Sprintf("%s_notification-controller_apps_Deployment", ns.Name),
 			Version: "v1",
 		},
-		fluxcdv1alpha1.ResourceRef{
+		fluxcdv1.ResourceRef{
 			ID:      fmt.Sprintf("%s_allow-egress_networking.k8s.io_NetworkPolicy", ns.Name),
 			Version: "v1",
 		},
@@ -148,7 +148,7 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 	g.Expect(events[2].Reason).To(Equal(meta.ProgressingReason))
 	g.Expect(events[2].Message).To(HavePrefix("Upgrading"))
 	g.Expect(events[3].Reason).To(Equal(meta.ReconciliationSucceededReason))
-	g.Expect(events[3].Annotations).To(HaveKeyWithValue(fluxcdv1alpha1.RevisionAnnotation, resultFinal.Status.LastAppliedRevision))
+	g.Expect(events[3].Annotations).To(HaveKeyWithValue(fluxcdv1.RevisionAnnotation, resultFinal.Status.LastAppliedRevision))
 
 	err = testClient.Delete(ctx, obj)
 	g.Expect(err).ToNot(HaveOccurred())
@@ -160,7 +160,7 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 	g.Expect(r.IsZero()).To(BeTrue())
 
 	// Check if the instance was uninstalled.
-	result = &fluxcdv1alpha1.FluxInstance{}
+	result = &fluxcdv1.FluxInstance{}
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
@@ -176,7 +176,7 @@ func TestFluxInstanceReconciler_InstallFail(t *testing.T) {
 	ns, err := testEnv.CreateNamespace(ctx, "test")
 	g.Expect(err).ToNot(HaveOccurred())
 
-	obj := &fluxcdv1alpha1.FluxInstance{
+	obj := &fluxcdv1.FluxInstance{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ns.Name,
 			Namespace: ns.Name,
@@ -202,7 +202,7 @@ func TestFluxInstanceReconciler_InstallFail(t *testing.T) {
 	g.Expect(r.IsZero()).To(BeTrue())
 
 	// Check if the instance was marked as failed.
-	result := &fluxcdv1alpha1.FluxInstance{}
+	result := &fluxcdv1.FluxInstance{}
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -227,7 +227,7 @@ func TestFluxInstanceReconciler_InstallFail(t *testing.T) {
 	g.Expect(r.IsZero()).To(BeTrue())
 
 	// Check if the instance was uninstalled.
-	result = &fluxcdv1alpha1.FluxInstance{}
+	result = &fluxcdv1.FluxInstance{}
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
@@ -237,7 +237,7 @@ func TestFluxInstanceReconciler_Profiles(t *testing.T) {
 	g := NewWithT(t)
 	reconciler := getFluxInstanceReconciler()
 	spec := getDefaultFluxSpec()
-	spec.Cluster = &fluxcdv1alpha1.Cluster{
+	spec.Cluster = &fluxcdv1.Cluster{
 		Type:        "openshift",
 		Multitenant: true,
 	}
@@ -247,7 +247,7 @@ func TestFluxInstanceReconciler_Profiles(t *testing.T) {
 	ns, err := testEnv.CreateNamespace(ctx, "test")
 	g.Expect(err).ToNot(HaveOccurred())
 
-	obj := &fluxcdv1alpha1.FluxInstance{
+	obj := &fluxcdv1.FluxInstance{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ns.Name,
 			Namespace: ns.Name,
