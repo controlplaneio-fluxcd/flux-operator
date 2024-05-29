@@ -1,0 +1,119 @@
+name: release
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'image tag prefix'
+        default: 'rc'
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  CONTROLLER: ${{ github.event.repository.name }}
+
+jobs:
+  release:
+    outputs:
+      image_url: ${{ steps.slsa.outputs.image_url }}
+      image_digest: ${{ steps.slsa.outputs.image_digest }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # for creating the GitHub release.
+      id-token: write # for creating OIDC tokens for signing.
+      packages: write # for pushing and signing container images.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
+      - name: Setup Kustomize
+        uses: fluxcd/pkg/actions/kustomize@main
+      - name: Prepare
+        id: prep
+        run: |
+          VERSION="${{ github.event.inputs.tag }}-${GITHUB_SHA::8}"
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF/refs\/tags\//}
+          fi
+          echo "BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+      - name: Setup QEMU
+        uses: docker/setup-qemu-action@68827325e0b33c7199eb31dd4e31fbe9023e06e3 # v3.0.0
+      - name: Setup Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@d70bba72b1f3fd22344832f00baa16ece964efeb # v3.3.0
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@e92390c5fb421da1463c202d546fed0ec5c39f20 # v3.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Generate images meta
+        id: meta
+        uses: docker/metadata-action@8e5442c4ef9f78752691e2d8f8d19755c6f78e81 # v5.5.1
+        with:
+          images: |
+            ghcr.io/controlplaneio-fluxcd/${{ env.CONTROLLER }}
+          tags: |
+            type=raw,value=${{ steps.prep.outputs.VERSION }}
+      - name: Publish images
+        id: build-push
+        uses: docker/build-push-action@2cdde995de11925a030ce8070c3d77a52ffcf1c0 # v5.3.0
+        with:
+          sbom: true
+          provenance: true
+          push: true
+          builder: ${{ steps.buildx.outputs.name }}
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+      - uses: sigstore/cosign-installer@59acb6260d9c0ba8f4a2f9d9b48431a222b68e20 # v3.5.0
+      - name: Sign images
+        env:
+          COSIGN_EXPERIMENTAL: 1
+        run: |
+          cosign sign --yes ghcr.io/controlplaneio-fluxcd/${{ env.CONTROLLER }}@${{ steps.build-push.outputs.digest }}
+      - name: Create release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create ${{ github.ref_name }} --generate-notes --verify-tag
+      - name: Upload release artifacts
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p config/release
+          kustomize build ./config/default > ./config/release/install.yaml
+          gh release upload ${{ github.ref_name }} ./config/release/install.yaml
+      - name: Generate SLSA metadata
+        id: slsa
+        run: |          
+          image_url=fluxcd/${{ env.CONTROLLER }}:${{ steps.prep.outputs.version }}
+          echo "image_url=$image_url" >> $GITHUB_OUTPUT
+          
+          image_digest=${{ steps.build-push.outputs.digest }}
+          echo "image_digest=$image_digest" >> $GITHUB_OUTPUT
+
+  ghcr-provenance:
+    needs: [release]
+    permissions:
+      actions: read # for detecting the Github Actions environment.
+      id-token: write # for creating OIDC tokens for signing.
+      packages: write # for uploading attestations.
+    if: startsWith(github.ref, 'refs/tags/v')
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.0.0
+    with:
+      image: ghcr.io/${{ needs.release.outputs.image_url }}
+      digest: ${{ needs.release.outputs.image_digest }}
+      registry-username: ${{ github.actor }}
+    secrets:
+      registry-password: ${{ secrets.GITHUB_TOKEN }}

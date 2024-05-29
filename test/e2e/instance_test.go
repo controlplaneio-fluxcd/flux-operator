@@ -9,8 +9,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
-	"github.com/controlplaneio-fluxcd/flux-operator/test/utils"
 )
 
 var _ = Describe("FluxInstance", Ordered, func() {
@@ -21,13 +19,13 @@ var _ = Describe("FluxInstance", Ordered, func() {
 				cmd := exec.Command("kubectl", "apply",
 					"-k", "config/samples", "-n", namespace,
 				)
-				_, err := utils.Run(cmd)
+				_, err := Run(cmd)
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
 
 				cmd = exec.Command("kubectl", "wait", "FluxInstance/flux", "-n", namespace,
 					"--for=condition=Ready", "--timeout=5m",
 				)
-				_, err = utils.Run(cmd)
+				_, err = Run(cmd)
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
 				return nil
 			}
@@ -42,19 +40,19 @@ var _ = Describe("FluxInstance", Ordered, func() {
 				cmd := exec.Command("kubectl", "-n", namespace, "patch", "FluxInstance/flux",
 					"--type=json", `-p=[{"op": "replace", "path": "/spec/cluster/multitenant", "value":true}]`,
 				)
-				_, err := utils.Run(cmd)
+				_, err := Run(cmd)
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
 
 				cmd = exec.Command("kubectl", "wait", "FluxInstance/flux", "-n", namespace,
 					"--for=condition=Ready", "--timeout=5m",
 				)
-				_, err = utils.Run(cmd)
+				_, err = Run(cmd)
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
 
 				cmd = exec.Command("kubectl", "get", "deploy/kustomize-controller",
 					"-n", namespace, "-o=yaml",
 				)
-				output, err := utils.Run(cmd)
+				output, err := Run(cmd)
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
 				ExpectWithOffset(2, output).To(ContainSubstring("no-cross-namespace-refs=true"))
 
@@ -69,16 +67,16 @@ var _ = Describe("FluxInstance", Ordered, func() {
 			By("delete FluxInstance")
 			cmd := exec.Command("kubectl", "delete", "-k", "config/samples",
 				"--timeout=30s", "-n", namespace)
-			_, err := utils.Run(cmd)
+			_, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 			By("source-controller deleted")
 			cmd = exec.Command("kubectl", "get", "deploy/source-controller", "-n", namespace)
-			_, err = utils.Run(cmd)
+			_, err = Run(cmd)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("not found"))
 			By("namespace exists")
 			cmd = exec.Command("kubectl", "get", "ns", namespace)
-			_, err = utils.Run(cmd)
+			_, err = Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})

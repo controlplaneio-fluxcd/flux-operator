@@ -169,6 +169,8 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 	return requeueAfter(obj), nil
 }
 
+// build reads the distribution manifests from the storage path,
+// matches the version and builds the final resources.
 func (r *FluxInstanceReconciler) build(ctx context.Context,
 	obj *fluxcdv1.FluxInstance) (*builder.Result, error) {
 	log := ctrl.LoggerFrom(ctx)
