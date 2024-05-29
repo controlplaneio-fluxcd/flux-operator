@@ -77,6 +77,25 @@ type Distribution struct {
 // +kubebuilder:validation:Enum:=source-controller;kustomize-controller;helm-controller;notification-controller;image-reflector-controller;image-automation-controller
 type Component string
 
+// ComponentImage represents a container image used by a component.
+type ComponentImage struct {
+	// Name of the component.
+	// +required
+	Name string `json:"name"`
+
+	// Repository address of the container image.
+	// +required
+	Repository string `json:"repository"`
+
+	// Tag of the container image.
+	// +required
+	Tag string `json:"tag"`
+
+	// Digest of the container image.
+	// +optional
+	Digest string `json:"digest,omitempty"`
+}
+
 // Cluster is the specification for the Kubernetes cluster.
 type Cluster struct {
 	// Domain is the cluster domain used for generating the FQDN of services.
@@ -146,6 +165,10 @@ type FluxInstanceStatus struct {
 	// distribution config that was last reconcile.
 	// +optional
 	LastAppliedRevision string `json:"lastAppliedRevision,omitempty"`
+
+	// Components contains the container images used by the components.
+	// +optional
+	Components []ComponentImage `json:"components,omitempty"`
 
 	// Inventory contains a list of Kubernetes resource object references
 	// last applied on the cluster.

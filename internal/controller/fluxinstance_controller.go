@@ -216,9 +216,13 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 	}
 
 	srcDir := filepath.Join(fluxDir, ver)
-	images, err := builder.ExtractComponentImages(srcDir, options)
+	images, err := builder.FetchComponentImages(options)
 	if err != nil {
-		return nil, fmt.Errorf("failed to extract container images from manifests: %w", err)
+		log.Error(err, "falling back to extracting images from manifests")
+		images, err = builder.ExtractComponentImages(srcDir, options)
+		if err != nil {
+			return nil, fmt.Errorf("failed to extract container images from manifests: %w", err)
+		}
 	}
 	options.ComponentImages = images
 
@@ -296,6 +300,15 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 
 	// Set last applied inventory in status.
 	obj.Status.Inventory = newInventory
+	obj.Status.Components = make([]fluxcdv1.ComponentImage, len(buildResult.ComponentImages))
+	for i, img := range buildResult.ComponentImages {
+		obj.Status.Components[i] = fluxcdv1.ComponentImage{
+			Name:       img.Name,
+			Repository: img.Repository,
+			Tag:        img.Tag,
+			Digest:     img.Digest,
+		}
+	}
 
 	// Detect stale resources which are subject to garbage collection.
 	staleObjects, err := inventory.Diff(oldInventory, newInventory)
