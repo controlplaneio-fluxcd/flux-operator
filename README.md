@@ -1,6 +1,7 @@
 # flux-operator
 
 [![release](https://img.shields.io/github/release/controlplaneio-fluxcd/flux-operator/all.svg)](https://github.com/controlplaneio-fluxcd/flux-operator/releases)
+[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/flux-operator)](https://artifacthub.io/packages/helm/flux-operator/flux-operator)
 [![e2e](https://github.com/controlplaneio-fluxcd/flux-operator/actions/workflows/e2e.yaml/badge.svg)](https://github.com/controlplaneio-fluxcd/flux-operator/actions/workflows/e2e.yaml)
 [![license](https://img.shields.io/github/license/controlplaneio-fluxcd/flux-operator.svg)](https://github.com/controlplaneio-fluxcd/flux-operator/blob/main/LICENSE)
 [![SLSA 3](https://slsa.dev/images/gh-badge-level3.svg)](#supply-chain-security)
@@ -11,7 +12,7 @@ the lifecycle of CNCF [Flux CD](https://fluxcd.io) and the
 
 > [!IMPORTANT]
 > Note that this project in under active development.
-> The APIs and features specification are described in
+> The APIs and features specs are described in
 > [RFC-0001](https://github.com/controlplaneio-fluxcd/distribution/tree/main/rfcs/0001-flux-operator/README.md).
 
 ## Features
@@ -27,7 +28,17 @@ the lifecycle of CNCF [Flux CD](https://fluxcd.io) and the
 
 ## Installation
 
-The Flux Operator can be installed using the Kubernetes manifests published on the releases page:
+The Flux Operator can be installed using the
+[Helm chart](https://github.com/controlplaneio-fluxcd/charts/tree/main/charts/flux-operator)
+available in the ControlPlane registry:
+
+```shell
+helm install flux-operator oci://ghcr.io/controlplaneio-fluxcd/charts/flux-operator \
+  --namespace flux-system \
+  --create-namespace
+```
+
+Or by using the Kubernetes manifests published on the releases page:
 
 ```shell
 kubectl apply -f https://github.com/controlplaneio-fluxcd/flux-operator/releases/latest/download/install.yaml
@@ -115,8 +126,8 @@ Every hour, the operator will check for updates in the ControlPlane
 If a new patch version is available, the operator will update the Flux components by pinning the
 container images to the latest digest published in the ControlPlane registry.
 
-Note that the `enterprise-flux-auth` Kubernetes secret must be created in the `flux-system` namespace
-and contain the credentials to pull the enterprise images:
+Note that the `flux-enterprise-auth` Kubernetes secret must be created in the `flux-system` namespace
+and should contain the credentials to pull the enterprise images:
 
 ```shell
 kubectl create secret docker-registry flux-enterprise-auth \
