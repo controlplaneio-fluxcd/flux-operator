@@ -34,11 +34,11 @@ resources:
 {{- if $registry }}
 images:
 {{- range .ComponentImages }}
-  - name: fluxcd/{{.Component}}
-    newName: {{.ImageName}}
-    newTag: {{.ImageTag}}
-{{- if .ImageDigest }}
-    digest: {{.ImageDigest}}
+  - name: fluxcd/{{.Name}}
+    newName: {{.Repository}}
+    newTag: {{.Tag}}
+{{- if .Digest }}
+    digest: {{.Digest}}
 {{- end }}
 {{- end }}
 {{- end }}

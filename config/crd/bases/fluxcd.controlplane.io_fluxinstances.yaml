@@ -195,6 +195,31 @@ spec:
           status:
             description: FluxInstanceStatus defines the observed state of FluxInstance
             properties:
+              components:
+                description: Components contains the container images used by the
+                  components.
+                items:
+                  description: ComponentImage represents a container image used by
+                    a component.
+                  properties:
+                    digest:
+                      description: Digest of the container image.
+                      type: string
+                    name:
+                      description: Name of the component.
+                      type: string
+                    repository:
+                      description: Repository address of the container image.
+                      type: string
+                    tag:
+                      description: Tag of the container image.
+                      type: string
+                  required:
+                  - name
+                  - repository
+                  - tag
+                  type: object
+                type: array
               conditions:
                 description: Conditions contains the readiness conditions of the object.
                 items:

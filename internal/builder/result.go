@@ -7,8 +7,9 @@ import "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 // Result holds the build result.
 type Result struct {
-	Version  string
-	Digest   string
-	Revision string
-	Objects  []*unstructured.Unstructured
+	Version         string
+	Digest          string
+	Revision        string
+	Objects         []*unstructured.Unstructured
+	ComponentImages []ComponentImage
 }

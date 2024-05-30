@@ -93,12 +93,20 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 		},
 	))
 
+	// Check if components images were recorded.
+	g.Expect(result.Status.Components).To(HaveLen(4))
+	g.Expect(result.Status.Components[0].Repository).To(Equal("ghcr.io/fluxcd/source-controller"))
+	g.Expect(result.Status.Components[1].Repository).To(Equal("ghcr.io/fluxcd/kustomize-controller"))
+	g.Expect(result.Status.Components[2].Repository).To(Equal("ghcr.io/fluxcd/helm-controller"))
+	g.Expect(result.Status.Components[3].Repository).To(Equal("ghcr.io/fluxcd/notification-controller"))
+
 	// Update the instance.
 	resultP := result.DeepCopy()
 	resultP.SetAnnotations(map[string]string{
 		fluxcdv1.ReconcileAnnotation:      fluxcdv1.EnabledValue,
 		fluxcdv1.ReconcileEveryAnnotation: "1m",
 	})
+	resultP.Spec.Distribution.Registry = "docker.io/fluxcd"
 	resultP.Spec.Components = []fluxcdv1.Component{"source-controller", "kustomize-controller"}
 	resultP.Spec.Cluster = &fluxcdv1.Cluster{
 		NetworkPolicy: false,
@@ -138,6 +146,11 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 			Version: "v1",
 		},
 	))
+
+	// Check if components images were updated.
+	g.Expect(resultFinal.Status.Components).To(HaveLen(2))
+	g.Expect(resultFinal.Status.Components[0].Repository).To(Equal("docker.io/fluxcd/source-controller"))
+	g.Expect(resultFinal.Status.Components[1].Repository).To(Equal("docker.io/fluxcd/kustomize-controller"))
 
 	// Check if events were recorded for each step.
 	events := getEvents(result.Name)
