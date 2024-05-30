@@ -6,15 +6,17 @@
 [![SLSA 3](https://slsa.dev/images/gh-badge-level3.svg)](#supply-chain-security)
 
 The Flux Operator is a Kubernetes CRD controller that manages
-the lifecycle of the [Flux CD](https://fluxcd.io) distribution.
+the lifecycle of CNCF [Flux CD](https://fluxcd.io) and the
+[ControlPlane enterprise distribution](https://github.com/controlplaneio-fluxcd/distribution).
 
 > [!IMPORTANT]
 > Note that this project in under active development.
-> The APIs may change in a backwards incompatible manner.
+> The APIs and features specification are described in
+> [RFC-0001](https://github.com/controlplaneio-fluxcd/distribution/tree/main/rfcs/0001-flux-operator/README.md).
 
 ## Features
 
-- Provide a declarative API for the installation and upgrade of CNCF Flux and the [ControlPlane enterprise distribution](https://github.com/controlplaneio-fluxcd/distribution).
+- Provide a declarative API for the installation and upgrade of the Flux distribution.
 - Automate patching for hotfixes and CVEs affecting the Flux controllers container images.
 - Provide first-class support for OpenShift, Azure, AWS, GCP and other marketplaces.
 - Simplify the configuration of multi-tenancy lockdown on shared Kubernetes clusters.
@@ -37,7 +39,9 @@ The Flux Operator comes with a Kubernetes CRD called `FluxInstance`. A single cu
 can exist in a Kubernetes cluster with the name `flux` that must be created in the same
 namespace where the operator is deployed.
 
-The following is an example of a `FluxInstance` custom resource:
+### Upstream Distribution
+
+To install the upstream distribution of Flux, create the following `FluxInstance` resource:
 
 ```yaml
 apiVersion: fluxcd.controlplane.io/v1
@@ -57,10 +61,8 @@ spec:
     - image-reflector-controller
     - image-automation-controller
   cluster:
-    type: openshift
-    multitenant: false
+    type: kubernetes
     networkPolicy: true
-    domain: "cluster.local"
   kustomize:
     patches:
       - target:
@@ -73,6 +75,55 @@ spec:
           - op: add
             path: /spec/template/spec/containers/0/args/-
             value: --requeue-dependency=5s
+```
+
+The operator will reconcile the `FluxInstance` resource and install
+the latest Flux stable version with the specified components.
+
+### Enterprise Distribution
+
+To install the FIPS-compliant distribution of Flux, create the following `FluxInstance` resource:
+
+```yaml
+apiVersion: fluxcd.controlplane.io/v1
+kind: FluxInstance
+metadata:
+  name: flux
+  namespace: flux-system
+  annotations:
+    fluxcd.controlplane.io/reconcileEvery: "1h"
+    fluxcd.controlplane.io/reconcileTimeout: "5m"
+spec:
+  distribution:
+    version: "2.3.x"
+    registry: "ghcr.io/controlplaneio-fluxcd/distroless"
+    imagePullSecret: "flux-enterprise-auth"
+  components:
+    - source-controller
+    - kustomize-controller
+    - helm-controller
+    - notification-controller
+  cluster:
+    type: openshift
+    multitenant: true
+    networkPolicy: true
+    domain: "cluster.local"
+```
+
+Every hour, the operator will check for updates in the ControlPlane
+[distribution repository](https://github.com/controlplaneio-fluxcd/distribution).
+If a new patch version is available, the operator will update the Flux components by pinning the
+container images to the latest digest published in the ControlPlane registry.
+
+Note that the `enterprise-flux-auth` Kubernetes secret must be created in the `flux-system` namespace
+and contain the credentials to pull the enterprise images:
+
+```shell
+kubectl create secret docker-registry flux-enterprise-auth \
+  --namespace flux-system \
+  --docker-server=ghcr.io \
+  --docker-username=flux \
+  --docker-password=$ENTERPRISE_TOKEN
 ```
 
 ## Supply Chain Security
@@ -88,7 +139,7 @@ Example of extracting the SBOM from the flux-operator image:
 
 ```shell
 docker buildx imagetools inspect \
-    ghcr.io/controlplaneio-fluxcd/flux-operator:v0.0.2 \
+    ghcr.io/controlplaneio-fluxcd/flux-operator:v0.1.0 \
     --format "{{ json (index .SBOM \"linux/amd64\").SPDX}}"
 ```
 
@@ -99,7 +150,7 @@ The ControlPlane images are signed using Sigstore Cosign and GitHub OIDC.
 Example of verifying the signature of the flux-operator image:
 
 ```shell
-cosign verify ghcr.io/controlplaneio-fluxcd/flux-operator:v0.0.2 \
+cosign verify ghcr.io/controlplaneio-fluxcd/flux-operator:v0.1.0 \
   --certificate-identity-regexp=^https://github\\.com/controlplaneio-fluxcd/.*$ \
   --certificate-oidc-issuer=https://token.actions.githubusercontent.com
 ```
@@ -119,7 +170,7 @@ Example of extracting the SLSA provenance JSON for the flux-operator image:
 
 ```shell
 docker buildx imagetools inspect \
-  ghcr.io/controlplaneio-fluxcd/flux-operator:v0.0.2 \
+  ghcr.io/controlplaneio-fluxcd/flux-operator:v0.1.0 \
   --format "{{ json (index .Provenance \"linux/amd64\").SLSA}}"
 ```
 
@@ -132,5 +183,5 @@ Example of verifying the provenance of the flux-operator image:
 cosign verify-attestation --type slsaprovenance \
   --certificate-identity-regexp=^https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml.*$ \
   --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
-  ghcr.io/controlplaneio-fluxcd/flux-operator:v0.0.2
+  ghcr.io/controlplaneio-fluxcd/flux-operator:v0.1.0
 ```
