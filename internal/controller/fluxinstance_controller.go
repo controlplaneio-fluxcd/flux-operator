@@ -268,7 +268,40 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 	}
 
 	applyOpts := ssa.DefaultApplyOptions()
-	applyOpts.Force = true
+	applyOpts.Cleanup = ssa.ApplyCleanupOptions{
+		// Remove the kubectl and helm annotations.
+		Annotations: []string{
+			corev1.LastAppliedConfigAnnotation,
+			"meta.helm.sh/release-name",
+			"meta.helm.sh/release-namespace",
+		},
+		// Remove the flux labels set at bootstrap.
+		Labels: []string{
+			"kustomize.toolkit.fluxcd.io/name",
+			"kustomize.toolkit.fluxcd.io/namespace",
+		},
+		// Take ownership of the Flux resources if they
+		// were previously managed by other tools.
+		FieldManagers: []ssa.FieldManager{
+			{
+				Name:          "flux",
+				OperationType: metav1.ManagedFieldsOperationApply,
+			},
+			{
+				Name:          "kustomize-controller",
+				OperationType: metav1.ManagedFieldsOperationApply,
+			},
+			{
+				Name:          "helm",
+				OperationType: metav1.ManagedFieldsOperationUpdate,
+			},
+			{
+				Name:          "kubectl",
+				OperationType: metav1.ManagedFieldsOperationUpdate,
+			},
+		},
+	}
+
 	resultSet := ssa.NewChangeSet()
 
 	// Apply the resources to the cluster.
