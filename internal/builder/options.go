@@ -19,6 +19,7 @@ type Options struct {
 	ClusterDomain          string
 	TolerationKeys         []string
 	Patches                string
+	ArtifactStorage        *ArtifactStorage
 }
 
 // MakeDefaultOptions returns the default builder configuration.
@@ -43,4 +44,18 @@ func MakeDefaultOptions() Options {
 		NotificationController: "notification-controller",
 		ClusterDomain:          "cluster.local",
 	}
+}
+
+// ComponentImage represents a container image used by a component.
+type ComponentImage struct {
+	Name       string
+	Repository string
+	Tag        string
+	Digest     string
+}
+
+// ArtifactStorage represents the source-controller PVC.
+type ArtifactStorage struct {
+	Class string
+	Size  string
 }

@@ -207,6 +207,13 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 		options.Patches += builder.ProfileMultitenant
 	}
 
+	if obj.Spec.Storage != nil {
+		options.ArtifactStorage = &builder.ArtifactStorage{
+			Class: obj.Spec.Storage.Class,
+			Size:  obj.Spec.Storage.Size,
+		}
+	}
+
 	if obj.Spec.Kustomize != nil && len(obj.Spec.Kustomize.Patches) > 0 {
 		patchesData, err := yaml.Marshal(obj.Spec.Kustomize.Patches)
 		if err != nil {

@@ -74,6 +74,12 @@ func generate(base string, options Options) error {
 		return fmt.Errorf("generate node selector failed: %w", err)
 	}
 
+	if options.ArtifactStorage != nil {
+		if err := execTemplate(options, pvcTmpl, path.Join(base, "pvc.yaml")); err != nil {
+			return fmt.Errorf("generate pvc failed: %w", err)
+		}
+	}
+
 	if err := execTemplate(options, kustomizationTmpl, path.Join(base, "kustomization.yaml")); err != nil {
 		return fmt.Errorf("generate kustomization failed: %w", err)
 	}

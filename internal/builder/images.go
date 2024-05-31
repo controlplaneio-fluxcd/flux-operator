@@ -21,14 +21,6 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// ComponentImage represents a container image used by a component.
-type ComponentImage struct {
-	Name       string
-	Repository string
-	Tag        string
-	Digest     string
-}
-
 // ExtractComponentImages reads the source directory and extracts the container images
 // from the components manifests.
 func ExtractComponentImages(srcDir string, opts Options) ([]ComponentImage, error) {
