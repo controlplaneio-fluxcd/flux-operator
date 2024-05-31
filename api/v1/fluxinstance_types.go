@@ -44,6 +44,11 @@ type FluxInstanceSpec struct {
 	// +optional
 	Cluster *Cluster `json:"cluster,omitempty"`
 
+	// Storage holds the specification of the source-controller
+	// persistent volume claim.
+	// +optional
+	Storage *Storage `json:"storage,omitempty"`
+
 	// Kustomize holds a set of patches that can be applied to the
 	// Flux installation, to customize the way Flux operates.
 	// +optional
@@ -120,6 +125,17 @@ type Cluster struct {
 	// +kubebuilder:default:=kubernetes
 	// +optional
 	Type string `json:"type,omitempty"`
+}
+
+// Storage is the specification for the persistent volume claim.
+type Storage struct {
+	// Class is the storage class to use for the PVC.
+	// +required
+	Class string `json:"class"`
+
+	// Size is the size of the PVC.
+	// +required
+	Size string `json:"size"`
 }
 
 // Kustomize holds a set of patches that can be applied to the

@@ -18,6 +18,9 @@ spec:
     multitenant: false
     networkPolicy: true
     domain: "cluster.local"
+  storage:
+    class: "standard"
+    size: "1Gi"
   kustomize:
     patches:
       - target:

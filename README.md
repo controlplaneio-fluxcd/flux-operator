@@ -119,6 +119,9 @@ spec:
     multitenant: true
     networkPolicy: true
     domain: "cluster.local"
+  storage:
+    class: "standard"
+    size: "10Gi"
 ```
 
 Every hour, the operator will check for updates in the ControlPlane

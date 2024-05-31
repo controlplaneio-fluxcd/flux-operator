@@ -15,6 +15,7 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+//nolint:goconst
 func TestBuild_Defaults(t *testing.T) {
 	g := NewWithT(t)
 	const version = "v2.3.0"
@@ -49,6 +50,7 @@ func TestBuild_Defaults(t *testing.T) {
 	g.Expect(string(genK)).To(Equal(string(goldenK)))
 }
 
+//nolint:goconst
 func TestBuild_Patches(t *testing.T) {
 	g := NewWithT(t)
 	const version = "v2.3.0"
@@ -113,6 +115,7 @@ func TestBuild_Patches(t *testing.T) {
 	g.Expect(found).To(BeTrue())
 }
 
+//nolint:goconst
 func TestBuild_Profiles(t *testing.T) {
 	g := NewWithT(t)
 	const version = "v2.3.0"
@@ -136,10 +139,10 @@ func TestBuild_Profiles(t *testing.T) {
 	g.Expect(result.Objects).NotTo(BeEmpty())
 	g.Expect(result.Revision).To(HavePrefix(version + "@sha256:"))
 
-	//if os.Getenv("GEN_GOLDEN") == "true" {
-	err = cp.Copy(filepath.Join(dstDir, "kustomization.yaml"), goldenFile)
-	g.Expect(err).NotTo(HaveOccurred())
-	//}
+	if os.Getenv("GEN_GOLDEN") == "true" {
+		err = cp.Copy(filepath.Join(dstDir, "kustomization.yaml"), goldenFile)
+		g.Expect(err).NotTo(HaveOccurred())
+	}
 
 	genK, err := os.ReadFile(filepath.Join(dstDir, "kustomization.yaml"))
 	g.Expect(err).NotTo(HaveOccurred())
@@ -161,6 +164,57 @@ func TestBuild_Profiles(t *testing.T) {
 	g.Expect(found).To(BeTrue())
 }
 
+//nolint:goconst
+func TestBuild_ArtifactStorage(t *testing.T) {
+	g := NewWithT(t)
+	const version = "v2.3.0"
+	options := MakeDefaultOptions()
+	options.Version = version
+
+	srcDir := filepath.Join("testdata", version)
+	goldenFile := filepath.Join("testdata", version+"-golden", "storage.kustomization.yaml")
+
+	dstDir, err := testTempDir(t)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	ci, err := ExtractComponentImages(srcDir, options)
+	g.Expect(err).NotTo(HaveOccurred())
+	options.ComponentImages = ci
+
+	options.ArtifactStorage = &ArtifactStorage{
+		Class: "standard",
+		Size:  "10Gi",
+	}
+
+	result, err := Build(srcDir, dstDir, options)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(result.Objects).NotTo(BeEmpty())
+	g.Expect(result.Revision).To(HavePrefix(version + "@sha256:"))
+
+	if os.Getenv("GEN_GOLDEN") == "true" {
+		err = cp.Copy(filepath.Join(dstDir, "kustomization.yaml"), goldenFile)
+		g.Expect(err).NotTo(HaveOccurred())
+	}
+
+	genK, err := os.ReadFile(filepath.Join(dstDir, "kustomization.yaml"))
+	g.Expect(err).NotTo(HaveOccurred())
+
+	goldenK, err := os.ReadFile(goldenFile)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	g.Expect(string(genK)).To(Equal(string(goldenK)))
+
+	found := false
+	for _, obj := range result.Objects {
+		if obj.GetKind() == "PersistentVolumeClaim" {
+			found = true
+			g.Expect(obj.GetName()).To(Equal("source-controller"))
+		}
+	}
+	g.Expect(found).To(BeTrue())
+}
+
+//nolint:goconst
 func TestBuild_InvalidPatches(t *testing.T) {
 	g := NewWithT(t)
 	const version = "v2.3.0"

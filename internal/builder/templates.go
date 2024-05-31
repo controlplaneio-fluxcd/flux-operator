@@ -17,9 +17,11 @@ var kustomizationTmpl = `---
 {{- $registry := .Registry }}
 {{- $logLevel := .LogLevel }}
 {{- $clusterDomain := .ClusterDomain }}
+{{- $artifactStorage := .ArtifactStorage }}
+{{- $namespace := .Namespace }}
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: {{.Namespace}}
+namespace: {{$namespace}}
 transformers:
   - labels.yaml
 resources:
@@ -30,6 +32,9 @@ resources:
   - roles
 {{- range .Components }}
   - {{.}}.yaml
+{{- end }}
+{{- if $artifactStorage }}
+  - pvc.yaml
 {{- end }}
 {{- if $registry }}
 images:
@@ -79,6 +84,19 @@ patches:
     - op: replace
       path: /spec/template/spec/containers/0/args/6
       value: --storage-adv-addr=source-controller.$(RUNTIME_NAMESPACE).svc.{{$clusterDomain}}.
+{{- if $artifactStorage }}
+    - op: add
+      path: '/spec/template/spec/volumes/-'
+      value:
+        name: persistent-data
+        persistentVolumeClaim:
+          claimName: source-controller
+    - op: replace
+      path: '/spec/template/spec/containers/0/volumeMounts/0'
+      value:
+        name: persistent-data
+        mountPath: /data
+{{- end }}
 {{- else }}
 - target:
     group: apps
@@ -157,6 +175,20 @@ metadata:
     pod-security.kubernetes.io/warn-version: latest
   annotations:
     fluxcd.controlplane.io/prune: disabled
+`
+
+var pvcTmpl = `---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: source-controller
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{.ArtifactStorage.Class}}
+  resources:
+    requests:
+      storage: {{.ArtifactStorage.Size}}
 `
 
 func execTemplate(obj interface{}, tmpl, filename string) (err error) {
