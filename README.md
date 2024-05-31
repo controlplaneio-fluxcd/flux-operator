@@ -153,7 +153,7 @@ Example of extracting the SBOM from the flux-operator image:
 
 ```shell
 docker buildx imagetools inspect \
-    ghcr.io/controlplaneio-fluxcd/flux-operator:v0.1.0 \
+    ghcr.io/controlplaneio-fluxcd/flux-operator:v0.2.0 \
     --format "{{ json (index .SBOM \"linux/amd64\").SPDX}}"
 ```
 
@@ -164,7 +164,7 @@ The ControlPlane images are signed using Sigstore Cosign and GitHub OIDC.
 Example of verifying the signature of the flux-operator image:
 
 ```shell
-cosign verify ghcr.io/controlplaneio-fluxcd/flux-operator:v0.1.0 \
+cosign verify ghcr.io/controlplaneio-fluxcd/flux-operator:v0.2.0 \
   --certificate-identity-regexp=^https://github\\.com/controlplaneio-fluxcd/.*$ \
   --certificate-oidc-issuer=https://token.actions.githubusercontent.com
 ```
@@ -184,7 +184,7 @@ Example of extracting the SLSA provenance JSON for the flux-operator image:
 
 ```shell
 docker buildx imagetools inspect \
-  ghcr.io/controlplaneio-fluxcd/flux-operator:v0.1.0 \
+  ghcr.io/controlplaneio-fluxcd/flux-operator:v0.2.0 \
   --format "{{ json (index .Provenance \"linux/amd64\").SLSA}}"
 ```
 
@@ -197,5 +197,5 @@ Example of verifying the provenance of the flux-operator image:
 cosign verify-attestation --type slsaprovenance \
   --certificate-identity-regexp=^https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml.*$ \
   --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
-  ghcr.io/controlplaneio-fluxcd/flux-operator:v0.1.0
+  ghcr.io/controlplaneio-fluxcd/flux-operator:v0.2.0
 ```
