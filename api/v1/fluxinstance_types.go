@@ -267,6 +267,7 @@ func (in *FluxInstance) GetTimeout() time.Duration {
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description=""
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",description=""
+// +kubebuilder:printcolumn:name="Revision",type="string",JSONPath=".status.lastAttemptedRevision",description=""
 
 // FluxInstance is the Schema for the fluxinstances API
 type FluxInstance struct {
