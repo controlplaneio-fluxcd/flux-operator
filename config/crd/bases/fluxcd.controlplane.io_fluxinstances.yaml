@@ -24,6 +24,9 @@ spec:
     - jsonPath: .status.conditions[?(@.type=="Ready")].message
       name: Status
       type: string
+    - jsonPath: .status.lastAttemptedRevision
+      name: Revision
+      type: string
     name: v1
     schema:
       openAPIV3Schema:
