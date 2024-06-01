@@ -325,6 +325,106 @@ func TestFluxInstanceReconciler_Downgrade(t *testing.T) {
 	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 }
 
+func TestFluxInstanceReconciler_Disabled(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getFluxInstanceReconciler()
+	spec := getDefaultFluxSpec()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	obj := &fluxcdv1.FluxInstance{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ns.Name,
+			Namespace: ns.Name,
+		},
+		Spec: spec,
+	}
+
+	err = testClient.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize the instance.
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Install the instance.
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Check if the instance was installed.
+	result := &fluxcdv1.FluxInstance{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).ToNot(HaveOccurred())
+	checkInstanceReadiness(g, result)
+
+	// Disable the instance reconciliation.
+	resultP := result.DeepCopy()
+	resultP.SetAnnotations(
+		map[string]string{
+			fluxcdv1.ReconcileAnnotation: fluxcdv1.DisabledValue,
+		})
+	resultP.Spec.Components = []fluxcdv1.Component{"source-controller"}
+	err = testClient.Patch(ctx, resultP, client.MergeFrom(result))
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Reconcile the instance with disabled reconciliation.
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.IsZero()).To(BeTrue())
+
+	// Check the final status.
+	resultFinal := &fluxcdv1.FluxInstance{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), resultFinal)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Check if events were recorded for each step.
+	events := getEvents(result.Name)
+	g.Expect(events).To(HaveLen(3))
+	g.Expect(events[0].Reason).To(Equal(meta.ProgressingReason))
+	g.Expect(events[1].Reason).To(Equal(meta.ReconciliationSucceededReason))
+	g.Expect(events[2].Reason).To(Equal("ReconciliationDisabled"))
+
+	// Check that resources were not deleted.
+	kc := &appsv1.Deployment{}
+	err = testClient.Get(ctx, types.NamespacedName{Name: "kustomize-controller", Namespace: ns.Name}, kc)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Enable the instance reconciliation.
+	resultP = resultFinal.DeepCopy()
+	resultP.SetAnnotations(
+		map[string]string{
+			fluxcdv1.ReconcileAnnotation: fluxcdv1.EnabledValue,
+		})
+	err = testClient.Patch(ctx, resultP, client.MergeFrom(result))
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Uninstall the instance.
+	err = testClient.Delete(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.IsZero()).To(BeTrue())
+
+	// Check that resources were not deleted.
+	sc := &appsv1.Deployment{}
+	err = testClient.Get(ctx, types.NamespacedName{Name: "source-controller", Namespace: ns.Name}, sc)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+}
+
 func TestFluxInstanceReconciler_Profiles(t *testing.T) {
 	g := NewWithT(t)
 	reconciler := getFluxInstanceReconciler()
