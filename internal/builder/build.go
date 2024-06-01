@@ -66,6 +66,10 @@ func generate(base string, options Options) error {
 		return fmt.Errorf("generate namespace failed: %w", err)
 	}
 
+	if err := execTemplate(options, annotationsTmpl, path.Join(base, "annotations.yaml")); err != nil {
+		return fmt.Errorf("generate annotations failed: %w", err)
+	}
+
 	if err := execTemplate(options, labelsTmpl, path.Join(base, "labels.yaml")); err != nil {
 		return fmt.Errorf("generate labels failed: %w", err)
 	}

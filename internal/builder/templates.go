@@ -23,6 +23,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: {{$namespace}}
 transformers:
+  - annotations.yaml
   - labels.yaml
 resources:
   - namespace.yaml
@@ -162,6 +163,18 @@ labels:
   app.kubernetes.io/part-of: flux
 fieldSpecs:
   - path: metadata/labels
+    create: true
+`
+
+var annotationsTmpl = `---
+apiVersion: builtin
+kind: AnnotationsTransformer
+metadata:
+  name: annotations
+annotations:
+  kustomize.toolkit.fluxcd.io/ssa: Ignore
+fieldSpecs:
+  - path: metadata/annotations
     create: true
 `
 

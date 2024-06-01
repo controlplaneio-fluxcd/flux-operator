@@ -15,7 +15,6 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-//nolint:goconst
 func TestBuild_Defaults(t *testing.T) {
 	g := NewWithT(t)
 	const version = "v2.3.0"
@@ -36,7 +35,7 @@ func TestBuild_Defaults(t *testing.T) {
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(result.Objects).NotTo(BeEmpty())
 
-	if os.Getenv("GEN_GOLDEN") == "true" {
+	if shouldGenGolden() {
 		err = cp.Copy(filepath.Join(dstDir, "kustomization.yaml"), goldenFile)
 		g.Expect(err).NotTo(HaveOccurred())
 	}
@@ -50,7 +49,6 @@ func TestBuild_Defaults(t *testing.T) {
 	g.Expect(string(genK)).To(Equal(string(goldenK)))
 }
 
-//nolint:goconst
 func TestBuild_Patches(t *testing.T) {
 	g := NewWithT(t)
 	const version = "v2.3.0"
@@ -89,7 +87,7 @@ func TestBuild_Patches(t *testing.T) {
 	g.Expect(result.Objects).NotTo(BeEmpty())
 	g.Expect(result.Revision).To(HavePrefix(version + "@sha256:"))
 
-	if os.Getenv("GEN_GOLDEN") == "true" {
+	if shouldGenGolden() {
 		err = cp.Copy(filepath.Join(dstDir, "kustomization.yaml"), goldenFile)
 		g.Expect(err).NotTo(HaveOccurred())
 	}
@@ -115,7 +113,6 @@ func TestBuild_Patches(t *testing.T) {
 	g.Expect(found).To(BeTrue())
 }
 
-//nolint:goconst
 func TestBuild_Profiles(t *testing.T) {
 	g := NewWithT(t)
 	const version = "v2.3.0"
@@ -139,7 +136,7 @@ func TestBuild_Profiles(t *testing.T) {
 	g.Expect(result.Objects).NotTo(BeEmpty())
 	g.Expect(result.Revision).To(HavePrefix(version + "@sha256:"))
 
-	if os.Getenv("GEN_GOLDEN") == "true" {
+	if shouldGenGolden() {
 		err = cp.Copy(filepath.Join(dstDir, "kustomization.yaml"), goldenFile)
 		g.Expect(err).NotTo(HaveOccurred())
 	}
@@ -154,17 +151,17 @@ func TestBuild_Profiles(t *testing.T) {
 
 	found := false
 	for _, obj := range result.Objects {
+		labels := obj.GetLabels()
 		if obj.GetKind() == "Namespace" {
 			found = true
-			labels := obj.GetLabels()
 			g.Expect(labels).NotTo(HaveKey("pod-security.kubernetes.io/warn"))
 			g.Expect(labels).NotTo(HaveKey("pod-security.kubernetes.io/warn-version"))
 		}
+		g.Expect(obj.GetLabels()).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "flux-operator"))
 	}
 	g.Expect(found).To(BeTrue())
 }
 
-//nolint:goconst
 func TestBuild_ArtifactStorage(t *testing.T) {
 	g := NewWithT(t)
 	const version = "v2.3.0"
@@ -191,7 +188,7 @@ func TestBuild_ArtifactStorage(t *testing.T) {
 	g.Expect(result.Objects).NotTo(BeEmpty())
 	g.Expect(result.Revision).To(HavePrefix(version + "@sha256:"))
 
-	if os.Getenv("GEN_GOLDEN") == "true" {
+	if shouldGenGolden() {
 		err = cp.Copy(filepath.Join(dstDir, "kustomization.yaml"), goldenFile)
 		g.Expect(err).NotTo(HaveOccurred())
 	}
@@ -210,11 +207,11 @@ func TestBuild_ArtifactStorage(t *testing.T) {
 			found = true
 			g.Expect(obj.GetName()).To(Equal("source-controller"))
 		}
+		g.Expect(obj.GetAnnotations()).To(HaveKeyWithValue("kustomize.toolkit.fluxcd.io/ssa", "Ignore"))
 	}
 	g.Expect(found).To(BeTrue())
 }
 
-//nolint:goconst
 func TestBuild_InvalidPatches(t *testing.T) {
 	g := NewWithT(t)
 	const version = "v2.3.0"
@@ -258,4 +255,8 @@ func testTempDir(t *testing.T) (string, error) {
 	}
 
 	return tmpDir, err
+}
+
+func shouldGenGolden() bool {
+	return os.Getenv("GEN_GOLDEN") == "true"
 }
