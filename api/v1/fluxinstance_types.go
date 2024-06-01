@@ -243,6 +243,12 @@ func (in *FluxInstance) SetConditions(conditions []metav1.Condition) {
 	in.Status.Conditions = conditions
 }
 
+// IsDisabled returns true if the object has the reconcile annotation set to 'disabled'.
+func (in *FluxInstance) IsDisabled() bool {
+	val, ok := in.GetAnnotations()[ReconcileAnnotation]
+	return ok && strings.ToLower(val) == DisabledValue
+}
+
 // GetInterval returns the interval at which the object should be reconciled.
 // If no interval is set, the default is 60 minutes.
 func (in *FluxInstance) GetInterval() time.Duration {

@@ -30,7 +30,7 @@ func (r *FluxInstanceReconciler) uninstall(ctx context.Context,
 	reconcileStart := time.Now()
 	log := ctrl.LoggerFrom(ctx)
 
-	if obj.Status.Inventory == nil || len(obj.Status.Inventory.Entries) == 0 {
+	if obj.IsDisabled() || obj.Status.Inventory == nil || len(obj.Status.Inventory.Entries) == 0 {
 		controllerutil.RemoveFinalizer(obj, fluxcdv1.Finalizer)
 		return ctrl.Result{}, nil
 	}

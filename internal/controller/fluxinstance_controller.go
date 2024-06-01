@@ -5,6 +5,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -87,6 +88,14 @@ func (r *FluxInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			meta.ProgressingReason,
 			msg)
 		return ctrl.Result{Requeue: true}, nil
+	}
+
+	// Pause reconciliation if the object has the reconcile annotation set to 'disabled'.
+	if obj.IsDisabled() {
+		msg := "Reconciliation in disabled"
+		log.Error(errors.New("can't reconcile instance"), msg)
+		r.Event(obj, corev1.EventTypeWarning, "ReconciliationDisabled", msg)
+		return ctrl.Result{}, nil
 	}
 
 	// Reconcile the object.
