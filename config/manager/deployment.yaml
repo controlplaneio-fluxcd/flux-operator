@@ -33,11 +33,14 @@ spec:
         image: flux-operator:latest
         imagePullPolicy: IfNotPresent
         securityContext:
+          runAsNonRoot: true
           readOnlyRootFilesystem: true
           allowPrivilegeEscalation: false
           capabilities:
             drop:
             - "ALL"
+          seccompProfile:
+            type: RuntimeDefault
         ports:
         - containerPort: 8080
           name: http-metrics

@@ -30,7 +30,7 @@ import (
 	// +kubebuilder:scaffold:imports
 )
 
-const controllerName = "fluxcd-controller"
+const controllerName = "flux-controller"
 
 var (
 	scheme   = runtime.NewScheme()

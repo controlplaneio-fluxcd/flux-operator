@@ -140,6 +140,16 @@ kubectl create secret docker-registry flux-enterprise-auth \
   --docker-password=$ENTERPRISE_TOKEN
 ```
 
+### Migration of a bootstrap cluster
+
+To migrate a cluster that was bootstrapped, after the flux-operator is installed
+and the `FluxInstance` resource is created, the following steps are required:
+
+1. Checkout the branch of the Flux repository that was used to bootstrap the cluster.
+2. Replace the contents of the `flux-system/gok-components.yaml` with the `FluxInstance` YAML manifest.
+3. Remove all controllers patches from the `flux-system/kustomization.yaml`.
+4. Commit and push the changes to the Flux repository.
+
 ## Supply Chain Security
 
 The build, release and provenance portions of the ControlPlane distribution supply chain meet
