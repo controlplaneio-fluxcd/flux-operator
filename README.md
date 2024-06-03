@@ -50,6 +50,10 @@ The Flux Operator comes with a Kubernetes CRD called `FluxInstance`. A single cu
 can exist in a Kubernetes cluster with the name `flux` that must be created in the same
 namespace where the operator is deployed.
 
+> [!NOTE]
+> The `FluxInstance` API documentation is available at
+> [docs/api/v1](https://github.com/controlplaneio-fluxcd/flux-operator/blob/main/docs/api/v1/fluxinstance.md).
+
 ### Upstream Distribution
 
 To install the upstream distribution of Flux, create the following `FluxInstance` resource:
