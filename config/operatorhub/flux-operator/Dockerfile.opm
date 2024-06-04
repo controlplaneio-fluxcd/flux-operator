@@ -1,0 +1,17 @@
+FROM alpine:3.20
+
+WORKDIR /opt
+RUN wget https://download.docker.com/linux/static/stable/x86_64/docker-26.1.3.tgz
+RUN tar xf docker-26.1.3.tgz
+
+RUN wget https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/4.15.9/opm-linux-4.15.9.tar.gz
+RUN tar xf opm-linux-4.15.9.tar.gz
+
+FROM ubuntu:24.04
+
+WORKDIR /opt
+
+COPY --from=0 /opt/docker/docker /usr/bin/
+COPY --from=0 /opt/opm /opt/
+
+ENTRYPOINT ["/opt/opm"]

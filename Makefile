@@ -6,6 +6,10 @@
 # Image URL to use all building/pushing image targets
 IMG ?= ghcr.io/controlplaneio-fluxcd/flux-operator:latest
 
+# OPERATOR_VERSION refers to the version of the operator to be tested
+# under ./config/operatorhub/flux-operator/<version> directory.
+OPERATOR_VERSION ?= 0.1.0
+
 # FLUX_VERSION refers to the version of Flux to be vendored.
 FLUX_VERSION = $(shell gh release view --repo fluxcd/flux2 --json tagName -q '.tagName')
 
@@ -144,6 +148,16 @@ deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in
 .PHONY: undeploy
 undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	$(KUSTOMIZE) build config/default | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
+
+.PHONY: opm-index
+opm-index:
+	./config/operatorhub/flux-operator/scripts/opm-index.sh ${OPERATOR_VERSION}
+
+.PHONY: test-operatorhub
+test-operatorhub: opm-index
+	yq e -i ".spec.startingCSV=\"flux-operator.v${OPERATOR_VERSION}\"" \
+	./config/operatorhub/flux-operator/test-yamls/004-operator-subscription.yaml
+	bash -x ./config/operatorhub/flux-operator/scripts/test.sh
 
 ##@ Dependencies
 
