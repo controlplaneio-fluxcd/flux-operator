@@ -1,0 +1,5 @@
+packageName: flux-operator
+defaultChannel: stable
+channels:
+  - name: stable
+    currentCSV: flux-operator.v0.3.0
