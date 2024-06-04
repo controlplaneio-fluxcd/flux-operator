@@ -31,6 +31,8 @@ jobs:
         uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
       - name: Setup Kustomize
         uses: fluxcd/pkg/actions/kustomize@main
+      - name: Setup Flux
+        uses: fluxcd/flux2/action@896e0fa46d5107a05e953dd0a5261d78a145ec8c #v2.3.0
       - name: Prepare
         id: prep
         run: |

@@ -110,7 +110,7 @@ build-installer: manifests generate kustomize ## Generate a consolidated YAML wi
 	$(KUSTOMIZE) build config/default > dist/install.yaml
 
 .PHONY: build-manifests
-build-manifests: manifests generate kustomize ## Generate release manifests.
+build-manifests: ## Generate release manifests.
 	mkdir -p dist/flux-operator
 	kustomize build config/default > dist/flux-operator/install.yaml
 	mkdir -p dist/flux
