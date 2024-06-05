@@ -7,7 +7,7 @@ IMG=ghcr.io/controlplaneio-fluxcd/openshift-flux-operator-catalog:bundle-v"${VER
 OPM=ghcr.io/controlplaneio-fluxcd/openshift-flux-operator-index:latest
 
 # create kind cluster
-kind create cluster --name=flux-operator-olm
+kind create cluster --name=flux-operator-olm --wait=5m
 
 # load images
 kind load docker-image --name=flux-operator-olm ${IMG}

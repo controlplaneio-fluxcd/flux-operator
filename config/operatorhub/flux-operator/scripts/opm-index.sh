@@ -10,7 +10,7 @@ ARCH=""
 case $(uname -m) in
     x86_64)   ARCH="x86_64" ;;
     aarch64)  ARCH="aarch64" ;;
-    arm64)    ARCH="aaarch64" ;;
+    arm64)    ARCH="aarch64" ;;
     *)        echo "Unsupported architecture"
               exit 1
               ;;
@@ -35,4 +35,3 @@ docker run --rm -it \
   --container-tool docker \
   --bundles "$list" \
   --tag ghcr.io/controlplaneio-fluxcd/openshift-flux-operator-index:latest
-
