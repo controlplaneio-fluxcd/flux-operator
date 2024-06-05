@@ -3,6 +3,4 @@ kind: OperatorGroup
 metadata:
   name: flux-system-group
   namespace: flux-system
-spec:
-  targetNamespaces:
-    - flux-system
+

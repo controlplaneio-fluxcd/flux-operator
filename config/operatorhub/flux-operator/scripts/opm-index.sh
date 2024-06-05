@@ -6,17 +6,25 @@ set -euo pipefail
 #
 
 VERSION=$1
+ARCH=""
+case $(uname -m) in
+    x86_64)   ARCH="x86_64" ;;
+    aarch64)  ARCH="aarch64" ;;
+    arm64)    ARCH="aaarch64" ;;
+    *)        echo "Unsupported architecture"
+              exit 1
+              ;;
+esac
 
 list=""
 for i in $(ls -d ./config/operatorhub/flux-operator/${VERSION}/ | xargs -I{} basename {}); do
   # docker build and push individual bundles
   docker build -t ghcr.io/controlplaneio-fluxcd/openshift-flux-operator-catalog:bundle-v"${i}" \
-  -f config/operatorhub/flux-operator/bundle.Dockerfile config/operatorhub/flux-operator/"${i}"
-  docker push ghcr.io/controlplaneio-fluxcd/openshift-flux-operator-catalog:bundle-v"${i}"
+  -f ./config/operatorhub/flux-operator/bundle.Dockerfile config/operatorhub/flux-operator/"${i}"
   list="$list,ghcr.io/controlplaneio-fluxcd/openshift-flux-operator-catalog:bundle-v$i"
 done
 
-docker build -t opm -f config/operatorhub/flux-operator/Dockerfile.opm .
+docker build -t opm --build-arg ARCH=$ARCH -f ./config/operatorhub/flux-operator/Dockerfile.opm .
 
 list=${list:1} # remove first comma
 docker run --rm -it \
@@ -28,5 +36,3 @@ docker run --rm -it \
   --bundles "$list" \
   --tag ghcr.io/controlplaneio-fluxcd/openshift-flux-operator-index:latest
 
-# push index
-docker push ghcr.io/controlplaneio-fluxcd/openshift-flux-operator-index:latest

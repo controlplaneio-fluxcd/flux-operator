@@ -32,4 +32,4 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: run tests
         run: |
-          make test-operatorhub OPERATOR_VERSION="${{ github.event.inputs.version }}"
+          make test-operatorhub FLUX_OPERATOR_VERSION="${{ github.event.inputs.version }}"

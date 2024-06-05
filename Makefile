@@ -6,9 +6,11 @@
 # Image URL to use all building/pushing image targets
 IMG ?= ghcr.io/controlplaneio-fluxcd/flux-operator:latest
 
-# OPERATOR_VERSION refers to the version of the operator to be tested
+# FLUX_OPERATOR_VERSION refers to the version of the operator to be tested
 # under ./config/operatorhub/flux-operator/<version> directory.
-OPERATOR_VERSION ?= 0.1.0
+FLUX_OPERATOR_VERSION ?= 0.1.0
+# OLM_VERSION refers to the version of the Operator Lifecycle Manager to be used.
+OLM_VERSION ?= 0.28.0
 
 # FLUX_VERSION refers to the version of Flux to be vendored.
 FLUX_VERSION = $(shell gh release view --repo fluxcd/flux2 --json tagName -q '.tagName')
@@ -151,13 +153,13 @@ undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.
 
 .PHONY: opm-index
 opm-index:
-	./config/operatorhub/flux-operator/scripts/opm-index.sh ${OPERATOR_VERSION}
+	./config/operatorhub/flux-operator/scripts/opm-index.sh ${FLUX_OPERATOR_VERSION}
 
 .PHONY: test-operatorhub
 test-operatorhub: opm-index
-	yq e -i ".spec.startingCSV=\"flux-operator.v${OPERATOR_VERSION}\"" \
+	yq e -i ".spec.startingCSV=\"flux-operator.v${FLUX_OPERATOR_VERSION}\"" \
 	./config/operatorhub/flux-operator/test-yamls/004-operator-subscription.yaml
-	bash -x ./config/operatorhub/flux-operator/scripts/test.sh
+	bash -x ./config/operatorhub/flux-operator/scripts/test.sh ${FLUX_OPERATOR_VERSION} ${OLM_VERSION}
 
 ##@ Dependencies
 
