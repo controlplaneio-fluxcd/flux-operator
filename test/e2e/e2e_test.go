@@ -24,16 +24,16 @@ var _ = BeforeSuite(func() {
 
 	By("building the flux-operator image")
 	cmd := exec.Command("make", "docker-build", fmt.Sprintf("IMG=%s", image))
-	_, err = Run(cmd)
+	_, err = Run(cmd, "/test/e2e")
 	ExpectWithOffset(1, err).NotTo(HaveOccurred())
 
 	By("loading the flux-operator image on Kind")
-	err = LoadImageToKindClusterWithName(image)
+	err = LoadImageToKindClusterWithName(image, "/test/e2e")
 	ExpectWithOffset(1, err).NotTo(HaveOccurred())
 
 	By("deploying flux-operator")
 	cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", image))
-	_, err = Run(cmd)
+	_, err = Run(cmd, "/test/e2e")
 	ExpectWithOffset(1, err).NotTo(HaveOccurred())
 
 	By("validating that the flux-operator pod is running as expected")
@@ -49,7 +49,7 @@ var _ = BeforeSuite(func() {
 			"-n", namespace,
 		)
 
-		podOutput, err := Run(cmd)
+		podOutput, err := Run(cmd, "/test/e2e")
 		ExpectWithOffset(2, err).NotTo(HaveOccurred())
 		podNames := GetNonEmptyLines(string(podOutput))
 		if len(podNames) != 1 {
@@ -63,7 +63,7 @@ var _ = BeforeSuite(func() {
 			"pods", controllerPodName, "-o", "jsonpath={.status.phase}",
 			"-n", namespace,
 		)
-		status, err := Run(cmd)
+		status, err := Run(cmd, "/test/e2e")
 		ExpectWithOffset(2, err).NotTo(HaveOccurred())
 		if string(status) != "Running" {
 			return fmt.Errorf("flux-operator pod in %s status", status)
@@ -77,6 +77,6 @@ var _ = BeforeSuite(func() {
 var _ = AfterSuite(func() {
 	By("uninstalling flux-operator")
 	cmd := exec.Command("make", "undeploy")
-	_, err := Run(cmd)
+	_, err := Run(cmd, "/test/e2e")
 	Expect(err).NotTo(HaveOccurred())
 })

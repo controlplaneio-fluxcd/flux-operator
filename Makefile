@@ -8,7 +8,7 @@ IMG ?= ghcr.io/controlplaneio-fluxcd/flux-operator:latest
 
 # FLUX_OPERATOR_VERSION refers to the version of the operator to be tested
 # under ./config/operatorhub/flux-operator/<version> directory.
-FLUX_OPERATOR_VERSION ?= 0.1.0
+FLUX_OPERATOR_VERSION ?= v0.1.0
 # OLM_VERSION refers to the version of the Operator Lifecycle Manager to be used.
 OLM_VERSION ?= 0.28.0
 
@@ -62,7 +62,7 @@ tidy: ## Run go mod tidy.
 
 .PHONY: test
 test: tidy manifests generate fmt vet envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v -e /e2e -e /olm) -coverprofile cover.out
 
 # Utilize Kind or modify the e2e tests to load the image locally, enabling compatibility with other vendors.
 .PHONY: test-e2e  # Run the e2e tests against a Kind k8s instance that is spun up.
@@ -155,11 +155,23 @@ undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.
 opm-index:
 	./config/operatorhub/flux-operator/scripts/opm-index.sh ${FLUX_OPERATOR_VERSION}
 
-.PHONY: test-operatorhub
-test-operatorhub: opm-index
-	yq e -i ".spec.startingCSV=\"flux-operator.v${FLUX_OPERATOR_VERSION}\"" \
-	./config/operatorhub/flux-operator/test-yamls/004-operator-subscription.yaml
-	bash -x ./config/operatorhub/flux-operator/scripts/test.sh ${FLUX_OPERATOR_VERSION} ${OLM_VERSION}
+.PHONY: test-olm
+test-olm: opm-index
+	yq e -i ".spec.startingCSV=\"flux-operator.${FLUX_OPERATOR_VERSION}\"" \
+	./config/operatorhub/flux-operator/testdata/004-operator-subscription.yaml
+	yq e -i ".spec.image=\"ghcr.io/controlplaneio-fluxcd/openshift-flux-operator-index:${FLUX_OPERATOR_VERSION}\"" \
+	./config/operatorhub/flux-operator/testdata/003-catalog-source.yaml
+	export OLM_VERSION=${OLM_VERSION} && \
+	export FLUX_OPERATOR_VERSION=${FLUX_OPERATOR_VERSION} && \
+	go test ./test/olm/ -v -ginkgo.v
+
+.PHONY: deploy-olm-data
+deploy-olm-data:
+	kubectl apply -k ./config/operatorhub/flux-operator/testdata/
+
+.PHONY: undeploy-olm-data
+undeploy-olm-data:
+	kubectl delete -k ./config/operatorhub/flux-operator/testdata/
 
 ##@ Dependencies
 

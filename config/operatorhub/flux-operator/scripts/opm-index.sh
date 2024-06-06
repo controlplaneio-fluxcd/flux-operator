@@ -7,6 +7,7 @@ set -euo pipefail
 
 VERSION=$1
 ARCH=""
+DIR="config/operatorhub/flux-operator/"
 case $(uname -m) in
     x86_64)   ARCH="x86_64" ;;
     aarch64)  ARCH="aarch64" ;;
@@ -16,22 +17,27 @@ case $(uname -m) in
               ;;
 esac
 
-list=""
-for i in $(ls -d ./config/operatorhub/flux-operator/${VERSION}/ | xargs -I{} basename {}); do
-  # docker build and push individual bundles
-  docker build -t ghcr.io/controlplaneio-fluxcd/openshift-flux-operator-catalog:bundle-v"${i}" \
-  -f ./config/operatorhub/flux-operator/bundle.Dockerfile config/operatorhub/flux-operator/"${i}"
-  list="$list,ghcr.io/controlplaneio-fluxcd/openshift-flux-operator-catalog:bundle-v$i"
-done
+if [ ! -d "${DIR}/${VERSION}" ]; then
+  echo "Version ${VERSION} does not exist"
+  exit 1
+fi
 
-docker build -t opm --build-arg ARCH=$ARCH -f ./config/operatorhub/flux-operator/Dockerfile.opm .
+# docker build and push individual bundles
+docker build -t ghcr.io/controlplaneio-fluxcd/openshift-flux-operator-catalog:bundle-"${VERSION}" \
+-f "${DIR}/bundle.Dockerfile" "${DIR}/${VERSION}"
+docker push ghcr.io/controlplaneio-fluxcd/openshift-flux-operator-catalog:bundle-"${VERSION}"
 
-list=${list:1} # remove first comma
+docker build -t opm --build-arg ARCH=$ARCH -f "${DIR}/Dockerfile.opm" .
+
 docker run --rm -it \
   --privileged \
   -v /var/lib/docker:/var/lib/docker \
   -v /var/run/docker.sock:/var/run/docker.sock \
   opm:latest index add \
   --container-tool docker \
-  --bundles "$list" \
-  --tag ghcr.io/controlplaneio-fluxcd/openshift-flux-operator-index:latest
+  --bundles ghcr.io/controlplaneio-fluxcd/openshift-flux-operator-catalog:bundle-"${VERSION}" \
+  --tag ghcr.io/controlplaneio-fluxcd/openshift-flux-operator-index:${VERSION}
+
+#push index
+docker push ghcr.io/controlplaneio-fluxcd/openshift-flux-operator-index:${VERSION}
+ 
