@@ -357,7 +357,7 @@ The Condition `message` is updated during the course of the reconciliation to
 report the action being performed at any particular moment such as
 building manifests, detecting drift, etc.
 
-The `Ready` Condition's `status` is also marked as `Unkown`.
+The `Ready` Condition's `status` is also marked as `Unknown`.
 
 #### Ready FluxInstance
 
