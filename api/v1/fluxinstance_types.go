@@ -59,6 +59,13 @@ type FluxInstanceSpec struct {
 	// +kubebuilder:default:=true
 	// +required
 	Wait bool `json:"wait"`
+
+	// Sync specifies the source for the cluster sync operation.
+	// When set, a Flux source (GitRepository, OCIRepository or Bucket)
+	// and Flux Kustomization are created to sync the cluster state
+	// with the source repository.
+	// +optional
+	Sync *Sync `json:"sync,omitempty"`
 }
 
 // Distribution specifies the version and container registry to pull images from.
@@ -121,7 +128,7 @@ type Cluster struct {
 
 	// Type specifies the distro of the Kubernetes cluster.
 	// Defaults to 'kubernetes'.
-	// +kubebuilder:validation:Enum:=kubernetes;openshift
+	// +kubebuilder:validation:Enum:=kubernetes;openshift;aws;azure;gcp
 	// +kubebuilder:default:=kubernetes
 	// +optional
 	Type string `json:"type,omitempty"`
@@ -145,6 +152,44 @@ type Kustomize struct {
 	// capable of targeting objects based on kind, label and annotation selectors.
 	// +optional
 	Patches []kustomize.Patch `json:"patches,omitempty"`
+}
+
+type Sync struct {
+	// Interval is the time between syncs.
+	// +kubebuilder:validation:Type=string
+	// +kubebuilder:validation:Pattern="^([0-9]+(\\.[0-9]+)?(ms|s|m|h))+$"
+	// +kubebuilder:default:="1m"
+	// +optional
+	Interval *metav1.Duration `json:"interval,omitempty"`
+
+	// Kind is the kind of the source.
+	// +kubebuilder:validation:Enum=OCIRepository;GitRepository;Bucket
+	// +required
+	Kind string `json:"kind"`
+
+	// URL is the source URL, can be a Git repository HTTP/S or SSH address,
+	// an OCI repository address or a Bucket endpoint.
+	// +required
+	URL string `json:"url"`
+
+	// Ref is the source reference, can be a Git ref name e.g. 'refs/heads/main',
+	// an OCI tag e.g. 'latest' or a bucket name e.g. 'flux'.
+	// +required
+	Ref string `json:"ref"`
+
+	// Path is the path to the source directory containing
+	// the kustomize overlay or plain Kubernetes manifests.
+	// +required
+	Path string `json:"path"`
+
+	// PullSecret specifies the Kubernetes Secret containing the
+	// authentication credentials for the source.
+	// For Git over HTTP/S sources, the secret must contain username and password fields.
+	// For Git over SSH sources, the secret must contain known_hosts and identity fields.
+	// For OCI sources, the secret must be of type kubernetes.io/dockerconfigjson.
+	// For Bucket sources, the secret must contain accesskey and secretkey fields.
+	// +optional
+	PullSecret string `json:"pullSecret,omitempty"`
 }
 
 // ResourceInventory contains a list of Kubernetes resource object references

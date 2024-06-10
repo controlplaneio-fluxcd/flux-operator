@@ -78,6 +78,9 @@ spec:
                     enum:
                     - kubernetes
                     - openshift
+                    - aws
+                    - azure
+                    - gcp
                     type: string
                 required:
                 - domain
@@ -199,6 +202,55 @@ spec:
                 required:
                 - class
                 - size
+                type: object
+              sync:
+                description: |-
+                  Sync specifies the source for the cluster sync operation.
+                  When set, a Flux source (GitRepository, OCIRepository or Bucket)
+                  and Flux Kustomization are created to sync the cluster state
+                  with the source repository.
+                properties:
+                  interval:
+                    default: 1m
+                    description: Interval is the time between syncs.
+                    pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m|h))+$
+                    type: string
+                  kind:
+                    description: Kind is the kind of the source.
+                    enum:
+                    - OCIRepository
+                    - GitRepository
+                    - Bucket
+                    type: string
+                  path:
+                    description: |-
+                      Path is the path to the source directory containing
+                      the kustomize overlay or plain Kubernetes manifests.
+                    type: string
+                  pullSecret:
+                    description: |-
+                      PullSecret specifies the Kubernetes Secret containing the
+                      authentication credentials for the source.
+                      For Git over HTTP/S sources, the secret must contain username and password fields.
+                      For Git over SSH sources, the secret must contain known_hosts and identity fields.
+                      For OCI sources, the secret must be of type kubernetes.io/dockerconfigjson.
+                      For Bucket sources, the secret must contain accesskey and secretkey fields.
+                    type: string
+                  ref:
+                    description: |-
+                      Ref is the source reference, can be a Git ref name e.g. 'refs/heads/main',
+                      an OCI tag e.g. 'latest' or a bucket name e.g. 'flux'.
+                    type: string
+                  url:
+                    description: |-
+                      URL is the source URL, can be a Git repository HTTP/S or SSH address,
+                      an OCI repository address or a Bucket endpoint.
+                    type: string
+                required:
+                - kind
+                - path
+                - ref
+                - url
                 type: object
               wait:
                 default: true
