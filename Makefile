@@ -156,7 +156,7 @@ opm-index:
 	./config/operatorhub/flux-operator/scripts/opm-index.sh ${FLUX_OPERATOR_VERSION}
 
 .PHONY: test-olm
-test-olm: opm-index
+test-olm: operator-sdk opm-index
 	yq e -i ".spec.startingCSV=\"flux-operator.${FLUX_OPERATOR_VERSION}\"" \
 	./config/operatorhub/flux-operator/testdata/004-operator-subscription.yaml
 	yq e -i ".spec.image=\"ghcr.io/controlplaneio-fluxcd/openshift-flux-operator-index:${FLUX_OPERATOR_VERSION}\"" \
@@ -186,12 +186,19 @@ KUSTOMIZE ?= $(LOCALBIN)/kustomize-$(KUSTOMIZE_VERSION)
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen-$(CONTROLLER_TOOLS_VERSION)
 ENVTEST ?= $(LOCALBIN)/setup-envtest-$(ENVTEST_VERSION)
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
+OPERATOR_SDK ?= $(LOCALBIN)/operator-sdk
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.4.1
 CONTROLLER_TOOLS_VERSION ?= v0.15.0
 ENVTEST_VERSION ?= release-0.18
 GOLANGCI_LINT_VERSION ?= v1.57.2
+OPERATOR_SDK_VERSION ?= v1.34.2
+
+.PHONY: operator-sdk
+operator-sdk: $(OPERATOR_SDK) ## Download operator-sdk locally if necessary.
+$(OPERATOR_SDK): $(LOCALBIN)
+	$(call go-install-tool,$(OPERATOR_SDK),github.com/operator-framework/operator-sdk/cmd/operator-sdk,$(OPERATOR_SDK_VERSION))
 
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.

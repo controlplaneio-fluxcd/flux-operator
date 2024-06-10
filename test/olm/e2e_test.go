@@ -44,7 +44,7 @@ var _ = BeforeSuite(func() {
 	ExpectWithOffset(1, err).NotTo(HaveOccurred())
 
 	By("installing OLM")
-	cmd := exec.Command("operator-sdk", "olm", "install", "--version", olmVersion)
+	cmd := exec.Command("bin/operator-sdk", "olm", "install", "--version", olmVersion)
 	_, err = utils.Run(cmd, "/test/olm")
 	ExpectWithOffset(1, err).NotTo(HaveOccurred())
 

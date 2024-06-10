@@ -40,4 +40,3 @@ docker run --rm -it \
 
 #push index
 docker push ghcr.io/controlplaneio-fluxcd/openshift-flux-operator-index:${VERSION}
- 

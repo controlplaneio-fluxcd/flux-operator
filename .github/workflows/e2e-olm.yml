@@ -1,4 +1,4 @@
-name: e2e-oerator-lifecycle-manager
+name: e2e-olm
 
 on:
   workflow_dispatch:
