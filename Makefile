@@ -6,6 +6,12 @@
 # Image URL to use all building/pushing image targets
 IMG ?= ghcr.io/controlplaneio-fluxcd/flux-operator:latest
 
+# FLUX_OPERATOR_VERSION refers to the version of the operator to be tested
+# under ./config/operatorhub/flux-operator/<version> directory.
+FLUX_OPERATOR_VERSION ?= v0.1.0
+# OLM_VERSION refers to the version of the Operator Lifecycle Manager to be used.
+OLM_VERSION ?= 0.28.0
+
 # FLUX_VERSION refers to the version of Flux to be vendored.
 FLUX_VERSION = $(shell gh release view --repo fluxcd/flux2 --json tagName -q '.tagName')
 
@@ -56,7 +62,7 @@ tidy: ## Run go mod tidy.
 
 .PHONY: test
 test: tidy manifests generate fmt vet envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v -e /e2e -e /olm) -coverprofile cover.out
 
 # Utilize Kind or modify the e2e tests to load the image locally, enabling compatibility with other vendors.
 .PHONY: test-e2e  # Run the e2e tests against a Kind k8s instance that is spun up.
@@ -145,6 +151,28 @@ deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in
 undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	$(KUSTOMIZE) build config/default | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
+.PHONY: opm-index
+opm-index:
+	./config/operatorhub/flux-operator/scripts/opm-index.sh ${FLUX_OPERATOR_VERSION}
+
+.PHONY: test-olm
+test-olm: operator-sdk opm-index
+	yq e -i ".spec.startingCSV=\"flux-operator.${FLUX_OPERATOR_VERSION}\"" \
+	./config/operatorhub/flux-operator/testdata/004-operator-subscription.yaml
+	yq e -i ".spec.image=\"ghcr.io/controlplaneio-fluxcd/openshift-flux-operator-index:${FLUX_OPERATOR_VERSION}\"" \
+	./config/operatorhub/flux-operator/testdata/003-catalog-source.yaml
+	export OLM_VERSION=${OLM_VERSION} && \
+	export FLUX_OPERATOR_VERSION=${FLUX_OPERATOR_VERSION} && \
+	go test ./test/olm/ -v -ginkgo.v
+
+.PHONY: deploy-olm-data
+deploy-olm-data:
+	kubectl apply -k ./config/operatorhub/flux-operator/testdata/
+
+.PHONY: undeploy-olm-data
+undeploy-olm-data:
+	kubectl delete -k ./config/operatorhub/flux-operator/testdata/
+
 ##@ Dependencies
 
 ## Location to install dependencies to
@@ -158,12 +186,19 @@ KUSTOMIZE ?= $(LOCALBIN)/kustomize-$(KUSTOMIZE_VERSION)
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen-$(CONTROLLER_TOOLS_VERSION)
 ENVTEST ?= $(LOCALBIN)/setup-envtest-$(ENVTEST_VERSION)
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
+OPERATOR_SDK ?= $(LOCALBIN)/operator-sdk
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.4.1
 CONTROLLER_TOOLS_VERSION ?= v0.15.0
 ENVTEST_VERSION ?= release-0.18
 GOLANGCI_LINT_VERSION ?= v1.57.2
+OPERATOR_SDK_VERSION ?= v1.34.2
+
+.PHONY: operator-sdk
+operator-sdk: $(OPERATOR_SDK) ## Download operator-sdk locally if necessary.
+$(OPERATOR_SDK): $(LOCALBIN)
+	$(call go-install-tool,$(OPERATOR_SDK),github.com/operator-framework/operator-sdk/cmd/operator-sdk,$(OPERATOR_SDK_VERSION))
 
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.

@@ -13,8 +13,8 @@ import (
 )
 
 // Run executes the provided command within this context
-func Run(cmd *exec.Cmd) ([]byte, error) {
-	dir, _ := GetProjectDir()
+func Run(cmd *exec.Cmd, dirPattern string) ([]byte, error) {
+	dir, _ := GetProjectDir(dirPattern)
 	cmd.Dir = dir
 
 	if err := os.Chdir(cmd.Dir); err != nil {
@@ -33,14 +33,14 @@ func Run(cmd *exec.Cmd) ([]byte, error) {
 }
 
 // LoadImageToKindClusterWithName loads a local docker image to the kind cluster
-func LoadImageToKindClusterWithName(name string) error {
+func LoadImageToKindClusterWithName(name, dirPattern string) error {
 	cluster := "kind"
 	if v, ok := os.LookupEnv("KIND_CLUSTER"); ok {
 		cluster = v
 	}
 	kindOptions := []string{"load", "docker-image", name, "--name", cluster}
 	cmd := exec.Command("kind", kindOptions...)
-	_, err := Run(cmd)
+	_, err := Run(cmd, dirPattern)
 	return err
 }
 
@@ -59,11 +59,13 @@ func GetNonEmptyLines(output string) []string {
 }
 
 // GetProjectDir will return the directory where the project is
-func GetProjectDir() (string, error) {
+// The pattern is used to remove the last part of the path
+// e.g. /home/user/go/src/github.com/flux-operator/test/e2e -> /home/user/go/src/github.com/flux-operator
+func GetProjectDir(pattern string) (string, error) {
 	wd, err := os.Getwd()
 	if err != nil {
 		return wd, err
 	}
-	wd = strings.Replace(wd, "/test/e2e", "", -1)
+	wd = strings.Replace(wd, pattern, "", -1)
 	return wd, nil
 }
