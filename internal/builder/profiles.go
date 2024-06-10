@@ -44,4 +44,10 @@ const ProfileMultitenant = `
     - op: add
       path: /spec/template/spec/containers/0/args/-
       value: --default-service-account=default
+- target:
+    kind: Kustomization
+  patch: |-
+    - op: add
+      path: /spec/serviceAccountName
+      value: kustomize-controller
 `

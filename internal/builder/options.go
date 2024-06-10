@@ -20,6 +20,7 @@ type Options struct {
 	TolerationKeys         []string
 	Patches                string
 	ArtifactStorage        *ArtifactStorage
+	Sync                   *Sync
 }
 
 // MakeDefaultOptions returns the default builder configuration.
@@ -58,4 +59,13 @@ type ComponentImage struct {
 type ArtifactStorage struct {
 	Class string
 	Size  string
+}
+
+type Sync struct {
+	Kind       string
+	URL        string
+	Ref        string
+	Path       string
+	Interval   string
+	PullSecret string
 }
