@@ -476,6 +476,7 @@ func TestFluxInstanceReconciler_Profiles(t *testing.T) {
 	sync.SetAPIVersion("kustomize.toolkit.fluxcd.io/v1")
 	sync.SetKind("Kustomization")
 	err = testClient.Get(ctx, types.NamespacedName{Name: ns.Name, Namespace: ns.Name}, &sync)
+	g.Expect(err).ToNot(HaveOccurred())
 
 	// Check multitenant profile.
 	nestedString, b, err := unstructured.NestedString(sync.Object, "spec", "serviceAccountName")

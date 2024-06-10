@@ -329,6 +329,174 @@ The reconciliation behaviour can be configured using the following annotations:
 - `fluxcd.controlplane.io/reconcileEvery`: Set the reconciliation interval. Default is `1h`.
 - `fluxcd.controlplane.io/reconcileTimeout`: Set the reconciliation timeout. Default is `5m`.
 
+### Sync configuration
+
+The `.spec.sync` field is optional and specifies the Flux sync configuration.
+When set, a Flux source and a Flux Kustomization are generated to sync
+the cluster state with the source repository.
+
+The Flux objects are created in the same namespace where the FluxInstance is deployed
+using the namespace name as the Flux source and Kustomization name. The naming convention
+matches the one used by `flux bootstrap` to ensure compatibility with upstream, and
+to allow transitioning a bootstrapped cluster to a FluxInstance managed one.
+
+Sync fields:
+
+- `kind`: The source kind, supported values are `GitRepository`, `OCIRepository` and `Bucket`.
+- `url`: The URL of the source repository, can be a Git repository HTTP/S or SSH address, an OCI repository address or a Bucket endpoint.
+- `ref`: The source reference, can be a Git ref name e.g. `refs/heads/main`, an OCI tag e.g. `latest` or a Bucket name.
+- `path`: The path to the source directory containing the kustomize overlay or plain Kubernetes manifests to sync from.
+- `pullSecret`: The name of the Kubernetes secret that contains the credentials to pull the source repository. This field is optional.
+- `interval`: The sync interval. This field is optional, when not set the default is `1m`.
+
+### Sync from Git over HTTP/S
+
+Example:
+
+```yaml
+spec:
+  sync:
+    kind: GitRepository
+    url: "https://gitlab.com/my-group/my-fleet.git"
+    ref: "refs/heads/main"
+    path: "clusters/my-cluster"
+    pullSecret: "git-token-auth"
+```
+
+If the source repository is private, the Kubernetes secret must be created
+in the same namespace where the FluxInstance is deployed, and have the following format:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: git-token-auth
+  namespace: flux-system
+type: Opaque
+stringData:
+  username: "git-username"
+  password: "git-token"
+```
+
+To generate the secret with the Flux CLI:
+
+```sh
+flux create secret git git-token-auth \
+  --namespace flux-system \
+  --url=https://gitlab.com/my-group/my-fleet.git \
+  --username=git-username \
+  --password=git-token
+```
+
+### Sync from Git over SSH
+
+Example:
+
+```yaml
+spec:
+  sync:
+    kind: GitRepository
+    url: "ssh://git@github.com/my-org/my-fleet.git"
+    ref: "refs/heads/main"
+    path: "clusters/my-cluster"
+    pullSecret: "git-ssh-auth"
+```
+
+If the source repository is private, the Kubernetes secret must be created
+in the same namespace where the FluxInstance is deployed, and have the following format:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: git-ssh-auth
+  namespace: flux-system
+type: Opaque
+stringData:
+  identity: |
+    -----BEGIN OPENSSH PRIVATE KEY-----
+    ...
+    -----END OPENSSH PRIVATE KEY-----    
+  known_hosts: |
+    github.com ecdsa-sha2-nistp256 AAAA...  
+```
+
+To generate the secret with the Flux CLI:
+
+```sh
+flux create secret git git-ssh-auth \
+  --namespace flux-system \
+  --url=ssh://git@github.com/my-org/my-fleet.git \
+  --private-key-file=my-private.key
+```
+
+### Sync from OCI over HTTP/S
+
+Example:
+
+```yaml
+spec:
+  sync:
+    kind: OCIRepository
+    url: "oci://ghcr.io/my-org/my-fleet-manifests"
+    ref: "latest"
+    path: "clusters/my-cluster"
+    pullSecret: "oci-token-auth"
+```
+
+If the container registry is private, the Kubernetes secret must be created
+in the same namespace where the FluxInstance is deployed, and be of type `kubernetes.io/dockerconfigjson`:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: oci-token-auth
+  namespace: flux-system
+type: kubernetes.io/dockerconfigjson
+data:
+  .dockerconfigjson: "base64-encoded-docker-config"
+```
+
+To generate the secret with the Flux CLI:
+
+```sh
+flux create secret oci oci-token-auth \
+  --namespace flux-system \
+  --url=ghcr.io \
+  --username=ghcr-username \
+  --password=ghcr-token
+```
+
+### Sync from S3-compatible storage over HTTP/S
+
+Example:
+
+```yaml
+spec:
+  sync:
+    kind: Bucket
+    url: "minio.my-org.com"
+    ref: "my-bucket-fleet"
+    path: "clusters/my-cluster"
+    pullSecret: "bucket-auth"
+```
+
+If the Bucket is private, the Kubernetes secret must be created
+in the same namespace where the FluxInstance is deployed, and have the following format:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: bucket-auth
+  namespace: flux-system
+type: Opaque
+stringData:
+  accesskey: "my-accesskey"
+  secretkey: "my-secretkey"
+```
+
 ## FluxInstance Status
 
 ### Conditions

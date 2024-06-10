@@ -17,8 +17,9 @@ the lifecycle of CNCF [Flux CD](https://fluxcd.io) and the
 
 ## Features
 
-- Provide a declarative API for the installation and upgrade of the Flux distribution.
+- Provide a declarative API for the installation, sync configuration and upgrade of the Flux distribution.
 - Automate patching for hotfixes and CVEs affecting the Flux controllers container images.
+- Support for syncing the cluster state from Git repositories, OCI artifacts and S3-compatible storage.
 - Provide first-class support for OpenShift, Azure, AWS, GCP and other marketplaces.
 - Simplify the configuration of multi-tenancy lockdown on shared Kubernetes clusters.
 - Provide a security-first approach to the Flux deployment and FIPS compliance.
@@ -144,14 +145,58 @@ kubectl create secret docker-registry flux-enterprise-auth \
   --docker-password=$ENTERPRISE_TOKEN
 ```
 
-### Migration of a bootstrap cluster
+### Cluster Sync
+
+The `FluxInstance` resource can be configured to instruct the operator to generate 
+a Flux source (`GitRepository`, `OCIRepository` or `Bucket`) and a Flux `Kustomization`
+to sync the cluster state with the source repository.
+
+The Flux objects are created in the same namespace where the `FluxInstance` is deployed
+using the namespace name as the Flux source and Kustomization name. The naming convention
+matches the one used by `flux bootstrap` to ensure compatibility with upstream, and
+to allow [transitioning](#migration-of-a-bootstrapped-cluster)
+a bootstrapped cluster to a `FluxInstance` managed one.
+
+To sync the cluster state from a Git repository, add the following configuration to the `FluxInstance`:
+
+```yaml
+apiVersion: fluxcd.controlplane.io/v1
+kind: FluxInstance
+metadata:
+  name: flux
+  namespace: flux-system
+spec:
+  sync:
+    kind: GitRepository
+    url: "https://github.com/my-org/my-fleet.git"
+    ref: "refs/heads/main"
+    path: "clusters/my-cluster"
+    pullSecret: "flux-system"
+```
+
+If the source repository is private, the Kubernetes secret must be created in the `flux-system` namespace
+and should contain the credentials to clone the repository:
+
+```shell
+flux create secret git flux-system \
+  --url=https://github.com/my-org/my-fleet.git \
+  --username=git \
+  --password=$GITHUB_TOKEN
+```
+
+> [!NOTE]
+> For more information on how to configure the cluster sync, refer to the
+> [FluxInstance API documentation](https://github.com/controlplaneio-fluxcd/flux-operator/blob/main/docs/api/v1/fluxinstance.md#sync-configuration).
+
+### Migration of a bootstrapped cluster
 
 To migrate a cluster that was bootstrapped, after the flux-operator is installed
-and the `FluxInstance` resource is created, the following steps are required:
+and the `FluxInstance` resource is created with a [sync source](#cluster-sync),
+the following steps can be followed:
 
 1. Checkout the branch of the Flux repository that was used to bootstrap the cluster.
-2. Replace the contents of the `flux-system/gok-components.yaml` with the `FluxInstance` YAML manifest.
-3. Remove all controllers patches from the `flux-system/kustomization.yaml`.
+2. Delete the `flux-system` directory from the repository `clusters/my-cluster` directory.
+3. Optionally, place the `FluxInstance` YAML manifest in the `clusters/my-cluster` directory.
 4. Commit and push the changes to the Flux repository.
 
 ## Supply Chain Security
