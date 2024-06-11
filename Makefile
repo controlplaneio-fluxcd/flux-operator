@@ -8,7 +8,7 @@ IMG ?= ghcr.io/controlplaneio-fluxcd/flux-operator:latest
 
 # FLUX_OPERATOR_VERSION refers to the version of the operator to be tested
 # under ./config/operatorhub/flux-operator/<version> directory.
-FLUX_OPERATOR_VERSION ?= v0.1.0
+FLUX_OPERATOR_VERSION ?= $(shell gh release view --json tagName -q '.tagName')
 # OLM_VERSION refers to the version of the Operator Lifecycle Manager to be used.
 OLM_VERSION ?= 0.28.0
 

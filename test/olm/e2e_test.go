@@ -7,9 +7,10 @@ import (
 	"strings"
 	"time"
 
-	utils "github.com/controlplaneio-fluxcd/flux-operator/test/e2e"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	utils "github.com/controlplaneio-fluxcd/flux-operator/test/e2e"
 )
 
 const (
@@ -96,5 +97,13 @@ var _ = AfterSuite(func() {
 	By("uninstalling flux-operator olm kubernetes resources")
 	cmd := exec.Command("make", "undeploy-olm-data")
 	_, err := utils.Run(cmd, "/test/olm")
+	Expect(err).NotTo(HaveOccurred())
+
+	operatorsdkBin = os.Getenv("OPERATOR_SDK_BIN")
+	if operatorsdkBin == "" {
+		operatorsdkBin = defaultOperatorsdkBin
+	}
+	cmd = exec.Command(operatorsdkBin, "olm", "uninstall")
+	_, err = utils.Run(cmd, "/test/olm")
 	Expect(err).NotTo(HaveOccurred())
 })
