@@ -27,10 +27,9 @@ docker build -t ghcr.io/controlplaneio-fluxcd/openshift-flux-operator-catalog:bu
 -f "${DIR}/bundle.Dockerfile" "${DIR}/${VERSION}"
 docker push ghcr.io/controlplaneio-fluxcd/openshift-flux-operator-catalog:bundle-"${VERSION}"
 
-docker build -t opm --build-arg ARCH=$ARCH -f "${DIR}/Dockerfile.opm" .
+docker build -t opm --build-arg ARCH=$ARCH -f "${DIR}/opm.Dockerfile" .
 
-docker run --rm -it \
-  --privileged \
+docker run --rm --privileged \
   -v /var/lib/docker:/var/lib/docker \
   -v /var/run/docker.sock:/var/run/docker.sock \
   opm:latest index add \
