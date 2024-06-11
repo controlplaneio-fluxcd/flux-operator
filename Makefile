@@ -163,6 +163,7 @@ test-olm: operator-sdk opm-index
 	./config/operatorhub/flux-operator/testdata/003-catalog-source.yaml
 	export OLM_VERSION=${OLM_VERSION} && \
 	export FLUX_OPERATOR_VERSION=${FLUX_OPERATOR_VERSION} && \
+	export OPERATOR_SDK_BIN=$(OPERATOR_SDK) && \
 	go test ./test/olm/ -v -ginkgo.v
 
 .PHONY: deploy-olm-data
@@ -186,7 +187,7 @@ KUSTOMIZE ?= $(LOCALBIN)/kustomize-$(KUSTOMIZE_VERSION)
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen-$(CONTROLLER_TOOLS_VERSION)
 ENVTEST ?= $(LOCALBIN)/setup-envtest-$(ENVTEST_VERSION)
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
-OPERATOR_SDK ?= $(LOCALBIN)/operator-sdk
+OPERATOR_SDK ?= $(LOCALBIN)/operator-sdk-$(OPERATOR_SDK_VERSION)
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.4.1

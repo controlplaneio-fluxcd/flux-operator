@@ -13,14 +13,16 @@ import (
 )
 
 const (
-	namespace         = "flux-system"
-	defaultVersion    = "v0.3.0"
-	defaultOLMVersion = "v0.28.0"
+	namespace             = "flux-system"
+	defaultVersion        = "v0.3.0"
+	defaultOLMVersion     = "v0.28.0"
+	defaultOperatorsdkBin = "bin/operator-sdk"
 )
 
 var (
-	version string
-	img     string
+	version        string
+	img            string
+	operatorsdkBin string
 )
 
 // Build the flux-operator image and deploy it to the Kind cluster.
@@ -34,6 +36,11 @@ var _ = BeforeSuite(func() {
 		olmVersion = defaultOLMVersion
 	}
 
+	operatorsdkBin = os.Getenv("OPERATOR_SDK_BIN")
+	if operatorsdkBin == "" {
+		operatorsdkBin = defaultOperatorsdkBin
+	}
+
 	img = fmt.Sprintf("ghcr.io/controlplaneio-fluxcd/openshift-flux-operator-catalog:bundle-%s", version)
 	opm := fmt.Sprintf("ghcr.io/controlplaneio-fluxcd/openshift-flux-operator-index:%s", version)
 
@@ -44,9 +51,9 @@ var _ = BeforeSuite(func() {
 	ExpectWithOffset(1, err).NotTo(HaveOccurred())
 
 	By("installing OLM")
-	cmd := exec.Command("bin/operator-sdk", "olm", "install", "--version", olmVersion)
+	cmd := exec.Command(operatorsdkBin, "olm", "install", "--version", olmVersion)
 	_, err = utils.Run(cmd, "/test/olm")
-	ExpectWithOffset(1, err).NotTo(HaveOccurred())
+	ExpectWithOffset(3, err).NotTo(HaveOccurred())
 
 	By("deploying flux-operator olm kubernetes resources")
 	cmd = exec.Command("make", "deploy-olm-data")
