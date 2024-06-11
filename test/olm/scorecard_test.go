@@ -1,3 +1,6 @@
+// Copyright 2024 Stefan Prodan.
+// SPDX-License-Identifier: AGPL-3.0
+
 package e2eolm
 
 import (
