@@ -160,7 +160,7 @@ spec:
     registry: "ghcr.io/fluxcd"
 ```
 
-### Distribution version
+#### Distribution version
 
 The `.spec.distribution.version` field is required and specifies the version of the Flux distribution to install.
 The version field value must be a valid [semver](https://semver.org/) range or an exact version.
@@ -191,7 +191,7 @@ spec:
     version: "2.3.0"
 ```
 
-### Distribution registry
+#### Distribution registry
 
 The `.spec.distribution.registry` field is required and specifies the container registry
 where the Flux distribution images are pulled from.
@@ -205,7 +205,7 @@ spec:
     registry: "ghcr.io/fluxcd"
 ```
 
-### Distribution image pull secret
+#### Distribution image pull secret
 
 The `.spec.distribution.imagePullSecret` field is optional and specifies the name of the Kubernetes secret
 that contains the credentials to pull the Flux distribution images from a private registry.
@@ -263,24 +263,24 @@ spec:
     domain: "cluster.local"
 ```
 
-### Cluster type
+#### Cluster type
 
 The `.spec.cluster.type` field is optional and specifies the type of the Kubernetes cluster.
 This field is used to enable specific configuration for AKS, EKS, GKE and OpenShift clusters.
 
 The supported values are `kubernetes` (default), `openshift`, `aks`, `eks` and `gke`.
 
-### Cluster multitenant
+#### Cluster multitenant
 
 The `.spec.cluster.multitenant` field is optional and specifies whether to enable Flux
 [multi-tenancy lockdown](https://fluxcd.io/flux/installation/configuration/multitenancy/).
 
-### Cluster network policy
+#### Cluster network policy
 
 The `.spec.cluster.networkPolicy` field is optional and specifies whether to restrict network access
 to the Flux namespace from other namespaces. By default, network policy is enabled.
 
-### Cluster domain
+#### Cluster domain
 
 The `.spec.cluster.domain` field is optional and specifies the cluster internal domain name.
 By default, the domain is set to `cluster.local`.
@@ -291,11 +291,20 @@ The `.spec.storage` field is optional and specifies the persistent storage for F
 When specified, the operator will create a persistent volume claim named `source-controller` with
 the specified storage class and size and mount it to the Flux source-controller `/data` volume.
 
-### Storage class
+#### Storage class
 
 The `.spec.storage.class` field is required and specifies the storage class to use for the persistent volume claim.
 
-### Storage size
+Example using the standard storage class:
+
+```yaml
+spec:
+  storage:
+    class: "standard"
+    size: "10Gi"
+```
+
+#### Storage size
 
 The `.spec.storage.size` field is required and specifies the size of the persistent volume claim.
 
@@ -349,7 +358,7 @@ Sync fields:
 - `pullSecret`: The name of the Kubernetes secret that contains the credentials to pull the source repository. This field is optional.
 - `interval`: The sync interval. This field is optional, when not set the default is `1m`.
 
-### Sync from Git over HTTP/S
+#### Sync from Git over HTTP/S
 
 Example:
 
@@ -388,7 +397,7 @@ flux create secret git git-token-auth \
   --password=git-token
 ```
 
-### Sync from Git over SSH
+#### Sync from Git over SSH
 
 Example:
 
@@ -430,7 +439,7 @@ flux create secret git git-ssh-auth \
   --private-key-file=my-private.key
 ```
 
-### Sync from OCI over HTTP/S
+#### Sync from OCI over HTTP/S
 
 Example:
 
@@ -468,7 +477,7 @@ flux create secret oci oci-token-auth \
   --password=ghcr-token
 ```
 
-### Sync from S3-compatible storage over HTTP/S
+#### Sync from S3-compatible storage over HTTP/S
 
 Example:
 
