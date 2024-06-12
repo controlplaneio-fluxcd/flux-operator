@@ -1,0 +1,51 @@
+# see https://sdk.operatorframework.io/docs/testing-operators/scorecard/ for more information
+apiVersion: scorecard.operatorframework.io/v1alpha3
+kind: Configuration
+metadata:
+  name: config
+stages:
+  - parallel: true
+    tests:
+      - entrypoint:
+          - scorecard-test
+          - basic-check-spec
+        image: quay.io/operator-framework/scorecard-test:v1.27.0
+        labels:
+          suite: basic
+          test: basic-check-spec-test
+        storage:
+          spec:
+            mountPath: {}
+      - entrypoint:
+          - scorecard-test
+          - olm-bundle-validation
+        image: quay.io/operator-framework/scorecard-test:v1.27.0
+        labels:
+          suite: olm
+          test: olm-bundle-validation-test
+        storage:
+          spec:
+            mountPath: {}
+      - entrypoint:
+          - scorecard-test
+          - olm-crds-have-validation
+        image: quay.io/operator-framework/scorecard-test:v1.27.0
+        labels:
+          suite: olm
+          test: olm-crds-have-validation-test
+        storage:
+          spec:
+            mountPath: {}
+      - entrypoint:
+          - scorecard-test
+          - olm-crds-have-validation
+        image: quay.io/operator-framework/scorecard-test:v1.7.1
+        labels:
+          suite: olm
+          test: olm-crds-have-validation-test
+        storage:
+          spec:
+            mountPath: {}
+storage:
+  spec:
+    mountPath: {}
