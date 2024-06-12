@@ -1,4 +1,4 @@
-# FluxInstance
+# Flux Instance CRD
 
 **FluxInstance** is a declarative API for the installation, configuration
 and automatic upgrade of the Flux distribution.
