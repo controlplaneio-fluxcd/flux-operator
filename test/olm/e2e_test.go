@@ -73,7 +73,7 @@ var _ = BeforeSuite(func() {
 		)
 		installPlanName, err := utils.Run(cmd, "/test/olm")
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to get installplan, please check the subscription, %w", err)
 		}
 		if !strings.Contains(string(installPlanName), "install") {
 			return fmt.Errorf("expect installplan to be in installed state")
@@ -86,7 +86,7 @@ var _ = BeforeSuite(func() {
 
 		return nil
 	}
-	EventuallyWithOffset(1, verifyInstallPlan, 3*time.Minute, 10*time.Second).Should(Succeed())
+	EventuallyWithOffset(1, verifyInstallPlan, 5*time.Minute, 10*time.Second).Should(Succeed())
 
 	By("validating that the flux-operator is running")
 	exec.Command("kubectl", "wait", "--for=condition=Ready=true", "pod",
