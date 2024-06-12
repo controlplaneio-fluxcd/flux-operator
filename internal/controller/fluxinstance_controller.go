@@ -223,6 +223,17 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 		}
 	}
 
+	if obj.Spec.Sync != nil {
+		options.Sync = &builder.Sync{
+			Kind:       obj.Spec.Sync.Kind,
+			Interval:   obj.Spec.Sync.Interval.Duration.String(),
+			Ref:        obj.Spec.Sync.Ref,
+			PullSecret: obj.Spec.Sync.PullSecret,
+			URL:        obj.Spec.Sync.URL,
+			Path:       obj.Spec.Sync.Path,
+		}
+	}
+
 	if obj.Spec.Kustomize != nil && len(obj.Spec.Kustomize.Patches) > 0 {
 		patchesData, err := yaml.Marshal(obj.Spec.Kustomize.Patches)
 		if err != nil {

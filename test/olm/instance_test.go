@@ -1,12 +1,16 @@
+// Copyright 2024 Stefan Prodan.
+// SPDX-License-Identifier: AGPL-3.0
+
 package e2eolm
 
 import (
 	"os/exec"
 	"time"
 
-	utils "github.com/controlplaneio-fluxcd/flux-operator/test/e2e"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	utils "github.com/controlplaneio-fluxcd/flux-operator/test/e2e"
 )
 
 var _ = Describe("FluxInstance", Ordered, func() {

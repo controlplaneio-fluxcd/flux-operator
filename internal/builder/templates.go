@@ -18,6 +18,7 @@ var kustomizationTmpl = `---
 {{- $logLevel := .LogLevel }}
 {{- $clusterDomain := .ClusterDomain }}
 {{- $artifactStorage := .ArtifactStorage }}
+{{- $sync := .Sync }}
 {{- $namespace := .Namespace }}
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -36,6 +37,9 @@ resources:
 {{- end }}
 {{- if $artifactStorage }}
   - pvc.yaml
+{{- end }}
+{{- if $sync }}
+  - sync.yaml
 {{- end }}
 {{- if $registry }}
 images:
@@ -202,6 +206,53 @@ spec:
   resources:
     requests:
       storage: {{.ArtifactStorage.Size}}
+`
+
+var syncTmpl = `---
+{{- $sync := .Sync }}
+{{- $namespace := .Namespace }}
+{{- if eq $sync.Kind "GitRepository" }}
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+{{- else if eq $sync.Kind "OCIRepository" }}
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: OCIRepository
+{{- else if eq $sync.Kind "Bucket" }}
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: Bucket
+{{- end }}
+metadata:
+  name: {{$namespace}}
+  namespace: {{$namespace}}
+spec:
+  interval: {{$sync.Interval}}
+{{- if eq $sync.Kind "GitRepository" }}
+  ref:
+    name: {{$sync.Ref}}
+{{- else if eq $sync.Kind "OCIRepository" }}
+  ref:
+    tag: {{$sync.Ref}}
+{{- else if eq $sync.Kind "Bucket" }}
+  bucketName: {{$sync.Ref}}
+{{- end }}
+{{- if $sync.PullSecret }}
+  secretRef:
+    name: {{$sync.PullSecret}}
+{{- end }}
+  url: {{$sync.URL}}
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: {{$namespace}}
+  namespace: {{$namespace}}
+spec:
+  interval: 10m0s
+  path: {{$sync.Path}}
+  prune: true
+  sourceRef:
+    kind: {{$sync.Kind}}
+    name: {{$namespace}}
 `
 
 func execTemplate(obj interface{}, tmpl, filename string) (err error) {

@@ -212,6 +212,59 @@ func TestBuild_ArtifactStorage(t *testing.T) {
 	g.Expect(found).To(BeTrue())
 }
 
+func TestBuild_Sync(t *testing.T) {
+	g := NewWithT(t)
+	const version = "v2.3.0"
+	options := MakeDefaultOptions()
+	options.Version = version
+
+	srcDir := filepath.Join("testdata", version)
+	goldenFile := filepath.Join("testdata", version+"-golden", "sync.kustomization.yaml")
+
+	dstDir, err := testTempDir(t)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	ci, err := ExtractComponentImages(srcDir, options)
+	g.Expect(err).NotTo(HaveOccurred())
+	options.ComponentImages = ci
+
+	options.Sync = &Sync{
+		Interval: "5m",
+		Kind:     "GitRepository",
+		URL:      "https://host/repo.git",
+		Ref:      "refs/heads/main",
+		Path:     "clusters/prod",
+	}
+
+	result, err := Build(srcDir, dstDir, options)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(result.Objects).NotTo(BeEmpty())
+	g.Expect(result.Revision).To(HavePrefix(version + "@sha256:"))
+
+	if shouldGenGolden() {
+		err = cp.Copy(filepath.Join(dstDir, "kustomization.yaml"), goldenFile)
+		g.Expect(err).NotTo(HaveOccurred())
+	}
+
+	genK, err := os.ReadFile(filepath.Join(dstDir, "kustomization.yaml"))
+	g.Expect(err).NotTo(HaveOccurred())
+
+	goldenK, err := os.ReadFile(goldenFile)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	g.Expect(string(genK)).To(Equal(string(goldenK)))
+
+	found := false
+	for _, obj := range result.Objects {
+		if obj.GetKind() == "GitRepository" || obj.GetKind() == "Kustomization" {
+			found = true
+			g.Expect(obj.GetName()).To(Equal(options.Namespace))
+		}
+		g.Expect(obj.GetAnnotations()).To(HaveKeyWithValue("kustomize.toolkit.fluxcd.io/ssa", "Ignore"))
+	}
+	g.Expect(found).To(BeTrue())
+}
+
 func TestBuild_InvalidPatches(t *testing.T) {
 	g := NewWithT(t)
 	const version = "v2.3.0"

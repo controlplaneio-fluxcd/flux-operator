@@ -4,7 +4,7 @@
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/flux-operator)](https://artifacthub.io/packages/helm/flux-operator/flux-operator)
 [![e2e](https://github.com/controlplaneio-fluxcd/flux-operator/actions/workflows/e2e.yaml/badge.svg)](https://github.com/controlplaneio-fluxcd/flux-operator/actions/workflows/e2e.yaml)
 [![license](https://img.shields.io/github/license/controlplaneio-fluxcd/flux-operator.svg)](https://github.com/controlplaneio-fluxcd/flux-operator/blob/main/LICENSE)
-[![SLSA 3](https://slsa.dev/images/gh-badge-level3.svg)](#supply-chain-security)
+[![SLSA 3](https://slsa.dev/images/gh-badge-level3.svg)](https://fluxcd.control-plane.io/distribution/security/)
 
 The Flux Operator is a Kubernetes CRD controller that manages
 the lifecycle of CNCF [Flux CD](https://fluxcd.io) and the
@@ -17,46 +17,44 @@ the lifecycle of CNCF [Flux CD](https://fluxcd.io) and the
 
 ## Features
 
-- Provide a declarative API for the installation and upgrade of the Flux distribution.
-- Automate patching for hotfixes and CVEs affecting the Flux controllers container images.
-- Provide first-class support for OpenShift, Azure, AWS, GCP and other marketplaces.
-- Simplify the configuration of multi-tenancy lockdown on shared Kubernetes clusters.
-- Provide a security-first approach to the Flux deployment and FIPS compliance.
-- Incorporate best practices for running Flux at scale with persistent storage, sharding and horizontal scaling.
-- Manage the update of Flux custom resources and prevent disruption during the upgrade process.
-- Facilitate a clean uninstall and reinstall process without affecting the Flux-managed workloads.
+- Provides a declarative API for the installation, configuration and upgrade of Flux.
+- Automates the patching of hotfixes and CVEs affecting the Flux controllers container images.
+- Simplifies the configuration of multi-tenancy lockdown on shared Kubernetes clusters.
+- Allows syncing the cluster state from Git repositories, OCI artifacts and S3-compatible storage.
+- Provides a security-first approach to the Flux deployment and FIPS compliance.
+- Incorporates best practices for running Flux at scale with persistent storage and vertical scaling.
+- Manages the update of Flux custom resources and prevents disruption during the upgrade process.
+- Facilitates a clean uninstall and reinstall process without affecting the Flux-managed workloads.
+- Provides first-class support for OpenShift, Azure, AWS, GCP and other marketplaces.
 
-## Installation
+## Documentation
 
-The Flux Operator can be installed using the
-[Helm chart](https://github.com/controlplaneio-fluxcd/charts/tree/main/charts/flux-operator)
-available in the ControlPlane registry:
+- [Flux operator installation](https://fluxcd.control-plane.io/operator/install/)
+- [Flux controllers configuration](https://fluxcd.control-plane.io/operator/flux-config/)
+- [Cluster sync configuration](https://fluxcd.control-plane.io/operator/flux-sync/)
+- [Migration of bootstrapped clusters](https://fluxcd.control-plane.io/operator/flux-bootstrap-migration/)
+- [FluxInstance API reference](https://fluxcd.control-plane.io/operator/fluxinstance/)
+
+## Quickstart Guide
+
+### Install the Flux Operator
+
+Install the Flux Operator in the `flux-system` namespace, for example using Helm:
 
 ```shell
 helm install flux-operator oci://ghcr.io/controlplaneio-fluxcd/charts/flux-operator \
-  --namespace flux-system \
-  --create-namespace
+  --namespace flux-system
 ```
-
-Or by using the Kubernetes manifests published on the releases page:
-
-```shell
-kubectl apply -f https://github.com/controlplaneio-fluxcd/flux-operator/releases/latest/download/install.yaml
-```
-
-## Usage
-
-The Flux Operator comes with a Kubernetes CRD called `FluxInstance`. A single custom resource of this kind
-can exist in a Kubernetes cluster with the name `flux` that must be created in the same
-namespace where the operator is deployed.
 
 > [!NOTE]
-> The `FluxInstance` API documentation is available at
-> [docs/api/v1](https://github.com/controlplaneio-fluxcd/flux-operator/blob/main/docs/api/v1/fluxinstance.md).
+> The Flux Operator can be installed using Helm, OperatorHub, kubectl and other methods.
+> For more information, refer to the
+> [installation guide](https://fluxcd.control-plane.io/operator/install/).
 
-### Upstream Distribution
+### Install the Flux Controllers
 
-To install the upstream distribution of Flux, create the following `FluxInstance` resource:
+Create a [FluxInstance](https://fluxcd.control-plane.io/operator/fluxinstance/) resource
+in the `flux-system` namespace to install the latest Flux stable version:
 
 ```yaml
 apiVersion: fluxcd.controlplane.io/v1
@@ -64,6 +62,9 @@ kind: FluxInstance
 metadata:
   name: flux
   namespace: flux-system
+  annotations:
+    fluxcd.controlplane.io/reconcileEvery: "1h"
+    fluxcd.controlplane.io/reconcileTimeout: "5m"
 spec:
   distribution:
     version: "2.x"
@@ -77,7 +78,9 @@ spec:
     - image-automation-controller
   cluster:
     type: kubernetes
+    multitenant: false
     networkPolicy: true
+    domain: "cluster.local"
   kustomize:
     patches:
       - target:
@@ -92,12 +95,14 @@ spec:
             value: --requeue-dependency=5s
 ```
 
-The operator will reconcile the `FluxInstance` resource and install
-the latest Flux stable version with the specified components.
+> [!NOTE]
+> The Flux instance can be customized in various ways.
+> For more information, refer to the
+> [configuration guide](https://fluxcd.control-plane.io/operator/flux-config/).
 
-### Enterprise Distribution
+### Sync from a Git Repository
 
-To install the FIPS-compliant distribution of Flux, create the following `FluxInstance` resource:
+To sync the cluster state from a Git repository, add the following configuration to the `FluxInstance`:
 
 ```yaml
 apiVersion: fluxcd.controlplane.io/v1
@@ -105,111 +110,33 @@ kind: FluxInstance
 metadata:
   name: flux
   namespace: flux-system
-  annotations:
-    fluxcd.controlplane.io/reconcileEvery: "1h"
-    fluxcd.controlplane.io/reconcileTimeout: "5m"
 spec:
-  distribution:
-    version: "2.3.x"
-    registry: "ghcr.io/controlplaneio-fluxcd/distroless"
-    imagePullSecret: "flux-enterprise-auth"
-  components:
-    - source-controller
-    - kustomize-controller
-    - helm-controller
-    - notification-controller
-  cluster:
-    type: openshift
-    multitenant: true
-    networkPolicy: true
-    domain: "cluster.local"
-  storage:
-    class: "standard"
-    size: "10Gi"
+  sync:
+    kind: GitRepository
+    url: "https://github.com/my-org/my-fleet.git"
+    ref: "refs/heads/main"
+    path: "clusters/my-cluster"
+    pullSecret: "flux-system"
 ```
 
-Every hour, the operator will check for updates in the ControlPlane
-[distribution repository](https://github.com/controlplaneio-fluxcd/distribution).
-If a new patch version is available, the operator will update the Flux components by pinning the
-container images to the latest digest published in the ControlPlane registry.
-
-Note that the `flux-enterprise-auth` Kubernetes secret must be created in the `flux-system` namespace
-and should contain the credentials to pull the enterprise images:
+If the source repository is private, the Kubernetes secret must be created in the `flux-system` namespace
+and should contain the credentials to clone the repository:
 
 ```shell
-kubectl create secret docker-registry flux-enterprise-auth \
-  --namespace flux-system \
-  --docker-server=ghcr.io \
-  --docker-username=flux \
-  --docker-password=$ENTERPRISE_TOKEN
+flux create secret git flux-system \
+  --url=https://github.com/my-org/my-fleet.git \
+  --username=git \
+  --password=$GITHUB_TOKEN
 ```
 
-### Migration of a bootstrap cluster
+> [!NOTE]
+> For more information on how to configure syncing from Git repositories,
+> container registries and S3-compatible storage, refer to the
+> [cluster sync guide](https://fluxcd.control-plane.io/operator/flux-sync/).
 
-To migrate a cluster that was bootstrapped, after the flux-operator is installed
-and the `FluxInstance` resource is created, the following steps are required:
+## License
 
-1. Checkout the branch of the Flux repository that was used to bootstrap the cluster.
-2. Replace the contents of the `flux-system/gok-components.yaml` with the `FluxInstance` YAML manifest.
-3. Remove all controllers patches from the `flux-system/kustomization.yaml`.
-4. Commit and push the changes to the Flux repository.
+The Flux Operator is an open-source project licensed under the
+[AGPL-3.0 license](https://github.com/controlplaneio-fluxcd/flux-operator/blob/main/LICENSE).
 
-## Supply Chain Security
-
-The build, release and provenance portions of the ControlPlane distribution supply chain meet
-[SLSA Build Level 3](https://slsa.dev/spec/v1.0/levels).
-
-### Software Bill of Materials
-
-The ControlPlane images come with SBOMs in SPDX format for each CPU architecture.
-
-Example of extracting the SBOM from the flux-operator image:
-
-```shell
-docker buildx imagetools inspect \
-    ghcr.io/controlplaneio-fluxcd/flux-operator:v0.2.0 \
-    --format "{{ json (index .SBOM \"linux/amd64\").SPDX}}"
-```
-
-### Signature Verification
-
-The ControlPlane images are signed using Sigstore Cosign and GitHub OIDC.
-
-Example of verifying the signature of the flux-operator image:
-
-```shell
-cosign verify ghcr.io/controlplaneio-fluxcd/flux-operator:v0.2.0 \
-  --certificate-identity-regexp=^https://github\\.com/controlplaneio-fluxcd/.*$ \
-  --certificate-oidc-issuer=https://token.actions.githubusercontent.com
-```
-
-### SLSA Provenance Verification
-
-The provenance attestations are generated at build time with Docker Buildkit and
-include facts about the build process such as:
-
-- Build timestamps
-- Build parameters and environment
-- Version control metadata
-- Source code details
-- Materials (files, scripts) consumed during the build
-
-Example of extracting the SLSA provenance JSON for the flux-operator image:
-
-```shell
-docker buildx imagetools inspect \
-  ghcr.io/controlplaneio-fluxcd/flux-operator:v0.2.0 \
-  --format "{{ json (index .Provenance \"linux/amd64\").SLSA}}"
-```
-
-The provenance of the build artifacts is generated with the official
-[SLSA GitHub Generator](https://github.com/slsa-framework/slsa-github-generator).
-
-Example of verifying the provenance of the flux-operator image:
-
-```shell
-cosign verify-attestation --type slsaprovenance \
-  --certificate-identity-regexp=^https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml.*$ \
-  --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
-  ghcr.io/controlplaneio-fluxcd/flux-operator:v0.2.0
-```
+The project is developed by CNCF Flux core maintainers part of the [ControlPlane](https://control-plane.io) team.

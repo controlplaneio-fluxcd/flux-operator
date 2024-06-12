@@ -84,6 +84,12 @@ func generate(base string, options Options) error {
 		}
 	}
 
+	if options.Sync != nil {
+		if err := execTemplate(options, syncTmpl, path.Join(base, "sync.yaml")); err != nil {
+			return fmt.Errorf("generate sync failed: %w", err)
+		}
+	}
+
 	if err := execTemplate(options, kustomizationTmpl, path.Join(base, "kustomization.yaml")); err != nil {
 		return fmt.Errorf("generate kustomization failed: %w", err)
 	}

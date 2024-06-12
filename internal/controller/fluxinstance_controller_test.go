@@ -16,6 +16,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -143,6 +144,14 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 		},
 		fluxcdv1.ResourceRef{
 			ID:      fmt.Sprintf("%s_allow-egress_networking.k8s.io_NetworkPolicy", ns.Name),
+			Version: "v1",
+		},
+		fluxcdv1.ResourceRef{
+			ID:      fmt.Sprintf("%[1]s_%[1]s_source.toolkit.fluxcd.io_OCIRepository", ns.Name),
+			Version: "v1beta2",
+		},
+		fluxcdv1.ResourceRef{
+			ID:      fmt.Sprintf("%[1]s_%[1]s_kustomize.toolkit.fluxcd.io_Kustomization", ns.Name),
 			Version: "v1",
 		},
 	))
@@ -463,6 +472,18 @@ func TestFluxInstanceReconciler_Profiles(t *testing.T) {
 	})
 	g.Expect(err).ToNot(HaveOccurred())
 
+	sync := unstructured.Unstructured{}
+	sync.SetAPIVersion("kustomize.toolkit.fluxcd.io/v1")
+	sync.SetKind("Kustomization")
+	err = testClient.Get(ctx, types.NamespacedName{Name: ns.Name, Namespace: ns.Name}, &sync)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Check multitenant profile.
+	nestedString, b, err := unstructured.NestedString(sync.Object, "spec", "serviceAccountName")
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(b).To(BeTrue())
+	g.Expect(nestedString).To(Equal("kustomize-controller"))
+
 	// Check if the components were installed with the profiles.
 	kc := &appsv1.Deployment{}
 	err = testClient.Get(ctx, types.NamespacedName{Name: "kustomize-controller", Namespace: ns.Name}, kc)
@@ -504,6 +525,12 @@ func getDefaultFluxSpec() fluxcdv1.FluxInstanceSpec {
 		Distribution: fluxcdv1.Distribution{
 			Version:  "v2.3.x",
 			Registry: "ghcr.io/fluxcd",
+		},
+		Sync: &fluxcdv1.Sync{
+			Kind: "OCIRepository",
+			URL:  "oci://registry/repo",
+			Path: "./",
+			Ref:  "latest",
 		},
 		Kustomize: &fluxcdv1.Kustomize{
 			Patches: []kustomize.Patch{

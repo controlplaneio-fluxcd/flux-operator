@@ -21,6 +21,11 @@ spec:
   storage:
     class: "standard"
     size: "1Gi"
+  sync:
+    kind: GitRepository
+    url: "https://github.com/controlplaneio-fluxcd/distribution.git"
+    ref: "refs/heads/main"
+    path: "tests/v2.3/sources"
   kustomize:
     patches:
       - target:

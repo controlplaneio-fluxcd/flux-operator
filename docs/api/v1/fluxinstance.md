@@ -1,4 +1,4 @@
-# FluxInstance
+# Flux Instance CRD
 
 **FluxInstance** is a declarative API for the installation, configuration
 and automatic upgrade of the Flux distribution.
@@ -160,7 +160,7 @@ spec:
     registry: "ghcr.io/fluxcd"
 ```
 
-### Distribution version
+#### Distribution version
 
 The `.spec.distribution.version` field is required and specifies the version of the Flux distribution to install.
 The version field value must be a valid [semver](https://semver.org/) range or an exact version.
@@ -191,7 +191,7 @@ spec:
     version: "2.3.0"
 ```
 
-### Distribution registry
+#### Distribution registry
 
 The `.spec.distribution.registry` field is required and specifies the container registry
 where the Flux distribution images are pulled from.
@@ -205,7 +205,7 @@ spec:
     registry: "ghcr.io/fluxcd"
 ```
 
-### Distribution image pull secret
+#### Distribution image pull secret
 
 The `.spec.distribution.imagePullSecret` field is optional and specifies the name of the Kubernetes secret
 that contains the credentials to pull the Flux distribution images from a private registry.
@@ -263,24 +263,24 @@ spec:
     domain: "cluster.local"
 ```
 
-### Cluster type
+#### Cluster type
 
 The `.spec.cluster.type` field is optional and specifies the type of the Kubernetes cluster.
 This field is used to enable specific configuration for AKS, EKS, GKE and OpenShift clusters.
 
 The supported values are `kubernetes` (default), `openshift`, `aks`, `eks` and `gke`.
 
-### Cluster multitenant
+#### Cluster multitenant
 
 The `.spec.cluster.multitenant` field is optional and specifies whether to enable Flux
 [multi-tenancy lockdown](https://fluxcd.io/flux/installation/configuration/multitenancy/).
 
-### Cluster network policy
+#### Cluster network policy
 
 The `.spec.cluster.networkPolicy` field is optional and specifies whether to restrict network access
 to the Flux namespace from other namespaces. By default, network policy is enabled.
 
-### Cluster domain
+#### Cluster domain
 
 The `.spec.cluster.domain` field is optional and specifies the cluster internal domain name.
 By default, the domain is set to `cluster.local`.
@@ -291,11 +291,20 @@ The `.spec.storage` field is optional and specifies the persistent storage for F
 When specified, the operator will create a persistent volume claim named `source-controller` with
 the specified storage class and size and mount it to the Flux source-controller `/data` volume.
 
-### Storage class
+#### Storage class
 
 The `.spec.storage.class` field is required and specifies the storage class to use for the persistent volume claim.
 
-### Storage size
+Example using the standard storage class:
+
+```yaml
+spec:
+  storage:
+    class: "standard"
+    size: "10Gi"
+```
+
+#### Storage size
 
 The `.spec.storage.size` field is required and specifies the size of the persistent volume claim.
 
@@ -328,6 +337,174 @@ The reconciliation behaviour can be configured using the following annotations:
 - `fluxcd.controlplane.io/reconcile`: Enable or disable the reconciliation loop. Default is `enabled`, set to `disabled` to pause the reconciliation.
 - `fluxcd.controlplane.io/reconcileEvery`: Set the reconciliation interval. Default is `1h`.
 - `fluxcd.controlplane.io/reconcileTimeout`: Set the reconciliation timeout. Default is `5m`.
+
+### Sync configuration
+
+The `.spec.sync` field is optional and specifies the Flux sync configuration.
+When set, a Flux source and a Flux Kustomization are generated to sync
+the cluster state with the source repository.
+
+The Flux objects are created in the same namespace where the FluxInstance is deployed
+using the namespace name as the Flux source and Kustomization name. The naming convention
+matches the one used by `flux bootstrap` to ensure compatibility with upstream, and
+to allow transitioning a bootstrapped cluster to a FluxInstance managed one.
+
+Sync fields:
+
+- `kind`: The source kind, supported values are `GitRepository`, `OCIRepository` and `Bucket`.
+- `url`: The URL of the source repository, can be a Git repository HTTP/S or SSH address, an OCI repository address or a Bucket endpoint.
+- `ref`: The source reference, can be a Git ref name e.g. `refs/heads/main`, an OCI tag e.g. `latest` or a Bucket name.
+- `path`: The path to the source directory containing the kustomize overlay or plain Kubernetes manifests to sync from.
+- `pullSecret`: The name of the Kubernetes secret that contains the credentials to pull the source repository. This field is optional.
+- `interval`: The sync interval. This field is optional, when not set the default is `1m`.
+
+#### Sync from Git over HTTP/S
+
+Example:
+
+```yaml
+spec:
+  sync:
+    kind: GitRepository
+    url: "https://gitlab.com/my-group/my-fleet.git"
+    ref: "refs/heads/main"
+    path: "clusters/my-cluster"
+    pullSecret: "git-token-auth"
+```
+
+If the source repository is private, the Kubernetes secret must be created
+in the same namespace where the FluxInstance is deployed, and have the following format:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: git-token-auth
+  namespace: flux-system
+type: Opaque
+stringData:
+  username: "git-username"
+  password: "git-token"
+```
+
+To generate the secret with the Flux CLI:
+
+```sh
+flux create secret git git-token-auth \
+  --namespace flux-system \
+  --url=https://gitlab.com/my-group/my-fleet.git \
+  --username=git-username \
+  --password=git-token
+```
+
+#### Sync from Git over SSH
+
+Example:
+
+```yaml
+spec:
+  sync:
+    kind: GitRepository
+    url: "ssh://git@github.com/my-org/my-fleet.git"
+    ref: "refs/heads/main"
+    path: "clusters/my-cluster"
+    pullSecret: "git-ssh-auth"
+```
+
+If the source repository is private, the Kubernetes secret must be created
+in the same namespace where the FluxInstance is deployed, and have the following format:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: git-ssh-auth
+  namespace: flux-system
+type: Opaque
+stringData:
+  identity: |
+    -----BEGIN OPENSSH PRIVATE KEY-----
+    ...
+    -----END OPENSSH PRIVATE KEY-----    
+  known_hosts: |
+    github.com ecdsa-sha2-nistp256 AAAA...  
+```
+
+To generate the secret with the Flux CLI:
+
+```sh
+flux create secret git git-ssh-auth \
+  --namespace flux-system \
+  --url=ssh://git@github.com/my-org/my-fleet.git \
+  --private-key-file=my-private.key
+```
+
+#### Sync from OCI over HTTP/S
+
+Example:
+
+```yaml
+spec:
+  sync:
+    kind: OCIRepository
+    url: "oci://ghcr.io/my-org/my-fleet-manifests"
+    ref: "latest"
+    path: "clusters/my-cluster"
+    pullSecret: "oci-token-auth"
+```
+
+If the container registry is private, the Kubernetes secret must be created
+in the same namespace where the FluxInstance is deployed, and be of type `kubernetes.io/dockerconfigjson`:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: oci-token-auth
+  namespace: flux-system
+type: kubernetes.io/dockerconfigjson
+data:
+  .dockerconfigjson: "base64-encoded-docker-config"
+```
+
+To generate the secret with the Flux CLI:
+
+```sh
+flux create secret oci oci-token-auth \
+  --namespace flux-system \
+  --url=ghcr.io \
+  --username=ghcr-username \
+  --password=ghcr-token
+```
+
+#### Sync from S3-compatible storage over HTTP/S
+
+Example:
+
+```yaml
+spec:
+  sync:
+    kind: Bucket
+    url: "minio.my-org.com"
+    ref: "my-bucket-fleet"
+    path: "clusters/my-cluster"
+    pullSecret: "bucket-auth"
+```
+
+If the Bucket is private, the Kubernetes secret must be created
+in the same namespace where the FluxInstance is deployed, and have the following format:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: bucket-auth
+  namespace: flux-system
+type: Opaque
+stringData:
+  accesskey: "my-accesskey"
+  secretkey: "my-secretkey"
+```
 
 ## FluxInstance Status
 
