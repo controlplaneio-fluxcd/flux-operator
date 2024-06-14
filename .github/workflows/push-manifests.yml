@@ -29,8 +29,7 @@ jobs:
       - name: Prepare
         id: prep
         run: |
-          VERSION="${{ github.event.inputs.tag }}-${GITHUB_SHA::8}"
-          echo "BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
+          VERSION="${{ github.event.inputs.tag }}-$(date +%s)"
           echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
       - name: Login to GitHub Container Registry
         uses: docker/login-action@0d4c9c5ea7693da7b068278f7b52bda2a190a446 # v3.2.0
@@ -49,7 +48,7 @@ jobs:
           
           img_digest=$(flux push artifact \
           oci://ghcr.io/controlplaneio-fluxcd/${{ env.CONTROLLER }}-manifests:${{ steps.prep.outputs.VERSION }} \
-          --path=dist \
+          --path=disto \
           --source=${{ github.repositoryUrl }} \
           --revision="${{ github.ref_name }}@sha1:${{ github.sha }}" \
           --annotations='org.opencontainers.image.description=Flux Operator' \
