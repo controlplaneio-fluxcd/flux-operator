@@ -23,9 +23,14 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o fl
 FROM gcr.io/distroless/static:nonroot
 WORKDIR /
 
-# Copy the binary and manifests data.
-COPY --from=builder /workspace/flux-operator .
+# Copy the license.
+COPY LICENSE /licenses/LICENSE
+
+# Copy the manifests data.
 COPY config/data/ /data/
+
+# Copy the operator binary.
+COPY --from=builder /workspace/flux-operator .
 
 # Run the operator as a non-root user.
 USER 65532:65532
