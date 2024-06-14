@@ -2,6 +2,7 @@
 
 [![release](https://img.shields.io/github/release/controlplaneio-fluxcd/flux-operator/all.svg)](https://github.com/controlplaneio-fluxcd/flux-operator/releases)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/flux-operator)](https://artifacthub.io/packages/helm/flux-operator/flux-operator)
+[![Operator Hub](https://img.shields.io/badge/Operator_Hub-flux--operator-9cf.svg)](https://operatorhub.io/operator/flux-operator)
 [![e2e](https://github.com/controlplaneio-fluxcd/flux-operator/actions/workflows/e2e.yaml/badge.svg)](https://github.com/controlplaneio-fluxcd/flux-operator/actions/workflows/e2e.yaml)
 [![license](https://img.shields.io/github/license/controlplaneio-fluxcd/flux-operator.svg)](https://github.com/controlplaneio-fluxcd/flux-operator/blob/main/LICENSE)
 [![SLSA 3](https://slsa.dev/images/gh-badge-level3.svg)](https://fluxcd.control-plane.io/distribution/security/)
