@@ -90,7 +90,7 @@ jobs:
           
           img_digest=$(flux push artifact \
           oci://ghcr.io/controlplaneio-fluxcd/${{ env.CONTROLLER }}-manifests:${{ steps.prep.outputs.VERSION }} \
-          --path=dist \
+          --path=disto \
           --source=${{ github.repositoryUrl }} \
           --revision="${{ github.ref_name }}@sha1:${{ github.sha }}" \
           --annotations='org.opencontainers.image.description=Flux Operator' \
