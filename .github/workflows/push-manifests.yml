@@ -1,0 +1,60 @@
+name: push-manifests
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'artifact tag prefix'
+        default: 'rc'
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  CONTROLLER: ${{ github.event.repository.name }}
+
+jobs:
+  flux-push:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # for creating OIDC tokens for signing.
+      packages: write # for pushing and signing container images.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
+      - name: Setup Kustomize
+        uses: fluxcd/pkg/actions/kustomize@main
+      - name: Setup Flux
+        uses: fluxcd/flux2/action@896e0fa46d5107a05e953dd0a5261d78a145ec8c #v2.3.0
+      - name: Prepare
+        id: prep
+        run: |
+          VERSION="${{ github.event.inputs.tag }}-${GITHUB_SHA::8}"
+          echo "BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@e92390c5fb421da1463c202d546fed0ec5c39f20 # v3.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: sigstore/cosign-installer@59acb6260d9c0ba8f4a2f9d9b48431a222b68e20 # v3.5.0
+      - name: Push and sign manifests
+        env:
+          COSIGN_EXPERIMENTAL: 1
+        run: |
+          set -euo pipefail
+          
+          make build-manifests
+          
+          img_digest=$(flux push artifact \
+          oci://ghcr.io/controlplaneio-fluxcd/${{ env.CONTROLLER }}-manifests:${{ steps.prep.outputs.VERSION }} \
+          --path=dist \
+          --source=${{ github.repositoryUrl }} \
+          --revision="${{ github.ref_name }}@sha1:${{ github.sha }}" \
+          --annotations='org.opencontainers.image.description=Flux Operator' \
+          --output=json | jq -r '.digest')
+          
+          cosign sign --yes ghcr.io/controlplaneio-fluxcd/${{ env.CONTROLLER }}-manifests@${img_digest}
+          
+          flux tag artifact oci://ghcr.io/controlplaneio-fluxcd/${{ env.CONTROLLER }}-manifests:${{ steps.prep.outputs.VERSION }} --tag=latest

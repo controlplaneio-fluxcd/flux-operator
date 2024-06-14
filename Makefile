@@ -120,7 +120,7 @@ build-manifests: ## Generate release manifests.
 	mkdir -p dist/flux-operator
 	kustomize build config/default > dist/flux-operator/install.yaml
 	mkdir -p dist/flux
-	cp -r config/data/flux/ dist/flux/
+	cp -r config/data/flux/* dist/flux/
 
 ##@ Deployment
 
