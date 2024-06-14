@@ -5,6 +5,7 @@ metadata:
     controller-gen.kubebuilder.io/version: v0.15.0
   labels:
     app.kubernetes.io/component: notification-controller
+    app.kubernetes.io/part-of: flux
   name: alerts.notification.toolkit.fluxcd.io
 spec:
   group: notification.toolkit.fluxcd.io
