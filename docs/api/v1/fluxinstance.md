@@ -570,7 +570,8 @@ following attributes in the FluxInstance’s `.status.conditions`:
 The flux-operator may get stuck trying to reconcile and apply a
 FluxInstance without completing. This can occur due to some of the following factors:
 
-- The specified distribution version is not available.
+- The distribution artifact is not accessible.
+- The distribution version is not available.
 - The kustomization of the Flux components fails to build.
 - Garbage collection fails.
 - Running health checks fails.
@@ -581,7 +582,7 @@ and adds a Condition with the following attributes to the FluxInstance’s
 
 - `type: Ready`
 - `status: "False"`
-- `reason: BuildFailed | HealthCheckFailed | ReconciliationFailed`
+- `reason: ArtifactFailed | BuildFailed | HealthCheckFailed | ReconciliationFailed`
 
 The `message` field of the Condition will contain more information about why
 the reconciliation failed.

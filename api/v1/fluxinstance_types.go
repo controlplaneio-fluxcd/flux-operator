@@ -89,7 +89,7 @@ type Distribution struct {
 	// e.g. 'oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests:latest'.
 	// +kubebuilder:validation:Pattern="^oci://.*$"
 	// +optional
-	Artifact string `json:"manifestsURL,omitempty"`
+	Artifact string `json:"artifact,omitempty"`
 }
 
 // Component is the name of a controller to install.

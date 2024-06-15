@@ -70,6 +70,7 @@ spec:
   distribution:
     version: "2.x"
     registry: "ghcr.io/fluxcd"
+    artifact: "oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests"
   components:
     - source-controller
     - kustomize-controller

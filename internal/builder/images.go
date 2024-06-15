@@ -5,14 +5,10 @@ package builder
 
 import (
 	"bytes"
-	"context"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/fluxcd/pkg/apis/kustomize"
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
@@ -60,8 +56,9 @@ func ExtractComponentImages(srcDir string, opts Options) ([]ComponentImage, erro
 	return images, nil
 }
 
-// FetchComponentImages fetches the components images from the distribution repository.
-func FetchComponentImages(opts Options) (images []ComponentImage, err error) {
+// ExtractComponentImagesWithDigest reads the source directory and extracts
+// the container images with digest from the kustomize images patches.
+func ExtractComponentImagesWithDigest(srcDir string, opts Options) (images []ComponentImage, err error) {
 	registry := strings.TrimSuffix(opts.Registry, "/")
 	var distro string
 
@@ -78,23 +75,9 @@ func FetchComponentImages(opts Options) (images []ComponentImage, err error) {
 		return nil, fmt.Errorf("unsupported registry: %s", registry)
 	}
 
-	const ghRepo = "https://raw.githubusercontent.com/controlplaneio-fluxcd/distribution/main/images"
-	ghURL := fmt.Sprintf("%s/%s/%s.yaml", ghRepo, opts.Version, distro)
+	imageFile := fmt.Sprintf("%s/%s/%s.yaml", srcDir, opts.Version, distro)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, ghURL, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-
-	data, err := io.ReadAll(resp.Body)
+	data, err := os.ReadFile(imageFile)
 	if err != nil {
 		return nil, fmt.Errorf("read body: %v", err)
 	}

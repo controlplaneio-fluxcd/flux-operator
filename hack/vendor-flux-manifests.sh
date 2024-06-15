@@ -36,7 +36,7 @@ curl -sLO https://github.com/controlplaneio-fluxcd/distribution/archive/refs/hea
 tar xzf main.tar.gz -C "${DEST_DIR}"
 
 mkdir -p "${IMG_DIR}"
-cp -r ${DEST_DIR}/distribution-main/images/* ${IMG_DIR}/
+cp -rf ${DEST_DIR}/distribution-main/images/* ${IMG_DIR}/
 rm -rf ${DEST_DIR}/distribution-main
 rm -rf main.tar.gz
 info "flux image manifests copied to flux-images"

@@ -105,17 +105,17 @@ spec:
                 description: Distribution specifies the version and container registry
                   to pull images from.
                 properties:
-                  imagePullSecret:
-                    description: |-
-                      ImagePullSecret is the name of the Kubernetes secret
-                      to use for pulling images.
-                    type: string
-                  manifestsURL:
+                  artifact:
                     description: |-
                       Artifact is the URL to the OCI artifact containing
                       the latest Kubernetes manifests for the distribution,
                       e.g. 'oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests:latest'.
                     pattern: ^oci://.*$
+                    type: string
+                  imagePullSecret:
+                    description: |-
+                      ImagePullSecret is the name of the Kubernetes secret
+                      to use for pulling images.
                     type: string
                   registry:
                     description: |-
