@@ -233,6 +233,23 @@ kubectl create secret docker-registry flux-enterprise-auth \
   --docker-password=$ENTERPRISE_TOKEN
 ```
 
+#### Distribution artifact
+
+The `.spec.distribution.artifact` field is optional and specifies the OCI artifact URL
+containing the Flux distribution manifests. When specified, the operator will pull the
+artifact on a regular interval to determine the latest Flux version available
+including CVE patches and hotfixes.
+
+Example using the official distribution artifact:
+
+```yaml
+spec:
+  distribution:
+    version: "2.x"
+    registry: "ghcr.io/fluxcd"
+    artifact: "oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests"
+```
+
 ### Components configuration
 
 The `.spec.components` field is optional and specifies the list of Flux components to install.

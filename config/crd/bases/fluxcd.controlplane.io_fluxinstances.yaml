@@ -110,6 +110,13 @@ spec:
                       ImagePullSecret is the name of the Kubernetes secret
                       to use for pulling images.
                     type: string
+                  manifestsURL:
+                    description: |-
+                      Artifact is the URL to the OCI artifact containing
+                      the latest Kubernetes manifests for the distribution,
+                      e.g. 'oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests:latest'.
+                    pattern: ^oci://.*$
+                    type: string
                   registry:
                     description: |-
                       Registry address to pull the distribution images from

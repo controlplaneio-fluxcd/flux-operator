@@ -83,6 +83,13 @@ type Distribution struct {
 	// to use for pulling images.
 	// +optional
 	ImagePullSecret string `json:"imagePullSecret,omitempty"`
+
+	// Artifact is the URL to the OCI artifact containing
+	// the latest Kubernetes manifests for the distribution,
+	// e.g. 'oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests:latest'.
+	// +kubebuilder:validation:Pattern="^oci://.*$"
+	// +optional
+	Artifact string `json:"manifestsURL,omitempty"`
 }
 
 // Component is the name of a controller to install.
