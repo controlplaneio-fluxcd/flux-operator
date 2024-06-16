@@ -47,7 +47,7 @@ var _ = BeforeSuite(func() {
 	}
 
 	img = fmt.Sprintf("%s-catalog:bundle-%s", olmArtifactPrefix, version)
-	opm := fmt.Sprintf("%s-index:%s", olmArtifactPrefix, version)
+	opm := fmt.Sprintf("%s-index:v%s", olmArtifactPrefix, version)
 
 	By("loading the flux-operator bundle image on Kind")
 	err := utils.LoadImageToKindClusterWithName(img, "/test/olm")

@@ -2,6 +2,12 @@ name: e2e-olm
 
 on:
   workflow_dispatch:
+  push:
+    branches: [ '*' ]
+    paths:
+    - 'config/olm/**'
+    - 'test/olm/**'
+    - '.github/workflows/e2e-olm.yml'
 
 permissions:
   contents: read
@@ -38,5 +44,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Run OLM tests
-        run: |
-          make test-olm
+        run: make test-olm
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

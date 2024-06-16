@@ -16,9 +16,8 @@ case $(uname -m) in
               ;;
 esac
 REPOSITORY_ROOT=$(git rev-parse --show-toplevel)
-OCI_IMAGE="ghcr.io/controlplaneio-fluxcd/openshift-flux-operator"
+OCI_IMAGE_PREFIX="ghcr.io/controlplaneio-fluxcd/openshift-flux-operator"
 DEST_DIR="${REPOSITORY_ROOT}/bin/olm"
-
 
 info() {
     echo '[INFO] ' "$@"
@@ -34,11 +33,11 @@ if [ ! -d "${DEST_DIR}/${VERSION}" ]; then
 fi
 
 # build catalog image
-docker build -t ${OCI_IMAGE}-catalog:bundle-"${VERSION}" \
+docker build -t ${OCI_IMAGE_PREFIX}-catalog:bundle-${VERSION} \
 -f "${DEST_DIR}/test/bundle.Dockerfile" "${DEST_DIR}/${VERSION}"
 
 # push catalog image
-docker push ${OCI_IMAGE}-catalog:bundle-"${VERSION}"
+docker push ${OCI_IMAGE_PREFIX}-catalog:bundle-${VERSION}
 
 # build opm image
 docker build -t opm --build-arg ARCH=$ARCH -f "${DEST_DIR}/test/opm.Dockerfile" "${DEST_DIR}"
@@ -49,11 +48,11 @@ docker run --rm --privileged \
   -v /var/run/docker.sock:/var/run/docker.sock \
   opm:latest index add \
   --container-tool docker \
-  --bundles ${OCI_IMAGE}-catalog:bundle-"${VERSION}" \
-  --tag ${OCI_IMAGE}-index:${VERSION}
+  --bundles ${OCI_IMAGE_PREFIX}-catalog:bundle-${VERSION} \
+  --tag ${OCI_IMAGE_PREFIX}-index:v${VERSION}
 
 # push index image
-docker push ${OCI_IMAGE}-index:${VERSION}
+docker push ${OCI_IMAGE_PREFIX}-index:v${VERSION}
 
-info "OLM catalog pushed to ${OCI_IMAGE}-catalog:bundle-${VERSION}"
-info "OLM index pushed to ${OCI_IMAGE}-index:${VERSION}"
+info "OLM catalog pushed to ${OCI_IMAGE_PREFIX}-catalog:bundle-${VERSION}"
+info "OLM index pushed to ${OCI_IMAGE_PREFIX}-index:v${VERSION}"

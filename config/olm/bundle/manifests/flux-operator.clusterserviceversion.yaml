@@ -61,9 +61,11 @@ spec:
     For more information about the CNCF Flux project, please see
     the [Flux architecture overview](https://fluxcd.control-plane.io/guides/flux-architecture/).
 
-    The [Flux Operator](https://github.com/controlplaneio-fluxcd) provides a
+    The [Flux Operator](https://github.com/controlplaneio-fluxcd/flux-operator) provides a
     declarative API for the installation, configuration and upgrade of CNCF Flux
     and the ControlPlane [enterprise distribution](https://fluxcd.control-plane.io/).
+    The operator allows the configuration of Flux multi-tenancy lockdown, vertical scaling, persistent storage,
+    and the syncing of the cluster state from Git repositories, OCI artifacts and S3-compatible storage.
     
     ### OpenShift Support
     
