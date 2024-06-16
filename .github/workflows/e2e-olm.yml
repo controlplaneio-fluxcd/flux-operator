@@ -2,10 +2,6 @@ name: e2e-olm
 
 on:
   workflow_dispatch:
-    inputs:
-      version:
-        description: 'Flux operator strict semver e.g. v0.3.0'
-        required: true
 
 permissions:
   contents: read
@@ -43,4 +39,4 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Run OLM tests
         run: |
-          make test-olm FLUX_OPERATOR_VERSION="${{ github.event.inputs.version }}"
+          make test-olm

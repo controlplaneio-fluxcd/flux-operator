@@ -17,7 +17,7 @@ var _ = Describe("Scorecard", Ordered, func() {
 		It("should run successfully", func() {
 			By("run scorecard tests")
 			cmd := exec.Command(operatorsdkBin, "scorecard",
-				img, "-c", "config/operatorhub/flux-operator/"+version+"/tests/scorecard/config.yaml",
+				img, "-c", bundlePath+"/"+version+"/tests/scorecard/config.yaml",
 				"-w", "5m", "-o", "json")
 			_, err := utils.Run(cmd, "/test/olm")
 			ExpectWithOffset(2, err).NotTo(HaveOccurred())
