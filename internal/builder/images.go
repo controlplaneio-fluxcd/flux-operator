@@ -71,6 +71,8 @@ func ExtractComponentImagesWithDigest(srcDir string, opts Options) (images []Com
 		distro = "enterprise-alpine"
 	case "ghcr.io/controlplaneio-fluxcd/distroless":
 		distro = "enterprise-distroless"
+	case "709825985650.dkr.ecr.us-east-1.amazonaws.com/controlplane/fluxcd":
+		distro = "enterprise-distroless"
 	default:
 		return nil, fmt.Errorf("unsupported registry: %s", registry)
 	}
@@ -91,7 +93,8 @@ func ExtractComponentImagesWithDigest(srcDir string, opts Options) (images []Com
 	}
 
 	for _, img := range kc.Images {
-		component := strings.TrimPrefix(img.Name, registry+"/")
+		name := img.Name
+		component := name[strings.LastIndex(name, "/")+1:]
 		if containsItemString(opts.Components, component) {
 			images = append(images, ComponentImage{
 				Name:       component,
