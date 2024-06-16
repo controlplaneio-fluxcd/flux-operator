@@ -16,7 +16,10 @@ var kustomizationTmpl = `---
 {{- $watchAllNamespaces := .WatchAllNamespaces }}
 {{- $registry := .Registry }}
 {{- $logLevel := .LogLevel }}
-{{- $clusterDomain := .ClusterDomain }}
+{{- $clusterDomain := "" }}
+{{- if .ClusterDomain }}
+{{- $clusterDomain = .ClusterDomain }}
+{{- end }}
 {{- $artifactStorage := .ArtifactStorage }}
 {{- $sync := .Sync }}
 {{- $namespace := .Namespace }}
@@ -88,7 +91,11 @@ patches:
       value: --log-level={{$logLevel}}
     - op: replace
       path: /spec/template/spec/containers/0/args/6
+      {{- if $clusterDomain }}
       value: --storage-adv-addr=source-controller.$(RUNTIME_NAMESPACE).svc.{{$clusterDomain}}.
+      {{- else }}
+      value: --storage-adv-addr=source-controller.$(RUNTIME_NAMESPACE).svc
+      {{- end }}
 {{- if $artifactStorage }}
     - op: add
       path: '/spec/template/spec/volumes/-'

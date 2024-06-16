@@ -43,7 +43,7 @@ func MakeDefaultOptions() Options {
 		NetworkPolicy:          true,
 		LogLevel:               "info",
 		NotificationController: "notification-controller",
-		ClusterDomain:          "cluster.local",
+		ClusterDomain:          "",
 	}
 }
 

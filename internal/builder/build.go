@@ -59,7 +59,11 @@ func Build(srcDir, tmpDir string, options Options) (*Result, error) {
 
 func generate(base string, options Options) error {
 	if containsItemString(options.Components, options.NotificationController) {
-		options.EventsAddr = fmt.Sprintf("http://%s.%s.svc.%s./", options.NotificationController, options.Namespace, options.ClusterDomain)
+		if options.ClusterDomain == "" {
+			options.EventsAddr = fmt.Sprintf("http://%s.%s.svc/", options.NotificationController, options.Namespace)
+		} else {
+			options.EventsAddr = fmt.Sprintf("http://%s.%s.svc.%s./", options.NotificationController, options.Namespace, options.ClusterDomain)
+		}
 	}
 
 	if err := execTemplate(options, namespaceTmpl, path.Join(base, "namespace.yaml")); err != nil {
