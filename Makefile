@@ -148,28 +148,17 @@ deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in
 undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	$(KUSTOMIZE) build config/default | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
-.PHONY: opm-index
-opm-index:
-	./config/operatorhub/flux-operator/scripts/opm-index.sh ${FLUX_OPERATOR_VERSION}
+.PHONY: build-olm-manifests
+build-olm-manifests: ## Generate OLM manifests for OperatorHub.
+	./hack/build-olm-manifests.sh $(FLUX_OPERATOR_VERSION:v%=%)
 
 .PHONY: test-olm
-test-olm: operator-sdk opm-index
-	yq e -i ".spec.startingCSV=\"flux-operator.${FLUX_OPERATOR_VERSION}\"" \
-	./config/operatorhub/flux-operator/testdata/004-operator-subscription.yaml
-	yq e -i ".spec.image=\"ghcr.io/controlplaneio-fluxcd/openshift-flux-operator-index:${FLUX_OPERATOR_VERSION}\"" \
-	./config/operatorhub/flux-operator/testdata/003-catalog-source.yaml
+test-olm: build-olm-manifests operator-sdk ## Test OLM manifests for current version.
+	./hack/build-olm-images.sh $(FLUX_OPERATOR_VERSION:v%=%)
 	export OLM_VERSION=${OLM_VERSION} && \
-	export FLUX_OPERATOR_VERSION=${FLUX_OPERATOR_VERSION} && \
+	export FLUX_OPERATOR_VERSION=$(FLUX_OPERATOR_VERSION:v%=%) && \
 	export OPERATOR_SDK_BIN=$(OPERATOR_SDK) && \
 	go test ./test/olm/ -v -ginkgo.v
-
-.PHONY: deploy-olm-data
-deploy-olm-data:
-	kubectl apply -k ./config/operatorhub/flux-operator/testdata/
-
-.PHONY: undeploy-olm-data
-undeploy-olm-data:
-	kubectl delete -k ./config/operatorhub/flux-operator/testdata/
 
 ##@ Dependencies
 

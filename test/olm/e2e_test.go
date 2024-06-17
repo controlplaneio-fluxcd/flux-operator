@@ -18,6 +18,8 @@ import (
 
 const (
 	namespace             = "flux-system"
+	bundlePath            = "bin/olm"
+	olmArtifactPrefix     = "ghcr.io/controlplaneio-fluxcd/openshift-flux-operator"
 	defaultVersion        = "v0.3.0"
 	defaultOLMVersion     = "v0.28.0"
 	defaultOperatorsdkBin = "bin/operator-sdk"
@@ -39,14 +41,13 @@ var _ = BeforeSuite(func() {
 	if olmVersion == "" {
 		olmVersion = defaultOLMVersion
 	}
-
 	operatorsdkBin = os.Getenv("OPERATOR_SDK_BIN")
 	if operatorsdkBin == "" {
 		operatorsdkBin = defaultOperatorsdkBin
 	}
 
-	img = fmt.Sprintf("ghcr.io/controlplaneio-fluxcd/openshift-flux-operator-catalog:bundle-%s", version)
-	opm := fmt.Sprintf("ghcr.io/controlplaneio-fluxcd/openshift-flux-operator-index:%s", version)
+	img = fmt.Sprintf("%s-catalog:bundle-%s", olmArtifactPrefix, version)
+	opm := fmt.Sprintf("%s-index:v%s", olmArtifactPrefix, version)
 
 	By("loading the flux-operator bundle image on Kind")
 	err := utils.LoadImageToKindClusterWithName(img, "/test/olm")
@@ -60,13 +61,12 @@ var _ = BeforeSuite(func() {
 	ExpectWithOffset(3, err).NotTo(HaveOccurred())
 
 	By("deploying flux-operator olm kubernetes resources")
-	cmd = exec.Command("make", "deploy-olm-data")
+	cmd = exec.Command("kubectl", "apply", "-f", bundlePath+"/test/olm.yaml")
 	_, err = utils.Run(cmd, "/test/olm")
 	ExpectWithOffset(1, err).NotTo(HaveOccurred())
 
 	By("validating that the flux-operator is installed")
 	verifyInstallPlan := func() error {
-
 		cmd = exec.Command("kubectl", "get",
 			"installplan", "-o", "jsonpath={.items[].metadata.name}",
 			"-n", namespace,
@@ -92,13 +92,12 @@ var _ = BeforeSuite(func() {
 	exec.Command("kubectl", "wait", "--for=condition=Ready=true", "pod",
 		"-lapp.kubernetes.io/name=flux-operator ", "-n", namespace)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred())
-
 })
 
 // Delete the flux-operator CRDs, deployment and namespace.
 var _ = AfterSuite(func() {
 	By("uninstalling flux-operator olm kubernetes resources")
-	cmd := exec.Command("make", "undeploy-olm-data")
+	cmd := exec.Command("kubectl", "delete", "-f", bundlePath+"/test/olm.yaml")
 	_, err := utils.Run(cmd, "/test/olm")
 	Expect(err).NotTo(HaveOccurred())
 
