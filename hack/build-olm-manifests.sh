@@ -24,6 +24,7 @@ mkdir -p ${DEST_DIR}
 cp -r ${SOUCE_DIR}/* ${DEST_DIR}/
 
 export FLUX_OPERATOR_VERSION=${VERSION}
+export FLUX_OPERATOR_TS=$(date +"%Y-%m-%dT%H:%M:%S")
 cat ${SOUCE_DIR}/bundle/manifests/flux-operator.clusterserviceversion.yaml | \
 envsubst > ${DEST_DIR}/bundle/manifests/flux-operator.clusterserviceversion.yaml
 

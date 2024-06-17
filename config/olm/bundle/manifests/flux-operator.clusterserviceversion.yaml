@@ -41,7 +41,7 @@ metadata:
       ]
     categories: Integration & Delivery
     certified: 'false'
-    createdAt: '2024-06-04T14:10:10Z'
+    createdAt: '${FLUX_OPERATOR_TS}Z'
     description: |-
       The Flux Operator manages the lifecycle of the CNCF Flux project.
     containerImage: ghcr.io/controlplaneio-fluxcd/flux-operator:v${FLUX_OPERATOR_VERSION}
