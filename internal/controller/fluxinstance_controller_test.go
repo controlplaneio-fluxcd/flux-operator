@@ -26,6 +26,7 @@ import (
 
 func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 	g := NewWithT(t)
+	const manifestsURL = "oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests:latest"
 	reconciler := getFluxInstanceReconciler()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -40,6 +41,7 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 		},
 		Spec: getDefaultFluxSpec(),
 	}
+	obj.Spec.Distribution.Artifact = manifestsURL
 
 	// Initialize the instance.
 	err = testEnv.Create(ctx, obj)
@@ -100,6 +102,13 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 	g.Expect(result.Status.Components[1].Repository).To(Equal("ghcr.io/fluxcd/kustomize-controller"))
 	g.Expect(result.Status.Components[2].Repository).To(Equal("ghcr.io/fluxcd/helm-controller"))
 	g.Expect(result.Status.Components[3].Repository).To(Equal("ghcr.io/fluxcd/notification-controller"))
+
+	// Check if the deployments images have digests.
+	sc := &appsv1.Deployment{}
+	err = testClient.Get(ctx, types.NamespacedName{Name: "source-controller", Namespace: ns.Name}, sc)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(sc.Spec.Template.Spec.Containers[0].Image).To(HavePrefix("ghcr.io/fluxcd/source-controller"))
+	g.Expect(sc.Spec.Template.Spec.Containers[0].Image).To(ContainSubstring("@sha256:"))
 
 	// Update the instance.
 	resultP := result.DeepCopy()
@@ -189,7 +198,69 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 }
 
-func TestFluxInstanceReconciler_InstallFail(t *testing.T) {
+func TestFluxInstanceReconciler_FetchFail(t *testing.T) {
+	g := NewWithT(t)
+	const manifestsURL = "oci://not.found/artifact"
+	reconciler := getFluxInstanceReconciler()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	obj := &fluxcdv1.FluxInstance{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ns.Name,
+			Namespace: ns.Name,
+		},
+		Spec: getDefaultFluxSpec(),
+	}
+	obj.Spec.Distribution.Artifact = manifestsURL
+
+	err = testClient.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize the instance.
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Try to install the instance.
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).To(HaveOccurred())
+
+	// Check if the instance was marked as failed.
+	result := &fluxcdv1.FluxInstance{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	logObjectStatus(t, result)
+	g.Expect(conditions.IsStalled(result)).To(BeFalse())
+	g.Expect(conditions.IsFalse(result, meta.ReadyCondition)).To(BeTrue())
+	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ArtifactFailedReason))
+	g.Expect(conditions.GetMessage(result, meta.ReadyCondition)).To(ContainSubstring(manifestsURL))
+	g.Expect(conditions.GetReason(result, meta.ReconcilingCondition)).To(BeIdenticalTo(meta.ProgressingWithRetryReason))
+
+	// Check if events were recorded for each step.
+	events := getEvents(result.Name)
+	g.Expect(events).To(HaveLen(1))
+	g.Expect(events[0].Reason).To(Equal(meta.ArtifactFailedReason))
+
+	err = testClient.Delete(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.IsZero()).To(BeTrue())
+}
+
+func TestFluxInstanceReconciler_BuildFail(t *testing.T) {
 	g := NewWithT(t)
 	reconciler := getFluxInstanceReconciler()
 	reconciler.StoragePath = "notfound"
@@ -523,7 +594,7 @@ func getDefaultFluxSpec() fluxcdv1.FluxInstanceSpec {
 	return fluxcdv1.FluxInstanceSpec{
 		Wait: false,
 		Distribution: fluxcdv1.Distribution{
-			Version:  "v2.3.x",
+			Version:  "v2.3.0",
 			Registry: "ghcr.io/fluxcd",
 		},
 		Sync: &fluxcdv1.Sync{

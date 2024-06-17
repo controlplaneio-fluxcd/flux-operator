@@ -233,6 +233,23 @@ kubectl create secret docker-registry flux-enterprise-auth \
   --docker-password=$ENTERPRISE_TOKEN
 ```
 
+#### Distribution artifact
+
+The `.spec.distribution.artifact` field is optional and specifies the OCI artifact URL
+containing the Flux distribution manifests. When specified, the operator will pull the
+artifact on a regular interval to determine the latest Flux version available
+including CVE patches and hotfixes.
+
+Example using the official distribution artifact:
+
+```yaml
+spec:
+  distribution:
+    version: "2.x"
+    registry: "ghcr.io/fluxcd"
+    artifact: "oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests"
+```
+
 ### Components configuration
 
 The `.spec.components` field is optional and specifies the list of Flux components to install.
@@ -553,7 +570,8 @@ following attributes in the FluxInstance’s `.status.conditions`:
 The flux-operator may get stuck trying to reconcile and apply a
 FluxInstance without completing. This can occur due to some of the following factors:
 
-- The specified distribution version is not available.
+- The distribution artifact is not accessible.
+- The distribution version is not available.
 - The kustomization of the Flux components fails to build.
 - Garbage collection fails.
 - Running health checks fails.
@@ -564,7 +582,7 @@ and adds a Condition with the following attributes to the FluxInstance’s
 
 - `type: Ready`
 - `status: "False"`
-- `reason: BuildFailed | HealthCheckFailed | ReconciliationFailed`
+- `reason: ArtifactFailed | BuildFailed | HealthCheckFailed | ReconciliationFailed`
 
 The `message` field of the Condition will contain more information about why
 the reconciliation failed.

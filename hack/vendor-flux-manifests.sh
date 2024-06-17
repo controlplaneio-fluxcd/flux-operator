@@ -7,6 +7,7 @@ set -euo pipefail
 
 REPOSITORY_ROOT=$(git rev-parse --show-toplevel)
 DEST_DIR="${REPOSITORY_ROOT}/config/data/flux"
+IMG_DIR="${REPOSITORY_ROOT}/config/data/flux-images"
 
 info() {
     echo '[INFO] ' "$@"
@@ -29,5 +30,15 @@ for var in "$@"
 do
     vendor "$var"
 done
+
+info "downloading distro repository"
+curl -sLO https://github.com/controlplaneio-fluxcd/distribution/archive/refs/heads/main.tar.gz
+tar xzf main.tar.gz -C "${DEST_DIR}"
+
+mkdir -p "${IMG_DIR}"
+cp -rf ${DEST_DIR}/distribution-main/images/* ${IMG_DIR}/
+rm -rf ${DEST_DIR}/distribution-main
+rm -rf main.tar.gz
+info "flux image manifests copied to flux-images"
 
 info "all manifests extracted to ${DEST_DIR}"

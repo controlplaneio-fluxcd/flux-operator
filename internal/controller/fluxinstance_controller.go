@@ -117,9 +117,35 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 	conditions.MarkReconciling(obj,
 		meta.ProgressingReason,
 		msg)
+	if err := r.patch(ctx, obj, patcher); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
+	}
+
+	tmpDir, err := builder.MkdirTempAbs("", "flux")
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to create tmp dir: %w", err)
+	}
+
+	defer func() {
+		if err := os.RemoveAll(tmpDir); err != nil {
+			log.Error(err, "failed to remove tmp dir", "dir", tmpDir)
+		}
+	}()
+
+	// Fetch the distribution manifests.
+	manifestsDir, err := r.fetch(ctx, obj, tmpDir)
+	if err != nil {
+		msg := fmt.Sprintf("fetch failed: %s", err.Error())
+		conditions.MarkFalse(obj,
+			meta.ReadyCondition,
+			meta.ArtifactFailedReason,
+			msg)
+		r.EventRecorder.Event(obj, corev1.EventTypeWarning, meta.ArtifactFailedReason, msg)
+		return ctrl.Result{}, err
+	}
 
 	// Build the distribution manifests.
-	buildResult, err := r.build(ctx, obj)
+	buildResult, err := r.build(ctx, obj, manifestsDir)
 	if err != nil {
 		msg := fmt.Sprintf("build failed: %s", err.Error())
 		conditions.MarkFalse(obj,
@@ -178,18 +204,55 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 	return requeueAfter(obj), nil
 }
 
-// build reads the distribution manifests from the storage path,
-// matches the version and builds the final resources.
-func (r *FluxInstanceReconciler) build(ctx context.Context,
-	obj *fluxcdv1.FluxInstance) (*builder.Result, error) {
+// fetch pulls the distribution OCI artifact and
+// extracts the manifests to the temporary directory.
+// If the distribution artifact URL is not provided,
+// it falls back  to the manifests stored in the container storage.
+func (r *FluxInstanceReconciler) fetch(ctx context.Context,
+	obj *fluxcdv1.FluxInstance, tmpDir string) (string, error) {
 	log := ctrl.LoggerFrom(ctx)
+	artifactURL := obj.Spec.Distribution.Artifact
 
-	fluxDir := filepath.Join(r.StoragePath, "flux")
-	if _, err := os.Stat(fluxDir); os.IsNotExist(err) {
-		return nil, fmt.Errorf("storage path %s does not exist", fluxDir)
+	// Pull the latest manifests from the OCI repository.
+	if artifactURL != "" {
+		ctxPull, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		artifactDigest, err := builder.PullArtifact(ctxPull, artifactURL, tmpDir)
+		if err != nil {
+			return "", err
+		}
+		log.Info("fetched latest manifests", "url", artifactURL, "digest", artifactDigest)
+		return tmpDir, nil
 	}
 
-	ver, err := builder.MatchVersion(fluxDir, obj.Spec.Distribution.Version)
+	// Fall back to the manifests stored in container storage.
+	return r.StoragePath, nil
+}
+
+// build reads the distribution manifests from the local storage,
+// matches the version and builds the final resources.
+func (r *FluxInstanceReconciler) build(ctx context.Context,
+	obj *fluxcdv1.FluxInstance, manifestsDir string) (*builder.Result, error) {
+	log := ctrl.LoggerFrom(ctx)
+
+	fluxManifestsDir := filepath.Join(manifestsDir, "flux")
+	if _, err := os.Stat(fluxManifestsDir); os.IsNotExist(err) {
+		return nil, fmt.Errorf("storage path %s does not exist", fluxManifestsDir)
+	}
+
+	tmpDir, err := builder.MkdirTempAbs("", "flux")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create tmp dir: %w", err)
+	}
+
+	defer func() {
+		if err := os.RemoveAll(tmpDir); err != nil {
+			log.Error(err, "failed to remove tmp dir", "dir", tmpDir)
+		}
+	}()
+
+	ver, err := builder.MatchVersion(fluxManifestsDir, obj.Spec.Distribution.Version)
 	if err != nil {
 		return nil, err
 	}
@@ -242,8 +305,8 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 		options.Patches += string(patchesData)
 	}
 
-	srcDir := filepath.Join(fluxDir, ver)
-	images, err := builder.FetchComponentImages(options)
+	srcDir := filepath.Join(fluxManifestsDir, ver)
+	images, err := builder.ExtractComponentImagesWithDigest(filepath.Join(manifestsDir, "flux-images"), options)
 	if err != nil {
 		log.Error(err, "falling back to extracting images from manifests")
 		images, err = builder.ExtractComponentImages(srcDir, options)
@@ -252,17 +315,6 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 		}
 	}
 	options.ComponentImages = images
-
-	tmpDir, err := builder.MkdirTempAbs("", "flux")
-	if err != nil {
-		return nil, fmt.Errorf("failed to create tmp dir: %w", err)
-	}
-
-	defer func() {
-		if err := os.RemoveAll(tmpDir); err != nil {
-			log.Error(err, "failed to remove tmp dir", "dir", tmpDir)
-		}
-	}()
 
 	return builder.Build(srcDir, tmpDir, options)
 }
@@ -495,6 +547,8 @@ func requeueAfter(obj *fluxcdv1.FluxInstance) ctrl.Result {
 	return result
 }
 
+// fmtDuration returns a human-readable string
+// representation of the time duration.
 func fmtDuration(t time.Time) string {
 	if time.Since(t) < time.Second {
 		return time.Since(t).Round(time.Millisecond).String()

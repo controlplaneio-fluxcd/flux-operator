@@ -36,14 +36,15 @@ func TestBuild_ExtractImages(t *testing.T) {
 	))
 }
 
-func TestBuild_FetchImages(t *testing.T) {
+func TestBuild_ExtractImagesWithDigest(t *testing.T) {
 	g := NewWithT(t)
 	const version = "v2.3.0"
 	opts := MakeDefaultOptions()
 	opts.Version = version
 	opts.Registry = "ghcr.io/fluxcd"
 
-	images, err := FetchComponentImages(opts)
+	imagePath := filepath.Join("testdata", "flux-images")
+	images, err := ExtractComponentImagesWithDigest(imagePath, opts)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(images).To(HaveLen(6))
 	g.Expect(images).To(ContainElements(
@@ -62,7 +63,28 @@ func TestBuild_FetchImages(t *testing.T) {
 	))
 
 	opts.Registry = "registry.local/fluxcd"
-	_, err = FetchComponentImages(opts)
+	_, err = ExtractComponentImagesWithDigest(imagePath, opts)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("unsupported registry"))
+}
+
+func TestBuild_ExtractImagesWithDigest_AWS(t *testing.T) {
+	g := NewWithT(t)
+	const version = "v2.3.0"
+	opts := MakeDefaultOptions()
+	opts.Version = version
+	opts.Registry = "709825985650.dkr.ecr.us-east-1.amazonaws.com/controlplane/fluxcd"
+
+	imagePath := filepath.Join("testdata", "flux-images")
+	images, err := ExtractComponentImagesWithDigest(imagePath, opts)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(images).To(HaveLen(6))
+	g.Expect(images).To(ContainElements(
+		ComponentImage{
+			Name:       "source-controller",
+			Repository: "709825985650.dkr.ecr.us-east-1.amazonaws.com/controlplane/fluxcd/source-controller",
+			Tag:        "v1.3.0",
+			Digest:     "sha256:3b34a63a635779b2b3ea67ec02f5925704dc93d39efc4b92243e2170907615af",
+		},
+	))
 }
