@@ -46,26 +46,30 @@ metadata:
       The Flux Operator manages the lifecycle of the CNCF Flux project.
     containerImage: ghcr.io/controlplaneio-fluxcd/flux-operator:v${FLUX_OPERATOR_VERSION}
     support: Community
-    capabilities: Full Lifecycle
+    capabilities: Deep Insights
     repository: https://github.com/controlplaneio-fluxcd/flux-operator
     operatorframework.io/suggested-namespace: flux-system
 spec:
   displayName: Flux Operator
   description: |-
-    [Flux](https://fluxcd.io) is a Continuous Delivery solution for Kubernetes.
+    [Flux](https://fluxcd.io) is a leading GitOps Continuous Delivery tool
+    used to streamline and automate application deployments on Kubernetes.
+    Flux enables teams to achieve a reliable and auditable delivery process
+    while promoting collaboration and traceability across different environments.
     
     Flux is powered by the GitOps Toolkit, a set of composable APIs and
     specialized tools that enable a wide range of continuous delivery use-cases,
-    from simple Kubernetes deployment pipelines to multi-tenant and
-    multi-environment progressive delivery rollouts.
-    For more information about the CNCF Flux project, please see
+    from simple Kubernetes deployment pipelines to multi-tenant and multi-cluster
+    progressive delivery rollouts.
+    For more information about the CNCF-graduated Flux project, please see
     the [Flux architecture overview](https://fluxcd.control-plane.io/guides/flux-architecture/).
 
     The [Flux Operator](https://github.com/controlplaneio-fluxcd/flux-operator) provides a
     declarative API for the installation, configuration and upgrade of CNCF Flux
     and the ControlPlane [enterprise distribution](https://fluxcd.control-plane.io/).
-    The operator allows the configuration of Flux multi-tenancy lockdown, vertical scaling, persistent storage,
-    and the syncing of the cluster state from Git repositories, OCI artifacts and S3-compatible storage.
+    The operator allows the configuration of Flux multi-tenancy lockdown, network policies,
+    persistent storage, vertical scaling, custom patches, and the synchronization of the
+    cluster state from Git repositories, OCI artifacts and S3-compatible storage.
     
     ### OpenShift Support
     
@@ -75,8 +79,7 @@ spec:
     named `flux` in the same namespace as the operator
     and set the `.spec.cluster.type` field to `openshift`.
     
-    For more information on how to configure Flux with multi-tenancy support,
-    Git synchronization and automated updates, please see the
+    For more information on how to configure the Flux instance, please see the
     [Flux Operator documentation](https://fluxcd.control-plane.io/operator/).
 
   maturity: beta
