@@ -1,11 +1,6 @@
 name: push-manifests
 on:
   workflow_dispatch:
-    inputs:
-      tag:
-        description: 'artifact tag prefix'
-        default: 'rc'
-        required: true
 
 permissions:
   contents: read
@@ -29,8 +24,11 @@ jobs:
       - name: Prepare
         id: prep
         run: |
-          VERSION="${{ github.event.inputs.tag }}-$(date +%s)"
+          RELEASE=$(gh release view --json tagName -q '.tagName')
+          VERSION="${RELEASE}-$(date +%s)"
           echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Login to GitHub Container Registry
         uses: docker/login-action@0d4c9c5ea7693da7b068278f7b52bda2a190a446 # v3.2.0
         with:

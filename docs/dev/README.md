@@ -30,10 +30,20 @@
 7. Open a PR in the upstream repository and wait for the CI to pass.
 8. After the PR is merged, the new version will be available at [operatorhub.io/operator/flux-operator](https://operatorhub.io/operator/flux-operator).
 
-## Flux Manifests Update
+## Manifests Release Procedure
 
-1. Create a new branch from `main`, e.g. `flux-up` in the [`controlplaneio-fluxcd/flux-operator` repository](https://github.com/controlplaneio-fluxcd/flux-operator).
+## Manifests Update for a New Flux Version
+
+1. Create a new branch from `main`, e.g. `flux-v2.x.x` in the [`controlplaneio-fluxcd/flux-operator` repository](https://github.com/controlplaneio-fluxcd/flux-operator).
 2. Generate the manifests for the latest Flux version by running `make vendor-flux`.
-3. Test the Flux version locally by running `make test-e2e`.
-4. Open a PR with the changes.
-5. After the PR is merged, publish the OCI artifacts with the manifests by running the [`push-manifests` GitHub Workflow](https://github.com/controlplaneio-fluxcd/flux-operator/actions/workflows/push-manifests.yml).
+3. Build the manifests with images digests by running `make build-manifests`.
+4. Write an end-to-end test for the upgrade if the new Flux version is a minor release.
+5. Commit changes and open a PR.
+6. After the PR is merged, publish the OCI artifact with the manifests by running the [`push-manifests` GitHub Workflow](https://github.com/controlplaneio-fluxcd/flux-operator/actions/workflows/push-manifests.yml).
+
+## Manifests Update for Enterprise CVE Fixes
+
+1. Create a new branch from `main`, e.g. `enterprise-cve-fixes` in the [`controlplaneio-fluxcd/flux-operator` repository](https://github.com/controlplaneio-fluxcd/flux-operator).
+2. Rebuild the Flux manifests with the latest image patches by running `make build-manifests`.
+3. Commit changes and open a PR.
+4. After the PR is merged, publish the OCI artifact with the manifests by running the [`push-manifests` GitHub Workflow](https://github.com/controlplaneio-fluxcd/flux-operator/actions/workflows/push-manifests.yml).
