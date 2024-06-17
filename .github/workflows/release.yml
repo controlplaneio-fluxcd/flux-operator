@@ -112,7 +112,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload ${{ github.ref_name }} ./distro/flux-operator/install.yaml
+          mkdir -p distro/flux-operator
+          kustomize build config/default > distro/flux-operator/install.yaml
+          gh release upload ${{ github.ref_name }} distro/flux-operator/install.yaml
       - name: Generate SLSA metadata
         id: slsa
         run: |          
