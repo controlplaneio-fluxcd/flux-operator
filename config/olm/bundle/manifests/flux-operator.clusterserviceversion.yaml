@@ -83,7 +83,7 @@ spec:
     [Flux Operator documentation](https://fluxcd.control-plane.io/operator/).
 
   maturity: beta
-  version: 0.4.0
+  version: ${FLUX_OPERATOR_VERSION}
   minKubeVersion: 1.22.0
   keywords:
     - flux
