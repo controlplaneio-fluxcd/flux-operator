@@ -81,6 +81,7 @@ jobs:
         run: |
           cosign sign --yes ghcr.io/controlplaneio-fluxcd/${{ env.CONTROLLER }}@${{ steps.build-push.outputs.digest }}
       - name: Push and sign manifests
+        if: startsWith(github.ref, 'refs/tags/v')
         env:
           COSIGN_EXPERIMENTAL: 1
         run: |
