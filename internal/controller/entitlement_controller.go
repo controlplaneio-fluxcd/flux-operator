@@ -160,8 +160,8 @@ func (r *EntitlementReconciler) InitEntitlementSecret(ctx context.Context) (*cor
 		}
 	}
 
-	exitingVendor, found := secret.Data[entitlement.VendorKey]
-	if !found || string(exitingVendor) != r.EntitlementClient.GetVendor() {
+	definedVendor, found := secret.Data[entitlement.VendorKey]
+	if !found || string(definedVendor) != r.EntitlementClient.GetVendor() {
 		secret.Data = make(map[string][]byte)
 		secret.Data[entitlement.VendorKey] = []byte(r.EntitlementClient.GetVendor())
 		if err := r.Client.Update(ctx, secret); err != nil {
