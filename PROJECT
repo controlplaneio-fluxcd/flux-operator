@@ -17,4 +17,13 @@ resources:
   kind: FluxInstance
   path: github.com/controlplaneio-fluxcd/flux-operator/api/v1
   version: v1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: controlplane.io
+  group: fluxcd
+  kind: FluxReport
+  path: github.com/controlplaneio-fluxcd/flux-operator/api/v1
+  version: v1
 version: "3"

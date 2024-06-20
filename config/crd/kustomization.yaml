@@ -2,3 +2,4 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
 - bases/fluxcd.controlplane.io_fluxinstances.yaml
+- bases/fluxcd.controlplane.io_fluxreports.yaml

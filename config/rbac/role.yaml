@@ -30,3 +30,29 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - fluxcd.controlplane.io
+  resources:
+  - fluxreports
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - fluxcd.controlplane.io
+  resources:
+  - fluxreports/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - fluxcd.controlplane.io
+  resources:
+  - fluxreports/status
+  verbs:
+  - get
+  - patch
+  - update
