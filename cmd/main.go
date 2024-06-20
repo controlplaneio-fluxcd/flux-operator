@@ -27,10 +27,14 @@ import (
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/controller"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/entitlement"
 	// +kubebuilder:scaffold:imports
 )
 
-const controllerName = "flux-controller"
+const (
+	controllerName   = "flux-operator"
+	defaultNamespace = "flux-system"
+)
 
 var (
 	scheme   = runtime.NewScheme()
@@ -70,6 +74,12 @@ func main() {
 
 	logger.SetLogger(logger.NewLogger(logOptions))
 
+	runtimeNamespace := os.Getenv("RUNTIME_NAMESPACE")
+	if runtimeNamespace == "" {
+		runtimeNamespace = defaultNamespace
+		setupLog.Info("RUNTIME_NAMESPACE env var not set, defaulting to " + defaultNamespace)
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
@@ -95,7 +105,7 @@ func main() {
 					// Only the FluxInstance with the name 'flux' can be reconciled.
 					Field: fields.SelectorFromSet(fields.Set{
 						"metadata.name":      "flux",
-						"metadata.namespace": os.Getenv("RUNTIME_NAMESPACE"),
+						"metadata.namespace": runtimeNamespace,
 					}),
 				},
 			},
@@ -103,6 +113,28 @@ func main() {
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
+		os.Exit(1)
+	}
+
+	entitlementClient, err := entitlement.NewClient()
+	if err != nil {
+		setupLog.Error(err, "unable to create entitlement client")
+		os.Exit(1)
+	}
+
+	if err = (&controller.EntitlementReconciler{
+		Client:            mgr.GetClient(),
+		Scheme:            mgr.GetScheme(),
+		StatusPoller:      polling.NewStatusPoller(mgr.GetClient(), mgr.GetRESTMapper(), polling.Options{}),
+		StatusManager:     controllerName,
+		EventRecorder:     mgr.GetEventRecorderFor(controllerName),
+		WatchNamespace:    runtimeNamespace,
+		EntitlementClient: entitlementClient,
+	}).SetupWithManager(mgr,
+		controller.EntitlementReconcilerOptions{
+			RateLimiter: runtimeCtrl.GetRateLimiter(rateLimiterOptions),
+		}); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Entitlement")
 		os.Exit(1)
 	}
 

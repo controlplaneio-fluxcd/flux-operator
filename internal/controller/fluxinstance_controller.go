@@ -378,6 +378,10 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 				Name:          "kubectl",
 				OperationType: metav1.ManagedFieldsOperationUpdate,
 			},
+			{
+				Name:          "flux-controller",
+				OperationType: metav1.ManagedFieldsOperationApply,
+			},
 		},
 	}
 
