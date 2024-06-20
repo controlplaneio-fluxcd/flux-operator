@@ -100,6 +100,11 @@ func logObjectStatus(t *testing.T, obj client.Object) {
 	t.Log(obj.GetName(), "status:\n", string(sts))
 }
 
+func logObject(t *testing.T, obj interface{}) {
+	sts, _ := yaml.Marshal(obj)
+	t.Log("object:\n", string(sts))
+}
+
 func checkInstanceReadiness(g *gomega.WithT, obj *fluxcdv1.FluxInstance) {
 	statusCheck := kcheck.NewInProgressChecker(testClient)
 	statusCheck.DisableFetch = true
