@@ -110,7 +110,9 @@ spec:
         totalSize: 78.1 KiB
   sync:
     ready: true
-    source: https://github.com/controlplaneio-fluxcd/distribution.git
+    id: kustomization/flux-system
+    path: clusters/production
+    source: https://github.com/my-org/my-fleet.git
     status: 'Applied revision: refs/heads/main@sha1:a90cd1ac35de01c175f7199315d3f4cd60195911'
 status:
   conditions:
@@ -231,8 +233,9 @@ spec:
 
 ### Cluster sync status
 
-The `.spec.sync` field contains information about the Flux sync status,
-including the source URL, the applied revision, and the sync readiness status.
+The `.spec.sync` field contains information about the cluster sync status,
+including the Flux Kustomization name, source URL, the applied revision,
+and the sync readiness status.
 
 Example:
 
@@ -240,6 +243,8 @@ Example:
 spec:
   sync:
     ready: true
+    id: kustomization/flux-system
+    path: tests/v2.3/sources
     source: https://github.com/controlplaneio-fluxcd/distribution.git
     status: 'Applied revision: refs/heads/main@sha1:a90cd1ac35de01c175f7199315d3f4cd60195911'
 ```

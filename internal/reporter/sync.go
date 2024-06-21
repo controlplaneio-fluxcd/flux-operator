@@ -6,6 +6,7 @@ package reporter
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/fluxcd/cli-utils/pkg/kstatus/status"
 	"github.com/fluxcd/pkg/apis/meta"
@@ -44,10 +45,17 @@ func (r *FluxStatusReporter) getSyncStatus(ctx context.Context, crds []metav1.Gr
 	}
 
 	syncStatus := &fluxcdv1.FluxSyncStatus{
+		ID:     fmt.Sprintf("%s/%s", strings.ToLower(syncKind), r.namespace),
 		Ready:  false,
 		Status: "not initialized",
 	}
 
+	// Read spec.path from the sync object.
+	if path, found, _ := unstructured.NestedString(syncObj.Object, "spec", "path"); found {
+		syncStatus.Path = path
+	}
+
+	// Set sync readiness based on the Kustomization object conditions.
 	if obj, err := status.GetObjectWithConditions(syncObj.Object); err == nil {
 		for _, cond := range obj.Status.Conditions {
 			if cond.Type == meta.ReadyCondition {
@@ -57,6 +65,7 @@ func (r *FluxStatusReporter) getSyncStatus(ctx context.Context, crds []metav1.Gr
 		}
 	}
 
+	// Set source URL and readiness based on the source object conditions.
 	if sourceKind, found, _ := unstructured.NestedString(syncObj.Object, "spec", "sourceRef", "kind"); found {
 		sourceGVK := gvkFor(sourceKind, crds)
 		if sourceGVK == nil {

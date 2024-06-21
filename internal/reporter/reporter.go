@@ -100,7 +100,7 @@ func RequestReportUpdate(ctx context.Context, kubeClient client.Client, instance
 	annotations[meta.ReconcileRequestAnnotation] = strconv.FormatInt(metav1.Now().Unix(), 10)
 	report.SetAnnotations(annotations)
 
-	if err := kubeClient.Patch(ctx, report, patch); err != nil {
+	if err := kubeClient.Patch(ctx, report, patch, client.FieldOwner(manager)); err != nil {
 		return fmt.Errorf("failed to annotate %s '%s' error: %w", report.Kind, instance, err)
 	}
 	return nil

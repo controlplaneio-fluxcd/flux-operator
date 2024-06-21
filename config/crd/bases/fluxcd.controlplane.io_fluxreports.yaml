@@ -73,7 +73,9 @@ spec:
                       description: Ready is the readiness status of the Flux component.
                       type: boolean
                     status:
-                      description: Status is the status of the Flux component.
+                      description: |-
+                        Status is a human-readable message indicating details
+                        about the Flux component observed state.
                       type: string
                   required:
                   - image
@@ -93,7 +95,9 @@ spec:
                       Flux instance.
                     type: string
                   status:
-                    description: Status is the status of the Flux instance.
+                    description: |-
+                      Status is a human-readable message indicating details
+                      about the distribution observed state.
                     type: string
                   version:
                     description: Version is the version of the Flux instance.
@@ -154,6 +158,12 @@ spec:
                   SyncStatus is the status of the cluster sync
                   Source and Kustomization resources.
                 properties:
+                  id:
+                    description: ID is the identifier of the sync.
+                    type: string
+                  path:
+                    description: Path is the kustomize path of the sync.
+                    type: string
                   ready:
                     description: Ready is the readiness status of the sync.
                     type: boolean
@@ -161,9 +171,12 @@ spec:
                     description: Source is the URL of the source repository.
                     type: string
                   status:
-                    description: Status is the status of the sync.
+                    description: |-
+                      Status is a human-readable message indicating details
+                      about the sync observed state.
                     type: string
                 required:
+                - id
                 - ready
                 - status
                 type: object

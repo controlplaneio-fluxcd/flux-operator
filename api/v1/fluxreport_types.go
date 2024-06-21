@@ -40,7 +40,8 @@ type FluxDistributionStatus struct {
 	// +required
 	Entitlement string `json:"entitlement"`
 
-	// Status is the status of the Flux instance.
+	// Status is a human-readable message indicating details
+	// about the distribution observed state.
 	// +required
 	Status string `json:"status"`
 
@@ -63,7 +64,8 @@ type FluxComponentStatus struct {
 	// +required
 	Ready bool `json:"ready"`
 
-	// Status is the status of the Flux component.
+	// Status is a human-readable message indicating details
+	// about the Flux component observed state.
 	// +required
 	Status string `json:"status"`
 
@@ -111,11 +113,20 @@ type FluxReconcilerStats struct {
 
 // FluxSyncStatus defines the observed state of the cluster sync.
 type FluxSyncStatus struct {
+	// ID is the identifier of the sync.
+	// +required
+	ID string `json:"id"`
+
+	// Path is the kustomize path of the sync.
+	// +optional
+	Path string `json:"path,omitempty"`
+
 	// Ready is the readiness status of the sync.
 	// +required
 	Ready bool `json:"ready"`
 
-	// Status is the status of the sync.
+	// Status is a human-readable message indicating details
+	// about the sync observed state.
 	// +required
 	Status string `json:"status"`
 

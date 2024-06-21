@@ -102,6 +102,7 @@ func TestFluxReportReconciler_Reconcile(t *testing.T) {
 	// Check reported sync.
 	g.Expect(report.Spec.SyncStatus).ToNot(BeNil())
 	g.Expect(report.Spec.SyncStatus.Source).To(Equal(instance.Spec.Sync.URL))
+	g.Expect(report.Spec.SyncStatus.ID).To(Equal("kustomization/" + ns.Name))
 
 	// Check ready condition.
 	g.Expect(conditions.GetReason(report, meta.ReadyCondition)).To(BeIdenticalTo(meta.SucceededReason))
