@@ -1,4 +1,5 @@
 ## Append samples of your project ##
 resources:
 - fluxcd_v1_fluxinstance.yaml
+- fluxcd_v1_fluxreport.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

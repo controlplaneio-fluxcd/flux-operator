@@ -21,7 +21,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/ratelimiter"
 
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/entitlement"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
 )
 
 // EntitlementReconciler reconciles entitlements.
@@ -75,6 +77,12 @@ func (r *EntitlementReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 
 		log.Info("Entitlement registered", "vendor", r.EntitlementClient.GetVendor())
+
+		if err := reporter.RequestReportUpdate(ctx,
+			r.Client, fluxcdv1.DefaultInstanceName,
+			r.StatusManager, r.WatchNamespace); err != nil {
+			log.Error(err, "failed to request report update")
+		}
 
 		// Requeue to verify the token.
 		return ctrl.Result{Requeue: true}, nil

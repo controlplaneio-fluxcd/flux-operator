@@ -1,0 +1,23 @@
+# permissions for end users to view fluxreports.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: flux-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: fluxreport-viewer-role
+rules:
+- apiGroups:
+  - fluxcd.controlplane.io
+  resources:
+  - fluxreports
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - fluxcd.controlplane.io
+  resources:
+  - fluxreports/status
+  verbs:
+  - get

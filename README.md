@@ -22,6 +22,7 @@ the lifecycle of CNCF [Flux CD](https://fluxcd.io) and the
 - Automates the patching of hotfixes and CVEs affecting the Flux controllers container images.
 - Simplifies the configuration of multi-tenancy lockdown on shared Kubernetes clusters.
 - Allows syncing the cluster state from Git repositories, OCI artifacts and S3-compatible storage.
+- Generates detailed reports about the Flux deployment readiness status and reconcilers statistics.
 - Provides a security-first approach to the Flux deployment and FIPS compliance.
 - Incorporates best practices for running Flux at scale with persistent storage and vertical scaling.
 - Manages the update of Flux custom resources and prevents disruption during the upgrade process.
@@ -32,6 +33,7 @@ the lifecycle of CNCF [Flux CD](https://fluxcd.io) and the
 
 - [Flux operator installation](https://fluxcd.control-plane.io/operator/install/)
 - [Flux controllers configuration](https://fluxcd.control-plane.io/operator/flux-config/)
+- [Flux instance customization](https://fluxcd.control-plane.io/operator/flux-kustomize/)
 - [Cluster sync configuration](https://fluxcd.control-plane.io/operator/flux-sync/)
 - [Migration of bootstrapped clusters](https://fluxcd.control-plane.io/operator/flux-bootstrap-migration/)
 - [FluxInstance API reference](https://fluxcd.control-plane.io/operator/fluxinstance/)
@@ -55,7 +57,7 @@ helm install flux-operator oci://ghcr.io/controlplaneio-fluxcd/charts/flux-opera
 ### Install the Flux Controllers
 
 Create a [FluxInstance](https://fluxcd.control-plane.io/operator/fluxinstance/) resource
-in the `flux-system` namespace to install the latest Flux stable version:
+named `flux` in the `flux-system` namespace to install the latest Flux stable version:
 
 ```yaml
 apiVersion: fluxcd.controlplane.io/v1
@@ -135,6 +137,20 @@ flux create secret git flux-system \
 > For more information on how to configure syncing from Git repositories,
 > container registries and S3-compatible storage, refer to the
 > [cluster sync guide](https://fluxcd.control-plane.io/operator/flux-sync/).
+
+### Monitor the Flux Installation
+
+To monitor the Flux deployment status, check the
+[FluxReport](https://fluxcd.control-plane.io/operator/fluxreport/)
+resource in the `flux-system` namespace:
+
+```shell
+kubectl get fluxreport/flux -n flux-system -o yaml
+```
+
+The report is update at regular intervals and contains information about the deployment
+readiness status, the distribution details, reconcilers statistics, Flux CRDs versions,
+the cluster sync status and more.
 
 ## License
 

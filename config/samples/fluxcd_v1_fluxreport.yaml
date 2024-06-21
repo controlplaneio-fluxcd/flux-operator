@@ -1,0 +1,8 @@
+apiVersion: fluxcd.controlplane.io/v1
+kind: FluxReport
+metadata:
+  name: flux
+spec:
+  distribution:
+    entitlement: "unknown"
+    status: "unknown"

@@ -13,6 +13,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/probes"
 	flag "github.com/spf13/pflag"
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -31,10 +32,7 @@ import (
 	// +kubebuilder:scaffold:imports
 )
 
-const (
-	controllerName   = "flux-operator"
-	defaultNamespace = "flux-system"
-)
+const controllerName = "flux-operator"
 
 var (
 	scheme   = runtime.NewScheme()
@@ -44,6 +42,7 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
+	utilruntime.Must(apiextensionsv1.AddToScheme(scheme))
 	utilruntime.Must(fluxcdv1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
@@ -76,8 +75,8 @@ func main() {
 
 	runtimeNamespace := os.Getenv("RUNTIME_NAMESPACE")
 	if runtimeNamespace == "" {
-		runtimeNamespace = defaultNamespace
-		setupLog.Info("RUNTIME_NAMESPACE env var not set, defaulting to " + defaultNamespace)
+		runtimeNamespace = fluxcdv1.DefaultNamespace
+		setupLog.Info("RUNTIME_NAMESPACE env var not set, defaulting to " + fluxcdv1.DefaultNamespace)
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
@@ -104,7 +103,14 @@ func main() {
 				&fluxcdv1.FluxInstance{}: {
 					// Only the FluxInstance with the name 'flux' can be reconciled.
 					Field: fields.SelectorFromSet(fields.Set{
-						"metadata.name":      "flux",
+						"metadata.name":      fluxcdv1.DefaultInstanceName,
+						"metadata.namespace": runtimeNamespace,
+					}),
+				},
+				&fluxcdv1.FluxReport{}: {
+					// Only the FluxReport with the name 'flux' can be reconciled.
+					Field: fields.SelectorFromSet(fields.Set{
+						"metadata.name":      fluxcdv1.DefaultInstanceName,
 						"metadata.namespace": runtimeNamespace,
 					}),
 				},
@@ -150,6 +156,20 @@ func main() {
 			RateLimiter: runtimeCtrl.GetRateLimiter(rateLimiterOptions),
 		}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", fluxcdv1.FluxInstanceKind)
+		os.Exit(1)
+	}
+
+	if err = (&controller.FluxReportReconciler{
+		Client:         mgr.GetClient(),
+		Scheme:         mgr.GetScheme(),
+		StatusManager:  controllerName,
+		EventRecorder:  mgr.GetEventRecorderFor(controllerName),
+		WatchNamespace: runtimeNamespace,
+	}).SetupWithManager(mgr,
+		controller.FluxReportReconcilerOptions{
+			RateLimiter: runtimeCtrl.GetRateLimiter(rateLimiterOptions),
+		}); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", fluxcdv1.FluxReportKind)
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

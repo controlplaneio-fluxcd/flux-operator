@@ -15,9 +15,11 @@ import (
 )
 
 const (
-	FluxInstanceKind = "FluxInstance"
-	EnabledValue     = "enabled"
-	DisabledValue    = "disabled"
+	DefaultInstanceName = "flux"
+	DefaultNamespace    = "flux-system"
+	FluxInstanceKind    = "FluxInstance"
+	EnabledValue        = "enabled"
+	DisabledValue       = "disabled"
 )
 
 var (
