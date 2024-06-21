@@ -15,6 +15,10 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
+    - jsonPath: .spec.distribution.entitlement
+      name: Entitlement
+      priority: 10
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -23,6 +27,9 @@ spec:
       type: string
     - jsonPath: .status.conditions[?(@.type=="Ready")].message
       name: Status
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].lastTransitionTime
+      name: LastUpdated
       type: string
     name: v1
     schema:

@@ -136,9 +136,11 @@ type FluxReportStatus struct {
 // +kubebuilder:storageversion
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Entitlement",type="string",JSONPath=".spec.distribution.entitlement",description="",priority=10
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description=""
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",description=""
+// +kubebuilder:printcolumn:name="LastUpdated",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].lastTransitionTime",description=""
 
 // FluxReport is the Schema for the fluxreports API.
 type FluxReport struct {
