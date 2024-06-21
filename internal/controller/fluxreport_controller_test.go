@@ -29,6 +29,17 @@ func TestFluxReportReconciler_Reconcile(t *testing.T) {
 	ns, err := testEnv.CreateNamespace(ctx, "test")
 	g.Expect(err).ToNot(HaveOccurred())
 
+	// Initialize the report.
+	report := &fluxcdv1.FluxReport{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fluxcdv1.DefaultInstanceName,
+			Namespace: ns.Name,
+		},
+	}
+	err = reportRec.initReport(ctx, report.GetName(), report.GetNamespace())
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Create the Flux instance.
 	instance := &fluxcdv1.FluxInstance{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ns.Name,
@@ -36,7 +47,6 @@ func TestFluxReportReconciler_Reconcile(t *testing.T) {
 		},
 		Spec: getDefaultFluxSpec(),
 	}
-
 	err = testEnv.Create(ctx, instance)
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -59,17 +69,6 @@ func TestFluxReportReconciler_Reconcile(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 	checkInstanceReadiness(g, instance)
 
-	report := &fluxcdv1.FluxReport{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fluxcdv1.DefaultInstanceName,
-			Namespace: ns.Name,
-		},
-	}
-
-	// Initialize the report.
-	err = reportRec.initReport(ctx, report.GetName(), report.GetNamespace())
-	g.Expect(err).ToNot(HaveOccurred())
-
 	// Compute instance report.
 	r, err = reportRec.Reconcile(ctx, reconcile.Request{
 		NamespacedName: client.ObjectKeyFromObject(report),
@@ -80,6 +79,9 @@ func TestFluxReportReconciler_Reconcile(t *testing.T) {
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(report), report)
 	g.Expect(err).ToNot(HaveOccurred())
 	logObject(t, report)
+
+	// Check annotation set by the instance reconciler.
+	g.Expect(report.GetAnnotations()).To(HaveKey(meta.ReconcileRequestAnnotation))
 
 	// Check reported components.
 	g.Expect(report.Spec.ComponentsStatus).To(HaveLen(len(instance.Status.Components)))
@@ -125,10 +127,11 @@ func TestFluxReportReconciler_Reconcile(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// Read the report and verify distribution.
-	err = testClient.Get(ctx, client.ObjectKeyFromObject(report), report)
+	emptyReport := &fluxcdv1.FluxReport{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(report), emptyReport)
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(report.Spec.Distribution.Status).To(Equal("Not Installed"))
-	g.Expect(report.Spec.Distribution.Entitlement).To(Equal("Issued by " + entitlement.DefaultVendor))
+	g.Expect(emptyReport.Spec.Distribution.Status).To(Equal("Not Installed"))
+	g.Expect(emptyReport.Spec.Distribution.Entitlement).To(Equal("Issued by " + entitlement.DefaultVendor))
 }
 
 func getFluxReportReconciler() *FluxReportReconciler {

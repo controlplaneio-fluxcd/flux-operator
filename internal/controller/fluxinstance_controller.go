@@ -32,6 +32,7 @@ import (
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/builder"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/inventory"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
 )
 
 // FluxInstanceReconciler reconciles a FluxInstance object
@@ -67,6 +68,12 @@ func (r *FluxInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		if err := r.finalizeStatus(ctx, obj, patcher); err != nil {
 			log.Error(err, "failed to update status")
 			retErr = kerrors.NewAggregate([]error{retErr, err})
+		}
+
+		if err := reporter.RequestReportUpdate(ctx,
+			r.Client, fluxcdv1.DefaultInstanceName,
+			r.StatusManager, obj.Namespace); err != nil {
+			log.Error(err, "failed to request report update")
 		}
 	}()
 
