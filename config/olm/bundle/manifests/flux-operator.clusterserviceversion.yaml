@@ -281,7 +281,7 @@ spec:
                     emptyDir: {}
   installModes:
     - type: OwnNamespace
-      supported: false
+      supported: true
     - type: SingleNamespace
       supported: false
     - type: MultiNamespace
