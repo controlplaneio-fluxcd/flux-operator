@@ -273,17 +273,13 @@ func (in *FluxInstance) GetComponents() []string {
 func (in *FluxInstance) GetCluster() Cluster {
 	cluster := in.Spec.Cluster
 	if cluster == nil {
-		cluster = &Cluster{}
+		return Cluster{
+			Type:          "kubernetes",
+			Domain:        "cluster.local",
+			NetworkPolicy: true,
+		}
 	}
-	if cluster.Domain == "" {
-		cluster.Domain = "cluster.local"
-	}
-	if cluster.NetworkPolicy {
-		cluster.NetworkPolicy = true
-	}
-	if cluster.Type == "" {
-		cluster.Type = "kubernetes"
-	}
+
 	return *cluster
 }
 
