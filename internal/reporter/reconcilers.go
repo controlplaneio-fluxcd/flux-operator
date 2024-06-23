@@ -22,6 +22,7 @@ import (
 
 func (r *FluxStatusReporter) getReconcilersStatus(ctx context.Context, crds []metav1.GroupVersionKind) ([]fluxcdv1.FluxReconcilerStatus, error) {
 	var multiErr error
+	ResetMetrics("FluxResource")
 	resStats := make([]fluxcdv1.FluxReconcilerStatus, len(crds))
 	for i, gvk := range crds {
 		var total int
@@ -40,6 +41,8 @@ func (r *FluxStatusReporter) getReconcilersStatus(ctx context.Context, crds []me
 			total = len(list.Items)
 
 			for _, item := range list.Items {
+				RecordMetrics(item)
+
 				if s, _, _ := unstructured.NestedBool(item.Object, "spec", "suspend"); s {
 					suspended++
 				}

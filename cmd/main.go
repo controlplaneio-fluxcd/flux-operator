@@ -29,6 +29,7 @@ import (
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/controller"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/entitlement"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -78,6 +79,8 @@ func main() {
 		runtimeNamespace = fluxcdv1.DefaultNamespace
 		setupLog.Info("RUNTIME_NAMESPACE env var not set, defaulting to " + fluxcdv1.DefaultNamespace)
 	}
+
+	reporter.MustRegisterMetrics()
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,

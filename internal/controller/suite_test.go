@@ -31,6 +31,7 @@ import (
 	// +kubebuilder:scaffold:imports
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
 )
 
 var (
@@ -63,6 +64,8 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create test environment client: %v", err))
 	}
+
+	reporter.MustRegisterMetrics()
 
 	go func() {
 		fmt.Println("Starting the test environment")
