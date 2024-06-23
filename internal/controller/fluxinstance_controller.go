@@ -21,6 +21,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
 	kuberecorder "k8s.io/client-go/tools/record"
@@ -68,6 +69,10 @@ func (r *FluxInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		if err := r.finalizeStatus(ctx, obj, patcher); err != nil {
 			log.Error(err, "failed to update status")
 			retErr = kerrors.NewAggregate([]error{retErr, err})
+		}
+
+		if err := r.recordMetrics(obj); err != nil {
+			log.Error(err, "failed to record metrics")
 		}
 
 		if err := reporter.RequestReportUpdate(ctx,
@@ -566,4 +571,17 @@ func fmtDuration(t time.Time) string {
 	} else {
 		return time.Since(t).Round(time.Second).String()
 	}
+}
+
+func (r *FluxInstanceReconciler) recordMetrics(obj *fluxcdv1.FluxInstance) error {
+	if !obj.ObjectMeta.DeletionTimestamp.IsZero() {
+		reporter.ResetMetrics(fluxcdv1.FluxInstanceKind)
+		return nil
+	}
+	rawMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
+	if err != nil {
+		return err
+	}
+	reporter.RecordMetrics(unstructured.Unstructured{Object: rawMap})
+	return nil
 }
