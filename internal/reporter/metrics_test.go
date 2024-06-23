@@ -76,9 +76,9 @@ func TestRecordMetrics_FluxResource(t *testing.T) {
 	RecordMetrics(ks)
 
 	metricFamilies, err := reg.Gather()
-	g.Expect(err).To(BeNil())
-	g.Expect(len(metricFamilies)).To(Equal(1))
-	g.Expect(len(metricFamilies[0].Metric)).To(Equal(2))
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(metricFamilies).To(HaveLen(1))
+	g.Expect(metricFamilies[0].Metric).To(HaveLen(2))
 
 	repoMetric := metricFamilies[0].Metric[0]
 	repoLabels := repoMetric.GetLabel()
@@ -134,6 +134,6 @@ func TestRecordMetrics_FluxResource(t *testing.T) {
 
 	ResetMetrics("FluxResource")
 	metricFamilies, err = reg.Gather()
-	g.Expect(err).To(BeNil())
-	g.Expect(len(metricFamilies)).To(Equal(0))
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(metricFamilies).To(BeEmpty())
 }

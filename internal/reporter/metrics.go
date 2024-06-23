@@ -37,10 +37,10 @@ func RecordMetrics(obj unstructured.Unstructured) {
 		applyRev, _, _ := unstructured.NestedString(obj.Object, "status", "lastAppliedRevision")
 		labels["revision"] = applyRev
 
-		labels["suspended"] = "False"
+		labels["suspended"] = falseValue
 		val, ok := obj.GetAnnotations()[fluxcdv1.ReconcileAnnotation]
 		if ok && strings.ToLower(val) == fluxcdv1.DisabledValue {
-			labels["suspended"] = "True"
+			labels["suspended"] = trueValue
 		}
 
 		metrics[kind].Reset()
@@ -54,6 +54,11 @@ func RecordMetrics(obj unstructured.Unstructured) {
 func ResetMetrics(kind string) {
 	metrics[kind].Reset()
 }
+
+const (
+	trueValue  = "True"
+	falseValue = "False"
+)
 
 var commonLabels = []string{"uid", "kind", "name", "exported_namespace", "ready", "suspended"}
 
@@ -102,9 +107,10 @@ func commonLabelsToValues(obj unstructured.Unstructured) prometheus.Labels {
 	return labels
 }
 
+// nolint: gocyclo
 func fluxLabelsToValues(obj unstructured.Unstructured) prometheus.Labels {
 	labels := commonLabelsToValues(obj)
-	labels["suspended"] = "False"
+	labels["suspended"] = falseValue
 	labels["revision"] = ""
 	labels["url"] = ""
 	labels["ref"] = ""
@@ -112,7 +118,7 @@ func fluxLabelsToValues(obj unstructured.Unstructured) prometheus.Labels {
 	labels["path"] = ""
 
 	if suspended, _, _ := unstructured.NestedBool(obj.Object, "spec", "suspend"); suspended {
-		labels["suspended"] = "True"
+		labels["suspended"] = trueValue
 	}
 
 	if source, found, _ := unstructured.NestedString(obj.Object, "spec", "sourceRef", "name"); found {
@@ -172,12 +178,12 @@ func fluxLabelsToValues(obj unstructured.Unstructured) prometheus.Labels {
 		}
 	case "HelmRepository":
 		if t, _, _ := unstructured.NestedString(obj.Object, "spec", "type"); t == "oci" {
-			labels["ready"] = "True"
+			labels["ready"] = trueValue
 		}
 	case "Alert":
-		labels["ready"] = "True"
+		labels["ready"] = trueValue
 	case "Provider":
-		labels["ready"] = "True"
+		labels["ready"] = trueValue
 	case "Receiver":
 		if url, found, _ := unstructured.NestedString(obj.Object, "status", "webhookPath"); found {
 			labels["url"] = url

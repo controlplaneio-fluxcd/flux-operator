@@ -659,3 +659,25 @@ Status:
   Last Applied Revision:    v2.3.0@sha256:4cc5babdb1279ad0177bf513292deadbfa3f7b7c3da0be7fa53b39ab434f7219
   Last Attempted Revision:  v2.3.0@sha256:4cc5babdb1279ad0177bf513292deadbfa3f7b7c3da0be7fa53b39ab434f7219
 ```
+
+## FluxInstance Metrics
+
+The Flux Operator exports metrics for the FluxInstance resource.
+These metrics are refreshed every time the operator reconciles the instance.
+
+Metrics:
+
+```text
+flux_instance_info{uid, kind, name, exported_namespace, ready, suspended, registry, revision}
+```
+
+Labels:
+
+- `uid`: The Kubernetes unique identifier of the resource.
+- `kind`: The kind of the resource (e.g. `FluxInstance`).
+- `name`: The name of the resource (e.g. `flux`).
+- `exported_namespace`: The namespace where the resource is deployed (e.g. `flux-system`).
+- `ready`: The readiness status of the resource (e.g. `True`, `False` or `Unkown`).
+- `suspended`: The suspended status of the resource (e.g. `True` or `False`).
+- `registry`: The container registry used by the instance (e.g. `ghcr.io/fluxcd`).
+- `revision`: The Flux revision installed by the instance (e.g. `v2.3.0@sha256:75aa209c6a...`).

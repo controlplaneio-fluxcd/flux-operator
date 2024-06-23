@@ -264,3 +264,39 @@ The reconciliation behaviour can be configured using the following annotations:
 
 - `fluxcd.controlplane.io/reconcile`: Enable or disable the reconciliation loop. Default is `enabled`, set to `disabled` to pause the reconciliation.
 - `fluxcd.controlplane.io/reconcileEvery`: Set the reconciliation interval. Default is `10m`.
+
+## Flux Resource Metrics
+
+The Flux Operator exports metrics for all Flux resources found in the cluster.
+These metrics are refreshed at the same time with the update of the FluxReport.
+
+Metrics:
+
+```text
+flux_resource_info{uid, kind, name, exported_namespace, ready, suspended, ...}
+```
+
+Common labels:
+
+- `uid`: The Kubernetes unique identifier of the resource.
+- `kind`: The kind of the resource (e.g. `GitRepository`, `Kustomization`, etc.).
+- `name`: The name of the resource (e.g. `flux-system`).
+- `exported_namespace`: The namespace of the resource (e.g. `flux-system`).
+- `ready`: The readiness status of the resource (e.g. `True`, `False` or `Unkown`).
+- `suspended`: The suspended status of the resource (e.g. `True` or `False`).
+
+Specific labels per resource kind:
+
+| Resource Kind         | Labels                            |
+|-----------------------|-----------------------------------|
+| Kustomization         | `revision`, `source_name`, `path` |
+| GitRepository         | `revision`, `url`, `ref`          |
+| OCIRepository         | `revision`, `url`, `ref`          |
+| Bucket                | `revision`, `url`, `ref`          |
+| HelmRelease           | `revision`, `source_name`         |
+| HelmChart             | `revision`, `source_name`         |
+| HelmRepository        | `revision`, `url`                 |
+| Receiver              | `url`                             |
+| ImageRepository       | `url`                             |
+| ImagePolicy           | `source_name`                     |
+| ImageUpdateAutomation | `source_name`                     |
