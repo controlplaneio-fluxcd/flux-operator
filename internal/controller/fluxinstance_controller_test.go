@@ -94,6 +94,14 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 			ID:      fmt.Sprintf("%s_notification-controller_apps_Deployment", ns.Name),
 			Version: "v1",
 		},
+		fluxcdv1.ResourceRef{
+			ID:      fmt.Sprintf("%s_allow-egress_networking.k8s.io_NetworkPolicy", ns.Name),
+			Version: "v1",
+		},
+		fluxcdv1.ResourceRef{
+			ID:      fmt.Sprintf("_cluster-reconciler-%s_rbac.authorization.k8s.io_ClusterRoleBinding", ns.Name),
+			Version: "v1",
+		},
 	))
 
 	// Check if components images were recorded.
