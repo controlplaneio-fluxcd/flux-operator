@@ -283,6 +283,7 @@ Common labels:
 - `name`: The name of the resource (e.g. `flux-system`).
 - `exported_namespace`: The namespace of the resource (e.g. `flux-system`).
 - `ready`: The readiness status of the resource (e.g. `True`, `False` or `Unkown`).
+- `reason`: The reason for the readiness status (e.g. `Progressing`, `BuildFailed`, `HealthCheckFailed`, etc.).
 - `suspended`: The suspended status of the resource (e.g. `True` or `False`).
 
 Specific labels per resource kind:
@@ -300,3 +301,20 @@ Specific labels per resource kind:
 | ImageRepository       | `url`                             |
 | ImagePolicy           | `source_name`                     |
 | ImageUpdateAutomation | `source_name`                     |
+
+Example:
+
+```text
+flux_resource_info{
+    exported_namespace="flux-system",
+    kind="Kustomization",
+    name="flux-system",
+    path="production/clusters",
+    ready="True",
+    reason="ReconciliationSucceeded",
+    revision="refs/heads/main@sha1:d3c6dfa21465cc540d214811f46694fee0ce700d",
+    source_name="flux-system",
+    suspended="False",
+    uid="359219f3-0793-4cf0-89a1-990ef1ac8098"
+}
+```

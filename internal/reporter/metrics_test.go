@@ -36,6 +36,7 @@ func TestRecordMetrics_FluxResource(t *testing.T) {
 					map[string]interface{}{
 						"type":   "Ready",
 						"status": "Unknown",
+						"reason": "Progressing",
 					},
 				},
 			},
@@ -66,6 +67,7 @@ func TestRecordMetrics_FluxResource(t *testing.T) {
 					map[string]interface{}{
 						"type":   "Ready",
 						"status": "True",
+						"reason": "ReconciliationSucceeded",
 					},
 				},
 				"lastAttemptedRevision": "6.6.3@sha1:b0c487c6b217bed8e6a53fca25f6ee1a7dd573e3",
@@ -82,7 +84,7 @@ func TestRecordMetrics_FluxResource(t *testing.T) {
 
 	repoMetric := metricFamilies[0].Metric[0]
 	repoLabels := repoMetric.GetLabel()
-	g.Expect(repoLabels).To(HaveLen(11))
+	g.Expect(repoLabels).To(HaveLen(12))
 	g.Expect(repoLabels[0].GetName()).To(Equal("exported_namespace"))
 	g.Expect(repoLabels[0].GetValue()).To(Equal("flux-system"))
 	g.Expect(repoLabels[1].GetName()).To(Equal("kind"))
@@ -93,22 +95,24 @@ func TestRecordMetrics_FluxResource(t *testing.T) {
 	g.Expect(repoLabels[3].GetValue()).To(Equal(""))
 	g.Expect(repoLabels[4].GetName()).To(Equal("ready"))
 	g.Expect(repoLabels[4].GetValue()).To(Equal("Unknown"))
-	g.Expect(repoLabels[5].GetName()).To(Equal("ref"))
-	g.Expect(repoLabels[5].GetValue()).To(Equal("main"))
-	g.Expect(repoLabels[6].GetName()).To(Equal("revision"))
-	g.Expect(repoLabels[6].GetValue()).To(Equal("6.6.3@sha1:b0c487c6b217bed8e6a53fca25f6ee1a7dd573e3"))
-	g.Expect(repoLabels[7].GetName()).To(Equal("source_name"))
-	g.Expect(repoLabels[7].GetValue()).To(Equal(""))
-	g.Expect(repoLabels[8].GetName()).To(Equal("suspended"))
-	g.Expect(repoLabels[8].GetValue()).To(Equal("False"))
-	g.Expect(repoLabels[9].GetName()).To(Equal("uid"))
-	g.Expect(repoLabels[9].GetValue()).To(Equal("f252c583-d7b7-4236-b436-618eb5eb3023"))
-	g.Expect(repoLabels[10].GetName()).To(Equal("url"))
-	g.Expect(repoLabels[10].GetValue()).To(Equal("ssh://test/repo"))
+	g.Expect(repoLabels[5].GetName()).To(Equal("reason"))
+	g.Expect(repoLabels[5].GetValue()).To(Equal("Progressing"))
+	g.Expect(repoLabels[6].GetName()).To(Equal("ref"))
+	g.Expect(repoLabels[6].GetValue()).To(Equal("main"))
+	g.Expect(repoLabels[7].GetName()).To(Equal("revision"))
+	g.Expect(repoLabels[7].GetValue()).To(Equal("6.6.3@sha1:b0c487c6b217bed8e6a53fca25f6ee1a7dd573e3"))
+	g.Expect(repoLabels[8].GetName()).To(Equal("source_name"))
+	g.Expect(repoLabels[8].GetValue()).To(Equal(""))
+	g.Expect(repoLabels[9].GetName()).To(Equal("suspended"))
+	g.Expect(repoLabels[9].GetValue()).To(Equal("False"))
+	g.Expect(repoLabels[10].GetName()).To(Equal("uid"))
+	g.Expect(repoLabels[10].GetValue()).To(Equal("f252c583-d7b7-4236-b436-618eb5eb3023"))
+	g.Expect(repoLabels[11].GetName()).To(Equal("url"))
+	g.Expect(repoLabels[11].GetValue()).To(Equal("ssh://test/repo"))
 
 	ksMetric := metricFamilies[0].Metric[1]
 	ksLabels := ksMetric.GetLabel()
-	g.Expect(ksLabels).To(HaveLen(11))
+	g.Expect(ksLabels).To(HaveLen(12))
 	g.Expect(ksLabels[0].GetName()).To(Equal("exported_namespace"))
 	g.Expect(ksLabels[0].GetValue()).To(Equal("flux-system"))
 	g.Expect(ksLabels[1].GetName()).To(Equal("kind"))
@@ -119,18 +123,20 @@ func TestRecordMetrics_FluxResource(t *testing.T) {
 	g.Expect(ksLabels[3].GetValue()).To(Equal("clusters/production"))
 	g.Expect(ksLabels[4].GetName()).To(Equal("ready"))
 	g.Expect(ksLabels[4].GetValue()).To(Equal("True"))
-	g.Expect(ksLabels[5].GetName()).To(Equal("ref"))
-	g.Expect(ksLabels[5].GetValue()).To(Equal(""))
-	g.Expect(ksLabels[6].GetName()).To(Equal("revision"))
-	g.Expect(ksLabels[6].GetValue()).To(Equal("6.6.3@sha1:b0c487c6b217bed8e6a53fca25f6ee1a7dd573e3"))
-	g.Expect(ksLabels[7].GetName()).To(Equal("source_name"))
-	g.Expect(ksLabels[7].GetValue()).To(Equal("flux-system"))
-	g.Expect(ksLabels[8].GetName()).To(Equal("suspended"))
-	g.Expect(ksLabels[8].GetValue()).To(Equal("True"))
-	g.Expect(ksLabels[9].GetName()).To(Equal("uid"))
-	g.Expect(ksLabels[9].GetValue()).To(Equal("1a0105c8-1ad2-4c5d-9d25-22096796156f"))
-	g.Expect(ksLabels[10].GetName()).To(Equal("url"))
-	g.Expect(ksLabels[10].GetValue()).To(Equal(""))
+	g.Expect(ksLabels[5].GetName()).To(Equal("reason"))
+	g.Expect(ksLabels[5].GetValue()).To(Equal("ReconciliationSucceeded"))
+	g.Expect(ksLabels[6].GetName()).To(Equal("ref"))
+	g.Expect(ksLabels[6].GetValue()).To(Equal(""))
+	g.Expect(ksLabels[7].GetName()).To(Equal("revision"))
+	g.Expect(ksLabels[7].GetValue()).To(Equal("6.6.3@sha1:b0c487c6b217bed8e6a53fca25f6ee1a7dd573e3"))
+	g.Expect(ksLabels[8].GetName()).To(Equal("source_name"))
+	g.Expect(ksLabels[8].GetValue()).To(Equal("flux-system"))
+	g.Expect(ksLabels[9].GetName()).To(Equal("suspended"))
+	g.Expect(ksLabels[9].GetValue()).To(Equal("True"))
+	g.Expect(ksLabels[10].GetName()).To(Equal("uid"))
+	g.Expect(ksLabels[10].GetValue()).To(Equal("1a0105c8-1ad2-4c5d-9d25-22096796156f"))
+	g.Expect(ksLabels[11].GetName()).To(Equal("url"))
+	g.Expect(ksLabels[11].GetValue()).To(Equal(""))
 
 	ResetMetrics("FluxResource")
 	metricFamilies, err = reg.Gather()

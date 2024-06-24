@@ -678,6 +678,23 @@ Labels:
 - `name`: The name of the resource (e.g. `flux`).
 - `exported_namespace`: The namespace where the resource is deployed (e.g. `flux-system`).
 - `ready`: The readiness status of the resource (e.g. `True`, `False` or `Unkown`).
+- `reason`: The reason for the readiness status (e.g. `Progressing`, `BuildFailed`, `HealthCheckFailed`, etc.).
 - `suspended`: The suspended status of the resource (e.g. `True` or `False`).
 - `registry`: The container registry used by the instance (e.g. `ghcr.io/fluxcd`).
 - `revision`: The Flux revision installed by the instance (e.g. `v2.3.0@sha256:75aa209c6a...`).
+
+Example:
+
+```text
+flux_instance_info{
+   exported_namespace="flux-system",
+   kind="FluxInstance",
+   name="flux",
+   ready="True",
+   reason="ReconciliationSucceeded",
+   registry="ghcr.io/fluxcd",
+   revision="v2.3.0@sha256:75aa209c6a2e25b97114ccf092246d02ab4363bc136edefc239d2a88da882b63",
+   suspended="False",
+   uid="16ca7202-9319-445b-99d0-617c25bda182"
+}
+```

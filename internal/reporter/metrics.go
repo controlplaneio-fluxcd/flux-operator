@@ -60,7 +60,7 @@ const (
 	falseValue = "False"
 )
 
-var commonLabels = []string{"uid", "kind", "name", "exported_namespace", "ready", "suspended"}
+var commonLabels = []string{"uid", "kind", "name", "exported_namespace", "ready", "reason", "suspended"}
 
 var metrics = map[string]*prometheus.GaugeVec{
 	"FluxInstance": prometheus.NewGaugeVec(
@@ -92,6 +92,7 @@ func commonLabelsToValues(obj unstructured.Unstructured) prometheus.Labels {
 	labels["name"] = obj.GetName()
 	labels["exported_namespace"] = obj.GetNamespace()
 	labels["ready"] = "Unknown"
+	labels["reason"] = ""
 
 	conditions, found, _ := unstructured.NestedSlice(obj.Object, "status", "conditions")
 	if found {
@@ -99,6 +100,7 @@ func commonLabelsToValues(obj unstructured.Unstructured) prometheus.Labels {
 			conditionMap := condition.(map[string]interface{})
 			if conditionMap["type"] == "Ready" {
 				labels["ready"] = conditionMap["status"].(string)
+				labels["reason"] = conditionMap["reason"].(string)
 				break
 			}
 		}
