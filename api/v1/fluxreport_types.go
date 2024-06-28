@@ -4,6 +4,7 @@
 package v1
 
 import (
+	"os"
 	"strings"
 	"time"
 
@@ -11,7 +12,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const FluxReportKind = "FluxReport"
+const (
+	FluxReportKind       = "FluxReport"
+	ReportIntervalEvnKey = "REPORTING_INTERVAL"
+)
 
 // FluxReportSpec defines the observed state of a Flux installation.
 type FluxReportSpec struct {
@@ -188,13 +192,21 @@ func (in *FluxReport) IsDisabled() bool {
 }
 
 // GetInterval returns the interval at which the object should be reconciled.
-// If no interval is set, the default is 10 minutes.
+// If the annotation is not set, the interval is read from the
+// REPORTING_INTERVAL environment variable. If the variable is not set,
+// the default interval is 5 minutes.
 func (in *FluxReport) GetInterval() time.Duration {
 	val, ok := in.GetAnnotations()[ReconcileAnnotation]
 	if ok && strings.ToLower(val) == DisabledValue {
 		return 0
 	}
-	defaultInterval := 10 * time.Minute
+	defaultInterval := 5 * time.Minute
+	if ri, _ := os.LookupEnv(ReportIntervalEvnKey); ri != "" {
+		if d, err := time.ParseDuration(ri); err != nil {
+			defaultInterval = d
+		}
+	}
+
 	val, ok = in.GetAnnotations()[ReconcileEveryAnnotation]
 	if !ok {
 		return defaultInterval
