@@ -598,6 +598,58 @@ func TestFluxInstanceReconciler_Profiles(t *testing.T) {
 	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 }
 
+func TestFluxInstanceReconciler_NewVersion(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getFluxInstanceReconciler()
+	spec := getDefaultFluxSpec()
+	spec.Distribution.Version = "v2.2.x"
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	obj := &fluxcdv1.FluxInstance{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ns.Name,
+			Namespace: ns.Name,
+		},
+		Spec: spec,
+	}
+
+	err = testClient.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize the instance.
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Install the instance.
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Check if events were recorded for each step.
+	events := getEvents(obj.Name)
+	g.Expect(events).To(HaveLen(3))
+	g.Expect(events[0].Reason).To(Equal("OutdatedVersion"))
+
+	err = testClient.Delete(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.IsZero()).To(BeTrue())
+
+}
+
 func getDefaultFluxSpec() fluxcdv1.FluxInstanceSpec {
 	return fluxcdv1.FluxInstanceSpec{
 		Wait: false,
