@@ -175,6 +175,15 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", fluxcdv1.FluxReportKind)
 		os.Exit(1)
 	}
+
+	if err = (&controller.EventWatcher{
+		Client:        mgr.GetClient(),
+		Scheme:        mgr.GetScheme(),
+		EventRecorder: mgr.GetEventRecorderFor(controllerName),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Event")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	probes.SetupChecks(mgr, setupLog)
