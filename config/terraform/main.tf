@@ -27,7 +27,7 @@ resource "kubernetes_namespace" "flux_system" {
 // Create a Kubernetes secret with the Git credentials
 // if a Git token is provided.
 resource "kubernetes_secret" "git_auth" {
-  count = var.git_token != "" ? 1 : 0
+  count      = var.git_token != "" ? 1 : 0
   depends_on = [kubernetes_namespace.flux_system]
 
   metadata {
@@ -63,7 +63,12 @@ resource "helm_release" "flux_instance" {
   repository = "oci://ghcr.io/controlplaneio-fluxcd/charts"
   chart      = "flux-instance"
 
-  // Configure the Flux components and automated upgrades.
+  // Configure the Flux components and kustomize patches.
+  values = [
+    file("values/components.yaml")
+  ]
+
+  // Configure the Flux distribution.
   set {
     name  = "instance.distribution.version"
     value = var.flux_version
@@ -71,17 +76,6 @@ resource "helm_release" "flux_instance" {
   set {
     name  = "instance.distribution.registry"
     value = var.flux_registry
-  }
-  set_list {
-    name = "instance.components"
-    value = [
-      "source-controller",
-      "kustomize-controller",
-      "helm-controller",
-      "notification-controller",
-      "image-reflector-controller",
-      "image-automation-controller"
-    ]
   }
 
   // Configure Flux Git sync.
@@ -106,4 +100,3 @@ resource "helm_release" "flux_instance" {
     value = var.git_token != "" ? "flux-system" : ""
   }
 }
-
