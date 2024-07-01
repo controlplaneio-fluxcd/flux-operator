@@ -20,6 +20,7 @@ const (
 	FluxInstanceKind    = "FluxInstance"
 	EnabledValue        = "enabled"
 	DisabledValue       = "disabled"
+	OutdatedReason      = "OutdatedVersion"
 )
 
 var (

@@ -275,6 +275,17 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 		}
 	}
 
+	latestVer, err := builder.MatchVersion(fluxManifestsDir, "2.x")
+	if err != nil {
+		return nil, err
+	}
+
+	if ver != latestVer {
+		msg := fmt.Sprintf("Flux %s is outdated, the latest stable version is %s", ver, latestVer)
+		r.EventRecorder.Event(obj, corev1.EventTypeNormal, fluxcdv1.OutdatedReason, msg)
+		log.Info(msg)
+	}
+
 	options := builder.MakeDefaultOptions()
 	options.Version = ver
 	options.Registry = obj.GetDistribution().Registry
