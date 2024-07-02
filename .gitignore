@@ -21,3 +21,10 @@
 go.work
 bin/
 disto/
+
+# Terraform
+**/.terraform
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+.terraformrc
