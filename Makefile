@@ -140,7 +140,7 @@ load-image: ## Load image into a Kind cluster.
 .PHONY: deploy
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	mkdir -p config/dev && cp config/default/* config/dev
-	cd config/dev && $(KUSTOMIZE) edit set image flux-operator=${IMG}
+	cd config/dev && $(KUSTOMIZE) edit set image ghcr.io/controlplaneio-fluxcd/flux-operator=${IMG}
 	$(KUSTOMIZE) build config/dev | $(KUBECTL) apply -f -
 	rm -rf config/dev
 
