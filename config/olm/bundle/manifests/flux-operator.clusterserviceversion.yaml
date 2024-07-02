@@ -122,12 +122,20 @@ spec:
     For more information about the CNCF-graduated Flux project, please see
     the [Flux architecture overview](https://fluxcd.control-plane.io/guides/flux-architecture/).
 
+    ### Operator Capabilities
+
     The [Flux Operator](https://github.com/controlplaneio-fluxcd/flux-operator) provides a
     declarative API for the installation, configuration and upgrade of CNCF Flux
     and the ControlPlane [enterprise distribution](https://fluxcd.control-plane.io/).
+    
     The operator allows the configuration of Flux multi-tenancy lockdown, network policies,
     persistent storage, vertical scaling, custom patches, and the synchronization of the
     cluster state from Git repositories, OCI artifacts and S3-compatible storage.
+    
+    The Flux Operator supervises the Flux controllers and provides a unified view
+    of all the Flux resources that define the GitOps workflows for the target cluster.
+    The operator generates reports, emits events, and exports Prometheus metrics
+    to help with monitoring and troubleshooting Flux.
     
     ### OpenShift Support
     
@@ -149,10 +157,8 @@ spec:
     - gitops
     - continuous delivery
   maintainers:
-    - name: Stefan Prodan
-      email: stefan.prodan@control-plane.io
-    - name: Soule Ba
-      email: soule.ba@control-plane.io
+    - name: ControlPlane Flux Team
+      email: flux-enterprise@control-plane.io
   provider:
     name: ControlPlane Ltd.
     url: https://control-plane.io
