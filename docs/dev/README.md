@@ -32,7 +32,7 @@
 
 ## Manifests Release Procedure
 
-## Manifests Update for a New Flux Version
+### Manifests Update for a New Flux Version
 
 1. Create a new branch from `main`, e.g. `flux-v2.x.x` in the [`controlplaneio-fluxcd/flux-operator` repository](https://github.com/controlplaneio-fluxcd/flux-operator).
 2. Generate the manifests for the latest Flux version by running `make vendor-flux`.
@@ -41,9 +41,77 @@
 5. Commit changes and open a PR.
 6. After the PR is merged, publish the OCI artifact with the manifests by running the [`push-manifests` GitHub Workflow](https://github.com/controlplaneio-fluxcd/flux-operator/actions/workflows/push-manifests.yml).
 
-## Manifests Update for Enterprise CVE Fixes
+### Manifests Update for Enterprise CVE Fixes
 
 1. Create a new branch from `main`, e.g. `enterprise-cve-fixes` in the [`controlplaneio-fluxcd/flux-operator` repository](https://github.com/controlplaneio-fluxcd/flux-operator).
 2. Rebuild the Flux manifests with the latest image patches by running `make build-manifests`.
 3. Commit changes and open a PR.
 4. After the PR is merged, publish the OCI artifact with the manifests by running the [`push-manifests` GitHub Workflow](https://github.com/controlplaneio-fluxcd/flux-operator/actions/workflows/push-manifests.yml).
+
+## Local Development
+
+### Prerequisites
+
+- [Go](https://golang.org/doc/install) 1.22+
+- [Docker](https://docs.docker.com/get-docker/)
+- [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/)
+- [Kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
+
+### Building
+
+After code changes, run the following command:
+
+```sh
+make tidy build lint
+```
+
+### Unit Testing
+
+Unit tests can be run with:
+
+```sh
+make test
+```
+
+### End-to-End Testing
+
+First, create a cluster named `kind`:
+
+```sh
+kind create cluster
+```
+
+End-to-end tests can be run with:
+
+```sh
+make test-e2e
+```
+
+### Manual Testing
+
+Build and run the operator in a Kind cluster:
+
+```sh
+IMG=flux-operator:test1 make docker-build load-image deploy
+```
+
+Make sure to increment the `test1` tag for each new build.
+
+Apply the instance from the `config/samples` dir:
+
+```sh
+kubectl -n flux-system apply -f config/samples/fluxcd_v1_fluxinstance.yaml
+```
+
+Check the logs:
+
+```sh
+kubectl -n flux-system logs deployment/flux-operator --follow
+```
+
+To clean up the resources, run:
+
+```sh
+kubectl -n flux-system delete fluxinstance/flux
+make undeploy
+```
