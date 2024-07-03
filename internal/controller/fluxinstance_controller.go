@@ -299,7 +299,7 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 		options.Patches += builder.ProfileOpenShift
 	}
 	if obj.GetCluster().Multitenant {
-		options.Patches += builder.ProfileMultitenant
+		options.Patches += builder.GetMultitenantProfile(obj.GetCluster().TenantDefaultServiceAccount)
 	}
 
 	if obj.Spec.Storage != nil {

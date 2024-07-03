@@ -3,6 +3,8 @@
 
 package builder
 
+import "fmt"
+
 const ProfileOpenShift = `
 - target:
     kind: Deployment
@@ -22,7 +24,7 @@ const ProfileOpenShift = `
       path: /metadata/labels/pod-security.kubernetes.io~1warn-version
 `
 
-const ProfileMultitenant = `
+const profileMultitenant = `
 - target:
     kind: Deployment
     name: "(kustomize-controller|helm-controller|notification-controller|image-reflector-controller|image-automation-controller)"
@@ -43,7 +45,7 @@ const ProfileMultitenant = `
   patch: |-
     - op: add
       path: /spec/template/spec/containers/0/args/-
-      value: --default-service-account=default
+      value: --default-service-account=%s
 - target:
     kind: Kustomization
   patch: |-
@@ -51,3 +53,11 @@ const ProfileMultitenant = `
       path: /spec/serviceAccountName
       value: kustomize-controller
 `
+
+func GetMultitenantProfile(defaultSA string) string {
+	if defaultSA == "" {
+		defaultSA = "default"
+	}
+
+	return fmt.Sprintf(profileMultitenant, defaultSA)
+}
