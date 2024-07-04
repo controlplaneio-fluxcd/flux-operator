@@ -130,6 +130,12 @@ type Cluster struct {
 	// +optional
 	Multitenant bool `json:"multitenant,omitempty"`
 
+	// TenantDefaultServiceAccount is the name of the service account
+	// to use as default when the multitenant lockdown is enabled.
+	// Defaults to the 'default' service account from the tenant namespace.
+	// +optional
+	TenantDefaultServiceAccount string `json:"tenantDefaultServiceAccount,omitempty"`
+
 	// NetworkPolicy restricts network access to the current namespace.
 	// Defaults to true.
 	// +kubebuilder:default:=true

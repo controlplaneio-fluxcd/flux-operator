@@ -129,7 +129,7 @@ func TestBuild_Profiles(t *testing.T) {
 	g.Expect(err).NotTo(HaveOccurred())
 	options.ComponentImages = ci
 
-	options.Patches = ProfileOpenShift + ProfileMultitenant
+	options.Patches = ProfileOpenShift + GetMultitenantProfile("")
 
 	result, err := Build(srcDir, dstDir, options)
 	g.Expect(err).NotTo(HaveOccurred())
