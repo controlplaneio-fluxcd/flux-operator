@@ -19,7 +19,7 @@ var _ = Describe("FluxInstance", Ordered, func() {
 			By("reconcile FluxInstance")
 			verifyFluxInstanceReconcile := func() error {
 				cmd := exec.Command("kubectl", "apply",
-					"-k", "config/samples", "-n", namespace,
+					"-f", "config/samples/fluxcd_v1_fluxinstance.yaml", "-n", namespace,
 				)
 				_, err := utils.Run(cmd, "/test/olm")
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
