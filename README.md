@@ -11,32 +11,26 @@ The Flux Operator is a Kubernetes CRD controller that manages
 the lifecycle of CNCF [Flux CD](https://fluxcd.io) and the
 [ControlPlane enterprise distribution](https://github.com/controlplaneio-fluxcd/distribution).
 
-> [!IMPORTANT]
-> Note that this project in under active development.
-> The APIs and features specs are described in
-> [RFC-0001](https://github.com/controlplaneio-fluxcd/distribution/tree/main/rfcs/0001-flux-operator/README.md).
-
 ## Features
 
-- Provides a declarative API for the installation, configuration and upgrade of Flux.
-- Automates the patching of hotfixes and CVEs affecting the Flux controllers container images.
-- Simplifies the configuration of multi-tenancy lockdown on shared Kubernetes clusters.
-- Allows syncing the cluster state from Git repositories, OCI artifacts and S3-compatible storage.
-- Generates detailed reports about the Flux deployment readiness status and reconcilers statistics.
-- Provides a security-first approach to the Flux deployment and FIPS compliance.
-- Incorporates best practices for running Flux at scale with persistent storage and vertical scaling.
-- Manages the update of Flux custom resources and prevents disruption during the upgrade process.
-- Facilitates a clean uninstall and reinstall process without affecting the Flux-managed workloads.
-- Provides first-class support for OpenShift, Azure, AWS, GCP and other marketplaces.
+**Autopilot for Flux CD** - The operator offers an alternative to the Flux Bootstrap procedure, it
+removes the operational burden of managing Flux across fleets of clusters by fully automating the
+installation, configuration, and upgrade of the Flux controllers based on a declarative API.
 
-## Documentation
+**Advanced Configuration** - The operator simplifies the configuration of Flux multi-tenancy lockdown,
+vertical scaling, persistent storage, and allows fine-tuning the Flux controllers with Kustomize patches.
+The operator streamlines the transition from Git as the delivery mechanism for the cluster
+desired state to OCI artifacts and S3-compatible storage.
 
-- [Flux operator installation](https://fluxcd.control-plane.io/operator/install/)
-- [Flux controllers configuration](https://fluxcd.control-plane.io/operator/flux-config/)
-- [Flux instance customization](https://fluxcd.control-plane.io/operator/flux-kustomize/)
-- [Cluster sync configuration](https://fluxcd.control-plane.io/operator/flux-sync/)
-- [Migration of bootstrapped clusters](https://fluxcd.control-plane.io/operator/flux-bootstrap-migration/)
-- [FluxInstance API reference](https://fluxcd.control-plane.io/operator/fluxinstance/)
+**Deep Insights** - The operator provides deep insights into the delivery pipelines managed by Flux,
+including detailed reports and Prometheus metrics about the Flux controllers
+readiness status, reconcilers statistics, and cluster state synchronization.
+
+**Enterprise Support** - The operator is a key component of the ControlPlane
+[Enterprise offering](https://fluxcd.control-plane.io/pricing/), and is designed to automate the
+rollout of new Flux versions, CVE patches and hotfixes to production environments in a secure and reliable way.
+The operator is end-to-end tested along with the ControlPlane Flux distribution on
+Red Hat OpenShift, Amazon EKS, Azure AKS and Google GKE.
 
 ## Quickstart Guide
 
@@ -50,7 +44,7 @@ helm install flux-operator oci://ghcr.io/controlplaneio-fluxcd/charts/flux-opera
 ```
 
 > [!NOTE]
-> The Flux Operator can be installed using Helm, OperatorHub, kubectl and other methods.
+> The Flux Operator can be installed using Helm, Terraform, OperatorHub, kubectl and other methods.
 > For more information, refer to the
 > [installation guide](https://fluxcd.control-plane.io/operator/install/).
 
@@ -121,6 +115,7 @@ spec:
     ref: "refs/heads/main"
     path: "clusters/my-cluster"
     pullSecret: "flux-system"
+  # distribution omitted for brevity
 ```
 
 If the source repository is private, the Kubernetes secret must be created in the `flux-system` namespace
@@ -151,6 +146,21 @@ kubectl get fluxreport/flux -n flux-system -o yaml
 The report is update at regular intervals and contains information about the deployment
 readiness status, the distribution details, reconcilers statistics, Flux CRDs versions,
 the cluster sync status and more.
+
+## Documentation
+
+- Installation
+  - [Flux operator installation](https://fluxcd.control-plane.io/operator/install/)
+- Configuration
+  - [Flux controllers configuration](https://fluxcd.control-plane.io/operator/flux-config/)
+  - [Flux instance customization](https://fluxcd.control-plane.io/operator/flux-kustomize/)
+  - [Cluster sync configuration](https://fluxcd.control-plane.io/operator/flux-sync/)
+- Guides
+  - [Flux monitoring and reporting](https://fluxcd.control-plane.io/operator/flux-monitoring/)
+  - [Migration of bootstrapped clusters](https://fluxcd.control-plane.io/operator/flux-bootstrap-migration/)
+- CRD references
+  - [FluxInstance API reference](https://fluxcd.control-plane.io/operator/fluxinstance/)
+  - [FluxReport API reference](https://fluxcd.control-plane.io/operator/fluxreport/)
 
 ## License
 
