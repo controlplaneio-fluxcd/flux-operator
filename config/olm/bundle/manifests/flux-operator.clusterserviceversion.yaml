@@ -96,7 +96,264 @@ metadata:
               "status": "Applied revision: refs/heads/main@sha1:a90cd1ac35de01c175f7199315d3f4cd60195911"
             }
           }
-        }      
+        },
+        {
+          "apiVersion": "source.toolkit.fluxcd.io/v1",
+          "kind": "GitRepository",
+          "metadata": {
+              "name": "podinfo",
+              "namespace": "default"
+          },
+          "spec": {
+              "interval": "10m",
+              "url": "https://github.com/stefanprodan/podinfo.git",
+              "ref": {
+                "semver": ">1.0.0"
+              }
+          }
+        },
+        {
+          "apiVersion": "source.toolkit.fluxcd.io/v1beta2",
+          "kind": "OCIRepository",
+          "metadata": {
+              "name": "podinfo",
+              "namespace": "default"
+          },
+          "spec": {
+              "interval": "10m",
+              "url": "oci://ghcr.io/stefanprodan/manifests/podinfo",
+              "ref": {
+                "semver": ">1.0.0"
+              }
+          }
+        },
+        {
+          "apiVersion": "source.toolkit.fluxcd.io/v1",
+          "kind": "HelmRepository",
+          "metadata": {
+              "name": "podinfo",
+              "namespace": "default"
+          },
+          "spec": {
+              "interval": "10m",
+              "url": "https://stefanprodan.github.io/podinfo"
+          }
+        },
+        {
+          "apiVersion": "source.toolkit.fluxcd.io/v1",
+          "kind": "HelmChart",
+          "metadata": {
+              "name": "podinfo",
+              "namespace": "default"
+          },
+          "spec": {
+              "interval": "10m",
+              "chart": "podinfo",
+              "version": ">1.0.0",
+              "sourceRef": {
+                "name": "podinfo",
+                "kind": "HelmRepository"
+              }
+          }
+        },
+        {
+          "apiVersion": "source.toolkit.fluxcd.io/v1beta2",
+          "kind": "Bucket",
+          "metadata": {
+              "name": "podinfo",
+              "namespace": "default"
+          },
+          "spec": {
+              "interval": "10m",
+              "provider": "generic",
+              "bucketName": "podinfo",
+              "endpoint": "minio.minio.svc.cluster.local:9000",
+              "insecure": true,
+              "secretRef": {
+                "name": "minio-credentials"
+              }
+          }
+        },
+        {
+          "apiVersion": "kustomize.toolkit.fluxcd.io/v1",
+          "kind": "Kustomization",
+          "metadata": {
+              "name": "podinfo",
+              "namespace": "default"
+          },
+          "spec": {
+              "interval": "10m",
+              "timeout": "2m",
+              "prune": true,
+              "wait": true,
+              "targetNamespace": "default",
+              "path": "./kustomize",
+              "sourceRef": {
+                "kind": "GitRepository",
+                "name": "podinfo"
+              }
+          }
+        },
+        {
+          "apiVersion": "helm.toolkit.fluxcd.io/v2",
+          "kind": "HelmRelease",
+          "metadata": {
+              "name": "podinfo",
+              "namespace": "default"
+          },
+          "spec": {
+              "interval": "10m",
+              "releaseName": "podinfo",
+              "chart": {
+                "spec": {
+                    "chart": "podinfo",
+                    "version": ">1.0.0",
+                    "sourceRef": {
+                      "kind": "HelmRepository",
+                      "name": "podinfo"
+                    }
+                }
+              },
+              "driftDetection": {
+                "mode": "enabled"
+              },
+              "test": {
+                "enable": true
+              },
+              "values": {
+                "replicaCount": 2
+              }
+          }
+        },
+        {
+          "apiVersion": "notification.toolkit.fluxcd.io/v1",
+          "kind": "Receiver",
+          "metadata": {
+              "name": "podinfo",
+              "namespace": "default"
+          },
+          "spec": {
+              "type": "github",
+              "events": [
+                "ping",
+                "push"
+              ],
+              "secretRef": {
+                "name": "webhook-token"
+              },
+              "resources": [
+                {
+                    "kind": "GitRepository",
+                    "name": "podinfo"
+                }
+              ]
+          }
+        },
+        {
+          "apiVersion": "notification.toolkit.fluxcd.io/v1beta3",
+          "kind": "Provider",
+          "metadata": {
+              "name": "slack",
+              "namespace": "default"
+          },
+          "spec": {
+              "type": "slack",
+              "channel": "general",
+              "address": "https://slack.com/api/chat.postMessage",
+              "secretRef": {
+                "name": "slack-bot-token"
+              }
+          }
+        },
+        {
+          "apiVersion": "notification.toolkit.fluxcd.io/v1beta3",
+          "kind": "Alert",
+          "metadata": {
+              "name": "slack",
+              "namespace": "default"
+          },
+          "spec": {
+              "providerRef": {
+                "name": "slack"
+              },
+              "eventSeverity": "info",
+              "eventSources": [
+                {
+                    "kind": "Kustomization",
+                    "name": "*"
+                },
+                {
+                    "kind": "HelmRelease",
+                    "name": "*"
+                }
+              ]
+          }
+        },
+        {
+          "apiVersion": "image.toolkit.fluxcd.io/v1beta2",
+          "kind": "ImageRepository",
+          "metadata": {
+              "name": "podinfo",
+              "namespace": "default"
+          },
+          "spec": {
+              "interval": "10m",
+              "image": "ghcr.io/stefanprodan/podinfo"
+          }
+        },
+        {
+          "apiVersion": "image.toolkit.fluxcd.io/v1beta2",
+          "kind": "ImagePolicy",
+          "metadata": {
+              "name": "podinfo",
+              "namespace": "default"
+          },
+          "spec": {
+              "imageRepositoryRef": {
+                "name": "podinfo"
+              },
+              "policy": {
+                "semver": {
+                    "range": ">1.0.0"
+                }
+              }
+          }
+        },
+        {
+          "apiVersion": "image.toolkit.fluxcd.io/v1beta2",
+          "kind": "ImageUpdateAutomation",
+          "metadata": {
+            "name": "podinfo",
+            "namespace": "default"
+          },
+          "spec": {
+            "interval": "10m",
+            "sourceRef": {
+              "kind": "GitRepository",
+              "name": "podinfo"
+            },
+            "git": {
+              "checkout": {
+                "ref": {
+                  "branch": "master"
+                }
+              },
+              "commit": {
+                "author": {
+                  "email": "fluxcdbot@users.noreply.github.com",
+                  "name": "fluxcdbot"
+                },
+                "messageTemplate": "{{range .Changed.Changes}}{{print .OldValue}} -> {{println .NewValue}}{{end}}"
+              },
+              "push": {
+                "branch": "master"
+              }
+            },
+            "update": {
+              "path": "./kustomize"
+            }
+          }
+        }
       ]
     categories: Integration & Delivery
     certified: 'false'
@@ -142,9 +399,25 @@ spec:
     
     The Flux Operator should be installed in a dedicated namespace, e.g. `flux-system`.
     
-    To deploy Flux on OpenShift clusters, create a `FluxInstance` custom resource
-    named `flux` in the same namespace as the operator
-    and set the `.spec.cluster.type` field to `openshift`.
+    To deploy Flux on OpenShift, create a `FluxInstance` custom resource named `flux`
+    in the same namespace as the operator and set the cluster type to `openshift`.
+    
+    ```yaml
+    apiVersion: fluxcd.controlplane.io/v1
+    kind: FluxInstance
+    metadata:
+      name: flux
+      namespace: flux-system
+    spec:
+      distribution:
+        version: "2.x"
+        registry: "ghcr.io/fluxcd"
+      cluster:
+        type: openshift
+        multitenant: false
+        networkPolicy: true
+        domain: "cluster.local"      
+    ```
     
     For more information on how to configure the Flux instance, please see the
     [Flux Operator documentation](https://fluxcd.control-plane.io/operator/flux-config/).
@@ -182,15 +455,80 @@ spec:
   customresourcedefinitions:
     owned:
       - name: fluxinstances.fluxcd.controlplane.io
-        displayName: FluxInstance
         kind: FluxInstance
         version: v1
-        description: Flux Instance
+        displayName: FluxInstance
+        description: Flux Instance (flux-operator)
       - name: fluxreports.fluxcd.controlplane.io
-        displayName: FluxReport
         kind: FluxReport
         version: v1
-        description: Flux Report (Autogenerated)
+        displayName: FluxReport
+        description: Flux Report (flux-operator)
+      - name: gitrepositories.source.toolkit.fluxcd.io
+        kind: GitRepository
+        version: v1
+        displayName: GitRepository
+        description: Git Repository (source-controller)
+      - name: helmrepositories.source.toolkit.fluxcd.io
+        kind: HelmRepository
+        version: v1
+        displayName: HelmRepository
+        description: Helm Repository (source-controller)
+      - name: helmcharts.source.toolkit.fluxcd.io
+        kind: HelmChart
+        version: v1
+        displayName: HelmChart
+        description: Helm Chart (source-controller)
+      - name: buckets.source.toolkit.fluxcd.io
+        kind: Bucket
+        version: v1beta2
+        displayName: Bucket
+        description: Bucket (source-controller)
+      - name: ocirepositories.source.toolkit.fluxcd.io
+        kind: OCIRepository
+        version: v1beta2
+        displayName: OCIRepository
+        description: OCI Repository (source-controller)
+      - name: kustomizations.kustomize.toolkit.fluxcd.io
+        kind: Kustomization
+        version: v1
+        displayName: Kustomization
+        description: Kustomization (kustomize-controller)
+      - name: helmreleases.helm.toolkit.fluxcd.io
+        kind: HelmRelease
+        version: v2
+        displayName: HelmRelease
+        description: Helm Release (helm-controller)
+      - name: providers.notification.toolkit.fluxcd.io
+        kind: Provider
+        version: v1beta3
+        displayName: Provider
+        description: Alert Provider (notification-controller)
+      - name: alerts.notification.toolkit.fluxcd.io
+        kind: Alert
+        version: v1beta3
+        displayName: Alert
+        description: Alert (notification-controller)
+      - name: receivers.notification.toolkit.fluxcd.io
+        kind: Receiver
+        version: v1
+        displayName: Receiver
+        description: Webhook Receiver (notification-controller)
+      - name: imagerepositories.image.toolkit.fluxcd.io
+        kind: ImageRepository
+        version: v1beta2
+        displayName: ImageRepository
+        description: Image Repository (image-reflector-controller)
+      - name: imagepolicies.image.toolkit.fluxcd.io
+        kind: ImagePolicy
+        version: v1beta2
+        displayName: ImagePolicy
+        description: Image Policy (image-reflector-controller)
+      - name: image.toolkit.fluxcd.io
+        kind: imageupdateautomations.image.toolkit.fluxcd.io
+        version: v1beta2
+        displayName: ImageUpdateAutomation
+        description: Image Automation (image-automation-controller)
   install:
     strategy: deployment
     spec:
