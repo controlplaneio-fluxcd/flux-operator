@@ -110,6 +110,9 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile.cross .
 	- $(CONTAINER_TOOL) buildx rm flux-operator-builder
 
+docker-build-ubi: ## Build docker image with the manager using UBI base image.
+	$(CONTAINER_TOOL) build -t ${IMG}-ubi --build-arg VERSION=$(FLUX_OPERATOR_VERSION) -f config/olm/build/Dockerfile .
+
 .PHONY: build-installer
 build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
 	mkdir -p dist
