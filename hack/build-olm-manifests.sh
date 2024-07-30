@@ -6,6 +6,7 @@
 set -euo pipefail
 
 VERSION=$1
+UBI=${2:-false}
 REPOSITORY_ROOT=$(git rev-parse --show-toplevel)
 SOUCE_DIR="${REPOSITORY_ROOT}/config/olm"
 DEST_DIR="${REPOSITORY_ROOT}/bin/olm"
@@ -25,6 +26,12 @@ cp -r ${SOUCE_DIR}/* ${DEST_DIR}/
 
 export FLUX_OPERATOR_VERSION=${VERSION}
 export FLUX_OPERATOR_TS=$(date +"%Y-%m-%dT%H:%M:%S")
+export FLUX_OPERATOR_VARIANT=""
+
+if [ "$UBI" = "true" ]; then
+  export FLUX_OPERATOR_VARIANT="-ubi"
+fi
+
 cat ${SOUCE_DIR}/bundle/manifests/flux-operator.clusterserviceversion.yaml | \
 envsubst > ${DEST_DIR}/bundle/manifests/flux-operator.clusterserviceversion.yaml
 

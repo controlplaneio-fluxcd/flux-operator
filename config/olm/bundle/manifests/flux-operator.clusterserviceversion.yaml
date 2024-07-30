@@ -103,7 +103,7 @@ metadata:
     createdAt: '${FLUX_OPERATOR_TS}Z'
     description: |-
       The Flux Operator manages the lifecycle of the CNCF Flux project.
-    containerImage: ghcr.io/controlplaneio-fluxcd/flux-operator:v${FLUX_OPERATOR_VERSION}
+    containerImage: ghcr.io/controlplaneio-fluxcd/flux-operator:v${FLUX_OPERATOR_VERSION}${FLUX_OPERATOR_VARIANT}
     support: Community
     capabilities: Deep Insights
     repository: https://github.com/controlplaneio-fluxcd/flux-operator
@@ -242,7 +242,7 @@ spec:
                                 - linux
                 containers:
                   - name: manager
-                    image: 'ghcr.io/controlplaneio-fluxcd/flux-operator:v${FLUX_OPERATOR_VERSION}'
+                    image: 'ghcr.io/controlplaneio-fluxcd/flux-operator:v${FLUX_OPERATOR_VERSION}${FLUX_OPERATOR_VARIANT}'
                     imagePullPolicy: IfNotPresent
                     securityContext:
                       runAsNonRoot: true
