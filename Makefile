@@ -155,6 +155,10 @@ undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.
 build-olm-manifests: ## Generate OLM manifests for OperatorHub.
 	./hack/build-olm-manifests.sh $(FLUX_OPERATOR_VERSION:v%=%)
 
+.PHONY: build-olm-manifests-ubi
+build-olm-manifests-ubi: ## Generate OLM manifests for OperatorHub.
+	./hack/build-olm-manifests.sh $(FLUX_OPERATOR_VERSION:v%=%) true
+
 .PHONY: test-olm
 test-olm: build-olm-manifests operator-sdk ## Test OLM manifests for current version.
 	./hack/build-olm-images.sh $(FLUX_OPERATOR_VERSION:v%=%)
