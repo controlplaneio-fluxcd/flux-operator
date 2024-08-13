@@ -13,6 +13,7 @@ import (
 	"github.com/fluxcd/pkg/ssa"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -97,7 +98,10 @@ func (r *FluxInstanceReconciler) removeFluxFinalizers(ctx context.Context) error
 	}
 
 	for _, v := range versions {
-		if err := r.removeFinalizersFor(ctx, v.apiVersion, v.listKind); err != nil {
+		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			return r.removeFinalizersFor(ctx, v.apiVersion, v.listKind)
+		})
+		if err != nil {
 			if !strings.Contains(err.Error(), "the server could not find the requested resource") &&
 				!strings.Contains(err.Error(), "no matches for kind") {
 				errs = append(errs, err)
