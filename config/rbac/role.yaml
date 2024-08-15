@@ -8,31 +8,6 @@ rules:
   - fluxcd.controlplane.io
   resources:
   - fluxinstances
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - fluxcd.controlplane.io
-  resources:
-  - fluxinstances/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - fluxcd.controlplane.io
-  resources:
-  - fluxinstances/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - fluxcd.controlplane.io
-  resources:
   - fluxreports
   verbs:
   - create
@@ -45,12 +20,14 @@ rules:
 - apiGroups:
   - fluxcd.controlplane.io
   resources:
+  - fluxinstances/finalizers
   - fluxreports/finalizers
   verbs:
   - update
 - apiGroups:
   - fluxcd.controlplane.io
   resources:
+  - fluxinstances/status
   - fluxreports/status
   verbs:
   - get
