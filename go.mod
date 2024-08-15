@@ -7,12 +7,12 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.30.3
 	github.com/aws/aws-sdk-go-v2/config v1.27.27
 	github.com/aws/aws-sdk-go-v2/service/marketplacemetering v1.23.3
-	github.com/fluxcd/cli-utils v0.36.0-flux.8
+	github.com/fluxcd/cli-utils v0.36.0-flux.9
 	github.com/fluxcd/pkg/apis/kustomize v1.6.0
 	github.com/fluxcd/pkg/apis/meta v1.6.0
-	github.com/fluxcd/pkg/kustomize v1.11.0
-	github.com/fluxcd/pkg/runtime v0.48.0
-	github.com/fluxcd/pkg/ssa v0.40.0
+	github.com/fluxcd/pkg/kustomize v1.13.0
+	github.com/fluxcd/pkg/runtime v0.49.0
+	github.com/fluxcd/pkg/ssa v0.41.0
 	github.com/fluxcd/pkg/tar v0.8.0
 	github.com/golang-jwt/jwt/v4 v4.5.0
 	github.com/google/go-containerregistry v0.20.2
@@ -28,7 +28,7 @@ require (
 	k8s.io/apimachinery v0.31.0
 	k8s.io/client-go v0.31.0
 	k8s.io/utils v0.0.0-20240711033017-18e509b52bc8
-	sigs.k8s.io/controller-runtime v0.19.0-beta.0
+	sigs.k8s.io/controller-runtime v0.19.0
 	sigs.k8s.io/yaml v1.4.0
 )
 
