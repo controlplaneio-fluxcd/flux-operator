@@ -82,7 +82,7 @@ func (r *FluxReportReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	conditions.MarkTrue(obj,
 		meta.ReadyCondition,
 		meta.SucceededReason,
-		msg)
+		"%s", msg)
 
 	// Patch the FluxReport with the computed spec.
 	err = patcher.Patch(ctx, obj, patch.WithFieldOwner(r.StatusManager))

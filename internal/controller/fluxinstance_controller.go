@@ -95,10 +95,10 @@ func (r *FluxInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		conditions.MarkUnknown(obj,
 			meta.ReadyCondition,
 			meta.ProgressingReason,
-			msg)
+			"%s", msg)
 		conditions.MarkReconciling(obj,
 			meta.ProgressingReason,
-			msg)
+			"%s", msg)
 		return ctrl.Result{Requeue: true}, nil
 	}
 
@@ -125,10 +125,10 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 	conditions.MarkUnknown(obj,
 		meta.ReadyCondition,
 		meta.ProgressingReason,
-		msg)
+		"%s", msg)
 	conditions.MarkReconciling(obj,
 		meta.ProgressingReason,
-		msg)
+		"%s", msg)
 	if err := r.patch(ctx, obj, patcher); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
 	}
@@ -151,7 +151,7 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 		conditions.MarkFalse(obj,
 			meta.ReadyCondition,
 			meta.ArtifactFailedReason,
-			msg)
+			"%s", msg)
 		r.EventRecorder.Event(obj, corev1.EventTypeWarning, meta.ArtifactFailedReason, msg)
 		return ctrl.Result{}, err
 	}
@@ -163,11 +163,11 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 		conditions.MarkFalse(obj,
 			meta.ReadyCondition,
 			meta.BuildFailedReason,
-			msg)
+			"%s", msg)
 		conditions.MarkTrue(obj,
 			meta.StalledCondition,
 			meta.BuildFailedReason,
-			msg)
+			"%s", msg)
 		log.Error(err, msg)
 		r.EventRecorder.Event(obj, corev1.EventTypeWarning, meta.BuildFailedReason, msg)
 		return ctrl.Result{}, nil
@@ -193,7 +193,7 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 		conditions.MarkFalse(obj,
 			meta.ReadyCondition,
 			meta.ReconciliationFailedReason,
-			msg)
+			"%s", msg)
 		r.EventRecorder.Event(obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
 
 		return ctrl.Result{}, err
@@ -205,7 +205,7 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 	conditions.MarkTrue(obj,
 		meta.ReadyCondition,
 		meta.ReconciliationSucceededReason,
-		msg)
+		"%s", msg)
 	log.Info(msg, "revision", obj.Status.LastAppliedRevision)
 	r.EventRecorder.AnnotatedEventf(obj,
 		map[string]string{fluxcdv1.RevisionAnnotation: obj.Status.LastAppliedRevision},
