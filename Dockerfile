@@ -1,5 +1,5 @@
 # Build the operator binary using the Docker's Debian image.
-FROM --platform=${BUILDPLATFORM} golang:1.22 AS builder
+FROM --platform=${BUILDPLATFORM} golang:1.23 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /workspace
