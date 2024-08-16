@@ -23,14 +23,14 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
         with:
-          go-version-file: 'go.mod'
+          go-version: 1.23.x
           cache-dependency-path: |
             **/go.sum
             **/go.mod
       - name: Setup Kubernetes
         uses: helm/kind-action@0025e74a8c7512023d06dc019c617aa3cf561fde # v1.10.0
         with:
-          version: v0.23.0
+          version: v0.24.0
           cluster_name: kind
       - name: Setup QEMU
         uses: docker/setup-qemu-action@49b3bc8e6bdd4a60e6116a5414239cba5943d3cf # v3.2.0

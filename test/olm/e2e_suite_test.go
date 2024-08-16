@@ -14,6 +14,6 @@ import (
 // Run e2e tests using the Ginkgo runner.
 func TestE2E(t *testing.T) {
 	RegisterFailHandler(Fail)
-	fmt.Fprintf(GinkgoWriter, "Starting flux-operator olm e2e suite\n")
+	fmt.Fprintf(GinkgoWriter, "Starting flux-operator olm e2e suite\n") //nolint:errcheck
 	RunSpecs(t, "olm e2e suite")
 }
