@@ -50,6 +50,26 @@ func (r *FluxInstanceReconciler) uninstall(ctx context.Context,
 	}
 
 	objects, _ := inventory.List(obj.Status.Inventory)
+
+	deployments := []*unstructured.Unstructured{}
+	for _, entry := range objects {
+		if entry.GetKind() == "Deployment" {
+			deployments = append(deployments, entry)
+		}
+	}
+
+	_, err := resourceManager.DeleteAll(ctx, deployments, opts)
+	if err != nil {
+		log.Error(err, "deleting deployments failed")
+	} else {
+		if err := resourceManager.WaitForTermination(deployments, ssa.WaitOptions{
+			Interval: 5 * time.Second,
+			Timeout:  5 * time.Minute,
+		}); err != nil {
+			log.Error(err, "waiting for deployments to be deleted failed")
+		}
+	}
+
 	changeSet, err := resourceManager.DeleteAll(ctx, objects, opts)
 	if err != nil {
 		log.Error(err, "pruning for deleted resource failed")
