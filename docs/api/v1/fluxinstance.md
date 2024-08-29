@@ -528,6 +528,16 @@ stringData:
   secretkey: "my-secretkey"
 ```
 
+### Resources migration configuration
+
+The `.spec.migrateResources` field is optional and instructs the operator to migrate
+the Flux custom resources stored in Kubernetes etcd to the latest API version as
+specified in the Flux CRDs. The migration runs after the Flux distribution is upgraded
+from a minor version to another and only when a new API version is introduced.
+
+By default, the field value is set to `true`. Note that disabling the migration may
+result in upgrade failures due to deprecated API versions being removed in future Flux releases.
+
 ## FluxInstance Status
 
 ### Conditions
