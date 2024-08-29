@@ -8,7 +8,9 @@ import (
 	"fmt"
 
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -53,7 +55,9 @@ func (r *FluxInstanceReconciler) migrateCRD(ctx context.Context, name string) er
 	}
 
 	// migrate the resources for the CRD
-	err := r.migrateCR(ctx, crd, storageVersion)
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		return r.migrateCR(ctx, crd, storageVersion)
+	})
 	if err != nil {
 		return fmt.Errorf("failed to migrate resources for CRD %s: %w", name, err)
 	}
@@ -91,7 +95,11 @@ func (r *FluxInstanceReconciler) migrateCR(ctx context.Context, crd *apiextensio
 
 	for _, item := range list.Items {
 		// patch the resource with an empty patch to update the version
-		if err := r.Client.Patch(ctx, &item, client.RawPatch(client.Merge.Type(), []byte("{}"))); err != nil {
+		if err := r.Client.Patch(
+			ctx,
+			&item,
+			client.RawPatch(client.Merge.Type(), []byte("{}")),
+		); err != nil && !apierrors.IsNotFound(err) {
 			return fmt.Errorf("failed to patch resource %s: %w", item.GetName(), err)
 		}
 	}
