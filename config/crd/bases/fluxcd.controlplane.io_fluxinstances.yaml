@@ -201,6 +201,13 @@ spec:
                       type: object
                     type: array
                 type: object
+              migrateResources:
+                default: true
+                description: |-
+                  MigrateResources instructs the controller to migrate the Flux custom resources
+                  from the previous version to the latest API version specified in the CRD.
+                  Defaults to true.
+                type: boolean
               storage:
                 description: |-
                   Storage holds the specification of the source-controller
@@ -273,6 +280,7 @@ spec:
                 type: boolean
             required:
             - distribution
+            - migrateResources
             - wait
             type: object
           status:
