@@ -60,8 +60,13 @@ type FluxInstanceSpec struct {
 	// Wait instructs the controller to check the health of all the reconciled
 	// resources. Defaults to true.
 	// +kubebuilder:default:=true
-	// +required
 	Wait bool `json:"wait"`
+
+	// MigrateResources instructs the controller to migrate the Flux custom resources
+	// from the previous version to the latest API version specified in the CRD.
+	// Defaults to true.
+	// +kubebuilder:default:=true
+	MigrateResources bool `json:"migrateResources"`
 
 	// Sync specifies the source for the cluster sync operation.
 	// When set, a Flux source (GitRepository, OCIRepository or Bucket)
