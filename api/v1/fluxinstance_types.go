@@ -79,7 +79,7 @@ type FluxInstanceSpec struct {
 	// and Flux Kustomization are created to sync the cluster state
 	// with the source repository.
 	// +optional
-	Sync *Sync `json:"sync"`
+	Sync *Sync `json:"sync,omitempty"`
 }
 
 // Distribution specifies the version and container registry to pull images from.

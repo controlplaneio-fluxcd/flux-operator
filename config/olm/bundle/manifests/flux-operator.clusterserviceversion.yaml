@@ -111,8 +111,7 @@ metadata:
 spec:
   displayName: Flux Operator
   description: >-
-    [Flux](https://fluxcd.io) is a leading GitOps Continuous Delivery
-    tool
+    [Flux](https://fluxcd.io) is a leading GitOps Continuous Delivery tool
     used to streamline and automate application deployments on Kubernetes.
     Flux enables teams to achieve a reliable and auditable delivery process
     while promoting collaboration and traceability across different environments.
@@ -125,17 +124,15 @@ spec:
     For more information about the CNCF-graduated Flux project, please see
     the [Flux architecture overview](https://fluxcd.control-plane.io/guides/flux-architecture/).
 
-
     ### Operator Capabilities
-
 
     The [Flux Operator](https://github.com/controlplaneio-fluxcd/flux-operator) provides a
     declarative API for the installation, configuration and upgrade of CNCF Flux
     and the ControlPlane [enterprise distribution](https://fluxcd.control-plane.io/).
 
     The operator allows the configuration of Flux multi-tenancy lockdown, network policies,
-    persistent storage, vertical scaling, custom patches, and the synchronization of the
-    cluster state from Git repositories, OCI artifacts and S3-compatible storage.
+    persistent storage, sharding, vertical scaling, custom patches, and the synchronization
+    of the cluster state from Git repositories, OCI artifacts and S3-compatible storage.
 
     The Flux Operator supervises the Flux controllers and provides a unified view
     of all the Flux resources that define the GitOps workflows for the target cluster.
@@ -143,7 +140,6 @@ spec:
     to help with monitoring and troubleshooting Flux.
 
     ### OpenShift Support
-
 
     The Flux Operator should be installed in a dedicated namespace, e.g. `flux-system`.
 
