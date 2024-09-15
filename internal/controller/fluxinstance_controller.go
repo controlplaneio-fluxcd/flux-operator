@@ -292,14 +292,22 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 	options.ImagePullSecret = obj.GetDistribution().ImagePullSecret
 	options.Namespace = obj.GetNamespace()
 	options.Components = obj.GetComponents()
-	options.ClusterDomain = obj.GetCluster().Domain
 	options.NetworkPolicy = obj.GetCluster().NetworkPolicy
+
+	if obj.GetCluster().Domain != "" {
+		options.ClusterDomain = obj.GetCluster().Domain
+	}
 
 	if obj.GetCluster().Type == "openshift" {
 		options.Patches += builder.ProfileOpenShift
 	}
 	if obj.GetCluster().Multitenant {
 		options.Patches += builder.GetMultitenantProfile(obj.GetCluster().TenantDefaultServiceAccount)
+	}
+
+	if obj.Spec.Sharding != nil {
+		options.ShardingKey = obj.Spec.Sharding.Key
+		options.Shards = obj.Spec.Sharding.Shards
 	}
 
 	if obj.Spec.Storage != nil {
