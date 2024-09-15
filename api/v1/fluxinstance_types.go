@@ -47,6 +47,10 @@ type FluxInstanceSpec struct {
 	// +optional
 	Cluster *Cluster `json:"cluster,omitempty"`
 
+	// Sharding holds the specification of the sharding configuration.
+	// +optional
+	Sharding *Sharding `json:"sharding,omitempty"`
+
 	// Storage holds the specification of the source-controller
 	// persistent volume claim.
 	// +optional
@@ -60,12 +64,14 @@ type FluxInstanceSpec struct {
 	// Wait instructs the controller to check the health of all the reconciled
 	// resources. Defaults to true.
 	// +kubebuilder:default:=true
+	// +optional
 	Wait bool `json:"wait"`
 
 	// MigrateResources instructs the controller to migrate the Flux custom resources
 	// from the previous version to the latest API version specified in the CRD.
 	// Defaults to true.
 	// +kubebuilder:default:=true
+	// +optional
 	MigrateResources bool `json:"migrateResources"`
 
 	// Sync specifies the source for the cluster sync operation.
@@ -73,7 +79,7 @@ type FluxInstanceSpec struct {
 	// and Flux Kustomization are created to sync the cluster state
 	// with the source repository.
 	// +optional
-	Sync *Sync `json:"sync,omitempty"`
+	Sync *Sync `json:"sync"`
 }
 
 // Distribution specifies the version and container registry to pull images from.
@@ -153,6 +159,18 @@ type Cluster struct {
 	// +kubebuilder:default:=kubernetes
 	// +optional
 	Type string `json:"type,omitempty"`
+}
+
+type Sharding struct {
+	// Key is the label key used to shard the resources.
+	// +kubebuilder:default:=sharding.fluxcd.io/key
+	// +optional
+	Key string `json:"key,omitempty"`
+
+	// Shards is the list of shard names.
+	// +kubebuilder:validation:MinItems=1
+	// +required
+	Shards []string `json:"shards"`
 }
 
 // Storage is the specification for the persistent volume claim.
