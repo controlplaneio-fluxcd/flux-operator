@@ -28,3 +28,4 @@ disto/
 *.tfstate.*
 .terraform.lock.hcl
 .terraformrc
+/internal/builder/testdata/output/

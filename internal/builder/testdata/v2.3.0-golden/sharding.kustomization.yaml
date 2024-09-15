@@ -15,6 +15,8 @@ resources:
   - notification-controller.yaml
   - image-reflector-controller.yaml
   - image-automation-controller.yaml
+  - shard1
+  - shard2
   - pvc.yaml
 images:
   - name: fluxcd/source-controller
@@ -147,4 +149,57 @@ patches:
     - op: replace
       path: /spec/template/spec/containers/0/args/2
       value: --log-level=info
+- target:
+    kind: Deployment
+    name: "(source-controller|kustomize-controller|helm-controller)"
+    annotationSelector: "!sharding.fluxcd.io/role"
+  patch: |
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --watch-label-selector=!sharding.fluxcd.io/key
+
+- target:
+    kind: Deployment
+  patch: |-
+    - op: remove
+      path: /spec/template/spec/securityContext
+    - op: remove
+      path: /spec/template/spec/containers/0/securityContext/seccompProfile
+    - op: remove
+      path: /spec/template/spec/containers/0/securityContext/runAsNonRoot
+- target:
+    kind: Namespace
+  patch: |-
+    - op: remove
+      path: /metadata/labels/pod-security.kubernetes.io~1warn
+    - op: remove
+      path: /metadata/labels/pod-security.kubernetes.io~1warn-version
+
+- target:
+    kind: Deployment
+    name: "(kustomize-controller|helm-controller|notification-controller|image-reflector-controller|image-automation-controller)"
+  patch: |-
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --no-cross-namespace-refs=true
+- target:
+    kind: Deployment
+    name: "(kustomize-controller)"
+  patch: |-
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --no-remote-bases=true
+- target:
+    kind: Deployment
+    name: "(kustomize-controller|helm-controller)"
+  patch: |-
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --default-service-account=default
+- target:
+    kind: Kustomization
+  patch: |-
+    - op: add
+      path: /spec/serviceAccountName
+      value: kustomize-controller
 

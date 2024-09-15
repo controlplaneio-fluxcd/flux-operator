@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/fluxcd/pkg/apis/kustomize"
@@ -14,6 +15,28 @@ import (
 	cp "github.com/otiai10/copy"
 	"sigs.k8s.io/yaml"
 )
+
+func TestBuild(t *testing.T) {
+	g := NewWithT(t)
+	const version = "v2.3.0"
+	options := MakeDefaultOptions()
+	options.Version = version
+	options.Shards = []string{"shard1", "shard2"}
+	options.Patches = ProfileOpenShift + GetMultitenantProfile("")
+	options.ArtifactStorage = &ArtifactStorage{
+		Class: "standard",
+		Size:  "10Gi",
+	}
+
+	srcDir := filepath.Join("testdata", version)
+	dstDir := filepath.Join("testdata", "output")
+	err := os.RemoveAll(dstDir)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	result, err := Build(srcDir, dstDir, options)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(result.Objects).NotTo(BeEmpty())
+}
 
 func TestBuild_Defaults(t *testing.T) {
 	g := NewWithT(t)
@@ -297,6 +320,55 @@ func TestBuild_InvalidPatches(t *testing.T) {
 	_, err = Build(srcDir, dstDir, options)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("Unexpected kind: removes"))
+}
+
+func TestBuild_Sharding(t *testing.T) {
+	g := NewWithT(t)
+	const version = "v2.3.0"
+	options := MakeDefaultOptions()
+	options.Version = version
+	options.Shards = []string{"shard1", "shard2"}
+	options.Patches = ProfileOpenShift + GetMultitenantProfile("")
+	options.ArtifactStorage = &ArtifactStorage{
+		Class: "standard",
+		Size:  "10Gi",
+	}
+
+	srcDir := filepath.Join("testdata", version)
+	goldenFile := filepath.Join("testdata", version+"-golden", "sharding.kustomization.yaml")
+
+	dstDir, err := testTempDir(t)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	ci, err := ExtractComponentImages(srcDir, options)
+	g.Expect(err).NotTo(HaveOccurred())
+	options.ComponentImages = ci
+
+	result, err := Build(srcDir, dstDir, options)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(result.Objects).NotTo(BeEmpty())
+
+	if shouldGenGolden() {
+		err = cp.Copy(filepath.Join(dstDir, "kustomization.yaml"), goldenFile)
+		g.Expect(err).NotTo(HaveOccurred())
+	}
+
+	genK, err := os.ReadFile(filepath.Join(dstDir, "kustomization.yaml"))
+	g.Expect(err).NotTo(HaveOccurred())
+
+	goldenK, err := os.ReadFile(goldenFile)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	g.Expect(string(genK)).To(Equal(string(goldenK)))
+
+	found := false
+	for _, obj := range result.Objects {
+		if strings.Contains(obj.GetName(), options.Shards[0]) {
+			found = true
+			g.Expect(obj.GetAnnotations()).To(HaveKeyWithValue("sharding.fluxcd.io/role", "shard"))
+		}
+	}
+	g.Expect(found).To(BeTrue())
 }
 
 func testTempDir(t *testing.T) (string, error) {
