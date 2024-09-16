@@ -21,6 +21,9 @@ type Options struct {
 	Patches                string
 	ArtifactStorage        *ArtifactStorage
 	Sync                   *Sync
+	ShardingKey            string
+	Shards                 []string
+	ShardName              string
 }
 
 // MakeDefaultOptions returns the default builder configuration.
@@ -44,6 +47,7 @@ func MakeDefaultOptions() Options {
 		LogLevel:               "info",
 		NotificationController: "notification-controller",
 		ClusterDomain:          "cluster.local",
+		ShardingKey:            "sharding.fluxcd.io/key",
 	}
 }
 

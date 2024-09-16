@@ -35,6 +35,9 @@ resources:
 {{- range .Components }}
   - {{.}}.yaml
 {{- end }}
+{{- range .Shards }}
+  - {{.}}
+{{- end }}
 {{- if $artifactStorage }}
   - pvc.yaml
 {{- end }}
@@ -90,6 +93,13 @@ patches:
       path: /spec/template/spec/containers/0/args/6
       value: --storage-adv-addr=source-controller.$(RUNTIME_NAMESPACE).svc.{{$clusterDomain}}.
 {{- if $artifactStorage }}
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: {{$component}}
+    annotationSelector: "!sharding.fluxcd.io/role"
+  patch: |-
     - op: add
       path: '/spec/template/spec/volumes/-'
       value:
@@ -120,7 +130,92 @@ patches:
       value: --log-level={{$logLevel}}
 {{- end }}
 {{- end }}
+{{- if gt (len .Shards) 0 }}
+- target:
+    kind: Deployment
+    name: "(source-controller|kustomize-controller|helm-controller)"
+    annotationSelector: "!sharding.fluxcd.io/role"
+  patch: |
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --watch-label-selector=!{{.ShardingKey}}
+{{- end }}
 {{ .Patches }}
+`
+
+var kustomizationShardTmpl = `---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: {{.Namespace}}
+resources:
+{{- range $i, $component := .Components }}
+{{- if eq $component "source-controller" }}
+  - ../{{$component}}.yaml
+{{- else if eq $component "kustomize-controller" }}
+  - ../{{$component}}.yaml
+{{- else if eq $component "helm-controller" }}
+  - ../{{$component}}.yaml
+{{- end }}
+{{- end }}
+nameSuffix: "-{{.ShardName}}"
+commonAnnotations:
+  sharding.fluxcd.io/role: "shard"
+patches:
+  - target:
+      kind: (Namespace|CustomResourceDefinition|ClusterRole|ClusterRoleBinding|ServiceAccount|NetworkPolicy|ResourceQuota)
+    patch: |
+      apiVersion: v1
+      kind: all
+      metadata:
+        name: all
+      $patch: delete
+  - target:
+      kind: Service
+      name: (source-controller)
+    patch: |
+      - op: replace
+        path: /spec/selector/app
+        value: source-controller-{{.ShardName}}
+  - target:
+      kind: Deployment
+      name: (source-controller)
+    patch: |
+      - op: replace
+        path: /spec/selector/matchLabels/app
+        value: source-controller-{{.ShardName}}
+      - op: replace
+        path: /spec/template/metadata/labels/app
+        value: source-controller-{{.ShardName}}
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --storage-adv-addr=source-controller-{{.ShardName}}.$(RUNTIME_NAMESPACE).svc.{{.ClusterDomain}}.
+  - target:
+      kind: Deployment
+      name: (kustomize-controller)
+    patch: |
+      - op: replace
+        path: /spec/selector/matchLabels/app
+        value: kustomize-controller-{{.ShardName}}
+      - op: replace
+        path: /spec/template/metadata/labels/app
+        value: kustomize-controller-{{.ShardName}}
+  - target:
+      kind: Deployment
+      name: (helm-controller)
+    patch: |
+      - op: replace
+        path: /spec/selector/matchLabels/app
+        value: helm-controller-{{.ShardName}}
+      - op: replace
+        path: /spec/template/metadata/labels/app
+        value: helm-controller-{{.ShardName}}
+  - target:
+      kind: Deployment
+      name: (source-controller|kustomize-controller|helm-controller)
+    patch: |
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --watch-label-selector={{.ShardingKey}}={{.ShardName}}
 `
 
 var kustomizationRolesTmpl = `---

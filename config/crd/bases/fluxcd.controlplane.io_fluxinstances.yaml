@@ -208,6 +208,22 @@ spec:
                   from the previous version to the latest API version specified in the CRD.
                   Defaults to true.
                 type: boolean
+              sharding:
+                description: Sharding holds the specification of the sharding configuration.
+                properties:
+                  key:
+                    default: sharding.fluxcd.io/key
+                    description: Key is the label key used to shard the resources.
+                    type: string
+                  shards:
+                    description: Shards is the list of shard names.
+                    items:
+                      type: string
+                    minItems: 1
+                    type: array
+                required:
+                - shards
+                type: object
               storage:
                 description: |-
                   Storage holds the specification of the source-controller
@@ -280,8 +296,6 @@ spec:
                 type: boolean
             required:
             - distribution
-            - migrateResources
-            - wait
             type: object
           status:
             description: FluxInstanceStatus defines the observed state of FluxInstance

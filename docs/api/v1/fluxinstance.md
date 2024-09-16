@@ -330,6 +330,52 @@ spec:
 
 The `.spec.storage.size` field is required and specifies the size of the persistent volume claim.
 
+### Sharding configuration
+
+The `.spec.sharding` field is optional and specifies the sharding configuration for the Flux controllers.
+
+Example:
+
+```yaml
+spec:
+  sharding:
+    key: "sharding.fluxcd.io/key"
+    shards:
+      - "shard1"
+      - "shard2"
+```
+
+For each shard, the operator will create a separate set of controllers, e.g.:
+
+```console
+$ kubectl -n flux-system get deployments -l app.kubernetes.io/part-of=flux
+NAME
+source-controller
+source-controller-shard1
+source-controller-shard2
+kustomize-controller
+kustomize-controller-shard1
+kustomize-controller-shard2
+helm-controller
+helm-controller-shard1
+helm-controller-shard2
+```
+
+Note that only the `source-controller`, `kustomize-controller` and `helm-controller` controllers
+support sharding.
+
+To assign a resource to a specific shard, add the `sharding.fluxcd.io/key` label with the shard value,
+e.g.: `sharding.fluxcd.io/key: shard1`.
+
+#### Sharding key
+
+The `.spec.sharding.key` field is optional and specifies the sharding key label to use for the Flux controllers.
+By default, the key is set to `sharding.fluxcd.io/key`.
+
+#### Shards
+
+The `.spec.sharding.shards` field is required and specifies the list of sharding values to use for the Flux controllers.
+
 ### Kustomize patches
 
 The `.spec.kustomize.patches` field is optional and specifies the Kustomize patches to apply to the Flux controllers.

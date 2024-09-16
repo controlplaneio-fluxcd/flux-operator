@@ -521,6 +521,9 @@ func TestFluxInstanceReconciler_Profiles(t *testing.T) {
 		Type:        "openshift",
 		Multitenant: true,
 	}
+	spec.Sharding = &fluxcdv1.Sharding{
+		Shards: []string{"shard1", "shard2"},
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -580,6 +583,17 @@ func TestFluxInstanceReconciler_Profiles(t *testing.T) {
 
 	// Check custom patches.
 	g.Expect(*kc.Spec.Replicas).To(BeNumerically("==", 0))
+
+	// Check if the shards were installed.
+	for _, shard := range spec.Sharding.Shards {
+		sc := &appsv1.Deployment{}
+		err = testClient.Get(ctx, types.NamespacedName{Name: "source-controller-" + shard, Namespace: ns.Name}, sc)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(sc.Spec.Template.Spec.Containers[0].Args).To(ContainElements(
+			fmt.Sprintf("--watch-label-selector=sharding.fluxcd.io/key=%s", shard),
+			fmt.Sprintf("--storage-adv-addr=source-controller-%s.$(RUNTIME_NAMESPACE).svc.cluster.local.", shard),
+		))
+	}
 
 	// Uninstall the instance.
 	err = testClient.Delete(ctx, obj)
@@ -652,7 +666,8 @@ func TestFluxInstanceReconciler_NewVersion(t *testing.T) {
 
 func getDefaultFluxSpec() fluxcdv1.FluxInstanceSpec {
 	return fluxcdv1.FluxInstanceSpec{
-		Wait: false,
+		Wait:             false,
+		MigrateResources: true,
 		Distribution: fluxcdv1.Distribution{
 			Version:  "v2.3.0",
 			Registry: "ghcr.io/fluxcd",

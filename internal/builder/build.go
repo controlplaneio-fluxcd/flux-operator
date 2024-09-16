@@ -115,5 +115,16 @@ func generate(base string, options Options) error {
 			return fmt.Errorf("replacing service account namespace in rbac failed: %w", err)
 		}
 	}
+
+	for _, shard := range options.Shards {
+		options.ShardName = shard
+		if err := os.MkdirAll(path.Join(base, shard), os.ModePerm); err != nil {
+			return fmt.Errorf("generate shard dir failed: %w", err)
+		}
+		if err := execTemplate(options, kustomizationShardTmpl, path.Join(base, shard, "kustomization.yaml")); err != nil {
+			return fmt.Errorf("generate shard kustomization failed: %w", err)
+		}
+	}
+
 	return nil
 }

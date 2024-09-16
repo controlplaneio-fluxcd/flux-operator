@@ -18,9 +18,9 @@ removes the operational burden of managing Flux across fleets of clusters by ful
 installation, configuration, and upgrade of the Flux controllers based on a declarative API.
 
 **Advanced Configuration** - The operator simplifies the configuration of Flux multi-tenancy lockdown,
-vertical scaling, persistent storage, and allows fine-tuning the Flux controllers with Kustomize patches.
-The operator streamlines the transition from Git as the delivery mechanism for the cluster
-desired state to OCI artifacts and S3-compatible storage.
+sharding, horizontal and vertical scaling, persistent storage, and allows fine-tuning the Flux
+controllers with Kustomize patches. The operator streamlines the transition from Git as the delivery
+mechanism for the cluster desired state to OCI artifacts and S3-compatible storage.
 
 **Deep Insights** - The operator provides deep insights into the delivery pipelines managed by Flux,
 including detailed reports and Prometheus metrics about the Flux controllers

@@ -22,6 +22,8 @@ spec:
   storage:
     class: "standard"
     size: "1Gi"
+  sharding:
+    shards: [ "shard1" ]
   sync:
     kind: GitRepository
     url: "https://github.com/controlplaneio-fluxcd/distribution.git"
