@@ -155,6 +155,7 @@ the cluster sync status and more.
   - [Flux controllers configuration](https://fluxcd.control-plane.io/operator/flux-config/)
   - [Flux instance customization](https://fluxcd.control-plane.io/operator/flux-kustomize/)
   - [Cluster sync configuration](https://fluxcd.control-plane.io/operator/flux-sync/)
+  - [Flux controllers sharding](https://fluxcd.control-plane.io/operator/flux-sharding/)
 - Guides
   - [Flux monitoring and reporting](https://fluxcd.control-plane.io/operator/flux-monitoring/)
   - [Migration of bootstrapped clusters](https://fluxcd.control-plane.io/operator/flux-bootstrap-migration/)
