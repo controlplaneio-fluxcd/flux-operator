@@ -8,12 +8,12 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.27.33
 	github.com/aws/aws-sdk-go-v2/service/marketplacemetering v1.23.6
 	github.com/fluxcd/cli-utils v0.36.0-flux.9
-	github.com/fluxcd/pkg/apis/kustomize v1.6.0
-	github.com/fluxcd/pkg/apis/meta v1.6.0
+	github.com/fluxcd/pkg/apis/kustomize v1.6.1
+	github.com/fluxcd/pkg/apis/meta v1.6.1
 	github.com/fluxcd/pkg/kustomize v1.13.0
-	github.com/fluxcd/pkg/runtime v0.49.0
-	github.com/fluxcd/pkg/ssa v0.41.0
-	github.com/fluxcd/pkg/tar v0.8.0
+	github.com/fluxcd/pkg/runtime v0.49.1
+	github.com/fluxcd/pkg/ssa v0.41.1
+	github.com/fluxcd/pkg/tar v0.8.1
 	github.com/golang-jwt/jwt/v4 v4.5.0
 	github.com/google/go-containerregistry v0.20.2
 	github.com/onsi/ginkgo/v2 v2.20.2
@@ -23,10 +23,10 @@ require (
 	github.com/prometheus/client_golang v1.20.3
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/exp v0.0.0-20240909161429-701f63a606c0
-	k8s.io/api v0.31.0
-	k8s.io/apiextensions-apiserver v0.31.0
-	k8s.io/apimachinery v0.31.0
-	k8s.io/client-go v0.31.0
+	k8s.io/api v0.31.1
+	k8s.io/apiextensions-apiserver v0.31.1
+	k8s.io/apimachinery v0.31.1
+	k8s.io/client-go v0.31.1
 	k8s.io/utils v0.0.0-20240711033017-18e509b52bc8
 	sigs.k8s.io/controller-runtime v0.19.0
 	sigs.k8s.io/yaml v1.4.0
@@ -51,7 +51,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/chai2010/gettext-go v1.0.2 // indirect
 	github.com/containerd/stargz-snapshotter/estargz v0.14.3 // indirect
-	github.com/cyphar/filepath-securejoin v0.3.1 // indirect
+	github.com/cyphar/filepath-securejoin v0.3.2 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/docker/cli v27.2.1+incompatible // indirect
 	github.com/docker/distribution v2.8.3+incompatible // indirect
@@ -60,7 +60,7 @@ require (
 	github.com/evanphx/json-patch/v5 v5.9.0 // indirect
 	github.com/exponent-io/jsonpath v0.0.0-20210407135951-1de76d718b3f // indirect
 	github.com/fluxcd/pkg/envsubst v1.1.0 // indirect
-	github.com/fluxcd/pkg/sourceignore v0.8.0 // indirect
+	github.com/fluxcd/pkg/sourceignore v0.8.1 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
 	github.com/go-errors/errors v1.5.1 // indirect
@@ -133,11 +133,11 @@ require (
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	k8s.io/cli-runtime v0.31.0 // indirect
-	k8s.io/component-base v0.31.0 // indirect
+	k8s.io/cli-runtime v0.31.1 // indirect
+	k8s.io/component-base v0.31.1 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20240411171206-dc4e619f62f3 // indirect
-	k8s.io/kubectl v0.31.0 // indirect
+	k8s.io/kubectl v0.31.1 // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/kustomize/api v0.17.3 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.17.2 // indirect
