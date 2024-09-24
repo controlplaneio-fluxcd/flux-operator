@@ -9,6 +9,7 @@ rules:
   resources:
   - fluxinstances
   - fluxreports
+  - resourcegroups
   verbs:
   - create
   - delete
@@ -22,6 +23,7 @@ rules:
   resources:
   - fluxinstances/finalizers
   - fluxreports/finalizers
+  - resourcegroups/finalizers
   verbs:
   - update
 - apiGroups:
@@ -29,6 +31,7 @@ rules:
   resources:
   - fluxinstances/status
   - fluxreports/status
+  - resourcegroups/status
   verbs:
   - get
   - patch
