@@ -7,8 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -29,35 +27,32 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/yaml"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/builder"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/inventory"
-	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
 )
 
-// FluxInstanceReconciler reconciles a FluxInstance object
-type FluxInstanceReconciler struct {
+// ResourceGroupReconciler reconciles a ResourceGroup object
+type ResourceGroupReconciler struct {
 	client.Client
 	kuberecorder.EventRecorder
 
 	Scheme        *runtime.Scheme
 	StatusPoller  *polling.StatusPoller
 	StatusManager string
-	StoragePath   string
 }
 
-// +kubebuilder:rbac:groups=fluxcd.controlplane.io,resources=fluxinstances,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=fluxcd.controlplane.io,resources=fluxinstances/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=fluxcd.controlplane.io,resources=fluxinstances/finalizers,verbs=update
+// +kubebuilder:rbac:groups=fluxcd.controlplane.io,resources=resourcegroups,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=fluxcd.controlplane.io,resources=resourcegroups/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=fluxcd.controlplane.io,resources=resourcegroups/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-func (r *FluxInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
+func (r *ResourceGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
 	log := ctrl.LoggerFrom(ctx)
 
-	obj := &fluxcdv1.FluxInstance{}
+	obj := &fluxcdv1.ResourceGroup{}
 	if err := r.Get(ctx, req.NamespacedName, obj); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -70,16 +65,6 @@ func (r *FluxInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		if err := r.finalizeStatus(ctx, obj, patcher); err != nil {
 			log.Error(err, "failed to update status")
 			retErr = kerrors.NewAggregate([]error{retErr, err})
-		}
-
-		if err := r.recordMetrics(obj); err != nil {
-			log.Error(err, "failed to record metrics")
-		}
-
-		if err := reporter.RequestReportUpdate(ctx,
-			r.Client, fluxcdv1.DefaultInstanceName,
-			r.StatusManager, obj.Namespace); err != nil {
-			log.Error(err, "failed to request report update")
 		}
 	}()
 
@@ -114,49 +99,27 @@ func (r *FluxInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	return r.reconcile(ctx, obj, patcher)
 }
 
-func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
-	obj *fluxcdv1.FluxInstance,
+func (r *ResourceGroupReconciler) reconcile(ctx context.Context,
+	obj *fluxcdv1.ResourceGroup,
 	patcher *patch.SerialPatcher) (ctrl.Result, error) {
 	log := ctrl.LoggerFrom(ctx)
 	reconcileStart := time.Now()
 
 	// Mark the object as reconciling.
+	msg := "Reconciliation in progress"
 	conditions.MarkUnknown(obj,
 		meta.ReadyCondition,
 		meta.ProgressingReason,
-		"%s", msgInProgress)
+		"%s", msg)
 	conditions.MarkReconciling(obj,
 		meta.ProgressingReason,
-		"%s", msgInProgress)
+		"%s", msg)
 	if err := r.patch(ctx, obj, patcher); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
 	}
 
-	tmpDir, err := builder.MkdirTempAbs("", "flux")
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to create tmp dir: %w", err)
-	}
-
-	defer func() {
-		if err := os.RemoveAll(tmpDir); err != nil {
-			log.Error(err, "failed to remove tmp dir", "dir", tmpDir)
-		}
-	}()
-
-	// Fetch the distribution manifests.
-	manifestsDir, err := r.fetch(ctx, obj, tmpDir)
-	if err != nil {
-		msg := fmt.Sprintf("fetch failed: %s", err.Error())
-		conditions.MarkFalse(obj,
-			meta.ReadyCondition,
-			meta.ArtifactFailedReason,
-			"%s", msg)
-		r.EventRecorder.Event(obj, corev1.EventTypeWarning, meta.ArtifactFailedReason, msg)
-		return ctrl.Result{}, err
-	}
-
 	// Build the distribution manifests.
-	buildResult, err := r.build(ctx, obj, manifestsDir)
+	buildResult, err := builder.BuildResourceGroup(obj.Spec.Resources, obj.GetInputs())
 	if err != nil {
 		msg := fmt.Sprintf("build failed: %s", err.Error())
 		conditions.MarkFalse(obj,
@@ -172,20 +135,6 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 		return ctrl.Result{}, nil
 	}
 
-	// Update latest attempted revision.
-	if obj.Status.LastAttemptedRevision != buildResult.Revision {
-		msg := fmt.Sprintf("Upgrading to revision %s", buildResult.Revision)
-		if obj.Status.LastAttemptedRevision == "" {
-			msg = fmt.Sprintf("Installing revision %s", buildResult.Revision)
-		}
-		log.Info(msg)
-		r.EventRecorder.Event(obj, corev1.EventTypeNormal, meta.ProgressingReason, msg)
-		obj.Status.LastAttemptedRevision = buildResult.Revision
-	}
-	if err := r.patch(ctx, obj, patcher); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
-	}
-
 	// Apply the distribution manifests.
 	if err := r.apply(ctx, obj, buildResult); err != nil {
 		msg := fmt.Sprintf("reconciliation failed: %s", err.Error())
@@ -199,164 +148,27 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 	}
 
 	// Mark the object as ready.
-	obj.Status.LastAppliedRevision = obj.Status.LastAttemptedRevision
-	msg := fmt.Sprintf("Reconciliation finished in %s", fmtDuration(reconcileStart))
+	msg = fmt.Sprintf("Reconciliation finished in %s", fmtDuration(reconcileStart))
 	conditions.MarkTrue(obj,
 		meta.ReadyCondition,
 		meta.ReconciliationSucceededReason,
 		"%s", msg)
-	log.Info(msg, "revision", obj.Status.LastAppliedRevision)
-	r.EventRecorder.AnnotatedEventf(obj,
-		map[string]string{fluxcdv1.RevisionAnnotation: obj.Status.LastAppliedRevision},
+	log.Info(msg)
+	r.EventRecorder.Event(obj,
 		corev1.EventTypeNormal,
 		meta.ReconciliationSucceededReason,
 		msg)
 
-	return requeueAfter(obj), nil
-}
-
-// fetch pulls the distribution OCI artifact and
-// extracts the manifests to the temporary directory.
-// If the distribution artifact URL is not provided,
-// it falls back  to the manifests stored in the container storage.
-func (r *FluxInstanceReconciler) fetch(ctx context.Context,
-	obj *fluxcdv1.FluxInstance, tmpDir string) (string, error) {
-	log := ctrl.LoggerFrom(ctx)
-	artifactURL := obj.Spec.Distribution.Artifact
-
-	// Pull the latest manifests from the OCI repository.
-	if artifactURL != "" {
-		ctxPull, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-
-		artifactDigest, err := builder.PullArtifact(ctxPull, artifactURL, tmpDir)
-		if err != nil {
-			return "", err
-		}
-		log.Info("fetched latest manifests", "url", artifactURL, "digest", artifactDigest)
-		return tmpDir, nil
-	}
-
-	// Fall back to the manifests stored in container storage.
-	return r.StoragePath, nil
-}
-
-// build reads the distribution manifests from the local storage,
-// matches the version and builds the final resources.
-func (r *FluxInstanceReconciler) build(ctx context.Context,
-	obj *fluxcdv1.FluxInstance, manifestsDir string) (*builder.Result, error) {
-	log := ctrl.LoggerFrom(ctx)
-
-	fluxManifestsDir := filepath.Join(manifestsDir, "flux")
-	if _, err := os.Stat(fluxManifestsDir); os.IsNotExist(err) {
-		return nil, fmt.Errorf("storage path %s does not exist", fluxManifestsDir)
-	}
-
-	tmpDir, err := builder.MkdirTempAbs("", "flux")
-	if err != nil {
-		return nil, fmt.Errorf("failed to create tmp dir: %w", err)
-	}
-
-	defer func() {
-		if err := os.RemoveAll(tmpDir); err != nil {
-			log.Error(err, "failed to remove tmp dir", "dir", tmpDir)
-		}
-	}()
-
-	ver, err := builder.MatchVersion(fluxManifestsDir, obj.Spec.Distribution.Version)
-	if err != nil {
-		return nil, err
-	}
-
-	if obj.Status.LastAppliedRevision != "" {
-		if err := builder.IsCompatibleVersion(obj.Status.LastAppliedRevision, ver); err != nil {
-			return nil, err
-		}
-	}
-
-	latestVer, err := builder.MatchVersion(fluxManifestsDir, "2.x")
-	if err != nil {
-		return nil, err
-	}
-
-	if ver != latestVer {
-		msg := fmt.Sprintf("Flux %s is outdated, the latest stable version is %s", ver, latestVer)
-		r.EventRecorder.Event(obj, corev1.EventTypeNormal, fluxcdv1.OutdatedReason, msg)
-		log.Info(msg)
-	}
-
-	options := builder.MakeDefaultOptions()
-	options.Version = ver
-	options.Registry = obj.GetDistribution().Registry
-	options.ImagePullSecret = obj.GetDistribution().ImagePullSecret
-	options.Namespace = obj.GetNamespace()
-	options.Components = obj.GetComponents()
-	options.NetworkPolicy = obj.GetCluster().NetworkPolicy
-
-	if obj.GetCluster().Domain != "" {
-		options.ClusterDomain = obj.GetCluster().Domain
-	}
-
-	if obj.GetCluster().Type == "openshift" {
-		options.Patches += builder.ProfileOpenShift
-	}
-	if obj.GetCluster().Multitenant {
-		options.Patches += builder.GetMultitenantProfile(obj.GetCluster().TenantDefaultServiceAccount)
-	}
-
-	if obj.Spec.Sharding != nil {
-		options.ShardingKey = obj.Spec.Sharding.Key
-		options.Shards = obj.Spec.Sharding.Shards
-	}
-
-	if obj.Spec.Storage != nil {
-		options.ArtifactStorage = &builder.ArtifactStorage{
-			Class: obj.Spec.Storage.Class,
-			Size:  obj.Spec.Storage.Size,
-		}
-	}
-
-	if obj.Spec.Sync != nil {
-		options.Sync = &builder.Sync{
-			Kind:       obj.Spec.Sync.Kind,
-			Interval:   obj.Spec.Sync.Interval.Duration.String(),
-			Ref:        obj.Spec.Sync.Ref,
-			PullSecret: obj.Spec.Sync.PullSecret,
-			URL:        obj.Spec.Sync.URL,
-			Path:       obj.Spec.Sync.Path,
-		}
-	}
-
-	if obj.Spec.Kustomize != nil && len(obj.Spec.Kustomize.Patches) > 0 {
-		patchesData, err := yaml.Marshal(obj.Spec.Kustomize.Patches)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse kustomize patches: %w", err)
-		}
-		options.Patches += string(patchesData)
-	}
-
-	srcDir := filepath.Join(fluxManifestsDir, ver)
-	images, err := builder.ExtractComponentImagesWithDigest(filepath.Join(manifestsDir, "flux-images"), options)
-	if err != nil {
-		log.Error(err, "falling back to extracting images from manifests")
-		images, err = builder.ExtractComponentImages(srcDir, options)
-		if err != nil {
-			return nil, fmt.Errorf("failed to extract container images from manifests: %w", err)
-		}
-	}
-	options.ComponentImages = images
-
-	return builder.Build(srcDir, tmpDir, options)
+	return requeueAfterResourceGroup(obj), nil
 }
 
 // apply reconciles the resources in the cluster by performing
 // a server-side apply, pruning of stale resources and waiting
 // for the resources to become ready.
-func (r *FluxInstanceReconciler) apply(ctx context.Context,
-	obj *fluxcdv1.FluxInstance,
-	buildResult *builder.Result) error {
+func (r *ResourceGroupReconciler) apply(ctx context.Context,
+	obj *fluxcdv1.ResourceGroup,
+	objects []*unstructured.Unstructured) error {
 	log := ctrl.LoggerFrom(ctx)
-	objects := buildResult.Objects
 	var changeSetLog strings.Builder
 
 	// Create a snapshot of the current inventory.
@@ -368,7 +180,7 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 	// Create a resource manager to reconcile the resources.
 	resourceManager := ssa.NewResourceManager(r.Client, r.StatusPoller, ssa.Owner{
 		Field: r.StatusManager,
-		Group: fluxcdv1.GroupVersion.Group,
+		Group: fmt.Sprintf("resourcegroup.%s", fluxcdv1.GroupVersion.Group),
 	})
 	resourceManager.SetOwnerLabels(objects, obj.GetName(), obj.GetNamespace())
 
@@ -412,10 +224,6 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 				Name:          "kubectl",
 				OperationType: metav1.ManagedFieldsOperationUpdate,
 			},
-			{
-				Name:          "flux-controller",
-				OperationType: metav1.ManagedFieldsOperationApply,
-			},
 		},
 	}
 
@@ -438,7 +246,7 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 	// Log the changeset.
 	if len(resultSet.Entries) > 0 {
 		log.Info("Server-side apply completed",
-			"output", resultSet.ToMap(), "revision", buildResult.Revision)
+			"output", resultSet.ToMap())
 	}
 
 	// Create an inventory from the reconciled resources.
@@ -450,15 +258,6 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 
 	// Set last applied inventory in status.
 	obj.Status.Inventory = newInventory
-	obj.Status.Components = make([]fluxcdv1.ComponentImage, len(buildResult.ComponentImages))
-	for i, img := range buildResult.ComponentImages {
-		obj.Status.Components[i] = fluxcdv1.ComponentImage{
-			Name:       img.Name,
-			Repository: img.Repository,
-			Tag:        img.Tag,
-			Digest:     img.Digest,
-		}
-	}
 
 	// Detect stale resources which are subject to garbage collection.
 	staleObjects, err := inventory.Diff(oldInventory, newInventory)
@@ -486,34 +285,37 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 				changeSetLog.WriteString(change.String() + "\n")
 			}
 			log.Info("Garbage collection completed",
-				"output", deleteSet.ToMap(), "revision", buildResult.Revision)
+				"output", deleteSet.ToMap())
 		}
+	}
+
+	// Emit event only if the server-side apply resulted in changes.
+	applyLog := strings.TrimSuffix(changeSetLog.String(), "\n")
+	if applyLog != "" {
+		r.EventRecorder.Event(obj,
+			corev1.EventTypeNormal,
+			"ApplySucceeded",
+			applyLog)
 	}
 
 	// Wait for the resources to become ready.
-	if obj.GetWait() && len(resultSet.Entries) > 0 {
+	if obj.Spec.Wait && len(resultSet.Entries) > 0 {
 		if err := resourceManager.WaitForSet(resultSet.ToObjMetadataSet(), ssa.WaitOptions{
 			Interval: 5 * time.Second,
 			Timeout:  obj.GetTimeout(),
+			FailFast: true,
 		}); err != nil {
 			return err
 		}
-		log.Info("Health check completed", "revision", buildResult.Revision)
-	}
-
-	// Migrate all custom resources if the Flux CRDs storage version has changed.
-	if obj.GetMigrateResources() {
-		if err := r.migrateResources(ctx, client.MatchingLabels{"app.kubernetes.io/part-of": obj.Name}); err != nil {
-			log.Error(err, "failed to migrate resources to the latest storage version")
-		}
+		log.Info("Health check completed")
 	}
 
 	return nil
 }
 
 // finalizeStatus updates the object status and conditions.
-func (r *FluxInstanceReconciler) finalizeStatus(ctx context.Context,
-	obj *fluxcdv1.FluxInstance,
+func (r *ResourceGroupReconciler) finalizeStatus(ctx context.Context,
+	obj *fluxcdv1.ResourceGroup,
 	patcher *patch.SerialPatcher) error {
 	// Set the value of the reconciliation request in status.
 	if v, ok := meta.ReconcileAnnotationValue(obj.GetAnnotations()); ok {
@@ -538,9 +340,50 @@ func (r *FluxInstanceReconciler) finalizeStatus(ctx context.Context,
 	return r.patch(ctx, obj, patcher)
 }
 
+// uninstall deletes all the resources managed by the ResourceGroup.
+//
+//nolint:unparam
+func (r *ResourceGroupReconciler) uninstall(ctx context.Context,
+	obj *fluxcdv1.ResourceGroup) (ctrl.Result, error) {
+	reconcileStart := time.Now()
+	log := ctrl.LoggerFrom(ctx)
+
+	if obj.IsDisabled() || obj.Status.Inventory == nil || len(obj.Status.Inventory.Entries) == 0 {
+		controllerutil.RemoveFinalizer(obj, fluxcdv1.Finalizer)
+		return ctrl.Result{}, nil
+	}
+
+	resourceManager := ssa.NewResourceManager(r.Client, nil, ssa.Owner{
+		Field: r.StatusManager,
+		Group: fluxcdv1.GroupVersion.Group,
+	})
+
+	opts := ssa.DeleteOptions{
+		PropagationPolicy: metav1.DeletePropagationBackground,
+		Inclusions:        resourceManager.GetOwnerLabels(obj.Name, obj.Namespace),
+		Exclusions: map[string]string{
+			fluxcdv1.PruneAnnotation: fluxcdv1.DisabledValue,
+		},
+	}
+
+	objects, _ := inventory.List(obj.Status.Inventory)
+
+	changeSet, err := resourceManager.DeleteAll(ctx, objects, opts)
+	if err != nil {
+		log.Error(err, "pruning for deleted resource failed")
+	}
+
+	controllerutil.RemoveFinalizer(obj, fluxcdv1.Finalizer)
+	msg := fmt.Sprintf("Uninstallation completed in %v", fmtDuration(reconcileStart))
+	log.Info(msg, "output", changeSet.ToMap())
+
+	// Stop reconciliation as the object is being deleted.
+	return ctrl.Result{}, nil
+}
+
 // patch updates the object status, conditions and finalizers.
-func (r *FluxInstanceReconciler) patch(ctx context.Context,
-	obj *fluxcdv1.FluxInstance,
+func (r *ResourceGroupReconciler) patch(ctx context.Context,
+	obj *fluxcdv1.ResourceGroup,
 	patcher *patch.SerialPatcher) (retErr error) {
 	// Configure the runtime patcher.
 	ownedConditions := []string{
@@ -568,49 +411,13 @@ func (r *FluxInstanceReconciler) patch(ctx context.Context,
 	return nil
 }
 
-// hasChanged evaluates the given action and returns true
-// if the action type matches a resource mutation or deletion.
-func hasChanged(action ssa.Action) bool {
-	switch action {
-	case ssa.SkippedAction:
-		return false
-	case ssa.UnchangedAction:
-		return false
-	default:
-		return true
-	}
-}
-
-// requeueAfter returns a ctrl.Result with the requeue time set to the
+// requeueAfterResourceGroup returns a ctrl.Result with the requeue time set to the
 // interval specified in the object's annotations.
-func requeueAfter(obj *fluxcdv1.FluxInstance) ctrl.Result {
+func requeueAfterResourceGroup(obj *fluxcdv1.ResourceGroup) ctrl.Result {
 	result := ctrl.Result{}
 	if obj.GetInterval() > 0 {
 		result.RequeueAfter = obj.GetInterval()
 	}
 
 	return result
-}
-
-// fmtDuration returns a human-readable string
-// representation of the time duration.
-func fmtDuration(t time.Time) string {
-	if time.Since(t) < time.Second {
-		return time.Since(t).Round(time.Millisecond).String()
-	} else {
-		return time.Since(t).Round(time.Second).String()
-	}
-}
-
-func (r *FluxInstanceReconciler) recordMetrics(obj *fluxcdv1.FluxInstance) error {
-	if !obj.ObjectMeta.DeletionTimestamp.IsZero() {
-		reporter.ResetMetrics(fluxcdv1.FluxInstanceKind)
-		return nil
-	}
-	rawMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
-	if err != nil {
-		return err
-	}
-	reporter.RecordMetrics(unstructured.Unstructured{Object: rawMap})
-	return nil
 }

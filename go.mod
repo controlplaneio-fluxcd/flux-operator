@@ -14,6 +14,7 @@ require (
 	github.com/fluxcd/pkg/runtime v0.49.1
 	github.com/fluxcd/pkg/ssa v0.41.1
 	github.com/fluxcd/pkg/tar v0.8.1
+	github.com/go-task/slim-sprig/v3 v3.0.0
 	github.com/golang-jwt/jwt/v4 v4.5.0
 	github.com/google/go-containerregistry v0.20.2
 	github.com/onsi/ginkgo/v2 v2.20.2
@@ -72,7 +73,6 @@ require (
 	github.com/go-openapi/jsonpointer v0.21.0 // indirect
 	github.com/go-openapi/jsonreference v0.21.0 // indirect
 	github.com/go-openapi/swag v0.23.0 // indirect
-	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
