@@ -1,0 +1,9 @@
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceGroup
+metadata:
+  name: app1
+  namespace: apps
+spec:
+  commonMetadata:
+    labels:
+      app.kubernetes.io/name: podinfo
