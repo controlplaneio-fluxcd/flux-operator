@@ -14,17 +14,15 @@ import (
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
-const msgInProgress = "Reconciliation in progress"
-
-// FluxInstanceReconcilerOptions contains options for the reconciler.
-type FluxInstanceReconcilerOptions struct {
+// ResourceGroupReconcilerOptions contains options for the reconciler.
+type ResourceGroupReconcilerOptions struct {
 	RateLimiter workqueue.TypedRateLimiter[reconcile.Request]
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *FluxInstanceReconciler) SetupWithManager(mgr ctrl.Manager, opts FluxInstanceReconcilerOptions) error {
+func (r *ResourceGroupReconciler) SetupWithManager(mgr ctrl.Manager, opts ResourceGroupReconcilerOptions) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&fluxcdv1.FluxInstance{},
+		For(&fluxcdv1.ResourceGroup{},
 			builder.WithPredicates(
 				predicate.Or(
 					predicate.GenerationChangedPredicate{},

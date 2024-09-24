@@ -59,7 +59,7 @@ func main() {
 		storagePath          string
 	)
 
-	flag.IntVar(&concurrent, "concurrent", 4, "The number of concurrent kustomize reconciles.")
+	flag.IntVar(&concurrent, "concurrent", 10, "The number of concurrent resource reconciles.")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&healthAddr, "health-addr", ":8081", "The address the health endpoint binds to.")
 	flag.StringVar(&storagePath, "storage-path", "/data", "The local storage path.")
@@ -185,6 +185,20 @@ func main() {
 			RateLimiter: runtimeCtrl.GetRateLimiter(rateLimiterOptions),
 		}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", fluxcdv1.FluxReportKind)
+		os.Exit(1)
+	}
+
+	if err = (&controller.ResourceGroupReconciler{
+		Client:        mgr.GetClient(),
+		Scheme:        mgr.GetScheme(),
+		StatusPoller:  polling.NewStatusPoller(mgr.GetClient(), mgr.GetRESTMapper(), polling.Options{}),
+		StatusManager: controllerName,
+		EventRecorder: mgr.GetEventRecorderFor(controllerName),
+	}).SetupWithManager(mgr,
+		controller.ResourceGroupReconcilerOptions{
+			RateLimiter: runtimeCtrl.GetRateLimiter(rateLimiterOptions),
+		}); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", fluxcdv1.ResourceGroupKind)
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
