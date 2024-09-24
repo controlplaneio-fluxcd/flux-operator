@@ -17,7 +17,7 @@ var _ = Describe("FluxInstance", Ordered, func() {
 			By("reconcile FluxInstance")
 			verifyFluxInstanceReconcile := func() error {
 				cmd := exec.Command("kubectl", "apply",
-					"-k", "config/samples", "-n", namespace,
+					"-f", "config/samples/fluxcd_v1_fluxinstance.yaml", "-n", namespace,
 				)
 				_, err := Run(cmd, "/test/e2e")
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
@@ -30,6 +30,31 @@ var _ = Describe("FluxInstance", Ordered, func() {
 				return nil
 			}
 			EventuallyWithOffset(1, verifyFluxInstanceReconcile, 5*time.Minute, 10*time.Second).Should(Succeed())
+		})
+	})
+
+	Context("resource group lifecycle", func() {
+		It("should run successfully", func() {
+			By("reconcile ResourceGroup")
+			reconcile := func() error {
+				cmd := exec.Command("kubectl", "apply",
+					"-f", "config/samples/fluxcd_v1_resourcegroup.yaml",
+				)
+				_, err := Run(cmd, "/test/e2e")
+				ExpectWithOffset(2, err).NotTo(HaveOccurred())
+
+				cmd = exec.Command("kubectl", "wait", "ResourceGroup/podinfo",
+					"--for=condition=Ready", "--timeout=5m",
+				)
+				_, err = Run(cmd, "/test/e2e")
+				ExpectWithOffset(2, err).NotTo(HaveOccurred())
+
+				cmd = exec.Command("kubectl", "delete", "ResourceGroup/podinfo")
+				_, err = Run(cmd, "/test/e2e")
+				ExpectWithOffset(2, err).NotTo(HaveOccurred())
+				return nil
+			}
+			EventuallyWithOffset(1, reconcile, 5*time.Minute, 10*time.Second).Should(Succeed())
 		})
 	})
 
@@ -65,7 +90,7 @@ var _ = Describe("FluxInstance", Ordered, func() {
 	Context("uninstallation", func() {
 		It("should run successfully", func() {
 			By("delete FluxInstance")
-			cmd := exec.Command("kubectl", "delete", "-k", "config/samples",
+			cmd := exec.Command("kubectl", "delete", "FluxInstance/flux",
 				"--timeout=30s", "-n", namespace)
 			_, err := Run(cmd, "/test/e2e")
 			Expect(err).NotTo(HaveOccurred())
