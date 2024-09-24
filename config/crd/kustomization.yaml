@@ -3,3 +3,4 @@ kind: Kustomization
 resources:
 - bases/fluxcd.controlplane.io_fluxinstances.yaml
 - bases/fluxcd.controlplane.io_fluxreports.yaml
+- bases/fluxcd.controlplane.io_resourcegroups.yaml
