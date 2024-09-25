@@ -33,6 +33,11 @@ type ResourceGroupSpec struct {
 	// +optional
 	Resources []*apiextensionsv1.JSON `json:"resources,omitempty"`
 
+	// DependsOn specifies the list of Kubernetes resources that must
+	// exist on the cluster before the reconciliation process starts.
+	// +optional
+	DependsOn []Dependency `json:"dependsOn,omitempty"`
+
 	// Wait instructs the controller to check the health of all the reconciled
 	// resources. Defaults to true.
 	// +kubebuilder:default:=true
@@ -49,6 +54,29 @@ type CommonMetadata struct {
 	// Labels to be added to the object's metadata.
 	// +optional
 	Labels map[string]string `json:"labels,omitempty"`
+}
+
+// Dependency defines a ResourceGroup dependency on a Kubernetes resource.
+type Dependency struct {
+	// APIVersion of the resource to depend on.
+	// +required
+	APIVersion string `json:"apiVersion"`
+
+	// Kind of the resource to depend on.
+	// +required
+	Kind string `json:"kind"`
+
+	// Name of the resource to depend on.
+	// +required
+	Name string `json:"name"`
+
+	// Namespace of the resource to depend on.
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+
+	// Ready checks if the resource Ready status condition is true.
+	// +optional
+	Ready bool `json:"ready,omitempty"`
 }
 
 // ResourceGroupInput defines the key-value pairs of the resource group input.
