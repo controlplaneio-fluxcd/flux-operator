@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/fluxcd/cli-utils/pkg/kstatus/polling"
+	"github.com/fluxcd/cli-utils/pkg/kstatus/status"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
@@ -38,6 +39,7 @@ type ResourceGroupReconciler struct {
 	client.Client
 	kuberecorder.EventRecorder
 
+	APIReader     client.Reader
 	Scheme        *runtime.Scheme
 	StatusPoller  *polling.StatusPoller
 	StatusManager string
@@ -95,6 +97,20 @@ func (r *ResourceGroupReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, nil
 	}
 
+	// Check dependencies and requeue the reconciliation if the check fails.
+	if err := r.checkDependencies(ctx, obj); err != nil {
+		msg := fmt.Sprintf("Retrying dependency check: %s", err.Error())
+		if conditions.GetReason(obj, meta.ReadyCondition) != meta.DependencyNotReadyReason {
+			log.Error(err, "dependency check failed")
+			r.Event(obj, corev1.EventTypeNormal, meta.DependencyNotReadyReason, msg)
+		}
+		conditions.MarkFalse(obj,
+			meta.ReadyCondition,
+			meta.DependencyNotReadyReason,
+			"%s", msg)
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
 	// Reconcile the object.
 	return r.reconcile(ctx, obj, patcher)
 }
@@ -118,7 +134,7 @@ func (r *ResourceGroupReconciler) reconcile(ctx context.Context,
 		return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
 	}
 
-	// Build the distribution manifests.
+	// Build the resources.
 	buildResult, err := builder.BuildResourceGroup(obj.Spec.Resources, obj.GetInputs())
 	if err != nil {
 		msg := fmt.Sprintf("build failed: %s", err.Error())
@@ -135,7 +151,7 @@ func (r *ResourceGroupReconciler) reconcile(ctx context.Context,
 		return ctrl.Result{}, nil
 	}
 
-	// Apply the distribution manifests.
+	// Apply the resources to the cluster.
 	if err := r.apply(ctx, obj, buildResult); err != nil {
 		msg := fmt.Sprintf("reconciliation failed: %s", err.Error())
 		conditions.MarkFalse(obj,
@@ -160,6 +176,40 @@ func (r *ResourceGroupReconciler) reconcile(ctx context.Context,
 		msg)
 
 	return requeueAfterResourceGroup(obj), nil
+}
+
+func (r *ResourceGroupReconciler) checkDependencies(ctx context.Context,
+	obj *fluxcdv1.ResourceGroup) error {
+
+	for _, dep := range obj.Spec.DependsOn {
+		depObj := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": dep.APIVersion,
+				"kind":       dep.Kind,
+				"metadata": map[string]interface{}{
+					"name":      dep.Name,
+					"namespace": dep.Namespace,
+				},
+			},
+		}
+
+		if err := r.Client.Get(ctx, client.ObjectKeyFromObject(depObj), depObj); err != nil {
+			return fmt.Errorf("dependency %s/%s/%s not found: %w", dep.APIVersion, dep.Kind, dep.Name, err)
+		}
+
+		if dep.Ready {
+			stat, err := status.Compute(depObj)
+			if err != nil {
+				return fmt.Errorf("dependency %s/%s/%s not ready: %w", dep.APIVersion, dep.Kind, dep.Name, err)
+			}
+
+			if stat.Status != status.CurrentStatus {
+				return fmt.Errorf("dependency %s/%s/%s not ready: status %s", dep.APIVersion, dep.Kind, dep.Name, stat.Status)
+			}
+		}
+	}
+
+	return nil
 }
 
 // apply reconciles the resources in the cluster by performing
