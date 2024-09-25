@@ -68,6 +68,36 @@ spec:
                     description: Labels to be added to the object's metadata.
                     type: object
                 type: object
+              dependsOn:
+                description: |-
+                  DependsOn specifies the list of Kubernetes resources that must
+                  exist on the cluster before the reconciliation process starts.
+                items:
+                  description: Dependency defines a ResourceGroup dependency on a
+                    Kubernetes resource.
+                  properties:
+                    apiVersion:
+                      description: APIVersion of the resource to depend on.
+                      type: string
+                    kind:
+                      description: Kind of the resource to depend on.
+                      type: string
+                    name:
+                      description: Name of the resource to depend on.
+                      type: string
+                    namespace:
+                      description: Namespace of the resource to depend on.
+                      type: string
+                    ready:
+                      description: Ready checks if the resource Ready status condition
+                        is true.
+                      type: boolean
+                  required:
+                  - apiVersion
+                  - kind
+                  - name
+                  type: object
+                type: array
               inputs:
                 description: Inputs contains the list of resource group inputs.
                 items:

@@ -190,6 +190,7 @@ func main() {
 
 	if err = (&controller.ResourceGroupReconciler{
 		Client:        mgr.GetClient(),
+		APIReader:     mgr.GetAPIReader(),
 		Scheme:        mgr.GetScheme(),
 		StatusPoller:  polling.NewStatusPoller(mgr.GetClient(), mgr.GetRESTMapper(), polling.Options{}),
 		StatusManager: controllerName,
