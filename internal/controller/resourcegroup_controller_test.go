@@ -196,9 +196,109 @@ spec:
 	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 }
 
+func TestResourceGroupReconciler_DependsOn(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceGroupReconciler()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	objDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceGroup
+metadata:
+  name: tenants
+  namespace: "%[1]s"
+spec:
+  dependsOn:
+    - apiVersion: apiextensions.k8s.io/v1
+      kind: CustomResourceDefinition
+      name: fluxinstances.fluxcd.controlplane.io
+      ready: true
+    - apiVersion: v1
+      kind: ServiceAccount
+      name: test
+      namespace: "%[1]s"
+  resources:
+    - apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: readonly
+        namespace: "%[1]s"
+`, ns.Name)
+
+	obj := &fluxcdv1.ResourceGroup{}
+	err = yaml.Unmarshal([]byte(objDef), obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize the instance.
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Reconcile with not found dependency.
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.RequeueAfter).To(Equal(5 * time.Second))
+
+	// Check if the instance was installed.
+	result := &fluxcdv1.ResourceGroup{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	logObjectStatus(t, result)
+	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.DependencyNotReadyReason))
+	g.Expect(conditions.GetMessage(result, meta.ReadyCondition)).To(ContainSubstring("test not found"))
+
+	// Create the dependency.
+	dep := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: ns.Name,
+		},
+	}
+
+	err = testClient.Create(ctx, dep)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Reconcile with ready dependencies.
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Check if the instance was installed.
+	resultFinal := &fluxcdv1.ResourceGroup{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), resultFinal)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	logObjectStatus(t, resultFinal)
+	g.Expect(conditions.GetReason(resultFinal, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
+
+	// Delete the resource group.
+	err = testClient.Delete(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.IsZero()).To(BeTrue())
+}
+
 func getResourceGroupReconciler() *ResourceGroupReconciler {
 	return &ResourceGroupReconciler{
 		Client:        testClient,
+		APIReader:     testClient,
 		Scheme:        NewTestScheme(),
 		StatusPoller:  polling.NewStatusPoller(testClient, testEnv.GetRESTMapper(), polling.Options{}),
 		StatusManager: controllerName,
