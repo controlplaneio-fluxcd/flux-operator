@@ -38,6 +38,11 @@ type ResourceGroupSpec struct {
 	// +optional
 	DependsOn []Dependency `json:"dependsOn,omitempty"`
 
+	// The name of the Kubernetes service account to impersonate
+	// when reconciling the generated resources.
+	// +optional
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+
 	// Wait instructs the controller to check the health of all the reconciled
 	// resources. Defaults to true.
 	// +kubebuilder:default:=true

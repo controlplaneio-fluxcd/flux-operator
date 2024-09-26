@@ -113,6 +113,11 @@ spec:
                 items:
                   x-kubernetes-preserve-unknown-fields: true
                 type: array
+              serviceAccountName:
+                description: |-
+                  The name of the Kubernetes service account to impersonate
+                  when reconciling the generated resources.
+                type: string
               wait:
                 default: true
                 description: |-
