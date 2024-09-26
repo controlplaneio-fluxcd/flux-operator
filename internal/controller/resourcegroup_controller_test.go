@@ -6,6 +6,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -14,9 +15,11 @@ import (
 	"github.com/fluxcd/pkg/runtime/conditions"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/yaml"
 
@@ -271,6 +274,136 @@ spec:
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// Reconcile with ready dependencies.
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Check if the instance was installed.
+	resultFinal := &fluxcdv1.ResourceGroup{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), resultFinal)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	logObjectStatus(t, resultFinal)
+	g.Expect(conditions.GetReason(resultFinal, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
+
+	// Delete the resource group.
+	err = testClient.Delete(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.IsZero()).To(BeTrue())
+}
+
+func TestResourceGroupReconciler_Impersonation(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceGroupReconciler()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	// Generate a kubeconfig for the testenv-admin user.
+	user, err := testEnv.AddUser(envtest.User{
+		Name:   "testenv-admin",
+		Groups: []string{"system:masters"},
+	}, nil)
+	if err != nil {
+		panic(fmt.Sprintf("failed to create testenv-admin user: %v", err))
+	}
+
+	kubeConfig, err := user.KubeConfig()
+	if err != nil {
+		panic(fmt.Sprintf("failed to create the testenv-admin user kubeconfig: %v", err))
+	}
+
+	tmpDir := t.TempDir()
+	err = os.WriteFile(fmt.Sprintf("%s/kubeconfig", tmpDir), kubeConfig, 0644)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Set the kubeconfig environment variable for the impersonator.
+	t.Setenv("KUBECONFIG", fmt.Sprintf("%s/kubeconfig", tmpDir))
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	objDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceGroup
+metadata:
+  name: test
+  namespace: "%[1]s"
+spec:
+  serviceAccountName: flux-operator
+  resources:
+    - apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: test
+        namespace: "%[1]s"
+`, ns.Name)
+
+	obj := &fluxcdv1.ResourceGroup{}
+	err = yaml.Unmarshal([]byte(objDef), obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize the instance.
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Reconcile with missing service account.
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).To(HaveOccurred())
+
+	// Check if the instance was installed.
+	result := &fluxcdv1.ResourceGroup{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	logObjectStatus(t, result)
+	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationFailedReason))
+
+	// Create the service account and role binding.
+	sa := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "flux-operator",
+			Namespace: ns.Name,
+		},
+	}
+
+	rb := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "flux-operator",
+			Namespace: ns.Name,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "flux-operator",
+				Namespace: ns.Name,
+			},
+		},
+		RoleRef: rbacv1.RoleRef{
+			Kind: "ClusterRole",
+			Name: "cluster-admin",
+		},
+	}
+
+	err = testClient.Create(ctx, sa)
+	g.Expect(err).ToNot(HaveOccurred())
+	err = testClient.Create(ctx, rb)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Reconcile with existing service account.
 	r, err = reconciler.Reconcile(ctx, reconcile.Request{
 		NamespacedName: client.ObjectKeyFromObject(obj),
 	})

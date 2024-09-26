@@ -50,19 +50,22 @@ func init() {
 
 func main() {
 	var (
-		concurrent           int
-		metricsAddr          string
-		healthAddr           string
-		enableLeaderElection bool
-		logOptions           logger.Options
-		rateLimiterOptions   runtimeCtrl.RateLimiterOptions
-		storagePath          string
+		concurrent            int
+		metricsAddr           string
+		healthAddr            string
+		enableLeaderElection  bool
+		logOptions            logger.Options
+		rateLimiterOptions    runtimeCtrl.RateLimiterOptions
+		storagePath           string
+		defaultServiceAccount string
 	)
 
 	flag.IntVar(&concurrent, "concurrent", 10, "The number of concurrent resource reconciles.")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&healthAddr, "health-addr", ":8081", "The address the health endpoint binds to.")
 	flag.StringVar(&storagePath, "storage-path", "/data", "The local storage path.")
+	flag.StringVar(&defaultServiceAccount, "default-service-account", "",
+		"Default service account used for impersonation.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
@@ -189,12 +192,13 @@ func main() {
 	}
 
 	if err = (&controller.ResourceGroupReconciler{
-		Client:        mgr.GetClient(),
-		APIReader:     mgr.GetAPIReader(),
-		Scheme:        mgr.GetScheme(),
-		StatusPoller:  polling.NewStatusPoller(mgr.GetClient(), mgr.GetRESTMapper(), polling.Options{}),
-		StatusManager: controllerName,
-		EventRecorder: mgr.GetEventRecorderFor(controllerName),
+		Client:                mgr.GetClient(),
+		APIReader:             mgr.GetAPIReader(),
+		Scheme:                mgr.GetScheme(),
+		StatusPoller:          polling.NewStatusPoller(mgr.GetClient(), mgr.GetRESTMapper(), polling.Options{}),
+		StatusManager:         controllerName,
+		EventRecorder:         mgr.GetEventRecorderFor(controllerName),
+		DefaultServiceAccount: defaultServiceAccount,
 	}).SetupWithManager(mgr,
 		controller.ResourceGroupReconcilerOptions{
 			RateLimiter: runtimeCtrl.GetRateLimiter(rateLimiterOptions),

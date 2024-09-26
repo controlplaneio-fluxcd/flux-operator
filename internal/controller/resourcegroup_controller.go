@@ -13,6 +13,7 @@ import (
 	"github.com/fluxcd/cli-utils/pkg/kstatus/polling"
 	"github.com/fluxcd/cli-utils/pkg/kstatus/status"
 	"github.com/fluxcd/pkg/apis/meta"
+	runtimeClient "github.com/fluxcd/pkg/runtime/client"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/ssa"
@@ -39,10 +40,11 @@ type ResourceGroupReconciler struct {
 	client.Client
 	kuberecorder.EventRecorder
 
-	APIReader     client.Reader
-	Scheme        *runtime.Scheme
-	StatusPoller  *polling.StatusPoller
-	StatusManager string
+	APIReader             client.Reader
+	Scheme                *runtime.Scheme
+	StatusPoller          *polling.StatusPoller
+	StatusManager         string
+	DefaultServiceAccount string
 }
 
 // +kubebuilder:rbac:groups=fluxcd.controlplane.io,resources=resourcegroups,verbs=get;list;watch;create;update;patch;delete
@@ -227,8 +229,26 @@ func (r *ResourceGroupReconciler) apply(ctx context.Context,
 		obj.Status.Inventory.DeepCopyInto(oldInventory)
 	}
 
+	// Configure the Kubernetes client for impersonation.
+	impersonation := runtimeClient.NewImpersonator(
+		r.Client,
+		r.StatusPoller,
+		polling.Options{},
+		nil,
+		runtimeClient.KubeConfigOptions{},
+		r.DefaultServiceAccount,
+		obj.Spec.ServiceAccountName,
+		obj.GetNamespace(),
+	)
+
+	// Create the Kubernetes client that runs under impersonation.
+	kubeClient, statusPoller, err := impersonation.GetClient(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to build kube client: %w", err)
+	}
+
 	// Create a resource manager to reconcile the resources.
-	resourceManager := ssa.NewResourceManager(r.Client, r.StatusPoller, ssa.Owner{
+	resourceManager := ssa.NewResourceManager(kubeClient, statusPoller, ssa.Owner{
 		Field: r.StatusManager,
 		Group: fmt.Sprintf("resourcegroup.%s", fluxcdv1.GroupVersion.Group),
 	})
@@ -403,29 +423,53 @@ func (r *ResourceGroupReconciler) uninstall(ctx context.Context,
 		return ctrl.Result{}, nil
 	}
 
-	resourceManager := ssa.NewResourceManager(r.Client, nil, ssa.Owner{
-		Field: r.StatusManager,
-		Group: fluxcdv1.GroupVersion.Group,
-	})
+	// Configure the Kubernetes client for impersonation.
+	impersonation := runtimeClient.NewImpersonator(
+		r.Client,
+		r.StatusPoller,
+		polling.Options{},
+		nil,
+		runtimeClient.KubeConfigOptions{},
+		r.DefaultServiceAccount,
+		obj.Spec.ServiceAccountName,
+		obj.GetNamespace(),
+	)
 
-	opts := ssa.DeleteOptions{
-		PropagationPolicy: metav1.DeletePropagationBackground,
-		Inclusions:        resourceManager.GetOwnerLabels(obj.Name, obj.Namespace),
-		Exclusions: map[string]string{
-			fluxcdv1.PruneAnnotation: fluxcdv1.DisabledValue,
-		},
+	// Prune the managed resources if the service account is found.
+	if impersonation.CanImpersonate(ctx) {
+		kubeClient, _, err := impersonation.GetClient(ctx)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
+		resourceManager := ssa.NewResourceManager(kubeClient, nil, ssa.Owner{
+			Field: r.StatusManager,
+			Group: fluxcdv1.GroupVersion.Group,
+		})
+
+		opts := ssa.DeleteOptions{
+			PropagationPolicy: metav1.DeletePropagationBackground,
+			Inclusions:        resourceManager.GetOwnerLabels(obj.Name, obj.Namespace),
+			Exclusions: map[string]string{
+				fluxcdv1.PruneAnnotation: fluxcdv1.DisabledValue,
+			},
+		}
+
+		objects, _ := inventory.List(obj.Status.Inventory)
+
+		changeSet, err := resourceManager.DeleteAll(ctx, objects, opts)
+		if err != nil {
+			log.Error(err, "pruning for deleted resource failed")
+		}
+
+		msg := fmt.Sprintf("Uninstallation completed in %v", fmtDuration(reconcileStart))
+		log.Info(msg, "output", changeSet.ToMap())
+	} else {
+		log.Error(errors.New("service account not found"), "skip pruning for deleted resource")
 	}
 
-	objects, _ := inventory.List(obj.Status.Inventory)
-
-	changeSet, err := resourceManager.DeleteAll(ctx, objects, opts)
-	if err != nil {
-		log.Error(err, "pruning for deleted resource failed")
-	}
-
+	// Release the object to be garbage collected.
 	controllerutil.RemoveFinalizer(obj, fluxcdv1.Finalizer)
-	msg := fmt.Sprintf("Uninstallation completed in %v", fmtDuration(reconcileStart))
-	log.Info(msg, "output", changeSet.ToMap())
 
 	// Stop reconciliation as the object is being deleted.
 	return ctrl.Result{}, nil

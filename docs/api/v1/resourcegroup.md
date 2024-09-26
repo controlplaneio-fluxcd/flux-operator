@@ -389,6 +389,20 @@ The health check is performed for the following resources types:
 By default, the wait timeout is `5m` and can be changed with the
 `fluxcd.controlplane.io/reconcileTimeout` annotation, set on the ResourceGroup object.
 
+### Role-based access control
+
+The `.spec.serviceAccountName` field is optional and specifies the name of the
+Kubernetes ServiceAccount used by the flux-operator to reconcile the ResourceGroup.
+The ServiceAccount must exist in the same namespace as the ResourceGroup
+and must have the necessary permissions to create, update and delete
+the resources defined in the ResourceGroup.
+
+On multi-tenant clusters, it is recommended to use a dedicated ServiceAccount per tenant namespace
+with the minimum required permissions. To enforce a ServiceAccount for all ResourceGroups,
+the `--default-service-account=flux-operator`flag can be set in the flux-operator container arguments.
+With this flag set, only the ResourceGroups created in the same namespace as the flux-operator
+will run with cluster-admin permissions.
+
 ## ResourceGroup Status
 
 ### Conditions
