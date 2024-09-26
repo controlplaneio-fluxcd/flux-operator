@@ -38,7 +38,7 @@ var _ = Describe("FluxInstance", Ordered, func() {
 	Context("uninstallation", func() {
 		It("should run successfully", func() {
 			By("delete FluxInstance")
-			cmd := exec.Command("kubectl", "delete", "-k", "config/samples",
+			cmd := exec.Command("kubectl", "delete", "FluxInstance/flux",
 				"--timeout=30s", "-n", namespace)
 			_, err := utils.Run(cmd, "/test/olm")
 			Expect(err).NotTo(HaveOccurred())

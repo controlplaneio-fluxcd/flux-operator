@@ -38,22 +38,16 @@ type ResourceGroupSpec struct {
 	// +optional
 	DependsOn []Dependency `json:"dependsOn,omitempty"`
 
+	// The name of the Kubernetes service account to impersonate
+	// when reconciling the generated resources.
+	// +optional
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+
 	// Wait instructs the controller to check the health of all the reconciled
 	// resources. Defaults to true.
 	// +kubebuilder:default:=true
 	// +optional
 	Wait bool `json:"wait,omitempty"`
-}
-
-// CommonMetadata defines the common labels and annotations.
-type CommonMetadata struct {
-	// Annotations to be added to the object's metadata.
-	// +optional
-	Annotations map[string]string `json:"annotations,omitempty"`
-
-	// Labels to be added to the object's metadata.
-	// +optional
-	Labels map[string]string `json:"labels,omitempty"`
 }
 
 // Dependency defines a ResourceGroup dependency on a Kubernetes resource.
