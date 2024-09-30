@@ -106,6 +106,7 @@ func (r *FluxInstanceReconciler) removeFluxFinalizers(ctx context.Context) error
 		{"source.toolkit.fluxcd.io/v1", "GitRepositoryList"},
 		{"source.toolkit.fluxcd.io/v1beta2", "OCIRepositoryList"},
 		{"source.toolkit.fluxcd.io/v1beta2", "BucketList"},
+		{"source.toolkit.fluxcd.io/v1", "BucketList"},
 		{"notification.toolkit.fluxcd.io/v1", "ReceiverList"},
 		{"notification.toolkit.fluxcd.io/v1beta2", "ProviderList"},
 		{"notification.toolkit.fluxcd.io/v1beta3", "ProviderList"},
