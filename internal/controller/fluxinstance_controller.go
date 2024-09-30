@@ -488,7 +488,7 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 	}
 
 	// Wait for the resources to become ready.
-	if obj.Spec.Wait && len(resultSet.Entries) > 0 {
+	if obj.GetWait() && len(resultSet.Entries) > 0 {
 		if err := resourceManager.WaitForSet(resultSet.ToObjMetadataSet(), ssa.WaitOptions{
 			Interval: 5 * time.Second,
 			Timeout:  obj.GetTimeout(),
@@ -499,7 +499,7 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 	}
 
 	// Migrate all custom resources if the Flux CRDs storage version has changed.
-	if obj.Spec.MigrateResources {
+	if obj.GetMigrateResources() {
 		if err := r.migrateResources(ctx, client.MatchingLabels{"app.kubernetes.io/part-of": obj.Name}); err != nil {
 			log.Error(err, "failed to migrate resources to the latest storage version")
 		}

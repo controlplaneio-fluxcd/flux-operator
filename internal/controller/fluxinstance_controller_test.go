@@ -666,8 +666,8 @@ func TestFluxInstanceReconciler_NewVersion(t *testing.T) {
 
 func getDefaultFluxSpec() fluxcdv1.FluxInstanceSpec {
 	return fluxcdv1.FluxInstanceSpec{
-		Wait:             false,
-		MigrateResources: true,
+		//Wait:             ptr.To(false),
+		//MigrateResources: ptr.To(true),
 		Distribution: fluxcdv1.Distribution{
 			Version:  "v2.3.0",
 			Registry: "ghcr.io/fluxcd",
