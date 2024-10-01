@@ -176,6 +176,16 @@ func (in *FluxInstanceSpec) DeepCopyInto(out *FluxInstanceSpec) {
 		*out = new(Kustomize)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.Wait != nil {
+		in, out := &in.Wait, &out.Wait
+		*out = new(bool)
+		**out = **in
+	}
+	if in.MigrateResources != nil {
+		in, out := &in.MigrateResources, &out.MigrateResources
+		*out = new(bool)
+		**out = **in
+	}
 	if in.Sync != nil {
 		in, out := &in.Sync, &out.Sync
 		*out = new(Sync)

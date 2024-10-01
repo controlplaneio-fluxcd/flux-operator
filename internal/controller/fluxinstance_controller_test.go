@@ -18,6 +18,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -477,10 +478,10 @@ func TestFluxInstanceReconciler_Disabled(t *testing.T) {
 
 	// Check if events were recorded for each step.
 	events := getEvents(result.Name)
-	g.Expect(events).To(HaveLen(3))
-	g.Expect(events[0].Reason).To(Equal(meta.ProgressingReason))
-	g.Expect(events[1].Reason).To(Equal(meta.ReconciliationSucceededReason))
-	g.Expect(events[2].Reason).To(Equal("ReconciliationDisabled"))
+	g.Expect(events).To(HaveLen(4))
+	g.Expect(events[1].Reason).To(Equal(meta.ProgressingReason))
+	g.Expect(events[2].Reason).To(Equal(meta.ReconciliationSucceededReason))
+	g.Expect(events[3].Reason).To(Equal("ReconciliationDisabled"))
 
 	// Check that resources were not deleted.
 	kc := &appsv1.Deployment{}
@@ -666,8 +667,8 @@ func TestFluxInstanceReconciler_NewVersion(t *testing.T) {
 
 func getDefaultFluxSpec() fluxcdv1.FluxInstanceSpec {
 	return fluxcdv1.FluxInstanceSpec{
-		Wait:             false,
-		MigrateResources: true,
+		Wait:             ptr.To(false),
+		MigrateResources: ptr.To(true),
 		Distribution: fluxcdv1.Distribution{
 			Version:  "v2.3.0",
 			Registry: "ghcr.io/fluxcd",

@@ -65,14 +65,14 @@ type FluxInstanceSpec struct {
 	// resources. Defaults to true.
 	// +kubebuilder:default:=true
 	// +optional
-	Wait bool `json:"wait"`
+	Wait *bool `json:"wait,omitempty"`
 
 	// MigrateResources instructs the controller to migrate the Flux custom resources
 	// from the previous version to the latest API version specified in the CRD.
 	// Defaults to true.
 	// +kubebuilder:default:=true
 	// +optional
-	MigrateResources bool `json:"migrateResources"`
+	MigrateResources *bool `json:"migrateResources,omitempty"`
 
 	// Sync specifies the source for the cluster sync operation.
 	// When set, a Flux source (GitRepository, OCIRepository or Bucket)
@@ -311,6 +311,22 @@ func (in *FluxInstance) GetCluster() Cluster {
 	}
 
 	return *cluster
+}
+
+// GetMigrateResources returns the migration configuration with defaults.
+func (in *FluxInstance) GetMigrateResources() bool {
+	if in.Spec.MigrateResources == nil {
+		return true
+	}
+	return *in.Spec.MigrateResources
+}
+
+// GetWait returns the wait configuration with defaults.
+func (in *FluxInstance) GetWait() bool {
+	if in.Spec.Wait == nil {
+		return true
+	}
+	return *in.Spec.Wait
 }
 
 // GetConditions returns the status conditions of the object.
