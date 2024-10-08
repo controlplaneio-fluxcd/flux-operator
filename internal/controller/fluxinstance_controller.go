@@ -91,14 +91,13 @@ func (r *FluxInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	if !controllerutil.ContainsFinalizer(obj, fluxcdv1.Finalizer) {
 		log.Info("Adding finalizer", "finalizer", fluxcdv1.Finalizer)
 		controllerutil.AddFinalizer(obj, fluxcdv1.Finalizer)
-		msg := "Reconciliation in progress"
 		conditions.MarkUnknown(obj,
 			meta.ReadyCondition,
 			meta.ProgressingReason,
-			"%s", msg)
+			"%s", msgInProgress)
 		conditions.MarkReconciling(obj,
 			meta.ProgressingReason,
-			"%s", msg)
+			"%s", msgInProgress)
 		return ctrl.Result{Requeue: true}, nil
 	}
 
@@ -121,14 +120,13 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 	reconcileStart := time.Now()
 
 	// Mark the object as reconciling.
-	msg := "Reconciliation in progress"
 	conditions.MarkUnknown(obj,
 		meta.ReadyCondition,
 		meta.ProgressingReason,
-		"%s", msg)
+		"%s", msgInProgress)
 	conditions.MarkReconciling(obj,
 		meta.ProgressingReason,
-		"%s", msg)
+		"%s", msgInProgress)
 	if err := r.patch(ctx, obj, patcher); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
 	}
@@ -201,7 +199,7 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 
 	// Mark the object as ready.
 	obj.Status.LastAppliedRevision = obj.Status.LastAttemptedRevision
-	msg = fmt.Sprintf("Reconciliation finished in %s", fmtDuration(reconcileStart))
+	msg := fmt.Sprintf("Reconciliation finished in %s", fmtDuration(reconcileStart))
 	conditions.MarkTrue(obj,
 		meta.ReadyCondition,
 		meta.ReconciliationSucceededReason,
