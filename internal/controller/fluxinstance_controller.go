@@ -18,6 +18,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/ssa"
 	"github.com/fluxcd/pkg/ssa/normalize"
+	ssautil "github.com/fluxcd/pkg/ssa/utils"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -375,6 +376,10 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 
 	if err := normalize.UnstructuredList(objects); err != nil {
 		return err
+	}
+
+	if cm := obj.Spec.CommonMetadata; cm != nil {
+		ssautil.SetCommonMetadata(objects, cm.Labels, cm.Annotations)
 	}
 
 	applyOpts := ssa.DefaultApplyOptions()
