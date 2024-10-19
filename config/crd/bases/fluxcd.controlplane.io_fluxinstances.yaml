@@ -92,6 +92,23 @@ spec:
                 - domain
                 - networkPolicy
                 type: object
+              commonMetadata:
+                description: |-
+                  CommonMetadata specifies the common labels and annotations that are
+                  applied to all resources. Any existing label or annotation will be
+                  overridden if its key matches a common one.
+                properties:
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    description: Annotations to be added to the object's metadata.
+                    type: object
+                  labels:
+                    additionalProperties:
+                      type: string
+                    description: Labels to be added to the object's metadata.
+                    type: object
+                type: object
               components:
                 description: |-
                   Components is the list of controllers to install.

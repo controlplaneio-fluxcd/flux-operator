@@ -43,6 +43,9 @@ spec:
   storage:
     class: "standard"
     size: "10Gi"
+  commonMetadata:
+    labels:
+      app.kubernetes.io/name: flux
   kustomize:
     patches:
       - target:
@@ -375,6 +378,31 @@ By default, the key is set to `sharding.fluxcd.io/key`.
 #### Shards
 
 The `.spec.sharding.shards` field is required and specifies the list of sharding values to use for the Flux controllers.
+
+### Common metadata
+
+The `.spec.commonMetadata` field is optional and specifies common metadata to be applied to all Kubernetes resources
+part of the Flux instance.
+
+It has two optional fields:
+
+- `labels`: A map used for setting [labels](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/)
+  on an object. Any existing label will be overridden if it matches with a key in
+  this map.
+- `annotations`: A map used for setting [annotations](https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/)
+  on an object. Any existing annotation will be overridden if it matches with a key
+  in this map.
+
+Example common metadata:
+
+```yaml
+spec:
+  commonMetadata:
+    labels:
+      app.kubernetes.io/name: flux
+    annotations:
+      toolkit.fluxcd.io/tenant: sre-team
+```
 
 ### Kustomize patches
 

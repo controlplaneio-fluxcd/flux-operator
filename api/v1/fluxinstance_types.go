@@ -43,6 +43,12 @@ type FluxInstanceSpec struct {
 	// +optional
 	Components []Component `json:"components,omitempty"`
 
+	// CommonMetadata specifies the common labels and annotations that are
+	// applied to all resources. Any existing label or annotation will be
+	// overridden if its key matches a common one.
+	// +optional
+	CommonMetadata *CommonMetadata `json:"commonMetadata,omitempty"`
+
 	// Cluster holds the specification of the Kubernetes cluster.
 	// +optional
 	Cluster *Cluster `json:"cluster,omitempty"`

@@ -119,6 +119,9 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 	g.Expect(sc.Spec.Template.Spec.Containers[0].Image).To(HavePrefix("ghcr.io/fluxcd/source-controller"))
 	g.Expect(sc.Spec.Template.Spec.Containers[0].Image).To(ContainSubstring("@sha256:"))
 
+	// Check if the deployments have the correct labels.
+	g.Expect(sc.Labels).To(HaveKeyWithValue("app.kubernetes.io/name", "flux"))
+
 	// Update the instance.
 	resultP := result.DeepCopy()
 	resultP.SetAnnotations(map[string]string{
@@ -679,6 +682,11 @@ func getDefaultFluxSpec() fluxcdv1.FluxInstanceSpec {
 			URL:  "oci://registry/repo",
 			Path: "./",
 			Ref:  "latest",
+		},
+		CommonMetadata: &fluxcdv1.CommonMetadata{
+			Labels: map[string]string{
+				"app.kubernetes.io/name": "flux",
+			},
 		},
 		Kustomize: &fluxcdv1.Kustomize{
 			Patches: []kustomize.Patch{
