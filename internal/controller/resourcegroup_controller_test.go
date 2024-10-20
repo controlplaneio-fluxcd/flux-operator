@@ -220,6 +220,9 @@ spec:
       kind: CustomResourceDefinition
       name: fluxinstances.fluxcd.controlplane.io
       ready: true
+      readyExpr: |
+       status.conditions.filter(e, e.type == 'Established').all(e, e.status == 'True') &&
+       status.storedVersions.exists(e, e =='v1')
     - apiVersion: v1
       kind: ServiceAccount
       name: test

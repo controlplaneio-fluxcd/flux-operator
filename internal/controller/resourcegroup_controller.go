@@ -19,6 +19,9 @@ import (
 	"github.com/fluxcd/pkg/ssa"
 	"github.com/fluxcd/pkg/ssa/normalize"
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
+	"github.com/google/cel-go/cel"
+	"github.com/google/cel-go/common/types"
+	"github.com/google/cel-go/ext"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -200,13 +203,54 @@ func (r *ResourceGroupReconciler) checkDependencies(ctx context.Context,
 		}
 
 		if dep.Ready {
-			stat, err := status.Compute(depObj)
-			if err != nil {
-				return fmt.Errorf("dependency %s/%s/%s not ready: %w", dep.APIVersion, dep.Kind, dep.Name, err)
-			}
+			if dep.ReadyExpr != "" {
+				var envOptions = []cel.EnvOption{
+					cel.HomogeneousAggregateLiterals(),
+					cel.EagerlyValidateDeclarations(true),
+					cel.DefaultUTCTimeZone(true),
+					cel.CrossTypeNumericComparisons(true),
+					cel.OptionalTypes(),
+					ext.Strings(ext.StringsVersion(2)),
+					ext.Sets(),
+				}
 
-			if stat.Status != status.CurrentStatus {
-				return fmt.Errorf("dependency %s/%s/%s not ready: status %s", dep.APIVersion, dep.Kind, dep.Name, stat.Status)
+				env, err := cel.NewEnv(envOptions...)
+				if err != nil {
+					return fmt.Errorf("failed to create CEL env: %w", err)
+				}
+
+				expr, issues := env.Parse(dep.ReadyExpr)
+				if issues != nil {
+					return fmt.Errorf("failed to parse the CEL expression: %s", issues.String())
+				}
+
+				prog, err := env.Program(expr, cel.EvalOptions(cel.OptOptimize))
+				if err != nil {
+					return fmt.Errorf("failed to instantiate CEL program: %w", err)
+				}
+
+				val, _, err := prog.Eval(depObj.UnstructuredContent())
+				if err != nil {
+					return fmt.Errorf("failed to evaluate CEL expression: %w", err)
+				}
+
+				isReady, ok := val.(types.Bool)
+				if !ok {
+					return fmt.Errorf("failed to evaluate CEL expression as boolean %s", dep.ReadyExpr)
+				}
+
+				if !isReady {
+					return fmt.Errorf("dependency %s/%s/%s not ready: expression %s", dep.APIVersion, dep.Kind, dep.Name, dep.ReadyExpr)
+				}
+			} else {
+				stat, err := status.Compute(depObj)
+				if err != nil {
+					return fmt.Errorf("dependency %s/%s/%s not ready: %w", dep.APIVersion, dep.Kind, dep.Name, err)
+				}
+
+				if stat.Status != status.CurrentStatus {
+					return fmt.Errorf("dependency %s/%s/%s not ready: status %s", dep.APIVersion, dep.Kind, dep.Name, stat.Status)
+				}
 			}
 		}
 	}

@@ -337,6 +337,7 @@ A dependency is a reference to a Kubernetes object with the following fields:
 - `name`: The name of the referred object (required).
 - `namespace`: The namespace of the referred object (optional).
 - `ready`: A boolean indicating if the referred object must have the `Ready` status condition set to `True` (optional, default is `false`).
+- `readyExpr`: A [CEL expression](https://cel.dev) that evaluates to a boolean indicating if the referred object is ready (optional).
 
 Example of conditional reconciliation based on the existence of CustomResourceDefinitions
 and the readiness of a ResourceGroup:
@@ -347,6 +348,10 @@ spec:
     - apiVersion: apiextensions.k8s.io/v1
       kind: CustomResourceDefinition
       name: helmreleases.helm.toolkit.fluxcd.io
+      ready: true
+      readyExpr: |
+        status.conditions.filter(e, e.type == 'Established').all(e, e.status == 'True') &&
+        status.storedVersions.exists(e, e =='v2')
     - apiVersion: apiextensions.k8s.io/v1
       kind: CustomResourceDefinition
       name: servicemonitors.monitoring.coreos.com

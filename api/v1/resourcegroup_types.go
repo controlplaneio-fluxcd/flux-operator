@@ -71,6 +71,10 @@ type Dependency struct {
 	// Ready checks if the resource Ready status condition is true.
 	// +optional
 	Ready bool `json:"ready,omitempty"`
+
+	// ReadyExpr checks if the resource satisfies the given CEL expression.
+	// +optional
+	ReadyExpr string `json:"readyExpr,omitempty"`
 }
 
 // ResourceGroupInput defines the key-value pairs of the resource group input.
