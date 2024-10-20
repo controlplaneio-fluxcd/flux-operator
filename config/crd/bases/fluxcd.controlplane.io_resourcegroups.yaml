@@ -92,6 +92,10 @@ spec:
                       description: Ready checks if the resource Ready status condition
                         is true.
                       type: boolean
+                    readyExpr:
+                      description: ReadyExpr checks if the resource satisfies the
+                        given CEL expression.
+                      type: string
                   required:
                   - apiVersion
                   - kind
