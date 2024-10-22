@@ -337,7 +337,7 @@ A dependency is a reference to a Kubernetes object with the following fields:
 - `name`: The name of the referred object (required).
 - `namespace`: The namespace of the referred object (optional).
 - `ready`: A boolean indicating if the referred object must have the `Ready` status condition set to `True` (optional, default is `false`).
-- `readyExpr`: A [CEL expression](https://cel.dev) that evaluates to a boolean indicating if the referred object is ready (optional).
+- `readyExpr`: A [CEL expression](#cel-readiness-expressions) that evaluates to a boolean indicating if the referred object is ready (optional).
 
 Example of conditional reconciliation based on the existence of CustomResourceDefinitions
 and the readiness of a ResourceGroup:
@@ -349,9 +349,6 @@ spec:
       kind: CustomResourceDefinition
       name: helmreleases.helm.toolkit.fluxcd.io
       ready: true
-      readyExpr: |
-        status.conditions.filter(e, e.type == 'Established').all(e, e.status == 'True') &&
-        status.storedVersions.exists(e, e =='v2')
     - apiVersion: apiextensions.k8s.io/v1
       kind: CustomResourceDefinition
       name: servicemonitors.monitoring.coreos.com
@@ -369,6 +366,40 @@ When the dependencies are not met, the flux-operator will reevaluate the require
 every five seconds and reconcile the ResourceGroup when the dependencies are satisfied.
 Failed dependencies are reported in the ResourceGroup `Ready` [status condition](#ResourceGroup-Status),
 in log messages and Kubernetes events.
+
+#### CEL readiness expressions
+
+The `readyExpr` field allows for more complex readiness checks and
+can be used for gating the reconciliation of a ResourceGroup based on the evaluation
+of the [CEL](https://cel.dev) expression.
+
+The expression is evaluated in the context of the referred object and has access to all the fields of the object,
+including the status conditions and the status subfields. The expression must evaluate to a boolean value, any syntax
+or runtime errors will be reported in the ResourceGroup status conditions.
+
+Example readiness expression:
+
+```yaml
+spec:
+  dependsOn:
+    - apiVersion: cluster.x-k8s.io/v1beta1
+      kind: Cluster
+      name: my-cluster
+      namespace: dev
+      ready: true
+      readyExpr: |
+        metadata.generation == status.observedGeneration &&
+        status.controlPlaneReady == true
+    - apiVersion: v1
+      kind: ConfigMap
+      name: my-gate
+      namespace: dev
+      ready: true
+      readyExpr: |
+        data.gate == 'opened'
+```
+
+For testing the CEL expressions, you can use the [CEL playground](https://playcel.undistro.io/).
 
 ### Reconciliation configuration
 
