@@ -413,18 +413,40 @@ func (r *ResourceGroupReconciler) apply(ctx context.Context,
 	}
 
 	// Wait for the resources to become ready.
-	if obj.Spec.Wait && len(resultSet.Entries) > 0 {
-		if err := resourceManager.WaitForSet(resultSet.ToObjMetadataSet(), ssa.WaitOptions{
+	if obj.Spec.Wait && len(changeSet.Entries) > 0 {
+		if err := resourceManager.WaitForSet(changeSet.ToObjMetadataSet(), ssa.WaitOptions{
 			Interval: 5 * time.Second,
 			Timeout:  obj.GetTimeout(),
 			FailFast: true,
 		}); err != nil {
-			return err
+			readyStatus := r.aggregateNotReadyStatus(ctx, kubeClient, objects)
+			return fmt.Errorf("%w\n%s", err, readyStatus)
 		}
 		log.Info("Health check completed")
 	}
 
 	return nil
+}
+
+// aggregateNotReadyStatus returns the status of the Flux resources not ready.
+func (r *ResourceGroupReconciler) aggregateNotReadyStatus(ctx context.Context,
+	kubeClient client.Client, objects []*unstructured.Unstructured) string {
+	var result strings.Builder
+	for _, res := range objects {
+		if strings.Contains(res.GetAPIVersion(), "fluxcd.io") {
+			if err := kubeClient.Get(ctx, client.ObjectKeyFromObject(res), res); err == nil {
+				if obj, err := status.GetObjectWithConditions(res.Object); err == nil {
+					for _, cond := range obj.Status.Conditions {
+						if cond.Type == meta.ReadyCondition && cond.Status != corev1.ConditionTrue {
+							result.WriteString(fmt.Sprintf("%s status: %s\n", ssautil.FmtUnstructured(res), cond.Message))
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return strings.TrimSuffix(result.String(), "\n")
 }
 
 // finalizeStatus updates the object status and conditions.
