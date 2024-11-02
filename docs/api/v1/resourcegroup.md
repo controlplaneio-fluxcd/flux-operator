@@ -391,12 +391,12 @@ spec:
         metadata.generation == status.observedGeneration &&
         status.controlPlaneReady == true
     - apiVersion: v1
-      kind: ConfigMap
+      kind: Secret
       name: my-gate
       namespace: dev
       ready: true
       readyExpr: |
-        data.gate == 'opened'
+        string(base64.decode(data.gate)) == 'opened'
 ```
 
 For testing the CEL expressions, you can use the [CEL playground](https://playcel.undistro.io/).
