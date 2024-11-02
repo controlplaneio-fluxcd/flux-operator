@@ -389,7 +389,7 @@ func (r *ResourceGroupReconciler) apply(ctx context.Context,
 			},
 		}
 
-		deleteSet, err := resourceManager.DeleteAll(ctx, staleObjects, deleteOpts)
+		deleteSet, err := r.deleteAllStaged(ctx, resourceManager, staleObjects, deleteOpts)
 		if err != nil {
 			return err
 		}
@@ -447,6 +447,53 @@ func (r *ResourceGroupReconciler) aggregateNotReadyStatus(ctx context.Context,
 	}
 
 	return strings.TrimSuffix(result.String(), "\n")
+}
+
+// deleteAllStaged removes resources in stages, first the Flux resources and then the rest.
+// This is to ensure that the Flux GC can run under impersonation as the service account
+// and role bindings are deleted after the Flux resources.
+func (r *ResourceGroupReconciler) deleteAllStaged(ctx context.Context,
+	rm *ssa.ResourceManager,
+	objects []*unstructured.Unstructured,
+	opts ssa.DeleteOptions) (*ssa.ChangeSet, error) {
+	log := ctrl.LoggerFrom(ctx)
+	changeSet := ssa.NewChangeSet()
+
+	var fluxObjects []*unstructured.Unstructured
+	var nativeObjects []*unstructured.Unstructured
+	for _, res := range objects {
+		if strings.Contains(res.GetAPIVersion(), "kustomize.toolkit.fluxcd.io") ||
+			strings.Contains(res.GetAPIVersion(), "helm.toolkit.fluxcd.io") {
+			fluxObjects = append(fluxObjects, res)
+		} else {
+			nativeObjects = append(nativeObjects, res)
+		}
+	}
+
+	// Delete the Flux resources first and wait for them to be removed.
+	if len(fluxObjects) > 0 {
+		fluxChangeSet, err := rm.DeleteAll(ctx, fluxObjects, opts)
+		if err != nil {
+			return changeSet, err
+		}
+		changeSet.Append(fluxChangeSet.Entries)
+
+		waitErr := rm.WaitForTermination(fluxObjects, ssa.DefaultWaitOptions())
+		if waitErr != nil {
+			log.Error(waitErr, "failed to wait for Flux resources to be deleted")
+		}
+	}
+
+	// Delete the rest of the resources.
+	if len(nativeObjects) > 0 {
+		nativeChangeSet, err := rm.DeleteAll(ctx, nativeObjects, opts)
+		if err != nil {
+			return changeSet, err
+		}
+		changeSet.Append(nativeChangeSet.Entries)
+	}
+
+	return changeSet, nil
 }
 
 // finalizeStatus updates the object status and conditions.
@@ -523,7 +570,7 @@ func (r *ResourceGroupReconciler) uninstall(ctx context.Context,
 
 		objects, _ := inventory.List(obj.Status.Inventory)
 
-		changeSet, err := resourceManager.DeleteAll(ctx, objects, opts)
+		changeSet, err := r.deleteAllStaged(ctx, resourceManager, objects, opts)
 		if err != nil {
 			log.Error(err, "pruning for deleted resource failed")
 		}
