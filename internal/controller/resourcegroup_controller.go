@@ -212,6 +212,7 @@ func (r *ResourceGroupReconciler) checkDependencies(ctx context.Context,
 					cel.OptionalTypes(),
 					ext.Strings(ext.StringsVersion(2)),
 					ext.Sets(),
+					ext.Encoders(),
 				}
 
 				env, err := cel.NewEnv(envOptions...)
