@@ -14,7 +14,7 @@ require (
 	github.com/fluxcd/pkg/runtime v0.49.1
 	github.com/fluxcd/pkg/ssa v0.41.1
 	github.com/fluxcd/pkg/tar v0.8.1
-	github.com/golang-jwt/jwt/v4 v4.5.0
+	github.com/golang-jwt/jwt/v4 v4.5.1
 	github.com/google/go-containerregistry v0.20.2
 	github.com/onsi/ginkgo/v2 v2.20.2
 	github.com/onsi/gomega v1.34.2
