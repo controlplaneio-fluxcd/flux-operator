@@ -252,6 +252,7 @@ func TestBuild_Sync(t *testing.T) {
 	options.ComponentImages = ci
 
 	options.Sync = &Sync{
+		Name:     "flux-system",
 		Interval: "5m",
 		Kind:     "GitRepository",
 		URL:      "https://host/repo.git",

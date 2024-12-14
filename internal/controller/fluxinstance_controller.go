@@ -319,7 +319,12 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 	}
 
 	if obj.Spec.Sync != nil {
+		syncName := obj.GetNamespace()
+		if obj.Spec.Sync.Name != "" {
+			syncName = obj.Spec.Sync.Name
+		}
 		options.Sync = &builder.Sync{
+			Name:       syncName,
 			Kind:       obj.Spec.Sync.Kind,
 			Interval:   obj.Spec.Sync.Interval.Duration.String(),
 			Ref:        obj.Spec.Sync.Ref,

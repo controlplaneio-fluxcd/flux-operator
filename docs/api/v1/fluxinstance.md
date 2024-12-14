@@ -453,6 +453,9 @@ Sync fields:
 - `path`: The path to the source directory containing the kustomize overlay or plain Kubernetes manifests to sync from.
 - `pullSecret`: The name of the Kubernetes secret that contains the credentials to pull the source repository. This field is optional.
 - `interval`: The sync interval. This field is optional, when not set the default is `1m`.
+- `name`: The name of the generated Flux source and Kustomization objects.
+   This field is optional, when not set the default is the FluxInstance namespace name.
+   Note that this field is considered immutable, and cannot be changed after the FluxInstance is created.
 
 #### Sync from Git over HTTP/S
 
