@@ -455,7 +455,7 @@ Sync fields:
 - `interval`: The sync interval. This field is optional, when not set the default is `1m`.
 - `name`: The name of the generated Flux source and Kustomization objects.
    This field is optional, when not set the default is the FluxInstance namespace name.
-   Note that this field is considered immutable, changing it after the FluxInstance is created, will result in a complete wipe of the cluster state.
+   Note that this field is considered immutable, and cannot be changed after the FluxInstance is created.
 
 #### Sync from Git over HTTP/S
 

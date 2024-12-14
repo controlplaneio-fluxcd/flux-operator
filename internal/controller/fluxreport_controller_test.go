@@ -208,6 +208,16 @@ func TestFluxReportReconciler_CustomSyncName(t *testing.T) {
 	// Check ready condition.
 	g.Expect(conditions.GetReason(report, meta.ReadyCondition)).To(BeIdenticalTo(meta.SucceededReason))
 
+	// Verify that sync name is immutable.
+	inst := &fluxcdv1.FluxInstance{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(instance), inst)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	inst.Spec.Sync.Name = "new-sync"
+	err = testClient.Update(ctx, inst)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("immutable"))
+
 	// Delete the instance.
 	err = testClient.Delete(ctx, instance)
 	g.Expect(err).ToNot(HaveOccurred())

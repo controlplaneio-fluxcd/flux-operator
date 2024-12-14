@@ -277,9 +277,13 @@ spec:
                     type: string
                   name:
                     description: |-
-                      Name is the name of the source and kustomization resources.
-                      When not specified, the name is set to namespace of the FluxInstance.
+                      Name is the name of the Flux source and kustomization resources.
+                      When not specified, the name is set to the namespace name of the FluxInstance.
+                    maxLength: 63
                     type: string
+                    x-kubernetes-validations:
+                    - message: Sync name is immutable
+                      rule: self == oldSelf
                   path:
                     description: |-
                       Path is the path to the source directory containing

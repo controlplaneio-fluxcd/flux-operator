@@ -200,8 +200,10 @@ type Kustomize struct {
 }
 
 type Sync struct {
-	// Name is the name of the source and kustomization resources.
-	// When not specified, the name is set to namespace of the FluxInstance.
+	// Name is the name of the Flux source and kustomization resources.
+	// When not specified, the name is set to the namespace name of the FluxInstance.
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="Sync name is immutable"
+	// +kubebuilder:validation:MaxLength=63
 	// +optional
 	Name string `json:"name,omitempty"`
 
