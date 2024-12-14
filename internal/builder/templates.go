@@ -305,6 +305,7 @@ spec:
 
 var syncTmpl = `---
 {{- $sync := .Sync }}
+{{- $name := .Sync.Name }}
 {{- $namespace := .Namespace }}
 {{- if eq $sync.Kind "GitRepository" }}
 apiVersion: source.toolkit.fluxcd.io/v1
@@ -317,7 +318,7 @@ apiVersion: source.toolkit.fluxcd.io/v1beta2
 kind: Bucket
 {{- end }}
 metadata:
-  name: {{$namespace}}
+  name: {{$name}}
   namespace: {{$namespace}}
 spec:
   interval: {{$sync.Interval}}
@@ -339,7 +340,7 @@ spec:
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
-  name: {{$namespace}}
+  name: {{$name}}
   namespace: {{$namespace}}
 spec:
   interval: 10m0s
@@ -347,7 +348,7 @@ spec:
   prune: true
   sourceRef:
     kind: {{$sync.Kind}}
-    name: {{$namespace}}
+    name: {{$name}}
 `
 
 func execTemplate(obj interface{}, tmpl, filename string) (err error) {

@@ -66,6 +66,7 @@ type ArtifactStorage struct {
 }
 
 type Sync struct {
+	Name       string
 	Kind       string
 	URL        string
 	Ref        string

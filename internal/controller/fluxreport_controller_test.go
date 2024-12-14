@@ -135,6 +135,89 @@ func TestFluxReportReconciler_Reconcile(t *testing.T) {
 	g.Expect(emptyReport.Spec.Distribution.Entitlement).To(Equal("Issued by " + entitlement.DefaultVendor))
 }
 
+func TestFluxReportReconciler_CustomSyncName(t *testing.T) {
+	g := NewWithT(t)
+	instRec := getFluxInstanceReconciler()
+	reportRec := getFluxReportReconciler()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize the report.
+	report := &fluxcdv1.FluxReport{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fluxcdv1.DefaultInstanceName,
+			Namespace: ns.Name,
+		},
+	}
+	err = reportRec.initReport(ctx, report.GetName(), report.GetNamespace())
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Create the Flux instance.
+	instance := &fluxcdv1.FluxInstance{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ns.Name,
+			Namespace: ns.Name,
+		},
+		Spec: getDefaultFluxSpec(),
+	}
+
+	// Set custom sync name.
+	instance.Spec.Sync.Name = "custom-sync"
+
+	err = testEnv.Create(ctx, instance)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize the instance.
+	r, err := instRec.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(instance),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Reconcile the instance.
+	r, err = instRec.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(instance),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeFalse())
+
+	// Check if the instance was installed.
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(instance), instance)
+	g.Expect(err).ToNot(HaveOccurred())
+	checkInstanceReadiness(g, instance)
+
+	// Compute instance report.
+	r, err = reportRec.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(report),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Read the report.
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(report), report)
+	g.Expect(err).ToNot(HaveOccurred())
+	logObject(t, report)
+
+	// Check reported sync with custom name.
+	g.Expect(report.Spec.SyncStatus).ToNot(BeNil())
+	g.Expect(report.Spec.SyncStatus.Source).To(Equal(instance.Spec.Sync.URL))
+	g.Expect(report.Spec.SyncStatus.ID).To(Equal("kustomization/" + instance.Spec.Sync.Name))
+
+	// Check ready condition.
+	g.Expect(conditions.GetReason(report, meta.ReadyCondition)).To(BeIdenticalTo(meta.SucceededReason))
+
+	// Delete the instance.
+	err = testClient.Delete(ctx, instance)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	r, err = instRec.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(instance),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+}
+
 func getFluxReportReconciler() *FluxReportReconciler {
 	return &FluxReportReconciler{
 		Client:        testClient,

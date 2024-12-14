@@ -200,6 +200,11 @@ type Kustomize struct {
 }
 
 type Sync struct {
+	// Name is the name of the source and kustomization resources.
+	// When not specified, the name is set to namespace of the FluxInstance.
+	// +optional
+	Name string `json:"name,omitempty"`
+
 	// Interval is the time between syncs.
 	// +kubebuilder:validation:Type=string
 	// +kubebuilder:validation:Pattern="^([0-9]+(\\.[0-9]+)?(ms|s|m|h))+$"

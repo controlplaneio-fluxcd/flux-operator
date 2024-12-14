@@ -20,6 +20,8 @@ import (
 )
 
 func (r *FluxStatusReporter) getSyncStatus(ctx context.Context, crds []metav1.GroupVersionKind) (*fluxcdv1.FluxSyncStatus, error) {
+	syncName := r.getSyncNameFromInstance(ctx)
+
 	syncKind := "Kustomization"
 	syncGKV := gvkFor(syncKind, crds)
 	if syncGKV == nil {
@@ -35,7 +37,7 @@ func (r *FluxStatusReporter) getSyncStatus(ctx context.Context, crds []metav1.Gr
 
 	if err := r.Get(ctx, client.ObjectKey{
 		Namespace: r.namespace,
-		Name:      r.namespace,
+		Name:      syncName,
 	}, &syncObj); err != nil {
 		if apiErrors.IsNotFound(err) {
 			// No sync configured, return empty status.
@@ -45,7 +47,7 @@ func (r *FluxStatusReporter) getSyncStatus(ctx context.Context, crds []metav1.Gr
 	}
 
 	syncStatus := &fluxcdv1.FluxSyncStatus{
-		ID:     fmt.Sprintf("%s/%s", strings.ToLower(syncKind), r.namespace),
+		ID:     fmt.Sprintf("%s/%s", strings.ToLower(syncKind), syncName),
 		Ready:  false,
 		Status: "not initialized",
 	}
@@ -81,7 +83,7 @@ func (r *FluxStatusReporter) getSyncStatus(ctx context.Context, crds []metav1.Gr
 
 		if err := r.Get(ctx, client.ObjectKey{
 			Namespace: r.namespace,
-			Name:      r.namespace,
+			Name:      syncName,
 		}, &sourceObj); err == nil {
 			if sourceURL, found, _ := unstructured.NestedString(sourceObj.Object, "spec", "url"); found {
 				syncStatus.Source = sourceURL
@@ -99,4 +101,18 @@ func (r *FluxStatusReporter) getSyncStatus(ctx context.Context, crds []metav1.Gr
 		}
 	}
 	return syncStatus, nil
+}
+
+func (r *FluxStatusReporter) getSyncNameFromInstance(ctx context.Context) string {
+	syncName := r.namespace
+	instanceList := &fluxcdv1.FluxInstanceList{}
+	if err := r.List(ctx, instanceList, client.InNamespace(r.namespace)); err == nil {
+		if len(instanceList.Items) > 0 {
+			if s := instanceList.Items[0].Spec.Sync; s != nil && s.Name != "" {
+				syncName = s.Name
+			}
+		}
+	}
+
+	return syncName
 }

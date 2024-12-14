@@ -275,6 +275,11 @@ spec:
                     - GitRepository
                     - Bucket
                     type: string
+                  name:
+                    description: |-
+                      Name is the name of the source and kustomization resources.
+                      When not specified, the name is set to namespace of the FluxInstance.
+                    type: string
                   path:
                     description: |-
                       Path is the path to the source directory containing
