@@ -110,6 +110,10 @@ spec:
 		},
 	))
 
+	// Check if the status last applied revision was set.
+	g.Expect(result.Status.LastAppliedRevision).ToNot(BeEmpty())
+	lastAppliedRevision := result.Status.LastAppliedRevision
+
 	// Check if the resources were created and labeled.
 	resultSA := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
@@ -176,6 +180,10 @@ spec:
 			Version: "v1",
 		},
 	))
+
+	// Check if the status last applied revision was updated.
+	g.Expect(resultFinal.Status.LastAppliedRevision).ToNot(BeEmpty())
+	g.Expect(resultFinal.Status.LastAppliedRevision).ToNot(BeEquivalentTo(lastAppliedRevision))
 
 	// Check if the resources were deleted.
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(resultSA), resultSA)

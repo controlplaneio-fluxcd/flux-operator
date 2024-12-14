@@ -22,6 +22,7 @@ import (
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types"
 	"github.com/google/cel-go/ext"
+	"github.com/opencontainers/go-digest"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -157,7 +158,8 @@ func (r *ResourceGroupReconciler) reconcile(ctx context.Context,
 	}
 
 	// Apply the resources to the cluster.
-	if err := r.apply(ctx, obj, buildResult); err != nil {
+	applySetDigest, err := r.apply(ctx, obj, buildResult)
+	if err != nil {
 		msg := fmt.Sprintf("reconciliation failed: %s", err.Error())
 		conditions.MarkFalse(obj,
 			meta.ReadyCondition,
@@ -168,7 +170,8 @@ func (r *ResourceGroupReconciler) reconcile(ctx context.Context,
 		return ctrl.Result{}, err
 	}
 
-	// Mark the object as ready.
+	// Mark the object as ready and set the last applied revision.
+	obj.Status.LastAppliedRevision = applySetDigest
 	msg = fmt.Sprintf("Reconciliation finished in %s", fmtDuration(reconcileStart))
 	conditions.MarkTrue(obj,
 		meta.ReadyCondition,
@@ -262,9 +265,11 @@ func (r *ResourceGroupReconciler) checkDependencies(ctx context.Context,
 // apply reconciles the resources in the cluster by performing
 // a server-side apply, pruning of stale resources and waiting
 // for the resources to become ready.
+// It returns an error if the apply operation fails, otherwise
+// it returns the sha256 digest of the applied resources.
 func (r *ResourceGroupReconciler) apply(ctx context.Context,
 	obj *fluxcdv1.ResourceGroup,
-	objects []*unstructured.Unstructured) error {
+	objects []*unstructured.Unstructured) (string, error) {
 	log := ctrl.LoggerFrom(ctx)
 	var changeSetLog strings.Builder
 
@@ -289,7 +294,7 @@ func (r *ResourceGroupReconciler) apply(ctx context.Context,
 	// Create the Kubernetes client that runs under impersonation.
 	kubeClient, statusPoller, err := impersonation.GetClient(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to build kube client: %w", err)
+		return "", fmt.Errorf("failed to build kube client: %w", err)
 	}
 
 	// Create a resource manager to reconcile the resources.
@@ -300,12 +305,19 @@ func (r *ResourceGroupReconciler) apply(ctx context.Context,
 	resourceManager.SetOwnerLabels(objects, obj.GetName(), obj.GetNamespace())
 
 	if err := normalize.UnstructuredList(objects); err != nil {
-		return err
+		return "", err
 	}
 
 	if cm := obj.Spec.CommonMetadata; cm != nil {
 		ssautil.SetCommonMetadata(objects, cm.Labels, cm.Annotations)
 	}
+
+	// Compute the sha256 digest of the resources.
+	data, err := ssautil.ObjectsToYAML(objects)
+	if err != nil {
+		return "", fmt.Errorf("failed to convert objects to YAML: %w", err)
+	}
+	applySetDigest := digest.FromString(data).String()
 
 	applyOpts := ssa.DefaultApplyOptions()
 	applyOpts.Cleanup = ssa.ApplyCleanupOptions{
@@ -347,7 +359,7 @@ func (r *ResourceGroupReconciler) apply(ctx context.Context,
 	// Apply the resources to the cluster.
 	changeSet, err := resourceManager.ApplyAllStaged(ctx, objects, applyOpts)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// Filter out the resources that have changed.
@@ -368,7 +380,7 @@ func (r *ResourceGroupReconciler) apply(ctx context.Context,
 	newInventory := inventory.New()
 	err = inventory.AddChangeSet(newInventory, changeSet)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// Set last applied inventory in status.
@@ -377,7 +389,7 @@ func (r *ResourceGroupReconciler) apply(ctx context.Context,
 	// Detect stale resources which are subject to garbage collection.
 	staleObjects, err := inventory.Diff(oldInventory, newInventory)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// Garbage collect stale resources.
@@ -392,7 +404,7 @@ func (r *ResourceGroupReconciler) apply(ctx context.Context,
 
 		deleteSet, err := r.deleteAllStaged(ctx, resourceManager, staleObjects, deleteOpts)
 		if err != nil {
-			return err
+			return "", err
 		}
 
 		if len(deleteSet.Entries) > 0 {
@@ -421,12 +433,12 @@ func (r *ResourceGroupReconciler) apply(ctx context.Context,
 			FailFast: true,
 		}); err != nil {
 			readyStatus := r.aggregateNotReadyStatus(ctx, kubeClient, objects)
-			return fmt.Errorf("%w\n%s", err, readyStatus)
+			return "", fmt.Errorf("%w\n%s", err, readyStatus)
 		}
 		log.Info("Health check completed")
 	}
 
-	return nil
+	return applySetDigest, nil
 }
 
 // aggregateNotReadyStatus returns the status of the Flux resources not ready.

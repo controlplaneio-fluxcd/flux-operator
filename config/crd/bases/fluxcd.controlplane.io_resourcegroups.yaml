@@ -217,6 +217,11 @@ spec:
                 required:
                 - entries
                 type: object
+              lastAppliedRevision:
+                description: |-
+                  LastAppliedRevision is the digest of the
+                  generated resources that were last reconcile.
+                type: string
               lastHandledReconcileAt:
                 description: |-
                   LastHandledReconcileAt holds the value of the most recent
