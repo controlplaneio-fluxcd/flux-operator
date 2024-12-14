@@ -92,6 +92,11 @@ type ResourceGroupStatus struct {
 	// last applied on the cluster.
 	// +optional
 	Inventory *ResourceInventory `json:"inventory,omitempty"`
+
+	// LastAppliedRevision is the digest of the
+	// generated resources that were last reconcile.
+	// +optional
+	LastAppliedRevision string `json:"lastAppliedRevision,omitempty"`
 }
 
 // GetConditions returns the status conditions of the object.
