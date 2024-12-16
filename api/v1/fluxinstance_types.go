@@ -279,6 +279,11 @@ type FluxInstanceStatus struct {
 	// +optional
 	LastAppliedRevision string `json:"lastAppliedRevision,omitempty"`
 
+	// LastArtifactRevision is the digest of the last pulled
+	// distribution artifact.
+	// +optional
+	LastArtifactRevision string `json:"lastArtifactRevision,omitempty"`
+
 	// Components contains the container images used by the components.
 	// +optional
 	Components []ComponentImage `json:"components,omitempty"`

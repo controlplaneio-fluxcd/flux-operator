@@ -16,7 +16,6 @@ import (
 	"github.com/fluxcd/pkg/runtime/conditions"
 	kcheck "github.com/fluxcd/pkg/runtime/conditions/check"
 	"github.com/fluxcd/pkg/runtime/testenv"
-	"github.com/onsi/gomega"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -108,7 +107,7 @@ func logObject(t *testing.T, obj interface{}) {
 	t.Log("object:\n", string(sts))
 }
 
-func checkInstanceReadiness(g *gomega.WithT, obj *fluxcdv1.FluxInstance) {
+func checkInstanceReadiness(g *WithT, obj *fluxcdv1.FluxInstance) {
 	statusCheck := kcheck.NewInProgressChecker(testClient)
 	statusCheck.DisableFetch = true
 	statusCheck.WithT(g).CheckErr(context.Background(), obj)

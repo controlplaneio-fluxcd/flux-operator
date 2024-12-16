@@ -146,7 +146,7 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 	}()
 
 	// Fetch the distribution manifests.
-	manifestsDir, err := r.fetch(ctx, obj, tmpDir)
+	manifestsDir, artifactDigest, err := r.fetch(ctx, obj, tmpDir)
 	if err != nil {
 		msg := fmt.Sprintf("fetch failed: %s", err.Error())
 		conditions.MarkFalse(obj,
@@ -202,6 +202,7 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 
 	// Mark the object as ready.
 	obj.Status.LastAppliedRevision = obj.Status.LastAttemptedRevision
+	obj.Status.LastArtifactRevision = artifactDigest
 	msg = fmt.Sprintf("Reconciliation finished in %s", fmtDuration(reconcileStart))
 	conditions.MarkTrue(obj,
 		meta.ReadyCondition,
@@ -222,7 +223,7 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 // If the distribution artifact URL is not provided,
 // it falls back  to the manifests stored in the container storage.
 func (r *FluxInstanceReconciler) fetch(ctx context.Context,
-	obj *fluxcdv1.FluxInstance, tmpDir string) (string, error) {
+	obj *fluxcdv1.FluxInstance, tmpDir string) (string, string, error) {
 	log := ctrl.LoggerFrom(ctx)
 	artifactURL := obj.Spec.Distribution.Artifact
 
@@ -233,14 +234,14 @@ func (r *FluxInstanceReconciler) fetch(ctx context.Context,
 
 		artifactDigest, err := builder.PullArtifact(ctxPull, artifactURL, tmpDir)
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
 		log.Info("fetched latest manifests", "url", artifactURL, "digest", artifactDigest)
-		return tmpDir, nil
+		return tmpDir, artifactDigest, nil
 	}
 
 	// Fall back to the manifests stored in container storage.
-	return r.StoragePath, nil
+	return r.StoragePath, "", nil
 }
 
 // build reads the distribution manifests from the local storage,
