@@ -441,6 +441,11 @@ spec:
                   LastAppliedRevision is the version and digest of the
                   distribution config that was last reconcile.
                 type: string
+              lastArtifactRevision:
+                description: |-
+                  LastArtifactRevision is the digest of the last pulled
+                  distribution artifact.
+                type: string
               lastAttemptedRevision:
                 description: |-
                   LastAttemptedRevision is the version and digest of the

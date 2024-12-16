@@ -6,6 +6,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -76,6 +77,11 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 	logObjectStatus(t, result)
 	checkInstanceReadiness(g, result)
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
+
+	// Check artifact digest.
+	lastArtifactRevision := result.Status.LastArtifactRevision
+	g.Expect(lastArtifactRevision).To(HavePrefix("sha256:"))
+	g.Expect(strings.TrimPrefix(lastArtifactRevision, "sha256:")).To(HaveLen(64))
 
 	// Check if the inventory was updated.
 	g.Expect(result.Status.Inventory.Entries).To(ContainElements(
