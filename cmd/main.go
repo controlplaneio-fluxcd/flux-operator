@@ -162,6 +162,18 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err = (&controller.FluxInstanceArtifactReconciler{
+		Client:        mgr.GetClient(),
+		StatusManager: controllerName,
+		EventRecorder: mgr.GetEventRecorderFor(controllerName),
+	}).SetupWithManager(mgr,
+		controller.FluxInstanceArtifactReconcilerOptions{
+			RateLimiter: runtimeCtrl.GetRateLimiter(rateLimiterOptions),
+		}); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", fluxcdv1.FluxInstanceKind+"Artifact")
+		os.Exit(1)
+	}
+
 	if err = (&controller.FluxReportReconciler{
 		Client:         mgr.GetClient(),
 		Scheme:         mgr.GetScheme(),
