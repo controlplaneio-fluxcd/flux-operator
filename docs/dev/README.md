@@ -44,7 +44,7 @@
 ### Manifests Update for Enterprise CVE Fixes
 
 1. Create a new branch from `main`, e.g. `enterprise-cve-fixes` in the [`controlplaneio-fluxcd/flux-operator` repository](https://github.com/controlplaneio-fluxcd/flux-operator).
-2. Rebuild the Flux manifests with the latest image patches by running `make build-manifests`.
+2. Rebuild the Flux manifests with the latest image patches by running `make vendor-flux`.
 3. Commit changes and open a PR.
 4. After the PR is merged, publish the OCI artifact with the manifests by running the [`push-manifests` GitHub Workflow](https://github.com/controlplaneio-fluxcd/flux-operator/actions/workflows/push-manifests.yml).
 
