@@ -23,7 +23,6 @@ metadata:
   annotations:
     fluxcd.controlplane.io/reconcile: "enabled"
     fluxcd.controlplane.io/reconcileEvery: "1h"
-    fluxcd.controlplane.io/reconcileArtifactEvery: "10m"
     fluxcd.controlplane.io/reconcileTimeout: "3m"
 spec:
   distribution:
