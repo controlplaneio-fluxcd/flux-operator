@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
 	corev1 "k8s.io/api/core/v1"
 	kuberecorder "k8s.io/client-go/tools/record"
@@ -47,6 +48,11 @@ func (r *FluxInstanceArtifactReconciler) Reconcile(ctx context.Context, req ctrl
 
 	// Skip reconciliation if the object does not have a last artifact revision to avoid race condition.
 	if obj.Status.LastArtifactRevision == "" {
+		return requeueArtifactAfter(obj), nil
+	}
+
+	// Skip reconciliation if the object is not ready.
+	if !conditions.IsReady(obj) {
 		return requeueArtifactAfter(obj), nil
 	}
 

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/runtime/conditions"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -38,6 +39,7 @@ func TestFluxInstanceArtifactReconciler(t *testing.T) {
 		delete                      bool
 		annotations                 map[string]string
 		manifestsURL                string
+		notReady                    bool
 		lastArtifactRevision        string
 		result                      ctrl.Result
 		err                         error
@@ -89,6 +91,14 @@ func TestFluxInstanceArtifactReconciler(t *testing.T) {
 			shouldRequestReconciliation: false,
 		},
 		{
+			name:                        "does not request reconciliation when the object is not ready",
+			notReady:                    true,
+			manifestsURL:                cpLatestManifestsURL,
+			lastArtifactRevision:        outdatedArtifactRevision,
+			result:                      ctrl.Result{RequeueAfter: 10 * time.Minute},
+			shouldRequestReconciliation: false,
+		},
+		{
 			name:                        "does not request reconciliation on artifact error",
 			manifestsURL:                "oci://not.found/artifact",
 			lastArtifactRevision:        outdatedArtifactRevision,
@@ -119,11 +129,16 @@ func TestFluxInstanceArtifactReconciler(t *testing.T) {
 			err = testEnv.Create(ctx, obj)
 			g.Expect(err).ToNot(HaveOccurred())
 
-			if tt.lastArtifactRevision != "" {
-				obj.Status.LastArtifactRevision = tt.lastArtifactRevision
-				err := testEnv.Status().Update(ctx, obj)
-				g.Expect(err).ToNot(HaveOccurred())
+			if tt.notReady {
+				conditions.MarkUnknown(obj, meta.ReadyCondition,
+					meta.ProgressingReason, "Reconciliation in progress")
+			} else {
+				conditions.MarkTrue(obj, meta.ReadyCondition, meta.ReconciliationSucceededReason,
+					"Reconciliation finished in %s", fmtDuration(time.Now()))
 			}
+			obj.Status.LastArtifactRevision = tt.lastArtifactRevision
+			err = testEnv.Status().Update(ctx, obj)
+			g.Expect(err).ToNot(HaveOccurred())
 
 			if tt.delete {
 				obj.Finalizers = append(obj.Finalizers, "test")
