@@ -15,7 +15,6 @@ metadata:
             "namespace": "flux-system",
             "annotations": {
               "fluxcd.controlplane.io/reconcileEvery": "1h",
-              "fluxcd.controlplane.io/reconcileArtifactEvery": "10m",
               "fluxcd.controlplane.io/reconcileTimeout": "5m"
             }
           },
