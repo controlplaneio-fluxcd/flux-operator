@@ -23,16 +23,20 @@ import (
 )
 
 func TestFluxInstanceArtifactReconciler(t *testing.T) {
-	const cpLatestManifestsURL = "oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests:latest"
+	const (
+		cpLatestManifestsURL     = "oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests:latest"
+		outdatedArtifactRevision = "sha256:1234567890"
+	)
 
 	g := NewWithT(t)
 
-	latestArtifactRevision, err := builder.HeadArtifact(context.Background(), cpLatestManifestsURL)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	latestArtifactRevision, err := builder.GetArtifactDigest(ctx, cpLatestManifestsURL)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(latestArtifactRevision).To(HavePrefix("sha256:"))
 	g.Expect(strings.TrimPrefix(latestArtifactRevision, "sha256:")).To(HaveLen(64))
-
-	const outdatedArtifactRevision = "sha256:1234567890"
 
 	for _, tt := range []struct {
 		name                        string
@@ -109,9 +113,8 @@ func TestFluxInstanceArtifactReconciler(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
+
 			reconciler := getFluxInstanceArtifactReconciler()
-			ctx, cancel := context.WithTimeout(context.Background(), timeout)
-			defer cancel()
 
 			ns, err := testEnv.CreateNamespace(ctx, "test")
 			g.Expect(err).ToNot(HaveOccurred())
