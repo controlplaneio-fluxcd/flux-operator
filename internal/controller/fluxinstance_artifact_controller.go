@@ -75,7 +75,7 @@ func (r *FluxInstanceArtifactReconciler) reconcile(ctx context.Context,
 		r.Event(obj, corev1.EventTypeWarning, meta.ArtifactFailedReason, msg)
 		return ctrl.Result{}, err
 	}
-	log.Info("fetched latest manifests", "url", artifactURL, "digest", artifactDigest)
+	log.V(1).Info("fetched latest manifests", "url", artifactURL, "digest", artifactDigest)
 
 	// Skip reconciliation if the artifact has not changed.
 	if artifactDigest == obj.Status.LastArtifactRevision {
