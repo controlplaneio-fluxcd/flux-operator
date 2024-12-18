@@ -95,6 +95,14 @@ func getFluxInstanceReconciler() *FluxInstanceReconciler {
 	}
 }
 
+func getFluxInstanceArtifactReconciler() *FluxInstanceArtifactReconciler {
+	return &FluxInstanceArtifactReconciler{
+		Client:        testClient,
+		EventRecorder: testEnv.GetEventRecorderFor(controllerName),
+		StatusManager: controllerName,
+	}
+}
+
 func logObjectStatus(t *testing.T, obj client.Object) {
 	u, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
 	status, _, _ := unstructured.NestedFieldCopy(u, "status")

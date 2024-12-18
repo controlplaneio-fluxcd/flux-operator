@@ -432,6 +432,7 @@ The reconciliation behaviour can be configured using the following annotations:
 
 - `fluxcd.controlplane.io/reconcile`: Enable or disable the reconciliation loop. Default is `enabled`, set to `disabled` to pause the reconciliation.
 - `fluxcd.controlplane.io/reconcileEvery`: Set the reconciliation interval. Default is `1h`.
+- `fluxcd.controlplane.io/reconcileArtifactEvery`: Set the artifact reconciliation interval. Default is `10m`.
 - `fluxcd.controlplane.io/reconcileTimeout`: Set the reconciliation timeout. Default is `5m`.
 
 ### Sync configuration

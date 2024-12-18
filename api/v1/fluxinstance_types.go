@@ -24,12 +24,13 @@ const (
 )
 
 var (
-	Finalizer                  = fmt.Sprintf("%s/finalizer", GroupVersion.Group)
-	ReconcileAnnotation        = fmt.Sprintf("%s/reconcile", GroupVersion.Group)
-	ReconcileEveryAnnotation   = fmt.Sprintf("%s/reconcileEvery", GroupVersion.Group)
-	ReconcileTimeoutAnnotation = fmt.Sprintf("%s/reconcileTimeout", GroupVersion.Group)
-	PruneAnnotation            = fmt.Sprintf("%s/prune", GroupVersion.Group)
-	RevisionAnnotation         = fmt.Sprintf("%s/revision", GroupVersion.Group)
+	Finalizer                        = fmt.Sprintf("%s/finalizer", GroupVersion.Group)
+	ReconcileAnnotation              = fmt.Sprintf("%s/reconcile", GroupVersion.Group)
+	ReconcileEveryAnnotation         = fmt.Sprintf("%s/reconcileEvery", GroupVersion.Group)
+	ReconcileArtifactEveryAnnotation = fmt.Sprintf("%s/reconcileArtifactEvery", GroupVersion.Group)
+	ReconcileTimeoutAnnotation       = fmt.Sprintf("%s/reconcileTimeout", GroupVersion.Group)
+	PruneAnnotation                  = fmt.Sprintf("%s/prune", GroupVersion.Group)
+	RevisionAnnotation               = fmt.Sprintf("%s/revision", GroupVersion.Group)
 )
 
 // FluxInstanceSpec defines the desired state of FluxInstance
@@ -366,12 +367,29 @@ func (in *FluxInstance) IsDisabled() bool {
 // GetInterval returns the interval at which the object should be reconciled.
 // If no interval is set, the default is 60 minutes.
 func (in *FluxInstance) GetInterval() time.Duration {
-	val, ok := in.GetAnnotations()[ReconcileAnnotation]
-	if ok && strings.ToLower(val) == DisabledValue {
+	if in.IsDisabled() {
 		return 0
 	}
 	defaultInterval := 60 * time.Minute
-	val, ok = in.GetAnnotations()[ReconcileEveryAnnotation]
+	val, ok := in.GetAnnotations()[ReconcileEveryAnnotation]
+	if !ok {
+		return defaultInterval
+	}
+	interval, err := time.ParseDuration(val)
+	if err != nil {
+		return defaultInterval
+	}
+	return interval
+}
+
+// GetArtifactInterval returns the interval at which the distribution artifact should be reconciled.
+// If no interval is set, the default is 10 minutes.
+func (in *FluxInstance) GetArtifactInterval() time.Duration {
+	if in.IsDisabled() {
+		return 0
+	}
+	defaultInterval := 10 * time.Minute
+	val, ok := in.GetAnnotations()[ReconcileArtifactEveryAnnotation]
 	if !ok {
 		return defaultInterval
 	}
