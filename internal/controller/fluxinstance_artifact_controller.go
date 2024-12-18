@@ -45,8 +45,8 @@ func (r *FluxInstanceArtifactReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, nil
 	}
 
-	// Skip reconciliation if the object does not have a distribution artifact specified.
-	if obj.Spec.Distribution.Artifact == "" {
+	// Skip reconciliation if the object does not have a last artifact revision to avoid race condition.
+	if obj.Status.LastArtifactRevision == "" {
 		return ctrl.Result{}, nil
 	}
 

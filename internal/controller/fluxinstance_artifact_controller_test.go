@@ -31,6 +31,8 @@ func TestFluxInstanceArtifactReconciler(t *testing.T) {
 	g.Expect(latestArtifactRevision).To(HavePrefix("sha256:"))
 	g.Expect(strings.TrimPrefix(latestArtifactRevision, "sha256:")).To(HaveLen(64))
 
+	const outdatedArtifactRevision = "sha256:1234567890"
+
 	for _, tt := range []struct {
 		name                        string
 		delete                      bool
@@ -44,7 +46,7 @@ func TestFluxInstanceArtifactReconciler(t *testing.T) {
 		{
 			name:                        "requests reconciliation when digest is different",
 			manifestsURL:                cpLatestManifestsURL,
-			lastArtifactRevision:        "",
+			lastArtifactRevision:        outdatedArtifactRevision,
 			result:                      ctrl.Result{RequeueAfter: 10 * time.Minute},
 			shouldRequestReconciliation: true,
 		},
@@ -67,7 +69,7 @@ func TestFluxInstanceArtifactReconciler(t *testing.T) {
 			name:                        "does not request reconciliation when on deletion",
 			delete:                      true,
 			manifestsURL:                cpLatestManifestsURL,
-			lastArtifactRevision:        "",
+			lastArtifactRevision:        outdatedArtifactRevision,
 			result:                      ctrl.Result{},
 			shouldRequestReconciliation: false,
 		},
@@ -75,20 +77,21 @@ func TestFluxInstanceArtifactReconciler(t *testing.T) {
 			name:                        "does not request reconciliation when disabled",
 			annotations:                 map[string]string{"fluxcd.controlplane.io/reconcile": "disabled"},
 			manifestsURL:                cpLatestManifestsURL,
-			lastArtifactRevision:        "",
+			lastArtifactRevision:        outdatedArtifactRevision,
 			result:                      ctrl.Result{},
 			shouldRequestReconciliation: false,
 		},
 		{
-			name:                        "does not request reconciliation when artifact is not specified",
-			manifestsURL:                "",
+			name:                        "does not request reconciliation when last artifact revision is missing to avoid race condition",
+			manifestsURL:                cpLatestManifestsURL,
+			lastArtifactRevision:        "",
 			result:                      ctrl.Result{},
 			shouldRequestReconciliation: false,
 		},
 		{
 			name:                        "does not request reconciliation on artifact error",
 			manifestsURL:                "oci://not.found/artifact",
-			lastArtifactRevision:        "",
+			lastArtifactRevision:        outdatedArtifactRevision,
 			result:                      ctrl.Result{},
 			err:                         errors.New("no such host"),
 			shouldRequestReconciliation: false,
