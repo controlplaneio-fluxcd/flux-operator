@@ -23,7 +23,7 @@ type FluxInstanceArtifactReconcilerOptions struct {
 // SetupWithManager sets up the controller with the Manager.
 func (r *FluxInstanceArtifactReconciler) SetupWithManager(mgr ctrl.Manager, opts FluxInstanceArtifactReconcilerOptions) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		Named("flux_instance_artifact").
+		Named("fluxinstance_artifact").
 		Watches(&fluxcdv1.FluxInstance{},
 			&handler.EnqueueRequestForObject{},
 			builder.WithPredicates(
