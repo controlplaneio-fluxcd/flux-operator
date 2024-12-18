@@ -8,6 +8,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -22,7 +23,8 @@ type FluxInstanceArtifactReconcilerOptions struct {
 // SetupWithManager sets up the controller with the Manager.
 func (r *FluxInstanceArtifactReconciler) SetupWithManager(mgr ctrl.Manager, opts FluxInstanceArtifactReconcilerOptions) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&fluxcdv1.FluxInstance{},
+		Watches(&fluxcdv1.FluxInstance{},
+			&handler.EnqueueRequestForObject{},
 			builder.WithPredicates(
 				predicate.Or(
 					predicate.GenerationChangedPredicate{},
