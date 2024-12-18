@@ -85,7 +85,7 @@ func TestFluxInstanceArtifactReconciler(t *testing.T) {
 			name:                        "does not request reconciliation when last artifact revision is missing to avoid race condition",
 			manifestsURL:                cpLatestManifestsURL,
 			lastArtifactRevision:        "",
-			result:                      ctrl.Result{},
+			result:                      ctrl.Result{RequeueAfter: 10 * time.Minute},
 			shouldRequestReconciliation: false,
 		},
 		{
