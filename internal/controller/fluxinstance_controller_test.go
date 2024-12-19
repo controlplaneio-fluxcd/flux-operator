@@ -528,6 +528,7 @@ func TestFluxInstanceReconciler_Profiles(t *testing.T) {
 	g := NewWithT(t)
 	reconciler := getFluxInstanceReconciler()
 	spec := getDefaultFluxSpec()
+	spec.Distribution.Version = "v2.4.x"
 	spec.Cluster = &fluxcdv1.Cluster{
 		Type:        "openshift",
 		Multitenant: true,
@@ -605,6 +606,16 @@ func TestFluxInstanceReconciler_Profiles(t *testing.T) {
 			fmt.Sprintf("--storage-adv-addr=source-controller-%s.$(RUNTIME_NAMESPACE).svc.cluster.local.", shard),
 		))
 	}
+
+	// Check if the notification CRD was patched.
+	crd := &unstructured.Unstructured{}
+	crd.SetAPIVersion("apiextensions.k8s.io/v1")
+	crd.SetKind("CustomResourceDefinition")
+	err = testClient.Get(ctx, types.NamespacedName{Name: "alerts.notification.toolkit.fluxcd.io"}, crd)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(
+		crd.Object["spec"].(map[string]interface{})["versions"].([]interface{})[2].(map[string]interface{})["schema"].(map[string]interface{})["openAPIV3Schema"].(map[string]interface{})["properties"].(map[string]interface{})["spec"].(map[string]interface{})["properties"].(map[string]interface{})["eventSources"].(map[string]interface{})["items"].(map[string]interface{})["properties"].(map[string]interface{})["kind"].(map[string]interface{})["enum"]).
+		To(ContainElement("FluxInstance"))
 
 	// Uninstall the instance.
 	err = testClient.Delete(ctx, obj)

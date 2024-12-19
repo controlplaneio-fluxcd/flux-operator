@@ -95,7 +95,7 @@ func ExtractComponentImagesWithDigest(srcDir string, opts Options) (images []Com
 	for _, img := range kc.Images {
 		name := img.Name
 		component := name[strings.LastIndex(name, "/")+1:]
-		if containsItemString(opts.Components, component) {
+		if ContainElementString(opts.Components, component) {
 			images = append(images, ComponentImage{
 				Name:       component,
 				Repository: fmt.Sprintf("%s/%s", registry, component),

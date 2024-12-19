@@ -307,6 +307,10 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 		options.Patches += builder.GetMultitenantProfile(obj.GetCluster().TenantDefaultServiceAccount)
 	}
 
+	if builder.ContainElementString(options.Components, options.NotificationController) {
+		options.Patches += builder.GetNotificationPatch(options.Namespace)
+	}
+
 	if obj.Spec.Sharding != nil {
 		options.ShardingKey = obj.Spec.Sharding.Key
 		options.Shards = obj.Spec.Sharding.Shards
