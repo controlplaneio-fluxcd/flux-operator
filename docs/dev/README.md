@@ -15,7 +15,7 @@
 1. Run the `update` GitHub Workflow in the [`controlplaneio-fluxcd/charts` repository](https://github.com/controlplaneio-fluxcd/charts/actions/workflows/update.yaml).
 2. Merge the PR opened by the `update` GitHub Workflow.
 3. Wait for the `test` workflow to pass on the `main` branch.
-4. Tag the `main` branch with the new chart version, e.g. `git tag -s -m "v2.0.0" "v2.0.0"`.
+4. Tag the `main` branch with the new next semver from [`controlplaneio-fluxcd/charts` repository](https://github.com/controlplaneio-fluxcd/charts/tags), e.g. `git tag -s -m "v0.2.0" "v0.2.0"`.
 5. Wait for the `release` GitHub Workflow to finish.
 6. After the Helm chart is published, the new version will be available at [artifacthub.io/packages/helm/flux-operator/flux-operator](https://artifacthub.io/packages/helm/flux-operator/flux-operator).
 
@@ -29,6 +29,17 @@
 6. Commit the changes with the title `operator flux-operator (2.0.0)` and push the branch to the fork.
 7. Open a PR in the upstream repository and wait for the CI to pass.
 8. After the PR is merged, the new version will be available at [operatorhub.io/operator/flux-operator](https://operatorhub.io/operator/flux-operator).
+
+### RedHat OpenShift Bundle
+
+1. Trigger the Redhat UBI build by running the `push-ubi` GitHub Workflow in the [`controlplaneio-fluxcd/flux-operator` repository](https://github.com/controlplaneio-fluxcd/flux-operator/actions/workflows/push-ubi.yml).
+2. Generate the OLM manifests for the UBI version locally by running `make build-olm-manifests-ubi`.
+3. Fork the [redhat-openshift-ecosystem/community-operators-prod repository](https://github.com/redhat-openshift-ecosystem/community-operators-prod) and clone it locally.
+4. Create a new branch from `main`, e.g. `flux-operator-2.0.0`.
+5. Copy the OLM manifests from the `flux-operator/bin/olm/2.0.0` dir to the `community-operators-prod/operators/flux-operator/2.0.0`.
+6. Commit the changes with the title `operator flux-operator (2.0.0)` and push the branch to the fork.
+7. Open a PR in the upstream repository and wait for the CI to pass.
+8. After the PR is merged, the new version will be available in the OpenShift Container Platform catalog.
 
 ## Manifests Release Procedure
 
@@ -52,7 +63,7 @@
 
 ### Prerequisites
 
-- [Go](https://golang.org/doc/install) 1.22+
+- [Go](https://golang.org/doc/install) 1.23+
 - [Docker](https://docs.docker.com/get-docker/)
 - [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/)
 - [Kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
