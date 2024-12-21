@@ -11,7 +11,7 @@ require (
 	github.com/fluxcd/pkg/apis/kustomize v1.8.0
 	github.com/fluxcd/pkg/apis/meta v1.9.0
 	github.com/fluxcd/pkg/kustomize v1.15.0
-	github.com/fluxcd/pkg/runtime v0.51.0
+	github.com/fluxcd/pkg/runtime v0.51.1
 	github.com/fluxcd/pkg/ssa v0.43.0
 	github.com/fluxcd/pkg/tar v0.10.0
 	github.com/golang-jwt/jwt/v4 v4.5.1
@@ -59,6 +59,7 @@ require (
 	github.com/emicklei/go-restful/v3 v3.12.0 // indirect
 	github.com/evanphx/json-patch/v5 v5.9.0 // indirect
 	github.com/exponent-io/jsonpath v0.0.0-20210407135951-1de76d718b3f // indirect
+	github.com/fluxcd/pkg/apis/event v0.12.0 // indirect
 	github.com/fluxcd/pkg/envsubst v1.3.0 // indirect
 	github.com/fluxcd/pkg/sourceignore v0.10.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
@@ -83,6 +84,8 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79 // indirect
+	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
+	github.com/hashicorp/go-retryablehttp v0.7.7 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
 	github.com/josharian/intern v1.0.0 // indirect

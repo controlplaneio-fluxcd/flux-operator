@@ -58,7 +58,7 @@ func Build(srcDir, tmpDir string, options Options) (*Result, error) {
 }
 
 func generate(base string, options Options) error {
-	if containsItemString(options.Components, options.NotificationController) {
+	if ContainElementString(options.Components, options.NotificationController) {
 		options.EventsAddr = fmt.Sprintf("http://%s.%s.svc.%s./", options.NotificationController, options.Namespace, options.ClusterDomain)
 	}
 

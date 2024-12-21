@@ -61,3 +61,50 @@ func GetMultitenantProfile(defaultSA string) string {
 
 	return fmt.Sprintf(profileMultitenant, defaultSA)
 }
+
+const tmpNotificationPatch = `
+- target:
+    kind: CustomResourceDefinition
+    name: alerts.notification.toolkit.fluxcd.io
+  patch: |-
+    - op: add
+      path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
+      value: FluxInstance
+    - op: add
+      path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
+      value: FluxInstance
+    - op: add
+      path: /spec/versions/2/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
+      value: FluxInstance
+- target:
+    kind: CustomResourceDefinition
+    name: receivers.notification.toolkit.fluxcd.io
+  patch: |-
+    - op: add
+      path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
+      value: FluxInstance
+    - op: add
+      path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
+      value: FluxInstance
+    - op: add
+      path: /spec/versions/2/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
+      value: FluxInstance
+- target:
+    kind: ClusterRole
+    name: crd-controller-%s
+  patch: |-
+    - op: add
+      path: /rules/-
+      value:
+       apiGroups: [ 'fluxcd.controlplane.io' ]
+       resources: [ '*' ]
+       verbs: [ '*' ]
+`
+
+func GetNotificationPatch(namespace string) string {
+	if namespace == "" {
+		namespace = "flux-system"
+	}
+
+	return fmt.Sprintf(tmpNotificationPatch, namespace)
+}

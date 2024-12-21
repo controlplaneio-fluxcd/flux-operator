@@ -71,8 +71,12 @@ github.com/evanphx/json-patch/v5 v5.9.0 h1:kcBlZQbplgElYIlo/n1hJbls2z/1awpXxpRi0
 github.com/evanphx/json-patch/v5 v5.9.0/go.mod h1:VNkHZ/282BpEyt/tObQO8s5CMPmYYq14uClGH4abBuQ=
 github.com/exponent-io/jsonpath v0.0.0-20210407135951-1de76d718b3f h1:Wl78ApPPB2Wvf/TIe2xdyJxTlb6obmF18d8QdkxNDu4=
 github.com/exponent-io/jsonpath v0.0.0-20210407135951-1de76d718b3f/go.mod h1:OSYXu++VVOHnXeitef/D8n/6y4QV8uLHSFXX4NeXMGc=
+github.com/fatih/color v1.16.0 h1:zmkK9Ngbjj+K0yRhTVONQh1p/HknKYSlNT+vZCzyokM=
+github.com/fatih/color v1.16.0/go.mod h1:fL2Sau1YI5c0pdGEVCbKQbLXB6edEj1ZgiY4NijnWvE=
 github.com/fluxcd/cli-utils v0.36.0-flux.11 h1:W0y2uvCVkcE8bgV9jgoGSjzWbLFiNq1AjrWtuxllek8=
 github.com/fluxcd/cli-utils v0.36.0-flux.11/go.mod h1:WZ7xUpZbK+O6HBxA5UWqzWTLSSltdmj4wS1LstS5Dqs=
+github.com/fluxcd/pkg/apis/event v0.12.0 h1:+zQVefTG3+THYRS48dtZkoA1rdbZZNx3t6wnbzprFIE=
+github.com/fluxcd/pkg/apis/event v0.12.0/go.mod h1:aRK2AONnjjSNW61B6Iy3SW4YHozACntnJeGm3fFqDqA=
 github.com/fluxcd/pkg/apis/kustomize v1.8.0 h1:HH6YRa3SMS72KK4cUyb9m5sK/dZH+Eti1qhjWDCgwKg=
 github.com/fluxcd/pkg/apis/kustomize v1.8.0/go.mod h1:QCKIFj1ocdndaWSkrLs5JKvdGNYyTzQX1ZB3lYTwma0=
 github.com/fluxcd/pkg/apis/meta v1.9.0 h1:wPgm7bWNJZ/ImS5GqikOxt362IgLPFBG73dZ27uWRiQ=
@@ -81,8 +85,8 @@ github.com/fluxcd/pkg/envsubst v1.3.0 h1:84Ain+8EBvyzu6y0FsKRwNsvaSiKuqhTqeh/4yo
 github.com/fluxcd/pkg/envsubst v1.3.0/go.mod h1:lz6HvqDnxbX0sIqjr1fxw0oTGYACLVFcOE/srKS0VQQ=
 github.com/fluxcd/pkg/kustomize v1.15.0 h1:lII4FW9EJl0rI20dk+Glg5C2JZhP343FBov7HwW+SQo=
 github.com/fluxcd/pkg/kustomize v1.15.0/go.mod h1:e2SGi7cl28c9cnBVZ8YV8HAS4VBgUsiM6HMqv/AHJWQ=
-github.com/fluxcd/pkg/runtime v0.51.0 h1:F4gKLUBUdvUdtg2lBsg72KUPqlOnaf9ChEL8bmP7CvQ=
-github.com/fluxcd/pkg/runtime v0.51.0/go.mod h1:uMJ+s81+TyNGVjcnn+PIXUGGYs9VA3AK8nDmQWXAnis=
+github.com/fluxcd/pkg/runtime v0.51.1 h1:68C6V/P2l/IwivqzvkgcR6Aa7zKds5ihsvoo0NcLarA=
+github.com/fluxcd/pkg/runtime v0.51.1/go.mod h1:uMJ+s81+TyNGVjcnn+PIXUGGYs9VA3AK8nDmQWXAnis=
 github.com/fluxcd/pkg/sourceignore v0.10.0 h1:z5Bhh0G990uLbwjKNj7SzYqbGkicpGcXxF/Z4ZSVB64=
 github.com/fluxcd/pkg/sourceignore v0.10.0/go.mod h1:d1d9hcFxf+grda6JL3k+mC09nVTtBb9kJVzQn6J77B0=
 github.com/fluxcd/pkg/ssa v0.43.0 h1:XmADD3C0erYZayKfGI0WTsMlW9TtS4bp5gy4Axo1dcA=
@@ -139,6 +143,12 @@ github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aN
 github.com/gorilla/websocket v1.5.3/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
 github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79 h1:+ngKgrYPPJrOjhax5N+uePQ0Fh1Z7PheYoUI/0nzkPA=
 github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79/go.mod h1:FecbI9+v66THATjSRHfNgh1IVFe/9kFxbXtjV0ctIMA=
+github.com/hashicorp/go-cleanhttp v0.5.2 h1:035FKYIWjmULyFRBKPs8TBQoi0x6d9G4xc9neXJWAZQ=
+github.com/hashicorp/go-cleanhttp v0.5.2/go.mod h1:kO/YDlP8L1346E6Sodw+PrpBSV4/SoxCXGY6BqNFT48=
+github.com/hashicorp/go-hclog v1.6.3 h1:Qr2kF+eVWjTiYmU7Y31tYlP1h0q/X3Nl3tPGdaB11/k=
+github.com/hashicorp/go-hclog v1.6.3/go.mod h1:W4Qnvbt70Wk/zYJryRzDRU/4r0kIg0PVHBcfoyhpF5M=
+github.com/hashicorp/go-retryablehttp v0.7.7 h1:C8hUCYzor8PIfXHa4UrZkU4VvK8o9ISHxT2Q8+VepXU=
+github.com/hashicorp/go-retryablehttp v0.7.7/go.mod h1:pkQpWZeYWskR+D1tR2O5OcBFOxfA7DoAO6xtkuQnHTk=
 github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=
 github.com/inconshreveable/mousetrap v1.1.0/go.mod h1:vpF70FUmC8bwa3OWnCshd2FqLfsEA9PFc4w1p2J65bw=
 github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 h1:BQSFePA1RWJOlocH6Fxy8MmwDt+yVQYULKfN0RoTN8A=
@@ -161,6 +171,10 @@ github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de h1:9TO3cAIGXtEhn
 github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de/go.mod h1:zAbeS9B/r2mtpb6U+EI2rYA5OAXxsYw6wTamcNW+zcE=
 github.com/mailru/easyjson v0.7.7 h1:UGYAvKxe3sBsEDzO8ZeWOSlIQfWFlxbzLZe7hwFURr0=
 github.com/mailru/easyjson v0.7.7/go.mod h1:xzfreul335JAWq5oZzymOObrkdz5UnU4kGfJJLY9Nlc=
+github.com/mattn/go-colorable v0.1.13 h1:fFA4WZxdEF4tXPZVKMLwD8oUnCTTo08duU7wxecdEvA=
+github.com/mattn/go-colorable v0.1.13/go.mod h1:7S9/ev0klgBDR4GtXTXX8a3vIGJpMovkB8vQcUbaXHg=
+github.com/mattn/go-isatty v0.0.20 h1:xfD0iDuEKnDkl03q4limB+vH+GxLEtL/jb4xVJSWWEY=
+github.com/mattn/go-isatty v0.0.20/go.mod h1:W+V8PltTTMOvKvAeJH7IuucS94S2C6jfK/D7dTCTo3Y=
 github.com/mitchellh/go-homedir v1.1.0 h1:lukF9ziXFxDFPkA1vsr5zpc1XuPDn/wFntq5mG+4E0Y=
 github.com/mitchellh/go-homedir v1.1.0/go.mod h1:SfyaCUpYCn1Vlf4IUYiD9fPX4A5wJrkLzIz1N1q0pr0=
 github.com/mitchellh/go-wordwrap v1.0.1 h1:TLuKupo69TCn6TQSyGxwI1EblZZEsQ0vMlAFQflz0v0=
