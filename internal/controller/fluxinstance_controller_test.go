@@ -42,7 +42,7 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 			Name:      ns.Name,
 			Namespace: ns.Name,
 		},
-		Spec: getDefaultFluxSpec(),
+		Spec: getDefaultFluxSpec(t),
 	}
 	obj.Spec.Distribution.Artifact = manifestsURL
 
@@ -196,15 +196,18 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 	}
 	messages := []string{
 		"is outdated",
-		"Installing revision",
-		"Flux installed revision",
-		"Upgrading to revision",
-		"Flux updated revision",
+		"Installing",
+		"installed",
+		"Upgrading",
+		"updated",
 		"Reconciliation finished",
 	}
 	for _, message := range messages {
 		g.Expect(events).Should(ContainElement(WithTransform(func(e corev1.Event) string { return e.Message }, ContainSubstring(message))))
 	}
+
+	// Check if events contain the revision metadata.
+	g.Expect(events[len(events)-1].Annotations).To(HaveKeyWithValue(fluxcdv1.RevisionAnnotation, resultFinal.Status.LastAppliedRevision))
 
 	// Uninstall the instance.
 	err = testClient.Delete(ctx, obj)
@@ -238,7 +241,7 @@ func TestFluxInstanceReconciler_FetchFail(t *testing.T) {
 			Name:      ns.Name,
 			Namespace: ns.Name,
 		},
-		Spec: getDefaultFluxSpec(),
+		Spec: getDefaultFluxSpec(t),
 	}
 	obj.Spec.Distribution.Artifact = manifestsURL
 
@@ -300,7 +303,7 @@ func TestFluxInstanceReconciler_BuildFail(t *testing.T) {
 			Name:      ns.Name,
 			Namespace: ns.Name,
 		},
-		Spec: getDefaultFluxSpec(),
+		Spec: getDefaultFluxSpec(t),
 	}
 
 	err = testClient.Create(ctx, obj)
@@ -355,7 +358,7 @@ func TestFluxInstanceReconciler_BuildFail(t *testing.T) {
 func TestFluxInstanceReconciler_Downgrade(t *testing.T) {
 	g := NewWithT(t)
 	reconciler := getFluxInstanceReconciler()
-	spec := getDefaultFluxSpec()
+	spec := getDefaultFluxSpec(t)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -433,7 +436,7 @@ func TestFluxInstanceReconciler_Downgrade(t *testing.T) {
 func TestFluxInstanceReconciler_Disabled(t *testing.T) {
 	g := NewWithT(t)
 	reconciler := getFluxInstanceReconciler()
-	spec := getDefaultFluxSpec()
+	spec := getDefaultFluxSpec(t)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -530,7 +533,7 @@ func TestFluxInstanceReconciler_Disabled(t *testing.T) {
 func TestFluxInstanceReconciler_Profiles(t *testing.T) {
 	g := NewWithT(t)
 	reconciler := getFluxInstanceReconciler()
-	spec := getDefaultFluxSpec()
+	spec := getDefaultFluxSpec(t)
 	spec.Distribution.Version = "v2.4.x"
 	spec.Cluster = &fluxcdv1.Cluster{
 		Type:        "openshift",
@@ -640,7 +643,7 @@ func TestFluxInstanceReconciler_Profiles(t *testing.T) {
 func TestFluxInstanceReconciler_NewVersion(t *testing.T) {
 	g := NewWithT(t)
 	reconciler := getFluxInstanceReconciler()
-	spec := getDefaultFluxSpec()
+	spec := getDefaultFluxSpec(t)
 	spec.Distribution.Version = "v2.2.x"
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -689,7 +692,11 @@ func TestFluxInstanceReconciler_NewVersion(t *testing.T) {
 
 }
 
-func getDefaultFluxSpec() fluxcdv1.FluxInstanceSpec {
+func getDefaultFluxSpec(t *testing.T) fluxcdv1.FluxInstanceSpec {
+	// Disable notifications for the tests as no pod is running.
+	// This is required to avoid the 30s retry loop performed by the HTTP client.
+	t.Setenv("NOTIFICATIONS_DISABLED", "yes")
+
 	return fluxcdv1.FluxInstanceSpec{
 		Wait:             ptr.To(false),
 		MigrateResources: ptr.To(true),

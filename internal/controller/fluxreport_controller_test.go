@@ -45,7 +45,7 @@ func TestFluxReportReconciler_Reconcile(t *testing.T) {
 			Name:      ns.Name,
 			Namespace: ns.Name,
 		},
-		Spec: getDefaultFluxSpec(),
+		Spec: getDefaultFluxSpec(t),
 	}
 	err = testEnv.Create(ctx, instance)
 	g.Expect(err).ToNot(HaveOccurred())
@@ -161,7 +161,7 @@ func TestFluxReportReconciler_CustomSyncName(t *testing.T) {
 			Name:      ns.Name,
 			Namespace: ns.Name,
 		},
-		Spec: getDefaultFluxSpec(),
+		Spec: getDefaultFluxSpec(t),
 	}
 
 	// Set custom sync name.

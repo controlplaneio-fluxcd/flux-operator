@@ -125,7 +125,7 @@ func TestFluxInstanceArtifactReconciler(t *testing.T) {
 					Namespace:   ns.Name,
 					Annotations: tt.annotations,
 				},
-				Spec: getDefaultFluxSpec(),
+				Spec: getDefaultFluxSpec(t),
 			}
 			obj.Spec.Distribution.Artifact = tt.manifestsURL
 

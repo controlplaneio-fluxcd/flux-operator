@@ -154,7 +154,7 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 			meta.ReadyCondition,
 			meta.ArtifactFailedReason,
 			"%s", msg)
-		r.EventRecorder.Event(obj, corev1.EventTypeWarning, meta.ArtifactFailedReason, msg)
+		r.notify(ctx, obj, meta.ArtifactFailedReason, corev1.EventTypeWarning, msg)
 		return ctrl.Result{}, err
 	}
 
@@ -528,7 +528,9 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 			action = "installed"
 		}
 
-		msg := fmt.Sprintf("Flux %s revision %s\n%s", action, buildResult.Revision, applyLog)
+		ver := strings.Split(buildResult.Revision, "@")[0]
+
+		msg := fmt.Sprintf("Flux %s %s\n%s", ver, action, applyLog)
 		r.notify(ctx, obj, meta.ReconciliationSucceededReason, corev1.EventTypeNormal, msg)
 	}
 
@@ -641,7 +643,7 @@ func (r *FluxInstanceReconciler) recordMetrics(obj *fluxcdv1.FluxInstance) error
 
 func (r *FluxInstanceReconciler) notify(ctx context.Context, obj *fluxcdv1.FluxInstance, reason, eventType, msg string) {
 	notificationAddress := ""
-	if builder.ContainElementString(obj.GetComponents(), builder.MakeDefaultOptions().NotificationController) {
+	if os.Getenv("NOTIFICATIONS_DISABLED") == "" && builder.ContainElementString(obj.GetComponents(), builder.MakeDefaultOptions().NotificationController) {
 		notificationAddress = fmt.Sprintf("http://%s.%s.svc.%s/",
 			builder.MakeDefaultOptions().NotificationController,
 			obj.GetNamespace(),
@@ -662,5 +664,10 @@ func (r *FluxInstanceReconciler) notify(ctx context.Context, obj *fluxcdv1.FluxI
 		return
 	}
 
-	go eventRecorder.Eventf(obj, eventType, reason, "%s", msg)
+	annotations := map[string]string{}
+	if obj.Status.LastAttemptedRevision != "" {
+		annotations[fluxcdv1.RevisionAnnotation] = obj.Status.LastAttemptedRevision
+	}
+
+	eventRecorder.AnnotatedEventf(obj, annotations, eventType, reason, "%s", msg)
 }
