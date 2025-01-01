@@ -15,6 +15,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/conditions"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -41,7 +42,7 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 			Name:      ns.Name,
 			Namespace: ns.Name,
 		},
-		Spec: getDefaultFluxSpec(),
+		Spec: getDefaultFluxSpec(t),
 	}
 	obj.Spec.Distribution.Artifact = manifestsURL
 
@@ -190,17 +191,25 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 
 	// Check if events were recorded for each step.
 	events := getEvents(result.Name)
-	g.Expect(events).To(HaveLen(5))
-	g.Expect(events[0].Reason).To(Equal(fluxcdv1.OutdatedReason))
-	g.Expect(events[1].Reason).To(Equal(meta.ProgressingReason))
-	g.Expect(events[1].Message).To(HavePrefix("Installing"))
-	g.Expect(events[2].Reason).To(Equal(meta.ReconciliationSucceededReason))
-	g.Expect(events[2].Message).To(HavePrefix("Reconciliation finished"))
-	g.Expect(events[3].Reason).To(Equal(meta.ProgressingReason))
-	g.Expect(events[3].Message).To(HavePrefix("Upgrading"))
-	g.Expect(events[4].Reason).To(Equal(meta.ReconciliationSucceededReason))
-	g.Expect(events[4].Annotations).To(HaveKeyWithValue(fluxcdv1.RevisionAnnotation, resultFinal.Status.LastAppliedRevision))
+	for _, event := range events {
+		t.Log(event.Message)
+	}
+	messages := []string{
+		"is outdated",
+		"Installing",
+		"installed",
+		"Upgrading",
+		"updated",
+		"Reconciliation finished",
+	}
+	for _, message := range messages {
+		g.Expect(events).Should(ContainElement(WithTransform(func(e corev1.Event) string { return e.Message }, ContainSubstring(message))))
+	}
 
+	// Check if events contain the revision metadata.
+	g.Expect(events[len(events)-1].Annotations).To(HaveKeyWithValue(fluxcdv1.RevisionAnnotation, resultFinal.Status.LastAppliedRevision))
+
+	// Uninstall the instance.
 	err = testClient.Delete(ctx, obj)
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -232,7 +241,7 @@ func TestFluxInstanceReconciler_FetchFail(t *testing.T) {
 			Name:      ns.Name,
 			Namespace: ns.Name,
 		},
-		Spec: getDefaultFluxSpec(),
+		Spec: getDefaultFluxSpec(t),
 	}
 	obj.Spec.Distribution.Artifact = manifestsURL
 
@@ -294,7 +303,7 @@ func TestFluxInstanceReconciler_BuildFail(t *testing.T) {
 			Name:      ns.Name,
 			Namespace: ns.Name,
 		},
-		Spec: getDefaultFluxSpec(),
+		Spec: getDefaultFluxSpec(t),
 	}
 
 	err = testClient.Create(ctx, obj)
@@ -349,7 +358,7 @@ func TestFluxInstanceReconciler_BuildFail(t *testing.T) {
 func TestFluxInstanceReconciler_Downgrade(t *testing.T) {
 	g := NewWithT(t)
 	reconciler := getFluxInstanceReconciler()
-	spec := getDefaultFluxSpec()
+	spec := getDefaultFluxSpec(t)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -427,7 +436,7 @@ func TestFluxInstanceReconciler_Downgrade(t *testing.T) {
 func TestFluxInstanceReconciler_Disabled(t *testing.T) {
 	g := NewWithT(t)
 	reconciler := getFluxInstanceReconciler()
-	spec := getDefaultFluxSpec()
+	spec := getDefaultFluxSpec(t)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -486,12 +495,9 @@ func TestFluxInstanceReconciler_Disabled(t *testing.T) {
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), resultFinal)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	// Check if events were recorded for each step.
+	// Check if the ReconciliationDisabled event was recorded.
 	events := getEvents(result.Name)
-	g.Expect(events).To(HaveLen(4))
-	g.Expect(events[1].Reason).To(Equal(meta.ProgressingReason))
-	g.Expect(events[2].Reason).To(Equal(meta.ReconciliationSucceededReason))
-	g.Expect(events[3].Reason).To(Equal("ReconciliationDisabled"))
+	g.Expect(events[len(events)-1].Reason).To(Equal("ReconciliationDisabled"))
 
 	// Check that resources were not deleted.
 	kc := &appsv1.Deployment{}
@@ -527,7 +533,8 @@ func TestFluxInstanceReconciler_Disabled(t *testing.T) {
 func TestFluxInstanceReconciler_Profiles(t *testing.T) {
 	g := NewWithT(t)
 	reconciler := getFluxInstanceReconciler()
-	spec := getDefaultFluxSpec()
+	spec := getDefaultFluxSpec(t)
+	spec.Distribution.Version = "v2.4.x"
 	spec.Cluster = &fluxcdv1.Cluster{
 		Type:        "openshift",
 		Multitenant: true,
@@ -606,6 +613,16 @@ func TestFluxInstanceReconciler_Profiles(t *testing.T) {
 		))
 	}
 
+	// Check if the notification CRD was patched.
+	crd := &unstructured.Unstructured{}
+	crd.SetAPIVersion("apiextensions.k8s.io/v1")
+	crd.SetKind("CustomResourceDefinition")
+	err = testClient.Get(ctx, types.NamespacedName{Name: "alerts.notification.toolkit.fluxcd.io"}, crd)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(
+		crd.Object["spec"].(map[string]interface{})["versions"].([]interface{})[2].(map[string]interface{})["schema"].(map[string]interface{})["openAPIV3Schema"].(map[string]interface{})["properties"].(map[string]interface{})["spec"].(map[string]interface{})["properties"].(map[string]interface{})["eventSources"].(map[string]interface{})["items"].(map[string]interface{})["properties"].(map[string]interface{})["kind"].(map[string]interface{})["enum"]).
+		To(ContainElement("FluxInstance"))
+
 	// Uninstall the instance.
 	err = testClient.Delete(ctx, obj)
 	g.Expect(err).ToNot(HaveOccurred())
@@ -626,7 +643,7 @@ func TestFluxInstanceReconciler_Profiles(t *testing.T) {
 func TestFluxInstanceReconciler_NewVersion(t *testing.T) {
 	g := NewWithT(t)
 	reconciler := getFluxInstanceReconciler()
-	spec := getDefaultFluxSpec()
+	spec := getDefaultFluxSpec(t)
 	spec.Distribution.Version = "v2.2.x"
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -661,7 +678,7 @@ func TestFluxInstanceReconciler_NewVersion(t *testing.T) {
 
 	// Check if events were recorded for each step.
 	events := getEvents(obj.Name)
-	g.Expect(events).To(HaveLen(3))
+	g.Expect(events).To(HaveLen(4))
 	g.Expect(events[0].Reason).To(Equal("OutdatedVersion"))
 
 	err = testClient.Delete(ctx, obj)
@@ -675,7 +692,11 @@ func TestFluxInstanceReconciler_NewVersion(t *testing.T) {
 
 }
 
-func getDefaultFluxSpec() fluxcdv1.FluxInstanceSpec {
+func getDefaultFluxSpec(t *testing.T) fluxcdv1.FluxInstanceSpec {
+	// Disable notifications for the tests as no pod is running.
+	// This is required to avoid the 30s retry loop performed by the HTTP client.
+	t.Setenv("NOTIFICATIONS_DISABLED", "yes")
+
 	return fluxcdv1.FluxInstanceSpec{
 		Wait:             ptr.To(false),
 		MigrateResources: ptr.To(true),

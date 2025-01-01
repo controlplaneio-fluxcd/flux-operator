@@ -15,6 +15,7 @@ import (
 	"github.com/fluxcd/cli-utils/pkg/kstatus/polling"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
+	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/ssa"
 	"github.com/fluxcd/pkg/ssa/normalize"
@@ -153,7 +154,7 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 			meta.ReadyCondition,
 			meta.ArtifactFailedReason,
 			"%s", msg)
-		r.EventRecorder.Event(obj, corev1.EventTypeWarning, meta.ArtifactFailedReason, msg)
+		r.notify(ctx, obj, meta.ArtifactFailedReason, corev1.EventTypeWarning, msg)
 		return ctrl.Result{}, err
 	}
 
@@ -170,7 +171,7 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 			meta.BuildFailedReason,
 			"%s", msg)
 		log.Error(err, msg)
-		r.EventRecorder.Event(obj, corev1.EventTypeWarning, meta.BuildFailedReason, msg)
+		r.notify(ctx, obj, meta.BuildFailedReason, corev1.EventTypeWarning, msg)
 		return ctrl.Result{}, nil
 	}
 
@@ -195,8 +196,7 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 			meta.ReadyCondition,
 			meta.ReconciliationFailedReason,
 			"%s", msg)
-		r.EventRecorder.Event(obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
-
+		r.notify(ctx, obj, meta.ReconciliationFailedReason, corev1.EventTypeWarning, msg)
 		return ctrl.Result{}, err
 	}
 
@@ -213,7 +213,7 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 		map[string]string{fluxcdv1.RevisionAnnotation: obj.Status.LastAppliedRevision},
 		corev1.EventTypeNormal,
 		meta.ReconciliationSucceededReason,
-		msg)
+		"%s", msg)
 
 	return requeueAfter(obj), nil
 }
@@ -305,6 +305,10 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 	}
 	if obj.GetCluster().Multitenant {
 		options.Patches += builder.GetMultitenantProfile(obj.GetCluster().TenantDefaultServiceAccount)
+	}
+
+	if builder.ContainElementString(options.Components, options.NotificationController) {
+		options.Patches += builder.GetNotificationPatch(options.Namespace)
 	}
 
 	if obj.Spec.Sharding != nil {
@@ -516,6 +520,20 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 		}
 	}
 
+	// Send event to notification-controller only if the server-side apply resulted in changes.
+	applyLog := strings.TrimSuffix(changeSetLog.String(), "\n")
+	if applyLog != "" {
+		action := "updated"
+		if len(oldInventory.Entries) == 0 {
+			action = "installed"
+		}
+
+		ver := strings.Split(buildResult.Revision, "@")[0]
+
+		msg := fmt.Sprintf("Flux %s %s\n%s", ver, action, applyLog)
+		r.notify(ctx, obj, meta.ReconciliationSucceededReason, corev1.EventTypeNormal, msg)
+	}
+
 	return nil
 }
 
@@ -621,4 +639,35 @@ func (r *FluxInstanceReconciler) recordMetrics(obj *fluxcdv1.FluxInstance) error
 	}
 	reporter.RecordMetrics(unstructured.Unstructured{Object: rawMap})
 	return nil
+}
+
+func (r *FluxInstanceReconciler) notify(ctx context.Context, obj *fluxcdv1.FluxInstance, reason, eventType, msg string) {
+	notificationAddress := ""
+	if os.Getenv("NOTIFICATIONS_DISABLED") == "" && builder.ContainElementString(obj.GetComponents(), builder.MakeDefaultOptions().NotificationController) {
+		notificationAddress = fmt.Sprintf("http://%s.%s.svc.%s/",
+			builder.MakeDefaultOptions().NotificationController,
+			obj.GetNamespace(),
+			obj.GetCluster().Domain,
+		)
+	}
+
+	log := ctrl.LoggerFrom(ctx)
+
+	eventRecorder, err := events.NewRecorderForScheme(
+		r.Scheme,
+		r.EventRecorder,
+		log,
+		notificationAddress,
+		r.StatusManager)
+	if err != nil {
+		log.Error(err, "failed to create event recorder")
+		return
+	}
+
+	annotations := map[string]string{}
+	if obj.Status.LastAttemptedRevision != "" {
+		annotations[fluxcdv1.RevisionAnnotation] = obj.Status.LastAttemptedRevision
+	}
+
+	eventRecorder.AnnotatedEventf(obj, annotations, eventType, reason, "%s", msg)
 }
