@@ -15,94 +15,64 @@ import (
 	v1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
-func TestBuildResourceGroup_Default(t *testing.T) {
-	g := NewWithT(t)
+func TestBuildResourceGroup(t *testing.T) {
+	testdataRoot := filepath.Join("testdata", "resourcegroup")
 
-	srcFile := filepath.Join("testdata", "resourcegroup", "default.yaml")
-	goldenFile := filepath.Join("testdata", "resourcegroup", "default.golden.yaml")
-
-	data, err := os.ReadFile(srcFile)
-	g.Expect(err).ToNot(HaveOccurred())
-
-	var rg v1.ResourceGroup
-	err = yaml.Unmarshal(data, &rg)
-	g.Expect(err).ToNot(HaveOccurred())
-
-	objects, err := BuildResourceGroup(rg.Spec.Resources, rg.GetInputs())
-	g.Expect(err).ToNot(HaveOccurred())
-
-	manifests, err := ssautil.ObjectsToYAML(objects)
-	g.Expect(err).ToNot(HaveOccurred())
-
-	//if shouldGenGolden() {
-	err = os.WriteFile(goldenFile, []byte(manifests), 0644)
-	g.Expect(err).NotTo(HaveOccurred())
-	//}
-
-	goldenK, err := os.ReadFile(goldenFile)
-	g.Expect(err).NotTo(HaveOccurred())
-
-	g.Expect(manifests).To(Equal(string(goldenK)))
-}
-
-func TestBuildResourceGroup_Deduplication(t *testing.T) {
-	g := NewWithT(t)
-
-	srcFile := filepath.Join("testdata", "resourcegroup", "dedup.yaml")
-	goldenFile := filepath.Join("testdata", "resourcegroup", "dedup.golden.yaml")
-
-	data, err := os.ReadFile(srcFile)
-	g.Expect(err).ToNot(HaveOccurred())
-
-	var rg v1.ResourceGroup
-	err = yaml.Unmarshal(data, &rg)
-	g.Expect(err).ToNot(HaveOccurred())
-
-	objects, err := BuildResourceGroup(rg.Spec.Resources, rg.GetInputs())
-	g.Expect(err).ToNot(HaveOccurred())
-
-	manifests, err := ssautil.ObjectsToYAML(objects)
-	g.Expect(err).ToNot(HaveOccurred())
-
-	if shouldGenGolden() {
-		err = os.WriteFile(goldenFile, []byte(manifests), 0644)
-		g.Expect(err).NotTo(HaveOccurred())
+	tests := []struct {
+		name       string
+		srcFile    string
+		goldenFile string
+	}{
+		{
+			name:       "default",
+			srcFile:    filepath.Join(testdataRoot, "default.yaml"),
+			goldenFile: filepath.Join(testdataRoot, "default.golden.yaml"),
+		},
+		{
+			name:       "dedup",
+			srcFile:    filepath.Join(testdataRoot, "dedup.yaml"),
+			goldenFile: filepath.Join(testdataRoot, "dedup.golden.yaml"),
+		},
+		{
+			name:       "exclude",
+			srcFile:    filepath.Join(testdataRoot, "exclude.yaml"),
+			goldenFile: filepath.Join(testdataRoot, "exclude.golden.yaml"),
+		},
+		{
+			name:       "noinputs",
+			srcFile:    filepath.Join(testdataRoot, "noinputs.yaml"),
+			goldenFile: filepath.Join(testdataRoot, "noinputs.golden.yaml"),
+		},
 	}
 
-	goldenK, err := os.ReadFile(goldenFile)
-	g.Expect(err).NotTo(HaveOccurred())
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
 
-	g.Expect(manifests).To(Equal(string(goldenK)))
-}
+			data, err := os.ReadFile(tt.srcFile)
+			g.Expect(err).ToNot(HaveOccurred())
 
-func TestBuildResourceGroup_NoInputs(t *testing.T) {
-	g := NewWithT(t)
+			var rg v1.ResourceGroup
+			err = yaml.Unmarshal(data, &rg)
+			g.Expect(err).ToNot(HaveOccurred())
 
-	srcFile := filepath.Join("testdata", "resourcegroup", "noinputs.yaml")
-	goldenFile := filepath.Join("testdata", "resourcegroup", "noinputs.golden.yaml")
+			objects, err := BuildResourceGroup(rg.Spec.Resources, rg.GetInputs())
+			g.Expect(err).ToNot(HaveOccurred())
 
-	data, err := os.ReadFile(srcFile)
-	g.Expect(err).ToNot(HaveOccurred())
+			manifests, err := ssautil.ObjectsToYAML(objects)
+			g.Expect(err).ToNot(HaveOccurred())
 
-	var rg v1.ResourceGroup
-	err = yaml.Unmarshal(data, &rg)
-	g.Expect(err).ToNot(HaveOccurred())
+			if shouldGenGolden() {
+				err = os.WriteFile(tt.goldenFile, []byte(manifests), 0644)
+				g.Expect(err).NotTo(HaveOccurred())
+			}
 
-	objects, err := BuildResourceGroup(rg.Spec.Resources, rg.GetInputs())
-	g.Expect(err).ToNot(HaveOccurred())
+			goldenK, err := os.ReadFile(tt.goldenFile)
+			g.Expect(err).NotTo(HaveOccurred())
 
-	manifests, err := ssautil.ObjectsToYAML(objects)
-	g.Expect(err).ToNot(HaveOccurred())
-
-	if shouldGenGolden() {
-		err = os.WriteFile(goldenFile, []byte(manifests), 0644)
-		g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(manifests).To(Equal(string(goldenK)))
+		})
 	}
-
-	goldenK, err := os.ReadFile(goldenFile)
-	g.Expect(err).NotTo(HaveOccurred())
-
-	g.Expect(manifests).To(Equal(string(goldenK)))
 }
 
 func TestBuildResourceGroup_Empty(t *testing.T) {

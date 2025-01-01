@@ -296,6 +296,34 @@ spec:
 In the above example, the `OCIRepository` resource is created only once
 and referred by all `HelmRelease` resources.
 
+#### Conditionally resource exclusion
+
+To exclude a resource based on input values, the `fluxcd.controlplane.io/reconcile` annotation can be set 
+to `disabled` on the resource metadata. This will prevent the resource from being reconciled by the operator.
+
+Example of excluding a resource based on an input value:
+
+```yaml
+spec:
+  inputs:
+    - tenant: "team1"
+    - tenant: "team2"
+  resources:
+    - apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: << inputs.tenant >>
+    - apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: flux
+        namespace: << inputs.tenant >>
+        annotations:
+          fluxcd.controlplane.io/reconcile: << if eq inputs.tenant "team1" >>enabled<< else >>disabled<< end >>
+```
+
+In the above example, the `ServiceAccount` resource is generated only for the `team1` tenant.
+
 ### Common metadata
 
 The `.spec.commonMetadata` field is optional and specifies common metadata to be applied to all resources.
