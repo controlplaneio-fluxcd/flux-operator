@@ -14,6 +14,8 @@ import (
 	apix "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/yaml"
+
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
 // BuildResourceGroup builds a list of Kubernetes resources
@@ -37,6 +39,12 @@ func BuildResourceGroup(templates []*apix.JSON, inputs []map[string]string) ([]*
 				return nil, fmt.Errorf("failed to build resources[%d]: %w", i, err)
 			}
 
+			// exclude object based on annotations
+			if val := object.GetAnnotations()[fluxcdv1.ReconcileAnnotation]; val == fluxcdv1.DisabledValue {
+				continue
+			}
+
+			// deduplicate objects
 			found := false
 			for _, obj := range objects {
 				if obj.GetAPIVersion() == object.GetAPIVersion() &&
