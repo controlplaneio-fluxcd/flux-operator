@@ -1,5 +1,5 @@
 apiVersion: fluxcd.controlplane.io/v1
-kind: ResourceGroup
+kind: ResourceSet
 metadata:
   name: tenants
   namespace: flux-system

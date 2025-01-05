@@ -4,16 +4,16 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.1
-  name: resourcegroups.fluxcd.controlplane.io
+  name: resourcesets.fluxcd.controlplane.io
 spec:
   group: fluxcd.controlplane.io
   names:
-    kind: ResourceGroup
-    listKind: ResourceGroupList
-    plural: resourcegroups
+    kind: ResourceSet
+    listKind: ResourceSetList
+    plural: resourcesets
     shortNames:
-    - rg
-    singular: resourcegroup
+    - rset
+    singular: resourceset
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
@@ -29,7 +29,7 @@ spec:
     name: v1
     schema:
       openAPIV3Schema:
-        description: ResourceGroup is the Schema for the ResourceGroups API
+        description: ResourceSet is the Schema for the ResourceSets API
         properties:
           apiVersion:
             description: |-
@@ -49,7 +49,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: ResourceGroupSpec defines the desired state of ResourceGroup
+            description: ResourceSetSpec defines the desired state of ResourceSet
             properties:
               commonMetadata:
                 description: |-
@@ -73,8 +73,8 @@ spec:
                   DependsOn specifies the list of Kubernetes resources that must
                   exist on the cluster before the reconciliation process starts.
                 items:
-                  description: Dependency defines a ResourceGroup dependency on a
-                    Kubernetes resource.
+                  description: Dependency defines a ResourceSet dependency on a Kubernetes
+                    resource.
                   properties:
                     apiVersion:
                       description: APIVersion of the resource to depend on.
@@ -107,7 +107,7 @@ spec:
                 items:
                   additionalProperties:
                     type: string
-                  description: ResourceGroupInput defines the key-value pairs of the
+                  description: ResourceSetInput defines the key-value pairs of the
                     resource group input.
                   type: object
                 type: array
@@ -130,7 +130,7 @@ spec:
                 type: boolean
             type: object
           status:
-            description: ResourceGroupStatus defines the observed state of ResourceGroup
+            description: ResourceSetStatus defines the observed state of ResourceSet
             properties:
               conditions:
                 description: Conditions contains the readiness conditions of the object.

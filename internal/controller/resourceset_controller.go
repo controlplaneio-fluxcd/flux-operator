@@ -39,8 +39,8 @@ import (
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/inventory"
 )
 
-// ResourceGroupReconciler reconciles a ResourceGroup object
-type ResourceGroupReconciler struct {
+// ResourceSetReconciler reconciles a ResourceSet object
+type ResourceSetReconciler struct {
 	client.Client
 	kuberecorder.EventRecorder
 
@@ -51,16 +51,16 @@ type ResourceGroupReconciler struct {
 	DefaultServiceAccount string
 }
 
-// +kubebuilder:rbac:groups=fluxcd.controlplane.io,resources=resourcegroups,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=fluxcd.controlplane.io,resources=resourcegroups/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=fluxcd.controlplane.io,resources=resourcegroups/finalizers,verbs=update
+// +kubebuilder:rbac:groups=fluxcd.controlplane.io,resources=resourcesets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=fluxcd.controlplane.io,resources=resourcesets/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=fluxcd.controlplane.io,resources=resourcesets/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-func (r *ResourceGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
+func (r *ResourceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
 	log := ctrl.LoggerFrom(ctx)
 
-	obj := &fluxcdv1.ResourceGroup{}
+	obj := &fluxcdv1.ResourceSet{}
 	if err := r.Get(ctx, req.NamespacedName, obj); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -121,8 +121,8 @@ func (r *ResourceGroupReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	return r.reconcile(ctx, obj, patcher)
 }
 
-func (r *ResourceGroupReconciler) reconcile(ctx context.Context,
-	obj *fluxcdv1.ResourceGroup,
+func (r *ResourceSetReconciler) reconcile(ctx context.Context,
+	obj *fluxcdv1.ResourceSet,
 	patcher *patch.SerialPatcher) (ctrl.Result, error) {
 	log := ctrl.LoggerFrom(ctx)
 	reconcileStart := time.Now()
@@ -141,7 +141,7 @@ func (r *ResourceGroupReconciler) reconcile(ctx context.Context,
 	}
 
 	// Build the resources.
-	buildResult, err := builder.BuildResourceGroup(obj.Spec.Resources, obj.GetInputs())
+	buildResult, err := builder.BuildResourceSet(obj.Spec.Resources, obj.GetInputs())
 	if err != nil {
 		msg := fmt.Sprintf("build failed: %s", err.Error())
 		conditions.MarkFalse(obj,
@@ -183,11 +183,11 @@ func (r *ResourceGroupReconciler) reconcile(ctx context.Context,
 		meta.ReconciliationSucceededReason,
 		msg)
 
-	return requeueAfterResourceGroup(obj), nil
+	return requeueAfterResourceSet(obj), nil
 }
 
-func (r *ResourceGroupReconciler) checkDependencies(ctx context.Context,
-	obj *fluxcdv1.ResourceGroup) error {
+func (r *ResourceSetReconciler) checkDependencies(ctx context.Context,
+	obj *fluxcdv1.ResourceSet) error {
 
 	for _, dep := range obj.Spec.DependsOn {
 		depObj := &unstructured.Unstructured{
@@ -267,8 +267,8 @@ func (r *ResourceGroupReconciler) checkDependencies(ctx context.Context,
 // for the resources to become ready.
 // It returns an error if the apply operation fails, otherwise
 // it returns the sha256 digest of the applied resources.
-func (r *ResourceGroupReconciler) apply(ctx context.Context,
-	obj *fluxcdv1.ResourceGroup,
+func (r *ResourceSetReconciler) apply(ctx context.Context,
+	obj *fluxcdv1.ResourceSet,
 	objects []*unstructured.Unstructured) (string, error) {
 	log := ctrl.LoggerFrom(ctx)
 	var changeSetLog strings.Builder
@@ -300,7 +300,7 @@ func (r *ResourceGroupReconciler) apply(ctx context.Context,
 	// Create a resource manager to reconcile the resources.
 	resourceManager := ssa.NewResourceManager(kubeClient, statusPoller, ssa.Owner{
 		Field: r.StatusManager,
-		Group: fmt.Sprintf("resourcegroup.%s", fluxcdv1.GroupVersion.Group),
+		Group: fmt.Sprintf("resourceset.%s", fluxcdv1.GroupVersion.Group),
 	})
 	resourceManager.SetOwnerLabels(objects, obj.GetName(), obj.GetNamespace())
 
@@ -442,7 +442,7 @@ func (r *ResourceGroupReconciler) apply(ctx context.Context,
 }
 
 // aggregateNotReadyStatus returns the status of the Flux resources not ready.
-func (r *ResourceGroupReconciler) aggregateNotReadyStatus(ctx context.Context,
+func (r *ResourceSetReconciler) aggregateNotReadyStatus(ctx context.Context,
 	kubeClient client.Client, objects []*unstructured.Unstructured) string {
 	var result strings.Builder
 	for _, res := range objects {
@@ -465,7 +465,7 @@ func (r *ResourceGroupReconciler) aggregateNotReadyStatus(ctx context.Context,
 // deleteAllStaged removes resources in stages, first the Flux resources and then the rest.
 // This is to ensure that the Flux GC can run under impersonation as the service account
 // and role bindings are deleted after the Flux resources.
-func (r *ResourceGroupReconciler) deleteAllStaged(ctx context.Context,
+func (r *ResourceSetReconciler) deleteAllStaged(ctx context.Context,
 	rm *ssa.ResourceManager,
 	objects []*unstructured.Unstructured,
 	opts ssa.DeleteOptions) (*ssa.ChangeSet, error) {
@@ -510,8 +510,8 @@ func (r *ResourceGroupReconciler) deleteAllStaged(ctx context.Context,
 }
 
 // finalizeStatus updates the object status and conditions.
-func (r *ResourceGroupReconciler) finalizeStatus(ctx context.Context,
-	obj *fluxcdv1.ResourceGroup,
+func (r *ResourceSetReconciler) finalizeStatus(ctx context.Context,
+	obj *fluxcdv1.ResourceSet,
 	patcher *patch.SerialPatcher) error {
 	// Set the value of the reconciliation request in status.
 	if v, ok := meta.ReconcileAnnotationValue(obj.GetAnnotations()); ok {
@@ -536,11 +536,11 @@ func (r *ResourceGroupReconciler) finalizeStatus(ctx context.Context,
 	return r.patch(ctx, obj, patcher)
 }
 
-// uninstall deletes all the resources managed by the ResourceGroup.
+// uninstall deletes all the resources managed by the ResourceSet.
 //
 //nolint:unparam
-func (r *ResourceGroupReconciler) uninstall(ctx context.Context,
-	obj *fluxcdv1.ResourceGroup) (ctrl.Result, error) {
+func (r *ResourceSetReconciler) uninstall(ctx context.Context,
+	obj *fluxcdv1.ResourceSet) (ctrl.Result, error) {
 	reconcileStart := time.Now()
 	log := ctrl.LoggerFrom(ctx)
 
@@ -602,8 +602,8 @@ func (r *ResourceGroupReconciler) uninstall(ctx context.Context,
 }
 
 // patch updates the object status, conditions and finalizers.
-func (r *ResourceGroupReconciler) patch(ctx context.Context,
-	obj *fluxcdv1.ResourceGroup,
+func (r *ResourceSetReconciler) patch(ctx context.Context,
+	obj *fluxcdv1.ResourceSet,
 	patcher *patch.SerialPatcher) (retErr error) {
 	// Configure the runtime patcher.
 	ownedConditions := []string{
@@ -631,9 +631,9 @@ func (r *ResourceGroupReconciler) patch(ctx context.Context,
 	return nil
 }
 
-// requeueAfterResourceGroup returns a ctrl.Result with the requeue time set to the
+// requeueAfterResourceSet returns a ctrl.Result with the requeue time set to the
 // interval specified in the object's annotations.
-func requeueAfterResourceGroup(obj *fluxcdv1.ResourceGroup) ctrl.Result {
+func requeueAfterResourceSet(obj *fluxcdv1.ResourceSet) ctrl.Result {
 	result := ctrl.Result{}
 	if obj.GetInterval() > 0 {
 		result.RequeueAfter = obj.GetInterval()

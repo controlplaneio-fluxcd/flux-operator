@@ -1,14 +1,15 @@
----
+# permissions for end users to edit fluxinstances.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: manager-role
+  labels:
+    app.kubernetes.io/name: flux-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: resourceset-editor-role
 rules:
 - apiGroups:
   - fluxcd.controlplane.io
   resources:
-  - fluxinstances
-  - fluxreports
   - resourcesets
   verbs:
   - create
@@ -21,18 +22,6 @@ rules:
 - apiGroups:
   - fluxcd.controlplane.io
   resources:
-  - fluxinstances/finalizers
-  - fluxreports/finalizers
-  - resourcesets/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - fluxcd.controlplane.io
-  resources:
-  - fluxinstances/status
-  - fluxreports/status
   - resourcesets/status
   verbs:
   - get
-  - patch
-  - update

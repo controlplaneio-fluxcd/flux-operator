@@ -26,9 +26,9 @@ import (
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
-func TestResourceGroupReconciler_LifeCycle(t *testing.T) {
+func TestResourceSetReconciler_LifeCycle(t *testing.T) {
 	g := NewWithT(t)
-	reconciler := getResourceGroupReconciler()
+	reconciler := getResourceSetReconciler()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -37,7 +37,7 @@ func TestResourceGroupReconciler_LifeCycle(t *testing.T) {
 
 	objDef := fmt.Sprintf(`
 apiVersion: fluxcd.controlplane.io/v1
-kind: ResourceGroup
+kind: ResourceSet
 metadata:
   name: tenants
   namespace: "%[1]s"
@@ -61,7 +61,7 @@ spec:
         namespace: "%[1]s"
 `, ns.Name)
 
-	obj := &fluxcdv1.ResourceGroup{}
+	obj := &fluxcdv1.ResourceSet{}
 	err = yaml.Unmarshal([]byte(objDef), obj)
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -76,7 +76,7 @@ spec:
 	g.Expect(r.Requeue).To(BeTrue())
 
 	// Check if the finalizer was added.
-	resultInit := &fluxcdv1.ResourceGroup{}
+	resultInit := &fluxcdv1.ResourceSet{}
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), resultInit)
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -90,7 +90,7 @@ spec:
 	g.Expect(r.Requeue).To(BeFalse())
 
 	// Check if the instance was installed.
-	result := &fluxcdv1.ResourceGroup{}
+	result := &fluxcdv1.ResourceSet{}
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -124,7 +124,7 @@ spec:
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(resultSA), resultSA)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	expectedLabel := fmt.Sprintf("resourcegroup.%s", fluxcdv1.GroupVersion.Group)
+	expectedLabel := fmt.Sprintf("resourceset.%s", fluxcdv1.GroupVersion.Group)
 	g.Expect(resultSA.Labels).To(HaveKeyWithValue(expectedLabel+"/name", "tenants"))
 	g.Expect(resultSA.Labels).To(HaveKeyWithValue(expectedLabel+"/namespace", ns.Name))
 	g.Expect(resultSA.Annotations).To(HaveKeyWithValue("owner", ns.Name))
@@ -157,7 +157,7 @@ spec:
 	g.Expect(r.RequeueAfter).To(Equal(time.Minute))
 
 	// Check the final status.
-	resultFinal := &fluxcdv1.ResourceGroup{}
+	resultFinal := &fluxcdv1.ResourceSet{}
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), resultFinal)
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -201,15 +201,15 @@ spec:
 	g.Expect(r.IsZero()).To(BeTrue())
 
 	// Check if the resource group was finalized.
-	result = &fluxcdv1.ResourceGroup{}
+	result = &fluxcdv1.ResourceSet{}
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 }
 
-func TestResourceGroupReconciler_DependsOn(t *testing.T) {
+func TestResourceSetReconciler_DependsOn(t *testing.T) {
 	g := NewWithT(t)
-	reconciler := getResourceGroupReconciler()
+	reconciler := getResourceSetReconciler()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -218,7 +218,7 @@ func TestResourceGroupReconciler_DependsOn(t *testing.T) {
 
 	objDef := fmt.Sprintf(`
 apiVersion: fluxcd.controlplane.io/v1
-kind: ResourceGroup
+kind: ResourceSet
 metadata:
   name: tenants
   namespace: "%[1]s"
@@ -243,7 +243,7 @@ spec:
         namespace: "%[1]s"
 `, ns.Name)
 
-	obj := &fluxcdv1.ResourceGroup{}
+	obj := &fluxcdv1.ResourceSet{}
 	err = yaml.Unmarshal([]byte(objDef), obj)
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -265,7 +265,7 @@ spec:
 	g.Expect(r.RequeueAfter).To(Equal(5 * time.Second))
 
 	// Check if the instance was installed.
-	result := &fluxcdv1.ResourceGroup{}
+	result := &fluxcdv1.ResourceSet{}
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -291,7 +291,7 @@ spec:
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// Check if the instance was installed.
-	resultFinal := &fluxcdv1.ResourceGroup{}
+	resultFinal := &fluxcdv1.ResourceSet{}
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), resultFinal)
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -309,9 +309,9 @@ spec:
 	g.Expect(r.IsZero()).To(BeTrue())
 }
 
-func TestResourceGroupReconciler_Impersonation(t *testing.T) {
+func TestResourceSetReconciler_Impersonation(t *testing.T) {
 	g := NewWithT(t)
-	reconciler := getResourceGroupReconciler()
+	reconciler := getResourceSetReconciler()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -341,7 +341,7 @@ func TestResourceGroupReconciler_Impersonation(t *testing.T) {
 
 	objDef := fmt.Sprintf(`
 apiVersion: fluxcd.controlplane.io/v1
-kind: ResourceGroup
+kind: ResourceSet
 metadata:
   name: test
   namespace: "%[1]s"
@@ -355,7 +355,7 @@ spec:
         namespace: "%[1]s"
 `, ns.Name)
 
-	obj := &fluxcdv1.ResourceGroup{}
+	obj := &fluxcdv1.ResourceSet{}
 	err = yaml.Unmarshal([]byte(objDef), obj)
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -376,7 +376,7 @@ spec:
 	g.Expect(err).To(HaveOccurred())
 
 	// Check if the instance was installed.
-	result := &fluxcdv1.ResourceGroup{}
+	result := &fluxcdv1.ResourceSet{}
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -421,7 +421,7 @@ spec:
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// Check if the instance was installed.
-	resultFinal := &fluxcdv1.ResourceGroup{}
+	resultFinal := &fluxcdv1.ResourceSet{}
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), resultFinal)
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -439,8 +439,8 @@ spec:
 	g.Expect(r.IsZero()).To(BeTrue())
 }
 
-func getResourceGroupReconciler() *ResourceGroupReconciler {
-	return &ResourceGroupReconciler{
+func getResourceSetReconciler() *ResourceSetReconciler {
+	return &ResourceSetReconciler{
 		Client:        testClient,
 		APIReader:     testClient,
 		Scheme:        NewTestScheme(),

@@ -15,8 +15,8 @@ import (
 	v1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
-func TestBuildResourceGroup(t *testing.T) {
-	testdataRoot := filepath.Join("testdata", "resourcegroup")
+func TestBuildResourceSet(t *testing.T) {
+	testdataRoot := filepath.Join("testdata", "resourceset")
 
 	tests := []struct {
 		name       string
@@ -52,11 +52,11 @@ func TestBuildResourceGroup(t *testing.T) {
 			data, err := os.ReadFile(tt.srcFile)
 			g.Expect(err).ToNot(HaveOccurred())
 
-			var rg v1.ResourceGroup
+			var rg v1.ResourceSet
 			err = yaml.Unmarshal(data, &rg)
 			g.Expect(err).ToNot(HaveOccurred())
 
-			objects, err := BuildResourceGroup(rg.Spec.Resources, rg.GetInputs())
+			objects, err := BuildResourceSet(rg.Spec.Resources, rg.GetInputs())
 			g.Expect(err).ToNot(HaveOccurred())
 
 			manifests, err := ssautil.ObjectsToYAML(objects)
@@ -75,36 +75,36 @@ func TestBuildResourceGroup(t *testing.T) {
 	}
 }
 
-func TestBuildResourceGroup_Empty(t *testing.T) {
+func TestBuildResourceSet_Empty(t *testing.T) {
 	g := NewWithT(t)
 
-	srcFile := filepath.Join("testdata", "resourcegroup", "empty.yaml")
+	srcFile := filepath.Join("testdata", "resourceset", "empty.yaml")
 
 	data, err := os.ReadFile(srcFile)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	var rg v1.ResourceGroup
+	var rg v1.ResourceSet
 	err = yaml.Unmarshal(data, &rg)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	objects, err := BuildResourceGroup(rg.Spec.Resources, rg.GetInputs())
+	objects, err := BuildResourceSet(rg.Spec.Resources, rg.GetInputs())
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(objects).To(BeEmpty())
 }
 
-func TestBuildResourceGroup_Error(t *testing.T) {
+func TestBuildResourceSet_Error(t *testing.T) {
 	g := NewWithT(t)
 
-	srcFile := filepath.Join("testdata", "resourcegroup", "error.yaml")
+	srcFile := filepath.Join("testdata", "resourceset", "error.yaml")
 
 	data, err := os.ReadFile(srcFile)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	var rg v1.ResourceGroup
+	var rg v1.ResourceSet
 	err = yaml.Unmarshal(data, &rg)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	_, err = BuildResourceGroup(rg.Spec.Resources, rg.GetInputs())
+	_, err = BuildResourceSet(rg.Spec.Resources, rg.GetInputs())
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("failed to build resources[0]"))
 }

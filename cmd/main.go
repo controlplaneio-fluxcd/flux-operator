@@ -191,7 +191,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controller.ResourceGroupReconciler{
+	if err = (&controller.ResourceSetReconciler{
 		Client:                mgr.GetClient(),
 		APIReader:             mgr.GetAPIReader(),
 		Scheme:                mgr.GetScheme(),
@@ -200,10 +200,10 @@ func main() {
 		EventRecorder:         mgr.GetEventRecorderFor(controllerName),
 		DefaultServiceAccount: defaultServiceAccount,
 	}).SetupWithManager(mgr,
-		controller.ResourceGroupReconcilerOptions{
+		controller.ResourceSetReconcilerOptions{
 			RateLimiter: runtimeCtrl.GetRateLimiter(rateLimiterOptions),
 		}); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", fluxcdv1.ResourceGroupKind)
+		setupLog.Error(err, "unable to create controller", "controller", fluxcdv1.ResourceSetKind)
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

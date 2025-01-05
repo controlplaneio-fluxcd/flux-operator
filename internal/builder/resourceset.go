@@ -18,9 +18,9 @@ import (
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
-// BuildResourceGroup builds a list of Kubernetes resources
+// BuildResourceSet builds a list of Kubernetes resources
 // from a list of JSON templates using the provided inputs.
-func BuildResourceGroup(templates []*apix.JSON, inputs []map[string]string) ([]*unstructured.Unstructured, error) {
+func BuildResourceSet(templates []*apix.JSON, inputs []map[string]string) ([]*unstructured.Unstructured, error) {
 	var objects []*unstructured.Unstructured
 	for i, tmpl := range templates {
 		if len(inputs) == 0 {

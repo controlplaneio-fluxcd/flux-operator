@@ -2,5 +2,5 @@
 resources:
 - fluxcd_v1_fluxinstance.yaml
 - fluxcd_v1_fluxreport.yaml
-- fluxcd_v1_resourcegroup.yaml
+- fluxcd_v1_resourceset.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

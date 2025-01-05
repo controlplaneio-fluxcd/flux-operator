@@ -14,11 +14,11 @@ import (
 )
 
 const (
-	ResourceGroupKind = "ResourceGroup"
+	ResourceSetKind = "ResourceSet"
 )
 
-// ResourceGroupSpec defines the desired state of ResourceGroup
-type ResourceGroupSpec struct {
+// ResourceSetSpec defines the desired state of ResourceSet
+type ResourceSetSpec struct {
 	// CommonMetadata specifies the common labels and annotations that are
 	// applied to all resources. Any existing label or annotation will be
 	// overridden if its key matches a common one.
@@ -27,7 +27,7 @@ type ResourceGroupSpec struct {
 
 	// Inputs contains the list of resource group inputs.
 	// +optional
-	Inputs []ResourceGroupInput `json:"inputs,omitempty"`
+	Inputs []ResourceSetInput `json:"inputs,omitempty"`
 
 	// Resources contains the list of Kubernetes resources to reconcile.
 	// +optional
@@ -50,7 +50,7 @@ type ResourceGroupSpec struct {
 	Wait bool `json:"wait,omitempty"`
 }
 
-// Dependency defines a ResourceGroup dependency on a Kubernetes resource.
+// Dependency defines a ResourceSet dependency on a Kubernetes resource.
 type Dependency struct {
 	// APIVersion of the resource to depend on.
 	// +required
@@ -77,11 +77,11 @@ type Dependency struct {
 	ReadyExpr string `json:"readyExpr,omitempty"`
 }
 
-// ResourceGroupInput defines the key-value pairs of the resource group input.
-type ResourceGroupInput map[string]string
+// ResourceSetInput defines the key-value pairs of the resource group input.
+type ResourceSetInput map[string]string
 
-// ResourceGroupStatus defines the observed state of ResourceGroup
-type ResourceGroupStatus struct {
+// ResourceSetStatus defines the observed state of ResourceSet
+type ResourceSetStatus struct {
 	meta.ReconcileRequestStatus `json:",inline"`
 
 	// Conditions contains the readiness conditions of the object.
@@ -100,24 +100,24 @@ type ResourceGroupStatus struct {
 }
 
 // GetConditions returns the status conditions of the object.
-func (in *ResourceGroup) GetConditions() []metav1.Condition {
+func (in *ResourceSet) GetConditions() []metav1.Condition {
 	return in.Status.Conditions
 }
 
 // SetConditions sets the status conditions on the object.
-func (in *ResourceGroup) SetConditions(conditions []metav1.Condition) {
+func (in *ResourceSet) SetConditions(conditions []metav1.Condition) {
 	in.Status.Conditions = conditions
 }
 
 // IsDisabled returns true if the object has the reconcile annotation set to 'disabled'.
-func (in *ResourceGroup) IsDisabled() bool {
+func (in *ResourceSet) IsDisabled() bool {
 	val, ok := in.GetAnnotations()[ReconcileAnnotation]
 	return ok && strings.ToLower(val) == DisabledValue
 }
 
 // GetInterval returns the interval at which the object should be reconciled.
 // If no interval is set, the default is 60 minutes.
-func (in *ResourceGroup) GetInterval() time.Duration {
+func (in *ResourceSet) GetInterval() time.Duration {
 	val, ok := in.GetAnnotations()[ReconcileAnnotation]
 	if ok && strings.ToLower(val) == DisabledValue {
 		return 0
@@ -136,7 +136,7 @@ func (in *ResourceGroup) GetInterval() time.Duration {
 
 // GetTimeout returns the timeout for the reconciliation process.
 // If no timeout is set, the default is 5 minutes.
-func (in *ResourceGroup) GetTimeout() time.Duration {
+func (in *ResourceSet) GetTimeout() time.Duration {
 	defaultTimeout := 5 * time.Minute
 	val, ok := in.GetAnnotations()[ReconcileTimeoutAnnotation]
 	if !ok {
@@ -150,7 +150,7 @@ func (in *ResourceGroup) GetTimeout() time.Duration {
 }
 
 // GetInputs returns the resource group inputs.
-func (in *ResourceGroup) GetInputs() []map[string]string {
+func (in *ResourceSet) GetInputs() []map[string]string {
 	var inputs = make([]map[string]string, len(in.Spec.Inputs))
 	for i, input := range in.Spec.Inputs {
 		inputs[i] = make(map[string]string)
@@ -164,29 +164,29 @@ func (in *ResourceGroup) GetInputs() []map[string]string {
 // +kubebuilder:storageversion
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:shortName=rg
+// +kubebuilder:resource:shortName=rset
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description=""
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",description=""
 
-// ResourceGroup is the Schema for the ResourceGroups API
-type ResourceGroup struct {
+// ResourceSet is the Schema for the ResourceSets API
+type ResourceSet struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   ResourceGroupSpec   `json:"spec,omitempty"`
-	Status ResourceGroupStatus `json:"status,omitempty"`
+	Spec   ResourceSetSpec   `json:"spec,omitempty"`
+	Status ResourceSetStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
-// ResourceGroupList contains a list of ResourceGroup
-type ResourceGroupList struct {
+// ResourceSetList contains a list of ResourceSet
+type ResourceSetList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []ResourceGroup `json:"items"`
+	Items           []ResourceSet `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&ResourceGroup{}, &ResourceGroupList{})
+	SchemeBuilder.Register(&ResourceSet{}, &ResourceSetList{})
 }

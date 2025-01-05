@@ -35,21 +35,21 @@ var _ = Describe("FluxInstance", Ordered, func() {
 
 	Context("resource group lifecycle", func() {
 		It("should run successfully", func() {
-			By("reconcile ResourceGroup")
+			By("reconcile ResourceSet")
 			reconcile := func() error {
 				cmd := exec.Command("kubectl", "apply",
-					"-f", "config/samples/fluxcd_v1_resourcegroup.yaml",
+					"-f", "config/samples/fluxcd_v1_resourceset.yaml",
 				)
 				_, err := Run(cmd, "/test/e2e")
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
 
-				cmd = exec.Command("kubectl", "wait", "ResourceGroup/podinfo",
+				cmd = exec.Command("kubectl", "wait", "ResourceSet/podinfo",
 					"--for=condition=Ready", "--timeout=5m",
 				)
 				_, err = Run(cmd, "/test/e2e")
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
 
-				cmd = exec.Command("kubectl", "delete", "ResourceGroup/podinfo")
+				cmd = exec.Command("kubectl", "delete", "ResourceSet/podinfo")
 				_, err = Run(cmd, "/test/e2e")
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
 				return nil
