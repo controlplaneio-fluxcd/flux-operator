@@ -23,6 +23,8 @@ spec:
       metadata:
         name: << inputs.tenant >>-app1
         namespace: apps
+        labels:
+          app.kubernetes.io/semver: << inputs.semver | slugify >>
       spec:
         interval: 10m
         url: oci://ghcr.io/org/charts/app1

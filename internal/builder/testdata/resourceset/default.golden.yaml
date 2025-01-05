@@ -1,6 +1,8 @@
 apiVersion: source.toolkit.fluxcd.io/v1beta2
 kind: OCIRepository
 metadata:
+  labels:
+    app.kubernetes.io/semver: 1-0-0-rc-0
   name: team1-app1
   namespace: apps
 spec:
@@ -16,6 +18,8 @@ spec:
 apiVersion: source.toolkit.fluxcd.io/v1beta2
 kind: OCIRepository
 metadata:
+  labels:
+    app.kubernetes.io/semver: 1-0-0
   name: team2-app1
   namespace: apps
 spec:

@@ -11,6 +11,7 @@ import (
 
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
 	sprig "github.com/go-task/slim-sprig/v3"
+	"github.com/gosimple/slug"
 	apix "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/yaml"
@@ -81,9 +82,17 @@ func BuildResource(tmpl *apix.JSON, inputs map[string]string) (*unstructured.Uns
 		return values
 	}}
 
+	// The slugify function normalizes strings to be used as Kubernetes label values.
+	var fnSlugify = template.FuncMap{"slugify": func(s string) string {
+		slug.MaxLength = 63
+		slug.EnableSmartTruncate = true
+		return slug.Make(s)
+	}}
+
 	tp, err := template.New("res").
 		Delims("<<", ">>").
 		Funcs(sprig.HermeticTxtFuncMap()).
+		Funcs(fnSlugify).
 		Funcs(fnInputs).
 		Parse(string(ymlTemplate))
 	if err != nil {

@@ -251,6 +251,10 @@ spec:
         layerSelector: << inputs.layerSelector | nindent 4 >>
 ```
 
+In addition to the slim-sprig functions, a `slugify` function is available to normalize a string for use in a Kubernetes
+[label value](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set)
+e.g. `<< inputs.tenant | slugify >>`.
+
 #### Resource deduplication
 
 The flux-operator deduplicates resources based on the
