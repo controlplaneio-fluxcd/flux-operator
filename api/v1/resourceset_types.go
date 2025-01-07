@@ -43,9 +43,8 @@ type ResourceSetSpec struct {
 	// +optional
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 
-	// Wait instructs the controller to check the health of all the reconciled
-	// resources. Defaults to true.
-	// +kubebuilder:default:=true
+	// Wait instructs the controller to check the health
+	// of all the reconciled resources.
 	// +optional
 	Wait bool `json:"wait,omitempty"`
 }

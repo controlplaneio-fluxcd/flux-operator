@@ -445,7 +445,7 @@ The reconciliation of behaviour of a ResourceSet can be configured using the fol
 
 The `.spec.wait` field is optional and instructs the flux-operator to perform
 a health check on all applied resources and waits for them to become ready. The health
-check is enabled by default and can be disabled by setting the `.spec.wait` field to `false`.
+check is disabled by default and can be enabled by setting the `.spec.wait` field to `true`.
 
 The health check is performed for the following resources types:
 

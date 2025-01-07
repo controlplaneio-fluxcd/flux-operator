@@ -123,10 +123,9 @@ spec:
                   when reconciling the generated resources.
                 type: string
               wait:
-                default: true
                 description: |-
-                  Wait instructs the controller to check the health of all the reconciled
-                  resources. Defaults to true.
+                  Wait instructs the controller to check the health
+                  of all the reconciled resources.
                 type: boolean
             type: object
           status:
