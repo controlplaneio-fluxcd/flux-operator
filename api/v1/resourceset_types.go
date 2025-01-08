@@ -72,6 +72,8 @@ type Dependency struct {
 	Ready bool `json:"ready,omitempty"`
 
 	// ReadyExpr checks if the resource satisfies the given CEL expression.
+	// The expression replaces the default readiness check and
+	// is only evaluated if Ready is set to 'true'.
 	// +optional
 	ReadyExpr string `json:"readyExpr,omitempty"`
 }

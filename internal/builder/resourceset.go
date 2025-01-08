@@ -68,6 +68,7 @@ func BuildResourceSet(templates []*apix.JSON, inputs []map[string]string) ([]*un
 
 // BuildResource builds a Kubernetes resource from a JSON template using the provided inputs.
 // Template functions are provided by the slim-sprig library https://go-task.github.io/slim-sprig/.
+// In addition, the slugify function is available to generate slugs from strings using https://github.com/gosimple/slug/.
 func BuildResource(tmpl *apix.JSON, inputs map[string]string) (*unstructured.Unstructured, error) {
 	ymlTemplate, err := yaml.JSONToYAML(tmpl.Raw)
 	if err != nil {
@@ -82,17 +83,10 @@ func BuildResource(tmpl *apix.JSON, inputs map[string]string) (*unstructured.Uns
 		return values
 	}}
 
-	// The slugify function normalizes strings to be used as Kubernetes label values.
-	var fnSlugify = template.FuncMap{"slugify": func(s string) string {
-		slug.MaxLength = 63
-		slug.EnableSmartTruncate = true
-		return slug.Make(s)
-	}}
-
 	tp, err := template.New("res").
 		Delims("<<", ">>").
+		Funcs(template.FuncMap{"slugify": slug.Make}).
 		Funcs(sprig.HermeticTxtFuncMap()).
-		Funcs(fnSlugify).
 		Funcs(fnInputs).
 		Parse(string(ymlTemplate))
 	if err != nil {
@@ -111,4 +105,13 @@ func BuildResource(tmpl *apix.JSON, inputs map[string]string) (*unstructured.Uns
 	}
 
 	return object, nil
+}
+
+// init initializes the slugify Go template function with the default settings.
+func init() {
+	// set max length to 63 characters which is
+	// the maximum length for a Kubernetes label value
+	slug.MaxLength = 63
+	// enable smart truncate to avoid cutting words in half
+	slug.EnableSmartTruncate = true
 }

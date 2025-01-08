@@ -446,7 +446,7 @@ func (r *ResourceSetReconciler) aggregateNotReadyStatus(ctx context.Context,
 	kubeClient client.Client, objects []*unstructured.Unstructured) string {
 	var result strings.Builder
 	for _, res := range objects {
-		if strings.Contains(res.GetAPIVersion(), "fluxcd.io") {
+		if strings.HasSuffix(res.GetObjectKind().GroupVersionKind().Group, ".fluxcd.io") {
 			if err := kubeClient.Get(ctx, client.ObjectKeyFromObject(res), res); err == nil {
 				if obj, err := status.GetObjectWithConditions(res.Object); err == nil {
 					for _, cond := range obj.Status.Conditions {
@@ -475,8 +475,8 @@ func (r *ResourceSetReconciler) deleteAllStaged(ctx context.Context,
 	var fluxObjects []*unstructured.Unstructured
 	var nativeObjects []*unstructured.Unstructured
 	for _, res := range objects {
-		if strings.Contains(res.GetAPIVersion(), "kustomize.toolkit.fluxcd.io") ||
-			strings.Contains(res.GetAPIVersion(), "helm.toolkit.fluxcd.io") {
+		if strings.HasPrefix(res.GetAPIVersion(), "kustomize.toolkit.fluxcd.io/") ||
+			strings.HasPrefix(res.GetAPIVersion(), "helm.toolkit.fluxcd.io/") {
 			fluxObjects = append(fluxObjects, res)
 		} else {
 			nativeObjects = append(nativeObjects, res)

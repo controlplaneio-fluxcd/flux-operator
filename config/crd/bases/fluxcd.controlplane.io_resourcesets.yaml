@@ -93,8 +93,10 @@ spec:
                         is true.
                       type: boolean
                     readyExpr:
-                      description: ReadyExpr checks if the resource satisfies the
-                        given CEL expression.
+                      description: |-
+                        ReadyExpr checks if the resource satisfies the given CEL expression.
+                        The expression replaces the default readiness check and
+                        is only evaluated if Ready is set to 'true'.
                       type: string
                   required:
                   - apiVersion
