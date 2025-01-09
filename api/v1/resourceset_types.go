@@ -78,10 +78,10 @@ type Dependency struct {
 	ReadyExpr string `json:"readyExpr,omitempty"`
 }
 
-// ResourceSetInput defines the key-value pairs of the resource group input.
+// ResourceSetInput defines the key-value pairs of the ResourceSet input.
 type ResourceSetInput map[string]*apiextensionsv1.JSON
 
-// ResourceSetStatus defines the observed state of ResourceSet
+// ResourceSetStatus defines the observed state of ResourceSet.
 type ResourceSetStatus struct {
 	meta.ReconcileRequestStatus `json:",inline"`
 
@@ -150,7 +150,7 @@ func (in *ResourceSet) GetTimeout() time.Duration {
 	return timeout
 }
 
-// GetInputs returns the resource group inputs.
+// GetInputs returns the ResourceSet inputs array.
 func (in *ResourceSet) GetInputs() []ResourceSetInput {
 	var inputs = make([]ResourceSetInput, len(in.Spec.Inputs))
 	for i, input := range in.Spec.Inputs {
@@ -170,7 +170,7 @@ func (in *ResourceSet) GetInputs() []ResourceSetInput {
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",description=""
 
-// ResourceSet is the Schema for the ResourceSets API
+// ResourceSet is the Schema for the ResourceSets API.
 type ResourceSet struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -181,7 +181,7 @@ type ResourceSet struct {
 
 // +kubebuilder:object:root=true
 
-// ResourceSetList contains a list of ResourceSet
+// ResourceSetList contains a list of ResourceSet.
 type ResourceSetList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

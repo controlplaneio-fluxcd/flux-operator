@@ -37,11 +37,13 @@ spec:
       app.kubernetes.io/name: podinfo
   inputs:
     - tenant: "team1"
-      version: "6.7.x"
-      replicas: "2"
+      app:
+       version: "6.7.x"
+       replicas: 2
     - tenant: "team2"
-      version: "6.6.x"
-      replicas: "3"
+      app:
+       version: "6.6.x"
+       replicas: 3
   resources:
     - apiVersion: source.toolkit.fluxcd.io/v1beta2
       kind: OCIRepository
@@ -52,7 +54,7 @@ spec:
         interval: 10m
         url: oci://ghcr.io/stefanprodan/charts/podinfo
         ref:
-          semver: << inputs.version | quote >>
+          semver: << inputs.app.version | quote >>
     - apiVersion: helm.toolkit.fluxcd.io/v2
       kind: HelmRelease
       metadata:
@@ -65,7 +67,7 @@ spec:
           kind: OCIRepository
           name: podinfo-<< inputs.tenant >>
         values:
-          replicaCount: << inputs.replicas | int >>
+          replicaCount: << inputs.app.replicas | int >>
 ```
 
 You can run this example by saving the manifest into `podinfo.yaml`.
@@ -142,15 +144,14 @@ Example inputs:
 spec:
   inputs:
    - tenant: team1
-     version: "6.7.x"
-     replicas: "2"
+     role: restricted
    - tenant: team2
-     version: "6.6.x"
-     replicas: "3"
+     role: privileged
 ```
 
-An input value is a key-value pair of strings, where the key is the input name
+An input value is a key-value pair of strings and structs, where the key is the input name
 which can be referenced in the resource templates using the `<< inputs.name >>` syntax.
+
 
 ### Resources configuration
 
@@ -232,14 +233,14 @@ e.g. `<< inputs.enabled | bool >>`.
 When using integer or boolean inputs as metadata label values, use the `quote` function to convert
 the value to a string e.g. `<< inputs.enabled | quote >>`.
 
-When using multi-line strings containing YAML, use the `nindent` function to properly format the string
-e.g.:
+When templating nested fields, use the `toYaml`  and `nindent` functions
+to properly format the string e.g.:
 
 ```yaml
 spec:
   inputs:
     - tenant: team1
-      layerSelector: |
+      layerSelector:
         mediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
         operation: copy
   resources:
@@ -248,7 +249,7 @@ spec:
       metadata:
         name: << inputs.tenant >>
       spec:
-        layerSelector: << inputs.layerSelector | nindent 4 >>
+        layerSelector: << inputs.layerSelector | toYaml | nindent 4 >>
 ```
 
 In addition to the slim-sprig functions, a `slugify` function is available to normalize a string for use in a Kubernetes

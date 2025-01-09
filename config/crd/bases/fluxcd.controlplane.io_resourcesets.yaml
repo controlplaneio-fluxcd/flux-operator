@@ -29,7 +29,7 @@ spec:
     name: v1
     schema:
       openAPIV3Schema:
-        description: ResourceSet is the Schema for the ResourceSets API
+        description: ResourceSet is the Schema for the ResourceSets API.
         properties:
           apiVersion:
             description: |-
@@ -110,7 +110,7 @@ spec:
                   additionalProperties:
                     x-kubernetes-preserve-unknown-fields: true
                   description: ResourceSetInput defines the key-value pairs of the
-                    resource group input.
+                    ResourceSet input.
                   type: object
                 type: array
               resources:
@@ -131,7 +131,7 @@ spec:
                 type: boolean
             type: object
           status:
-            description: ResourceSetStatus defines the observed state of ResourceSet
+            description: ResourceSetStatus defines the observed state of ResourceSet.
             properties:
               conditions:
                 description: Conditions contains the readiness conditions of the object.
