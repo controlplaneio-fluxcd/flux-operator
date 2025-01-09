@@ -79,7 +79,7 @@ type Dependency struct {
 }
 
 // ResourceSetInput defines the key-value pairs of the resource group input.
-type ResourceSetInput map[string]string
+type ResourceSetInput map[string]*apiextensionsv1.JSON
 
 // ResourceSetStatus defines the observed state of ResourceSet
 type ResourceSetStatus struct {
@@ -151,10 +151,10 @@ func (in *ResourceSet) GetTimeout() time.Duration {
 }
 
 // GetInputs returns the resource group inputs.
-func (in *ResourceSet) GetInputs() []map[string]string {
-	var inputs = make([]map[string]string, len(in.Spec.Inputs))
+func (in *ResourceSet) GetInputs() []ResourceSetInput {
+	var inputs = make([]ResourceSetInput, len(in.Spec.Inputs))
 	for i, input := range in.Spec.Inputs {
-		inputs[i] = make(map[string]string)
+		inputs[i] = make(ResourceSetInput)
 		for k, v := range input {
 			inputs[i][k] = v
 		}

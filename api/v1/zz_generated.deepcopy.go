@@ -535,7 +535,16 @@ func (in ResourceSetInput) DeepCopyInto(out *ResourceSetInput) {
 		in := &in
 		*out = make(ResourceSetInput, len(*in))
 		for key, val := range *in {
-			(*out)[key] = val
+			var outVal *apiextensionsv1.JSON
+			if val == nil {
+				(*out)[key] = nil
+			} else {
+				inVal := (*in)[key]
+				in, out := &inVal, &outVal
+				*out = new(apiextensionsv1.JSON)
+				(*in).DeepCopyInto(*out)
+			}
+			(*out)[key] = outVal
 		}
 	}
 }
@@ -598,7 +607,16 @@ func (in *ResourceSetSpec) DeepCopyInto(out *ResourceSetSpec) {
 				in, out := &(*in)[i], &(*out)[i]
 				*out = make(ResourceSetInput, len(*in))
 				for key, val := range *in {
-					(*out)[key] = val
+					var outVal *apiextensionsv1.JSON
+					if val == nil {
+						(*out)[key] = nil
+					} else {
+						inVal := (*in)[key]
+						in, out := &inVal, &outVal
+						*out = new(apiextensionsv1.JSON)
+						(*in).DeepCopyInto(*out)
+					}
+					(*out)[key] = outVal
 				}
 			}
 		}

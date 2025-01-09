@@ -5,6 +5,7 @@ package builder
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"text/template"
@@ -21,7 +22,20 @@ import (
 
 // BuildResourceSet builds a list of Kubernetes resources
 // from a list of JSON templates using the provided inputs.
-func BuildResourceSet(templates []*apix.JSON, inputs []map[string]string) ([]*unstructured.Unstructured, error) {
+func BuildResourceSet(templates []*apix.JSON, jsonInputs []fluxcdv1.ResourceSetInput) ([]*unstructured.Unstructured, error) {
+	inputs := make([]map[string]any, 0, len(jsonInputs))
+	for i, ji := range jsonInputs {
+		inp := make(map[string]any, len(ji))
+		for k, v := range ji {
+			var data any
+			if err := json.Unmarshal(v.Raw, &data); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal inputs[%d]: %w", i, err)
+			}
+			inp[k] = data
+		}
+		inputs = append(inputs, inp)
+	}
+
 	var objects []*unstructured.Unstructured
 	for i, tmpl := range templates {
 		if len(inputs) == 0 {
@@ -69,25 +83,18 @@ func BuildResourceSet(templates []*apix.JSON, inputs []map[string]string) ([]*un
 // BuildResource builds a Kubernetes resource from a JSON template using the provided inputs.
 // Template functions are provided by the slim-sprig library https://go-task.github.io/slim-sprig/.
 // In addition, the slugify function is available to generate slugs from strings using https://github.com/gosimple/slug/.
-func BuildResource(tmpl *apix.JSON, inputs map[string]string) (*unstructured.Unstructured, error) {
+func BuildResource(tmpl *apix.JSON, inputs map[string]any) (*unstructured.Unstructured, error) {
 	ymlTemplate, err := yaml.JSONToYAML(tmpl.Raw)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert template to YAML: %w", err)
 	}
 
-	var fnInputs = template.FuncMap{"inputs": func() map[string]string {
-		values := make(map[string]string)
-		for k, v := range inputs {
-			values[k] = v
-		}
-		return values
-	}}
-
 	tp, err := template.New("res").
 		Delims("<<", ">>").
-		Funcs(template.FuncMap{"slugify": slug.Make}).
 		Funcs(sprig.HermeticTxtFuncMap()).
-		Funcs(fnInputs).
+		Funcs(template.FuncMap{"slugify": slug.Make}).
+		Funcs(template.FuncMap{"inputs": func() any { return inputs }}).
+		Funcs(template.FuncMap{"toYaml": toYaml, "mustToYaml": mustToYaml}).
 		Parse(string(ymlTemplate))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse template: %w", err)
@@ -114,4 +121,23 @@ func init() {
 	slug.MaxLength = 63
 	// enable smart truncate to avoid cutting words in half
 	slug.EnableSmartTruncate = true
+}
+
+// toYaml encodes an item into a YAML string.
+// On error, it returns an empty string.
+func toYaml(v any) string {
+	if b, err := mustToYaml(v); err == nil {
+		return b
+	}
+	return ""
+}
+
+// mustToYaml encodes an item into a YAML string.
+// On error, it returns an empty string and the error.
+func mustToYaml(v any) (string, error) {
+	b, err := yaml.Marshal(v)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }

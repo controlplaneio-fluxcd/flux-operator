@@ -43,6 +43,11 @@ func TestBuildResourceSet(t *testing.T) {
 			srcFile:    filepath.Join(testdataRoot, "noinputs.yaml"),
 			goldenFile: filepath.Join(testdataRoot, "noinputs.golden.yaml"),
 		},
+		{
+			name:       "nestedinputs",
+			srcFile:    filepath.Join(testdataRoot, "nestedinputs.yaml"),
+			goldenFile: filepath.Join(testdataRoot, "nestedinputs.golden.yaml"),
+		},
 	}
 
 	for _, tt := range tests {

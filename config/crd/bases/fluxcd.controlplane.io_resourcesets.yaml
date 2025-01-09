@@ -108,7 +108,7 @@ spec:
                 description: Inputs contains the list of resource group inputs.
                 items:
                   additionalProperties:
-                    type: string
+                    x-kubernetes-preserve-unknown-fields: true
                   description: ResourceSetInput defines the key-value pairs of the
                     resource group input.
                   type: object
