@@ -1,0 +1,82 @@
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: OCIRepository
+metadata:
+  name: addons
+  namespace: flux-system
+spec:
+  interval: 10m
+  ref:
+    tag: latest
+  url: oci://registry.example.com/addons
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: ingress-nginx
+  namespace: flux-system
+spec:
+  interval: 10m
+  path: ./ingress-nginx
+  prune: true
+  sourceRef:
+    kind: OCIRepository
+    name: addons
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: cert-manager
+  namespace: flux-system
+spec:
+  interval: 10m
+  path: ./cert-manager
+  prune: true
+  sourceRef:
+    kind: OCIRepository
+    name: addons
+---
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: OCIRepository
+metadata:
+  name: apps
+  namespace: flux-system
+spec:
+  interval: 10m
+  ref:
+    tag: latest
+  url: oci://registry.example.com/apps
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: frontend
+  namespace: flux-system
+spec:
+  decryption:
+    provider: sops
+    secretRef:
+      name: apps-sops
+  interval: 10m
+  path: ./frontend
+  prune: true
+  sourceRef:
+    kind: OCIRepository
+    name: apps
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: backend
+  namespace: flux-system
+spec:
+  decryption:
+    provider: sops
+    secretRef:
+      name: apps-sops
+  interval: 10m
+  path: ./backend
+  prune: true
+  sourceRef:
+    kind: OCIRepository
+    name: apps
+---

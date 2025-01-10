@@ -1,0 +1,17 @@
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: app1
+  namespace: apps
+spec:
+  inputs:
+  - foo:
+      bar:
+        k1: v1
+        k2: v2
+  resources:
+  - apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: configmap1
+    data: << inputs.foo.bar | toYaml | nindent 2 >>

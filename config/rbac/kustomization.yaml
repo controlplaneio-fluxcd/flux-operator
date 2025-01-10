@@ -17,4 +17,6 @@ resources:
 - fluxreport_viewer_role.yaml
 - fluxinstance_editor_role.yaml
 - fluxinstance_viewer_role.yaml
+- resourceset_editor_role.yaml
+- resourceset_viewer_role.yaml
 
