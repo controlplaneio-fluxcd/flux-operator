@@ -9,3 +9,11 @@ updates:
           - "*"
     schedule:
       interval: "daily"
+  - package-ecosystem: gomod
+    directory: "/"
+    groups:
+      go:
+        patterns:
+          - "*"
+    schedule:
+      interval: "daily"
