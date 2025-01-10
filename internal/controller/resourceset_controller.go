@@ -141,7 +141,7 @@ func (r *ResourceSetReconciler) reconcile(ctx context.Context,
 	}
 
 	// Build the resources.
-	buildResult, err := builder.BuildResourceSet(obj.Spec.Resources, obj.GetInputs())
+	buildResult, err := builder.BuildResourceSet(obj.Spec.ResourcesTemplate, obj.Spec.Resources, obj.GetInputs())
 	if err != nil {
 		msg := fmt.Sprintf("build failed: %s", err.Error())
 		conditions.MarkFalse(obj,

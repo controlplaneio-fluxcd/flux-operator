@@ -152,7 +152,6 @@ spec:
 An input value is a key-value pair of strings and structs, where the key is the input name
 which can be referenced in the resource templates using the `<< inputs.name >>` syntax.
 
-
 ### Resources configuration
 
 The `.spec.resources` field is optional and specifies the list of Kubernetes resource
@@ -328,6 +327,67 @@ spec:
 ```
 
 In the above example, the `ServiceAccount` resource is generated only for the `team1` tenant.
+
+### Resources template
+
+The `.spec.resourcesTemplate` field is optional and offers an alternative to the `.spec.resources`.
+The `.spec.resourcesTemplate` is a single string that contains the multi-document YAML of the resources
+definitions. This field can be used for complex templating scenarios with the trade-off of reduced readability.
+
+Note that when both `.spec.resources` and `.spec.resourcesTemplate` are set, the resulting resources
+are the union of the two. If duplicate resources are defined in both fields, the resources from
+`.spec.resources` take precedence.
+
+Example of a template containing conditional and repeated blocks:
+
+```yaml
+spec:
+  inputs:
+    - bundle: addons
+      decryption: false
+      components:
+        - ingress-nginx
+        - cert-manager
+    - bundle: apps
+      decryption: true
+      components:
+        - frontend
+        - backend
+  resourcesTemplate: |
+    ---
+    apiVersion: source.toolkit.fluxcd.io/v1beta2
+    kind: OCIRepository
+    metadata:
+      name: << inputs.bundle >>
+      namespace: flux-system
+    spec:
+      interval: 10m
+      url: oci://registry.example.com/<< inputs.bundle >>
+    <<- range $component := inputs.components >>
+    ---
+    apiVersion: kustomize.toolkit.fluxcd.io/v1
+    kind: Kustomization
+    metadata:
+      name: << $component >>
+      namespace: flux-system
+    spec:
+      interval: 1h
+      prune: true
+      <<- if inputs.decryption >>
+      decryption:
+        provider: sops
+        secretRef:
+          name: << inputs.bundle >>-sops
+      <<- end >>
+      sourceRef:
+        kind: OCIRepository
+        name: << inputs.bundle >>
+      path: ./<< $component >>
+    <<- end >>
+```
+
+The above example generates two `OCIRepository` resources (one for each bundle) and four
+`Kustomization` resources (one for each component in each bundle).
 
 ### Common metadata
 

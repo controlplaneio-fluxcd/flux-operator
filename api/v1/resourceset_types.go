@@ -33,6 +33,14 @@ type ResourceSetSpec struct {
 	// +optional
 	Resources []*apiextensionsv1.JSON `json:"resources,omitempty"`
 
+	// ResourcesTemplate is a Go template that generates the list of
+	// Kubernetes resources to reconcile. The template is rendered
+	// as multi-document YAML, the resources should be separated by '---'.
+	// When both Resources and ResourcesTemplate are set, the resulting
+	// objects are merged and deduplicated, with the ones from Resources taking precedence.
+	// +optional
+	ResourcesTemplate string `json:"resourcesTemplate,omitempty"`
+
 	// DependsOn specifies the list of Kubernetes resources that must
 	// exist on the cluster before the reconciliation process starts.
 	// +optional

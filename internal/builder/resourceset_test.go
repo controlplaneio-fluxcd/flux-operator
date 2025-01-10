@@ -48,6 +48,11 @@ func TestBuildResourceSet(t *testing.T) {
 			srcFile:    filepath.Join(testdataRoot, "nestedinputs.yaml"),
 			goldenFile: filepath.Join(testdataRoot, "nestedinputs.golden.yaml"),
 		},
+		{
+			name:       "multi-doc-template",
+			srcFile:    filepath.Join(testdataRoot, "multi-doc-template.yaml"),
+			goldenFile: filepath.Join(testdataRoot, "multi-doc-template.golden.yaml"),
+		},
 	}
 
 	for _, tt := range tests {
@@ -61,7 +66,7 @@ func TestBuildResourceSet(t *testing.T) {
 			err = yaml.Unmarshal(data, &rg)
 			g.Expect(err).ToNot(HaveOccurred())
 
-			objects, err := BuildResourceSet(rg.Spec.Resources, rg.GetInputs())
+			objects, err := BuildResourceSet(rg.Spec.ResourcesTemplate, rg.Spec.Resources, rg.GetInputs())
 			g.Expect(err).ToNot(HaveOccurred())
 
 			manifests, err := ssautil.ObjectsToYAML(objects)
@@ -92,7 +97,7 @@ func TestBuildResourceSet_Empty(t *testing.T) {
 	err = yaml.Unmarshal(data, &rg)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	objects, err := BuildResourceSet(rg.Spec.Resources, rg.GetInputs())
+	objects, err := BuildResourceSet(rg.Spec.ResourcesTemplate, rg.Spec.Resources, rg.GetInputs())
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(objects).To(BeEmpty())
 }
@@ -109,7 +114,7 @@ func TestBuildResourceSet_Error(t *testing.T) {
 	err = yaml.Unmarshal(data, &rg)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	_, err = BuildResourceSet(rg.Spec.Resources, rg.GetInputs())
+	_, err = BuildResourceSet(rg.Spec.ResourcesTemplate, rg.Spec.Resources, rg.GetInputs())
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("failed to build resources[0]"))
 }

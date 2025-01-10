@@ -119,6 +119,14 @@ spec:
                 items:
                   x-kubernetes-preserve-unknown-fields: true
                 type: array
+              resourcesTemplate:
+                description: |-
+                  ResourcesTemplate is a Go template that generates the list of
+                  Kubernetes resources to reconcile. The template is rendered
+                  as multi-document YAML, the resources should be separated by '---'.
+                  When both Resources and ResourcesTemplate are set, the resulting
+                  objects are merged and deduplicated, with the ones from Resources taking precedence.
+                type: string
               serviceAccountName:
                 description: |-
                   The name of the Kubernetes service account to impersonate
