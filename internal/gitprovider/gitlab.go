@@ -55,6 +55,44 @@ func NewGitLabProvider(ctx context.Context, opts Options) (*GitLabProvider, erro
 	}, nil
 }
 
+func (p *GitLabProvider) ListBranches(ctx context.Context, opts Options) ([]Result, error) {
+	glOpts := &gitlab.ListBranchesOptions{
+		ListOptions: gitlab.ListOptions{
+			PerPage: 100,
+		},
+	}
+	if opts.Filters.SourceBranchRx != nil {
+		glOpts.Regex = gitlab.Ptr(opts.Filters.SourceBranchRx.String())
+	}
+
+	var results []Result
+	for {
+		branches, resp, err := p.Client.Branches.ListBranches(p.Project, glOpts)
+		if err != nil {
+			return nil, fmt.Errorf("could not list merge requests: %v", err)
+		}
+
+		for _, branch := range branches {
+			results = append(results, Result{
+				ID:           checksum(branch.Name),
+				SHA:          branch.Commit.ID,
+				SourceBranch: branch.Name,
+			})
+
+			if opts.Filters.Limit > 0 && len(results) >= opts.Filters.Limit {
+				return results, nil
+			}
+		}
+
+		if resp.NextPage == 0 {
+			break
+		}
+		glOpts.Page = resp.NextPage
+	}
+
+	return results, nil
+}
+
 func (p *GitLabProvider) ListRequests(ctx context.Context, opts Options) ([]Result, error) {
 	var labels *gitlab.LabelOptions
 	if len(opts.Filters.Labels) > 0 {

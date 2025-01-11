@@ -12,6 +12,100 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+func TestGitLabProvider_ListBranches(t *testing.T) {
+	tests := []struct {
+		name       string
+		opts       Options
+		want       []Result
+		wantErrMsg string
+	}{
+		{
+			name: "filters branches by regex",
+			opts: Options{
+				Token: os.Getenv("GITLAB_TOKEN"),
+				URL:   "https://gitlab.com/stefanprodan/podinfo",
+				Filters: Filters{
+					SourceBranchRx: regexp.MustCompile(`^patch-.*`),
+				},
+			},
+			want: []Result{
+				{
+					ID:           "183501423",
+					SHA:          "cebef2d870bc83b37f43c470bae205fca094bacc",
+					Author:       "",
+					Title:        "",
+					SourceBranch: "patch-1",
+					TargetBranch: "",
+				},
+				{
+					ID:           "183566960",
+					SHA:          "a275fb0322466eaa1a74485a4f79f88d7c8858e8",
+					Author:       "",
+					Title:        "",
+					SourceBranch: "patch-2",
+					TargetBranch: "",
+				},
+				{
+					ID:           "183632497",
+					SHA:          "f2aed00334494f13d92d065ecda39aea0d0b871f",
+					Author:       "",
+					Title:        "",
+					SourceBranch: "patch-3",
+					TargetBranch: "",
+				},
+				{
+					ID:           "183698034",
+					SHA:          "a143f78b7f8abd511a4f4ce84b4875edfb621a56",
+					Author:       "",
+					Title:        "",
+					SourceBranch: "patch-4",
+					TargetBranch: "",
+				},
+			},
+		},
+		{
+			name: "filters branches by limit",
+			opts: Options{
+				Token: os.Getenv("GITLAB_TOKEN"),
+				URL:   "https://gitlab.com/stefanprodan/podinfo",
+				Filters: Filters{
+					SourceBranchRx: regexp.MustCompile(`^patch-.*`),
+					Limit:          1,
+				},
+			},
+			want: []Result{
+				{
+					ID:           "183501423",
+					SHA:          "cebef2d870bc83b37f43c470bae205fca094bacc",
+					Author:       "",
+					Title:        "",
+					SourceBranch: "patch-1",
+					TargetBranch: "",
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			provider, err := NewGitLabProvider(context.Background(), tt.opts)
+			g.Expect(err).NotTo(HaveOccurred())
+
+			got, err := provider.ListBranches(context.Background(), tt.opts)
+			if len(tt.wantErrMsg) > 0 {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.wantErrMsg))
+				return
+			}
+			g.Expect(err).NotTo(HaveOccurred())
+
+			g.Expect(got).To(BeEquivalentTo(tt.want))
+		})
+	}
+}
+
 func TestGitLabProvider_ListRequests(t *testing.T) {
 	tests := []struct {
 		name       string
