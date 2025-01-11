@@ -62,6 +62,45 @@ func NewGitHubProvider(ctx context.Context, opts Options) (*GitHubProvider, erro
 	}, nil
 }
 
+func (p *GitHubProvider) ListBranches(ctx context.Context, opts Options) ([]Result, error) {
+	ghOpts := &github.BranchListOptions{
+		ListOptions: github.ListOptions{
+			PerPage: 100,
+		},
+	}
+
+	var results []Result
+	for {
+		prs, resp, err := p.Client.Repositories.ListBranches(ctx, p.Owner, p.Repo, ghOpts)
+		if err != nil {
+			return nil, fmt.Errorf("could not list pull requests: %v", err)
+		}
+
+		for _, pr := range prs {
+			if !matchBranches(opts, *pr.Name, *pr.Name) {
+				continue
+			}
+
+			results = append(results, Result{
+				ID:           checksum(pr.GetName()),
+				SHA:          pr.GetCommit().GetSHA(),
+				SourceBranch: pr.GetName(),
+			})
+
+			if opts.Filters.Limit > 0 && len(results) >= opts.Filters.Limit {
+				return results, nil
+			}
+		}
+
+		if resp.NextPage == 0 {
+			break
+		}
+		ghOpts.Page = resp.NextPage
+	}
+
+	return results, nil
+}
+
 func (p *GitHubProvider) ListRequests(ctx context.Context, opts Options) ([]Result, error) {
 	ghOpts := &github.PullRequestListOptions{
 		State: "open",

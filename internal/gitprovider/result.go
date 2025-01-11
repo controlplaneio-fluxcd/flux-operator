@@ -3,6 +3,11 @@
 
 package gitprovider
 
+import (
+	"fmt"
+	"hash/adler32"
+)
+
 // Result holds the information about a pull/merge request.
 type Result struct {
 	ID           string `json:"id"`
@@ -32,4 +37,8 @@ func (r *Result) ToMapWithDefault(defaults map[string]any) map[string]any {
 		}
 	}
 	return m
+}
+
+func checksum(txt string) string {
+	return fmt.Sprintf("%v", adler32.Checksum([]byte(txt)))
 }
