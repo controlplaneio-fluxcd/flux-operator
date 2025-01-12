@@ -10,22 +10,20 @@ import (
 
 // Result holds the information about a pull/merge request.
 type Result struct {
-	ID           string `json:"id"`
-	SHA          string `json:"sha"`
-	Author       string `json:"author"`
-	Title        string `json:"title"`
-	SourceBranch string `json:"sourceBranch"`
-	TargetBranch string `json:"targetBranch"`
+	ID     string `json:"id"`
+	SHA    string `json:"sha"`
+	Author string `json:"author"`
+	Title  string `json:"title"`
+	Branch string `json:"sourceBranch"`
 }
 
 func (r *Result) ToMap() map[string]any {
 	return map[string]any{
-		"id":           r.ID,
-		"sha":          r.SHA,
-		"author":       r.Author,
-		"title":        r.Title,
-		"sourceBranch": r.SourceBranch,
-		"targetBranch": r.TargetBranch,
+		"id":     r.ID,
+		"sha":    r.SHA,
+		"author": r.Author,
+		"title":  r.Title,
+		"branch": r.Branch,
 	}
 }
 

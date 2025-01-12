@@ -71,20 +71,20 @@ func (p *GitHubProvider) ListBranches(ctx context.Context, opts Options) ([]Resu
 
 	var results []Result
 	for {
-		prs, resp, err := p.Client.Repositories.ListBranches(ctx, p.Owner, p.Repo, ghOpts)
+		branches, resp, err := p.Client.Repositories.ListBranches(ctx, p.Owner, p.Repo, ghOpts)
 		if err != nil {
 			return nil, fmt.Errorf("could not list pull requests: %v", err)
 		}
 
-		for _, pr := range prs {
-			if !matchBranches(opts, *pr.Name, *pr.Name) {
+		for _, branch := range branches {
+			if !matchBranch(opts, branch.GetName()) {
 				continue
 			}
 
 			results = append(results, Result{
-				ID:           checksum(pr.GetName()),
-				SHA:          pr.GetCommit().GetSHA(),
-				SourceBranch: pr.GetName(),
+				ID:     checksum(branch.GetName()),
+				SHA:    branch.GetCommit().GetSHA(),
+				Branch: branch.GetName(),
 			})
 
 			if opts.Filters.Limit > 0 && len(results) >= opts.Filters.Limit {
@@ -117,7 +117,7 @@ func (p *GitHubProvider) ListRequests(ctx context.Context, opts Options) ([]Resu
 		}
 
 		for _, pr := range prs {
-			if !matchBranches(opts, pr.GetHead().GetRef(), pr.GetBase().GetRef()) {
+			if !matchBranch(opts, pr.GetHead().GetRef()) {
 				continue
 			}
 
@@ -126,17 +126,16 @@ func (p *GitHubProvider) ListRequests(ctx context.Context, opts Options) ([]Resu
 				prLabels[i] = l.GetName()
 			}
 
-			if !includesLabels(opts, prLabels) {
+			if !matchLabels(opts, prLabels) {
 				continue
 			}
 
 			results = append(results, Result{
-				ID:           fmt.Sprintf("%d", pr.GetNumber()),
-				SHA:          pr.GetHead().GetSHA(),
-				SourceBranch: pr.GetHead().GetRef(),
-				TargetBranch: pr.GetBase().GetRef(),
-				Title:        pr.GetTitle(),
-				Author:       pr.GetUser().GetLogin(),
+				ID:     fmt.Sprintf("%d", pr.GetNumber()),
+				SHA:    pr.GetHead().GetSHA(),
+				Branch: pr.GetHead().GetRef(),
+				Title:  pr.GetTitle(),
+				Author: pr.GetUser().GetLogin(),
 			})
 
 			if opts.Filters.Limit > 0 && len(results) >= opts.Filters.Limit {

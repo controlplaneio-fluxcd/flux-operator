@@ -17,29 +17,32 @@ type Options struct {
 	Filters  Filters
 }
 
-// Filters holds the filters for the pull/merge requests.
+// Filters holds the filters for the Git SaaS responses.
 type Filters struct {
-	SourceBranchRx *regexp.Regexp
-	TargetBranchRx *regexp.Regexp
-	Labels         []string
-	Limit          int
+	IncludeBranchRx *regexp.Regexp
+	ExcludeBranchRx *regexp.Regexp
+	Labels          []string
+	Limit           int
 }
 
-func matchBranches(opt Options, sourceBranch, targetBranch string) bool {
-	if opt.Filters.SourceBranchRx != nil {
-		if !opt.Filters.SourceBranchRx.MatchString(sourceBranch) {
+// matchBranch returns true if the branch matches the include and exclude regex filters.
+func matchBranch(opt Options, branch string) bool {
+	if opt.Filters.IncludeBranchRx != nil {
+		if !opt.Filters.IncludeBranchRx.MatchString(branch) {
 			return false
 		}
 	}
-	if opt.Filters.TargetBranchRx != nil {
-		if !opt.Filters.TargetBranchRx.MatchString(targetBranch) {
+
+	if opt.Filters.ExcludeBranchRx != nil {
+		if opt.Filters.ExcludeBranchRx.MatchString(branch) {
 			return false
 		}
 	}
 	return true
 }
 
-func includesLabels(opt Options, labels []string) bool {
+// matchLabels returns true if the given labels include all the label filters.
+func matchLabels(opt Options, labels []string) bool {
 	for _, label := range opt.Filters.Labels {
 		if !slices.Contains(labels, label) {
 			return false

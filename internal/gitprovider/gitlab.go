@@ -61,8 +61,8 @@ func (p *GitLabProvider) ListBranches(ctx context.Context, opts Options) ([]Resu
 			PerPage: 100,
 		},
 	}
-	if opts.Filters.SourceBranchRx != nil {
-		glOpts.Regex = gitlab.Ptr(opts.Filters.SourceBranchRx.String())
+	if opts.Filters.IncludeBranchRx != nil {
+		glOpts.Regex = gitlab.Ptr(opts.Filters.IncludeBranchRx.String())
 	}
 
 	var results []Result
@@ -73,10 +73,14 @@ func (p *GitLabProvider) ListBranches(ctx context.Context, opts Options) ([]Resu
 		}
 
 		for _, branch := range branches {
+			if !matchBranch(opts, branch.Name) {
+				continue
+			}
+
 			results = append(results, Result{
-				ID:           checksum(branch.Name),
-				SHA:          branch.Commit.ID,
-				SourceBranch: branch.Name,
+				ID:     checksum(branch.Name),
+				SHA:    branch.Commit.ID,
+				Branch: branch.Name,
 			})
 
 			if opts.Filters.Limit > 0 && len(results) >= opts.Filters.Limit {
@@ -116,17 +120,16 @@ func (p *GitLabProvider) ListRequests(ctx context.Context, opts Options) ([]Resu
 		}
 
 		for _, mr := range msrs {
-			if !matchBranches(opts, mr.SourceBranch, mr.TargetBranch) {
+			if !matchBranch(opts, mr.SourceBranch) {
 				continue
 			}
 
 			results = append(results, Result{
-				ID:           fmt.Sprintf("%d", mr.IID),
-				SHA:          mr.SHA,
-				SourceBranch: mr.SourceBranch,
-				TargetBranch: mr.TargetBranch,
-				Title:        mr.Title,
-				Author:       mr.Author.Username,
+				ID:     fmt.Sprintf("%d", mr.IID),
+				SHA:    mr.SHA,
+				Branch: mr.SourceBranch,
+				Title:  mr.Title,
+				Author: mr.Author.Username,
 			})
 
 			if opts.Filters.Limit > 0 && len(results) >= opts.Filters.Limit {
