@@ -206,6 +206,18 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", fluxcdv1.ResourceSetKind)
 		os.Exit(1)
 	}
+
+	if err = (&controller.ResourceSetInputProviderReconciler{
+		Client:        mgr.GetClient(),
+		StatusManager: controllerName,
+		EventRecorder: mgr.GetEventRecorderFor(controllerName),
+	}).SetupWithManager(mgr,
+		controller.ResourceSetInputProviderReconcilerOptions{
+			RateLimiter: runtimeCtrl.GetRateLimiter(rateLimiterOptions),
+		}); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", fluxcdv1.ResourceSetInputProviderKind)
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	probes.SetupChecks(mgr, setupLog)
