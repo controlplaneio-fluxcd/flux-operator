@@ -139,25 +139,44 @@ func (r *ResourceSetReconciler) reconcile(ctx context.Context,
 		return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
 	}
 
-	// Build the resources.
-	buildResult, err := builder.BuildResourceSet(obj.Spec.ResourcesTemplate, obj.Spec.Resources, obj.GetInputs())
+	// Compute the final inputs from providers and in-line inputs.
+	inputs, err := r.getInputs(ctx, obj)
 	if err != nil {
-		msg := fmt.Sprintf("build failed: %s", err.Error())
+		msg := fmt.Sprintf("failed to compute inputs: %s", err.Error())
 		conditions.MarkFalse(obj,
 			meta.ReadyCondition,
-			meta.BuildFailedReason,
+			meta.ReconciliationFailedReason,
 			"%s", msg)
-		conditions.MarkTrue(obj,
-			meta.StalledCondition,
-			meta.BuildFailedReason,
-			"%s", msg)
-		log.Error(err, msg)
 		r.EventRecorder.Event(obj, corev1.EventTypeWarning, meta.BuildFailedReason, msg)
-		return ctrl.Result{}, nil
+		return ctrl.Result{}, err
+	}
+
+	var objects []*unstructured.Unstructured
+	if len(obj.Spec.InputsFrom) > 0 && len(inputs) == 0 {
+		// If providers return no inputs, we should reconcile an empty set to trigger GC.
+		log.Info("No inputs returned from providers, reconciling an empty set")
+	} else {
+		// Build the resources using the inputs.
+		buildResult, err := builder.BuildResourceSet(obj.Spec.ResourcesTemplate, obj.Spec.Resources, inputs)
+		if err != nil {
+			msg := fmt.Sprintf("build failed: %s", err.Error())
+			conditions.MarkFalse(obj,
+				meta.ReadyCondition,
+				meta.BuildFailedReason,
+				"%s", msg)
+			conditions.MarkTrue(obj,
+				meta.StalledCondition,
+				meta.BuildFailedReason,
+				"%s", msg)
+			log.Error(err, msg)
+			r.EventRecorder.Event(obj, corev1.EventTypeWarning, meta.BuildFailedReason, msg)
+			return ctrl.Result{}, nil
+		}
+		objects = buildResult
 	}
 
 	// Apply the resources to the cluster.
-	applySetDigest, err := r.apply(ctx, obj, buildResult)
+	applySetDigest, err := r.apply(ctx, obj, objects)
 	if err != nil {
 		msg := fmt.Sprintf("reconciliation failed: %s", err.Error())
 		conditions.MarkFalse(obj,
@@ -259,6 +278,34 @@ func (r *ResourceSetReconciler) checkDependencies(ctx context.Context,
 	}
 
 	return nil
+}
+
+func (r *ResourceSetReconciler) getInputs(ctx context.Context,
+	obj *fluxcdv1.ResourceSet) ([]fluxcdv1.ResourceSetInput, error) {
+	inputs := make([]fluxcdv1.ResourceSetInput, 0)
+	for _, inputSource := range obj.Spec.InputsFrom {
+		var provider fluxcdv1.ResourceSetInputProvider
+		namespace := obj.GetNamespace()
+		if inputSource.Namespace != "" {
+			namespace = inputSource.Namespace
+		}
+
+		key := client.ObjectKey{
+			Namespace: namespace,
+			Name:      inputSource.Name,
+		}
+
+		if err := r.Get(ctx, key, &provider); err != nil {
+			return nil, fmt.Errorf("failed to get inputs from %s/%s: %w", key.Namespace, key.Name, err)
+		}
+
+		inputs = append(inputs, provider.Status.ExportedInputs...)
+	}
+	if len(obj.Spec.Inputs) > 0 {
+		inputs = append(inputs, obj.Spec.Inputs...)
+	}
+
+	return inputs, nil
 }
 
 // apply reconciles the resources in the cluster by performing
