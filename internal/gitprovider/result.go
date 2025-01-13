@@ -52,7 +52,7 @@ func (r *Result) ToMapWithDefaults(defaults map[string]any) map[string]any {
 
 // MakeInputs converts a list of results into a list of ResourceSet inputs with defaults.
 func MakeInputs(results []Result, defaults map[string]any) ([]map[string]*apiextensionsv1.JSON, error) {
-	var inputs []map[string]*apiextensionsv1.JSON
+	inputs := make([]map[string]*apiextensionsv1.JSON, 0, len(results))
 
 	list := make([]map[string]any, 0, len(results))
 	for _, r := range results {

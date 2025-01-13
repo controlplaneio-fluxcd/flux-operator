@@ -107,7 +107,8 @@ spec:
                   SecretRef specifies the Kubernetes Secret containing the basic-auth credentials
                   to access the input provider. The secret must contain the keys
                   'username' and 'password'.
-                  When connecting to a Git provider, the password should be a personal access token.
+                  When connecting to a Git provider, the password should be a personal access token
+                  that grants read-only access to the repository.
                 properties:
                   name:
                     description: Name of the referent.

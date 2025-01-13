@@ -107,9 +107,8 @@ func (r *FluxInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	// Pause reconciliation if the object has the reconcile annotation set to 'disabled'.
 	if obj.IsDisabled() {
-		msg := "Reconciliation in disabled"
-		log.Error(errors.New("can't reconcile instance"), msg)
-		r.Event(obj, corev1.EventTypeWarning, "ReconciliationDisabled", msg)
+		log.Error(errors.New("can't reconcile instance"), fluxcdv1.ReconciliationDisabledMessage)
+		r.Event(obj, corev1.EventTypeWarning, fluxcdv1.ReconciliationDisabledReason, fluxcdv1.ReconciliationDisabledMessage)
 		return ctrl.Result{}, nil
 	}
 
