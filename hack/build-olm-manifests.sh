@@ -44,5 +44,8 @@ ${DEST_DIR}/bundle/manifests/fluxinstances.fluxcd.controlplane.io.crd.yaml
 cat ${REPOSITORY_ROOT}/config/crd/bases/fluxcd.controlplane.io_fluxreports.yaml > \
 ${DEST_DIR}/bundle/manifests/fluxreports.fluxcd.controlplane.io.crd.yaml
 
+cat ${REPOSITORY_ROOT}/config/crd/bases/fluxcd.controlplane.io_resourcesets.yaml > \
+${DEST_DIR}/bundle/manifests/resourcesets.fluxcd.controlplane.io.crd.yaml
+
 mv ${DEST_DIR}/bundle ${DEST_DIR}/${VERSION}
 info "OperatorHub bundle created in ${DEST_DIR}/${VERSION}"

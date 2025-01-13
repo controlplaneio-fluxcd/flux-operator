@@ -1,0 +1,50 @@
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: bundles
+  namespace: flux-system
+spec:
+  inputs:
+    - bundle: addons
+      decryption: false
+      apps:
+        - ingress-nginx
+        - cert-manager
+    - bundle: apps
+      decryption: true
+      apps:
+        - frontend
+        - backend
+  resourcesTemplate: |
+    ---
+    apiVersion: source.toolkit.fluxcd.io/v1beta2
+    kind: OCIRepository
+    metadata:
+      name: << inputs.bundle >>
+      namespace: flux-system
+    spec:
+      interval: 10m
+      url: oci://registry.example.com/<< inputs.bundle >>
+      ref:
+        tag: latest
+    <<- range $app := inputs.apps >>
+    ---
+    apiVersion: kustomize.toolkit.fluxcd.io/v1
+    kind: Kustomization
+    metadata:
+      name: << $app >>
+      namespace: flux-system
+    spec:
+      interval: 10m
+      prune: true
+      <<- if inputs.decryption >>
+      decryption:
+        provider: sops
+        secretRef:
+          name: << inputs.bundle >>-sops
+      <<- end >>
+      sourceRef:
+        kind: OCIRepository
+        name: << inputs.bundle >>
+      path: ./<< $app >>
+    <<- end >>
