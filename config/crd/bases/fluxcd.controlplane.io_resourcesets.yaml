@@ -105,12 +105,42 @@ spec:
                   type: object
                 type: array
               inputs:
-                description: Inputs contains the list of resource group inputs.
+                description: Inputs contains the list of ResourceSet inputs.
                 items:
                   additionalProperties:
                     x-kubernetes-preserve-unknown-fields: true
                   description: ResourceSetInput defines the key-value pairs of the
                     ResourceSet input.
+                  type: object
+                type: array
+              inputsFrom:
+                description: |-
+                  InputsFrom contains the list of references to inputs providers.
+                  When set, the inputs are fetched from the providers and merged with the
+                  inputs defined in the ResourceSet.
+                items:
+                  properties:
+                    apiVersion:
+                      description: |-
+                        APIVersion of the inputs provider resource.
+                        When not set, the APIVersion of the ResourceSet is used.
+                      type: string
+                    kind:
+                      description: Kind of the inputs provider resource.
+                      enum:
+                      - ResourceSetInputProvider
+                      type: string
+                    name:
+                      description: Name of the inputs provider resource.
+                      type: string
+                    namespace:
+                      description: |-
+                        Namespace of the inputs provider resource.
+                        When not set, the namespace of the ResourceSet is used.
+                      type: string
+                  required:
+                  - kind
+                  - name
                   type: object
                 type: array
               resources:

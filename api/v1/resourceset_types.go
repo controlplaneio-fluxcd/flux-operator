@@ -25,9 +25,15 @@ type ResourceSetSpec struct {
 	// +optional
 	CommonMetadata *CommonMetadata `json:"commonMetadata,omitempty"`
 
-	// Inputs contains the list of resource group inputs.
+	// Inputs contains the list of ResourceSet inputs.
 	// +optional
 	Inputs []ResourceSetInput `json:"inputs,omitempty"`
+
+	// InputsFrom contains the list of references to inputs providers.
+	// When set, the inputs are fetched from the providers and merged with the
+	// inputs defined in the ResourceSet.
+	// +optional
+	InputsFrom []InputsProvider `json:"inputsFrom,omitempty"`
 
 	// Resources contains the list of Kubernetes resources to reconcile.
 	// +optional
@@ -55,6 +61,27 @@ type ResourceSetSpec struct {
 	// of all the reconciled resources.
 	// +optional
 	Wait bool `json:"wait,omitempty"`
+}
+
+type InputsProvider struct {
+	// APIVersion of the inputs provider resource.
+	// When not set, the APIVersion of the ResourceSet is used.
+	// +optional
+	APIVersion string `json:"apiVersion,omitempty"`
+
+	// Kind of the inputs provider resource.
+	// +kubebuilder:validation:Enum=ResourceSetInputProvider
+	// +required
+	Kind string `json:"kind"`
+
+	// Name of the inputs provider resource.
+	// +required
+	Name string `json:"name"`
+
+	// Namespace of the inputs provider resource.
+	// When not set, the namespace of the ResourceSet is used.
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
 }
 
 // Dependency defines a ResourceSet dependency on a Kubernetes resource.
@@ -156,18 +183,6 @@ func (in *ResourceSet) GetTimeout() time.Duration {
 		return defaultTimeout
 	}
 	return timeout
-}
-
-// GetInputs returns the ResourceSet inputs array.
-func (in *ResourceSet) GetInputs() []ResourceSetInput {
-	var inputs = make([]ResourceSetInput, len(in.Spec.Inputs))
-	for i, input := range in.Spec.Inputs {
-		inputs[i] = make(ResourceSetInput)
-		for k, v := range input {
-			inputs[i][k] = v
-		}
-	}
-	return inputs
 }
 
 // +kubebuilder:storageversion
