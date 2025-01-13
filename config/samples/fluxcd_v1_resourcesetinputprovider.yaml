@@ -1,0 +1,17 @@
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSetInputProvider
+metadata:
+  name: demo
+  namespace: default
+  annotations:
+    fluxcd.controlplane.io/reconcile: "enabled"
+    fluxcd.controlplane.io/reconcileEvery: "10m"
+    fluxcd.controlplane.io/reconcileTimeout: "1m"
+spec:
+  type: GitHubPullRequest
+  url: "https://github.com/fluxcd-testing/pr-testing"
+  filter:
+    limit: 10
+    includeBranch: "^stefanprodan-patch-.*$"
+    labels:
+      - "enhancement"

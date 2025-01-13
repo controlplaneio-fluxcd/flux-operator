@@ -9,6 +9,7 @@ rules:
   resources:
   - fluxinstances
   - fluxreports
+  - resourcesetinputproviders
   - resourcesets
   verbs:
   - create
@@ -23,6 +24,7 @@ rules:
   resources:
   - fluxinstances/finalizers
   - fluxreports/finalizers
+  - resourcesetinputproviders/finalizers
   - resourcesets/finalizers
   verbs:
   - update
@@ -31,6 +33,7 @@ rules:
   resources:
   - fluxinstances/status
   - fluxreports/status
+  - resourcesetinputproviders/status
   - resourcesets/status
   verbs:
   - get
