@@ -98,8 +98,9 @@ spec:
                       type: string
                     type: array
                   limit:
-                    description: Limit specifies the maximum number of input sets
-                      to return.
+                    description: |-
+                      Limit specifies the maximum number of input sets to return.
+                      When not set, the default limit is 100.
                     type: integer
                 type: object
               secretRef:

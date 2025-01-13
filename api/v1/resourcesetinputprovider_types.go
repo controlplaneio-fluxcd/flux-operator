@@ -1,13 +1,15 @@
-// Copyright 2024 Stefan Prodan.
+// Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
 package v1
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/json"
 
 	"github.com/fluxcd/pkg/apis/meta"
 )
@@ -57,7 +59,7 @@ type ResourceSetInputProviderSpec struct {
 
 	// Filter defines the filter to apply to the input provider response.
 	// +optional
-	Filter ResourceSetInputFilter `json:"filter,omitempty"`
+	Filter *ResourceSetInputFilter `json:"filter,omitempty"`
 }
 
 // ResourceSetInputFilter defines the filter to apply to the input provider response.
@@ -77,6 +79,7 @@ type ResourceSetInputFilter struct {
 	Labels []string `json:"labels,omitempty"`
 
 	// Limit specifies the maximum number of input sets to return.
+	// When not set, the default limit is 100.
 	// +optional
 	Limit int `json:"limit,omitempty"`
 }
@@ -142,6 +145,19 @@ func (in *ResourceSetInputProvider) GetTimeout() time.Duration {
 		return defaultTimeout
 	}
 	return timeout
+}
+
+// GetDefaultInputs returns the ResourceSetInputProvider default inputs.
+func (in *ResourceSetInputProvider) GetDefaultInputs() (map[string]any, error) {
+	defaults := make(map[string]any)
+	for k, v := range in.Spec.DefaultValues {
+		var data any
+		if err := json.Unmarshal(v.Raw, &data); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal default values[%s]: %w", k, err)
+		}
+		defaults[k] = data
+	}
+	return defaults, nil
 }
 
 // +kubebuilder:storageversion

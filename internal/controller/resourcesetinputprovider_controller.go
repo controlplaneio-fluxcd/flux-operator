@@ -1,12 +1,15 @@
-// Copyright 2024 Stefan Prodan.
+// Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
 package controller
 
 import (
 	"context"
+	"crypto/x509"
 	"errors"
 	"fmt"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
@@ -14,6 +17,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/patch"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
 	kuberecorder "k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -21,6 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/gitprovider"
 )
 
 // ResourceSetInputProviderReconciler reconciles a ResourceSetInputProvider object
@@ -58,7 +63,11 @@ func (r *ResourceSetInputProviderReconciler) Reconcile(ctx context.Context, req 
 
 	// Uninstall if the object is under deletion.
 	if !obj.ObjectMeta.DeletionTimestamp.IsZero() {
-		return r.uninstall(ctx, obj)
+		// Release the object to be garbage collected.
+		controllerutil.RemoveFinalizer(obj, fluxcdv1.Finalizer)
+
+		// Stop reconciliation as the object is being deleted.
+		return ctrl.Result{}, nil
 	}
 
 	// Add the finalizer if it does not exist.
@@ -105,6 +114,33 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 		return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
 	}
 
+	// Get the basic auth credentials.
+	username, password, err := r.getBasicAuth(ctx, obj)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to get credentials: %w", err)
+	}
+
+	// Get the CA certificate.
+	certPool, err := r.getCertPool(ctx, obj)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to get certificates: %w", err)
+	}
+
+	// Create the provider based on the object type.
+	provider, err := r.newGitProvider(ctx, obj, certPool, username, password)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to create provider: %w", err)
+	}
+
+	// Get the provider options.
+	exportedInputs, err := r.callProvider(ctx, obj, provider)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to call provider: %w", err)
+	}
+
+	// Update the object status with the exported inputs.
+	obj.Status.ExportedInputs = exportedInputs
+
 	// Mark the object as ready and set the last applied revision.
 	msg = fmt.Sprintf("Reconciliation finished in %s", fmtDuration(reconcileStart))
 	conditions.MarkTrue(obj,
@@ -118,6 +154,173 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 		msg)
 
 	return requeueAfterResourceSetInputProvider(obj), nil
+}
+
+// newGitProvider returns a new Git provider based on the type specified in the ResourceSetInputProvider object.
+//
+//nolint:unparam
+func (r *ResourceSetInputProviderReconciler) newGitProvider(ctx context.Context,
+	obj *fluxcdv1.ResourceSetInputProvider,
+	certPool *x509.CertPool,
+	username, password string) (gitprovider.Provider, error) {
+	switch {
+	case strings.HasPrefix(obj.Spec.Type, "GitHub"):
+		return gitprovider.NewGitHubProvider(ctx, gitprovider.Options{
+			URL:      obj.Spec.URL,
+			CertPool: certPool,
+			Token:    password,
+		})
+	case strings.HasPrefix(obj.Spec.Type, "GitLab"):
+		return gitprovider.NewGitLabProvider(ctx, gitprovider.Options{
+			URL:      obj.Spec.URL,
+			CertPool: certPool,
+			Token:    password,
+		})
+	default:
+		return nil, fmt.Errorf("unsupported type: %s", obj.Spec.Type)
+	}
+}
+
+// makeGitOptions returns the gitprovider.Options based on the object spec
+// filters and URL, using a default limit of 100.
+func (r *ResourceSetInputProviderReconciler) makeGitOptions(obj *fluxcdv1.ResourceSetInputProvider) (gitprovider.Options, error) {
+	opts := gitprovider.Options{
+		URL: obj.Spec.URL,
+		Filters: gitprovider.Filters{
+			Limit: 100,
+		},
+	}
+
+	if obj.Spec.Filter != nil {
+		if obj.Spec.Filter.Limit > 0 {
+			opts.Filters.Limit = obj.Spec.Filter.Limit
+		}
+		if len(obj.Spec.Filter.Labels) > 0 {
+			opts.Filters.Labels = obj.Spec.Filter.Labels
+		}
+		if obj.Spec.Filter.IncludeBranch != "" {
+			inRx, err := regexp.Compile(obj.Spec.Filter.IncludeBranch)
+			if err != nil {
+				return gitprovider.Options{}, fmt.Errorf("invalid includeBranch regex: %w", err)
+			}
+			opts.Filters.IncludeBranchRx = inRx
+		}
+		if obj.Spec.Filter.ExcludeBranch != "" {
+			exRx, err := regexp.Compile(obj.Spec.Filter.ExcludeBranch)
+			if err != nil {
+				return gitprovider.Options{}, fmt.Errorf("invalid excludeBranch regex: %w", err)
+			}
+			opts.Filters.ExcludeBranchRx = exRx
+		}
+	}
+
+	return opts, nil
+}
+
+func (r *ResourceSetInputProviderReconciler) callProvider(ctx context.Context,
+	obj *fluxcdv1.ResourceSetInputProvider,
+	provider gitprovider.Provider) ([]fluxcdv1.ResourceSetInput, error) {
+	var inputs []fluxcdv1.ResourceSetInput
+
+	opts, err := r.makeGitOptions(obj)
+	if err != nil {
+		return nil, err
+	}
+
+	var results []gitprovider.Result
+	switch {
+	case strings.HasSuffix(obj.Spec.Type, "Request"):
+		results, err = provider.ListRequests(ctx, opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list requests: %w", err)
+		}
+	default:
+		return nil, fmt.Errorf("unsupported type: %s", obj.Spec.Type)
+	}
+
+	if len(results) > 0 {
+		defaults, err := obj.GetDefaultInputs()
+		if err != nil {
+			return nil, fmt.Errorf("invalid default values: %w", err)
+		}
+
+		inputsWithDefaults, err := gitprovider.MakeInputs(results, defaults)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate inputs: %w", err)
+		}
+
+		for _, input := range inputsWithDefaults {
+			inputs = append(inputs, input)
+		}
+	}
+
+	return inputs, nil
+}
+
+// getBasicAuth returns the basic auth credentials by reading the username
+// and password from spec.SecretRef.
+func (r *ResourceSetInputProviderReconciler) getBasicAuth(ctx context.Context,
+	obj *fluxcdv1.ResourceSetInputProvider) (string, string, error) {
+	if obj.Spec.SecretRef == nil {
+		return "", "", nil
+	}
+
+	authData, err := r.getSecretData(ctx, obj.Spec.SecretRef.Name, obj.GetNamespace())
+	if err != nil {
+		return "", "", err
+	}
+
+	usernameData, ok := authData["username"]
+	if !ok {
+		return "", "", fmt.Errorf("invalid secret '%s/%s': key 'username' is missing", obj.GetNamespace(), obj.Spec.SecretRef.Name)
+	}
+
+	passwordData, ok := authData["password"]
+	if !ok {
+		return "", "", fmt.Errorf("invalid secret '%s/%s': key 'password' is missing", obj.GetNamespace(), obj.Spec.SecretRef.Name)
+	}
+
+	return strings.TrimSpace(string(usernameData)), strings.TrimSpace(string(passwordData)), nil
+}
+
+// getCertPool returns the x509.CertPool by reading the CA certificate from
+// spec.CertSecretRef.
+func (r *ResourceSetInputProviderReconciler) getCertPool(ctx context.Context,
+	obj *fluxcdv1.ResourceSetInputProvider) (*x509.CertPool, error) {
+	if obj.Spec.CertSecretRef == nil {
+		return nil, nil
+	}
+
+	certData, err := r.getSecretData(ctx, obj.Spec.CertSecretRef.Name, obj.GetNamespace())
+	if err != nil {
+		return nil, err
+	}
+
+	caData, ok := certData["ca.crt"]
+	if !ok {
+		return nil, fmt.Errorf("invalid secret '%s/%s': key 'ca.crt' is missing", obj.GetNamespace(), obj.Spec.CertSecretRef.Name)
+	}
+
+	certPool := x509.NewCertPool()
+	ok = certPool.AppendCertsFromPEM(caData)
+	if !ok {
+		return nil, fmt.Errorf("invalid secret '%s/%s': 'ca.crt' PEM can't be parsed", obj.GetNamespace(), obj.Spec.CertSecretRef.Name)
+	}
+
+	return certPool, nil
+}
+
+// getSecretData returns the data of the secret by reading it from the API server.
+func (r *ResourceSetInputProviderReconciler) getSecretData(ctx context.Context, name, namespace string) (map[string][]byte, error) {
+	key := types.NamespacedName{
+		Namespace: namespace,
+		Name:      name,
+	}
+	var secret corev1.Secret
+	if err := r.Client.Get(ctx, key, &secret); err != nil {
+		return nil, fmt.Errorf("failed to read secret '%s/%s': %w", namespace, name, err)
+	}
+	return secret.Data, nil
 }
 
 // finalizeStatus updates the object status and conditions.
@@ -145,19 +348,6 @@ func (r *ResourceSetInputProviderReconciler) finalizeStatus(ctx context.Context,
 
 	// Patch finalizers, status and conditions.
 	return r.patch(ctx, obj, patcher)
-}
-
-// uninstall deletes all the resources managed by the ResourceSetInputProvider.
-//
-//nolint:unparam
-func (r *ResourceSetInputProviderReconciler) uninstall(ctx context.Context,
-	obj *fluxcdv1.ResourceSetInputProvider) (ctrl.Result, error) {
-
-	// Release the object to be garbage collected.
-	controllerutil.RemoveFinalizer(obj, fluxcdv1.Finalizer)
-
-	// Stop reconciliation as the object is being deleted.
-	return ctrl.Result{}, nil
 }
 
 // patch updates the object status, conditions and finalizers.
