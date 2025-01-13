@@ -95,6 +95,11 @@ type ResourceSetInputProviderStatus struct {
 	// ExportedInputs contains the list of inputs exported by the provider.
 	// +optional
 	ExportedInputs []ResourceSetInput `json:"exportedInputs,omitempty"`
+
+	// LastExportedRevision is the digest of the
+	// inputs that were last reconcile.
+	// +optional
+	LastExportedRevision string `json:"lastExportedRevision,omitempty"`
 }
 
 // GetConditions returns the status conditions of the object.

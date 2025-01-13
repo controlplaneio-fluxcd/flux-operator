@@ -616,7 +616,7 @@ func (r *ResourceSetReconciler) uninstall(ctx context.Context,
 
 		resourceManager := ssa.NewResourceManager(kubeClient, nil, ssa.Owner{
 			Field: r.StatusManager,
-			Group: fluxcdv1.GroupVersion.Group,
+			Group: fmt.Sprintf("resourceset.%s", fluxcdv1.GroupVersion.Group),
 		})
 
 		opts := ssa.DeleteOptions{

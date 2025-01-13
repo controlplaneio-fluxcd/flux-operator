@@ -15,6 +15,7 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
+	"github.com/opencontainers/go-digest"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -23,6 +24,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/yaml"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/gitprovider"
@@ -139,7 +141,12 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 	}
 
 	// Update the object status with the exported inputs.
+	data, err := yaml.Marshal(obj.Status.ExportedInputs)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to marshal exported inputs: %w", err)
+	}
 	obj.Status.ExportedInputs = exportedInputs
+	obj.Status.LastExportedRevision = digest.FromBytes(data).String()
 
 	// Mark the object as ready and set the last applied revision.
 	msg = fmt.Sprintf("Reconciliation finished in %s", fmtDuration(reconcileStart))

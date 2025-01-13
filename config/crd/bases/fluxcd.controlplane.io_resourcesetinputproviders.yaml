@@ -204,6 +204,11 @@ spec:
                     ResourceSet input.
                   type: object
                 type: array
+              lastExportedRevision:
+                description: |-
+                  LastExportedRevision is the digest of the
+                  inputs that were last reconcile.
+                type: string
               lastHandledReconcileAt:
                 description: |-
                   LastHandledReconcileAt holds the value of the most recent
