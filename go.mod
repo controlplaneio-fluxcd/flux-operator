@@ -18,8 +18,8 @@ require (
 	github.com/golang-jwt/jwt/v4 v4.5.1
 	github.com/google/cel-go v0.22.0
 	github.com/google/go-containerregistry v0.20.2
-	github.com/gosimple/slug v1.15.0
 	github.com/google/go-containerregistry/pkg/authn/k8schain v0.0.0-20241111191718-6bce25ecf029
+	github.com/gosimple/slug v1.15.0
 	github.com/onsi/ginkgo/v2 v2.22.2
 	github.com/onsi/gomega v1.36.2
 	github.com/opencontainers/go-digest v1.0.0
