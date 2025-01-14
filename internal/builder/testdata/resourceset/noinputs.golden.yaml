@@ -20,6 +20,4 @@ spec:
     name: app1
   interval: 1h
   releaseName: app1
-  values:
-    replicas: 2
 ---

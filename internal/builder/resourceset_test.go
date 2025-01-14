@@ -24,9 +24,9 @@ func TestBuildResourceSet(t *testing.T) {
 		goldenFile string
 	}{
 		{
-			name:       "default",
-			srcFile:    filepath.Join(testdataRoot, "default.yaml"),
-			goldenFile: filepath.Join(testdataRoot, "default.golden.yaml"),
+			name:       "slugify",
+			srcFile:    filepath.Join(testdataRoot, "slugify.yaml"),
+			goldenFile: filepath.Join(testdataRoot, "slugify.golden.yaml"),
 		},
 		{
 			name:       "dedup",
@@ -103,18 +103,39 @@ func TestBuildResourceSet_Empty(t *testing.T) {
 }
 
 func TestBuildResourceSet_Error(t *testing.T) {
-	g := NewWithT(t)
+	testdataRoot := filepath.Join("testdata", "resourceset")
 
-	srcFile := filepath.Join("testdata", "resourceset", "error.yaml")
+	tests := []struct {
+		name     string
+		srcFile  string
+		matchErr string
+	}{
+		{
+			name:     "fails with converting error",
+			srcFile:  filepath.Join(testdataRoot, "invalid-output.yaml"),
+			matchErr: `failed to build resources[0]: failed to read object: error converting YAML to JSON`,
+		},
+		{
+			name:     "fails with missing input error",
+			srcFile:  filepath.Join(testdataRoot, "missing-inputs.yaml"),
+			matchErr: `<inputs>: map has no entry for key "semver"`,
+		},
+	}
 
-	data, err := os.ReadFile(srcFile)
-	g.Expect(err).ToNot(HaveOccurred())
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
 
-	var rg v1.ResourceSet
-	err = yaml.Unmarshal(data, &rg)
-	g.Expect(err).ToNot(HaveOccurred())
+			data, err := os.ReadFile(tt.srcFile)
+			g.Expect(err).ToNot(HaveOccurred())
 
-	_, err = BuildResourceSet(rg.Spec.ResourcesTemplate, rg.Spec.Resources, rg.Spec.Inputs)
-	g.Expect(err).To(HaveOccurred())
-	g.Expect(err.Error()).To(ContainSubstring("failed to build resources[0]"))
+			var rg v1.ResourceSet
+			err = yaml.Unmarshal(data, &rg)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			_, err = BuildResourceSet(rg.Spec.ResourcesTemplate, rg.Spec.Resources, rg.Spec.Inputs)
+			g.Expect(err).To(HaveOccurred())
+			g.Expect(err.Error()).To(ContainSubstring(tt.matchErr))
+		})
+	}
 }

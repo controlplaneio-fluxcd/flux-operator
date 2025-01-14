@@ -154,12 +154,13 @@ func BuildResourcesFromYAML(yamlTemplate string, inputs map[string]any) ([]*unst
 }
 
 func newTemplate(yamlTemplate string, inputs map[string]any) (*template.Template, error) {
-	tp, err := template.New("res").
+	tp, err := template.New("resourceset").
 		Delims("<<", ">>").
 		Funcs(sprig.HermeticTxtFuncMap()).
 		Funcs(template.FuncMap{"slugify": slug.Make}).
 		Funcs(template.FuncMap{"inputs": func() any { return inputs }}).
 		Funcs(template.FuncMap{"toYaml": toYaml, "mustToYaml": mustToYaml}).
+		Option("missingkey=error").
 		Parse(yamlTemplate)
 	if err != nil {
 		return nil, err
