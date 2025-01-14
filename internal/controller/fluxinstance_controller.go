@@ -237,7 +237,7 @@ func (r *FluxInstanceReconciler) fetch(ctx context.Context,
 		if manifestPullSecret != "" {
 			// the secret must be defined in the same namespace as the FluxInstance resource
 			// in case of error retrieving the secret or creating the keychain, we just log an error
-			// and continue with a nil keychain
+			// and continue with a nil keychain, which will result in an error when pulling the artifact
 			ns := obj.GetNamespace()
 			// Fetch the Secret
 			secret := corev1.Secret{}
