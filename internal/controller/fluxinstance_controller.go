@@ -20,6 +20,8 @@ import (
 	"github.com/fluxcd/pkg/ssa"
 	"github.com/fluxcd/pkg/ssa/normalize"
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
+	"github.com/google/go-containerregistry/pkg/authn"
+	"github.com/google/go-containerregistry/pkg/authn/k8schain"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -230,7 +232,25 @@ func (r *FluxInstanceReconciler) fetch(ctx context.Context,
 		ctxPull, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		artifactDigest, err := builder.PullArtifact(ctxPull, artifactURL, tmpDir)
+		manifestPullSecret := obj.Spec.Distribution.ManifestPullSecret
+		var keyChain authn.Keychain
+		if manifestPullSecret != "" {
+			// the secret must be defined in the same namespace as the FluxInstance resource
+			// in case of error retrieving the secret or creating the keychain, we just log an error
+			// and continue with a nil keychain
+			ns := obj.GetNamespace()
+			// Fetch the Secret
+			secret := corev1.Secret{}
+			if err := r.Get(ctxPull, client.ObjectKey{Name: manifestPullSecret, Namespace: ns}, &secret); err != nil {
+				log.Error(err, "unable to fetch Secret")
+			} else {
+				if keyChain, err = k8schain.NewFromPullSecrets(ctxPull, []corev1.Secret{secret}); err != nil {
+					log.Error(err, "failed to create keychain from pull secret", "secret", manifestPullSecret)
+				}
+			}
+		}
+
+		artifactDigest, err := builder.PullArtifact(ctxPull, artifactURL, tmpDir, keyChain)
 		if err != nil {
 			return "", "", err
 		}

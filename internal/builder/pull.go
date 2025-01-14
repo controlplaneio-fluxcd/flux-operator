@@ -9,14 +9,15 @@ import (
 	"strings"
 
 	"github.com/fluxcd/pkg/tar"
+	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/crane"
 )
 
 // PullArtifact downloads an artifact from an OCI repository and extracts the content
 // of the first tgz layer to the given destination directory.
 // It returns the digest of the artifact.
-func PullArtifact(ctx context.Context, ociURL, dstDir string) (string, error) {
-	img, err := crane.Pull(strings.TrimPrefix(ociURL, "oci://"), crane.WithContext(ctx))
+func PullArtifact(ctx context.Context, ociURL, dstDir string, keyChain authn.Keychain) (string, error) {
+	img, err := crane.Pull(strings.TrimPrefix(ociURL, "oci://"), crane.WithContext(ctx), crane.WithAuthFromKeychain(keyChain))
 	if err != nil {
 		return "", fmt.Errorf("pulling artifact %s failed: %w", ociURL, err)
 	}
