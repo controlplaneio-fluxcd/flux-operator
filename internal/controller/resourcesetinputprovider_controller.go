@@ -141,7 +141,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 	}
 
 	// Update the object status with the exported inputs.
-	data, err := yaml.Marshal(obj.Status.ExportedInputs)
+	data, err := yaml.Marshal(exportedInputs)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to marshal exported inputs: %w", err)
 	}
