@@ -69,7 +69,14 @@ func (r *FluxInstanceArtifactReconciler) reconcile(ctx context.Context,
 
 	// Fetch the latest digest of the distribution manifests.
 	artifactURL := obj.Spec.Distribution.Artifact
-	artifactDigest, err := builder.GetArtifactDigest(ctx, artifactURL)
+	keyChain, err := GetDistributionKeychain(ctx, r.Client, obj)
+	if err != nil {
+		msg := fmt.Sprintf("failed to get distribution key chain: %s", err.Error())
+		r.Event(obj, corev1.EventTypeWarning, meta.ArtifactFailedReason, msg)
+		return ctrl.Result{}, err
+	}
+
+	artifactDigest, err := builder.GetArtifactDigest(ctx, artifactURL, keyChain)
 	if err != nil {
 		msg := fmt.Sprintf("fetch failed: %s", err.Error())
 		r.Event(obj, corev1.EventTypeWarning, meta.ArtifactFailedReason, msg)

@@ -20,6 +20,8 @@ import (
 	"github.com/fluxcd/pkg/ssa"
 	"github.com/fluxcd/pkg/ssa/normalize"
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
+	"github.com/google/go-containerregistry/pkg/authn"
+	"github.com/google/go-containerregistry/pkg/authn/k8schain"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -216,6 +218,21 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 	return requeueAfter(obj), nil
 }
 
+// Get a keychain from the artifactPullSecret secret if provided
+func GetDistributionKeychain(ctx context.Context, kubeClient client.Client, obj *fluxcdv1.FluxInstance) (authn.Keychain, error) {
+	artifactPullSecret := obj.Spec.Distribution.ArtifactPullSecret
+	if artifactPullSecret == "" {
+		return nil, nil
+	}
+	// the secret must be defined in the same namespace as the FluxInstance resource
+	ns := obj.GetNamespace()
+	secret := corev1.Secret{}
+	if err := kubeClient.Get(ctx, client.ObjectKey{Name: artifactPullSecret, Namespace: ns}, &secret); err != nil {
+		return nil, err
+	}
+	return k8schain.NewFromPullSecrets(ctx, []corev1.Secret{secret})
+}
+
 // fetch pulls the distribution OCI artifact and
 // extracts the manifests to the temporary directory.
 // If the distribution artifact URL is not provided,
@@ -230,7 +247,12 @@ func (r *FluxInstanceReconciler) fetch(ctx context.Context,
 		ctxPull, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		artifactDigest, err := builder.PullArtifact(ctxPull, artifactURL, tmpDir)
+		// Create a keychain for the distribution artifact.
+		keyChain, err := GetDistributionKeychain(ctxPull, r.Client, obj)
+		if err != nil {
+			return "", "", err
+		}
+		artifactDigest, err := builder.PullArtifact(ctxPull, artifactURL, tmpDir, keyChain)
 		if err != nil {
 			return "", "", err
 		}

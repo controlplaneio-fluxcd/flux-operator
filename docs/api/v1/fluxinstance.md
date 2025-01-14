@@ -253,6 +253,25 @@ spec:
     artifact: "oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests"
 ```
 
+#### Distribution artifact pull secret
+
+The `.spec.distribution.artifactPullSecret` field is optional and specifies the name of the Kubernetes secret
+that contains the credentials to pull the Flux distribution manifests from a private registry.
+
+Example using a private registry:
+
+```yaml
+spec:
+  distribution:
+    version: "2.3.x"
+    registry: "ghcr.io/controlplaneio-fluxcd/distroless"
+    artifact: "oci://private.registry.com/controlplaneio-fluxcd/flux-operator-manifests"
+    artifactPullSecret: "flux-private-auth"
+```
+
+The manifest pull secret must be created in the same namespace where the FluxInstance is deployed
+and must be of type `kubernetes.io/dockerconfigjson`.
+
 ### Components configuration
 
 The `.spec.components` field is optional and specifies the list of Flux components to install.

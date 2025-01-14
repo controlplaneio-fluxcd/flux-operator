@@ -111,6 +111,11 @@ type Distribution struct {
 	// +kubebuilder:validation:Pattern="^oci://.*$"
 	// +optional
 	Artifact string `json:"artifact,omitempty"`
+
+	// ArtifactPullSecret is the name of the Kubernetes secret
+	// to use for pulling the Kubernetes manifests for the distribution specified in the Artifact field.
+	// +optional
+	ArtifactPullSecret string `json:"artifactPullSecret,omitempty"`
 }
 
 // Component is the name of a controller to install.

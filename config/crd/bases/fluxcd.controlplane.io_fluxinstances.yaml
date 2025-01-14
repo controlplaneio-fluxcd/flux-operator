@@ -135,6 +135,11 @@ spec:
                       e.g. 'oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests:latest'.
                     pattern: ^oci://.*$
                     type: string
+                  artifactPullSecret:
+                    description: |-
+                      ArtifactPullSecret is the name of the Kubernetes secret
+                      to use for pulling the Kubernetes manifests for the distribution specified in the Artifact field.
+                    type: string
                   imagePullSecret:
                     description: |-
                       ImagePullSecret is the name of the Kubernetes secret
