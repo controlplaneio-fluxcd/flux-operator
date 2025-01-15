@@ -289,7 +289,7 @@ spec:
 The `.spec.cluster.type` field is optional and specifies the type of the Kubernetes cluster.
 This field is used to enable specific configuration for AKS, EKS, GKE and OpenShift clusters.
 
-The supported values are `kubernetes` (default), `openshift`, `aks`, `eks` and `gke`.
+The supported values are `kubernetes` (default), `openshift`, `azure`, `aws` and `gcp`.
 
 #### Cluster multitenant
 
