@@ -89,9 +89,6 @@ func (r *ResourceSetReconciler) indexBy(kind string) func(o client.Object) []str
 		for _, k := range rs.Spec.InputsFrom {
 			if k.Kind == kind {
 				ns := rs.GetNamespace()
-				if k.Namespace != "" {
-					ns = k.Namespace
-				}
 				results = append(results, fmt.Sprintf("%s/%s", ns, k.Name))
 			}
 		}

@@ -125,7 +125,7 @@ func (in *ResourceSetInputProvider) GetInterval() time.Duration {
 	if ok && strings.ToLower(val) == DisabledValue {
 		return 0
 	}
-	defaultInterval := 60 * time.Minute
+	defaultInterval := 10 * time.Minute
 	val, ok = in.GetAnnotations()[ReconcileEveryAnnotation]
 	if !ok {
 		return defaultInterval
@@ -140,7 +140,7 @@ func (in *ResourceSetInputProvider) GetInterval() time.Duration {
 // GetTimeout returns the timeout for the reconciliation process.
 // If no timeout is set, the default is 5 minutes.
 func (in *ResourceSetInputProvider) GetTimeout() time.Duration {
-	defaultTimeout := 5 * time.Minute
+	defaultTimeout := 1 * time.Minute
 	val, ok := in.GetAnnotations()[ReconcileTimeoutAnnotation]
 	if !ok {
 		return defaultTimeout

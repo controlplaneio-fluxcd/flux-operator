@@ -133,11 +133,6 @@ spec:
                     name:
                       description: Name of the inputs provider resource.
                       type: string
-                    namespace:
-                      description: |-
-                        Namespace of the inputs provider resource.
-                        When not set, the namespace of the ResourceSet is used.
-                      type: string
                   required:
                   - kind
                   - name

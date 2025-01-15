@@ -285,13 +285,8 @@ func (r *ResourceSetReconciler) getInputs(ctx context.Context,
 	inputs := make([]fluxcdv1.ResourceSetInput, 0)
 	for _, inputSource := range obj.Spec.InputsFrom {
 		var provider fluxcdv1.ResourceSetInputProvider
-		namespace := obj.GetNamespace()
-		if inputSource.Namespace != "" {
-			namespace = inputSource.Namespace
-		}
-
 		key := client.ObjectKey{
-			Namespace: namespace,
+			Namespace: obj.GetNamespace(),
 			Name:      inputSource.Name,
 		}
 

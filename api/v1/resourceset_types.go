@@ -77,11 +77,6 @@ type InputsProvider struct {
 	// Name of the inputs provider resource.
 	// +required
 	Name string `json:"name"`
-
-	// Namespace of the inputs provider resource.
-	// When not set, the namespace of the ResourceSet is used.
-	// +optional
-	Namespace string `json:"namespace,omitempty"`
 }
 
 // Dependency defines a ResourceSet dependency on a Kubernetes resource.
