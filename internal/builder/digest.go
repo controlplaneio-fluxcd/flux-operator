@@ -8,12 +8,13 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/crane"
 )
 
 // GetArtifactDigest looks up an artifact from an OCI repository and returns the digest of the artifact.
-func GetArtifactDigest(ctx context.Context, ociURL string) (string, error) {
-	digest, err := crane.Digest(strings.TrimPrefix(ociURL, "oci://"), crane.WithContext(ctx))
+func GetArtifactDigest(ctx context.Context, ociURL string, keyChain authn.Keychain) (string, error) {
+	digest, err := crane.Digest(strings.TrimPrefix(ociURL, "oci://"), crane.WithContext(ctx), crane.WithAuthFromKeychain(keyChain))
 	if err != nil {
 		return "", fmt.Errorf("fetching digest for artifact %s failed: %w", ociURL, err)
 	}

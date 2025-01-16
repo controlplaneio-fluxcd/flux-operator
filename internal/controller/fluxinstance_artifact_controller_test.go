@@ -12,6 +12,7 @@ import (
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
+	"github.com/google/go-containerregistry/pkg/authn"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -33,7 +34,8 @@ func TestFluxInstanceArtifactReconciler(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	latestArtifactRevision, err := builder.GetArtifactDigest(ctx, cpLatestManifestsURL)
+	var keyChain authn.Keychain
+	latestArtifactRevision, err := builder.GetArtifactDigest(ctx, cpLatestManifestsURL, keyChain)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(latestArtifactRevision).To(HavePrefix("sha256:"))
 	g.Expect(strings.TrimPrefix(latestArtifactRevision, "sha256:")).To(HaveLen(64))
