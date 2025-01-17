@@ -281,23 +281,38 @@ func (r *ResourceSetReconciler) checkDependencies(ctx context.Context,
 }
 
 func (r *ResourceSetReconciler) getInputs(ctx context.Context,
-	obj *fluxcdv1.ResourceSet) ([]fluxcdv1.ResourceSetInput, error) {
-	inputs := make([]fluxcdv1.ResourceSetInput, 0)
+	obj *fluxcdv1.ResourceSet) ([]map[string]any, error) {
+	providers := make([]fluxcdv1.InputProvider, 0)
+	providers = append(providers, obj)
 	for _, inputSource := range obj.Spec.InputsFrom {
-		var provider fluxcdv1.ResourceSetInputProvider
+		var provider fluxcdv1.InputProvider
 		key := client.ObjectKey{
 			Namespace: obj.GetNamespace(),
 			Name:      inputSource.Name,
 		}
 
-		if err := r.Get(ctx, key, &provider); err != nil {
-			return nil, fmt.Errorf("failed to get inputs from %s/%s: %w", key.Namespace, key.Name, err)
+		switch inputSource.Kind {
+		case fluxcdv1.ResourceSetInputProviderKind:
+			var rsip fluxcdv1.ResourceSetInputProvider
+			if err := r.Get(ctx, key, &rsip); err != nil {
+				return nil, fmt.Errorf("failed to get provider %s/%s: %w", key.Namespace, key.Name, err)
+			}
+			provider = &rsip
+		default:
+			return nil, fmt.Errorf("unsupported provider kind %s", inputSource.Kind)
 		}
 
-		inputs = append(inputs, provider.Status.ExportedInputs...)
+		providers = append(providers, provider)
 	}
-	if len(obj.Spec.Inputs) > 0 {
-		inputs = append(inputs, obj.Spec.Inputs...)
+
+	inputs := make([]map[string]any, 0)
+	for _, provider := range providers {
+		exportedInputs, err := provider.GetInputs()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get inputs from %s/%s: %w",
+				provider.GroupVersionKind().Kind, provider.GetName(), err)
+		}
+		inputs = append(inputs, exportedInputs...)
 	}
 
 	return inputs, nil

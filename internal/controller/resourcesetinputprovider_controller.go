@@ -169,7 +169,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 func (r *ResourceSetInputProviderReconciler) newGitProvider(ctx context.Context,
 	obj *fluxcdv1.ResourceSetInputProvider,
 	certPool *x509.CertPool,
-	username, password string) (gitprovider.Provider, error) {
+	username, password string) (gitprovider.Interface, error) {
 	switch {
 	case strings.HasPrefix(obj.Spec.Type, "GitHub"):
 		return gitprovider.NewGitHubProvider(ctx, gitprovider.Options{
@@ -210,14 +210,14 @@ func (r *ResourceSetInputProviderReconciler) makeGitOptions(obj *fluxcdv1.Resour
 			if err != nil {
 				return gitprovider.Options{}, fmt.Errorf("invalid includeBranch regex: %w", err)
 			}
-			opts.Filters.IncludeBranchRx = inRx
+			opts.Filters.IncludeBranchRe = inRx
 		}
 		if obj.Spec.Filter.ExcludeBranch != "" {
 			exRx, err := regexp.Compile(obj.Spec.Filter.ExcludeBranch)
 			if err != nil {
 				return gitprovider.Options{}, fmt.Errorf("invalid excludeBranch regex: %w", err)
 			}
-			opts.Filters.ExcludeBranchRx = exRx
+			opts.Filters.ExcludeBranchRe = exRx
 		}
 	}
 
@@ -226,7 +226,7 @@ func (r *ResourceSetInputProviderReconciler) makeGitOptions(obj *fluxcdv1.Resour
 
 func (r *ResourceSetInputProviderReconciler) callProvider(ctx context.Context,
 	obj *fluxcdv1.ResourceSetInputProvider,
-	provider gitprovider.Provider) ([]fluxcdv1.ResourceSetInput, error) {
+	provider gitprovider.Interface) ([]fluxcdv1.ResourceSetInput, error) {
 	var inputs []fluxcdv1.ResourceSetInput
 
 	opts, err := r.makeGitOptions(obj)

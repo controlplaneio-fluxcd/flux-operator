@@ -25,8 +25,8 @@ func TestGitHubProvider_ListBranches(t *testing.T) {
 				Token: os.Getenv("GITHUB_TOKEN"),
 				URL:   "https://github.com/fluxcd-testing/pr-testing",
 				Filters: Filters{
-					IncludeBranchRx: regexp.MustCompile(`^stefanprodan-patch-.*`),
-					ExcludeBranchRx: regexp.MustCompile(`^stefanprodan-patch-4`),
+					IncludeBranchRe: regexp.MustCompile(`^stefanprodan-patch-.*`),
+					ExcludeBranchRe: regexp.MustCompile(`^stefanprodan-patch-4`),
 				},
 			},
 			want: []Result{
@@ -59,7 +59,7 @@ func TestGitHubProvider_ListBranches(t *testing.T) {
 				Token: os.Getenv("GITHUB_TOKEN"),
 				URL:   "https://github.com/fluxcd-testing/pr-testing",
 				Filters: Filters{
-					IncludeBranchRx: regexp.MustCompile(`^stefanprodan-patch-.*`),
+					IncludeBranchRe: regexp.MustCompile(`^stefanprodan-patch-.*`),
 					Limit:           1,
 				},
 			},
@@ -179,7 +179,7 @@ func TestGitHubProvider_ListRequests(t *testing.T) {
 				Token: os.Getenv("GITHUB_TOKEN"),
 				URL:   "https://github.com/fluxcd-testing/pr-testing",
 				Filters: Filters{
-					IncludeBranchRx: regexp.MustCompile(`^feat/.*`),
+					IncludeBranchRe: regexp.MustCompile(`^feat/.*`),
 				},
 			},
 			want: []Result{

@@ -19,22 +19,22 @@ type Options struct {
 
 // Filters holds the filters for the Git SaaS responses.
 type Filters struct {
-	IncludeBranchRx *regexp.Regexp
-	ExcludeBranchRx *regexp.Regexp
+	IncludeBranchRe *regexp.Regexp
+	ExcludeBranchRe *regexp.Regexp
 	Labels          []string
 	Limit           int
 }
 
 // matchBranch returns true if the branch matches the include and exclude regex filters.
 func matchBranch(opt Options, branch string) bool {
-	if opt.Filters.IncludeBranchRx != nil {
-		if !opt.Filters.IncludeBranchRx.MatchString(branch) {
+	if opt.Filters.IncludeBranchRe != nil {
+		if !opt.Filters.IncludeBranchRe.MatchString(branch) {
 			return false
 		}
 	}
 
-	if opt.Filters.ExcludeBranchRx != nil {
-		if opt.Filters.ExcludeBranchRx.MatchString(branch) {
+	if opt.Filters.ExcludeBranchRe != nil {
+		if opt.Filters.ExcludeBranchRe.MatchString(branch) {
 			return false
 		}
 	}

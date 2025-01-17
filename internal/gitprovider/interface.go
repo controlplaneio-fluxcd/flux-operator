@@ -7,8 +7,8 @@ import (
 	"context"
 )
 
-// Provider is the interface that Git SaaS providers must implement.
-type Provider interface {
+// Interface that all Git SaaS providers must implement.
+type Interface interface {
 	// ListBranches returns a list of branches that match the filters.
 	ListBranches(ctx context.Context, opts Options) ([]Result, error)
 

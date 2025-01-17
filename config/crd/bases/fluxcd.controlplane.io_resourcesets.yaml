@@ -115,23 +115,23 @@ spec:
                 type: array
               inputsFrom:
                 description: |-
-                  InputsFrom contains the list of references to inputs providers.
-                  When set, the inputs are fetched from the providers and merged with the
-                  inputs defined in the ResourceSet.
+                  InputsFrom contains the list of references to input providers.
+                  When set, the inputs are fetched from the providers and concatenated
+                  with the in-line inputs defined in the ResourceSet.
                 items:
                   properties:
                     apiVersion:
                       description: |-
-                        APIVersion of the inputs provider resource.
+                        APIVersion of the input provider resource.
                         When not set, the APIVersion of the ResourceSet is used.
                       type: string
                     kind:
-                      description: Kind of the inputs provider resource.
+                      description: Kind of the input provider resource.
                       enum:
                       - ResourceSetInputProvider
                       type: string
                     name:
-                      description: Name of the inputs provider resource.
+                      description: Name of the input provider resource.
                       type: string
                   required:
                   - kind

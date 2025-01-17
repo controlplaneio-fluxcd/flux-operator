@@ -61,8 +61,8 @@ func (p *GitLabProvider) ListBranches(ctx context.Context, opts Options) ([]Resu
 			PerPage: 100,
 		},
 	}
-	if opts.Filters.IncludeBranchRx != nil {
-		glOpts.Regex = gitlab.Ptr(opts.Filters.IncludeBranchRx.String())
+	if opts.Filters.IncludeBranchRe != nil {
+		glOpts.Regex = gitlab.Ptr(opts.Filters.IncludeBranchRe.String())
 	}
 
 	var results []Result
@@ -147,15 +147,15 @@ func (p *GitLabProvider) ListRequests(ctx context.Context, opts Options) ([]Resu
 }
 
 // parseGitHubURL parses a GitLab URL and returns the host and project.
-func parseGitLabURL(ghURL string) (string, string, error) {
-	u, err := url.Parse(ghURL)
+func parseGitLabURL(glURL string) (string, string, error) {
+	u, err := url.Parse(glURL)
 	if err != nil {
-		return "", "", fmt.Errorf("invalid URL %q: %w", ghURL, err)
+		return "", "", fmt.Errorf("invalid URL %q: %w", glURL, err)
 	}
 
 	project := strings.TrimLeft(u.Path, "/")
 	if len(project) < 1 {
-		return "", "", fmt.Errorf("invalid GitLab URL %q: can't find project", ghURL)
+		return "", "", fmt.Errorf("invalid GitLab URL %q: can't find project", glURL)
 	}
 
 	return fmt.Sprintf("%s://%s", u.Scheme, u.Host), project, nil

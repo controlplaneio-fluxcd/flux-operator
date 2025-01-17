@@ -16,8 +16,8 @@ import (
 
 const (
 	ResourceSetInputProviderKind    = "ResourceSetInputProvider"
-	GitHubPullRequestInputProvider  = "GitHubPullRequest"
-	GitLabMergeRequestInputProvider = "GitLabMergeRequest"
+	InputProviderGitHubPullRequest  = "GitHubPullRequest"
+	InputProviderGitLabMergeRequest = "GitLabMergeRequest"
 )
 
 // ResourceSetInputProviderSpec defines the desired state of ResourceSetInputProvider
@@ -163,6 +163,23 @@ func (in *ResourceSetInputProvider) GetDefaultInputs() (map[string]any, error) {
 		defaults[k] = data
 	}
 	return defaults, nil
+}
+
+// GetInputs returns the exported inputs from ResourceSetInputProvider status.
+func (in *ResourceSetInputProvider) GetInputs() ([]map[string]any, error) {
+	inputs := make([]map[string]any, 0, len(in.Status.ExportedInputs))
+	for i, ji := range in.Status.ExportedInputs {
+		inp := make(map[string]any, len(ji))
+		for k, v := range ji {
+			var data any
+			if err := json.Unmarshal(v.Raw, &data); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal inputs[%d]: %w", i, err)
+			}
+			inp[k] = data
+		}
+		inputs = append(inputs, inp)
+	}
+	return inputs, nil
 }
 
 // +kubebuilder:storageversion

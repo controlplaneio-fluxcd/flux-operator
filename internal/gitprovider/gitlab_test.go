@@ -25,8 +25,8 @@ func TestGitLabProvider_ListBranches(t *testing.T) {
 				Token: os.Getenv("GITLAB_TOKEN"),
 				URL:   "https://gitlab.com/stefanprodan/podinfo",
 				Filters: Filters{
-					IncludeBranchRx: regexp.MustCompile(`^patch-.*`),
-					ExcludeBranchRx: regexp.MustCompile(`^patch-4`),
+					IncludeBranchRe: regexp.MustCompile(`^patch-.*`),
+					ExcludeBranchRe: regexp.MustCompile(`^patch-4`),
 				},
 			},
 			want: []Result{
@@ -59,7 +59,7 @@ func TestGitLabProvider_ListBranches(t *testing.T) {
 				Token: os.Getenv("GITLAB_TOKEN"),
 				URL:   "https://gitlab.com/stefanprodan/podinfo",
 				Filters: Filters{
-					IncludeBranchRx: regexp.MustCompile(`^patch-.*`),
+					IncludeBranchRe: regexp.MustCompile(`^patch-.*`),
 					Limit:           1,
 				},
 			},
@@ -179,7 +179,7 @@ func TestGitLabProvider_ListRequests(t *testing.T) {
 				Token: os.Getenv("GITLAB_TOKEN"),
 				URL:   "https://gitlab.com/stefanprodan/podinfo",
 				Filters: Filters{
-					IncludeBranchRx: regexp.MustCompile(`^feat/.*`),
+					IncludeBranchRe: regexp.MustCompile(`^feat/.*`),
 				},
 			},
 			want: []Result{

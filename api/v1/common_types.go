@@ -3,7 +3,11 @@
 
 package v1
 
-import "fmt"
+import (
+	"fmt"
+
+	"k8s.io/apimachinery/pkg/runtime/schema"
+)
 
 const (
 	EnabledValue  = "enabled"
@@ -22,6 +26,17 @@ var (
 	PruneAnnotation                  = fmt.Sprintf("%s/prune", GroupVersion.Group)
 	RevisionAnnotation               = fmt.Sprintf("%s/revision", GroupVersion.Group)
 )
+
+// InputProvider is the interface that the ResourceSet
+// input providers must implement.
+//
+// +k8s:deepcopy-gen=false
+type InputProvider interface {
+	GetInputs() ([]map[string]any, error)
+	GetNamespace() string
+	GetName() string
+	GroupVersionKind() schema.GroupVersionKind
+}
 
 // CommonMetadata defines the common labels and annotations.
 type CommonMetadata struct {

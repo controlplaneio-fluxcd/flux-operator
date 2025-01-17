@@ -64,7 +64,7 @@ func MakeInputs(results []Result, defaults map[string]any) ([]map[string]*apiext
 		for k, v := range item {
 			b, err := json.Marshal(v)
 			if err != nil {
-				return nil, fmt.Errorf("failed to marshal value %v: %w", v, err)
+				return nil, fmt.Errorf("failed to marshal value to JSON %v: %w", v, err)
 			}
 			input[k] = &apiextensionsv1.JSON{Raw: b}
 		}
