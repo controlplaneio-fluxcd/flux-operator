@@ -8,11 +8,7 @@ spec:
     - tenant: team1
       domain: t1.example.com
       semver: ">=1.0.0-rc.0"
-      semverFilter: ".*-rc.*"
       replicas: "2"
-      layerSelector: |
-        mediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
-        operation: copy
     - tenant: team2
       domain: t2.example.com
       semver: ">=1.0.0"
@@ -28,10 +24,8 @@ spec:
       spec:
         interval: 10m
         url: oci://ghcr.io/org/charts/app1
-        layerSelector: << inputs.layerSelector | default "~" | nindent 4 >>
         ref:
           semver: << inputs.semver | quote >>
-          semverFilter: << inputs.semverFilter | default "*" | quote >>
     - apiVersion: helm.toolkit.fluxcd.io/v2
       kind: HelmRelease
       metadata:

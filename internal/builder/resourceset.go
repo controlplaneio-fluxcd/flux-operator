@@ -5,7 +5,6 @@ package builder
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"text/template"
@@ -22,20 +21,7 @@ import (
 
 // BuildResourceSet builds a list of Kubernetes resources
 // from a list of JSON templates using the provided inputs.
-func BuildResourceSet(yamlTemplate string, templates []*apix.JSON, jsonInputs []fluxcdv1.ResourceSetInput) ([]*unstructured.Unstructured, error) {
-	inputs := make([]map[string]any, 0, len(jsonInputs))
-	for i, ji := range jsonInputs {
-		inp := make(map[string]any, len(ji))
-		for k, v := range ji {
-			var data any
-			if err := json.Unmarshal(v.Raw, &data); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal inputs[%d]: %w", i, err)
-			}
-			inp[k] = data
-		}
-		inputs = append(inputs, inp)
-	}
-
+func BuildResourceSet(yamlTemplate string, templates []*apix.JSON, inputs []map[string]any) ([]*unstructured.Unstructured, error) {
 	var objects []*unstructured.Unstructured
 
 	// build resources from JSON templates
@@ -154,12 +140,13 @@ func BuildResourcesFromYAML(yamlTemplate string, inputs map[string]any) ([]*unst
 }
 
 func newTemplate(yamlTemplate string, inputs map[string]any) (*template.Template, error) {
-	tp, err := template.New("res").
+	tp, err := template.New("resourceset").
 		Delims("<<", ">>").
 		Funcs(sprig.HermeticTxtFuncMap()).
 		Funcs(template.FuncMap{"slugify": slug.Make}).
 		Funcs(template.FuncMap{"inputs": func() any { return inputs }}).
 		Funcs(template.FuncMap{"toYaml": toYaml, "mustToYaml": mustToYaml}).
+		Option("missingkey=error").
 		Parse(yamlTemplate)
 	if err != nil {
 		return nil, err

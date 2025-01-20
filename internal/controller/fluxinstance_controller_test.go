@@ -623,6 +623,17 @@ func TestFluxInstanceReconciler_Profiles(t *testing.T) {
 		crd.Object["spec"].(map[string]interface{})["versions"].([]interface{})[2].(map[string]interface{})["schema"].(map[string]interface{})["openAPIV3Schema"].(map[string]interface{})["properties"].(map[string]interface{})["spec"].(map[string]interface{})["properties"].(map[string]interface{})["eventSources"].(map[string]interface{})["items"].(map[string]interface{})["properties"].(map[string]interface{})["kind"].(map[string]interface{})["enum"]).
 		To(ContainElement("FluxInstance"))
 
+	// Check if the receivers CRD was patched.
+	rcrd := &unstructured.Unstructured{}
+	rcrd.SetAPIVersion("apiextensions.k8s.io/v1")
+	rcrd.SetKind("CustomResourceDefinition")
+	err = testClient.Get(ctx, types.NamespacedName{Name: "receivers.notification.toolkit.fluxcd.io"}, rcrd)
+	g.Expect(err).ToNot(HaveOccurred())
+	rawData, err := rcrd.MarshalJSON()
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(string(rawData)).To(ContainSubstring("FluxInstance"))
+	g.Expect(string(rawData)).To(ContainSubstring("ResourceSetInputProvider"))
+
 	// Uninstall the instance.
 	err = testClient.Delete(ctx, obj)
 	g.Expect(err).ToNot(HaveOccurred())

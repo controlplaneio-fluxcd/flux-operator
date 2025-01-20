@@ -4,7 +4,6 @@
 package v1
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
@@ -18,19 +17,7 @@ const (
 	DefaultInstanceName = "flux"
 	DefaultNamespace    = "flux-system"
 	FluxInstanceKind    = "FluxInstance"
-	EnabledValue        = "enabled"
-	DisabledValue       = "disabled"
 	OutdatedReason      = "OutdatedVersion"
-)
-
-var (
-	Finalizer                        = fmt.Sprintf("%s/finalizer", GroupVersion.Group)
-	ReconcileAnnotation              = fmt.Sprintf("%s/reconcile", GroupVersion.Group)
-	ReconcileEveryAnnotation         = fmt.Sprintf("%s/reconcileEvery", GroupVersion.Group)
-	ReconcileArtifactEveryAnnotation = fmt.Sprintf("%s/reconcileArtifactEvery", GroupVersion.Group)
-	ReconcileTimeoutAnnotation       = fmt.Sprintf("%s/reconcileTimeout", GroupVersion.Group)
-	PruneAnnotation                  = fmt.Sprintf("%s/prune", GroupVersion.Group)
-	RevisionAnnotation               = fmt.Sprintf("%s/revision", GroupVersion.Group)
 )
 
 // FluxInstanceSpec defines the desired state of FluxInstance

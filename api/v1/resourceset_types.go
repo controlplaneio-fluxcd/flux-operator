@@ -4,11 +4,13 @@
 package v1
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/json"
 
 	"github.com/fluxcd/pkg/apis/meta"
 )
@@ -25,9 +27,15 @@ type ResourceSetSpec struct {
 	// +optional
 	CommonMetadata *CommonMetadata `json:"commonMetadata,omitempty"`
 
-	// Inputs contains the list of resource group inputs.
+	// Inputs contains the list of ResourceSet inputs.
 	// +optional
 	Inputs []ResourceSetInput `json:"inputs,omitempty"`
+
+	// InputsFrom contains the list of references to input providers.
+	// When set, the inputs are fetched from the providers and concatenated
+	// with the in-line inputs defined in the ResourceSet.
+	// +optional
+	InputsFrom []InputProviderReference `json:"inputsFrom,omitempty"`
 
 	// Resources contains the list of Kubernetes resources to reconcile.
 	// +optional
@@ -55,6 +63,22 @@ type ResourceSetSpec struct {
 	// of all the reconciled resources.
 	// +optional
 	Wait bool `json:"wait,omitempty"`
+}
+
+type InputProviderReference struct {
+	// APIVersion of the input provider resource.
+	// When not set, the APIVersion of the ResourceSet is used.
+	// +optional
+	APIVersion string `json:"apiVersion,omitempty"`
+
+	// Kind of the input provider resource.
+	// +kubebuilder:validation:Enum=ResourceSetInputProvider
+	// +required
+	Kind string `json:"kind"`
+
+	// Name of the input provider resource.
+	// +required
+	Name string `json:"name"`
 }
 
 // Dependency defines a ResourceSet dependency on a Kubernetes resource.
@@ -158,16 +182,21 @@ func (in *ResourceSet) GetTimeout() time.Duration {
 	return timeout
 }
 
-// GetInputs returns the ResourceSet inputs array.
-func (in *ResourceSet) GetInputs() []ResourceSetInput {
-	var inputs = make([]ResourceSetInput, len(in.Spec.Inputs))
-	for i, input := range in.Spec.Inputs {
-		inputs[i] = make(ResourceSetInput)
-		for k, v := range input {
-			inputs[i][k] = v
+// GetInputs returns the ResourceSet in-line inputs as a list of maps.
+func (in *ResourceSet) GetInputs() ([]map[string]any, error) {
+	inputs := make([]map[string]any, 0, len(in.Spec.Inputs))
+	for i, ji := range in.Spec.Inputs {
+		inp := make(map[string]any, len(ji))
+		for k, v := range ji {
+			var data any
+			if err := json.Unmarshal(v.Raw, &data); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal inputs[%d]: %w", i, err)
+			}
+			inp[k] = data
 		}
+		inputs = append(inputs, inp)
 	}
-	return inputs
+	return inputs, nil
 }
 
 // +kubebuilder:storageversion

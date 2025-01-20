@@ -97,9 +97,8 @@ func (r *ResourceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// Pause reconciliation if the object has the reconcile annotation set to 'disabled'.
 	if obj.IsDisabled() {
-		msg := "Reconciliation in disabled"
-		log.Error(errors.New("can't reconcile instance"), msg)
-		r.Event(obj, corev1.EventTypeWarning, "ReconciliationDisabled", msg)
+		log.Error(errors.New("can't reconcile instance"), fluxcdv1.ReconciliationDisabledMessage)
+		r.Event(obj, corev1.EventTypeWarning, fluxcdv1.ReconciliationDisabledReason, fluxcdv1.ReconciliationDisabledMessage)
 		return ctrl.Result{}, nil
 	}
 
@@ -140,25 +139,44 @@ func (r *ResourceSetReconciler) reconcile(ctx context.Context,
 		return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
 	}
 
-	// Build the resources.
-	buildResult, err := builder.BuildResourceSet(obj.Spec.ResourcesTemplate, obj.Spec.Resources, obj.GetInputs())
+	// Compute the final inputs from providers and in-line inputs.
+	inputs, err := r.getInputs(ctx, obj)
 	if err != nil {
-		msg := fmt.Sprintf("build failed: %s", err.Error())
+		msg := fmt.Sprintf("failed to compute inputs: %s", err.Error())
 		conditions.MarkFalse(obj,
 			meta.ReadyCondition,
-			meta.BuildFailedReason,
+			meta.ReconciliationFailedReason,
 			"%s", msg)
-		conditions.MarkTrue(obj,
-			meta.StalledCondition,
-			meta.BuildFailedReason,
-			"%s", msg)
-		log.Error(err, msg)
 		r.EventRecorder.Event(obj, corev1.EventTypeWarning, meta.BuildFailedReason, msg)
-		return ctrl.Result{}, nil
+		return ctrl.Result{}, err
+	}
+
+	var objects []*unstructured.Unstructured
+	if len(obj.Spec.InputsFrom) > 0 && len(inputs) == 0 {
+		// If providers return no inputs, we should reconcile an empty set to trigger GC.
+		log.Info("No inputs returned from providers, reconciling an empty set")
+	} else {
+		// Build the resources using the inputs.
+		buildResult, err := builder.BuildResourceSet(obj.Spec.ResourcesTemplate, obj.Spec.Resources, inputs)
+		if err != nil {
+			msg := fmt.Sprintf("build failed: %s", err.Error())
+			conditions.MarkFalse(obj,
+				meta.ReadyCondition,
+				meta.BuildFailedReason,
+				"%s", msg)
+			conditions.MarkTrue(obj,
+				meta.StalledCondition,
+				meta.BuildFailedReason,
+				"%s", msg)
+			log.Error(err, msg)
+			r.EventRecorder.Event(obj, corev1.EventTypeWarning, meta.BuildFailedReason, msg)
+			return ctrl.Result{}, nil
+		}
+		objects = buildResult
 	}
 
 	// Apply the resources to the cluster.
-	applySetDigest, err := r.apply(ctx, obj, buildResult)
+	applySetDigest, err := r.apply(ctx, obj, objects)
 	if err != nil {
 		msg := fmt.Sprintf("reconciliation failed: %s", err.Error())
 		conditions.MarkFalse(obj,
@@ -260,6 +278,44 @@ func (r *ResourceSetReconciler) checkDependencies(ctx context.Context,
 	}
 
 	return nil
+}
+
+func (r *ResourceSetReconciler) getInputs(ctx context.Context,
+	obj *fluxcdv1.ResourceSet) ([]map[string]any, error) {
+	providers := make([]fluxcdv1.InputProvider, 0)
+	providers = append(providers, obj)
+	for _, inputSource := range obj.Spec.InputsFrom {
+		var provider fluxcdv1.InputProvider
+		key := client.ObjectKey{
+			Namespace: obj.GetNamespace(),
+			Name:      inputSource.Name,
+		}
+
+		switch inputSource.Kind {
+		case fluxcdv1.ResourceSetInputProviderKind:
+			var rsip fluxcdv1.ResourceSetInputProvider
+			if err := r.Get(ctx, key, &rsip); err != nil {
+				return nil, fmt.Errorf("failed to get provider %s/%s: %w", key.Namespace, key.Name, err)
+			}
+			provider = &rsip
+		default:
+			return nil, fmt.Errorf("unsupported provider kind %s", inputSource.Kind)
+		}
+
+		providers = append(providers, provider)
+	}
+
+	inputs := make([]map[string]any, 0)
+	for _, provider := range providers {
+		exportedInputs, err := provider.GetInputs()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get inputs from %s/%s: %w",
+				provider.GroupVersionKind().Kind, provider.GetName(), err)
+		}
+		inputs = append(inputs, exportedInputs...)
+	}
+
+	return inputs, nil
 }
 
 // apply reconciles the resources in the cluster by performing
@@ -570,7 +626,7 @@ func (r *ResourceSetReconciler) uninstall(ctx context.Context,
 
 		resourceManager := ssa.NewResourceManager(kubeClient, nil, ssa.Owner{
 			Field: r.StatusManager,
-			Group: fluxcdv1.GroupVersion.Group,
+			Group: fmt.Sprintf("resourceset.%s", fluxcdv1.GroupVersion.Group),
 		})
 
 		opts := ssa.DeleteOptions{

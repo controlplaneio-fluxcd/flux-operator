@@ -85,6 +85,7 @@ func main() {
 
 	reporter.MustRegisterMetrics()
 
+	ctx := ctrl.SetupSignalHandler()
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
@@ -199,11 +200,23 @@ func main() {
 		StatusManager:         controllerName,
 		EventRecorder:         mgr.GetEventRecorderFor(controllerName),
 		DefaultServiceAccount: defaultServiceAccount,
-	}).SetupWithManager(mgr,
+	}).SetupWithManager(ctx, mgr,
 		controller.ResourceSetReconcilerOptions{
 			RateLimiter: runtimeCtrl.GetRateLimiter(rateLimiterOptions),
 		}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", fluxcdv1.ResourceSetKind)
+		os.Exit(1)
+	}
+
+	if err = (&controller.ResourceSetInputProviderReconciler{
+		Client:        mgr.GetClient(),
+		StatusManager: controllerName,
+		EventRecorder: mgr.GetEventRecorderFor(controllerName),
+	}).SetupWithManager(mgr,
+		controller.ResourceSetInputProviderReconcilerOptions{
+			RateLimiter: runtimeCtrl.GetRateLimiter(rateLimiterOptions),
+		}); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", fluxcdv1.ResourceSetInputProviderKind)
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
@@ -211,7 +224,7 @@ func main() {
 	probes.SetupChecks(mgr, setupLog)
 
 	setupLog.Info("starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}

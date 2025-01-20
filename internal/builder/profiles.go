@@ -89,6 +89,15 @@ const tmpNotificationPatch = `
     - op: add
       path: /spec/versions/2/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
       value: FluxInstance
+    - op: add
+      path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
+      value: ResourceSetInputProvider
+    - op: add
+      path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
+      value: ResourceSetInputProvider
+    - op: add
+      path: /spec/versions/2/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
+      value: ResourceSetInputProvider
 - target:
     kind: ClusterRole
     name: crd-controller-%s
