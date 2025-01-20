@@ -120,7 +120,9 @@ spec:
               type:
                 description: Type specifies the type of the input provider.
                 enum:
+                - GitHubBranch
                 - GitHubPullRequest
+                - GitLabBranch
                 - GitLabMergeRequest
                 type: string
               url:
