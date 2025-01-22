@@ -236,6 +236,11 @@ func (r *ResourceSetInputProviderReconciler) callProvider(ctx context.Context,
 
 	var results []gitprovider.Result
 	switch {
+	case strings.HasSuffix(obj.Spec.Type, "Branch"):
+		results, err = provider.ListBranches(ctx, opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list branches: %w", err)
+		}
 	case strings.HasSuffix(obj.Spec.Type, "Request"):
 		results, err = provider.ListRequests(ctx, opts)
 		if err != nil {

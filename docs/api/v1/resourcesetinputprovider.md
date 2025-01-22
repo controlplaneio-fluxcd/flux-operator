@@ -87,19 +87,27 @@ The `.spec.type` field is required and specifies the type of the provider.
 The following types are supported:
 
 - `GitHubPullRequest`: fetches input values from opened GitHub Pull Requests.
+- `GitHubBranch`: fetches input values from GitHub repository branches.
 - `GitLabMergeRequest`: fetches input values from opened GitLab Merge Requests.
+- `GitLabBranch`: fetches input values from GitLab project branches.
 
-For both `GitHubPullRequest` and `GitLabMergeRequest` types, flux-operator will
-export in `.status.exportedInputs` a set of input values for each
-Pull Request or Merge Request that matches the [filter](#filter) criteria.
+For all types, the flux-operator will export in `.status.exportedInputs` a
+set of input values for each Pull/Merge Request or Branch
+that matches the [filter](#filter) criteria.
 
-The [exported inputs](#exported-inputs-status) structure is:
+For Pull/Merge Requests the [exported inputs](#exported-inputs-status) structure is:
 
 - `id`: the ID number of the PR/MR (type string).
 - `sha`: the commit SHA of the PR/MR (type string).
 - `branch`: the branch name of the PR/MR (type string).
 - `author`: the author username of the PR/MR (type string).
 - `title`: the title of the PR/MR (type string).
+
+For Git Branches the [exported inputs](#exported-inputs-status) structure is:
+
+- `id`: the Adler-32 checksum of the branch name (type string).
+- `branch`: the branch name (type string).
+- `sha`: the commit SHA corresponding to the branch HEAD (type string).
 
 ### URL
 

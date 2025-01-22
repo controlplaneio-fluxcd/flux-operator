@@ -16,14 +16,16 @@ import (
 
 const (
 	ResourceSetInputProviderKind    = "ResourceSetInputProvider"
+	InputProviderGitHubBranch       = "GitHubBranch"
 	InputProviderGitHubPullRequest  = "GitHubPullRequest"
+	InputProviderGitLabBranch       = "GitLabBranch"
 	InputProviderGitLabMergeRequest = "GitLabMergeRequest"
 )
 
 // ResourceSetInputProviderSpec defines the desired state of ResourceSetInputProvider
 type ResourceSetInputProviderSpec struct {
 	// Type specifies the type of the input provider.
-	// +kubebuilder:validation:Enum=GitHubPullRequest;GitLabMergeRequest
+	// +kubebuilder:validation:Enum=GitHubBranch;GitHubPullRequest;GitLabBranch;GitLabMergeRequest
 	// +required
 	Type string `json:"type"`
 
