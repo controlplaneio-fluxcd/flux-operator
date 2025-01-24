@@ -12,12 +12,12 @@ COPY go.sum go.sum
 RUN go mod download
 
 # Copy the Go sources.
-COPY cmd/main.go cmd/main.go
+COPY cmd/operator/main.go cmd/operator/main.go
 COPY api/ api/
 COPY internal/ internal/
 
 # Build the operator binary.
-RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o flux-operator cmd/main.go
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o flux-operator cmd/operator/main.go
 
 # Run the operator binary using Google's Distroless image.
 FROM gcr.io/distroless/static:nonroot

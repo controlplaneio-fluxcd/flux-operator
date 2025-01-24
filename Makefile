@@ -9,6 +9,7 @@ IMG ?= ghcr.io/controlplaneio-fluxcd/flux-operator:latest
 # FLUX_OPERATOR_VERSION refers to the version of the operator to be tested
 # under ./config/operatorhub/flux-operator/<version> directory.
 FLUX_OPERATOR_VERSION ?= $(shell gh release view --json tagName -q '.tagName')
+FLUX_OPERATOR_DEV_VERSION?=0.0.0-$(shell git rev-parse --abbrev-ref HEAD)-$(shell git rev-parse --short HEAD)-$(shell date +%s)
 # OLM_VERSION refers to the version of the Operator Lifecycle Manager to be used.
 OLM_VERSION ?= 0.28.0
 
@@ -81,11 +82,11 @@ lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes.
 
 .PHONY: build
 build: manifests generate fmt vet ## Build manager binary.
-	go build -o bin/manager cmd/main.go
+	go build -o bin/manager cmd/operator/main.go
 
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
-	go run ./cmd/main.go
+	go run ./cmd/operator/main.go
 
 .PHONY: vendor-flux
 vendor-flux: ## Download Flux base manifests to config/flux dir.
@@ -121,6 +122,12 @@ build-installer: manifests generate kustomize ## Generate a consolidated YAML wi
 .PHONY: build-manifests
 build-manifests: ## Generate release manifests.
 	hack/build-dist-manifests.sh
+
+##@ CLI
+
+.PHONY: cli-build
+cli-build: tidy fmt vet ## Build CLI binary.
+	CGO_ENABLED=0 go build -ldflags="-s -w -X main.VERSION=$(FLUX_OPERATOR_DEV_VERSION)" -o ./bin/foctl ./cmd/cli/
 
 ##@ Deployment
 
