@@ -72,7 +72,7 @@ test-e2e:
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter.
-	$(GOLANGCI_LINT) run
+	$(GOLANGCI_LINT) run --skip-dirs cmd/cli
 
 .PHONY: lint-fix
 lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes.

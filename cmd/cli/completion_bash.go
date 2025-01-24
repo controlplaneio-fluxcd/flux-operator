@@ -19,7 +19,7 @@ var completionBashCmd = &cobra.Command{
 To configure your bash shell to load completions for each session add to your bashrc
 
 # ~/.bashrc or ~/.profile
-command -v timoni >/dev/null && . <(flux-operator completion bash)`,
+command -v flux-operator >/dev/null && . <(flux-operator completion bash)`,
 	Run: func(cmd *cobra.Command, args []string) {
 		rootCmd.GenBashCompletion(os.Stdout)
 	},

@@ -19,7 +19,7 @@ var completionZshCmd = &cobra.Command{
 To configure your zsh shell to load completions for each session add to your zshrc
 
 # ~/.zshrc or ~/.profile
-command -v flux-operator >/dev/null && . <(timoni completion zsh) && compdef _flux-operator flux-operator
+command -v flux-operator >/dev/null && . <(flux-operator completion zsh) && compdef _flux-operator flux-operator
 
 or write a cached file in one of the completion directories in your ${fpath}:
 
