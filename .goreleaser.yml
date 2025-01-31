@@ -1,0 +1,54 @@
+project_name: flux-operator
+changelog:
+  use: github-native
+builds:
+  - <<: &build_defaults
+      binary: flux-operator
+      main: ./cmd/cli
+      ldflags:
+        - -s -w -X main.VERSION={{ .Version }}
+      env:
+        - CGO_ENABLED=0
+    id: linux
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+  - <<: *build_defaults
+    id: darwin
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+  - <<: *build_defaults
+    id: windows
+    goos:
+      - windows
+    goarch:
+      - amd64
+archives:
+  - name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    id: nix
+    builds: [darwin, linux]
+    format: tar.gz
+    files:
+      - LICENSE
+  - name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    id: windows
+    builds: [windows]
+    format: zip
+    files:
+      - LICENSE
+source:
+  enabled: true
+  name_template: '{{ .ProjectName }}_{{ .Version }}_source_code'
+sboms:
+  - id: source
+    artifacts: source
+    documents:
+      - "{{ .ProjectName }}_{{ .Version }}_sbom.spdx.json"
+release:
+  extra_files:
+    - glob: ./bin/release/install.yaml
