@@ -229,8 +229,8 @@ spec:
       name: fluxinstances.fluxcd.controlplane.io
       ready: true
       readyExpr: |
-       status.conditions.filter(e, e.type == 'Established').all(e, e.status == 'True') &&
-       status.storedVersions.exists(e, e =='v1')
+        status.conditions.filter(e, e.type == 'Established').all(e, e.status == 'True') &&
+        status.storedVersions.exists(e, e =='v1')
     - apiVersion: v1
       kind: ServiceAccount
       name: test
@@ -271,7 +271,7 @@ spec:
 
 	logObjectStatus(t, result)
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.DependencyNotReadyReason))
-	g.Expect(conditions.GetMessage(result, meta.ReadyCondition)).To(ContainSubstring("test not found"))
+	g.Expect(conditions.GetMessage(result, meta.ReadyCondition)).To(ContainSubstring("\"test\" not found"))
 
 	// Create the dependency.
 	dep := &corev1.ServiceAccount{
@@ -307,6 +307,71 @@ spec:
 	})
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(r.IsZero()).To(BeTrue())
+}
+
+func TestResourceSetReconciler_DependsOnInvalidExpression(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceSetReconciler()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	objDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: tenants
+  namespace: "%[1]s"
+spec:
+  dependsOn:
+    - apiVersion: apiextensions.k8s.io/v1
+      kind: CustomResourceDefinition
+      name: fluxinstances.fluxcd.controlplane.io
+      ready: true
+      readyExpr: status.
+    - apiVersion: v1
+      kind: ServiceAccount
+      name: test
+      namespace: "%[1]s"
+  resources:
+    - apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: readonly
+        namespace: "%[1]s"
+`, ns.Name)
+
+	obj := &fluxcdv1.ResourceSet{}
+	err = yaml.Unmarshal([]byte(objDef), obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize the instance.
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Reconcile with invalid expression.
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.RequeueAfter).To(Equal(time.Duration(0)))
+
+	// Check if the instance was installed.
+	result := &fluxcdv1.ResourceSet{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	logObjectStatus(t, result)
+	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.InvalidCELExpressionReason))
+	g.Expect(conditions.GetMessage(result, meta.ReadyCondition)).To(ContainSubstring("failed to parse expression"))
 }
 
 func TestResourceSetReconciler_Impersonation(t *testing.T) {

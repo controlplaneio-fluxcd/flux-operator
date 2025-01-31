@@ -13,15 +13,13 @@ import (
 	"github.com/fluxcd/cli-utils/pkg/kstatus/polling"
 	"github.com/fluxcd/cli-utils/pkg/kstatus/status"
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/runtime/cel"
 	runtimeClient "github.com/fluxcd/pkg/runtime/client"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/ssa"
 	"github.com/fluxcd/pkg/ssa/normalize"
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
-	"github.com/google/cel-go/cel"
-	"github.com/google/cel-go/common/types"
-	"github.com/google/cel-go/ext"
 	"github.com/opencontainers/go-digest"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -102,8 +100,20 @@ func (r *ResourceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, nil
 	}
 
+	// Build dependency expressions and fail terminally if the expressions are invalid.
+	exprs, err := r.buildDependencyExpressions(obj)
+	if err != nil {
+		const msg = "Reconciliation failed terminally due to configuration error"
+		errMsg := fmt.Sprintf("%s: %v", msg, err)
+		conditions.MarkFalse(obj, meta.ReadyCondition, meta.InvalidCELExpressionReason, "%s", errMsg)
+		conditions.MarkStalled(obj, meta.InvalidCELExpressionReason, "%s", errMsg)
+		log.Error(err, msg)
+		r.Event(obj, corev1.EventTypeWarning, meta.InvalidCELExpressionReason, errMsg)
+		return ctrl.Result{}, nil
+	}
+
 	// Check dependencies and requeue the reconciliation if the check fails.
-	if err := r.checkDependencies(ctx, obj); err != nil {
+	if err := r.checkDependencies(ctx, obj, exprs); err != nil {
 		msg := fmt.Sprintf("Retrying dependency check: %s", err.Error())
 		if conditions.GetReason(obj, meta.ReadyCondition) != meta.DependencyNotReadyReason {
 			log.Error(err, "dependency check failed")
@@ -204,10 +214,25 @@ func (r *ResourceSetReconciler) reconcile(ctx context.Context,
 	return requeueAfterResourceSet(obj), nil
 }
 
-func (r *ResourceSetReconciler) checkDependencies(ctx context.Context,
-	obj *fluxcdv1.ResourceSet) error {
+func (r *ResourceSetReconciler) buildDependencyExpressions(obj *fluxcdv1.ResourceSet) ([]*cel.Expression, error) {
+	exprs := make([]*cel.Expression, len(obj.Spec.DependsOn))
+	for i, dep := range obj.Spec.DependsOn {
+		if dep.Ready && dep.ReadyExpr != "" {
+			expr, err := cel.NewExpression(dep.ReadyExpr)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse expression for dependency %s/%s/%s/%s: %w", dep.APIVersion, dep.Kind, dep.Name, dep.Namespace, err)
+			}
+			exprs[i] = expr
+		}
+	}
+	return exprs, nil
+}
 
-	for _, dep := range obj.Spec.DependsOn {
+func (r *ResourceSetReconciler) checkDependencies(ctx context.Context,
+	obj *fluxcdv1.ResourceSet,
+	exprs []*cel.Expression) error {
+
+	for i, dep := range obj.Spec.DependsOn {
 		depObj := &unstructured.Unstructured{
 			Object: map[string]interface{}{
 				"apiVersion": dep.APIVersion,
@@ -220,58 +245,27 @@ func (r *ResourceSetReconciler) checkDependencies(ctx context.Context,
 		}
 
 		if err := r.Client.Get(ctx, client.ObjectKeyFromObject(depObj), depObj); err != nil {
-			return fmt.Errorf("dependency %s/%s/%s not found: %w", dep.APIVersion, dep.Kind, dep.Name, err)
+			return fmt.Errorf("dependency %s/%s/%s/%s not found: %w", dep.APIVersion, dep.Kind, dep.Name, dep.Namespace, err)
 		}
 
 		if dep.Ready {
 			if dep.ReadyExpr != "" {
-				var envOptions = []cel.EnvOption{
-					cel.HomogeneousAggregateLiterals(),
-					cel.EagerlyValidateDeclarations(true),
-					cel.DefaultUTCTimeZone(true),
-					cel.CrossTypeNumericComparisons(true),
-					cel.OptionalTypes(),
-					ext.Strings(ext.StringsVersion(2)),
-					ext.Sets(),
-					ext.Encoders(),
-				}
-
-				env, err := cel.NewEnv(envOptions...)
+				isReady, err := exprs[i].EvaluateBoolean(ctx, depObj.UnstructuredContent())
 				if err != nil {
-					return fmt.Errorf("failed to create CEL env: %w", err)
-				}
-
-				expr, issues := env.Parse(dep.ReadyExpr)
-				if issues != nil {
-					return fmt.Errorf("failed to parse the CEL expression: %s", issues.String())
-				}
-
-				prog, err := env.Program(expr, cel.EvalOptions(cel.OptOptimize))
-				if err != nil {
-					return fmt.Errorf("failed to instantiate CEL program: %w", err)
-				}
-
-				val, _, err := prog.Eval(depObj.UnstructuredContent())
-				if err != nil {
-					return fmt.Errorf("failed to evaluate CEL expression: %w", err)
-				}
-
-				isReady, ok := val.(types.Bool)
-				if !ok {
-					return fmt.Errorf("failed to evaluate CEL expression as boolean %s", dep.ReadyExpr)
+					return err
 				}
 
 				if !isReady {
-					return fmt.Errorf("dependency %s/%s/%s not ready: expression %s", dep.APIVersion, dep.Kind, dep.Name, dep.ReadyExpr)
+					return fmt.Errorf("dependency %s/%s/%s/%s not ready: expression %s", dep.APIVersion, dep.Kind, dep.Name, dep.Namespace, dep.ReadyExpr)
 				}
 			} else {
 				stat, err := status.Compute(depObj)
 				if err != nil {
-					return fmt.Errorf("dependency %s/%s/%s not ready: %w", dep.APIVersion, dep.Kind, dep.Name, err)
+					return fmt.Errorf("dependency %s/%s/%s/%s not ready: %w", dep.APIVersion, dep.Kind, dep.Name, dep.Namespace, err)
 				}
 
 				if stat.Status != status.CurrentStatus {
-					return fmt.Errorf("dependency %s/%s/%s not ready: status %s", dep.APIVersion, dep.Kind, dep.Name, stat.Status)
+					return fmt.Errorf("dependency %s/%s/%s/%s not ready: status %s", dep.APIVersion, dep.Kind, dep.Name, dep.Namespace, stat.Status)
 				}
 			}
 		}
