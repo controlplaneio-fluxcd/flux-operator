@@ -27,7 +27,10 @@ var rootCmd = &cobra.Command{
 	SilenceUsage:      true,
 	SilenceErrors:     true,
 	DisableAutoGenTag: true,
-	Short:             "Command line utility for Flux Operator.",
+	Long: `Command line utility for Flux Operator.
+⚠️ Please note that this CLI is in preview and under development.
+While we try our best to not introduce breaking changes, they may occur when
+we adapt to new features and/or find better ways to facilitate what it does.`,
 }
 
 type rootFlags struct {
@@ -36,7 +39,7 @@ type rootFlags struct {
 
 var (
 	rootArgs = rootFlags{
-		timeout: 5 * time.Minute,
+		timeout: time.Minute,
 	}
 	kubeconfigArgs = genericclioptions.NewConfigFlags(false)
 )
