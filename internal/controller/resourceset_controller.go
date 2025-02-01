@@ -12,6 +12,7 @@ import (
 
 	"github.com/fluxcd/cli-utils/pkg/kstatus/polling"
 	"github.com/fluxcd/cli-utils/pkg/kstatus/status"
+	"github.com/fluxcd/cli-utils/pkg/object"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/cel"
 	runtimeClient "github.com/fluxcd/pkg/runtime/client"
@@ -26,6 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
 	kuberecorder "k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -220,7 +222,12 @@ func (r *ResourceSetReconciler) buildDependencyExpressions(obj *fluxcdv1.Resourc
 		if dep.Ready && dep.ReadyExpr != "" {
 			expr, err := cel.NewExpression(dep.ReadyExpr)
 			if err != nil {
-				return nil, fmt.Errorf("failed to parse expression for dependency %s/%s/%s/%s: %w", dep.APIVersion, dep.Kind, dep.Name, dep.Namespace, err)
+				depMd := object.ObjMetadata{
+					Namespace: dep.Namespace,
+					Name:      dep.Name,
+					GroupKind: schema.GroupKind{Kind: dep.Kind},
+				}
+				return nil, fmt.Errorf("failed to parse expression for dependency %s/%s: %w", dep.APIVersion, ssautil.FmtObjMetadata(depMd), err)
 			}
 			exprs[i] = expr
 		}
@@ -243,9 +250,14 @@ func (r *ResourceSetReconciler) checkDependencies(ctx context.Context,
 				},
 			},
 		}
+		depMd := object.ObjMetadata{
+			Namespace: dep.Namespace,
+			Name:      dep.Name,
+			GroupKind: schema.GroupKind{Kind: dep.Kind},
+		}
 
 		if err := r.Client.Get(ctx, client.ObjectKeyFromObject(depObj), depObj); err != nil {
-			return fmt.Errorf("dependency %s/%s/%s/%s not found: %w", dep.APIVersion, dep.Kind, dep.Name, dep.Namespace, err)
+			return fmt.Errorf("dependency %s/%s not found: %w", dep.APIVersion, ssautil.FmtObjMetadata(depMd), err)
 		}
 
 		if dep.Ready {
@@ -256,16 +268,16 @@ func (r *ResourceSetReconciler) checkDependencies(ctx context.Context,
 				}
 
 				if !isReady {
-					return fmt.Errorf("dependency %s/%s/%s/%s not ready: expression %s", dep.APIVersion, dep.Kind, dep.Name, dep.Namespace, dep.ReadyExpr)
+					return fmt.Errorf("dependency %s/%s not ready: expression '%s'", dep.APIVersion, ssautil.FmtObjMetadata(depMd), dep.ReadyExpr)
 				}
 			} else {
 				stat, err := status.Compute(depObj)
 				if err != nil {
-					return fmt.Errorf("dependency %s/%s/%s/%s not ready: %w", dep.APIVersion, dep.Kind, dep.Name, dep.Namespace, err)
+					return fmt.Errorf("dependency %s/%s not ready: %w", dep.APIVersion, ssautil.FmtObjMetadata(depMd), err)
 				}
 
 				if stat.Status != status.CurrentStatus {
-					return fmt.Errorf("dependency %s/%s/%s/%s not ready: status %s", dep.APIVersion, dep.Kind, dep.Name, dep.Namespace, stat.Status)
+					return fmt.Errorf("dependency %s/%s not ready: status %s", dep.APIVersion, ssautil.FmtObjMetadata(depMd), stat.Status)
 				}
 			}
 		}
