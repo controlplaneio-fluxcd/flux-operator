@@ -124,39 +124,39 @@ status:
       type: Ready
 ```
 
-1. Export the report in YAML format:
+**1.** Export the report in YAML format:
 
-   ```shell
-   kubectl -n flux-system get fluxreport/flux -o yaml
-   ```
+```shell
+kubectl -n flux-system get fluxreport/flux -o yaml
+```
 
-2. Trigger a reconciliation of the report:
+**2.** Trigger a reconciliation of the report:
 
-   ```shell
-   kubectl -n flux-system annotate --overwrite fluxreport/flux \
-    reconcile.fluxcd.io/requestedAt="$(date +%s)"
-   ```
+```shell
+kubectl -n flux-system annotate --overwrite fluxreport/flux \
+ reconcile.fluxcd.io/requestedAt="$(date +%s)"
+```
 
-3. Change the report reconciliation interval:
+**3.** Change the report reconciliation interval:
 
-   ```shell
-   kubectl -n flux-system annotate --overwrite fluxreport/flux \
-    fluxcd.controlplane.io/reconcileEvery=5m
-   ```
+```shell
+kubectl -n flux-system annotate --overwrite fluxreport/flux \
+ fluxcd.controlplane.io/reconcileEvery=5m
+```
 
-4. Pause the report reconciliation:
+**4.** Pause the report reconciliation:
 
-   ```shell
-   kubectl -n flux-system annotate --overwrite fluxreport/flux \
-    fluxcd.controlplane.io/reconcile=disabled
-   ```
+```shell
+kubectl -n flux-system annotate --overwrite fluxreport/flux \
+ fluxcd.controlplane.io/reconcile=disabled
+```
 
-5. Resume the reconciliation of the report:
+**5.** Resume the reconciliation of the report:
 
-   ```shell
-    kubectl -n flux-system annotate --overwrite fluxreport/flux \
-     fluxcd.controlplane.io/reconcile=enabled
-    ```
+```shell
+ kubectl -n flux-system annotate --overwrite fluxreport/flux \
+  fluxcd.controlplane.io/reconcile=enabled
+ ```
 
 ## Reading a FluxReport
 

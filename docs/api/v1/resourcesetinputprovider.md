@@ -31,47 +31,47 @@ spec:
 
 You can run this example by saving the manifest into `flux-appx-prs.yaml`.
 
-1. Apply the ResourceSetInputProvider on the cluster:
+**1.** Apply the ResourceSetInputProvider on the cluster:
 
-   ```shell
-   kubectl apply -f flux-appx-prs.yaml.yaml
-   ```
+```shell
+kubectl apply -f flux-appx-prs.yaml.yaml
+```
 
-2. Wait for the ResourceSetInputProvider to reconcile:
+**2.** Wait for the ResourceSetInputProvider to reconcile:
 
-   ```shell
-   kubectl wait rsip/flux-appx-prs --for=condition=ready --timeout=5m
-   ```
+```shell
+kubectl wait rsip/flux-appx-prs --for=condition=ready --timeout=5m
+```
 
-3. Run `kubectl get -o yaml` to see the exported inputs generated in the ResourceSetInputProvider status:
+**3.** Run `kubectl get -o yaml` to see the exported inputs generated in the ResourceSetInputProvider status:
 
-   ```console
-   $ kubectl get rsip/flux-appx-prs -o yaml | yq .status.exportedInputs
-   - author: stefanprodan
-     branch: kubernetes/helm-set-limits
-     chart: charts/flux-appx
-     id: "4"
-     sha: bf5d6e01cf802734853f6f3417b237e3ad0ba35d
-     title: 'kubernetes(helm): Add default resources limits'
-   - author: stefanprodan
-     branch: feat/ui-footer
-     chart: charts/flux-appx
-     id: "3"
-     sha: 8492c0b5b2094fe720776c8ace1b9690ff258f53
-     title: 'feat(ui): Add footer'
-   - author: stefanprodan
-     branch: feat/ui-color-scheme
-     chart: charts/flux-appx
-     id: "2"
-     sha: 8166bdecd6b078b9e5dd14fa3b7b67a847f76893
-     title: 'feat(ui): Default color scheme'
-    ```
+```console
+$ kubectl get rsip/flux-appx-prs -o yaml | yq .status.exportedInputs
+- author: stefanprodan
+  branch: kubernetes/helm-set-limits
+  chart: charts/flux-appx
+  id: "4"
+  sha: bf5d6e01cf802734853f6f3417b237e3ad0ba35d
+  title: 'kubernetes(helm): Add default resources limits'
+- author: stefanprodan
+  branch: feat/ui-footer
+  chart: charts/flux-appx
+  id: "3"
+  sha: 8492c0b5b2094fe720776c8ace1b9690ff258f53
+  title: 'feat(ui): Add footer'
+- author: stefanprodan
+  branch: feat/ui-color-scheme
+  chart: charts/flux-appx
+  id: "2"
+  sha: 8166bdecd6b078b9e5dd14fa3b7b67a847f76893
+  title: 'feat(ui): Default color scheme'
+```
 
-4. Run `kubectl delete` to remove the provider from the cluster:
+**4.** Run `kubectl delete` to remove the provider from the cluster:
 
-    ```shell
-    kubectl delete rsip/flux-appx-prs
-    ```
+```shell
+kubectl delete rsip/flux-appx-prs
+```
 
 ## Writing a ResourceSetInputProvider spec
 
