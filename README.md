@@ -163,6 +163,8 @@ the cluster sync status and more.
 - CRD references
   - [FluxInstance API reference](https://fluxcd.control-plane.io/operator/fluxinstance/)
   - [FluxReport API reference](https://fluxcd.control-plane.io/operator/fluxreport/)
+  - [ResourceSet API reference](https://fluxcd.control-plane.io/operator/resourceset/)
+  - [ResourceSetInputProvider API reference](https://fluxcd.control-plane.io/operator/resourcesetinputprovider/)
 
 ## License
 
