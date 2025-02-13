@@ -4,6 +4,8 @@
 package main
 
 import (
+	"crypto/fips140"
+	"errors"
 	"os"
 
 	"github.com/fluxcd/cli-utils/pkg/kstatus/polling"
@@ -76,6 +78,13 @@ func main() {
 	flag.Parse()
 
 	logger.SetLogger(logger.NewLogger(logOptions))
+
+	// Perform FIPS 140-3 check, will panic if integrity check fails.
+	if fips140.Enabled() {
+		setupLog.Info("Operating in FIPS 140-3 mode, integrity check passed")
+	} else {
+		setupLog.Error(errors.New("FIPS 140-3 mode disabled"), "Operating in non-FIPS mode")
+	}
 
 	runtimeNamespace := os.Getenv("RUNTIME_NAMESPACE")
 	if runtimeNamespace == "" {
