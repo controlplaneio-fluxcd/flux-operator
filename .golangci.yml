@@ -16,12 +16,13 @@ issues:
       linters:
         - dupl
         - lll
+  exclude-dirs:
+    - "cmd/cli"
 linters:
   disable-all: true
   enable:
     - dupl
     - errcheck
-    - exportloopref
     - ginkgolinter
     - goconst
     - gocyclo
