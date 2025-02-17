@@ -345,6 +345,9 @@ spec:
                   - name: manager
                     image: ghcr.io/controlplaneio-fluxcd/flux-operator:v${FLUX_OPERATOR_VERSION}${FLUX_OPERATOR_VARIANT}
                     imagePullPolicy: IfNotPresent
+                    args:
+                      - --default-service-account=flux-operator
+                      - --enable-leader-election=true
                     securityContext:
                       runAsNonRoot: true
                       readOnlyRootFilesystem: true
