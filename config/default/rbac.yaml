@@ -10,3 +10,42 @@ subjects:
   - kind: ServiceAccount
     name: flux-operator
     namespace: flux-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: flux-operator-edit
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+rules:
+  - apiGroups:
+      - fluxcd.controlplane.io
+    resources:
+      - resourcesets
+      - resourcesetinputproviders
+    verbs:
+      - create
+      - delete
+      - deletecollection
+      - patch
+      - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: flux-operator-view
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+rules:
+  - apiGroups:
+      - fluxcd.controlplane.io
+    resources:
+      - resourcesets
+      - resourcesetinputproviders
+    verbs:
+      - get
+      - list
+      - watch
