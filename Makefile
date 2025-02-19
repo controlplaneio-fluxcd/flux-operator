@@ -72,7 +72,7 @@ test-e2e:
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter.
-	$(GOLANGCI_LINT) run --skip-dirs cmd/cli
+	$(GOLANGCI_LINT) run
 
 .PHONY: lint-fix
 lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes.
@@ -193,7 +193,7 @@ OPERATOR_SDK ?= $(LOCALBIN)/operator-sdk-$(OPERATOR_SDK_VERSION)
 KUSTOMIZE_VERSION ?= v5.4.3
 CONTROLLER_TOOLS_VERSION ?= v0.16.1
 ENVTEST_VERSION ?= release-0.19
-GOLANGCI_LINT_VERSION ?= v1.60.1
+GOLANGCI_LINT_VERSION ?= v1.64.4
 OPERATOR_SDK_VERSION ?= v1.34.2
 
 .PHONY: operator-sdk
