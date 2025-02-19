@@ -10,6 +10,7 @@ require (
 	github.com/fluxcd/cli-utils v0.36.0-flux.12
 	github.com/fluxcd/pkg/apis/kustomize v1.9.0
 	github.com/fluxcd/pkg/apis/meta v1.10.0
+	github.com/fluxcd/pkg/auth v0.2.0
 	github.com/fluxcd/pkg/kustomize v1.16.0
 	github.com/fluxcd/pkg/runtime v0.53.1
 	github.com/fluxcd/pkg/ssa v0.45.1
@@ -74,6 +75,7 @@ require (
 	github.com/awslabs/amazon-ecr-credential-helper/ecr-login v0.0.0-20250115170608-608f37feb051 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
+	github.com/bradleyfalzon/ghinstallation/v2 v2.13.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/chai2010/gettext-go v1.0.2 // indirect
 	github.com/chrismellard/docker-credential-acr-env v0.0.0-20230304212654-82a0ddb27589 // indirect
@@ -90,6 +92,7 @@ require (
 	github.com/fluxcd/pkg/apis/event v0.16.0 // indirect
 	github.com/fluxcd/pkg/envsubst v1.3.0 // indirect
 	github.com/fluxcd/pkg/sourceignore v0.11.0 // indirect
+	github.com/fluxcd/pkg/ssh v0.16.0 // indirect
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
 	github.com/go-errors/errors v1.5.1 // indirect

@@ -76,6 +76,8 @@ github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=
 github.com/beorn7/perks v1.0.1/go.mod h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6rlkpw=
 github.com/blang/semver/v4 v4.0.0 h1:1PFHFE6yCCTv8C1TeyNNarDzntLi7wMI5i/pzqYIsAM=
 github.com/blang/semver/v4 v4.0.0/go.mod h1:IbckMUScFkM3pff0VJDNKRiT6TG/YpiHIM2yvyW5YoQ=
+github.com/bradleyfalzon/ghinstallation/v2 v2.13.0 h1:5FhjW93/YLQJDmPdeyMPw7IjAPzqsr+0jHPfrPz0sZI=
+github.com/bradleyfalzon/ghinstallation/v2 v2.13.0/go.mod h1:EJ6fgedVEHa2kUyBTTvslJCXJafS/mhJNNKEOCspZXQ=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
 github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
 github.com/chai2010/gettext-go v1.0.2 h1:1Lwwip6Q2QGsAdl/ZKPCwTe9fe0CjlUbqj5bFNSjIRk=
@@ -119,6 +121,8 @@ github.com/fluxcd/pkg/apis/kustomize v1.9.0 h1:SJpT1CK58AnTvCpDKeGfMNA0Xud/4VReZ
 github.com/fluxcd/pkg/apis/kustomize v1.9.0/go.mod h1:AZl2GU03oPVue6SUivdiIYd/3mvF94j7t1G2JO26d4s=
 github.com/fluxcd/pkg/apis/meta v1.10.0 h1:rqbAuyl5ug7A5jjRf/rNwBXmNl6tJ9wG2iIsriwnQUk=
 github.com/fluxcd/pkg/apis/meta v1.10.0/go.mod h1:n7NstXHDaleAUMajcXTVkhz0MYkvEXy1C/eLI/t1xoI=
+github.com/fluxcd/pkg/auth v0.2.0 h1:Df3pHGMDJjpr8AcGKgPvudXF3Lb3SuBlkAmhrkp7U1k=
+github.com/fluxcd/pkg/auth v0.2.0/go.mod h1:XABpOmSQHsereCRfb4PkN6Y/rkG+cHQlJuEBHDO8rHs=
 github.com/fluxcd/pkg/envsubst v1.3.0 h1:84Ain+8EBvyzu6y0FsKRwNsvaSiKuqhTqeh/4yoGFFU=
 github.com/fluxcd/pkg/envsubst v1.3.0/go.mod h1:lz6HvqDnxbX0sIqjr1fxw0oTGYACLVFcOE/srKS0VQQ=
 github.com/fluxcd/pkg/kustomize v1.16.0 h1:UBOeIvkrC6y4owYs7vZwG5PUVFeqnRoDFN9eaNhuNPI=
@@ -129,6 +133,8 @@ github.com/fluxcd/pkg/sourceignore v0.11.0 h1:xzpYmc5/t/Ck+/DkJSX3r+VbahDRIAn5kb
 github.com/fluxcd/pkg/sourceignore v0.11.0/go.mod h1:ri2FvlzX8ep2iszOK5gF/riYq2TNgpVvsfJ2QY0dLWI=
 github.com/fluxcd/pkg/ssa v0.45.1 h1:ISl84TJwRP/GuZXrKiR9Tf8JOnG5XFgtjcYoR4XQYf4=
 github.com/fluxcd/pkg/ssa v0.45.1/go.mod h1:8Anf7XVZ0zxOve7HXbDaW1s0gfmP95ksJBlKfDYinhQ=
+github.com/fluxcd/pkg/ssh v0.16.0 h1:dhSWNp30p05EJ86bhICezad9pG3fJi4CAVKnZ3EmUV8=
+github.com/fluxcd/pkg/ssh v0.16.0/go.mod h1:MyDegNZHnKNDAwM5/A2t/1FjpvpS8BsRZQ4WqEwCHc0=
 github.com/fluxcd/pkg/tar v0.11.0 h1:pjf/rzr6HNAPiuxT59mtba9tfBtdNiSQ/UqduG8vZ2I=
 github.com/fluxcd/pkg/tar v0.11.0/go.mod h1:+kiP25NqibWMpFWgizyPEMqnMJIux7bCgEy+4pfxyI4=
 github.com/fsnotify/fsnotify v1.8.0 h1:dAwr6QBTBZIkG8roQaJjGof0pp0EeF+tNV7YBP3F/8M=
