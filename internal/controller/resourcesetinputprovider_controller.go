@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/auth/github"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/opencontainers/go-digest"
@@ -116,10 +117,14 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 		return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
 	}
 
-	// Get the basic auth credentials.
-	username, password, err := r.getBasicAuth(ctx, obj)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to get credentials: %w", err)
+	// Get the auth data.
+	var authData map[string][]byte
+	if obj.Spec.SecretRef != nil {
+		var err error
+		authData, err = r.getSecretData(ctx, obj.Spec.SecretRef.Name, obj.GetNamespace())
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to get credentials: %w", err)
+		}
 	}
 
 	// Get the CA certificate.
@@ -129,7 +134,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 	}
 
 	// Create the provider based on the object type.
-	provider, err := r.newGitProvider(ctx, obj, certPool, username, password)
+	provider, err := r.newGitProvider(ctx, obj, certPool, authData)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to create provider: %w", err)
 	}
@@ -164,24 +169,30 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 }
 
 // newGitProvider returns a new Git provider based on the type specified in the ResourceSetInputProvider object.
-//
-//nolint:unparam
 func (r *ResourceSetInputProviderReconciler) newGitProvider(ctx context.Context,
 	obj *fluxcdv1.ResourceSetInputProvider,
 	certPool *x509.CertPool,
-	username, password string) (gitprovider.Interface, error) {
+	authData map[string][]byte) (gitprovider.Interface, error) {
 	switch {
 	case strings.HasPrefix(obj.Spec.Type, "GitHub"):
+		token, err := r.getGitHubToken(ctx, obj, authData)
+		if err != nil {
+			return nil, err
+		}
 		return gitprovider.NewGitHubProvider(ctx, gitprovider.Options{
 			URL:      obj.Spec.URL,
 			CertPool: certPool,
-			Token:    password,
+			Token:    token,
 		})
 	case strings.HasPrefix(obj.Spec.Type, "GitLab"):
+		token, err := r.getGitLabToken(obj, authData)
+		if err != nil {
+			return nil, err
+		}
 		return gitprovider.NewGitLabProvider(ctx, gitprovider.Options{
 			URL:      obj.Spec.URL,
 			CertPool: certPool,
-			Token:    password,
+			Token:    token,
 		})
 	default:
 		return nil, fmt.Errorf("unsupported type: %s", obj.Spec.Type)
@@ -270,17 +281,12 @@ func (r *ResourceSetInputProviderReconciler) callProvider(ctx context.Context,
 }
 
 // getBasicAuth returns the basic auth credentials by reading the username
-// and password from spec.SecretRef.
-func (r *ResourceSetInputProviderReconciler) getBasicAuth(ctx context.Context,
-	obj *fluxcdv1.ResourceSetInputProvider) (string, string, error) {
-	if obj.Spec.SecretRef == nil {
-		return "", "", nil
-	}
-
-	authData, err := r.getSecretData(ctx, obj.Spec.SecretRef.Name, obj.GetNamespace())
-	if err != nil {
-		return "", "", err
-	}
+// and password from authData.
+//
+//nolint:unparam
+func (r *ResourceSetInputProviderReconciler) getBasicAuth(
+	obj *fluxcdv1.ResourceSetInputProvider,
+	authData map[string][]byte) (string, string, error) {
 
 	usernameData, ok := authData["username"]
 	if !ok {
@@ -293,6 +299,47 @@ func (r *ResourceSetInputProviderReconciler) getBasicAuth(ctx context.Context,
 	}
 
 	return strings.TrimSpace(string(usernameData)), strings.TrimSpace(string(passwordData)), nil
+}
+
+// getGitHubToken returns the appropriate GitHub token by reading the secrets in authData.
+func (r *ResourceSetInputProviderReconciler) getGitHubToken(
+	ctx context.Context,
+	obj *fluxcdv1.ResourceSetInputProvider,
+	authData map[string][]byte) (string, error) {
+
+	if authData == nil {
+		return "", nil
+	}
+
+	if _, ok := authData[github.AppIDKey]; !ok {
+		_, password, err := r.getBasicAuth(obj, authData)
+		return password, err
+	}
+
+	ghc, err := github.New(github.WithAppData(authData))
+	if err != nil {
+		return "", err
+	}
+
+	tok, err := ghc.GetToken(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	return tok.Token, nil
+}
+
+// getGitLabToken returns the appropriate GitLab token by reading the secrets in authData.
+func (r *ResourceSetInputProviderReconciler) getGitLabToken(
+	obj *fluxcdv1.ResourceSetInputProvider,
+	authData map[string][]byte) (string, error) {
+
+	if authData == nil {
+		return "", nil
+	}
+
+	_, password, err := r.getBasicAuth(obj, authData)
+	return password, err
 }
 
 // getCertPool returns the x509.CertPool by reading the CA certificate from

@@ -172,8 +172,8 @@ metadata:
   name: github-pat
   namespace: default
 stringData:
-    username: flux
-    password: <GITHUB PAT>
+  username: flux
+  password: <GITHUB PAT>
 ```
 
 Example secret reference:
@@ -183,6 +183,41 @@ spec:
   secretRef:
     name: github-pat
 ```
+
+#### GitHub App authentication
+
+For GitHub, GitHub App authentication is also supported. Instead of adding the basic
+auth keys `username` and `password`, you can add the following GitHub App keys to the
+secret:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: github-app
+  namespace: default
+stringData:
+  githubAppID: "<GITHUB APP ID>"
+  githubAppInstallationID: "<GITHUB APP INSTALLATION ID>"
+  githubAppBaseURL: <github-enterprise-api-url> # optional, for self-hosted GitHub Enterprise
+  githubAppPrivateKey: |
+    -----BEGIN RSA PRIVATE KEY-----
+    ...
+    -----END RSA PRIVATE KEY-----
+```
+
+Example secret reference:
+
+```yaml
+spec:
+  secretRef:
+    name: github-app
+```
+
+The GitHub App ID and Installation ID are integer numbers, so remember to quote them in the secret
+if using the `stringData` field as all values in this field must be strings.
+
+A simpler alternative is creating the secret using the Flux CLI command `flux create secret githubapp`.
 
 ### TLS certificate configuration
 
@@ -201,11 +236,11 @@ metadata:
   name: gitlab-ca
   namespace: default
 stringData:
-    ca.crt: |
-      -----BEGIN CERTIFICATE-----
-      MIIDpDCCAoygAwIBAgIUI7z
-      ...
-      -----END CERTIFICATE-----
+  ca.crt: |
+    -----BEGIN CERTIFICATE-----
+    MIIDpDCCAoygAwIBAgIUI7z
+    ...
+    -----END CERTIFICATE-----
 ```
 
 Example certificate reference:
@@ -298,20 +333,20 @@ Example:
 
 ```yaml
 status:
-   exportedInputs:
-   - author: stefanprodan
-     branch: kubernetes/helm-set-limits
-     id: "4"
-     sha: bf5d6e01cf802734853f6f3417b237e3ad0ba35d
-     title: 'kubernetes(helm): Add default resources limits'
-   - author: stefanprodan
-     branch: feat/ui-footer
-     id: "3"
-     sha: 8492c0b5b2094fe720776c8ace1b9690ff258f53
-     title: 'feat(ui): Add footer'
-   - author: stefanprodan
-     branch: feat/ui-color-scheme
-     id: "2"
-     sha: 8166bdecd6b078b9e5dd14fa3b7b67a847f76893
-     title: 'feat(ui): Default color scheme'
+  exportedInputs:
+  - author: stefanprodan
+    branch: kubernetes/helm-set-limits
+    id: "4"
+    sha: bf5d6e01cf802734853f6f3417b237e3ad0ba35d
+    title: 'kubernetes(helm): Add default resources limits'
+  - author: stefanprodan
+    branch: feat/ui-footer
+    id: "3"
+    sha: 8492c0b5b2094fe720776c8ace1b9690ff258f53
+    title: 'feat(ui): Add footer'
+  - author: stefanprodan
+    branch: feat/ui-color-scheme
+    id: "2"
+    sha: 8166bdecd6b078b9e5dd14fa3b7b67a847f76893
+    title: 'feat(ui): Default color scheme'
 ```
