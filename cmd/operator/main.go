@@ -68,7 +68,7 @@ func main() {
 	flag.StringVar(&storagePath, "storage-path", "/data", "The local storage path.")
 	flag.StringVar(&defaultServiceAccount, "default-service-account", "",
 		"Default service account used for impersonation.")
-	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
+	flag.BoolVar(&enableLeaderElection, "enable-leader-election", true,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 
