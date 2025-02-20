@@ -148,16 +148,29 @@ The report is update at regular intervals and contains information about the dep
 readiness status, the distribution details, reconcilers statistics, Flux CRDs versions,
 the cluster sync status and more.
 
+## ResourceSet APIs
+
+The Flux Operator [ResourceSet APIs](https://fluxcd.control-plane.io/operator/resourcesets/introduction/)
+offer a high-level abstraction for defining and managing Flux resources and related Kubernetes
+objects as a single unit.
+The ResourceSet API is designed to reduce the complexity of GitOps workflows and to
+enable self-service for developers and platform teams.
+
+Guides:
+
+- [Using ResourceSets for Application Definitions](https://fluxcd.control-plane.io/operator/resourcesets/app-definition/)
+- [Ephemeral Environments for GitHub Pull Requests](https://fluxcd.control-plane.io/operator/resourcesets/github-pull-requests/)
+- [Ephemeral Environments for GitLab Merge Requests](https://fluxcd.control-plane.io/operator/resourcesets/gitlab-merge-requests/)
+
 ## Documentation
 
 - Installation
   - [Flux operator installation](https://fluxcd.control-plane.io/operator/install/)
-- Configuration
+- Flux Configuration
   - [Flux controllers configuration](https://fluxcd.control-plane.io/operator/flux-config/)
   - [Flux instance customization](https://fluxcd.control-plane.io/operator/flux-kustomize/)
   - [Cluster sync configuration](https://fluxcd.control-plane.io/operator/flux-sync/)
   - [Flux controllers sharding](https://fluxcd.control-plane.io/operator/flux-sharding/)
-- Guides
   - [Flux monitoring and reporting](https://fluxcd.control-plane.io/operator/monitoring/)
   - [Migration of bootstrapped clusters](https://fluxcd.control-plane.io/operator/flux-bootstrap-migration/)
 - CRD references
