@@ -347,7 +347,6 @@ spec:
                     imagePullPolicy: IfNotPresent
                     args:
                       - --default-service-account=flux-operator
-                      - --enable-leader-election=true
                     securityContext:
                       runAsNonRoot: true
                       readOnlyRootFilesystem: true
