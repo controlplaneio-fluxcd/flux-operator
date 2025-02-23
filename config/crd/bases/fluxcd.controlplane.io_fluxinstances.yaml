@@ -294,6 +294,17 @@ spec:
                       Path is the path to the source directory containing
                       the kustomize overlay or plain Kubernetes manifests.
                     type: string
+                  provider:
+                    description: |-
+                      Provider used for source authentication. Can be 'aws', 'azure' or 'gcp' for
+                      OCIRepository/Bucket sources, and 'azure' or 'github' for GitRepository.
+                    enum:
+                    - generic
+                    - aws
+                    - azure
+                    - gcp
+                    - github
+                    type: string
                   pullSecret:
                     description: |-
                       PullSecret specifies the Kubernetes Secret containing the
