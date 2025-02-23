@@ -472,6 +472,9 @@ Sync fields:
 - `ref`: The source reference, can be a Git ref name e.g. `refs/heads/main`, an OCI tag e.g. `latest` or a Bucket name.
 - `path`: The path to the source directory containing the kustomize overlay or plain Kubernetes manifests to sync from.
 - `pullSecret`: The name of the Kubernetes secret that contains the credentials to pull the source repository. This field is optional.
+- `provider`: The provider name used for OIDC-based authentication.
+   Supported values are `aws`, `azure` and `gcp` for `OCIRepository`/`Bucket`,
+   and `azure` or `github` for `GitRepository`. This field is optional.
 - `interval`: The sync interval. This field is optional, when not set the default is `1m`.
 - `name`: The name of the generated Flux source and Kustomization objects.
    This field is optional, when not set the default is the FluxInstance namespace name.

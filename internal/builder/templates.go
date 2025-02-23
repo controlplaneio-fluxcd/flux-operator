@@ -335,6 +335,9 @@ spec:
   secretRef:
     name: {{$sync.PullSecret}}
 {{- end }}
+{{- if $sync.Provider }}
+  provider: {{$sync.Provider}}
+{{- end }}
   url: {{$sync.URL}}
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1

@@ -355,6 +355,7 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 			PullSecret: obj.Spec.Sync.PullSecret,
 			URL:        obj.Spec.Sync.URL,
 			Path:       obj.Spec.Sync.Path,
+			Provider:   obj.Spec.Sync.Provider,
 		}
 	}
 
