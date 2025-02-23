@@ -123,32 +123,62 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 		var err error
 		authData, err = r.getSecretData(ctx, obj.Spec.SecretRef.Name, obj.GetNamespace())
 		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to get credentials: %w", err)
+			msg := fmt.Sprintf("failed to get credentials %s", err.Error())
+			conditions.MarkFalse(obj,
+				meta.ReadyCondition,
+				meta.ReconciliationFailedReason,
+				"%s", msg)
+			r.EventRecorder.Event(obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
+			return ctrl.Result{}, err
 		}
 	}
 
 	// Get the CA certificate.
 	certPool, err := r.getCertPool(ctx, obj)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to get certificates: %w", err)
+		msg := fmt.Sprintf("failed to get certificates %s", err.Error())
+		conditions.MarkFalse(obj,
+			meta.ReadyCondition,
+			meta.ReconciliationFailedReason,
+			"%s", msg)
+		r.EventRecorder.Event(obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
+		return ctrl.Result{}, err
 	}
 
 	// Create the provider based on the object type.
 	provider, err := r.newGitProvider(ctx, obj, certPool, authData)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to create provider: %w", err)
+		msg := fmt.Sprintf("failed to create provider %s", err.Error())
+		conditions.MarkFalse(obj,
+			meta.ReadyCondition,
+			meta.ReconciliationFailedReason,
+			"%s", msg)
+		r.EventRecorder.Event(obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
+		return ctrl.Result{}, err
 	}
 
 	// Get the provider options.
 	exportedInputs, err := r.callProvider(ctx, obj, provider)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to call provider: %w", err)
+		msg := fmt.Sprintf("failed to call provider %s", err.Error())
+		conditions.MarkFalse(obj,
+			meta.ReadyCondition,
+			meta.ReconciliationFailedReason,
+			"%s", msg)
+		r.EventRecorder.Event(obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
+		return ctrl.Result{}, err
 	}
 
 	// Update the object status with the exported inputs.
 	data, err := yaml.Marshal(exportedInputs)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to marshal exported inputs: %w", err)
+		msg := fmt.Sprintf("failed to marshal exported inputs %s", err.Error())
+		conditions.MarkFalse(obj,
+			meta.ReadyCondition,
+			meta.ReconciliationFailedReason,
+			"%s", msg)
+		r.EventRecorder.Event(obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
+		return ctrl.Result{}, err
 	}
 	obj.Status.ExportedInputs = exportedInputs
 	obj.Status.LastExportedRevision = digest.FromBytes(data).String()
