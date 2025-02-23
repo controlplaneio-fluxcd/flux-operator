@@ -92,6 +92,13 @@ func main() {
 		setupLog.Info("RUNTIME_NAMESPACE env var not set, defaulting to " + fluxcdv1.DefaultNamespace)
 	}
 
+	// Allow the default service account name to be set by an environment variable.
+	// Needed for the OLM Subscription that only allows env var configuration.
+	defaultSA := os.Getenv("DEFAULT_SERVICE_ACCOUNT")
+	if defaultSA != "" {
+		defaultServiceAccount = defaultSA
+	}
+
 	reporter.MustRegisterMetrics()
 
 	ctx := ctrl.SetupSignalHandler()

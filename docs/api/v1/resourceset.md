@@ -529,9 +529,24 @@ the resources defined in the ResourceSet.
 
 On multi-tenant clusters, it is recommended to use a dedicated ServiceAccount per tenant namespace
 with the minimum required permissions. To enforce a ServiceAccount for all ResourceSets,
-the `--default-service-account=flux-operator`flag can be set in the flux-operator container arguments.
+the `--default-service-account=flux-operator` flag can be set in the flux-operator container arguments.
 With this flag set, only the ResourceSets created in the same namespace as the flux-operator
 will run with cluster-admin permissions.
+
+When installing the Flux Operator with Helm, you can change the default service account name with:
+
+```shell
+helm install flux-operator oci://ghcr.io/controlplaneio-fluxcd/charts/flux-operator \
+  --namespace flux-system \
+  --create-namespace \
+  --set multitenancy.enabled=true \
+  --set multitenancy.defaultServiceAccount=flux-operator
+```
+
+When installing the Flux Operator on OpenShift from OperatorHub, the default service account name
+can be changed by setting the `DEFAULT_SERVICE_ACCOUNT` environment variable using the OLM
+[Subscription](https://github.com/operator-framework/operator-lifecycle-manager/blob/master/doc/design/subscription-config.md)
+`.spec.config.env` field.
 
 ### Garbage collection
 
