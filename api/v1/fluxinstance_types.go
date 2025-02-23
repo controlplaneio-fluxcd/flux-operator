@@ -235,6 +235,12 @@ type Sync struct {
 	// For Bucket sources, the secret must contain accesskey and secretkey fields.
 	// +optional
 	PullSecret string `json:"pullSecret,omitempty"`
+
+	// Provider used for source authentication. Can be 'aws', 'azure' or 'gcp' for
+	// OCIRepository/Bucket sources, and 'azure' or 'github' for GitRepository.
+	// +kubebuilder:validation:Enum=generic;aws;azure;gcp;github
+	// +optional
+	Provider string `json:"provider,omitempty"`
 }
 
 // ResourceInventory contains a list of Kubernetes resource object references

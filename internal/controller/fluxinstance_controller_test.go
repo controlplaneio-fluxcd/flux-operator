@@ -716,10 +716,11 @@ func getDefaultFluxSpec(t *testing.T) fluxcdv1.FluxInstanceSpec {
 			Registry: "ghcr.io/fluxcd",
 		},
 		Sync: &fluxcdv1.Sync{
-			Kind: "OCIRepository",
-			URL:  "oci://registry/repo",
-			Path: "./",
-			Ref:  "latest",
+			Kind:     "OCIRepository",
+			URL:      "oci://registry/repo",
+			Path:     "./",
+			Ref:      "latest",
+			Provider: "generic",
 		},
 		CommonMetadata: &fluxcdv1.CommonMetadata{
 			Labels: map[string]string{

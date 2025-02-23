@@ -13,6 +13,7 @@ import (
 	"github.com/fluxcd/pkg/apis/kustomize"
 	. "github.com/onsi/gomega"
 	cp "github.com/otiai10/copy"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/yaml"
 )
 
@@ -258,6 +259,7 @@ func TestBuild_Sync(t *testing.T) {
 		URL:      "https://host/repo.git",
 		Ref:      "refs/heads/main",
 		Path:     "clusters/prod",
+		Provider: "github",
 	}
 
 	result, err := Build(srcDir, dstDir, options)
@@ -287,6 +289,13 @@ func TestBuild_Sync(t *testing.T) {
 		g.Expect(obj.GetAnnotations()).To(HaveKeyWithValue("kustomize.toolkit.fluxcd.io/ssa", "Ignore"))
 	}
 	g.Expect(found).To(BeTrue())
+
+	for _, obj := range result.Objects {
+		if obj.GetKind() == "GitRepository" {
+			p, _, _ := unstructured.NestedString(obj.Object, "spec", "provider")
+			g.Expect(p).To(Equal("github"))
+		}
+	}
 }
 
 func TestBuild_InvalidPatches(t *testing.T) {
