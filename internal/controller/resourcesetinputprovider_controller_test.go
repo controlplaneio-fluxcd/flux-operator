@@ -401,6 +401,100 @@ spec:
 	g.Expect(r.IsZero()).To(BeTrue())
 }
 
+func TestResourceSetInputProviderReconciler_FailureRecovery(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceSetInputProviderReconciler()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	objDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSetInputProvider
+metadata:
+  name: test-failure-recovery
+  namespace: "%[1]s"
+spec:
+  type: GitLabBranch
+  url: "https://gitlab.com/stefanprodan/podinfo-not-found"
+  filter:
+    includeBranch: "^patch-[1|2]$"
+`, ns.Name)
+
+	obj := &fluxcdv1.ResourceSetInputProvider{}
+	err = yaml.Unmarshal([]byte(objDef), obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Create the ResourceSetInputProvider.
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize the ResourceSetInputProvider.
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Try to reconcile the inputs with upstream.
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).To(HaveOccurred())
+
+	// Check if the ResourceSetInputProvider was marked as failed.
+	result := &fluxcdv1.ResourceSetInputProvider{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(conditions.IsReady(result)).To(BeFalse())
+	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationFailedReason))
+	g.Expect(conditions.GetMessage(result, meta.ReadyCondition)).To(ContainSubstring("404 Not Found"))
+	g.Expect(result.Status.ExportedInputs).To(BeEmpty())
+
+	// Check if the failure event was recorded.
+	events := getEvents(result.Name)
+	g.Expect(events[0].Reason).To(Equal(meta.ReconciliationFailedReason))
+	g.Expect(events[0].Message).To(ContainSubstring("failed to list branches"))
+
+	// Update the URL to a valid repository.
+	resultP := result.DeepCopy()
+	resultP.Spec.URL = "https://gitlab.com/stefanprodan/podinfo"
+	err = testClient.Patch(ctx, resultP, client.MergeFrom(result))
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Reconcile the inputs with upstream.
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Check if the exported inputs were updated and marked as ready.
+	resultFinal := &fluxcdv1.ResourceSetInputProvider{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), resultFinal)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(conditions.IsReady(resultFinal)).To(BeTrue())
+	g.Expect(resultFinal.Status.ExportedInputs).ToNot(BeEmpty())
+	g.Expect(resultFinal.Status.LastExportedRevision).To(BeIdenticalTo("sha256:be31afc5e49da21b12fdca6a2cad6916cad26f4bbde8c16e5822359f75c1d46a"))
+
+	// Delete the ResourceSetInputProvider.
+	err = testClient.Delete(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.IsZero()).To(BeTrue())
+
+	// Check if the ResourceSetInputProvider was finalized.
+	result = &fluxcdv1.ResourceSetInputProvider{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+}
+
 func getResourceSetInputProviderReconciler() *ResourceSetInputProviderReconciler {
 	return &ResourceSetInputProviderReconciler{
 		Client:        testClient,
