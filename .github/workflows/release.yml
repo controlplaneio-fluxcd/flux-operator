@@ -110,6 +110,16 @@ jobs:
         run: |
           mkdir -p bin/release
           kustomize build config/default > bin/release/install.yaml
+          kustomize build config/crds > bin/release/crds.yaml
+      - name: Generate OpenAPI JSON schemas from CRDs
+        uses: fluxcd/pkg/actions/crdjsonschema@c964ce7b91949ff4b5e3959db4f1d7bb2e029a49 # main
+        with:
+          crd: bin/release/crds.yaml
+          output: schemas
+      - name: Archive the OpenAPI JSON schemas
+        run: |
+          tar -czvf bin/release/crd-schemas.tar.gz -C schemas .
+          rm -rf schemas
       - name: Create release
         if: startsWith(github.ref, 'refs/tags/v')
         id: run-goreleaser
