@@ -73,4 +73,5 @@ type Sync struct {
 	Path       string
 	Interval   string
 	PullSecret string
+	Provider   string
 }
