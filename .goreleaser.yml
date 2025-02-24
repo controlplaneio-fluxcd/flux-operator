@@ -52,3 +52,8 @@ sboms:
 release:
   extra_files:
     - glob: ./bin/release/install.yaml
+    - glob: ./bin/release/crd-schemas.tar.gz
+checksum:
+  extra_files:
+    - glob: ./bin/release/install.yaml
+    - glob: ./bin/release/crd-schemas.tar.gz
