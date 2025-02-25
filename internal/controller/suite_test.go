@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fluxcd/cli-utils/pkg/kstatus/polling"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	kcheck "github.com/fluxcd/pkg/runtime/conditions/check"
@@ -26,6 +25,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/yaml"
 
 	// +kubebuilder:scaffold:imports
@@ -40,6 +40,7 @@ var (
 	testEnv        *testenv.Environment
 	testClient     client.Client
 	testCtx        = ctrl.SetupSignalHandler()
+	testKubeConfig []byte
 )
 
 func NewTestScheme() *runtime.Scheme {
@@ -76,6 +77,21 @@ func TestMain(m *testing.M) {
 	}()
 	<-testEnv.Manager.Elected()
 
+	// Generate a kubeconfig for the testenv-admin user.
+	user, err := testEnv.AddUser(envtest.User{
+		Name:   "testenv-admin",
+		Groups: []string{"system:masters"},
+	}, nil)
+	if err != nil {
+		panic(fmt.Sprintf("failed to create testenv-admin user: %v", err))
+	}
+
+	kubeConfig, err := user.KubeConfig()
+	if err != nil {
+		panic(fmt.Sprintf("failed to create the testenv-admin user kubeconfig: %v", err))
+	}
+	testKubeConfig = kubeConfig
+
 	code := m.Run()
 
 	fmt.Println("Stopping the test environment")
@@ -86,11 +102,19 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func getFluxInstanceReconciler() *FluxInstanceReconciler {
+func getFluxInstanceReconciler(t *testing.T) *FluxInstanceReconciler {
+	tmpDir := t.TempDir()
+	err := os.WriteFile(fmt.Sprintf("%s/kubeconfig", tmpDir), testKubeConfig, 0644)
+	if err != nil {
+		panic(fmt.Sprintf("failed to create the testenv-admin user kubeconfig: %v", err))
+	}
+
+	// Set the kubeconfig environment variable for the impersonator.
+	t.Setenv("KUBECONFIG", fmt.Sprintf("%s/kubeconfig", tmpDir))
+
 	return &FluxInstanceReconciler{
 		Client:        testClient,
 		Scheme:        NewTestScheme(),
-		StatusPoller:  polling.NewStatusPoller(testClient, testEnv.GetRESTMapper(), polling.Options{}),
 		StoragePath:   filepath.Join("..", "..", "config", "data"),
 		StatusManager: controllerName,
 		EventRecorder: testEnv.GetEventRecorderFor(controllerName),

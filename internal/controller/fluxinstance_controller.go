@@ -14,6 +14,7 @@ import (
 
 	"github.com/fluxcd/cli-utils/pkg/kstatus/polling"
 	"github.com/fluxcd/pkg/apis/meta"
+	runtimeClient "github.com/fluxcd/pkg/runtime/client"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/patch"
@@ -45,8 +46,9 @@ type FluxInstanceReconciler struct {
 	client.Client
 	kuberecorder.EventRecorder
 
-	Scheme        *runtime.Scheme
-	StatusPoller  *polling.StatusPoller
+	Scheme      *runtime.Scheme
+	PollingOpts polling.Options
+
 	StatusManager string
 	StoragePath   string
 }
@@ -397,8 +399,25 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 		obj.Status.Inventory.DeepCopyInto(oldInventory)
 	}
 
+	// Configure the Kubernetes client for impersonation.
+	impersonation := runtimeClient.NewImpersonator(
+		r.Client,
+		r.PollingOpts,
+		nil,
+		runtimeClient.KubeConfigOptions{},
+		"",
+		"",
+		"",
+	)
+
+	// Create the Kubernetes client that runs under impersonation.
+	kubeClient, statusPoller, err := impersonation.GetClient(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to build kube client: %w", err)
+	}
+
 	// Create a resource manager to reconcile the resources.
-	resourceManager := ssa.NewResourceManager(r.Client, r.StatusPoller, ssa.Owner{
+	resourceManager := ssa.NewResourceManager(kubeClient, statusPoller, ssa.Owner{
 		Field: r.StatusManager,
 		Group: fluxcdv1.GroupVersion.Group,
 	})

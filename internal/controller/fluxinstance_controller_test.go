@@ -30,7 +30,7 @@ import (
 func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 	g := NewWithT(t)
 	const manifestsURL = "oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests:latest"
-	reconciler := getFluxInstanceReconciler()
+	reconciler := getFluxInstanceReconciler(t)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -229,7 +229,7 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 func TestFluxInstanceReconciler_FetchFail(t *testing.T) {
 	g := NewWithT(t)
 	const manifestsURL = "oci://not.found/artifact"
-	reconciler := getFluxInstanceReconciler()
+	reconciler := getFluxInstanceReconciler(t)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -290,7 +290,7 @@ func TestFluxInstanceReconciler_FetchFail(t *testing.T) {
 
 func TestFluxInstanceReconciler_BuildFail(t *testing.T) {
 	g := NewWithT(t)
-	reconciler := getFluxInstanceReconciler()
+	reconciler := getFluxInstanceReconciler(t)
 	reconciler.StoragePath = "notfound"
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -357,7 +357,7 @@ func TestFluxInstanceReconciler_BuildFail(t *testing.T) {
 
 func TestFluxInstanceReconciler_Downgrade(t *testing.T) {
 	g := NewWithT(t)
-	reconciler := getFluxInstanceReconciler()
+	reconciler := getFluxInstanceReconciler(t)
 	spec := getDefaultFluxSpec(t)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -435,7 +435,7 @@ func TestFluxInstanceReconciler_Downgrade(t *testing.T) {
 
 func TestFluxInstanceReconciler_Disabled(t *testing.T) {
 	g := NewWithT(t)
-	reconciler := getFluxInstanceReconciler()
+	reconciler := getFluxInstanceReconciler(t)
 	spec := getDefaultFluxSpec(t)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -532,7 +532,7 @@ func TestFluxInstanceReconciler_Disabled(t *testing.T) {
 
 func TestFluxInstanceReconciler_Profiles(t *testing.T) {
 	g := NewWithT(t)
-	reconciler := getFluxInstanceReconciler()
+	reconciler := getFluxInstanceReconciler(t)
 	spec := getDefaultFluxSpec(t)
 	spec.Distribution.Version = "v2.4.x"
 	spec.Cluster = &fluxcdv1.Cluster{
@@ -653,7 +653,7 @@ func TestFluxInstanceReconciler_Profiles(t *testing.T) {
 
 func TestFluxInstanceReconciler_NewVersion(t *testing.T) {
 	g := NewWithT(t)
-	reconciler := getFluxInstanceReconciler()
+	reconciler := getFluxInstanceReconciler(t)
 	spec := getDefaultFluxSpec(t)
 	spec.Distribution.Version = "v2.2.x"
 

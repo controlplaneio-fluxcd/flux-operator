@@ -9,6 +9,8 @@ import (
 	"os"
 
 	"github.com/fluxcd/cli-utils/pkg/kstatus/polling"
+	"github.com/fluxcd/cli-utils/pkg/kstatus/polling/clusterreader"
+	"github.com/fluxcd/cli-utils/pkg/kstatus/polling/engine"
 	runtimeCtrl "github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/logger"
 	"github.com/fluxcd/pkg/runtime/pprof"
@@ -99,6 +101,11 @@ func main() {
 		defaultServiceAccount = defaultSA
 	}
 
+	// Disable the status poller cache to reduce memory usage.
+	pollingOpts := polling.Options{
+		ClusterReaderFactory: engine.ClusterReaderFactoryFunc(clusterreader.NewDirectClusterReader),
+	}
+
 	reporter.MustRegisterMetrics()
 
 	ctx := ctrl.SetupSignalHandler()
@@ -170,7 +177,7 @@ func main() {
 	if err = (&controller.FluxInstanceReconciler{
 		Client:        mgr.GetClient(),
 		Scheme:        mgr.GetScheme(),
-		StatusPoller:  polling.NewStatusPoller(mgr.GetClient(), mgr.GetRESTMapper(), polling.Options{}),
+		PollingOpts:   pollingOpts,
 		StoragePath:   storagePath,
 		StatusManager: controllerName,
 		EventRecorder: mgr.GetEventRecorderFor(controllerName),
@@ -212,7 +219,7 @@ func main() {
 		Client:                mgr.GetClient(),
 		APIReader:             mgr.GetAPIReader(),
 		Scheme:                mgr.GetScheme(),
-		StatusPoller:          polling.NewStatusPoller(mgr.GetClient(), mgr.GetRESTMapper(), polling.Options{}),
+		PollingOpts:           pollingOpts,
 		StatusManager:         controllerName,
 		EventRecorder:         mgr.GetEventRecorderFor(controllerName),
 		DefaultServiceAccount: defaultServiceAccount,

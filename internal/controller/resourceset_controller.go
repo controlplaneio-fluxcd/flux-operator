@@ -44,9 +44,10 @@ type ResourceSetReconciler struct {
 	client.Client
 	kuberecorder.EventRecorder
 
-	APIReader             client.Reader
-	Scheme                *runtime.Scheme
-	StatusPoller          *polling.StatusPoller
+	APIReader   client.Reader
+	Scheme      *runtime.Scheme
+	PollingOpts polling.Options
+
 	StatusManager         string
 	DefaultServiceAccount string
 }
@@ -344,8 +345,7 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 	// Configure the Kubernetes client for impersonation.
 	impersonation := runtimeClient.NewImpersonator(
 		r.Client,
-		r.StatusPoller,
-		polling.Options{},
+		r.PollingOpts,
 		nil,
 		runtimeClient.KubeConfigOptions{},
 		r.DefaultServiceAccount,
@@ -614,8 +614,7 @@ func (r *ResourceSetReconciler) uninstall(ctx context.Context,
 	// Configure the Kubernetes client for impersonation.
 	impersonation := runtimeClient.NewImpersonator(
 		r.Client,
-		r.StatusPoller,
-		polling.Options{},
+		r.PollingOpts,
 		nil,
 		runtimeClient.KubeConfigOptions{},
 		r.DefaultServiceAccount,
