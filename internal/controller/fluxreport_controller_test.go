@@ -21,7 +21,7 @@ import (
 
 func TestFluxReportReconciler_Reconcile(t *testing.T) {
 	g := NewWithT(t)
-	instRec := getFluxInstanceReconciler()
+	instRec := getFluxInstanceReconciler(t)
 	reportRec := getFluxReportReconciler()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -137,7 +137,7 @@ func TestFluxReportReconciler_Reconcile(t *testing.T) {
 
 func TestFluxReportReconciler_CustomSyncName(t *testing.T) {
 	g := NewWithT(t)
-	instRec := getFluxInstanceReconciler()
+	instRec := getFluxInstanceReconciler(t)
 	reportRec := getFluxReportReconciler()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()

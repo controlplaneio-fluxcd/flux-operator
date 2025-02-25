@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fluxcd/cli-utils/pkg/kstatus/polling"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	. "github.com/onsi/gomega"
@@ -19,7 +18,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/yaml"
 
@@ -28,7 +26,7 @@ import (
 
 func TestResourceSetReconciler_LifeCycle(t *testing.T) {
 	g := NewWithT(t)
-	reconciler := getResourceSetReconciler()
+	reconciler := getResourceSetReconciler(t)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -209,7 +207,7 @@ spec:
 
 func TestResourceSetReconciler_DependsOn(t *testing.T) {
 	g := NewWithT(t)
-	reconciler := getResourceSetReconciler()
+	reconciler := getResourceSetReconciler(t)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -311,7 +309,7 @@ spec:
 
 func TestResourceSetReconciler_DependsOnInvalidExpression(t *testing.T) {
 	g := NewWithT(t)
-	reconciler := getResourceSetReconciler()
+	reconciler := getResourceSetReconciler(t)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -376,30 +374,9 @@ spec:
 
 func TestResourceSetReconciler_Impersonation(t *testing.T) {
 	g := NewWithT(t)
-	reconciler := getResourceSetReconciler()
+	reconciler := getResourceSetReconciler(t)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-
-	// Generate a kubeconfig for the testenv-admin user.
-	user, err := testEnv.AddUser(envtest.User{
-		Name:   "testenv-admin",
-		Groups: []string{"system:masters"},
-	}, nil)
-	if err != nil {
-		panic(fmt.Sprintf("failed to create testenv-admin user: %v", err))
-	}
-
-	kubeConfig, err := user.KubeConfig()
-	if err != nil {
-		panic(fmt.Sprintf("failed to create the testenv-admin user kubeconfig: %v", err))
-	}
-
-	tmpDir := t.TempDir()
-	err = os.WriteFile(fmt.Sprintf("%s/kubeconfig", tmpDir), kubeConfig, 0644)
-	g.Expect(err).ToNot(HaveOccurred())
-
-	// Set the kubeconfig environment variable for the impersonator.
-	t.Setenv("KUBECONFIG", fmt.Sprintf("%s/kubeconfig", tmpDir))
 
 	ns, err := testEnv.CreateNamespace(ctx, "test")
 	g.Expect(err).ToNot(HaveOccurred())
@@ -504,12 +481,20 @@ spec:
 	g.Expect(r.IsZero()).To(BeTrue())
 }
 
-func getResourceSetReconciler() *ResourceSetReconciler {
+func getResourceSetReconciler(t *testing.T) *ResourceSetReconciler {
+	tmpDir := t.TempDir()
+	err := os.WriteFile(fmt.Sprintf("%s/kubeconfig", tmpDir), testKubeConfig, 0644)
+	if err != nil {
+		panic(fmt.Sprintf("failed to create the testenv-admin user kubeconfig: %v", err))
+	}
+
+	// Set the kubeconfig environment variable for the impersonator.
+	t.Setenv("KUBECONFIG", fmt.Sprintf("%s/kubeconfig", tmpDir))
+
 	return &ResourceSetReconciler{
 		Client:        testClient,
 		APIReader:     testClient,
 		Scheme:        NewTestScheme(),
-		StatusPoller:  polling.NewStatusPoller(testClient, testEnv.GetRESTMapper(), polling.Options{}),
 		StatusManager: controllerName,
 		EventRecorder: testEnv.GetEventRecorderFor(controllerName),
 	}

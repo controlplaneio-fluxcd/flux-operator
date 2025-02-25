@@ -24,7 +24,7 @@ import (
 func TestResourceSetInputProviderReconciler_GitLabBranch_LifeCycle(t *testing.T) {
 	g := NewWithT(t)
 	reconciler := getResourceSetInputProviderReconciler()
-	rsetReconciler := getResourceSetReconciler()
+	rsetReconciler := getResourceSetReconciler(t)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -200,7 +200,7 @@ spec:
 func TestResourceSetInputProviderReconciler_GitHubPullRequest_LifeCycle(t *testing.T) {
 	g := NewWithT(t)
 	reconciler := getResourceSetInputProviderReconciler()
-	rsetReconciler := getResourceSetReconciler()
+	rsetReconciler := getResourceSetReconciler(t)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
