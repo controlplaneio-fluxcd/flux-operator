@@ -35,6 +35,9 @@ fi
 cat ${SOUCE_DIR}/bundle/manifests/flux-operator.clusterserviceversion.yaml | \
 envsubst > ${DEST_DIR}/bundle/manifests/flux-operator.clusterserviceversion.yaml
 
+cat ${SOUCE_DIR}/bundle/manifests/flux-operator.service.yaml > \
+${DEST_DIR}/bundle/manifests/flux-operator.service.yaml
+
 cat ${SOUCE_DIR}/test/olm.yaml | \
 envsubst > ${DEST_DIR}/test/olm.yaml
 

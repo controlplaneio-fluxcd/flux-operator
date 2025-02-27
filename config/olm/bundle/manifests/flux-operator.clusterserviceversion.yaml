@@ -304,16 +304,6 @@ spec:
                 - "*"
               verbs:
                 - "*"
-      services:
-        - name: flux-operator
-          spec:
-            ports:
-              - name: http-metrics
-                port: 8080
-                protocol: TCP
-                targetPort: 8080
-            selector:
-              app.kubernetes.io/name: flux-operator
       deployments:
         - name: flux-operator
           spec:
