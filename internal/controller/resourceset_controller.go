@@ -38,6 +38,7 @@ import (
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/builder"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/inventory"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
 )
 
 // ResourceSetReconciler reconciles a ResourceSet object
@@ -75,6 +76,10 @@ func (r *ResourceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if err := r.finalizeStatus(ctx, obj, patcher); err != nil {
 			log.Error(err, "failed to update status")
 			retErr = kerrors.NewAggregate([]error{retErr, err})
+		}
+
+		if err := r.recordMetrics(obj); err != nil {
+			log.Error(err, "failed to record metrics")
 		}
 	}()
 
@@ -743,6 +748,19 @@ func (r *ResourceSetReconciler) patch(ctx context.Context,
 		}
 	}
 
+	return nil
+}
+
+func (r *ResourceSetReconciler) recordMetrics(obj *fluxcdv1.ResourceSet) error {
+	if !obj.ObjectMeta.DeletionTimestamp.IsZero() {
+		reporter.DeleteMetricsFor(fluxcdv1.ResourceSetKind, obj.GetName(), obj.GetNamespace())
+		return nil
+	}
+	rawMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
+	if err != nil {
+		return err
+	}
+	reporter.RecordMetrics(unstructured.Unstructured{Object: rawMap})
 	return nil
 }
 

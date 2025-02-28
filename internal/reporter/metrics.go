@@ -30,7 +30,7 @@ func RecordMetrics(obj unstructured.Unstructured) {
 	kind := obj.GetKind()
 	labels := commonLabelsToValues(obj)
 	switch kind {
-	case "FluxInstance":
+	case fluxcdv1.FluxInstanceKind:
 		registry, _, _ := unstructured.NestedString(obj.Object, "spec", "distribution", "registry")
 		labels["registry"] = registry
 
@@ -45,6 +45,36 @@ func RecordMetrics(obj unstructured.Unstructured) {
 
 		metrics[kind].Reset()
 		metrics[kind].With(labels).Set(1)
+	case fluxcdv1.ResourceSetKind:
+		applyRev, _, _ := unstructured.NestedString(obj.Object, "status", "lastAppliedRevision")
+		labels["revision"] = applyRev
+
+		labels["suspended"] = falseValue
+		val, ok := obj.GetAnnotations()[fluxcdv1.ReconcileAnnotation]
+		if ok && strings.ToLower(val) == fluxcdv1.DisabledValue {
+			labels["suspended"] = trueValue
+		}
+
+		metrics[kind].DeletePartialMatch(map[string]string{
+			"name":               labels["name"],
+			"exported_namespace": labels["exported_namespace"],
+		})
+		metrics[kind].With(labels).Set(1)
+	case fluxcdv1.ResourceSetInputProviderKind:
+		sourceURL, _, _ := unstructured.NestedString(obj.Object, "spec", "url")
+		labels["url"] = sourceURL
+
+		labels["suspended"] = falseValue
+		val, ok := obj.GetAnnotations()[fluxcdv1.ReconcileAnnotation]
+		if ok && strings.ToLower(val) == fluxcdv1.DisabledValue {
+			labels["suspended"] = trueValue
+		}
+
+		metrics[kind].DeletePartialMatch(map[string]string{
+			"name":               labels["name"],
+			"exported_namespace": labels["exported_namespace"],
+		})
+		metrics[kind].With(labels).Set(1)
 	default:
 		metrics["FluxResource"].With(fluxLabelsToValues(obj)).Set(1)
 	}
@@ -55,6 +85,13 @@ func ResetMetrics(kind string) {
 	metrics[kind].Reset()
 }
 
+func DeleteMetricsFor(kind, name, namespace string) {
+	metrics[kind].DeletePartialMatch(map[string]string{
+		"name":               name,
+		"exported_namespace": namespace,
+	})
+}
+
 const (
 	trueValue  = "True"
 	falseValue = "False"
@@ -63,12 +100,26 @@ const (
 var commonLabels = []string{"uid", "kind", "name", "exported_namespace", "ready", "reason", "suspended"}
 
 var metrics = map[string]*prometheus.GaugeVec{
-	"FluxInstance": prometheus.NewGaugeVec(
+	fluxcdv1.FluxInstanceKind: prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "flux_instance_info",
 			Help: "The current status of a Flux instance.",
 		},
 		append(commonLabels, "registry", "revision"),
+	),
+	fluxcdv1.ResourceSetKind: prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "flux_resourceset_info",
+			Help: "The current status of a Flux Operator ResourceSet.",
+		},
+		append(commonLabels, "revision"),
+	),
+	fluxcdv1.ResourceSetInputProviderKind: prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "flux_resourcesetinputprovider_info",
+			Help: "The current status of a Flux Operator ResourceSetInputProvider.",
+		},
+		append(commonLabels, "url"),
 	),
 	"FluxResource": prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{

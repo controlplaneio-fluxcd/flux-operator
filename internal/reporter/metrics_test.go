@@ -6,6 +6,8 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
 func TestRecordMetrics_FluxResource(t *testing.T) {
@@ -142,4 +144,73 @@ func TestRecordMetrics_FluxResource(t *testing.T) {
 	metricFamilies, err = reg.Gather()
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(metricFamilies).To(BeEmpty())
+}
+
+func TestRecordMetrics_ResourceSet(t *testing.T) {
+	g := NewWithT(t)
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(metrics[fluxcdv1.ResourceSetKind])
+
+	rs := unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "toolkit.fluxcd.io/v1",
+			"kind":       "ResourceSet",
+			"metadata": map[string]interface{}{
+				"uid":       "f252c583-d7b7-4236-b436-618eb5eb3023",
+				"name":      "test",
+				"namespace": "flux-system",
+			},
+			"spec": map[string]interface{}{
+				"resources": []interface{}{
+					map[string]interface{}{
+						"kind": "GitRepository",
+						"name": "flux-system",
+					},
+				},
+			},
+			"status": map[string]interface{}{
+				"conditions": []interface{}{
+					map[string]interface{}{
+						"type":   "Ready",
+						"status": "True",
+						"reason": "ReconciliationSucceeded",
+					},
+				},
+				"lastAppliedRevision": "b0c487c6b217bed8e6a53fca25f6ee1a7dd573e3",
+			},
+		},
+	}
+
+	RecordMetrics(rs)
+
+	rsNew := rs.DeepCopy()
+	rsNew.SetName("test2")
+	RecordMetrics(*rsNew)
+
+	metricFamilies, err := reg.Gather()
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(metricFamilies).To(HaveLen(1))
+	g.Expect(metricFamilies[0].Metric).To(HaveLen(2))
+
+	rsMetric := metricFamilies[0].Metric[0]
+	rsLabels := rsMetric.GetLabel()
+	g.Expect(rsLabels).To(HaveLen(8))
+	g.Expect(rsLabels[0].GetName()).To(Equal("exported_namespace"))
+	g.Expect(rsLabels[0].GetValue()).To(Equal("flux-system"))
+	g.Expect(rsLabels[1].GetName()).To(Equal("kind"))
+	g.Expect(rsLabels[1].GetValue()).To(Equal("ResourceSet"))
+	g.Expect(rsLabels[2].GetName()).To(Equal("name"))
+	g.Expect(rsLabels[2].GetValue()).To(Equal("test"))
+	g.Expect(rsLabels[3].GetName()).To(Equal("ready"))
+	g.Expect(rsLabels[3].GetValue()).To(Equal("True"))
+	g.Expect(rsLabels[4].GetName()).To(Equal("reason"))
+	g.Expect(rsLabels[4].GetValue()).To(Equal("ReconciliationSucceeded"))
+	g.Expect(rsLabels[5].GetName()).To(Equal("revision"))
+	g.Expect(rsLabels[5].GetValue()).To(Equal("b0c487c6b217bed8e6a53fca25f6ee1a7dd573e3"))
+
+	DeleteMetricsFor(fluxcdv1.ResourceSetKind, rs.GetName(), rs.GetNamespace())
+	metricFamilies, err = reg.Gather()
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(metricFamilies).To(HaveLen(1))
+	g.Expect(metricFamilies[0].Metric).To(HaveLen(1))
 }
