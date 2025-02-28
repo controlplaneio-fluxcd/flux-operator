@@ -660,3 +660,25 @@ Status:
       Id: default_podinfo_apps_Deployment
       V:  v1
 ```
+
+## ResourceSet Metrics
+
+The Flux Operator exports Prometheus metrics for the ResourceSet objects
+that can be used to monitor the reconciliation status.
+
+Metrics:
+
+```text
+flux_resourceset_info{uid, kind, name, exported_namespace, ready, suspended, revision}
+```
+
+Labels:
+
+- `uid`: The Kubernetes unique identifier of the resource.
+- `kind`: The kind of the resource (e.g. `ResourceSet`).
+- `name`: The name of the resource (e.g. `podinfo`).
+- `exported_namespace`: The namespace where the resource is deployed (e.g. `apps`).
+- `ready`: The readiness status of the resource (e.g. `True`, `False` or `Unkown`).
+- `reason`: The reason for the readiness status (e.g. `ReconciliationSucceeded`, `BuildFailed`, `HealthCheckFailed`, etc.).
+- `suspended`: The suspended status of the resource (e.g. `True` or `False`).
+- `revision`: The revision last applied on the cluster (e.g. `sha256:75aa209c6a...`).

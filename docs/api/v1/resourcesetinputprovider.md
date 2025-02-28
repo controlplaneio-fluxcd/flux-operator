@@ -350,3 +350,25 @@ status:
     sha: 8166bdecd6b078b9e5dd14fa3b7b67a847f76893
     title: 'feat(ui): Default color scheme'
 ```
+
+## ResourceSetInputProvider Metrics
+
+The Flux Operator exports Prometheus metrics for the ResourceSetInputProvider objects
+that can be used to monitor the reconciliation status.
+
+Metrics:
+
+```text
+flux_resourcesetinputprovider_info{uid, kind, name, exported_namespace, ready, suspended, url}
+```
+
+Labels:
+
+- `uid`: The Kubernetes unique identifier of the resource.
+- `kind`: The kind of the resource (e.g. `ResourceSetInputProvider`).
+- `name`: The name of the resource (e.g. `podinfo-prs`).
+- `exported_namespace`: The namespace where the resource is deployed (e.g. `podinfo-review`).
+- `ready`: The readiness status of the resource (e.g. `True`, `False` or `Unkown`).
+- `reason`: The reason for the readiness status (e.g. `ReconciliationSucceeded` or `ReconciliationFailed`).
+- `suspended`: The suspended status of the resource (e.g. `True` or `False`).
+- `url`: The provider address (e.g. `https://github.com/stefanprodan/podinfo`).

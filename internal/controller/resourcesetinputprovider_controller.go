@@ -19,6 +19,8 @@ import (
 	"github.com/opencontainers/go-digest"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
 	kuberecorder "k8s.io/client-go/tools/record"
@@ -29,6 +31,7 @@ import (
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/gitprovider"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
 )
 
 // ResourceSetInputProviderReconciler reconciles a ResourceSetInputProvider object
@@ -61,6 +64,10 @@ func (r *ResourceSetInputProviderReconciler) Reconcile(ctx context.Context, req 
 		if err := r.finalizeStatus(ctx, obj, patcher); err != nil {
 			log.Error(err, "failed to update status")
 			retErr = kerrors.NewAggregate([]error{retErr, err})
+		}
+
+		if err := r.recordMetrics(obj); err != nil {
+			log.Error(err, "failed to record metrics")
 		}
 	}()
 
@@ -466,6 +473,19 @@ func (r *ResourceSetInputProviderReconciler) patch(ctx context.Context,
 		}
 	}
 
+	return nil
+}
+
+func (r *ResourceSetInputProviderReconciler) recordMetrics(obj *fluxcdv1.ResourceSetInputProvider) error {
+	if !obj.ObjectMeta.DeletionTimestamp.IsZero() {
+		reporter.DeleteMetricsFor(fluxcdv1.ResourceSetInputProviderKind, obj.GetName(), obj.GetNamespace())
+		return nil
+	}
+	rawMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
+	if err != nil {
+		return err
+	}
+	reporter.RecordMetrics(unstructured.Unstructured{Object: rawMap})
 	return nil
 }
 
