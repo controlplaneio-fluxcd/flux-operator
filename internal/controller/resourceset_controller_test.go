@@ -205,6 +205,196 @@ spec:
 	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 }
 
+func TestResourceSetReconciler_CopyFrom(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceSetReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	objDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: tenants
+  namespace: "%[1]s"
+spec:
+  commonMetadata:
+    annotations:
+      owner: "%[1]s"
+  inputs:
+    - tenant: team1
+    - tenant: team2
+  resources:
+    - apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: << inputs.tenant >>
+        namespace: "%[1]s"
+        annotations:
+          fluxcd.controlplane.io/copyFrom: "%[1]s/test-cm"
+    - apiVersion: v1
+      kind: Secret
+      metadata:
+        name: << inputs.tenant >>
+        namespace: "%[1]s"
+        annotations:
+          fluxcd.controlplane.io/copyFrom: "%[1]s/test-secret"
+`, ns.Name)
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cm",
+			Namespace: ns.Name,
+		},
+		Data: map[string]string{
+			"key": "value",
+		},
+	}
+	err = testEnv.Create(ctx, cm)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-secret",
+			Namespace: ns.Name,
+		},
+		StringData: map[string]string{
+			"key": "value",
+		},
+	}
+	err = testEnv.Create(ctx, secret)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	obj := &fluxcdv1.ResourceSet{}
+	err = yaml.Unmarshal([]byte(objDef), obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize the ResourceSet.
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Reconcile the ResourceSet.
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeFalse())
+
+	// Check if the ResourceSet was deployed.
+	result := &fluxcdv1.ResourceSet{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	logObjectStatus(t, result)
+	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
+
+	// Check if the inventory was updated.
+	g.Expect(result.Status.Inventory.Entries).To(HaveLen(4))
+	g.Expect(result.Status.Inventory.Entries).To(ContainElements(
+		fluxcdv1.ResourceRef{
+			ID:      fmt.Sprintf("%s_team1__ConfigMap", ns.Name),
+			Version: "v1",
+		},
+		fluxcdv1.ResourceRef{
+			ID:      fmt.Sprintf("%s_team1__Secret", ns.Name),
+			Version: "v1",
+		},
+		fluxcdv1.ResourceRef{
+			ID:      fmt.Sprintf("%s_team2__ConfigMap", ns.Name),
+			Version: "v1",
+		},
+		fluxcdv1.ResourceRef{
+			ID:      fmt.Sprintf("%s_team2__Secret", ns.Name),
+			Version: "v1",
+		},
+	))
+
+	// Check if the resources were created with the copied data.
+	resultCM := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "team1",
+			Namespace: ns.Name,
+		},
+	}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(resultCM), resultCM)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(resultCM.Annotations).To(HaveKeyWithValue("owner", ns.Name))
+	g.Expect(resultCM.Data).To(HaveKeyWithValue("key", "value"))
+
+	resultSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "team2",
+			Namespace: ns.Name,
+		},
+	}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(resultSecret), resultSecret)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(resultSecret.Annotations).To(HaveKeyWithValue("owner", ns.Name))
+	g.Expect(resultSecret.Data).To(HaveKeyWithValue("key", []byte("value")))
+
+	// Update the source ConfigMap.
+	cm.Data = map[string]string{"key1": "updated1"}
+	err = testClient.Update(ctx, cm)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Update the source Secret.
+	secret.Data["key"] = []byte("updated")
+	err = testClient.Update(ctx, secret)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Reconcile the ResourceSet.
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Check if the ConfigMap was updated.
+	finalCM := &corev1.ConfigMap{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(resultCM), finalCM)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(finalCM.Data).NotTo(HaveKeyWithValue("key", "value"))
+	g.Expect(finalCM.Data).To(HaveKeyWithValue("key1", "updated1"))
+
+	// Check if the Secret was updated.
+	finalSecret := &corev1.Secret{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(resultSecret), finalSecret)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(finalSecret.Data).To(HaveKeyWithValue("key", []byte("updated")))
+
+	// Delete the resource group.
+	err = testClient.Delete(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.IsZero()).To(BeTrue())
+
+	// Check if the resource group was finalized.
+	result = &fluxcdv1.ResourceSet{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+
+	// Check if the resources were deleted.
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(resultCM), resultCM)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(resultSecret), resultSecret)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+}
+
 func TestResourceSetReconciler_DependsOn(t *testing.T) {
 	g := NewWithT(t)
 	reconciler := getResourceSetReconciler(t)

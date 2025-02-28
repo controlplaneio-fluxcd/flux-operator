@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
 	kuberecorder "k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -374,6 +375,10 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 		ssautil.SetCommonMetadata(objects, cm.Labels, cm.Annotations)
 	}
 
+	if err := r.copyResources(ctx, kubeClient, objects); err != nil {
+		return "", err
+	}
+
 	// Compute the sha256 digest of the resources.
 	data, err := ssautil.ObjectsToYAML(objects)
 	if err != nil {
@@ -501,6 +506,55 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 	}
 
 	return applySetDigest, nil
+}
+
+// copyResources copies data from ConfigMaps and Secrets based on the
+// annotations set on the resources template.
+func (r *ResourceSetReconciler) copyResources(ctx context.Context,
+	kubeClient client.Client, objects []*unstructured.Unstructured) error {
+	for i := range objects {
+		if objects[i].GetAPIVersion() == "v1" {
+			source, found := objects[i].GetAnnotations()[fluxcdv1.CopyFromAnnotation]
+			if !found {
+				continue
+			}
+
+			sourceParts := strings.Split(source, "/")
+			if len(sourceParts) != 2 {
+				return fmt.Errorf("invalid %s annotation value '%s' must be in the format 'namespace/name'",
+					fluxcdv1.CopyFromAnnotation, source)
+			}
+
+			sourceName := types.NamespacedName{
+				Namespace: sourceParts[0],
+				Name:      sourceParts[1],
+			}
+
+			switch objects[i].GetKind() {
+			case "ConfigMap":
+				cm := &corev1.ConfigMap{}
+				if err := kubeClient.Get(ctx, sourceName, cm); err != nil {
+					return fmt.Errorf("failed to copy data from ConfigMap/%s: %w", source, err)
+				}
+				if err := unstructured.SetNestedStringMap(objects[i].Object, cm.Data, "data"); err != nil {
+					return fmt.Errorf("failed to copy data from ConfigMap/%s: %w", source, err)
+				}
+			case "Secret":
+				secret := &corev1.Secret{}
+				if err := kubeClient.Get(ctx, sourceName, secret); err != nil {
+					return fmt.Errorf("failed to copy data from Secret/%s: %w", source, err)
+				}
+				data := make(map[string]string, len(secret.Data))
+				for k, v := range secret.Data {
+					data[k] = string(v)
+				}
+				if err := unstructured.SetNestedStringMap(objects[i].Object, data, "stringData"); err != nil {
+					return fmt.Errorf("failed to copy data from Secret/%s: %w", source, err)
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // aggregateNotReadyStatus returns the status of the Flux resources not ready.
