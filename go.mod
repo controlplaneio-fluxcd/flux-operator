@@ -10,7 +10,8 @@ require (
 	github.com/fluxcd/cli-utils v0.36.0-flux.12
 	github.com/fluxcd/pkg/apis/kustomize v1.9.0
 	github.com/fluxcd/pkg/apis/meta v1.10.0
-	github.com/fluxcd/pkg/auth v0.3.0
+	github.com/fluxcd/pkg/auth v0.4.0
+	github.com/fluxcd/pkg/cache v0.4.1-0.20250301154518-d48089d18d8b
 	github.com/fluxcd/pkg/kustomize v1.16.0
 	github.com/fluxcd/pkg/runtime v0.54.0
 	github.com/fluxcd/pkg/ssa v0.45.1
@@ -75,7 +76,7 @@ require (
 	github.com/awslabs/amazon-ecr-credential-helper/ecr-login v0.0.0-20250115170608-608f37feb051 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
-	github.com/bradleyfalzon/ghinstallation/v2 v2.13.0 // indirect
+	github.com/bradleyfalzon/ghinstallation/v2 v2.14.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/chai2010/gettext-go v1.0.2 // indirect
 	github.com/chrismellard/docker-credential-acr-env v0.0.0-20230304212654-82a0ddb27589 // indirect
@@ -109,6 +110,7 @@ require (
 	github.com/google/gnostic-models v0.6.9 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-containerregistry/pkg/authn/kubernetes v0.0.0-20241111191718-6bce25ecf029 // indirect
+	github.com/google/go-github/v69 v69.2.0 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/pprof v0.0.0-20250128161936-077ca0a936bf // indirect
