@@ -152,8 +152,12 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 		return ctrl.Result{}, err
 	}
 
+	// Create the provider context with timeout.
+	providerCtx, cancel := context.WithTimeout(ctx, obj.GetTimeout())
+	defer cancel()
+
 	// Create the provider based on the object type.
-	provider, err := r.newGitProvider(ctx, obj, certPool, authData)
+	provider, err := r.newGitProvider(providerCtx, obj, certPool, authData)
 	if err != nil {
 		msg := fmt.Sprintf("failed to create provider %s", err.Error())
 		conditions.MarkFalse(obj,
@@ -165,7 +169,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 	}
 
 	// Get the provider options.
-	exportedInputs, err := r.callProvider(ctx, obj, provider)
+	exportedInputs, err := r.callProvider(providerCtx, obj, provider)
 	if err != nil {
 		msg := fmt.Sprintf("failed to call provider %s", err.Error())
 		conditions.MarkFalse(obj,
