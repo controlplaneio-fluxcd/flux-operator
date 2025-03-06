@@ -13,6 +13,11 @@ import (
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
+// Registerer returns the metrics registerer.
+func Registerer() prometheus.Registerer {
+	return crtlmetrics.Registry
+}
+
 // MustRegisterMetrics attempts to register the metrics collectors
 // in the controller-runtime metrics registry.
 func MustRegisterMetrics() {

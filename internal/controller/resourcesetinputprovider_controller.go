@@ -14,6 +14,7 @@ import (
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/auth/github"
+	"github.com/fluxcd/pkg/cache"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/opencontainers/go-digest"
@@ -40,6 +41,7 @@ type ResourceSetInputProviderReconciler struct {
 	kuberecorder.EventRecorder
 
 	StatusManager string
+	TokenCache    *cache.TokenCache
 }
 
 // +kubebuilder:rbac:groups=fluxcd.controlplane.io,resources=resourcesetinputproviders,verbs=get;list;watch;create;update;patch;delete
@@ -357,7 +359,16 @@ func (r *ResourceSetInputProviderReconciler) getGitHubToken(
 		return password, err
 	}
 
-	ghc, err := github.New(github.WithAppData(authData))
+	opts := []github.OptFunc{github.WithAppData(authData)}
+
+	if r.TokenCache != nil {
+		opts = append(opts, github.WithCache(r.TokenCache,
+			fluxcdv1.ResourceSetInputProviderKind,
+			obj.GetName(),
+			obj.GetNamespace()))
+	}
+
+	ghc, err := github.New(opts...)
 	if err != nil {
 		return "", err
 	}

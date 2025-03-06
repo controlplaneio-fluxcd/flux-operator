@@ -7,10 +7,12 @@ import (
 	"crypto/fips140"
 	"errors"
 	"os"
+	"time"
 
 	"github.com/fluxcd/cli-utils/pkg/kstatus/polling"
 	"github.com/fluxcd/cli-utils/pkg/kstatus/polling/clusterreader"
 	"github.com/fluxcd/cli-utils/pkg/kstatus/polling/engine"
+	"github.com/fluxcd/pkg/cache"
 	runtimeCtrl "github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/logger"
 	"github.com/fluxcd/pkg/runtime/pprof"
@@ -55,6 +57,8 @@ func init() {
 func main() {
 	var (
 		concurrent            int
+		tokenCacheMaxSize     int
+		tokenCacheMaxDuration time.Duration
 		metricsAddr           string
 		healthAddr            string
 		enableLeaderElection  bool
@@ -65,6 +69,10 @@ func main() {
 	)
 
 	flag.IntVar(&concurrent, "concurrent", 10, "The number of concurrent resource reconciles.")
+	flag.IntVar(&tokenCacheMaxSize, "token-cache-max-size", 100,
+		"The maximum size of the cache in number of tokens.")
+	flag.DurationVar(&tokenCacheMaxDuration, "token-cache-max-duration", cache.TokenMaxDuration,
+		"The maximum duration a token is cached.")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&healthAddr, "health-addr", ":8081", "The address the health endpoint binds to.")
 	flag.StringVar(&storagePath, "storage-path", "/data", "The local storage path.")
@@ -158,6 +166,19 @@ func main() {
 		os.Exit(1)
 	}
 
+	var tokenCache *cache.TokenCache
+	if tokenCacheMaxSize > 0 {
+		tokenCache, err = cache.NewTokenCache(tokenCacheMaxSize,
+			cache.WithMaxDuration(tokenCacheMaxDuration),
+			cache.WithMetricsRegisterer(reporter.Registerer()),
+			cache.WithMetricsPrefix("flux_token_"),
+			cache.WithEventNamespaceLabel("exported_namespace"))
+		if err != nil {
+			setupLog.Error(err, "unable to create token cache")
+			os.Exit(1)
+		}
+	}
+
 	if err = (&controller.EntitlementReconciler{
 		Client:            mgr.GetClient(),
 		Scheme:            mgr.GetScheme(),
@@ -235,6 +256,7 @@ func main() {
 		Client:        mgr.GetClient(),
 		StatusManager: controllerName,
 		EventRecorder: mgr.GetEventRecorderFor(controllerName),
+		TokenCache:    tokenCache,
 	}).SetupWithManager(mgr,
 		controller.ResourceSetInputProviderReconcilerOptions{
 			RateLimiter: runtimeCtrl.GetRateLimiter(rateLimiterOptions),

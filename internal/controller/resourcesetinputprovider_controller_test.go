@@ -6,9 +6,13 @@ package controller
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
+	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/auth/github"
+	"github.com/fluxcd/pkg/cache"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -493,6 +497,42 @@ spec:
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+}
+
+func TestResourceSetInputProviderReconciler_getGitHubToken_cached(t *testing.T) {
+	const key = "githubAppID=123,githubAppInstallationID=123456,githubAppBaseURL=https://github.com,githubAppPrivateKeyDigest=9d5b1bf1d595f2da0c8e9941bc84a82dabbad433fc95fea56aa596eda99e550b"
+
+	g := NewWithT(t)
+
+	ctx := context.Background()
+
+	tokenCache, err := cache.NewTokenCache(1)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	r := &ResourceSetInputProviderReconciler{
+		TokenCache: tokenCache,
+	}
+
+	_, _, err = r.TokenCache.GetOrSet(ctx, key, func(context.Context) (cache.Token, error) {
+		return &github.AppToken{
+			Token:     "my-gh-app-token",
+			ExpiresAt: time.Now().Add(time.Hour),
+		}, nil
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	privateKeyPEM, err := os.ReadFile("testdata/rsa-private-key.pem")
+	g.Expect(err).NotTo(HaveOccurred())
+
+	token, err := r.getGitHubToken(ctx, &fluxcdv1.ResourceSetInputProvider{}, map[string][]byte{
+		"githubAppID":             []byte("123"),
+		"githubAppInstallationID": []byte("123456"),
+		"githubAppBaseURL":        []byte("https://github.com"),
+		"githubAppPrivateKey":     privateKeyPEM,
+	})
+
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(token).To(Equal("my-gh-app-token"))
 }
 
 func getResourceSetInputProviderReconciler() *ResourceSetInputProviderReconciler {
