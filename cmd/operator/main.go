@@ -7,7 +7,6 @@ import (
 	"crypto/fips140"
 	"errors"
 	"os"
-	"time"
 
 	"github.com/fluxcd/cli-utils/pkg/kstatus/polling"
 	"github.com/fluxcd/cli-utils/pkg/kstatus/polling/clusterreader"
@@ -55,10 +54,13 @@ func init() {
 }
 
 func main() {
+	const (
+		tokenCacheDefaultMaxSize = 100
+	)
+
 	var (
 		concurrent            int
-		tokenCacheMaxSize     int
-		tokenCacheMaxDuration time.Duration
+		tokenCacheOptions     cache.TokenFlags
 		metricsAddr           string
 		healthAddr            string
 		enableLeaderElection  bool
@@ -69,10 +71,6 @@ func main() {
 	)
 
 	flag.IntVar(&concurrent, "concurrent", 10, "The number of concurrent resource reconciles.")
-	flag.IntVar(&tokenCacheMaxSize, "token-cache-max-size", 100,
-		"The maximum size of the cache in number of tokens.")
-	flag.DurationVar(&tokenCacheMaxDuration, "token-cache-max-duration", cache.TokenMaxDuration,
-		"The maximum duration a token is cached.")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&healthAddr, "health-addr", ":8081", "The address the health endpoint binds to.")
 	flag.StringVar(&storagePath, "storage-path", "/data", "The local storage path.")
@@ -82,6 +80,7 @@ func main() {
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 
+	tokenCacheOptions.BindFlags(flag.CommandLine, tokenCacheDefaultMaxSize)
 	logOptions.BindFlags(flag.CommandLine)
 	rateLimiterOptions.BindFlags(flag.CommandLine)
 
@@ -167,9 +166,9 @@ func main() {
 	}
 
 	var tokenCache *cache.TokenCache
-	if tokenCacheMaxSize > 0 {
-		tokenCache, err = cache.NewTokenCache(tokenCacheMaxSize,
-			cache.WithMaxDuration(tokenCacheMaxDuration),
+	if tokenCacheOptions.MaxSize > 0 {
+		tokenCache, err = cache.NewTokenCache(tokenCacheOptions.MaxSize,
+			cache.WithMaxDuration(tokenCacheOptions.MaxDuration),
 			cache.WithMetricsRegisterer(reporter.Registerer()),
 			cache.WithMetricsPrefix("flux_token_"),
 			cache.WithEventNamespaceLabel("exported_namespace"))
