@@ -123,8 +123,8 @@ github.com/fluxcd/pkg/apis/meta v1.10.0 h1:rqbAuyl5ug7A5jjRf/rNwBXmNl6tJ9wG2iIsr
 github.com/fluxcd/pkg/apis/meta v1.10.0/go.mod h1:n7NstXHDaleAUMajcXTVkhz0MYkvEXy1C/eLI/t1xoI=
 github.com/fluxcd/pkg/auth v0.6.0 h1:plHUxZ/+IJn7lm1jEnxwr1hvIgMKIepRmheOHZz3ltA=
 github.com/fluxcd/pkg/auth v0.6.0/go.mod h1:mdlybbiiRJ5AoRYx1jM7jFoEUYxzB2Ma406fYYt01qA=
-github.com/fluxcd/pkg/cache v0.6.0 h1:l6tly7YGYkCaMj0Sfn9m+jiLir9CDksI+QDOE/BwK0c=
-github.com/fluxcd/pkg/cache v0.6.0/go.mod h1:VNMLzJa62iDHfojoywykJ2pdUlgSjVzTLrOgkNlPxEo=
+github.com/fluxcd/pkg/cache v0.7.0 h1:6TTWbxCyAxErIAT338KrLTy96ds+vSDw4sEyypSISfs=
+github.com/fluxcd/pkg/cache v0.7.0/go.mod h1:EHpyMSXf/ECKIoKEQmNCOesH2wfAdpmXR/ZXD6VwWRg=
 github.com/fluxcd/pkg/envsubst v1.3.0 h1:84Ain+8EBvyzu6y0FsKRwNsvaSiKuqhTqeh/4yoGFFU=
 github.com/fluxcd/pkg/envsubst v1.3.0/go.mod h1:lz6HvqDnxbX0sIqjr1fxw0oTGYACLVFcOE/srKS0VQQ=
 github.com/fluxcd/pkg/kustomize v1.16.0 h1:UBOeIvkrC6y4owYs7vZwG5PUVFeqnRoDFN9eaNhuNPI=

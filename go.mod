@@ -11,7 +11,7 @@ require (
 	github.com/fluxcd/pkg/apis/kustomize v1.9.0
 	github.com/fluxcd/pkg/apis/meta v1.10.0
 	github.com/fluxcd/pkg/auth v0.6.0
-	github.com/fluxcd/pkg/cache v0.6.0
+	github.com/fluxcd/pkg/cache v0.7.0
 	github.com/fluxcd/pkg/kustomize v1.16.0
 	github.com/fluxcd/pkg/runtime v0.54.0
 	github.com/fluxcd/pkg/ssa v0.45.1

@@ -494,6 +494,7 @@ func (r *ResourceSetInputProviderReconciler) patch(ctx context.Context,
 func (r *ResourceSetInputProviderReconciler) recordMetrics(obj *fluxcdv1.ResourceSetInputProvider) error {
 	if !obj.ObjectMeta.DeletionTimestamp.IsZero() {
 		reporter.DeleteMetricsFor(fluxcdv1.ResourceSetInputProviderKind, obj.GetName(), obj.GetNamespace())
+		r.TokenCache.DeleteEventsForObject(fluxcdv1.ResourceSetInputProviderKind, obj.GetName(), obj.GetNamespace())
 		return nil
 	}
 	rawMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
