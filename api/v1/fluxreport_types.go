@@ -202,7 +202,7 @@ func (in *FluxReport) GetInterval() time.Duration {
 	}
 	defaultInterval := 5 * time.Minute
 	if ri, _ := os.LookupEnv(ReportIntervalEvnKey); ri != "" {
-		if d, err := time.ParseDuration(ri); err != nil {
+		if d, err := time.ParseDuration(ri); err == nil {
 			defaultInterval = d
 		}
 	}
