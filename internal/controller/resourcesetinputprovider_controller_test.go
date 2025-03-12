@@ -500,7 +500,7 @@ spec:
 }
 
 func TestResourceSetInputProviderReconciler_getGitHubToken_cached(t *testing.T) {
-	const key = "githubAppID=123,githubAppInstallationID=123456,githubAppBaseURL=https://github.com,githubAppPrivateKeyDigest=9d5b1bf1d595f2da0c8e9941bc84a82dabbad433fc95fea56aa596eda99e550b"
+	const key = "dd2ce27f135e666c946a3bd4657f4ffaf1d2c97d9a35b93336f467dcdd93a56b"
 
 	g := NewWithT(t)
 
