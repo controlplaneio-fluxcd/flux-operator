@@ -31,9 +31,10 @@ type FluxReportReconciler struct {
 	client.Client
 	kuberecorder.EventRecorder
 
-	Scheme         *runtime.Scheme
-	StatusManager  string
-	WatchNamespace string
+	Scheme            *runtime.Scheme
+	StatusManager     string
+	WatchNamespace    string
+	ReportingInterval time.Duration
 }
 
 // +kubebuilder:rbac:groups=fluxcd.controlplane.io,resources=fluxreports,verbs=get;list;watch;create;update;patch;delete
@@ -90,8 +91,8 @@ func (r *FluxReportReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
-	log.Info(msg)
-	return ctrl.Result{RequeueAfter: obj.GetInterval()}, nil
+	log.V(1).Info(msg)
+	return r.requeueAfter(obj), nil
 }
 
 // FluxReportReconcilerOptions contains options for the reconciler.
@@ -139,4 +140,18 @@ func (r *FluxReportReconciler) initReport(ctx context.Context, name, namespace s
 		}
 	}
 	return nil
+}
+
+// requeueAfter returns a ctrl.Result with the requeue time set to the
+// interval specified in the object's annotations. If the annotation is not set,
+// the global reporting interval is used.
+func (r *FluxReportReconciler) requeueAfter(obj *fluxcdv1.FluxReport) ctrl.Result {
+	result := ctrl.Result{}
+	if obj.GetInterval() > 0 {
+		result.RequeueAfter = obj.GetInterval()
+	} else {
+		result.RequeueAfter = r.ReportingInterval
+	}
+
+	return result
 }

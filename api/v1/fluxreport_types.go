@@ -4,7 +4,6 @@
 package v1
 
 import (
-	"os"
 	"strings"
 	"time"
 
@@ -13,8 +12,7 @@ import (
 )
 
 const (
-	FluxReportKind       = "FluxReport"
-	ReportIntervalEvnKey = "REPORTING_INTERVAL"
+	FluxReportKind = "FluxReport"
 )
 
 // FluxReportSpec defines the observed state of a Flux installation.
@@ -192,30 +190,17 @@ func (in *FluxReport) IsDisabled() bool {
 }
 
 // GetInterval returns the interval at which the object should be reconciled.
-// If the annotation is not set, the interval is read from the
-// REPORTING_INTERVAL environment variable. If the variable is not set,
-// the default interval is 5 minutes.
+// If the annotation is not set, it returns 0.
 func (in *FluxReport) GetInterval() time.Duration {
-	val, ok := in.GetAnnotations()[ReconcileAnnotation]
-	if ok && strings.ToLower(val) == DisabledValue {
+	val, ok := in.GetAnnotations()[ReconcileEveryAnnotation]
+	if !ok {
 		return 0
 	}
-	defaultInterval := 5 * time.Minute
-	if ri, _ := os.LookupEnv(ReportIntervalEvnKey); ri != "" {
-		if d, err := time.ParseDuration(ri); err == nil {
-			defaultInterval = d
-		}
-	}
-
-	val, ok = in.GetAnnotations()[ReconcileEveryAnnotation]
-	if !ok {
-		return defaultInterval
-	}
 	interval, err := time.ParseDuration(val)
-	if err != nil {
-		return defaultInterval
+	if err == nil {
+		return interval
 	}
-	return interval
+	return 0
 }
 
 func init() {

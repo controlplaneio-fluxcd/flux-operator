@@ -265,7 +265,8 @@ The reconciliation behaviour can be configured using the following annotations:
 - `fluxcd.controlplane.io/reconcile`: Enable or disable the reconciliation loop. Default is `enabled`, set to `disabled` to pause the reconciliation.
 - `fluxcd.controlplane.io/reconcileEvery`: Set the reconciliation interval. Default is `5m`.
 
-The default reconciliation interval of the report can be changed by setting
+The default reconciliation interval of the report can be changed with
+the `--reporting-interval` flag or by setting
 the `REPORTING_INTERVAL` environment variable in the operator deployment.
 
 ## Flux Resource Metrics

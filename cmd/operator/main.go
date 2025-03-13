@@ -7,6 +7,7 @@ import (
 	"crypto/fips140"
 	"errors"
 	"os"
+	"time"
 
 	"github.com/fluxcd/cli-utils/pkg/kstatus/polling"
 	"github.com/fluxcd/cli-utils/pkg/kstatus/polling/clusterreader"
@@ -38,8 +39,6 @@ import (
 	// +kubebuilder:scaffold:imports
 )
 
-const controllerName = "flux-operator"
-
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
@@ -55,11 +54,16 @@ func init() {
 
 func main() {
 	const (
-		tokenCacheDefaultMaxSize = 100
+		controllerName              = "flux-operator"
+		defaultServiceAccountEnvKey = "DEFAULT_SERVICE_ACCOUNT"
+		reportingIntervalEnvKey     = "REPORTING_INTERVAL"
+		runtimeNamespaceEnvKey      = "RUNTIME_NAMESPACE"
+		tokenCacheDefaultMaxSize    = 100
 	)
 
 	var (
 		concurrent            int
+		reportingInterval     time.Duration
 		tokenCacheOptions     cache.TokenFlags
 		metricsAddr           string
 		healthAddr            string
@@ -70,10 +74,16 @@ func main() {
 		defaultServiceAccount string
 	)
 
-	flag.IntVar(&concurrent, "concurrent", 10, "The number of concurrent resource reconciles.")
-	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
-	flag.StringVar(&healthAddr, "health-addr", ":8081", "The address the health endpoint binds to.")
-	flag.StringVar(&storagePath, "storage-path", "/data", "The local storage path.")
+	flag.IntVar(&concurrent, "concurrent", 10,
+		"The number of concurrent resource reconciles.")
+	flag.DurationVar(&reportingInterval, "reporting-interval", 5*time.Minute,
+		"The interval at which the report is computed.")
+	flag.StringVar(&metricsAddr, "metrics-addr", ":8080",
+		"The address the metric endpoint binds to.")
+	flag.StringVar(&healthAddr, "health-addr", ":8081",
+		"The address the health endpoint binds to.")
+	flag.StringVar(&storagePath, "storage-path", "/data",
+		"The local storage path.")
 	flag.StringVar(&defaultServiceAccount, "default-service-account", "",
 		"Default service account used for impersonation.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", true,
@@ -95,7 +105,7 @@ func main() {
 		setupLog.Error(errors.New("FIPS 140-3 mode disabled"), "Operating in non-FIPS mode")
 	}
 
-	runtimeNamespace := os.Getenv("RUNTIME_NAMESPACE")
+	runtimeNamespace := os.Getenv(runtimeNamespaceEnvKey)
 	if runtimeNamespace == "" {
 		runtimeNamespace = fluxcdv1.DefaultNamespace
 		setupLog.Info("RUNTIME_NAMESPACE env var not set, defaulting to " + fluxcdv1.DefaultNamespace)
@@ -103,9 +113,20 @@ func main() {
 
 	// Allow the default service account name to be set by an environment variable.
 	// Needed for the OLM Subscription that only allows env var configuration.
-	defaultSA := os.Getenv("DEFAULT_SERVICE_ACCOUNT")
+	defaultSA := os.Getenv(defaultServiceAccountEnvKey)
 	if defaultSA != "" {
 		defaultServiceAccount = defaultSA
+	}
+
+	// Allow the reporting interval to be set by an environment variable.
+	reportingIntervalEnv := os.Getenv(reportingIntervalEnvKey)
+	if reportingIntervalEnv != "" {
+		d, err := time.ParseDuration(reportingIntervalEnv)
+		if err != nil {
+			setupLog.Error(err, "unable to parse reporting interval", "value", reportingIntervalEnv)
+			os.Exit(1)
+		}
+		reportingInterval = d
 	}
 
 	// Disable the status poller cache to reduce memory usage.
@@ -222,11 +243,12 @@ func main() {
 	}
 
 	if err = (&controller.FluxReportReconciler{
-		Client:         mgr.GetClient(),
-		Scheme:         mgr.GetScheme(),
-		StatusManager:  controllerName,
-		EventRecorder:  mgr.GetEventRecorderFor(controllerName),
-		WatchNamespace: runtimeNamespace,
+		Client:            mgr.GetClient(),
+		Scheme:            mgr.GetScheme(),
+		StatusManager:     controllerName,
+		EventRecorder:     mgr.GetEventRecorderFor(controllerName),
+		WatchNamespace:    runtimeNamespace,
+		ReportingInterval: reportingInterval,
 	}).SetupWithManager(mgr,
 		controller.FluxReportReconcilerOptions{
 			RateLimiter: runtimeCtrl.GetRateLimiter(rateLimiterOptions),

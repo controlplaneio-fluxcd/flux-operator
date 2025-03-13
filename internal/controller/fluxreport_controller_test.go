@@ -6,6 +6,7 @@ package controller
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
@@ -190,10 +191,11 @@ func TestFluxReportReconciler_CustomSyncName(t *testing.T) {
 	checkInstanceReadiness(g, instance)
 
 	// Compute instance report.
-	r, err = reportRec.Reconcile(ctx, reconcile.Request{
+	rp, err := reportRec.Reconcile(ctx, reconcile.Request{
 		NamespacedName: client.ObjectKeyFromObject(report),
 	})
 	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(rp.RequeueAfter).To(BeEquivalentTo(time.Minute))
 
 	// Read the report.
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(report), report)
@@ -230,9 +232,10 @@ func TestFluxReportReconciler_CustomSyncName(t *testing.T) {
 
 func getFluxReportReconciler() *FluxReportReconciler {
 	return &FluxReportReconciler{
-		Client:        testClient,
-		EventRecorder: testEnv.GetEventRecorderFor(controllerName),
-		Scheme:        NewTestScheme(),
-		StatusManager: controllerName,
+		Client:            testClient,
+		EventRecorder:     testEnv.GetEventRecorderFor(controllerName),
+		Scheme:            NewTestScheme(),
+		StatusManager:     controllerName,
+		ReportingInterval: time.Minute,
 	}
 }
