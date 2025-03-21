@@ -25,9 +25,9 @@ resource "kubernetes_namespace" "flux_system" {
 }
 
 // Create a Kubernetes secret with the Git credentials
-// if a Git token is provided.
+// if a GitHub/GitLab token or GitHub App is provided.
 resource "kubernetes_secret" "git_auth" {
-  count      = var.git_token != "" ? 1 : 0
+  count      =  var.git_token != "" || var.github_app_id != "" ? 1 : 0
   depends_on = [kubernetes_namespace.flux_system]
 
   metadata {
@@ -36,8 +36,11 @@ resource "kubernetes_secret" "git_auth" {
   }
 
   data = {
-    username = "git"
-    password = var.git_token
+    username = var.git_token != "" ? "git" : null
+    password = var.git_token != "" ? var.git_token : null
+    githubAppID = var.github_app_id != "" ? var.github_app_id : null
+    githubAppInstallationID = var.github_app_installation_id != "" ? var.github_app_installation_id : null
+    githubAppPrivateKey = var.github_app_pem != "" ? var.github_app_pem: null
   }
 
   type = "Opaque"
@@ -96,7 +99,11 @@ resource "helm_release" "flux_instance" {
     value = var.git_ref
   }
   set {
+    name  = "instance.sync.provider"
+    value = var.github_app_id != "" ? "github" : "generic"
+  }
+  set {
     name  = "instance.sync.pullSecret"
-    value = var.git_token != "" ? "flux-system" : ""
+    value = var.git_token != "" || var.github_app_id != "" ? "flux-system" : ""
   }
 }

@@ -29,6 +29,22 @@ The `git_token` variable is used to create a Kubernetes secret in the `flux-syst
 Flux to authenticate with the Git repository over HTTPS.
 If the repository is public, the token variable can be omitted.
 
+Alternatively, you can use a GitHub App to authenticate with a GitHub repository:
+
+```shell
+export GITHUB_APP_PEM=`cat path/to/app.private-key.pem`
+
+terraform apply \
+  -var flux_version="2.x" \
+  -var flux_registry="ghcr.io/fluxcd" \
+  -var github_app_id="1" \
+  -var github_app_installation_id="2" \
+  -var github_app_pem="$GITHUB_APP_PEM" \
+  -var git_url="https://github.com/org/repo.git" \
+  -var git_ref="refs/heads/main" \
+  -var git_path="clusters/production"
+```
+
 Verify the Flux components are running:
 
 ```shell
