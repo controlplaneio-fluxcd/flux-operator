@@ -18,7 +18,7 @@ require (
 	github.com/fluxcd/pkg/tar v0.11.0
 	github.com/go-logr/logr v1.4.2
 	github.com/go-task/slim-sprig/v3 v3.0.0
-	github.com/golang-jwt/jwt/v4 v4.5.1
+	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/google/go-containerregistry v0.20.3
 	github.com/google/go-containerregistry/pkg/authn/k8schain v0.0.0-20250115185438-c4dd792fa06c
 	github.com/google/go-github/v69 v69.2.0
