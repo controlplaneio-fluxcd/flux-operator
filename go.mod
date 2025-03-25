@@ -13,7 +13,7 @@ require (
 	github.com/fluxcd/pkg/auth v0.8.0
 	github.com/fluxcd/pkg/cache v0.7.0
 	github.com/fluxcd/pkg/kustomize v1.16.0
-	github.com/fluxcd/pkg/runtime v0.54.0
+	github.com/fluxcd/pkg/runtime v0.56.0
 	github.com/fluxcd/pkg/ssa v0.45.1
 	github.com/fluxcd/pkg/tar v0.11.0
 	github.com/go-logr/logr v1.4.2
@@ -41,7 +41,7 @@ require (
 	k8s.io/cli-runtime v0.32.2
 	k8s.io/client-go v0.32.2
 	k8s.io/utils v0.0.0-20241210054802-24370beab758
-	sigs.k8s.io/controller-runtime v0.20.2
+	sigs.k8s.io/controller-runtime v0.20.4
 	sigs.k8s.io/yaml v1.4.0
 )
 
