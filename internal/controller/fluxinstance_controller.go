@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fluxcd/cli-utils/pkg/kstatus/polling"
+	"github.com/fluxcd/cli-utils/pkg/kstatus/polling/engine"
 	"github.com/fluxcd/pkg/apis/meta"
 	runtimeClient "github.com/fluxcd/pkg/runtime/client"
 	"github.com/fluxcd/pkg/runtime/conditions"
@@ -46,8 +46,8 @@ type FluxInstanceReconciler struct {
 	client.Client
 	kuberecorder.EventRecorder
 
-	Scheme      *runtime.Scheme
-	PollingOpts polling.Options
+	Scheme        *runtime.Scheme
+	ClusterReader engine.ClusterReaderFactory
 
 	StatusManager string
 	StoragePath   string
@@ -400,15 +400,11 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 	}
 
 	// Configure the Kubernetes client for impersonation.
-	impersonation := runtimeClient.NewImpersonator(
-		r.Client,
-		r.PollingOpts,
-		nil,
-		runtimeClient.KubeConfigOptions{},
-		"",
-		"",
-		"",
-	)
+	var impersonatorOpts []runtimeClient.ImpersonatorOption
+	if r.ClusterReader != nil {
+		impersonatorOpts = append(impersonatorOpts, runtimeClient.WithPolling(r.ClusterReader))
+	}
+	impersonation := runtimeClient.NewImpersonator(r.Client, impersonatorOpts...)
 
 	// Create the Kubernetes client that runs under impersonation.
 	kubeClient, statusPoller, err := impersonation.GetClient(ctx)

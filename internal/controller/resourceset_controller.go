@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fluxcd/cli-utils/pkg/kstatus/polling"
+	"github.com/fluxcd/cli-utils/pkg/kstatus/polling/engine"
 	"github.com/fluxcd/cli-utils/pkg/kstatus/status"
 	"github.com/fluxcd/cli-utils/pkg/object"
 	"github.com/fluxcd/pkg/apis/meta"
@@ -46,9 +46,9 @@ type ResourceSetReconciler struct {
 	client.Client
 	kuberecorder.EventRecorder
 
-	APIReader   client.Reader
-	Scheme      *runtime.Scheme
-	PollingOpts polling.Options
+	APIReader     client.Reader
+	Scheme        *runtime.Scheme
+	ClusterReader engine.ClusterReaderFactory
 
 	StatusManager         string
 	DefaultServiceAccount string
@@ -349,15 +349,13 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 	}
 
 	// Configure the Kubernetes client for impersonation.
-	impersonation := runtimeClient.NewImpersonator(
-		r.Client,
-		r.PollingOpts,
-		nil,
-		runtimeClient.KubeConfigOptions{},
-		r.DefaultServiceAccount,
-		obj.Spec.ServiceAccountName,
-		obj.GetNamespace(),
-	)
+	impersonatorOpts := []runtimeClient.ImpersonatorOption{
+		runtimeClient.WithServiceAccount(r.DefaultServiceAccount, obj.Spec.ServiceAccountName, obj.GetNamespace()),
+	}
+	if r.ClusterReader != nil {
+		impersonatorOpts = append(impersonatorOpts, runtimeClient.WithPolling(r.ClusterReader))
+	}
+	impersonation := runtimeClient.NewImpersonator(r.Client, impersonatorOpts...)
 
 	// Create the Kubernetes client that runs under impersonation.
 	kubeClient, statusPoller, err := impersonation.GetClient(ctx)
@@ -671,15 +669,13 @@ func (r *ResourceSetReconciler) uninstall(ctx context.Context,
 	}
 
 	// Configure the Kubernetes client for impersonation.
-	impersonation := runtimeClient.NewImpersonator(
-		r.Client,
-		r.PollingOpts,
-		nil,
-		runtimeClient.KubeConfigOptions{},
-		r.DefaultServiceAccount,
-		obj.Spec.ServiceAccountName,
-		obj.GetNamespace(),
-	)
+	impersonatorOpts := []runtimeClient.ImpersonatorOption{
+		runtimeClient.WithServiceAccount(r.DefaultServiceAccount, obj.Spec.ServiceAccountName, obj.GetNamespace()),
+	}
+	if r.ClusterReader != nil {
+		impersonatorOpts = append(impersonatorOpts, runtimeClient.WithPolling(r.ClusterReader))
+	}
+	impersonation := runtimeClient.NewImpersonator(r.Client, impersonatorOpts...)
 
 	// Prune the managed resources if the service account is found.
 	if impersonation.CanImpersonate(ctx) {

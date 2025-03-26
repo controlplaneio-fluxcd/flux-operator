@@ -13,7 +13,7 @@ require (
 	github.com/fluxcd/pkg/auth v0.8.0
 	github.com/fluxcd/pkg/cache v0.7.0
 	github.com/fluxcd/pkg/kustomize v1.16.0
-	github.com/fluxcd/pkg/runtime v0.56.0
+	github.com/fluxcd/pkg/runtime v0.57.1
 	github.com/fluxcd/pkg/ssa v0.45.1
 	github.com/fluxcd/pkg/tar v0.11.0
 	github.com/go-logr/logr v1.4.2

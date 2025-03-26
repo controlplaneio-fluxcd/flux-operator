@@ -130,9 +130,7 @@ func main() {
 	}
 
 	// Disable the status poller cache to reduce memory usage.
-	pollingOpts := polling.Options{
-		ClusterReaderFactory: engine.ClusterReaderFactoryFunc(clusterreader.NewDirectClusterReader),
-	}
+	clusterReader := engine.ClusterReaderFactoryFunc(clusterreader.NewDirectClusterReader)
 
 	reporter.MustRegisterMetrics()
 
@@ -218,7 +216,7 @@ func main() {
 	if err = (&controller.FluxInstanceReconciler{
 		Client:        mgr.GetClient(),
 		Scheme:        mgr.GetScheme(),
-		PollingOpts:   pollingOpts,
+		ClusterReader: clusterReader,
 		StoragePath:   storagePath,
 		StatusManager: controllerName,
 		EventRecorder: mgr.GetEventRecorderFor(controllerName),
@@ -261,7 +259,7 @@ func main() {
 		Client:                mgr.GetClient(),
 		APIReader:             mgr.GetAPIReader(),
 		Scheme:                mgr.GetScheme(),
-		PollingOpts:           pollingOpts,
+		ClusterReader:         clusterReader,
 		StatusManager:         controllerName,
 		EventRecorder:         mgr.GetEventRecorderFor(controllerName),
 		DefaultServiceAccount: defaultServiceAccount,
