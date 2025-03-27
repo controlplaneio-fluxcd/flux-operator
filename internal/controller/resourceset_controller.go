@@ -349,8 +349,10 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 	}
 
 	// Configure the Kubernetes client for impersonation.
-	impersonatorOpts := []runtimeClient.ImpersonatorOption{
-		runtimeClient.WithServiceAccount(r.DefaultServiceAccount, obj.Spec.ServiceAccountName, obj.GetNamespace()),
+	var impersonatorOpts []runtimeClient.ImpersonatorOption
+	if r.DefaultServiceAccount != "" || obj.Spec.ServiceAccountName != "" {
+		impersonatorOpts = append(impersonatorOpts,
+			runtimeClient.WithServiceAccount(r.DefaultServiceAccount, obj.Spec.ServiceAccountName, obj.GetNamespace()))
 	}
 	if r.ClusterReader != nil {
 		impersonatorOpts = append(impersonatorOpts, runtimeClient.WithPolling(r.ClusterReader))
@@ -669,8 +671,10 @@ func (r *ResourceSetReconciler) uninstall(ctx context.Context,
 	}
 
 	// Configure the Kubernetes client for impersonation.
-	impersonatorOpts := []runtimeClient.ImpersonatorOption{
-		runtimeClient.WithServiceAccount(r.DefaultServiceAccount, obj.Spec.ServiceAccountName, obj.GetNamespace()),
+	var impersonatorOpts []runtimeClient.ImpersonatorOption
+	if r.DefaultServiceAccount != "" || obj.Spec.ServiceAccountName != "" {
+		impersonatorOpts = append(impersonatorOpts,
+			runtimeClient.WithServiceAccount(r.DefaultServiceAccount, obj.Spec.ServiceAccountName, obj.GetNamespace()))
 	}
 	if r.ClusterReader != nil {
 		impersonatorOpts = append(impersonatorOpts, runtimeClient.WithPolling(r.ClusterReader))
