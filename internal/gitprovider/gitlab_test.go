@@ -115,6 +115,7 @@ func TestGitLabProvider_ListRequests(t *testing.T) {
 					Author: "stefanprodan",
 					Title:  "test5: Edit README.md",
 					Branch: "feat/5",
+					Labels: []string{},
 				},
 				{
 					ID:     "4",
@@ -122,6 +123,7 @@ func TestGitLabProvider_ListRequests(t *testing.T) {
 					Author: "stefanprodan",
 					Title:  "test4: Edit README.md",
 					Branch: "patch-4",
+					Labels: []string{"documentation", "enhancement"},
 				},
 				{
 					ID:     "3",
@@ -129,6 +131,7 @@ func TestGitLabProvider_ListRequests(t *testing.T) {
 					Author: "stefanprodan",
 					Title:  "test3: Edit README.md",
 					Branch: "patch-3",
+					Labels: []string{"documentation"},
 				},
 				{
 					ID:     "2",
@@ -136,6 +139,7 @@ func TestGitLabProvider_ListRequests(t *testing.T) {
 					Author: "stefanprodan",
 					Title:  "test2: Edit README.md",
 					Branch: "patch-2",
+					Labels: []string{"enhancement"},
 				},
 				{
 					ID:     "1",
@@ -143,6 +147,7 @@ func TestGitLabProvider_ListRequests(t *testing.T) {
 					Author: "stefanprodan",
 					Title:  "test1: Edit README.md",
 					Branch: "patch-1",
+					Labels: []string{"enhancement"},
 				},
 			},
 		},
@@ -163,6 +168,7 @@ func TestGitLabProvider_ListRequests(t *testing.T) {
 					Author: "stefanprodan",
 					Title:  "test4: Edit README.md",
 					Branch: "patch-4",
+					Labels: []string{"documentation", "enhancement"},
 				},
 				{
 					ID:     "2",
@@ -170,6 +176,7 @@ func TestGitLabProvider_ListRequests(t *testing.T) {
 					Author: "stefanprodan",
 					Title:  "test2: Edit README.md",
 					Branch: "patch-2",
+					Labels: []string{"enhancement"},
 				},
 			},
 		},
@@ -189,6 +196,7 @@ func TestGitLabProvider_ListRequests(t *testing.T) {
 					Author: "stefanprodan",
 					Title:  "test5: Edit README.md",
 					Branch: "feat/5",
+					Labels: []string{},
 				},
 			},
 		},

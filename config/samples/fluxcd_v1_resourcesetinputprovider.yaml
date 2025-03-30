@@ -15,3 +15,7 @@ spec:
     includeBranch: "^stefanprodan-patch-.*$"
     labels:
       - "enhancement"
+  skip:
+    labels:
+      - "deploy/flux-preview-pause"
+      - "!test-build-push/passed"

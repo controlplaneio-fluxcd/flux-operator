@@ -130,6 +130,7 @@ func (p *GitLabProvider) ListRequests(ctx context.Context, opts Options) ([]Resu
 				Branch: mr.SourceBranch,
 				Title:  mr.Title,
 				Author: mr.Author.Username,
+				Labels: mr.Labels,
 			})
 
 			if opts.Filters.Limit > 0 && len(results) >= opts.Filters.Limit {
