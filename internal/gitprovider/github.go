@@ -136,6 +136,7 @@ func (p *GitHubProvider) ListRequests(ctx context.Context, opts Options) ([]Resu
 				Branch: pr.GetHead().GetRef(),
 				Title:  pr.GetTitle(),
 				Author: pr.GetUser().GetLogin(),
+				Labels: prLabels,
 			})
 
 			if opts.Filters.Limit > 0 && len(results) >= opts.Filters.Limit {

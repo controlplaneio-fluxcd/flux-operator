@@ -187,6 +187,12 @@ metadata:
               "labels": [
                 "enhancement"
               ]
+            },
+            "skip": {
+              "labels": [
+                  "deploy/flux-preview-pause",
+                  "!test-build-push/passed"
+              ]
             }
           }
         }
