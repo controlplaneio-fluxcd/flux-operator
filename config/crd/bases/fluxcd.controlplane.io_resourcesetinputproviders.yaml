@@ -117,6 +117,18 @@ spec:
                 required:
                 - name
                 type: object
+              skip:
+                description: Skip defines whether we need to skip input provider response
+                  updates.
+                properties:
+                  labels:
+                    description: |-
+                      Labels specifies list of labels to skip input provider response when any of the label conditions matched.
+                      When prefixed with !, input provider response will be skipped if it does not have this label.
+                    items:
+                      type: string
+                    type: array
+                type: object
               type:
                 description: Type specifies the type of the input provider.
                 enum:

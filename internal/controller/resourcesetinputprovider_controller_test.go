@@ -236,12 +236,17 @@ spec:
   id: "4"
   sha: 80332195632fe293564ff563344032cf4c75af45
   title: 'test4: Update README.md'
+  labels:
+  - documentation
+  - enhancement
 - author: stefanprodan
   branch: stefanprodan-patch-2
   env: staging
   id: "2"
   sha: 1e5aef14d38a8c67e5240308adf2935d6cdc2ec8
   title: 'test2: Update README.md'
+  labels:
+  - enhancement
 `
 
 	setDef := fmt.Sprintf(`
@@ -266,6 +271,7 @@ spec:
         title: << inputs.title | quote >>
         author: << inputs.author | quote >>
         env: << inputs.env | quote >>
+        labels: << inputs.labels | join "," >>
 `, ns.Name)
 
 	obj := &fluxcdv1.ResourceSetInputProvider{}
@@ -342,6 +348,7 @@ spec:
 	g.Expect(resultCM.Data).To(HaveKeyWithValue("title", "test2: Update README.md"))
 	g.Expect(resultCM.Data).To(HaveKeyWithValue("author", "stefanprodan"))
 	g.Expect(resultCM.Data).To(HaveKeyWithValue("env", "staging"))
+	g.Expect(resultCM.Data).To(HaveKeyWithValue("labels", "enhancement"))
 
 	// Update the filter to exclude all results.
 	resultP := result.DeepCopy()
@@ -540,5 +547,173 @@ func getResourceSetInputProviderReconciler() *ResourceSetInputProviderReconciler
 		Client:        testClient,
 		StatusManager: controllerName,
 		EventRecorder: testEnv.GetEventRecorderFor(controllerName),
+	}
+}
+
+func TestResourceSetInputProviderReconciler_SkipExportedInputsUpdate_LifeCycle(t *testing.T) {
+	defaultStatus := `
+conditions:
+- lastTransitionTime: "2025-03-28T09:53:36Z"
+  message: Reconciliation finished in 331ms
+  observedGeneration: 1
+  reason: ReconciliationSucceeded
+  status: "True"
+  type: Ready
+exportedInputs:
+- author: stefanprodan
+  branch: stefanprodan-patch-4
+  env: staging
+  id: "4"
+  sha: 342db2d64746fedf3a8768d351621b7fda2362f3
+  title: 'test4: Update README.md'
+  labels:
+  - documentation
+  - enhancement
+  - test
+- author: stefanprodan
+  branch: stefanprodan-patch-2
+  env: staging
+  id: "2"
+  sha: 381635adf7bfa06e48cb958531cc1d44e03a744c
+  title: 'test2: Update README.md'
+  labels:
+  - enhancement
+`
+	objDef := `
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSetInputProvider
+metadata:
+  name: test
+  namespace: %[1]s
+spec:
+  type: GitHubPullRequest
+  url: "https://github.com/fluxcd-testing/pr-testing"
+  defaultValues:
+    env: "staging"
+  filter:
+    includeBranch: "^stefanprodan-patch-.*$"
+    labels:
+    - "enhancement"
+  skip:
+    labels:
+    %[2]s
+`
+
+	tests := []struct {
+		name           string
+		skipDef        string
+		statusDef      string // fake status to simulate previous exported inputs
+		expectedInputs string
+	}{
+		{
+			name:      "Skip label",
+			skipDef:   `- "documentation"`,
+			statusDef: defaultStatus,
+			expectedInputs: `
+- author: stefanprodan
+  branch: stefanprodan-patch-4
+  env: staging
+  id: "4"
+  sha: 342db2d64746fedf3a8768d351621b7fda2362f3
+  title: 'test4: Update README.md'
+  labels:
+  - documentation
+  - enhancement
+  - test
+- author: stefanprodan
+  branch: stefanprodan-patch-2
+  env: staging
+  id: "2"
+  sha: 1e5aef14d38a8c67e5240308adf2935d6cdc2ec8
+  title: 'test2: Update README.md'
+  labels:
+  - enhancement
+- author: stefanprodan
+  branch: stefanprodan-patch-1
+  env: staging
+  id: "1"
+  sha: 2dd3a8d2088457e5cf991018edf13e25cbd61380
+  title: 'test1: Update README.md'
+  labels:
+  - enhancement
+`,
+		},
+		{
+			name:      "Skip label with reverse",
+			skipDef:   `- "!documentation"`,
+			statusDef: defaultStatus,
+			expectedInputs: `
+- author: stefanprodan
+  branch: stefanprodan-patch-4
+  env: staging
+  id: "4"
+  sha: 80332195632fe293564ff563344032cf4c75af45
+  title: 'test4: Update README.md'
+  labels:
+  - documentation
+  - enhancement
+- author: stefanprodan
+  branch: stefanprodan-patch-2
+  env: staging
+  id: "2"
+  sha: 381635adf7bfa06e48cb958531cc1d44e03a744c
+  title: 'test2: Update README.md'
+  labels:
+  - enhancement
+`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			reconciler := getResourceSetInputProviderReconciler()
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			defer cancel()
+
+			ns, err := testEnv.CreateNamespace(ctx, "test")
+			g.Expect(err).ToNot(HaveOccurred())
+
+			objDef := fmt.Sprintf(objDef, ns.Name, tt.skipDef)
+
+			obj := &fluxcdv1.ResourceSetInputProvider{}
+			err = yaml.Unmarshal([]byte(objDef), obj)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			// Initialize the ResourceSetInputProvider.
+			err = testEnv.Create(ctx, obj)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			err = yaml.Unmarshal([]byte(tt.statusDef), &obj.Status)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			// Manually update the exportedInputs to simulate previous exportedInputs
+			err = testEnv.Status().Update(ctx, obj)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			r, err := reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: client.ObjectKeyFromObject(obj),
+			})
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(r.Requeue).To(BeTrue())
+
+			r, err = reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: client.ObjectKeyFromObject(obj),
+			})
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(r.Requeue).To(BeFalse())
+
+			// Check if the ResourceSetInputProvider was marked as ready.
+			result := &fluxcdv1.ResourceSetInputProvider{}
+			err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			logObjectStatus(t, result)
+
+			// Check if the exported inputs are correct.
+			inputsData, err := yaml.Marshal(result.Status.ExportedInputs)
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(string(inputsData)).To(MatchYAML(tt.expectedInputs))
+		})
 	}
 }
