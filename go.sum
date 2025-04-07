@@ -129,8 +129,8 @@ github.com/fluxcd/pkg/envsubst v1.3.0 h1:84Ain+8EBvyzu6y0FsKRwNsvaSiKuqhTqeh/4yo
 github.com/fluxcd/pkg/envsubst v1.3.0/go.mod h1:lz6HvqDnxbX0sIqjr1fxw0oTGYACLVFcOE/srKS0VQQ=
 github.com/fluxcd/pkg/kustomize v1.16.0 h1:UBOeIvkrC6y4owYs7vZwG5PUVFeqnRoDFN9eaNhuNPI=
 github.com/fluxcd/pkg/kustomize v1.16.0/go.mod h1:6yQkAZaG+w3nXY30LbyWRYHimjRcLRwlYkrwG0ygMSI=
-github.com/fluxcd/pkg/runtime v0.57.1 h1:OvzGfW4AZNpyV2e/QAE5pvUXm8CcNCoOU1MtrMEYV2I=
-github.com/fluxcd/pkg/runtime v0.57.1/go.mod h1:ZRlEHAHhlP3gPl7/+kZ8i8nimZ+/mSnpURlexBJULnI=
+github.com/fluxcd/pkg/runtime v0.58.0 h1:aic88k/PUqEOzq62nxav9XEyUicAbT+fiDcJ7dzWhqc=
+github.com/fluxcd/pkg/runtime v0.58.0/go.mod h1:ZRlEHAHhlP3gPl7/+kZ8i8nimZ+/mSnpURlexBJULnI=
 github.com/fluxcd/pkg/sourceignore v0.11.0 h1:xzpYmc5/t/Ck+/DkJSX3r+VbahDRIAn5kbv04fynWUo=
 github.com/fluxcd/pkg/sourceignore v0.11.0/go.mod h1:ri2FvlzX8ep2iszOK5gF/riYq2TNgpVvsfJ2QY0dLWI=
 github.com/fluxcd/pkg/ssa v0.45.1 h1:ISl84TJwRP/GuZXrKiR9Tf8JOnG5XFgtjcYoR4XQYf4=
