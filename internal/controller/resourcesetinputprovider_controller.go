@@ -32,6 +32,7 @@ import (
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/gitprovider"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/notifier"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
 )
 
@@ -40,6 +41,7 @@ type ResourceSetInputProviderReconciler struct {
 	client.Client
 	kuberecorder.EventRecorder
 
+	Scheme        *runtime.Scheme
 	StatusManager string
 	TokenCache    *cache.TokenCache
 }
@@ -137,7 +139,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 				meta.ReadyCondition,
 				meta.ReconciliationFailedReason,
 				"%s", msg)
-			r.EventRecorder.Event(obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
+			r.notify(ctx, obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
 			return ctrl.Result{}, err
 		}
 	}
@@ -150,7 +152,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 			meta.ReadyCondition,
 			meta.ReconciliationFailedReason,
 			"%s", msg)
-		r.EventRecorder.Event(obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
+		r.notify(ctx, obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
 		return ctrl.Result{}, err
 	}
 
@@ -166,7 +168,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 			meta.ReadyCondition,
 			meta.ReconciliationFailedReason,
 			"%s", msg)
-		r.EventRecorder.Event(obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
+		r.notify(ctx, obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
 		return ctrl.Result{}, err
 	}
 
@@ -178,7 +180,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 			meta.ReadyCondition,
 			meta.ReconciliationFailedReason,
 			"%s", msg)
-		r.EventRecorder.Event(obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
+		r.notify(ctx, obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
 		return ctrl.Result{}, err
 	}
 
@@ -190,7 +192,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 			meta.ReadyCondition,
 			meta.ReconciliationFailedReason,
 			"%s", msg)
-		r.EventRecorder.Event(obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
+		r.notify(ctx, obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
 		return ctrl.Result{}, err
 	}
 	obj.Status.ExportedInputs = exportedInputs
@@ -503,6 +505,17 @@ func (r *ResourceSetInputProviderReconciler) recordMetrics(obj *fluxcdv1.Resourc
 	}
 	reporter.RecordMetrics(unstructured.Unstructured{Object: rawMap})
 	return nil
+}
+
+// eventType is always corev1.EventTypeWarning for now, but later when we have
+// drift detection we will need to use corev1.EventTypeNormal (the unparam
+// linter directive fixes the linter error).
+//
+//nolint:unparam
+func (r *ResourceSetInputProviderReconciler) notify(ctx context.Context, obj *fluxcdv1.ResourceSetInputProvider, eventType, reason, message string) {
+	notifier.
+		New(ctx, r.EventRecorder, r.Scheme, notifier.WithClient(r.Client)).
+		Event(obj, eventType, reason, message)
 }
 
 // requeueAfterResourceSetInputProvider returns a ctrl.Result with the requeue time set to the

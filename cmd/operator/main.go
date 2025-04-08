@@ -273,6 +273,7 @@ func main() {
 
 	if err = (&controller.ResourceSetInputProviderReconciler{
 		Client:        mgr.GetClient(),
+		Scheme:        mgr.GetScheme(),
 		StatusManager: controllerName,
 		EventRecorder: mgr.GetEventRecorderFor(controllerName),
 		TokenCache:    tokenCache,

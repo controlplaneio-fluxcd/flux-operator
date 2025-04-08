@@ -406,6 +406,10 @@ spec:
 }
 
 func TestResourceSetInputProviderReconciler_FailureRecovery(t *testing.T) {
+	// Disable notifications for the tests as no pod is running.
+	// This is required to avoid the 30s retry loop performed by the HTTP client.
+	t.Setenv("NOTIFICATIONS_DISABLED", "yes")
+
 	g := NewWithT(t)
 	reconciler := getResourceSetInputProviderReconciler()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -538,6 +542,7 @@ func TestResourceSetInputProviderReconciler_getGitHubToken_cached(t *testing.T) 
 func getResourceSetInputProviderReconciler() *ResourceSetInputProviderReconciler {
 	return &ResourceSetInputProviderReconciler{
 		Client:        testClient,
+		Scheme:        NewTestScheme(),
 		StatusManager: controllerName,
 		EventRecorder: testEnv.GetEventRecorderFor(controllerName),
 	}

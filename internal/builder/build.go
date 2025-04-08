@@ -16,6 +16,8 @@ import (
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
 	"github.com/opencontainers/go-digest"
 	cp "github.com/otiai10/copy"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/notifier"
 )
 
 // Build copies the source directory to a temporary directory, generates the
@@ -58,8 +60,8 @@ func Build(srcDir, tmpDir string, options Options) (*Result, error) {
 }
 
 func generate(base string, options Options) error {
-	if ContainElementString(options.Components, options.NotificationController) {
-		options.EventsAddr = fmt.Sprintf("http://%s.%s.svc.%s./", options.NotificationController, options.Namespace, options.ClusterDomain)
+	if options.HasNotificationController() {
+		options.EventsAddr = notifier.Address(options.Namespace, options.ClusterDomain)
 	}
 
 	if err := execTemplate(options, namespaceTmpl, path.Join(base, "namespace.yaml")); err != nil {

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/fluxcd/pkg/apis/kustomize"
@@ -95,7 +96,7 @@ func ExtractComponentImagesWithDigest(srcDir string, opts Options) (images []Com
 	for _, img := range kc.Images {
 		name := img.Name
 		component := name[strings.LastIndex(name, "/")+1:]
-		if ContainElementString(opts.Components, component) {
+		if slices.Contains(opts.Components, component) {
 			images = append(images, ComponentImage{
 				Name:       component,
 				Repository: fmt.Sprintf("%s/%s", registry, component),

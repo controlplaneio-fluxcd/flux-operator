@@ -25,6 +25,10 @@ import (
 )
 
 func TestResourceSetReconciler_LifeCycle(t *testing.T) {
+	// Disable notifications for the tests as no pod is running.
+	// This is required to avoid the 30s retry loop performed by the HTTP client.
+	t.Setenv("NOTIFICATIONS_DISABLED", "yes")
+
 	g := NewWithT(t)
 	reconciler := getResourceSetReconciler(t)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
