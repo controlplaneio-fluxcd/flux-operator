@@ -16,7 +16,6 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	runtimeClient "github.com/fluxcd/pkg/runtime/client"
 	"github.com/fluxcd/pkg/runtime/conditions"
-	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/ssa"
 	"github.com/fluxcd/pkg/ssa/normalize"
@@ -38,6 +37,7 @@ import (
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/builder"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/inventory"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/notifier"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
 )
 
@@ -328,7 +328,7 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 		options.Patches += builder.GetMultitenantProfile(obj.GetCluster().TenantDefaultServiceAccount)
 	}
 
-	if builder.ContainElementString(options.Components, options.NotificationController) {
+	if options.HasNotificationController() {
 		options.Patches += builder.GetNotificationPatch(options.Namespace)
 	}
 
@@ -677,32 +677,11 @@ func (r *FluxInstanceReconciler) recordMetrics(obj *fluxcdv1.FluxInstance) error
 }
 
 func (r *FluxInstanceReconciler) notify(ctx context.Context, obj *fluxcdv1.FluxInstance, reason, eventType, msg string) {
-	notificationAddress := ""
-	if os.Getenv("NOTIFICATIONS_DISABLED") == "" && builder.ContainElementString(obj.GetComponents(), builder.MakeDefaultOptions().NotificationController) {
-		notificationAddress = fmt.Sprintf("http://%s.%s.svc.%s/",
-			builder.MakeDefaultOptions().NotificationController,
-			obj.GetNamespace(),
-			obj.GetCluster().Domain,
-		)
-	}
-
-	log := ctrl.LoggerFrom(ctx)
-
-	eventRecorder, err := events.NewRecorderForScheme(
-		r.Scheme,
-		r.EventRecorder,
-		log,
-		notificationAddress,
-		r.StatusManager)
-	if err != nil {
-		log.Error(err, "failed to create event recorder")
-		return
-	}
-
 	annotations := map[string]string{}
 	if obj.Status.LastAttemptedRevision != "" {
 		annotations[fluxcdv1.RevisionAnnotation] = obj.Status.LastAttemptedRevision
 	}
-
-	eventRecorder.AnnotatedEventf(obj, annotations, eventType, reason, "%s", msg)
+	notifier.
+		New(ctx, r.EventRecorder, r.Scheme, notifier.WithFluxInstance(obj)).
+		AnnotatedEventf(obj, annotations, eventType, reason, "%s", msg)
 }

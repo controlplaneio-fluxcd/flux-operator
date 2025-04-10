@@ -3,27 +3,32 @@
 
 package builder
 
+import (
+	"slices"
+
+	notification "github.com/controlplaneio-fluxcd/flux-operator/internal/notifier"
+)
+
 // Options defines the builder configuration.
 type Options struct {
-	Version                string
-	Namespace              string
-	Components             []string
-	ComponentImages        []ComponentImage
-	EventsAddr             string
-	Registry               string
-	ImagePullSecret        string
-	WatchAllNamespaces     bool
-	NetworkPolicy          bool
-	LogLevel               string
-	NotificationController string
-	ClusterDomain          string
-	TolerationKeys         []string
-	Patches                string
-	ArtifactStorage        *ArtifactStorage
-	Sync                   *Sync
-	ShardingKey            string
-	Shards                 []string
-	ShardName              string
+	Version            string
+	Namespace          string
+	Components         []string
+	ComponentImages    []ComponentImage
+	EventsAddr         string
+	Registry           string
+	ImagePullSecret    string
+	WatchAllNamespaces bool
+	NetworkPolicy      bool
+	LogLevel           string
+	ClusterDomain      string
+	TolerationKeys     []string
+	Patches            string
+	ArtifactStorage    *ArtifactStorage
+	Sync               *Sync
+	ShardingKey        string
+	Shards             []string
+	ShardName          string
 }
 
 // MakeDefaultOptions returns the default builder configuration.
@@ -35,20 +40,23 @@ func MakeDefaultOptions() Options {
 			"source-controller",
 			"kustomize-controller",
 			"helm-controller",
-			"notification-controller",
+			notification.Controller,
 			"image-reflector-controller",
 			"image-automation-controller",
 		},
-		EventsAddr:             "",
-		Registry:               "ghcr.io/fluxcd",
-		ImagePullSecret:        "",
-		WatchAllNamespaces:     true,
-		NetworkPolicy:          true,
-		LogLevel:               "info",
-		NotificationController: "notification-controller",
-		ClusterDomain:          "cluster.local",
-		ShardingKey:            "sharding.fluxcd.io/key",
+		EventsAddr:         "",
+		Registry:           "ghcr.io/fluxcd",
+		ImagePullSecret:    "",
+		WatchAllNamespaces: true,
+		NetworkPolicy:      true,
+		LogLevel:           "info",
+		ClusterDomain:      "cluster.local",
+		ShardingKey:        "sharding.fluxcd.io/key",
 	}
+}
+
+func (o *Options) HasNotificationController() bool {
+	return slices.Contains(o.Components, notification.Controller)
 }
 
 // ComponentImage represents a container image used by a component.

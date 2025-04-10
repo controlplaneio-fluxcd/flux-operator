@@ -385,12 +385,3 @@ func execTemplate(obj interface{}, tmpl, filename string) (err error) {
 
 	return file.Sync()
 }
-
-func ContainElementString(s []string, e string) bool {
-	for _, a := range s {
-		if a == e {
-			return true
-		}
-	}
-	return false
-}

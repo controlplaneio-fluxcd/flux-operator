@@ -38,6 +38,7 @@ import (
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/builder"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/inventory"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/notifier"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
 )
 
@@ -117,7 +118,7 @@ func (r *ResourceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		conditions.MarkFalse(obj, meta.ReadyCondition, meta.InvalidCELExpressionReason, "%s", errMsg)
 		conditions.MarkStalled(obj, meta.InvalidCELExpressionReason, "%s", errMsg)
 		log.Error(err, msg)
-		r.Event(obj, corev1.EventTypeWarning, meta.InvalidCELExpressionReason, errMsg)
+		r.notify(ctx, obj, corev1.EventTypeWarning, meta.InvalidCELExpressionReason, errMsg)
 		return ctrl.Result{}, nil
 	}
 
@@ -126,7 +127,7 @@ func (r *ResourceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		msg := fmt.Sprintf("Retrying dependency check: %s", err.Error())
 		if conditions.GetReason(obj, meta.ReadyCondition) != meta.DependencyNotReadyReason {
 			log.Error(err, "dependency check failed")
-			r.Event(obj, corev1.EventTypeNormal, meta.DependencyNotReadyReason, msg)
+			r.notify(ctx, obj, corev1.EventTypeNormal, meta.DependencyNotReadyReason, msg)
 		}
 		conditions.MarkFalse(obj,
 			meta.ReadyCondition,
@@ -166,7 +167,7 @@ func (r *ResourceSetReconciler) reconcile(ctx context.Context,
 			meta.ReadyCondition,
 			meta.ReconciliationFailedReason,
 			"%s", msg)
-		r.EventRecorder.Event(obj, corev1.EventTypeWarning, meta.BuildFailedReason, msg)
+		r.notify(ctx, obj, corev1.EventTypeWarning, meta.BuildFailedReason, msg)
 		return ctrl.Result{}, err
 	}
 
@@ -188,7 +189,7 @@ func (r *ResourceSetReconciler) reconcile(ctx context.Context,
 				meta.BuildFailedReason,
 				"%s", msg)
 			log.Error(err, msg)
-			r.EventRecorder.Event(obj, corev1.EventTypeWarning, meta.BuildFailedReason, msg)
+			r.notify(ctx, obj, corev1.EventTypeWarning, meta.BuildFailedReason, msg)
 			return ctrl.Result{}, nil
 		}
 		objects = buildResult
@@ -202,7 +203,7 @@ func (r *ResourceSetReconciler) reconcile(ctx context.Context,
 			meta.ReadyCondition,
 			meta.ReconciliationFailedReason,
 			"%s", msg)
-		r.EventRecorder.Event(obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
+		r.notify(ctx, obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
 
 		return ctrl.Result{}, err
 	}
@@ -491,7 +492,7 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 	// Emit event only if the server-side apply resulted in changes.
 	applyLog := strings.TrimSuffix(changeSetLog.String(), "\n")
 	if applyLog != "" {
-		r.EventRecorder.Event(obj,
+		r.notify(ctx, obj,
 			corev1.EventTypeNormal,
 			"ApplySucceeded",
 			applyLog)
@@ -762,6 +763,12 @@ func (r *ResourceSetReconciler) recordMetrics(obj *fluxcdv1.ResourceSet) error {
 	}
 	reporter.RecordMetrics(unstructured.Unstructured{Object: rawMap})
 	return nil
+}
+
+func (r *ResourceSetReconciler) notify(ctx context.Context, obj *fluxcdv1.ResourceSet, eventType, reason, message string) {
+	notifier.
+		New(ctx, r.EventRecorder, r.Scheme, notifier.WithClient(r.Client)).
+		Event(obj, eventType, reason, message)
 }
 
 // requeueAfterResourceSet returns a ctrl.Result with the requeue time set to the
