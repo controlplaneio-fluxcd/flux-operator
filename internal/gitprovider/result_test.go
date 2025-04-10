@@ -30,6 +30,13 @@ func TestMakeInputs(t *testing.T) {
 					SHA:    "1e5aef14d38a8c67e5240308adf2935d6cdc2ec8",
 					Branch: "patch-2",
 				},
+				{
+					ID:     "1433470822",
+					SHA:    "6889f7524d5796de2570466f0bf50afdb78fb30e",
+					Branch: "patch-3",
+					Title:  "my title",
+					Labels: []string{"enhancement", "development"},
+				},
 			},
 			defaults: nil,
 			want: `
@@ -39,6 +46,13 @@ func TestMakeInputs(t *testing.T) {
 - id: "1433536418"
   sha: "1e5aef14d38a8c67e5240308adf2935d6cdc2ec8"
   branch: "patch-2"
+- id: "1433470822"
+  sha: "6889f7524d5796de2570466f0bf50afdb78fb30e"
+  branch: "patch-3"
+  title: "my title"
+  labels:
+  - "enhancement"
+  - "development"
 `,
 		},
 		{
@@ -54,6 +68,13 @@ func TestMakeInputs(t *testing.T) {
 					ID:     "1433536418",
 					SHA:    "1e5aef14d38a8c67e5240308adf2935d6cdc2ec8",
 					Branch: "patch-2",
+				},
+				{
+					ID:     "1433470822",
+					SHA:    "6889f7524d5796de2570466f0bf50afdb78fb30e",
+					Branch: "patch-3",
+					Title:  "my title",
+					Labels: []string{"enhancement", "development"},
 				},
 			},
 			defaults: map[string]any{
@@ -78,6 +99,17 @@ func TestMakeInputs(t *testing.T) {
   numbers:
   - 1
   - 2
+- id: "1433470822"
+  sha: "6889f7524d5796de2570466f0bf50afdb78fb30e"
+  branch: "patch-3"
+  title: "my title"
+  labels:
+  - "enhancement"
+  - "development"
+  boolean: true
+  numbers:
+  - 1
+  - 2
 `,
 		},
 	}
@@ -93,6 +125,53 @@ func TestMakeInputs(t *testing.T) {
 			g.Expect(err).NotTo(HaveOccurred())
 
 			g.Expect(string(gotData)).To(MatchYAML(tt.want))
+		})
+	}
+}
+
+func TestOverrideFromExportedInputs(t *testing.T) {
+	tests := []struct {
+		name          string
+		result        Result
+		exportedInput map[string]any
+		want          Result
+	}{
+		{
+			name: "results without defaults",
+			result: Result{
+				ID:     "1",
+				SHA:    "6889f7524d5796de2570466f0bf50afdb78fb30e",
+				Branch: "patch-3",
+				Title:  "my title",
+				Labels: []string{"deploy", "pipeline:pending"},
+			},
+			exportedInput: map[string]any{
+				"id":     "1",
+				"sha":    "2dd3a8d2088457e5cf991018edf13e25cbd61380",
+				"branch": "patch-3",
+				"title":  "my title",
+				"labels": []string{"deploy"},
+			},
+			want: Result{
+				ID:     "1",
+				SHA:    "2dd3a8d2088457e5cf991018edf13e25cbd61380",
+				Branch: "patch-3",
+				Title:  "my title",
+				Labels: []string{"deploy"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			result := tt.result
+
+			err := result.OverrideFromExportedInputs(tt.exportedInput)
+			g.Expect(err).NotTo(HaveOccurred())
+
+			g.Expect(result).To(Equal(tt.want))
 		})
 	}
 }

@@ -62,6 +62,10 @@ type ResourceSetInputProviderSpec struct {
 	// Filter defines the filter to apply to the input provider response.
 	// +optional
 	Filter *ResourceSetInputFilter `json:"filter,omitempty"`
+
+	// Skip defines whether we need to skip input provider response updates.
+	// +optional
+	Skip *ResourceSetInputSkip `json:"skip,omitempty"`
 }
 
 // ResourceSetInputFilter defines the filter to apply to the input provider response.
@@ -84,6 +88,14 @@ type ResourceSetInputFilter struct {
 	// When not set, the default limit is 100.
 	// +optional
 	Limit int `json:"limit,omitempty"`
+}
+
+// ResourceSetInputSkip defines whether we need to skip input updates.
+type ResourceSetInputSkip struct {
+	// Labels specifies list of labels to skip input provider response when any of the label conditions matched.
+	// When prefixed with !, input provider response will be skipped if it does not have this label.
+	// +optional
+	Labels []string `json:"labels,omitempty"`
 }
 
 // ResourceSetInputProviderStatus defines the observed state of ResourceSetInputProvider.

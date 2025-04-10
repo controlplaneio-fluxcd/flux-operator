@@ -13,11 +13,12 @@ import (
 
 // Result holds the information extracted from the Git SaaS provider response.
 type Result struct {
-	ID     string `json:"id"`
-	SHA    string `json:"sha"`
-	Branch string `json:"branch"`
-	Author string `json:"author,omitempty"`
-	Title  string `json:"title,omitempty"`
+	ID     string   `json:"id"`
+	SHA    string   `json:"sha"`
+	Branch string   `json:"branch"`
+	Author string   `json:"author,omitempty"`
+	Title  string   `json:"title,omitempty"`
+	Labels []string `json:"labels,omitempty"`
 }
 
 // ToMap converts the result into a map.
@@ -36,6 +37,10 @@ func (r *Result) ToMap() map[string]any {
 		m["title"] = r.Title
 	}
 
+	if len(r.Labels) > 0 {
+		m["labels"] = r.Labels
+	}
+
 	return m
 }
 
@@ -48,6 +53,23 @@ func (r *Result) ToMapWithDefaults(defaults map[string]any) map[string]any {
 		}
 	}
 	return m
+}
+
+// OverrideFromExportedInputs override result fields from exportedInput.
+func (r *Result) OverrideFromExportedInputs(input map[string]any) error {
+	var err error
+
+	data, err := json.Marshal(input)
+	if err != nil {
+		return err
+	}
+
+	err = json.Unmarshal(data, r)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // MakeInputs converts a list of results into a list of ResourceSet inputs with defaults.

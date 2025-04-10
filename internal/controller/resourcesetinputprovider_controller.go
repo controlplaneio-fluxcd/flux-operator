@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -278,6 +279,58 @@ func (r *ResourceSetInputProviderReconciler) makeGitOptions(obj *fluxcdv1.Resour
 	return opts, nil
 }
 
+// restoreSkippedGitProviderResults skip git provider results when matches skip condition.
+func (r *ResourceSetInputProviderReconciler) restoreSkippedGitProviderResults(results []gitprovider.Result, obj *fluxcdv1.ResourceSetInputProvider) ([]gitprovider.Result, error) {
+	if obj.Spec.Skip == nil || len(obj.Spec.Skip.Labels) == 0 {
+		return results, nil
+	}
+
+	exportedInputs, err := obj.GetInputs()
+	if err != nil {
+		return nil, fmt.Errorf("invalid exportedInputs values: %w", err)
+	}
+
+	res := make([]gitprovider.Result, 0, len(results))
+	for _, result := range results {
+		isSkipped := false
+		for _, label := range obj.Spec.Skip.Labels {
+			// handle the case when the label is prefixed with ! to skip the result if it does not have the label
+			if strings.HasPrefix(label, "!") {
+				isSkipped = !slices.Contains(result.Labels, label[1:])
+			} else {
+				isSkipped = slices.Contains(result.Labels, label)
+			}
+			if isSkipped {
+				break
+			}
+		}
+
+		if isSkipped {
+			var exportedInput map[string]any
+			for _, ei := range exportedInputs {
+				if ei["id"] == result.ID {
+					exportedInput = ei
+					break
+				}
+			}
+
+			// when the result is newly added, we completely skip it
+			if exportedInput == nil {
+				continue
+			}
+
+			err := result.OverrideFromExportedInputs(exportedInput)
+			if err != nil {
+				return nil, fmt.Errorf("failed to override result from exportedInput: %w", err)
+			}
+		}
+
+		res = append(res, result)
+	}
+
+	return res, nil
+}
+
 func (r *ResourceSetInputProviderReconciler) callProvider(ctx context.Context,
 	obj *fluxcdv1.ResourceSetInputProvider,
 	provider gitprovider.Interface) ([]fluxcdv1.ResourceSetInput, error) {
@@ -305,6 +358,10 @@ func (r *ResourceSetInputProviderReconciler) callProvider(ctx context.Context,
 	}
 
 	if len(results) > 0 {
+		if results, err = r.restoreSkippedGitProviderResults(results, obj); err != nil {
+			return nil, err
+		}
+
 		defaults, err := obj.GetDefaultInputs()
 		if err != nil {
 			return nil, fmt.Errorf("invalid default values: %w", err)

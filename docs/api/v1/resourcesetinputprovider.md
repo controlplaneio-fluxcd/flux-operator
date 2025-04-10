@@ -137,6 +137,28 @@ spec:
     excludeBranch: "^feat/not-this-one$"
 ```
 
+### Skip
+
+The `.spec.skip` field is optional and specifies the skip criteria for skipping input updates.
+This field can be used to wait until certain PR/MR is ready.
+
+The following skips are supported:
+
+- `labels`: skip input update by labels if one of the label matched. When the label starts with `!` it will skip if the label is not present.
+
+Example of a skip configuration:
+
+```yaml
+spec:
+  filter:
+    labels:
+      - "deploy:flux-preview"
+  skip:
+    labels:
+      - "deploy/flux-preview-pause"
+      - "!test-build-push/passed"
+```
+
 ### Default values
 
 The `.spec.defaultValues` field is optional and specifies the default values for the exported inputs.
