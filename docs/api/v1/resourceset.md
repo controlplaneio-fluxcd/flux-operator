@@ -252,6 +252,21 @@ spec:
         layerSelector: << inputs.layerSelector | toYaml | nindent 4 >>
 ```
 
+To assign a default value when an input field is not specified, use `get` combined with `default`.
+E.g. using the namespace input as a default value for name:
+
+```yaml
+spec:
+  inputs:
+    - namespace: team1
+  resources:
+    - apiVersion: source.toolkit.fluxcd.io/v1beta2
+      kind: OCIRepository
+      metadata:
+        name: << get inputs "name" | default inputs.namespace >>
+        namespace: << inputs.namespace >>
+```
+
 In addition to the slim-sprig functions, a `slugify` function is available to normalize a string for use in a Kubernetes
 [label value](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set)
 e.g. `<< inputs.tenant | slugify >>`.
