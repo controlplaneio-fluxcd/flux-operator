@@ -3,20 +3,6 @@
 **ResourceSet** is a declarative API for generating a group of Kubernetes objects
 based on a matrix of input values and a set of templated resources.
 
-The ResourceSet API offers a high-level abstraction for defining and managing
-Flux resources and related Kubernetes objects as a single unit. It is designed
-to reduce the complexity of Kustomize overlays by providing a compact way
-of defining different configurations for a set of workloads per tenant and/or environment.
-
-Use cases:
-
-- Application definition: Bundle a set of Kubernetes resources (Flux HelmRelease, OCIRepository, Alert, Provider, Receiver, ImagePolicy) into a single deployable unit.
-- Preview environments: Generate a set of Kubernetes resources for each opened pull/merge request that are removed when PRs are closed.
-- Dependency management: Define dependencies between apps to ensure that the resources are applied in the correct order. The dependencies are more flexible  than in Flux, they can be for other ResourceSets, CRDs, or any other Kubernetes object.
-- Multi-instance provisioning: Generate multiple instances of the same application with different configurations.
-- Multi-cluster provisioning: Generate multiple instances of the same application for each target cluster that are deployed by Flux from a management cluster.
-- Multi-tenancy provisioning: Generate a set of resources (Namespace, ServiceAccount, RoleBinding) for each tenant with specific roles and permissions.
-
 ## Example
 
 The following example shows a ResourceSet that generates an application instance consisting of a
