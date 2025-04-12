@@ -82,14 +82,14 @@ func geInstanceCmdRun(cmd *cobra.Command, args []string) error {
 			ready,
 			conditions.GetMessage(&instance, "Ready"),
 		}
-		if getResourceSetArgs.allNamespaces {
+		if getInstanceArgs.allNamespaces {
 			row = append([]string{instance.Namespace}, row...)
 		}
 		rows = append(rows, row)
 	}
 
 	header := []string{"Name", "Resources", "Ready", "Message"}
-	if getResourceSetArgs.allNamespaces {
+	if getInstanceArgs.allNamespaces {
 		header = append([]string{"Namespace"}, header...)
 	}
 
