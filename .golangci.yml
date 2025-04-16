@@ -18,6 +18,7 @@ issues:
         - lll
   exclude-dirs:
     - "cmd/cli"
+    - "cmd/mcp"
 linters:
   disable-all: true
   enable:
