@@ -14,7 +14,7 @@ import (
 )
 
 func GetFluxInstanceHandler(ctx context.Context, args GetArgs) (*mcpgolang.ToolResponse, error) {
-	result, err := exportObjects(ctx, args.Namespace, []metav1.GroupVersionKind{
+	result, err := exportObjects(ctx, args.Name, args.Namespace, []metav1.GroupVersionKind{
 		{
 			Group:   fluxcdv1.GroupVersion.Group,
 			Version: fluxcdv1.GroupVersion.Version,

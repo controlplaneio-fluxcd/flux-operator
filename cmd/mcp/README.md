@@ -11,7 +11,8 @@ Example prompts:
 - Analyze the Flux installation in my cluster and report the status of all components.
 - Are there any reconciliation errors in the Flux managed resources?
 - Are the Flux kustomizations and Helm releases configured correctly?
-- Create a report of all Flux resources in the cluster and their status.
+- Based on Flux events, what deployments have been updated today?
+- Create a report of all Flux resources and their status in the monitoring namespace.
 - Draw a diagram of the Flux dependency flow in the cluster.
 - Which Kubernetes deployments are managed by Flux in the cluster?
 - Which images are deployed by Flux in the monitoring namespace?
