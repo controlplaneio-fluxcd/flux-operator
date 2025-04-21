@@ -24,14 +24,14 @@ func serveCmdRun(cmd *cobra.Command, args []string) error {
 
 	mcpServer := mcpgolang.NewServer(stdio.NewStdioServerTransport())
 
-	for _, tool := range ActionList {
+	for _, tool := range ReconcileToolList {
 		err := mcpServer.RegisterTool(tool.Name, tool.Description, tool.Handler)
 		if err != nil {
 			return err
 		}
 	}
 
-	for _, tool := range ReportList {
+	for _, tool := range GetToolList {
 		err := mcpServer.RegisterTool(tool.Name, tool.Description, tool.Handler)
 		if err != nil {
 			return err
