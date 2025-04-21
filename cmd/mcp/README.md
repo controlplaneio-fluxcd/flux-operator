@@ -16,6 +16,8 @@ Example prompts:
 - Which Kubernetes deployments are managed by Flux in the cluster?
 - Which images are deployed by Flux in the monitoring namespace?
 - Reconcile the Flux infra-components kustomization in the monitoring namespace.
+- Reconcile the Flux podinfo Helm release in the frontend namespace.
+- Reconcile all the Flux sources in the cluster, then verify their status.
 
 ## Build from source
 
@@ -49,6 +51,41 @@ Add the binary to the Claude Desktop configuration (change the paths to your use
 ```
 
 Note that on macOS the config file is located at `~/Library/Application Support/Claude/claude_desktop_config.json`.
+
+## Security Considerations
+
+The MCP server is designed to prevent alterations to the cluster state, besides triggering
+the reconciliation of Flux resources no other write operation is exposed to the client.
+
+The data returned by the server is limited to the Flux resources spec and their status which
+may contain sensitive information such as container images, Git repository URLs, and Helm chart names.
+The server does not expose sensitive information stored in Kubernetes secrets,
+unless Flux substitutions are used to set inline values in HelmRelease and Kustomization resources.
+
+The MCP server uses the `KUBECONFIG` environment variable to read the configuration and 
+authenticate to the cluster. The server will use the default context set the kubeconfig file.
+It is possible to specify a different context and a user or service account that the MCP server
+will impersonate when connecting to the cluster.
+
+Example configuration for impersonating a service account:
+
+```json
+{
+    "mcpServers": {
+      "flux-operator-mcp": {
+          "command": "/Users/stefanprodan/src/flux-operator/bin/flux-operator-mcp",
+          "args": [
+            "serve",
+            "--kube-context=kind-kind",
+            "--kube-as=system:serviceaccount:flux-system:flux-operator"
+          ],
+          "env": {
+            "KUBECONFIG": "/Users/stefanprodan/.kube/config"
+          }
+        }
+      }
+}
+```
 
 ## License
 
