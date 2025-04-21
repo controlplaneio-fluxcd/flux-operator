@@ -3,7 +3,7 @@
 This in an **experimental** Model Context Protocol Server for interacting with
 Kubernetes clusters managed by the [Flux Operator](https://fluxcd.control-plane.io/operator/).
 
-The MCP server primarily goal is helping ControlPlane's support team to analyze and
+The MCP server primarily goal is helping Flux users and ControlPlane's support team to analyze and
 troubleshoot [Flux Enterprise](https://fluxcd.control-plane.io/distribution/) installations.
 
 Example prompts:
@@ -14,6 +14,7 @@ Example prompts:
 - Create a report of all Flux resources in the cluster and their status.
 - Draw a diagram of the Flux dependency flow in the cluster.
 - Which Kubernetes deployments are managed by Flux in the cluster?
+- Which images are deployed by Flux in the monitoring namespace?
 - Reconcile the Flux infra-components kustomization in the monitoring namespace.
 
 ## Build from source

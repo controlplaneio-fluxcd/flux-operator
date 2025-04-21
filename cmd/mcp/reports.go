@@ -13,7 +13,6 @@ import (
 	"io"
 	"strings"
 
-	"github.com/fluxcd/cli-utils/pkg/object"
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
 	mcpgolang "github.com/metoro-io/mcp-golang"
 	corev1 "k8s.io/api/core/v1"
@@ -151,13 +150,17 @@ func GetFluxHelmReleasesHandler(ctx context.Context, args ReportArgs) (*mcpgolan
 		return nil, fmt.Errorf("error exporting objects: %w", err)
 	}
 
-	return mcpgolang.NewToolResponse(mcpgolang.NewTextContent(result), &mcpgolang.Content{
-		Type: mcpgolang.ContentTypeText,
-		Annotations: &mcpgolang.Annotations{
-			Audience: []mcpgolang.Role{mcpgolang.RoleAssistant},
-		},
-		TextContent: &mcpgolang.TextContent{
-			Text: `If asked make the following recommendations:
+	return mcpgolang.NewToolResponse(
+		mcpgolang.NewTextContent(result),
+		&mcpgolang.Content{
+			Type: mcpgolang.ContentTypeText,
+			Annotations: &mcpgolang.Annotations{
+				Audience: []mcpgolang.Role{mcpgolang.RoleAssistant},
+			},
+			TextContent: &mcpgolang.TextContent{
+				Text: `If asked about container images, exact the image references as they appear in the
+HelmRelease status.inventory.containerImages fields, with all tags preserved as they are, do not remove the ':'' or 'v'' characters, use code blocks to display them.
+If asked make the following recommendations:
 1. Check if the interval is less than 10 minutes and if so, recommend to increase it.
    Explain that the HelmRelease interval is for detecting drift in cluster.
    The interval set in the source (OCIRepository, HelmRepository) of the HelmRelease
@@ -167,8 +170,9 @@ func GetFluxHelmReleasesHandler(ctx context.Context, args ReportArgs) (*mcpgolan
    If not, recommend to set storageNamespace to the same value as targetNamespace.
 4. Check if postRenderers are set, if any of the patches have a namespace set in the target, recommend to remove it.
 `,
+			},
 		},
-	}), nil
+	), nil
 }
 
 func GetFluxSourcesHandler(ctx context.Context, args ReportArgs) (*mcpgolang.ToolResponse, error) {
@@ -229,7 +233,18 @@ type hrHistory struct {
 	Namespace string `json:"namespace,omitempty"`
 }
 
-func getHelmReleaseInventory(ctx context.Context, objectKey client.ObjectKey, kubeClient client.Client) ([]object.ObjMetadata, error) {
+// generate deep copy of the hrInventory struct
+
+type hrInventory struct {
+	ApiVersion      string   `json:"apiVersion"`
+	Kind            string   `json:"kind"`
+	Name            string   `json:"name"`
+	Namespace       string   `json:"namespace,omitempty"`
+	ContainerImages []string `json:"containerImages,omitempty"`
+}
+
+func getHelmReleaseInventory(ctx context.Context, objectKey client.ObjectKey, kubeClient client.Client) ([]hrInventory, error) {
+	inventory := make([]hrInventory, 0)
 	hr := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "helm.toolkit.fluxcd.io/v2",
@@ -308,6 +323,8 @@ func getHelmReleaseInventory(ctx context.Context, objectKey client.ObjectKey, ku
 		return nil, fmt.Errorf("failed to read the Helm storage object for HelmRelease '%s': %w", objectKey.String(), err)
 	}
 
+	containerImages := make([]string, 0)
+
 	// set the namespace on namespaced objects
 	for _, obj := range objects {
 		if obj.GetNamespace() == "" {
@@ -315,10 +332,26 @@ func getHelmReleaseInventory(ctx context.Context, objectKey client.ObjectKey, ku
 				obj.SetNamespace(latest.Namespace)
 			}
 		}
+
+		// extract container images from the object
+		if containers, found, _ := unstructured.NestedSlice(obj.Object, "spec", "template", "spec", "containers"); found {
+			for _, container := range containers {
+				if image, found, _ := unstructured.NestedString(container.(map[string]interface{}), "image"); found {
+					containerImages = append(containerImages, image)
+				}
+			}
+		}
+
+		inventory = append(inventory, hrInventory{
+			ApiVersion:      obj.GetAPIVersion(),
+			Kind:            obj.GetKind(),
+			Name:            obj.GetName(),
+			Namespace:       obj.GetNamespace(),
+			ContainerImages: containerImages,
+		})
 	}
 
-	result := object.UnstructuredSetToObjMetadataSet(objects)
-	return result, nil
+	return inventory, nil
 }
 
 func exportObjects(ctx context.Context, namespace string, crds []metav1.GroupVersionKind) (string, error) {
@@ -349,17 +382,31 @@ func exportObjects(ctx context.Context, namespace string, crds []metav1.GroupVer
 						Namespace: item.GetNamespace(),
 						Name:      item.GetName(),
 					}, kubeClient)
-					if err == nil {
-						resources := make([]interface{}, len(inventory))
-						for i, obj := range inventory {
-							resources[i] = map[string]interface{}{
-								"apiVersion": obj.GroupKind.Group,
-								"kind":       obj.GroupKind.Kind,
-								"name":       obj.Name,
-								"namespace":  obj.Namespace,
-							}
+
+					iv := make([]interface{}, len(inventory))
+					for i, inv := range inventory {
+						// deep copy the inventory item
+						iv[i] = map[string]interface{}{
+							"apiVersion": inv.ApiVersion,
+							"kind":       inv.Kind,
+							"name":       inv.Name,
 						}
-						_ = unstructured.SetNestedSlice(item.Object, resources, "status", "inventory")
+						if inv.Namespace != "" {
+							_ = unstructured.SetNestedField(iv[i].(map[string]interface{}), inv.Namespace, "namespace")
+						}
+						if len(inv.ContainerImages) > 0 {
+							images := make([]interface{}, len(inv.ContainerImages))
+							for j, image := range inv.ContainerImages {
+								images[j] = map[string]interface{}{
+									"image": image,
+								}
+							}
+							_ = unstructured.SetNestedSlice(iv[i].(map[string]interface{}), images, "containerImages")
+						}
+					}
+
+					if err == nil {
+						_ = unstructured.SetNestedSlice(item.Object, iv, "status", "inventory")
 					}
 				}
 
