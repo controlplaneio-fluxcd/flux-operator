@@ -23,8 +23,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 )
 
-func GetFluxHelmReleasesHandler(ctx context.Context, args GetArgs) (*mcpgolang.ToolResponse, error) {
-	result, err := exportObjects(ctx, args.Name, args.Namespace, []metav1.GroupVersionKind{
+func GetFluxHelmReleasesHandler(ctx context.Context, args GetFluxResourceArgs) (*mcpgolang.ToolResponse, error) {
+	result, err := exportObjects(ctx, args.Name, args.Namespace, args.LabelSelector, []metav1.GroupVersionKind{
 		{
 			Group:   "helm.toolkit.fluxcd.io",
 			Version: "v2",
@@ -44,7 +44,7 @@ func GetFluxHelmReleasesHandler(ctx context.Context, args GetArgs) (*mcpgolang.T
 			},
 			TextContent: &mcpgolang.TextContent{
 				Text: `If asked about container images, exact the image references as they appear in the
-HelmRelease status.inventory.containerImages fields, with all tags preserved as they are, do not remove the ':'' or 'v'' characters, use code blocks to display them.
+HelmRelease status.inventory.containers fields, with all tags preserved as they are, do not remove the ':'' or 'v'' characters, use code blocks to display them.
 If asked make the following recommendations:
 1. Check if the interval is less than 10 minutes and if so, recommend to increase it.
    Explain that the HelmRelease interval is for detecting drift in cluster.

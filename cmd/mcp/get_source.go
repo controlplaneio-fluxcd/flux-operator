@@ -11,8 +11,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func GetFluxSourcesHandler(ctx context.Context, args GetArgs) (*mcpgolang.ToolResponse, error) {
-	result, err := exportObjects(ctx, args.Name, args.Namespace, []metav1.GroupVersionKind{
+func GetFluxSourcesHandler(ctx context.Context, args GetFluxResourceArgs) (*mcpgolang.ToolResponse, error) {
+	result, err := exportObjects(ctx, args.Name, args.Namespace, args.LabelSelector, []metav1.GroupVersionKind{
 		{
 			Group:   "source.toolkit.fluxcd.io",
 			Version: "v1",

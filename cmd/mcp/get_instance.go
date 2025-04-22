@@ -13,8 +13,8 @@ import (
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
-func GetFluxInstanceHandler(ctx context.Context, args GetArgs) (*mcpgolang.ToolResponse, error) {
-	result, err := exportObjects(ctx, args.Name, args.Namespace, []metav1.GroupVersionKind{
+func GetFluxInstanceHandler(ctx context.Context, args GetFluxResourceArgs) (*mcpgolang.ToolResponse, error) {
+	result, err := exportObjects(ctx, args.Name, args.Namespace, args.LabelSelector, []metav1.GroupVersionKind{
 		{
 			Group:   fluxcdv1.GroupVersion.Group,
 			Version: fluxcdv1.GroupVersion.Version,
