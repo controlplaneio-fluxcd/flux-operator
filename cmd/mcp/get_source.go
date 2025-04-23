@@ -11,34 +11,52 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func GetFluxSourcesHandler(ctx context.Context, args GetFluxResourceArgs) (*mcpgolang.ToolResponse, error) {
-	result, err := exportObjects(ctx, args.Name, args.Namespace, args.LabelSelector, []metav1.GroupVersionKind{
-		{
+type GetFluxSourceArgs struct {
+	Kind          string `json:"kind" jsonschema:"description=Filter by a specific Flux source kind."`
+	Name          string `json:"name" jsonschema:"description=Filter by a specific name."`
+	Namespace     string `json:"namespace" jsonschema:"description=Filter by a specific namespace, if not specified all namespaces are included."`
+	LabelSelector string `json:"labelSelector" jsonschema:"description=The label selector in the format label-name=label-value."`
+}
+
+func GetFluxSourcesHandler(ctx context.Context, args GetFluxSourceArgs) (*mcpgolang.ToolResponse, error) {
+	var sources []metav1.GroupVersionKind
+	if args.Kind == "" || args.Kind == "GitRepository" {
+		sources = append(sources, metav1.GroupVersionKind{
 			Group:   "source.toolkit.fluxcd.io",
 			Version: "v1",
 			Kind:    "GitRepository",
-		},
-		{
-			Group:   "source.toolkit.fluxcd.io",
-			Version: "v1beta2",
-			Kind:    "OCIRepository",
-		},
-		{
+		})
+	}
+	if args.Kind == "" || args.Kind == "Bucket" {
+		sources = append(sources, metav1.GroupVersionKind{
 			Group:   "source.toolkit.fluxcd.io",
 			Version: "v1",
 			Kind:    "Bucket",
-		},
-		{
+		})
+	}
+	if args.Kind == "" || args.Kind == "HelmRepository" {
+		sources = append(sources, metav1.GroupVersionKind{
 			Group:   "source.toolkit.fluxcd.io",
 			Version: "v1",
 			Kind:    "HelmRepository",
-		},
-		{
+		})
+	}
+	if args.Kind == "" || args.Kind == "HelmChart" {
+		sources = append(sources, metav1.GroupVersionKind{
 			Group:   "source.toolkit.fluxcd.io",
 			Version: "v1",
 			Kind:    "HelmChart",
-		},
-	})
+		})
+	}
+	if args.Kind == "" || args.Kind == "OCIRepository" {
+		sources = append(sources, metav1.GroupVersionKind{
+			Group:   "source.toolkit.fluxcd.io",
+			Version: "v1beta2",
+			Kind:    "OCIRepository",
+		})
+	}
+
+	result, err := exportObjects(ctx, args.Name, args.Namespace, args.LabelSelector, sources)
 	if err != nil {
 		return nil, fmt.Errorf("error exporting objects: %w", err)
 	}

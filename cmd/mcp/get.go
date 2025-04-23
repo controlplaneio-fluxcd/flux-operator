@@ -31,7 +31,7 @@ var GetToolList = []GetTool{
 	},
 	{
 		Name:        "get-flux-resourceset",
-		Description: "This tool retrieves the Flux ResourceSets, ResourceSetInputProviders including their status and events.",
+		Description: "This tool retrieves the Flux ResourceSets and ResourceSetInputProviders including their status and events.",
 		Handler:     GetFluxResourceSetsHandler,
 	},
 	{
