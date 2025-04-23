@@ -16,8 +16,9 @@ Example prompts:
 - What is the Git source and revision of the Flux OCI repositories?
 - Which Kubernetes deployments are managed by Flux in the cluster?
 - Which images are deployed by Flux in the monitoring namespace?
-- Reconcile the podinfo Helm release in the frontend namespace.
 - Reconcile all the Flux sources in the dependsOn order, then verify their status.
+- Suspend all failing Helm releases in the test namespace, then delete them from the cluster.
+- Search for all the suspended Flux resources in the cluster and resume them.
 
 Recommended Claude setup:
 
@@ -102,6 +103,20 @@ The reconciliation tools accept the following arguments:
 
 The output of the reconciliation tools tells the model how to verify the status of the reconciled resource.
 
+### Suspend / Resume tools
+
+The MCP server provides a set of tools for suspending and resuming the reconciliation of Flux resources:
+
+- `suspend-flux-resource`: This tool suspends the reconciliation of a Flux resource (Kustomization, HelmRelease, ResourceSet, OCIRepository, etc.).
+- `resume-flux-resource`: This tool resumes the reconciliation of a Flux resource.
+
+The suspend and resume tools accept the following arguments:
+
+- `apiVersion` - The API version of the resource (required).
+- `kind` - The kind of the resource (required).
+- `name` - The name of the resource (required).
+- `namespace` - The namespace of the resource (required).
+
 ### Deletion tool
 
 The MCP server provides a tool for deleting Kubernetes resources:
@@ -122,8 +137,8 @@ such as container images, Git repository URLs, and Helm chart names.
 By default, the MCP Server masks the values of the Kubernetes Secrets data values,
 but it is possible to disable this feature by setting the `--mask-secrets=false` flag.
 
-The MCP server exposes tools that alter the state of the cluster, such as
-deleting Kubernetes resources. To disable these tools, the MCP server can be
+The MCP server exposes tools that alter the state of the cluster, such as suspending,
+resuming, and deleting Flux resources. To disable these tools, the MCP server can be
 configured to run in read-only mode by setting the `--read-only` flag.
 
 The MCP server uses the `KUBECONFIG` environment variable to read the configuration and

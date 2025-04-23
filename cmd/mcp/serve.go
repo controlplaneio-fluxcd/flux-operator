@@ -59,6 +59,13 @@ func serveCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	if !serveArgs.readOnly {
+		for _, tool := range SuspendResumeToolList {
+			err := mcpServer.RegisterTool(tool.Name, tool.Description, tool.Handler)
+			if err != nil {
+				return err
+			}
+		}
+
 		for _, tool := range DeleteToolList {
 			err := mcpServer.RegisterTool(tool.Name, tool.Description, tool.Handler)
 			if err != nil {
