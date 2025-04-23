@@ -1,59 +1,104 @@
+version: 2
+
+# xref: https://goreleaser.com/errors/multiple-tokens/
+force_token: github
+
+# xref: https://goreleaser.com/customization/project/
 project_name: flux-operator
-changelog:
-  use: github-native
+
+# xref: https://goreleaser.com/customization/hooks/
+before:
+  hooks:
+    - go mod download
+
+# xref: https://goreleaser.com/customization/env/
+env:
+  - CGO_ENABLED=0
+
+# xref: https://goreleaser.com/customization/build/
 builds:
-  - <<: &build_defaults
+  - <<: &cmd_defaults
       binary: flux-operator
       main: ./cmd/cli
       ldflags:
         - -s -w -X main.VERSION={{ .Version }}
-      env:
-        - CGO_ENABLED=0
-    id: linux
+    id: cli
     goos:
       - linux
-    goarch:
-      - amd64
-      - arm64
-  - <<: *build_defaults
-    id: darwin
-    goos:
       - darwin
     goarch:
       - amd64
       - arm64
-  - <<: *build_defaults
-    id: windows
+  - <<: *cmd_defaults
+    id: cli-windows
     goos:
       - windows
     goarch:
       - amd64
+      - arm64
+  - <<: &mcp_defaults
+      binary: flux-operator-mcp
+      main: ./cmd/mcp
+      ldflags:
+        - -s -w -X main.VERSION={{ .Version }}
+    id: mcp
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+  - <<: *mcp_defaults
+    id: mcp-windows
+    goos:
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+# xref: https://goreleaser.com/customization/archive/
 archives:
   - name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    id: nix
-    builds: [darwin, linux]
-    format: tar.gz
+    id: unix
+    ids:
+      - cli
+      - mcp
+    formats: ['tar.gz']
     files:
       - LICENSE
   - name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     id: windows
-    builds: [windows]
-    format: zip
+    ids:
+      - cli-windows
+      - mcp-windows
+    formats: ['zip']
     files:
       - LICENSE
+
+# xref: https://goreleaser.com/customization/checksum/
+checksum:
+  extra_files:
+    - glob: ./bin/release/install.yaml
+    - glob: ./bin/release/crd-schemas.tar.gz
+
+# xref: https://goreleaser.com/customization/source/
 source:
   enabled: true
   name_template: '{{ .ProjectName }}_{{ .Version }}_source_code'
+
+# xref: https://goreleaser.com/customization/sbom/
 sboms:
   - id: source
     artifacts: source
     documents:
       - "{{ .ProjectName }}_{{ .Version }}_sbom.spdx.json"
+
+# xref: https://goreleaser.com/customization/changelog/
+changelog:
+  use: github-native
+
+# xref: https://goreleaser.com/customization/release/
 release:
-  extra_files:
-    - glob: ./bin/release/install.yaml
-    - glob: ./bin/release/crd-schemas.tar.gz
-checksum:
   extra_files:
     - glob: ./bin/release/install.yaml
     - glob: ./bin/release/crd-schemas.tar.gz
