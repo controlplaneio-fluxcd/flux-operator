@@ -25,33 +25,33 @@ type GetTool struct {
 
 var GetToolList = []GetTool{
 	{
-		Name:        "get-flux-instance-report",
-		Description: "This tool retrieves the Flux instance info from the Kubernetes cluster.",
+		Name:        "get-flux-instance",
+		Description: "This tool retrieves the Flux instance and a detailed report about Flux controllers and their status.",
 		Handler:     GetFluxInstanceHandler,
 	},
 	{
-		Name:        "get-flux-resourceset-report",
-		Description: "This tool lists the Flux ResourceSets, ResourceSetInputProviders and their status and events.",
+		Name:        "get-flux-resourceset",
+		Description: "This tool retrieves the Flux ResourceSets, ResourceSetInputProviders including their status and events.",
 		Handler:     GetFluxResourceSetsHandler,
 	},
 	{
-		Name:        "get-flux-kustomization-report",
-		Description: "This tool lists the Flux Kustomizations and their status and events.",
+		Name:        "get-flux-kustomization",
+		Description: "This tool retrieves the Flux Kustomizations including their status, inventory and events.",
 		Handler:     GetFluxKustomizationsHandler,
 	},
 	{
-		Name:        "get-flux-helmrelease-report",
-		Description: "This tool lists the Flux HelmReleases and their status and events.",
+		Name:        "get-flux-helmrelease",
+		Description: "This tool retrieves the Flux HelmReleases including their status, inventory and events.",
 		Handler:     GetFluxHelmReleasesHandler,
 	},
 	{
-		Name:        "get-flux-source-report",
-		Description: "This tool lists the Flux sources (GitRepository, OCIRepository, HelmRepository, HelmChart, Bucket) and their status and events.",
+		Name:        "get-flux-source",
+		Description: "This tool retrieves the Flux sources (GitRepository, OCIRepository, HelmRepository, HelmChart, Bucket) including their status and events.",
 		Handler:     GetFluxSourcesHandler,
 	},
 	{
 		Name:        "get-kubernetes-resource",
-		Description: "This tool retrieves a Kubernetes resource identified by apiVersion, kind, name, namespace and label selector.",
+		Description: "This tool retrieves Kubernetes resources identified by apiVersion, kind, name, namespace and label selector.",
 		Handler:     GetKubernetesResourceHandler,
 	},
 }
@@ -103,6 +103,15 @@ func exportObjects(ctx context.Context, name string, namespace string, labelSele
 		if err := kubeClient.List(ctx, &list, listOpts...); err == nil {
 			for _, item := range list.Items {
 				unstructured.RemoveNestedField(item.Object, "metadata", "managedFields")
+
+				if item.GetKind() == "Secret" && rootArgs.maskSecrets {
+					dataKV, found, err := unstructured.NestedMap(item.Object, "data")
+					if err == nil && found {
+						for k := range dataKV {
+							_ = unstructured.SetNestedField(item.Object, "****", "data", k)
+						}
+					}
+				}
 
 				if item.GetKind() == "HelmRelease" {
 					inventory, err := getHelmReleaseInventory(ctx, client.ObjectKey{

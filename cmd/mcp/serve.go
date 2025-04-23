@@ -11,11 +11,19 @@ import (
 
 var serveCmd = &cobra.Command{
 	Use:   "serve",
-	Short: "Start the MCP server",
+	Short: "Start the MCP server in stdio mode",
 	RunE:  serveCmdRun,
 }
 
+type serveFlags struct {
+	readOnly bool
+}
+
+var serveArgs serveFlags
+
 func init() {
+	serveCmd.Flags().BoolVar(&serveArgs.readOnly, "read-only", false,
+		"Run the MCP server in read-only mode, disabling write and delete operations.")
 	rootCmd.AddCommand(serveCmd)
 }
 
@@ -24,8 +32,13 @@ func serveCmdRun(cmd *cobra.Command, args []string) error {
 
 	mcpServer := mcpgolang.NewServer(stdio.NewStdioServerTransport())
 
-	for _, tool := range ReconcileToolList {
-		err := mcpServer.RegisterTool(tool.Name, tool.Description, tool.Handler)
+	for _, resource := range DocumentationList {
+		err := mcpServer.RegisterResource(
+			resource.Path,
+			resource.Name,
+			resource.Description,
+			resource.ContentType,
+			resource.Handler)
 		if err != nil {
 			return err
 		}
@@ -38,15 +51,19 @@ func serveCmdRun(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	for _, resource := range DocumentationList {
-		err := mcpServer.RegisterResource(
-			resource.Path,
-			resource.Name,
-			resource.Description,
-			resource.ContentType,
-			resource.Handler)
+	for _, tool := range ReconcileToolList {
+		err := mcpServer.RegisterTool(tool.Name, tool.Description, tool.Handler)
 		if err != nil {
 			return err
+		}
+	}
+
+	if !serveArgs.readOnly {
+		for _, tool := range DeleteToolList {
+			err := mcpServer.RegisterTool(tool.Name, tool.Description, tool.Handler)
+			if err != nil {
+				return err
+			}
 		}
 	}
 

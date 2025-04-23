@@ -34,7 +34,8 @@ we adapt to new features and/or find better ways to facilitate what it does.`,
 }
 
 type rootFlags struct {
-	timeout time.Duration
+	timeout     time.Duration
+	maskSecrets bool
 }
 
 var (
@@ -47,6 +48,8 @@ var (
 func init() {
 	rootCmd.PersistentFlags().DurationVar(&rootArgs.timeout, "timeout", rootArgs.timeout,
 		"The length of time to wait before giving up on the current operation.")
+	rootCmd.PersistentFlags().BoolVar(&rootArgs.maskSecrets, "mask-secrets", true,
+		"Mask secrets in the output")
 	addKubeConfigFlags(rootCmd)
 
 	rootCmd.SetOut(os.Stdout)

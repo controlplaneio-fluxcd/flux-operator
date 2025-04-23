@@ -16,9 +16,18 @@ Example prompts:
 - Draw a diagram of the Flux dependency flow in the cluster.
 - Which Kubernetes deployments are managed by Flux in the cluster?
 - Which images are deployed by Flux in the monitoring namespace?
-- Reconcile the Flux infra-components kustomization in the monitoring namespace.
-- Reconcile the Flux podinfo Helm release in the frontend namespace.
-- Reconcile all the Flux sources in the cluster, then verify their status.
+- Reconcile the podinfo Helm release in the frontend namespace.
+- Reconcile all the Flux sources in the dependsOn order, then verify their status.
+
+Recommended Claude setup:
+
+- Create a project dedicated to Flux Operator.
+- Set the project instructions to "Use the Flux Operator MCP Server
+  to analyse and troubleshoot GitOps pipelines on Kubernetes clusters."
+- In the project knowledge, add the Flux Operator documentation using the
+  `https://github.com/controlplaneio-fluxcd/distribution` repository
+  and select the `docs/operator` folder. This will ensure that the latest
+  Flux Operator API specifications are available to the model along with guides and examples.
 
 ## Build from source
 
@@ -55,20 +64,21 @@ Note that on macOS the config file is located at `~/Library/Application Support/
 
 ## Security Considerations
 
-The MCP server is designed to prevent alterations to the cluster state, besides triggering
-the reconciliation of Flux resources no other write operation is exposed to the client.
+The data returned by the MCP server may contain sensitive information found in Flux resources,
+such as container images, Git repository URLs, and Helm chart names.
+By default, the MCP Server masks the values of the Kubernetes Secrets data values,
+but it is possible to disable this feature by setting the `--mask-secrets=false` flag.
 
-The data returned by the server is limited to the Flux resources spec and their status which
-may contain sensitive information such as container images, Git repository URLs, and Helm chart names.
-The server does not expose sensitive information stored in Kubernetes secrets,
-unless Flux substitutions are used to set inline values in HelmRelease and Kustomization resources.
+The MCP server exposes tools that alter the state of the cluster, such as
+deleting Kubernetes resources. To disable these tools, the MCP server can be
+configured to run in read-only mode by setting the `--read-only` flag.
 
 The MCP server uses the `KUBECONFIG` environment variable to read the configuration and 
 authenticate to the cluster. The server will use the default context set the kubeconfig file.
 It is possible to specify a different context and a user or service account that the MCP server
 will impersonate when connecting to the cluster.
 
-Example configuration for impersonating a service account:
+Example configuration for impersonating a service account with read-only permissions:
 
 ```json
 {
@@ -77,7 +87,7 @@ Example configuration for impersonating a service account:
           "command": "/Users/stefanprodan/src/flux-operator/bin/flux-operator-mcp",
           "args": [
             "serve",
-            "--kube-context=kind-kind",
+            "--read-only",
             "--kube-as=system:serviceaccount:flux-system:flux-operator"
           ],
           "env": {
