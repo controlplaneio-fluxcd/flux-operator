@@ -12,8 +12,8 @@ Example prompts:
 - Are there any reconciliation errors in the Flux managed resources?
 - Are the Flux kustomizations and Helm releases configured correctly?
 - Based on Flux events, what deployments have been updated today?
-- Create a report of all Flux resources and their status in the monitoring namespace.
 - Draw a diagram of the Flux dependency flow in the cluster.
+- What is the Git source and revision of the Flux OCI repositories?
 - Which Kubernetes deployments are managed by Flux in the cluster?
 - Which images are deployed by Flux in the monitoring namespace?
 - Reconcile the podinfo Helm release in the frontend namespace.
@@ -62,6 +62,59 @@ Add the binary to the Claude Desktop configuration (change the paths to your use
 
 Note that on macOS the config file is located at `~/Library/Application Support/Claude/claude_desktop_config.json`.
 
+## MCP Tools
+
+### Reporting tools
+
+The MCP server provides a set of tools for generating reports about the state of the cluster:
+
+- `get-flux-instance`: This tool retrieves the Flux instance and a detailed report about Flux controllers and their status.
+- `get-flux-resourceset`: This tool retrieves the Flux ResourceSets and ResourceSetInputProviders including their status and events.
+- `get-flux-source`: This tool retrieves the Flux sources (GitRepository, OCIRepository, HelmRepository, HelmChart, Bucket) including their status and events.
+- `get-flux-kustomization`: This tool retrieves the Flux Kustomizations including their status and events.
+- `get-flux-helmrelease`: This tool retrieves the Flux HelmReleases including their status and events.
+- `get-kubernetes-resource`: This tool retrieves the Kubernetes resources managed by Flux.
+
+All the reporting tools allow filtering the output by:
+
+- `apiVersion`: The API version of the resource (required for `get-kubernetes-resource`).
+- `kind`: The kind of the resource (required for `get-kubernetes-resource`).
+- `name`: The name of the resource (optional).
+- `namespace`: The namespace of the resource (optional).
+- `labelSelector`: The label selector in the format `label-key=label-value` (optional).
+
+The output of the reporting tools is formatted as a multi-doc YAML.
+
+### Reconciliation tools
+
+The MCP server provides a set of tools for triggering the reconciliation of Flux resources:
+
+- `reconcile-flux-resourceset`: This tool triggers the reconciliation of the Flux ResourceSet.
+- `reconcile-flux-source`: This tool triggers the reconciliation of the Flux sources (GitRepository, OCIRepository, HelmRepository, HelmChart, Bucket).
+- `reconcile-flux-kustomization`: This tool triggers the reconciliation of the Flux Kustomization including its source (GitRepository, OCIRepository, Bucket).
+- `reconcile-flux-helmrelease`: This tool triggers the reconciliation of the Flux HelmRelease including its source (OCIRepository, HelmChart).
+
+The reconciliation tools accept the following arguments:
+
+- `name` - The name of the resource to reconcile (required).
+- `namespace` - The namespace of the resource to reconcile (required).
+- `withSource` - Trigger the reconciliation of the Flux Kustomization or HelmRelease source (optional).
+
+The output of the reconciliation tools tells the model how to verify the status of the reconciled resource.
+
+### Deletion tool
+
+The MCP server provides a tool for deleting Kubernetes resources:
+
+- `delete-kubernetes-resource`: This tool triggers the deletion of a Kubernetes resource.
+
+The deletion tool accept the following arguments:
+
+- `apiVersion` - The API version of the resource (required).
+- `kind` - The kind of the resource (required).
+- `name` - The name of the resource (required).
+- `namespace` - The namespace of the resource (required for namespaced resources).
+
 ## Security Considerations
 
 The data returned by the MCP server may contain sensitive information found in Flux resources,
@@ -73,7 +126,7 @@ The MCP server exposes tools that alter the state of the cluster, such as
 deleting Kubernetes resources. To disable these tools, the MCP server can be
 configured to run in read-only mode by setting the `--read-only` flag.
 
-The MCP server uses the `KUBECONFIG` environment variable to read the configuration and 
+The MCP server uses the `KUBECONFIG` environment variable to read the configuration and
 authenticate to the cluster. The server will use the default context set the kubeconfig file.
 It is possible to specify a different context and a user or service account that the MCP server
 will impersonate when connecting to the cluster.
