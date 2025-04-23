@@ -30,7 +30,11 @@ func init() {
 func serveCmdRun(cmd *cobra.Command, args []string) error {
 	done := make(chan struct{})
 
-	mcpServer := mcpgolang.NewServer(stdio.NewStdioServerTransport())
+	mcpServer := mcpgolang.NewServer(
+		stdio.NewStdioServerTransport(),
+		mcpgolang.WithName("flux-operator-mcp"),
+		mcpgolang.WithVersion(VERSION),
+	)
 
 	for _, resource := range DocumentationList {
 		err := mcpServer.RegisterResource(
