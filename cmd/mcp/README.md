@@ -75,6 +75,7 @@ The MCP server provides a set of tools for generating reports about the state of
 - `get-flux-kustomization`: This tool retrieves the Flux Kustomizations including their status and events.
 - `get-flux-helmrelease`: This tool retrieves the Flux HelmReleases including their status and events.
 - `get-kubernetes-resource`: This tool retrieves the Kubernetes resources managed by Flux.
+- `get-kubernetes-api-versions`: This tool retrieves the CRDs registered on the cluster and returns the preferred apiVersion for each kind.
 
 All the reporting tools allow filtering the output by:
 

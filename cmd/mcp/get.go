@@ -54,6 +54,11 @@ var GetToolList = []GetTool{
 		Description: "This tool retrieves Kubernetes resources identified by apiVersion, kind, name, namespace and label selector.",
 		Handler:     GetKubernetesResourceHandler,
 	},
+	{
+		Name:        "get-kubernetes-api-versions",
+		Description: "This tool retrieves the Kubernetes CRDs registered on the cluster and returns the preferred apiVersion for each kind.",
+		Handler:     GetApiVersionsHandler,
+	},
 }
 
 type GetFluxResourceArgs struct {
