@@ -26,7 +26,7 @@ type GetTool struct {
 var GetToolList = []GetTool{
 	{
 		Name:        "get-flux-instance",
-		Description: "This tool retrieves the Flux instance and a detailed report about Flux controllers and their status.",
+		Description: "This tool retrieves the Flux instance and a detailed report about Flux controllers and their installation status.",
 		Handler:     GetFluxInstanceHandler,
 	},
 	{

@@ -9,6 +9,7 @@ troubleshoot [Flux Enterprise](https://fluxcd.control-plane.io/distribution/) in
 Example prompts:
 
 - Analyze the Flux installation in my cluster and report the status of all components.
+- Compare the Flux instances across the clusters in my kubeconfig.
 - Are there any reconciliation errors in the Flux managed resources?
 - Are the Flux kustomizations and Helm releases configured correctly?
 - Based on Flux events, what deployments have been updated today?
@@ -124,12 +125,22 @@ The MCP server provides a tool for deleting Kubernetes resources:
 
 - `delete-kubernetes-resource`: This tool triggers the deletion of a Kubernetes resource.
 
-The deletion tool accept the following arguments:
+The deletion tool accepts the following arguments:
 
 - `apiVersion` - The API version of the resource (required).
 - `kind` - The kind of the resource (required).
 - `name` - The name of the resource (required).
 - `namespace` - The namespace of the resource (required for namespaced resources).
+
+### Multi-cluster tools
+
+The MCP server provides a set of tools for multi-cluster operations:
+
+- `get-kubeconfig-contexts`: This tool retrieves the Kubernetes clusters contexts found in the kubeconfig.
+- `set-kubeconfig-context`: This tool sets the context to a specific cluster for the current session.
+
+Note that the `set-kubeconfig-context` tool does not alter the kubeconfig file,
+it only sets the context for the current session.
 
 ## Security Considerations
 

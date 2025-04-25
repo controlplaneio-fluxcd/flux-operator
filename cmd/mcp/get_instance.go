@@ -27,7 +27,7 @@ func GetFluxInstanceHandler(ctx context.Context, args GetFluxResourceArgs) (*mcp
 		},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("error exporting objects: %w", err)
+		return nil, fmt.Errorf("unable to determine the Flux status on this cluster: %w", err)
 	}
 
 	return mcpgolang.NewToolResponse(mcpgolang.NewTextContent(result)), nil
