@@ -22,12 +22,12 @@ type KubeConfigTool struct {
 
 var KubeConfigToolList = []KubeConfigTool{
 	{
-		Name:        "get-kubeconfig-contexts",
+		Name:        "get_kubeconfig_contexts",
 		Description: "This tool retrieves the Kubernetes clusters contexts found in the kubeconfig.",
 		Handler:     GetKubernetesContextHandler,
 	},
 	{
-		Name:        "set-kubeconfig-context",
+		Name:        "set_kubeconfig_context",
 		Description: "This tool changes the kubeconfig context for this session.",
 		Handler:     SetKubernetesContextHandler,
 	},
@@ -59,7 +59,7 @@ func SetKubernetesContextHandler(ctx context.Context, args SetKubernetesContextA
 
 	return mcpgolang.NewToolResponse(mcpgolang.NewTextContent(
 		fmt.Sprintf(`Context changed to %s.
-If asked, use the get-flux-instance tool to determine the Flux controllers status on the current cluster.
+If asked, use the get_flux_instance tool to determine the Flux operator status on the current cluster.
 `, args.Name))), nil
 }
 

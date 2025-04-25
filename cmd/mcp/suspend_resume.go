@@ -6,14 +6,10 @@ package main
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	mcpgolang "github.com/metoro-io/mcp-golang"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/client"
 )
 
 type SuspendResumeTool struct {
@@ -24,12 +20,12 @@ type SuspendResumeTool struct {
 
 var SuspendResumeToolList = []SuspendResumeTool{
 	{
-		Name:        "suspend-flux-reconciliation",
+		Name:        "suspend_flux_reconciliation",
 		Description: "This tool suspends the reconciliation of a Flux resource identified by apiVersion, kind, name and namespace.",
 		Handler:     SuspendReconciliationHandler,
 	},
 	{
-		Name:        "resume-flux-reconciliation",
+		Name:        "resume_flux_reconciliation",
 		Description: "This tool resumes the reconciliation of a Flux resource identified by apiVersion, kind, name and namespace.",
 		Handler:     ResumeReconciliationHandler,
 	},
@@ -59,13 +55,24 @@ func SuspendReconciliationHandler(ctx context.Context, args SuspendResumeReconci
 	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
 	defer cancel()
 
-	gvk := schema.FromAPIVersionAndKind(args.ApiVersion, args.Kind)
-	err := toggleSuspension(ctx, gvk, args.Name, args.Namespace, true)
+	kubeClient, err := client.NewClient(kubeconfigArgs)
+	if err != nil {
+		return nil, err
+	}
+
+	gvk, err := kubeClient.ParseGroupVersionKind(args.ApiVersion, args.Kind)
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse group version kind %s/%s: %w", args.ApiVersion, args.Kind, err)
+	}
+
+	err = kubeClient.ToggleSuspension(ctx, gvk, args.Name, args.Namespace, true)
 	if err != nil {
 		return nil, fmt.Errorf("unable to suspend reconciliation: %w", err)
 	}
 
-	return mcpgolang.NewToolResponse(mcpgolang.NewTextContent(fmt.Sprintf("Reconciliation of %s/%s/%s suspended", gvk.Kind, args.Namespace, args.Name))), nil
+	return mcpgolang.NewToolResponse(mcpgolang.NewTextContent(fmt.Sprintf(
+		"Reconciliation of %s/%s/%s suspended.To resume reconciliation, run the resume_flux_reconciliation tool.",
+		gvk.Kind, args.Namespace, args.Name))), nil
 }
 
 func ResumeReconciliationHandler(ctx context.Context, args SuspendResumeReconciliationArgs) (*mcpgolang.ToolResponse, error) {
@@ -85,62 +92,20 @@ func ResumeReconciliationHandler(ctx context.Context, args SuspendResumeReconcil
 	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
 	defer cancel()
 
-	gvk := schema.FromAPIVersionAndKind(args.ApiVersion, args.Kind)
-	err := toggleSuspension(ctx, gvk, args.Name, args.Namespace, false)
+	kubeClient, err := client.NewClient(kubeconfigArgs)
+	if err != nil {
+		return nil, err
+	}
+
+	gvk, err := kubeClient.ParseGroupVersionKind(args.ApiVersion, args.Kind)
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse group version kind %s/%s: %w", args.ApiVersion, args.Kind, err)
+	}
+
+	err = kubeClient.ToggleSuspension(ctx, gvk, args.Name, args.Namespace, false)
 	if err != nil {
 		return nil, fmt.Errorf("unable to resume reconciliation: %w", err)
 	}
 
 	return mcpgolang.NewToolResponse(mcpgolang.NewTextContent(fmt.Sprintf("Reconciliation of %s/%s/%s resumed and started", gvk.Kind, args.Namespace, args.Name))), nil
-}
-
-func toggleSuspension(ctx context.Context, gvk schema.GroupVersionKind, name, namespace string, suspend bool) error {
-	if strings.EqualFold(gvk.Group, fluxcdv1.GroupVersion.Group) {
-		val := fluxcdv1.EnabledValue
-		if suspend {
-			val = fluxcdv1.DisabledValue
-		}
-		return annotateResource(ctx,
-			gvk.Group,
-			gvk.Version,
-			gvk.Kind,
-			name,
-			namespace,
-			[]string{fluxcdv1.ReconcileAnnotation},
-			val)
-	}
-
-	resource := &unstructured.Unstructured{}
-	resource.SetGroupVersionKind(gvk)
-
-	objectKey := client.ObjectKey{
-		Namespace: namespace,
-		Name:      name,
-	}
-
-	kubeClient, err := newKubeClient()
-	if err != nil {
-		return fmt.Errorf("unable to create kube client error: %w", err)
-	}
-
-	if err := kubeClient.Get(ctx, objectKey, resource); err != nil {
-		return fmt.Errorf("unable to read %s/%s/%s error: %w", gvk.Kind, namespace, name, err)
-	}
-
-	patch := client.MergeFrom(resource.DeepCopy())
-
-	if suspend {
-		err = unstructured.SetNestedField(resource.Object, suspend, "spec", "suspend")
-		if err != nil {
-			return fmt.Errorf("unable to set suspend field: %w", err)
-		}
-	} else {
-		unstructured.RemoveNestedField(resource.Object, "spec", "suspend")
-	}
-
-	if err := kubeClient.Patch(ctx, resource, patch); err != nil {
-		return fmt.Errorf("unable to patch %s/%s/%s error: %w", gvk.Kind, namespace, name, err)
-	}
-
-	return nil
 }

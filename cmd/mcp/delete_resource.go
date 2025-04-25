@@ -8,6 +8,8 @@ import (
 	"fmt"
 
 	mcpgolang "github.com/metoro-io/mcp-golang"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/client"
 )
 
 type DeleteKubernetesResourceArgs struct {
@@ -31,7 +33,17 @@ func DeleteKubernetesResourceHandler(ctx context.Context, args DeleteKubernetesR
 	ctx, cancel := context.WithTimeout(ctx, rootArgs.timeout)
 	defer cancel()
 
-	err := deleteResource(ctx, args.ApiVersion, args.Kind, args.Name, args.Namespace)
+	kubeClient, err := client.NewClient(kubeconfigArgs)
+	if err != nil {
+		return nil, err
+	}
+
+	gvk, err := kubeClient.ParseGroupVersionKind(args.ApiVersion, args.Kind)
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse group version kind %s/%s: %w", args.ApiVersion, args.Kind, err)
+	}
+
+	err = kubeClient.DeleteResource(ctx, gvk, args.Name, args.Namespace)
 	if err != nil {
 		return nil, fmt.Errorf("unable to delete resource: %w", err)
 	}

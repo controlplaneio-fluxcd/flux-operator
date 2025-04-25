@@ -70,21 +70,17 @@ Note that on macOS the config file is located at `~/Library/Application Support/
 
 The MCP server provides a set of tools for generating reports about the state of the cluster:
 
-- `get-flux-instance`: This tool retrieves the Flux instance and a detailed report about Flux controllers and their status.
-- `get-flux-resourceset`: This tool retrieves the Flux ResourceSets and ResourceSetInputProviders including their status and events.
-- `get-flux-source`: This tool retrieves the Flux sources (GitRepository, OCIRepository, HelmRepository, HelmChart, Bucket) including their status and events.
-- `get-flux-kustomization`: This tool retrieves the Flux Kustomizations including their status and events.
-- `get-flux-helmrelease`: This tool retrieves the Flux HelmReleases including their status and events.
-- `get-kubernetes-resource`: This tool retrieves the Kubernetes resources managed by Flux.
-- `get-kubernetes-api-versions`: This tool retrieves the CRDs registered on the cluster and returns the preferred apiVersion for each kind.
-
-All the reporting tools allow filtering the output by:
-
-- `apiVersion`: The API version of the resource (required for `get-kubernetes-resource`).
-- `kind`: The kind of the resource (required for `get-kubernetes-resource`).
-- `name`: The name of the resource (optional).
-- `namespace`: The namespace of the resource (optional).
-- `labelSelector`: The label selector in the format `label-key=label-value` (optional).
+- `get_flux_instance`: This tool retrieves the Flux instance and a detailed report about Flux controllers and their status.
+  - `name` - The name of the Flux instance (optional).
+  - `namespace` - The namespace of the Flux instance (optional).
+- `get_kubernetes_resources`: This tool retrieves Kubernetes resources including Flux own resources, their status, and events.
+  - `apiVersion`: The API version of the resource(s) (required).
+  - `kind`: The kind of the resource(s) (required).
+  - `name`: The name of the resource (optional).
+  - `namespace`: The namespace of the resource(s) (optional).
+  - `labelSelector`: The label selector in the format `key1=value1,key2=value2` (optional).
+- `get_kubernetes_api-versions`: This tool retrieves the CRDs registered on the cluster and returns the preferred apiVersion for each kind.
+  - No parameters required
 
 The output of the reporting tools is formatted as a multi-doc YAML.
 
@@ -92,16 +88,16 @@ The output of the reporting tools is formatted as a multi-doc YAML.
 
 The MCP server provides a set of tools for triggering the reconciliation of Flux resources:
 
-- `reconcile-flux-resourceset`: This tool triggers the reconciliation of the Flux ResourceSet.
-- `reconcile-flux-source`: This tool triggers the reconciliation of the Flux sources (GitRepository, OCIRepository, HelmRepository, HelmChart, Bucket).
-- `reconcile-flux-kustomization`: This tool triggers the reconciliation of the Flux Kustomization including its source (GitRepository, OCIRepository, Bucket).
-- `reconcile-flux-helmrelease`: This tool triggers the reconciliation of the Flux HelmRelease including its source (OCIRepository, HelmChart).
+- `reconcile_flux_resourceset`: This tool triggers the reconciliation of the Flux ResourceSet.
+- `reconcile_flux_source`: This tool triggers the reconciliation of the Flux sources (GitRepository, OCIRepository, HelmRepository, HelmChart, Bucket).
+- `reconcile_flux_kustomization`: This tool triggers the reconciliation of the Flux Kustomization including its source (GitRepository, OCIRepository, Bucket).
+- `reconcile_flux_helmrelease`: This tool triggers the reconciliation of the Flux HelmRelease including its source (OCIRepository, HelmChart).
 
 The reconciliation tools accept the following arguments:
 
 - `name` - The name of the resource to reconcile (required).
 - `namespace` - The namespace of the resource to reconcile (required).
-- `withSource` - Trigger the reconciliation of the Flux Kustomization or HelmRelease source (optional).
+- `with_source` - Trigger the reconciliation of the Flux Kustomization or HelmRelease source (optional).
 
 The output of the reconciliation tools tells the model how to verify the status of the reconciled resource.
 
@@ -109,8 +105,8 @@ The output of the reconciliation tools tells the model how to verify the status 
 
 The MCP server provides a set of tools for suspending and resuming the reconciliation of Flux resources:
 
-- `suspend-flux-resource`: This tool suspends the reconciliation of a Flux resource (Kustomization, HelmRelease, ResourceSet, OCIRepository, etc.).
-- `resume-flux-resource`: This tool resumes the reconciliation of a Flux resource.
+- `suspend_flux_resource`: This tool suspends the reconciliation of a Flux resource (Kustomization, HelmRelease, ResourceSet, OCIRepository, etc.).
+- `resume_flux_resource`: This tool resumes the reconciliation of a Flux resource.
 
 The suspend and resume tools accept the following arguments:
 
@@ -123,7 +119,7 @@ The suspend and resume tools accept the following arguments:
 
 The MCP server provides a tool for deleting Kubernetes resources:
 
-- `delete-kubernetes-resource`: This tool triggers the deletion of a Kubernetes resource.
+- `delete_kubernetes_resource`: This tool triggers the deletion of a Kubernetes resource.
 
 The deletion tool accepts the following arguments:
 
@@ -136,10 +132,10 @@ The deletion tool accepts the following arguments:
 
 The MCP server provides a set of tools for multi-cluster operations:
 
-- `get-kubeconfig-contexts`: This tool retrieves the Kubernetes clusters contexts found in the kubeconfig.
-- `set-kubeconfig-context`: This tool sets the context to a specific cluster for the current session.
+- `get_kubeconfig_contexts`: This tool retrieves the Kubernetes clusters contexts found in the kubeconfig.
+- `set_kubeconfig_context`: This tool sets the context to a specific cluster for the current session.
 
-Note that the `set-kubeconfig-context` tool does not alter the kubeconfig file,
+Note that the `set_kubeconfig_context` tool does not alter the kubeconfig file,
 it only sets the context for the current session.
 
 ## Security Considerations

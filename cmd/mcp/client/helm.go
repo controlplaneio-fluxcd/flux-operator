@@ -1,7 +1,7 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-package main
+package client
 
 import (
 	"bytes"
@@ -14,64 +14,30 @@ import (
 	"strings"
 
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
-	mcpgolang "github.com/metoro-io/mcp-golang"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 )
 
-func GetFluxHelmReleasesHandler(ctx context.Context, args GetFluxResourceArgs) (*mcpgolang.ToolResponse, error) {
-	result, err := exportObjects(ctx, args.Name, args.Namespace, args.LabelSelector, []metav1.GroupVersionKind{
-		{
-			Group:   "helm.toolkit.fluxcd.io",
-			Version: "v2",
-			Kind:    "HelmRelease",
-		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("error exporting objects: %w", err)
-	}
-
-	return mcpgolang.NewToolResponse(
-		mcpgolang.NewTextContent(result),
-		&mcpgolang.Content{
-			Type: mcpgolang.ContentTypeText,
-			Annotations: &mcpgolang.Annotations{
-				Audience: []mcpgolang.Role{mcpgolang.RoleAssistant},
-			},
-			TextContent: &mcpgolang.TextContent{
-				Text: `If asked about container images, exact the image references as they appear in the
-HelmRelease status.inventory.containers fields, with all tags preserved as they are, do not remove the ':'' or 'v'' characters, use code blocks to display them.
-If asked make the following recommendations:
-1. Check if the interval is less than 10 minutes and if so, recommend to increase it.
-   Explain that the HelmRelease interval is for detecting drift in cluster.
-   The interval set in the source (OCIRepository, HelmRepository) of the HelmRelease
-   is for detecting changes in upstream Helm chart, and that one can be set to a lower value.
-2. Check if the HelmRelease has releaseName set and if not, recommend to add it.
-3. Check if the HelmRelease has targetNamespace set, if so check if storageNamespace is set to the same value.
-   If not, recommend to set storageNamespace to the same value as targetNamespace.
-4. Check if postRenderers are set, if any of the patches have a namespace set in the target, recommend to remove it.
-`,
-			},
-		},
-	), nil
-}
-
-type hrStorage struct {
+// HelmStorage is a struct used to decode the Helm storage secret.
+type HelmStorage struct {
 	Name     string `json:"name,omitempty"`
 	Manifest string `json:"manifest,omitempty"`
 }
 
-type hrHistory struct {
+// HelmHistory is a struct used to decode the release
+// history from the HelmRelease status.
+type HelmHistory struct {
 	ChartName string `json:"chartName,omitempty"`
 	Version   int64  `json:"version,omitempty"`
 	Namespace string `json:"namespace,omitempty"`
 }
 
-type hrInventory struct {
+// HelmInventory is a struct used to store the metadata of
+// the Kubernetes objects that are managed by a HelmRelease.
+type HelmInventory struct {
 	ApiVersion      string   `json:"apiVersion"`
 	Kind            string   `json:"kind"`
 	Name            string   `json:"name"`
@@ -79,19 +45,21 @@ type hrInventory struct {
 	ContainerImages []string `json:"containerImages,omitempty"`
 }
 
-func getHelmReleaseInventory(ctx context.Context, objectKey client.ObjectKey, kubeClient client.Client) ([]hrInventory, error) {
-	inventory := make([]hrInventory, 0)
+// GetHelmInventory returns the HelmRelease inventory by extracting the Kubernetes
+// objects metadata from the Helm storage secret belonging to the latest release version.
+func (k *KubeClient) GetHelmInventory(ctx context.Context, objectKey client.ObjectKey) ([]HelmInventory, error) {
+	inventory := make([]HelmInventory, 0)
 	hr := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "helm.toolkit.fluxcd.io/v2",
 			"kind":       "HelmRelease",
 		},
 	}
-	if err := kubeClient.Get(ctx, objectKey, hr); err != nil {
+	if err := k.Get(ctx, objectKey, hr); err != nil {
 		return nil, err
 	}
 
-	// skip release if it targets a remote clusters
+	// skip release if it targets a remote cluster
 	if _, found, _ := unstructured.NestedFieldCopy(hr.Object, "spec", "kubeConfig"); found {
 		return nil, nil
 	}
@@ -104,7 +72,7 @@ func getHelmReleaseInventory(ctx context.Context, objectKey client.ObjectKey, ku
 	}
 
 	// get the latest release from the history
-	latest := &hrHistory{}
+	latest := &HelmHistory{}
 	latest.ChartName = history[0].(map[string]interface{})["chartName"].(string)
 	latest.Version = history[0].(map[string]interface{})["version"].(int64)
 	latest.Namespace = history[0].(map[string]interface{})["namespace"].(string)
@@ -115,7 +83,7 @@ func getHelmReleaseInventory(ctx context.Context, objectKey client.ObjectKey, ku
 	}
 
 	storageSecret := &corev1.Secret{}
-	if err := kubeClient.Get(ctx, storageKey, storageSecret); err != nil {
+	if err := k.Get(ctx, storageKey, storageSecret); err != nil {
 		// skip release if it has no storage
 		if apierrors.IsNotFound(err) {
 			return nil, nil
@@ -149,7 +117,7 @@ func getHelmReleaseInventory(ctx context.Context, objectKey client.ObjectKey, ku
 	}
 
 	// extract objects from Helm storage
-	var rls hrStorage
+	var rls HelmStorage
 	if err := json.Unmarshal(b, &rls); err != nil {
 		return nil, fmt.Errorf("failed to decode the Helm storage object for HelmRelease '%s': %w", objectKey.String(), err)
 	}
@@ -164,7 +132,7 @@ func getHelmReleaseInventory(ctx context.Context, objectKey client.ObjectKey, ku
 	// set the namespace on namespaced objects
 	for _, obj := range objects {
 		if obj.GetNamespace() == "" {
-			if isNamespaced, _ := apiutil.IsObjectNamespaced(obj, kubeClient.Scheme(), kubeClient.RESTMapper()); isNamespaced {
+			if isNamespaced, _ := apiutil.IsObjectNamespaced(obj, k.Scheme(), k.RESTMapper()); isNamespaced {
 				obj.SetNamespace(latest.Namespace)
 			}
 		}
@@ -178,7 +146,7 @@ func getHelmReleaseInventory(ctx context.Context, objectKey client.ObjectKey, ku
 			}
 		}
 
-		inventory = append(inventory, hrInventory{
+		inventory = append(inventory, HelmInventory{
 			ApiVersion:      obj.GetAPIVersion(),
 			Kind:            obj.GetKind(),
 			Name:            obj.GetName(),

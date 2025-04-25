@@ -12,13 +12,15 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	mcpgolang "github.com/metoro-io/mcp-golang"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/client"
 )
 
 type ReconcileHelmReleaseArgs struct {
 	Name       string `json:"name" jsonschema:"required,description=The name of the Flux HelmRelease."`
 	Namespace  string `json:"namespace" jsonschema:"required,description=The namespace of the Flux HelmRelease."`
-	WithSource bool   `json:"withSource" jsonschema:"description=If true, the source will be reconciled as well."`
+	WithSource bool   `json:"with_source" jsonschema:"description=If true, the source will be reconciled as well."`
 }
 
 func ReconcileHelmReleaseHandler(ctx context.Context, args ReconcileHelmReleaseArgs) (*mcpgolang.ToolResponse, error) {
@@ -32,10 +34,9 @@ func ReconcileHelmReleaseHandler(ctx context.Context, args ReconcileHelmReleaseA
 	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
 	defer cancel()
 
-	// Check if the HelmRelease exists
-	kubeClient, err := newKubeClient()
+	kubeClient, err := client.NewClient(kubeconfigArgs)
 	if err != nil {
-		return nil, fmt.Errorf("unable to create kube client: %w", err)
+		return nil, err
 	}
 
 	hr := &unstructured.Unstructured{
@@ -47,7 +48,7 @@ func ReconcileHelmReleaseHandler(ctx context.Context, args ReconcileHelmReleaseA
 	hr.SetName(args.Name)
 	hr.SetNamespace(args.Namespace)
 
-	if err := kubeClient.Get(ctx, client.ObjectKeyFromObject(hr), hr); err != nil {
+	if err := kubeClient.Get(ctx, kubeClient.ObjectKeyFromObject(hr), hr); err != nil {
 		return nil, fmt.Errorf("unable to get HelmRelease: %w", err)
 	}
 
@@ -64,19 +65,23 @@ func ReconcileHelmReleaseHandler(ctx context.Context, args ReconcileHelmReleaseA
 			var err error
 			switch chartRefType {
 			case "HelmChart":
-				err = annotateResource(ctx,
-					"source.toolkit.fluxcd.io",
-					"v1",
-					"HelmChart",
+				err = kubeClient.AnnotateResource(ctx,
+					schema.GroupVersionKind{
+						Group:   "source.toolkit.fluxcd.io",
+						Version: "v1",
+						Kind:    "HelmChart",
+					},
 					chartRefName,
 					chartRefNamespace,
 					[]string{meta.ReconcileRequestAnnotation},
 					ts)
 			case "OCIRepository":
-				err = annotateResource(ctx,
-					"source.toolkit.fluxcd.io",
-					"v1beta2",
-					"OCIRepository",
+				err = kubeClient.AnnotateResource(ctx,
+					schema.GroupVersionKind{
+						Group:   "source.toolkit.fluxcd.io",
+						Version: "v1beta2",
+						Kind:    "OCIRepository",
+					},
 					chartRefName,
 					chartRefNamespace,
 					[]string{meta.ReconcileRequestAnnotation},
@@ -90,10 +95,12 @@ func ReconcileHelmReleaseHandler(ctx context.Context, args ReconcileHelmReleaseA
 		}
 	}
 
-	err = annotateResource(ctx,
-		"helm.toolkit.fluxcd.io",
-		"v2",
-		"HelmRelease",
+	err = kubeClient.AnnotateResource(ctx,
+		schema.GroupVersionKind{
+			Group:   "helm.toolkit.fluxcd.io",
+			Version: "v2",
+			Kind:    "HelmRelease",
+		},
 		args.Name,
 		args.Namespace,
 		[]string{

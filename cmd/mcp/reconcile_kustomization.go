@@ -12,13 +12,15 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	mcpgolang "github.com/metoro-io/mcp-golang"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/client"
 )
 
 type ReconcileKustomizationArgs struct {
 	Name       string `json:"name" jsonschema:"required,description=The name of the Flux Kustomization."`
 	Namespace  string `json:"namespace" jsonschema:"required,description=The namespace of the Flux Kustomization."`
-	WithSource bool   `json:"withSource" jsonschema:"description=If true, the source will be reconciled as well."`
+	WithSource bool   `json:"with_source" jsonschema:"description=If true, the source will be reconciled as well."`
 }
 
 func ReconcileKustomizationHandler(ctx context.Context, args ReconcileKustomizationArgs) (*mcpgolang.ToolResponse, error) {
@@ -32,9 +34,9 @@ func ReconcileKustomizationHandler(ctx context.Context, args ReconcileKustomizat
 	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
 	defer cancel()
 
-	kubeClient, err := newKubeClient()
+	kubeClient, err := client.NewClient(kubeconfigArgs)
 	if err != nil {
-		return nil, fmt.Errorf("unable to create kube client: %w", err)
+		return nil, err
 	}
 
 	ks := &unstructured.Unstructured{
@@ -46,7 +48,7 @@ func ReconcileKustomizationHandler(ctx context.Context, args ReconcileKustomizat
 	ks.SetName(args.Name)
 	ks.SetNamespace(args.Namespace)
 
-	if err := kubeClient.Get(ctx, client.ObjectKeyFromObject(ks), ks); err != nil {
+	if err := kubeClient.Get(ctx, kubeClient.ObjectKeyFromObject(ks), ks); err != nil {
 		return nil, fmt.Errorf("unable to get Kustomization: %w", err)
 	}
 
@@ -62,28 +64,34 @@ func ReconcileKustomizationHandler(ctx context.Context, args ReconcileKustomizat
 		var err error
 		switch sourceRefType {
 		case "GitRepository":
-			err = annotateResource(ctx,
-				"source.toolkit.fluxcd.io",
-				"v1",
-				"GitRepository",
+			err = kubeClient.AnnotateResource(ctx,
+				schema.GroupVersionKind{
+					Group:   "source.toolkit.fluxcd.io",
+					Version: "v1",
+					Kind:    "GitRepository",
+				},
 				sourceRefName,
 				sourceRefNamespace,
 				[]string{meta.ReconcileRequestAnnotation},
 				ts)
 		case "Bucket":
-			err = annotateResource(ctx,
-				"source.toolkit.fluxcd.io",
-				"v1",
-				"Bucket",
+			err = kubeClient.AnnotateResource(ctx,
+				schema.GroupVersionKind{
+					Group:   "source.toolkit.fluxcd.io",
+					Version: "v1",
+					Kind:    "Bucket",
+				},
 				sourceRefName,
 				sourceRefNamespace,
 				[]string{meta.ReconcileRequestAnnotation},
 				ts)
 		case "OCIRepository":
-			err = annotateResource(ctx,
-				"source.toolkit.fluxcd.io",
-				"v1beta2",
-				"OCIRepository",
+			err = kubeClient.AnnotateResource(ctx,
+				schema.GroupVersionKind{
+					Group:   "source.toolkit.fluxcd.io",
+					Version: "v1beta2",
+					Kind:    "OCIRepository",
+				},
 				sourceRefName,
 				sourceRefNamespace,
 				[]string{meta.ReconcileRequestAnnotation},
@@ -96,10 +104,12 @@ func ReconcileKustomizationHandler(ctx context.Context, args ReconcileKustomizat
 		}
 	}
 
-	err = annotateResource(ctx,
-		"kustomize.toolkit.fluxcd.io",
-		"v1",
-		"Kustomization",
+	err = kubeClient.AnnotateResource(ctx,
+		schema.GroupVersionKind{
+			Group:   "kustomize.toolkit.fluxcd.io",
+			Version: "v1",
+			Kind:    "Kustomization",
+		},
 		args.Name,
 		args.Namespace,
 		[]string{meta.ReconcileRequestAnnotation},

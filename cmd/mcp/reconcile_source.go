@@ -12,6 +12,9 @@ import (
 
 	"github.com/fluxcd/pkg/apis/meta"
 	mcpgolang "github.com/metoro-io/mcp-golang"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/client"
 )
 
 type ReconcileSourceArgs struct {
@@ -34,41 +37,53 @@ func ReconcileSourceHandler(ctx context.Context, args ReconcileSourceArgs) (*mcp
 	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
 	defer cancel()
 
+	kubeClient, err := client.NewClient(kubeconfigArgs)
+	if err != nil {
+		return nil, err
+	}
+
 	ts := time.Now().Format(time.RFC3339Nano)
-	var err error
 	switch {
 	case strings.Contains(strings.ToLower(args.Kind), "gitrepository"):
-		err = annotateResource(ctx,
-			"source.toolkit.fluxcd.io",
-			"v1",
-			"GitRepository",
+		err = kubeClient.AnnotateResource(ctx,
+			schema.GroupVersionKind{
+				Group:   "source.toolkit.fluxcd.io",
+				Version: "v1",
+				Kind:    "GitRepository",
+			},
 			args.Name,
 			args.Namespace,
 			[]string{meta.ReconcileRequestAnnotation},
 			ts)
 	case strings.Contains(strings.ToLower(args.Kind), "bucket"):
-		err = annotateResource(ctx,
-			"source.toolkit.fluxcd.io",
-			"v1",
-			"Bucket",
+		err = kubeClient.AnnotateResource(ctx,
+			schema.GroupVersionKind{
+				Group:   "source.toolkit.fluxcd.io",
+				Version: "v1",
+				Kind:    "Bucket",
+			},
 			args.Name,
 			args.Namespace,
 			[]string{meta.ReconcileRequestAnnotation},
 			ts)
 	case strings.Contains(strings.ToLower(args.Kind), "helmchart"):
-		err = annotateResource(ctx,
-			"source.toolkit.fluxcd.io",
-			"v1",
-			"HelmChart",
+		err = kubeClient.AnnotateResource(ctx,
+			schema.GroupVersionKind{
+				Group:   "source.toolkit.fluxcd.io",
+				Version: "v1",
+				Kind:    "HelmChart",
+			},
 			args.Name,
 			args.Namespace,
 			[]string{meta.ReconcileRequestAnnotation},
 			ts)
 	case strings.Contains(strings.ToLower(args.Kind), "ocirepository"):
-		err = annotateResource(ctx,
-			"source.toolkit.fluxcd.io",
-			"v1beta2",
-			"OCIRepository",
+		err = kubeClient.AnnotateResource(ctx,
+			schema.GroupVersionKind{
+				Group:   "source.toolkit.fluxcd.io",
+				Version: "v1beta2",
+				Kind:    "OCIRepository",
+			},
 			args.Name,
 			args.Namespace,
 			[]string{meta.ReconcileRequestAnnotation},

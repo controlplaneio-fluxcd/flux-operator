@@ -24,14 +24,14 @@ type Documentation struct {
 var DocumentationList = []Documentation{
 	{
 		Path:        "https://fluxcd.io/flux/components/",
-		Name:        "flux-api-docs",
+		Name:        "flux_api_docs",
 		Description: "Flux CD API documentation",
 		ContentType: "text/markdown",
 		Handler:     GetFluxDocsHandler,
 	},
 	{
 		Path:        "https://fluxcd.control-plane.io/operator/",
-		Name:        "flux-operator-api-docs",
+		Name:        "flux_operator_api_docs",
 		Description: "Flux Operator API documentation",
 		ContentType: "text/markdown",
 		Handler:     GetFluxOperatorDocsHandler,
