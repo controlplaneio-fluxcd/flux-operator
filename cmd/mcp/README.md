@@ -3,13 +3,13 @@
 This in an **experimental** Model Context Protocol Server for interacting with
 Kubernetes clusters managed by the [Flux Operator](https://fluxcd.control-plane.io/operator/).
 
-The MCP server primarily goal is helping Flux users and ControlPlane's support team to analyze and
+The MCP Server primary goal is helping Flux users and ControlPlane's support team to analyze and
 troubleshoot [Flux Enterprise](https://fluxcd.control-plane.io/distribution/) installations.
 
 Example prompts:
 
-- Analyze the Flux installation in my cluster and report the status of all components.
-- Compare the Flux instances across the clusters in my kubeconfig.
+- Analyze the Flux installation in my current cluster and report the status of all components.
+- List the clusters in my kubeconfig and compare the Flux instances across then.
 - Are there any reconciliation errors in the Flux managed resources?
 - Are the Flux kustomizations and Helm releases configured correctly?
 - Based on Flux events, what deployments have been updated today?
@@ -25,7 +25,7 @@ Recommended Claude setup:
 
 - Create a project dedicated to Flux Operator.
 - Set the project instructions to "Use the Flux Operator MCP Server
-  to analyse and troubleshoot GitOps pipelines on Kubernetes clusters."
+  to analyze and troubleshoot GitOps pipelines on Kubernetes clusters."
 - In the project knowledge, add the Flux Operator documentation using the
   `https://github.com/controlplaneio-fluxcd/distribution` repository
   and select the `docs/operator` folder. This will ensure that the latest
@@ -70,7 +70,7 @@ Note that on macOS the config file is located at `~/Library/Application Support/
 
 The MCP server provides a set of tools for generating reports about the state of the cluster:
 
-- `get_flux_instance`: This tool retrieves the Flux instance and a detailed report about Flux controllers and their status.
+- `get_flux_instance_report`: This tool retrieves the Flux instance and a detailed report about Flux controllers and their status.
   - `name` - The name of the Flux instance (optional).
   - `namespace` - The namespace of the Flux instance (optional).
 - `get_kubernetes_resources`: This tool retrieves Kubernetes resources including Flux own resources, their status, and events.
@@ -78,7 +78,8 @@ The MCP server provides a set of tools for generating reports about the state of
   - `kind`: The kind of the resource(s) (required).
   - `name`: The name of the resource (optional).
   - `namespace`: The namespace of the resource(s) (optional).
-  - `labelSelector`: The label selector in the format `key1=value1,key2=value2` (optional).
+  - `selector`: The label selector in the format `key1=value1,key2=value2` (optional).
+  - `limit`: The maximum number of resources to return (optional).
 - `get_kubernetes_api-versions`: This tool retrieves the CRDs registered on the cluster and returns the preferred apiVersion for each kind.
   - No parameters required
 
@@ -150,9 +151,8 @@ resuming, and deleting Flux resources. To disable these tools, the MCP server ca
 configured to run in read-only mode by setting the `--read-only` flag.
 
 The MCP server uses the `KUBECONFIG` environment variable to read the configuration and
-authenticate to the cluster. The server will use the default context set the kubeconfig file.
-It is possible to specify a different context and a user or service account that the MCP server
-will impersonate when connecting to the cluster.
+authenticate to Kubernetes clusters. It is possible to specify a user or service account
+that the MCP server will impersonate when connecting to the cluster.
 
 Example configuration for impersonating a service account with read-only permissions:
 

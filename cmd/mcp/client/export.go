@@ -22,6 +22,7 @@ import (
 func (k *KubeClient) Export(ctx context.Context,
 	gvks []schema.GroupVersionKind,
 	name, namespace, labelSelector string,
+	limit int,
 	maskSecrets bool) (string, error) {
 	var strBuilder strings.Builder
 	for _, gvk := range gvks {
@@ -34,6 +35,10 @@ func (k *KubeClient) Export(ctx context.Context,
 
 		listOpts := []client.ListOption{
 			client.InNamespace(namespace),
+		}
+
+		if limit > 0 {
+			listOpts = append(listOpts, client.Limit(limit))
 		}
 
 		if name != "" {

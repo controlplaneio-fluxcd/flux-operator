@@ -19,6 +19,7 @@ type GetKubernetesResourcesArgs struct {
 	Name          string `json:"name" jsonschema:"description=The name of the Kubernetes resource."`
 	Namespace     string `json:"namespace" jsonschema:"description=The namespace of the Kubernetes resource."`
 	LabelSelector string `json:"selector" jsonschema:"description=The label selector in the format key1=value1,key2=value2."`
+	Limit         int    `json:"limit" jsonschema:"description=The maximum number of resources to return."`
 }
 
 func GetKubernetesResourcesHandler(ctx context.Context, args GetKubernetesResourcesArgs) (*mcpgolang.ToolResponse, error) {
@@ -43,6 +44,7 @@ func GetKubernetesResourcesHandler(ctx context.Context, args GetKubernetesResour
 		args.Name,
 		args.Namespace,
 		args.LabelSelector,
+		args.Limit,
 		rootArgs.maskSecrets)
 
 	contents := []*mcpgolang.Content{

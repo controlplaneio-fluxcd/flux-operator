@@ -39,7 +39,7 @@ func GetFluxInstanceHandler(ctx context.Context, args GetFluxInstanceArgs) (*mcp
 			Version: fluxcdv1.GroupVersion.Version,
 			Kind:    fluxcdv1.FluxReportKind,
 		},
-	}, args.Name, args.Namespace, "", true)
+	}, args.Name, args.Namespace, "", 1, true)
 	if err != nil {
 		return nil, fmt.Errorf("unable to determine the Flux status on this cluster: %w", err)
 	}
