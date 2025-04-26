@@ -48,6 +48,13 @@ func serveCmdRun(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	for _, prompt := range PromptList {
+		err := mcpServer.RegisterPrompt(prompt.Name, prompt.Description, prompt.Handler)
+		if err != nil {
+			return err
+		}
+	}
+
 	for _, tool := range KubeConfigToolList {
 		err := mcpServer.RegisterTool(tool.Name, tool.Description, tool.Handler)
 		if err != nil {
