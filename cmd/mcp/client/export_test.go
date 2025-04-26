@@ -23,7 +23,7 @@ func TestExport(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "flux-system",
 			Labels: map[string]string{
-				"app.kubernetes.io/part-of": "fluxcd",
+				"app.kubernetes.io/part-of": "flux",
 			},
 		},
 	}
