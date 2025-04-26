@@ -23,17 +23,23 @@ type Event struct {
 }
 
 // GetEvents retrieves events for a specific resource kind and name in the given namespace.
-func (k *KubeClient) GetEvents(ctx context.Context, kind, name, namespace string) ([]Event, error) {
+func (k *KubeClient) GetEvents(ctx context.Context, kind, name, namespace string, excludeReason string) ([]Event, error) {
 	el := &corev1.EventList{}
+
+	selectors := []fields.Selector{
+		fields.OneTermEqualSelector("involvedObject.kind", kind),
+		fields.OneTermEqualSelector("involvedObject.name", name),
+	}
+
+	if excludeReason != "" {
+		selectors = append(selectors, fields.OneTermNotEqualSelector("reason", excludeReason))
+	}
+
 	listOpts := []client.ListOption{
 		client.Limit(100),
 		client.InNamespace(namespace),
 		client.MatchingFieldsSelector{
-			Selector: fields.AndSelectors(
-				fields.OneTermNotEqualSelector("reason", "ReconciliationSucceeded"),
-				fields.OneTermEqualSelector("involvedObject.kind", kind),
-				fields.OneTermEqualSelector("involvedObject.name", name),
-			),
+			Selector: fields.AndSelectors(selectors...),
 		}}
 	err := k.List(ctx, el, listOpts...)
 	if err != nil {

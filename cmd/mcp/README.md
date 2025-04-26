@@ -46,16 +46,16 @@ Build the MCP server binary (Go 1.24+ is required):
 make mcp-build
 ```
 
-Add the binary to the Claude Desktop configuration (change the paths to your user):
+Add the binary to the Claude Desktop configuration (change the paths to your username):
 
 ```json
 {
     "mcpServers": {
       "flux-operator-mcp": {
-          "command": "/Users/stefanprodan/src/flux-operator/bin/flux-operator-mcp",
+          "command": "/Users/username/src/flux-operator/bin/flux-operator-mcp",
           "args": ["serve"],
           "env": {
-            "KUBECONFIG": "/Users/stefanprodan/.kube/config"
+            "KUBECONFIG": "/Users/username/.kube/config"
           }
         }
       }
@@ -81,7 +81,7 @@ The MCP server provides a set of tools for generating reports about the state of
   - `selector`: The label selector in the format `key1=value1,key2=value2` (optional).
   - `limit`: The maximum number of resources to return (optional).
 - `get_kubernetes_api-versions`: This tool retrieves the CRDs registered on the cluster and returns the preferred apiVersion for each kind.
-  - No parameters required
+  - No arguments required
 
 The output of the reporting tools is formatted as a multi-doc YAML.
 

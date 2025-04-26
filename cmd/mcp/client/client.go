@@ -4,6 +4,7 @@
 package client
 
 import (
+	"errors"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
@@ -59,6 +60,10 @@ func (k *KubeClient) ParseGroupVersionKind(apiVersion, kind string) (schema.Grou
 	gv, err := schema.ParseGroupVersion(apiVersion)
 	if err != nil {
 		return gvk, err
+	}
+
+	if kind == "" {
+		return gvk, errors.New("kind not specified")
 	}
 
 	gvk = schema.GroupVersionKind{

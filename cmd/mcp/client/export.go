@@ -5,10 +5,13 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
@@ -103,7 +106,7 @@ func (k *KubeClient) Export(ctx context.Context,
 				}
 
 				if strings.Contains(item.GetAPIVersion(), "fluxcd") {
-					events, err := k.GetEvents(ctx, item.GetKind(), item.GetName(), item.GetNamespace())
+					events, err := k.GetEvents(ctx, item.GetKind(), item.GetName(), item.GetNamespace(), "ReconciliationSucceeded")
 					if err == nil && len(events) > 0 {
 						ev := make([]interface{}, len(events))
 						for i, event := range events {
@@ -125,6 +128,46 @@ func (k *KubeClient) Export(ctx context.Context,
 				strBuilder.Write(itemBytes)
 			}
 		}
+	}
+
+	return strBuilder.String(), nil
+}
+
+// ExportAPIs retrieves the Kubernetes CRDs and returns the
+// preferred API version for each kind as a YAML multi-doc.
+func (k *KubeClient) ExportAPIs(ctx context.Context) (string, error) {
+	var list apiextensionsv1.CustomResourceDefinitionList
+	if err := k.List(ctx, &list, client.InNamespace("")); err != nil {
+		return "", fmt.Errorf("failed to list CRDs: %w", err)
+	}
+
+	if len(list.Items) == 0 {
+		return "", errors.New("no CRDs found")
+	}
+
+	gvkList := make([]metav1.GroupVersionKind, len(list.Items))
+	for i, crd := range list.Items {
+		gvk := metav1.GroupVersionKind{
+			Group: crd.Spec.Group,
+			Kind:  crd.Spec.Names.Kind,
+		}
+		versions := crd.Status.StoredVersions
+		if len(versions) > 0 {
+			gvk.Version = versions[len(versions)-1]
+		} else {
+			return "", fmt.Errorf("no stored versions found for CRD %s", crd.Name)
+		}
+		gvkList[i] = gvk
+	}
+
+	var strBuilder strings.Builder
+	for _, gvk := range gvkList {
+		itemBytes, err := yaml.Marshal(gvk)
+		if err != nil {
+			return "", fmt.Errorf("error marshalling gvk: %w", err)
+		}
+		strBuilder.WriteString("---\n")
+		strBuilder.Write(itemBytes)
 	}
 
 	return strBuilder.String(), nil
