@@ -6,12 +6,11 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 
 	mcpgolang "github.com/metoro-io/mcp-golang"
-	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/yaml"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/client"
 )
 
 type KubeConfigTool struct {
@@ -33,16 +32,22 @@ var KubeConfigToolList = []KubeConfigTool{
 	},
 }
 
+var kubeconfig *client.KubeConfig
+
+func init() {
+	kubeconfig = client.NewKubeConfig()
+}
+
 type GetKubernetesContextArgs struct {
 }
 
 func GetKubernetesContextHandler(ctx context.Context, args GetKubernetesContextArgs) (*mcpgolang.ToolResponse, error) {
-	list, err := getKubeContexts()
+	err := kubeconfig.Load()
 	if err != nil {
 		return nil, fmt.Errorf("error reading kubeconfig contexts: %w", err)
 	}
 
-	data, err := yaml.Marshal(list)
+	data, err := yaml.Marshal(kubeconfig.Contexts())
 	if err != nil {
 		return nil, fmt.Errorf("error marshalling gvk: %w", err)
 	}
@@ -55,42 +60,21 @@ type SetKubernetesContextArgs struct {
 }
 
 func SetKubernetesContextHandler(ctx context.Context, args SetKubernetesContextArgs) (*mcpgolang.ToolResponse, error) {
+	if args.Name == "" {
+		return nil, fmt.Errorf("context name is required")
+	}
+
+	err := kubeconfig.Load()
+	if err != nil {
+		return nil, fmt.Errorf("error reading kubeconfig contexts: %w", err)
+	}
+
+	err = kubeconfig.SetCurrentContext(args.Name)
+	if err != nil {
+		return nil, fmt.Errorf("error setting kubeconfig context: %w", err)
+	}
 	kubeconfigArgs.Context = &args.Name
 
 	return mcpgolang.NewToolResponse(mcpgolang.NewTextContent(
-		fmt.Sprintf(`Context changed to %s.
-If asked, use the get_flux_instance tool to determine the Flux operator status on the current cluster.
-`, args.Name))), nil
-}
-
-type kubeContext struct {
-	Name    string `json:"name" jsonschema:"description=The name of the kubeconfig context."`
-	Current bool   `json:"current" jsonschema:"description=Whether the context is the current context."`
-}
-
-func getKubeContexts() ([]kubeContext, error) {
-	kubeConfig := os.Getenv("KUBECONFIG")
-	if kubeConfig == "" {
-		return nil, nil
-	}
-
-	paths := filepath.SplitList(kubeConfig)
-
-	var contexts []kubeContext
-	config, err := clientcmd.LoadFromFile(paths[0])
-	if err != nil {
-		return nil, err
-	}
-
-	for contextName := range config.Contexts {
-		kubeCtx := kubeContext{
-			Name: contextName,
-		}
-		if contextName == config.CurrentContext {
-			kubeCtx.Current = true
-		}
-		contexts = append(contexts, kubeCtx)
-	}
-
-	return contexts, nil
+		fmt.Sprintf("Context changed to %s", args.Name))), nil
 }
