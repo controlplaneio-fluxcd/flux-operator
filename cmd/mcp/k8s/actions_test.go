@@ -1,7 +1,7 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-package client
+package k8s
 
 import (
 	"context"
@@ -40,7 +40,7 @@ func TestAnnotateResource(t *testing.T) {
 		},
 	}
 
-	kubeClient := KubeClient{
+	kubeClient := Client{
 		Client: fake.NewClientBuilder().
 			WithScheme(NewTestScheme()).
 			WithObjects(mockNamespace, mockInstance).
@@ -93,7 +93,7 @@ func TestAnnotateResource(t *testing.T) {
 			gvk, err := kubeClient.ParseGroupVersionKind(tt.apiVersion, tt.kind)
 			g.Expect(err).NotTo(HaveOccurred())
 
-			err = kubeClient.AnnotateResource(
+			err = kubeClient.Annotate(
 				context.Background(),
 				gvk,
 				tt.name,
@@ -149,7 +149,7 @@ func TestDeleteResource(t *testing.T) {
 		},
 	}
 
-	kubeClient := KubeClient{
+	kubeClient := Client{
 		Client: fake.NewClientBuilder().
 			WithScheme(NewTestScheme()).
 			WithObjects(mockNamespace, mockInstance).
@@ -198,7 +198,7 @@ func TestDeleteResource(t *testing.T) {
 			gvk, err := kubeClient.ParseGroupVersionKind(tt.apiVersion, tt.kind)
 			g.Expect(err).NotTo(HaveOccurred())
 
-			err = kubeClient.DeleteResource(
+			err = kubeClient.Delete(
 				context.Background(),
 				gvk,
 				tt.name,

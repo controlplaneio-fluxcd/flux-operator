@@ -1,7 +1,7 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-package client
+package k8s
 
 import (
 	"fmt"
@@ -12,23 +12,32 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
+// KubeConfig represents a thread-safe configuration for
+// managing Kubernetes contexts and clusters.
 type KubeConfig struct {
 	mx       sync.Mutex
 	contexts []KubeConfigContext
 }
 
+// KubeConfigContext represents a Kubernetes context with
+// its associated cluster and current selection status.
 type KubeConfigContext struct {
 	ClusterName    string `json:"cluster"`
 	ContextName    string `json:"context"`
 	CurrentContext bool   `json:"current"`
 }
 
+// NewKubeConfig initializes a new instance of KubeConfig
+// with an empty list of contexts.
 func NewKubeConfig() *KubeConfig {
 	return &KubeConfig{
 		contexts: []KubeConfigContext{},
 	}
 }
 
+// Load loads and updates Kubernetes configuration contexts based on the KUBECONFIG environment variable.
+// It ensures thread safety and preserves the current context if it exists in the new configuration.
+// Returns an error if KUBECONFIG is not set or if there is an issue loading the configuration.
 func (c *KubeConfig) Load() error {
 	c.mx.Lock()
 	defer c.mx.Unlock()
@@ -91,6 +100,8 @@ func (c *KubeConfig) Load() error {
 	return nil
 }
 
+// Contexts returns a slice of all Kubernetes contexts
+// currently loaded in the KubeConfig instance.
 func (c *KubeConfig) Contexts() []KubeConfigContext {
 	c.mx.Lock()
 	defer c.mx.Unlock()
@@ -98,6 +109,9 @@ func (c *KubeConfig) Contexts() []KubeConfigContext {
 	return c.contexts
 }
 
+// SetCurrentContext sets the specified context as the current context in the KubeConfig.
+// It returns an error if the context with the given name does not exist.
+// This function does not change the kubeconfig file.
 func (c *KubeConfig) SetCurrentContext(name string) error {
 	c.mx.Lock()
 	defer c.mx.Unlock()

@@ -4,17 +4,22 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/tools/clientcmd"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/prompter"
+	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/toolbox"
 )
 
 var (
@@ -36,6 +41,7 @@ we adapt to new features and/or find better ways to facilitate what it does.`,
 type rootFlags struct {
 	timeout     time.Duration
 	maskSecrets bool
+	readOnly    bool
 }
 
 var (
@@ -49,10 +55,12 @@ func init() {
 	rootCmd.PersistentFlags().DurationVar(&rootArgs.timeout, "timeout", rootArgs.timeout,
 		"The length of time to wait before giving up on the current operation.")
 	rootCmd.PersistentFlags().BoolVar(&rootArgs.maskSecrets, "mask-secrets", true,
-		"Mask secrets in the output")
+		"Mask secrets in the MCP server output")
+	rootCmd.PersistentFlags().BoolVar(&rootArgs.readOnly, "read-only", false,
+		"Run the MCP server in read-only mode, disabling write and delete operations.")
 	addKubeConfigFlags(rootCmd)
-
 	rootCmd.SetOut(os.Stdout)
+	rootCmd.AddCommand(serveCmd)
 }
 
 func main() {
@@ -131,4 +139,33 @@ func getCurrentKubeconfigPath() string {
 		}
 	}
 	return defaultPath
+}
+
+var serveCmd = &cobra.Command{
+	Use:   "serve",
+	Short: "Start the MCP server in stdio mode",
+	RunE:  serveCmdRun,
+}
+
+func serveCmdRun(cmd *cobra.Command, args []string) error {
+	mcpServer := server.NewMCPServer(
+		"flux-operator-mcp",
+		VERSION,
+		server.WithResourceCapabilities(true, true),
+		server.WithToolCapabilities(true),
+		server.WithPromptCapabilities(true),
+	)
+
+	tm := toolbox.NewManager(kubeconfigArgs, rootArgs.timeout, rootArgs.maskSecrets)
+	tm.RegisterTools(mcpServer, rootArgs.readOnly)
+
+	pm := prompter.NewManager()
+	pm.RegisterPrompts(mcpServer)
+	pm.RegisterResources(mcpServer)
+
+	if err := server.ServeStdio(mcpServer); err != nil {
+		fmt.Printf("Server error: %v\n", err)
+	}
+
+	return nil
 }

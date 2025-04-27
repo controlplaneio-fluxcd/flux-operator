@@ -1,7 +1,7 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-package client
+package k8s
 
 import (
 	corev1 "k8s.io/api/core/v1"

@@ -1,7 +1,7 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-package client
+package k8s
 
 import (
 	"bytes"
@@ -17,7 +17,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 )
 
@@ -47,7 +47,7 @@ type HelmInventory struct {
 
 // GetHelmInventory returns the HelmRelease inventory by extracting the Kubernetes
 // objects metadata from the Helm storage secret belonging to the latest release version.
-func (k *KubeClient) GetHelmInventory(ctx context.Context, objectKey client.ObjectKey) ([]HelmInventory, error) {
+func (k *Client) GetHelmInventory(ctx context.Context, objectKey ctrlclient.ObjectKey) ([]HelmInventory, error) {
 	inventory := make([]HelmInventory, 0)
 	hr := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -55,7 +55,7 @@ func (k *KubeClient) GetHelmInventory(ctx context.Context, objectKey client.Obje
 			"kind":       "HelmRelease",
 		},
 	}
-	if err := k.Get(ctx, objectKey, hr); err != nil {
+	if err := k.Client.Get(ctx, objectKey, hr); err != nil {
 		return nil, err
 	}
 
@@ -67,7 +67,7 @@ func (k *KubeClient) GetHelmInventory(ctx context.Context, objectKey client.Obje
 	storageNamespace, _, _ := unstructured.NestedString(hr.Object, "status", "storageNamespace")
 	history, _, _ := unstructured.NestedSlice(hr.Object, "status", "history")
 	if storageNamespace == "" || len(history) == 0 {
-		// Skip release if it has no current
+		// Skip the release if it has no current
 		return nil, nil
 	}
 
@@ -77,13 +77,13 @@ func (k *KubeClient) GetHelmInventory(ctx context.Context, objectKey client.Obje
 	latest.Version = history[0].(map[string]interface{})["version"].(int64)
 	latest.Namespace = history[0].(map[string]interface{})["namespace"].(string)
 
-	storageKey := client.ObjectKey{
+	storageKey := ctrlclient.ObjectKey{
 		Namespace: storageNamespace,
 		Name:      fmt.Sprintf("sh.helm.release.v1.%s.v%v", latest.ChartName, latest.Version),
 	}
 
 	storageSecret := &corev1.Secret{}
-	if err := k.Get(ctx, storageKey, storageSecret); err != nil {
+	if err := k.Client.Get(ctx, storageKey, storageSecret); err != nil {
 		// skip release if it has no storage
 		if apierrors.IsNotFound(err) {
 			return nil, nil
@@ -132,7 +132,7 @@ func (k *KubeClient) GetHelmInventory(ctx context.Context, objectKey client.Obje
 	// set the namespace on namespaced objects
 	for _, obj := range objects {
 		if obj.GetNamespace() == "" {
-			if isNamespaced, _ := apiutil.IsObjectNamespaced(obj, k.Scheme(), k.RESTMapper()); isNamespaced {
+			if isNamespaced, _ := apiutil.IsObjectNamespaced(obj, k.Client.Scheme(), k.Client.RESTMapper()); isNamespaced {
 				obj.SetNamespace(latest.Namespace)
 			}
 		}

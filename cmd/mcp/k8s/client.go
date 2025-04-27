@@ -1,7 +1,7 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-package client
+package k8s
 
 import (
 	"errors"
@@ -12,16 +12,20 @@ import (
 	apiruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	cli "k8s.io/cli-runtime/pkg/genericclioptions"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
-type KubeClient struct {
-	client.Client
+// Client embeds the controller-runtime client to provide
+// extended functionality for interacting with Kubernetes resources.
+type Client struct {
+	ctrlclient.Client
 }
 
-func NewClient(flags *cli.ConfigFlags) (*KubeClient, error) {
+// NewClient creates a new Kubernetes client using the provided cli.ConfigFlags,
+// configuring QPS, Burst, and custom schemes.
+func NewClient(flags *cli.ConfigFlags) (*Client, error) {
 	cfg, err := flags.ToRESTConfig()
 	if err != nil {
 		return nil, fmt.Errorf("loading kubeconfig failed: %w", err)
@@ -46,16 +50,16 @@ func NewClient(flags *cli.ConfigFlags) (*KubeClient, error) {
 		return nil, err
 	}
 
-	kubeClient, err := client.New(cfg, client.Options{Mapper: restMapper, Scheme: scheme})
+	kubeClient, err := ctrlclient.New(cfg, ctrlclient.Options{Mapper: restMapper, Scheme: scheme})
 	if err != nil {
 		return nil, err
 	}
 
-	return &KubeClient{Client: client.WithFieldOwner(kubeClient, "flux-operator-mcp")}, nil
+	return &Client{Client: ctrlclient.WithFieldOwner(kubeClient, "flux-operator-mcp")}, nil
 }
 
 // ParseGroupVersionKind parses the provided apiVersion and kind into a GroupVersionKind object.
-func (k *KubeClient) ParseGroupVersionKind(apiVersion, kind string) (schema.GroupVersionKind, error) {
+func (k *Client) ParseGroupVersionKind(apiVersion, kind string) (schema.GroupVersionKind, error) {
 	var gvk schema.GroupVersionKind
 	gv, err := schema.ParseGroupVersion(apiVersion)
 	if err != nil {
@@ -75,6 +79,6 @@ func (k *KubeClient) ParseGroupVersionKind(apiVersion, kind string) (schema.Grou
 }
 
 // ObjectKeyFromObject returns the ObjectKey given a runtime.Object.
-func (k *KubeClient) ObjectKeyFromObject(obj client.Object) client.ObjectKey {
-	return client.ObjectKeyFromObject(obj)
+func (k *Client) ObjectKeyFromObject(obj ctrlclient.Object) ctrlclient.ObjectKey {
+	return ctrlclient.ObjectKeyFromObject(obj)
 }

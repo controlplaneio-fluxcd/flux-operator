@@ -1,7 +1,7 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-package client
+package k8s
 
 import (
 	"context"
@@ -80,7 +80,7 @@ func TestGetEvents(t *testing.T) {
 		return []string{e.Reason}
 	}
 
-	kubeClient := KubeClient{
+	kubeClient := Client{
 		Client: fake.NewClientBuilder().
 			WithScheme(NewTestScheme()).
 			WithLists(mockEventList).

@@ -3,8 +3,9 @@
 This in an **experimental** Model Context Protocol Server for interacting with
 Kubernetes clusters managed by the [Flux Operator](https://fluxcd.control-plane.io/operator/).
 
-The MCP Server primary goal is helping Flux users and ControlPlane's support team to analyze and
-troubleshoot [Flux Enterprise](https://fluxcd.control-plane.io/distribution/) installations.
+The MCP Server is designed to assist Flux users and ControlPlane's support team
+in analyzing and troubleshooting Flux Operator installations and GitOps continuous
+delivery pipelines across environments.
 
 Example prompts:
 
@@ -64,7 +65,20 @@ Add the binary to the Claude Desktop configuration (change the paths to your use
 
 Note that on macOS the config file is located at `~/Library/Application Support/Claude/claude_desktop_config.json`.
 
-## MCP Tools
+## MCP Prompts and Tools
+
+### Predefined prompts
+
+The MCP server provides a set of predefined prompts that can be used to troubleshoot Flux:
+
+- `debug_flux_kustomization`: This prompt instructs the model to troubleshoot a Flux Kustomization and provide root cause analysis.
+  - `name` - The name of the Kustomization (required).
+  - `namespace` - The namespace of the Kustomization (required).
+  - `cluster` - The name of the cluster (optional).
+- `debug_flux_helmrelease`: This prompt instructs the model to troubleshoot a Flux HelmRelease and provide root cause analysis.
+  - `name` - The name of the HelmRelease (required).
+  - `namespace` - The namespace of the HelmRelease (required).
+  - `cluster` - The name of the cluster (optional).
 
 ### Reporting tools
 
@@ -90,15 +104,19 @@ The output of the reporting tools is formatted as a multi-doc YAML.
 The MCP server provides a set of tools for triggering the reconciliation of Flux resources:
 
 - `reconcile_flux_resourceset`: This tool triggers the reconciliation of the Flux ResourceSet.
+  - `name` - The name of the resource to reconcile (required).
+  - `namespace` - The namespace of the resource to reconcile (required).
 - `reconcile_flux_source`: This tool triggers the reconciliation of the Flux sources (GitRepository, OCIRepository, HelmRepository, HelmChart, Bucket).
+  - `name` - The name of the resource to reconcile (required).
+  - `namespace` - The namespace of the resource to reconcile (required).
 - `reconcile_flux_kustomization`: This tool triggers the reconciliation of the Flux Kustomization including its source (GitRepository, OCIRepository, Bucket).
+  - `name` - The name of the resource to reconcile (required).
+  - `namespace` - The namespace of the resource to reconcile (required).
+  - `with_source` - Trigger the reconciliation of the Flux Kustomization source (optional).
 - `reconcile_flux_helmrelease`: This tool triggers the reconciliation of the Flux HelmRelease including its source (OCIRepository, HelmChart).
-
-The reconciliation tools accept the following arguments:
-
-- `name` - The name of the resource to reconcile (required).
-- `namespace` - The namespace of the resource to reconcile (required).
-- `with_source` - Trigger the reconciliation of the Flux Kustomization or HelmRelease source (optional).
+  - `name` - The name of the resource to reconcile (required).
+  - `namespace` - The namespace of the resource to reconcile (required).
+  - `with_source` - Trigger the reconciliation of the Flux HelmRelease source (optional).
 
 The output of the reconciliation tools tells the model how to verify the status of the reconciled resource.
 
@@ -107,37 +125,37 @@ The output of the reconciliation tools tells the model how to verify the status 
 The MCP server provides a set of tools for suspending and resuming the reconciliation of Flux resources:
 
 - `suspend_flux_resource`: This tool suspends the reconciliation of a Flux resource (Kustomization, HelmRelease, ResourceSet, OCIRepository, etc.).
+  - `apiVersion` - The API version of the resource (required).
+  - `kind` - The kind of the resource (required).
+  - `name` - The name of the resource (required).
+  - `namespace` - The namespace of the resource (required).
 - `resume_flux_resource`: This tool resumes the reconciliation of a Flux resource.
-
-The suspend and resume tools accept the following arguments:
-
-- `apiVersion` - The API version of the resource (required).
-- `kind` - The kind of the resource (required).
-- `name` - The name of the resource (required).
-- `namespace` - The namespace of the resource (required).
+  - `apiVersion` - The API version of the resource (required).
+  - `kind` - The kind of the resource (required).
+  - `name` - The name of the resource (required).
+  - `namespace` - The namespace of the resource (required).
 
 ### Deletion tool
 
 The MCP server provides a tool for deleting Kubernetes resources:
 
 - `delete_kubernetes_resource`: This tool triggers the deletion of a Kubernetes resource.
-
-The deletion tool accepts the following arguments:
-
-- `apiVersion` - The API version of the resource (required).
-- `kind` - The kind of the resource (required).
-- `name` - The name of the resource (required).
-- `namespace` - The namespace of the resource (required for namespaced resources).
+  - `apiVersion` - The API version of the resource (required).
+  - `kind` - The kind of the resource (required).
+  - `name` - The name of the resource (required).
+  - `namespace` - The namespace of the resource (required for namespaced resources).
 
 ### Multi-cluster tools
 
 The MCP server provides a set of tools for multi-cluster operations:
 
 - `get_kubeconfig_contexts`: This tool retrieves the Kubernetes clusters contexts found in the kubeconfig.
+  - No arguments required
 - `set_kubeconfig_context`: This tool sets the context to a specific cluster for the current session.
+  - `name` - The name of the context to set (required).
 
 Note that the `set_kubeconfig_context` tool does not alter the kubeconfig file,
-it only sets the context for the current session.
+it only sets the context for the current session. 
 
 ## Security Considerations
 
@@ -176,5 +194,5 @@ Example configuration for impersonating a service account with read-only permiss
 
 ## License
 
-The Flux Operator is an open-source project licensed under the
+The Flux Operator MCP Server is an open-source project licensed under the
 [AGPL-3.0 license](https://github.com/controlplaneio-fluxcd/flux-operator/blob/main/LICENSE).

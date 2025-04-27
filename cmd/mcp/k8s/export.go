@@ -1,7 +1,7 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-package client
+package k8s
 
 import (
 	"context"
@@ -16,13 +16,14 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 )
 
-// Export retrieves Kubernetes resources based on the provided GroupVersionKind,
-// name, namespace, and label selector and returns them as a YAML multi-doc.
-func (k *KubeClient) Export(ctx context.Context,
+// Export retrieves resources based on provided criteria and returns them as a YAML multi-document string.
+// Supports filtering by GroupVersionKind, name, namespace, labels, and limit.
+// Allows masking secrets and includes additional metadata for Flux resource types.
+func (k *Client) Export(ctx context.Context,
 	gvks []schema.GroupVersionKind,
 	name, namespace, labelSelector string,
 	limit int,
@@ -36,16 +37,16 @@ func (k *KubeClient) Export(ctx context.Context,
 			},
 		}
 
-		listOpts := []client.ListOption{
-			client.InNamespace(namespace),
+		listOpts := []ctrlclient.ListOption{
+			ctrlclient.InNamespace(namespace),
 		}
 
 		if limit > 0 {
-			listOpts = append(listOpts, client.Limit(limit))
+			listOpts = append(listOpts, ctrlclient.Limit(limit))
 		}
 
 		if name != "" {
-			listOpts = append(listOpts, client.MatchingFieldsSelector{
+			listOpts = append(listOpts, ctrlclient.MatchingFieldsSelector{
 				Selector: fields.OneTermEqualSelector("metadata.name", name),
 			})
 		}
@@ -56,10 +57,10 @@ func (k *KubeClient) Export(ctx context.Context,
 				return "", fmt.Errorf("invalid label selector format: %w", err)
 			}
 
-			listOpts = append(listOpts, client.MatchingLabelsSelector{Selector: sel})
+			listOpts = append(listOpts, ctrlclient.MatchingLabelsSelector{Selector: sel})
 		}
 
-		if err := k.List(ctx, &list, listOpts...); err == nil {
+		if err := k.Client.List(ctx, &list, listOpts...); err == nil {
 			for _, item := range list.Items {
 				unstructured.RemoveNestedField(item.Object, "metadata", "managedFields")
 
@@ -73,7 +74,7 @@ func (k *KubeClient) Export(ctx context.Context,
 				}
 
 				if item.GetKind() == "HelmRelease" {
-					inventory, err := k.GetHelmInventory(ctx, client.ObjectKey{
+					inventory, err := k.GetHelmInventory(ctx, ctrlclient.ObjectKey{
 						Namespace: item.GetNamespace(),
 						Name:      item.GetName(),
 					})
@@ -135,9 +136,9 @@ func (k *KubeClient) Export(ctx context.Context,
 
 // ExportAPIs retrieves the Kubernetes CRDs and returns the
 // preferred API version for each kind as a YAML multi-doc.
-func (k *KubeClient) ExportAPIs(ctx context.Context) (string, error) {
+func (k *Client) ExportAPIs(ctx context.Context) (string, error) {
 	var list apiextensionsv1.CustomResourceDefinitionList
-	if err := k.List(ctx, &list, client.InNamespace("")); err != nil {
+	if err := k.Client.List(ctx, &list, ctrlclient.InNamespace("")); err != nil {
 		return "", fmt.Errorf("failed to list CRDs: %w", err)
 	}
 

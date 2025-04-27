@@ -1,7 +1,7 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-package client
+package k8s
 
 import (
 	"testing"
@@ -11,7 +11,7 @@ import (
 )
 
 func TestParseGroupVersionKind(t *testing.T) {
-	kubeClient := KubeClient{
+	kubeClient := Client{
 		Client: fake.NewClientBuilder().WithScheme(NewTestScheme()).Build(),
 	}
 

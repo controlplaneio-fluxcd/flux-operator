@@ -1,7 +1,7 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-package client
+package k8s
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Event is a lighter representation of a Kubernetes event.
@@ -23,7 +23,7 @@ type Event struct {
 }
 
 // GetEvents retrieves events for a specific resource kind and name in the given namespace.
-func (k *KubeClient) GetEvents(ctx context.Context, kind, name, namespace string, excludeReason string) ([]Event, error) {
+func (k *Client) GetEvents(ctx context.Context, kind, name, namespace string, excludeReason string) ([]Event, error) {
 	el := &corev1.EventList{}
 
 	selectors := []fields.Selector{
@@ -35,13 +35,13 @@ func (k *KubeClient) GetEvents(ctx context.Context, kind, name, namespace string
 		selectors = append(selectors, fields.OneTermNotEqualSelector("reason", excludeReason))
 	}
 
-	listOpts := []client.ListOption{
-		client.Limit(100),
-		client.InNamespace(namespace),
-		client.MatchingFieldsSelector{
+	listOpts := []ctrlclient.ListOption{
+		ctrlclient.Limit(100),
+		ctrlclient.InNamespace(namespace),
+		ctrlclient.MatchingFieldsSelector{
 			Selector: fields.AndSelectors(selectors...),
 		}}
-	err := k.List(ctx, el, listOpts...)
+	err := k.Client.List(ctx, el, listOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("unable to list events: %w", err)
 	}
