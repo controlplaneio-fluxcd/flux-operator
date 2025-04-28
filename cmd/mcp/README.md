@@ -47,6 +47,14 @@ Build the MCP server binary (Go 1.24+ is required):
 make mcp-build
 ```
 
+## Installation
+
+The MCP server is a standalone binary available as a binary executable for Linux, macOS and Windows.
+The AMD64 and ARM64 binaries can be downloaded from
+GitHub [releases page](https://github.com/controlplaneio-fluxcd/flux-operator/releases).
+
+### Usage with Claude Desktop
+
 Add the binary to the Claude Desktop configuration (change the paths to your username):
 
 ```json
@@ -64,6 +72,29 @@ Add the binary to the Claude Desktop configuration (change the paths to your use
 ```
 
 Note that on macOS the config file is located at `~/Library/Application Support/Claude/claude_desktop_config.json`.
+
+### Usage with VS Code
+
+Add the following configuration to the vscode `settings.json` file:
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "flux-operator-mcp": {
+        "command": "/Users/username/src/flux-operator/bin/flux-operator-mcp",
+        "args": ["serve"],
+        "env": {
+          "KUBECONFIG": "/Users/username/.kube/config"
+        }
+      }
+    }
+  },
+  "chat.mcp.enabled": true
+}
+```
+
+Note that you need to toggle Agent mode in the Copilot Chat to use the Flux Operator MCP tools.
 
 ## MCP Prompts and Tools
 
