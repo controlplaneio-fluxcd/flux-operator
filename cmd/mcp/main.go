@@ -42,6 +42,8 @@ type rootFlags struct {
 	timeout     time.Duration
 	maskSecrets bool
 	readOnly    bool
+	transport   string
+	port        int
 }
 
 var (
@@ -58,6 +60,10 @@ func init() {
 		"Mask secrets in the MCP server output")
 	rootCmd.PersistentFlags().BoolVar(&rootArgs.readOnly, "read-only", false,
 		"Run the MCP server in read-only mode, disabling write and delete operations.")
+	rootCmd.PersistentFlags().StringVar(&rootArgs.transport, "transport", "stdio",
+		"The transport protocol to use for the MCP server. Options: [stdio, sse].")
+	rootCmd.PersistentFlags().IntVar(&rootArgs.port, "port", 8080,
+		"The port to use for the MCP server. This is only used when the transport is set to 'sse'.")
 	addKubeConfigFlags(rootCmd)
 	rootCmd.SetOut(os.Stdout)
 	rootCmd.AddCommand(serveCmd)
@@ -163,8 +169,15 @@ func serveCmdRun(cmd *cobra.Command, args []string) error {
 	pm.RegisterPrompts(mcpServer)
 	pm.RegisterResources(mcpServer)
 
-	if err := server.ServeStdio(mcpServer); err != nil {
-		fmt.Printf("Server error: %v\n", err)
+	if rootArgs.transport == "sse" {
+		sseServer := server.NewSSEServer(mcpServer)
+		if err := sseServer.Start(fmt.Sprintf(":%d", rootArgs.port)); err != nil {
+			return err
+		}
+	} else {
+		if err := server.ServeStdio(mcpServer); err != nil {
+			return err
+		}
 	}
 
 	return nil

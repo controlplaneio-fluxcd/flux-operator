@@ -49,9 +49,19 @@ make mcp-build
 
 ## Installation
 
-The MCP server is a standalone binary available as a binary executable for Linux, macOS and Windows.
-The AMD64 and ARM64 binaries can be downloaded from
+The MCP server is available as a binary executable for Linux, macOS, and Windows.
+The `flux-operator-mcp` AMD64 and ARM64 binaries can be downloaded from
 GitHub [releases page](https://github.com/controlplaneio-fluxcd/flux-operator/releases).
+
+By default, the `flux-operator-mcp serve` command starts the server using the
+Standard Input/Output (stdio) transport which is compatible with Claude Desktop,
+Cursor, Windsurf, VS Code Copilot Chat, and other AI tools.
+
+To use Server-Sent Events (SSE), start the server with:
+
+```shell
+flux-operator-mcp serve --transport sse --port 8080
+```
 
 ### Usage with Claude Desktop
 
@@ -59,19 +69,22 @@ Add the binary to the Claude Desktop configuration (change the paths to your use
 
 ```json
 {
-    "mcpServers": {
-      "flux-operator-mcp": {
-          "command": "/Users/username/src/flux-operator/bin/flux-operator-mcp",
-          "args": ["serve"],
-          "env": {
-            "KUBECONFIG": "/Users/username/.kube/config"
-          }
-        }
+  "mcpServers": {
+    "flux-operator-mcp": {
+      "command": "/Users/username/src/flux-operator/bin/flux-operator-mcp",
+      "args": ["serve"],
+      "env": {
+        "KUBECONFIG": "/Users/username/.kube/config"
       }
+    }
+  }
 }
 ```
 
-Note that on macOS the config file is located at `~/Library/Application Support/Claude/claude_desktop_config.json`.
+Note that on macOS the Claude config file is located at
+`~/Library/Application Support/Claude/claude_desktop_config.json`.
+
+The same configuration can be used with Cursor and Windsurf.
 
 ### Usage with VS Code
 
@@ -207,19 +220,19 @@ Example configuration for impersonating a service account with read-only permiss
 
 ```json
 {
-    "mcpServers": {
-      "flux-operator-mcp": {
-          "command": "/Users/stefanprodan/src/flux-operator/bin/flux-operator-mcp",
-          "args": [
-            "serve",
-            "--read-only",
-            "--kube-as=system:serviceaccount:flux-system:flux-operator"
-          ],
-          "env": {
-            "KUBECONFIG": "/Users/stefanprodan/.kube/config"
-          }
-        }
+  "mcpServers": {
+    "flux-operator-mcp": {
+      "command": "/Users/stefanprodan/src/flux-operator/bin/flux-operator-mcp",
+      "args": [
+        "serve",
+        "--read-only",
+        "--kube-as=system:serviceaccount:flux-system:flux-operator"
+      ],
+      "env": {
+        "KUBECONFIG": "/Users/stefanprodan/.kube/config"
       }
+    }
+  }
 }
 ```
 
