@@ -12,6 +12,7 @@ import (
 	apiruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	cli "k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/client-go/rest"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
@@ -21,6 +22,7 @@ import (
 // extended functionality for interacting with Kubernetes resources.
 type Client struct {
 	ctrlclient.Client
+	cfg *rest.Config
 }
 
 // NewClient creates a new Kubernetes client using the provided cli.ConfigFlags,
@@ -55,7 +57,10 @@ func NewClient(flags *cli.ConfigFlags) (*Client, error) {
 		return nil, err
 	}
 
-	return &Client{Client: ctrlclient.WithFieldOwner(kubeClient, "flux-operator-mcp")}, nil
+	return &Client{
+		Client: ctrlclient.WithFieldOwner(kubeClient, "flux-operator-mcp"),
+		cfg:    cfg,
+	}, nil
 }
 
 // ParseGroupVersionKind parses the provided apiVersion and kind into a GroupVersionKind object.

@@ -47,11 +47,11 @@ type HelmInventory struct {
 
 // GetHelmInventory returns the HelmRelease inventory by extracting the Kubernetes
 // objects metadata from the Helm storage secret belonging to the latest release version.
-func (k *Client) GetHelmInventory(ctx context.Context, objectKey ctrlclient.ObjectKey) ([]HelmInventory, error) {
+func (k *Client) GetHelmInventory(ctx context.Context, apiVersion string, objectKey ctrlclient.ObjectKey) ([]HelmInventory, error) {
 	inventory := make([]HelmInventory, 0)
 	hr := &unstructured.Unstructured{
 		Object: map[string]interface{}{
-			"apiVersion": "helm.toolkit.fluxcd.io/v2",
+			"apiVersion": apiVersion,
 			"kind":       "HelmRelease",
 		},
 	}

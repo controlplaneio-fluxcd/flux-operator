@@ -74,7 +74,7 @@ func (k *Client) Export(ctx context.Context,
 				}
 
 				if item.GetKind() == "HelmRelease" {
-					inventory, err := k.GetHelmInventory(ctx, ctrlclient.ObjectKey{
+					inventory, err := k.GetHelmInventory(ctx, item.GetAPIVersion(), ctrlclient.ObjectKey{
 						Namespace: item.GetNamespace(),
 						Name:      item.GetName(),
 					})

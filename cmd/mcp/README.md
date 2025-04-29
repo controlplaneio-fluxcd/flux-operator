@@ -138,7 +138,12 @@ The MCP server provides a set of tools for generating reports about the state of
   - `namespace`: The namespace of the resource(s) (optional).
   - `selector`: The label selector in the format `key1=value1,key2=value2` (optional).
   - `limit`: The maximum number of resources to return (optional).
-- `get_kubernetes_api-versions`: This tool retrieves the CRDs registered on the cluster and returns the preferred apiVersion for each kind.
+- `get_kubernetes_logs` : This tool retrieves the most recent logs of a Kubernetes pod.
+  - `pod_name` - The name of the pod (required).
+  - `pod_namespace` - The namespace of the pod (required).
+  - `containe_namer` - The name of the container (required).
+  - `limit` - The maximum number of lines to return (default 100).
+- `get_kubernetes_api_versions`: This tool retrieves the CRDs registered on the cluster and returns the preferred apiVersion for each kind.
   - No arguments required
 
 The output of the reporting tools is formatted as a multi-doc YAML.
