@@ -11,11 +11,3 @@ func (m *Manager) PromptSet() []SystemPrompt {
 		m.NewDebugHelmReleasePrompt(),
 	}
 }
-
-// DocResourceSet returns a slice of predefined Documentation Resource objects.
-func (m *Manager) DocResourceSet() []DocResource {
-	return []DocResource{
-		m.GetFluxDocumentationResource(),
-		m.GetFluxOperatorDocumentationResource(),
-	}
-}

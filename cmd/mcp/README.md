@@ -21,6 +21,7 @@ Example prompts:
 - Reconcile all the Flux sources in the dependsOn order, then verify their status.
 - Suspend all failing Helm releases in the test namespace, then delete them from the cluster.
 - Search for all the suspended Flux resources in the cluster and resume them.
+- How to configure mutual TLS for Git? Answer using the Flux docs search tool.
 
 Recommended Claude setup:
 
@@ -31,6 +32,17 @@ Recommended Claude setup:
   `https://github.com/controlplaneio-fluxcd/distribution` repository
   and select the `docs/operator` folder. This will ensure that the latest
   Flux Operator API specifications are available to the model along with guides and examples.
+
+Recommended VS Code setup:
+
+- Use the Git repository containing the Flux manifests as the workspace. This will 
+  allow Copilot to compare the current state of the cluster with the desired state in Git.
+- Start a Copilot chat session by asking a question about the Flux instance e.g. 
+  `What is the status of the Flux instance on my current cluster?`. This will ensure that
+  Copilot has access to the latest information about the cluster and Flux API versions.
+- When asking questions about the Flux API, it is recommended to append the following sentence
+  to the prompt: `Answer using the Flux docs search tool.`. This will ensure that Copilot
+  uses the latest information from the Flux documentation.
 
 ## Build from source
 
@@ -128,7 +140,7 @@ The MCP server provides a set of predefined prompts that can be used to troubles
 
 The MCP server provides a set of tools for generating reports about the state of the cluster:
 
-- `get_flux_instance_report`: This tool retrieves the Flux instance and a detailed report about Flux controllers and their status.
+- `get_flux_instance`: This tool retrieves the Flux instance and a detailed report about Flux controllers and their status.
   - `name` - The name of the Flux instance (optional).
   - `namespace` - The namespace of the Flux instance (optional).
 - `get_kubernetes_resources`: This tool retrieves Kubernetes resources including Flux own resources, their status, and events.
@@ -205,6 +217,18 @@ The MCP server provides a set of tools for multi-cluster operations:
 
 Note that the `set_kubeconfig_context` tool does not alter the kubeconfig file,
 it only sets the context for the current session. 
+
+### Documentation tool
+
+The MCP server provides a tool for searching the Flux documentation:
+
+- `search_flux_docs`: This tool searches the latest Flux documentation and returns up-to-date information.
+  - `query` - The search query (required).
+  - `limit` - The maximum number of results to return (default 1).
+
+Note that most AI models are trained on data up to a certain date and may not have the latest information.
+When asking questions about the Flux APIs or features, it is recommended to append the following sentence
+to the prompt: `Answer using the Flux docs search tool.`.
 
 ## Security Considerations
 

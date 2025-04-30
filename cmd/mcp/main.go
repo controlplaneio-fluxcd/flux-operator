@@ -167,7 +167,6 @@ func serveCmdRun(cmd *cobra.Command, args []string) error {
 
 	pm := prompter.NewManager()
 	pm.RegisterPrompts(mcpServer)
-	pm.RegisterResources(mcpServer)
 
 	if rootArgs.transport == "sse" {
 		sseServer := server.NewSSEServer(mcpServer)

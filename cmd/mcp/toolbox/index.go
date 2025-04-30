@@ -20,5 +20,6 @@ func (m *Manager) ToolSet() []SystemTool {
 		m.NewResumeReconciliationTool(),
 		m.NewGetKubeconfigContextsTool(),
 		m.NewSetKubeconfigContextTool(),
+		m.NewSearchFluxDocsTool(),
 	}
 }
