@@ -12,7 +12,7 @@ import (
 // NewSearchFluxDocsTool creates a new tool for searching Flux documentation.
 func (m *Manager) NewSearchFluxDocsTool() SystemTool {
 	return SystemTool{
-		mcp.NewTool("get_flux_docs",
+		mcp.NewTool("search_flux_docs",
 			mcp.WithDescription("This tool searches the Flux documentation and returns relevant up-to-date API specifications in markdown format."),
 			mcp.WithString("query",
 				mcp.Description("The search query."),
@@ -27,7 +27,7 @@ func (m *Manager) NewSearchFluxDocsTool() SystemTool {
 	}
 }
 
-// HandleSearchFluxDocs is the handler function for the get_flux_docs tool.
+// HandleSearchFluxDocs is the handler function for the search_flux_docs tool.
 func (m *Manager) HandleSearchFluxDocs(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	query := mcp.ParseString(request, "query", "")
 	limit := mcp.ParseInt(request, "limit", 1)

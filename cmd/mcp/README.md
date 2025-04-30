@@ -185,12 +185,12 @@ The output of the reconciliation tools tells the model how to verify the status 
 
 The MCP server provides a set of tools for suspending and resuming the reconciliation of Flux resources:
 
-- `suspend_flux_resource`: This tool suspends the reconciliation of a Flux resource (Kustomization, HelmRelease, ResourceSet, OCIRepository, etc.).
+- `suspend_flux_reconciliation`: This tool suspends the reconciliation of a Flux resource (Kustomization, HelmRelease, ResourceSet, OCIRepository, etc.).
   - `apiVersion` - The API version of the resource (required).
   - `kind` - The kind of the resource (required).
   - `name` - The name of the resource (required).
   - `namespace` - The namespace of the resource (required).
-- `resume_flux_resource`: This tool resumes the reconciliation of a Flux resource.
+- `resume_flux_reconciliation`: This tool resumes the reconciliation of a Flux resource.
   - `apiVersion` - The API version of the resource (required).
   - `kind` - The kind of the resource (required).
   - `name` - The name of the resource (required).
@@ -264,6 +264,13 @@ Example configuration for impersonating a service account with read-only permiss
   }
 }
 ```
+
+On the local machine file system, the MCP server performs only read operations.
+It reads the `KUBECONFIG` environment variable then reads the config file.
+If the config file contains `exec` instructions to authenticate to the cluster,
+the MCP server will execute the command in the same way as `kubectl` does.
+Note that running the MCP server in a container is possible
+only if the config contains static credentials.
 
 ## License
 
