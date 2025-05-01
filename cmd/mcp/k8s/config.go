@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 
 	"k8s.io/client-go/tools/clientcmd"
@@ -105,6 +106,11 @@ func (c *KubeConfig) Load() error {
 func (c *KubeConfig) Contexts() []KubeConfigContext {
 	c.mx.Lock()
 	defer c.mx.Unlock()
+
+	// sort the contexts by name
+	sort.Slice(c.contexts, func(i, j int) bool {
+		return c.contexts[i].ContextName < c.contexts[j].ContextName
+	})
 
 	return c.contexts
 }

@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
@@ -137,11 +138,33 @@ func (k *Client) GetHelmInventory(ctx context.Context, apiVersion string, object
 			}
 		}
 
-		// extract container images from the object
+		// extract container images from Deployment, StatefulSet, DaemonSet and Job
 		if containers, found, _ := unstructured.NestedSlice(obj.Object, "spec", "template", "spec", "containers"); found {
 			for _, container := range containers {
 				if image, found, _ := unstructured.NestedString(container.(map[string]interface{}), "image"); found {
 					containerImages = append(containerImages, image)
+				}
+			}
+		}
+
+		// extract init container images from Deployment, StatefulSet, DaemonSet and Job
+		if containers, found, _ := unstructured.NestedSlice(obj.Object, "spec", "template", "spec", "initContainers"); found {
+			for _, container := range containers {
+				if image, found, _ := unstructured.NestedString(container.(map[string]interface{}), "image"); found {
+					if !slices.Contains(containerImages, image) {
+						containerImages = append(containerImages, image)
+					}
+				}
+			}
+		}
+
+		// extract container images from CronJob
+		if containers, found, _ := unstructured.NestedSlice(obj.Object, "spec", "jobTemplate", "spec", "template", "spec", "containers"); found {
+			for _, container := range containers {
+				if image, found, _ := unstructured.NestedString(container.(map[string]interface{}), "image"); found {
+					if !slices.Contains(containerImages, image) {
+						containerImages = append(containerImages, image)
+					}
 				}
 			}
 		}
