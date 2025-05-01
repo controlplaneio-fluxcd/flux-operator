@@ -55,7 +55,7 @@ To debug the Flux Kustomization %[1]s in namespace %[2]s on the %[3]s cluster, f
 
 0. Use the get_kubeconfig_contexts tool to find the context name for the %[3]s cluster
 and use the set_kubeconfig_context to change the context to it.
-1. Use the get_flux_instance_report tool to check the kustomize-controller deployment
+1. Use the get_flux_instance tool to check the kustomize-controller deployment
 status and the available Flux API versions.
 2. Retrieve the Kustomization details using the get_kubernetes_resources tool.
 3. Identify the Kustomization source by looking at the spec.sourceRef field,

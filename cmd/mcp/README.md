@@ -26,8 +26,7 @@ Example prompts:
 Recommended Claude setup:
 
 - Create a project dedicated to Flux Operator.
-- Set the project instructions to "Use the Flux Operator MCP Server
-  to analyze and troubleshoot GitOps pipelines on Kubernetes clusters."
+- Set the project instructions to the content from [ai-instructions.md](ai-instructions.md).
 - In the project knowledge, add the Flux Operator documentation using the
   `https://github.com/controlplaneio-fluxcd/distribution` repository
   and select the `docs/operator` folder. This will ensure that the latest
@@ -37,6 +36,7 @@ Recommended VS Code setup:
 
 - Use the Git repository containing the Flux manifests as the workspace. This will 
   allow Copilot to compare the current state of the cluster with the desired state in Git.
+- Create a `.github/copilot-instructions.md` file with the content from [ai-instructions.md](ai-instructions.md).
 - Start a Copilot chat session by asking a question about the Flux instance e.g. 
   `What is the status of the Flux instance on my current cluster?`. This will ensure that
   Copilot has access to the latest information about the cluster and Flux API versions.
@@ -153,7 +153,7 @@ The MCP server provides a set of tools for generating reports about the state of
 - `get_kubernetes_logs` : This tool retrieves the most recent logs of a Kubernetes pod.
   - `pod_name` - The name of the pod (required).
   - `pod_namespace` - The namespace of the pod (required).
-  - `containe_namer` - The name of the container (required).
+  - `containe_name` - The name of the container (required).
   - `limit` - The maximum number of lines to return (default 100).
 - `get_kubernetes_api_versions`: This tool retrieves the CRDs registered on the cluster and returns the preferred apiVersion for each kind.
   - No arguments required
