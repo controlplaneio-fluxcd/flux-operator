@@ -8,7 +8,7 @@ package toolbox
 func (m *Manager) ToolSet() []SystemTool {
 	return []SystemTool{
 		m.NewGetFluxInstanceTool(),
-		m.NewGetApiVersionsTool(),
+		m.NewGetAPIVersionsTool(),
 		m.NewGetKubernetesLogsTool(),
 		m.NewGetKubernetesResourcesTool(),
 		m.NewDeleteKubernetesResourceTool(),

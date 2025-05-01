@@ -38,7 +38,7 @@ type HelmHistory struct {
 // HelmInventory is a struct used to store the metadata of
 // the Kubernetes objects that are managed by a HelmRelease.
 type HelmInventory struct {
-	ApiVersion      string   `json:"apiVersion"`
+	APIVersion      string   `json:"apiVersion"`
 	Kind            string   `json:"kind"`
 	Name            string   `json:"name"`
 	Namespace       string   `json:"namespace,omitempty"`
@@ -147,7 +147,7 @@ func (k *Client) GetHelmInventory(ctx context.Context, apiVersion string, object
 		}
 
 		inventory = append(inventory, HelmInventory{
-			ApiVersion:      obj.GetAPIVersion(),
+			APIVersion:      obj.GetAPIVersion(),
 			Kind:            obj.GetKind(),
 			Name:            obj.GetName(),
 			Namespace:       obj.GetNamespace(),

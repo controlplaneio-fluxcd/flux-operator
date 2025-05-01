@@ -40,9 +40,6 @@ Recommended VS Code setup:
 - Start a Copilot chat session by asking a question about the Flux instance e.g. 
   `What is the status of the Flux instance on my current cluster?`. This will ensure that
   Copilot has access to the latest information about the cluster and Flux API versions.
-- When asking questions about the Flux API, it is recommended to append the following sentence
-  to the prompt: `Answer using the Flux docs search tool.`. This will ensure that Copilot
-  uses the latest information from the Flux documentation.
 
 ## Build from source
 

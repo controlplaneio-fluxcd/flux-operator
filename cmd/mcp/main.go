@@ -4,6 +4,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -34,7 +35,7 @@ var rootCmd = &cobra.Command{
 	DisableAutoGenTag: true,
 	Long: `Model Context Protocol Server for interacting with Flux Operator.
 ⚠️ Please note that this MCP server is in preview and under development.
-While we try our best to not introduce breaking changes, they may occur when
+While we try our best not to introduce breaking changes, they may occur when
 we adapt to new features and/or find better ways to facilitate what it does.`,
 }
 
@@ -118,9 +119,11 @@ func addKubeConfigFlags(cmd *cobra.Command) {
 }
 
 func getCurrentKubeconfigPath() string {
+	defaultPath := ""
+
 	kubeConfig := os.Getenv("KUBECONFIG")
 	if kubeConfig == "" {
-		panic("KUBECONFIG environment variable not set")
+		return defaultPath
 	}
 
 	paths := filepath.SplitList(kubeConfig)
@@ -142,7 +145,7 @@ func getCurrentKubeconfigPath() string {
 			return path
 		}
 	}
-	return kubeConfig
+	return defaultPath
 }
 
 var serveCmd = &cobra.Command{
@@ -152,6 +155,10 @@ var serveCmd = &cobra.Command{
 }
 
 func serveCmdRun(cmd *cobra.Command, args []string) error {
+	if os.Getenv("KUBECONFIG") == "" {
+		return errors.New("KUBECONFIG environment variable is not set")
+	}
+
 	mcpServer := server.NewMCPServer(
 		"flux-operator-mcp",
 		VERSION,
@@ -167,7 +174,7 @@ func serveCmdRun(cmd *cobra.Command, args []string) error {
 	pm.RegisterPrompts(mcpServer)
 
 	if rootArgs.transport == "sse" {
-		sseServer := server.NewSSEServer(mcpServer)
+		sseServer := server.NewSSEServer(mcpServer, server.WithKeepAlive(true))
 		if err := sseServer.Start(fmt.Sprintf(":%d", rootArgs.port)); err != nil {
 			return err
 		}

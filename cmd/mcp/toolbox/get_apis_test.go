@@ -15,7 +15,7 @@ import (
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/k8s"
 )
 
-func TestManager_HandleGetApiVersions(t *testing.T) {
+func TestManager_HandleGetAPIVersions(t *testing.T) {
 	configFile := "testdata/kubeconfig.yaml"
 	t.Setenv("KUBECONFIG", configFile)
 
@@ -45,7 +45,7 @@ func TestManager_HandleGetApiVersions(t *testing.T) {
 			g := NewWithT(t)
 			request.Params.Arguments = test.arguments
 
-			result, err := m.HandleGetApiVersions(context.Background(), request)
+			result, err := m.HandleGetAPIVersions(context.Background(), request)
 			g.Expect(err).ToNot(HaveOccurred())
 			textContent, ok := mcp.AsTextContent(result.Content[0])
 			g.Expect(ok).To(BeTrue())

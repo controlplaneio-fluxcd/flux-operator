@@ -83,7 +83,7 @@ func (k *Client) Export(ctx context.Context,
 					for i, inv := range inventory {
 						// deep copy the inventory item
 						iv[i] = map[string]interface{}{
-							"apiVersion": inv.ApiVersion,
+							"apiVersion": inv.APIVersion,
 							"kind":       inv.Kind,
 							"name":       inv.Name,
 						}
