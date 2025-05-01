@@ -29,16 +29,11 @@ func TestManager_HandleGetFluxInstance(t *testing.T) {
 	request.Params.Name = "get_flux_instance"
 
 	tests := []struct {
-		testName  string
-		arguments map[string]interface{}
-		matchErr  string
+		testName string
+		matchErr string
 	}{
 		{
 			testName: "fails with invalid kubeconfig",
-			arguments: map[string]interface{}{
-				"name":      "flux",
-				"namespace": "flux-system",
-			},
 			matchErr: "Failed to create Kubernetes client",
 		},
 	}
@@ -46,7 +41,6 @@ func TestManager_HandleGetFluxInstance(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.testName, func(t *testing.T) {
 			g := NewWithT(t)
-			request.Params.Arguments = test.arguments
 
 			result, err := m.HandleGetFluxInstance(context.Background(), request)
 			g.Expect(err).ToNot(HaveOccurred())

@@ -138,8 +138,7 @@ The MCP server provides a set of predefined prompts that can be used to troubles
 The MCP server provides a set of tools for generating reports about the state of the cluster:
 
 - `get_flux_instance`: This tool retrieves the Flux instance and a detailed report about Flux controllers and their status.
-  - `name` - The name of the Flux instance (optional).
-  - `namespace` - The namespace of the Flux instance (optional).
+  - No arguments required
 - `get_kubernetes_resources`: This tool retrieves Kubernetes resources including Flux own resources, their status, and events.
   - `apiVersion`: The API version of the resource(s) (required).
   - `kind`: The kind of the resource(s) (required).

@@ -18,12 +18,6 @@ func (m *Manager) NewGetFluxInstanceTool() SystemTool {
 	return SystemTool{
 		mcp.NewTool("get_flux_instance",
 			mcp.WithDescription("This tool retrieves the Flux instance installation and a detailed report about Flux controllers, CRDs and their status."),
-			mcp.WithString("name",
-				mcp.Description("Filter by a specific name."),
-			),
-			mcp.WithString("namespace",
-				mcp.Description("Filter by a specific namespace, if not specified all namespaces are included."),
-			),
 		),
 		m.HandleGetFluxInstance,
 		true,
@@ -32,9 +26,6 @@ func (m *Manager) NewGetFluxInstanceTool() SystemTool {
 
 // HandleGetFluxInstance is the handler function for the get_flux_instance tool.
 func (m *Manager) HandleGetFluxInstance(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	name := mcp.ParseString(request, "name", "")
-	namespace := mcp.ParseString(request, "namespace", "")
-
 	ctx, cancel := context.WithTimeout(ctx, m.timeout)
 	defer cancel()
 
@@ -54,9 +45,13 @@ func (m *Manager) HandleGetFluxInstance(ctx context.Context, request mcp.CallToo
 			Version: fluxcdv1.GroupVersion.Version,
 			Kind:    fluxcdv1.FluxReportKind,
 		},
-	}, name, namespace, "", 1, true)
+	}, "", "", "", 1, true)
 	if err != nil {
 		return mcp.NewToolResultErrorFromErr("Failed to determine the Flux status", err), nil
+	}
+
+	if result == "" {
+		return mcp.NewToolResultError("No Flux instance found"), nil
 	}
 
 	return mcp.NewToolResultText(result), nil
