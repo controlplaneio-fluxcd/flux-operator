@@ -60,6 +60,7 @@ When troubleshooting a HelmRelease, follow these steps:
 - Use the `get_flux_instance` tool to check the helm-controller deployment status and the apiVersion of the HelmRelease kind.
 - Use the `get_kubernetes_resources` tool to get the HelmRelease, then analyze the spec, the status, inventory and events.
 - Determine which Flux object is managing the HelmRelease by looking at the annotations; it can be a Kustomization or a ResourceSet.
+- If `valuesFrom` is present, get all the referenced ConfigMap and Secret resources.
 - Identify the HelmRelease source by looking at the `chartRef` or the `sourceRef` field.
 - Use the `get_kubernetes_resources` tool to get the HelmRelease source then analyze the source status and events.
 - If the HelmRelease is in a failed state or in progress, it may be due to failures in one of the managed resources found in the inventory.
@@ -75,6 +76,7 @@ When troubleshooting a Kustomization, follow these steps:
 - Use the `get_flux_instance` tool to check the kustomize-controller deployment status and the apiVersion of the Kustomization kind.
 - Use the `get_kubernetes_resources` tool to get the Kustomization, then analyze the spec, the status, inventory and events.
 - Determine which Flux object is managing the Kustomization by looking at the annotations; it can be another Kustomization or a ResourceSet.
+- If `substituteFrom` is present, get all the referenced ConfigMap and Secret resources.
 - Identify the Kustomization source by looking at the `sourceRef` field.
 - Use the `get_kubernetes_resources` tool to get the Kustomization source then analyze the source status and events.
 - If the Kustomization is in a failed state or in progress, it may be due to failures in one of the managed resources found in the inventory.
@@ -82,3 +84,17 @@ When troubleshooting a Kustomization, follow these steps:
 - If the managed resources are in a failed state, analyze their logs using the `get_kubernetes_logs` tool.
 - If any issues were found, create a root cause analysis report for the user.
 - If no issues were found, create a report with the current status of the Kustomization and its managed resources.
+
+## Flux Comparison analysis
+
+When comparing a Flux resource between clusters, follow these steps:
+
+- Use the `get_kubernetes_contexts` tool to get the cluster contexts.
+- Use the `set_kubernetes_context` tool to switch to a specific cluster.
+- Use the `get_flux_instance` tool to check the Flux Operator status and settings.
+- Use the `get_kubernetes_resources` tool to get the resource you want to compare.
+- If the Flux resource contains `valuesFrom` or `substituteFrom`, get all the referenced ConfigMap and Secret resources.
+- Repeat the above steps for each cluster.
+
+When comparing resources, look for differences in the `spec`, `status` and `events`, including the referenced ConfigMaps and Secrets.
+The Flux resource `spec` represents the desired state and should be the main focus of the comparison, while the status and events represent the current state in the cluster.

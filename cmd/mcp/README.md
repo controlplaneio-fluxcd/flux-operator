@@ -10,7 +10,7 @@ delivery pipelines across environments.
 Example prompts:
 
 - Analyze the Flux installation in my current cluster and report the status of all components.
-- List the clusters in my kubeconfig and compare the Flux instances across then.
+- List the clusters in my kubeconfig and compare the Flux instances across them.
 - Are there any reconciliation errors in the Flux managed resources?
 - Are the Flux kustomizations and Helm releases configured correctly?
 - Based on Flux events, what deployments have been updated today?
