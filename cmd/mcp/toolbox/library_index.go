@@ -87,6 +87,25 @@ var docsMetadata = []DocumentMetadata{
 		},
 	},
 	{
+		URL:   "https://raw.githubusercontent.com/fluxcd/notification-controller/refs/heads/main/docs/spec/v1beta3/alerts.md",
+		Group: "notification.toolkit.fluxcd.io",
+		Kind:  "Alert",
+		Keywords: []string{
+			"notification-controller", "alerting", "event", "notification", "observability",
+			"incident", "error", "info", "severity",
+		},
+	},
+	{
+		URL:   "https://raw.githubusercontent.com/fluxcd/notification-controller/refs/heads/main/docs/spec/v1beta3/providers.md",
+		Group: "notification.toolkit.fluxcd.io",
+		Kind:  "Provider",
+		Keywords: []string{
+			"notification-controller", "alert", "notification", "slack", "teams",
+			"pagerduty", "discord", "matrix", "lark", "rocket", "datadog", "grafana",
+			"sentry", "telegram", "webex", "nats", "pubsub", "eventhub", "dispatch",
+		},
+	},
+	{
 		URL:   "https://raw.githubusercontent.com/controlplaneio-fluxcd/flux-operator/refs/heads/main/docs/api/v1/fluxinstance.md",
 		Group: "fluxcd.controlplane.io",
 		Kind:  "FluxInstance",
