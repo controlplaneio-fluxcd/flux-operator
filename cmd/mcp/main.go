@@ -118,11 +118,9 @@ func addKubeConfigFlags(cmd *cobra.Command) {
 }
 
 func getCurrentKubeconfigPath() string {
-	defaultPath := ""
-
 	kubeConfig := os.Getenv("KUBECONFIG")
 	if kubeConfig == "" {
-		return defaultPath
+		panic("KUBECONFIG environment variable not set")
 	}
 
 	paths := filepath.SplitList(kubeConfig)
@@ -144,12 +142,12 @@ func getCurrentKubeconfigPath() string {
 			return path
 		}
 	}
-	return defaultPath
+	return kubeConfig
 }
 
 var serveCmd = &cobra.Command{
 	Use:   "serve",
-	Short: "Start the MCP server in stdio mode",
+	Short: "Start the MCP server in stdio or sse mode",
 	RunE:  serveCmdRun,
 }
 
