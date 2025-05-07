@@ -40,7 +40,7 @@ For a deep understanding of the Flux CRDs and features, call the `search_flux_do
 - When asked about the Flux installation status call the `get_flux_instance` tool.
 - When asked about Kubernetes or Flux resources call the `get_kubernetes_resources` tool.
 - Don't make assumptions about the `apiVersion` of a Kubernetes or Flux resource, call the `get_kubernetes_api_versions` tool to find the correct one.
-- When asked about GitOps features, Flux configuration options or Flux Operator APIs call the `search_flux_docs` tool to get the latest docs.
+- When asked about Flux CRDs or Flux Operator APIs call the `search_flux_docs` tool to get the latest docs.
 - When asked to use a specific cluster, cal the `get_kubernetes_contexts` tool to find the cluster context before switching to it with the `set_kubernetes_context` tool.
 - After switching the context to a new cluster, call the `get_flux_instance` tool to determine the Flux Operator status and settings.
 

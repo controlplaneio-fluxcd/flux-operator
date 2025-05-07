@@ -5,8 +5,6 @@ package toolbox
 
 // docsMetadata is a collection of DocumentMetadata instances,
 // each describing metadata like URL, group, kind, and related keywords.
-//
-// TODO(stefan): add all Flux API specs to the library
 var docsMetadata = []DocumentMetadata{
 	{
 		URL:   "https://raw.githubusercontent.com/fluxcd/source-controller/refs/heads/main/docs/spec/v1/gitrepositories.md",
@@ -103,6 +101,33 @@ var docsMetadata = []DocumentMetadata{
 			"notification-controller", "alert", "notification", "slack", "teams",
 			"pagerduty", "discord", "matrix", "lark", "rocket", "datadog", "grafana",
 			"sentry", "telegram", "webex", "nats", "pubsub", "eventhub", "dispatch",
+		},
+	},
+	{
+		URL:   "https://raw.githubusercontent.com/fluxcd/image-reflector-controller/refs/heads/main/docs/spec/v1beta2/imagerepositories.md",
+		Group: "image.toolkit.fluxcd.io",
+		Kind:  "ImageRepository",
+		Keywords: []string{
+			"image-reflector-controller", "container", "image", "tags",
+			"docker", "ecr", "gar", "acr", "scan",
+		},
+	},
+	{
+		URL:   "https://raw.githubusercontent.com/fluxcd/image-reflector-controller/refs/heads/main/docs/spec/v1beta2/imagepolicies.md",
+		Group: "image.toolkit.fluxcd.io",
+		Kind:  "ImagePolicy",
+		Keywords: []string{
+			"image-reflector-controller", "container", "image", "policy", "tag", "semver", "range",
+			"numerical", "alphabetical", "order", "filter", "pattern", "regex", "latest",
+		},
+	},
+	{
+		URL:   "https://raw.githubusercontent.com/fluxcd/image-automation-controller/refs/heads/main/docs/spec/v1beta2/imageupdateautomations.md",
+		Group: "image.toolkit.fluxcd.io",
+		Kind:  "ImageUpdateAutomation",
+		Keywords: []string{
+			"image-automation-controller", "docker", "container", "image", "tag",
+			"policy", "update", "commit", "push", "git", "scan", "automation", "automate",
 		},
 	},
 	{
