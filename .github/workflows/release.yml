@@ -36,7 +36,7 @@ jobs:
       - name: Setup Flux
         uses: fluxcd/flux2/action@8d5f40dca5aa5d3c0fc3414457dda15a0ac92fa4 #v2.5.1
       - name: Setup Syft
-        uses: anchore/sbom-action/download-syft@f325610c9f50a54015d37c8d16cb3b0e2c8f4de0 # v0.18.0
+        uses: anchore/sbom-action/download-syft@9f7302141466aa6482940f15371237e9d9f4c34a # v0.19.0
       - name: Prepare
         id: prep
         run: |
@@ -67,7 +67,7 @@ jobs:
             type=raw,value=${{ steps.prep.outputs.VERSION }}
       - name: Publish images
         id: build-push
-        uses: docker/build-push-action@471d1dc4e07e5cdedd4c2171150001c434f0b7a4 # v6.15.0
+        uses: docker/build-push-action@14487ce63c7a62a4a324b0bfb37086795e31c6c1 # v6.16.0
         with:
           sbom: true
           provenance: true
@@ -78,7 +78,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-      - uses: sigstore/cosign-installer@d7d6bc7722e3daa8354c50bcb52f4837da5e9b6a # v3.8.1
+      - uses: sigstore/cosign-installer@3454372f43399081ed03b604cb2d021dabca52bb # v3.8.2
       - name: Sign images
         env:
           COSIGN_EXPERIMENTAL: 1
@@ -112,7 +112,7 @@ jobs:
           kustomize build config/default > bin/release/install.yaml
           kustomize build config/crd > bin/release/crds.yaml
       - name: Generate OpenAPI JSON schemas from CRDs
-        uses: fluxcd/pkg/actions/crdjsonschema@c964ce7b91949ff4b5e3959db4f1d7bb2e029a49 # main
+        uses: fluxcd/pkg/actions/crdjsonschema@7e9c75bbb6a47b08c194edefa11d1c436e5bdd9e # main
         with:
           crd: bin/release/crds.yaml
           output: schemas
