@@ -246,6 +246,21 @@ spec:
         namespace: "%[1]s"
         annotations:
           fluxcd.controlplane.io/copyFrom: "%[1]s/test-secret"
+    - apiVersion: v1
+      kind: Secret
+      metadata:
+        name: << inputs.tenant >>-docker
+        namespace: "%[1]s"
+        annotations:
+          fluxcd.controlplane.io/copyFrom: "%[1]s/test-secret-docker"
+    - apiVersion: v1
+      kind: Secret
+      metadata:
+        name: << inputs.tenant >>-keep-type
+        namespace: "%[1]s"
+        annotations:
+          fluxcd.controlplane.io/copyFrom: "%[1]s/test-secret"
+      type: CustomType
 `, ns.Name)
 
 	cm := &corev1.ConfigMap{
@@ -270,6 +285,26 @@ spec:
 		},
 	}
 	err = testEnv.Create(ctx, secret)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	dockerData := `{
+	"auths": {
+		"ghcr.io": {
+			"auth": "dXNlcjpwYXNz"
+		}
+	}
+}`
+	secretDocker := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-secret-docker",
+			Namespace: ns.Name,
+		},
+		Type: corev1.SecretTypeDockerConfigJson,
+		StringData: map[string]string{
+			corev1.DockerConfigJsonKey: dockerData,
+		},
+	}
+	err = testEnv.Create(ctx, secretDocker)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	obj := &fluxcdv1.ResourceSet{}
@@ -302,7 +337,7 @@ spec:
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
 
 	// Check if the inventory was updated.
-	g.Expect(result.Status.Inventory.Entries).To(HaveLen(4))
+	g.Expect(result.Status.Inventory.Entries).To(HaveLen(8))
 	g.Expect(result.Status.Inventory.Entries).To(ContainElements(
 		fluxcdv1.ResourceRef{
 			ID:      fmt.Sprintf("%s_team1__ConfigMap", ns.Name),
@@ -313,11 +348,27 @@ spec:
 			Version: "v1",
 		},
 		fluxcdv1.ResourceRef{
+			ID:      fmt.Sprintf("%s_team1-docker__Secret", ns.Name),
+			Version: "v1",
+		},
+		fluxcdv1.ResourceRef{
+			ID:      fmt.Sprintf("%s_team1-keep-type__Secret", ns.Name),
+			Version: "v1",
+		},
+		fluxcdv1.ResourceRef{
 			ID:      fmt.Sprintf("%s_team2__ConfigMap", ns.Name),
 			Version: "v1",
 		},
 		fluxcdv1.ResourceRef{
 			ID:      fmt.Sprintf("%s_team2__Secret", ns.Name),
+			Version: "v1",
+		},
+		fluxcdv1.ResourceRef{
+			ID:      fmt.Sprintf("%s_team2-docker__Secret", ns.Name),
+			Version: "v1",
+		},
+		fluxcdv1.ResourceRef{
+			ID:      fmt.Sprintf("%s_team2-keep-type__Secret", ns.Name),
 			Version: "v1",
 		},
 	))
@@ -344,6 +395,30 @@ spec:
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(resultSecret.Annotations).To(HaveKeyWithValue("owner", ns.Name))
 	g.Expect(resultSecret.Data).To(HaveKeyWithValue("key", []byte("value")))
+
+	resultSecretDocker := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "team2-docker",
+			Namespace: ns.Name,
+		},
+	}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(resultSecretDocker), resultSecretDocker)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(resultSecretDocker.Annotations).To(HaveKeyWithValue("owner", ns.Name))
+	g.Expect(resultSecretDocker.Type).To(Equal(corev1.SecretTypeDockerConfigJson))
+	g.Expect(resultSecretDocker.Data).To(HaveKeyWithValue(corev1.DockerConfigJsonKey, []byte(dockerData)))
+
+	resultSecretCustomType := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "team2-keep-type",
+			Namespace: ns.Name,
+		},
+	}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(resultSecretCustomType), resultSecretCustomType)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(resultSecretCustomType.Annotations).To(HaveKeyWithValue("owner", ns.Name))
+	g.Expect(resultSecretCustomType.Type).To(Equal(corev1.SecretType("CustomType")))
+	g.Expect(resultSecretCustomType.Data).To(HaveKeyWithValue("key", []byte("value")))
 
 	// Update the source ConfigMap.
 	cm.Data = map[string]string{"key1": "updated1"}
