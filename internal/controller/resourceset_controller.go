@@ -37,6 +37,7 @@ import (
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/builder"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/inputs"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/inventory"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/notifier"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
@@ -294,42 +295,101 @@ func (r *ResourceSetReconciler) checkDependencies(ctx context.Context,
 	return nil
 }
 
+// getInputs fetches all the referenced provider objects and appends
+// the inputs from all of them. It returns the combined list of input
+// maps, including the static inputs specified on the ResourceSet.
+// Objects are deduplicated by their GVK, name and namespace.
+// The API version, kind, name and namespace of the provider are added
+// to each input map.
 func (r *ResourceSetReconciler) getInputs(ctx context.Context,
 	obj *fluxcdv1.ResourceSet) ([]map[string]any, error) {
-	providers := make([]fluxcdv1.InputProvider, 0)
-	providers = append(providers, obj)
-	for _, inputSource := range obj.Spec.InputsFrom {
-		var provider fluxcdv1.InputProvider
-		key := client.ObjectKey{
-			Namespace: obj.GetNamespace(),
-			Name:      inputSource.Name,
-		}
 
-		switch inputSource.Kind {
-		case fluxcdv1.ResourceSetInputProviderKind:
-			var rsip fluxcdv1.ResourceSetInputProvider
-			if err := r.Get(ctx, key, &rsip); err != nil {
-				return nil, fmt.Errorf("failed to get provider %s/%s: %w", key.Namespace, key.Name, err)
-			}
-			provider = &rsip
-		default:
-			return nil, fmt.Errorf("unsupported provider kind %s", inputSource.Kind)
-		}
-
-		providers = append(providers, provider)
+	// Initialize the map of providers with the ResourceSet itself.
+	obj.SetGroupVersionKind(fluxcdv1.GroupVersion.WithKind(fluxcdv1.ResourceSetKind))
+	providers := map[inputs.ProviderKey]fluxcdv1.InputProvider{
+		inputs.NewProviderKey(obj): obj,
 	}
 
-	inputs := make([]map[string]any, 0)
+	// List providers in inputsFrom.
+	rsipGVK := fluxcdv1.GroupVersion.WithKind(fluxcdv1.ResourceSetInputProviderKind)
+	for _, inputSource := range obj.Spec.InputsFrom {
+		switch inputSource.Kind {
+		case fluxcdv1.ResourceSetInputProviderKind:
+
+			switch {
+			// Get provider by name.
+			case inputSource.Name != "":
+
+				mapKey := inputs.ProviderKey{
+					GVK:       rsipGVK,
+					Name:      inputSource.Name,
+					Namespace: obj.GetNamespace(),
+				}
+				if _, found := providers[mapKey]; found {
+					continue
+				}
+
+				objKey := client.ObjectKey{
+					Name:      inputSource.Name,
+					Namespace: obj.GetNamespace(),
+				}
+
+				var rsip fluxcdv1.ResourceSetInputProvider
+				if err := r.Get(ctx, objKey, &rsip); err != nil {
+					return nil, fmt.Errorf("failed to get provider %s/%s: %w", objKey.Namespace, objKey.Name, err)
+				}
+
+				rsip.SetGroupVersionKind(rsipGVK)
+				providers[mapKey] = &rsip
+
+			// List providers by selector.
+			case inputSource.Selector != nil:
+
+				selector, err := metav1.LabelSelectorAsSelector(inputSource.Selector)
+				if err != nil {
+					return nil, fmt.Errorf("failed to parse selector %s: %w", inputSource.Selector, err)
+				}
+
+				var rsipList fluxcdv1.ResourceSetInputProviderList
+
+				listOpts := []client.ListOption{
+					client.InNamespace(obj.GetNamespace()),
+					client.MatchingLabelsSelector{Selector: selector},
+				}
+
+				if err := r.List(ctx, &rsipList, listOpts...); err != nil {
+					return nil, fmt.Errorf("failed to list providers with selector %s: %w", inputSource.Selector, err)
+				}
+
+				for _, rsip := range rsipList.Items {
+					rsip.SetGroupVersionKind(rsipGVK)
+					providers[inputs.NewProviderKey(&rsip)] = &rsip
+				}
+
+			default:
+				return nil, fmt.Errorf("input provider '%s' must have either name or selector set", inputSource.Kind)
+			}
+
+		default:
+			return nil, fmt.Errorf("unsupported provider kind: '%s'", inputSource.Kind)
+		}
+	}
+
+	// List exportedInputs from all providers.
+	var exportedInputs []map[string]any
 	for _, provider := range providers {
-		exportedInputs, err := provider.GetInputs()
+		providerInputs, err := provider.GetInputs()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get inputs from %s/%s: %w",
 				provider.GroupVersionKind().Kind, provider.GetName(), err)
 		}
-		inputs = append(inputs, exportedInputs...)
+		for _, input := range providerInputs {
+			inputs.AddProviderReference(input, provider)
+		}
+		exportedInputs = append(exportedInputs, providerInputs...)
 	}
 
-	return inputs, nil
+	return exportedInputs, nil
 }
 
 // apply reconciles the resources in the cluster by performing

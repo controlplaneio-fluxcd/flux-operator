@@ -86,12 +86,19 @@ The `.spec.type` field is required and specifies the type of the provider.
 
 The following types are supported:
 
+- `Static`: exports a single input map with the values from the field `.spec.defaultValues`.
 - `GitHubPullRequest`: fetches input values from opened GitHub Pull Requests.
 - `GitHubBranch`: fetches input values from GitHub repository branches.
 - `GitLabMergeRequest`: fetches input values from opened GitLab Merge Requests.
 - `GitLabBranch`: fetches input values from GitLab project branches.
 
-For all types, the flux-operator will export in `.status.exportedInputs` a
+For the `Static` type, the flux-operator will export in `.status.exportedInputs` a
+single input map with the values from the field `.spec.defaultValues` and the
+additional value:
+
+- `id`: the Adler-32 checksum of the ResourceSetInputProvider UID (type string).
+
+For all non-static types, the flux-operator will export in `.status.exportedInputs` a
 set of input values for each Pull/Merge Request or Branch
 that matches the [filter](#filter) criteria.
 
