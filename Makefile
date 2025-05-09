@@ -129,6 +129,10 @@ build-manifests: ## Generate release manifests.
 cli-build: tidy fmt vet ## Build CLI binary.
 	CGO_ENABLED=0 go build -ldflags="-s -w -X main.VERSION=$(FLUX_OPERATOR_DEV_VERSION)" -o ./bin/foctl ./cmd/cli/
 
+.PHONY: mcp-build
+mcp-build: tidy fmt vet ## Build MCP server binary.
+	CGO_ENABLED=0 go build -ldflags="-s -w -X main.VERSION=$(FLUX_OPERATOR_DEV_VERSION)" -o ./bin/flux-operator-mcp ./cmd/mcp/
+
 ##@ Deployment
 
 ifndef ignore-not-found
