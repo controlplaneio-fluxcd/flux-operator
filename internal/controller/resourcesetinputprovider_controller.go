@@ -33,6 +33,7 @@ import (
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/gitprovider"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/inputs"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/notifier"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
 )
@@ -116,26 +117,69 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 	log := ctrl.LoggerFrom(ctx)
 	reconcileStart := time.Now()
 
-	// Mark the object as reconciling.
-	msg := "Reconciliation in progress"
-	conditions.MarkUnknown(obj,
-		meta.ReadyCondition,
-		meta.ProgressingReason,
-		"%s", msg)
-	conditions.MarkReconciling(obj,
-		meta.ProgressingReason,
-		"%s", msg)
-	if err := r.patch(ctx, obj, patcher); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
+	// Mark stalled if the default values in the object spec are invalid.
+	defaults, err := obj.GetDefaultInputs()
+	if err != nil {
+		const msg = "Reconciliation failed terminally due to configuration error"
+		errMsg := fmt.Sprintf("%s: %v", msg, err)
+		conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidDefaultValues, "%s", errMsg)
+		conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidDefaultValues, "%s", errMsg)
+		log.Error(err, msg)
+		r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidDefaultValues, errMsg)
+		return ctrl.Result{}, nil
 	}
 
-	// Get the auth data.
-	var authData map[string][]byte
-	if obj.Spec.SecretRef != nil {
-		var err error
-		authData, err = r.getSecretData(ctx, obj.Spec.SecretRef.Name, obj.GetNamespace())
+	var exportedInputs []fluxcdv1.ResourceSetInput
+
+	switch obj.Spec.Type {
+	case fluxcdv1.InputProviderStatic:
+		// Handle static input provider.
+		defaults["id"] = inputs.Checksum(string(obj.GetUID()))
+		exportedInput, err := fluxcdv1.NewResourceSetInput(defaults)
 		if err != nil {
-			msg := fmt.Sprintf("failed to get credentials %s", err.Error())
+			const msg = "Reconciliation failed terminally due to configuration error"
+			errMsg := fmt.Sprintf("%s: %v", msg, err)
+			conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidExportedInputs, "%s", errMsg)
+			conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidExportedInputs, "%s", errMsg)
+			log.Error(err, msg)
+			r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidExportedInputs, errMsg)
+			return ctrl.Result{}, nil
+		}
+		exportedInputs = append(exportedInputs, exportedInput)
+	default:
+		// Mark the object as reconciling.
+		msg := "Reconciliation in progress"
+		conditions.MarkUnknown(obj,
+			meta.ReadyCondition,
+			meta.ProgressingReason,
+			"%s", msg)
+		conditions.MarkReconciling(obj,
+			meta.ProgressingReason,
+			"%s", msg)
+		if err := r.patch(ctx, obj, patcher); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
+		}
+
+		// Get the auth data.
+		var authData map[string][]byte
+		if obj.Spec.SecretRef != nil {
+			var err error
+			authData, err = r.getSecretData(ctx, obj.Spec.SecretRef.Name, obj.GetNamespace())
+			if err != nil {
+				msg := fmt.Sprintf("failed to get credentials %s", err.Error())
+				conditions.MarkFalse(obj,
+					meta.ReadyCondition,
+					meta.ReconciliationFailedReason,
+					"%s", msg)
+				r.notify(ctx, obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
+				return ctrl.Result{}, err
+			}
+		}
+
+		// Get the CA certificate.
+		certPool, err := r.getCertPool(ctx, obj)
+		if err != nil {
+			msg := fmt.Sprintf("failed to get certificates %s", err.Error())
 			conditions.MarkFalse(obj,
 				meta.ReadyCondition,
 				meta.ReconciliationFailedReason,
@@ -143,46 +187,34 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 			r.notify(ctx, obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
 			return ctrl.Result{}, err
 		}
-	}
 
-	// Get the CA certificate.
-	certPool, err := r.getCertPool(ctx, obj)
-	if err != nil {
-		msg := fmt.Sprintf("failed to get certificates %s", err.Error())
-		conditions.MarkFalse(obj,
-			meta.ReadyCondition,
-			meta.ReconciliationFailedReason,
-			"%s", msg)
-		r.notify(ctx, obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
-		return ctrl.Result{}, err
-	}
+		// Create the provider context with timeout.
+		providerCtx, cancel := context.WithTimeout(ctx, obj.GetTimeout())
+		defer cancel()
 
-	// Create the provider context with timeout.
-	providerCtx, cancel := context.WithTimeout(ctx, obj.GetTimeout())
-	defer cancel()
+		// Create the provider based on the object type.
+		provider, err := r.newGitProvider(providerCtx, obj, certPool, authData)
+		if err != nil {
+			msg := fmt.Sprintf("failed to create provider %s", err.Error())
+			conditions.MarkFalse(obj,
+				meta.ReadyCondition,
+				meta.ReconciliationFailedReason,
+				"%s", msg)
+			r.notify(ctx, obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
+			return ctrl.Result{}, err
+		}
 
-	// Create the provider based on the object type.
-	provider, err := r.newGitProvider(providerCtx, obj, certPool, authData)
-	if err != nil {
-		msg := fmt.Sprintf("failed to create provider %s", err.Error())
-		conditions.MarkFalse(obj,
-			meta.ReadyCondition,
-			meta.ReconciliationFailedReason,
-			"%s", msg)
-		r.notify(ctx, obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
-		return ctrl.Result{}, err
-	}
-
-	// Get the provider options.
-	exportedInputs, err := r.callProvider(providerCtx, obj, provider)
-	if err != nil {
-		msg := fmt.Sprintf("failed to call provider %s", err.Error())
-		conditions.MarkFalse(obj,
-			meta.ReadyCondition,
-			meta.ReconciliationFailedReason,
-			"%s", msg)
-		r.notify(ctx, obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
-		return ctrl.Result{}, err
+		// Get the provider options.
+		exportedInputs, err = r.callProvider(providerCtx, obj, provider, defaults)
+		if err != nil {
+			msg := fmt.Sprintf("failed to call provider %s", err.Error())
+			conditions.MarkFalse(obj,
+				meta.ReadyCondition,
+				meta.ReconciliationFailedReason,
+				"%s", msg)
+			r.notify(ctx, obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
+			return ctrl.Result{}, err
+		}
 	}
 
 	// Update the object status with the exported inputs.
@@ -200,7 +232,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 	obj.Status.LastExportedRevision = digest.FromBytes(data).String()
 
 	// Mark the object as ready and set the last applied revision.
-	msg = fmt.Sprintf("Reconciliation finished in %s", fmtDuration(reconcileStart))
+	msg := fmt.Sprintf("Reconciliation finished in %s", fmtDuration(reconcileStart))
 	conditions.MarkTrue(obj,
 		meta.ReadyCondition,
 		meta.ReconciliationSucceededReason,
@@ -334,8 +366,9 @@ func (r *ResourceSetInputProviderReconciler) restoreSkippedGitProviderResults(re
 }
 
 func (r *ResourceSetInputProviderReconciler) callProvider(ctx context.Context,
-	obj *fluxcdv1.ResourceSetInputProvider,
-	provider gitprovider.Interface) ([]fluxcdv1.ResourceSetInput, error) {
+	obj *fluxcdv1.ResourceSetInputProvider, provider gitprovider.Interface,
+	defaults map[string]any) ([]fluxcdv1.ResourceSetInput, error) {
+
 	var inputs []fluxcdv1.ResourceSetInput
 
 	opts, err := r.makeGitOptions(obj)
@@ -362,11 +395,6 @@ func (r *ResourceSetInputProviderReconciler) callProvider(ctx context.Context,
 	if len(results) > 0 {
 		if results, err = r.restoreSkippedGitProviderResults(results, obj); err != nil {
 			return nil, err
-		}
-
-		defaults, err := obj.GetDefaultInputs()
-		if err != nil {
-			return nil, fmt.Errorf("invalid default values: %w", err)
 		}
 
 		inputsWithDefaults, err := gitprovider.MakeInputs(results, defaults)

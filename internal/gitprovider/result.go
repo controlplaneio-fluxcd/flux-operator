@@ -4,11 +4,10 @@
 package gitprovider
 
 import (
-	"fmt"
-	"hash/adler32"
-
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/util/json"
+
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
 // Result holds the information extracted from the Git SaaS provider response.
@@ -82,20 +81,12 @@ func MakeInputs(results []Result, defaults map[string]any) ([]map[string]*apiext
 	}
 
 	for _, item := range list {
-		input := make(map[string]*apiextensionsv1.JSON)
-		for k, v := range item {
-			b, err := json.Marshal(v)
-			if err != nil {
-				return nil, fmt.Errorf("failed to marshal value to JSON %v: %w", v, err)
-			}
-			input[k] = &apiextensionsv1.JSON{Raw: b}
+		input, err := fluxcdv1.NewResourceSetInput(item)
+		if err != nil {
+			return nil, err
 		}
 		inputs = append(inputs, input)
 	}
 
 	return inputs, nil
-}
-
-func checksum(txt string) string {
-	return fmt.Sprintf("%v", adler32.Checksum([]byte(txt)))
 }

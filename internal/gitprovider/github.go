@@ -13,6 +13,8 @@ import (
 
 	"github.com/google/go-github/v69/github"
 	"golang.org/x/oauth2"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/inputs"
 )
 
 type GitHubProvider struct {
@@ -82,7 +84,7 @@ func (p *GitHubProvider) ListBranches(ctx context.Context, opts Options) ([]Resu
 			}
 
 			results = append(results, Result{
-				ID:     checksum(branch.GetName()),
+				ID:     inputs.Checksum(branch.GetName()),
 				SHA:    branch.GetCommit().GetSHA(),
 				Branch: branch.GetName(),
 			})
