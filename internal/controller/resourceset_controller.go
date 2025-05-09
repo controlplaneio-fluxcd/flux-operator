@@ -393,6 +393,7 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 	applySetDigest := digest.FromString(data).String()
 
 	applyOpts := ssa.DefaultApplyOptions()
+	applyOpts.Force = obj.IsForceEnabled()
 	applyOpts.Cleanup = ssa.ApplyCleanupOptions{
 		// Remove the kubectl and helm annotations.
 		Annotations: []string{
