@@ -148,6 +148,12 @@ func (in *ResourceSet) IsDisabled() bool {
 	return ok && strings.ToLower(val) == DisabledValue
 }
 
+// IsForceEnabled returns true if the object has the force annotation set to 'enabled'.
+func (in *ResourceSet) IsForceEnabled() bool {
+	val, ok := in.GetAnnotations()[ForceAnnotation]
+	return ok && strings.ToLower(val) == EnabledValue
+}
+
 // GetInterval returns the interval at which the object should be reconciled.
 // If no interval is set, the default is 60 minutes.
 func (in *ResourceSet) GetInterval() time.Duration {
