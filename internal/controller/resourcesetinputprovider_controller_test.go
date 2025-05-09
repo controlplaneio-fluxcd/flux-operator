@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
-	"github.com/fluxcd/pkg/auth/github"
 	"github.com/fluxcd/pkg/cache"
+	"github.com/fluxcd/pkg/git/github"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"

@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
-	"github.com/fluxcd/pkg/auth/github"
 	"github.com/fluxcd/pkg/cache"
+	"github.com/fluxcd/pkg/git/github"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/opencontainers/go-digest"
@@ -424,7 +424,8 @@ func (r *ResourceSetInputProviderReconciler) getGitHubToken(
 		opts = append(opts, github.WithCache(r.TokenCache,
 			fluxcdv1.ResourceSetInputProviderKind,
 			obj.GetName(),
-			obj.GetNamespace()))
+			obj.GetNamespace(),
+			cache.OperationReconcile))
 	}
 
 	ghc, err := github.New(opts...)
@@ -553,7 +554,8 @@ func (r *ResourceSetInputProviderReconciler) patch(ctx context.Context,
 func (r *ResourceSetInputProviderReconciler) recordMetrics(obj *fluxcdv1.ResourceSetInputProvider) error {
 	if !obj.ObjectMeta.DeletionTimestamp.IsZero() {
 		reporter.DeleteMetricsFor(fluxcdv1.ResourceSetInputProviderKind, obj.GetName(), obj.GetNamespace())
-		r.TokenCache.DeleteEventsForObject(fluxcdv1.ResourceSetInputProviderKind, obj.GetName(), obj.GetNamespace())
+		r.TokenCache.DeleteEventsForObject(fluxcdv1.ResourceSetInputProviderKind,
+			obj.GetName(), obj.GetNamespace(), cache.OperationReconcile)
 		return nil
 	}
 	rawMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
