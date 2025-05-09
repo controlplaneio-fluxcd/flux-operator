@@ -550,6 +550,18 @@ func (r *ResourceSetReconciler) copyResources(ctx context.Context,
 				if err := kubeClient.Get(ctx, sourceName, secret); err != nil {
 					return fmt.Errorf("failed to copy data from Secret/%s: %w", source, err)
 				}
+				_, ok, err := unstructured.NestedString(objects[i].Object, "type")
+				if err != nil {
+					return fmt.Errorf("type field of Secret/%s is not a string: %w", source, err)
+				}
+				if !ok {
+					if secret.Type == "" {
+						secret.Type = corev1.SecretTypeOpaque
+					}
+					if err := unstructured.SetNestedField(objects[i].Object, string(secret.Type), "type"); err != nil {
+						return fmt.Errorf("failed to copy type from Secret/%s: %w", source, err)
+					}
+				}
 				data := make(map[string]string, len(secret.Data))
 				for k, v := range secret.Data {
 					data[k] = string(v)
