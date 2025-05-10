@@ -11,6 +11,7 @@ func (m *Manager) ToolSet() []SystemTool {
 		m.NewGetAPIVersionsTool(),
 		m.NewGetKubernetesLogsTool(),
 		m.NewGetKubernetesResourcesTool(),
+		m.NewApplyKubernetesManifestTool(),
 		m.NewDeleteKubernetesResourceTool(),
 		m.NewReconcileSourceTool(),
 		m.NewReconcileKustomizationTool(),

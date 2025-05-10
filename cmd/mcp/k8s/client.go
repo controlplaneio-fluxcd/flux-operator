@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/fluxcd/cli-utils/pkg/kstatus/polling"
+	"github.com/fluxcd/pkg/ssa"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiruntime "k8s.io/apimachinery/pkg/runtime"
@@ -23,6 +25,7 @@ import (
 type Client struct {
 	ctrlclient.Client
 	cfg *rest.Config
+	rm  *ssa.ResourceManager
 }
 
 // NewClient creates a new Kubernetes client using the provided cli.ConfigFlags,
@@ -57,9 +60,16 @@ func NewClient(flags *cli.ConfigFlags) (*Client, error) {
 		return nil, err
 	}
 
+	kubePoller := polling.NewStatusPoller(kubeClient, restMapper, polling.Options{})
+	rm := ssa.NewResourceManager(kubeClient, kubePoller, ssa.Owner{
+		Field: "kubectl-flux-mcp",
+		Group: fluxcdv1.GroupVersion.Group,
+	})
+
 	return &Client{
 		Client: ctrlclient.WithFieldOwner(kubeClient, "flux-operator-mcp"),
 		cfg:    cfg,
+		rm:     rm,
 	}, nil
 }
 
