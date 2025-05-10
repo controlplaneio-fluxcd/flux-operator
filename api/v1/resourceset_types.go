@@ -65,6 +65,8 @@ type ResourceSetSpec struct {
 	Wait bool `json:"wait,omitempty"`
 }
 
+// +kubebuilder:validation:XValidation:rule="has(self.name) || has(self.selector)", message="at least one of name or selector must be set for input provider references"
+// +kubebuilder:validation:XValidation:rule="!has(self.name) || !has(self.selector)", message="cannot set both name and selector for input provider references"
 type InputProviderReference struct {
 	// APIVersion of the input provider resource.
 	// When not set, the APIVersion of the ResourceSet is used.
@@ -76,9 +78,15 @@ type InputProviderReference struct {
 	// +required
 	Kind string `json:"kind"`
 
-	// Name of the input provider resource.
-	// +required
-	Name string `json:"name"`
+	// Name of the input provider resource. Cannot be set
+	// when the Selector field is set.
+	// +optional
+	Name string `json:"name,omitempty"`
+
+	// Selector is a label selector to filter the input provider resources
+	// as an alternative to the Name field.
+	// +optional
+	Selector *metav1.LabelSelector `json:"selector,omitempty"`
 }
 
 // Dependency defines a ResourceSet dependency on a Kubernetes resource.
@@ -112,6 +120,19 @@ type Dependency struct {
 
 // ResourceSetInput defines the key-value pairs of the ResourceSet input.
 type ResourceSetInput map[string]*apiextensionsv1.JSON
+
+// NewResourceSetInput creates a new ResourceSetInput from a map[string]any.
+func NewResourceSetInput(m map[string]any) (ResourceSetInput, error) {
+	res := make(ResourceSetInput)
+	for k, v := range m {
+		b, err := json.Marshal(v)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal value to JSON %v: %w", v, err)
+		}
+		res[k] = &apiextensionsv1.JSON{Raw: b}
+	}
+	return res, nil
+}
 
 // ResourceSetStatus defines the observed state of ResourceSet.
 type ResourceSetStatus struct {

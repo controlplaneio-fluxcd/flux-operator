@@ -140,9 +140,9 @@ spec:
 ```
 
 The `.spec.inputsFrom` field is optional and specifies a list of [ResourceSetInputProvider](resourcesetinputprovider.md)
-objects that provide dynamic input values to the ResourceSet.
+objects that provide input values to the ResourceSet.
 
-Example of dynamic inputs generated from GitHub Pull Requests:
+Example of inputs generated from GitHub Pull Requests:
 
 ```yaml
 spec:
@@ -150,6 +150,25 @@ spec:
     - apiVersion: fluxcd.controlplane.io/v1
       kind: ResourceSetInputsProvider
       name: podinfo-pull-requests
+```
+
+Example of inputs generated from multiple ResourceSetInputProviders via
+[Label Selectors](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors):
+
+```yaml
+spec:
+  inputsFrom:
+    - apiVersion: fluxcd.controlplane.io/v1
+      kind: ResourceSetInputsProvider
+      selector:
+        matchLabels:
+          app: podinfo
+        matchExpressions:
+          - key: environment
+            operator: In
+            values:
+              - dev
+              - staging
 ```
 
 At runtime, the operator will fetch the input values every time the `ResourceSetInputProvider`
