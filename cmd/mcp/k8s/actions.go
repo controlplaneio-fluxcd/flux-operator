@@ -8,6 +8,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/fluxcd/pkg/ssa"
+	"github.com/fluxcd/pkg/ssa/normalize"
+	ssautil "github.com/fluxcd/pkg/ssa/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -15,6 +18,29 @@ import (
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
+
+func (k *Client) Apply(ctx context.Context, manifest string) (string, error) {
+	objects, err := ssautil.ReadObjects(strings.NewReader(manifest))
+	if err != nil {
+		return "", fmt.Errorf("unable to parse YAML manifest: %w", err)
+	}
+
+	if len(objects) == 0 {
+		return "", fmt.Errorf("no Kubernetes objects found in manifest")
+	}
+
+	err = normalize.UnstructuredList(objects)
+	if err != nil {
+		return "", fmt.Errorf("unable to normalize objects: %w", err)
+	}
+
+	changeSet, err := k.rm.ApplyAllStaged(ctx, objects, ssa.DefaultApplyOptions())
+	if err != nil {
+		return "", fmt.Errorf("unable to apply objects: %w", err)
+	}
+
+	return changeSet.String(), nil
+}
 
 // Annotate sets annotations on a Kubernetes resource identified by GroupVersionKind, name, and namespace.
 func (k *Client) Annotate(ctx context.Context, gvk schema.GroupVersionKind, name, namespace string, keys []string, val string) error {

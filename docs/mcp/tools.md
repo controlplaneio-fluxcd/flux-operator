@@ -185,6 +185,23 @@ Resumes the reconciliation of a previously suspended Flux resource.
 
 Confirmation message indicating the resource has been resumed.
 
+## Apply Tool
+
+This tool allows creating or updating Kubernetes resources in the cluster.
+Note that if the resources are managed by Flux, the changes will be undone on the next reconciliation.
+
+### apply_kubernetes_manifest
+
+Applies a YAML manifest on the cluster using Kubernetes server-side apply.
+
+**Parameters:**
+
+- `yaml` (required): The multi-doc YAML content
+
+**Output:**
+
+The list of applied resources in the format `kind/namespace/name [created|updated|unchanged]`.
+
 ## Deletion Tool
 
 This tool enables the removal of resources from your cluster.
