@@ -6,8 +6,12 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
+	"github.com/fluxcd/pkg/ssa"
+	"github.com/fluxcd/pkg/ssa/normalize"
+	ssautil "github.com/fluxcd/pkg/ssa/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -15,6 +19,70 @@ import (
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
+
+// Apply parses the YAML manifest and creates or updates the Kubernetes objects using server-side apply.
+// If any of the Kubernetes objects are managed by Flux, it will return an error unless overwrite is set to true.
+func (k *Client) Apply(ctx context.Context, manifest string, overwrite bool) (string, error) {
+	objects, err := ssautil.ReadObjects(strings.NewReader(manifest))
+	if err != nil {
+		return "", fmt.Errorf("unable to parse YAML manifest: %w", err)
+	}
+
+	if len(objects) == 0 {
+		return "", fmt.Errorf("no Kubernetes objects found in manifest")
+	}
+
+	if !overwrite {
+		for _, object := range objects {
+			if k.IsManagedByFlux(ctx, object.GroupVersionKind(), object.GetName(), object.GetNamespace()) {
+				return "", fmt.Errorf("%s/%s is managed by Flux",
+					object.GetKind(), object.GetName())
+			}
+		}
+	}
+
+	err = normalize.UnstructuredList(objects)
+	if err != nil {
+		return "", fmt.Errorf("unable to normalize objects: %w", err)
+	}
+
+	changeSet, err := k.rm.ApplyAllStaged(ctx, objects, ssa.DefaultApplyOptions())
+	if err != nil {
+		return "", fmt.Errorf("unable to apply objects: %w", err)
+	}
+
+	return changeSet.String(), nil
+}
+
+// IsManagedByFlux checks if a Kubernetes resource is managed by Flux by inspecting specific Flux-related labels.
+func (k *Client) IsManagedByFlux(ctx context.Context, gvk schema.GroupVersionKind, name, namespace string) bool {
+	resource := &metav1.PartialObjectMetadata{}
+	resource.SetGroupVersionKind(gvk)
+
+	objectKey := ctrlclient.ObjectKey{
+		Namespace: namespace,
+		Name:      name,
+	}
+
+	if err := k.Client.Get(ctx, objectKey, resource); err != nil {
+		return false
+	}
+
+	fluxLabels := []string{
+		"fluxcd.controlplane.io/namespace",
+		"resourceset.fluxcd.controlplane.io/namespace",
+		"kustomize.toolkit.fluxcd.io/namespace",
+		"helm.toolkit.fluxcd.io/namespace",
+	}
+
+	for key := range resource.GetLabels() {
+		if slices.Contains(fluxLabels, key) {
+			return true
+		}
+	}
+
+	return false
+}
 
 // Annotate sets annotations on a Kubernetes resource identified by GroupVersionKind, name, and namespace.
 func (k *Client) Annotate(ctx context.Context, gvk schema.GroupVersionKind, name, namespace string, keys []string, val string) error {
