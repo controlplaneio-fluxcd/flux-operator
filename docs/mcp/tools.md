@@ -188,7 +188,8 @@ Confirmation message indicating the resource has been resumed.
 ## Apply Tool
 
 This tool allows creating or updating Kubernetes resources in the cluster.
-Note that if the resources are managed by Flux, the changes will be undone on the next reconciliation.
+If the resources already exist and are managed by Flux, the tool will error out unless
+explicitly told to overwrite them.
 
 ### apply_kubernetes_manifest
 
@@ -196,7 +197,8 @@ Applies a YAML manifest on the cluster using Kubernetes server-side apply.
 
 **Parameters:**
 
-- `yaml` (required): The multi-doc YAML content
+- `yaml_content` (required): The multi-doc YAML content
+- `overwrite` (optional): Whether to overwrite resources managed by Flux (default: false)
 
 **Output:**
 

@@ -36,14 +36,14 @@ func TestManager_HandleApplyKubernetesManifest(t *testing.T) {
 		{
 			testName: "fails without empty yaml",
 			arguments: map[string]interface{}{
-				"yaml": "",
+				"yaml_content": "",
 			},
 			matchErr: "YAML manifest cannot be empty",
 		},
 		{
 			testName: "fails with invalid kubeconfig",
 			arguments: map[string]interface{}{
-				"yaml": "test: test",
+				"yaml_content": "test: test",
 			},
 			matchErr: "Failed to create Kubernetes client",
 		},
