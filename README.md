@@ -33,6 +33,12 @@ that can be templated, parameterized and deployed as a single unit on self-servi
 The ResourceSet API integrates with GitLab and GitHub pull requests to create ephemeral environments
 for testing and validation.
 
+**AI-Assisted GitOps** - The [Flux MCP Server](https://fluxcd.control-plane.io/mcp/) connects
+AI assistants to Kubernetes clusters running the operator, enabling seamless interaction
+through natural language. It serves as a bridge between AI tools and GitOps pipelines,
+allowing you to analyze deployment across environments, troubleshoot issues,
+and perform operations using conversational prompts.
+
 **Enterprise Support** - The operator is a key component of the ControlPlane
 [Enterprise offering](https://fluxcd.control-plane.io/pricing/), and is designed to automate the
 rollout of new Flux versions, CVE patches and hotfixes to production environments in a secure and reliable way.
