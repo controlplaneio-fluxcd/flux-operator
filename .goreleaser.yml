@@ -59,17 +59,29 @@ builds:
 # xref: https://goreleaser.com/customization/archive/
 archives:
   - name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    id: unix
+    id: unix-cli
     ids:
       - cli
+    formats: ['tar.gz']
+    files:
+      - LICENSE
+  - name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    id: unix-mcp
+    ids:
       - mcp
     formats: ['tar.gz']
     files:
       - LICENSE
   - name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    id: windows
+    id: windows-cli
     ids:
       - cli-windows
+    formats: ['zip']
+    files:
+      - LICENSE
+  - name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    id: windows-mcp
+    ids:
       - mcp-windows
     formats: ['zip']
     files:
