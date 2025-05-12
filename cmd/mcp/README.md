@@ -13,16 +13,20 @@ Using AI assistants with the Flux MCP Server, you can:
 
 ## Quickstart
 
-Download the `flux-operator-mcp` archive from GitHub
-[releases page](https://github.com/controlplaneio-fluxcd/flux-operator/releases),
-unpacking it, and place the binary in a directory included in your system's `PATH`.
+Install the Flux MCP Server using Homebrew:
+
+```shell
+brew install controlplaneio-fluxcd/tap/flux-operator-mcp
+```
+
+For other installation options, refer to the [installation guide](https://fluxcd.control-plane.io/mcp/install/).
 
 Add the following configuration to your AI assistant's MCP settings:
 
 ```json
 {
   "flux-operator-mcp":{
-    "command":"/path/to/flux-operator-mcp",
+    "command":"flux-operator-mcp",
     "args":[
       "serve",
       "--read-only=false"
@@ -34,8 +38,8 @@ Add the following configuration to your AI assistant's MCP settings:
 }
 ```
 
-Replace `/path/to/flux-operator-mcp` with the actual path to the binary
-and `/path/to/.kube/config` with the path to your kubeconfig file.
+Replace `/path/to/.kube/config` with the absolute path to your kubeconfig file,
+you can find it with: `echo $HOME/.kube/config`.
 
 Copy the AI rules from
 [instructions.md](https://raw.githubusercontent.com/controlplaneio-fluxcd/distribution/refs/heads/main/docs/mcp/instructions.md)
