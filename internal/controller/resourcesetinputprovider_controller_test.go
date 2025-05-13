@@ -16,6 +16,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/conditions"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	apix "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -23,7 +24,126 @@ import (
 	"sigs.k8s.io/yaml"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/inputs"
 )
+
+func TestResourceSetInputProviderReconciler_Static(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceSetInputProviderReconciler()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	objDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSetInputProvider
+metadata:
+  name: test-static
+  namespace: "%[1]s"
+spec:
+  type: Static
+  url: https://gitlab.com/stefanprodan/podinfo
+  defaultValues:
+    env: "staging"
+    foo: "bar"
+`, ns.Name)
+
+	obj := &fluxcdv1.ResourceSetInputProvider{}
+	err = yaml.Unmarshal([]byte(objDef), obj)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Create the ResourceSetInputProvider. Should error out due to CEL validation.
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("spec.url must be empty when spec.type is 'Static'"))
+
+	// Invert CEL validation error to type not Static and URL empty.
+	obj.Spec.Type = fluxcdv1.InputProviderGitHubBranch
+	obj.Spec.URL = ""
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("spec.url must not be empty when spec.type is not 'Static'"))
+
+	// Fix object and create.
+	obj.Spec.Type = fluxcdv1.InputProviderStatic
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).NotTo(HaveOccurred())
+	exportedInput := fmt.Sprintf(`
+id: "%[1]s"
+env: staging
+foo: bar `, inputs.Checksum(string(obj.UID)))
+
+	// Initialize the ResourceSetInputProvider.
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Reconcile and verify exported inputs.
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(r.Requeue).To(BeFalse())
+	result := &fluxcdv1.ResourceSetInputProvider{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(conditions.IsReady(result)).To(BeTrue())
+	g.Expect(result.Status.ExportedInputs).To(HaveLen(1))
+	b, err := yaml.Marshal(result.Status.ExportedInputs[0])
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(string(b)).To(MatchYAML(exportedInput))
+	g.Expect(result.Status.LastExportedRevision).To(HavePrefix("sha256:"))
+	g.Expect(result.Status.LastExportedRevision).To(HaveLen(71))
+	lastExportedRevision := result.Status.LastExportedRevision
+
+	// Reconcile again and verify that revision did not change.
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(r.Requeue).To(BeFalse())
+	result = &fluxcdv1.ResourceSetInputProvider{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(conditions.IsReady(result)).To(BeTrue())
+	g.Expect(result.Status.ExportedInputs).To(HaveLen(1))
+	b, err = yaml.Marshal(result.Status.ExportedInputs[0])
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(string(b)).To(MatchYAML(exportedInput))
+	g.Expect(result.Status.LastExportedRevision).To(Equal(lastExportedRevision))
+}
+
+func TestResourceSetInputProviderReconciler_reconcile_InvalidDefaultValues(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceSetInputProviderReconciler()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	obj := &fluxcdv1.ResourceSetInputProvider{
+		Spec: fluxcdv1.ResourceSetInputProviderSpec{
+			DefaultValues: fluxcdv1.ResourceSetInput{
+				"foo": &apix.JSON{
+					Raw: []byte(`{"bar": "baz"`),
+				},
+			},
+		},
+	}
+
+	r, err := reconciler.reconcile(ctx, obj, nil)
+	g.Expect(r).To(Equal(reconcile.Result{}))
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(obj.Status.Conditions).To(HaveLen(2))
+	g.Expect(conditions.IsReady(obj)).To(BeFalse())
+	g.Expect(conditions.IsStalled(obj)).To(BeTrue())
+	g.Expect(conditions.GetReason(obj, meta.ReadyCondition)).To(Equal(fluxcdv1.ReasonInvalidDefaultValues))
+	g.Expect(conditions.GetReason(obj, meta.StalledCondition)).To(Equal(fluxcdv1.ReasonInvalidDefaultValues))
+	g.Expect(conditions.GetMessage(obj, meta.ReadyCondition)).To(ContainSubstring("Reconciliation failed terminally due to configuration error"))
+	g.Expect(conditions.GetMessage(obj, meta.StalledCondition)).To(ContainSubstring("Reconciliation failed terminally due to configuration error"))
+}
 
 func TestResourceSetInputProviderReconciler_GitLabBranch_LifeCycle(t *testing.T) {
 	g := NewWithT(t)

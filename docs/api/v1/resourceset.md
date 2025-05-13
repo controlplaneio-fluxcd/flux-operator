@@ -140,9 +140,9 @@ spec:
 ```
 
 The `.spec.inputsFrom` field is optional and specifies a list of [ResourceSetInputProvider](resourcesetinputprovider.md)
-objects that provide dynamic input values to the ResourceSet.
+objects that provide input values to the ResourceSet.
 
-Example of dynamic inputs generated from GitHub Pull Requests:
+Example of inputs generated from GitHub Pull Requests:
 
 ```yaml
 spec:
@@ -150,6 +150,25 @@ spec:
     - apiVersion: fluxcd.controlplane.io/v1
       kind: ResourceSetInputsProvider
       name: podinfo-pull-requests
+```
+
+Example of inputs generated from multiple `ResourceSetInputProvider` objects via
+[Label Selectors](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors):
+
+```yaml
+spec:
+  inputsFrom:
+    - apiVersion: fluxcd.controlplane.io/v1
+      kind: ResourceSetInputsProvider
+      selector:
+        matchLabels:
+          app: podinfo
+        matchExpressions:
+          - key: environment
+            operator: In
+            values:
+              - dev
+              - staging
 ```
 
 At runtime, the operator will fetch the input values every time the `ResourceSetInputProvider`
@@ -373,6 +392,28 @@ spec:
 ```
 
 In the above example, the `ServiceAccount` resource is generated only for the `team1` tenant.
+
+#### Built-in input fields
+
+For every set of inputs, the reference of the object providing those inputs is injected
+by Flux Operator when templating the resources. The reference can be used in templates
+through the `inputs` object, through the following fields:
+
+- `inputs.provider.apiVersion`: The API version of the object providing the inputs.
+- `inputs.provider.kind`: The kind of the object providing the inputs.
+- `inputs.provider.name`: The name of the object providing the inputs.
+- `inputs.provider.namespace`: The namespace of the object providing the inputs.
+
+In the case of inline inputs provided directly in the `ResourceSet` object through the
+`.spec.inputs` field, `inputs.provider.apiVersion` is `fluxcd.controlplane.io/v1` and
+`inputs.provider.kind` is `ResourceSet`.
+
+In the case of inputs provided through a `ResourceSetInputProvider` referenced in the
+`.spec.inputsFrom` field of a `ResourceSet`, `inputs.provider.apiVersion` is
+`fluxcd.controlplane.io/v1` and `inputs.provider.kind` is `ResourceSetInputProvider`.
+
+The `inputs.provider` field is always overwritten with the data above and cannot
+be set by the user.
 
 ### Resources template
 

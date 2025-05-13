@@ -22,6 +22,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/inputs"
 )
 
 func TestResourceSetReconciler_LifeCycle(t *testing.T) {
@@ -639,6 +640,466 @@ spec:
 	logObjectStatus(t, result)
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.InvalidCELExpressionReason))
 	g.Expect(conditions.GetMessage(result, meta.ReadyCondition)).To(ContainSubstring("failed to parse expression"))
+}
+
+func TestResourceSetInputsFromValidation(t *testing.T) {
+	g := NewWithT(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Both set.
+	err = testEnv.Create(ctx, &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: ns.Name,
+		},
+		Spec: fluxcdv1.ResourceSetSpec{
+			InputsFrom: []fluxcdv1.InputProviderReference{{
+				Kind:     fluxcdv1.ResourceSetInputProviderKind,
+				Name:     "test",
+				Selector: &metav1.LabelSelector{},
+			}},
+		},
+	})
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("cannot set both name and selector for input provider references"))
+
+	// Neither set.
+	err = testEnv.Create(ctx, &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: ns.Name,
+		},
+		Spec: fluxcdv1.ResourceSetSpec{
+			InputsFrom: []fluxcdv1.InputProviderReference{{
+				Kind: fluxcdv1.ResourceSetInputProviderKind,
+			}},
+		},
+	})
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("at least one of name or selector must be set for input provider references"))
+}
+
+func TestResourceSetReconciler_LabelSelector(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceSetReconciler(t)
+	rsipReconciler := getResourceSetInputProviderReconciler()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	rsipZeroDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSetInputProvider
+metadata:
+  name: app-0
+  namespace: "%[1]s"
+spec:
+  type: Static
+  defaultValues:
+    foo: app-0-foo
+    baz: app-0-baz
+`, ns.Name)
+
+	rsipOneDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSetInputProvider
+metadata:
+  name: app-1
+  namespace: "%[1]s"
+  labels:
+    app: app-1
+    my: tenant
+spec:
+  type: Static
+  defaultValues:
+    foo: bar
+    baz: qux
+`, ns.Name)
+
+	rsipTwoDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSetInputProvider
+metadata:
+  name: app-2
+  namespace: "%[1]s"
+  labels:
+    app: app-2
+    my: tenant
+spec:
+  type: Static
+  defaultValues:
+    foo: qux
+    baz: bar
+`, ns.Name)
+
+	// Create, initialize and reconcile the ResourceSetInputProviders.
+	rsipID := make([]string, 3)
+	for i, def := range []string{rsipZeroDef, rsipOneDef, rsipTwoDef} {
+		obj := &fluxcdv1.ResourceSetInputProvider{}
+		err = yaml.Unmarshal([]byte(def), obj)
+		g.Expect(err).NotTo(HaveOccurred())
+		err = testEnv.Create(ctx, obj)
+		g.Expect(err).NotTo(HaveOccurred())
+		r, err := rsipReconciler.Reconcile(ctx, reconcile.Request{
+			NamespacedName: client.ObjectKeyFromObject(obj),
+		})
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(r.Requeue).To(BeTrue())
+		r, err = rsipReconciler.Reconcile(ctx, reconcile.Request{
+			NamespacedName: client.ObjectKeyFromObject(obj),
+		})
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(r.Requeue).To(BeFalse())
+		result := &fluxcdv1.ResourceSetInputProvider{}
+		err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(conditions.IsReady(result)).To(BeTrue())
+		rsipID[i] = inputs.Checksum(string(result.GetUID()))
+	}
+	rsipZeroID := rsipID[0]
+	rsipOneID := rsipID[1]
+	rsipTwoID := rsipID[2]
+
+	rsetDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: tenants
+  namespace: "%[1]s"
+spec:
+  inputs:
+    - id: inputs-dont-have-a-default-id
+      foo: rset-foo
+      baz: rset-baz
+  inputsFrom:
+    - kind: ResourceSetInputProvider
+      name: app-0
+    - kind: ResourceSetInputProvider # this tests deduplication
+      selector:
+        matchLabels:
+          my: tenant
+    - kind: ResourceSetInputProvider
+      selector:
+        matchExpressions:
+          - key: app
+            operator: In
+            values:
+              - app-1
+              - app-2
+  resources:
+    - apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: cm-<< inputs.id >>
+        namespace: "%[1]s"
+      data:
+        providerAPIVersion: << inputs.provider.apiVersion >>
+        providerKind: << inputs.provider.kind >>
+        providerName: << inputs.provider.name >>
+        providerNamespace: << inputs.provider.namespace >>
+        foo: << inputs.foo >>
+        baz: << inputs.baz >>
+`, ns.Name)
+
+	obj := &fluxcdv1.ResourceSet{}
+	err = yaml.Unmarshal([]byte(rsetDef), obj)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Initialize and reconcile the ResourceSet.
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).NotTo(HaveOccurred())
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(r.Requeue).To(BeFalse())
+	result := &fluxcdv1.ResourceSet{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(conditions.IsReady(result)).To(BeTrue())
+
+	// Assert inventory entries.
+	g.Expect(result.Status.Inventory.Entries).To(HaveLen(4))
+	g.Expect(result.Status.Inventory.Entries).To(ContainElements(
+		fluxcdv1.ResourceRef{
+			ID:      fmt.Sprintf("%s_cm-inputs-dont-have-a-default-id__ConfigMap", ns.Name),
+			Version: "v1",
+		},
+		fluxcdv1.ResourceRef{
+			ID:      fmt.Sprintf("%s_cm-%s__ConfigMap", ns.Name, rsipZeroID),
+			Version: "v1",
+		},
+		fluxcdv1.ResourceRef{
+			ID:      fmt.Sprintf("%s_cm-%s__ConfigMap", ns.Name, rsipOneID),
+			Version: "v1",
+		},
+		fluxcdv1.ResourceRef{
+			ID:      fmt.Sprintf("%s_cm-%s__ConfigMap", ns.Name, rsipTwoID),
+			Version: "v1",
+		},
+	))
+
+	// Get ConfigMaps and assert data.
+	cm := &corev1.ConfigMap{}
+	err = testClient.Get(ctx, client.ObjectKey{
+		Name:      "cm-inputs-dont-have-a-default-id",
+		Namespace: ns.Name,
+	}, cm)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(cm.Data["providerAPIVersion"]).To(Equal("fluxcd.controlplane.io/v1"))
+	g.Expect(cm.Data["providerKind"]).To(Equal("ResourceSet"))
+	g.Expect(cm.Data["providerName"]).To(Equal("tenants"))
+	g.Expect(cm.Data["providerNamespace"]).To(Equal(ns.Name))
+	g.Expect(cm.Data["foo"]).To(Equal("rset-foo"))
+	g.Expect(cm.Data["baz"]).To(Equal("rset-baz"))
+	cm = &corev1.ConfigMap{}
+	err = testClient.Get(ctx, client.ObjectKey{
+		Name:      fmt.Sprintf("cm-%s", rsipZeroID),
+		Namespace: ns.Name,
+	}, cm)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(cm.Data["providerAPIVersion"]).To(Equal("fluxcd.controlplane.io/v1"))
+	g.Expect(cm.Data["providerKind"]).To(Equal("ResourceSetInputProvider"))
+	g.Expect(cm.Data["providerName"]).To(Equal("app-0"))
+	g.Expect(cm.Data["providerNamespace"]).To(Equal(ns.Name))
+	g.Expect(cm.Data["foo"]).To(Equal("app-0-foo"))
+	g.Expect(cm.Data["baz"]).To(Equal("app-0-baz"))
+	cm = &corev1.ConfigMap{}
+	err = testClient.Get(ctx, client.ObjectKey{
+		Name:      fmt.Sprintf("cm-%s", rsipOneID),
+		Namespace: ns.Name,
+	}, cm)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(cm.Data["providerAPIVersion"]).To(Equal("fluxcd.controlplane.io/v1"))
+	g.Expect(cm.Data["providerKind"]).To(Equal("ResourceSetInputProvider"))
+	g.Expect(cm.Data["providerName"]).To(Equal("app-1"))
+	g.Expect(cm.Data["providerNamespace"]).To(Equal(ns.Name))
+	g.Expect(cm.Data["foo"]).To(Equal("bar"))
+	g.Expect(cm.Data["baz"]).To(Equal("qux"))
+	cm = &corev1.ConfigMap{}
+	err = testClient.Get(ctx, client.ObjectKey{
+		Name:      fmt.Sprintf("cm-%s", rsipTwoID),
+		Namespace: ns.Name,
+	}, cm)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(cm.Data["providerAPIVersion"]).To(Equal("fluxcd.controlplane.io/v1"))
+	g.Expect(cm.Data["providerKind"]).To(Equal("ResourceSetInputProvider"))
+	g.Expect(cm.Data["providerName"]).To(Equal("app-2"))
+	g.Expect(cm.Data["providerNamespace"]).To(Equal(ns.Name))
+	g.Expect(cm.Data["foo"]).To(Equal("qux"))
+	g.Expect(cm.Data["baz"]).To(Equal("bar"))
+}
+
+func TestResourceSetReconciler_LabelSelector_LifeCycle(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceSetReconciler(t)
+	rsipReconciler := getResourceSetInputProviderReconciler()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	rsipFmt := `
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSetInputProvider
+metadata:
+  name: %[1]s
+  namespace: %[2]s
+  labels:
+    my: tenant
+spec:
+  type: Static
+  defaultValues:
+    foo: qux
+    baz: bar
+`
+
+	// RSIP helpers.
+	createRSIP := func(name string) string {
+		obj := &fluxcdv1.ResourceSetInputProvider{}
+		err = yaml.Unmarshal([]byte(fmt.Sprintf(rsipFmt, name, ns.Name)), obj)
+		g.Expect(err).NotTo(HaveOccurred())
+		err = testEnv.Create(ctx, obj)
+		g.Expect(err).NotTo(HaveOccurred())
+		r, err := rsipReconciler.Reconcile(ctx, reconcile.Request{
+			NamespacedName: client.ObjectKeyFromObject(obj),
+		})
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(r.Requeue).To(BeTrue())
+		r, err = rsipReconciler.Reconcile(ctx, reconcile.Request{
+			NamespacedName: client.ObjectKeyFromObject(obj),
+		})
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(r.Requeue).To(BeFalse())
+		result := &fluxcdv1.ResourceSetInputProvider{}
+		err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(conditions.IsReady(result)).To(BeTrue())
+		return inputs.Checksum(string(result.GetUID()))
+	}
+	deleteRSIP := func(name string) {
+		err := testClient.Delete(ctx, &fluxcdv1.ResourceSetInputProvider{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: ns.Name,
+			},
+		})
+		g.Expect(err).NotTo(HaveOccurred())
+		r, err := rsipReconciler.Reconcile(ctx, reconcile.Request{
+			NamespacedName: client.ObjectKey{
+				Name:      name,
+				Namespace: ns.Name,
+			},
+		})
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(r.Requeue).To(BeFalse())
+		g.Eventually(func() bool {
+			err = testClient.Get(ctx, client.ObjectKey{
+				Name:      name,
+				Namespace: ns.Name,
+			}, &fluxcdv1.ResourceSetInputProvider{})
+			return apierrors.IsNotFound(err)
+		}).Should(BeTrue())
+	}
+
+	rsetDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: tenants
+  namespace: "%[1]s"
+spec:
+  inputsFrom:
+    - kind: ResourceSetInputProvider
+      selector:
+        matchLabels:
+          my: tenant
+  resources:
+    - apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: cm-<< inputs.id >>
+        namespace: "%[1]s"
+`, ns.Name)
+
+	obj := &fluxcdv1.ResourceSet{}
+	err = yaml.Unmarshal([]byte(rsetDef), obj)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Initialize and reconcile the ResourceSet.
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).NotTo(HaveOccurred())
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(r.Requeue).To(BeFalse())
+	result := &fluxcdv1.ResourceSet{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(conditions.IsReady(result)).To(BeTrue())
+
+	// Assert empty inventory.
+	g.Expect(result.Status.Inventory.Entries).To(BeEmpty())
+
+	// Create two RSIPs, reconcile RSET and check inventory.
+	rsipOne := createRSIP("app-1")
+	rsipTwo := createRSIP("app-2")
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(r.Requeue).To(BeFalse())
+	result = &fluxcdv1.ResourceSet{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(conditions.IsReady(result)).To(BeTrue())
+	g.Expect(result.Status.Inventory.Entries).To(HaveLen(2))
+	g.Expect(result.Status.Inventory.Entries).To(ContainElements(
+		fluxcdv1.ResourceRef{
+			ID:      fmt.Sprintf("%s_cm-%s__ConfigMap", ns.Name, rsipOne),
+			Version: "v1",
+		},
+		fluxcdv1.ResourceRef{
+			ID:      fmt.Sprintf("%s_cm-%s__ConfigMap", ns.Name, rsipTwo),
+			Version: "v1",
+		},
+	))
+	cm := &corev1.ConfigMap{}
+	err = testClient.Get(ctx, client.ObjectKey{
+		Name:      fmt.Sprintf("cm-%s", rsipOne),
+		Namespace: ns.Name,
+	}, cm)
+	g.Expect(err).NotTo(HaveOccurred())
+	cm = &corev1.ConfigMap{}
+	err = testClient.Get(ctx, client.ObjectKey{
+		Name:      fmt.Sprintf("cm-%s", rsipTwo),
+		Namespace: ns.Name,
+	}, cm)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Delete RSIP one, reconcile RSET and check inventory.
+	deleteRSIP("app-1")
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(r.Requeue).To(BeFalse())
+	result = &fluxcdv1.ResourceSet{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(conditions.IsReady(result)).To(BeTrue())
+	g.Expect(result.Status.Inventory.Entries).To(HaveLen(1))
+	g.Expect(result.Status.Inventory.Entries).To(ContainElements(
+		fluxcdv1.ResourceRef{
+			ID:      fmt.Sprintf("%s_cm-%s__ConfigMap", ns.Name, rsipTwo),
+			Version: "v1",
+		},
+	))
+
+	// Delete RSIP two, reconcile RSET and check inventory.
+	deleteRSIP("app-2")
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(r.Requeue).To(BeFalse())
+	result = &fluxcdv1.ResourceSet{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(conditions.IsReady(result)).To(BeTrue())
+	g.Expect(result.Status.Inventory.Entries).To(BeEmpty())
+	cm = &corev1.ConfigMap{}
+	err = testClient.Get(ctx, client.ObjectKey{
+		Name:      fmt.Sprintf("cm-%s", rsipTwo),
+		Namespace: ns.Name,
+	}, cm)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+	cm = &corev1.ConfigMap{}
+	err = testClient.Get(ctx, client.ObjectKey{
+		Name:      fmt.Sprintf("cm-%s", rsipOne),
+		Namespace: ns.Name,
+	}, cm)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 }
 
 func TestResourceSetReconciler_Impersonation(t *testing.T) {

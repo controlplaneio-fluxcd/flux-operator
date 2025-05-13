@@ -15,25 +15,32 @@ import (
 )
 
 const (
-	ResourceSetInputProviderKind    = "ResourceSetInputProvider"
+	ResourceSetInputProviderKind = "ResourceSetInputProvider"
+
+	InputProviderStatic             = "Static"
 	InputProviderGitHubBranch       = "GitHubBranch"
 	InputProviderGitHubPullRequest  = "GitHubPullRequest"
 	InputProviderGitLabBranch       = "GitLabBranch"
 	InputProviderGitLabMergeRequest = "GitLabMergeRequest"
+
+	ReasonInvalidDefaultValues  = "InvalidDefaultValues"
+	ReasonInvalidExportedInputs = "InvalidExportedInputs"
 )
 
 // ResourceSetInputProviderSpec defines the desired state of ResourceSetInputProvider
+// +kubebuilder:validation:XValidation:rule="self.type != 'Static' || !has(self.url)", message="spec.url must be empty when spec.type is 'Static'"
+// +kubebuilder:validation:XValidation:rule="self.type == 'Static' || has(self.url)", message="spec.url must not be empty when spec.type is not 'Static'"
 type ResourceSetInputProviderSpec struct {
 	// Type specifies the type of the input provider.
-	// +kubebuilder:validation:Enum=GitHubBranch;GitHubPullRequest;GitLabBranch;GitLabMergeRequest
+	// +kubebuilder:validation:Enum=Static;GitHubBranch;GitHubPullRequest;GitLabBranch;GitLabMergeRequest
 	// +required
 	Type string `json:"type"`
 
 	// URL specifies the HTTP/S address of the input provider API.
 	// When connecting to a Git provider, the URL should point to the repository address.
-	// +kubebuilder:validation:Pattern="^(http|https)://.*$"
-	// +required
-	URL string `json:"url"`
+	// +kubebuilder:validation:Pattern="^((http|https)://.*){0,1}$"
+	// +optional
+	URL string `json:"url,omitempty"`
 
 	// SecretRef specifies the Kubernetes Secret containing the basic-auth credentials
 	// to access the input provider. The secret must contain the keys
