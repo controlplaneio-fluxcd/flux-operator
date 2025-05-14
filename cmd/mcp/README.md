@@ -62,6 +62,12 @@ and other assistants, please refer to the [documentation website](https://fluxcd
 - [MCP Tools Reference](https://fluxcd.control-plane.io/mcp/tools/)
 - [MCP Prompts Reference](https://fluxcd.control-plane.io/mcp/prompts/)
 
+## Contributing
+
+We welcome contributions to the Flux MCP Server project via GitHub pull requests.
+Please see the [CONTRIBUTING](https://github.com/controlplaneio-fluxcd/flux-operator/blob/main/CONTRIBUTING.md)
+guide for details on how to set up your development environment and start contributing to the project.
+
 ## License
 
 The MCP Server is open-source and part of the [Flux Operator](https://github.com/controlplaneio-fluxcd/flux-operator)

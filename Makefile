@@ -82,7 +82,7 @@ lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes.
 
 .PHONY: build
 build: manifests generate fmt vet ## Build manager binary.
-	go build -o bin/manager cmd/operator/main.go
+	go build -o bin/flux-operator cmd/operator/main.go
 
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
@@ -127,7 +127,7 @@ build-manifests: ## Generate release manifests.
 
 .PHONY: cli-build
 cli-build: tidy fmt vet ## Build CLI binary.
-	CGO_ENABLED=0 go build -ldflags="-s -w -X main.VERSION=$(FLUX_OPERATOR_DEV_VERSION)" -o ./bin/foctl ./cmd/cli/
+	CGO_ENABLED=0 go build -ldflags="-s -w -X main.VERSION=$(FLUX_OPERATOR_DEV_VERSION)" -o ./bin/flux-operator-cli ./cmd/cli/
 
 .PHONY: mcp-build
 mcp-build: tidy fmt vet ## Build MCP server binary.
