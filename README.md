@@ -192,6 +192,12 @@ Guides:
   - [ResourceSet API reference](https://fluxcd.control-plane.io/operator/resourceset/)
   - [ResourceSetInputProvider API reference](https://fluxcd.control-plane.io/operator/resourcesetinputprovider/)
 
+## Contributing
+
+We welcome contributions to the Flux Operator project via GitHub pull requests.
+Please see the [CONTRIBUTING](https://github.com/controlplaneio-fluxcd/flux-operator/blob/main/CONTRIBUTING.md)
+guide for details on how to set up your development environment and start contributing to the project.
+
 ## License
 
 The Flux Operator is an open-source project licensed under the
