@@ -36,7 +36,7 @@ jobs:
       - name: Setup Flux
         uses: fluxcd/flux2/action@8d5f40dca5aa5d3c0fc3414457dda15a0ac92fa4 #v2.5.1
       - name: Setup Syft
-        uses: anchore/sbom-action/download-syft@9f7302141466aa6482940f15371237e9d9f4c34a # v0.19.0
+        uses: anchore/sbom-action/download-syft@e11c554f704a0b820cbf8c51673f6945e0731532 # v0.20.0
       - name: Prepare
         id: prep
         run: |
