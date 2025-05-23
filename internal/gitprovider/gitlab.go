@@ -13,6 +13,8 @@ import (
 
 	"github.com/hashicorp/go-retryablehttp"
 	gitlab "gitlab.com/gitlab-org/api/client-go"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/inputs"
 )
 
 type GitLabProvider struct {
@@ -78,7 +80,7 @@ func (p *GitLabProvider) ListBranches(ctx context.Context, opts Options) ([]Resu
 			}
 
 			results = append(results, Result{
-				ID:     checksum(branch.Name),
+				ID:     inputs.Checksum(branch.Name),
 				SHA:    branch.Commit.ID,
 				Branch: branch.Name,
 			})
