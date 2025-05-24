@@ -129,9 +129,16 @@ build-manifests: ## Generate release manifests.
 cli-build: tidy fmt vet ## Build CLI binary.
 	CGO_ENABLED=0 go build -ldflags="-s -w -X main.VERSION=$(FLUX_OPERATOR_DEV_VERSION)" -o ./bin/flux-operator-cli ./cmd/cli/
 
+##@ MCP
+
 .PHONY: mcp-build
 mcp-build: tidy fmt vet ## Build MCP server binary.
 	CGO_ENABLED=0 go build -ldflags="-s -w -X main.VERSION=$(FLUX_OPERATOR_DEV_VERSION)" -o ./bin/flux-operator-mcp ./cmd/mcp/
+
+MCP_IMG ?= ghcr.io/controlplaneio-fluxcd/flux-operator-mcp:latest
+
+mcp-docker-build: ## Build docker image with the MCP server.
+	$(CONTAINER_TOOL) build -t ${MCP_IMG} --build-arg VERSION=$(FLUX_OPERATOR_VERSION) -f cmd/mcp/Dockerfile .
 
 ##@ Deployment
 
