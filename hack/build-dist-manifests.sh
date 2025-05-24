@@ -22,6 +22,10 @@ mkdir -p ${DEST_DIR}/flux-operator
 kustomize build config/default > ${DEST_DIR}/flux-operator/install.yaml
 info "operator manifests generated to disto/flux-operator"
 
+mkdir -p ${DEST_DIR}/flux-operator-mcp
+kustomize build config/mcp > ${DEST_DIR}/flux-operator-mcp/install.yaml
+info "MCP server manifests generated to disto/flux-operator-mcp"
+
 mkdir -p ${DEST_DIR}/flux
 cp -r config/data/flux/* ${DEST_DIR}/flux/
 info "flux manifests copied to disto/flux"

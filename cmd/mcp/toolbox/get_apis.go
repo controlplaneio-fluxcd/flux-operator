@@ -14,11 +14,12 @@ import (
 // NewGetAPIVersionsTool creates a new tool for retrieving Kubernetes API versions.
 func (m *Manager) NewGetAPIVersionsTool() SystemTool {
 	return SystemTool{
-		mcp.NewTool("get_kubernetes_api_versions",
+		Tool: mcp.NewTool("get_kubernetes_api_versions",
 			mcp.WithDescription("This tool retrieves the Kubernetes CRDs registered on the cluster and returns the preferred apiVersion for each kind."),
 		),
-		m.HandleGetAPIVersions,
-		true,
+		Handler:   m.HandleGetAPIVersions,
+		ReadOnly:  true,
+		InCluster: true,
 	}
 }
 

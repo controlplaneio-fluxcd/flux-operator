@@ -16,9 +16,16 @@ import (
 // SystemTool represents a system tool with its associated
 // MCP tool, handler function, and read-only status.
 type SystemTool struct {
-	Tool     mcp.Tool
-	Handler  mcpserver.ToolHandlerFunc
+	Tool    mcp.Tool
+	Handler mcpserver.ToolHandlerFunc
+
+	// ReadOnly indicates whether the tool is read-only,
+	// meaning it does not modify the state of cluster resources.
 	ReadOnly bool
+
+	// InCluster indicates whether the tool can operate
+	// inside a Kubernetes cluster using the in-cluster configuration.
+	InCluster bool
 }
 
 // Manager manages Kubernetes configurations and operations,
@@ -45,9 +52,12 @@ func NewManager(flags *cli.ConfigFlags, timeout time.Duration, maskSecrets bool)
 
 // RegisterTools registers tools with the given server,
 // optionally filtering by readonly status.
-func (m *Manager) RegisterTools(server *mcpserver.MCPServer, readonly bool) {
+func (m *Manager) RegisterTools(server *mcpserver.MCPServer, readonly bool, inCluster bool) {
 	for _, t := range m.ToolSet() {
 		if readonly && !t.ReadOnly {
+			continue
+		}
+		if inCluster && !t.InCluster {
 			continue
 		}
 		server.AddTool(t.Tool, t.Handler)

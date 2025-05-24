@@ -14,7 +14,7 @@ import (
 // NewDeleteKubernetesResourceTool creates a new tool for deleting Kubernetes resources.
 func (m *Manager) NewDeleteKubernetesResourceTool() SystemTool {
 	return SystemTool{
-		mcp.NewTool("delete_kubernetes_resource",
+		Tool: mcp.NewTool("delete_kubernetes_resource",
 			mcp.WithDescription("This tool deletes a Kubernetes resource based on its API version, kind, name, and namespace."),
 			mcp.WithString("apiVersion",
 				mcp.Description("The apiVersion of the resource to delete."),
@@ -32,8 +32,9 @@ func (m *Manager) NewDeleteKubernetesResourceTool() SystemTool {
 				mcp.Description("The namespace of the resource to delete."),
 			),
 		),
-		m.HandleDeleteKubernetesResource,
-		false,
+		Handler:   m.HandleDeleteKubernetesResource,
+		ReadOnly:  false,
+		InCluster: true,
 	}
 }
 

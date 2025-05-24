@@ -19,7 +19,7 @@ import (
 // NewReconcileHelmReleaseTool creates a new tool for reconciling a Flux HelmRelease.
 func (m *Manager) NewReconcileHelmReleaseTool() SystemTool {
 	return SystemTool{
-		mcp.NewTool("reconcile_flux_helmrelease",
+		Tool: mcp.NewTool("reconcile_flux_helmrelease",
 			mcp.WithDescription("This tool triggers the reconciliation of a Flux HelmRelease  and optionally its source reference."),
 			mcp.WithString("name",
 				mcp.Description("The name of the HelmRelease."),
@@ -33,8 +33,9 @@ func (m *Manager) NewReconcileHelmReleaseTool() SystemTool {
 				mcp.Description("If true, the source will be reconciled as well."),
 			),
 		),
-		m.HandleReconcileHelmRelease,
-		false,
+		Handler:   m.HandleReconcileHelmRelease,
+		ReadOnly:  false,
+		InCluster: true,
 	}
 }
 
