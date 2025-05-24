@@ -15,7 +15,7 @@ import (
 // NewSuspendReconciliationTool creates a new tool for suspending the reconciliation of a Flux resource.
 func (m *Manager) NewSuspendReconciliationTool() SystemTool {
 	return SystemTool{
-		mcp.NewTool("suspend_flux_reconciliation",
+		Tool: mcp.NewTool("suspend_flux_reconciliation",
 			mcp.WithDescription("This tool suspends the reconciliation of a Flux resource."),
 			mcp.WithString("apiVersion",
 				mcp.Description("The apiVersion of the Flux resource."),
@@ -34,9 +34,9 @@ func (m *Manager) NewSuspendReconciliationTool() SystemTool {
 				mcp.Required(),
 			),
 		),
-		m.HandleSuspendReconciliation,
-		false,
-		true,
+		Handler:   m.HandleSuspendReconciliation,
+		ReadOnly:  false,
+		InCluster: true,
 	}
 }
 

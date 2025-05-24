@@ -13,12 +13,12 @@ import (
 // NewGetKubeconfigContextsTool creates a new tool for retrieving Kubernetes contexts from the kubeconfig.
 func (m *Manager) NewGetKubeconfigContextsTool() SystemTool {
 	return SystemTool{
-		mcp.NewTool("get_kubeconfig_contexts",
+		Tool: mcp.NewTool("get_kubeconfig_contexts",
 			mcp.WithDescription("This tool retrieves the Kubernetes clusters name and context found in the kubeconfig."),
 		),
-		m.HandleGetKubeconfigContexts,
-		true,
-		false,
+		Handler:   m.HandleGetKubeconfigContexts,
+		ReadOnly:  true,
+		InCluster: false,
 	}
 }
 

@@ -13,16 +13,16 @@ import (
 // NewSetKubeconfigContextTool creates a new tool for setting the current kubeconfig context.
 func (m *Manager) NewSetKubeconfigContextTool() SystemTool {
 	return SystemTool{
-		mcp.NewTool("set_kubeconfig_context",
+		Tool: mcp.NewTool("set_kubeconfig_context",
 			mcp.WithDescription("This tool changes the kubeconfig context for this session."),
 			mcp.WithString("name",
 				mcp.Description("The name of the kubeconfig context."),
 				mcp.Required(),
 			),
 		),
-		m.HandleSetKubeconfigContext,
-		true,
-		false,
+		Handler:   m.HandleSetKubeconfigContext,
+		ReadOnly:  true,
+		InCluster: false,
 	}
 }
 

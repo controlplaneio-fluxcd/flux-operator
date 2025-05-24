@@ -16,12 +16,12 @@ import (
 // NewGetFluxInstanceTool creates a new tool for retrieving the Flux instance report.
 func (m *Manager) NewGetFluxInstanceTool() SystemTool {
 	return SystemTool{
-		mcp.NewTool("get_flux_instance",
+		Tool: mcp.NewTool("get_flux_instance",
 			mcp.WithDescription("This tool retrieves the Flux instance installation and a detailed report about Flux controllers, CRDs and their status."),
 		),
-		m.HandleGetFluxInstance,
-		true,
-		true, // InCluster is true because it operates on the cluster's Flux instance.
+		Handler:   m.HandleGetFluxInstance,
+		ReadOnly:  true,
+		InCluster: true,
 	}
 }
 

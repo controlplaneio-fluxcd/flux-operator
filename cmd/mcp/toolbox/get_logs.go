@@ -15,7 +15,7 @@ import (
 // NewGetKubernetesLogsTool creates a new tool for retrieving the pod logs.
 func (m *Manager) NewGetKubernetesLogsTool() SystemTool {
 	return SystemTool{
-		mcp.NewTool("get_kubernetes_logs",
+		Tool: mcp.NewTool("get_kubernetes_logs",
 			mcp.WithDescription("This tool retrieves the the most recent logs of a Kubernetes pod."),
 			mcp.WithString("pod_name",
 				mcp.Description("The name of the pod."),
@@ -33,9 +33,9 @@ func (m *Manager) NewGetKubernetesLogsTool() SystemTool {
 				mcp.Description("The maximum number of log lines to return. Defaults to 100."),
 			),
 		),
-		m.HandleGetKubernetesLogs,
-		true,
-		true,
+		Handler:   m.HandleGetKubernetesLogs,
+		ReadOnly:  true,
+		InCluster: true,
 	}
 }
 

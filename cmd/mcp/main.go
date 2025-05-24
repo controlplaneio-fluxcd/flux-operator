@@ -71,7 +71,6 @@ func init() {
 }
 
 func main() {
-	log.SetFlags(0)
 	ctrllog.SetLogger(logr.New(ctrllog.NullLogSink{}))
 
 	if err := rootCmd.Execute(); err != nil {
@@ -157,7 +156,7 @@ var serveCmd = &cobra.Command{
 func serveCmdRun(cmd *cobra.Command, args []string) error {
 	inCluster := os.Getenv("KUBERNETES_SERVICE_HOST") != ""
 	if inCluster {
-		log.Printf("Starting in-cluster MCP server with read-only mode: %t", rootArgs.readOnly)
+		log.Printf("Starting the MCP server in-cluster with read-only mode set to %t", rootArgs.readOnly)
 	}
 
 	if os.Getenv("KUBECONFIG") == "" && !inCluster {
