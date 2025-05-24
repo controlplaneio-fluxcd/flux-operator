@@ -36,6 +36,7 @@ func (m *Manager) NewResumeReconciliationTool() SystemTool {
 		),
 		m.HandleResumeReconciliation,
 		false,
+		true,
 	}
 }
 

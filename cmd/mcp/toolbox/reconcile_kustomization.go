@@ -35,6 +35,7 @@ func (m *Manager) NewReconcileKustomizationTool() SystemTool {
 		),
 		m.HandleReconcileKustomization,
 		false,
+		true,
 	}
 }
 

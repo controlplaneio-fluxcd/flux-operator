@@ -24,6 +24,7 @@ func (m *Manager) NewSearchFluxDocsTool() SystemTool {
 		),
 		m.HandleSearchFluxDocs,
 		true,
+		true,
 	}
 }
 

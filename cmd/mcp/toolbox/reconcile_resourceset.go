@@ -32,6 +32,7 @@ func (m *Manager) NewReconcileResourceSetTool() SystemTool {
 		),
 		m.HandleReconcileResourceSet,
 		true,
+		true,
 	}
 }
 

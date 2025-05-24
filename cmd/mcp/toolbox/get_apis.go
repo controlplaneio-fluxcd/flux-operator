@@ -19,6 +19,7 @@ func (m *Manager) NewGetAPIVersionsTool() SystemTool {
 		),
 		m.HandleGetAPIVersions,
 		true,
+		true,
 	}
 }
 

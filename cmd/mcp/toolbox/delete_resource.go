@@ -34,6 +34,7 @@ func (m *Manager) NewDeleteKubernetesResourceTool() SystemTool {
 		),
 		m.HandleDeleteKubernetesResource,
 		false,
+		true,
 	}
 }
 

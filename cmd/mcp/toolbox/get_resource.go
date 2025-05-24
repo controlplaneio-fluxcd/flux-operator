@@ -40,6 +40,7 @@ func (m *Manager) NewGetKubernetesResourcesTool() SystemTool {
 		),
 		m.HandleGetKubernetesResources,
 		true,
+		true,
 	}
 }
 

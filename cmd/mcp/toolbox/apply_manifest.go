@@ -26,6 +26,7 @@ func (m *Manager) NewApplyKubernetesManifestTool() SystemTool {
 		),
 		m.HandleApplyKubernetesManifest,
 		false,
+		true,
 	}
 }
 

@@ -22,6 +22,7 @@ func (m *Manager) NewSetKubeconfigContextTool() SystemTool {
 		),
 		m.HandleSetKubeconfigContext,
 		true,
+		false,
 	}
 }
 

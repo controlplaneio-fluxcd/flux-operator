@@ -35,6 +35,7 @@ func (m *Manager) NewReconcileSourceTool() SystemTool {
 		),
 		m.HandleReconcileSource,
 		false,
+		true,
 	}
 }
 

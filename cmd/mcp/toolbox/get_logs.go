@@ -35,6 +35,7 @@ func (m *Manager) NewGetKubernetesLogsTool() SystemTool {
 		),
 		m.HandleGetKubernetesLogs,
 		true,
+		true,
 	}
 }
 

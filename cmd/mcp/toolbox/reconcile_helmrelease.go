@@ -35,6 +35,7 @@ func (m *Manager) NewReconcileHelmReleaseTool() SystemTool {
 		),
 		m.HandleReconcileHelmRelease,
 		false,
+		true,
 	}
 }
 

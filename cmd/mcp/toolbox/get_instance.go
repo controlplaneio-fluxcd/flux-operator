@@ -21,6 +21,7 @@ func (m *Manager) NewGetFluxInstanceTool() SystemTool {
 		),
 		m.HandleGetFluxInstance,
 		true,
+		true, // InCluster is true because it operates on the cluster's Flux instance.
 	}
 }
 

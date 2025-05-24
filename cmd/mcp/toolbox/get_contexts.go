@@ -18,6 +18,7 @@ func (m *Manager) NewGetKubeconfigContextsTool() SystemTool {
 		),
 		m.HandleGetKubeconfigContexts,
 		true,
+		false,
 	}
 }
 
