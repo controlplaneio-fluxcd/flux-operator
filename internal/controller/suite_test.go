@@ -148,12 +148,12 @@ func checkInstanceReadiness(g *WithT, obj *fluxcdv1.FluxInstance) {
 	g.Expect(conditions.IsTrue(obj, meta.ReadyCondition)).To(BeTrue())
 }
 
-func getEvents(objName string) []corev1.Event {
+func getEvents(objName, objNamespace string) []corev1.Event {
 	var result []corev1.Event
 	events := &corev1.EventList{}
 	_ = testClient.List(context.Background(), events)
 	for _, event := range events.Items {
-		if event.InvolvedObject.Name == objName {
+		if event.InvolvedObject.Name == objName && event.InvolvedObject.Namespace == objNamespace {
 			result = append(result, event)
 		}
 	}

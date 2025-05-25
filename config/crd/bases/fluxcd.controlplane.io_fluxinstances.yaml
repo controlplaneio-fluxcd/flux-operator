@@ -477,6 +477,9 @@ spec:
                 type: string
             type: object
         type: object
+        x-kubernetes-validations:
+        - message: the only accepted name for a FluxInstance is 'flux'
+          rule: self.metadata.name == 'flux'
     served: true
     storage: true
     subresources:

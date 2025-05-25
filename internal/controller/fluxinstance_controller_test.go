@@ -27,6 +27,29 @@ import (
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
+func TestFluxInstanceReconciler_CELNameValidation(t *testing.T) {
+	g := NewWithT(t)
+	const manifestsURL = "oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests:latest"
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	obj := &fluxcdv1.FluxInstance{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "fluxx", // Invalid name
+			Namespace: ns.Name,
+		},
+		Spec: getDefaultFluxSpec(t),
+	}
+	obj.Spec.Distribution.Artifact = manifestsURL
+
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("the only accepted name for a FluxInstance is 'flux'"))
+}
+
 func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 	g := NewWithT(t)
 	const manifestsURL = "oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests:latest"
@@ -39,7 +62,7 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 
 	obj := &fluxcdv1.FluxInstance{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ns.Name,
+			Name:      "flux",
 			Namespace: ns.Name,
 		},
 		Spec: getDefaultFluxSpec(t),
@@ -190,7 +213,7 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 	g.Expect(resultFinal.Status.Components[1].Repository).To(Equal("docker.io/fluxcd/kustomize-controller"))
 
 	// Check if events were recorded for each step.
-	events := getEvents(result.Name)
+	events := getEvents(result.Name, result.Namespace)
 	for _, event := range events {
 		t.Log(event.Message)
 	}
@@ -238,7 +261,7 @@ func TestFluxInstanceReconciler_FetchFail(t *testing.T) {
 
 	obj := &fluxcdv1.FluxInstance{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ns.Name,
+			Name:      "flux",
 			Namespace: ns.Name,
 		},
 		Spec: getDefaultFluxSpec(t),
@@ -274,7 +297,7 @@ func TestFluxInstanceReconciler_FetchFail(t *testing.T) {
 	g.Expect(conditions.GetReason(result, meta.ReconcilingCondition)).To(BeIdenticalTo(meta.ProgressingWithRetryReason))
 
 	// Check if events were recorded for each step.
-	events := getEvents(result.Name)
+	events := getEvents(result.Name, result.Namespace)
 	g.Expect(events).To(HaveLen(1))
 	g.Expect(events[0].Reason).To(Equal(meta.ArtifactFailedReason))
 
@@ -300,7 +323,7 @@ func TestFluxInstanceReconciler_BuildFail(t *testing.T) {
 
 	obj := &fluxcdv1.FluxInstance{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ns.Name,
+			Name:      "flux",
 			Namespace: ns.Name,
 		},
 		Spec: getDefaultFluxSpec(t),
@@ -334,7 +357,7 @@ func TestFluxInstanceReconciler_BuildFail(t *testing.T) {
 	g.Expect(conditions.GetMessage(result, meta.ReadyCondition)).To(ContainSubstring(reconciler.StoragePath))
 
 	// Check if events were recorded for each step.
-	events := getEvents(result.Name)
+	events := getEvents(result.Name, result.Namespace)
 	g.Expect(events).To(HaveLen(1))
 	g.Expect(events[0].Reason).To(Equal(meta.BuildFailedReason))
 	g.Expect(events[0].Message).To(ContainSubstring(reconciler.StoragePath))
@@ -367,7 +390,7 @@ func TestFluxInstanceReconciler_Downgrade(t *testing.T) {
 
 	obj := &fluxcdv1.FluxInstance{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ns.Name,
+			Name:      "flux",
 			Namespace: ns.Name,
 		},
 		Spec: spec,
@@ -445,7 +468,7 @@ func TestFluxInstanceReconciler_Disabled(t *testing.T) {
 
 	obj := &fluxcdv1.FluxInstance{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ns.Name,
+			Name:      "flux",
 			Namespace: ns.Name,
 		},
 		Spec: spec,
@@ -496,7 +519,7 @@ func TestFluxInstanceReconciler_Disabled(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// Check if the ReconciliationDisabled event was recorded.
-	events := getEvents(result.Name)
+	events := getEvents(result.Name, result.Namespace)
 	g.Expect(events[len(events)-1].Reason).To(Equal("ReconciliationDisabled"))
 
 	// Check that resources were not deleted.
@@ -550,7 +573,7 @@ func TestFluxInstanceReconciler_Profiles(t *testing.T) {
 
 	obj := &fluxcdv1.FluxInstance{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ns.Name,
+			Name:      "flux",
 			Namespace: ns.Name,
 		},
 		Spec: spec,
@@ -665,7 +688,7 @@ func TestFluxInstanceReconciler_NewVersion(t *testing.T) {
 
 	obj := &fluxcdv1.FluxInstance{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ns.Name,
+			Name:      "flux",
 			Namespace: ns.Name,
 		},
 		Spec: spec,
@@ -688,7 +711,7 @@ func TestFluxInstanceReconciler_NewVersion(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// Check if events were recorded for each step.
-	events := getEvents(obj.Name)
+	events := getEvents(obj.Name, obj.Namespace)
 	g.Expect(events).To(HaveLen(4))
 	g.Expect(events[0].Reason).To(Equal("OutdatedVersion"))
 

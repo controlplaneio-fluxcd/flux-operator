@@ -424,6 +424,7 @@ func (in *FluxInstance) GetTimeout() time.Duration {
 // +kubebuilder:printcolumn:name="Revision",type="string",JSONPath=".status.lastAttemptedRevision",description=""
 
 // FluxInstance is the Schema for the fluxinstances API
+// +kubebuilder:validation:XValidation:rule="self.metadata.name == 'flux'", message="the only accepted name for a FluxInstance is 'flux'"
 type FluxInstance struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

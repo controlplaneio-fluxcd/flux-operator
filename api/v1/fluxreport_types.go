@@ -156,6 +156,7 @@ type FluxReportStatus struct {
 // +kubebuilder:printcolumn:name="LastUpdated",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].lastTransitionTime",description=""
 
 // FluxReport is the Schema for the fluxreports API.
+// +kubebuilder:validation:XValidation:rule="self.metadata.name == 'flux'", message="the only accepted name for a FluxReport is 'flux'"
 type FluxReport struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
