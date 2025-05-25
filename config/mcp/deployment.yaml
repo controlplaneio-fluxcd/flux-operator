@@ -9,7 +9,6 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/name: flux-operator-mcp
-  replicas: 1
   template:
     metadata:
       labels:
@@ -33,7 +32,7 @@ spec:
         args:
           - serve
           - --transport=sse
-          - --port=8080
+          - --port=9090
         securityContext:
           runAsNonRoot: true
           readOnlyRootFilesystem: true
@@ -44,15 +43,15 @@ spec:
           seccompProfile:
             type: RuntimeDefault
         ports:
-        - containerPort: 8080
+        - containerPort: 9090
           name: http
           protocol: TCP
         livenessProbe:
           tcpSocket:
-            port: 8080
+            port: http
         readinessProbe:
           tcpSocket:
-            port: 8080
+            port: http
         resources:
           limits:
             cpu: 1000m

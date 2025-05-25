@@ -8,8 +8,8 @@ metadata:
 spec:
   ports:
   - name: http
-    port: 8080
+    port: 9090
     protocol: TCP
-    targetPort: 8080
+    targetPort: http
   selector:
     app.kubernetes.io/name: flux-operator-mcp
