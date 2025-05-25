@@ -20,6 +20,26 @@ import (
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/entitlement"
 )
 
+func TestFluxReportReconciler_CELNameValidation(t *testing.T) {
+	g := NewWithT(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	report := &fluxcdv1.FluxReport{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "fluxx", // Invalid name
+			Namespace: ns.Name,
+		},
+	}
+
+	err = testEnv.Create(ctx, report)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("the only accepted name for a FluxReport is 'flux'"))
+}
+
 func TestFluxReportReconciler_Reconcile(t *testing.T) {
 	g := NewWithT(t)
 	instRec := getFluxInstanceReconciler(t)
@@ -43,7 +63,7 @@ func TestFluxReportReconciler_Reconcile(t *testing.T) {
 	// Create the Flux instance.
 	instance := &fluxcdv1.FluxInstance{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ns.Name,
+			Name:      "flux",
 			Namespace: ns.Name,
 		},
 		Spec: getDefaultFluxSpec(t),
@@ -159,7 +179,7 @@ func TestFluxReportReconciler_CustomSyncName(t *testing.T) {
 	// Create the Flux instance.
 	instance := &fluxcdv1.FluxInstance{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ns.Name,
+			Name:      "flux",
 			Namespace: ns.Name,
 		},
 		Spec: getDefaultFluxSpec(t),

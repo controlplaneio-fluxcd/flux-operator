@@ -133,7 +133,7 @@ spec:
 	g.Expect(resultSA.Annotations).To(HaveKeyWithValue("owner", ns.Name))
 
 	// Check if events were recorded for each step.
-	events := getEvents(result.Name)
+	events := getEvents(result.Name, result.Namespace)
 	g.Expect(events).To(HaveLen(2))
 	g.Expect(events[0].Reason).To(Equal("ApplySucceeded"))
 	g.Expect(events[0].Message).To(ContainSubstring("team1-readonly created"))

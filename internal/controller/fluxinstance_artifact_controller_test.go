@@ -123,7 +123,7 @@ func TestFluxInstanceArtifactReconciler(t *testing.T) {
 
 			obj := &fluxcdv1.FluxInstance{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:        ns.Name,
+					Name:        "flux",
 					Namespace:   ns.Name,
 					Annotations: tt.annotations,
 				},

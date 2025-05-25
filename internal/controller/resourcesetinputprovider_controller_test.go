@@ -589,7 +589,7 @@ spec:
 	g.Expect(result.Status.ExportedInputs).To(BeEmpty())
 
 	// Check if the failure event was recorded.
-	events := getEvents(result.Name)
+	events := getEvents(result.Name, result.Namespace)
 	g.Expect(events[0].Reason).To(Equal(meta.ReconciliationFailedReason))
 	g.Expect(events[0].Message).To(ContainSubstring("failed to list branches"))
 
