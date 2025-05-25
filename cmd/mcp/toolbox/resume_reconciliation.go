@@ -15,7 +15,7 @@ import (
 // NewResumeReconciliationTool creates a new tool for resuming the reconciliation of a Flux resource.
 func (m *Manager) NewResumeReconciliationTool() SystemTool {
 	return SystemTool{
-		mcp.NewTool("resume_flux_reconciliation",
+		Tool: mcp.NewTool("resume_flux_reconciliation",
 			mcp.WithDescription("This tool resumes the reconciliation of a Flux resource."),
 			mcp.WithString("apiVersion",
 				mcp.Description("The apiVersion of the Flux resource."),
@@ -34,8 +34,9 @@ func (m *Manager) NewResumeReconciliationTool() SystemTool {
 				mcp.Required(),
 			),
 		),
-		m.HandleResumeReconciliation,
-		false,
+		Handler:   m.HandleResumeReconciliation,
+		ReadOnly:  false,
+		InCluster: true,
 	}
 }
 

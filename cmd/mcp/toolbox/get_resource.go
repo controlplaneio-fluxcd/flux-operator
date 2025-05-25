@@ -15,7 +15,7 @@ import (
 // NewGetKubernetesResourcesTool creates a new tool for retrieving Kubernetes resources.
 func (m *Manager) NewGetKubernetesResourcesTool() SystemTool {
 	return SystemTool{
-		mcp.NewTool("get_kubernetes_resources",
+		Tool: mcp.NewTool("get_kubernetes_resources",
 			mcp.WithDescription("This tool retrieves Kubernetes resources including Flux own resources, their status, and events"),
 			mcp.WithString("apiVersion",
 				mcp.Description("The apiVersion of the Kubernetes resource. Use the get_kubernetes_api_versions tool to get the available apiVersions."),
@@ -38,8 +38,9 @@ func (m *Manager) NewGetKubernetesResourcesTool() SystemTool {
 				mcp.Description("The maximum number of resources to return."),
 			),
 		),
-		m.HandleGetKubernetesResources,
-		true,
+		Handler:   m.HandleGetKubernetesResources,
+		ReadOnly:  true,
+		InCluster: true,
 	}
 }
 

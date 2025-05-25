@@ -19,7 +19,7 @@ import (
 // NewReconcileResourceSetTool creates a new tool for reconciling a Flux ResourceSet.
 func (m *Manager) NewReconcileResourceSetTool() SystemTool {
 	return SystemTool{
-		mcp.NewTool("reconcile_flux_resourceset",
+		Tool: mcp.NewTool("reconcile_flux_resourceset",
 			mcp.WithDescription("This tool triggers the reconciliation of a Flux ResourceSet."),
 			mcp.WithString("name",
 				mcp.Description("The name of the ResourceSet."),
@@ -30,8 +30,9 @@ func (m *Manager) NewReconcileResourceSetTool() SystemTool {
 				mcp.Required(),
 			),
 		),
-		m.HandleReconcileResourceSet,
-		true,
+		Handler:   m.HandleReconcileResourceSet,
+		ReadOnly:  false,
+		InCluster: true,
 	}
 }
 

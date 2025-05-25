@@ -71,7 +71,6 @@ func init() {
 }
 
 func main() {
-	log.SetFlags(0)
 	ctrllog.SetLogger(logr.New(ctrllog.NullLogSink{}))
 
 	if err := rootCmd.Execute(); err != nil {
@@ -155,7 +154,12 @@ var serveCmd = &cobra.Command{
 }
 
 func serveCmdRun(cmd *cobra.Command, args []string) error {
-	if os.Getenv("KUBECONFIG") == "" {
+	inCluster := os.Getenv("KUBERNETES_SERVICE_HOST") != ""
+	if inCluster {
+		log.Printf("Starting the MCP server in-cluster with read-only mode set to %t", rootArgs.readOnly)
+	}
+
+	if os.Getenv("KUBECONFIG") == "" && !inCluster {
 		return errors.New("KUBECONFIG environment variable is not set")
 	}
 
@@ -168,7 +172,7 @@ func serveCmdRun(cmd *cobra.Command, args []string) error {
 	)
 
 	tm := toolbox.NewManager(kubeconfigArgs, rootArgs.timeout, rootArgs.maskSecrets)
-	tm.RegisterTools(mcpServer, rootArgs.readOnly)
+	tm.RegisterTools(mcpServer, rootArgs.readOnly, inCluster)
 
 	pm := prompter.NewManager()
 	pm.RegisterPrompts(mcpServer)

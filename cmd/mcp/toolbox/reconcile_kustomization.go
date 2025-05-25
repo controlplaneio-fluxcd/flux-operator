@@ -19,7 +19,7 @@ import (
 // NewReconcileKustomizationTool creates a new tool for reconciling a Flux Kustomization.
 func (m *Manager) NewReconcileKustomizationTool() SystemTool {
 	return SystemTool{
-		mcp.NewTool("reconcile_flux_kustomization",
+		Tool: mcp.NewTool("reconcile_flux_kustomization",
 			mcp.WithDescription("This tool triggers the reconciliation of a Flux Kustomization and optionally its source reference."),
 			mcp.WithString("name",
 				mcp.Description("The name of the Flux Kustomization."),
@@ -33,8 +33,9 @@ func (m *Manager) NewReconcileKustomizationTool() SystemTool {
 				mcp.Description("If true, the source will be reconciled as well."),
 			),
 		),
-		m.HandleReconcileKustomization,
-		false,
+		Handler:   m.HandleReconcileKustomization,
+		ReadOnly:  false,
+		InCluster: true,
 	}
 }
 

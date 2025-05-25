@@ -14,7 +14,7 @@ import (
 // NewApplyKubernetesManifestTool creates a new tool for applying Kubernetes manifests.
 func (m *Manager) NewApplyKubernetesManifestTool() SystemTool {
 	return SystemTool{
-		mcp.NewTool("apply_kubernetes_manifest",
+		Tool: mcp.NewTool("apply_kubernetes_manifest",
 			mcp.WithDescription("This tool applies a Kubernetes YAML manifest on the cluster."),
 			mcp.WithString("yaml_content",
 				mcp.Description("The multi-doc YAML content."),
@@ -24,8 +24,9 @@ func (m *Manager) NewApplyKubernetesManifestTool() SystemTool {
 				mcp.Description("Overwrite resources managed by Flux."),
 			),
 		),
-		m.HandleApplyKubernetesManifest,
-		false,
+		Handler:   m.HandleApplyKubernetesManifest,
+		ReadOnly:  false,
+		InCluster: true,
 	}
 }
 

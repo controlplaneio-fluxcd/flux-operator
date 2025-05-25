@@ -18,7 +18,7 @@ import (
 // NewReconcileSourceTool creates a new tool for reconciling a Flux source.
 func (m *Manager) NewReconcileSourceTool() SystemTool {
 	return SystemTool{
-		mcp.NewTool("reconcile_flux_source",
+		Tool: mcp.NewTool("reconcile_flux_source",
 			mcp.WithDescription("This tool triggers the reconciliation of a Flux source."),
 			mcp.WithString("kind",
 				mcp.Description("The Flux source kind. Can only one of GitRepository, OCIRepository, Bucket, HelmChart, HelmRepository."),
@@ -33,8 +33,9 @@ func (m *Manager) NewReconcileSourceTool() SystemTool {
 				mcp.Required(),
 			),
 		),
-		m.HandleReconcileSource,
-		false,
+		Handler:   m.HandleReconcileSource,
+		ReadOnly:  false,
+		InCluster: true,
 	}
 }
 
