@@ -87,6 +87,25 @@ var _ = Describe("FluxInstance", Ordered, func() {
 		})
 	})
 
+	Context("reporting", func() {
+		It("should run successfully", func() {
+			By("generates FluxReport")
+			verifyFluxReport := func() error {
+				cmd := exec.Command("kubectl", "get", "FluxReport/flux",
+					"-n", namespace, "-o=yaml",
+				)
+				output, err := Run(cmd, "/test/e2e")
+				ExpectWithOffset(2, err).NotTo(HaveOccurred())
+				ExpectWithOffset(2, output).To(ContainSubstring("nodes: 1"))
+				ExpectWithOffset(2, output).To(ContainSubstring("managedBy: flux-operator"))
+				ExpectWithOffset(2, output).To(ContainSubstring("id: kustomization/flux-system"))
+
+				return nil
+			}
+			EventuallyWithOffset(1, verifyFluxReport, time.Minute, 10*time.Second).Should(Succeed())
+		})
+	})
+
 	Context("uninstallation", func() {
 		It("should run successfully", func() {
 			By("delete FluxInstance")

@@ -21,6 +21,10 @@ metadata:
   name: flux
   namespace: flux-system
 spec:
+  cluster:
+    platform: linux/arm64
+    serverVersion: v1.33.0
+    nodes: 5
   components:
     - image: ghcr.io/fluxcd/helm-controller:v1.0.1@sha256:a67a037faa850220ff94d8090253732079589ad9ff10b6ddf294f3b7cd0f3424
       name: helm-controller
@@ -156,7 +160,7 @@ kubectl -n flux-system annotate --overwrite fluxreport/flux \
 ```shell
  kubectl -n flux-system annotate --overwrite fluxreport/flux \
   fluxcd.controlplane.io/reconcile=enabled
- ```
+```
 
 ## Reading a FluxReport
 
@@ -165,11 +169,16 @@ As with all other Kubernetes config, a FluxReport is identified by `apiVersion`,
 about the Flux installation, including statistic data for the Flux custom resources
 that are reconciled by the Flux controllers.
 
+### Cluster information
+
+The `.spec.cluster` field contains information about the Kubernetes cluster,
+including the server version, platform, and the number of nodes.
+
 ### Distribution information
 
 The `.spec.distribution` field contains information about the Flux distribution,
-including the version, installation status, entitlement issuer
-and tool that is managing the distribution.
+including the version, installation status, entitlement issuer,
+and the tool that is managing the distribution.
 
 Example distribution information for when Flux
 was installed using the bootstrap command:
@@ -208,7 +217,7 @@ spec:
 
 The `.spec.reconcilers` field contains statistics about the Flux custom resources
 that are reconciled by the Flux controllers, including the API version, kind, and
-the number of resources in each state: failing, running and suspended.
+the number of resources in each state: failing, running, and suspended.
 For source type resources, the storage size of the locally cached artifacts is also reported.
 
 Example:
