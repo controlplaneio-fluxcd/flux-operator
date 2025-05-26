@@ -125,6 +125,11 @@ func TestFluxReportReconciler_Reconcile(t *testing.T) {
 	g.Expect(report.Spec.SyncStatus.Source).To(Equal(instance.Spec.Sync.URL))
 	g.Expect(report.Spec.SyncStatus.ID).To(Equal("kustomization/" + ns.Name))
 
+	// Check reported cluster.
+	g.Expect(report.Spec.Cluster).ToNot(BeNil())
+	g.Expect(report.Spec.Cluster.ServerVersion).To(ContainSubstring("v1."))
+	g.Expect(report.Spec.Cluster.Platform).To(ContainSubstring("64"))
+
 	// Check ready condition.
 	g.Expect(conditions.GetReason(report, meta.ReadyCondition)).To(BeIdenticalTo(meta.SucceededReason))
 

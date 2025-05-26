@@ -45,6 +45,12 @@ func (r *FluxStatusReporter) Compute(ctx context.Context) (fluxcdv1.FluxReportSp
 	report := fluxcdv1.FluxReportSpec{}
 	report.Distribution = r.getDistributionStatus(ctx)
 
+	cluster, err := r.getClusterInfo(ctx)
+	if err != nil {
+		return report, fmt.Errorf("failed to compute cluster info: %w", err)
+	}
+	report.Cluster = cluster
+
 	crds, err := r.listCRDs(ctx)
 	if err != nil {
 		return report, fmt.Errorf("failed to list CRDs: %w", err)

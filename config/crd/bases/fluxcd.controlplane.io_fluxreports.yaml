@@ -56,6 +56,22 @@ spec:
           spec:
             description: FluxReportSpec defines the observed state of a Flux installation.
             properties:
+              cluster:
+                description: Cluster is the version information of the Kubernetes
+                  cluster.
+                properties:
+                  nodes:
+                    description: Nodes is the number of nodes in the Kubernetes cluster.
+                    type: integer
+                  platform:
+                    description: Platform is the os/arch of the Kubernetes control
+                      plane.
+                    type: string
+                  serverVersion:
+                    description: ServerVersion is the version of the Kubernetes API
+                      server.
+                    type: string
+                type: object
               components:
                 description: ComponentsStatus is the status of the Flux controller
                   deployments.
