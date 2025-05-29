@@ -232,9 +232,6 @@ special characters e.g. `<< inputs.version | quote >>`.
 When templating integers, use the `int` function to convert the string to an integer
 e.g. `<< inputs.replicas | int >>`.
 
-When templating booleans, use the `bool` function to convert the string to a boolean
-e.g. `<< inputs.enabled | bool >>`.
-
 When using integer or boolean inputs as metadata label values, use the `quote` function to convert
 the value to a string e.g. `<< inputs.enabled | quote >>`.
 
