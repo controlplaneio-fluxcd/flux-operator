@@ -83,6 +83,27 @@ func MatchVersion(dataDir, semverRange string) (string, error) {
 	return matchingVersions[0].Original(), nil
 }
 
+// getSourceAPIVersion determines the API version of the source based on the provided Flux version.
+func getSourceAPIVersion(fluxVersion string) (string, error) {
+	sourceAPIVersion := "source.toolkit.fluxcd.io/v1beta2"
+
+	version, err := semver.NewVersion(fluxVersion)
+	if err != nil {
+		return sourceAPIVersion, fmt.Errorf("version '%s' parse error: %w", fluxVersion, err)
+	}
+
+	c, err := semver.NewConstraint(">= 2.6.0")
+	if err != nil {
+		return sourceAPIVersion, fmt.Errorf("semver constraint parse error: %w", err)
+	}
+
+	if c.Check(version) {
+		sourceAPIVersion = "source.toolkit.fluxcd.io/v1"
+	}
+
+	return sourceAPIVersion, nil
+}
+
 // MkdirTempAbs creates a tmp dir and returns the absolute path to the dir.
 // This is required since certain OSes like MacOS create temporary files in
 // e.g. `/private/var`, to which `/var` is a symlink.

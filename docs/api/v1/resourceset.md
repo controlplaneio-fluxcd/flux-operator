@@ -32,7 +32,7 @@ spec:
        version: "6.6.x"
        replicas: 3
   resources:
-    - apiVersion: source.toolkit.fluxcd.io/v1beta2
+    - apiVersion: source.toolkit.fluxcd.io/v1
       kind: OCIRepository
       metadata:
         name: podinfo-<< inputs.tenant >>
@@ -246,7 +246,7 @@ spec:
         mediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
         operation: copy
   resources:
-    - apiVersion: source.toolkit.fluxcd.io/v1beta2
+    - apiVersion: source.toolkit.fluxcd.io/v1
       kind: OCIRepository
       metadata:
         name: << inputs.tenant >>
@@ -262,7 +262,7 @@ spec:
   inputs:
     - namespace: team1
   resources:
-    - apiVersion: source.toolkit.fluxcd.io/v1beta2
+    - apiVersion: source.toolkit.fluxcd.io/v1
       kind: OCIRepository
       metadata:
         name: << get inputs "name" | default inputs.namespace >>
@@ -290,7 +290,7 @@ spec:
     - tenant: "team2"
       replicas: "3"
   resources:
-    - apiVersion: source.toolkit.fluxcd.io/v1beta2
+    - apiVersion: source.toolkit.fluxcd.io/v1
       kind: OCIRepository
       metadata:
         name: podinfo
@@ -439,7 +439,7 @@ spec:
         - backend
   resourcesTemplate: |
     ---
-    apiVersion: source.toolkit.fluxcd.io/v1beta2
+    apiVersion: source.toolkit.fluxcd.io/v1
     kind: OCIRepository
     metadata:
       name: << inputs.bundle >>

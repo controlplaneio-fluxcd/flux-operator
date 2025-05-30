@@ -29,6 +29,7 @@ type Options struct {
 	ShardingKey        string
 	Shards             []string
 	ShardName          string
+	SourceAPIVersion   string
 }
 
 // MakeDefaultOptions returns the default builder configuration.

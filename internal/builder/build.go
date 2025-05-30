@@ -87,6 +87,12 @@ func generate(base string, options Options) error {
 	}
 
 	if options.Sync != nil {
+		sourceAPIVersion, err := getSourceAPIVersion(options.Version)
+		if err != nil {
+			return fmt.Errorf("get source API version failed: %w", err)
+		}
+		options.SourceAPIVersion = sourceAPIVersion
+
 		if err := execTemplate(options, syncTmpl, path.Join(base, "sync.yaml")); err != nil {
 			return fmt.Errorf("generate sync failed: %w", err)
 		}
