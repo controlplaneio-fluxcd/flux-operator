@@ -18,6 +18,7 @@ import (
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/builder"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/inputs"
 )
 
 var buildResourceSetCmd = &cobra.Command{
@@ -101,12 +102,16 @@ func buildResourceSetCmdRun(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	inputs, err := rset.GetInputs()
+	providerInputs, err := rset.GetInputs()
 	if err != nil {
 		return fmt.Errorf("error reading '.spec.inputs': %w", err)
 	}
 
-	objects, err := builder.BuildResourceSet(rset.Spec.ResourcesTemplate, rset.Spec.Resources, inputs)
+	for _, input := range providerInputs {
+		inputs.AddProviderReference(input, &rset)
+	}
+
+	objects, err := builder.BuildResourceSet(rset.Spec.ResourcesTemplate, rset.Spec.Resources, providerInputs)
 	if err != nil {
 		return err
 	}
