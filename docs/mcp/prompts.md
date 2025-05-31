@@ -1,3 +1,8 @@
+---
+title: Flux MCP Server Prompts
+description: MCP Server predefined prompts for troubleshooting FluxCD
+---
+
 # Flux MCP Server Prompts
 
 The Flux MCP Server comes with a set of predefined prompts that instruct the AI assistant

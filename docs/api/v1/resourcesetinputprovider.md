@@ -1,3 +1,8 @@
+---
+title: ResourceSetInputProvider CRD
+description: Flux Operator API for generating input values for ResourceSets
+---
+
 # ResourceSetInputProvider CRD
 
 **ResourceSetInputProvider** is a declarative API for generating a set of input values

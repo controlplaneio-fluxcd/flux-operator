@@ -1,3 +1,8 @@
+---
+title: Flux Report CRD
+description: Flux Operator API for FluxCD monitoring
+---
+
 # Flux Report CRD
 
 **FluxReport** is an API that reflects the observed state of a Flux installation.

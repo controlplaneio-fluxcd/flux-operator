@@ -1,3 +1,8 @@
+---
+title: ResourceSet CRD
+description: Flux Operator API for generating FluxCD resources
+---
+
 # ResourceSet CRD
 
 **ResourceSet** is a declarative API for generating a group of Kubernetes objects
