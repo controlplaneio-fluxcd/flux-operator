@@ -1,3 +1,8 @@
+---
+title: Flux Instance CRD
+description: Flux Operator API for FluxCD lifecycle management
+---
+
 # Flux Instance CRD
 
 **FluxInstance** is a declarative API for the installation, configuration

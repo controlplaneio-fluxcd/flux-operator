@@ -298,6 +298,84 @@ func TestBuild_Sync(t *testing.T) {
 	}
 }
 
+func TestBuild_Sync_OCIRepository(t *testing.T) {
+	g := NewWithT(t)
+	const version = "v2.6.0"
+	options := MakeDefaultOptions()
+	options.Version = version
+
+	srcDir := filepath.Join("testdata", version)
+
+	dstDir, err := testTempDir(t)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	ci, err := ExtractComponentImages(srcDir, options)
+	g.Expect(err).NotTo(HaveOccurred())
+	options.ComponentImages = ci
+
+	options.Sync = &Sync{
+		Name:     "flux-system",
+		Interval: "5m",
+		Kind:     "OCIRepository",
+		URL:      "oci://registry/artifact",
+		Ref:      "latest",
+		Path:     "clusters/prod",
+	}
+
+	result, err := Build(srcDir, dstDir, options)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	found := false
+	for _, obj := range result.Objects {
+		if obj.GetKind() == "OCIRepository" {
+			found = true
+			g.Expect(obj.GetAPIVersion()).To(Equal("source.toolkit.fluxcd.io/v1"))
+			p, _, _ := unstructured.NestedString(obj.Object, "spec", "ref", "tag")
+			g.Expect(p).To(Equal("latest"))
+		}
+	}
+	g.Expect(found).To(BeTrue())
+}
+
+func TestBuild_Sync_Bucket(t *testing.T) {
+	g := NewWithT(t)
+	const version = "v2.3.0"
+	options := MakeDefaultOptions()
+	options.Version = version
+
+	srcDir := filepath.Join("testdata", version)
+
+	dstDir, err := testTempDir(t)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	ci, err := ExtractComponentImages(srcDir, options)
+	g.Expect(err).NotTo(HaveOccurred())
+	options.ComponentImages = ci
+
+	options.Sync = &Sync{
+		Name:     "flux-system",
+		Interval: "5m",
+		Kind:     "Bucket",
+		URL:      "minio.my-org.com",
+		Ref:      "my-bucket",
+		Path:     "clusters/prod",
+	}
+
+	result, err := Build(srcDir, dstDir, options)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	found := false
+	for _, obj := range result.Objects {
+		if obj.GetKind() == "Bucket" {
+			found = true
+			g.Expect(obj.GetAPIVersion()).To(Equal("source.toolkit.fluxcd.io/v1beta2"))
+			p, _, _ := unstructured.NestedString(obj.Object, "spec", "bucketName")
+			g.Expect(p).To(Equal("my-bucket"))
+		}
+	}
+	g.Expect(found).To(BeTrue())
+}
+
 func TestBuild_InvalidPatches(t *testing.T) {
 	g := NewWithT(t)
 	const version = "v2.3.0"

@@ -307,14 +307,15 @@ var syncTmpl = `---
 {{- $sync := .Sync }}
 {{- $name := .Sync.Name }}
 {{- $namespace := .Namespace }}
+{{- $apiVersion := .SourceAPIVersion }}
 {{- if eq $sync.Kind "GitRepository" }}
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: GitRepository
 {{- else if eq $sync.Kind "OCIRepository" }}
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: {{$apiVersion}}
 kind: OCIRepository
 {{- else if eq $sync.Kind "Bucket" }}
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: {{$apiVersion}}
 kind: Bucket
 {{- end }}
 metadata:

@@ -1,3 +1,8 @@
+---
+title: Flux MCP Server Tools
+description: MCP tools for interacting with Kubernetes clusters managed by FluxCD
+---
+
 # Flux MCP Server Tools
 
 The Flux Model Context Protocol (MCP) Server provides a comprehensive set of tools
