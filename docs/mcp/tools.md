@@ -60,6 +60,22 @@ Retrieves logs from Kubernetes pods, allowing AI assistants to analyze applicati
 
 Returns the specified number of log lines from the requested container, with timestamps and log levels preserved.
 
+### get_kubernetes_metrics
+
+Retrieves CPU and Memory usage for Kubernetes pods, allowing AI assistants to monitor resource consumption and performance.
+This tool depends on the Kubernetes metrics-server being installed in the cluster.
+
+**Parameters:**
+
+- `pod_name` (optional): The name of the pod, when not specified all pods are selected.
+- `pod_namespace` (required): The namespace of the pods.
+- `pod_selector` (optional): Label selector in the format `key1=value1,key2=value2`
+- `limit` (optional): Maximum number of metrics to return (default: 100)
+
+**Output:**
+
+Returns the metrics for the specified pods, including CPU and Memory for each container, in YAML format.
+
 ### get_kubernetes_api_versions
 
 Retrieves the Kubernetes CRDs registered on the cluster and returns the preferred apiVersion for each kind.

@@ -51,7 +51,7 @@ type HelmInventory struct {
 func (k *Client) GetHelmInventory(ctx context.Context, apiVersion string, objectKey ctrlclient.ObjectKey) ([]HelmInventory, error) {
 	inventory := make([]HelmInventory, 0)
 	hr := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": apiVersion,
 			"kind":       "HelmRelease",
 		},
@@ -74,9 +74,9 @@ func (k *Client) GetHelmInventory(ctx context.Context, apiVersion string, object
 
 	// get the latest release from the history
 	latest := &HelmHistory{}
-	latest.ChartName = history[0].(map[string]interface{})["chartName"].(string)
-	latest.Version = history[0].(map[string]interface{})["version"].(int64)
-	latest.Namespace = history[0].(map[string]interface{})["namespace"].(string)
+	latest.ChartName = history[0].(map[string]any)["chartName"].(string)
+	latest.Version = history[0].(map[string]any)["version"].(int64)
+	latest.Namespace = history[0].(map[string]any)["namespace"].(string)
 
 	storageKey := ctrlclient.ObjectKey{
 		Namespace: storageNamespace,
@@ -141,7 +141,7 @@ func (k *Client) GetHelmInventory(ctx context.Context, apiVersion string, object
 		// extract container images from Deployment, StatefulSet, DaemonSet and Job
 		if containers, found, _ := unstructured.NestedSlice(obj.Object, "spec", "template", "spec", "containers"); found {
 			for _, container := range containers {
-				if image, found, _ := unstructured.NestedString(container.(map[string]interface{}), "image"); found {
+				if image, found, _ := unstructured.NestedString(container.(map[string]any), "image"); found {
 					containerImages = append(containerImages, image)
 				}
 			}
@@ -150,7 +150,7 @@ func (k *Client) GetHelmInventory(ctx context.Context, apiVersion string, object
 		// extract init container images from Deployment, StatefulSet, DaemonSet and Job
 		if containers, found, _ := unstructured.NestedSlice(obj.Object, "spec", "template", "spec", "initContainers"); found {
 			for _, container := range containers {
-				if image, found, _ := unstructured.NestedString(container.(map[string]interface{}), "image"); found {
+				if image, found, _ := unstructured.NestedString(container.(map[string]any), "image"); found {
 					if !slices.Contains(containerImages, image) {
 						containerImages = append(containerImages, image)
 					}
@@ -161,7 +161,7 @@ func (k *Client) GetHelmInventory(ctx context.Context, apiVersion string, object
 		// extract container images from CronJob
 		if containers, found, _ := unstructured.NestedSlice(obj.Object, "spec", "jobTemplate", "spec", "template", "spec", "containers"); found {
 			for _, container := range containers {
-				if image, found, _ := unstructured.NestedString(container.(map[string]interface{}), "image"); found {
+				if image, found, _ := unstructured.NestedString(container.(map[string]any), "image"); found {
 					if !slices.Contains(containerImages, image) {
 						containerImages = append(containerImages, image)
 					}

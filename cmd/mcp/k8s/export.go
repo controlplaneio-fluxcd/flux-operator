@@ -18,6 +18,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
+
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
 // Export retrieves resources based on provided criteria and returns them as a YAML multi-document string.
@@ -31,7 +33,7 @@ func (k *Client) Export(ctx context.Context,
 	var strBuilder strings.Builder
 	for _, gvk := range gvks {
 		list := unstructured.UnstructuredList{
-			Object: map[string]interface{}{
+			Object: map[string]any{
 				"apiVersion": gvk.Group + "/" + gvk.Version,
 				"kind":       gvk.Kind,
 			},
@@ -64,6 +66,7 @@ func (k *Client) Export(ctx context.Context,
 			for _, item := range list.Items {
 				unstructured.RemoveNestedField(item.Object, "metadata", "managedFields")
 
+				// Mask values in Kubernetes Secret
 				if item.GetKind() == "Secret" && maskSecrets {
 					dataKV, found, err := unstructured.NestedMap(item.Object, "data")
 					if err == nil && found {
@@ -73,6 +76,7 @@ func (k *Client) Export(ctx context.Context,
 					}
 				}
 
+				// Add inventory for HelmRelease resources
 				if item.GetKind() == "HelmRelease" {
 					inventory, err := k.GetHelmInventory(ctx, item.GetAPIVersion(), ctrlclient.ObjectKey{
 						Namespace: item.GetNamespace(),
@@ -82,22 +86,22 @@ func (k *Client) Export(ctx context.Context,
 					iv := make([]interface{}, len(inventory))
 					for i, inv := range inventory {
 						// deep copy the inventory item
-						iv[i] = map[string]interface{}{
+						iv[i] = map[string]any{
 							"apiVersion": inv.APIVersion,
 							"kind":       inv.Kind,
 							"name":       inv.Name,
 						}
 						if inv.Namespace != "" {
-							_ = unstructured.SetNestedField(iv[i].(map[string]interface{}), inv.Namespace, "namespace")
+							_ = unstructured.SetNestedField(iv[i].(map[string]any), inv.Namespace, "namespace")
 						}
 						if len(inv.ContainerImages) > 0 {
 							images := make([]interface{}, len(inv.ContainerImages))
 							for j, image := range inv.ContainerImages {
-								images[j] = map[string]interface{}{
+								images[j] = map[string]any{
 									"image": image,
 								}
 							}
-							_ = unstructured.SetNestedSlice(iv[i].(map[string]interface{}), images, "containers")
+							_ = unstructured.SetNestedSlice(iv[i].(map[string]any), images, "containers")
 						}
 					}
 
@@ -106,12 +110,13 @@ func (k *Client) Export(ctx context.Context,
 					}
 				}
 
+				// Add Kubernetes events for Flux resources
 				if strings.Contains(item.GetAPIVersion(), "fluxcd") {
 					events, err := k.GetEvents(ctx, item.GetKind(), item.GetName(), item.GetNamespace(), "ReconciliationSucceeded")
 					if err == nil && len(events) > 0 {
 						ev := make([]interface{}, len(events))
 						for i, event := range events {
-							ev[i] = map[string]interface{}{
+							ev[i] = map[string]any{
 								"lastTimestamp": event.LastTimestamp.Time.Format(time.RFC3339),
 								"type":          event.Type,
 								"message":       event.Message,
@@ -127,6 +132,18 @@ func (k *Client) Export(ctx context.Context,
 				}
 				strBuilder.WriteString("---\n")
 				strBuilder.Write(itemBytes)
+
+				// Add CPU and Memory usage to Flux report
+				if item.GetKind() == fluxcdv1.FluxReportKind {
+					if metrics, err := k.GetMetrics(ctx, "", item.GetNamespace(), "", 100); err == nil {
+						metricsBytes, err := yaml.Marshal(metrics.Object)
+						if err != nil {
+							return "", fmt.Errorf("error marshalling metrics: %w", err)
+						}
+						strBuilder.WriteString("---\n")
+						strBuilder.Write(metricsBytes)
+					}
+				}
 			}
 		}
 	}
