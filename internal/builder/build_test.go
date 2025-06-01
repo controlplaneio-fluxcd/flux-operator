@@ -294,6 +294,8 @@ func TestBuild_Sync(t *testing.T) {
 		if obj.GetKind() == "GitRepository" {
 			p, _, _ := unstructured.NestedString(obj.Object, "spec", "provider")
 			g.Expect(p).To(Equal("github"))
+			u, _, _ := unstructured.NestedString(obj.Object, "spec", "url")
+			g.Expect(u).To(Equal("https://host/repo.git"))
 		}
 	}
 }
@@ -330,6 +332,8 @@ func TestBuild_Sync_OCIRepository(t *testing.T) {
 		if obj.GetKind() == "OCIRepository" {
 			found = true
 			g.Expect(obj.GetAPIVersion()).To(Equal("source.toolkit.fluxcd.io/v1"))
+			u, _, _ := unstructured.NestedString(obj.Object, "spec", "url")
+			g.Expect(u).To(Equal("oci://registry/artifact"))
 			p, _, _ := unstructured.NestedString(obj.Object, "spec", "ref", "tag")
 			g.Expect(p).To(Equal("latest"))
 		}
@@ -371,6 +375,8 @@ func TestBuild_Sync_Bucket(t *testing.T) {
 			g.Expect(obj.GetAPIVersion()).To(Equal("source.toolkit.fluxcd.io/v1beta2"))
 			p, _, _ := unstructured.NestedString(obj.Object, "spec", "bucketName")
 			g.Expect(p).To(Equal("my-bucket"))
+			u, _, _ := unstructured.NestedString(obj.Object, "spec", "endpoint")
+			g.Expect(u).To(Equal("minio.my-org.com"))
 		}
 	}
 	g.Expect(found).To(BeTrue())

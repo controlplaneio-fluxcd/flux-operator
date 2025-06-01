@@ -339,7 +339,11 @@ spec:
 {{- if $sync.Provider }}
   provider: {{$sync.Provider}}
 {{- end }}
+{{- if eq $sync.Kind "Bucket" }}
+  endpoint: {{$sync.URL}}
+{{- else }}
   url: {{$sync.URL}}
+{{- end }}
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
