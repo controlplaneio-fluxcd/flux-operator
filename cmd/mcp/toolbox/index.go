@@ -10,6 +10,7 @@ func (m *Manager) ToolSet() []SystemTool {
 		m.NewGetFluxInstanceTool(),
 		m.NewGetAPIVersionsTool(),
 		m.NewGetKubernetesLogsTool(),
+		m.NewGetKubernetesMetricsTool(),
 		m.NewGetKubernetesResourcesTool(),
 		m.NewApplyKubernetesManifestTool(),
 		m.NewDeleteKubernetesResourceTool(),
