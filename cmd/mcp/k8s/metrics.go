@@ -52,10 +52,18 @@ func (k *Client) GetMetrics(ctx context.Context, pod, namespace, labelSelector s
 		return nil, fmt.Errorf("no metrics found for pods in namespace %s", namespace)
 	}
 
-	metrics := make([]map[string]interface{}, 0, len(versionedMetrics.Items))
+	metrics := make([]map[string]any, 0, len(versionedMetrics.Items))
 	for _, item := range versionedMetrics.Items {
 		for _, container := range item.Containers {
-			metrics = append(metrics, map[string]interface{}{
+			if len(container.Usage) == 0 {
+				continue
+			}
+			r, ok := container.Usage[corev1.ResourceMemory]
+			if !ok || r.IsZero() {
+				continue
+			}
+
+			metrics = append(metrics, map[string]any{
 				"pod":       item.Name,
 				"namespace": item.Namespace,
 				"container": container.Name,
@@ -66,10 +74,10 @@ func (k *Client) GetMetrics(ctx context.Context, pod, namespace, labelSelector s
 	}
 
 	return &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "PodMetricsList",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      pod,
 				"namespace": namespace,
 			},
