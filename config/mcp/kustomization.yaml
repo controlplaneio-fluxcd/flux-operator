@@ -7,4 +7,4 @@ resources:
 images:
 - name: flux-operator-mcp
   newName: ghcr.io/controlplaneio-fluxcd/flux-operator-mcp
-  newTag: v0.21.0
+  newTag: v0.22.0
