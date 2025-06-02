@@ -31,6 +31,7 @@ require (
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/otiai10/copy v1.14.1
 	github.com/prometheus/client_golang v1.22.0
+	github.com/robfig/cron/v3 v3.0.1
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.6
 	gitlab.com/gitlab-org/api/client-go v0.128.0

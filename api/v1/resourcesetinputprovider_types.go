@@ -73,6 +73,10 @@ type ResourceSetInputProviderSpec struct {
 	// Skip defines whether we need to skip input provider response updates.
 	// +optional
 	Skip *ResourceSetInputSkip `json:"skip,omitempty"`
+
+	// Schedule defines the schedules for the input provider to run.
+	// +optional
+	Schedule []Schedule `json:"schedule,omitempty"`
 }
 
 // ResourceSetInputFilter defines the filter to apply to the input provider response.
