@@ -202,10 +202,9 @@ func buildInstanceCmdRun(cmd *cobra.Command, args []string) error {
 		ssautil.SetCommonMetadata(objects, instance.Spec.CommonMetadata.Labels, instance.Spec.CommonMetadata.Annotations)
 	}
 
-	ownerGroup := fmt.Sprintf("%s", fluxcdv1.GroupVersion.Group)
 	ssautil.SetCommonMetadata(objects, map[string]string{
-		fmt.Sprintf("%s/name", ownerGroup):      instance.GetName(),
-		fmt.Sprintf("%s/namespace", ownerGroup): instance.GetNamespace(),
+		fmt.Sprintf("%s/name", fluxcdv1.GroupVersion.Group):      instance.GetName(),
+		fmt.Sprintf("%s/namespace", fluxcdv1.GroupVersion.Group): instance.GetNamespace(),
 	}, nil)
 
 	for _, obj := range objects {
