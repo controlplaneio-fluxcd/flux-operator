@@ -664,9 +664,10 @@ using the [`.spec.commonMetadata`](#common-metadata) field.
 ### Conditions
 
 A ResourceSet enters various states during its lifecycle, reflected as Kubernetes Conditions.
-It can be [reconciling](#reconciling-fluxinstance) while applying the
-resources on the cluster, it can be [ready](#ready-fluxinstance), or it can [fail during
-reconciliation](#failed-fluxinstance).
+It can be [reconciling](#reconciling-resourceset) while applying the resources on the cluster,
+it can be [ready](#ready-resourceset),
+it can [fail during reconciliation](#failed-resourceset),
+or it can [fail due to misconfiguration](#stalled-resourceset).
 
 The ResourceSet API is compatible with the **kstatus** specification,
 and reports `Reconciling` and `Stalled` conditions where applicable to
@@ -725,7 +726,26 @@ the reconciliation failed.
 
 While the ResourceSet has one or more of these Conditions, the flux-operator
 will continue to attempt a reconciliation with an
-exponential backoff, until it succeeds and the ResourceSet is marked as [ready](#ready-fluxinstance).
+exponential backoff, until it succeeds and the ResourceSet is marked as [ready](#ready-resourceset).
+
+#### Stalled ResourceSet
+
+The flux-operator may fail the reconciliation of a ResourceSet object terminally due
+to a misconfiguration. When this happens, the flux-operator adds the `Stalled` Condition
+to the ResourceSet’s `.status.conditions` with the following attributes:
+
+- `type: Stalled`
+- `status: "True"`
+- `reason: InvalidCELExpression | BuildFailed`
+
+Misconfigurations can include:
+
+- The `.spec.dependsOn[].readyExpr` expression is invalid. In this case the condition reason is
+`InvalidCELExpression`.
+- The templating of the resources fails. In this case the condition reason is `BuildFailed`.
+
+When this happens, the flux-operator will not attempt to reconcile the ResourceSet
+until the misconfiguration is fixed. The `Ready` Condition status is also set to `False`.
 
 ### Inventory status
 

@@ -103,6 +103,31 @@ spec:
                       When not set, the default limit is 100.
                     type: integer
                 type: object
+              schedule:
+                description: Schedule defines the schedules for the input provider
+                  to run.
+                items:
+                  description: Schedule defines a schedule for something to run.
+                  properties:
+                    cron:
+                      description: Cron specifies the cron expression for the schedule.
+                      type: string
+                    timeZone:
+                      default: UTC
+                      description: TimeZone specifies the time zone for the cron schedule.
+                        Defaults to UTC.
+                      type: string
+                    window:
+                      default: 0s
+                      description: |-
+                        Window defines the time window during which the execution is allowed.
+                        Defaults to 0s, meaning no window is applied.
+                      pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m|h))+$
+                      type: string
+                  required:
+                  - cron
+                  type: object
+                type: array
               secretRef:
                 description: |-
                   SecretRef specifies the Kubernetes Secret containing the basic-auth credentials
@@ -228,12 +253,45 @@ spec:
                   LastExportedRevision is the digest of the
                   inputs that were last reconcile.
                 type: string
+              lastHandledForceAt:
+                description: |-
+                  LastHandledForceAt holds the value of the most recent
+                  force request value, so a change of the annotation value
+                  can be detected.
+                type: string
               lastHandledReconcileAt:
                 description: |-
                   LastHandledReconcileAt holds the value of the most recent
                   reconcile request value, so a change of the annotation value
                   can be detected.
                 type: string
+              nextSchedule:
+                description: NextSchedule is the next schedule when the input provider
+                  will run.
+                properties:
+                  cron:
+                    description: Cron specifies the cron expression for the schedule.
+                    type: string
+                  timeZone:
+                    default: UTC
+                    description: TimeZone specifies the time zone for the cron schedule.
+                      Defaults to UTC.
+                    type: string
+                  when:
+                    description: When is the next time the schedule will run.
+                    format: date-time
+                    type: string
+                  window:
+                    default: 0s
+                    description: |-
+                      Window defines the time window during which the execution is allowed.
+                      Defaults to 0s, meaning no window is applied.
+                    pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m|h))+$
+                    type: string
+                required:
+                - cron
+                - when
+                type: object
             type: object
         type: object
     served: true

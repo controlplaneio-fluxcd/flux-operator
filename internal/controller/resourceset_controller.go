@@ -148,14 +148,13 @@ func (r *ResourceSetReconciler) reconcile(ctx context.Context,
 	reconcileStart := time.Now()
 
 	// Mark the object as reconciling.
-	msg := "Reconciliation in progress"
 	conditions.MarkUnknown(obj,
 		meta.ReadyCondition,
 		meta.ProgressingReason,
-		"%s", msg)
+		"%s", msgInProgress)
 	conditions.MarkReconciling(obj,
 		meta.ProgressingReason,
-		"%s", msg)
+		"%s", msgInProgress)
 	if err := r.patch(ctx, obj, patcher); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
 	}
@@ -185,8 +184,7 @@ func (r *ResourceSetReconciler) reconcile(ctx context.Context,
 				meta.ReadyCondition,
 				meta.BuildFailedReason,
 				"%s", msg)
-			conditions.MarkTrue(obj,
-				meta.StalledCondition,
+			conditions.MarkStalled(obj,
 				meta.BuildFailedReason,
 				"%s", msg)
 			log.Error(err, msg)
@@ -211,7 +209,7 @@ func (r *ResourceSetReconciler) reconcile(ctx context.Context,
 
 	// Mark the object as ready and set the last applied revision.
 	obj.Status.LastAppliedRevision = applySetDigest
-	msg = fmt.Sprintf("Reconciliation finished in %s", fmtDuration(reconcileStart))
+	msg := fmt.Sprintf("Reconciliation finished in %s", fmtDuration(reconcileStart))
 	conditions.MarkTrue(obj,
 		meta.ReadyCondition,
 		meta.ReconciliationSucceededReason,

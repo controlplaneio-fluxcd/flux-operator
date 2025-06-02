@@ -36,6 +36,7 @@ import (
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/inputs"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/notifier"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/schedule"
 )
 
 // ResourceSetInputProviderReconciler reconciles a ResourceSetInputProvider object
@@ -64,6 +65,7 @@ func (r *ResourceSetInputProviderReconciler) Reconcile(ctx context.Context, req 
 
 	// Initialize the runtime patcher with the current version of the object.
 	patcher := patch.NewSerialPatcher(obj, r.Client)
+	obj.Status.NextSchedule = nil
 
 	// Finalise the reconciliation and report the results.
 	defer func() {
@@ -117,6 +119,33 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 	log := ctrl.LoggerFrom(ctx)
 	reconcileStart := time.Now()
 
+	// Handle force reconciliation requests.
+	force := meta.ShouldHandleForceRequest(obj)
+
+	// Validate schedule.
+	scheduler, err := schedule.NewScheduler(obj.Spec.Schedule, obj.GetTimeout())
+	if err != nil {
+		const msg = "Reconciliation failed terminally due to configuration error"
+		errMsg := fmt.Sprintf("%s: %v", msg, err)
+		conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidSchedule, "%s", errMsg)
+		conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidSchedule, "%s", errMsg)
+		log.Error(err, msg)
+		r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSchedule, errMsg)
+		return ctrl.Result{}, nil
+	}
+
+	// Check if the object should be reconciled according to the schedule.
+	if !scheduler.ShouldReconcile(reconcileStart) && !force {
+		obj.Status.NextSchedule = scheduler.Next(reconcileStart)
+		next := obj.Status.NextSchedule.When.Time
+		msg := fmt.Sprintf("Reconciliation skipped, next scheduled at %s", next.Format(time.RFC3339))
+		log.Info(msg)
+		r.notify(ctx, obj, corev1.EventTypeNormal, fluxcdv1.ReasonSkippedDueToSchedule, msg)
+		return ctrl.Result{
+			RequeueAfter: next.Sub(reconcileStart),
+		}, nil
+	}
+
 	// Mark stalled if the default values in the object spec are invalid.
 	defaults, err := obj.GetDefaultInputs()
 	if err != nil {
@@ -128,6 +157,9 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 		r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidDefaultValues, errMsg)
 		return ctrl.Result{}, nil
 	}
+
+	// Mark the object as reconciling.
+	conditions.MarkReconciling(obj, meta.ProgressingReason, "%s", msgInProgress)
 
 	var exportedInputs []fluxcdv1.ResourceSetInput
 
@@ -147,15 +179,11 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 		}
 		exportedInputs = append(exportedInputs, exportedInput)
 	default:
-		// Mark the object as reconciling.
-		msg := "Reconciliation in progress"
+		// Mark the object as progressing and update the status.
 		conditions.MarkUnknown(obj,
 			meta.ReadyCondition,
 			meta.ProgressingReason,
-			"%s", msg)
-		conditions.MarkReconciling(obj,
-			meta.ProgressingReason,
-			"%s", msg)
+			"%s", msgInProgress)
 		if err := r.patch(ctx, obj, patcher); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
 		}
@@ -243,7 +271,8 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 		meta.ReconciliationSucceededReason,
 		msg)
 
-	return requeueAfterResourceSetInputProvider(obj), nil
+	reconcileEnd := time.Now()
+	return requeueAfterResourceSetInputProvider(obj, scheduler, reconcileEnd), nil
 }
 
 // newGitProvider returns a new Git provider based on the type specified in the ResourceSetInputProvider object.
@@ -606,12 +635,29 @@ func (r *ResourceSetInputProviderReconciler) notify(ctx context.Context, obj *fl
 }
 
 // requeueAfterResourceSetInputProvider returns a ctrl.Result with the requeue time set to the
-// interval specified in the object's annotations.
-func requeueAfterResourceSetInputProvider(obj *fluxcdv1.ResourceSetInputProvider) ctrl.Result {
-	result := ctrl.Result{}
-	if obj.GetInterval() > 0 {
-		result.RequeueAfter = obj.GetInterval()
+// interval specified in the object's annotations, or the next schedule time if a schedule is
+// defined and the next interval is not within the schedule window.
+func requeueAfterResourceSetInputProvider(obj *fluxcdv1.ResourceSetInputProvider,
+	scheduler *schedule.Scheduler, reconcileEnd time.Time) ctrl.Result {
+
+	interval := obj.GetInterval()
+	if interval == 0 { // If the interval is zero, the object is disabled.
+		return ctrl.Result{}
 	}
 
-	return result
+	requeueAfter := interval
+
+	// Check if next interval is within the schedule window,
+	// or if the next schedule is before the next interval.
+	if scheduler != nil {
+		nextInterval := reconcileEnd.Add(interval)
+		nextSchedule := scheduler.Next(reconcileEnd)
+		nextScheduleTime := nextSchedule.When.Time
+		if !scheduler.ShouldScheduleInterval(nextInterval) || nextScheduleTime.Before(nextInterval) {
+			obj.Status.NextSchedule = nextSchedule
+			requeueAfter = nextScheduleTime.Sub(reconcileEnd)
+		}
+	}
+
+	return ctrl.Result{RequeueAfter: requeueAfter}
 }

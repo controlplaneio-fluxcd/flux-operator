@@ -662,9 +662,10 @@ result in upgrade failures due to deprecated API versions being removed in futur
 ### Conditions
 
 A FluxInstance enters various states during its lifecycle, reflected as Kubernetes Conditions.
-It can be [reconciling](#reconciling-fluxinstance) while applying the
-resources on the cluster, it can be [ready](#ready-fluxinstance), or it can [fail during
-reconciliation](#failed-fluxinstance).
+It can be [reconciling](#reconciling-fluxinstance) while applying the resources on the cluster,
+it can be [ready](#ready-fluxinstance),
+it can [fail during reconciliation](#failed-fluxinstance),
+or it can [fail due to misconfiguration](#stalled-fluxinstance).
 
 The FluxInstance API is compatible with the **kstatus** specification,
 and reports `Reconciling` and `Stalled` conditions where applicable to
@@ -724,6 +725,23 @@ the reconciliation failed.
 While the FluxInstance has one or more of these Conditions, the flux-operator
 will continue to attempt a reconciliation with an
 exponential backoff, until it succeeds and the FluxInstance is marked as [ready](#ready-fluxinstance).
+
+#### Stalled FluxInstance
+
+The flux-operator may fail the reconciliation of a FluxInstance object terminally due
+to a misconfiguration. When this happens, the flux-operator adds the `Stalled` Condition
+to the FluxInstance’s `.status.conditions` with the following attributes:
+
+- `type: Stalled`
+- `status: "True"`
+- `reason: BuildFailed`
+
+Misconfigurations can include:
+
+- The build of the Flux manifests fails. In this case the condition reason is `BuildFailed`.
+
+When this happens, the flux-operator will not attempt to reconcile the FluxInstance
+until the misconfiguration is fixed. The `Ready` Condition status is also set to `False`.
 
 ### Components status
 
