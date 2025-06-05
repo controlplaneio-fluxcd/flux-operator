@@ -304,6 +304,7 @@ spec:
     type: openshift
     multitenant: true
     tenantDefaultServiceAccount: "flux"
+    objectLevelWorkloadIdentity: false
     networkPolicy: true
     domain: "cluster.local"
 ```
@@ -323,6 +324,9 @@ The `.spec.cluster.multitenant` field is optional and specifies whether to enabl
 The `.spec.cluster.tenantDefaultServiceAccount` is optional and specifies the default
 service account used by Flux when reconciling `Kustomization` and `HelmRelease`
 resources found in the tenant namespaces.
+
+The `.spec.cluster.objectLevelWorkloadIdentity` field is optional and specifies whether to
+enable the object-level workload identity feature gate and RBAC for the Flux controllers.
 
 #### Cluster network policy
 

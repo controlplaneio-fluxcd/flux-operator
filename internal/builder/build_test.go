@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/fluxcd/pkg/apis/kustomize"
+	ssautil "github.com/fluxcd/pkg/ssa/utils"
 	. "github.com/onsi/gomega"
 	cp "github.com/otiai10/copy"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -339,6 +340,15 @@ func TestBuild_Sync_OCIRepository(t *testing.T) {
 		}
 	}
 	g.Expect(found).To(BeTrue())
+
+	found = false
+	for _, obj := range result.Objects {
+		if obj.GetName() == "crd-controller-flux-system" && obj.GetKind() == "ClusterRole" {
+			found = true
+			g.Expect(ssautil.ObjectToYAML(obj)).ToNot(ContainSubstring("serviceaccounts/token"))
+		}
+	}
+	g.Expect(found).To(BeTrue())
 }
 
 func TestBuild_Sync_Bucket(t *testing.T) {
@@ -377,6 +387,44 @@ func TestBuild_Sync_Bucket(t *testing.T) {
 			g.Expect(p).To(Equal("my-bucket"))
 			u, _, _ := unstructured.NestedString(obj.Object, "spec", "endpoint")
 			g.Expect(u).To(Equal("minio.my-org.com"))
+		}
+	}
+	g.Expect(found).To(BeTrue())
+}
+
+func TestBuild_ObjectLevelWorkloadIdentity(t *testing.T) {
+	g := NewWithT(t)
+	const version = "v2.6.0"
+	options := MakeDefaultOptions()
+	options.Version = version
+	options.EnableObjectLevelWorkloadIdentity = true
+
+	srcDir := filepath.Join("testdata", version)
+
+	dstDir, err := testTempDir(t)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	ci, err := ExtractComponentImages(srcDir, options)
+	g.Expect(err).NotTo(HaveOccurred())
+	options.ComponentImages = ci
+
+	result, err := Build(srcDir, dstDir, options)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	found := false
+	for _, obj := range result.Objects {
+		if obj.GetName() == "crd-controller-flux-system" && obj.GetKind() == "ClusterRole" {
+			found = true
+			g.Expect(ssautil.ObjectToYAML(obj)).To(ContainSubstring("serviceaccounts/token"))
+		}
+	}
+	g.Expect(found).To(BeTrue())
+
+	found = false
+	for _, obj := range result.Objects {
+		if obj.GetName() == "source-controller" && obj.GetKind() == "Deployment" {
+			found = true
+			g.Expect(ssautil.ObjectToYAML(obj)).To(ContainSubstring("--feature-gates=ObjectLevelWorkloadIdentity=true"))
 		}
 	}
 	g.Expect(found).To(BeTrue())

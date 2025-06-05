@@ -316,6 +316,7 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 	options.Namespace = obj.GetNamespace()
 	options.Components = obj.GetComponents()
 	options.NetworkPolicy = obj.GetCluster().NetworkPolicy
+	options.EnableObjectLevelWorkloadIdentity = obj.GetCluster().ObjectLevelWorkloadIdentity
 
 	if obj.GetCluster().Domain != "" {
 		options.ClusterDomain = obj.GetCluster().Domain
