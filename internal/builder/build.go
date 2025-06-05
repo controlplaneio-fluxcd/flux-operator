@@ -60,6 +60,18 @@ func Build(srcDir, tmpDir string, options Options) (*Result, error) {
 }
 
 func generate(base string, options Options) error {
+	supportsObjectLevelWorkloadIdentity, err := SupportsObjectLevelWorkloadFeature(options.Version)
+	if err != nil {
+		return fmt.Errorf("check ObjectLevelWorkloadIdentity support failed: %w", err)
+	}
+	options.SupportsObjectLevelWorkloadIdentity = supportsObjectLevelWorkloadIdentity
+
+	enableObjectLevelWorkloadIdentity, err := EnableObjectLevelWorkloadFeature(options.Version, options.EnableObjectLevelWorkloadIdentity)
+	if err != nil {
+		return fmt.Errorf("check ObjectLevelWorkloadIdentity feature failed: %w", err)
+	}
+	options.EnableObjectLevelWorkloadIdentity = enableObjectLevelWorkloadIdentity
+
 	if options.HasNotificationController() {
 		options.EventsAddr = notifier.Address(options.Namespace, options.ClusterDomain)
 	}

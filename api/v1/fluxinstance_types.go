@@ -146,6 +146,12 @@ type Cluster struct {
 	// +optional
 	TenantDefaultServiceAccount string `json:"tenantDefaultServiceAccount,omitempty"`
 
+	// ObjectLevelWorkloadIdentity enables the feature gate
+	// required for object-level workload identity.
+	// This feature is only available in Flux v2.6.0 and later.
+	// +optional
+	ObjectLevelWorkloadIdentity bool `json:"objectLevelWorkloadIdentity,omitempty"`
+
 	// NetworkPolicy restricts network access to the current namespace.
 	// Defaults to true.
 	// +kubebuilder:default:=true

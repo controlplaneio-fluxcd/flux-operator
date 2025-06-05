@@ -70,6 +70,12 @@ spec:
                       NetworkPolicy restricts network access to the current namespace.
                       Defaults to true.
                     type: boolean
+                  objectLevelWorkloadIdentity:
+                    description: |-
+                      ObjectLevelWorkloadIdentity enables the feature gate
+                      required for object-level workload identity.
+                      This feature is only available in Flux v2.6.0 and later.
+                    type: boolean
                   tenantDefaultServiceAccount:
                     description: |-
                       TenantDefaultServiceAccount is the name of the service account

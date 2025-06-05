@@ -140,6 +140,16 @@ patches:
       path: /spec/template/spec/containers/0/args/-
       value: --watch-label-selector=!{{.ShardingKey}}
 {{- end }}
+{{- if and .SupportsObjectLevelWorkloadIdentity .EnableObjectLevelWorkloadIdentity }}
+patches:
+- target:
+    kind: Deployment
+    name: "(source-controller|kustomize-controller|notification-controller|image-reflector-controller|image-automation-controller)"
+  patch: |
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --feature-gates=ObjectLevelWorkloadIdentity=true
+{{- end }}
 {{ .Patches }}
 `
 
@@ -225,6 +235,17 @@ namespace: {{.Namespace}}
 resources:
   - rbac.yaml
 nameSuffix: -{{.Namespace}}
+{{- if .SupportsObjectLevelWorkloadIdentity }}
+{{- if not .EnableObjectLevelWorkloadIdentity }}
+patches:
+  - target:
+     kind: ClusterRole
+     name: crd-controller
+    patch: |-
+     - op: remove
+       path: /rules/10
+{{- end }}
+{{- end }}
 `
 
 var nodeSelectorTmpl = `---
