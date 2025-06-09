@@ -18,6 +18,11 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+const (
+	deploymentKind = "Deployment"
+	pvcKind        = "PersistentVolumeClaim"
+)
+
 func TestBuild(t *testing.T) {
 	g := NewWithT(t)
 	const version = "v2.3.0"
@@ -229,7 +234,7 @@ func TestBuild_ArtifactStorage(t *testing.T) {
 
 	found := false
 	for _, obj := range result.Objects {
-		if obj.GetKind() == "PersistentVolumeClaim" {
+		if obj.GetKind() == pvcKind {
 			found = true
 			g.Expect(obj.GetName()).To(Equal("source-controller"))
 		}
@@ -423,7 +428,7 @@ func TestBuild_ObjectLevelWorkloadIdentity(t *testing.T) {
 
 	found = false
 	for _, obj := range result.Objects {
-		if obj.GetName() == "source-controller" && obj.GetKind() == "Deployment" {
+		if obj.GetName() == "source-controller" && obj.GetKind() == deploymentKind {
 			found = true
 			g.Expect(ssautil.ObjectToYAML(obj)).To(ContainSubstring("--feature-gates=ObjectLevelWorkloadIdentity=true"))
 		}
@@ -512,6 +517,16 @@ func TestBuild_Sharding(t *testing.T) {
 		}
 	}
 	g.Expect(found).To(BeTrue())
+
+	// Check PVCs for the main source-controller only
+	foundPVCs := 0
+	for _, obj := range result.Objects {
+		if obj.GetKind() == pvcKind {
+			foundPVCs++
+			g.Expect(obj.GetName()).To(ContainSubstring("source-controller"))
+		}
+	}
+	g.Expect(foundPVCs).To(Equal(1))
 }
 
 func TestBuild_ShardingWithStorage(t *testing.T) {
@@ -585,7 +600,7 @@ func TestBuild_ShardingWithStorage(t *testing.T) {
 	// Check PVC ref in shard1 source-controller
 	found := false
 	for _, obj := range result.Objects {
-		if obj.GetKind() == "Deployment" && strings.Contains(obj.GetName(), options.Shards[0]) {
+		if obj.GetKind() == deploymentKind && strings.Contains(obj.GetName(), options.Shards[0]) {
 			g.Expect(obj.GetAnnotations()).To(HaveKeyWithValue("sharding.fluxcd.io/role", "shard"))
 			volumes, _, _ := unstructured.NestedSlice(obj.Object, "spec", "template", "spec", "volumes")
 			for _, v := range volumes {
