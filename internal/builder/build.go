@@ -141,6 +141,12 @@ func generate(base string, options Options) error {
 		if err := os.MkdirAll(path.Join(base, shard), os.ModePerm); err != nil {
 			return fmt.Errorf("generate shard dir failed: %w", err)
 		}
+		if options.ArtifactStorage != nil && options.ShardingStorage {
+			if err := execTemplate(options, pvcTmpl, path.Join(base, shard, "pvc.yaml")); err != nil {
+				return fmt.Errorf("generate shard pvc failed: %w", err)
+			}
+		}
+
 		if err := execTemplate(options, kustomizationShardTmpl, path.Join(base, shard, "kustomization.yaml")); err != nil {
 			return fmt.Errorf("generate shard kustomization failed: %w", err)
 		}

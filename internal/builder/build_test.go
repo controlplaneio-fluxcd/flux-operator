@@ -23,6 +23,7 @@ func TestBuild(t *testing.T) {
 	const version = "v2.3.0"
 	options := MakeDefaultOptions()
 	options.Version = version
+	options.ShardingStorage = true
 	options.Shards = []string{"shard1", "shard2"}
 	options.Patches = ProfileOpenShift + GetMultitenantProfile("")
 	options.ArtifactStorage = &ArtifactStorage{
@@ -508,6 +509,94 @@ func TestBuild_Sharding(t *testing.T) {
 		if strings.Contains(obj.GetName(), options.Shards[0]) {
 			found = true
 			g.Expect(obj.GetAnnotations()).To(HaveKeyWithValue("sharding.fluxcd.io/role", "shard"))
+		}
+	}
+	g.Expect(found).To(BeTrue())
+}
+
+func TestBuild_ShardingWithStorage(t *testing.T) {
+	g := NewWithT(t)
+	const version = "v2.6.0"
+	options := MakeDefaultOptions()
+	options.Version = version
+	options.Shards = []string{"shard1", "shard2"}
+	options.ShardingStorage = true
+	options.ArtifactStorage = &ArtifactStorage{
+		Class: "standard",
+		Size:  "10Gi",
+	}
+
+	srcDir := filepath.Join("testdata", version)
+	goldenFile := filepath.Join("testdata", version+"-golden", "sharding.kustomization.yaml")
+	goldenFileShard1 := filepath.Join("testdata", version+"-golden", "shard1.kustomization.yaml")
+	goldenFileShard2 := filepath.Join("testdata", version+"-golden", "shard2.kustomization.yaml")
+
+	dstDir, err := testTempDir(t)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	ci, err := ExtractComponentImages(srcDir, options)
+	g.Expect(err).NotTo(HaveOccurred())
+	options.ComponentImages = ci
+
+	result, err := Build(srcDir, dstDir, options)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(result.Objects).NotTo(BeEmpty())
+
+	if shouldGenGolden() {
+		err = cp.Copy(filepath.Join(dstDir, "kustomization.yaml"), goldenFile)
+		g.Expect(err).NotTo(HaveOccurred())
+		err = cp.Copy(filepath.Join(dstDir, "shard1", "kustomization.yaml"), goldenFileShard1)
+		g.Expect(err).NotTo(HaveOccurred())
+		err = cp.Copy(filepath.Join(dstDir, "shard2", "kustomization.yaml"), goldenFileShard2)
+		g.Expect(err).NotTo(HaveOccurred())
+	}
+
+	// Check main kustomization
+	genK, err := os.ReadFile(filepath.Join(dstDir, "kustomization.yaml"))
+	g.Expect(err).NotTo(HaveOccurred())
+	goldenK, err := os.ReadFile(goldenFile)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(string(genK)).To(Equal(string(goldenK)))
+
+	// Check shard1 overlay
+	genKShard1, err := os.ReadFile(filepath.Join(dstDir, "shard1", "kustomization.yaml"))
+	g.Expect(err).NotTo(HaveOccurred())
+	goldenKShard1, err := os.ReadFile(goldenFileShard1)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(string(genKShard1)).To(Equal(string(goldenKShard1)))
+
+	// Check shard2 overlay
+	genKShard2, err := os.ReadFile(filepath.Join(dstDir, "shard2", "kustomization.yaml"))
+	g.Expect(err).NotTo(HaveOccurred())
+	goldenKShard2, err := os.ReadFile(goldenFileShard2)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(string(genKShard2)).To(Equal(string(goldenKShard2)))
+
+	// Check PVCs for the main source-controller and shards
+	foundPVCs := 0
+	for _, obj := range result.Objects {
+		if obj.GetKind() == "PersistentVolumeClaim" {
+			foundPVCs++
+			g.Expect(obj.GetName()).To(ContainSubstring("source-controller"))
+		}
+	}
+	g.Expect(foundPVCs).To(Equal(3))
+
+	// Check PVC ref in shard1 source-controller
+	found := false
+	for _, obj := range result.Objects {
+		if obj.GetKind() == "Deployment" && strings.Contains(obj.GetName(), options.Shards[0]) {
+			g.Expect(obj.GetAnnotations()).To(HaveKeyWithValue("sharding.fluxcd.io/role", "shard"))
+			volumes, _, _ := unstructured.NestedSlice(obj.Object, "spec", "template", "spec", "volumes")
+			for _, v := range volumes {
+				if vol, ok := v.(map[string]any); ok && vol["name"] == "persistent-data-"+options.Shards[0] {
+					g.Expect(vol["persistentVolumeClaim"]).ToNot(BeNil())
+					if claim, ok := vol["persistentVolumeClaim"].(map[string]any); ok {
+						found = true
+						g.Expect(claim["claimName"]).To(Equal("source-controller-" + options.Shards[0]))
+					}
+				}
+			}
 		}
 	}
 	g.Expect(found).To(BeTrue())

@@ -1,0 +1,79 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: flux-system
+resources:
+  - ../source-controller.yaml
+  - ../kustomize-controller.yaml
+  - ../helm-controller.yaml
+  - pvc.yaml
+nameSuffix: "-shard2"
+commonAnnotations:
+  sharding.fluxcd.io/role: "shard"
+patches:
+  - target:
+      kind: (Namespace|CustomResourceDefinition|ClusterRole|ClusterRoleBinding|ServiceAccount|NetworkPolicy|ResourceQuota)
+    patch: |
+      apiVersion: v1
+      kind: all
+      metadata:
+        name: all
+      $patch: delete
+  - target:
+      kind: Service
+      name: (source-controller)
+    patch: |
+      - op: replace
+        path: /spec/selector/app
+        value: source-controller-shard2
+  - target:
+      kind: Deployment
+      name: (source-controller)
+    patch: |
+      - op: replace
+        path: /spec/selector/matchLabels/app
+        value: source-controller-shard2
+      - op: replace
+        path: /spec/template/metadata/labels/app
+        value: source-controller-shard2
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --storage-adv-addr=source-controller-shard2.$(RUNTIME_NAMESPACE).svc.cluster.local.
+      - op: replace
+        path: /spec/template/spec/volumes/0
+        value:
+          name: persistent-data-shard2
+          persistentVolumeClaim:
+            claimName: source-controller-shard2
+      - op: replace
+        path: /spec/template/spec/containers/0/volumeMounts/0
+        value:
+          name: persistent-data-shard2
+          mountPath: /data
+  - target:
+      kind: Deployment
+      name: (kustomize-controller)
+    patch: |
+      - op: replace
+        path: /spec/selector/matchLabels/app
+        value: kustomize-controller-shard2
+      - op: replace
+        path: /spec/template/metadata/labels/app
+        value: kustomize-controller-shard2
+  - target:
+      kind: Deployment
+      name: (helm-controller)
+    patch: |
+      - op: replace
+        path: /spec/selector/matchLabels/app
+        value: helm-controller-shard2
+      - op: replace
+        path: /spec/template/metadata/labels/app
+        value: helm-controller-shard2
+  - target:
+      kind: Deployment
+      name: (source-controller|kustomize-controller|helm-controller)
+    patch: |
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --watch-label-selector=sharding.fluxcd.io/key=shard2
