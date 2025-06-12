@@ -176,6 +176,14 @@ type Sharding struct {
 	// +kubebuilder:validation:MinItems=1
 	// +required
 	Shards []string `json:"shards"`
+
+	// Storage defines if the source-controller shards
+	// should use an emptyDir or a persistent volume claim for storage.
+	// Accepted values are 'ephemeral' or 'persistent', defaults to 'ephemeral'.
+	// For 'persistent' to take effect, the '.spec.storage' field must be set.
+	// +kubebuilder:validation:Enum:=ephemeral;persistent
+	// +optional
+	Storage string `json:"storage,omitempty"`
 }
 
 // Storage is the specification for the persistent volume claim.
@@ -336,6 +344,14 @@ func (in *FluxInstance) GetCluster() Cluster {
 	}
 
 	return *cluster
+}
+
+// IsShardingStorageEnabled returns true if 'spec.sharding.storage' is set to 'persistent'.
+func (in *FluxInstance) IsShardingStorageEnabled() bool {
+	if in.Spec.Sharding == nil {
+		return false
+	}
+	return in.Spec.Sharding.Storage == "persistent"
 }
 
 // GetMigrateResources returns the migration configuration with defaults.

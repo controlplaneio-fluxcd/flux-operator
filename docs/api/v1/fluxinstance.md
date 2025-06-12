@@ -374,6 +374,7 @@ spec:
     shards:
       - "shard1"
       - "shard2"
+    storage: persistent
 ```
 
 For each shard, the operator will create a separate set of controllers, e.g.:
@@ -406,6 +407,15 @@ By default, the key is set to `sharding.fluxcd.io/key`.
 #### Shards
 
 The `.spec.sharding.shards` field is required and specifies the list of sharding values to use for the Flux controllers.
+
+### Sharding storage
+
+The `.spec.sharding.storage` field is optional and specifies the storage type to use
+for the source-controller shards.
+
+The supported values are `ephemeral` (default) and `persistent`.
+When set to `persistent`, the operator will create a persistent volume claim for each shard using
+the storage class and size specified in the `.spec.storage` field.
 
 ### Common metadata
 

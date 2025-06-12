@@ -336,6 +336,7 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 	if obj.Spec.Sharding != nil {
 		options.ShardingKey = obj.Spec.Sharding.Key
 		options.Shards = obj.Spec.Sharding.Shards
+		options.ShardingStorage = obj.IsShardingStorageEnabled()
 	}
 
 	if obj.Spec.Storage != nil {

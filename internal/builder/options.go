@@ -27,6 +27,7 @@ type Options struct {
 	ArtifactStorage                     *ArtifactStorage
 	Sync                                *Sync
 	ShardingKey                         string
+	ShardingStorage                     bool
 	Shards                              []string
 	ShardName                           string
 	SourceAPIVersion                    string

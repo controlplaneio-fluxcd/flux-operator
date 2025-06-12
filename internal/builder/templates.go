@@ -154,6 +154,8 @@ patches:
 `
 
 var kustomizationShardTmpl = `---
+{{- $artifactStorage := .ArtifactStorage }}
+{{- $artifactStorageEnabled := .ShardingStorage }}
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: {{.Namespace}}
@@ -166,6 +168,9 @@ resources:
 {{- else if eq $component "helm-controller" }}
   - ../{{$component}}.yaml
 {{- end }}
+{{- end }}
+{{- if and $artifactStorage $artifactStorageEnabled }}
+  - pvc.yaml
 {{- end }}
 nameSuffix: "-{{.ShardName}}"
 commonAnnotations:
@@ -199,6 +204,19 @@ patches:
       - op: add
         path: /spec/template/spec/containers/0/args/-
         value: --storage-adv-addr=source-controller-{{.ShardName}}.$(RUNTIME_NAMESPACE).svc.{{.ClusterDomain}}.
+{{- if and $artifactStorage $artifactStorageEnabled }}
+      - op: replace
+        path: /spec/template/spec/volumes/0
+        value:
+          name: persistent-data-{{.ShardName}}
+          persistentVolumeClaim:
+            claimName: source-controller-{{.ShardName}}
+      - op: replace
+        path: /spec/template/spec/containers/0/volumeMounts/0
+        value:
+          name: persistent-data-{{.ShardName}}
+          mountPath: /data
+{{- end }}
   - target:
       kind: Deployment
       name: (kustomize-controller)
