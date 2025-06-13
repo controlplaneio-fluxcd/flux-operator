@@ -19,11 +19,23 @@ var reconcileInstanceCmd = &cobra.Command{
 	Short: "Trigger FluxInstance reconciliation",
 	Example: `  # Trigger the reconciliation of an instance
   flux-operator -n flux-system reconcile instance flux
+
+  # Trigger the reconciliation of an instance without waiting for it to become ready
+  flux-operator -n flux-system reconcile instance flux --wait=false
 `,
 	RunE: reconcileInstanceCmdRun,
 }
 
+type reconcileInstanceFlags struct {
+	wait bool
+}
+
+var reconcileInstanceArgs reconcileInstanceFlags
+
 func init() {
+	reconcileInstanceCmd.Flags().BoolVar(&reconcileInstanceArgs.wait, "wait", true,
+		"Wait for the resource to become ready.")
+
 	reconcileCmd.AddCommand(reconcileInstanceCmd)
 }
 
@@ -35,9 +47,32 @@ func reconcileInstanceCmdRun(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
 	defer cancel()
 
-	return annotateResource(ctx,
+	now := metav1.Now().String()
+
+	err := annotateResource(ctx,
 		fluxcdv1.FluxInstanceKind, args[0],
 		*kubeconfigArgs.Namespace,
 		meta.ReconcileRequestAnnotation,
-		metav1.Now().String())
+		now)
+	if err != nil {
+		return err
+	}
+
+	rootCmd.Println(`►`, "Reconciliation triggered")
+	if reconcileInstanceArgs.wait {
+		rootCmd.Println(`◎`, "Waiting for reconciliation...")
+		msg, err := waitForResourceReconciliation(ctx,
+			fluxcdv1.FluxInstanceKind,
+			args[0],
+			*kubeconfigArgs.Namespace,
+			now,
+			rootArgs.timeout)
+		if err != nil {
+			return err
+		}
+
+		rootCmd.Println(`✔`, msg)
+	}
+
+	return nil
 }
