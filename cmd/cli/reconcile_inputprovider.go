@@ -18,16 +18,30 @@ var reconcileInputProviderCmd = &cobra.Command{
 	Use:     "inputprovider",
 	Aliases: []string{"rsip", "resourcesetinputprovider"},
 	Short:   "Trigger ResourceSetInputProvider reconciliation",
-	RunE:    reconcileInputProviderCmdRun,
+	Example: `  # Trigger the reconciliation of a ResourceSetInputProvider
+  flux-operator -n flux-system reconcile rsip my-inputprovider
+
+  # Force the reconciliation of a ResourceSetInputProvider
+  flux-operator -n flux-system reconcile rsip my-inputprovider --force
+
+  # Trigger the reconciliation of a ResourceSetInputProvider without waiting for it to become ready
+  flux-operator -n flux-system reconcile rsip my-inputprovider --wait=false
+`,
+	RunE: reconcileInputProviderCmdRun,
 }
 
-var reconcileInputProviderArgs struct {
+type reconcileInputProviderFlags struct {
 	force bool
+	wait  bool
 }
+
+var reconcileInputProviderArgs reconcileInputProviderFlags
 
 func init() {
 	reconcileInputProviderCmd.Flags().BoolVar(&reconcileInputProviderArgs.force, "force", false,
 		"Force the reconciliation of the ResourceSetInputProvider, even if the current time is outside the schedule.")
+	reconcileInputProviderCmd.Flags().BoolVar(&reconcileInputProviderArgs.wait, "wait", true,
+		"Wait for the resource to become ready.")
 
 	reconcileCmd.AddCommand(reconcileInputProviderCmd)
 }
@@ -43,18 +57,42 @@ func reconcileInputProviderCmdRun(cmd *cobra.Command, args []string) error {
 	now := metav1.Now().String()
 
 	if !reconcileInputProviderArgs.force {
-		return annotateResource(ctx,
+		err := annotateResource(ctx,
 			fluxcdv1.ResourceSetInputProviderKind, args[0],
 			*kubeconfigArgs.Namespace,
 			meta.ReconcileRequestAnnotation,
 			now)
+		if err != nil {
+			return err
+		}
 	}
 
-	return annotateResourceWithMap(ctx,
+	err := annotateResourceWithMap(ctx,
 		fluxcdv1.ResourceSetInputProviderKind, args[0],
 		*kubeconfigArgs.Namespace,
 		map[string]string{
 			meta.ReconcileRequestAnnotation: now,
 			meta.ForceRequestAnnotation:     now,
 		})
+	if err != nil {
+		return err
+	}
+
+	rootCmd.Println(`►`, "Reconciliation triggered")
+	if reconcileInputProviderArgs.wait {
+		rootCmd.Println(`◎`, "Waiting for reconciliation...")
+		msg, err := waitForResourceReconciliation(ctx,
+			fluxcdv1.ResourceSetInputProviderKind,
+			args[0],
+			*kubeconfigArgs.Namespace,
+			now,
+			rootArgs.timeout)
+		if err != nil {
+			return err
+		}
+
+		rootCmd.Println(`✔`, msg)
+	}
+
+	return nil
 }

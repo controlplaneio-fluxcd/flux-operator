@@ -18,10 +18,24 @@ var reconcileResourceSetCmd = &cobra.Command{
 	Use:     "resourceset",
 	Aliases: []string{"rset"},
 	Short:   "Trigger ResourceSet reconciliation",
-	RunE:    reconcileResourceSetCmdRun,
+	Example: `  # Trigger the reconciliation of a ResourceSet
+  flux-operator -n flux-system reconcile rset my-resourceset
+
+  # Trigger the reconciliation of a ResourceSet without waiting for it to become ready
+  flux-operator -n flux-system reconcile rset my-resourceset --wait=false
+`,
+	RunE: reconcileResourceSetCmdRun,
 }
 
+type reconcileResourceSetFlags struct {
+	wait bool
+}
+
+var reconcileResourceSetArgs reconcileResourceSetFlags
+
 func init() {
+	reconcileResourceSetCmd.Flags().BoolVar(&reconcileResourceSetArgs.wait, "wait", true,
+		"Wait for the resource to become ready.")
 	reconcileCmd.AddCommand(reconcileResourceSetCmd)
 }
 
@@ -33,9 +47,31 @@ func reconcileResourceSetCmdRun(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
 	defer cancel()
 
-	return annotateResource(ctx,
+	now := metav1.Now().String()
+	err := annotateResource(ctx,
 		fluxcdv1.ResourceSetKind, args[0],
 		*kubeconfigArgs.Namespace,
 		meta.ReconcileRequestAnnotation,
-		metav1.Now().String())
+		now)
+	if err != nil {
+		return err
+	}
+
+	rootCmd.Println(`►`, "Reconciliation triggered")
+	if reconcileResourceSetArgs.wait {
+		rootCmd.Println(`◎`, "Waiting for reconciliation...")
+		msg, err := waitForResourceReconciliation(ctx,
+			fluxcdv1.ResourceSetKind,
+			args[0],
+			*kubeconfigArgs.Namespace,
+			now,
+			rootArgs.timeout)
+		if err != nil {
+			return err
+		}
+
+		rootCmd.Println(`✔`, msg)
+	}
+
+	return nil
 }

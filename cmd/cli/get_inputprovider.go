@@ -23,9 +23,11 @@ var getInputProviderCmd = &cobra.Command{
 	RunE:    getInputProviderCmdRun,
 }
 
-var getInputProviderArgs struct {
+type getInputProviderFlags struct {
 	allNamespaces bool
 }
+
+var getInputProviderArgs getInputProviderFlags
 
 func init() {
 	getInputProviderCmd.Flags().BoolVarP(&getInputProviderArgs.allNamespaces, "all-namespaces", "A", false,
