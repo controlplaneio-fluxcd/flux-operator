@@ -296,7 +296,8 @@ Each `Schedule` object has the following fields:
   This is optional and defaults to `UTC`.
 - `.window`: an optional string representing the time window duration in which reconciliations are
   allowed to run. The format is a Go duration string, such as `1h30m` or `2h45m`. Defaults to `0s`,
-  meaning no window is applied.
+  meaning no window is applied. The duration must be either zero or at least twice the
+  [timeout](#reconciliation-configuration).
 
 Example:
 
@@ -348,7 +349,7 @@ The reconciliation of behaviour of a ResourceSet can be configured using the fol
 
 - `fluxcd.controlplane.io/reconcile`: Enable or disable the reconciliation loop. Default is `enabled`, set to `disabled` to pause the reconciliation.
 - `fluxcd.controlplane.io/reconcileEvery`: Set the reconciliation interval used for calling external services. Default is `10m`.
-- `fluxcd.controlplane.io/reconcileTimeout`: Set the timeout for calling external services. Default is `1m`.
+- `fluxcd.controlplane.io/reconcileTimeout`: Set the timeout for calling external services. Default is `2m`.
 
 ## ResourceSetInputProvider Status
 
