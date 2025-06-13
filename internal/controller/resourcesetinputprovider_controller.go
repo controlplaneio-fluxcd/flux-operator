@@ -65,7 +65,6 @@ func (r *ResourceSetInputProviderReconciler) Reconcile(ctx context.Context, req 
 
 	// Initialize the runtime patcher with the current version of the object.
 	patcher := patch.NewSerialPatcher(obj, r.Client)
-	obj.Status.NextSchedule = nil
 
 	// Finalise the reconciliation and report the results.
 	defer func() {
@@ -135,6 +134,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 	}
 
 	// Check if the object should be reconciled according to the schedule.
+	obj.Status.NextSchedule = nil
 	if !scheduler.ShouldReconcile(reconcileStart) && !force {
 		obj.Status.NextSchedule = scheduler.Next(reconcileStart)
 		next := obj.Status.NextSchedule.When.Time

@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"maps"
 
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -52,6 +53,10 @@ func newKubeClient() (client.Client, error) {
 }
 
 func annotateResource(ctx context.Context, kind, name, namespace, key, val string) error {
+	return annotateResourceWithMap(ctx, kind, name, namespace, map[string]string{key: val})
+}
+
+func annotateResourceWithMap(ctx context.Context, kind, name, namespace string, m map[string]string) error {
 	resource := &metav1.PartialObjectMetadata{}
 	resource.SetGroupVersionKind(schema.GroupVersionKind{
 		Group:   fluxcdv1.GroupVersion.Group,
@@ -79,7 +84,7 @@ func annotateResource(ctx context.Context, kind, name, namespace, key, val strin
 	if annotations == nil {
 		annotations = make(map[string]string)
 	}
-	annotations[key] = val
+	maps.Copy(annotations, m)
 	resource.SetAnnotations(annotations)
 
 	if err := kubeClient.Patch(ctx, resource, patch); err != nil {
