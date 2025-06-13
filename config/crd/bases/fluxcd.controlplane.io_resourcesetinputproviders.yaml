@@ -168,6 +168,9 @@ spec:
                 - GitLabBranch
                 - GitLabTag
                 - GitLabMergeRequest
+                - AzureDevOpsBranch
+                - AzureDevOpsTag
+                - AzureDevOpsPullRequest
                 type: string
               url:
                 description: |-

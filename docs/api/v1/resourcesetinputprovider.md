@@ -98,6 +98,9 @@ The following types are supported:
 - `GitLabMergeRequest`: fetches input values from opened GitLab Merge Requests.
 - `GitLabBranch`: fetches input values from GitLab project branches.
 - `GitLabTag`: fetches input values from GitLab project tags.
+- `AzureDevOpsPullRequest`: fetches input values from opened Azure DevOps Pull Requests.
+- `AzureDevOpsBranch`: fetches input values from Azure DevOps repository branches.
+- `AzureDevOpsTag`: fetches input values from AzureDevOps project tags.
 
 For the `Static` type, the flux-operator will export in `.status.exportedInputs` a
 single input map with the values from the field `.spec.defaultValues` and the
