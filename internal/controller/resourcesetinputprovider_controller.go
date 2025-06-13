@@ -90,14 +90,7 @@ func (r *ResourceSetInputProviderReconciler) Reconcile(ctx context.Context, req 
 	// Add the finalizer if it does not exist.
 	if !controllerutil.ContainsFinalizer(obj, fluxcdv1.Finalizer) {
 		log.Info("Adding finalizer", "finalizer", fluxcdv1.Finalizer)
-		controllerutil.AddFinalizer(obj, fluxcdv1.Finalizer)
-		conditions.MarkUnknown(obj,
-			meta.ReadyCondition,
-			meta.ProgressingReason,
-			"%s", msgInProgress)
-		conditions.MarkReconciling(obj,
-			meta.ProgressingReason,
-			"%s", msgInProgress)
+		initializeObjectStatus(obj)
 		return ctrl.Result{Requeue: true}, nil
 	}
 
@@ -555,24 +548,7 @@ func (r *ResourceSetInputProviderReconciler) getSecretData(ctx context.Context, 
 func (r *ResourceSetInputProviderReconciler) finalizeStatus(ctx context.Context,
 	obj *fluxcdv1.ResourceSetInputProvider,
 	patcher *patch.SerialPatcher) error {
-	// Set the value of the reconciliation request in status.
-	if v, ok := meta.ReconcileAnnotationValue(obj.GetAnnotations()); ok {
-		obj.Status.LastHandledReconcileAt = v
-	}
-
-	// Set the Reconciling reason to ProgressingWithRetry if the
-	// reconciliation has failed.
-	if conditions.IsFalse(obj, meta.ReadyCondition) &&
-		conditions.Has(obj, meta.ReconcilingCondition) {
-		rc := conditions.Get(obj, meta.ReconcilingCondition)
-		rc.Reason = meta.ProgressingWithRetryReason
-		conditions.Set(obj, rc)
-	}
-
-	// Remove the Reconciling condition.
-	if conditions.IsTrue(obj, meta.ReadyCondition) || conditions.IsTrue(obj, meta.StalledCondition) {
-		conditions.Delete(obj, meta.ReconcilingCondition)
-	}
+	finalizeObjectStatus(obj)
 
 	// Patch finalizers, status and conditions.
 	return r.patch(ctx, obj, patcher)

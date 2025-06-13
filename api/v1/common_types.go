@@ -5,8 +5,11 @@ package v1
 
 import (
 	"fmt"
+	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -28,6 +31,28 @@ var (
 	RevisionAnnotation               = fmt.Sprintf("%s/revision", GroupVersion.Group)
 	CopyFromAnnotation               = fmt.Sprintf("%s/copyFrom", GroupVersion.Group)
 )
+
+// FluxObject is the interface that all Flux objects must implement.
+//
+// +k8s:deepcopy-gen=false
+type FluxObject interface {
+	client.Object
+
+	// GetConditions returns a slice of metav1.Condition.
+	GetConditions() []metav1.Condition
+
+	// SetConditions sets the status conditions on the object.
+	SetConditions([]metav1.Condition)
+
+	// SetLastHandledReconcileAt sets the last handled reconcile time in the status.
+	SetLastHandledReconcileAt(value string)
+
+	// IsDisabled returns true if the object has the reconcile annotation set to 'disabled'.
+	IsDisabled() bool
+
+	// GetInterval returns the interval at which the object should be reconciled.
+	GetInterval() time.Duration
+}
 
 // InputProvider is the interface that the ResourceSet
 // input providers must implement.

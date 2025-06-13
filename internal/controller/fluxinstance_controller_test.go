@@ -29,7 +29,6 @@ import (
 
 func TestFluxInstanceReconciler_CELNameValidation(t *testing.T) {
 	g := NewWithT(t)
-	const manifestsURL = "oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests:latest"
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -38,16 +37,67 @@ func TestFluxInstanceReconciler_CELNameValidation(t *testing.T) {
 
 	obj := &fluxcdv1.FluxInstance{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "fluxx", // Invalid name
+			Name:      "invalid-name",
 			Namespace: ns.Name,
 		},
 		Spec: getDefaultFluxSpec(t),
 	}
-	obj.Spec.Distribution.Artifact = manifestsURL
 
 	err = testEnv.Create(ctx, obj)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("the only accepted name for a FluxInstance is 'flux'"))
+}
+
+func TestFluxInstanceReconciler_InitDisabled(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getFluxInstanceReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	obj := &fluxcdv1.FluxInstance{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "flux",
+			Namespace: ns.Name,
+			Annotations: map[string]string{
+				fluxcdv1.ReconcileAnnotation: fluxcdv1.DisabledValue,
+			},
+		},
+		Spec: getDefaultFluxSpec(t),
+	}
+
+	// Initialize the instance.
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	resultInit := &fluxcdv1.FluxInstance{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), resultInit)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Check if the finalizer was added.
+	g.Expect(resultInit.Finalizers).To(ContainElement(fluxcdv1.Finalizer))
+
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeFalse())
+
+	result := &fluxcdv1.FluxInstance{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Check if the Ready condition is set to ReconciliationDisabled.
+	checkInstanceReadiness(g, result)
+	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(fluxcdv1.ReconciliationDisabledReason))
 }
 
 func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {

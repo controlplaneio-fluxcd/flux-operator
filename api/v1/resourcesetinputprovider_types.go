@@ -142,6 +142,11 @@ func (in *ResourceSetInputProvider) SetConditions(conditions []metav1.Condition)
 	in.Status.Conditions = conditions
 }
 
+// SetLastHandledReconcileAt sets the last handled reconcile time in the status.
+func (in *ResourceSetInputProvider) SetLastHandledReconcileAt(value string) {
+	in.Status.LastHandledReconcileAt = value
+}
+
 // IsDisabled returns true if the object has the reconcile annotation set to 'disabled'.
 func (in *ResourceSetInputProvider) IsDisabled() bool {
 	val, ok := in.GetAnnotations()[ReconcileAnnotation]
