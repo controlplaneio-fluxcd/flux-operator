@@ -204,8 +204,9 @@ func TestResourceSetInputProviderReconciler_reconcile_SkippedDueToSchedule(t *te
 			Schedule: []fluxcdv1.Schedule{{
 				// This cron only happens once every 4 years, so most
 				// of the time the reconciliation will be skipped.
-				Cron:   "0 0 29 2 *",
-				Window: metav1.Duration{Duration: time.Second},
+				Cron:     "0 0 29 2 *",
+				TimeZone: "UTC",
+				Window:   metav1.Duration{Duration: time.Second},
 			}},
 		},
 	}
@@ -216,19 +217,18 @@ func TestResourceSetInputProviderReconciler_reconcile_SkippedDueToSchedule(t *te
 
 	res, err := reconciler.reconcile(ctx, obj, nil)
 	g.Expect(err).NotTo(HaveOccurred())
-	requeueAfter := res.RequeueAfter.Seconds()
 
-	expectedRequeueAfter := time.Until(sched.Next(time.Now())).Seconds()
-
-	g.Expect(requeueAfter).To(BeNumerically("~", expectedRequeueAfter, 0.01))
+	expectedRequeueAfter := time.Until(sched.Next(time.Now()))
+	g.Expect(res.RequeueAfter).To(BeNumerically("~", expectedRequeueAfter, time.Second))
 
 	g.Expect(obj.Status.NextSchedule).NotTo(BeNil())
 	g.Expect(obj.Status.NextSchedule.Schedule).To(Equal(fluxcdv1.Schedule{
-		Cron:   "0 0 29 2 *",
-		Window: metav1.Duration{Duration: time.Second},
+		Cron:     "0 0 29 2 *",
+		TimeZone: "UTC",
+		Window:   metav1.Duration{Duration: time.Second},
 	}))
-	untilWhen := time.Until(obj.Status.NextSchedule.When.Time).Seconds()
-	g.Expect(untilWhen).To(BeNumerically("~", expectedRequeueAfter, 0.01))
+	untilWhen := time.Until(obj.Status.NextSchedule.When.Time)
+	g.Expect(untilWhen).To(BeNumerically("~", expectedRequeueAfter, time.Second))
 
 	g.Eventually(func() bool {
 		events := getEvents(obj.Name, obj.Namespace)

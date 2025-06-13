@@ -200,6 +200,11 @@ func (in *FluxReport) SetConditions(conditions []metav1.Condition) {
 	in.Status.Conditions = conditions
 }
 
+// SetLastHandledReconcileAt sets the last handled reconcile time in the status.
+func (in *FluxReport) SetLastHandledReconcileAt(value string) {
+	in.Status.LastHandledReconcileAt = value
+}
+
 // IsDisabled returns true if the object has the reconcile annotation set to 'disabled'.
 func (in *FluxReport) IsDisabled() bool {
 	val, ok := in.GetAnnotations()[ReconcileAnnotation]
