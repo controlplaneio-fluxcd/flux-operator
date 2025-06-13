@@ -31,9 +31,15 @@ func resumeInputProviderCmdRun(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
 	defer cancel()
 
-	return annotateResource(ctx,
+	err := annotateResource(ctx,
 		fluxcdv1.ResourceSetInputProviderKind, args[0],
 		*kubeconfigArgs.Namespace,
 		fluxcdv1.ReconcileAnnotation,
 		fluxcdv1.EnabledValue)
+	if err != nil {
+		return err
+	}
+
+	rootCmd.Println(`✔`, "Reconciliation resumed")
+	return nil
 }

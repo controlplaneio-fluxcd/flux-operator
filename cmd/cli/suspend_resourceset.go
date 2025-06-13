@@ -31,9 +31,15 @@ func suspendResourceSetCmdRun(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
 	defer cancel()
 
-	return annotateResource(ctx,
+	err := annotateResource(ctx,
 		fluxcdv1.ResourceSetKind, args[0],
 		*kubeconfigArgs.Namespace,
 		fluxcdv1.ReconcileAnnotation,
 		fluxcdv1.DisabledValue)
+	if err != nil {
+		return err
+	}
+
+	rootCmd.Println(`✔`, "Reconciliation suspended")
+	return nil
 }
