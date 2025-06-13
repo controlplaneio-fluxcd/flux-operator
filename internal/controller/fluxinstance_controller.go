@@ -167,8 +167,7 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 			meta.ReadyCondition,
 			meta.BuildFailedReason,
 			"%s", msg)
-		conditions.MarkTrue(obj,
-			meta.StalledCondition,
+		conditions.MarkStalled(obj,
 			meta.BuildFailedReason,
 			"%s", msg)
 		log.Error(err, msg)

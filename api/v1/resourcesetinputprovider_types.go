@@ -73,6 +73,10 @@ type ResourceSetInputProviderSpec struct {
 	// Skip defines whether we need to skip input provider response updates.
 	// +optional
 	Skip *ResourceSetInputSkip `json:"skip,omitempty"`
+
+	// Schedule defines the schedules for the input provider to run.
+	// +optional
+	Schedule []Schedule `json:"schedule,omitempty"`
 }
 
 // ResourceSetInputFilter defines the filter to apply to the input provider response.
@@ -108,6 +112,7 @@ type ResourceSetInputSkip struct {
 // ResourceSetInputProviderStatus defines the observed state of ResourceSetInputProvider.
 type ResourceSetInputProviderStatus struct {
 	meta.ReconcileRequestStatus `json:",inline"`
+	meta.ForceRequestStatus     `json:",inline"`
 
 	// Conditions contains the readiness conditions of the object.
 	// +optional
@@ -121,6 +126,10 @@ type ResourceSetInputProviderStatus struct {
 	// inputs that were last reconcile.
 	// +optional
 	LastExportedRevision string `json:"lastExportedRevision,omitempty"`
+
+	// NextSchedule is the next schedule when the input provider will run.
+	// +optional
+	NextSchedule *NextSchedule `json:"nextSchedule,omitempty"`
 }
 
 // GetConditions returns the status conditions of the object.
@@ -201,6 +210,16 @@ func (in *ResourceSetInputProvider) GetInputs() ([]map[string]any, error) {
 		inputs = append(inputs, inp)
 	}
 	return inputs, nil
+}
+
+// GetLastHandledReconcileRequest returns the last handled reconcile request.
+func (in ResourceSetInputProvider) GetLastHandledReconcileRequest() string {
+	return in.Status.GetLastHandledReconcileRequest()
+}
+
+// GetLastHandledForceRequestStatus returns the last handled force request status.
+func (in *ResourceSetInputProvider) GetLastHandledForceRequestStatus() *string {
+	return &in.Status.LastHandledForceAt
 }
 
 // +kubebuilder:storageversion

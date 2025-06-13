@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,6 +26,8 @@ import (
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/inputs"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/schedule"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/testutils"
 )
 
 func TestResourceSetInputProviderReconciler_Static(t *testing.T) {
@@ -143,6 +146,98 @@ func TestResourceSetInputProviderReconciler_reconcile_InvalidDefaultValues(t *te
 	g.Expect(conditions.GetReason(obj, meta.StalledCondition)).To(Equal(fluxcdv1.ReasonInvalidDefaultValues))
 	g.Expect(conditions.GetMessage(obj, meta.ReadyCondition)).To(ContainSubstring("Reconciliation failed terminally due to configuration error"))
 	g.Expect(conditions.GetMessage(obj, meta.StalledCondition)).To(ContainSubstring("Reconciliation failed terminally due to configuration error"))
+}
+
+func TestResourceSetInputProviderReconciler_reconcile_InvalidSchedule(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceSetInputProviderReconciler()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	obj := &fluxcdv1.ResourceSetInputProvider{
+		Spec: fluxcdv1.ResourceSetInputProviderSpec{
+			DefaultValues: fluxcdv1.ResourceSetInput{
+				"foo": &apix.JSON{
+					Raw: []byte(`{"bar": "baz"}`),
+				},
+			},
+			Schedule: []fluxcdv1.Schedule{{
+				Cron: "lalksadlsakd",
+			}},
+		},
+	}
+
+	r, err := reconciler.reconcile(ctx, obj, nil)
+	g.Expect(r).To(Equal(reconcile.Result{}))
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(obj.Status.Conditions).To(HaveLen(2))
+	g.Expect(conditions.IsReady(obj)).To(BeFalse())
+	g.Expect(conditions.IsStalled(obj)).To(BeTrue())
+	g.Expect(conditions.GetReason(obj, meta.ReadyCondition)).To(Equal(fluxcdv1.ReasonInvalidSchedule))
+	g.Expect(conditions.GetReason(obj, meta.StalledCondition)).To(Equal(fluxcdv1.ReasonInvalidSchedule))
+	g.Expect(conditions.GetMessage(obj, meta.ReadyCondition)).To(ContainSubstring("Reconciliation failed terminally due to configuration error"))
+	g.Expect(conditions.GetMessage(obj, meta.StalledCondition)).To(ContainSubstring("Reconciliation failed terminally due to configuration error"))
+}
+
+func TestResourceSetInputProviderReconciler_reconcile_SkippedDueToSchedule(t *testing.T) {
+	// Disable notifications for the tests as no pod is running.
+	// This is required to avoid the 30s retry loop performed by the HTTP client.
+	t.Setenv("NOTIFICATIONS_DISABLED", "yes")
+
+	g := NewWithT(t)
+	reconciler := getResourceSetInputProviderReconciler()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test-skipped-due-to-schedule")
+	g.Expect(err).NotTo(HaveOccurred())
+
+	obj := &fluxcdv1.ResourceSetInputProvider{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: ns.Name,
+			Annotations: map[string]string{
+				fluxcdv1.ReconcileTimeoutAnnotation: "100ms",
+			},
+		},
+		Spec: fluxcdv1.ResourceSetInputProviderSpec{
+			Schedule: []fluxcdv1.Schedule{{
+				// This cron only happens once every 4 years, so most
+				// of the time the reconciliation will be skipped.
+				Cron:   "0 0 29 2 *",
+				Window: metav1.Duration{Duration: time.Second},
+			}},
+		},
+	}
+
+	sched, err := schedule.Parse("0 0 29 2 *", "UTC")
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(sched).NotTo(BeNil())
+
+	res, err := reconciler.reconcile(ctx, obj, nil)
+	g.Expect(err).NotTo(HaveOccurred())
+	requeueAfter := res.RequeueAfter.Seconds()
+
+	expectedRequeueAfter := time.Until(sched.Next(time.Now())).Seconds()
+
+	g.Expect(requeueAfter).To(BeNumerically("~", expectedRequeueAfter, 0.01))
+
+	g.Expect(obj.Status.NextSchedule).NotTo(BeNil())
+	g.Expect(obj.Status.NextSchedule.Schedule).To(Equal(fluxcdv1.Schedule{
+		Cron:   "0 0 29 2 *",
+		Window: metav1.Duration{Duration: time.Second},
+	}))
+	untilWhen := time.Until(obj.Status.NextSchedule.When.Time).Seconds()
+	g.Expect(untilWhen).To(BeNumerically("~", expectedRequeueAfter, 0.01))
+
+	g.Eventually(func() bool {
+		events := getEvents(obj.Name, obj.Namespace)
+		if len(events) == 0 {
+			return false
+		}
+		return events[0].Reason == fluxcdv1.ReasonSkippedDueToSchedule &&
+			strings.Contains(events[0].Message, "Reconciliation skipped, next scheduled at")
+	}, timeout).Should(BeTrue())
 }
 
 func TestResourceSetInputProviderReconciler_GitLabBranch_LifeCycle(t *testing.T) {
@@ -839,6 +934,115 @@ spec:
 			inputsData, err := yaml.Marshal(result.Status.ExportedInputs)
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(string(inputsData)).To(MatchYAML(tt.expectedInputs))
+		})
+	}
+}
+
+func TestRequeueAfterResourceSetInputProvider(t *testing.T) {
+	for _, tt := range []struct {
+		name                 string
+		interval             time.Duration
+		schedules            []fluxcdv1.Schedule
+		timeout              time.Duration
+		reconcileEnd         string
+		expectedRequeueAfter time.Duration
+		expectedNextSchedule *fluxcdv1.NextSchedule
+	}{
+		{
+			name:                 "disabled",
+			interval:             0,
+			reconcileEnd:         "2023-10-01T00:00:00Z",
+			expectedRequeueAfter: 0,
+		},
+		{
+			name:                 "no schedule",
+			interval:             time.Hour,
+			reconcileEnd:         "2023-10-01T00:00:00Z",
+			expectedRequeueAfter: time.Hour,
+		},
+		{
+			name:     "schedule without window",
+			interval: time.Hour,
+			schedules: []fluxcdv1.Schedule{{
+				Cron: "0 9 * * *",
+			}},
+			timeout:              5 * time.Minute,
+			reconcileEnd:         "2023-10-01T10:00:00Z",
+			expectedRequeueAfter: 23 * time.Hour,
+			expectedNextSchedule: &fluxcdv1.NextSchedule{
+				Schedule: fluxcdv1.Schedule{
+					Cron: "0 9 * * *",
+				},
+				When: metav1.Time{Time: time.Date(2023, 10, 2, 9, 0, 0, 0, time.UTC)},
+			},
+		},
+		{
+			name:     "next interval is within the window",
+			interval: time.Hour,
+			schedules: []fluxcdv1.Schedule{{
+				Cron:   "0 9 * * *",
+				Window: metav1.Duration{Duration: 8 * time.Hour},
+			}},
+			timeout:              5 * time.Minute,
+			reconcileEnd:         "2023-10-01T10:00:00Z",
+			expectedRequeueAfter: time.Hour,
+		},
+		{
+			name:     "next interval is outside the window",
+			interval: time.Hour,
+			schedules: []fluxcdv1.Schedule{{
+				Cron:   "0 9 * * *",
+				Window: metav1.Duration{Duration: 8 * time.Hour},
+			}},
+			timeout:              5 * time.Minute,
+			reconcileEnd:         "2023-10-01T18:00:00Z",
+			expectedRequeueAfter: 15 * time.Hour,
+			expectedNextSchedule: &fluxcdv1.NextSchedule{
+				Schedule: fluxcdv1.Schedule{
+					Cron:   "0 9 * * *",
+					Window: metav1.Duration{Duration: 8 * time.Hour},
+				},
+				When: metav1.Time{Time: time.Date(2023, 10, 2, 9, 0, 0, 0, time.UTC)},
+			},
+		},
+		{
+			name:     "next interval is later than next schedule",
+			interval: time.Hour,
+			schedules: []fluxcdv1.Schedule{{
+				Cron:   "0 9 * * *",
+				Window: metav1.Duration{Duration: 8 * time.Hour},
+			}},
+			timeout:              5 * time.Minute,
+			reconcileEnd:         "2023-10-01T08:30:00Z",
+			expectedRequeueAfter: 30 * time.Minute,
+			expectedNextSchedule: &fluxcdv1.NextSchedule{
+				Schedule: fluxcdv1.Schedule{
+					Cron:   "0 9 * * *",
+					Window: metav1.Duration{Duration: 8 * time.Hour},
+				},
+				When: metav1.Time{Time: time.Date(2023, 10, 1, 9, 0, 0, 0, time.UTC)},
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			obj := &fluxcdv1.ResourceSetInputProvider{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						fluxcdv1.ReconcileEveryAnnotation: tt.interval.String(),
+					},
+				},
+			}
+
+			scheduler, err := schedule.NewScheduler(tt.schedules, tt.timeout)
+			g.Expect(err).NotTo(HaveOccurred())
+
+			reconcileEnd := testutils.ParseTime(t, tt.reconcileEnd)
+
+			res := requeueAfterResourceSetInputProvider(obj, scheduler, reconcileEnd)
+			g.Expect(res.RequeueAfter).To(Equal(tt.expectedRequeueAfter))
+			g.Expect(obj.Status.NextSchedule).To(Equal(tt.expectedNextSchedule))
 		})
 	}
 }

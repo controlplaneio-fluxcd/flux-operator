@@ -136,7 +136,7 @@ func TestFluxInstanceArtifactReconciler(t *testing.T) {
 
 			if tt.notReady {
 				conditions.MarkUnknown(obj, meta.ReadyCondition,
-					meta.ProgressingReason, "Reconciliation in progress")
+					meta.ProgressingReason, msgInProgress)
 			} else {
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.ReconciliationSucceededReason,
 					"Reconciliation finished in %s", fmtDuration(time.Now()))
