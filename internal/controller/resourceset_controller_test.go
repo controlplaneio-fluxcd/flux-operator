@@ -23,6 +23,7 @@ import (
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/inputs"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/testutils"
 )
 
 func TestResourceSetReconciler_LifeCycle(t *testing.T) {
@@ -83,7 +84,7 @@ spec:
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), resultInit)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	logObjectStatus(t, resultInit)
+	testutils.LogObjectStatus(t, resultInit)
 	g.Expect(resultInit.Finalizers).To(ContainElement(fluxcdv1.Finalizer))
 
 	r, err = reconciler.Reconcile(ctx, reconcile.Request{
@@ -97,7 +98,7 @@ spec:
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	logObjectStatus(t, result)
+	testutils.LogObjectStatus(t, result)
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
 
 	// Check if the inventory was updated.
@@ -165,7 +166,7 @@ spec:
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// Check if the inventory was updated.
-	logObject(t, resultFinal)
+	testutils.LogObject(t, resultFinal)
 	g.Expect(resultFinal.Status.Inventory.Entries).To(HaveLen(2))
 	g.Expect(resultFinal.Status.Inventory.Entries).ToNot(ContainElements(
 		fluxcdv1.ResourceRef{
@@ -334,7 +335,7 @@ spec:
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	logObjectStatus(t, result)
+	testutils.LogObjectStatus(t, result)
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
 
 	// Check if the inventory was updated.
@@ -537,7 +538,7 @@ spec:
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	logObjectStatus(t, result)
+	testutils.LogObjectStatus(t, result)
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.DependencyNotReadyReason))
 	g.Expect(conditions.GetMessage(result, meta.ReadyCondition)).To(ContainSubstring("\"test\" not found"))
 
@@ -563,7 +564,7 @@ spec:
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), resultFinal)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	logObjectStatus(t, resultFinal)
+	testutils.LogObjectStatus(t, resultFinal)
 	g.Expect(conditions.GetReason(resultFinal, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
 
 	// Delete the resource group.
@@ -637,7 +638,7 @@ spec:
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	logObjectStatus(t, result)
+	testutils.LogObjectStatus(t, result)
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.InvalidCELExpressionReason))
 	g.Expect(conditions.GetMessage(result, meta.ReadyCondition)).To(ContainSubstring("failed to parse expression"))
 }
@@ -1152,7 +1153,7 @@ spec:
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	logObjectStatus(t, result)
+	testutils.LogObjectStatus(t, result)
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationFailedReason))
 
 	// Create the service account and role binding.
@@ -1197,7 +1198,7 @@ spec:
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), resultFinal)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	logObjectStatus(t, resultFinal)
+	testutils.LogObjectStatus(t, resultFinal)
 	g.Expect(conditions.GetReason(resultFinal, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
 
 	// Delete the resource group.

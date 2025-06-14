@@ -196,7 +196,7 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 	// Mark the object as ready.
 	obj.Status.LastAppliedRevision = obj.Status.LastAttemptedRevision
 	obj.Status.LastArtifactRevision = artifactDigest
-	msg := fmt.Sprintf("Reconciliation finished in %s", fmtDuration(reconcileStart))
+	msg := reconcileMessage(reconcileStart)
 	conditions.MarkTrue(obj,
 		meta.ReadyCondition,
 		meta.ReconciliationSucceededReason,
@@ -628,16 +628,6 @@ func requeueAfter(obj *fluxcdv1.FluxInstance) ctrl.Result {
 	}
 
 	return result
-}
-
-// fmtDuration returns a human-readable string
-// representation of the time duration.
-func fmtDuration(t time.Time) string {
-	if time.Since(t) < time.Second {
-		return time.Since(t).Round(time.Millisecond).String()
-	} else {
-		return time.Since(t).Round(time.Second).String()
-	}
 }
 
 func (r *FluxInstanceReconciler) recordMetrics(obj *fluxcdv1.FluxInstance) error {

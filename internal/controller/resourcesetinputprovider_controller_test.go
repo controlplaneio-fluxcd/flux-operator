@@ -119,7 +119,7 @@ foo: bar `, inputs.Checksum(string(obj.UID)))
 	g.Expect(result.Status.LastExportedRevision).To(Equal(lastExportedRevision))
 }
 
-func TestResourceSetInputProviderReconciler_reconcile_InvalidDefaultValues(t *testing.T) {
+func TestResourceSetInputProviderReconciler_InvalidDefaultValues(t *testing.T) {
 	g := NewWithT(t)
 	reconciler := getResourceSetInputProviderReconciler()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -143,8 +143,8 @@ func TestResourceSetInputProviderReconciler_reconcile_InvalidDefaultValues(t *te
 	g.Expect(conditions.IsStalled(obj)).To(BeTrue())
 	g.Expect(conditions.GetReason(obj, meta.ReadyCondition)).To(Equal(fluxcdv1.ReasonInvalidDefaultValues))
 	g.Expect(conditions.GetReason(obj, meta.StalledCondition)).To(Equal(fluxcdv1.ReasonInvalidDefaultValues))
-	g.Expect(conditions.GetMessage(obj, meta.ReadyCondition)).To(ContainSubstring("Reconciliation failed terminally due to configuration error"))
-	g.Expect(conditions.GetMessage(obj, meta.StalledCondition)).To(ContainSubstring("Reconciliation failed terminally due to configuration error"))
+	g.Expect(conditions.GetMessage(obj, meta.ReadyCondition)).To(ContainSubstring(msgTerminalError))
+	g.Expect(conditions.GetMessage(obj, meta.StalledCondition)).To(ContainSubstring(msgTerminalError))
 }
 
 func TestResourceSetInputProviderReconciler_reconcile_InvalidSchedule(t *testing.T) {
@@ -155,11 +155,6 @@ func TestResourceSetInputProviderReconciler_reconcile_InvalidSchedule(t *testing
 
 	obj := &fluxcdv1.ResourceSetInputProvider{
 		Spec: fluxcdv1.ResourceSetInputProviderSpec{
-			DefaultValues: fluxcdv1.ResourceSetInput{
-				"foo": &apix.JSON{
-					Raw: []byte(`{"bar": "baz"}`),
-				},
-			},
 			Schedule: []fluxcdv1.Schedule{{
 				Cron: "lalksadlsakd",
 			}},
@@ -174,8 +169,8 @@ func TestResourceSetInputProviderReconciler_reconcile_InvalidSchedule(t *testing
 	g.Expect(conditions.IsStalled(obj)).To(BeTrue())
 	g.Expect(conditions.GetReason(obj, meta.ReadyCondition)).To(Equal(fluxcdv1.ReasonInvalidSchedule))
 	g.Expect(conditions.GetReason(obj, meta.StalledCondition)).To(Equal(fluxcdv1.ReasonInvalidSchedule))
-	g.Expect(conditions.GetMessage(obj, meta.ReadyCondition)).To(ContainSubstring("Reconciliation failed terminally due to configuration error"))
-	g.Expect(conditions.GetMessage(obj, meta.StalledCondition)).To(ContainSubstring("Reconciliation failed terminally due to configuration error"))
+	g.Expect(conditions.GetMessage(obj, meta.ReadyCondition)).To(ContainSubstring(msgTerminalError))
+	g.Expect(conditions.GetMessage(obj, meta.StalledCondition)).To(ContainSubstring(msgTerminalError))
 }
 
 func TestResourceSetInputProviderReconciler_reconcile_SkippedDueToSchedule(t *testing.T) {
@@ -241,7 +236,7 @@ spec:
 	expectedRequeueAfter := time.Until(sched.Next(time.Now()))
 	g.Expect(r.RequeueAfter).To(BeNumerically("~", expectedRequeueAfter, time.Second))
 
-	logObjectStatus(t, result)
+	testutils.LogObjectStatus(t, result)
 
 	// Verify that the status contains the next schedule.
 	g.Expect(result.Status.NextSchedule).NotTo(BeNil())
@@ -337,7 +332,7 @@ spec:
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	logObjectStatus(t, result)
+	testutils.LogObjectStatus(t, result)
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
 	g.Expect(result.Status.LastExportedRevision).To(BeIdenticalTo("sha256:be31afc5e49da21b12fdca6a2cad6916cad26f4bbde8c16e5822359f75c1d46a"))
 
@@ -534,7 +529,7 @@ spec:
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), resultInit)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	logObjectStatus(t, resultInit)
+	testutils.LogObjectStatus(t, resultInit)
 	g.Expect(resultInit.Finalizers).To(ContainElement(fluxcdv1.Finalizer))
 
 	r, err = reconciler.Reconcile(ctx, reconcile.Request{
@@ -548,7 +543,7 @@ spec:
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	logObjectStatus(t, result)
+	testutils.LogObjectStatus(t, result)
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
 
 	// Check if the exported inputs are correct.
@@ -954,7 +949,7 @@ spec:
 			err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 			g.Expect(err).ToNot(HaveOccurred())
 
-			logObjectStatus(t, result)
+			testutils.LogObjectStatus(t, result)
 
 			// Check if the exported inputs are correct.
 			inputsData, err := yaml.Marshal(result.Status.ExportedInputs)

@@ -6,7 +6,6 @@ package controller
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -81,7 +80,7 @@ func (r *FluxInstanceReconciler) uninstall(ctx context.Context,
 	}
 
 	controllerutil.RemoveFinalizer(obj, fluxcdv1.Finalizer)
-	msg := fmt.Sprintf("Uninstallation completed in %v", fmtDuration(reconcileStart))
+	msg := uninstallMessage(reconcileStart)
 	log.Info(msg, "output", changeSet.ToMap())
 
 	// Stop reconciliation as the object is being deleted.
