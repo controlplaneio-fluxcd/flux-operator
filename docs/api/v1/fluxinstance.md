@@ -320,6 +320,7 @@ The supported values are `kubernetes` (default), `openshift`, `azure`, `aws` and
 
 The `.spec.cluster.multitenant` field is optional and specifies whether to enable Flux
 [multi-tenancy lockdown](https://fluxcd.io/flux/installation/configuration/multitenancy/).
+By default, it is `false` (disabled).
 
 The `.spec.cluster.tenantDefaultServiceAccount` is optional and specifies the default
 service account used by Flux when reconciling `Kustomization` and `HelmRelease`
