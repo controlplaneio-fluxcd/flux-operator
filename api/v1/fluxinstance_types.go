@@ -134,7 +134,7 @@ type Cluster struct {
 	// Defaults to 'cluster.local'.
 	// +kubebuilder:default:=cluster.local
 	// +optional
-	Domain string `json:"domain"`
+	Domain string `json:"domain,omitempty"`
 
 	// Multitenant enables the multitenancy lockdown. Defaults to false.
 	// +kubebuilder:default:=false

@@ -4,6 +4,9 @@
 package controller
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -14,6 +17,7 @@ import (
 const (
 	msgInProgress    = "Reconciliation in progress"
 	msgInitSuspended = "Initialized with reconciliation suspended"
+	msgTerminalError = "Reconciliation failed terminally due to configuration error"
 )
 
 // initializeObjectStatus initializes the FluxObject by adding a finalizer and setting
@@ -56,5 +60,23 @@ func finalizeObjectStatus(obj fluxcdv1.FluxObject) {
 	// Remove the Reconciling condition.
 	if conditions.IsTrue(obj, meta.ReadyCondition) || conditions.IsTrue(obj, meta.StalledCondition) {
 		conditions.Delete(obj, meta.ReconcilingCondition)
+	}
+}
+
+func reconcileMessage(t time.Time) string {
+	return fmt.Sprintf("Reconciliation finished in %s", fmtDuration(t))
+}
+
+func uninstallMessage(t time.Time) string {
+	return fmt.Sprintf("Uninstallation compleated in %s", fmtDuration(t))
+}
+
+// fmtDuration returns a human-readable string
+// representation of the time duration.
+func fmtDuration(t time.Time) string {
+	if time.Since(t) < time.Second {
+		return time.Since(t).Round(time.Millisecond).String()
+	} else {
+		return time.Since(t).Round(time.Second).String()
 	}
 }

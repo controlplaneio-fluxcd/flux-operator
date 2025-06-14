@@ -107,11 +107,10 @@ func (r *ResourceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// Build dependency expressions and fail terminally if the expressions are invalid.
 	exprs, err := r.buildDependencyExpressions(obj)
 	if err != nil {
-		const msg = "Reconciliation failed terminally due to configuration error"
-		errMsg := fmt.Sprintf("%s: %v", msg, err)
+		errMsg := fmt.Sprintf("%s: %v", msgTerminalError, err)
 		conditions.MarkFalse(obj, meta.ReadyCondition, meta.InvalidCELExpressionReason, "%s", errMsg)
 		conditions.MarkStalled(obj, meta.InvalidCELExpressionReason, "%s", errMsg)
-		log.Error(err, msg)
+		log.Error(err, msgTerminalError)
 		r.notify(ctx, obj, corev1.EventTypeWarning, meta.InvalidCELExpressionReason, errMsg)
 		return ctrl.Result{}, nil
 	}
@@ -202,7 +201,7 @@ func (r *ResourceSetReconciler) reconcile(ctx context.Context,
 
 	// Mark the object as ready and set the last applied revision.
 	obj.Status.LastAppliedRevision = applySetDigest
-	msg := fmt.Sprintf("Reconciliation finished in %s", fmtDuration(reconcileStart))
+	msg := reconcileMessage(reconcileStart)
 	conditions.MarkTrue(obj,
 		meta.ReadyCondition,
 		meta.ReconciliationSucceededReason,
@@ -756,7 +755,7 @@ func (r *ResourceSetReconciler) uninstall(ctx context.Context,
 			log.Error(err, "pruning for deleted resource failed")
 		}
 
-		msg := fmt.Sprintf("Uninstallation completed in %v", fmtDuration(reconcileStart))
+		msg := uninstallMessage(reconcileStart)
 		log.Info(msg, "output", changeSet.ToMap())
 	} else {
 		log.Error(errors.New("service account not found"), "skip pruning for deleted resource")

@@ -6,6 +6,8 @@ package controller
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +15,7 @@ import (
 	"github.com/fluxcd/pkg/apis/kustomize"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
+	kcheck "github.com/fluxcd/pkg/runtime/conditions/check"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -25,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/testutils"
 )
 
 func TestFluxInstanceReconciler_CELNameValidation(t *testing.T) {
@@ -134,7 +138,7 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), resultInit)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	logObjectStatus(t, resultInit)
+	testutils.LogObjectStatus(t, resultInit)
 	g.Expect(resultInit.Finalizers).To(ContainElement(fluxcdv1.Finalizer))
 
 	r, err = reconciler.Reconcile(ctx, reconcile.Request{
@@ -148,7 +152,7 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	logObjectStatus(t, result)
+	testutils.LogObjectStatus(t, result)
 	checkInstanceReadiness(g, result)
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
 
@@ -229,9 +233,14 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), resultFinal)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	logObjectStatus(t, resultFinal)
+	testutils.LogObjectStatus(t, resultFinal)
 	g.Expect(resultFinal.Status.LastAttemptedRevision).To(HavePrefix("v2.3.0@sha256:"))
 	g.Expect(resultFinal.Status.LastAppliedRevision).To(BeIdenticalTo(resultFinal.Status.LastAttemptedRevision))
+
+	// Check cluster default values.
+	g.Expect(resultFinal.Spec.Cluster.Type).To(BeIdenticalTo("kubernetes"))
+	g.Expect(resultFinal.Spec.Cluster.Domain).To(BeIdenticalTo("cluster.local"))
+	g.Expect(resultFinal.Spec.Cluster.Multitenant).To(BeFalse())
 
 	// Check if the inventory was updated.
 	g.Expect(resultFinal.Status.Inventory.Entries).ToNot(ContainElements(
@@ -339,7 +348,7 @@ func TestFluxInstanceReconciler_FetchFail(t *testing.T) {
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	logObjectStatus(t, result)
+	testutils.LogObjectStatus(t, result)
 	g.Expect(conditions.IsStalled(result)).To(BeFalse())
 	g.Expect(conditions.IsFalse(result, meta.ReadyCondition)).To(BeTrue())
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ArtifactFailedReason))
@@ -401,7 +410,7 @@ func TestFluxInstanceReconciler_BuildFail(t *testing.T) {
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	logObjectStatus(t, result)
+	testutils.LogObjectStatus(t, result)
 	g.Expect(conditions.IsStalled(result)).To(BeTrue())
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.BuildFailedReason))
 	g.Expect(conditions.GetMessage(result, meta.ReadyCondition)).To(ContainSubstring(reconciler.StoragePath))
@@ -485,7 +494,7 @@ func TestFluxInstanceReconciler_Downgrade(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// Check if the downgraded was rejected.
-	logObjectStatus(t, resultFinal)
+	testutils.LogObjectStatus(t, resultFinal)
 	g.Expect(conditions.IsStalled(resultFinal)).To(BeTrue())
 	g.Expect(conditions.GetMessage(resultFinal, meta.ReadyCondition)).To(ContainSubstring("is not supported"))
 
@@ -815,4 +824,30 @@ func getDefaultFluxSpec(t *testing.T) fluxcdv1.FluxInstanceSpec {
 			},
 		},
 	}
+}
+
+func getFluxInstanceReconciler(t *testing.T) *FluxInstanceReconciler {
+	tmpDir := t.TempDir()
+	err := os.WriteFile(fmt.Sprintf("%s/kubeconfig", tmpDir), testKubeConfig, 0644)
+	if err != nil {
+		panic(fmt.Sprintf("failed to create the testenv-admin user kubeconfig: %v", err))
+	}
+
+	// Set the kubeconfig environment variable for the impersonator.
+	t.Setenv("KUBECONFIG", fmt.Sprintf("%s/kubeconfig", tmpDir))
+
+	return &FluxInstanceReconciler{
+		Client:        testClient,
+		Scheme:        NewTestScheme(),
+		StoragePath:   filepath.Join("..", "..", "config", "data"),
+		StatusManager: controllerName,
+		EventRecorder: testEnv.GetEventRecorderFor(controllerName),
+	}
+}
+
+func checkInstanceReadiness(g *WithT, obj *fluxcdv1.FluxInstance) {
+	statusCheck := kcheck.NewInProgressChecker(testClient)
+	statusCheck.DisableFetch = true
+	statusCheck.WithT(g).CheckErr(context.Background(), obj)
+	g.Expect(conditions.IsTrue(obj, meta.ReadyCondition)).To(BeTrue())
 }

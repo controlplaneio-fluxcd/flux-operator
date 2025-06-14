@@ -184,3 +184,11 @@ func TestFluxInstanceArtifactReconciler(t *testing.T) {
 		})
 	}
 }
+
+func getFluxInstanceArtifactReconciler() *FluxInstanceArtifactReconciler {
+	return &FluxInstanceArtifactReconciler{
+		Client:        testClient,
+		EventRecorder: testEnv.GetEventRecorderFor(controllerName),
+		StatusManager: controllerName,
+	}
+}

@@ -117,11 +117,10 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 	// Validate schedule.
 	scheduler, err := schedule.NewScheduler(obj.Spec.Schedule, obj.GetTimeout())
 	if err != nil {
-		const msg = "Reconciliation failed terminally due to configuration error"
-		errMsg := fmt.Sprintf("%s: %v", msg, err)
+		errMsg := fmt.Sprintf("%s: %v", msgTerminalError, err)
 		conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidSchedule, "%s", errMsg)
 		conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidSchedule, "%s", errMsg)
-		log.Error(err, msg)
+		log.Error(err, msgTerminalError)
 		r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSchedule, errMsg)
 		return ctrl.Result{}, nil
 	}
@@ -150,11 +149,10 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 	// Mark stalled if the default values in the object spec are invalid.
 	defaults, err := obj.GetDefaultInputs()
 	if err != nil {
-		const msg = "Reconciliation failed terminally due to configuration error"
-		errMsg := fmt.Sprintf("%s: %v", msg, err)
+		errMsg := fmt.Sprintf("%s: %v", msgTerminalError, err)
 		conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidDefaultValues, "%s", errMsg)
 		conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidDefaultValues, "%s", errMsg)
-		log.Error(err, msg)
+		log.Error(err, msgTerminalError)
 		r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidDefaultValues, errMsg)
 		return ctrl.Result{}, nil
 	}
@@ -170,11 +168,10 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 		defaults["id"] = inputs.Checksum(string(obj.GetUID()))
 		exportedInput, err := fluxcdv1.NewResourceSetInput(defaults)
 		if err != nil {
-			const msg = "Reconciliation failed terminally due to configuration error"
-			errMsg := fmt.Sprintf("%s: %v", msg, err)
+			errMsg := fmt.Sprintf("%s: %v", msgTerminalError, err)
 			conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidExportedInputs, "%s", errMsg)
 			conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidExportedInputs, "%s", errMsg)
-			log.Error(err, msg)
+			log.Error(err, msgTerminalError)
 			r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidExportedInputs, errMsg)
 			return ctrl.Result{}, nil
 		}
@@ -261,7 +258,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 	obj.Status.LastExportedRevision = digest.FromBytes(data).String()
 
 	// Mark the object as ready and set the last applied revision.
-	msg := fmt.Sprintf("Reconciliation finished in %s", fmtDuration(reconcileStart))
+	msg := reconcileMessage(reconcileStart)
 	conditions.MarkTrue(obj,
 		meta.ReadyCondition,
 		meta.ReconciliationSucceededReason,
