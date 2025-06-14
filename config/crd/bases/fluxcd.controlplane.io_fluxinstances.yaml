@@ -62,7 +62,9 @@ spec:
                       Defaults to 'cluster.local'.
                     type: string
                   multitenant:
-                    description: Multitenant enables the multitenancy lockdown.
+                    default: false
+                    description: Multitenant enables the multitenancy lockdown. Defaults
+                      to false.
                     type: boolean
                   networkPolicy:
                     default: true
@@ -94,9 +96,6 @@ spec:
                     - azure
                     - gcp
                     type: string
-                required:
-                - domain
-                - networkPolicy
                 type: object
               commonMetadata:
                 description: |-
@@ -118,7 +117,7 @@ spec:
               components:
                 description: |-
                   Components is the list of controllers to install.
-                  Defaults to all controllers.
+                  Defaults to a commonly used subset.
                 items:
                   description: Component is the name of a controller to install.
                   enum:
