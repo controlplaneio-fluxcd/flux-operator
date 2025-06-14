@@ -132,6 +132,14 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 		obj.Status.NextSchedule = scheduler.Next(reconcileStart)
 		next := obj.Status.NextSchedule.When.Time
 		msg := fmt.Sprintf("Reconciliation skipped, next scheduled at %s", next.Format(time.RFC3339))
+
+		// If the object is reconciling, mark it as ready and delete the reconciling condition.
+		// This occurs only at object creation time when the next schedule is in the future.
+		if conditions.IsReconciling(obj) && conditions.IsUnknown(obj, meta.ReadyCondition) {
+			conditions.Delete(obj, meta.ReconcilingCondition)
+			conditions.MarkTrue(obj, meta.ReadyCondition, fluxcdv1.ReasonSkippedDueToSchedule, "%s", msg)
+		}
+
 		log.Info(msg)
 		r.notify(ctx, obj, corev1.EventTypeNormal, fluxcdv1.ReasonSkippedDueToSchedule, msg)
 		return ctrl.Result{

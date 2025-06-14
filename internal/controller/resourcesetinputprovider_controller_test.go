@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -234,7 +233,17 @@ spec:
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).NotTo(HaveOccurred())
 
+	sched, err := schedule.Parse("0 0 29 2 *", "UTC")
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(sched).NotTo(BeNil())
+
+	// Verify that the next schedule is set correctly.
+	expectedRequeueAfter := time.Until(sched.Next(time.Now()))
+	g.Expect(r.RequeueAfter).To(BeNumerically("~", expectedRequeueAfter, time.Second))
+
 	logObjectStatus(t, result)
+
+	// Verify that the status contains the next schedule.
 	g.Expect(result.Status.NextSchedule).NotTo(BeNil())
 	g.Expect(result.Status.NextSchedule.Schedule).To(Equal(fluxcdv1.Schedule{
 		Cron:     "0 0 29 2 *",
@@ -242,24 +251,19 @@ spec:
 		Window:   metav1.Duration{Duration: time.Second},
 	}))
 
-	sched, err := schedule.Parse("0 0 29 2 *", "UTC")
-	g.Expect(err).NotTo(HaveOccurred())
-	g.Expect(sched).NotTo(BeNil())
-
-	expectedRequeueAfter := time.Until(sched.Next(time.Now()))
-	g.Expect(r.RequeueAfter).To(BeNumerically("~", expectedRequeueAfter, time.Second))
-
+	// Verify that the status contains the next schedule time.
 	untilWhen := time.Until(result.Status.NextSchedule.When.Time)
 	g.Expect(untilWhen).To(BeNumerically("~", expectedRequeueAfter, time.Second))
 
-	g.Eventually(func() bool {
-		events := getEvents(obj.Name, obj.Namespace)
-		if len(events) == 0 {
-			return false
-		}
-		return events[0].Reason == fluxcdv1.ReasonSkippedDueToSchedule &&
-			strings.Contains(events[0].Message, "Reconciliation skipped, next scheduled at")
-	}, timeout).Should(BeTrue())
+	// Verify that the status ready condition reason is set to SkippedDueToSchedule.
+	g.Expect(conditions.IsReady(result)).To(BeTrue())
+	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(Equal(fluxcdv1.ReasonSkippedDueToSchedule))
+
+	// Verify skipped reconciliation event.
+	events := getEvents(obj.Name, obj.Namespace)
+	g.Expect(events).To(HaveLen(1))
+	g.Expect(events[0].Reason).To(Equal(fluxcdv1.ReasonSkippedDueToSchedule))
+	g.Expect(events[0].Message).To(ContainSubstring("Reconciliation skipped, next scheduled at"))
 }
 
 func TestResourceSetInputProviderReconciler_GitLabBranch_LifeCycle(t *testing.T) {
