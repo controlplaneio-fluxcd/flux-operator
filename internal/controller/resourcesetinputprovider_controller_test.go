@@ -192,42 +192,64 @@ func TestResourceSetInputProviderReconciler_reconcile_SkippedDueToSchedule(t *te
 	ns, err := testEnv.CreateNamespace(ctx, "test-skipped-due-to-schedule")
 	g.Expect(err).NotTo(HaveOccurred())
 
-	obj := &fluxcdv1.ResourceSetInputProvider{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test",
-			Namespace: ns.Name,
-			Annotations: map[string]string{
-				fluxcdv1.ReconcileTimeoutAnnotation: "100ms",
-			},
-		},
-		Spec: fluxcdv1.ResourceSetInputProviderSpec{
-			Schedule: []fluxcdv1.Schedule{{
-				// This cron only happens once every 4 years, so most
-				// of the time the reconciliation will be skipped.
-				Cron:     "0 0 29 2 *",
-				TimeZone: "UTC",
-				Window:   metav1.Duration{Duration: time.Second},
-			}},
-		},
-	}
+	objDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSetInputProvider
+metadata:
+  name: test-schedule
+  namespace: "%[1]s"
+  annotations:
+    fluxcd.controlplane.io/reconcileTimeout: 100ms
+spec:
+  type: Static
+  schedule:
+  - cron: "0 0 29 2 *" # This cron only happens once every 4 years.
+    window: 1s
+  defaultValues:
+    env: test
+`, ns.Name)
+
+	// Create the ResourceSetInputProvide
+	obj := &fluxcdv1.ResourceSetInputProvider{}
+	err = yaml.Unmarshal([]byte(objDef), obj)
+	g.Expect(err).NotTo(HaveOccurred())
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize the ResourceSetInputProvider.
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Reconcile and verify schedule
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(r.Requeue).To(BeFalse())
+
+	result := &fluxcdv1.ResourceSetInputProvider{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	logObjectStatus(t, result)
+	g.Expect(result.Status.NextSchedule).NotTo(BeNil())
+	g.Expect(result.Status.NextSchedule.Schedule).To(Equal(fluxcdv1.Schedule{
+		Cron:     "0 0 29 2 *",
+		TimeZone: "UTC",
+		Window:   metav1.Duration{Duration: time.Second},
+	}))
 
 	sched, err := schedule.Parse("0 0 29 2 *", "UTC")
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(sched).NotTo(BeNil())
 
-	res, err := reconciler.reconcile(ctx, obj, nil)
-	g.Expect(err).NotTo(HaveOccurred())
-
 	expectedRequeueAfter := time.Until(sched.Next(time.Now()))
-	g.Expect(res.RequeueAfter).To(BeNumerically("~", expectedRequeueAfter, time.Second))
+	g.Expect(r.RequeueAfter).To(BeNumerically("~", expectedRequeueAfter, time.Second))
 
-	g.Expect(obj.Status.NextSchedule).NotTo(BeNil())
-	g.Expect(obj.Status.NextSchedule.Schedule).To(Equal(fluxcdv1.Schedule{
-		Cron:     "0 0 29 2 *",
-		TimeZone: "UTC",
-		Window:   metav1.Duration{Duration: time.Second},
-	}))
-	untilWhen := time.Until(obj.Status.NextSchedule.When.Time)
+	untilWhen := time.Until(result.Status.NextSchedule.When.Time)
 	g.Expect(untilWhen).To(BeNumerically("~", expectedRequeueAfter, time.Second))
 
 	g.Eventually(func() bool {
