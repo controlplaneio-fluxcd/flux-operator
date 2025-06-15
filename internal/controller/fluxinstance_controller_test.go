@@ -702,7 +702,7 @@ func TestFluxInstanceReconciler_Profiles(t *testing.T) {
 	err = testClient.Get(ctx, types.NamespacedName{Name: "alerts.notification.toolkit.fluxcd.io"}, crd)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(
-		crd.Object["spec"].(map[string]interface{})["versions"].([]interface{})[2].(map[string]interface{})["schema"].(map[string]interface{})["openAPIV3Schema"].(map[string]interface{})["properties"].(map[string]interface{})["spec"].(map[string]interface{})["properties"].(map[string]interface{})["eventSources"].(map[string]interface{})["items"].(map[string]interface{})["properties"].(map[string]interface{})["kind"].(map[string]interface{})["enum"]).
+		crd.Object["spec"].(map[string]any)["versions"].([]any)[2].(map[string]any)["schema"].(map[string]any)["openAPIV3Schema"].(map[string]any)["properties"].(map[string]any)["spec"].(map[string]any)["properties"].(map[string]any)["eventSources"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)["kind"].(map[string]any)["enum"]).
 		To(ContainElement("FluxInstance"))
 
 	// Check if the receivers CRD was patched.

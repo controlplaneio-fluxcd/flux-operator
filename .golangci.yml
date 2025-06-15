@@ -26,6 +26,7 @@ linters:
       rules:
         - name: comment-spacings
         - name: import-shadowing
+        - name: use-any
     staticcheck:
       checks:
         - all
@@ -38,9 +39,6 @@ linters:
         # Use consistent method receiver names.
         # https://staticcheck.dev/docs/checks/#ST1016
         - -ST1016
-        # Use 'strings.ReplaceAll' instead of 'strings.Replace' with 'n == -1'.
-        # https://staticcheck.dev/docs/checks/#QF1004
-        - -QF1004
         # Omit embedded fields from selector expression.
         # https://staticcheck.dev/docs/checks/#QF1008
         - -QF1008

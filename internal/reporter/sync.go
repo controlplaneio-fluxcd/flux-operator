@@ -29,7 +29,7 @@ func (r *FluxStatusReporter) getSyncStatus(ctx context.Context, crds []metav1.Gr
 	}
 
 	syncObj := unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": syncGKV.Group + "/" + syncGKV.Version,
 			"kind":       syncKind,
 		},
@@ -75,7 +75,7 @@ func (r *FluxStatusReporter) getSyncStatus(ctx context.Context, crds []metav1.Gr
 		}
 
 		sourceObj := unstructured.Unstructured{
-			Object: map[string]interface{}{
+			Object: map[string]any{
 				"apiVersion": sourceGVK.Group + "/" + sourceGVK.Version,
 				"kind":       sourceGVK.Kind,
 			},

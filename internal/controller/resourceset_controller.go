@@ -240,10 +240,10 @@ func (r *ResourceSetReconciler) checkDependencies(ctx context.Context,
 
 	for i, dep := range obj.Spec.DependsOn {
 		depObj := &unstructured.Unstructured{
-			Object: map[string]interface{}{
+			Object: map[string]any{
 				"apiVersion": dep.APIVersion,
 				"kind":       dep.Kind,
-				"metadata": map[string]interface{}{
+				"metadata": map[string]any{
 					"name":      dep.Name,
 					"namespace": dep.Namespace,
 				},
