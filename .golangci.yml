@@ -1,43 +1,72 @@
+version: "2"
 run:
-  timeout: 5m
   allow-parallel-runners: true
-
-issues:
-  # don't skip warning about doc comments
-  # don't exclude the default set of lint
-  exclude-use-default: false
-  # restore some of the defaults
-  # (fill in the rest as needed)
-  exclude-rules:
-    - path: "api/*"
-      linters:
-        - lll
-    - path: "internal/*"
-      linters:
-        - dupl
-        - lll
-  exclude-dirs:
-    - "cmd/cli"
-    - "cmd/mcp"
 linters:
-  disable-all: true
+  default: none
   enable:
+    - copyloopvar
     - dupl
     - errcheck
     - ginkgolinter
     - goconst
     - gocyclo
-    - gofmt
-    - goimports
-    - gosimple
     - govet
     - ineffassign
     - lll
     - misspell
     - nakedret
     - prealloc
+    - revive
     - staticcheck
-    - typecheck
     - unconvert
     - unparam
     - unused
+  settings:
+    revive:
+      rules:
+        - name: comment-spacings
+        - name: import-shadowing
+    staticcheck:
+      checks:
+        - all
+        # Incorrect or missing package comment.
+        # https://staticcheck.dev/docs/checks/#ST1000
+        - -ST1000
+        # Dot imports are discouraged.
+        # https://staticcheck.dev/docs/checks/#ST1001
+        - -ST1001
+        # Use consistent method receiver names.
+        # https://staticcheck.dev/docs/checks/#ST1016
+        - -ST1016
+        # Use 'strings.ReplaceAll' instead of 'strings.Replace' with 'n == -1'.
+        # https://staticcheck.dev/docs/checks/#QF1004
+        - -QF1004
+        # Omit embedded fields from selector expression.
+        # https://staticcheck.dev/docs/checks/#QF1008
+        - -QF1008
+  exclusions:
+    generated: lax
+    rules:
+      - linters:
+          - lll
+        path: api/*
+      - linters:
+          - dupl
+          - lll
+        path: internal/*
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+      - cmd/cli
+      - cmd/mcp
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

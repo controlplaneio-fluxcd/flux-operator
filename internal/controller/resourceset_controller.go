@@ -152,7 +152,7 @@ func (r *ResourceSetReconciler) reconcile(ctx context.Context,
 	}
 
 	// Compute the final inputs from providers and in-line inputs.
-	inputs, err := r.getInputs(ctx, obj)
+	inputSet, err := r.getInputs(ctx, obj)
 	if err != nil {
 		msg := fmt.Sprintf("failed to compute inputs: %s", err.Error())
 		conditions.MarkFalse(obj,
@@ -164,12 +164,12 @@ func (r *ResourceSetReconciler) reconcile(ctx context.Context,
 	}
 
 	var objects []*unstructured.Unstructured
-	if len(obj.Spec.InputsFrom) > 0 && len(inputs) == 0 {
+	if len(obj.Spec.InputsFrom) > 0 && len(inputSet) == 0 {
 		// If providers return no inputs, we should reconcile an empty set to trigger GC.
 		log.Info("No inputs returned from providers, reconciling an empty set")
 	} else {
 		// Build the resources using the inputs.
-		buildResult, err := builder.BuildResourceSet(obj.Spec.ResourcesTemplate, obj.Spec.Resources, inputs)
+		buildResult, err := builder.BuildResourceSet(obj.Spec.ResourcesTemplate, obj.Spec.Resources, inputSet)
 		if err != nil {
 			msg := fmt.Sprintf("build failed: %s", err.Error())
 			conditions.MarkFalse(obj,

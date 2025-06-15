@@ -396,7 +396,7 @@ func (r *ResourceSetInputProviderReconciler) callProvider(ctx context.Context,
 	obj *fluxcdv1.ResourceSetInputProvider, provider gitprovider.Interface,
 	defaults map[string]any) ([]fluxcdv1.ResourceSetInput, error) {
 
-	var inputs []fluxcdv1.ResourceSetInput
+	var inputSet []fluxcdv1.ResourceSetInput
 
 	opts, err := r.makeGitOptions(obj)
 	if err != nil {
@@ -430,11 +430,11 @@ func (r *ResourceSetInputProviderReconciler) callProvider(ctx context.Context,
 		}
 
 		for _, input := range inputsWithDefaults {
-			inputs = append(inputs, input)
+			inputSet = append(inputSet, input)
 		}
 	}
 
-	return inputs, nil
+	return inputSet, nil
 }
 
 // getBasicAuth returns the basic auth credentials by reading the username

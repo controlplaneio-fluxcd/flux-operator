@@ -211,7 +211,7 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 	return requeueAfter(obj), nil
 }
 
-// Get a keychain from the artifactPullSecret secret if provided
+// GetDistributionKeychain creates a keychain from the artifactPullSecret secret if provided.
 func GetDistributionKeychain(ctx context.Context, kubeClient client.Client, obj *fluxcdv1.FluxInstance) (authn.Keychain, error) {
 	artifactPullSecret := obj.Spec.Distribution.ArtifactPullSecret
 	if artifactPullSecret == "" {
