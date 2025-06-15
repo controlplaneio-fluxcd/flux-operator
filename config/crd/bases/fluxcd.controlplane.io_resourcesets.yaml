@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.16.1
+    controller-gen.kubebuilder.io/version: v0.18.0
   name: resourcesets.fluxcd.controlplane.io
 spec:
   group: fluxcd.controlplane.io
@@ -119,6 +119,9 @@ spec:
                   When set, the inputs are fetched from the providers and concatenated
                   with the in-line inputs defined in the ResourceSet.
                 items:
+                  description: |-
+                    InputProviderReference defines a reference to an input provider resource
+                    in the same namespace as the ResourceSet.
                   properties:
                     apiVersion:
                       description: |-

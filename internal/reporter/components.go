@@ -18,7 +18,7 @@ import (
 
 func (r *FluxStatusReporter) getComponentsStatus(ctx context.Context) ([]fluxcdv1.FluxComponentStatus, error) {
 	deployments := unstructured.UnstructuredList{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "apps/v1",
 			"kind":       "Deployment",
 		},
@@ -47,7 +47,7 @@ func (r *FluxStatusReporter) getComponentsStatus(ctx context.Context) ([]fluxcdv
 
 		containers, found, _ := unstructured.NestedSlice(d.Object, "spec", "template", "spec", "containers")
 		if found && len(containers) > 0 {
-			components[i].Image = containers[0].(map[string]interface{})["image"].(string)
+			components[i].Image = containers[0].(map[string]any)["image"].(string)
 		}
 	}
 

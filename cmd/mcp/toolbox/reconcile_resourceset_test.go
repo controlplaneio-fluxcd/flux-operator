@@ -30,26 +30,26 @@ func TestManager_HandleReconcileResourceSet(t *testing.T) {
 
 	tests := []struct {
 		testName  string
-		arguments map[string]interface{}
+		arguments map[string]any
 		matchErr  string
 	}{
 		{
 			testName: "fails without name",
-			arguments: map[string]interface{}{
+			arguments: map[string]any{
 				"kind": "ResourceSet",
 			},
 			matchErr: "name is required",
 		},
 		{
 			testName: "fails without namespace",
-			arguments: map[string]interface{}{
+			arguments: map[string]any{
 				"name": "test",
 			},
 			matchErr: "namespace is required",
 		},
 		{
 			testName: "fails with invalid kubeconfig",
-			arguments: map[string]interface{}{
+			arguments: map[string]any{
 				"name":      "test",
 				"namespace": "default",
 			},

@@ -23,13 +23,10 @@ import (
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/inputs"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/testutils"
 )
 
 func TestResourceSetReconciler_LifeCycle(t *testing.T) {
-	// Disable notifications for the tests as no pod is running.
-	// This is required to avoid the 30s retry loop performed by the HTTP client.
-	t.Setenv("NOTIFICATIONS_DISABLED", "yes")
-
 	g := NewWithT(t)
 	reconciler := getResourceSetReconciler(t)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -83,7 +80,7 @@ spec:
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), resultInit)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	logObjectStatus(t, resultInit)
+	testutils.LogObjectStatus(t, resultInit)
 	g.Expect(resultInit.Finalizers).To(ContainElement(fluxcdv1.Finalizer))
 
 	r, err = reconciler.Reconcile(ctx, reconcile.Request{
@@ -97,7 +94,7 @@ spec:
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	logObjectStatus(t, result)
+	testutils.LogObjectStatus(t, result)
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
 
 	// Check if the inventory was updated.
@@ -165,7 +162,7 @@ spec:
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// Check if the inventory was updated.
-	logObject(t, resultFinal)
+	testutils.LogObject(t, resultFinal)
 	g.Expect(resultFinal.Status.Inventory.Entries).To(HaveLen(2))
 	g.Expect(resultFinal.Status.Inventory.Entries).ToNot(ContainElements(
 		fluxcdv1.ResourceRef{
@@ -334,7 +331,7 @@ spec:
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	logObjectStatus(t, result)
+	testutils.LogObjectStatus(t, result)
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
 
 	// Check if the inventory was updated.
@@ -537,7 +534,7 @@ spec:
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	logObjectStatus(t, result)
+	testutils.LogObjectStatus(t, result)
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.DependencyNotReadyReason))
 	g.Expect(conditions.GetMessage(result, meta.ReadyCondition)).To(ContainSubstring("\"test\" not found"))
 
@@ -563,7 +560,7 @@ spec:
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), resultFinal)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	logObjectStatus(t, resultFinal)
+	testutils.LogObjectStatus(t, resultFinal)
 	g.Expect(conditions.GetReason(resultFinal, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
 
 	// Delete the resource group.
@@ -637,7 +634,7 @@ spec:
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	logObjectStatus(t, result)
+	testutils.LogObjectStatus(t, result)
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.InvalidCELExpressionReason))
 	g.Expect(conditions.GetMessage(result, meta.ReadyCondition)).To(ContainSubstring("failed to parse expression"))
 }
@@ -686,7 +683,7 @@ func TestResourceSetInputsFromValidation(t *testing.T) {
 func TestResourceSetReconciler_LabelSelector(t *testing.T) {
 	g := NewWithT(t)
 	reconciler := getResourceSetReconciler(t)
-	rsipReconciler := getResourceSetInputProviderReconciler()
+	rsipReconciler := getResourceSetInputProviderReconciler(t)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -904,7 +901,7 @@ spec:
 func TestResourceSetReconciler_LabelSelector_LifeCycle(t *testing.T) {
 	g := NewWithT(t)
 	reconciler := getResourceSetReconciler(t)
-	rsipReconciler := getResourceSetInputProviderReconciler()
+	rsipReconciler := getResourceSetInputProviderReconciler(t)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -1152,7 +1149,7 @@ spec:
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	logObjectStatus(t, result)
+	testutils.LogObjectStatus(t, result)
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationFailedReason))
 
 	// Create the service account and role binding.
@@ -1197,7 +1194,7 @@ spec:
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), resultFinal)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	logObjectStatus(t, resultFinal)
+	testutils.LogObjectStatus(t, resultFinal)
 	g.Expect(conditions.GetReason(resultFinal, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
 
 	// Delete the resource group.
@@ -1220,6 +1217,10 @@ func getResourceSetReconciler(t *testing.T) *ResourceSetReconciler {
 
 	// Set the kubeconfig environment variable for the impersonator.
 	t.Setenv("KUBECONFIG", fmt.Sprintf("%s/kubeconfig", tmpDir))
+
+	// Disable notifications for the tests as no pod is running.
+	// This is required to avoid the 30s retry loop performed by the HTTP client.
+	t.Setenv("NOTIFICATIONS_DISABLED", "yes")
 
 	return &ResourceSetReconciler{
 		Client:        testClient,

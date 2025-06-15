@@ -30,26 +30,26 @@ func TestManager_HandleGetKubernetesLogs(t *testing.T) {
 
 	tests := []struct {
 		testName  string
-		arguments map[string]interface{}
+		arguments map[string]any
 		matchErr  string
 	}{
 		{
 			testName: "fails without pod name",
-			arguments: map[string]interface{}{
+			arguments: map[string]any{
 				"kind": "Pod",
 			},
 			matchErr: "pod name is required",
 		},
 		{
 			testName: "fails without container name",
-			arguments: map[string]interface{}{
+			arguments: map[string]any{
 				"pod_name": "test",
 			},
 			matchErr: "container name is required",
 		},
 		{
 			testName: "fails without pod namespace",
-			arguments: map[string]interface{}{
+			arguments: map[string]any{
 				"pod_name":       "test",
 				"container_name": "test-container",
 			},
@@ -57,7 +57,7 @@ func TestManager_HandleGetKubernetesLogs(t *testing.T) {
 		},
 		{
 			testName: "fails with invalid kubeconfig",
-			arguments: map[string]interface{}{
+			arguments: map[string]any{
 				"pod_name":       "test",
 				"pod_namespace":  "default",
 				"container_name": "test-container",

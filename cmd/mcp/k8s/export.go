@@ -83,7 +83,7 @@ func (k *Client) Export(ctx context.Context,
 						Name:      item.GetName(),
 					})
 
-					iv := make([]interface{}, len(inventory))
+					iv := make([]any, len(inventory))
 					for i, inv := range inventory {
 						// deep copy the inventory item
 						iv[i] = map[string]any{
@@ -95,7 +95,7 @@ func (k *Client) Export(ctx context.Context,
 							_ = unstructured.SetNestedField(iv[i].(map[string]any), inv.Namespace, "namespace")
 						}
 						if len(inv.ContainerImages) > 0 {
-							images := make([]interface{}, len(inv.ContainerImages))
+							images := make([]any, len(inv.ContainerImages))
 							for j, image := range inv.ContainerImages {
 								images[j] = map[string]any{
 									"image": image,
@@ -114,7 +114,7 @@ func (k *Client) Export(ctx context.Context,
 				if strings.Contains(item.GetAPIVersion(), "fluxcd") {
 					events, err := k.GetEvents(ctx, item.GetKind(), item.GetName(), item.GetNamespace(), "ReconciliationSucceeded")
 					if err == nil && len(events) > 0 {
-						ev := make([]interface{}, len(events))
+						ev := make([]any, len(events))
 						for i, event := range events {
 							ev[i] = map[string]any{
 								"lastTimestamp": event.LastTimestamp.Time.Format(time.RFC3339),

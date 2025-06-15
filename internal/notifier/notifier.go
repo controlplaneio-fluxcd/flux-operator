@@ -31,9 +31,9 @@ func WithFluxInstance(obj *fluxcdv1.FluxInstance) Option {
 	}
 }
 
-func WithClient(client client.Client) Option {
+func WithClient(c client.Client) Option {
 	return func(o *options) {
-		o.client = client
+		o.client = c
 	}
 }
 

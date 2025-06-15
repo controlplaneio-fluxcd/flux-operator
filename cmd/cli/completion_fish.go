@@ -18,7 +18,7 @@ flux-operator completion fish > ~/.config/fish/completions/flux-operator.fish
 
 See http://fishshell.com/docs/current/index.html#completion-own for more details`,
 	Run: func(cmd *cobra.Command, args []string) {
-		rootCmd.GenFishCompletion(os.Stdout, true)
+		rootCmd.GenFishCompletion(os.Stdout, true) //nolint:errcheck
 	},
 }
 

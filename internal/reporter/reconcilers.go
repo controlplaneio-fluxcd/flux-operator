@@ -31,7 +31,7 @@ func (r *FluxStatusReporter) getReconcilersStatus(ctx context.Context, crds []me
 		var totalSize int64
 
 		list := unstructured.UnstructuredList{
-			Object: map[string]interface{}{
+			Object: map[string]any{
 				"apiVersion": gvk.Group + "/" + gvk.Version,
 				"kind":       gvk.Kind,
 			},

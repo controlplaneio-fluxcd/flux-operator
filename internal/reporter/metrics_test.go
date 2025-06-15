@@ -1,3 +1,6 @@
+// Copyright 2025 Stefan Prodan.
+// SPDX-License-Identifier: AGPL-3.0
+
 package reporter
 
 import (
@@ -16,26 +19,26 @@ func TestRecordMetrics_FluxResource(t *testing.T) {
 	reg.MustRegister(metrics["FluxResource"])
 
 	repo := unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "source.toolkit.fluxcd.io/v1",
 			"kind":       "GitRepository",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"uid":       "f252c583-d7b7-4236-b436-618eb5eb3023",
 				"name":      "flux-system",
 				"namespace": "flux-system",
 			},
-			"spec": map[string]interface{}{
+			"spec": map[string]any{
 				"url": "ssh://test/repo",
-				"ref": map[string]interface{}{
+				"ref": map[string]any{
 					"branch": "main",
 				},
 			},
-			"status": map[string]interface{}{
-				"artifact": map[string]interface{}{
+			"status": map[string]any{
+				"artifact": map[string]any{
 					"revision": "6.6.3@sha1:b0c487c6b217bed8e6a53fca25f6ee1a7dd573e3",
 				},
-				"conditions": []interface{}{
-					map[string]interface{}{
+				"conditions": []any{
+					map[string]any{
 						"type":   "Ready",
 						"status": "Unknown",
 						"reason": "Progressing",
@@ -48,25 +51,25 @@ func TestRecordMetrics_FluxResource(t *testing.T) {
 	RecordMetrics(repo)
 
 	ks := unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "kustomize.toolkit.fluxcd.io/v1",
 			"kind":       "Kustomization",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"uid":       "1a0105c8-1ad2-4c5d-9d25-22096796156f",
 				"name":      "flux-system",
 				"namespace": "flux-system",
 			},
-			"spec": map[string]interface{}{
-				"sourceRef": map[string]interface{}{
+			"spec": map[string]any{
+				"sourceRef": map[string]any{
 					"kind": "GitRepository",
 					"name": "flux-system",
 				},
 				"path":    "clusters/production",
 				"suspend": true,
 			},
-			"status": map[string]interface{}{
-				"conditions": []interface{}{
-					map[string]interface{}{
+			"status": map[string]any{
+				"conditions": []any{
+					map[string]any{
 						"type":   "Ready",
 						"status": "True",
 						"reason": "ReconciliationSucceeded",
@@ -152,25 +155,25 @@ func TestRecordMetrics_ResourceSet(t *testing.T) {
 	reg.MustRegister(metrics[fluxcdv1.ResourceSetKind])
 
 	rs := unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "toolkit.fluxcd.io/v1",
 			"kind":       "ResourceSet",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"uid":       "f252c583-d7b7-4236-b436-618eb5eb3023",
 				"name":      "test",
 				"namespace": "flux-system",
 			},
-			"spec": map[string]interface{}{
-				"resources": []interface{}{
-					map[string]interface{}{
+			"spec": map[string]any{
+				"resources": []any{
+					map[string]any{
 						"kind": "GitRepository",
 						"name": "flux-system",
 					},
 				},
 			},
-			"status": map[string]interface{}{
-				"conditions": []interface{}{
-					map[string]interface{}{
+			"status": map[string]any{
+				"conditions": []any{
+					map[string]any{
 						"type":   "Ready",
 						"status": "True",
 						"reason": "ReconciliationSucceeded",

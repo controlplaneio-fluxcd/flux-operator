@@ -153,7 +153,7 @@ func commonLabelsToValues(obj unstructured.Unstructured) prometheus.Labels {
 	conditions, found, _ := unstructured.NestedSlice(obj.Object, "status", "conditions")
 	if found {
 		for _, condition := range conditions {
-			conditionMap := condition.(map[string]interface{})
+			conditionMap := condition.(map[string]any)
 			if conditionMap["type"] == "Ready" {
 				labels["ready"] = conditionMap["status"].(string)
 				labels["reason"] = conditionMap["reason"].(string)

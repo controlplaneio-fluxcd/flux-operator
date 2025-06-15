@@ -90,14 +90,7 @@ func (r *ResourceSetInputProviderReconciler) Reconcile(ctx context.Context, req 
 	// Add the finalizer if it does not exist.
 	if !controllerutil.ContainsFinalizer(obj, fluxcdv1.Finalizer) {
 		log.Info("Adding finalizer", "finalizer", fluxcdv1.Finalizer)
-		controllerutil.AddFinalizer(obj, fluxcdv1.Finalizer)
-		conditions.MarkUnknown(obj,
-			meta.ReadyCondition,
-			meta.ProgressingReason,
-			"%s", msgInProgress)
-		conditions.MarkReconciling(obj,
-			meta.ProgressingReason,
-			"%s", msgInProgress)
+		initializeObjectStatus(obj)
 		return ctrl.Result{Requeue: true}, nil
 	}
 
@@ -124,11 +117,10 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 	// Validate schedule.
 	scheduler, err := schedule.NewScheduler(obj.Spec.Schedule, obj.GetTimeout())
 	if err != nil {
-		const msg = "Reconciliation failed terminally due to configuration error"
-		errMsg := fmt.Sprintf("%s: %v", msg, err)
+		errMsg := fmt.Sprintf("%s: %v", msgTerminalError, err)
 		conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidSchedule, "%s", errMsg)
 		conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidSchedule, "%s", errMsg)
-		log.Error(err, msg)
+		log.Error(err, msgTerminalError)
 		r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSchedule, errMsg)
 		return ctrl.Result{}, nil
 	}
@@ -139,6 +131,14 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 		obj.Status.NextSchedule = scheduler.Next(reconcileStart)
 		next := obj.Status.NextSchedule.When.Time
 		msg := fmt.Sprintf("Reconciliation skipped, next scheduled at %s", next.Format(time.RFC3339))
+
+		// If the object is reconciling, mark it as ready and delete the reconciling condition.
+		// This occurs only at object creation time when the next schedule is in the future.
+		if conditions.IsReconciling(obj) && conditions.IsUnknown(obj, meta.ReadyCondition) {
+			conditions.Delete(obj, meta.ReconcilingCondition)
+			conditions.MarkTrue(obj, meta.ReadyCondition, fluxcdv1.ReasonSkippedDueToSchedule, "%s", msg)
+		}
+
 		log.Info(msg)
 		r.notify(ctx, obj, corev1.EventTypeNormal, fluxcdv1.ReasonSkippedDueToSchedule, msg)
 		return ctrl.Result{
@@ -149,11 +149,10 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 	// Mark stalled if the default values in the object spec are invalid.
 	defaults, err := obj.GetDefaultInputs()
 	if err != nil {
-		const msg = "Reconciliation failed terminally due to configuration error"
-		errMsg := fmt.Sprintf("%s: %v", msg, err)
+		errMsg := fmt.Sprintf("%s: %v", msgTerminalError, err)
 		conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidDefaultValues, "%s", errMsg)
 		conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidDefaultValues, "%s", errMsg)
-		log.Error(err, msg)
+		log.Error(err, msgTerminalError)
 		r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidDefaultValues, errMsg)
 		return ctrl.Result{}, nil
 	}
@@ -169,11 +168,10 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 		defaults["id"] = inputs.Checksum(string(obj.GetUID()))
 		exportedInput, err := fluxcdv1.NewResourceSetInput(defaults)
 		if err != nil {
-			const msg = "Reconciliation failed terminally due to configuration error"
-			errMsg := fmt.Sprintf("%s: %v", msg, err)
+			errMsg := fmt.Sprintf("%s: %v", msgTerminalError, err)
 			conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidExportedInputs, "%s", errMsg)
 			conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidExportedInputs, "%s", errMsg)
-			log.Error(err, msg)
+			log.Error(err, msgTerminalError)
 			r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidExportedInputs, errMsg)
 			return ctrl.Result{}, nil
 		}
@@ -260,7 +258,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 	obj.Status.LastExportedRevision = digest.FromBytes(data).String()
 
 	// Mark the object as ready and set the last applied revision.
-	msg := fmt.Sprintf("Reconciliation finished in %s", fmtDuration(reconcileStart))
+	msg := reconcileMessage(reconcileStart)
 	conditions.MarkTrue(obj,
 		meta.ReadyCondition,
 		meta.ReconciliationSucceededReason,
@@ -398,7 +396,7 @@ func (r *ResourceSetInputProviderReconciler) callProvider(ctx context.Context,
 	obj *fluxcdv1.ResourceSetInputProvider, provider gitprovider.Interface,
 	defaults map[string]any) ([]fluxcdv1.ResourceSetInput, error) {
 
-	var inputs []fluxcdv1.ResourceSetInput
+	var inputSet []fluxcdv1.ResourceSetInput
 
 	opts, err := r.makeGitOptions(obj)
 	if err != nil {
@@ -432,11 +430,11 @@ func (r *ResourceSetInputProviderReconciler) callProvider(ctx context.Context,
 		}
 
 		for _, input := range inputsWithDefaults {
-			inputs = append(inputs, input)
+			inputSet = append(inputSet, input)
 		}
 	}
 
-	return inputs, nil
+	return inputSet, nil
 }
 
 // getBasicAuth returns the basic auth credentials by reading the username
@@ -555,24 +553,7 @@ func (r *ResourceSetInputProviderReconciler) getSecretData(ctx context.Context, 
 func (r *ResourceSetInputProviderReconciler) finalizeStatus(ctx context.Context,
 	obj *fluxcdv1.ResourceSetInputProvider,
 	patcher *patch.SerialPatcher) error {
-	// Set the value of the reconciliation request in status.
-	if v, ok := meta.ReconcileAnnotationValue(obj.GetAnnotations()); ok {
-		obj.Status.LastHandledReconcileAt = v
-	}
-
-	// Set the Reconciling reason to ProgressingWithRetry if the
-	// reconciliation has failed.
-	if conditions.IsFalse(obj, meta.ReadyCondition) &&
-		conditions.Has(obj, meta.ReconcilingCondition) {
-		rc := conditions.Get(obj, meta.ReconcilingCondition)
-		rc.Reason = meta.ProgressingWithRetryReason
-		conditions.Set(obj, rc)
-	}
-
-	// Remove the Reconciling condition.
-	if conditions.IsTrue(obj, meta.ReadyCondition) || conditions.IsTrue(obj, meta.StalledCondition) {
-		conditions.Delete(obj, meta.ReconcilingCondition)
-	}
+	finalizeObjectStatus(obj)
 
 	// Patch finalizers, status and conditions.
 	return r.patch(ctx, obj, patcher)

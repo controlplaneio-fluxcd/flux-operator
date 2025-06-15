@@ -6,6 +6,8 @@ package controller
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +15,7 @@ import (
 	"github.com/fluxcd/pkg/apis/kustomize"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
+	kcheck "github.com/fluxcd/pkg/runtime/conditions/check"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -25,11 +28,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/testutils"
 )
 
 func TestFluxInstanceReconciler_CELNameValidation(t *testing.T) {
 	g := NewWithT(t)
-	const manifestsURL = "oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests:latest"
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -38,16 +41,67 @@ func TestFluxInstanceReconciler_CELNameValidation(t *testing.T) {
 
 	obj := &fluxcdv1.FluxInstance{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "fluxx", // Invalid name
+			Name:      "invalid-name",
 			Namespace: ns.Name,
 		},
 		Spec: getDefaultFluxSpec(t),
 	}
-	obj.Spec.Distribution.Artifact = manifestsURL
 
 	err = testEnv.Create(ctx, obj)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("the only accepted name for a FluxInstance is 'flux'"))
+}
+
+func TestFluxInstanceReconciler_InitDisabled(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getFluxInstanceReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	obj := &fluxcdv1.FluxInstance{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "flux",
+			Namespace: ns.Name,
+			Annotations: map[string]string{
+				fluxcdv1.ReconcileAnnotation: fluxcdv1.DisabledValue,
+			},
+		},
+		Spec: getDefaultFluxSpec(t),
+	}
+
+	// Initialize the instance.
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	resultInit := &fluxcdv1.FluxInstance{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), resultInit)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Check if the finalizer was added.
+	g.Expect(resultInit.Finalizers).To(ContainElement(fluxcdv1.Finalizer))
+
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeFalse())
+
+	result := &fluxcdv1.FluxInstance{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Check if the Ready condition is set to ReconciliationDisabled.
+	checkInstanceReadiness(g, result)
+	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(fluxcdv1.ReconciliationDisabledReason))
 }
 
 func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
@@ -84,7 +138,7 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), resultInit)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	logObjectStatus(t, resultInit)
+	testutils.LogObjectStatus(t, resultInit)
 	g.Expect(resultInit.Finalizers).To(ContainElement(fluxcdv1.Finalizer))
 
 	r, err = reconciler.Reconcile(ctx, reconcile.Request{
@@ -98,7 +152,7 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	logObjectStatus(t, result)
+	testutils.LogObjectStatus(t, result)
 	checkInstanceReadiness(g, result)
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
 
@@ -179,9 +233,14 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), resultFinal)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	logObjectStatus(t, resultFinal)
+	testutils.LogObjectStatus(t, resultFinal)
 	g.Expect(resultFinal.Status.LastAttemptedRevision).To(HavePrefix("v2.3.0@sha256:"))
 	g.Expect(resultFinal.Status.LastAppliedRevision).To(BeIdenticalTo(resultFinal.Status.LastAttemptedRevision))
+
+	// Check cluster default values.
+	g.Expect(resultFinal.Spec.Cluster.Type).To(BeIdenticalTo("kubernetes"))
+	g.Expect(resultFinal.Spec.Cluster.Domain).To(BeIdenticalTo("cluster.local"))
+	g.Expect(resultFinal.Spec.Cluster.Multitenant).To(BeFalse())
 
 	// Check if the inventory was updated.
 	g.Expect(resultFinal.Status.Inventory.Entries).ToNot(ContainElements(
@@ -289,7 +348,7 @@ func TestFluxInstanceReconciler_FetchFail(t *testing.T) {
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	logObjectStatus(t, result)
+	testutils.LogObjectStatus(t, result)
 	g.Expect(conditions.IsStalled(result)).To(BeFalse())
 	g.Expect(conditions.IsFalse(result, meta.ReadyCondition)).To(BeTrue())
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ArtifactFailedReason))
@@ -351,7 +410,7 @@ func TestFluxInstanceReconciler_BuildFail(t *testing.T) {
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	logObjectStatus(t, result)
+	testutils.LogObjectStatus(t, result)
 	g.Expect(conditions.IsStalled(result)).To(BeTrue())
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.BuildFailedReason))
 	g.Expect(conditions.GetMessage(result, meta.ReadyCondition)).To(ContainSubstring(reconciler.StoragePath))
@@ -435,7 +494,7 @@ func TestFluxInstanceReconciler_Downgrade(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// Check if the downgraded was rejected.
-	logObjectStatus(t, resultFinal)
+	testutils.LogObjectStatus(t, resultFinal)
 	g.Expect(conditions.IsStalled(resultFinal)).To(BeTrue())
 	g.Expect(conditions.GetMessage(resultFinal, meta.ReadyCondition)).To(ContainSubstring("is not supported"))
 
@@ -643,7 +702,7 @@ func TestFluxInstanceReconciler_Profiles(t *testing.T) {
 	err = testClient.Get(ctx, types.NamespacedName{Name: "alerts.notification.toolkit.fluxcd.io"}, crd)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(
-		crd.Object["spec"].(map[string]interface{})["versions"].([]interface{})[2].(map[string]interface{})["schema"].(map[string]interface{})["openAPIV3Schema"].(map[string]interface{})["properties"].(map[string]interface{})["spec"].(map[string]interface{})["properties"].(map[string]interface{})["eventSources"].(map[string]interface{})["items"].(map[string]interface{})["properties"].(map[string]interface{})["kind"].(map[string]interface{})["enum"]).
+		crd.Object["spec"].(map[string]any)["versions"].([]any)[2].(map[string]any)["schema"].(map[string]any)["openAPIV3Schema"].(map[string]any)["properties"].(map[string]any)["spec"].(map[string]any)["properties"].(map[string]any)["eventSources"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)["kind"].(map[string]any)["enum"]).
 		To(ContainElement("FluxInstance"))
 
 	// Check if the receivers CRD was patched.
@@ -765,4 +824,30 @@ func getDefaultFluxSpec(t *testing.T) fluxcdv1.FluxInstanceSpec {
 			},
 		},
 	}
+}
+
+func getFluxInstanceReconciler(t *testing.T) *FluxInstanceReconciler {
+	tmpDir := t.TempDir()
+	err := os.WriteFile(fmt.Sprintf("%s/kubeconfig", tmpDir), testKubeConfig, 0644)
+	if err != nil {
+		panic(fmt.Sprintf("failed to create the testenv-admin user kubeconfig: %v", err))
+	}
+
+	// Set the kubeconfig environment variable for the impersonator.
+	t.Setenv("KUBECONFIG", fmt.Sprintf("%s/kubeconfig", tmpDir))
+
+	return &FluxInstanceReconciler{
+		Client:        testClient,
+		Scheme:        NewTestScheme(),
+		StoragePath:   filepath.Join("..", "..", "config", "data"),
+		StatusManager: controllerName,
+		EventRecorder: testEnv.GetEventRecorderFor(controllerName),
+	}
+}
+
+func checkInstanceReadiness(g *WithT, obj *fluxcdv1.FluxInstance) {
+	statusCheck := kcheck.NewInProgressChecker(testClient)
+	statusCheck.DisableFetch = true
+	statusCheck.WithT(g).CheckErr(context.Background(), obj)
+	g.Expect(conditions.IsTrue(obj, meta.ReadyCondition)).To(BeTrue())
 }

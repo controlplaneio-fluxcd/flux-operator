@@ -29,7 +29,7 @@ flux-operator completion zsh > _flux-operator
 mv _flux-operator ~/.oh-my-zsh/completions  # oh-my-zsh
 mv _flux-operator ~/.zprezto/modules/completion/external/src/  # zprezto`,
 	Run: func(cmd *cobra.Command, args []string) {
-		rootCmd.GenZshCompletion(os.Stdout)
+		rootCmd.GenZshCompletion(os.Stdout) //nolint:errcheck
 	},
 }
 

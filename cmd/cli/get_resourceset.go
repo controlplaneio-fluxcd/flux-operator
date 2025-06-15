@@ -66,7 +66,7 @@ func getResourceSetCmdRun(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	var rows [][]string
+	rows := make([][]string, 0)
 	for _, rset := range list.Items {
 		objCount := 0
 		if rset.Status.Inventory != nil {

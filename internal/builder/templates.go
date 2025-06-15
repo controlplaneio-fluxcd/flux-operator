@@ -398,7 +398,7 @@ spec:
     name: {{$name}}
 `
 
-func execTemplate(obj interface{}, tmpl, filename string) (err error) {
+func execTemplate(obj any, tmpl, filename string) (err error) {
 	t, err := template.New("tmpl").Parse(tmpl)
 	if err != nil {
 		return err

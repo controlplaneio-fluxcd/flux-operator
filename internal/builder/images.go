@@ -38,7 +38,7 @@ func ExtractComponentImages(srcDir string, opts Options) ([]ComponentImage, erro
 					return nil, fmt.Errorf("containers not found in %s", obj.GetName())
 				}
 				for _, container := range containers {
-					img := container.(map[string]interface{})["image"].(string)
+					img := container.(map[string]any)["image"].(string)
 					tag, err := gcname.NewTag(img, gcname.WeakValidation)
 					if err != nil {
 						return nil, err

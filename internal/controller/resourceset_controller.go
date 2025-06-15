@@ -93,14 +93,7 @@ func (r *ResourceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// Add the finalizer if it does not exist.
 	if !controllerutil.ContainsFinalizer(obj, fluxcdv1.Finalizer) {
 		log.Info("Adding finalizer", "finalizer", fluxcdv1.Finalizer)
-		controllerutil.AddFinalizer(obj, fluxcdv1.Finalizer)
-		conditions.MarkUnknown(obj,
-			meta.ReadyCondition,
-			meta.ProgressingReason,
-			"%s", msgInProgress)
-		conditions.MarkReconciling(obj,
-			meta.ProgressingReason,
-			"%s", msgInProgress)
+		initializeObjectStatus(obj)
 		return ctrl.Result{Requeue: true}, nil
 	}
 
@@ -114,11 +107,10 @@ func (r *ResourceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// Build dependency expressions and fail terminally if the expressions are invalid.
 	exprs, err := r.buildDependencyExpressions(obj)
 	if err != nil {
-		const msg = "Reconciliation failed terminally due to configuration error"
-		errMsg := fmt.Sprintf("%s: %v", msg, err)
+		errMsg := fmt.Sprintf("%s: %v", msgTerminalError, err)
 		conditions.MarkFalse(obj, meta.ReadyCondition, meta.InvalidCELExpressionReason, "%s", errMsg)
 		conditions.MarkStalled(obj, meta.InvalidCELExpressionReason, "%s", errMsg)
-		log.Error(err, msg)
+		log.Error(err, msgTerminalError)
 		r.notify(ctx, obj, corev1.EventTypeWarning, meta.InvalidCELExpressionReason, errMsg)
 		return ctrl.Result{}, nil
 	}
@@ -160,7 +152,7 @@ func (r *ResourceSetReconciler) reconcile(ctx context.Context,
 	}
 
 	// Compute the final inputs from providers and in-line inputs.
-	inputs, err := r.getInputs(ctx, obj)
+	inputSet, err := r.getInputs(ctx, obj)
 	if err != nil {
 		msg := fmt.Sprintf("failed to compute inputs: %s", err.Error())
 		conditions.MarkFalse(obj,
@@ -172,12 +164,12 @@ func (r *ResourceSetReconciler) reconcile(ctx context.Context,
 	}
 
 	var objects []*unstructured.Unstructured
-	if len(obj.Spec.InputsFrom) > 0 && len(inputs) == 0 {
+	if len(obj.Spec.InputsFrom) > 0 && len(inputSet) == 0 {
 		// If providers return no inputs, we should reconcile an empty set to trigger GC.
 		log.Info("No inputs returned from providers, reconciling an empty set")
 	} else {
 		// Build the resources using the inputs.
-		buildResult, err := builder.BuildResourceSet(obj.Spec.ResourcesTemplate, obj.Spec.Resources, inputs)
+		buildResult, err := builder.BuildResourceSet(obj.Spec.ResourcesTemplate, obj.Spec.Resources, inputSet)
 		if err != nil {
 			msg := fmt.Sprintf("build failed: %s", err.Error())
 			conditions.MarkFalse(obj,
@@ -209,7 +201,7 @@ func (r *ResourceSetReconciler) reconcile(ctx context.Context,
 
 	// Mark the object as ready and set the last applied revision.
 	obj.Status.LastAppliedRevision = applySetDigest
-	msg := fmt.Sprintf("Reconciliation finished in %s", fmtDuration(reconcileStart))
+	msg := reconcileMessage(reconcileStart)
 	conditions.MarkTrue(obj,
 		meta.ReadyCondition,
 		meta.ReconciliationSucceededReason,
@@ -248,10 +240,10 @@ func (r *ResourceSetReconciler) checkDependencies(ctx context.Context,
 
 	for i, dep := range obj.Spec.DependsOn {
 		depObj := &unstructured.Unstructured{
-			Object: map[string]interface{}{
+			Object: map[string]any{
 				"apiVersion": dep.APIVersion,
 				"kind":       dep.Kind,
-				"metadata": map[string]interface{}{
+				"metadata": map[string]any{
 					"name":      dep.Name,
 					"namespace": dep.Namespace,
 				},
@@ -706,24 +698,7 @@ func (r *ResourceSetReconciler) deleteAllStaged(ctx context.Context,
 func (r *ResourceSetReconciler) finalizeStatus(ctx context.Context,
 	obj *fluxcdv1.ResourceSet,
 	patcher *patch.SerialPatcher) error {
-	// Set the value of the reconciliation request in status.
-	if v, ok := meta.ReconcileAnnotationValue(obj.GetAnnotations()); ok {
-		obj.Status.LastHandledReconcileAt = v
-	}
-
-	// Set the Reconciling reason to ProgressingWithRetry if the
-	// reconciliation has failed.
-	if conditions.IsFalse(obj, meta.ReadyCondition) &&
-		conditions.Has(obj, meta.ReconcilingCondition) {
-		rc := conditions.Get(obj, meta.ReconcilingCondition)
-		rc.Reason = meta.ProgressingWithRetryReason
-		conditions.Set(obj, rc)
-	}
-
-	// Remove the Reconciling condition.
-	if conditions.IsTrue(obj, meta.ReadyCondition) || conditions.IsTrue(obj, meta.StalledCondition) {
-		conditions.Delete(obj, meta.ReconcilingCondition)
-	}
+	finalizeObjectStatus(obj)
 
 	// Patch finalizers, status and conditions.
 	return r.patch(ctx, obj, patcher)
@@ -780,7 +755,7 @@ func (r *ResourceSetReconciler) uninstall(ctx context.Context,
 			log.Error(err, "pruning for deleted resource failed")
 		}
 
-		msg := fmt.Sprintf("Uninstallation completed in %v", fmtDuration(reconcileStart))
+		msg := uninstallMessage(reconcileStart)
 		log.Info(msg, "output", changeSet.ToMap())
 	} else {
 		log.Error(errors.New("service account not found"), "skip pruning for deleted resource")

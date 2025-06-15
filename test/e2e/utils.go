@@ -9,7 +9,7 @@ import (
 	"os/exec"
 	"strings"
 
-	. "github.com/onsi/ginkgo/v2" //nolint:golint,revive
+	. "github.com/onsi/ginkgo/v2"
 )
 
 // Run executes the provided command within this context
@@ -66,6 +66,6 @@ func GetProjectDir(pattern string) (string, error) {
 	if err != nil {
 		return wd, err
 	}
-	wd = strings.Replace(wd, pattern, "", -1)
+	wd = strings.ReplaceAll(wd, pattern, "")
 	return wd, nil
 }
