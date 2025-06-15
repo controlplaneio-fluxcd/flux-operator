@@ -18,27 +18,27 @@ func TestManager_HandleSearchFluxDocs(t *testing.T) {
 
 	tests := []struct {
 		testName     string
-		arguments    map[string]interface{}
+		arguments    map[string]any
 		matchErr     string
 		matchResults []string
 	}{
 		{
 			testName: "fails with not found",
-			arguments: map[string]interface{}{
+			arguments: map[string]any{
 				"query": "notfound",
 			},
 			matchErr: "No documents found",
 		},
 		{
 			testName: "returns single result",
-			arguments: map[string]interface{}{
+			arguments: map[string]any{
 				"query": "GitHub Pull Request",
 			},
 			matchResults: []string{"ResourceSetInputProvider"},
 		},
 		{
 			testName: "returns multiple results",
-			arguments: map[string]interface{}{
+			arguments: map[string]any{
 				"query": "GitLab Merge Request",
 				"limit": 2,
 			},

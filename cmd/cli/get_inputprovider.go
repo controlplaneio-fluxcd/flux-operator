@@ -66,7 +66,7 @@ func getInputProviderCmdRun(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	var rows [][]string
+	rows := make([][]string, 0)
 	for _, obj := range list.Items {
 		inputsCount := 0
 		if obj.Status.ExportedInputs != nil {

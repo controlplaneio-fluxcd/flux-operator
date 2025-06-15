@@ -30,26 +30,26 @@ func TestManager_HandleDeleteKubernetesResource(t *testing.T) {
 
 	tests := []struct {
 		testName  string
-		arguments map[string]interface{}
+		arguments map[string]any
 		matchErr  string
 	}{
 		{
 			testName: "fails without apiVersion",
-			arguments: map[string]interface{}{
+			arguments: map[string]any{
 				"name": "test",
 			},
 			matchErr: "apiVersion is required",
 		},
 		{
 			testName: "fails without kind",
-			arguments: map[string]interface{}{
+			arguments: map[string]any{
 				"apiVersion": "v1",
 			},
 			matchErr: "kind is required",
 		},
 		{
 			testName: "fails without name",
-			arguments: map[string]interface{}{
+			arguments: map[string]any{
 				"apiVersion": "v1",
 				"kind":       "Deployment",
 			},
@@ -57,7 +57,7 @@ func TestManager_HandleDeleteKubernetesResource(t *testing.T) {
 		},
 		{
 			testName: "fails with invalid kubeconfig",
-			arguments: map[string]interface{}{
+			arguments: map[string]any{
 				"apiVersion": "apps/v1",
 				"kind":       "Deployment",
 				"name":       "test",

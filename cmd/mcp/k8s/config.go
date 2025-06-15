@@ -50,7 +50,7 @@ func (c *KubeConfig) Load() error {
 
 	paths := filepath.SplitList(configPaths)
 
-	var newContexts []KubeConfigContext
+	newContexts := make([]KubeConfigContext, 0)
 	config, err := clientcmd.LoadFromFile(paths[0])
 	if err != nil {
 		return err

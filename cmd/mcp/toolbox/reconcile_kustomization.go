@@ -59,7 +59,7 @@ func (m *Manager) HandleReconcileKustomization(ctx context.Context, request mcp.
 		return mcp.NewToolResultErrorFromErr("Failed to create Kubernetes client", err), nil
 	}
 	ks := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "kustomize.toolkit.fluxcd.io/v1",
 			"kind":       "Kustomization",
 		},

@@ -60,7 +60,7 @@ func (m *Manager) HandleReconcileHelmRelease(ctx context.Context, request mcp.Ca
 	}
 
 	hr := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "helm.toolkit.fluxcd.io/v2",
 			"kind":       "HelmRelease",
 		},

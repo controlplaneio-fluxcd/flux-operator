@@ -29,27 +29,27 @@ func TestManager_HandleSetKubeconfigContext(t *testing.T) {
 
 	tests := []struct {
 		testName    string
-		arguments   map[string]interface{}
+		arguments   map[string]any
 		matchErr    string
 		matchResult string
 	}{
 		{
 			testName: "fails with not found context",
-			arguments: map[string]interface{}{
+			arguments: map[string]any{
 				"name": "test",
 			},
 			matchErr: "not found",
 		},
 		{
 			testName: "changes context to staging",
-			arguments: map[string]interface{}{
+			arguments: map[string]any{
 				"name": "kind-staging",
 			},
 			matchResult: "Context changed to kind-staging",
 		},
 		{
 			testName: "changes context to dev",
-			arguments: map[string]interface{}{
+			arguments: map[string]any{
 				"name": "kind-dev",
 			},
 			matchResult: "Context changed to kind-dev",
