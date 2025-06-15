@@ -65,6 +65,8 @@ type ResourceSetSpec struct {
 	Wait bool `json:"wait,omitempty"`
 }
 
+// InputProviderReference defines a reference to an input provider resource
+// in the same namespace as the ResourceSet.
 // +kubebuilder:validation:XValidation:rule="has(self.name) || has(self.selector)", message="at least one of name or selector must be set for input provider references"
 // +kubebuilder:validation:XValidation:rule="!has(self.name) || !has(self.selector)", message="cannot set both name and selector for input provider references"
 type InputProviderReference struct {

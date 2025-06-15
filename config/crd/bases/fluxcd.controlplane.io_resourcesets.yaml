@@ -119,6 +119,9 @@ spec:
                   When set, the inputs are fetched from the providers and concatenated
                   with the in-line inputs defined in the ResourceSet.
                 items:
+                  description: |-
+                    InputProviderReference defines a reference to an input provider resource
+                    in the same namespace as the ResourceSet.
                   properties:
                     apiVersion:
                       description: |-
