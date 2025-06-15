@@ -27,7 +27,7 @@ type FluxInstanceSpec struct {
 	Distribution Distribution `json:"distribution"`
 
 	// Components is the list of controllers to install.
-	// Defaults to all controllers.
+	// Defaults to a commonly used subset.
 	// +optional
 	Components []Component `json:"components,omitempty"`
 
@@ -133,10 +133,11 @@ type Cluster struct {
 	// Domain is the cluster domain used for generating the FQDN of services.
 	// Defaults to 'cluster.local'.
 	// +kubebuilder:default:=cluster.local
-	// +required
+	// +optional
 	Domain string `json:"domain"`
 
-	// Multitenant enables the multitenancy lockdown.
+	// Multitenant enables the multitenancy lockdown. Defaults to false.
+	// +kubebuilder:default:=false
 	// +optional
 	Multitenant bool `json:"multitenant,omitempty"`
 
@@ -155,7 +156,7 @@ type Cluster struct {
 	// NetworkPolicy restricts network access to the current namespace.
 	// Defaults to true.
 	// +kubebuilder:default:=true
-	// +required
+	// +optional
 	NetworkPolicy bool `json:"networkPolicy"`
 
 	// Type specifies the distro of the Kubernetes cluster.
