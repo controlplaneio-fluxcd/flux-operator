@@ -27,6 +27,9 @@ linters:
         - name: comment-spacings
         - name: import-shadowing
         - name: use-any
+        - name: file-header
+          arguments:
+            - "SPDX-License-Identifier: AGPL-3.0"
     staticcheck:
       checks:
         - all
