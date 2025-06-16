@@ -102,6 +102,10 @@ spec:
                       Limit specifies the maximum number of input sets to return.
                       When not set, the default limit is 100.
                     type: integer
+                  semver:
+                    description: Semver specifies the semantic version range to filter
+                      and order the tags.
+                    type: string
                 type: object
               schedule:
                 description: Schedule defines the schedules for the input provider
@@ -159,8 +163,10 @@ spec:
                 enum:
                 - Static
                 - GitHubBranch
+                - GitHubTag
                 - GitHubPullRequest
                 - GitLabBranch
+                - GitLabTag
                 - GitLabMergeRequest
                 type: string
               url:
