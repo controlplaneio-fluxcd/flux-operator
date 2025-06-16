@@ -57,6 +57,59 @@ func NewGitLabProvider(ctx context.Context, opts Options) (*GitLabProvider, erro
 	}, nil
 }
 
+func (p *GitLabProvider) ListTags(ctx context.Context, opts Options) ([]Result, error) {
+	glOpts := &gitlab.ListTagsOptions{
+		ListOptions: gitlab.ListOptions{
+			PerPage: 100,
+		},
+	}
+
+	tags := make([]*gitlab.Tag, 0)
+	for {
+		page, resp, err := p.Client.Tags.ListTags(p.Project, glOpts)
+		if err != nil {
+			return nil, fmt.Errorf("could not list tags: %v", err)
+		}
+		tags = append(tags, page...)
+
+		if resp.NextPage == 0 {
+			break
+		}
+		glOpts.Page = resp.NextPage
+	}
+
+	tagMap := make(map[string]*gitlab.Tag, len(tags))
+	semverList := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		semverList = append(semverList, tag.Name)
+		tagMap[tag.Name] = tag
+	}
+
+	semverResult, err := sortSemver(opts, semverList)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]Result, 0)
+	for _, version := range semverResult {
+		tag, ok := tagMap[version]
+		if !ok {
+			return nil, fmt.Errorf("could not find tag %s", version)
+		}
+
+		results = append(results, Result{
+			ID:  inputs.Checksum(tag.Name),
+			SHA: tag.Commit.ID,
+			Tag: tag.Name,
+		})
+
+		if opts.Filters.Limit > 0 && len(results) >= opts.Filters.Limit {
+			return results, nil
+		}
+	}
+	return results, nil
+}
+
 func (p *GitLabProvider) ListBranches(ctx context.Context, opts Options) ([]Result, error) {
 	glOpts := &gitlab.ListBranchesOptions{
 		ListOptions: gitlab.ListOptions{
@@ -67,11 +120,11 @@ func (p *GitLabProvider) ListBranches(ctx context.Context, opts Options) ([]Resu
 		glOpts.Regex = gitlab.Ptr(opts.Filters.IncludeBranchRe.String())
 	}
 
-	var results []Result
+	results := make([]Result, 0)
 	for {
 		branches, resp, err := p.Client.Branches.ListBranches(p.Project, glOpts)
 		if err != nil {
-			return nil, fmt.Errorf("could not list merge requests: %v", err)
+			return nil, fmt.Errorf("could not list branches: %v", err)
 		}
 
 		for _, branch := range branches {
@@ -114,7 +167,7 @@ func (p *GitLabProvider) ListRequests(ctx context.Context, opts Options) ([]Resu
 		},
 	}
 
-	var results []Result
+	results := make([]Result, 0)
 	for {
 		msrs, resp, err := p.Client.MergeRequests.ListProjectMergeRequests(p.Project, glOpts)
 		if err != nil {
