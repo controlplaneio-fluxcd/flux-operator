@@ -90,13 +90,9 @@ func (p *GitHubProvider) ListTags(ctx context.Context, opts Options) ([]Result, 
 		tagMap[tag.GetName()] = tag
 	}
 
-	semverResult, err := sortSemver(opts, semverList)
-	if err != nil {
-		return nil, err
-	}
-
 	results := make([]Result, 0)
-	for _, version := range semverResult {
+	semverResults := sortSemver(opts, semverList)
+	for _, version := range semverResults {
 		tag, ok := tagMap[version]
 		if !ok {
 			return nil, fmt.Errorf("could not find tag %s", version)

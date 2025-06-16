@@ -5,7 +5,6 @@ package gitprovider
 
 import (
 	"crypto/x509"
-	"fmt"
 	"regexp"
 	"slices"
 	"sort"
@@ -23,11 +22,11 @@ type Options struct {
 
 // Filters holds the filters for the Git SaaS responses.
 type Filters struct {
-	IncludeBranchRe *regexp.Regexp
-	ExcludeBranchRe *regexp.Regexp
-	Labels          []string
-	Limit           int
-	Semver          string
+	IncludeBranchRe   *regexp.Regexp
+	ExcludeBranchRe   *regexp.Regexp
+	Labels            []string
+	Limit             int
+	SemverConstraints *semver.Constraints
 }
 
 // matchBranch returns true if the branch matches the include and exclude regex filters.
@@ -58,15 +57,10 @@ func matchLabels(opt Options, labels []string) bool {
 
 // sortSemver filters the tags based the provided semver range
 // and sorts them in descending order.
-func sortSemver(opt Options, tags []string) ([]string, error) {
-	semverRange := opt.Filters.Semver
-	if semverRange == "" {
-		return tags, nil
-	}
-
-	constraint, err := semver.NewConstraint(semverRange)
-	if err != nil {
-		return nil, fmt.Errorf("invalid semver constraint: %w", err)
+func sortSemver(opt Options, tags []string) []string {
+	constraint := opt.Filters.SemverConstraints
+	if constraint == nil {
+		return tags
 	}
 
 	var versions []*semver.Version
@@ -79,7 +73,7 @@ func sortSemver(opt Options, tags []string) ([]string, error) {
 	}
 
 	if len(tags) == 0 || len(versions) == 0 {
-		return nil, nil
+		return nil
 	}
 
 	sort.Sort(sort.Reverse(semver.Collection(versions)))
@@ -88,5 +82,5 @@ func sortSemver(opt Options, tags []string) ([]string, error) {
 		sortedTags = append(sortedTags, v.Original())
 	}
 
-	return sortedTags, nil
+	return sortedTags
 }

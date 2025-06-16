@@ -9,10 +9,18 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/Masterminds/semver/v3"
 	. "github.com/onsi/gomega"
 )
 
 func TestGitLabProvider_ListTags(t *testing.T) {
+	newConstraint := func(s string) *semver.Constraints {
+		c, err := semver.NewConstraint(s)
+		if err != nil {
+			panic(err)
+		}
+		return c
+	}
 	tests := []struct {
 		name       string
 		opts       Options
@@ -25,7 +33,7 @@ func TestGitLabProvider_ListTags(t *testing.T) {
 				Token: os.Getenv("GITLAB_TOKEN"),
 				URL:   "https://gitlab.com/stefanprodan/podinfo",
 				Filters: Filters{
-					Semver: "5.0.x",
+					SemverConstraints: newConstraint("5.0.x"),
 				},
 			},
 			want: []Result{
@@ -57,8 +65,8 @@ func TestGitLabProvider_ListTags(t *testing.T) {
 				Token: os.Getenv("GITLAB_TOKEN"),
 				URL:   "https://gitlab.com/stefanprodan/podinfo",
 				Filters: Filters{
-					Semver: "6.0.x",
-					Limit:  1,
+					SemverConstraints: newConstraint("6.0.x"),
+					Limit:             1,
 				},
 			},
 			want: []Result{
