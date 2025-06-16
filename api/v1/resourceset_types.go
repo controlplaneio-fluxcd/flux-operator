@@ -65,6 +65,8 @@ type ResourceSetSpec struct {
 	Wait bool `json:"wait,omitempty"`
 }
 
+// InputProviderReference defines a reference to an input provider resource
+// in the same namespace as the ResourceSet.
 // +kubebuilder:validation:XValidation:rule="has(self.name) || has(self.selector)", message="at least one of name or selector must be set for input provider references"
 // +kubebuilder:validation:XValidation:rule="!has(self.name) || !has(self.selector)", message="cannot set both name and selector for input provider references"
 type InputProviderReference struct {
@@ -161,6 +163,11 @@ func (in *ResourceSet) GetConditions() []metav1.Condition {
 // SetConditions sets the status conditions on the object.
 func (in *ResourceSet) SetConditions(conditions []metav1.Condition) {
 	in.Status.Conditions = conditions
+}
+
+// SetLastHandledReconcileAt sets the last handled reconcile time in the status.
+func (in *ResourceSet) SetLastHandledReconcileAt(value string) {
+	in.Status.LastHandledReconcileAt = value
 }
 
 // IsDisabled returns true if the object has the reconcile annotation set to 'disabled'.

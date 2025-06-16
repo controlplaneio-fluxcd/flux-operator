@@ -28,7 +28,7 @@ Linux:
 cd "${XDG_CONFIG_HOME:-"$HOME/.config/"}/powershell/modules"
 flux-operator completion >> flux-operator-completions.ps1`,
 	Run: func(cmd *cobra.Command, args []string) {
-		rootCmd.GenPowerShellCompletion(os.Stdout)
+		rootCmd.GenPowerShellCompletion(os.Stdout) //nolint:errcheck
 	},
 }
 

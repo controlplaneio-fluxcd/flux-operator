@@ -96,14 +96,7 @@ func (r *FluxInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	// Add the finalizer if it does not exist.
 	if !controllerutil.ContainsFinalizer(obj, fluxcdv1.Finalizer) {
 		log.Info("Adding finalizer", "finalizer", fluxcdv1.Finalizer)
-		controllerutil.AddFinalizer(obj, fluxcdv1.Finalizer)
-		conditions.MarkUnknown(obj,
-			meta.ReadyCondition,
-			meta.ProgressingReason,
-			"%s", msgInProgress)
-		conditions.MarkReconciling(obj,
-			meta.ProgressingReason,
-			"%s", msgInProgress)
+		initializeObjectStatus(obj)
 		return ctrl.Result{Requeue: true}, nil
 	}
 
@@ -203,7 +196,7 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 	// Mark the object as ready.
 	obj.Status.LastAppliedRevision = obj.Status.LastAttemptedRevision
 	obj.Status.LastArtifactRevision = artifactDigest
-	msg := fmt.Sprintf("Reconciliation finished in %s", fmtDuration(reconcileStart))
+	msg := reconcileMessage(reconcileStart)
 	conditions.MarkTrue(obj,
 		meta.ReadyCondition,
 		meta.ReconciliationSucceededReason,
@@ -218,7 +211,7 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 	return requeueAfter(obj), nil
 }
 
-// Get a keychain from the artifactPullSecret secret if provided
+// GetDistributionKeychain creates a keychain from the artifactPullSecret secret if provided.
 func GetDistributionKeychain(ctx context.Context, kubeClient client.Client, obj *fluxcdv1.FluxInstance) (authn.Keychain, error) {
 	artifactPullSecret := obj.Spec.Distribution.ArtifactPullSecret
 	if artifactPullSecret == "" {
@@ -577,24 +570,7 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 func (r *FluxInstanceReconciler) finalizeStatus(ctx context.Context,
 	obj *fluxcdv1.FluxInstance,
 	patcher *patch.SerialPatcher) error {
-	// Set the value of the reconciliation request in status.
-	if v, ok := meta.ReconcileAnnotationValue(obj.GetAnnotations()); ok {
-		obj.Status.LastHandledReconcileAt = v
-	}
-
-	// Set the Reconciling reason to ProgressingWithRetry if the
-	// reconciliation has failed.
-	if conditions.IsFalse(obj, meta.ReadyCondition) &&
-		conditions.Has(obj, meta.ReconcilingCondition) {
-		rc := conditions.Get(obj, meta.ReconcilingCondition)
-		rc.Reason = meta.ProgressingWithRetryReason
-		conditions.Set(obj, rc)
-	}
-
-	// Remove the Reconciling condition.
-	if conditions.IsTrue(obj, meta.ReadyCondition) || conditions.IsTrue(obj, meta.StalledCondition) {
-		conditions.Delete(obj, meta.ReconcilingCondition)
-	}
+	finalizeObjectStatus(obj)
 
 	// Patch finalizers, status and conditions.
 	return r.patch(ctx, obj, patcher)
@@ -652,16 +628,6 @@ func requeueAfter(obj *fluxcdv1.FluxInstance) ctrl.Result {
 	}
 
 	return result
-}
-
-// fmtDuration returns a human-readable string
-// representation of the time duration.
-func fmtDuration(t time.Time) string {
-	if time.Since(t) < time.Second {
-		return time.Since(t).Round(time.Millisecond).String()
-	} else {
-		return time.Since(t).Round(time.Second).String()
-	}
 }
 
 func (r *FluxInstanceReconciler) recordMetrics(obj *fluxcdv1.FluxInstance) error {

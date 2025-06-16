@@ -30,12 +30,12 @@ func TestManager_HandleGetAPIVersions(t *testing.T) {
 
 	tests := []struct {
 		testName  string
-		arguments map[string]interface{}
+		arguments map[string]any
 		matchErr  string
 	}{
 		{
 			testName:  "fails with invalid kubeconfig",
-			arguments: map[string]interface{}{},
+			arguments: map[string]any{},
 			matchErr:  "Failed to create Kubernetes client",
 		},
 	}

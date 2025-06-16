@@ -30,26 +30,26 @@ func TestManager_HandleReconcileSource(t *testing.T) {
 
 	tests := []struct {
 		testName  string
-		arguments map[string]interface{}
+		arguments map[string]any
 		matchErr  string
 	}{
 		{
 			testName: "fails without kind",
-			arguments: map[string]interface{}{
+			arguments: map[string]any{
 				"name": "test",
 			},
 			matchErr: "kind is required",
 		},
 		{
 			testName: "fails without name",
-			arguments: map[string]interface{}{
+			arguments: map[string]any{
 				"kind": "Deployment",
 			},
 			matchErr: "name is required",
 		},
 		{
 			testName: "fails without namespace",
-			arguments: map[string]interface{}{
+			arguments: map[string]any{
 				"kind": "GitRepository",
 				"name": "test",
 			},
@@ -57,7 +57,7 @@ func TestManager_HandleReconcileSource(t *testing.T) {
 		},
 		{
 			testName: "fails with invalid kubeconfig",
-			arguments: map[string]interface{}{
+			arguments: map[string]any{
 				"kind":      "OCIRepository",
 				"name":      "test",
 				"namespace": "default",

@@ -11,22 +11,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fluxcd/pkg/apis/meta"
-	"github.com/fluxcd/pkg/runtime/conditions"
-	kcheck "github.com/fluxcd/pkg/runtime/conditions/check"
 	"github.com/fluxcd/pkg/runtime/testenv"
-	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
-	"sigs.k8s.io/yaml"
 
 	// +kubebuilder:scaffold:imports
 
@@ -100,52 +94,6 @@ func TestMain(m *testing.M) {
 	}
 
 	os.Exit(code)
-}
-
-func getFluxInstanceReconciler(t *testing.T) *FluxInstanceReconciler {
-	tmpDir := t.TempDir()
-	err := os.WriteFile(fmt.Sprintf("%s/kubeconfig", tmpDir), testKubeConfig, 0644)
-	if err != nil {
-		panic(fmt.Sprintf("failed to create the testenv-admin user kubeconfig: %v", err))
-	}
-
-	// Set the kubeconfig environment variable for the impersonator.
-	t.Setenv("KUBECONFIG", fmt.Sprintf("%s/kubeconfig", tmpDir))
-
-	return &FluxInstanceReconciler{
-		Client:        testClient,
-		Scheme:        NewTestScheme(),
-		StoragePath:   filepath.Join("..", "..", "config", "data"),
-		StatusManager: controllerName,
-		EventRecorder: testEnv.GetEventRecorderFor(controllerName),
-	}
-}
-
-func getFluxInstanceArtifactReconciler() *FluxInstanceArtifactReconciler {
-	return &FluxInstanceArtifactReconciler{
-		Client:        testClient,
-		EventRecorder: testEnv.GetEventRecorderFor(controllerName),
-		StatusManager: controllerName,
-	}
-}
-
-func logObjectStatus(t *testing.T, obj client.Object) {
-	u, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
-	status, _, _ := unstructured.NestedFieldCopy(u, "status")
-	sts, _ := yaml.Marshal(status)
-	t.Log(obj.GetName(), "status:\n", string(sts))
-}
-
-func logObject(t *testing.T, obj interface{}) {
-	sts, _ := yaml.Marshal(obj)
-	t.Log("object:\n", string(sts))
-}
-
-func checkInstanceReadiness(g *WithT, obj *fluxcdv1.FluxInstance) {
-	statusCheck := kcheck.NewInProgressChecker(testClient)
-	statusCheck.DisableFetch = true
-	statusCheck.WithT(g).CheckErr(context.Background(), obj)
-	g.Expect(conditions.IsTrue(obj, meta.ReadyCondition)).To(BeTrue())
 }
 
 func getEvents(objName, objNamespace string) []corev1.Event {

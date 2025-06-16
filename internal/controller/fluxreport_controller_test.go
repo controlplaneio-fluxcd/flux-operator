@@ -18,6 +18,7 @@ import (
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/entitlement"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/testutils"
 )
 
 func TestFluxReportReconciler_CELNameValidation(t *testing.T) {
@@ -99,7 +100,7 @@ func TestFluxReportReconciler_Reconcile(t *testing.T) {
 	// Read the report.
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(report), report)
 	g.Expect(err).ToNot(HaveOccurred())
-	logObject(t, report)
+	testutils.LogObject(t, report)
 
 	// Check annotation set by the instance reconciler.
 	g.Expect(report.GetAnnotations()).To(HaveKey(meta.ReconcileRequestAnnotation))
@@ -225,7 +226,7 @@ func TestFluxReportReconciler_CustomSyncName(t *testing.T) {
 	// Read the report.
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(report), report)
 	g.Expect(err).ToNot(HaveOccurred())
-	logObject(t, report)
+	testutils.LogObject(t, report)
 
 	// Check reported sync with custom name.
 	g.Expect(report.Spec.SyncStatus).ToNot(BeNil())

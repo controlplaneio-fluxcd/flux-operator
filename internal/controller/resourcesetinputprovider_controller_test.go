@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -32,7 +31,7 @@ import (
 
 func TestResourceSetInputProviderReconciler_Static(t *testing.T) {
 	g := NewWithT(t)
-	reconciler := getResourceSetInputProviderReconciler()
+	reconciler := getResourceSetInputProviderReconciler(t)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -120,9 +119,9 @@ foo: bar `, inputs.Checksum(string(obj.UID)))
 	g.Expect(result.Status.LastExportedRevision).To(Equal(lastExportedRevision))
 }
 
-func TestResourceSetInputProviderReconciler_reconcile_InvalidDefaultValues(t *testing.T) {
+func TestResourceSetInputProviderReconciler_InvalidDefaultValues(t *testing.T) {
 	g := NewWithT(t)
-	reconciler := getResourceSetInputProviderReconciler()
+	reconciler := getResourceSetInputProviderReconciler(t)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -144,23 +143,18 @@ func TestResourceSetInputProviderReconciler_reconcile_InvalidDefaultValues(t *te
 	g.Expect(conditions.IsStalled(obj)).To(BeTrue())
 	g.Expect(conditions.GetReason(obj, meta.ReadyCondition)).To(Equal(fluxcdv1.ReasonInvalidDefaultValues))
 	g.Expect(conditions.GetReason(obj, meta.StalledCondition)).To(Equal(fluxcdv1.ReasonInvalidDefaultValues))
-	g.Expect(conditions.GetMessage(obj, meta.ReadyCondition)).To(ContainSubstring("Reconciliation failed terminally due to configuration error"))
-	g.Expect(conditions.GetMessage(obj, meta.StalledCondition)).To(ContainSubstring("Reconciliation failed terminally due to configuration error"))
+	g.Expect(conditions.GetMessage(obj, meta.ReadyCondition)).To(ContainSubstring(msgTerminalError))
+	g.Expect(conditions.GetMessage(obj, meta.StalledCondition)).To(ContainSubstring(msgTerminalError))
 }
 
 func TestResourceSetInputProviderReconciler_reconcile_InvalidSchedule(t *testing.T) {
 	g := NewWithT(t)
-	reconciler := getResourceSetInputProviderReconciler()
+	reconciler := getResourceSetInputProviderReconciler(t)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	obj := &fluxcdv1.ResourceSetInputProvider{
 		Spec: fluxcdv1.ResourceSetInputProviderSpec{
-			DefaultValues: fluxcdv1.ResourceSetInput{
-				"foo": &apix.JSON{
-					Raw: []byte(`{"bar": "baz"}`),
-				},
-			},
 			Schedule: []fluxcdv1.Schedule{{
 				Cron: "lalksadlsakd",
 			}},
@@ -175,74 +169,97 @@ func TestResourceSetInputProviderReconciler_reconcile_InvalidSchedule(t *testing
 	g.Expect(conditions.IsStalled(obj)).To(BeTrue())
 	g.Expect(conditions.GetReason(obj, meta.ReadyCondition)).To(Equal(fluxcdv1.ReasonInvalidSchedule))
 	g.Expect(conditions.GetReason(obj, meta.StalledCondition)).To(Equal(fluxcdv1.ReasonInvalidSchedule))
-	g.Expect(conditions.GetMessage(obj, meta.ReadyCondition)).To(ContainSubstring("Reconciliation failed terminally due to configuration error"))
-	g.Expect(conditions.GetMessage(obj, meta.StalledCondition)).To(ContainSubstring("Reconciliation failed terminally due to configuration error"))
+	g.Expect(conditions.GetMessage(obj, meta.ReadyCondition)).To(ContainSubstring(msgTerminalError))
+	g.Expect(conditions.GetMessage(obj, meta.StalledCondition)).To(ContainSubstring(msgTerminalError))
 }
 
-func TestResourceSetInputProviderReconciler_reconcile_SkippedDueToSchedule(t *testing.T) {
-	// Disable notifications for the tests as no pod is running.
-	// This is required to avoid the 30s retry loop performed by the HTTP client.
-	t.Setenv("NOTIFICATIONS_DISABLED", "yes")
-
+func TestResourceSetInputProviderReconciler_SkippedDueToSchedule(t *testing.T) {
 	g := NewWithT(t)
-	reconciler := getResourceSetInputProviderReconciler()
+	reconciler := getResourceSetInputProviderReconciler(t)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	ns, err := testEnv.CreateNamespace(ctx, "test-skipped-due-to-schedule")
 	g.Expect(err).NotTo(HaveOccurred())
 
-	obj := &fluxcdv1.ResourceSetInputProvider{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test",
-			Namespace: ns.Name,
-			Annotations: map[string]string{
-				fluxcdv1.ReconcileTimeoutAnnotation: "100ms",
-			},
-		},
-		Spec: fluxcdv1.ResourceSetInputProviderSpec{
-			Schedule: []fluxcdv1.Schedule{{
-				// This cron only happens once every 4 years, so most
-				// of the time the reconciliation will be skipped.
-				Cron:   "0 0 29 2 *",
-				Window: metav1.Duration{Duration: time.Second},
-			}},
-		},
-	}
+	objDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSetInputProvider
+metadata:
+  name: test-schedule
+  namespace: "%[1]s"
+  annotations:
+    fluxcd.controlplane.io/reconcileTimeout: 100ms
+spec:
+  type: Static
+  schedule:
+  - cron: "0 0 29 2 *" # This cron only happens once every 4 years.
+    window: 1s
+  defaultValues:
+    env: test
+`, ns.Name)
+
+	// Create the ResourceSetInputProvider.
+	obj := &fluxcdv1.ResourceSetInputProvider{}
+	err = yaml.Unmarshal([]byte(objDef), obj)
+	g.Expect(err).NotTo(HaveOccurred())
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize the ResourceSetInputProvider.
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Reconcile and verify schedule.
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(r.Requeue).To(BeFalse())
+
+	result := &fluxcdv1.ResourceSetInputProvider{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).NotTo(HaveOccurred())
 
 	sched, err := schedule.Parse("0 0 29 2 *", "UTC")
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(sched).NotTo(BeNil())
 
-	res, err := reconciler.reconcile(ctx, obj, nil)
-	g.Expect(err).NotTo(HaveOccurred())
-	requeueAfter := res.RequeueAfter.Seconds()
+	// Verify that the next schedule is set correctly.
+	expectedRequeueAfter := time.Until(sched.Next(time.Now()))
+	g.Expect(r.RequeueAfter).To(BeNumerically("~", expectedRequeueAfter, time.Second))
 
-	expectedRequeueAfter := time.Until(sched.Next(time.Now())).Seconds()
+	testutils.LogObjectStatus(t, result)
 
-	g.Expect(requeueAfter).To(BeNumerically("~", expectedRequeueAfter, 0.01))
-
-	g.Expect(obj.Status.NextSchedule).NotTo(BeNil())
-	g.Expect(obj.Status.NextSchedule.Schedule).To(Equal(fluxcdv1.Schedule{
-		Cron:   "0 0 29 2 *",
-		Window: metav1.Duration{Duration: time.Second},
+	// Verify that the status contains the next schedule.
+	g.Expect(result.Status.NextSchedule).NotTo(BeNil())
+	g.Expect(result.Status.NextSchedule.Schedule).To(Equal(fluxcdv1.Schedule{
+		Cron:     "0 0 29 2 *",
+		TimeZone: "UTC",
+		Window:   metav1.Duration{Duration: time.Second},
 	}))
-	untilWhen := time.Until(obj.Status.NextSchedule.When.Time).Seconds()
-	g.Expect(untilWhen).To(BeNumerically("~", expectedRequeueAfter, 0.01))
 
-	g.Eventually(func() bool {
-		events := getEvents(obj.Name, obj.Namespace)
-		if len(events) == 0 {
-			return false
-		}
-		return events[0].Reason == fluxcdv1.ReasonSkippedDueToSchedule &&
-			strings.Contains(events[0].Message, "Reconciliation skipped, next scheduled at")
-	}, timeout).Should(BeTrue())
+	// Verify that the status contains the next schedule time.
+	untilWhen := time.Until(result.Status.NextSchedule.When.Time)
+	g.Expect(untilWhen).To(BeNumerically("~", expectedRequeueAfter, time.Second))
+
+	// Verify that the status ready condition reason is set to SkippedDueToSchedule.
+	g.Expect(conditions.IsReady(result)).To(BeTrue())
+	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(Equal(fluxcdv1.ReasonSkippedDueToSchedule))
+
+	// Verify skipped reconciliation event.
+	events := getEvents(obj.Name, obj.Namespace)
+	g.Expect(events).To(HaveLen(1))
+	g.Expect(events[0].Reason).To(Equal(fluxcdv1.ReasonSkippedDueToSchedule))
+	g.Expect(events[0].Message).To(ContainSubstring("Reconciliation skipped, next scheduled at"))
 }
 
 func TestResourceSetInputProviderReconciler_GitLabBranch_LifeCycle(t *testing.T) {
 	g := NewWithT(t)
-	reconciler := getResourceSetInputProviderReconciler()
+	reconciler := getResourceSetInputProviderReconciler(t)
 	rsetReconciler := getResourceSetReconciler(t)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -311,7 +328,7 @@ spec:
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	logObjectStatus(t, result)
+	testutils.LogObjectStatus(t, result)
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
 	g.Expect(result.Status.LastExportedRevision).To(BeIdenticalTo("sha256:be31afc5e49da21b12fdca6a2cad6916cad26f4bbde8c16e5822359f75c1d46a"))
 
@@ -418,7 +435,7 @@ spec:
 
 func TestResourceSetInputProviderReconciler_GitHubPullRequest_LifeCycle(t *testing.T) {
 	g := NewWithT(t)
-	reconciler := getResourceSetInputProviderReconciler()
+	reconciler := getResourceSetInputProviderReconciler(t)
 	rsetReconciler := getResourceSetReconciler(t)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -508,7 +525,7 @@ spec:
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), resultInit)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	logObjectStatus(t, resultInit)
+	testutils.LogObjectStatus(t, resultInit)
 	g.Expect(resultInit.Finalizers).To(ContainElement(fluxcdv1.Finalizer))
 
 	r, err = reconciler.Reconcile(ctx, reconcile.Request{
@@ -522,7 +539,7 @@ spec:
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	logObjectStatus(t, result)
+	testutils.LogObjectStatus(t, result)
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
 
 	// Check if the exported inputs are correct.
@@ -633,7 +650,7 @@ func TestResourceSetInputProviderReconciler_FailureRecovery(t *testing.T) {
 	t.Setenv("NOTIFICATIONS_DISABLED", "yes")
 
 	g := NewWithT(t)
-	reconciler := getResourceSetInputProviderReconciler()
+	reconciler := getResourceSetInputProviderReconciler(t)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -761,15 +778,6 @@ func TestResourceSetInputProviderReconciler_getGitHubToken_cached(t *testing.T) 
 	g.Expect(token).To(Equal("my-gh-app-token"))
 }
 
-func getResourceSetInputProviderReconciler() *ResourceSetInputProviderReconciler {
-	return &ResourceSetInputProviderReconciler{
-		Client:        testClient,
-		Scheme:        NewTestScheme(),
-		StatusManager: controllerName,
-		EventRecorder: testEnv.GetEventRecorderFor(controllerName),
-	}
-}
-
 func TestResourceSetInputProviderReconciler_SkipExportedInputsUpdate_LifeCycle(t *testing.T) {
 	defaultStatus := `
 conditions:
@@ -887,7 +895,7 @@ spec:
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
-			reconciler := getResourceSetInputProviderReconciler()
+			reconciler := getResourceSetInputProviderReconciler(t)
 			ctx, cancel := context.WithTimeout(context.Background(), timeout)
 			defer cancel()
 
@@ -928,7 +936,7 @@ spec:
 			err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 			g.Expect(err).ToNot(HaveOccurred())
 
-			logObjectStatus(t, result)
+			testutils.LogObjectStatus(t, result)
 
 			// Check if the exported inputs are correct.
 			inputsData, err := yaml.Marshal(result.Status.ExportedInputs)
@@ -1044,5 +1052,19 @@ func TestRequeueAfterResourceSetInputProvider(t *testing.T) {
 			g.Expect(res.RequeueAfter).To(Equal(tt.expectedRequeueAfter))
 			g.Expect(obj.Status.NextSchedule).To(Equal(tt.expectedNextSchedule))
 		})
+	}
+}
+
+// getResourceSetInputProviderReconciler returns a new ResourceSetInputProviderReconciler
+// configured for testing purposes, with notifications disabled and a test event recorder.
+func getResourceSetInputProviderReconciler(t *testing.T) *ResourceSetInputProviderReconciler {
+	// Disable notifications for the tests as no pod is running.
+	// This is required to avoid the 30s retry loop performed by the HTTP client.
+	t.Setenv("NOTIFICATIONS_DISABLED", "yes")
+	return &ResourceSetInputProviderReconciler{
+		Client:        testClient,
+		Scheme:        NewTestScheme(),
+		StatusManager: controllerName,
+		EventRecorder: testEnv.GetEventRecorderFor(controllerName),
 	}
 }

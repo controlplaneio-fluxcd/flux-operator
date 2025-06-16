@@ -134,7 +134,7 @@ type Cluster struct {
 	// Defaults to 'cluster.local'.
 	// +kubebuilder:default:=cluster.local
 	// +optional
-	Domain string `json:"domain"`
+	Domain string `json:"domain,omitempty"`
 
 	// Multitenant enables the multitenancy lockdown. Defaults to false.
 	// +kubebuilder:default:=false
@@ -379,6 +379,11 @@ func (in *FluxInstance) GetConditions() []metav1.Condition {
 // SetConditions sets the status conditions on the object.
 func (in *FluxInstance) SetConditions(conditions []metav1.Condition) {
 	in.Status.Conditions = conditions
+}
+
+// SetLastHandledReconcileAt sets the last handled reconcile time in the status.
+func (in *FluxInstance) SetLastHandledReconcileAt(value string) {
+	in.Status.LastHandledReconcileAt = value
 }
 
 // IsDisabled returns true if the object has the reconcile annotation set to 'disabled'.

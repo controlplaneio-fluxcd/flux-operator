@@ -145,7 +145,7 @@ func isResourceReconciledFunc(kubeClient client.Client, obj *unstructured.Unstru
 		}
 
 		if ssautil.AnyInMetadata(obj, map[string]string{fluxcdv1.ReconcileAnnotation: fluxcdv1.DisabledValue}) {
-			return false, fmt.Errorf("Reconciliation is disabled for %s", obj.GetName())
+			return false, fmt.Errorf("Reconciliation is disabled for %s", obj.GetName()) //nolint:staticcheck
 		}
 
 		lastHandledReconcileAt, _, _ := unstructured.NestedString(obj.Object, "status", "lastHandledReconcileAt")

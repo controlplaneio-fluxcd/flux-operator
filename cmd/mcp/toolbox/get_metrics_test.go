@@ -30,19 +30,19 @@ func TestManager_HandleGetKubernetesMetrics(t *testing.T) {
 
 	tests := []struct {
 		testName  string
-		arguments map[string]interface{}
+		arguments map[string]any
 		matchErr  string
 	}{
 		{
 			testName: "fails without namespace",
-			arguments: map[string]interface{}{
+			arguments: map[string]any{
 				"pod_name": "test",
 			},
 			matchErr: "pod namespace is required",
 		},
 		{
 			testName: "fails with invalid kubeconfig",
-			arguments: map[string]interface{}{
+			arguments: map[string]any{
 				"pod_name":      "test",
 				"pod_namespace": "default",
 			},

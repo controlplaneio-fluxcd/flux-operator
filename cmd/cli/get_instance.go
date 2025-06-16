@@ -66,7 +66,7 @@ func geInstanceCmdRun(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	var rows [][]string
+	rows := make([][]string, 0)
 	for _, instance := range list.Items {
 		objCount := 0
 		if instance.Status.Inventory != nil {
