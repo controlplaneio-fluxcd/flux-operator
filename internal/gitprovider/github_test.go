@@ -9,8 +9,101 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/Masterminds/semver/v3"
 	. "github.com/onsi/gomega"
 )
+
+func TestGitHubProvider_ListTags(t *testing.T) {
+	newConstraint := func(s string) *semver.Constraints {
+		c, err := semver.NewConstraint(s)
+		if err != nil {
+			panic(err)
+		}
+		return c
+	}
+	tests := []struct {
+		name       string
+		opts       Options
+		want       []Result
+		wantErrMsg string
+	}{
+		{
+			name: "filters tags by semver",
+			opts: Options{
+				Token: os.Getenv("GITHUB_TOKEN"),
+				URL:   "https://github.com/stefanprodan/podinfo",
+				Filters: Filters{
+					SemverConstraints: newConstraint("> 6.0.1 < 6.1.0"),
+				},
+			},
+			want: []Result{
+				{
+					ID:  "48955639",
+					SHA: "11cf36d83818e64aaa60d523ab6438258ebb6009",
+					Tag: "6.0.4",
+				},
+				{
+					ID:  "48890102",
+					SHA: "ea292aa958c5e348266518af2261dc04d6270439",
+					Tag: "6.0.3",
+				},
+				{
+					ID:  "48824565",
+					SHA: "693ffa9d28208c677738a0e2061f41694dfaa183",
+					Tag: "6.0.2",
+				},
+			},
+		},
+		{
+			name: "filters tags by semver and limit",
+			opts: Options{
+				Token: os.Getenv("GITHUB_TOKEN"),
+				URL:   "https://github.com/stefanprodan/podinfo",
+				Filters: Filters{
+					SemverConstraints: newConstraint("6.0.x"),
+					Limit:             1,
+				},
+			},
+			want: []Result{
+				{
+					ID:  "48955639",
+					SHA: "11cf36d83818e64aaa60d523ab6438258ebb6009",
+					Tag: "6.0.4",
+				},
+			},
+		},
+		{
+			name: "filters tags no results",
+			opts: Options{
+				Token: os.Getenv("GITHUB_TOKEN"),
+				URL:   "https://github.com/stefanprodan/podinfo",
+				Filters: Filters{
+					SemverConstraints: newConstraint("0.0.x"),
+				},
+			},
+			want: []Result{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			provider, err := NewGitHubProvider(context.Background(), tt.opts)
+			g.Expect(err).NotTo(HaveOccurred())
+
+			got, err := provider.ListTags(context.Background(), tt.opts)
+			if len(tt.wantErrMsg) > 0 {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.wantErrMsg))
+				return
+			}
+			g.Expect(err).NotTo(HaveOccurred())
+
+			g.Expect(got).To(BeEquivalentTo(tt.want))
+		})
+	}
+}
 
 func TestGitHubProvider_ListBranches(t *testing.T) {
 	tests := []struct {
@@ -33,22 +126,16 @@ func TestGitHubProvider_ListBranches(t *testing.T) {
 				{
 					ID:     "1433470881",
 					SHA:    "2dd3a8d2088457e5cf991018edf13e25cbd61380",
-					Author: "",
-					Title:  "",
 					Branch: "stefanprodan-patch-1",
 				},
 				{
 					ID:     "1433536418",
 					SHA:    "1e5aef14d38a8c67e5240308adf2935d6cdc2ec8",
-					Author: "",
-					Title:  "",
 					Branch: "stefanprodan-patch-2",
 				},
 				{
 					ID:     "1433601955",
 					SHA:    "29d1d3a726e1e1f68b7cb60ac891cb83fa260ea9",
-					Author: "",
-					Title:  "",
 					Branch: "stefanprodan-patch-3",
 				},
 			},
@@ -67,8 +154,6 @@ func TestGitHubProvider_ListBranches(t *testing.T) {
 				{
 					ID:     "1433470881",
 					SHA:    "2dd3a8d2088457e5cf991018edf13e25cbd61380",
-					Author: "",
-					Title:  "",
 					Branch: "stefanprodan-patch-1",
 				},
 			},

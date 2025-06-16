@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/cache"
 	"github.com/fluxcd/pkg/git/github"
@@ -335,6 +336,13 @@ func (r *ResourceSetInputProviderReconciler) makeGitOptions(obj *fluxcdv1.Resour
 			}
 			opts.Filters.ExcludeBranchRe = exRx
 		}
+		if obj.Spec.Filter.Semver != "" {
+			constraints, err := semver.NewConstraint(obj.Spec.Filter.Semver)
+			if err != nil {
+				return gitprovider.Options{}, fmt.Errorf("invalid semver expression: %w", err)
+			}
+			opts.Filters.SemverConstraints = constraints
+		}
 	}
 
 	return opts, nil
@@ -409,6 +417,11 @@ func (r *ResourceSetInputProviderReconciler) callProvider(ctx context.Context,
 		results, err = provider.ListBranches(ctx, opts)
 		if err != nil {
 			return nil, fmt.Errorf("failed to list branches: %w", err)
+		}
+	case strings.HasSuffix(obj.Spec.Type, "Tag"):
+		results, err = provider.ListTags(ctx, opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list tags: %w", err)
 		}
 	case strings.HasSuffix(obj.Spec.Type, "Request"):
 		results, err = provider.ListRequests(ctx, opts)

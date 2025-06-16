@@ -14,7 +14,8 @@ import (
 type Result struct {
 	ID     string   `json:"id"`
 	SHA    string   `json:"sha"`
-	Branch string   `json:"branch"`
+	Branch string   `json:"branch,omitempty"`
+	Tag    string   `json:"tag,omitempty"`
 	Author string   `json:"author,omitempty"`
 	Title  string   `json:"title,omitempty"`
 	Labels []string `json:"labels,omitempty"`
@@ -23,9 +24,16 @@ type Result struct {
 // ToMap converts the result into a map.
 func (r *Result) ToMap() map[string]any {
 	m := map[string]any{
-		"id":     r.ID,
-		"sha":    r.SHA,
-		"branch": r.Branch,
+		"id":  r.ID,
+		"sha": r.SHA,
+	}
+
+	if r.Branch != "" {
+		m["branch"] = r.Branch
+	}
+
+	if r.Tag != "" {
+		m["tag"] = r.Tag
 	}
 
 	if r.Author != "" {

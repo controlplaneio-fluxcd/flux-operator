@@ -9,8 +9,112 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/Masterminds/semver/v3"
 	. "github.com/onsi/gomega"
 )
+
+func TestGitLabProvider_ListTags(t *testing.T) {
+	newConstraint := func(s string) *semver.Constraints {
+		c, err := semver.NewConstraint(s)
+		if err != nil {
+			panic(err)
+		}
+		return c
+	}
+	tests := []struct {
+		name       string
+		opts       Options
+		want       []Result
+		wantErrMsg string
+	}{
+		{
+			name: "filters tags by semver",
+			opts: Options{
+				Token: os.Getenv("GITLAB_TOKEN"),
+				URL:   "https://gitlab.com/stefanprodan/podinfo",
+				Filters: Filters{
+					SemverConstraints: newConstraint("5.0.x"),
+				},
+			},
+			want: []Result{
+				{
+					ID:  "48562421",
+					SHA: "95be17be1dc2103eb5e2c0b0bac50ef692c4657d",
+					Tag: "5.0.3",
+				},
+				{
+					ID:  "48496884",
+					SHA: "6596ed08de58bffc6982512a0483be3b2ec346ce",
+					Tag: "5.0.2",
+				},
+				{
+					ID:  "48431347",
+					SHA: "7411da595c25183daba255068814b83843fe3395",
+					Tag: "5.0.1",
+				},
+				{
+					ID:  "48365810",
+					SHA: "9299a2d1f300267354609bee398caa2cb5548594",
+					Tag: "5.0.0",
+				},
+			},
+		},
+		{
+			name: "filters tags by semver and limit",
+			opts: Options{
+				Token: os.Getenv("GITLAB_TOKEN"),
+				URL:   "https://gitlab.com/stefanprodan/podinfo",
+				Filters: Filters{
+					SemverConstraints: newConstraint("6.0.x"),
+					Limit:             1,
+				},
+			},
+			want: []Result{
+				{
+					ID:  "48955639",
+					SHA: "11cf36d83818e64aaa60d523ab6438258ebb6009",
+					Tag: "6.0.4",
+				},
+			},
+		},
+		{
+			name: "filters tags by limit",
+			opts: Options{
+				Token: os.Getenv("GITLAB_TOKEN"),
+				URL:   "https://gitlab.com/stefanprodan/podinfo",
+				Filters: Filters{
+					Limit: 1,
+				},
+			},
+			want: []Result{
+				{
+					ID:  "49283322",
+					SHA: "450796ddb2ab6724ee1cc32a4be56da032d1cca0",
+					Tag: "6.1.6",
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			provider, err := NewGitLabProvider(context.Background(), tt.opts)
+			g.Expect(err).NotTo(HaveOccurred())
+
+			got, err := provider.ListTags(context.Background(), tt.opts)
+			if len(tt.wantErrMsg) > 0 {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.wantErrMsg))
+				return
+			}
+			g.Expect(err).NotTo(HaveOccurred())
+
+			g.Expect(got).To(BeEquivalentTo(tt.want))
+		})
+	}
+}
 
 func TestGitLabProvider_ListBranches(t *testing.T) {
 	tests := []struct {

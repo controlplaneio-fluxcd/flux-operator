@@ -9,6 +9,9 @@ import (
 
 // Interface that all Git SaaS providers must implement.
 type Interface interface {
+	// ListTags returns a list of tags that match the filters.
+	ListTags(ctx context.Context, opts Options) ([]Result, error)
+
 	// ListBranches returns a list of branches that match the filters.
 	ListBranches(ctx context.Context, opts Options) ([]Result, error)
 

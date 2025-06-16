@@ -19,8 +19,10 @@ const (
 
 	InputProviderStatic             = "Static"
 	InputProviderGitHubBranch       = "GitHubBranch"
+	InputProviderGitHubTag          = "GitHubTag"
 	InputProviderGitHubPullRequest  = "GitHubPullRequest"
 	InputProviderGitLabBranch       = "GitLabBranch"
+	InputProviderGitLabTag          = "GitLabTag"
 	InputProviderGitLabMergeRequest = "GitLabMergeRequest"
 
 	ReasonInvalidDefaultValues  = "InvalidDefaultValues"
@@ -32,7 +34,7 @@ const (
 // +kubebuilder:validation:XValidation:rule="self.type == 'Static' || has(self.url)", message="spec.url must not be empty when spec.type is not 'Static'"
 type ResourceSetInputProviderSpec struct {
 	// Type specifies the type of the input provider.
-	// +kubebuilder:validation:Enum=Static;GitHubBranch;GitHubPullRequest;GitLabBranch;GitLabMergeRequest
+	// +kubebuilder:validation:Enum=Static;GitHubBranch;GitHubTag;GitHubPullRequest;GitLabBranch;GitLabTag;GitLabMergeRequest
 	// +required
 	Type string `json:"type"`
 
@@ -99,6 +101,10 @@ type ResourceSetInputFilter struct {
 	// When not set, the default limit is 100.
 	// +optional
 	Limit int `json:"limit,omitempty"`
+
+	// Semver specifies the semantic version range to filter and order the tags.
+	// +optional
+	Semver string `json:"semver,omitempty"`
 }
 
 // ResourceSetInputSkip defines whether we need to skip input updates.

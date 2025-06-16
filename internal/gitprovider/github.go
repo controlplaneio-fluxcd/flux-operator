@@ -64,6 +64,53 @@ func NewGitHubProvider(ctx context.Context, opts Options) (*GitHubProvider, erro
 	}, nil
 }
 
+func (p *GitHubProvider) ListTags(ctx context.Context, opts Options) ([]Result, error) {
+	ghOpts := &github.ListOptions{
+		PerPage: 100,
+	}
+
+	tags := make([]*github.RepositoryTag, 0)
+	for {
+		page, resp, err := p.Client.Repositories.ListTags(ctx, p.Owner, p.Repo, ghOpts)
+		if err != nil {
+			return nil, fmt.Errorf("could not list tags: %v", err)
+		}
+		tags = append(tags, page...)
+
+		if resp.NextPage == 0 {
+			break
+		}
+		ghOpts.Page = resp.NextPage
+	}
+
+	tagMap := make(map[string]*github.RepositoryTag, len(tags))
+	semverList := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		semverList = append(semverList, tag.GetName())
+		tagMap[tag.GetName()] = tag
+	}
+
+	results := make([]Result, 0)
+	semverResults := sortSemver(opts, semverList)
+	for _, version := range semverResults {
+		tag, ok := tagMap[version]
+		if !ok {
+			return nil, fmt.Errorf("could not find tag %s", version)
+		}
+
+		results = append(results, Result{
+			ID:  inputs.Checksum(tag.GetName()),
+			SHA: tag.GetCommit().GetSHA(),
+			Tag: tag.GetName(),
+		})
+
+		if opts.Filters.Limit > 0 && len(results) >= opts.Filters.Limit {
+			return results, nil
+		}
+	}
+	return results, nil
+}
+
 func (p *GitHubProvider) ListBranches(ctx context.Context, opts Options) ([]Result, error) {
 	ghOpts := &github.BranchListOptions{
 		ListOptions: github.ListOptions{
@@ -71,11 +118,11 @@ func (p *GitHubProvider) ListBranches(ctx context.Context, opts Options) ([]Resu
 		},
 	}
 
-	var results []Result
+	results := make([]Result, 0)
 	for {
 		branches, resp, err := p.Client.Repositories.ListBranches(ctx, p.Owner, p.Repo, ghOpts)
 		if err != nil {
-			return nil, fmt.Errorf("could not list pull requests: %v", err)
+			return nil, fmt.Errorf("could not list branches: %v", err)
 		}
 
 		for _, branch := range branches {
@@ -111,7 +158,7 @@ func (p *GitHubProvider) ListRequests(ctx context.Context, opts Options) ([]Resu
 		},
 	}
 
-	var results []Result
+	results := make([]Result, 0)
 	for {
 		prs, resp, err := p.Client.PullRequests.List(ctx, p.Owner, p.Repo, ghOpts)
 		if err != nil {

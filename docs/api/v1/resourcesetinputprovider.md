@@ -94,8 +94,10 @@ The following types are supported:
 - `Static`: exports a single input map with the values from the field `.spec.defaultValues`.
 - `GitHubPullRequest`: fetches input values from opened GitHub Pull Requests.
 - `GitHubBranch`: fetches input values from GitHub repository branches.
+- `GitHubTag`: fetches input values from GitHub repository tags.
 - `GitLabMergeRequest`: fetches input values from opened GitLab Merge Requests.
 - `GitLabBranch`: fetches input values from GitLab project branches.
+- `GitLabTag`: fetches input values from GitLab project tags.
 
 For the `Static` type, the flux-operator will export in `.status.exportedInputs` a
 single input map with the values from the field `.spec.defaultValues` and the
@@ -121,6 +123,12 @@ For Git Branches the [exported inputs](#exported-inputs-status) structure is:
 - `branch`: the branch name (type string).
 - `sha`: the commit SHA corresponding to the branch HEAD (type string).
 
+For Git Tags the [exported inputs](#exported-inputs-status) structure is:
+
+- `id`: the Adler-32 checksum of the tag name (type string).
+- `tag`: the tag name (type string).
+- `sha`: the commit SHA corresponding to the tag (type string).
+
 ### URL
 
 The `.spec.url` field is required and specifies the HTTP/S URL of the provider.
@@ -136,6 +144,7 @@ The following filters are supported:
 - `labels`: filter GitHub Pull Requests or GitLab Merge Requests by labels.
 - `includeBranch`: regular expression to include branches by name.
 - `excludeBranch`: regular expression to exclude branches by name.
+- `semver`: sematic version range to filter and sort tags.
 
 Example of a filter configuration for GitLab Merge Requests:
 
@@ -147,6 +156,15 @@ spec:
       - "deploy::flux-preview"
     includeBranch: "^feat/.*"
     excludeBranch: "^feat/not-this-one$"
+```
+
+Example of a filter configuration for fetching only the latest Git tag according to semver:
+
+```yaml
+spec:
+  filter:
+    limit: 1
+    semver: ">=1.0.0"
 ```
 
 ### Skip
@@ -292,8 +310,8 @@ The `.spec.schedule` field is optional and can be used to specify a list of `Sch
 Each `Schedule` object has the following fields:
 - `.cron`: a required string representing the cron schedule in the format accepted by
   [cron](https://crontab.guru/).
-- `.timeZone`: a string representing the time zone in which the cron schedule should be interpreted.
-  This is optional and defaults to `UTC`.
+- `.timeZone`: a string representing the [time zone](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones)
+  in which the cron schedule should be interpreted. This field is optional and defaults to `UTC`.
 - `.window`: an optional string representing the time window duration in which reconciliations are
   allowed to run. The format is a Go duration string, such as `1h30m` or `2h45m`. Defaults to `0s`,
   meaning no window is applied. The duration must be either zero or at least twice the
@@ -304,21 +322,30 @@ Example:
 ```yaml
 spec:
   schedule:
-  - cron: 0 8 * * 1-5 # Every weekday at 8:00 AM
-    timeZone: Europe/London
-    window: 8h
+    # Every day-of-week from Monday through Thursday
+    # between 10:00 to 16:00
+    - cron: "0 10 * * 1-4"
+      timeZone: "Europe/London"
+      window: "6h"
+    # Every Friday from 10:00 to 13:00
+    - cron: "0 10 * * 5"
+      timeZone: "Europe/London"
+      window: "3h"
 ```
 
 When multiple schedules are specified, flux-operator will:
 - Reconcile the ResourceSetInputProvider if at least one of the schedules matches the current time.
 - Use the earliest next scheduled time across all schedules to determine the next scheduled time.
 
-When a schedule is specified with a zero duration window (the default), flux-operator will make
-the best effort to reconcile the ResourceSetInputProvider at the scheduled time, but it may not be
-able to guarantee that the reconciliation will start exactly at that time, especially if the operator
-is too busy or if the cluster is under heavy load. If multiple schedules are specified and at least
-one has a zero duration window, flux-operator will always reconcile the ResourceSetInputProvider upon
-any requests.
+When a schedule is specified with `window: 0s`, flux-operator will make the best effort to reconcile
+the ResourceSetInputProvider at the scheduled time; but it may not be able to guarantee that the
+reconciliation will start exactly at that time, especially if the operator is too busy or if
+the cluster is under heavy load.
+
+If multiple schedules are specified and at least one has a zero-duration window,
+flux-operator will always reconcile the ResourceSetInputProvider upon any requests, e.g.,
+updating the `.spec`, when the CLI is used to trigger a reconciliation, or when the
+operator is restarted.
 
 When a schedule is specified with a non-zero duration window, flux-operator will only reconcile
 the ResourceSetInputProvider when the time point `time.Now().Add(obj.GetTimeout())` falls within
@@ -443,7 +470,7 @@ until the misconfiguration is fixed. The `Ready` Condition status is also set to
 After a successful reconciliation, the ResourceSetInputProvider status contains a list of exported inputs
 that can be used in the ResourceSet templates.
 
-Example:
+Example for GitHub Pull Request:
 
 ```yaml
 status:
@@ -463,6 +490,16 @@ status:
     id: "2"
     sha: 8166bdecd6b078b9e5dd14fa3b7b67a847f76893
     title: 'feat(ui): Default color scheme'
+```
+
+Example for GitHub latest semver tag:
+
+```yaml
+status:
+  exportedInputs:
+  - id: "48955639"
+    tag: "6.0.4"
+    sha: 11cf36d83818e64aaa60d523ab6438258ebb6009
 ```
 
 ### Schedule status
