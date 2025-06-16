@@ -1,0 +1,19 @@
+images:
+  - name: ghcr.io/fluxcd/source-controller
+    newTag: v1.6.1
+    digest: sha256:a9dbd7872344ceadea48a89ea24c8a761a2a1008a2cdbbc1ffa3ed95dd2a00ce
+  - name: ghcr.io/fluxcd/kustomize-controller
+    newTag: v1.6.0
+    digest: sha256:d8c5445003196791441354f2d549e96cc6e69bb9ef6c5a7e440918dab0503776
+  - name: ghcr.io/fluxcd/helm-controller
+    newTag: v1.3.0
+    digest: sha256:db55d9d9f9b5106acd8c21da6916b8e285fcfc5572f214361ececd1a8571a4f0
+  - name: ghcr.io/fluxcd/notification-controller
+    newTag: v1.6.0
+    digest: sha256:80174ff676407af7a6feff67b0c2f100de9f7f89df4c26fc871e4d4c4006544d
+  - name: ghcr.io/fluxcd/image-reflector-controller
+    newTag: v0.35.2
+    digest: sha256:4df89798b23a1ba7ec86bab327dcb50417af1517fe7986e511e28f62f40b8f61
+  - name: ghcr.io/fluxcd/image-automation-controller
+    newTag: v0.41.1
+    digest: sha256:b622ed93cddf31ac4086e7f6847cafc990ba363f8f4af49d3217313b50582282
