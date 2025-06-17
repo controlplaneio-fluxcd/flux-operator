@@ -308,6 +308,7 @@ spec:
 The `.spec.schedule` field is optional and can be used to specify a list of `Schedule` objects.
 
 Each `Schedule` object has the following fields:
+
 - `.cron`: a required string representing the cron schedule in the format accepted by
   [cron](https://crontab.guru/).
 - `.timeZone`: a string representing the [time zone](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones)
@@ -334,6 +335,7 @@ spec:
 ```
 
 When multiple schedules are specified, flux-operator will:
+
 - Reconcile the ResourceSetInputProvider if at least one of the schedules matches the current time.
 - Use the earliest next scheduled time across all schedules to determine the next scheduled time.
 
