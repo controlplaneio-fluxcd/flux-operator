@@ -74,8 +74,10 @@ func getInputProviderCmdRun(cmd *cobra.Command, args []string) error {
 			inputsCount = len(obj.Status.ExportedInputs)
 		}
 		ready := "Unknown"
+		lastReconciled := "Unknown"
 		if conditions.Has(&obj, "Ready") {
 			ready = string(conditions.Get(&obj, "Ready").Status)
+			lastReconciled = conditions.Get(&obj, "Ready").LastTransitionTime.String()
 		}
 		var nextSchedule string
 		if obj.Status.NextSchedule != nil {
@@ -86,6 +88,7 @@ func getInputProviderCmdRun(cmd *cobra.Command, args []string) error {
 			strconv.Itoa(inputsCount),
 			ready,
 			conditions.GetMessage(&obj, "Ready"),
+			lastReconciled,
 			nextSchedule,
 		}
 		if getInputProviderArgs.allNamespaces {
@@ -94,7 +97,7 @@ func getInputProviderCmdRun(cmd *cobra.Command, args []string) error {
 		rows = append(rows, row)
 	}
 
-	header := []string{"Name", "Inputs", "Ready", "Message", "Next Schedule"}
+	header := []string{"Name", "Inputs", "Ready", "Message", "Last Reconciled", "Next Schedule"}
 	if getInputProviderArgs.allNamespaces {
 		header = append([]string{"Namespace"}, header...)
 	}

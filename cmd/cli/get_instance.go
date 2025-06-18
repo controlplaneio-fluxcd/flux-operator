@@ -74,14 +74,17 @@ func geInstanceCmdRun(cmd *cobra.Command, args []string) error {
 			objCount = len(instance.Status.Inventory.Entries)
 		}
 		ready := "Unknown"
+		lastReconciled := "Unknown"
 		if conditions.Has(&instance, "Ready") {
 			ready = string(conditions.Get(&instance, "Ready").Status)
+			lastReconciled = conditions.Get(&instance, "Ready").LastTransitionTime.String()
 		}
 		row := []string{
 			instance.Name,
 			strconv.Itoa(objCount),
 			ready,
 			conditions.GetMessage(&instance, "Ready"),
+			lastReconciled,
 		}
 		if getInstanceArgs.allNamespaces {
 			row = append([]string{instance.Namespace}, row...)
@@ -89,7 +92,7 @@ func geInstanceCmdRun(cmd *cobra.Command, args []string) error {
 		rows = append(rows, row)
 	}
 
-	header := []string{"Name", "Resources", "Ready", "Message"}
+	header := []string{"Name", "Resources", "Ready", "Message", "Last Reconciled"}
 	if getInstanceArgs.allNamespaces {
 		header = append([]string{"Namespace"}, header...)
 	}
