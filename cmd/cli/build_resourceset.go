@@ -25,7 +25,6 @@ var buildResourceSetCmd = &cobra.Command{
 	Use:     "resourceset",
 	Aliases: []string{"rset"},
 	Short:   "Build ResourceSet templates to Kubernetes objects",
-	RunE:    buildResourceSetCmdRun,
 	Example: `  # Build the given ResourceSet and print the generated objects
   flux-operator build resourceset -f my-resourceset.yaml
 
@@ -40,18 +39,20 @@ var buildResourceSetCmd = &cobra.Command{
   flux-operator build resourceset -f my-resourceset.yaml | \
     kubectl diff --server-side --field-manager=flux-operator -f -
 `,
+	Args: cobra.NoArgs,
+	RunE: buildResourceSetCmdRun,
 }
 
 type buildResourceSetFlags struct {
 	filename   string
-	inputsProm string
+	inputsFrom string
 }
 
 var buildResourceSetArgs buildResourceSetFlags
 
 func init() {
 	buildResourceSetCmd.Flags().StringVarP(&buildResourceSetArgs.filename, "filename", "f", "", "Path to the ResourceSet YAML manifest.")
-	buildResourceSetCmd.Flags().StringVarP(&buildResourceSetArgs.inputsProm, "inputs-from", "i", "", "Path to the ResourceSet inputs YAML manifest.")
+	buildResourceSetCmd.Flags().StringVarP(&buildResourceSetArgs.inputsFrom, "inputs-from", "i", "", "Path to the ResourceSet inputs YAML manifest.")
 
 	buildCmd.AddCommand(buildResourceSetCmd)
 }
@@ -87,12 +88,12 @@ func buildResourceSetCmdRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("error parsing ResourceSet: %w", err)
 	}
 
-	if len(rset.Spec.InputsFrom) > 0 && buildResourceSetArgs.inputsProm == "" {
+	if len(rset.Spec.InputsFrom) > 0 && buildResourceSetArgs.inputsFrom == "" {
 		return fmt.Errorf("ResourceSet has '.spec.inputsFrom', please provide the inputs with --inputs-from")
 	}
 
-	if buildResourceSetArgs.inputsProm != "" {
-		inputsData, err := os.ReadFile(buildResourceSetArgs.inputsProm)
+	if buildResourceSetArgs.inputsFrom != "" {
+		inputsData, err := os.ReadFile(buildResourceSetArgs.inputsFrom)
 		if err != nil {
 			return fmt.Errorf("error reading inputs file: %w", err)
 		}

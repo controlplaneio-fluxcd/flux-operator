@@ -27,7 +27,8 @@ var reconcileInputProviderCmd = &cobra.Command{
   # Trigger the reconciliation of a ResourceSetInputProvider without waiting for it to become ready
   flux-operator -n flux-system reconcile rsip my-inputprovider --wait=false
 `,
-	RunE: reconcileInputProviderCmdRun,
+	RunE:              reconcileInputProviderCmdRun,
+	ValidArgsFunction: resourceNamesCompletionFunc(fluxcdv1.GroupVersion.WithKind(fluxcdv1.ResourceSetInputProviderKind)),
 }
 
 type reconcileInputProviderFlags struct {

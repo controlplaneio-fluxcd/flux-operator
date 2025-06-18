@@ -24,7 +24,8 @@ var reconcileResourceSetCmd = &cobra.Command{
   # Trigger the reconciliation of a ResourceSet without waiting for it to become ready
   flux-operator -n flux-system reconcile rset my-resourceset --wait=false
 `,
-	RunE: reconcileResourceSetCmdRun,
+	RunE:              reconcileResourceSetCmdRun,
+	ValidArgsFunction: resourceNamesCompletionFunc(fluxcdv1.GroupVersion.WithKind(fluxcdv1.ResourceSetKind)),
 }
 
 type reconcileResourceSetFlags struct {

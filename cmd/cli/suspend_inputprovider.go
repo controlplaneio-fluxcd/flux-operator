@@ -13,10 +13,11 @@ import (
 )
 
 var suspendInputProviderCmd = &cobra.Command{
-	Use:     "inputprovider",
-	Aliases: []string{"rsip", "resourcesetinputprovider"},
-	Short:   "Suspend ResourceSetInputProvider reconciliation",
-	RunE:    suspendInputProviderCmdRun,
+	Use:               "inputprovider",
+	Aliases:           []string{"rsip", "resourcesetinputprovider"},
+	Short:             "Suspend ResourceSetInputProvider reconciliation",
+	RunE:              suspendInputProviderCmdRun,
+	ValidArgsFunction: resourceNamesCompletionFunc(fluxcdv1.GroupVersion.WithKind(fluxcdv1.ResourceSetInputProviderKind)),
 }
 
 func init() {

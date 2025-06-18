@@ -13,9 +13,10 @@ import (
 )
 
 var resumeInstanceCmd = &cobra.Command{
-	Use:   "instance",
-	Short: "Resume FluxInstance reconciliation",
-	RunE:  resumeInstanceCmdRun,
+	Use:               "instance",
+	Short:             "Resume FluxInstance reconciliation",
+	RunE:              resumeInstanceCmdRun,
+	ValidArgsFunction: resourceNamesCompletionFunc(fluxcdv1.GroupVersion.WithKind(fluxcdv1.FluxInstanceKind)),
 }
 
 func init() {

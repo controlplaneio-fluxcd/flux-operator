@@ -13,9 +13,10 @@ import (
 )
 
 var suspendInstanceCmd = &cobra.Command{
-	Use:   "instance",
-	Short: "Suspend FluxInstance reconciliation",
-	RunE:  suspendInstanceCmdRun,
+	Use:               "instance",
+	Short:             "Suspend FluxInstance reconciliation",
+	RunE:              suspendInstanceCmdRun,
+	ValidArgsFunction: resourceNamesCompletionFunc(fluxcdv1.GroupVersion.WithKind(fluxcdv1.FluxInstanceKind)),
 }
 
 func init() {
