@@ -17,10 +17,11 @@ import (
 )
 
 var getResourceSetCmd = &cobra.Command{
-	Use:     "resourceset",
-	Aliases: []string{"resourcesets", "rset"},
-	Short:   "List ResourceSets",
-	RunE:    getResourceSetCmdRun,
+	Use:               "resourceset",
+	Aliases:           []string{"resourcesets", "rset"},
+	Short:             "List ResourceSets",
+	RunE:              getResourceSetCmdRun,
+	ValidArgsFunction: resourceNamesCompletionFunc(fluxcdv1.GroupVersion.WithKind(fluxcdv1.ResourceSetKind)),
 }
 
 type getResourceSetFlags struct {

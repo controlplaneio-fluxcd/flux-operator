@@ -33,7 +33,6 @@ var buildInstanceCmd = &cobra.Command{
 4. Builds the Flux Kubernetes manifests according to the instance specifications and kustomize patches.
 5. Prints the multi-doc YAML containing the Flux Kubernetes manifests to stdout.
 `,
-	RunE: buildInstanceCmdRun,
 	Example: `  # Build the given FluxInstance and print the generated manifests
   flux-operator build instance -f flux.yaml
 
@@ -44,6 +43,8 @@ var buildInstanceCmd = &cobra.Command{
   flux-operator build instance -f flux.yaml | \
     kubectl diff --server-side --field-manager=flux-operator -f -
 `,
+	Args: cobra.NoArgs,
+	RunE: buildInstanceCmdRun,
 }
 
 type buildInstanceFlags struct {

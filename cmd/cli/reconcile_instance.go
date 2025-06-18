@@ -23,7 +23,8 @@ var reconcileInstanceCmd = &cobra.Command{
   # Trigger the reconciliation of an instance without waiting for it to become ready
   flux-operator -n flux-system reconcile instance flux --wait=false
 `,
-	RunE: reconcileInstanceCmdRun,
+	RunE:              reconcileInstanceCmdRun,
+	ValidArgsFunction: resourceNamesCompletionFunc(fluxcdv1.GroupVersion.WithKind(fluxcdv1.FluxInstanceKind)),
 }
 
 type reconcileInstanceFlags struct {

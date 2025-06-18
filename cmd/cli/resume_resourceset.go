@@ -13,10 +13,11 @@ import (
 )
 
 var resumeResourceSetCmd = &cobra.Command{
-	Use:     "resourceset",
-	Aliases: []string{"rset"},
-	Short:   "Resume ResourceSet reconciliation",
-	RunE:    resumeResourceSetCmdRun,
+	Use:               "resourceset",
+	Aliases:           []string{"rset"},
+	Short:             "Resume ResourceSet reconciliation",
+	RunE:              resumeResourceSetCmdRun,
+	ValidArgsFunction: resourceNamesCompletionFunc(fluxcdv1.GroupVersion.WithKind(fluxcdv1.ResourceSetKind)),
 }
 
 func init() {

@@ -17,10 +17,11 @@ import (
 )
 
 var getInputProviderCmd = &cobra.Command{
-	Use:     "inputprovider",
-	Aliases: []string{"rsip", "resourcesetinputproviders"},
-	Short:   "List ResourceSetInputProviders",
-	RunE:    getInputProviderCmdRun,
+	Use:               "inputprovider",
+	Aliases:           []string{"rsip", "resourcesetinputproviders"},
+	Short:             "List ResourceSetInputProviders",
+	RunE:              getInputProviderCmdRun,
+	ValidArgsFunction: resourceNamesCompletionFunc(fluxcdv1.GroupVersion.WithKind(fluxcdv1.ResourceSetInputProviderKind)),
 }
 
 type getInputProviderFlags struct {
