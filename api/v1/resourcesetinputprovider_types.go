@@ -82,6 +82,9 @@ type ResourceSetInputProviderSpec struct {
 }
 
 // ResourceSetInputFilter defines the filter to apply to the input provider response.
+// +kubebuilder:validation:XValidation:rule="!has(self.semver) || !has(self.alphabetical)",message="cannot specify more than one of semver, alphabetical or numerical"
+// +kubebuilder:validation:XValidation:rule="!has(self.alphabetical) || !has(self.numerical)",message="cannot specify more than one of semver, alphabetical or numerical"
+// +kubebuilder:validation:XValidation:rule="!has(self.numerical) || !has(self.semver)",message="cannot specify more than one of semver, alphabetical or numerical"
 type ResourceSetInputFilter struct {
 	// IncludeBranch specifies the regular expression to filter the branches
 	// that the input provider should include.
@@ -103,8 +106,21 @@ type ResourceSetInputFilter struct {
 	Limit int `json:"limit,omitempty"`
 
 	// Semver specifies the semantic version range to filter and order the tags.
+	// Cannot be specified alongside Alphabetical or Numerical.
 	// +optional
 	Semver string `json:"semver,omitempty"`
+
+	// Alphabetical specifies whether to sort the tags alphabetically.
+	// Cannot be specified alongside Semver or Numerical.
+	// +kubebuilder:validation:Enum=asc;desc
+	// +optional
+	Alphabetical string `json:"alphabetical,omitempty"`
+
+	// Numerical specifies whether to sort the tags numerically.
+	// Cannot be specified alongside Semver or Alphabetical.
+	// +kubebuilder:validation:Enum=asc;desc
+	// +optional
+	Numerical string `json:"numerical,omitempty"`
 }
 
 // ResourceSetInputSkip defines whether we need to skip input updates.

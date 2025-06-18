@@ -81,6 +81,14 @@ spec:
                 description: Filter defines the filter to apply to the input provider
                   response.
                 properties:
+                  alphabetical:
+                    description: |-
+                      Alphabetical specifies whether to sort the tags alphabetically.
+                      Cannot be specified alongside Semver or Numerical.
+                    enum:
+                    - asc
+                    - desc
+                    type: string
                   excludeBranch:
                     description: |-
                       ExcludeBranch specifies the regular expression to filter the branches
@@ -102,11 +110,30 @@ spec:
                       Limit specifies the maximum number of input sets to return.
                       When not set, the default limit is 100.
                     type: integer
+                  numerical:
+                    description: |-
+                      Numerical specifies whether to sort the tags numerically.
+                      Cannot be specified alongside Semver or Alphabetical.
+                    enum:
+                    - asc
+                    - desc
+                    type: string
                   semver:
-                    description: Semver specifies the semantic version range to filter
-                      and order the tags.
+                    description: |-
+                      Semver specifies the semantic version range to filter and order the tags.
+                      Cannot be specified alongside Alphabetical or Numerical.
                     type: string
                 type: object
+                x-kubernetes-validations:
+                - message: cannot specify more than one of semver, alphabetical or
+                    numerical
+                  rule: '!has(self.semver) || !has(self.alphabetical)'
+                - message: cannot specify more than one of semver, alphabetical or
+                    numerical
+                  rule: '!has(self.alphabetical) || !has(self.numerical)'
+                - message: cannot specify more than one of semver, alphabetical or
+                    numerical
+                  rule: '!has(self.numerical) || !has(self.semver)'
               schedule:
                 description: Schedule defines the schedules for the input provider
                   to run.

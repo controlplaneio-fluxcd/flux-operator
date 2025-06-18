@@ -336,12 +336,17 @@ func (r *ResourceSetInputProviderReconciler) makeGitOptions(obj *fluxcdv1.Resour
 			}
 			opts.Filters.ExcludeBranchRe = exRx
 		}
-		if obj.Spec.Filter.Semver != "" {
+		switch {
+		case obj.Spec.Filter.Semver != "":
 			constraints, err := semver.NewConstraint(obj.Spec.Filter.Semver)
 			if err != nil {
 				return gitprovider.Options{}, fmt.Errorf("invalid semver expression: %w", err)
 			}
 			opts.Filters.SemverConstraints = constraints
+		case obj.Spec.Filter.Alphabetical != "":
+			opts.Filters.Alphabetical = obj.Spec.Filter.Alphabetical
+		case obj.Spec.Filter.Numerical != "":
+			opts.Filters.Numerical = obj.Spec.Filter.Numerical
 		}
 	}
 

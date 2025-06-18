@@ -84,15 +84,15 @@ func (p *GitHubProvider) ListTags(ctx context.Context, opts Options) ([]Result, 
 	}
 
 	tagMap := make(map[string]*github.RepositoryTag, len(tags))
-	semverList := make([]string, 0, len(tags))
+	sortedTags := make([]string, 0, len(tags))
 	for _, tag := range tags {
-		semverList = append(semverList, tag.GetName())
+		sortedTags = append(sortedTags, tag.GetName())
 		tagMap[tag.GetName()] = tag
 	}
 
 	results := make([]Result, 0)
-	semverResults := sortSemver(opts, semverList)
-	for _, version := range semverResults {
+	sortedTags = sortTags(opts, sortedTags)
+	for _, version := range sortedTags {
 		tag, ok := tagMap[version]
 		if !ok {
 			return nil, fmt.Errorf("could not find tag %s", version)

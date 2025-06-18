@@ -114,6 +114,70 @@ foo: bar `, inputs.Checksum(string(obj.UID)))
 	g.Expect(result.Status.LastExportedRevision).To(Equal(lastExportedRevision))
 }
 
+func TestResourceSetInputProviderReconciler_MultipleOrderingOptions(t *testing.T) {
+	g := NewWithT(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test-multiple-ordering-options")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	for _, tt := range []struct {
+		name   string
+		filter fluxcdv1.ResourceSetInputFilter
+	}{
+		{
+			name: "semver and alphabetical",
+			filter: fluxcdv1.ResourceSetInputFilter{
+				Semver:       ">=1.0.0",
+				Alphabetical: "asc",
+			},
+		},
+		{
+			name: "alphabetical and numerical",
+			filter: fluxcdv1.ResourceSetInputFilter{
+				Alphabetical: "desc",
+				Numerical:    "asc",
+			},
+		},
+		{
+			name: "numerical and semver",
+			filter: fluxcdv1.ResourceSetInputFilter{
+				Numerical: "asc",
+				Semver:    ">=1.0.0",
+			},
+		},
+		{
+			name: "all three",
+			filter: fluxcdv1.ResourceSetInputFilter{
+				Semver:       ">=1.0.0",
+				Alphabetical: "asc",
+				Numerical:    "desc",
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			obj := &fluxcdv1.ResourceSetInputProvider{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-multiple-ordering-options",
+					Namespace: ns.Name,
+				},
+				Spec: fluxcdv1.ResourceSetInputProviderSpec{
+					Type:   fluxcdv1.InputProviderStatic,
+					Filter: &tt.filter,
+				},
+			}
+
+			err := testEnv.Create(ctx, obj)
+			g.Expect(err).To(HaveOccurred())
+			g.Expect(err.Error()).To(ContainSubstring("cannot specify more than one of semver, alphabetical or numerical"))
+		})
+	}
+}
+
 func TestResourceSetInputProviderReconciler_InvalidDefaultValues(t *testing.T) {
 	g := NewWithT(t)
 	reconciler := getResourceSetInputProviderReconciler(t)

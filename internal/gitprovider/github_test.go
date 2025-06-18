@@ -73,6 +73,118 @@ func TestGitHubProvider_ListTags(t *testing.T) {
 			},
 		},
 		{
+			name: "sorts tags alphabetically in ascending order",
+			opts: Options{
+				Token: os.Getenv("GITHUB_TOKEN"),
+				URL:   "https://github.com/stefanprodan/podinfo",
+				Filters: Filters{
+					Alphabetical: "asc",
+					Limit:        3,
+				},
+			},
+			want: []Result{
+				{
+					ID:  "47251697",
+					SHA: "81ef8654bff2d5fba88dcf9cf874b3adc425d6b7",
+					Tag: "0.2.2",
+				},
+				{
+					ID:  "47382767",
+					SHA: "dc27269a47e66923dbd8bdecf465a23092097f9e",
+					Tag: "2.0.0",
+				},
+				{
+					ID:  "47448304",
+					SHA: "e0864b6e205dc7755cd7b2f47f89273b31f7189d",
+					Tag: "2.0.1",
+				},
+			},
+		},
+		{
+			name: "sorts tags alphabetically in descending order",
+			opts: Options{
+				Token: os.Getenv("GITHUB_TOKEN"),
+				URL:   "https://github.com/stefanprodan/podinfo",
+				Filters: Filters{
+					Alphabetical: "desc",
+					Limit:        3,
+				},
+			},
+			want: []Result{
+				{
+					ID:  "95093100",
+					SHA: "6c8a85a5ab953874c7c83d50317359a0e5a352a9",
+					Tag: "v1.8.0",
+				},
+				{
+					ID:  "94896491",
+					SHA: "18af1ea3a6c340c252e97b7875e929a97e7b0b8f",
+					Tag: "v1.7.0",
+				},
+				{
+					ID:  "94699882",
+					SHA: "44f588dd4c76ee5d78f7865ab016510c901096da",
+					Tag: "v1.6.0",
+				},
+			},
+		},
+		{
+			name: "sorts tags numerically in ascending order",
+			opts: Options{
+				Token: os.Getenv("GITHUB_TOKEN"),
+				URL:   "https://github.com/stefanprodan/podinfo",
+				Filters: Filters{
+					Numerical: "asc",
+					Limit:     3,
+				},
+			},
+			want: []Result{
+				{
+					ID:  "95093100",
+					SHA: "6c8a85a5ab953874c7c83d50317359a0e5a352a9",
+					Tag: "123456",
+				},
+				{
+					ID:  "94896491",
+					SHA: "18af1ea3a6c340c252e97b7875e929a97e7b0b8f",
+					Tag: "234567",
+				},
+				{
+					ID:  "94699882",
+					SHA: "44f588dd4c76ee5d78f7865ab016510c901096da",
+					Tag: "345678",
+				},
+			},
+		},
+		{
+			name: "sorts tags numerically in descending order",
+			opts: Options{
+				Token: os.Getenv("GITHUB_TOKEN"),
+				URL:   "https://github.com/stefanprodan/podinfo",
+				Filters: Filters{
+					Numerical: "desc",
+					Limit:     3,
+				},
+			},
+			want: []Result{
+				{
+					ID:  "94699882",
+					SHA: "44f588dd4c76ee5d78f7865ab016510c901096da",
+					Tag: "345678",
+				},
+				{
+					ID:  "94896491",
+					SHA: "18af1ea3a6c340c252e97b7875e929a97e7b0b8f",
+					Tag: "234567",
+				},
+				{
+					ID:  "95093100",
+					SHA: "6c8a85a5ab953874c7c83d50317359a0e5a352a9",
+					Tag: "123456",
+				},
+			},
+		},
+		{
 			name: "filters tags no results",
 			opts: Options{
 				Token: os.Getenv("GITHUB_TOKEN"),
