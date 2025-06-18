@@ -4,10 +4,10 @@
 
 ### Flux Operator
 
-1. Create a new release branch from `main`, e.g. `release-v2.0.0` in the [`controlplaneio-fluxcd/flux-operator` repository](https://github.com/controlplaneio-fluxcd/flux-operator).
+1. Create a new release branch from `main`, e.g. `release-v1.0.0` in the [`controlplaneio-fluxcd/flux-operator` repository](https://github.com/controlplaneio-fluxcd/flux-operator).
 2. Bump the version in the `newTag` field from `config/manager/kustomization.yaml`.
-3. Commit the changes with the title `Release v2.0.0`, push and open a PR.
-4. After the PR is merged, tag the `main` branch with the new version, e.g. `git tag -s -m "v2.0.0" "v2.0.0"`.
+3. Commit the changes with the title `Release v1.0.0`, push and open a PR.
+4. After the PR is merged, tag the `main` branch with the new version, e.g. `git tag -s -m "v1.0.0" "v1.0.0"`.
 5. Wait for the `release` GitHub Workflow to finish.
 
 ### Helm Chart
@@ -24,9 +24,9 @@
 1. Validate the new version by running the `e2e-olm` GitHub Workflow in the [`controlplaneio-fluxcd/flux-operator` repository](https://github.com/controlplaneio-fluxcd/flux-operator/actions/workflows/e2e-olm.yml).
 2. Generate the OLM manifests locally by running `make build-olm-manifests`.
 3. Fork the [OperatorHub.io repository](https://github.com/k8s-operatorhub/community-operators) and clone it locally.
-4. Create a new branch from `main`, e.g. `flux-operator-2.0.0`.
-5. Copy the OLM manifests from the `flux-operator/bin/olm/2.0.0` dir to the `community-operators/operators/flux-operator/2.0.0`.
-6. Commit the changes with the title `operator flux-operator (2.0.0)` and push the branch to the fork.
+4. Create a new branch from `main`, e.g. `flux-operator-1.0.0`.
+5. Copy the OLM manifests from the `flux-operator/bin/olm/1.0.0` dir to the `community-operators/operators/flux-operator/1.0.0`.
+6. Commit the changes with the title `operator flux-operator (1.0.0)` and push the branch to the fork.
 7. Open a PR in the upstream repository and wait for the CI to pass.
 8. After the PR is merged, the new version will be available at [operatorhub.io/operator/flux-operator](https://operatorhub.io/operator/flux-operator).
 
@@ -35,11 +35,24 @@
 1. Trigger the Redhat UBI build by running the `push-ubi` GitHub Workflow in the [`controlplaneio-fluxcd/flux-operator` repository](https://github.com/controlplaneio-fluxcd/flux-operator/actions/workflows/push-ubi.yml).
 2. Generate the OLM manifests for the UBI version locally by running `make build-olm-manifests-ubi`.
 3. Fork the [redhat-openshift-ecosystem/community-operators-prod repository](https://github.com/redhat-openshift-ecosystem/community-operators-prod) and clone it locally.
-4. Create a new branch from `main`, e.g. `flux-operator-2.0.0`.
-5. Copy the OLM manifests from the `flux-operator/bin/olm/2.0.0` dir to the `community-operators-prod/operators/flux-operator/2.0.0`.
-6. Commit the changes with the title `operator flux-operator (2.0.0)` and push the branch to the fork.
+4. Create a new branch from `main`, e.g. `flux-operator-1.0.0`.
+5. Copy the OLM manifests from the `flux-operator/bin/olm/1.0.0` dir to the `community-operators-prod/operators/flux-operator/1.0.0`.
+6. Commit the changes with the title `operator flux-operator (1.0.0)` and push the branch to the fork.
 7. Open a PR in the upstream repository and wait for the CI to pass.
 8. After the PR is merged, the new version will be available in the OpenShift Container Platform catalog.
+
+### Homebrew Tap
+
+1. Trigger the `release` GitHub Workflow in the [`controlplaneio-fluxcd/homebrew-tap` repository](https://github.com/controlplaneio-fluxcd/homebrew-tap/blob/main/.github/workflows/release.yml).
+2. Merge the PR opened by the `release` workflow.
+3. Verify the new version is available by running `brew upgrade flux-operator flux-operator-mcp` on your local machine.
+
+### Documentation Website
+
+1. Trigger the `vendor-operator-docs` GitHub Workflow in the [`controlplaneio-fluxcd/distribution` repository](https://github.com/controlplaneio-fluxcd/distribution/blob/main/.github/workflows/vendor-operator-docs.yaml).
+2. Merge the PR opened by the `vendor-operator-docs` workflow.
+3. Trigger the `docs` GitHub Workflow in the [`controlplaneio-fluxcd/distribution` repository](https://github.com/controlplaneio-fluxcd/distribution/blob/main/.github/workflows/docs.yaml).
+4. Wait for the `docs` workflow to finish and verify the changes on the [Flux Operator documentation site](https://fluxcd.control-plane.io/operator/).
 
 ## Manifests Release Procedure
 
@@ -63,7 +76,7 @@
 
 ### Prerequisites
 
-- [Go](https://golang.org/doc/install) 1.23+
+- [Go](https://golang.org/doc/install) 1.24+
 - [Docker](https://docs.docker.com/get-docker/)
 - [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/)
 - [Kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
