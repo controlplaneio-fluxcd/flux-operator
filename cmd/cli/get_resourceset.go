@@ -74,14 +74,17 @@ func getResourceSetCmdRun(cmd *cobra.Command, args []string) error {
 			objCount = len(rset.Status.Inventory.Entries)
 		}
 		ready := "Unknown"
+		lastReconciled := "Unknown"
 		if conditions.Has(&rset, "Ready") {
 			ready = string(conditions.Get(&rset, "Ready").Status)
+			lastReconciled = conditions.Get(&rset, "Ready").LastTransitionTime.String()
 		}
 		row := []string{
 			rset.Name,
 			strconv.Itoa(objCount),
 			ready,
 			conditions.GetMessage(&rset, "Ready"),
+			lastReconciled,
 		}
 		if getResourceSetArgs.allNamespaces {
 			row = append([]string{rset.Namespace}, row...)
@@ -89,7 +92,7 @@ func getResourceSetCmdRun(cmd *cobra.Command, args []string) error {
 		rows = append(rows, row)
 	}
 
-	header := []string{"Name", "Resources", "Ready", "Message"}
+	header := []string{"Name", "Resources", "Ready", "Message", "Last Reconciled"}
 	if getResourceSetArgs.allNamespaces {
 		header = append([]string{"Namespace"}, header...)
 	}
