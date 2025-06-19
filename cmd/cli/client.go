@@ -20,6 +20,7 @@ import (
 	apiruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
+	cliopts "k8s.io/cli-runtime/pkg/genericclioptions"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
@@ -61,18 +62,14 @@ func newKubeClient() (client.Client, error) {
 }
 
 // annotateResource annotates a resource with the specified key and value.
-func annotateResource(ctx context.Context, kind, name, namespace, key, val string) error {
-	return annotateResourceWithMap(ctx, kind, name, namespace, map[string]string{key: val})
+func annotateResource(ctx context.Context, gvk schema.GroupVersionKind, name, namespace, key, val string) error {
+	return annotateResourceWithMap(ctx, gvk, name, namespace, map[string]string{key: val})
 }
 
 // annotateResourceWithMap annotates a resource with the provided map of annotations.
-func annotateResourceWithMap(ctx context.Context, kind, name, namespace string, m map[string]string) error {
+func annotateResourceWithMap(ctx context.Context, gvk schema.GroupVersionKind, name, namespace string, m map[string]string) error {
 	resource := &metav1.PartialObjectMetadata{}
-	resource.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   fluxcdv1.GroupVersion.Group,
-		Version: fluxcdv1.GroupVersion.Version,
-		Kind:    kind,
-	})
+	resource.SetGroupVersionKind(gvk)
 
 	objectKey := client.ObjectKey{
 		Namespace: namespace,
@@ -85,7 +82,7 @@ func annotateResourceWithMap(ctx context.Context, kind, name, namespace string, 
 	}
 
 	if err := kubeClient.Get(ctx, objectKey, resource); err != nil {
-		return fmt.Errorf("unable to read %s/%s/%s error: %w", kind, namespace, name, err)
+		return fmt.Errorf("unable to read %s/%s/%s error: %w", gvk.Kind, namespace, name, err)
 	}
 
 	patch := client.MergeFrom(resource.DeepCopy())
@@ -98,20 +95,16 @@ func annotateResourceWithMap(ctx context.Context, kind, name, namespace string, 
 	resource.SetAnnotations(annotations)
 
 	if err := kubeClient.Patch(ctx, resource, patch); err != nil {
-		return fmt.Errorf("unable to annotate %s/%s/%s error: %w", kind, namespace, name, err)
+		return fmt.Errorf("unable to annotate %s/%s/%s error: %w", gvk.Kind, namespace, name, err)
 	}
 
 	return nil
 }
 
 // waitForResourceReconciliation waits for a resource to become ready after a reconciliation request.
-func waitForResourceReconciliation(ctx context.Context, kind, name, namespace, requestTime string, timeout time.Duration) (string, error) {
+func waitForResourceReconciliation(ctx context.Context, gvk schema.GroupVersionKind, name, namespace, requestTime string, timeout time.Duration) (string, error) {
 	resource := &unstructured.Unstructured{}
-	resource.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   fluxcdv1.GroupVersion.Group,
-		Version: fluxcdv1.GroupVersion.Version,
-		Kind:    kind,
-	})
+	resource.SetGroupVersionKind(gvk)
 	resource.SetName(name)
 	resource.SetNamespace(namespace)
 
@@ -168,4 +161,40 @@ func isResourceReconciledFunc(kubeClient client.Client, obj *unstructured.Unstru
 
 		return false, nil
 	}
+}
+
+// preferredFluxGVK returns the preferred GroupVersionKind for a given Flux kind.
+func preferredFluxGVK(kind string, cf *cliopts.ConfigFlags) (*schema.GroupVersionKind, error) {
+	gk := schema.GroupKind{
+		Kind: kind,
+	}
+
+	mapper, err := cf.ToRESTMapper()
+	if err != nil {
+		return nil, fmt.Errorf("unable to create REST mapper: %w", err)
+	}
+
+	switch kind {
+	case "FluxInstance", "FluxReport", "ResourceSet", "ResourceSetInputProvider":
+		gk.Group = fluxcdv1.GroupVersion.Group
+	case "GitRepository", "OCIRepository", "Bucket", "HelmChart", "HelmRepository":
+		gk.Group = "source.toolkit.fluxcd.io"
+	case "Alert", "Provider", "Receiver":
+		gk.Group = "notification.toolkit.fluxcd.io"
+	case "ImageRepository", "ImagePolicy", "ImageUpdateAutomation":
+		gk.Group = "image.toolkit.fluxcd.io"
+	case "Kustomization":
+		gk.Group = "kustomize.toolkit.fluxcd.io"
+	case "HelmRelease":
+		gk.Group = "helm.toolkit.fluxcd.io"
+	default:
+		return nil, fmt.Errorf("unknown Flux kind %s", kind)
+	}
+
+	mapping, err := mapper.RESTMapping(gk)
+	if err != nil {
+		return nil, err
+	}
+
+	return &mapping.GroupVersionKind, nil
 }

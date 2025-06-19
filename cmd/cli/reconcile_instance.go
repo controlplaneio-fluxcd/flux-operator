@@ -45,13 +45,17 @@ func reconcileInstanceCmdRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("name is required")
 	}
 
+	name := args[0]
+	gvk := fluxcdv1.GroupVersion.WithKind(fluxcdv1.FluxInstanceKind)
+
 	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
 	defer cancel()
 
 	now := metav1.Now().String()
 
 	err := annotateResource(ctx,
-		fluxcdv1.FluxInstanceKind, args[0],
+		gvk,
+		name,
 		*kubeconfigArgs.Namespace,
 		meta.ReconcileRequestAnnotation,
 		now)
@@ -63,8 +67,8 @@ func reconcileInstanceCmdRun(cmd *cobra.Command, args []string) error {
 	if reconcileInstanceArgs.wait {
 		rootCmd.Println(`◎`, "Waiting for reconciliation...")
 		msg, err := waitForResourceReconciliation(ctx,
-			fluxcdv1.FluxInstanceKind,
-			args[0],
+			gvk,
+			name,
 			*kubeconfigArgs.Namespace,
 			now,
 			rootArgs.timeout)

@@ -29,11 +29,15 @@ func suspendInputProviderCmdRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("name is required")
 	}
 
+	name := args[0]
+	gvk := fluxcdv1.GroupVersion.WithKind(fluxcdv1.ResourceSetInputProviderKind)
+
 	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
 	defer cancel()
 
 	err := annotateResource(ctx,
-		fluxcdv1.ResourceSetInputProviderKind, args[0],
+		gvk,
+		name,
 		*kubeconfigArgs.Namespace,
 		fluxcdv1.ReconcileAnnotation,
 		fluxcdv1.DisabledValue)
