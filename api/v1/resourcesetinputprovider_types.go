@@ -17,13 +17,16 @@ import (
 const (
 	ResourceSetInputProviderKind = "ResourceSetInputProvider"
 
-	InputProviderStatic             = "Static"
-	InputProviderGitHubBranch       = "GitHubBranch"
-	InputProviderGitHubTag          = "GitHubTag"
-	InputProviderGitHubPullRequest  = "GitHubPullRequest"
-	InputProviderGitLabBranch       = "GitLabBranch"
-	InputProviderGitLabTag          = "GitLabTag"
-	InputProviderGitLabMergeRequest = "GitLabMergeRequest"
+	InputProviderStatic                 = "Static"
+	InputProviderGitHubBranch           = "GitHubBranch"
+	InputProviderGitHubTag              = "GitHubTag"
+	InputProviderGitHubPullRequest      = "GitHubPullRequest"
+	InputProviderGitLabBranch           = "GitLabBranch"
+	InputProviderGitLabTag              = "GitLabTag"
+	InputProviderGitLabMergeRequest     = "GitLabMergeRequest"
+	InputProviderAzureDevOpsBranch      = "AzureDevOpsBranch"
+	InputProviderAzureDevOpsPullRequest = "AzureDevOpsPullRequest"
+	InputProviderAzureDevOpsTag         = "AzureDevOpsTag"
 
 	ReasonInvalidDefaultValues  = "InvalidDefaultValues"
 	ReasonInvalidExportedInputs = "InvalidExportedInputs"
@@ -34,7 +37,7 @@ const (
 // +kubebuilder:validation:XValidation:rule="self.type == 'Static' || has(self.url)", message="spec.url must not be empty when spec.type is not 'Static'"
 type ResourceSetInputProviderSpec struct {
 	// Type specifies the type of the input provider.
-	// +kubebuilder:validation:Enum=Static;GitHubBranch;GitHubTag;GitHubPullRequest;GitLabBranch;GitLabTag;GitLabMergeRequest
+	// +kubebuilder:validation:Enum=Static;GitHubBranch;GitHubTag;GitHubPullRequest;GitLabBranch;GitLabTag;GitLabMergeRequest;AzureDevOpsBranch;AzureDevOpsTag;AzureDevOpsPullRequest
 	// +required
 	Type string `json:"type"`
 

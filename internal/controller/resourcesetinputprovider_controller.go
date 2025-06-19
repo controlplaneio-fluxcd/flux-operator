@@ -300,6 +300,16 @@ func (r *ResourceSetInputProviderReconciler) newGitProvider(ctx context.Context,
 			CertPool: certPool,
 			Token:    token,
 		})
+	case strings.HasPrefix(obj.Spec.Type, "AzureDevOps"):
+		token, err := r.getAzureDevOpsToken(obj, authData)
+		if err != nil {
+			return nil, err
+		}
+		return gitprovider.NewAzureDevOpsProvider(ctx, gitprovider.Options{
+			URL:      obj.Spec.URL,
+			CertPool: certPool,
+			Token:    token,
+		})
 	default:
 		return nil, fmt.Errorf("unsupported type: %s", obj.Spec.Type)
 	}
@@ -511,6 +521,19 @@ func (r *ResourceSetInputProviderReconciler) getGitHubToken(
 
 // getGitLabToken returns the appropriate GitLab token by reading the secrets in authData.
 func (r *ResourceSetInputProviderReconciler) getGitLabToken(
+	obj *fluxcdv1.ResourceSetInputProvider,
+	authData map[string][]byte) (string, error) {
+
+	if authData == nil {
+		return "", nil
+	}
+
+	_, password, err := r.getBasicAuth(obj, authData)
+	return password, err
+}
+
+// getAzureDevOpsToken returns the appropriate AzureDevOps token by reading the secrets in authData.
+func (r *ResourceSetInputProviderReconciler) getAzureDevOpsToken(
 	obj *fluxcdv1.ResourceSetInputProvider,
 	authData map[string][]byte) (string, error) {
 
