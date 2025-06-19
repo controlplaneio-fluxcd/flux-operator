@@ -904,3 +904,47 @@ spec:
 		})
 	}
 }
+
+func TestResourceSetInputProviderReconciler_InvalidGitURL(t *testing.T) {
+	g := NewWithT(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test-invalid-oci-url")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	for _, tt := range []struct {
+		provider string
+	}{
+		{provider: fluxcdv1.InputProviderGitHubBranch},
+		{provider: fluxcdv1.InputProviderGitHubTag},
+		{provider: fluxcdv1.InputProviderGitHubPullRequest},
+		{provider: fluxcdv1.InputProviderGitLabBranch},
+		{provider: fluxcdv1.InputProviderGitLabTag},
+		{provider: fluxcdv1.InputProviderGitLabMergeRequest},
+		{provider: fluxcdv1.InputProviderAzureDevOpsBranch},
+		{provider: fluxcdv1.InputProviderAzureDevOpsPullRequest},
+		{provider: fluxcdv1.InputProviderAzureDevOpsTag},
+	} {
+		t.Run(tt.provider, func(t *testing.T) {
+			g := NewWithT(t)
+
+			obj := &fluxcdv1.ResourceSetInputProvider{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: ns.Name,
+				},
+				Spec: fluxcdv1.ResourceSetInputProviderSpec{
+					Type: tt.provider,
+					URL:  "github.com/stefanprodan/podinfo",
+				},
+			}
+
+			err = testEnv.Create(ctx, obj)
+			g.Expect(err).To(HaveOccurred())
+			g.Expect(err.Error()).To(ContainSubstring(
+				"spec.url must start with 'http://' or 'https://' when spec.type is a Git provider"))
+		})
+	}
+}

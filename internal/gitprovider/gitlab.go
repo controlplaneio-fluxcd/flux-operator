@@ -94,7 +94,7 @@ func (p *GitLabProvider) ListTags(ctx context.Context, opts Options) ([]Result, 
 		}
 
 		results = append(results, Result{
-			ID:  inputs.Checksum(tag.Name),
+			ID:  inputs.ID(tag.Name),
 			SHA: tag.Commit.ID,
 			Tag: tag.Name,
 		})
@@ -129,7 +129,7 @@ func (p *GitLabProvider) ListBranches(ctx context.Context, opts Options) ([]Resu
 			}
 
 			results = append(results, Result{
-				ID:     inputs.Checksum(branch.Name),
+				ID:     inputs.ID(branch.Name),
 				SHA:    branch.Commit.ID,
 				Branch: branch.Name,
 			})

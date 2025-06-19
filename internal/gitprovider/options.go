@@ -7,9 +7,9 @@ import (
 	"crypto/x509"
 	"regexp"
 	"slices"
-	"sort"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/fluxcd/pkg/version"
 )
 
 // Options holds the configuration for the Git SaaS provider.
@@ -62,25 +62,5 @@ func sortSemver(opt Options, tags []string) []string {
 	if constraint == nil {
 		return tags
 	}
-
-	var versions []*semver.Version
-	for _, tag := range tags {
-		if v, err := semver.NewVersion(tag); err == nil {
-			if constraint.Check(v) {
-				versions = append(versions, v)
-			}
-		}
-	}
-
-	if len(tags) == 0 || len(versions) == 0 {
-		return nil
-	}
-
-	sort.Sort(sort.Reverse(semver.Collection(versions)))
-	sortedTags := make([]string, 0, len(versions))
-	for _, v := range versions {
-		sortedTags = append(sortedTags, v.Original())
-	}
-
-	return sortedTags
+	return version.Sort(constraint, tags)
 }

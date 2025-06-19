@@ -70,7 +70,7 @@ spec:
 	exportedInput := fmt.Sprintf(`
 id: "%[1]s"
 env: staging
-foo: bar `, inputs.Checksum(string(obj.UID)))
+foo: bar `, inputs.ID(string(obj.UID)))
 
 	// Initialize the ResourceSetInputProvider.
 	r, err := reconciler.Reconcile(ctx, reconcile.Request{

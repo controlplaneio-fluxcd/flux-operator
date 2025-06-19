@@ -5,9 +5,11 @@ package controller
 
 import (
 	"context"
+	"crypto/tls"
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"net/http"
 	"regexp"
 	"slices"
 	"strings"
@@ -19,6 +21,9 @@ import (
 	"github.com/fluxcd/pkg/git/github"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
+	"github.com/fluxcd/pkg/version"
+	"github.com/google/go-containerregistry/pkg/authn/k8schain"
+	"github.com/google/go-containerregistry/pkg/crane"
 	"github.com/opencontainers/go-digest"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -166,8 +171,9 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 	switch obj.Spec.Type {
 	case fluxcdv1.InputProviderStatic:
 		// Handle static input provider.
-		defaults["id"] = inputs.Checksum(string(obj.GetUID()))
-		exportedInput, err := fluxcdv1.NewResourceSetInput(defaults)
+		exportedInput, err := fluxcdv1.NewResourceSetInput(defaults, map[string]any{
+			"id": inputs.ID(string(obj.GetUID())),
+		})
 		if err != nil {
 			errMsg := fmt.Sprintf("%s: %v", msgTerminalError, err)
 			conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidExportedInputs, "%s", errMsg)
@@ -187,54 +193,10 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 			return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
 		}
 
-		// Get the auth data.
-		var authData map[string][]byte
-		if obj.Spec.SecretRef != nil {
-			var err error
-			authData, err = r.getSecretData(ctx, obj.Spec.SecretRef.Name, obj.GetNamespace())
-			if err != nil {
-				msg := fmt.Sprintf("failed to get credentials %s", err.Error())
-				conditions.MarkFalse(obj,
-					meta.ReadyCondition,
-					meta.ReconciliationFailedReason,
-					"%s", msg)
-				r.notify(ctx, obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
-				return ctrl.Result{}, err
-			}
-		}
-
-		// Get the CA certificate.
-		certPool, err := r.getCertPool(ctx, obj)
+		// Call the external provider to get the exported inputs.
+		exportedInputs, err = r.callExternalProvider(ctx, obj, defaults)
 		if err != nil {
-			msg := fmt.Sprintf("failed to get certificates %s", err.Error())
-			conditions.MarkFalse(obj,
-				meta.ReadyCondition,
-				meta.ReconciliationFailedReason,
-				"%s", msg)
-			r.notify(ctx, obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
-			return ctrl.Result{}, err
-		}
-
-		// Create the provider context with timeout.
-		providerCtx, cancel := context.WithTimeout(ctx, obj.GetTimeout())
-		defer cancel()
-
-		// Create the provider based on the object type.
-		provider, err := r.newGitProvider(providerCtx, obj, certPool, authData)
-		if err != nil {
-			msg := fmt.Sprintf("failed to create provider %s", err.Error())
-			conditions.MarkFalse(obj,
-				meta.ReadyCondition,
-				meta.ReconciliationFailedReason,
-				"%s", msg)
-			r.notify(ctx, obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
-			return ctrl.Result{}, err
-		}
-
-		// Get the provider options.
-		exportedInputs, err = r.callProvider(providerCtx, obj, provider, defaults)
-		if err != nil {
-			msg := fmt.Sprintf("failed to call provider %s", err.Error())
+			msg := err.Error()
 			conditions.MarkFalse(obj,
 				meta.ReadyCondition,
 				meta.ReconciliationFailedReason,
@@ -274,11 +236,79 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 	return requeueAfterResourceSetInputProvider(obj, scheduler, reconcileEnd), nil
 }
 
+// callExternalProvider calls the external provider based on the object spec type
+// and returns the list of ResourceSetInput objects.
+func (r *ResourceSetInputProviderReconciler) callExternalProvider(
+	ctx context.Context, obj *fluxcdv1.ResourceSetInputProvider,
+	defaults map[string]any) ([]fluxcdv1.ResourceSetInput, error) {
+
+	// Get the auth secret and data.
+	var authSecret *corev1.Secret
+	var authData map[string][]byte
+	if obj.Spec.SecretRef != nil {
+		var err error
+		authSecret, err = r.getSecret(ctx, obj.Spec.SecretRef.Name, obj.GetNamespace())
+		if err != nil {
+			return nil, fmt.Errorf("failed to get credentials: %w", err)
+		}
+		authData = authSecret.Data
+	}
+
+	// Get the TLS config.
+	tlsConfig, err := r.getTLSConfig(ctx, obj)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get certificates: %w", err)
+	}
+
+	// Create the provider context with timeout.
+	providerCtx, cancel := context.WithTimeout(ctx, obj.GetTimeout())
+	defer cancel()
+
+	var exportedInputs []fluxcdv1.ResourceSetInput
+
+	switch {
+	// Handle Git providers.
+	case strings.HasPrefix(obj.Spec.Type, "Git") || strings.HasPrefix(obj.Spec.Type, "AzureDevOps"):
+		// Create the provider based on the object type.
+		provider, err := r.newGitProvider(providerCtx, obj, tlsConfig, authData)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Git provider: %w", err)
+		}
+
+		// Call the provider.
+		exportedInputs, err = r.callGitProvider(providerCtx, obj, provider, defaults)
+		if err != nil {
+			return nil, fmt.Errorf("failed to call Git provider: %w", err)
+		}
+	// Handle OCI providers.
+	case strings.HasSuffix(obj.Spec.Type, "ArtifactTag"):
+		exportedInputs, err = r.callOCIProvider(providerCtx, obj, tlsConfig, authSecret, defaults)
+		if err != nil {
+			return nil, fmt.Errorf("failed to call OCI provider: %w", err)
+		}
+	}
+
+	return exportedInputs, nil
+}
+
 // newGitProvider returns a new Git provider based on the type specified in the ResourceSetInputProvider object.
 func (r *ResourceSetInputProviderReconciler) newGitProvider(ctx context.Context,
 	obj *fluxcdv1.ResourceSetInputProvider,
-	certPool *x509.CertPool,
+	tlsConfig *tls.Config,
 	authData map[string][]byte) (gitprovider.Interface, error) {
+
+	// For Git providers, we currently return an error if the certSecretRef is set
+	// but the ca.crt key is missing.
+	// TODO(matheuscscp): Remove this restriction when we support mTLS for Git providers.
+	var certPool *x509.CertPool
+	if obj.Spec.CertSecretRef != nil && tlsConfig.RootCAs == nil {
+		return nil, fmt.Errorf("invalid secret '%s/%s': key 'ca.crt' is missing",
+			obj.GetNamespace(), obj.Spec.CertSecretRef.Name)
+	}
+	if tlsConfig != nil {
+		certPool = tlsConfig.RootCAs
+	}
+
 	switch {
 	case strings.HasPrefix(obj.Spec.Type, "GitHub"):
 		token, err := r.getGitHubToken(ctx, obj, authData)
@@ -316,19 +346,16 @@ func (r *ResourceSetInputProviderReconciler) newGitProvider(ctx context.Context,
 }
 
 // makeGitOptions returns the gitprovider.Options based on the object spec
-// filters and URL, using a default limit of 100.
+// filters and URL, using the default limit.
 func (r *ResourceSetInputProviderReconciler) makeGitOptions(obj *fluxcdv1.ResourceSetInputProvider) (gitprovider.Options, error) {
 	opts := gitprovider.Options{
 		URL: obj.Spec.URL,
 		Filters: gitprovider.Filters{
-			Limit: 100,
+			Limit: obj.GetFilterLimit(),
 		},
 	}
 
 	if obj.Spec.Filter != nil {
-		if obj.Spec.Filter.Limit > 0 {
-			opts.Filters.Limit = obj.Spec.Filter.Limit
-		}
 		if len(obj.Spec.Filter.Labels) > 0 {
 			opts.Filters.Labels = obj.Spec.Filter.Labels
 		}
@@ -410,7 +437,9 @@ func (r *ResourceSetInputProviderReconciler) restoreSkippedGitProviderResults(re
 	return res, nil
 }
 
-func (r *ResourceSetInputProviderReconciler) callProvider(ctx context.Context,
+// callGitProvider calls the git provider based on the object spec type
+// and returns the list of ResourceSetInput objects.
+func (r *ResourceSetInputProviderReconciler) callGitProvider(ctx context.Context,
 	obj *fluxcdv1.ResourceSetInputProvider, provider gitprovider.Interface,
 	defaults map[string]any) ([]fluxcdv1.ResourceSetInput, error) {
 
@@ -452,9 +481,7 @@ func (r *ResourceSetInputProviderReconciler) callProvider(ctx context.Context,
 			return nil, fmt.Errorf("failed to generate inputs: %w", err)
 		}
 
-		for _, input := range inputsWithDefaults {
-			inputSet = append(inputSet, input)
-		}
+		inputSet = append(inputSet, inputsWithDefaults...)
 	}
 
 	return inputSet, nil
@@ -545,35 +572,132 @@ func (r *ResourceSetInputProviderReconciler) getAzureDevOpsToken(
 	return password, err
 }
 
-// getCertPool returns the x509.CertPool by reading the CA certificate from
-// spec.CertSecretRef.
-func (r *ResourceSetInputProviderReconciler) getCertPool(ctx context.Context,
-	obj *fluxcdv1.ResourceSetInputProvider) (*x509.CertPool, error) {
+// callOCIProvider lists the tags of an OCI artifact repository
+// and returns the list of ResourceSetInput objects.
+func (r *ResourceSetInputProviderReconciler) callOCIProvider(ctx context.Context,
+	obj *fluxcdv1.ResourceSetInputProvider, tlsConfig *tls.Config,
+	authSecret *corev1.Secret, defaults map[string]any) ([]fluxcdv1.ResourceSetInput, error) {
+
+	// Build options.
+	opts := []crane.Option{
+		crane.WithContext(ctx),
+	}
+	if authSecret != nil {
+		keychain, err := k8schain.NewFromPullSecrets(ctx, []corev1.Secret{*authSecret})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create OCI keychain from secret '%s/%s': %w",
+				authSecret.GetNamespace(), authSecret.GetName(), err)
+		}
+		opts = append(opts, crane.WithAuthFromKeychain(keychain))
+	}
+	if tlsConfig != nil {
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+		transport.TLSClientConfig = tlsConfig
+		opts = append(opts, crane.WithTransport(transport))
+	}
+
+	// Call OCI server.
+	repo := strings.TrimPrefix(obj.Spec.URL, "oci://")
+	tags, err := crane.ListTags(repo, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list OCI tags for '%s': %w", repo, err)
+	}
+
+	// Filter tags.
+	if f := obj.Spec.Filter; f != nil {
+		if f.Semver != "" {
+			constraint, err := semver.NewConstraint(f.Semver)
+			if err != nil {
+				return nil, fmt.Errorf("invalid semver expression '%s': %w", f.Semver, err)
+			}
+			tags = version.Sort(constraint, tags)
+		}
+	}
+	n := min(obj.GetFilterLimit(), len(tags))
+	tags = slices.Clone(tags[:n]) // free memory in case the received tags are too many
+
+	// Export inputs.
+	res := make([]fluxcdv1.ResourceSetInput, 0, len(tags))
+	for _, tag := range tags {
+		digest, err := crane.Digest(fmt.Sprintf("%s:%s", repo, tag), opts...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get digest for tag '%s' in repository '%s': %w", tag, repo, err)
+		}
+		input, err := fluxcdv1.NewResourceSetInput(defaults, map[string]any{
+			"id":     inputs.ID(tag),
+			"tag":    tag,
+			"digest": digest,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create ResourceSetInput for tag '%s': %w", tag, err)
+		}
+		res = append(res, input)
+	}
+
+	return res, nil
+}
+
+// getTLSConfig reads spec.certSecretRef and returns the TLS configuration
+// including any provided CA or mTLS certificates.
+func (r *ResourceSetInputProviderReconciler) getTLSConfig(ctx context.Context,
+	obj *fluxcdv1.ResourceSetInputProvider) (*tls.Config, error) {
+
 	if obj.Spec.CertSecretRef == nil {
 		return nil, nil
 	}
 
-	certData, err := r.getSecretData(ctx, obj.Spec.CertSecretRef.Name, obj.GetNamespace())
+	certSecret, err := r.getSecret(ctx, obj.Spec.CertSecretRef.Name, obj.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
 
-	caData, ok := certData["ca.crt"]
-	if !ok {
-		return nil, fmt.Errorf("invalid secret '%s/%s': key 'ca.crt' is missing", obj.GetNamespace(), obj.Spec.CertSecretRef.Name)
+	// Get the CA certificate if it exists in the secret.
+	const caKey = "ca.crt"
+	var rootCAs *x509.CertPool
+	if caData, ok := certSecret.Data[caKey]; ok {
+		rootCAs = x509.NewCertPool()
+		ok = rootCAs.AppendCertsFromPEM(caData)
+		if !ok {
+			return nil, fmt.Errorf("invalid secret '%s/%s': '%s' PEM can't be parsed",
+				obj.GetNamespace(), obj.Spec.CertSecretRef.Name, caKey)
+		}
 	}
 
-	certPool := x509.NewCertPool()
-	ok = certPool.AppendCertsFromPEM(caData)
-	if !ok {
-		return nil, fmt.Errorf("invalid secret '%s/%s': 'ca.crt' PEM can't be parsed", obj.GetNamespace(), obj.Spec.CertSecretRef.Name)
+	// Get the mTLS client certificate and key if they exist in the secret.
+	var certificates []tls.Certificate
+	cert, certOK := certSecret.Data[corev1.TLSCertKey]
+	key, keyOK := certSecret.Data[corev1.TLSPrivateKeyKey]
+	if certOK && !keyOK {
+		return nil, fmt.Errorf("invalid secret '%s/%s': key '%s' is missing",
+			obj.GetNamespace(), obj.Spec.CertSecretRef.Name, corev1.TLSPrivateKeyKey)
+	}
+	if keyOK && !certOK {
+		return nil, fmt.Errorf("invalid secret '%s/%s': key '%s' is missing",
+			obj.GetNamespace(), obj.Spec.CertSecretRef.Name, corev1.TLSCertKey)
+	}
+	if certOK && keyOK {
+		certificate, err := tls.X509KeyPair(cert, key)
+		if err != nil {
+			return nil, fmt.Errorf("invalid secret '%s/%s': failed to parse mTLS certificate and key: %w",
+				obj.GetNamespace(), obj.Spec.CertSecretRef.Name, err)
+		}
+		certificates = append(certificates, certificate)
 	}
 
-	return certPool, nil
+	// Check if we have at least one of the CA or mTLS certificates.
+	if rootCAs == nil && len(certificates) == 0 {
+		return nil, fmt.Errorf("invalid secret '%s/%s': at least one of '%s', or '%s' and '%s' keys must be set",
+			obj.GetNamespace(), obj.Spec.CertSecretRef.Name, caKey, corev1.TLSCertKey, corev1.TLSPrivateKeyKey)
+	}
+
+	return &tls.Config{
+		RootCAs:      rootCAs,
+		Certificates: certificates,
+	}, nil
 }
 
-// getSecretData returns the data of the secret by reading it from the API server.
-func (r *ResourceSetInputProviderReconciler) getSecretData(ctx context.Context, name, namespace string) (map[string][]byte, error) {
+// getSecret returns the secret by reading it from the API server.
+func (r *ResourceSetInputProviderReconciler) getSecret(ctx context.Context, name, namespace string) (*corev1.Secret, error) {
 	key := types.NamespacedName{
 		Namespace: namespace,
 		Name:      name,
@@ -582,7 +706,7 @@ func (r *ResourceSetInputProviderReconciler) getSecretData(ctx context.Context, 
 	if err := r.Client.Get(ctx, key, &secret); err != nil {
 		return nil, fmt.Errorf("failed to read secret '%s/%s': %w", namespace, name, err)
 	}
-	return secret.Data, nil
+	return &secret, nil
 }
 
 // finalizeStatus updates the object status and conditions.

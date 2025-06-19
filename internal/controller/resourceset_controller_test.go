@@ -757,7 +757,7 @@ spec:
 		err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 		g.Expect(err).NotTo(HaveOccurred())
 		g.Expect(conditions.IsReady(result)).To(BeTrue())
-		rsipID[i] = inputs.Checksum(string(result.GetUID()))
+		rsipID[i] = inputs.ID(string(result.GetUID()))
 	}
 	rsipZeroID := rsipID[0]
 	rsipOneID := rsipID[1]
@@ -944,7 +944,7 @@ spec:
 		err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 		g.Expect(err).NotTo(HaveOccurred())
 		g.Expect(conditions.IsReady(result)).To(BeTrue())
-		return inputs.Checksum(string(result.GetUID()))
+		return inputs.ID(string(result.GetUID()))
 	}
 	deleteRSIP := func(name string) {
 		err := testClient.Delete(ctx, &fluxcdv1.ResourceSetInputProvider{

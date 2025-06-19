@@ -4,7 +4,6 @@
 package gitprovider
 
 import (
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/util/json"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
@@ -51,17 +50,6 @@ func (r *Result) ToMap() map[string]any {
 	return m
 }
 
-// ToMapWithDefaults converts the result into a map with default values.
-func (r *Result) ToMapWithDefaults(defaults map[string]any) map[string]any {
-	m := r.ToMap()
-	for k, v := range defaults {
-		if _, ok := m[k]; !ok {
-			m[k] = v
-		}
-	}
-	return m
-}
-
 // OverrideFromExportedInputs override result fields from exportedInput.
 func (r *Result) OverrideFromExportedInputs(input map[string]any) error {
 	var err error
@@ -80,21 +68,14 @@ func (r *Result) OverrideFromExportedInputs(input map[string]any) error {
 }
 
 // MakeInputs converts a list of results into a list of ResourceSet inputs with defaults.
-func MakeInputs(results []Result, defaults map[string]any) ([]map[string]*apiextensionsv1.JSON, error) {
-	inputs := make([]map[string]*apiextensionsv1.JSON, 0, len(results))
-
-	list := make([]map[string]any, 0, len(results))
-	for _, r := range results {
-		list = append(list, r.ToMapWithDefaults(defaults))
-	}
-
-	for _, item := range list {
-		input, err := fluxcdv1.NewResourceSetInput(item)
+func MakeInputs(results []Result, defaults map[string]any) ([]fluxcdv1.ResourceSetInput, error) {
+	inputs := make([]fluxcdv1.ResourceSetInput, 0, len(results))
+	for _, item := range results {
+		input, err := fluxcdv1.NewResourceSetInput(defaults, item.ToMap())
 		if err != nil {
 			return nil, err
 		}
 		inputs = append(inputs, input)
 	}
-
 	return inputs, nil
 }

@@ -8,7 +8,7 @@ import (
 	"hash/adler32"
 )
 
-// Checksum computes the checksum of a string using the Adler-32 algorithm.
-func Checksum(s string) string {
+// ID returns a short, opaque ID for input sets.
+func ID(s string) string {
 	return fmt.Sprintf("%v", adler32.Checksum([]byte(s)))
 }
