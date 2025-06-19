@@ -5,13 +5,17 @@ package controller
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
+	"net/http"
 	"testing"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/testutils"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
+	"github.com/google/go-containerregistry/pkg/authn/k8schain"
+	"github.com/google/go-containerregistry/pkg/crane"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -132,6 +136,129 @@ spec:
 	g.Expect(resultCM.Data).To(HaveKeyWithValue("digest", "sha256:d4ec9861522d4961b2acac5a070ef4f92d732480dff2062c2f3a1dcf9a5d1e91"))
 }
 
+func TestResourceSetInputProviderReconciler_buildOCIOptions(t *testing.T) {
+	g := NewWithT(t)
+
+	r := getResourceSetInputProviderReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test-build-oci-options")
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Create a ServiceAccount for the test.
+	sa := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-sa",
+			Namespace: ns.Name,
+		},
+		ImagePullSecrets: []corev1.LocalObjectReference{{Name: "pull-secret"}},
+	}
+	err = testEnv.Create(ctx, sa)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Create a pull secret for the test.
+	anotherAuthSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pull-secret",
+			Namespace: ns.Name,
+		},
+		Type: corev1.SecretTypeDockerConfigJson,
+		Data: map[string][]byte{
+			".dockerconfigjson": []byte(`{
+	"auths": {
+		"another-example.com": {
+			"username": "another-user",
+			"password": "another-pass"
+		}
+	}
+}`),
+		},
+	}
+	err = testEnv.Create(ctx, anotherAuthSecret)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	for _, tt := range []struct {
+		provider string
+		err      string
+	}{
+		{
+			provider: fluxcdv1.InputProviderACRArtifactTag,
+			err:      "provider 'azure': ObjectLevelWorkloadIdentity feature gate is not enabled",
+		},
+		{
+			provider: fluxcdv1.InputProviderECRArtifactTag,
+			err:      "provider 'aws': ObjectLevelWorkloadIdentity feature gate is not enabled",
+		},
+		{
+			provider: fluxcdv1.InputProviderGARArtifactTag,
+			err:      "provider 'gcp': ObjectLevelWorkloadIdentity feature gate is not enabled",
+		},
+		{
+			provider: fluxcdv1.InputProviderOCIArtifactTag,
+		},
+	} {
+		t.Run(tt.provider, func(t *testing.T) {
+			g := NewWithT(t)
+
+			obj := &fluxcdv1.ResourceSetInputProvider{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: ns.Name,
+				},
+				Spec: fluxcdv1.ResourceSetInputProviderSpec{
+					Type:               tt.provider,
+					ServiceAccountName: "test-sa",
+				},
+			}
+
+			const repo = "example.com/stefanprodan/podinfo"
+
+			tlsConfig := &tls.Config{
+				ServerName: "server.example.com",
+			}
+
+			authSecret := &corev1.Secret{
+				Type: corev1.SecretTypeDockerConfigJson,
+				Data: map[string][]byte{
+					".dockerconfigjson": []byte(`{
+	"auths": {
+		"example.com": {
+			"username": "user",
+			"password": "pass"
+		}
+	}
+}`),
+				},
+			}
+
+			opts, err := r.buildOCIOptions(ctx, obj, repo, tlsConfig, authSecret)
+
+			// Check provider errors (or not).
+			if tt.err != "" {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.err))
+				return
+			}
+			g.Expect(err).NotTo(HaveOccurred())
+
+			o := crane.GetOptions(opts...)
+
+			// Validate TLS config.
+			g.Expect(o.Transport).NotTo(BeNil())
+			g.Expect(o.Transport.(*http.Transport)).NotTo(BeNil())
+			g.Expect(o.Transport.(*http.Transport).TLSClientConfig.ServerName).To(Equal("server.example.com"))
+
+			// Validate secret data.
+			g.Expect(o.Keychain).NotTo(BeNil())
+			keychain, err := k8schain.NewFromPullSecrets(ctx,
+				[]corev1.Secret{*authSecret, *anotherAuthSecret})
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(o.Keychain).To(Equal(keychain))
+		})
+	}
+}
+
 func TestResourceSetInputProviderReconciler_InvalidOCIURL(t *testing.T) {
 	g := NewWithT(t)
 
@@ -145,6 +272,9 @@ func TestResourceSetInputProviderReconciler_InvalidOCIURL(t *testing.T) {
 		provider string
 	}{
 		{provider: fluxcdv1.InputProviderOCIArtifactTag},
+		{provider: fluxcdv1.InputProviderACRArtifactTag},
+		{provider: fluxcdv1.InputProviderECRArtifactTag},
+		{provider: fluxcdv1.InputProviderGARArtifactTag},
 	} {
 		t.Run(tt.provider, func(t *testing.T) {
 			g := NewWithT(t)
