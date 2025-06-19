@@ -12,6 +12,7 @@ import (
 	"github.com/fluxcd/cli-utils/pkg/kstatus/polling"
 	"github.com/fluxcd/cli-utils/pkg/kstatus/polling/clusterreader"
 	"github.com/fluxcd/cli-utils/pkg/kstatus/polling/engine"
+	"github.com/fluxcd/pkg/auth"
 	"github.com/fluxcd/pkg/cache"
 	runtimeCtrl "github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/logger"
@@ -111,6 +112,8 @@ func main() {
 		runtimeNamespace = fluxcdv1.DefaultNamespace
 		setupLog.Info("RUNTIME_NAMESPACE env var not set, defaulting to " + fluxcdv1.DefaultNamespace)
 	}
+
+	auth.EnableObjectLevelWorkloadIdentity()
 
 	// Allow the default service account name to be set by an environment variable.
 	// Needed for the OLM Subscription that only allows env var configuration.

@@ -101,7 +101,10 @@ The following types are supported:
 - `AzureDevOpsPullRequest`: fetches input values from opened Azure DevOps Pull Requests.
 - `AzureDevOpsBranch`: fetches input values from Azure DevOps repository branches.
 - `AzureDevOpsTag`: fetches input values from AzureDevOps project tags.
-- `OCIArtifactTag`: fetches input values from OCI artifact tags.
+- `OCIArtifactTag`: fetches input values from OCI artifact tags from generic container registries.
+- `ACRArtifactTag`: fetches input values from Azure Container Registry OCI artifact tags.
+- `ECRArtifactTag`: fetches input values from Elastic Container Registry OCI artifact tags.
+- `GARArtifactTag`: fetches input values from Google Artifact Registry OCI artifact tags.
 
 For the `Static` type, the flux-operator will export in `.status.exportedInputs` a
 single input map with the values from the field `.spec.defaultValues` and the
@@ -138,6 +141,10 @@ For OCI Artifact Tags the [exported inputs](#exported-inputs-status) structure i
 - `id`: the Adler-32 checksum of the tag name (type string).
 - `tag`: the tag name (type string).
 - `digest`: the SHA256 digest corresponding to the tag in the format `sha256:<hash>` (type string).
+
+The ACR, ECR and GAR Artifact Tag providers export the same inputs as the OCI Artifact Tag provider,
+with the difference on the authentication method used to connect to the registry. For these providers,
+[secret-less](#secret-less) authentication is used.
 
 ### URL
 
@@ -220,9 +227,18 @@ spec:
 
 ### Authentication configuration
 
+#### Secret-based
+
 The `.spec.secretRef` field is optional and specifies the Kubernetes Secret containing
 the authentication credentials used for connecting to the external service.
 Note that the secret must be created in the same namespace as the ResourceSetInputProvider.
+
+This field is not supported by the following provider [types](#type):
+
+- `Static`
+- `ACRArtifactTag`
+- `ECRArtifactTag`
+- `GARArtifactTag`
 
 For Git services, the secret should contain the `username` and `password` keys, with the password
 set to a personal access token that grants access for listing Pull Requests or Merge Requests
@@ -230,6 +246,10 @@ and Git branches.
 
 For the `OCIArtifactTag` provider [type](#type), the secret should contain a Kubernetes Docker
 config JSON secret, i.e. as if created by the `kubectl create secret docker-registry` command.
+If the `.spec.serviceAccountName` field is specified, all the image pull secrets configured on
+the ServiceAccount are also included in the registry keychain used for the reconciliation,
+alongside the secret specified in `.spec.secretRef`. All of them have to be on the format
+produced by the `kubectl create secret docker-registry` command.
 
 Example of Git secret:
 
@@ -244,7 +264,7 @@ stringData:
   password: <GITHUB PAT>
 ```
 
-Example of `OCIArtifactTag` secret:
+Example of `OCIArtifactTag` Docker config secret:
 
 ```yaml
 apiVersion: v1
@@ -269,15 +289,70 @@ Example secret reference:
 
 ```yaml
 spec:
+  serviceAccountName: oci-pull-secrets-sa # optional, for OCIArtifactTag provider type only
   secretRef:
-    name: github-pat # or docker-config
+    name: github-pat # or oci-pull-secret for OCIArtifactTag provider type
 ```
+
+#### Secret-less
+
+The `.spec.serviceAccountName` field is optional and specifies the name of the Kubernetes
+ServiceAccount in the same namespace configured with workload identity to access a cloud
+provider service (this is called *object-level workload identity*). This field can only
+be used with the following provider [types](#type) for workload identity:
+
+- `AzureDevOpsPullRequest`
+- `AzureDevOpsBranch`
+- `AzureDevOpsTag`
+- `ACRArtifactTag`
+- `ECRArtifactTag`
+- `GARArtifactTag`
+
+When this field is not present and one of the types above is specified (and in the case of Azure
+DevOps, [`.spec.secretRef`](#secret-reference) is also not specified), the operator will attempt
+to authenticate using the environment credentials, i.e. either the identity of the node or the
+operator ServiceAccount. This is called *controller-level workload identity*.
+
+For configuring a Kubernetes ServiceAccount with workload identity, see the following documentation:
+
+- [Azure](https://fluxcd.io/flux/integrations/azure/#with-workload-identity-federation)
+- [AWS (controller-level)](https://fluxcd.io/flux/integrations/aws/#with-eks-pod-identity)
+- [AWS (object-level)](https://fluxcd.io/flux/integrations/aws/#with-oidc-federation)
+- [GCP](https://fluxcd.io/flux/integrations/gcp/#with-workload-identity-federation)
+
+For configuring the required permissions to access the cloud services, see the following documentation:
+
+- [Azure DevOps](https://fluxcd.io/flux/integrations/azure/#for-azure-devops) (the `Readers` ADO group is sufficient)
+- [Azure Container Registry](https://fluxcd.io/flux/integrations/azure/#for-azure-container-registry)
+- [Amazon Elastic Container Registry](https://fluxcd.io/flux/integrations/aws/#for-amazon-elastic-container-registry)
+- [Amazon Elastic Container Registry Public](https://fluxcd.io/flux/integrations/aws/#for-amazon-public-elastic-container-registry)
+- [Google Artifact Registry](https://fluxcd.io/flux/integrations/gcp/#for-google-cloud-artifact-registry)
+
+For configuring the operator to use controller-level workload identity, patches like
+the ones described in the documentation below can be applied to the operator deployment:
+
+- [Azure](https://fluxcd.io/flux/integrations/azure/#at-the-controller-level)
+- [AWS](https://fluxcd.io/flux/integrations/aws/#at-the-controller-level)
+- [GCP](https://fluxcd.io/flux/integrations/gcp/#at-the-controller-level)
+
+For configuring the identity of your nodes to access container registry services, see the
+following documentation:
+
+- [Authenticate with ACR from AKS](https://learn.microsoft.com/en-us/azure/aks/cluster-container-registry-integration?tabs=azure-cli)
+- Authenticate with ECR from EKS:
+  - [Create IAM Roles for EKS worker nodes](https://docs.aws.amazon.com/eks/latest/userguide/create-node-role.html#create-worker-node-role)
+  - [Allow the EKS worker IAM Roles to pull images from ECR](https://docs.aws.amazon.com/AmazonECR/latest/userguide/ECR_on_EKS.html)
+- [Authenticate with GAR from GKE](https://cloud.google.com/artifact-registry/docs/integrate-gke)
+
+See also the cross-cloud documentation:
+
+- [Cross-cloud support](https://fluxcd.io/flux/integrations/cross-cloud/)
 
 #### GitHub App authentication
 
 For GitHub, GitHub App authentication is also supported. Instead of adding the basic
-auth keys `username` and `password`, you can add the following GitHub App keys to the
-secret:
+auth keys `username` and `password` to the referenced Secret, you can add the following
+GitHub App keys:
 
 ```yaml
 apiVersion: v1
@@ -313,6 +388,13 @@ A simpler alternative is creating the secret using the Flux CLI command `flux cr
 The `.spec.certSecretRef` field is optional and specifies the Kubernetes Secret containing the
 TLS certificate used for connecting to the external service.
 Note that the secret must be created in the same namespace as the ResourceSetInputProvider.
+
+This field is not supported by the following provider [types](#type):
+
+- `Static`
+- `ACRArtifactTag`
+- `ECRArtifactTag`
+- `GARArtifactTag`
 
 For Git services that use self-signed certificates, the secret should contain the `ca.crt` key.
 
