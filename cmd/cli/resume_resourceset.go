@@ -29,11 +29,15 @@ func resumeResourceSetCmdRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("name is required")
 	}
 
+	name := args[0]
+	gvk := fluxcdv1.GroupVersion.WithKind(fluxcdv1.ResourceSetKind)
+
 	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
 	defer cancel()
 
 	err := annotateResource(ctx,
-		fluxcdv1.ResourceSetKind, args[0],
+		gvk,
+		name,
 		*kubeconfigArgs.Namespace,
 		fluxcdv1.ReconcileAnnotation,
 		fluxcdv1.EnabledValue)
