@@ -27,18 +27,18 @@ func TestEntitlementReconciler_ReconcileDefaultVendor(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 
 	reconciler := getEntitlementReconciler(ns.Name)
-	result, err := reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(ns)})
+	r, err := reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(ns)})
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(result.Requeue).To(BeTrue())
+	g.Expect(r.Requeue).To(BeTrue())
 
 	secret, err := reconciler.GetEntitlementSecret(ctx)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(secret.Data).To(HaveKeyWithValue(entitlement.VendorKey, []byte(entitlement.DefaultVendor)))
 	g.Expect(secret.Data).To(HaveKey(entitlement.TokenKey))
 
-	result, err = reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(ns)})
+	r, err = reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(ns)})
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(result.RequeueAfter).To(Equal(30 * time.Minute))
+	g.Expect(r.RequeueAfter).To(Equal(30 * time.Minute))
 
 	dc := &entitlement.DefaultClient{Vendor: entitlement.DefaultVendor}
 	token, err := dc.RegisterUsage(ctx, string(ns.UID))
