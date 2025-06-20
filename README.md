@@ -172,13 +172,14 @@ enable self-service for developers and platform teams.
 Guides:
 
 - [Using ResourceSets for Application Definitions](https://fluxcd.control-plane.io/operator/resourcesets/app-definition/)
+- [Using ResourceSets for Time-Based Delivery](https://fluxcd.control-plane.io/operator/resourcesets/time-based-delivery/)
 - [Ephemeral Environments for GitHub Pull Requests](https://fluxcd.control-plane.io/operator/resourcesets/github-pull-requests/)
 - [Ephemeral Environments for GitLab Merge Requests](https://fluxcd.control-plane.io/operator/resourcesets/gitlab-merge-requests/)
 
 ## Documentation
 
 - Installation
-  - [Flux operator installation](https://fluxcd.control-plane.io/operator/install/)
+  - [Flux Operator installation](https://fluxcd.control-plane.io/operator/install/)
 - Flux Configuration
   - [Flux controllers configuration](https://fluxcd.control-plane.io/operator/flux-config/)
   - [Flux instance customization](https://fluxcd.control-plane.io/operator/flux-kustomize/)
@@ -191,6 +192,8 @@ Guides:
   - [FluxReport API reference](https://fluxcd.control-plane.io/operator/fluxreport/)
   - [ResourceSet API reference](https://fluxcd.control-plane.io/operator/resourceset/)
   - [ResourceSetInputProvider API reference](https://fluxcd.control-plane.io/operator/resourcesetinputprovider/)
+- CLI reference
+  - [Flux Operator CLI](https://fluxcd.control-plane.io/operator/cli/)
 
 ## Contributing
 
