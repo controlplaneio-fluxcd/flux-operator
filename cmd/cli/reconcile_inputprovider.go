@@ -59,27 +59,20 @@ func reconcileInputProviderCmdRun(cmd *cobra.Command, args []string) error {
 	defer cancel()
 
 	now := metav1.Now().String()
+	annotations := map[string]string{
+		meta.ReconcileRequestAnnotation: now,
+	}
 
-	if !reconcileInputProviderArgs.force {
-		err := annotateResource(ctx,
-			gvk,
-			name,
-			*kubeconfigArgs.Namespace,
-			meta.ReconcileRequestAnnotation,
-			now)
-		if err != nil {
-			return err
-		}
+	if reconcileInputProviderArgs.force {
+		annotations[meta.ForceRequestAnnotation] = now
 	}
 
 	err := annotateResourceWithMap(ctx,
 		gvk,
 		name,
 		*kubeconfigArgs.Namespace,
-		map[string]string{
-			meta.ReconcileRequestAnnotation: now,
-			meta.ForceRequestAnnotation:     now,
-		})
+		annotations,
+	)
 	if err != nil {
 		return err
 	}

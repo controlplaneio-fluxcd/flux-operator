@@ -76,6 +76,33 @@ func resourceNamesCompletionFunc(gvk schema.GroupVersionKind) func(cmd *cobra.Co
 	}
 }
 
+// resourceKindCompletionFunc returns a function that can be used as a completion function for Flux resource kinds.
+func resourceKindCompletionFunc() func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		// These are the Flux kinds that react to the reconcileAt annotation.
+		kinds := []string{
+			"GitRepository/",
+			"OCIRepository/",
+			"Bucket/",
+			"HelmRepository/",
+			"HelmChart/",
+			"HelmRelease/",
+			"Kustomization/",
+			"ImageRepository/",
+			"Receiver/",
+		}
+
+		var comps []string
+		for _, kind := range kinds {
+			if strings.HasPrefix(kind, toComplete) {
+				comps = append(comps, kind)
+			}
+		}
+
+		return comps, cobra.ShellCompDirectiveNoFileComp
+	}
+}
+
 // completionError is a helper function to handle errors in completion functions.
 func completionError(err error) ([]string, cobra.ShellCompDirective) {
 	cobra.CompError(err.Error())
