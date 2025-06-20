@@ -124,7 +124,12 @@ type Dependency struct {
 type ResourceSetInput map[string]*apiextensionsv1.JSON
 
 // NewResourceSetInput creates a new ResourceSetInput from a map[string]any.
-func NewResourceSetInput(m map[string]any) (ResourceSetInput, error) {
+func NewResourceSetInput(defaults, m map[string]any) (ResourceSetInput, error) {
+	for k, v := range defaults {
+		if _, ok := m[k]; !ok {
+			m[k] = v
+		}
+	}
 	res := make(ResourceSetInput)
 	for k, v := range m {
 		b, err := json.Marshal(v)

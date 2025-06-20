@@ -99,7 +99,7 @@ func (p *GitHubProvider) ListTags(ctx context.Context, opts Options) ([]Result, 
 		}
 
 		results = append(results, Result{
-			ID:  inputs.Checksum(tag.GetName()),
+			ID:  inputs.ID(tag.GetName()),
 			SHA: tag.GetCommit().GetSHA(),
 			Tag: tag.GetName(),
 		})
@@ -131,7 +131,7 @@ func (p *GitHubProvider) ListBranches(ctx context.Context, opts Options) ([]Resu
 			}
 
 			results = append(results, Result{
-				ID:     inputs.Checksum(branch.GetName()),
+				ID:     inputs.ID(branch.GetName()),
 				SHA:    branch.GetCommit().GetSHA(),
 				Branch: branch.GetName(),
 			})

@@ -98,7 +98,7 @@ func (p *AzureDevOpsProvider) ListTags(ctx context.Context, opts Options) ([]Res
 		}
 
 		results = append(results, Result{
-			ID:  inputs.Checksum(tagName),
+			ID:  inputs.ID(tagName),
 			SHA: sha,
 			Tag: tagName,
 		})
@@ -133,7 +133,7 @@ func (p *AzureDevOpsProvider) ListBranches(ctx context.Context, opts Options) ([
 		}
 
 		results = append(results, Result{
-			ID:     inputs.Checksum(*branch.Name),
+			ID:     inputs.ID(*branch.Name),
 			SHA:    *branch.Commit.CommitId,
 			Branch: *branch.Name,
 		})

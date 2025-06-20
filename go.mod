@@ -16,6 +16,7 @@ require (
 	github.com/fluxcd/pkg/runtime v0.60.0
 	github.com/fluxcd/pkg/ssa v0.48.0
 	github.com/fluxcd/pkg/tar v0.12.0
+	github.com/fluxcd/pkg/version v0.8.0
 	github.com/go-logr/logr v1.4.3
 	github.com/go-task/slim-sprig/v3 v3.0.0
 	github.com/golang-jwt/jwt/v4 v4.5.2

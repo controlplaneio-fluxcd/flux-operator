@@ -27,6 +27,7 @@ const (
 	InputProviderAzureDevOpsBranch      = "AzureDevOpsBranch"
 	InputProviderAzureDevOpsPullRequest = "AzureDevOpsPullRequest"
 	InputProviderAzureDevOpsTag         = "AzureDevOpsTag"
+	InputProviderOCIArtifactTag         = "OCIArtifactTag"
 
 	ReasonInvalidDefaultValues  = "InvalidDefaultValues"
 	ReasonInvalidExportedInputs = "InvalidExportedInputs"
@@ -35,23 +36,29 @@ const (
 // ResourceSetInputProviderSpec defines the desired state of ResourceSetInputProvider
 // +kubebuilder:validation:XValidation:rule="self.type != 'Static' || !has(self.url)", message="spec.url must be empty when spec.type is 'Static'"
 // +kubebuilder:validation:XValidation:rule="self.type == 'Static' || has(self.url)", message="spec.url must not be empty when spec.type is not 'Static'"
+// +kubebuilder:validation:XValidation:rule="!self.type.startsWith('Git') || self.url.startsWith('http')", message="spec.url must start with 'http://' or 'https://' when spec.type is a Git provider"
+// +kubebuilder:validation:XValidation:rule="!self.type.startsWith('AzureDevOps') || self.url.startsWith('http')", message="spec.url must start with 'http://' or 'https://' when spec.type is a Git provider"
+// +kubebuilder:validation:XValidation:rule="!self.type.endsWith('ArtifactTag') || self.url.startsWith('oci')", message="spec.url must start with 'oci://' when spec.type is an OCI provider"
 type ResourceSetInputProviderSpec struct {
 	// Type specifies the type of the input provider.
-	// +kubebuilder:validation:Enum=Static;GitHubBranch;GitHubTag;GitHubPullRequest;GitLabBranch;GitLabTag;GitLabMergeRequest;AzureDevOpsBranch;AzureDevOpsTag;AzureDevOpsPullRequest
+	// +kubebuilder:validation:Enum=Static;GitHubBranch;GitHubTag;GitHubPullRequest;GitLabBranch;GitLabTag;GitLabMergeRequest;AzureDevOpsBranch;AzureDevOpsTag;AzureDevOpsPullRequest;OCIArtifactTag
 	// +required
 	Type string `json:"type"`
 
-	// URL specifies the HTTP/S address of the input provider API.
+	// URL specifies the HTTP/S or OCI address of the input provider API.
 	// When connecting to a Git provider, the URL should point to the repository address.
-	// +kubebuilder:validation:Pattern="^((http|https)://.*){0,1}$"
+	// When connecting to an OCI provider, the URL should point to the OCI repository address.
+	// +kubebuilder:validation:Pattern="^((http|https|oci)://.*){0,1}$"
 	// +optional
 	URL string `json:"url,omitempty"`
 
 	// SecretRef specifies the Kubernetes Secret containing the basic-auth credentials
-	// to access the input provider. The secret must contain the keys
-	// 'username' and 'password'.
-	// When connecting to a Git provider, the password should be a personal access token
+	// to access the input provider.
+	// When connecting to a Git provider, the secret must contain the keys
+	// 'username' and 'password', and the password should be a personal access token
 	// that grants read-only access to the repository.
+	// When connecting to an OCI provider, the secret must contain a Kubernetes
+	// Image Pull Secret, as if created by `kubectl create secret docker-registry`.
 	// +optional
 	SecretRef *meta.LocalObjectReference `json:"secretRef,omitempty"`
 
@@ -60,8 +67,10 @@ type ResourceSetInputProviderSpec struct {
 	// - a PEM-encoded CA certificate (`ca.crt`)
 	// - a PEM-encoded client certificate (`tls.crt`) and private key (`tls.key`)
 	//
-	// When connecting to a Git provider that uses self-signed certificates, the CA certificate
+	// When connecting to a Git or OCI provider that uses self-signed certificates, the CA certificate
 	// must be set in the Secret under the 'ca.crt' key to establish the trust relationship.
+	// When connecting to an OCI provider that supports client certificates (mTLS), the client certificate
+	// and private key must be set in the Secret under the 'tls.crt' and 'tls.key' keys, respectively.
 	// +optional
 	CertSecretRef *meta.LocalObjectReference `json:"certSecretRef,omitempty"`
 
@@ -102,6 +111,7 @@ type ResourceSetInputFilter struct {
 
 	// Limit specifies the maximum number of input sets to return.
 	// When not set, the default limit is 100.
+	// +kubebuilder:default:=100
 	// +optional
 	Limit int `json:"limit,omitempty"`
 
@@ -224,6 +234,14 @@ func (in *ResourceSetInputProvider) GetInputs() ([]map[string]any, error) {
 		inputs = append(inputs, inp)
 	}
 	return inputs, nil
+}
+
+// GetFilterLimit returns the filter limit for the input provider.
+func (in *ResourceSetInputProvider) GetFilterLimit() int {
+	if f := in.Spec.Filter; f != nil && f.Limit > 0 {
+		return f.Limit
+	}
+	return 100 // default limit
 }
 
 // GetLastHandledReconcileRequest returns the last handled reconcile request.

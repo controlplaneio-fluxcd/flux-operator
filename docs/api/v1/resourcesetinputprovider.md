@@ -101,6 +101,7 @@ The following types are supported:
 - `AzureDevOpsPullRequest`: fetches input values from opened Azure DevOps Pull Requests.
 - `AzureDevOpsBranch`: fetches input values from Azure DevOps repository branches.
 - `AzureDevOpsTag`: fetches input values from AzureDevOps project tags.
+- `OCIArtifactTag`: fetches input values from OCI artifact tags.
 
 For the `Static` type, the flux-operator will export in `.status.exportedInputs` a
 single input map with the values from the field `.spec.defaultValues` and the
@@ -130,12 +131,21 @@ For Git Tags the [exported inputs](#exported-inputs-status) structure is:
 
 - `id`: the Adler-32 checksum of the tag name (type string).
 - `tag`: the tag name (type string).
-- `sha`: the commit SHA corresponding to the tag (type string).
+- `sha`: the commit SHA corresponding to the tag in the format `<hash>` (type string).
+
+For OCI Artifact Tags the [exported inputs](#exported-inputs-status) structure is:
+
+- `id`: the Adler-32 checksum of the tag name (type string).
+- `tag`: the tag name (type string).
+- `digest`: the SHA256 digest corresponding to the tag in the format `sha256:<hash>` (type string).
 
 ### URL
 
-The `.spec.url` field is required and specifies the HTTP/S URL of the provider.
-For Git services, the URL should contain the GitHub repository or the GitLab project address.
+The `.spec.url` field is required for external providers.
+For Git services, the URL should contain GitHub repository or the GitLab project address,
+including the HTTP/S scheme (`(http|https)://`).
+For OCI services, the URL should contain the OCI repository address,
+including the OCI scheme (`oci://`).
 
 ### Filter
 
@@ -161,7 +171,7 @@ spec:
     excludeBranch: "^feat/not-this-one$"
 ```
 
-Example of a filter configuration for fetching only the latest Git tag according to semver:
+Example of a filter configuration for fetching only the latest tag according to semver:
 
 ```yaml
 spec:
@@ -218,7 +228,10 @@ For Git services, the secret should contain the `username` and `password` keys, 
 set to a personal access token that grants access for listing Pull Requests or Merge Requests
 and Git branches.
 
-Example secret:
+For the `OCIArtifactTag` provider [type](#type), the secret should contain a Kubernetes Docker
+config JSON secret, i.e. as if created by the `kubectl create secret docker-registry` command.
+
+Example of Git secret:
 
 ```yaml
 apiVersion: v1
@@ -231,12 +244,33 @@ stringData:
   password: <GITHUB PAT>
 ```
 
+Example of `OCIArtifactTag` secret:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: docker-config
+  namespace: default
+type: kubernetes.io/dockerconfigjson
+stringData:
+  .dockerconfigjson: |
+    {
+      "auths": {
+        "<REGISTRY HOST>": {
+          "username": "flux",
+          "password": "<PASSWORD>"
+        }
+      }
+    }
+```
+
 Example secret reference:
 
 ```yaml
 spec:
   secretRef:
-    name: github-pat
+    name: github-pat # or docker-config
 ```
 
 #### GitHub App authentication
@@ -282,20 +316,34 @@ Note that the secret must be created in the same namespace as the ResourceSetInp
 
 For Git services that use self-signed certificates, the secret should contain the `ca.crt` key.
 
+For the `OCIArtifactTag` provider [type](#type), the secret should contain either or both of
+the `ca.crt` key with a CA certificate, and the pair `tls.crt` and `tls.key` keys with an
+mTLS client certificate and key.
+
 Example secret:
 
 ```yaml
 apiVersion: v1
 kind: Secret
 metadata:
-  name: gitlab-ca
+  name: provider-certs
   namespace: default
 stringData:
-  ca.crt: |
+  ca.crt: | # supported for both Git and OCIArtifactTag providers
     -----BEGIN CERTIFICATE-----
     MIIDpDCCAoygAwIBAgIUI7z
     ...
     -----END CERTIFICATE-----
+  tls.crt: | # supported only for the OCIArtifactTag provider
+    -----BEGIN CERTIFICATE-----
+    MIIDpDCCAoygIUI7zgAwIBA
+    ...
+    -----END CERTIFICATE-----
+  tls.key: | # supported only for the OCIArtifactTag provider
+    -----BEGIN PRIVATE KEY-----
+    MIIEvQIBADABAQCv1qlHtnk
+    ...
+    -----END PRIVATE KEY-----
 ```
 
 Example certificate reference:
@@ -303,7 +351,7 @@ Example certificate reference:
 ```yaml
 spec:
   certSecretRef:
-    name: gitlab-ca
+    name: provider-certs
 ```
 
 ### Schedule
@@ -505,6 +553,16 @@ status:
   - id: "48955639"
     tag: "6.0.4"
     sha: 11cf36d83818e64aaa60d523ab6438258ebb6009
+```
+
+Example for OCI latest semver tag:
+
+```yaml
+status:
+  exportedInputs:
+  - id: "48955639"
+    tag: "6.0.4"
+    sha: sha256:d4ec9861522d4961b2acac5a070ef4f92d732480dff2062c2f3a1dcf9a5d1e91
 ```
 
 ### Schedule status
