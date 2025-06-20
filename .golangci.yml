@@ -70,6 +70,10 @@ linters:
           - dupl
           - lll
         path: internal/*
+      - linters:
+          - dupl
+          - lll
+        path: test/*
     paths:
       - third_party$
       - builtin$
