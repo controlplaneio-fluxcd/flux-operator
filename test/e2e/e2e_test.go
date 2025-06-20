@@ -14,16 +14,22 @@ import (
 
 const (
 	namespace = "flux-system"
+	image     = "test/flux-operator:v0.0.0-dev.1"
+	cli       = "./bin/flux-operator-cli"
 )
 
 // Build the flux-operator image and deploy it to the Kind cluster.
 var _ = BeforeSuite(func() {
-	image := "test/flux-operator:v0.0.0-dev.1"
 	var controllerPodName string
 	var err error
 
+	By("building the flux-operator CLI")
+	cmd := exec.Command("make", "cli-build")
+	_, err = Run(cmd, "/test/e2e")
+	ExpectWithOffset(1, err).NotTo(HaveOccurred())
+
 	By("building the flux-operator image")
-	cmd := exec.Command("make", "docker-build", fmt.Sprintf("IMG=%s", image))
+	cmd = exec.Command("make", "docker-build", fmt.Sprintf("IMG=%s", image))
 	_, err = Run(cmd, "/test/e2e")
 	ExpectWithOffset(1, err).NotTo(HaveOccurred())
 
@@ -39,7 +45,6 @@ var _ = BeforeSuite(func() {
 	By("validating that the flux-operator pod is running as expected")
 	verifyControllerUp := func() error {
 		// Get pod name
-
 		cmd = exec.Command("kubectl", "get",
 			"pods", "-l", "app.kubernetes.io/name=flux-operator",
 			"-o", "go-template={{ range .items }}"+

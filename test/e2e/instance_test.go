@@ -12,6 +12,22 @@ import (
 )
 
 var _ = Describe("FluxInstance", Ordered, func() {
+	Context("build", func() {
+		It("should run successfully", func() {
+			By("build FluxInstance")
+			build := func() error {
+				cmd := exec.Command(cli, "build", "instance",
+					"-f", "config/samples/fluxcd_v1_fluxinstance.yaml")
+				output, err := Run(cmd, "/test/e2e")
+				ExpectWithOffset(2, err).NotTo(HaveOccurred())
+				ExpectWithOffset(2, output).To(ContainSubstring("--requeue-dependency=10s"))
+
+				return nil
+			}
+			EventuallyWithOffset(1, build, time.Minute, 10*time.Second).Should(Succeed())
+		})
+	})
+
 	Context("installation", func() {
 		It("should run successfully", func() {
 			By("reconcile FluxInstance")
@@ -27,20 +43,47 @@ var _ = Describe("FluxInstance", Ordered, func() {
 				)
 				_, err = Run(cmd, "/test/e2e")
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
+
+				cmd = exec.Command(cli, "suspend", "instance", "flux", "-n", namespace)
+				output, err := Run(cmd, "/test/e2e")
+				ExpectWithOffset(2, err).NotTo(HaveOccurred())
+				ExpectWithOffset(2, output).To(ContainSubstring("Reconciliation suspended"))
+
+				cmd = exec.Command(cli, "reconcile", "instance", "flux", "-n", namespace)
+				output, err = Run(cmd, "/test/e2e")
+				ExpectWithOffset(2, err).To(HaveOccurred())
+				ExpectWithOffset(2, output).To(ContainSubstring("Reconciliation is disabled"))
+
+				cmd = exec.Command(cli, "resume", "instance", "flux", "-n", namespace)
+				_, err = Run(cmd, "/test/e2e")
+				ExpectWithOffset(2, err).NotTo(HaveOccurred())
+
+				cmd = exec.Command(cli, "get", "resources", "-n", namespace)
+				output, err = Run(cmd, "/test/e2e")
+				ExpectWithOffset(2, err).NotTo(HaveOccurred())
+				ExpectWithOffset(2, output).To(ContainSubstring("GitRepository"))
+				ExpectWithOffset(2, output).To(ContainSubstring("Kustomization"))
+
 				return nil
 			}
 			EventuallyWithOffset(1, verifyFluxInstanceReconcile, 5*time.Minute, 10*time.Second).Should(Succeed())
 		})
 	})
 
-	Context("resource group lifecycle", func() {
+	Context("ResourceSet lifecycle", func() {
 		It("should run successfully", func() {
 			By("reconcile ResourceSet")
 			reconcile := func() error {
-				cmd := exec.Command("kubectl", "apply",
+				cmd := exec.Command(cli, "build", "resourceset",
+					"-f", "config/samples/fluxcd_v1_resourceset.yaml")
+				output, err := Run(cmd, "/test/e2e")
+				ExpectWithOffset(2, err).NotTo(HaveOccurred())
+				ExpectWithOffset(2, output).To(ContainSubstring("resourceset.fluxcd.controlplane.io/name: podinfo"))
+
+				cmd = exec.Command("kubectl", "apply",
 					"-f", "config/samples/fluxcd_v1_resourceset.yaml",
 				)
-				_, err := Run(cmd, "/test/e2e")
+				_, err = Run(cmd, "/test/e2e")
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
 
 				cmd = exec.Command("kubectl", "wait", "ResourceSet/podinfo",
@@ -49,7 +92,47 @@ var _ = Describe("FluxInstance", Ordered, func() {
 				_, err = Run(cmd, "/test/e2e")
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
 
+				cmd = exec.Command(cli, "get", "rset", "-A")
+				output, err = Run(cmd, "/test/e2e")
+				ExpectWithOffset(2, err).NotTo(HaveOccurred())
+				ExpectWithOffset(2, output).To(ContainSubstring("podinfo"))
+
+				cmd = exec.Command(cli, "reconcile", "rset", "podinfo")
+				output, err = Run(cmd, "/test/e2e")
+				ExpectWithOffset(2, err).ToNot(HaveOccurred())
+				ExpectWithOffset(2, output).To(ContainSubstring("Reconciliation finished"))
+
 				cmd = exec.Command("kubectl", "delete", "ResourceSet/podinfo")
+				_, err = Run(cmd, "/test/e2e")
+				ExpectWithOffset(2, err).NotTo(HaveOccurred())
+				return nil
+			}
+			EventuallyWithOffset(1, reconcile, 5*time.Minute, 10*time.Second).Should(Succeed())
+		})
+	})
+
+	Context("ResourceSetInputProvider lifecycle", func() {
+		It("should run successfully", func() {
+			By("reconcile ResourceSetInputProvider")
+			reconcile := func() error {
+				cmd := exec.Command("kubectl", "apply",
+					"-f", "config/samples/fluxcd_v1_resourcesetinputprovider.yaml",
+				)
+				_, err := Run(cmd, "/test/e2e")
+				ExpectWithOffset(2, err).NotTo(HaveOccurred())
+
+				cmd = exec.Command("kubectl", "wait", "ResourceSetInputProvider/demo",
+					"--for=condition=Ready", "--timeout=5m",
+				)
+				_, err = Run(cmd, "/test/e2e")
+				ExpectWithOffset(2, err).NotTo(HaveOccurred())
+
+				cmd = exec.Command(cli, "get", "rsip", "-A")
+				output, err := Run(cmd, "/test/e2e")
+				ExpectWithOffset(2, err).NotTo(HaveOccurred())
+				ExpectWithOffset(2, output).To(ContainSubstring("demo"))
+
+				cmd = exec.Command("kubectl", "delete", "ResourceSetInputProvider/demo")
 				_, err = Run(cmd, "/test/e2e")
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
 				return nil
