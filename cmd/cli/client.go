@@ -137,15 +137,25 @@ func isResourceReconciledFunc(kubeClient client.Client, obj *unstructured.Unstru
 			return false, err
 		}
 
+		suspendedMsg := "Reconciliation is disabled"
+
+		// Check if the resource is suspended via annotations
 		if ssautil.AnyInMetadata(obj, map[string]string{fluxcdv1.ReconcileAnnotation: fluxcdv1.DisabledValue}) {
-			return false, fmt.Errorf("Reconciliation is disabled for %s", obj.GetName()) //nolint:staticcheck
+			return false, fmt.Errorf("%s for %s", suspendedMsg, obj.GetName())
 		}
 
+		// Check if the resource is suspended via spec.suspend field
+		if suspend, found, err := unstructured.NestedBool(obj.Object, "spec", "suspend"); suspend && found && err == nil {
+			return false, fmt.Errorf("%s for %s", suspendedMsg, obj.GetName())
+		}
+
+		// Check if the status.lastHandledReconcileAt matches the request time
 		lastHandledReconcileAt, _, _ := unstructured.NestedString(obj.Object, "status", "lastHandledReconcileAt")
 		if lastHandledReconcileAt != requestTime {
 			return false, nil
 		}
 
+		// Check if the resource is ready
 		if res, err := status.GetObjectWithConditions(obj.Object); err == nil {
 			for _, cond := range res.Status.Conditions {
 				if cond.Type == meta.ReadyCondition {
