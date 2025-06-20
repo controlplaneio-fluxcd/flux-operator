@@ -30,6 +30,8 @@ jobs:
           cluster_name: kind
       - name: Run controller tests
         run: make test
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Run controller e2e tests
         run: make test-e2e
       - name: Run golangci lint

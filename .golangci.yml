@@ -56,6 +56,9 @@ linters:
           - errcheck
         source: "^\\s*defer\\s+"
       - linters:
+          - staticcheck
+        source: "r\\.Requeue"
+      - linters:
           - lll
         path: api/*
       - linters:
