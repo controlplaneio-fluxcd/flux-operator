@@ -97,7 +97,7 @@ vendor-flux: ## Download Flux base manifests to config/flux dir.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
 docker-build: ## Build docker image with the manager.
-	$(CONTAINER_TOOL) build -t ${IMG} .
+	$(CONTAINER_TOOL) build -t ${IMG} --build-arg VERSION=$(FLUX_OPERATOR_DEV_VERSION) .
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
