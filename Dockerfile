@@ -1,5 +1,6 @@
 # Build the operator binary using the Docker's Debian image.
 FROM --platform=${BUILDPLATFORM} golang:1.24 AS builder
+ARG VERSION
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /workspace
@@ -17,7 +18,8 @@ COPY api/ api/
 COPY internal/ internal/
 
 # Build the operator binary.
-RUN CGO_ENABLED=0 GOFIPS140=latest GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o flux-operator cmd/operator/main.go
+RUN CGO_ENABLED=0 GOFIPS140=latest GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
+    go build -ldflags="-s -w -X main.VERSION=${VERSION}" -trimpath -a -o flux-operator cmd/operator/main.go
 
 # Run the operator binary using Google's Distroless image.
 FROM gcr.io/distroless/static:nonroot

@@ -25,6 +25,10 @@ type FluxReportSpec struct {
 	// +optional
 	Cluster *ClusterInfo `json:"cluster,omitempty"`
 
+	// Operator is the version information of the Flux Operator.
+	// +optional
+	Operator *OperatorInfo `json:"operator,omitempty"`
+
 	// ComponentsStatus is the status of the Flux controller deployments.
 	// +optional
 	ComponentsStatus []FluxComponentStatus `json:"components,omitempty"`
@@ -63,13 +67,31 @@ type FluxDistributionStatus struct {
 // ClusterInfo defines the version information of the Kubernetes cluster.
 type ClusterInfo struct {
 	// ServerVersion is the version of the Kubernetes API server.
-	ServerVersion string `json:"serverVersion,omitempty"`
+	// +required
+	ServerVersion string `json:"serverVersion"`
 
 	// Platform is the os/arch of the Kubernetes control plane.
-	Platform string `json:"platform,omitempty"`
+	// +required
+	Platform string `json:"platform"`
 
 	// Nodes is the number of nodes in the Kubernetes cluster.
+	// +optional
 	Nodes int `json:"nodes,omitempty"`
+}
+
+// OperatorInfo defines the version information of the Flux Operator.
+type OperatorInfo struct {
+	// APIVersion is the API version of the Flux Operator.
+	// +required
+	APIVersion string `json:"apiVersion"`
+
+	// Version is the version number of Flux Operator.
+	// +required
+	Version string `json:"version"`
+
+	// Platform is the os/arch of Flux Operator.
+	// +required
+	Platform string `json:"platform"`
 }
 
 // FluxComponentStatus defines the observed state of a Flux component.

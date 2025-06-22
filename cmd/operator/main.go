@@ -40,6 +40,7 @@ import (
 )
 
 var (
+	VERSION  = "0.0.0-dev.0"
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
 )
@@ -247,6 +248,7 @@ func main() {
 		EventRecorder:     mgr.GetEventRecorderFor(controllerName),
 		WatchNamespace:    runtimeNamespace,
 		ReportingInterval: reportingInterval,
+		Version:           VERSION,
 	}).SetupWithManager(mgr,
 		controller.FluxReportReconcilerOptions{
 			RateLimiter: runtimeCtrl.GetRateLimiter(rateLimiterOptions),

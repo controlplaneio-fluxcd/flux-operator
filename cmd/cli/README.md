@@ -134,3 +134,12 @@ The following commands are available:
 - `flux-operator resume rset <name> -n <namespace>`: Resumes the reconciliation of the ResourceSet resource in the cluster.
 - `flux-operator suspend rsip <name> -n <namespace>`: Suspends the reconciliation of the ResourceSetInputProvider resource in the cluster.
 - `flux-operator resume rsip <name> -n <namespace>`: Resumes the reconciliation of the ResourceSetInputProvider resource in the cluster.
+
+### Version Command
+
+The `flux-operator version` command is used to display the version of the CLI and of the Flux Operator
+running in the cluster.
+
+Arguments:
+
+- `---client`: If true, shows client version only (no server required).

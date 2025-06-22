@@ -64,6 +64,12 @@ var _ = Describe("FluxInstance", Ordered, func() {
 				ExpectWithOffset(2, output).To(ContainSubstring("GitRepository"))
 				ExpectWithOffset(2, output).To(ContainSubstring("Kustomization"))
 
+				cmd = exec.Command(cli, "version")
+				output, err = Run(cmd, "/test/e2e")
+				ExpectWithOffset(2, err).NotTo(HaveOccurred())
+				ExpectWithOffset(2, output).To(ContainSubstring("client:"))
+				ExpectWithOffset(2, output).To(ContainSubstring("server:"))
+
 				return nil
 			}
 			EventuallyWithOffset(1, verifyFluxInstanceReconcile, 5*time.Minute, 10*time.Second).Should(Succeed())

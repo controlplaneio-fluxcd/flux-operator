@@ -131,6 +131,12 @@ func TestFluxReportReconciler_Reconcile(t *testing.T) {
 	g.Expect(report.Spec.Cluster.ServerVersion).To(ContainSubstring("v1."))
 	g.Expect(report.Spec.Cluster.Platform).To(ContainSubstring("64"))
 
+	// Check reported operator.
+	g.Expect(report.Spec.Operator).ToNot(BeNil())
+	g.Expect(report.Spec.Operator.APIVersion).To(Equal(fluxcdv1.GroupVersion.String()))
+	g.Expect(report.Spec.Operator.Version).To(Equal("v0.0.0-dev"))
+	g.Expect(report.Spec.Operator.Platform).To(ContainSubstring("/"))
+
 	// Check ready condition.
 	g.Expect(conditions.GetReason(report, meta.ReadyCondition)).To(BeIdenticalTo(meta.SucceededReason))
 
@@ -263,5 +269,6 @@ func getFluxReportReconciler() *FluxReportReconciler {
 		Scheme:            NewTestScheme(),
 		StatusManager:     controllerName,
 		ReportingInterval: time.Minute,
+		Version:           "v0.0.0-dev",
 	}
 }
