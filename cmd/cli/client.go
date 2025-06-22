@@ -271,3 +271,8 @@ func preferredFluxGVK(kind string, cf *cliopts.ConfigFlags) (*schema.GroupVersio
 
 	return &mapping.GroupVersionKind, nil
 }
+
+// timeNow returns the current time in RFC3339Nano format.
+func timeNow() string {
+	return metav1.Now().Format(time.RFC3339Nano)
+}

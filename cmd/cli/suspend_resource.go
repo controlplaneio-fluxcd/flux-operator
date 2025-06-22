@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var suspendResourceCmd = &cobra.Command{
@@ -39,7 +38,7 @@ func suspendResourceCmdRun(cmd *cobra.Command, args []string) error {
 
 	kind := parts[0]
 	name := parts[1]
-	now := metav1.Now().String()
+	now := timeNow()
 
 	gvk, err := preferredFluxGVK(kind, kubeconfigArgs)
 	if err != nil {

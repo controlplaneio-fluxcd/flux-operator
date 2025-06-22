@@ -8,7 +8,6 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
@@ -31,7 +30,7 @@ func suspendInstanceCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	name := args[0]
-	now := metav1.Now().String()
+	now := timeNow()
 	gvk := fluxcdv1.GroupVersion.WithKind(fluxcdv1.FluxInstanceKind)
 
 	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)

@@ -8,7 +8,6 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
@@ -39,7 +38,7 @@ func resumeInstanceCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	name := args[0]
-	now := metav1.Now().String()
+	now := timeNow()
 	gvk := fluxcdv1.GroupVersion.WithKind(fluxcdv1.FluxInstanceKind)
 
 	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
@@ -52,12 +51,7 @@ func resumeInstanceCmdRun(cmd *cobra.Command, args []string) error {
 
 	if resumeInstanceArgs.wait {
 		rootCmd.Println(`◎`, "Waiting for reconciliation...")
-		msg, err := waitForResourceReconciliation(ctx,
-			gvk,
-			name,
-			*kubeconfigArgs.Namespace,
-			now,
-			rootArgs.timeout)
+		msg, err := waitForResourceReconciliation(ctx, gvk, name, *kubeconfigArgs.Namespace, now, rootArgs.timeout)
 		if err != nil {
 			return err
 		}

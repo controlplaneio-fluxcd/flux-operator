@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var resumeResourceCmd = &cobra.Command{
@@ -47,7 +46,7 @@ func resumeResourceCmdRun(cmd *cobra.Command, args []string) error {
 
 	kind := parts[0]
 	name := parts[1]
-	now := metav1.Now().String()
+	now := timeNow()
 
 	gvk, err := preferredFluxGVK(kind, kubeconfigArgs)
 	if err != nil {
@@ -64,12 +63,7 @@ func resumeResourceCmdRun(cmd *cobra.Command, args []string) error {
 
 	if resumeResourceArgs.wait {
 		rootCmd.Println(`◎`, "Waiting for reconciliation...")
-		msg, err := waitForResourceReconciliation(ctx,
-			*gvk,
-			name,
-			*kubeconfigArgs.Namespace,
-			now,
-			rootArgs.timeout)
+		msg, err := waitForResourceReconciliation(ctx, *gvk, name, *kubeconfigArgs.Namespace, now, rootArgs.timeout)
 		if err != nil {
 			return err
 		}
