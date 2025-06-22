@@ -32,8 +32,16 @@ const (
 	InputProviderECRArtifactTag         = "ECRArtifactTag"
 	InputProviderGARArtifactTag         = "GARArtifactTag"
 
+	LatestPolicySemVer              = "SemVer"
+	LatestPolicyAlphabetical        = "Alphabetical"
+	LatestPolicyReverseAlphabetical = "ReverseAlphabetical"
+	LatestPolicyNumerical           = "Numerical"
+	LatestPolicyReverseNumerical    = "ReverseNumerical"
+
 	ReasonInvalidDefaultValues  = "InvalidDefaultValues"
 	ReasonInvalidExportedInputs = "InvalidExportedInputs"
+
+	DefaultResourceSetInputProviderFilterLimit = 100
 )
 
 // ResourceSetInputProviderSpec defines the desired state of ResourceSetInputProvider
@@ -110,7 +118,9 @@ type ResourceSetInputProviderSpec struct {
 // ResourceSetInputFilter defines the filter to apply to the input provider response.
 type ResourceSetInputFilter struct {
 	// IncludeBranch specifies the regular expression to filter the branches
-	// that the input provider should include.
+	// that the input provider should include. Can be used alongside
+	// the Value and GroupKey fields to expand a value and group key
+	// respectively from the branch name for usage with another filter.
 	// +optional
 	IncludeBranch string `json:"includeBranch,omitempty"`
 
@@ -119,17 +129,63 @@ type ResourceSetInputFilter struct {
 	// +optional
 	ExcludeBranch string `json:"excludeBranch,omitempty"`
 
+	// IncludeTag specifies the regular expression to filter the tags
+	// that the input provider should include. Can be used alongside
+	// the Value and GroupKey fields to expand a value and group key
+	// respectively from the tag name for usage with another filter.
+	// +optional
+	IncludeTag string `json:"includeTag,omitempty"`
+
+	// ExcludeTag specifies the regular expression to filter the tags
+	// that the input provider should exclude.
+	// +optional
+	ExcludeTag string `json:"excludeTag,omitempty"`
+
+	// Value is a template that can be expanded using the IncludeBranch
+	// or IncludeTag regular expression matching results to expand a
+	// value from the branch or tag name for usage with another filter.
+	// Supported by the SemVer and LatestPolicy filters.
+	// +optional
+	Value string `json:"value,omitempty"`
+
+	// GroupKey is a template that can be expanded using the IncludeBranch
+	// or IncludeTag regular expression matching results to expand a group
+	// key from the branch or tag name for usage with another filter.
+	// The strings with the same key will placed in the same group.
+	// If the template always expands to the same value, all strings will
+	// be placed in the same group, resulting in a single group (this is the
+	// default behavior).
+	// Supported only by the LatestPolicy filter.
+	// +optional
+	GroupKey string `json:"groupKey,omitempty"`
+
+	// LatestPolicy is the order for sorting each group of tags.
+	// After sorting each group, the last tag is selected as
+	// the "latest" in the group. When this field is set, the
+	// Limit filter is ignored, and only the latest tags from
+	// each group are exported as inputs. When Value and IncludeTag
+	// are set, the expanded value is used for sorting instead of
+	// the tag name itself.
+	// Supported only for tags at the moment.
+	// +kubebuilder:validation:Enum=SemVer;Alphabetical;ReverseAlphabetical;Numerical;ReverseNumerical
+	// +optional
+	LatestPolicy string `json:"latestPolicy,omitempty"`
+
 	// Labels specifies the list of labels to filter the input provider response.
 	// +optional
 	Labels []string `json:"labels,omitempty"`
 
 	// Limit specifies the maximum number of input sets to return.
 	// When not set, the default limit is 100.
+	// When LatestPolicy is set, the limit is ignored.
 	// +kubebuilder:default:=100
 	// +optional
 	Limit int `json:"limit,omitempty"`
 
-	// Semver specifies the semantic version range to filter and order the tags.
+	// Semver specifies a semantic version range to filter and sort the tags.
+	// When both Value and IncludeTag are set, the expanded value is
+	// checked against the range instead of the tag name itself.
+	// Supported only for tags at the moment.
 	// +optional
 	Semver string `json:"semver,omitempty"`
 }
@@ -255,7 +311,7 @@ func (in *ResourceSetInputProvider) GetFilterLimit() int {
 	if f := in.Spec.Filter; f != nil && f.Limit > 0 {
 		return f.Limit
 	}
-	return 100 // default limit
+	return DefaultResourceSetInputProviderFilterLimit
 }
 
 // GetLastHandledReconcileRequest returns the last handled reconcile request.

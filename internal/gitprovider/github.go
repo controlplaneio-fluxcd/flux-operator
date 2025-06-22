@@ -69,13 +69,13 @@ func (p *GitHubProvider) ListTags(ctx context.Context, opts Options) ([]Result, 
 		PerPage: 100,
 	}
 
-	tags := make([]*github.RepositoryTag, 0)
+	repoTags := make([]*github.RepositoryTag, 0)
 	for {
 		page, resp, err := p.Client.Repositories.ListTags(ctx, p.Owner, p.Repo, ghOpts)
 		if err != nil {
 			return nil, fmt.Errorf("could not list tags: %v", err)
 		}
-		tags = append(tags, page...)
+		repoTags = append(repoTags, page...)
 
 		if resp.NextPage == 0 {
 			break
@@ -83,16 +83,15 @@ func (p *GitHubProvider) ListTags(ctx context.Context, opts Options) ([]Result, 
 		ghOpts.Page = resp.NextPage
 	}
 
-	tagMap := make(map[string]*github.RepositoryTag, len(tags))
-	semverList := make([]string, 0, len(tags))
-	for _, tag := range tags {
-		semverList = append(semverList, tag.GetName())
+	tagMap := make(map[string]*github.RepositoryTag, len(repoTags))
+	tags := make([]string, 0, len(repoTags))
+	for _, tag := range repoTags {
+		tags = append(tags, tag.GetName())
 		tagMap[tag.GetName()] = tag
 	}
 
 	results := make([]Result, 0)
-	semverResults := sortSemver(opts, semverList)
-	for _, version := range semverResults {
+	for _, version := range opts.Filters.Tags(tags) {
 		tag, ok := tagMap[version]
 		if !ok {
 			return nil, fmt.Errorf("could not find tag %s", version)
@@ -126,7 +125,7 @@ func (p *GitHubProvider) ListBranches(ctx context.Context, opts Options) ([]Resu
 		}
 
 		for _, branch := range branches {
-			if !matchBranch(opts, branch.GetName()) {
+			if !opts.Filters.MatchBranch(branch.GetName()) {
 				continue
 			}
 
@@ -166,7 +165,7 @@ func (p *GitHubProvider) ListRequests(ctx context.Context, opts Options) ([]Resu
 		}
 
 		for _, pr := range prs {
-			if !matchBranch(opts, pr.GetHead().GetRef()) {
+			if !opts.Filters.MatchBranch(pr.GetHead().GetRef()) {
 				continue
 			}
 
@@ -175,7 +174,7 @@ func (p *GitHubProvider) ListRequests(ctx context.Context, opts Options) ([]Resu
 				prLabels[i] = l.GetName()
 			}
 
-			if !matchLabels(opts, prLabels) {
+			if !opts.Filters.MatchLabels(prLabels) {
 				continue
 			}
 

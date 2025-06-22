@@ -67,7 +67,7 @@ func (p *AzureDevOpsProvider) ListTags(ctx context.Context, opts Options) ([]Res
 	}
 
 	tagMap := make(map[string]string)
-	semverList := make([]string, 0, len(azRefs.Value))
+	tags := make([]string, 0, len(azRefs.Value))
 
 	for _, gitRef := range azRefs.Value {
 		if gitRef.Name == nil || gitRef.ObjectId == nil {
@@ -75,14 +75,11 @@ func (p *AzureDevOpsProvider) ListTags(ctx context.Context, opts Options) ([]Res
 		}
 		tagName := strings.TrimPrefix(*gitRef.Name, "refs/tags/")
 		tagMap[tagName] = *gitRef.ObjectId
-		semverList = append(semverList, tagName)
+		tags = append(tags, tagName)
 	}
 
-	// semver sorting
-	semverResults := sortSemver(opts, semverList)
-
 	results := make([]Result, 0)
-	for _, tagName := range semverResults {
+	for _, tagName := range opts.Filters.Tags(tags) {
 		objectID := tagMap[tagName]
 		sha := objectID // fallback for lightweight tag
 
@@ -103,10 +100,6 @@ func (p *AzureDevOpsProvider) ListTags(ctx context.Context, opts Options) ([]Res
 			SHA: sha,
 			Tag: tagName,
 		})
-
-		if opts.Filters.Limit > 0 && len(results) >= opts.Filters.Limit {
-			break
-		}
 	}
 
 	return results, nil
@@ -129,7 +122,7 @@ func (p *AzureDevOpsProvider) ListBranches(ctx context.Context, opts Options) ([
 			continue
 		}
 
-		if !matchBranch(opts, *branch.Name) {
+		if !opts.Filters.MatchBranch(*branch.Name) {
 			continue
 		}
 
@@ -167,7 +160,7 @@ func (p *AzureDevOpsProvider) ListRequests(ctx context.Context, opts Options) ([
 
 		sourceBranch := strings.TrimPrefix(*pr.SourceRefName, "refs/heads/")
 
-		if !matchBranch(opts, sourceBranch) {
+		if !opts.Filters.MatchBranch(sourceBranch) {
 			continue
 		}
 
@@ -179,7 +172,7 @@ func (p *AzureDevOpsProvider) ListRequests(ctx context.Context, opts Options) ([
 			}
 		}
 
-		if !matchLabels(opts, prLabels) {
+		if !opts.Filters.MatchLabels(prLabels) {
 			continue
 		}
 
