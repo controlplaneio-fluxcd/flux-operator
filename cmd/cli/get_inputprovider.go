@@ -79,6 +79,11 @@ func getInputProviderCmdRun(cmd *cobra.Command, args []string) error {
 			ready = string(conditions.Get(&obj, "Ready").Status)
 			lastReconciled = conditions.Get(&obj, "Ready").LastTransitionTime.String()
 		}
+
+		if obj.IsDisabled() {
+			ready = "Suspended"
+		}
+
 		var nextSchedule string
 		if obj.Status.NextSchedule != nil {
 			nextSchedule = obj.Status.NextSchedule.When.String()

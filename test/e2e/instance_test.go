@@ -69,6 +69,7 @@ var _ = Describe("FluxInstance", Ordered, func() {
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
 				ExpectWithOffset(2, output).To(ContainSubstring("client:"))
 				ExpectWithOffset(2, output).To(ContainSubstring("server:"))
+				ExpectWithOffset(2, output).To(ContainSubstring("distribution:"))
 
 				return nil
 			}
@@ -107,6 +108,11 @@ var _ = Describe("FluxInstance", Ordered, func() {
 				output, err = Run(cmd, "/test/e2e")
 				ExpectWithOffset(2, err).ToNot(HaveOccurred())
 				ExpectWithOffset(2, output).To(ContainSubstring("Reconciliation finished"))
+
+				cmd = exec.Command(cli, "stats")
+				output, err = Run(cmd, "/test/e2e")
+				ExpectWithOffset(2, err).NotTo(HaveOccurred())
+				ExpectWithOffset(2, output).To(ContainSubstring("ResourceSet"))
 
 				cmd = exec.Command("kubectl", "delete", "ResourceSet/podinfo")
 				_, err = Run(cmd, "/test/e2e")
