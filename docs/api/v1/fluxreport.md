@@ -57,6 +57,18 @@ spec:
     platform: linux/arm64
     version: v0.24.0
   reconcilers:
+    - apiVersion: fluxcd.controlplane.io/v1
+      kind: ResourceSet
+      stats:
+        failing: 0
+        running: 5
+        suspended: 1
+    - apiVersion: fluxcd.controlplane.io/v1
+      kind: ResourceSetInputProvider
+      stats:
+        failing: 1
+        running: 5
+        suspended: 1
     - apiVersion: helm.toolkit.fluxcd.io/v2
       kind: HelmRelease
       stats:

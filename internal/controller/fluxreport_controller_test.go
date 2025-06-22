@@ -117,9 +117,9 @@ func TestFluxReportReconciler_Reconcile(t *testing.T) {
 	g.Expect(report.Spec.Distribution.ManagedBy).To(Equal("flux-operator"))
 
 	// Check reported reconcilers.
-	g.Expect(report.Spec.ReconcilersStatus).To(HaveLen(10))
-	g.Expect(report.Spec.ReconcilersStatus[9].Kind).To(Equal("OCIRepository"))
-	g.Expect(report.Spec.ReconcilersStatus[9].Stats.Running).To(Equal(1))
+	g.Expect(report.Spec.ReconcilersStatus).To(HaveLen(12))
+	g.Expect(report.Spec.ReconcilersStatus[11].Kind).To(Equal("OCIRepository"))
+	g.Expect(report.Spec.ReconcilersStatus[11].Stats.Running).To(Equal(1))
 
 	// Check reported sync.
 	g.Expect(report.Spec.SyncStatus).ToNot(BeNil())
