@@ -71,5 +71,12 @@ func versionCmdRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to print server version: %w", err)
 	}
 
+	if report.Spec.Distribution.Version != "" {
+		_, err = fmt.Fprintln(rootCmd.OutOrStdout(), "distribution:", report.Spec.Distribution.Version)
+		if err != nil {
+			return fmt.Errorf("failed to print distribution version: %w", err)
+		}
+	}
+
 	return nil
 }

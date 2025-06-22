@@ -69,6 +69,7 @@ var _ = Describe("FluxInstance", Ordered, func() {
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
 				ExpectWithOffset(2, output).To(ContainSubstring("client:"))
 				ExpectWithOffset(2, output).To(ContainSubstring("server:"))
+				ExpectWithOffset(2, output).To(ContainSubstring("distribution:"))
 
 				return nil
 			}
