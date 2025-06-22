@@ -6,6 +6,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
@@ -13,7 +14,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/patch"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
+	ctrlrun "k8s.io/apimachinery/pkg/runtime"
 	kuberecorder "k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -31,10 +32,11 @@ type FluxReportReconciler struct {
 	client.Client
 	kuberecorder.EventRecorder
 
-	Scheme            *runtime.Scheme
+	Scheme            *ctrlrun.Scheme
 	StatusManager     string
 	WatchNamespace    string
 	ReportingInterval time.Duration
+	Version           string
 }
 
 // +kubebuilder:rbac:groups=fluxcd.controlplane.io,resources=fluxreports,verbs=get;list;watch;create;update;patch;delete
@@ -74,6 +76,9 @@ func (r *FluxReportReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if err != nil {
 		log.Error(err, "report computed with errors")
 	}
+
+	// Set the operator info.
+	report.Operator = r.getInfo()
 
 	// Update the FluxReport with the computed spec.
 	obj.Spec = report
@@ -116,6 +121,14 @@ func (r *FluxReportReconciler) SetupWithManager(mgr ctrl.Manager, opts FluxRepor
 		Complete(r)
 }
 
+func (r *FluxReportReconciler) getInfo() *fluxcdv1.OperatorInfo {
+	return &fluxcdv1.OperatorInfo{
+		APIVersion: fluxcdv1.GroupVersion.String(),
+		Version:    r.Version,
+		Platform:   fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH),
+	}
+}
+
 func (r *FluxReportReconciler) initReport(ctx context.Context, name, namespace string) error {
 	report := &fluxcdv1.FluxReport{
 		TypeMeta: metav1.TypeMeta{
@@ -131,6 +144,7 @@ func (r *FluxReportReconciler) initReport(ctx context.Context, name, namespace s
 				Status:      "Unknown",
 				Entitlement: "Unknown",
 			},
+			Operator: r.getInfo(),
 		},
 	}
 
