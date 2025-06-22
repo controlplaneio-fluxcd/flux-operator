@@ -89,6 +89,7 @@ func resourceKindCompletionFunc() func(cmd *cobra.Command, args []string, toComp
 			"HelmRelease/",
 			"Kustomization/",
 			"ImageRepository/",
+			"ImageUpdateAutomation/",
 			"Receiver/",
 		}
 
