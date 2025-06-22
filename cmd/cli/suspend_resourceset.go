@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
@@ -16,6 +17,7 @@ var suspendResourceSetCmd = &cobra.Command{
 	Use:               "resourceset",
 	Aliases:           []string{"rset"},
 	Short:             "Suspend ResourceSet reconciliation",
+	Args:              cobra.ExactArgs(1),
 	RunE:              suspendResourceSetCmdRun,
 	ValidArgsFunction: resourceNamesCompletionFunc(fluxcdv1.GroupVersion.WithKind(fluxcdv1.ResourceSetKind)),
 }
@@ -30,17 +32,13 @@ func suspendResourceSetCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	name := args[0]
+	now := metav1.Now().String()
 	gvk := fluxcdv1.GroupVersion.WithKind(fluxcdv1.ResourceSetKind)
 
 	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
 	defer cancel()
 
-	err := annotateResource(ctx,
-		gvk,
-		name,
-		*kubeconfigArgs.Namespace,
-		fluxcdv1.ReconcileAnnotation,
-		fluxcdv1.DisabledValue)
+	err := toggleSuspension(ctx, gvk, name, *kubeconfigArgs.Namespace, now, true)
 	if err != nil {
 		return err
 	}
