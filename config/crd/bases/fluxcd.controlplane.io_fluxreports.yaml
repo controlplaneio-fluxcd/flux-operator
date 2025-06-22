@@ -79,6 +79,8 @@ spec:
                 description: ComponentsStatus is the status of the Flux controller
                   deployments.
                 items:
+                  description: FluxComponentStatus defines the observed state of a
+                    Flux component.
                   properties:
                     image:
                       description: Image is the container image of the Flux component.

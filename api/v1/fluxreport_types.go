@@ -94,6 +94,7 @@ type OperatorInfo struct {
 	Platform string `json:"platform"`
 }
 
+// FluxComponentStatus defines the observed state of a Flux component.
 type FluxComponentStatus struct {
 	// Name is the name of the Flux component.
 	// +required
