@@ -68,26 +68,31 @@ func getResourceSetCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	rows := make([][]string, 0)
-	for _, rset := range list.Items {
+	for _, obj := range list.Items {
 		objCount := 0
-		if rset.Status.Inventory != nil {
-			objCount = len(rset.Status.Inventory.Entries)
+		if obj.Status.Inventory != nil {
+			objCount = len(obj.Status.Inventory.Entries)
 		}
 		ready := "Unknown"
 		lastReconciled := "Unknown"
-		if conditions.Has(&rset, "Ready") {
-			ready = string(conditions.Get(&rset, "Ready").Status)
-			lastReconciled = conditions.Get(&rset, "Ready").LastTransitionTime.String()
+		if conditions.Has(&obj, "Ready") {
+			ready = string(conditions.Get(&obj, "Ready").Status)
+			lastReconciled = conditions.Get(&obj, "Ready").LastTransitionTime.String()
 		}
+
+		if obj.IsDisabled() {
+			ready = "Suspended"
+		}
+
 		row := []string{
-			rset.Name,
+			obj.Name,
 			strconv.Itoa(objCount),
 			ready,
-			conditions.GetMessage(&rset, "Ready"),
+			conditions.GetMessage(&obj, "Ready"),
 			lastReconciled,
 		}
 		if getResourceSetArgs.allNamespaces {
-			row = append([]string{rset.Namespace}, row...)
+			row = append([]string{obj.Namespace}, row...)
 		}
 		rows = append(rows, row)
 	}

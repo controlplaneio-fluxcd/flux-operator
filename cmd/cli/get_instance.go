@@ -68,26 +68,31 @@ func geInstanceCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	rows := make([][]string, 0)
-	for _, instance := range list.Items {
+	for _, obj := range list.Items {
 		objCount := 0
-		if instance.Status.Inventory != nil {
-			objCount = len(instance.Status.Inventory.Entries)
+		if obj.Status.Inventory != nil {
+			objCount = len(obj.Status.Inventory.Entries)
 		}
 		ready := "Unknown"
 		lastReconciled := "Unknown"
-		if conditions.Has(&instance, "Ready") {
-			ready = string(conditions.Get(&instance, "Ready").Status)
-			lastReconciled = conditions.Get(&instance, "Ready").LastTransitionTime.String()
+		if conditions.Has(&obj, "Ready") {
+			ready = string(conditions.Get(&obj, "Ready").Status)
+			lastReconciled = conditions.Get(&obj, "Ready").LastTransitionTime.String()
 		}
+
+		if obj.IsDisabled() {
+			ready = "Suspended"
+		}
+
 		row := []string{
-			instance.Name,
+			obj.Name,
 			strconv.Itoa(objCount),
 			ready,
-			conditions.GetMessage(&instance, "Ready"),
+			conditions.GetMessage(&obj, "Ready"),
 			lastReconciled,
 		}
 		if getInstanceArgs.allNamespaces {
-			row = append([]string{instance.Namespace}, row...)
+			row = append([]string{obj.Namespace}, row...)
 		}
 		rows = append(rows, row)
 	}
