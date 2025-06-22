@@ -6,6 +6,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -250,6 +251,179 @@ spec:
 	g.Expect(events).To(HaveLen(1))
 	g.Expect(events[0].Reason).To(Equal(fluxcdv1.ReasonSkippedDueToSchedule))
 	g.Expect(events[0].Message).To(ContainSubstring("Reconciliation skipped, next scheduled at"))
+}
+
+func TestResourceSetInputProviderReconciler_ProviderAuthAndSecretsCompatiblity(t *testing.T) {
+	g := NewWithT(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test-provider-auth-and-secrets-compatibility")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	for _, tt := range []struct {
+		provider           string
+		serviceAccountName bool
+		certSecretRef      bool
+		secretRef          bool
+	}{
+		{
+			provider:           fluxcdv1.InputProviderStatic,
+			serviceAccountName: false,
+			certSecretRef:      false,
+			secretRef:          false,
+		},
+		{
+			provider:           fluxcdv1.InputProviderGitHubBranch,
+			serviceAccountName: false,
+			certSecretRef:      true,
+			secretRef:          true,
+		},
+		{
+			provider:           fluxcdv1.InputProviderGitHubTag,
+			serviceAccountName: false,
+			certSecretRef:      true,
+			secretRef:          true,
+		},
+		{
+			provider:           fluxcdv1.InputProviderGitHubPullRequest,
+			serviceAccountName: false,
+			certSecretRef:      true,
+			secretRef:          true,
+		},
+		{
+			provider:           fluxcdv1.InputProviderGitLabBranch,
+			serviceAccountName: false,
+			certSecretRef:      true,
+			secretRef:          true,
+		},
+		{
+			provider:           fluxcdv1.InputProviderGitLabTag,
+			serviceAccountName: false,
+			certSecretRef:      true,
+			secretRef:          true,
+		},
+		{
+			provider:           fluxcdv1.InputProviderGitLabMergeRequest,
+			serviceAccountName: false,
+			certSecretRef:      true,
+			secretRef:          true,
+		},
+		{
+			provider:           fluxcdv1.InputProviderAzureDevOpsBranch,
+			serviceAccountName: true,
+			certSecretRef:      false,
+			secretRef:          true,
+		},
+		{
+			provider:           fluxcdv1.InputProviderAzureDevOpsPullRequest,
+			serviceAccountName: true,
+			certSecretRef:      false,
+			secretRef:          true,
+		},
+		{
+			provider:           fluxcdv1.InputProviderAzureDevOpsTag,
+			serviceAccountName: true,
+			certSecretRef:      false,
+			secretRef:          true,
+		},
+		{
+			provider:           fluxcdv1.InputProviderOCIArtifactTag,
+			serviceAccountName: true,
+			certSecretRef:      true,
+			secretRef:          true,
+		},
+		{
+			provider:           fluxcdv1.InputProviderACRArtifactTag,
+			serviceAccountName: true,
+			certSecretRef:      false,
+			secretRef:          false,
+		},
+		{
+			provider:           fluxcdv1.InputProviderECRArtifactTag,
+			serviceAccountName: true,
+			certSecretRef:      false,
+			secretRef:          false,
+		},
+		{
+			provider:           fluxcdv1.InputProviderGARArtifactTag,
+			serviceAccountName: true,
+			certSecretRef:      false,
+			secretRef:          false,
+		},
+	} {
+		t.Run(tt.provider, func(t *testing.T) {
+			g := NewWithT(t)
+
+			// Prepare object and spec.
+			obj := &fluxcdv1.ResourceSetInputProvider{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: ns.Name,
+				},
+			}
+			spec := fluxcdv1.ResourceSetInputProviderSpec{
+				Type: tt.provider,
+			}
+			urlScheme := "oci"
+			if strings.HasPrefix(tt.provider, "Git") || strings.HasPrefix(tt.provider, "AzureDevOps") {
+				urlScheme = "https"
+			}
+			if tt.provider != fluxcdv1.InputProviderStatic {
+				spec.URL = fmt.Sprintf("%s://example.com/owner/repo", urlScheme)
+			}
+
+			// Validate serviceAccountName.
+			const saErr = "cannot specify spec.serviceAccountName when spec.type is not one of AzureDevOps* or *ArtifactTag"
+			obj.Spec = spec
+			obj.Spec.ServiceAccountName = "test-sa"
+			if !tt.serviceAccountName {
+				err = testEnv.Create(ctx, obj)
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(saErr))
+			} else {
+				err = testEnv.Create(ctx, obj, client.DryRunAll, client.FieldOwner(controllerName))
+				if err != nil {
+					g.Expect(err.Error()).NotTo(ContainSubstring(saErr))
+				}
+			}
+
+			// Validate certSecretRef.
+			const certErr = "cannot specify spec.certSecretRef when spec.type is one of Static, AzureDevOps*, ACRArtifactTag, ECRArtifactTag or GARArtifactTag"
+			obj.Spec = spec
+			obj.Spec.CertSecretRef = &meta.LocalObjectReference{
+				Name: "test-cert-secret",
+			}
+			if !tt.certSecretRef {
+				err = testEnv.Create(ctx, obj)
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(certErr))
+			} else {
+				err = testEnv.Create(ctx, obj, client.DryRunAll, client.FieldOwner(controllerName))
+				if err != nil {
+					g.Expect(err.Error()).NotTo(ContainSubstring(certErr))
+				}
+			}
+
+			// Validate secretRef.
+			const secretErr = "cannot specify spec.secretRef when spec.type is one of Static, ACRArtifactTag, ECRArtifactTag or GARArtifactTag"
+			obj.Spec = spec
+			obj.Spec.SecretRef = &meta.LocalObjectReference{
+				Name: "test-secret",
+			}
+			if !tt.secretRef {
+				err = testEnv.Create(ctx, obj)
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(secretErr))
+			} else {
+				err = testEnv.Create(ctx, obj, client.DryRunAll, client.FieldOwner(controllerName))
+				if err != nil {
+					g.Expect(err.Error()).NotTo(ContainSubstring(secretErr))
+				}
+			}
+		})
+	}
 }
 
 func TestRequeueAfterResourceSetInputProvider(t *testing.T) {

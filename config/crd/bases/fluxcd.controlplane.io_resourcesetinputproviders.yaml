@@ -151,6 +151,14 @@ spec:
                 required:
                 - name
                 type: object
+              serviceAccountName:
+                description: |-
+                  ServiceAccountName specifies the name of the Kubernetes ServiceAccount
+                  used for authentication with AWS, Azure or GCP services through
+                  workload identity federation features. If not specified, the
+                  authentication for these cloud providers will use the ServiceAccount
+                  of the operator (or any other environment authentication configuration).
+                type: string
               skip:
                 description: Skip defines whether we need to skip input provider response
                   updates.
@@ -177,6 +185,9 @@ spec:
                 - AzureDevOpsTag
                 - AzureDevOpsPullRequest
                 - OCIArtifactTag
+                - ACRArtifactTag
+                - ECRArtifactTag
+                - GARArtifactTag
                 type: string
               url:
                 description: |-
@@ -202,6 +213,18 @@ spec:
             - message: spec.url must start with 'oci://' when spec.type is an OCI
                 provider
               rule: '!self.type.endsWith(''ArtifactTag'') || self.url.startsWith(''oci'')'
+            - message: cannot specify spec.serviceAccountName when spec.type is not
+                one of AzureDevOps* or *ArtifactTag
+              rule: '!has(self.serviceAccountName) || self.type.startsWith(''AzureDevOps'')
+                || self.type.endsWith(''ArtifactTag'')'
+            - message: cannot specify spec.certSecretRef when spec.type is one of
+                Static, AzureDevOps*, ACRArtifactTag, ECRArtifactTag or GARArtifactTag
+              rule: '!has(self.certSecretRef) || !(self.url == ''Static'' || self.type.startsWith(''AzureDevOps'')
+                || (self.type.endsWith(''ArtifactTag'') && self.type != ''OCIArtifactTag''))'
+            - message: cannot specify spec.secretRef when spec.type is one of Static,
+                ACRArtifactTag, ECRArtifactTag or GARArtifactTag
+              rule: '!has(self.secretRef) || !(self.url == ''Static'' || (self.type.endsWith(''ArtifactTag'')
+                && self.type != ''OCIArtifactTag''))'
           status:
             description: ResourceSetInputProviderStatus defines the observed state
               of ResourceSetInputProvider.

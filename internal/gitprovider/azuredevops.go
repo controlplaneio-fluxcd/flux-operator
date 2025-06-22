@@ -9,9 +9,10 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/controlplaneio-fluxcd/flux-operator/internal/inputs"
 	"github.com/microsoft/azure-devops-go-api/azuredevops/v7"
 	git "github.com/microsoft/azure-devops-go-api/azuredevops/v7/git"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/inputs"
 )
 
 type AzureDevOpsProvider struct {

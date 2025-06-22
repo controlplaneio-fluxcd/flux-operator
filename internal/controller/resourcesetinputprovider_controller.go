@@ -17,6 +17,11 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/auth"
+	"github.com/fluxcd/pkg/auth/aws"
+	"github.com/fluxcd/pkg/auth/azure"
+	"github.com/fluxcd/pkg/auth/gcp"
+	authutils "github.com/fluxcd/pkg/auth/utils"
 	"github.com/fluxcd/pkg/cache"
 	"github.com/fluxcd/pkg/git/github"
 	"github.com/fluxcd/pkg/runtime/conditions"
@@ -331,7 +336,7 @@ func (r *ResourceSetInputProviderReconciler) newGitProvider(ctx context.Context,
 			Token:    token,
 		})
 	case strings.HasPrefix(obj.Spec.Type, "AzureDevOps"):
-		token, err := r.getAzureDevOpsToken(obj, authData)
+		token, err := r.getAzureDevOpsToken(ctx, obj, authData)
 		if err != nil {
 			return nil, err
 		}
@@ -561,15 +566,43 @@ func (r *ResourceSetInputProviderReconciler) getGitLabToken(
 
 // getAzureDevOpsToken returns the appropriate AzureDevOps token by reading the secrets in authData.
 func (r *ResourceSetInputProviderReconciler) getAzureDevOpsToken(
-	obj *fluxcdv1.ResourceSetInputProvider,
+	ctx context.Context, obj *fluxcdv1.ResourceSetInputProvider,
 	authData map[string][]byte) (string, error) {
 
-	if authData == nil {
-		return "", nil
-	}
+	switch {
 
-	_, password, err := r.getBasicAuth(obj, authData)
-	return password, err
+	// Handle static authentication.
+	case len(authData) > 0:
+		_, password, err := r.getBasicAuth(obj, authData)
+		return password, err
+
+	// Handle workload identity.
+	default:
+
+		var opts []auth.Option
+
+		// Configure service account.
+		if obj.Spec.ServiceAccountName != "" {
+			sa := client.ObjectKey{
+				Name:      obj.Spec.ServiceAccountName,
+				Namespace: obj.GetNamespace(),
+			}
+			opts = append(opts, auth.WithServiceAccount(sa, r.Client))
+		}
+
+		// Configure token cache.
+		if r.TokenCache != nil {
+			involvedObject := getInputProviderInvolvedObject(obj)
+			opts = append(opts, auth.WithCache(*r.TokenCache, involvedObject))
+		}
+
+		// Get token.
+		t, err := authutils.GetGitCredentials(ctx, azure.ProviderName, opts...)
+		if err != nil {
+			return "", err
+		}
+		return t.BearerToken, nil
+	}
 }
 
 // callOCIProvider lists the tags of an OCI artifact repository
@@ -578,26 +611,15 @@ func (r *ResourceSetInputProviderReconciler) callOCIProvider(ctx context.Context
 	obj *fluxcdv1.ResourceSetInputProvider, tlsConfig *tls.Config,
 	authSecret *corev1.Secret, defaults map[string]any) ([]fluxcdv1.ResourceSetInput, error) {
 
+	repo := strings.TrimPrefix(obj.Spec.URL, "oci://")
+
 	// Build options.
-	opts := []crane.Option{
-		crane.WithContext(ctx),
-	}
-	if authSecret != nil {
-		keychain, err := k8schain.NewFromPullSecrets(ctx, []corev1.Secret{*authSecret})
-		if err != nil {
-			return nil, fmt.Errorf("failed to create OCI keychain from secret '%s/%s': %w",
-				authSecret.GetNamespace(), authSecret.GetName(), err)
-		}
-		opts = append(opts, crane.WithAuthFromKeychain(keychain))
-	}
-	if tlsConfig != nil {
-		transport := http.DefaultTransport.(*http.Transport).Clone()
-		transport.TLSClientConfig = tlsConfig
-		opts = append(opts, crane.WithTransport(transport))
+	opts, err := r.buildOCIOptions(ctx, obj, repo, tlsConfig, authSecret)
+	if err != nil {
+		return nil, err
 	}
 
 	// Call OCI server.
-	repo := strings.TrimPrefix(obj.Spec.URL, "oci://")
 	tags, err := crane.ListTags(repo, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list OCI tags for '%s': %w", repo, err)
@@ -635,6 +657,106 @@ func (r *ResourceSetInputProviderReconciler) callOCIProvider(ctx context.Context
 	}
 
 	return res, nil
+}
+
+var inputProviderToCloudProvider = map[string]string{
+	fluxcdv1.InputProviderACRArtifactTag: azure.ProviderName,
+	fluxcdv1.InputProviderECRArtifactTag: aws.ProviderName,
+	fluxcdv1.InputProviderGARArtifactTag: gcp.ProviderName,
+}
+
+// buildOCIOptions builds the crane options for the OCI artifact providers
+// configuring authentication and TLS settings.
+func (r *ResourceSetInputProviderReconciler) buildOCIOptions(ctx context.Context,
+	obj *fluxcdv1.ResourceSetInputProvider, repo string, tlsConfig *tls.Config,
+	authSecret *corev1.Secret) ([]crane.Option, error) {
+
+	opts := []crane.Option{
+		crane.WithContext(ctx),
+	}
+
+	switch {
+
+	// Configure workload identity for cloud providers.
+	case obj.Spec.Type != fluxcdv1.InputProviderOCIArtifactTag:
+		var authOpts []auth.Option
+
+		// Configure service account.
+		if obj.Spec.ServiceAccountName != "" {
+			sa := client.ObjectKey{
+				Name:      obj.Spec.ServiceAccountName,
+				Namespace: obj.GetNamespace(),
+			}
+			authOpts = append(authOpts, auth.WithServiceAccount(sa, r.Client))
+		}
+
+		// Configure token cache.
+		if r.TokenCache != nil {
+			involvedObject := getInputProviderInvolvedObject(obj)
+			authOpts = append(authOpts, auth.WithCache(*r.TokenCache, involvedObject))
+		}
+
+		// Build authenticator.
+		provider := inputProviderToCloudProvider[obj.Spec.Type]
+		authenticator, err := authutils.GetArtifactRegistryCredentials(ctx, provider, repo, authOpts...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get artifact registry credentials for '%s', provider '%s': %w",
+				repo, provider, err)
+		}
+		opts = append(opts, crane.WithAuth(authenticator))
+
+	// Configure generic OCI artifact provider.
+	default:
+		var pullSecrets []corev1.Secret
+
+		// Add pull secret from the object spec.
+		if authSecret != nil {
+			pullSecrets = append(pullSecrets, *authSecret)
+		}
+
+		// Add pull secrets from the service account.
+		if obj.Spec.ServiceAccountName != "" {
+			saKey := client.ObjectKey{
+				Name:      obj.Spec.ServiceAccountName,
+				Namespace: obj.GetNamespace(),
+			}
+			var sa corev1.ServiceAccount
+			if err := r.Client.Get(ctx, saKey, &sa); err != nil {
+				return nil, fmt.Errorf("failed to get service account '%s/%s': %w",
+					saKey.Namespace, saKey.Name, err)
+			}
+			for _, secretRef := range sa.ImagePullSecrets {
+				secretKey := client.ObjectKey{
+					Name:      secretRef.Name,
+					Namespace: saKey.Namespace,
+				}
+				var secret corev1.Secret
+				if err := r.Client.Get(ctx, secretKey, &secret); err != nil {
+					return nil, fmt.Errorf("failed to get image pull secret '%s/%s': %w",
+						secretKey.Namespace, secretKey.Name, err)
+				}
+				pullSecrets = append(pullSecrets, secret)
+			}
+		}
+
+		// Configure pull secrets.
+		if len(pullSecrets) > 0 {
+			keychain, err := k8schain.NewFromPullSecrets(ctx, pullSecrets)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create OCI keychain: %w", err)
+			}
+			opts = append(opts, crane.WithAuthFromKeychain(keychain))
+		}
+
+		// Configure TLS settings.
+		if tlsConfig != nil {
+			transport := http.DefaultTransport.(*http.Transport).Clone()
+			transport.TLSClientConfig = tlsConfig
+			opts = append(opts, crane.WithTransport(transport))
+		}
+	}
+
+	return opts, nil
 }
 
 // getTLSConfig reads spec.certSecretRef and returns the TLS configuration
@@ -801,4 +923,15 @@ func requeueAfterResourceSetInputProvider(obj *fluxcdv1.ResourceSetInputProvider
 	}
 
 	return ctrl.Result{RequeueAfter: requeueAfter}
+}
+
+// getInputProviderInvolvedObject returns the involved object for the input provider
+// for cache operations.
+func getInputProviderInvolvedObject(obj *fluxcdv1.ResourceSetInputProvider) cache.InvolvedObject {
+	return cache.InvolvedObject{
+		Kind:      fluxcdv1.ResourceSetInputProviderKind,
+		Name:      obj.GetName(),
+		Namespace: obj.GetNamespace(),
+		Operation: cache.OperationReconcile,
+	}
 }

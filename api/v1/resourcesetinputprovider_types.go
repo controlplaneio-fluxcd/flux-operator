@@ -28,6 +28,9 @@ const (
 	InputProviderAzureDevOpsPullRequest = "AzureDevOpsPullRequest"
 	InputProviderAzureDevOpsTag         = "AzureDevOpsTag"
 	InputProviderOCIArtifactTag         = "OCIArtifactTag"
+	InputProviderACRArtifactTag         = "ACRArtifactTag"
+	InputProviderECRArtifactTag         = "ECRArtifactTag"
+	InputProviderGARArtifactTag         = "GARArtifactTag"
 
 	ReasonInvalidDefaultValues  = "InvalidDefaultValues"
 	ReasonInvalidExportedInputs = "InvalidExportedInputs"
@@ -39,9 +42,12 @@ const (
 // +kubebuilder:validation:XValidation:rule="!self.type.startsWith('Git') || self.url.startsWith('http')", message="spec.url must start with 'http://' or 'https://' when spec.type is a Git provider"
 // +kubebuilder:validation:XValidation:rule="!self.type.startsWith('AzureDevOps') || self.url.startsWith('http')", message="spec.url must start with 'http://' or 'https://' when spec.type is a Git provider"
 // +kubebuilder:validation:XValidation:rule="!self.type.endsWith('ArtifactTag') || self.url.startsWith('oci')", message="spec.url must start with 'oci://' when spec.type is an OCI provider"
+// +kubebuilder:validation:XValidation:rule="!has(self.serviceAccountName) || self.type.startsWith('AzureDevOps') || self.type.endsWith('ArtifactTag')", message="cannot specify spec.serviceAccountName when spec.type is not one of AzureDevOps* or *ArtifactTag"
+// +kubebuilder:validation:XValidation:rule="!has(self.certSecretRef) || !(self.url == 'Static' || self.type.startsWith('AzureDevOps') || (self.type.endsWith('ArtifactTag') && self.type != 'OCIArtifactTag'))", message="cannot specify spec.certSecretRef when spec.type is one of Static, AzureDevOps*, ACRArtifactTag, ECRArtifactTag or GARArtifactTag"
+// +kubebuilder:validation:XValidation:rule="!has(self.secretRef) || !(self.url == 'Static' || (self.type.endsWith('ArtifactTag') && self.type != 'OCIArtifactTag'))", message="cannot specify spec.secretRef when spec.type is one of Static, ACRArtifactTag, ECRArtifactTag or GARArtifactTag"
 type ResourceSetInputProviderSpec struct {
 	// Type specifies the type of the input provider.
-	// +kubebuilder:validation:Enum=Static;GitHubBranch;GitHubTag;GitHubPullRequest;GitLabBranch;GitLabTag;GitLabMergeRequest;AzureDevOpsBranch;AzureDevOpsTag;AzureDevOpsPullRequest;OCIArtifactTag
+	// +kubebuilder:validation:Enum=Static;GitHubBranch;GitHubTag;GitHubPullRequest;GitLabBranch;GitLabTag;GitLabMergeRequest;AzureDevOpsBranch;AzureDevOpsTag;AzureDevOpsPullRequest;OCIArtifactTag;ACRArtifactTag;ECRArtifactTag;GARArtifactTag
 	// +required
 	Type string `json:"type"`
 
@@ -51,6 +57,14 @@ type ResourceSetInputProviderSpec struct {
 	// +kubebuilder:validation:Pattern="^((http|https|oci)://.*){0,1}$"
 	// +optional
 	URL string `json:"url,omitempty"`
+
+	// ServiceAccountName specifies the name of the Kubernetes ServiceAccount
+	// used for authentication with AWS, Azure or GCP services through
+	// workload identity federation features. If not specified, the
+	// authentication for these cloud providers will use the ServiceAccount
+	// of the operator (or any other environment authentication configuration).
+	// +optional
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 
 	// SecretRef specifies the Kubernetes Secret containing the basic-auth credentials
 	// to access the input provider.

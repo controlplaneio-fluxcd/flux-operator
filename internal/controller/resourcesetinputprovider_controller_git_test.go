@@ -911,7 +911,7 @@ func TestResourceSetInputProviderReconciler_InvalidGitURL(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	ns, err := testEnv.CreateNamespace(ctx, "test-invalid-oci-url")
+	ns, err := testEnv.CreateNamespace(ctx, "test-invalid-git-url")
 	g.Expect(err).ToNot(HaveOccurred())
 
 	for _, tt := range []struct {
@@ -947,4 +947,30 @@ func TestResourceSetInputProviderReconciler_InvalidGitURL(t *testing.T) {
 				"spec.url must start with 'http://' or 'https://' when spec.type is a Git provider"))
 		})
 	}
+}
+
+func TestResouceSetInputProviderReconciler_getAzureDevOpsToken(t *testing.T) {
+	r := getResourceSetInputProviderReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	t.Run("with basic auth", func(t *testing.T) {
+		g := NewWithT(t)
+		res, err := r.getAzureDevOpsToken(ctx, nil, map[string][]byte{
+			"username": []byte("user"),
+			"password": []byte("pass"),
+		})
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(res).To(Equal("pass"))
+	})
+
+	t.Run("with workload identity", func(t *testing.T) {
+		g := NewWithT(t)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		res, err := r.getAzureDevOpsToken(ctx, &fluxcdv1.ResourceSetInputProvider{}, nil)
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("ManagedIdentityCredential"))
+		g.Expect(res).To(BeEmpty())
+	})
 }
