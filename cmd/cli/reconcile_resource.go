@@ -26,7 +26,7 @@ var reconcileResourceCmd = &cobra.Command{
 `,
 	Args:              cobra.ExactArgs(1),
 	RunE:              reconcileResourceCmdRun,
-	ValidArgsFunction: resourceKindCompletionFunc(),
+	ValidArgsFunction: resourceKindNameCompletionFunc(true),
 }
 
 type reconcileResourceFlags struct {

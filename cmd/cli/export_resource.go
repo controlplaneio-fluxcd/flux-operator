@@ -24,8 +24,9 @@ var exportResourceCmd = &cobra.Command{
   # Export a OCIRepository to a YAML file
   flux-operator -n apps export resource OCIRepository/my-app > my-app.yaml
 `,
-	RunE: exportResourceCmdRun,
-	Args: cobra.ExactArgs(1),
+	RunE:              exportResourceCmdRun,
+	Args:              cobra.ExactArgs(1),
+	ValidArgsFunction: resourceKindNameCompletionFunc(false),
 }
 
 func init() {

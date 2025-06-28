@@ -19,7 +19,7 @@ var resumeResourceCmd = &cobra.Command{
 `,
 	Args:              cobra.ExactArgs(1),
 	RunE:              resumeResourceCmdRun,
-	ValidArgsFunction: resourceKindCompletionFunc(),
+	ValidArgsFunction: resourceKindNameCompletionFunc(true),
 }
 
 type resumeResourceFlags struct {
