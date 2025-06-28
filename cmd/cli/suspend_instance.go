@@ -15,6 +15,7 @@ import (
 var suspendInstanceCmd = &cobra.Command{
 	Use:               "instance",
 	Short:             "Suspend FluxInstance reconciliation",
+	Args:              cobra.ExactArgs(1),
 	RunE:              suspendInstanceCmdRun,
 	ValidArgsFunction: resourceNamesCompletionFunc(fluxcdv1.GroupVersion.WithKind(fluxcdv1.FluxInstanceKind)),
 }
@@ -29,17 +30,13 @@ func suspendInstanceCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	name := args[0]
+	now := timeNow()
 	gvk := fluxcdv1.GroupVersion.WithKind(fluxcdv1.FluxInstanceKind)
 
 	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
 	defer cancel()
 
-	err := annotateResource(ctx,
-		gvk,
-		name,
-		*kubeconfigArgs.Namespace,
-		fluxcdv1.ReconcileAnnotation,
-		fluxcdv1.DisabledValue)
+	err := toggleSuspension(ctx, gvk, name, *kubeconfigArgs.Namespace, now, true)
 	if err != nil {
 		return err
 	}

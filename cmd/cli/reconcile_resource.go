@@ -10,7 +10,6 @@ import (
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/spf13/cobra"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var reconcileResourceCmd = &cobra.Command{
@@ -56,6 +55,7 @@ func reconcileResourceCmdRun(cmd *cobra.Command, args []string) error {
 
 	kind := parts[0]
 	name := parts[1]
+	now := timeNow()
 
 	gvk, err := preferredFluxGVK(kind, kubeconfigArgs)
 	if err != nil {
@@ -65,7 +65,6 @@ func reconcileResourceCmdRun(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
 	defer cancel()
 
-	now := metav1.Now().String()
 	annotations := map[string]string{
 		meta.ReconcileRequestAnnotation: now,
 	}
@@ -74,12 +73,7 @@ func reconcileResourceCmdRun(cmd *cobra.Command, args []string) error {
 		annotations[meta.ForceRequestAnnotation] = now
 	}
 
-	err = annotateResourceWithMap(ctx,
-		*gvk,
-		name,
-		*kubeconfigArgs.Namespace,
-		annotations,
-	)
+	err = annotateResourceWithMap(ctx, *gvk, name, *kubeconfigArgs.Namespace, annotations)
 	if err != nil {
 		return err
 	}
@@ -87,12 +81,7 @@ func reconcileResourceCmdRun(cmd *cobra.Command, args []string) error {
 	rootCmd.Println(`►`, "Reconciliation triggered")
 	if reconcileeResourceArgs.wait {
 		rootCmd.Println(`◎`, "Waiting for reconciliation...")
-		msg, err := waitForResourceReconciliation(ctx,
-			*gvk,
-			name,
-			*kubeconfigArgs.Namespace,
-			now,
-			rootArgs.timeout)
+		msg, err := waitForResourceReconciliation(ctx, *gvk, name, *kubeconfigArgs.Namespace, now, rootArgs.timeout)
 		if err != nil {
 			return err
 		}

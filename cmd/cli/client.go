@@ -173,6 +173,69 @@ func isResourceReconciledFunc(kubeClient client.Client, obj *unstructured.Unstru
 	}
 }
 
+// toggleSuspension toggles the suspension of a Flux resource by setting or removing the `spec.suspend` field.
+// If the resource is a Flux Operator resource, it uses annotations instead.
+// When resuming a resource, it also sets the ReconcileAt annotation.
+func toggleSuspension(ctx context.Context, gvk schema.GroupVersionKind, name, namespace string, requestTime string, suspend bool) error {
+	resource := &unstructured.Unstructured{}
+	resource.SetGroupVersionKind(gvk)
+	resource.SetName(name)
+	resource.SetNamespace(namespace)
+
+	// Handle Flux Operator resources using annotations.
+	if gvk.GroupVersion() == fluxcdv1.GroupVersion {
+		var annotations map[string]string
+		if suspend {
+			annotations = map[string]string{
+				fluxcdv1.ReconcileAnnotation: fluxcdv1.DisabledValue,
+			}
+		} else {
+			annotations = map[string]string{
+				fluxcdv1.ReconcileAnnotation:    fluxcdv1.EnabledValue,
+				meta.ReconcileRequestAnnotation: requestTime,
+			}
+		}
+
+		return annotateResourceWithMap(ctx, gvk, name, namespace, annotations)
+	}
+
+	// Handle Flux resources by patching the spec.suspend field.
+	kubeClient, err := newKubeClient()
+	if err != nil {
+		return fmt.Errorf("unable to create kube client error: %w", err)
+	}
+
+	if err := kubeClient.Get(ctx, client.ObjectKeyFromObject(resource), resource); err != nil {
+		return fmt.Errorf("unable to read %s/%s/%s error: %w", gvk.Kind, namespace, name, err)
+	}
+
+	patch := client.MergeFrom(resource.DeepCopy())
+
+	if suspend {
+		err := unstructured.SetNestedField(resource.Object, suspend, "spec", "suspend")
+		if err != nil {
+			return fmt.Errorf("unable to set suspend field: %w", err)
+		}
+	} else {
+		unstructured.RemoveNestedField(resource.Object, "spec", "suspend")
+
+		annotations := resource.GetAnnotations()
+		if annotations == nil {
+			annotations = make(map[string]string)
+		}
+		maps.Copy(annotations, map[string]string{
+			meta.ReconcileRequestAnnotation: requestTime,
+		})
+		resource.SetAnnotations(annotations)
+	}
+
+	if err := kubeClient.Patch(ctx, resource, patch); err != nil {
+		return fmt.Errorf("unable to patch %s/%s/%s error: %w", gvk.Kind, namespace, name, err)
+	}
+
+	return nil
+}
+
 // preferredFluxGVK returns the preferred GroupVersionKind for a given Flux kind.
 func preferredFluxGVK(kind string, cf *cliopts.ConfigFlags) (*schema.GroupVersionKind, error) {
 	gk := schema.GroupKind{
@@ -207,4 +270,9 @@ func preferredFluxGVK(kind string, cf *cliopts.ConfigFlags) (*schema.GroupVersio
 	}
 
 	return &mapping.GroupVersionKind, nil
+}
+
+// timeNow returns the current time in RFC3339Nano format.
+func timeNow() string {
+	return metav1.Now().Format(time.RFC3339Nano)
 }

@@ -9,7 +9,6 @@ import (
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/spf13/cobra"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
@@ -58,7 +57,7 @@ func reconcileInputProviderCmdRun(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
 	defer cancel()
 
-	now := metav1.Now().String()
+	now := timeNow()
 	annotations := map[string]string{
 		meta.ReconcileRequestAnnotation: now,
 	}
@@ -67,12 +66,7 @@ func reconcileInputProviderCmdRun(cmd *cobra.Command, args []string) error {
 		annotations[meta.ForceRequestAnnotation] = now
 	}
 
-	err := annotateResourceWithMap(ctx,
-		gvk,
-		name,
-		*kubeconfigArgs.Namespace,
-		annotations,
-	)
+	err := annotateResourceWithMap(ctx, gvk, name, *kubeconfigArgs.Namespace, annotations)
 	if err != nil {
 		return err
 	}
@@ -80,12 +74,7 @@ func reconcileInputProviderCmdRun(cmd *cobra.Command, args []string) error {
 	rootCmd.Println(`►`, "Reconciliation triggered")
 	if reconcileInputProviderArgs.wait {
 		rootCmd.Println(`◎`, "Waiting for reconciliation...")
-		msg, err := waitForResourceReconciliation(ctx,
-			gvk,
-			name,
-			*kubeconfigArgs.Namespace,
-			now,
-			rootArgs.timeout)
+		msg, err := waitForResourceReconciliation(ctx, gvk, name, *kubeconfigArgs.Namespace, now, rootArgs.timeout)
 		if err != nil {
 			return err
 		}
