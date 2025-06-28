@@ -50,6 +50,9 @@ func NewGitHubProvider(ctx context.Context, opts Options) (*GitHubProvider, erro
 			}
 			ctxCA := context.WithValue(ctx, oauth2.HTTPClient, &http.Client{Transport: tr})
 			httpClient = oauth2.NewClient(ctxCA, ts)
+		} else {
+			// Create OAuth2 client without custom cert pool
+			httpClient = oauth2.NewClient(ctx, ts)
 		}
 		client, err = github.NewClient(httpClient).WithEnterpriseURLs(host, host)
 		if err != nil {
