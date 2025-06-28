@@ -110,6 +110,16 @@ Arguments:
 - `-n, --namespace`: Specifies the namespace to filter the resources.
 - `-A, --all-namespaces`: Retrieves resources from all namespaces.
 
+### Export Commands
+
+The `flux-operator export` commands are used to export the Flux Operator resources in YAML format.
+The exported resources can be used for backup, migration, or inspection purposes.
+
+The following commands are available:
+
+- `flux-operator export report`: Exports the FluxReport resource containing the distribution status and version information.
+- `flux-operator export resource <kind>/<name> -n <namespace>`: Exports a Flux resource from the specified namespace.
+
 ### Reconcile Commands
 
 The `flux-operator reconcile` commands are used to trigger the reconciliation of the Flux Operator resources.
