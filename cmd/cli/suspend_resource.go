@@ -19,7 +19,7 @@ var suspendResourceCmd = &cobra.Command{
 `,
 	Args:              cobra.ExactArgs(1),
 	RunE:              suspendResourceCmdRun,
-	ValidArgsFunction: resourceKindCompletionFunc(),
+	ValidArgsFunction: resourceKindNameCompletionFunc(true),
 }
 
 func init() {

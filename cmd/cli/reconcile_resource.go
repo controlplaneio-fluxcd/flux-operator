@@ -26,7 +26,7 @@ var reconcileResourceCmd = &cobra.Command{
 `,
 	Args:              cobra.ExactArgs(1),
 	RunE:              reconcileResourceCmdRun,
-	ValidArgsFunction: resourceKindCompletionFunc(),
+	ValidArgsFunction: resourceKindNameCompletionFunc(true),
 }
 
 type reconcileResourceFlags struct {
@@ -34,12 +34,12 @@ type reconcileResourceFlags struct {
 	wait  bool
 }
 
-var reconcileeResourceArgs reconcileResourceFlags
+var reconcileResourceArgs reconcileResourceFlags
 
 func init() {
-	reconcileResourceCmd.Flags().BoolVar(&reconcileeResourceArgs.force, "force", false,
+	reconcileResourceCmd.Flags().BoolVar(&reconcileResourceArgs.force, "force", false,
 		"Force the reconciliation of the resource, applies only to Flux HelmReleases.")
-	reconcileResourceCmd.Flags().BoolVar(&reconcileeResourceArgs.wait, "wait", true, "Wait for the resource to become ready.")
+	reconcileResourceCmd.Flags().BoolVar(&reconcileResourceArgs.wait, "wait", true, "Wait for the resource to become ready.")
 	reconcileCmd.AddCommand(reconcileResourceCmd)
 }
 
@@ -69,7 +69,7 @@ func reconcileResourceCmdRun(cmd *cobra.Command, args []string) error {
 		meta.ReconcileRequestAnnotation: now,
 	}
 
-	if reconcileeResourceArgs.force {
+	if reconcileResourceArgs.force {
 		annotations[meta.ForceRequestAnnotation] = now
 	}
 
@@ -79,7 +79,7 @@ func reconcileResourceCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	rootCmd.Println(`►`, "Reconciliation triggered")
-	if reconcileeResourceArgs.wait {
+	if reconcileResourceArgs.wait {
 		rootCmd.Println(`◎`, "Waiting for reconciliation...")
 		msg, err := waitForResourceReconciliation(ctx, *gvk, name, *kubeconfigArgs.Namespace, now, rootArgs.timeout)
 		if err != nil {

@@ -186,9 +186,7 @@ var _ = Describe("FluxInstance", Ordered, func() {
 		It("should run successfully", func() {
 			By("generates FluxReport")
 			verifyFluxReport := func() error {
-				cmd := exec.Command("kubectl", "get", "FluxReport/flux",
-					"-n", namespace, "-o=yaml",
-				)
+				cmd := exec.Command(cli, "export", "report")
 				output, err := Run(cmd, "/test/e2e")
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
 				ExpectWithOffset(2, output).To(ContainSubstring("nodes: 1"))
