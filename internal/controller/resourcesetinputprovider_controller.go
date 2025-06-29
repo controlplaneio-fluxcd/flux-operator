@@ -26,7 +26,6 @@ import (
 	"github.com/fluxcd/pkg/git/github"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
-	"github.com/fluxcd/pkg/version"
 	"github.com/google/go-containerregistry/pkg/authn/k8schain"
 	"github.com/google/go-containerregistry/pkg/crane"
 	"github.com/opencontainers/go-digest"
@@ -43,6 +42,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/filtering"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/gitprovider"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/inputs"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/notifier"
@@ -350,44 +350,62 @@ func (r *ResourceSetInputProviderReconciler) newGitProvider(ctx context.Context,
 	}
 }
 
-// makeGitOptions returns the gitprovider.Options based on the object spec
-// filters and URL, using the default limit.
-func (r *ResourceSetInputProviderReconciler) makeGitOptions(obj *fluxcdv1.ResourceSetInputProvider) (gitprovider.Options, error) {
-	opts := gitprovider.Options{
-		URL: obj.Spec.URL,
-		Filters: gitprovider.Filters{
-			Limit: obj.GetFilterLimit(),
-		},
+// makeFilters returns the *filtering.Filters based on the
+// object spec filters, using the default limit.
+func (r *ResourceSetInputProviderReconciler) makeFilters(
+	obj *fluxcdv1.ResourceSetInputProvider) (*filtering.Filters, error) {
+
+	limit := obj.GetFilterLimit()
+
+	if obj.Spec.Filter == nil {
+		return &filtering.Filters{Limit: limit}, nil
 	}
 
-	if obj.Spec.Filter != nil {
-		if len(obj.Spec.Filter.Labels) > 0 {
-			opts.Filters.Labels = obj.Spec.Filter.Labels
-		}
-		if obj.Spec.Filter.IncludeBranch != "" {
-			inRx, err := regexp.Compile(obj.Spec.Filter.IncludeBranch)
-			if err != nil {
-				return gitprovider.Options{}, fmt.Errorf("invalid includeBranch regex: %w", err)
-			}
-			opts.Filters.IncludeBranchRe = inRx
-		}
-		if obj.Spec.Filter.ExcludeBranch != "" {
-			exRx, err := regexp.Compile(obj.Spec.Filter.ExcludeBranch)
-			if err != nil {
-				return gitprovider.Options{}, fmt.Errorf("invalid excludeBranch regex: %w", err)
-			}
-			opts.Filters.ExcludeBranchRe = exRx
-		}
-		if obj.Spec.Filter.Semver != "" {
-			constraints, err := semver.NewConstraint(obj.Spec.Filter.Semver)
-			if err != nil {
-				return gitprovider.Options{}, fmt.Errorf("invalid semver expression: %w", err)
-			}
-			opts.Filters.SemverConstraints = constraints
-		}
+	filters := &filtering.Filters{
+		Limit:  limit,
+		Labels: obj.Spec.Filter.Labels,
 	}
 
-	return opts, nil
+	// Regular expressions.
+	if obj.Spec.Filter.IncludeBranch != "" {
+		inRx, err := regexp.Compile(obj.Spec.Filter.IncludeBranch)
+		if err != nil {
+			return nil, fmt.Errorf("invalid includeBranch regex: %w", err)
+		}
+		filters.Include = inRx
+	}
+	if obj.Spec.Filter.IncludeTag != "" {
+		inRx, err := regexp.Compile(obj.Spec.Filter.IncludeTag)
+		if err != nil {
+			return nil, fmt.Errorf("invalid includeTag regex: %w", err)
+		}
+		filters.Include = inRx
+	}
+	if obj.Spec.Filter.ExcludeBranch != "" {
+		exRx, err := regexp.Compile(obj.Spec.Filter.ExcludeBranch)
+		if err != nil {
+			return nil, fmt.Errorf("invalid excludeBranch regex: %w", err)
+		}
+		filters.Exclude = exRx
+	}
+	if obj.Spec.Filter.ExcludeTag != "" {
+		exRx, err := regexp.Compile(obj.Spec.Filter.ExcludeTag)
+		if err != nil {
+			return nil, fmt.Errorf("invalid excludeTag regex: %w", err)
+		}
+		filters.Exclude = exRx
+	}
+
+	// SemVer.
+	if obj.Spec.Filter.Semver != "" {
+		constraints, err := semver.NewConstraint(obj.Spec.Filter.Semver)
+		if err != nil {
+			return nil, fmt.Errorf("invalid semver expression: %w", err)
+		}
+		filters.SemVer = constraints
+	}
+
+	return filters, nil
 }
 
 // restoreSkippedGitProviderResults skip git provider results when matches skip condition.
@@ -450,9 +468,14 @@ func (r *ResourceSetInputProviderReconciler) callGitProvider(ctx context.Context
 
 	var inputSet []fluxcdv1.ResourceSetInput
 
-	opts, err := r.makeGitOptions(obj)
+	filters, err := r.makeFilters(obj)
 	if err != nil {
 		return nil, err
+	}
+
+	opts := gitprovider.Options{
+		URL:     obj.Spec.URL,
+		Filters: *filters,
 	}
 
 	var results []gitprovider.Result
@@ -626,17 +649,11 @@ func (r *ResourceSetInputProviderReconciler) callOCIProvider(ctx context.Context
 	}
 
 	// Filter tags.
-	if f := obj.Spec.Filter; f != nil {
-		if f.Semver != "" {
-			constraint, err := semver.NewConstraint(f.Semver)
-			if err != nil {
-				return nil, fmt.Errorf("invalid semver expression '%s': %w", f.Semver, err)
-			}
-			tags = version.Sort(constraint, tags)
-		}
+	filters, err := r.makeFilters(obj)
+	if err != nil {
+		return nil, err
 	}
-	n := min(obj.GetFilterLimit(), len(tags))
-	tags = slices.Clone(tags[:n]) // free memory in case the received tags are too many
+	tags = filters.Tags(tags)
 
 	// Export inputs.
 	res := make([]fluxcdv1.ResourceSetInput, 0, len(tags))

@@ -11,6 +11,8 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	. "github.com/onsi/gomega"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/filtering"
 )
 
 func TestGitHubProvider_ListTags(t *testing.T) {
@@ -32,8 +34,8 @@ func TestGitHubProvider_ListTags(t *testing.T) {
 			opts: Options{
 				Token: os.Getenv("GITHUB_TOKEN"),
 				URL:   "https://github.com/stefanprodan/podinfo",
-				Filters: Filters{
-					SemverConstraints: newConstraint("> 6.0.1 < 6.1.0"),
+				Filters: filtering.Filters{
+					SemVer: newConstraint("> 6.0.1 < 6.1.0"),
 				},
 			},
 			want: []Result{
@@ -59,9 +61,9 @@ func TestGitHubProvider_ListTags(t *testing.T) {
 			opts: Options{
 				Token: os.Getenv("GITHUB_TOKEN"),
 				URL:   "https://github.com/stefanprodan/podinfo",
-				Filters: Filters{
-					SemverConstraints: newConstraint("6.0.x"),
-					Limit:             1,
+				Filters: filtering.Filters{
+					SemVer: newConstraint("6.0.x"),
+					Limit:  1,
 				},
 			},
 			want: []Result{
@@ -77,8 +79,8 @@ func TestGitHubProvider_ListTags(t *testing.T) {
 			opts: Options{
 				Token: os.Getenv("GITHUB_TOKEN"),
 				URL:   "https://github.com/stefanprodan/podinfo",
-				Filters: Filters{
-					SemverConstraints: newConstraint("0.0.x"),
+				Filters: filtering.Filters{
+					SemVer: newConstraint("0.0.x"),
 				},
 			},
 			want: []Result{},
@@ -117,9 +119,9 @@ func TestGitHubProvider_ListBranches(t *testing.T) {
 			opts: Options{
 				Token: os.Getenv("GITHUB_TOKEN"),
 				URL:   "https://github.com/fluxcd-testing/pr-testing",
-				Filters: Filters{
-					IncludeBranchRe: regexp.MustCompile(`^stefanprodan-patch-.*`),
-					ExcludeBranchRe: regexp.MustCompile(`^stefanprodan-patch-4`),
+				Filters: filtering.Filters{
+					Include: regexp.MustCompile(`^stefanprodan-patch-.*`),
+					Exclude: regexp.MustCompile(`^stefanprodan-patch-4`),
 				},
 			},
 			want: []Result{
@@ -145,9 +147,9 @@ func TestGitHubProvider_ListBranches(t *testing.T) {
 			opts: Options{
 				Token: os.Getenv("GITHUB_TOKEN"),
 				URL:   "https://github.com/fluxcd-testing/pr-testing",
-				Filters: Filters{
-					IncludeBranchRe: regexp.MustCompile(`^stefanprodan-patch-.*`),
-					Limit:           1,
+				Filters: filtering.Filters{
+					Include: regexp.MustCompile(`^stefanprodan-patch-.*`),
+					Limit:   1,
 				},
 			},
 			want: []Result{
@@ -241,7 +243,7 @@ func TestGitHubProvider_ListRequests(t *testing.T) {
 			opts: Options{
 				Token: os.Getenv("GITHUB_TOKEN"),
 				URL:   "https://github.com/fluxcd-testing/pr-testing",
-				Filters: Filters{
+				Filters: filtering.Filters{
 					Limit:  2,
 					Labels: []string{"enhancement"},
 				},
@@ -270,8 +272,8 @@ func TestGitHubProvider_ListRequests(t *testing.T) {
 			opts: Options{
 				Token: os.Getenv("GITHUB_TOKEN"),
 				URL:   "https://github.com/fluxcd-testing/pr-testing",
-				Filters: Filters{
-					IncludeBranchRe: regexp.MustCompile(`^feat/.*`),
+				Filters: filtering.Filters{
+					Include: regexp.MustCompile(`^feat/.*`),
 				},
 			},
 			want: []Result{

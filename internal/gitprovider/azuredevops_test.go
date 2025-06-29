@@ -11,6 +11,8 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	. "github.com/onsi/gomega"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/filtering"
 )
 
 func TestAzureDevOpsProvider_ListTags(t *testing.T) {
@@ -32,8 +34,8 @@ func TestAzureDevOpsProvider_ListTags(t *testing.T) {
 			opts: Options{
 				Token: os.Getenv("AZURE_TOKEN"),
 				URL:   "https://dev.azure.com/stefanprodan/fluxcd-testing/_git/podinfo",
-				Filters: Filters{
-					SemverConstraints: newConstraint("> 6.0.1 < 6.1.0"),
+				Filters: filtering.Filters{
+					SemVer: newConstraint("> 6.0.1 < 6.1.0"),
 				},
 			},
 			want: []Result{
@@ -59,9 +61,9 @@ func TestAzureDevOpsProvider_ListTags(t *testing.T) {
 			opts: Options{
 				Token: os.Getenv("AZURE_TOKEN"),
 				URL:   "https://dev.azure.com/stefanprodan/fluxcd-testing/_git/podinfo",
-				Filters: Filters{
-					SemverConstraints: newConstraint("6.0.x"),
-					Limit:             1,
+				Filters: filtering.Filters{
+					SemVer: newConstraint("6.0.x"),
+					Limit:  1,
 				},
 			},
 			want: []Result{
@@ -77,8 +79,8 @@ func TestAzureDevOpsProvider_ListTags(t *testing.T) {
 			opts: Options{
 				Token: os.Getenv("AZURE_TOKEN"),
 				URL:   "https://dev.azure.com/stefanprodan/fluxcd-testing/_git/podinfo",
-				Filters: Filters{
-					SemverConstraints: newConstraint("0.0.x"),
+				Filters: filtering.Filters{
+					SemVer: newConstraint("0.0.x"),
 				},
 			},
 			want: []Result{},
@@ -117,9 +119,9 @@ func TestAzureDevOpsProvider_ListBranches(t *testing.T) {
 			opts: Options{
 				Token: os.Getenv("AZURE_TOKEN"),
 				URL:   "https://dev.azure.com/stefanprodan/fluxcd-testing/_git/podinfo",
-				Filters: Filters{
-					IncludeBranchRe: regexp.MustCompile(`test*`),
-					ExcludeBranchRe: regexp.MustCompile(`^feat/.*`),
+				Filters: filtering.Filters{
+					Include: regexp.MustCompile(`test*`),
+					Exclude: regexp.MustCompile(`^feat/.*`),
 				},
 			},
 			want: []Result{
@@ -150,9 +152,9 @@ func TestAzureDevOpsProvider_ListBranches(t *testing.T) {
 			opts: Options{
 				Token: os.Getenv("AZURE_TOKEN"),
 				URL:   "https://dev.azure.com/stefanprodan/fluxcd-testing/_git/podinfo",
-				Filters: Filters{
-					IncludeBranchRe: regexp.MustCompile(`ma*`),
-					Limit:           1,
+				Filters: filtering.Filters{
+					Include: regexp.MustCompile(`ma*`),
+					Limit:   1,
 				},
 			},
 			want: []Result{
@@ -251,7 +253,7 @@ func TestAzureDevOpsProvider_ListRequests(t *testing.T) {
 			opts: Options{
 				Token: os.Getenv("AZURE_TOKEN"),
 				URL:   "https://dev.azure.com/stefanprodan/fluxcd-testing/_git/podinfo",
-				Filters: Filters{
+				Filters: filtering.Filters{
 					Limit:  2,
 					Labels: []string{"fix"},
 				},
@@ -282,8 +284,8 @@ func TestAzureDevOpsProvider_ListRequests(t *testing.T) {
 			opts: Options{
 				Token: os.Getenv("AZURE_TOKEN"),
 				URL:   "https://dev.azure.com/stefanprodan/fluxcd-testing/_git/podinfo",
-				Filters: Filters{
-					IncludeBranchRe: regexp.MustCompile(`^feat/.*`),
+				Filters: filtering.Filters{
+					Include: regexp.MustCompile(`^feat/.*`),
 				},
 			},
 			want: []Result{

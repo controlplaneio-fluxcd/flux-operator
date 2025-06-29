@@ -426,6 +426,80 @@ func TestResourceSetInputProviderReconciler_ProviderAuthAndSecretsCompatiblity(t
 	}
 }
 
+func TestResourceSetInputProviderReconciler_makeFilters(t *testing.T) {
+	r := getResourceSetInputProviderReconciler(t)
+
+	t.Run("no filters", func(t *testing.T) {
+		g := NewWithT(t)
+
+		obj := &fluxcdv1.ResourceSetInputProvider{
+			Spec: fluxcdv1.ResourceSetInputProviderSpec{
+				Type: fluxcdv1.InputProviderStatic,
+			},
+		}
+
+		filters, err := r.makeFilters(obj)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(filters.Limit).To(Equal(100))
+	})
+
+	t.Run("with branch filters", func(t *testing.T) {
+		for _, tt := range []struct {
+			name    string
+			filter  *fluxcdv1.ResourceSetInputFilter
+			include string
+			exclude string
+		}{
+			{
+				name: "branch",
+				filter: &fluxcdv1.ResourceSetInputFilter{
+					Limit:         50,
+					Labels:        []string{"env=production"},
+					IncludeBranch: "^main$",
+					ExcludeBranch: "^feature/.*$",
+					Semver:        ">=1.0.0 <2.0.0",
+				},
+				include: "^main$",
+				exclude: "^feature/.*$",
+			},
+			{
+				name: "tag",
+				filter: &fluxcdv1.ResourceSetInputFilter{
+					Limit:      50,
+					Labels:     []string{"env=production"},
+					IncludeTag: "^v[0-9]+\\.[0-9]+\\.[0-9]+$",
+					ExcludeTag: "^v[0-9]+\\.[0-9]+\\.[0-9]+-beta$",
+					Semver:     ">=1.0.0 <2.0.0",
+				},
+				include: "^v[0-9]+\\.[0-9]+\\.[0-9]+$",
+				exclude: "^v[0-9]+\\.[0-9]+\\.[0-9]+-beta$",
+			},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				g := NewWithT(t)
+
+				obj := &fluxcdv1.ResourceSetInputProvider{
+					Spec: fluxcdv1.ResourceSetInputProviderSpec{
+						Type:   fluxcdv1.InputProviderGitHubBranch,
+						Filter: tt.filter,
+					},
+				}
+
+				filters, err := r.makeFilters(obj)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(filters.Limit).To(Equal(50))
+				g.Expect(filters.Labels).To(Equal([]string{"env=production"}))
+				g.Expect(filters.Include).NotTo(BeNil())
+				g.Expect(filters.Include.String()).To(Equal(tt.include))
+				g.Expect(filters.Exclude).NotTo(BeNil())
+				g.Expect(filters.Exclude.String()).To(Equal(tt.exclude))
+				g.Expect(filters.SemVer).NotTo(BeNil())
+				g.Expect(filters.SemVer.String()).To(Equal(">=1.0.0 <2.0.0"))
+			})
+		}
+	})
+}
+
 func TestRequeueAfterResourceSetInputProvider(t *testing.T) {
 	for _, tt := range []struct {
 		name                 string

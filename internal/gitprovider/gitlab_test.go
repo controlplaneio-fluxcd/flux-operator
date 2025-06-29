@@ -11,6 +11,8 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	. "github.com/onsi/gomega"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/filtering"
 )
 
 func TestGitLabProvider_ListTags(t *testing.T) {
@@ -32,8 +34,8 @@ func TestGitLabProvider_ListTags(t *testing.T) {
 			opts: Options{
 				Token: os.Getenv("GITLAB_TOKEN"),
 				URL:   "https://gitlab.com/stefanprodan/podinfo",
-				Filters: Filters{
-					SemverConstraints: newConstraint("5.0.x"),
+				Filters: filtering.Filters{
+					SemVer: newConstraint("5.0.x"),
 				},
 			},
 			want: []Result{
@@ -64,9 +66,9 @@ func TestGitLabProvider_ListTags(t *testing.T) {
 			opts: Options{
 				Token: os.Getenv("GITLAB_TOKEN"),
 				URL:   "https://gitlab.com/stefanprodan/podinfo",
-				Filters: Filters{
-					SemverConstraints: newConstraint("6.0.x"),
-					Limit:             1,
+				Filters: filtering.Filters{
+					SemVer: newConstraint("6.0.x"),
+					Limit:  1,
 				},
 			},
 			want: []Result{
@@ -82,15 +84,15 @@ func TestGitLabProvider_ListTags(t *testing.T) {
 			opts: Options{
 				Token: os.Getenv("GITLAB_TOKEN"),
 				URL:   "https://gitlab.com/stefanprodan/podinfo",
-				Filters: Filters{
+				Filters: filtering.Filters{
 					Limit: 1,
 				},
 			},
 			want: []Result{
 				{
-					ID:  "49283322",
-					SHA: "450796ddb2ab6724ee1cc32a4be56da032d1cca0",
-					Tag: "6.1.6",
+					ID:  "95093100",
+					SHA: "6c8a85a5ab953874c7c83d50317359a0e5a352a9",
+					Tag: "v1.8.0",
 				},
 			},
 		},
@@ -128,9 +130,9 @@ func TestGitLabProvider_ListBranches(t *testing.T) {
 			opts: Options{
 				Token: os.Getenv("GITLAB_TOKEN"),
 				URL:   "https://gitlab.com/stefanprodan/podinfo",
-				Filters: Filters{
-					IncludeBranchRe: regexp.MustCompile(`^patch-.*`),
-					ExcludeBranchRe: regexp.MustCompile(`^patch-4`),
+				Filters: filtering.Filters{
+					Include: regexp.MustCompile(`^patch-.*`),
+					Exclude: regexp.MustCompile(`^patch-4`),
 				},
 			},
 			want: []Result{
@@ -162,9 +164,9 @@ func TestGitLabProvider_ListBranches(t *testing.T) {
 			opts: Options{
 				Token: os.Getenv("GITLAB_TOKEN"),
 				URL:   "https://gitlab.com/stefanprodan/podinfo",
-				Filters: Filters{
-					IncludeBranchRe: regexp.MustCompile(`^patch-.*`),
-					Limit:           1,
+				Filters: filtering.Filters{
+					Include: regexp.MustCompile(`^patch-.*`),
+					Limit:   1,
 				},
 			},
 			want: []Result{
@@ -260,7 +262,7 @@ func TestGitLabProvider_ListRequests(t *testing.T) {
 			opts: Options{
 				Token: os.Getenv("GITLAB_TOKEN"),
 				URL:   "https://gitlab.com/stefanprodan/podinfo",
-				Filters: Filters{
+				Filters: filtering.Filters{
 					Limit:  2,
 					Labels: []string{"enhancement"},
 				},
@@ -289,8 +291,8 @@ func TestGitLabProvider_ListRequests(t *testing.T) {
 			opts: Options{
 				Token: os.Getenv("GITLAB_TOKEN"),
 				URL:   "https://gitlab.com/stefanprodan/podinfo",
-				Filters: Filters{
-					IncludeBranchRe: regexp.MustCompile(`^feat/.*`),
+				Filters: filtering.Filters{
+					Include: regexp.MustCompile(`^feat/.*`),
 				},
 			},
 			want: []Result{

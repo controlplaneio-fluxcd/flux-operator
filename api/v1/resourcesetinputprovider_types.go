@@ -34,6 +34,8 @@ const (
 
 	ReasonInvalidDefaultValues  = "InvalidDefaultValues"
 	ReasonInvalidExportedInputs = "InvalidExportedInputs"
+
+	DefaultResourceSetInputProviderFilterLimit = 100
 )
 
 // ResourceSetInputProviderSpec defines the desired state of ResourceSetInputProvider
@@ -119,6 +121,16 @@ type ResourceSetInputFilter struct {
 	// +optional
 	ExcludeBranch string `json:"excludeBranch,omitempty"`
 
+	// IncludeTag specifies the regular expression to filter the tags
+	// that the input provider should include.
+	// +optional
+	IncludeTag string `json:"includeTag,omitempty"`
+
+	// ExcludeTag specifies the regular expression to filter the tags
+	// that the input provider should exclude.
+	// +optional
+	ExcludeTag string `json:"excludeTag,omitempty"`
+
 	// Labels specifies the list of labels to filter the input provider response.
 	// +optional
 	Labels []string `json:"labels,omitempty"`
@@ -129,7 +141,10 @@ type ResourceSetInputFilter struct {
 	// +optional
 	Limit int `json:"limit,omitempty"`
 
-	// Semver specifies the semantic version range to filter and order the tags.
+	// Semver specifies a semantic version range to filter and sort the tags.
+	// If this field is not specified, the tags will be sorted in reverse
+	// alphabetical order.
+	// Supported only for tags at the moment.
 	// +optional
 	Semver string `json:"semver,omitempty"`
 }
@@ -255,7 +270,7 @@ func (in *ResourceSetInputProvider) GetFilterLimit() int {
 	if f := in.Spec.Filter; f != nil && f.Limit > 0 {
 		return f.Limit
 	}
-	return 100 // default limit
+	return DefaultResourceSetInputProviderFilterLimit
 }
 
 // GetLastHandledReconcileRequest returns the last handled reconcile request.
