@@ -64,13 +64,13 @@ func (p *GitLabProvider) ListTags(ctx context.Context, opts Options) ([]Result, 
 		},
 	}
 
-	tags := make([]*gitlab.Tag, 0)
+	gitlabTags := make([]*gitlab.Tag, 0)
 	for {
 		page, resp, err := p.Client.Tags.ListTags(p.Project, glOpts)
 		if err != nil {
 			return nil, fmt.Errorf("could not list tags: %v", err)
 		}
-		tags = append(tags, page...)
+		gitlabTags = append(gitlabTags, page...)
 
 		if resp.NextPage == 0 {
 			break
@@ -78,16 +78,15 @@ func (p *GitLabProvider) ListTags(ctx context.Context, opts Options) ([]Result, 
 		glOpts.Page = resp.NextPage
 	}
 
-	tagMap := make(map[string]*gitlab.Tag, len(tags))
-	semverList := make([]string, 0, len(tags))
-	for _, tag := range tags {
-		semverList = append(semverList, tag.Name)
+	tagMap := make(map[string]*gitlab.Tag, len(gitlabTags))
+	tags := make([]string, 0, len(gitlabTags))
+	for _, tag := range gitlabTags {
+		tags = append(tags, tag.Name)
 		tagMap[tag.Name] = tag
 	}
 
 	results := make([]Result, 0)
-	semverResults := sortSemver(opts, semverList)
-	for _, version := range semverResults {
+	for _, version := range opts.Filters.Tags(tags) {
 		tag, ok := tagMap[version]
 		if !ok {
 			return nil, fmt.Errorf("could not find tag %s", version)
@@ -112,8 +111,8 @@ func (p *GitLabProvider) ListBranches(ctx context.Context, opts Options) ([]Resu
 			PerPage: 100,
 		},
 	}
-	if opts.Filters.IncludeBranchRe != nil {
-		glOpts.Regex = gitlab.Ptr(opts.Filters.IncludeBranchRe.String())
+	if opts.Filters.Include != nil {
+		glOpts.Regex = gitlab.Ptr(opts.Filters.Include.String())
 	}
 
 	results := make([]Result, 0)
@@ -124,7 +123,7 @@ func (p *GitLabProvider) ListBranches(ctx context.Context, opts Options) ([]Resu
 		}
 
 		for _, branch := range branches {
-			if !matchBranch(opts, branch.Name) {
+			if !opts.Filters.MatchString(branch.Name) {
 				continue
 			}
 
@@ -171,7 +170,7 @@ func (p *GitLabProvider) ListRequests(ctx context.Context, opts Options) ([]Resu
 		}
 
 		for _, mr := range msrs {
-			if !matchBranch(opts, mr.SourceBranch) {
+			if !opts.Filters.MatchString(mr.SourceBranch) {
 				continue
 			}
 

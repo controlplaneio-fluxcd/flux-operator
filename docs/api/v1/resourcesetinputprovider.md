@@ -164,6 +164,8 @@ The following filters are supported:
 - `labels`: filter GitHub Pull Requests or GitLab Merge Requests by labels.
 - `includeBranch`: regular expression to include branches by name.
 - `excludeBranch`: regular expression to exclude branches by name.
+- `includeTag`: regular expression to include tags by name.
+- `excludeTag`: regular expression to exclude tags by name.
 - `semver`: sematic version range to filter and sort tags.
 
 Example of a filter configuration for GitLab Merge Requests:
@@ -176,6 +178,15 @@ spec:
       - "deploy::flux-preview"
     includeBranch: "^feat/.*"
     excludeBranch: "^feat/not-this-one$"
+```
+
+Example of a filter configuration for filtering tags by inclusion and exclusion:
+
+```yaml
+spec:
+  filter:
+    includeTag: "^v[0-9]+\\.[0-9]+\\.[0-9]+$" # include tags like v1.2.3
+    excludeTag: "^v0" # exclude tags like v0.1.0
 ```
 
 Example of a filter configuration for fetching only the latest tag according to semver:

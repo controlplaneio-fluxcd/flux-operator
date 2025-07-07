@@ -88,9 +88,19 @@ spec:
                       ExcludeBranch specifies the regular expression to filter the branches
                       that the input provider should exclude.
                     type: string
+                  excludeTag:
+                    description: |-
+                      ExcludeTag specifies the regular expression to filter the tags
+                      that the input provider should exclude.
+                    type: string
                   includeBranch:
                     description: |-
                       IncludeBranch specifies the regular expression to filter the branches
+                      that the input provider should include.
+                    type: string
+                  includeTag:
+                    description: |-
+                      IncludeTag specifies the regular expression to filter the tags
                       that the input provider should include.
                     type: string
                   labels:
@@ -106,8 +116,11 @@ spec:
                       When not set, the default limit is 100.
                     type: integer
                   semver:
-                    description: Semver specifies the semantic version range to filter
-                      and order the tags.
+                    description: |-
+                      Semver specifies a semantic version range to filter and sort the tags.
+                      If this field is not specified, the tags will be sorted in reverse
+                      alphabetical order.
+                      Supported only for tags at the moment.
                     type: string
                 type: object
               schedule:
