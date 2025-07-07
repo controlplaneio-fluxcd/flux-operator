@@ -26,6 +26,7 @@ import (
 	"github.com/fluxcd/pkg/git/github"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
+	"github.com/fluxcd/pkg/runtime/secrets"
 	"github.com/google/go-containerregistry/pkg/authn/k8schain"
 	"github.com/google/go-containerregistry/pkg/crane"
 	"github.com/opencontainers/go-digest"
@@ -251,18 +252,27 @@ func (r *ResourceSetInputProviderReconciler) callExternalProvider(
 	var authSecret *corev1.Secret
 	var authData map[string][]byte
 	if obj.Spec.SecretRef != nil {
-		var err error
-		authSecret, err = r.getSecret(ctx, obj.Spec.SecretRef.Name, obj.GetNamespace())
-		if err != nil {
-			return nil, fmt.Errorf("failed to get credentials: %w", err)
+		key := types.NamespacedName{
+			Name:      obj.GetNamespace(),
+			Namespace: obj.Spec.SecretRef.Name,
 		}
+		var secret corev1.Secret
+		if err := r.Client.Get(ctx, key, &secret); err != nil {
+			return nil, fmt.Errorf("failed to read secret '%s': %w", key, err)
+		}
+		authSecret = &secret
 		authData = authSecret.Data
 	}
 
 	// Get the TLS config.
-	tlsConfig, err := r.getTLSConfig(ctx, obj)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get certificates: %w", err)
+	var tlsConfig *tls.Config
+	if obj.Spec.CertSecretRef != nil {
+		var err error
+		tlsConfig, err = secrets.TLSConfigFromSecret(ctx, r.Client,
+			obj.Spec.CertSecretRef.Name, obj.GetNamespace())
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Create the provider context with timeout.
@@ -287,6 +297,7 @@ func (r *ResourceSetInputProviderReconciler) callExternalProvider(
 		}
 	// Handle OCI providers.
 	case strings.HasSuffix(obj.Spec.Type, "ArtifactTag"):
+		var err error
 		exportedInputs, err = r.callOCIProvider(providerCtx, obj, tlsConfig, authSecret, defaults)
 		if err != nil {
 			return nil, fmt.Errorf("failed to call OCI provider: %w", err)
@@ -733,27 +744,12 @@ func (r *ResourceSetInputProviderReconciler) buildOCIOptions(ctx context.Context
 
 		// Add pull secrets from the service account.
 		if obj.Spec.ServiceAccountName != "" {
-			saKey := client.ObjectKey{
-				Name:      obj.Spec.ServiceAccountName,
-				Namespace: obj.GetNamespace(),
+			s, err := secrets.PullSecretsFromServiceAccount(ctx, r.Client,
+				obj.Spec.ServiceAccountName, obj.GetNamespace())
+			if err != nil {
+				return nil, err
 			}
-			var sa corev1.ServiceAccount
-			if err := r.Client.Get(ctx, saKey, &sa); err != nil {
-				return nil, fmt.Errorf("failed to get service account '%s/%s': %w",
-					saKey.Namespace, saKey.Name, err)
-			}
-			for _, secretRef := range sa.ImagePullSecrets {
-				secretKey := client.ObjectKey{
-					Name:      secretRef.Name,
-					Namespace: saKey.Namespace,
-				}
-				var secret corev1.Secret
-				if err := r.Client.Get(ctx, secretKey, &secret); err != nil {
-					return nil, fmt.Errorf("failed to get image pull secret '%s/%s': %w",
-						secretKey.Namespace, secretKey.Name, err)
-				}
-				pullSecrets = append(pullSecrets, secret)
-			}
+			pullSecrets = append(pullSecrets, s...)
 		}
 
 		// Configure pull secrets.
@@ -774,78 +770,6 @@ func (r *ResourceSetInputProviderReconciler) buildOCIOptions(ctx context.Context
 	}
 
 	return opts, nil
-}
-
-// getTLSConfig reads spec.certSecretRef and returns the TLS configuration
-// including any provided CA or mTLS certificates.
-func (r *ResourceSetInputProviderReconciler) getTLSConfig(ctx context.Context,
-	obj *fluxcdv1.ResourceSetInputProvider) (*tls.Config, error) {
-
-	if obj.Spec.CertSecretRef == nil {
-		return nil, nil
-	}
-
-	certSecret, err := r.getSecret(ctx, obj.Spec.CertSecretRef.Name, obj.GetNamespace())
-	if err != nil {
-		return nil, err
-	}
-
-	// Get the CA certificate if it exists in the secret.
-	const caKey = "ca.crt"
-	var rootCAs *x509.CertPool
-	if caData, ok := certSecret.Data[caKey]; ok {
-		rootCAs = x509.NewCertPool()
-		ok = rootCAs.AppendCertsFromPEM(caData)
-		if !ok {
-			return nil, fmt.Errorf("invalid secret '%s/%s': '%s' PEM can't be parsed",
-				obj.GetNamespace(), obj.Spec.CertSecretRef.Name, caKey)
-		}
-	}
-
-	// Get the mTLS client certificate and key if they exist in the secret.
-	var certificates []tls.Certificate
-	cert, certOK := certSecret.Data[corev1.TLSCertKey]
-	key, keyOK := certSecret.Data[corev1.TLSPrivateKeyKey]
-	if certOK && !keyOK {
-		return nil, fmt.Errorf("invalid secret '%s/%s': key '%s' is missing",
-			obj.GetNamespace(), obj.Spec.CertSecretRef.Name, corev1.TLSPrivateKeyKey)
-	}
-	if keyOK && !certOK {
-		return nil, fmt.Errorf("invalid secret '%s/%s': key '%s' is missing",
-			obj.GetNamespace(), obj.Spec.CertSecretRef.Name, corev1.TLSCertKey)
-	}
-	if certOK && keyOK {
-		certificate, err := tls.X509KeyPair(cert, key)
-		if err != nil {
-			return nil, fmt.Errorf("invalid secret '%s/%s': failed to parse mTLS certificate and key: %w",
-				obj.GetNamespace(), obj.Spec.CertSecretRef.Name, err)
-		}
-		certificates = append(certificates, certificate)
-	}
-
-	// Check if we have at least one of the CA or mTLS certificates.
-	if rootCAs == nil && len(certificates) == 0 {
-		return nil, fmt.Errorf("invalid secret '%s/%s': at least one of '%s', or '%s' and '%s' keys must be set",
-			obj.GetNamespace(), obj.Spec.CertSecretRef.Name, caKey, corev1.TLSCertKey, corev1.TLSPrivateKeyKey)
-	}
-
-	return &tls.Config{
-		RootCAs:      rootCAs,
-		Certificates: certificates,
-	}, nil
-}
-
-// getSecret returns the secret by reading it from the API server.
-func (r *ResourceSetInputProviderReconciler) getSecret(ctx context.Context, name, namespace string) (*corev1.Secret, error) {
-	key := types.NamespacedName{
-		Namespace: namespace,
-		Name:      name,
-	}
-	var secret corev1.Secret
-	if err := r.Client.Get(ctx, key, &secret); err != nil {
-		return nil, fmt.Errorf("failed to read secret '%s/%s': %w", namespace, name, err)
-	}
-	return &secret, nil
 }
 
 // finalizeStatus updates the object status and conditions.
