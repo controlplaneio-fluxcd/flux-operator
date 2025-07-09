@@ -1,0 +1,25 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://openvex.dev/docs/public/vex-f843e58a33079b9f9344d4b4e72a3dcc0ee7ad51825e087b96692dccaf21f2d8",
+  "author": "flux-enterprise@control-plane.io",
+  "role": "Enterprise Flux Maintainers",
+  "timestamp": "2024-02-20T17:26:04.422544+03:00",
+  "last_updated": "2025-04-16T12:20:00.000000+01:00",
+  "version": 2,
+  "statements": [
+    {
+      "vulnerability": {
+        "name": "CVE-2025-29087"
+      },
+      "timestamp": "2025-04-16T12:20:00.000000+01:00",
+      "products": [
+        {
+          "@id": "pkg:apk/alpine/sqlite-libs@3.48.0-r0"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The vulnerable code is not executed by Flux"
+    }
+  ]
+}

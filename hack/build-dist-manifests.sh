@@ -36,9 +36,14 @@ tar xzf main.tar.gz -C "${DEST_DIR}"
 
 mkdir -p "${DEST_DIR}/flux-images"
 cp -r ${DEST_DIR}/distribution-main/images/* ${DEST_DIR}/flux-images/
+info "flux image manifests copied to disto/flux-images"
+
+mkdir -p "${DEST_DIR}/flux-vex"
+cp -r ${DEST_DIR}/distribution-main/vex/* ${DEST_DIR}/flux-vex/
+info "flux OpenVEX documents copied to disto/flux-vex"
+
 rm -rf ${DEST_DIR}/distribution-main
 rm -rf main.tar.gz
-info "flux image manifests copied to disto/flux-images"
 
 info "all manifests generated to disto/"
 tree -d ${DEST_DIR}
