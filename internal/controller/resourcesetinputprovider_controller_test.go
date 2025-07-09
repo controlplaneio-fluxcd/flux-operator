@@ -13,6 +13,7 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	apix "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -621,4 +622,63 @@ func getResourceSetInputProviderReconciler(t *testing.T) *ResourceSetInputProvid
 		StatusManager: controllerName,
 		EventRecorder: testEnv.GetEventRecorderFor(controllerName),
 	}
+}
+
+func TestResourceSetInputProviderReconciler_SuccessfullyFetchesSecret(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceSetInputProviderReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Create the secret.
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-secret",
+			Namespace: ns.Name,
+		},
+		Data: map[string][]byte{
+			"foo": []byte("bar"),
+		},
+	}
+	err = testEnv.Create(ctx, secret)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	objDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSetInputProvider
+metadata:
+  name: test-secret
+  namespace: "%[1]s"
+spec:
+  type: OCIArtifactTag
+  url: oci://ghcr.io/stefanprodan/podinfo
+  secretRef:
+    name: test-secret
+  filter:
+    limit: 1
+`, ns.Name)
+
+	// Create object.
+	obj := &fluxcdv1.ResourceSetInputProvider{}
+	err = yaml.Unmarshal([]byte(objDef), obj)
+	g.Expect(err).NotTo(HaveOccurred())
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Initialize the ResourceSetInputProvider.
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Reconcile.
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(r.Requeue).To(BeFalse())
 }
