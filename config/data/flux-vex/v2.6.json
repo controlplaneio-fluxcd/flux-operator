@@ -1,0 +1,53 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://openvex.dev/docs/public/vex-f843e58a33079b9f9344d4b4e72a3dcc0ee7ad51825e087b96692dccaf21f2d8",
+  "author": "flux-enterprise@control-plane.io",
+  "role": "Enterprise Flux Maintainers",
+  "timestamp": "2025-07-09T09:46:14Z",
+  "last_updated": "2025-07-09T09:46:14Z",
+  "version": 2,
+  "statements": [
+    {
+      "vulnerability": {
+        "name": "CVE-2025-53547"
+      },
+      "timestamp": "2025-07-09T09:46:14Z",
+      "products": [
+        {
+          "@id": "pkg:golang/helm.sh/helm/v3@3.17.3"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The affected code is not executed by Flux."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-53547"
+      },
+      "timestamp": "2025-07-09T09:46:14Z",
+      "products": [
+        {
+          "@id": "pkg:oci/source-controller"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The source-controller implements a custom Helm chart downloader that does not use the vulnerable code path in Helm SDK."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-53547"
+      },
+      "timestamp": "2025-07-09T09:46:14Z",
+      "products": [
+        {
+          "@id": "pkg:oci/helm-controller"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The helm-controller does not downloads Helm charts, and the vulnerable code path in Helm SDK is not used."
+    }
+  ]
+}

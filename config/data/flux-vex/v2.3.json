@@ -1,0 +1,92 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://openvex.dev/docs/public/vex-f843e58a33079b9f9344d4b4e72a3dcc0ee7ad51825e087b96692dccaf21f2d8",
+  "author": "flux-enterprise@control-plane.io",
+  "role": "Enterprise Flux Maintainers",
+  "timestamp": "2024-05-23T17:26:04.422544+03:00",
+  "last_updated": "2024-06-17T09:15:06.353901+03:00",
+  "version": 2,
+  "statements": [
+    {
+      "vulnerability": {
+        "name": "CVE-2024-4741"
+      },
+      "timestamp": "2024-06-17T09:15:06.353901+03:00",
+      "products": [
+        {
+          "@id": "pkg:apk/alpine/libssl3@3.3.0-r2"
+        },
+        {
+          "@id": "pkg:apk/alpine/libssl3"
+        },
+        {
+          "@id": "pkg:apk/alpine/libcrypto3@3.3.0-r2"
+        },
+        {
+          "@id": "pkg:apk/alpine/libcrypto3"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The vulnerable code is not executed by Flux"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2023-42365"
+      },
+      "timestamp": "2024-06-17T09:15:06.353901+03:00",
+      "products": [
+        {
+          "@id": "pkg:apk/alpine/busybox@1.36.1-r28"
+        },
+        {
+          "@id": "pkg:apk/alpine/busybox"
+        },
+        {
+          "@id": "pkg:apk/alpine/busybox-binsh@1.36.1-r28"
+        },
+        {
+          "@id": "pkg:apk/alpine/busybox-binsh"
+        },
+        {
+          "@id": "pkg:apk/alpine/ssl_client@1.36.1-r28"
+        },
+        {
+          "@id": "pkg:apk/alpine/ssl_client"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The vulnerable code is not executed by Flux"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2023-42364"
+      },
+      "timestamp": "2024-06-17T09:15:06.353901+03:00",
+      "products": [
+        {
+          "@id": "pkg:apk/alpine/busybox@1.36.1-r28"
+        },
+        {
+          "@id": "pkg:apk/alpine/busybox"
+        },
+        {
+          "@id": "pkg:apk/alpine/busybox-binsh@1.36.1-r28"
+        },
+        {
+          "@id": "pkg:apk/alpine/busybox-binsh"
+        },
+        {
+          "@id": "pkg:apk/alpine/ssl_client@1.36.1-r28"
+        },
+        {
+          "@id": "pkg:apk/alpine/ssl_client"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The vulnerable code is not executed by Flux"
+    }
+  ]
+}

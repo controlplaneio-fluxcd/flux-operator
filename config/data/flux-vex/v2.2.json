@@ -1,0 +1,39 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://openvex.dev/docs/public/vex-f843e58a33079b9f9344d4b4e72a3dcc0ee7ad51825e087b96692dccaf21f2d8",
+  "author": "flux-enterprise@control-plane.io",
+  "role": "Enterprise Flux Maintainers",
+  "timestamp": "2024-05-23T17:26:04.422544+03:00",
+  "last_updated": "2024-05-24T00:38:58.404614+03:00",
+  "version": 3,
+  "statements": [
+    {
+      "vulnerability": {
+        "name": "CVE-2019-25210"
+      },
+      "timestamp": "2024-05-24T00:38:51.232345+03:00",
+      "products": [
+        {
+          "@id": "pkg:oci/source-controller"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "This CVE has been dismissed by the Helm team https://helm.sh/blog/response-cve-2019-25210/"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2019-25210"
+      },
+      "timestamp": "2024-05-24T00:38:58.404614+03:00",
+      "products": [
+        {
+          "@id": "pkg:oci/helm-controller"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "This CVE has been dismissed by the Helm team https://helm.sh/blog/response-cve-2019-25210/"
+    }
+  ]
+}
