@@ -253,8 +253,8 @@ func (r *ResourceSetInputProviderReconciler) callExternalProvider(
 	var authData map[string][]byte
 	if obj.Spec.SecretRef != nil {
 		key := types.NamespacedName{
-			Name:      obj.GetNamespace(),
-			Namespace: obj.Spec.SecretRef.Name,
+			Name:      obj.Spec.SecretRef.Name,
+			Namespace: obj.GetNamespace(),
 		}
 		var secret corev1.Secret
 		if err := r.Client.Get(ctx, key, &secret); err != nil {
