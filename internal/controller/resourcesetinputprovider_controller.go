@@ -27,7 +27,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/runtime/secrets"
-	"github.com/google/go-containerregistry/pkg/authn/k8schain"
+	kauth "github.com/google/go-containerregistry/pkg/authn/kubernetes"
 	"github.com/google/go-containerregistry/pkg/crane"
 	"github.com/opencontainers/go-digest"
 	corev1 "k8s.io/api/core/v1"
@@ -267,9 +267,12 @@ func (r *ResourceSetInputProviderReconciler) callExternalProvider(
 	// Get the TLS config.
 	var tlsConfig *tls.Config
 	if obj.Spec.CertSecretRef != nil {
+		key := types.NamespacedName{
+			Name:      obj.Spec.CertSecretRef.Name,
+			Namespace: obj.GetNamespace(),
+		}
 		var err error
-		tlsConfig, err = secrets.TLSConfigFromSecret(ctx, r.Client,
-			obj.Spec.CertSecretRef.Name, obj.GetNamespace())
+		tlsConfig, err = secrets.TLSConfigFromSecretRef(ctx, r.Client, key)
 		if err != nil {
 			return nil, err
 		}
@@ -744,8 +747,11 @@ func (r *ResourceSetInputProviderReconciler) buildOCIOptions(ctx context.Context
 
 		// Add pull secrets from the service account.
 		if obj.Spec.ServiceAccountName != "" {
-			s, err := secrets.PullSecretsFromServiceAccount(ctx, r.Client,
-				obj.Spec.ServiceAccountName, obj.GetNamespace())
+			key := types.NamespacedName{
+				Name:      obj.Spec.ServiceAccountName,
+				Namespace: obj.GetNamespace(),
+			}
+			s, err := secrets.PullSecretsFromServiceAccountRef(ctx, r.Client, key)
 			if err != nil {
 				return nil, err
 			}
@@ -754,7 +760,7 @@ func (r *ResourceSetInputProviderReconciler) buildOCIOptions(ctx context.Context
 
 		// Configure pull secrets.
 		if len(pullSecrets) > 0 {
-			keychain, err := k8schain.NewFromPullSecrets(ctx, pullSecrets)
+			keychain, err := kauth.NewFromPullSecrets(ctx, pullSecrets)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create OCI keychain: %w", err)
 			}

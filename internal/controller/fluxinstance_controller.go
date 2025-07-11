@@ -21,12 +21,13 @@ import (
 	"github.com/fluxcd/pkg/ssa/normalize"
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
 	"github.com/google/go-containerregistry/pkg/authn"
-	"github.com/google/go-containerregistry/pkg/authn/k8schain"
+	kauth "github.com/google/go-containerregistry/pkg/authn/kubernetes"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
 	kuberecorder "k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -217,13 +218,16 @@ func GetDistributionKeychain(ctx context.Context, kubeClient client.Client, obj 
 	if artifactPullSecret == "" {
 		return nil, nil
 	}
-	// the secret must be defined in the same namespace as the FluxInstance resource
-	ns := obj.GetNamespace()
-	secret := corev1.Secret{}
-	if err := kubeClient.Get(ctx, client.ObjectKey{Name: artifactPullSecret, Namespace: ns}, &secret); err != nil {
+
+	key := types.NamespacedName{
+		Name:      artifactPullSecret,
+		Namespace: obj.GetNamespace(),
+	}
+	var secret corev1.Secret
+	if err := kubeClient.Get(ctx, key, &secret); err != nil {
 		return nil, err
 	}
-	return k8schain.NewFromPullSecrets(ctx, []corev1.Secret{secret})
+	return kauth.NewFromPullSecrets(ctx, []corev1.Secret{secret})
 }
 
 // fetch pulls the distribution OCI artifact and

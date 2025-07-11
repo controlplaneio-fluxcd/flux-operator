@@ -10,11 +10,9 @@ import (
 	"net/http"
 	"testing"
 
-	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
-	"github.com/controlplaneio-fluxcd/flux-operator/internal/testutils"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
-	"github.com/google/go-containerregistry/pkg/authn/k8schain"
+	kauth "github.com/google/go-containerregistry/pkg/authn/kubernetes"
 	"github.com/google/go-containerregistry/pkg/crane"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -22,6 +20,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/yaml"
+
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/testutils"
 )
 
 func TestResourceSetInputProviderReconciler_OCIArtifactTag_LifeCycle(t *testing.T) {
@@ -251,7 +252,7 @@ func TestResourceSetInputProviderReconciler_buildOCIOptions(t *testing.T) {
 
 			// Validate secret data.
 			g.Expect(o.Keychain).NotTo(BeNil())
-			keychain, err := k8schain.NewFromPullSecrets(ctx,
+			keychain, err := kauth.NewFromPullSecrets(ctx,
 				[]corev1.Secret{*authSecret, *anotherAuthSecret})
 			g.Expect(err).NotTo(HaveOccurred())
 			g.Expect(o.Keychain).To(Equal(keychain))
