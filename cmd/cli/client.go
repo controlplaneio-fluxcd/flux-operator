@@ -162,6 +162,8 @@ func isResourceReconciledFunc(kubeClient client.Client, obj *unstructured.Unstru
 					switch cond.Status {
 					case corev1.ConditionTrue:
 						return true, nil
+					case corev1.ConditionUnknown:
+						return false, nil
 					case corev1.ConditionFalse:
 						return false, errors.New(cond.Message)
 					}
