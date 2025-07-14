@@ -151,6 +151,11 @@ The following commands are available:
   - `--username`: Set the username for registry authentication (required).
   - `--password`: Set the password for registry authentication (required if --password-stdin is not used).
   - `--password-stdin`: Read the password from stdin.
+- `flux-operator create secret sops`: Create a Kubernetes Secret containing SOPS decryption keys.
+  - `--age-key-file`: Path to Age private key file (can be used multiple times).
+  - `--gpg-key-file`: Path to GPG private key file (can be used multiple times).
+  - `--age-key-stdin`: Read Age private key from stdin.
+  - `--gpg-key-stdin`: Read GPG private key from stdin.
 - `flux-operator create secret ssh`: Create a Kubernetes Secret containing SSH credentials.
   - `--private-key-file`: Path to SSH private key file (required).
   - `--public-key-file`: Path to SSH public key file (optional).
