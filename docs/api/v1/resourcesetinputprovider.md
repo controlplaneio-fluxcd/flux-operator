@@ -309,7 +309,7 @@ spec:
 
 The `.spec.serviceAccountName` field is optional and specifies the name of the Kubernetes
 ServiceAccount in the same namespace configured with workload identity to access a cloud
-provider service (this is called *object-level workload identity*). This field can only
+provider service. This is called *object-level workload identity*. This field can only
 be used with the following provider [types](#type) for workload identity:
 
 - `AzureDevOpsPullRequest`
@@ -319,8 +319,8 @@ be used with the following provider [types](#type) for workload identity:
 - `ECRArtifactTag`
 - `GARArtifactTag`
 
-When this field is not present and one of the types above is specified (and in the case of Azure
-DevOps, [`.spec.secretRef`](#secret-reference) is also not specified), the operator will attempt
+When this field is not present and one of the types above is specified (and, in the case of Azure
+DevOps, [`.spec.secretRef`](#secret-based) is also not specified), the operator will attempt
 to authenticate using the environment credentials, i.e. either the identity of the node or the
 operator ServiceAccount. This is called *controller-level workload identity*.
 
@@ -351,8 +351,8 @@ following documentation:
 
 - [Authenticate with ACR from AKS](https://learn.microsoft.com/en-us/azure/aks/cluster-container-registry-integration?tabs=azure-cli)
 - Authenticate with ECR from EKS:
-  - [Create IAM Roles for EKS worker nodes](https://docs.aws.amazon.com/eks/latest/userguide/create-node-role.html#create-worker-node-role)
-  - [Allow the EKS worker IAM Roles to pull images from ECR](https://docs.aws.amazon.com/AmazonECR/latest/userguide/ECR_on_EKS.html)
+    - [Create IAM Roles for EKS worker nodes](https://docs.aws.amazon.com/eks/latest/userguide/create-node-role.html#create-worker-node-role)
+    - [Allow the EKS worker IAM Roles to pull images from ECR](https://docs.aws.amazon.com/AmazonECR/latest/userguide/ECR_on_EKS.html)
 - [Authenticate with GAR from GKE](https://cloud.google.com/artifact-registry/docs/integrate-gke)
 
 See also the cross-cloud documentation:
