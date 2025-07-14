@@ -36,63 +36,20 @@ and the Flux Operator to be installed.
 
 The CLI connects to the cluster using the `~.kube/config` file, similar to `kubectl`.
 
+All commands display help information and example usage when run with the `-h` or `--help` flag.
+
 ### Build Commands
 
 The `flux-operator build` commands are used to build and validate the Flux Operator resources.
 These commands do not require access to a Kubernetes cluster and can be run in any environment.
 
-#### `flux-operator build instance`
+The following commands are available:
 
-The build instance command performs the following steps:
-
-1. Reads the FluxInstance YAML manifest from the specified file.
-2. Validates the instance definition and sets default values.
-3. Pulls the distribution OCI artifact from the registry using the Docker config file for authentication.
-   If not specified, the artifact is pulled from 'oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests'.
-4. Builds the Flux Kubernetes manifests according to the instance specifications and kustomize patches.
-5. Prints the multi-doc YAML containing the Flux Kubernetes manifests to stdout.
-
-Example usage:
-
-```shell
-# Build the given FluxInstance and print the generated manifests
-flux-operator build instance -f flux.yaml
-
-# Pipe the FluxInstance definition to the build command
-cat flux.yaml | flux-operator build instance -f -
-
-# Build a FluxInstance and print a diff of the generated manifests
-flux-operator build instance -f flux.yaml | \
-  kubectl diff --server-side --field-manager=flux-operator -f -
-```
-
-#### `flux-operator build rset`
-
-The build rset command performs the following steps:
-
-1. Reads the ResourceSet YAML manifest from the specified file.
-2. Validates the ResourceSet definition and sets default values.
-3. Extracts the inputs from the ResourceSet and validates the templates.
-4. Builds the Kubernetes manifests according to the ResourceSet specifications and templates.
-5. Prints the multi-doc YAML containing the Kubernetes manifests to stdout.
-
-Example usage:
-
-```shell
-# Build the given ResourceSet and print the generated objects
-flux-operator build rset -f my-resourceset.yaml
-
-# Build a ResourceSet by providing the inputs from a file
-flux-operator build rset -f my-resourceset.yaml \
---inputs-from my-resourceset-inputs.yaml
-
-# Pipe the ResourceSet manifest to the build command
-cat my-resourceset.yaml | flux-operator build rset -f -
-
-# Build a ResourceSet and print a diff of the generated objects
-flux-operator build rset -f my-resourceset.yaml | \
-kubectl diff --server-side --field-manager=flux-operator -f -
-```
+- `flux-operator build instance`: Generates the Flux Kubernetes manifests from a FluxInstance definition.
+    - `-f, --file`: Path to the FluxInstance YAML manifest (required).
+- `flux-operator build rset`: Generates the Kubernetes manifests from a ResourceSet definition.
+    - `-f, --file`: Path to the ResourceSet YAML manifest (required).
+    - `--inputs-from`: Path to the ResourceSet inputs YAML manifest.
 
 ### Get Commands
 
@@ -118,7 +75,11 @@ The exported resources can be used for backup, migration, or inspection purposes
 The following commands are available:
 
 - `flux-operator export report`: Exports the FluxReport resource containing the distribution status and version information.
-- `flux-operator export resource <kind>/<name> -n <namespace>`: Exports a Flux resource from the specified namespace.
+- `flux-operator export resource <kind>/<name>`: Exports a Flux resource from the specified namespace.
+
+Arguments:
+
+- `-n, --namespace`: Specifies the namespace scope of the command.
 
 ### Reconcile Commands
 
@@ -126,10 +87,15 @@ The `flux-operator reconcile` commands are used to trigger the reconciliation of
 
 The following commands are available:
 
-- `flux-operator reconcile instance <name> -n <namespace>`: Reconciles the FluxInstance resource in the cluster.
-- `flux-operator reconcile rset <name> -n <namespace>`: Reconciles the ResourceSet resource in the cluster.
-- `flux-operator reconcile rsip <name> -n <namespace>`: Reconciles the ResourceSetInputProvider resource in the cluster.
-- `flux-operator reconcile resource <kind>/<name> -n <namespace>`: Reconciles a Flux resource in the specified namespace.
+- `flux-operator reconcile instance <name>`: Reconciles the FluxInstance resource in the cluster.
+- `flux-operator reconcile rset <name>`: Reconciles the ResourceSet resource in the cluster.
+- `flux-operator reconcile rsip <name>`: Reconciles the ResourceSetInputProvider resource in the cluster.
+- `flux-operator reconcile resource <kind>/<name>`: Reconciles a Flux resource in the specified namespace.
+
+Arguments:
+
+- `-n, --namespace`: Specifies the namespace scope of the command.
+- `--wait`: Waits for the reconciliation to complete before returning.
 
 ### Suspend/Resume Commands
 
@@ -138,25 +104,76 @@ to suspend or resume the reconciliation of the Flux Operator resources.
 
 The following commands are available:
 
-- `flux-operator suspend instance <name> -n <namespace>`: Suspends the reconciliation of the FluxInstance resource in the cluster.
-- `flux-operator resume instance <name> -n <namespace>`: Resumes the reconciliation of the FluxInstance resource in the cluster.
-- `flux-operator suspend rset <name> -n <namespace>`: Suspends the reconciliation of the ResourceSet resource in the cluster.
-- `flux-operator resume rset <name> -n <namespace>`: Resumes the reconciliation of the ResourceSet resource in the cluster.
-- `flux-operator suspend rsip <name> -n <namespace>`: Suspends the reconciliation of the ResourceSetInputProvider resource in the cluster.
-- `flux-operator resume rsip <name> -n <namespace>`: Resumes the reconciliation of the ResourceSetInputProvider resource in the cluster.
-- `flux-operator suspend resource <kind>/<name> -n <namespace>`: Suspends the reconciliation of the Flux resource in the cluster.
-- `flux-operator resume resource <kind>/<name> -n <namespace>`: Resumes the reconciliation of the Flux resource in the cluster.
-
-### Statistics Command
-
-The `flux-operator stats` command is used to retrieve statistics about the Flux resources
-including their reconciliation status and the amount of cumulative storage used for each source type.
-
-### Version Command
-
-The `flux-operator version` command is used to display the version of the CLI, of the Flux Operator
-and of the Flux distribution running in the cluster.
+- `flux-operator suspend instance <name>`: Suspends the reconciliation of the FluxInstance resource in the cluster.
+- `flux-operator resume instance <name>`: Resumes the reconciliation of the FluxInstance resource in the cluster.
+- `flux-operator suspend rset <name>`: Suspends the reconciliation of the ResourceSet resource in the cluster.
+- `flux-operator resume rset <name>`: Resumes the reconciliation of the ResourceSet resource in the cluster.
+- `flux-operator suspend rsip <name>`: Suspends the reconciliation of the ResourceSetInputProvider resource in the cluster.
+- `flux-operator resume rsip <name>`: Resumes the reconciliation of the ResourceSetInputProvider resource in the cluster.
+- `flux-operator suspend resource <kind>/<name>`: Suspends the reconciliation of the Flux resource in the cluster.
+- `flux-operator resume resource <kind>/<name>`: Resumes the reconciliation of the Flux resource in the cluster.
 
 Arguments:
 
-- `--client`: If true, shows the client version only (no server required).
+- `-n, --namespace`: Specifies the namespace scope of the command.
+- `--wait`: On resume, waits for the reconciliation to complete before returning.
+
+### Statistics Command
+
+This command is used to retrieve statistics about the Flux resources
+including their reconciliation status and the amount of cumulative storage used for each source type.
+
+- `flux-operator stats`: Displays statistics about the Flux resources in the cluster.
+
+### Create Secret Commands
+
+The `flux-operator create secret` commands are used to create Kubernetes secrets specific to Flux.
+These commands can be used to create or update secrets directly in the cluster, or to export them in YAML format.
+
+The following commands are available:
+
+- `flux-operator create secret basic-auth`: Create a Kubernetes Secret containing basic auth credentials.
+  - `--username`: Set the username for basic authentication (required).
+  - `--password`: Set the password for basic authentication (required if --password-stdin is not used).
+  - `--password-stdin`: Read the password from stdin.
+- `flux-operator create secret githubapp`: Create a Kubernetes Secret containing GitHub App credentials.
+  - `--app-id`: GitHub App ID (required).
+  - `--app-installation-id`: GitHub App Installation ID (required).
+  - `--app-private-key-file`: Path to GitHub App private key file (required).
+  - `--app-base-url`: GitHub base URL for GitHub Enterprise Server (optional).
+- `flux-operator create secret proxy`: Create a Kubernetes Secret containing HTTP/S proxy credentials.
+  - `--address`: Set the proxy address (required).
+  - `--username`: Set the username for proxy authentication (optional).
+  - `--password`: Set the password for proxy authentication (optional).
+  - `--password-stdin`: Read the password from stdin.
+- `flux-operator create secret registry`: Create a Kubernetes Secret containing registry credentials.
+  - `--server`: Set the registry server (required).
+  - `--username`: Set the username for registry authentication (required).
+  - `--password`: Set the password for registry authentication (required if --password-stdin is not used).
+  - `--password-stdin`: Read the password from stdin.
+- `flux-operator create secret ssh`: Create a Kubernetes Secret containing SSH credentials.
+  - `--private-key-file`: Path to SSH private key file (required).
+  - `--public-key-file`: Path to SSH public key file (optional).
+  - `--knownhosts-file`: Path to SSH known_hosts file (required).
+  - `--password`: Password for encrypted SSH private key (optional).
+  - `--password-stdin`: Read the password from stdin.
+- `flux-operator create secret tls`: Create a Kubernetes Secret containing TLS certs.
+  - `--tls-crt-file`: Path to TLS client certificate file.
+  - `--tls-key-file`: Path to TLS client private key file.
+  - `--ca-crt-file`: Path to CA certificate file (optional).
+
+Arguments:
+
+- `-n, --namespace`: Specifies the namespace to create the secret in.
+- `--annotation`: Set annotations on the resource (can specify multiple annotations with commas: annotation1=value1,annotation2=value2).
+- `--label`: Set labels on the resource (can specify multiple labels with commas: label1=value1,label2=value2).
+- `--immutable`: Set the immutable flag on the Secret.
+- `--export`: Export secret in YAML format to stdout instead of creating it in the cluster.
+
+### Version Command
+
+This command is used to display the version of the CLI, of the Flux Operator
+and of the Flux distribution running in the cluster.
+
+- `flux-operator version`: Displays the version information for the CLI and the Flux Operator.
+    - `--client`:  If true, shows the client version only (no server required).
