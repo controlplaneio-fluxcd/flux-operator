@@ -107,8 +107,8 @@ github.com/fluxcd/pkg/apis/event v0.18.0 h1:PNbWk9gvX8gMIi6VsJapnuDO+giLEeY+6olL
 github.com/fluxcd/pkg/apis/event v0.18.0/go.mod h1:7S/DGboLolfbZ6stO6dcDhG1SfkPWQ9foCULvbiYpiA=
 github.com/fluxcd/pkg/apis/kustomize v1.11.0 h1:0IzDgxZkc4v+5SDNCvgZhfwfkdkQLPXCner7TNaJFWE=
 github.com/fluxcd/pkg/apis/kustomize v1.11.0/go.mod h1:j302mJGDww8cn9qvMsRQ0LJ1HPAPs/IlX7CSsoJV7BI=
-github.com/fluxcd/pkg/apis/meta v1.15.0 h1:kvpju2J2r3DfpOMUFIgHkAE2qwI6219TvezFRGxYi2w=
-github.com/fluxcd/pkg/apis/meta v1.15.0/go.mod h1:97l3hTwBpJbXBY+wetNbqrUsvES8B1jGioKcBUxmqd8=
+github.com/fluxcd/pkg/apis/meta v1.16.0 h1:XbtIDWVH09CGcFApzp+WgWW3NYTNr+lIjq2ZLimIkQE=
+github.com/fluxcd/pkg/apis/meta v1.16.0/go.mod h1:97l3hTwBpJbXBY+wetNbqrUsvES8B1jGioKcBUxmqd8=
 github.com/fluxcd/pkg/auth v0.20.0 h1:uNWkx28InC5YbgeNG7EMcpk9dkZc4w6Q7bUwDga28x0=
 github.com/fluxcd/pkg/auth v0.20.0/go.mod h1:EU+cYkXJNXBIQ+JoeVqx4wFtlsDiTSEjn1iP5Sa4PCk=
 github.com/fluxcd/pkg/cache v0.10.0 h1:M+OGDM4da1cnz7q+sZSBtkBJHpiJsLnKVmR9OdMWxEY=
@@ -119,8 +119,8 @@ github.com/fluxcd/pkg/git v0.33.0 h1:ZzScdBLGkHbJxYqAW2PB14bbUHX1VUi+huNvX0ZTu5A
 github.com/fluxcd/pkg/git v0.33.0/go.mod h1:F9Asm3MlLW4uZx3FF92+bqho+oktdMdnTn/QmXe56NE=
 github.com/fluxcd/pkg/kustomize v1.19.0 h1:2eO8lMx0/H/Yyq35LMTAMhxEElOzMW0Yi9zUNZoimlU=
 github.com/fluxcd/pkg/kustomize v1.19.0/go.mod h1:OCCW9vU3lStDh3jyg9MM/a29MSdNAVk2wjl0lDos5Fs=
-github.com/fluxcd/pkg/runtime v0.66.0 h1:efOrHg/a+q0iUInCZ+dnTZRG8sk89sW340SC93HhnHg=
-github.com/fluxcd/pkg/runtime v0.66.0/go.mod h1:2/cfa1WspakXzEol7tstyzShAQb43pHa8FEXq7vCMf8=
+github.com/fluxcd/pkg/runtime v0.68.0 h1:RtUwUOA7pxlptXZkWpp0iOxiNORkPx1HW1BHDUIQVvs=
+github.com/fluxcd/pkg/runtime v0.68.0/go.mod h1:HkXWJInVIT/1Ej5rLXseAJR658wAlOre/kf9UNOMyx4=
 github.com/fluxcd/pkg/sourceignore v0.13.0 h1:ZvkzX2WsmyZK9cjlqOFFW1onHVzhPZIqDbCh96rPqbU=
 github.com/fluxcd/pkg/sourceignore v0.13.0/go.mod h1:Z9H1GoBx0ljOhptnzoV0PL6Nd/UzwKcSphP27lqb4xI=
 github.com/fluxcd/pkg/ssa v0.51.0 h1:sFarxKZcS0J8sjq9qvs/r+1XiJqNgRodEiPjV75F8R4=

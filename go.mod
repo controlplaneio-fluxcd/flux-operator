@@ -9,12 +9,12 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/marketplacemetering v1.29.2
 	github.com/fluxcd/cli-utils v0.36.0-flux.14
 	github.com/fluxcd/pkg/apis/kustomize v1.11.0
-	github.com/fluxcd/pkg/apis/meta v1.15.0
+	github.com/fluxcd/pkg/apis/meta v1.16.0
 	github.com/fluxcd/pkg/auth v0.20.0
 	github.com/fluxcd/pkg/cache v0.10.0
 	github.com/fluxcd/pkg/git v0.33.0
 	github.com/fluxcd/pkg/kustomize v1.19.0
-	github.com/fluxcd/pkg/runtime v0.66.0
+	github.com/fluxcd/pkg/runtime v0.68.0
 	github.com/fluxcd/pkg/ssa v0.51.0
 	github.com/fluxcd/pkg/tar v0.13.0
 	github.com/fluxcd/pkg/version v0.9.0
