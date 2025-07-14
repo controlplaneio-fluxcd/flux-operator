@@ -36,6 +36,8 @@ func TestResourceSetInputProviderReconciler_GitTag_LifeCycle(t *testing.T) {
 	ns, err := testEnv.CreateNamespace(ctx, "test")
 	g.Expect(err).ToNot(HaveOccurred())
 
+	_, githubSecretRef := createGitHubTokenSecret(t, ctx, ns.Name)
+
 	objDef := fmt.Sprintf(`
 apiVersion: fluxcd.controlplane.io/v1
 kind: ResourceSetInputProvider
@@ -142,6 +144,7 @@ spec:
 	resultP.Spec.Type = fluxcdv1.InputProviderGitHubTag
 	resultP.Spec.URL = "https://github.com/stefanprodan/podinfo"
 	resultP.Spec.Filter.Semver = "5.0.x"
+	resultP.Spec.SecretRef = githubSecretRef
 	err = testClient.Patch(ctx, resultP, client.MergeFrom(result))
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -406,6 +409,8 @@ func TestResourceSetInputProviderReconciler_GitHubPullRequest_LifeCycle(t *testi
 	ns, err := testEnv.CreateNamespace(ctx, "test")
 	g.Expect(err).ToNot(HaveOccurred())
 
+	githubSecretRef, _ := createGitHubTokenSecret(t, ctx, ns.Name)
+
 	objDef := fmt.Sprintf(`
 apiVersion: fluxcd.controlplane.io/v1
 kind: ResourceSetInputProvider
@@ -415,6 +420,7 @@ metadata:
 spec:
   type: GitHubPullRequest
   url: "https://github.com/fluxcd-testing/pr-testing"
+%[2]s
   defaultValues:
     env: "staging"
   filter:
@@ -422,7 +428,7 @@ spec:
     includeBranch: "^stefanprodan-patch-.*$"
     labels:
       - "enhancement"
-`, ns.Name)
+`, ns.Name, githubSecretRef)
 
 	exportedInputs := `
 - author: stefanprodan
@@ -775,6 +781,7 @@ metadata:
 spec:
   type: GitHubPullRequest
   url: "https://github.com/fluxcd-testing/pr-testing"
+%[3]s
   defaultValues:
     env: "staging"
   filter:
@@ -861,7 +868,8 @@ spec:
 			ns, err := testEnv.CreateNamespace(ctx, "test")
 			g.Expect(err).ToNot(HaveOccurred())
 
-			objDef := fmt.Sprintf(objDef, ns.Name, tt.skipDef)
+			githubSecretRef, _ := createGitHubTokenSecret(t, ctx, ns.Name)
+			objDef := fmt.Sprintf(objDef, ns.Name, tt.skipDef, githubSecretRef)
 
 			obj := &fluxcdv1.ResourceSetInputProvider{}
 			err = yaml.Unmarshal([]byte(objDef), obj)
@@ -973,4 +981,29 @@ func TestResouceSetInputProviderReconciler_getAzureDevOpsToken(t *testing.T) {
 		g.Expect(err.Error()).To(ContainSubstring("ManagedIdentityCredential"))
 		g.Expect(res).To(BeEmpty())
 	})
+}
+
+func createGitHubTokenSecret(t *testing.T, ctx context.Context, ns string) (string, *meta.LocalObjectReference) {
+	g := NewWithT(t)
+
+	token := os.Getenv("GITHUB_TOKEN")
+	if token == "" {
+		return "", nil
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "github-token",
+			Namespace: ns,
+		},
+		StringData: map[string]string{
+			"username": "github-token",
+			"password": token,
+		},
+	}
+	g.Expect(testClient.Create(ctx, secret)).To(Succeed())
+
+	return "  secretRef:\n    name: github-token\n", &meta.LocalObjectReference{
+		Name: "github-token",
+	}
 }

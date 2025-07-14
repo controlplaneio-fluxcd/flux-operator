@@ -290,7 +290,8 @@ func TestGitHubProvider_ListRequests(t *testing.T) {
 		{
 			name: "repo not found",
 			opts: Options{
-				URL: "https://github.com/fluxcd-testing/invalid",
+				Token: os.Getenv("GITHUB_TOKEN"),
+				URL:   "https://github.com/fluxcd-testing/invalid",
 			},
 			wantErrMsg: "404 Not Found",
 		},
