@@ -4,10 +4,10 @@
 
 ### Flux Operator
 
-1. Create a new release branch from `main`, e.g. `release-v1.0.0` in the [`controlplaneio-fluxcd/flux-operator` repository](https://github.com/controlplaneio-fluxcd/flux-operator).
-2. Bump the version in the `newTag` field from `config/manager/kustomization.yaml`.
-3. Commit the changes with the title `Release v1.0.0`, push and open a PR.
-4. After the PR is merged, tag the `main` branch with the new version, e.g. `git tag -s -m "v1.0.0" "v1.0.0"`.
+1. Switch to the `main` branch and pull the latest commit of the [`controlplaneio-fluxcd/flux-operator` repository](https://github.com/controlplaneio-fluxcd/flux-operator).
+2. Run `make prep-release` that increments the minor version and opens a PR with the changes. (Or set a version with `NEXT_VERSION=v1.2.3 make prep-release`.)
+3. Merge the PR and pull the latest commit from the `main` branch locally.
+4. Run `make release` that creates a new tag for the release and pushes it to the remote repository.
 5. Wait for the `release` GitHub Workflow to finish.
 
 ### Helm Chart
