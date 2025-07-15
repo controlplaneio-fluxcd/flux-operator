@@ -185,6 +185,21 @@ test-olm: build-olm-manifests operator-sdk ## Test OLM manifests for current ver
 	export OPERATOR_SDK_BIN=$(OPERATOR_SDK) && \
 	go test ./test/olm/ -v -ginkgo.v
 
+##@ Release
+
+NEXT_VERSION ?= ""
+
+.PHONY: prep-release
+prep-release: ## Create release PR for the next version (auto minor bump).
+	hack/vendor-flux-manifests.sh $(FLUX_VERSION)
+	hack/prep-release.sh $(NEXT_VERSION)
+
+.PHONY: release
+release: ## Create a release for the next version.
+	@next=$(shell yq '.images[0].newTag' "config/manager/kustomization.yaml") && \
+	git tag -s -m "$$next" "$$next" && \
+	git push origin "$$next"
+
 ##@ Dependencies
 
 ## Location to install dependencies to
