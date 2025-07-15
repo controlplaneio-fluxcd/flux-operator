@@ -13,7 +13,7 @@ import (
 )
 
 var resumeInputProviderCmd = &cobra.Command{
-	Use:               "inputprovider",
+	Use:               "inputprovider [name]",
 	Aliases:           []string{"rsip", "resourcesetinputprovider"},
 	Short:             "Resume ResourceSetInputProvider reconciliation",
 	Args:              cobra.ExactArgs(1),

@@ -14,7 +14,7 @@ import (
 )
 
 var reconcileInstanceCmd = &cobra.Command{
-	Use:   "instance",
+	Use:   "instance [name]",
 	Short: "Trigger FluxInstance reconciliation",
 	Example: `  # Trigger the reconciliation of an instance
   flux-operator -n flux-system reconcile instance flux
@@ -22,6 +22,7 @@ var reconcileInstanceCmd = &cobra.Command{
   # Trigger the reconciliation of an instance without waiting for it to become ready
   flux-operator -n flux-system reconcile instance flux --wait=false
 `,
+	Args:              cobra.ExactArgs(1),
 	RunE:              reconcileInstanceCmdRun,
 	ValidArgsFunction: resourceNamesCompletionFunc(fluxcdv1.GroupVersion.WithKind(fluxcdv1.FluxInstanceKind)),
 }

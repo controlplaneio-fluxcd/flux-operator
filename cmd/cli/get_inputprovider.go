@@ -20,6 +20,7 @@ var getInputProviderCmd = &cobra.Command{
 	Use:               "inputprovider",
 	Aliases:           []string{"rsip", "resourcesetinputproviders"},
 	Short:             "List ResourceSetInputProviders",
+	Args:              cobra.MaximumNArgs(1),
 	RunE:              getInputProviderCmdRun,
 	ValidArgsFunction: resourceNamesCompletionFunc(fluxcdv1.GroupVersion.WithKind(fluxcdv1.ResourceSetInputProviderKind)),
 }

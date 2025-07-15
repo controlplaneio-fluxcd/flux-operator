@@ -14,7 +14,7 @@ import (
 )
 
 var reconcileInputProviderCmd = &cobra.Command{
-	Use:     "inputprovider",
+	Use:     "inputprovider [name]",
 	Aliases: []string{"rsip", "resourcesetinputprovider"},
 	Short:   "Trigger ResourceSetInputProvider reconciliation",
 	Example: `  # Trigger the reconciliation of a ResourceSetInputProvider
@@ -26,6 +26,7 @@ var reconcileInputProviderCmd = &cobra.Command{
   # Trigger the reconciliation of a ResourceSetInputProvider without waiting for it to become ready
   flux-operator -n flux-system reconcile rsip my-inputprovider --wait=false
 `,
+	Args:              cobra.ExactArgs(1),
 	RunE:              reconcileInputProviderCmdRun,
 	ValidArgsFunction: resourceNamesCompletionFunc(fluxcdv1.GroupVersion.WithKind(fluxcdv1.ResourceSetInputProviderKind)),
 }

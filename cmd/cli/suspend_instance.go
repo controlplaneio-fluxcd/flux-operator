@@ -13,7 +13,7 @@ import (
 )
 
 var suspendInstanceCmd = &cobra.Command{
-	Use:               "instance",
+	Use:               "instance [name]",
 	Short:             "Suspend FluxInstance reconciliation",
 	Args:              cobra.ExactArgs(1),
 	RunE:              suspendInstanceCmdRun,

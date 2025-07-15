@@ -20,6 +20,7 @@ var getInstanceCmd = &cobra.Command{
 	Use:               "instance",
 	Aliases:           []string{"instances"},
 	Short:             "List Flux instances",
+	Args:              cobra.MaximumNArgs(1),
 	RunE:              geInstanceCmdRun,
 	ValidArgsFunction: resourceNamesCompletionFunc(fluxcdv1.GroupVersion.WithKind(fluxcdv1.FluxInstanceKind)),
 }

@@ -16,7 +16,7 @@ import (
 )
 
 var exportResourceCmd = &cobra.Command{
-	Use:   "resource",
+	Use:   "resource [kind/name]",
 	Short: "Export a Flux custom resource in YAML format",
 	Example: `  # Export a ResourceSet to standard output
   flux-operator -n flux-system export resource ResourceSet/apps
@@ -24,8 +24,8 @@ var exportResourceCmd = &cobra.Command{
   # Export a OCIRepository to a YAML file
   flux-operator -n apps export resource OCIRepository/my-app > my-app.yaml
 `,
-	RunE:              exportResourceCmdRun,
 	Args:              cobra.ExactArgs(1),
+	RunE:              exportResourceCmdRun,
 	ValidArgsFunction: resourceKindNameCompletionFunc(false),
 }
 

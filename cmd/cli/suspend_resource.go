@@ -12,7 +12,7 @@ import (
 )
 
 var suspendResourceCmd = &cobra.Command{
-	Use:   "resource",
+	Use:   "resource [kind/name]",
 	Short: "suspend Flux resource reconciliation",
 	Example: `  # Suspend the reconciliation of a Flux Kustomization
   flux-operator -n apps suspend resource Kustomization/my-app

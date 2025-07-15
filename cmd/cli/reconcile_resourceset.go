@@ -14,7 +14,7 @@ import (
 )
 
 var reconcileResourceSetCmd = &cobra.Command{
-	Use:     "resourceset",
+	Use:     "resourceset [name]",
 	Aliases: []string{"rset"},
 	Short:   "Trigger ResourceSet reconciliation",
 	Example: `  # Trigger the reconciliation of a ResourceSet
@@ -23,6 +23,7 @@ var reconcileResourceSetCmd = &cobra.Command{
   # Trigger the reconciliation of a ResourceSet without waiting for it to become ready
   flux-operator -n flux-system reconcile rset my-resourceset --wait=false
 `,
+	Args:              cobra.ExactArgs(1),
 	RunE:              reconcileResourceSetCmdRun,
 	ValidArgsFunction: resourceNamesCompletionFunc(fluxcdv1.GroupVersion.WithKind(fluxcdv1.ResourceSetKind)),
 }

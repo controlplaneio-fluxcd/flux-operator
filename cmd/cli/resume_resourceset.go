@@ -13,7 +13,7 @@ import (
 )
 
 var resumeResourceSetCmd = &cobra.Command{
-	Use:               "resourceset",
+	Use:               "resourceset [name]",
 	Aliases:           []string{"rset"},
 	Short:             "Resume ResourceSet reconciliation",
 	Args:              cobra.ExactArgs(1),

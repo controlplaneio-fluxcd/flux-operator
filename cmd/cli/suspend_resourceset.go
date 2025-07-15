@@ -13,7 +13,7 @@ import (
 )
 
 var suspendResourceSetCmd = &cobra.Command{
-	Use:               "resourceset",
+	Use:               "resourceset [name]",
 	Aliases:           []string{"rset"},
 	Short:             "Suspend ResourceSet reconciliation",
 	Args:              cobra.ExactArgs(1),

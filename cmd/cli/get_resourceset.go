@@ -20,6 +20,7 @@ var getResourceSetCmd = &cobra.Command{
 	Use:               "resourceset",
 	Aliases:           []string{"resourcesets", "rset"},
 	Short:             "List ResourceSets",
+	Args:              cobra.MaximumNArgs(1),
 	RunE:              getResourceSetCmdRun,
 	ValidArgsFunction: resourceNamesCompletionFunc(fluxcdv1.GroupVersion.WithKind(fluxcdv1.ResourceSetKind)),
 }
