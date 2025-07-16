@@ -13,7 +13,7 @@ import (
 )
 
 var reconcileResourceCmd = &cobra.Command{
-	Use:   "resource",
+	Use:   "resource [kind/name]",
 	Short: "Trigger Flux resource reconciliation",
 	Example: `  # Trigger the reconciliation of a Flux Kustomization
   flux-operator -n apps reconcile resource Kustomization/my-app

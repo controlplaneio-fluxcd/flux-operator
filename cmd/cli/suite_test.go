@@ -149,4 +149,13 @@ func resetCmdArgs() {
 	resumeResourceSetArgs = resumeResourceSetFlags{}
 	resumeInputProviderArgs = resumeInputProviderFlags{}
 	resumeResourceArgs = resumeResourceFlags{}
+
+	// Create commands
+	createSecretBasicAuthArgs = createSecretBasicAuthFlags{}
+	createSecretGitHubAppArgs = createSecretGitHubAppFlags{}
+	createSecretProxyArgs = createSecretProxyFlags{}
+	createSecretTLSArgs = createSecretTLSFlags{}
+	createSecretSSHArgs = createSecretSSHFlags{}
+	createSecretRegistryArgs = createSecretRegistryFlags{}
+	createSecretSOPSArgs = createSecretSOPSFlags{}
 }

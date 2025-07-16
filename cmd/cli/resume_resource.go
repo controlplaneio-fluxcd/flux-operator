@@ -12,7 +12,7 @@ import (
 )
 
 var resumeResourceCmd = &cobra.Command{
-	Use:   "resource",
+	Use:   "resource [kind/name]",
 	Short: "Resume Flux resource reconciliation",
 	Example: `  # Resume the reconciliation of a Flux Kustomization
   flux-operator -n apps resume resource Kustomization/my-app

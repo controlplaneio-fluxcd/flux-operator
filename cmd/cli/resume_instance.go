@@ -13,7 +13,7 @@ import (
 )
 
 var resumeInstanceCmd = &cobra.Command{
-	Use:               "instance",
+	Use:               "instance [name]",
 	Short:             "Resume FluxInstance reconciliation",
 	Args:              cobra.ExactArgs(1),
 	RunE:              resumeInstanceCmdRun,

@@ -87,9 +87,9 @@ func createSecretProxyCmdRun(cmd *cobra.Command, args []string) error {
 	secret, err := secrets.MakeProxySecret(
 		name,
 		*kubeconfigArgs.Namespace,
+		createSecretProxyArgs.address,
 		createSecretProxyArgs.username,
 		password,
-		createSecretProxyArgs.address,
 	)
 	if err != nil {
 		return err

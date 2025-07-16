@@ -87,9 +87,9 @@ func createSecretRegistryCmdRun(cmd *cobra.Command, args []string) error {
 	secret, err := secrets.MakeRegistrySecret(
 		name,
 		*kubeconfigArgs.Namespace,
+		createSecretRegistryArgs.server,
 		createSecretRegistryArgs.username,
 		password,
-		createSecretRegistryArgs.server,
 	)
 	if err != nil {
 		return err
