@@ -1,0 +1,19 @@
+---
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSetInputProvider
+metadata:
+  name: team1-apps
+  namespace: test
+  labels:
+    fluxcd.controlplane.io/role: provisioning
+spec:
+  type: Static
+  defaultValues:
+    tenantName: team1
+    applications:
+      - name: app1
+        envs:
+          - name: staging
+            version: v1.0.1
+          - name: production
+            version: v1.0.0

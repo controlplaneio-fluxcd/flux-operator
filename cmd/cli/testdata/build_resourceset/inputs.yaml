@@ -1,0 +1,9 @@
+- tenantName: team1
+  id: 340788154
+  applications:
+    - name: app1
+      envs:
+        - name: staging
+          version: v1.0.1
+        - name: production
+          version: v1.0.0

@@ -14,6 +14,8 @@ import (
 
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
 	"github.com/spf13/cobra"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/util/json"
 	"sigs.k8s.io/yaml"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
@@ -133,7 +135,15 @@ func buildResourceSetCmdRun(cmd *cobra.Command, args []string) error {
 			if rset.Spec.Inputs == nil {
 				rset.Spec.Inputs = []fluxcdv1.ResourceSetInput{}
 			}
-			rset.Spec.Inputs = append(rset.Spec.Inputs, provider.Spec.DefaultValues)
+			vals := provider.Spec.DefaultValues
+
+			// compute the provider ID and add it to the inputs
+			b, err := json.Marshal(inputs.ID(provider.GetName()))
+			if err != nil {
+				return fmt.Errorf("failed to compute provider ID: %w", err)
+			}
+			vals["id"] = &apiextensionsv1.JSON{Raw: b}
+			rset.Spec.Inputs = append(rset.Spec.Inputs, vals)
 		}
 	}
 

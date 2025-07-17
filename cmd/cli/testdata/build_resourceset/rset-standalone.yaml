@@ -1,0 +1,53 @@
+---
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: apps
+  namespace: test
+spec:
+  inputs:
+    - tenantName: team1
+      id: 340788154
+      applications:
+        - name: app1
+          envs:
+            - name: staging
+              version: v1.0.1
+            - name: production
+              version: v1.0.0
+  resourcesTemplate: |
+    <<- $id := inputs.id >>    
+    <<- $tenant := inputs.tenantName >>
+    <<- range $app := inputs.applications >>
+    <<- $appName := $app.name >>
+    <<- range $env := $app.envs >>
+    ---
+    apiVersion: source.toolkit.fluxcd.io/v1
+    kind: OCIRepository
+    metadata:
+      name: << $appName >>
+      namespace: << $tenant >>-<< $env.name >>
+      annotations:
+        fluxcd.controlplane.io/id: << $id | quote >>
+    spec:
+      interval: 10m
+      url: oci://registry.example.com/<< $appName >>
+      ref:
+        tag: << $env.version >>
+    ---
+    apiVersion: kustomize.toolkit.fluxcd.io/v1
+    kind: Kustomization
+    metadata:
+      name: << $appName >>
+      namespace: << $tenant >>-<< $env.name >>
+      annotations:
+        fluxcd.controlplane.io/id: << $id | quote >>
+    spec:
+      interval: 1h
+      prune: true
+      sourceRef:
+        kind: OCIRepository
+        name: << $appName >>
+      path: ./
+    <<- end >>
+    <<- end >>
