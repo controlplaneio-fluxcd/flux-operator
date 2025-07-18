@@ -14,6 +14,8 @@ import (
 
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
 	"github.com/spf13/cobra"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/util/json"
 	"sigs.k8s.io/yaml"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
@@ -27,6 +29,10 @@ var buildResourceSetCmd = &cobra.Command{
 	Short:   "Build ResourceSet templates to Kubernetes objects",
 	Example: `  # Build the given ResourceSet and print the generated objects
   flux-operator build resourceset -f my-resourceset.yaml
+
+  # Build a ResourceSet by providing the inputs from a static ResourceSetInputProvider
+  flux-operator build resourceset -f my-resourceset.yaml \
+    --inputs-from-provider my-resourcesetinputprovider.yaml
 
   # Build a ResourceSet by providing the inputs from a file
   flux-operator build resourceset -f my-resourceset.yaml \
@@ -44,8 +50,9 @@ var buildResourceSetCmd = &cobra.Command{
 }
 
 type buildResourceSetFlags struct {
-	filename   string
-	inputsFrom string
+	filename           string
+	inputsFrom         string
+	inputsFromProvider string
 }
 
 var buildResourceSetArgs buildResourceSetFlags
@@ -53,6 +60,7 @@ var buildResourceSetArgs buildResourceSetFlags
 func init() {
 	buildResourceSetCmd.Flags().StringVarP(&buildResourceSetArgs.filename, "filename", "f", "", "Path to the ResourceSet YAML manifest.")
 	buildResourceSetCmd.Flags().StringVarP(&buildResourceSetArgs.inputsFrom, "inputs-from", "i", "", "Path to the ResourceSet inputs YAML manifest.")
+	buildResourceSetCmd.Flags().StringVar(&buildResourceSetArgs.inputsFromProvider, "inputs-from-provider", "", "Path to the ResourceSetInputProvider static type YAML manifest.")
 
 	buildCmd.AddCommand(buildResourceSetCmd)
 }
@@ -88,8 +96,10 @@ func buildResourceSetCmdRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("error parsing ResourceSet: %w", err)
 	}
 
-	if len(rset.Spec.InputsFrom) > 0 && buildResourceSetArgs.inputsFrom == "" {
-		return fmt.Errorf("ResourceSet has '.spec.inputsFrom', please provide the inputs with --inputs-from")
+	if len(rset.Spec.InputsFrom) > 0 &&
+		buildResourceSetArgs.inputsFrom == "" &&
+		buildResourceSetArgs.inputsFromProvider == "" {
+		return fmt.Errorf("ResourceSet has '.spec.inputsFrom', please provide the inputs with --inputs-from or --inputs-from-provider")
 	}
 
 	if buildResourceSetArgs.inputsFrom != "" {
@@ -100,6 +110,40 @@ func buildResourceSetCmdRun(cmd *cobra.Command, args []string) error {
 
 		if err := yaml.Unmarshal(inputsData, &rset.Spec.Inputs); err != nil {
 			return fmt.Errorf("error parsing inputs file: %w", err)
+		}
+	}
+
+	if buildResourceSetArgs.inputsFromProvider != "" {
+		inputsData, err := os.ReadFile(buildResourceSetArgs.inputsFromProvider)
+		if err != nil {
+			return fmt.Errorf("error reading inputs provider file: %w", err)
+		}
+
+		var provider fluxcdv1.ResourceSetInputProvider
+		if err := yaml.Unmarshal(inputsData, &provider); err != nil {
+			return fmt.Errorf("error parsing inputs provider file: %w", err)
+		}
+
+		if provider.Spec.Type != fluxcdv1.InputProviderStatic {
+			return fmt.Errorf("unsupported provider type '%s', only '%s' is supported",
+				provider.Spec.Type,
+				fluxcdv1.InputProviderStatic)
+		}
+
+		// copy defaultValues from the provider to the ResourceSet inputs
+		if len(provider.Spec.DefaultValues) > 0 {
+			if rset.Spec.Inputs == nil {
+				rset.Spec.Inputs = []fluxcdv1.ResourceSetInput{}
+			}
+			vals := provider.Spec.DefaultValues
+
+			// compute the provider ID and add it to the inputs
+			b, err := json.Marshal(inputs.ID(provider.GetName()))
+			if err != nil {
+				return fmt.Errorf("failed to compute provider ID: %w", err)
+			}
+			vals["id"] = &apiextensionsv1.JSON{Raw: b}
+			rset.Spec.Inputs = append(rset.Spec.Inputs, vals)
 		}
 	}
 

@@ -50,6 +50,7 @@ The following commands are available:
 - `flux-operator build rset`: Generates the Kubernetes manifests from a ResourceSet definition.
     - `-f, --file`: Path to the ResourceSet YAML manifest (required).
     - `--inputs-from`: Path to the ResourceSet inputs YAML manifest.
+    - `--inputs-from-provider`: Path to the ResourceSetInputProvider static type YAML manifest.
 
 ### Get Commands
 
