@@ -11,7 +11,10 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
+	"github.com/google/go-containerregistry/pkg/authn"
+	kauth "github.com/google/go-containerregistry/pkg/authn/kubernetes"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	kuberecorder "k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -111,4 +114,22 @@ func requeueArtifactAfter(obj *fluxcdv1.FluxInstance) ctrl.Result {
 		result.RequeueAfter = d
 	}
 	return result
+}
+
+// GetDistributionKeychain creates a keychain from the artifactPullSecret secret if provided.
+func GetDistributionKeychain(ctx context.Context, kubeClient client.Client, obj *fluxcdv1.FluxInstance) (authn.Keychain, error) {
+	artifactPullSecret := obj.Spec.Distribution.ArtifactPullSecret
+	if artifactPullSecret == "" {
+		return nil, nil
+	}
+
+	key := types.NamespacedName{
+		Name:      artifactPullSecret,
+		Namespace: obj.GetNamespace(),
+	}
+	var secret corev1.Secret
+	if err := kubeClient.Get(ctx, key, &secret); err != nil {
+		return nil, err
+	}
+	return kauth.NewFromPullSecrets(ctx, []corev1.Secret{secret})
 }

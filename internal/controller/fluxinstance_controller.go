@@ -20,19 +20,17 @@ import (
 	"github.com/fluxcd/pkg/ssa"
 	"github.com/fluxcd/pkg/ssa/normalize"
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
-	"github.com/google/go-containerregistry/pkg/authn"
-	kauth "github.com/google/go-containerregistry/pkg/authn/kubernetes"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
 	kuberecorder "k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/yaml"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
@@ -130,6 +128,20 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 		return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
 	}
 
+	// Sanity check for building the distribution manifests.
+	if err := builder.CheckPrerequisites(r.StoragePath); err != nil {
+		// If this happens, then the operator image has been tampered with
+		// e.g.: the manifests are missing, or the Flux / OS version is not supported.
+		conditions.MarkFalse(obj,
+			meta.ReadyCondition,
+			meta.BuildFailedReason,
+			"%s", err.Error())
+		conditions.MarkStalled(obj,
+			meta.BuildFailedReason,
+			"%s", err.Error())
+		return ctrl.Result{}, reconcile.TerminalError(err)
+	}
+
 	tmpDir, err := builder.MkdirTempAbs("", "flux")
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to create tmp dir: %w", err)
@@ -210,24 +222,6 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 		"%s", msg)
 
 	return requeueAfter(obj), nil
-}
-
-// GetDistributionKeychain creates a keychain from the artifactPullSecret secret if provided.
-func GetDistributionKeychain(ctx context.Context, kubeClient client.Client, obj *fluxcdv1.FluxInstance) (authn.Keychain, error) {
-	artifactPullSecret := obj.Spec.Distribution.ArtifactPullSecret
-	if artifactPullSecret == "" {
-		return nil, nil
-	}
-
-	key := types.NamespacedName{
-		Name:      artifactPullSecret,
-		Namespace: obj.GetNamespace(),
-	}
-	var secret corev1.Secret
-	if err := kubeClient.Get(ctx, key, &secret); err != nil {
-		return nil, err
-	}
-	return kauth.NewFromPullSecrets(ctx, []corev1.Secret{secret})
 }
 
 // fetch pulls the distribution OCI artifact and

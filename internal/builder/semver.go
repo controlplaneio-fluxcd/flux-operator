@@ -83,6 +83,25 @@ func MatchVersion(dataDir, semverRange string) (string, error) {
 	return matchingVersions[0].Original(), nil
 }
 
+// CheckMinimumVersion checks if the given Flux version is greater than or equal to the minimum required version.
+func CheckMinimumVersion(fluxVersion, minimumVersion string) error {
+	c, err := semver.NewConstraint(fmt.Sprintf(">= %s", minimumVersion))
+	if err != nil {
+		return fmt.Errorf("semver constraint parse error: %w", err)
+	}
+
+	version, err := semver.NewVersion(fluxVersion)
+	if err != nil {
+		return fmt.Errorf("version '%s' parse error: %w", fluxVersion, err)
+	}
+
+	if c.Check(version) {
+		return nil
+	}
+
+	return fmt.Errorf("version '%s' is lower than the required minimum version '%s'", fluxVersion, minimumVersion)
+}
+
 // SupportsObjectLevelWorkloadFeature checks if the Flux version
 // supports the object level workload feature.
 func SupportsObjectLevelWorkloadFeature(fluxVersion string) (bool, error) {
