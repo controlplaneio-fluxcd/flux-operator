@@ -86,7 +86,7 @@
 After code changes, run the following command:
 
 ```sh
-make tidy build lint
+make all
 ```
 
 ### Unit Testing
@@ -131,6 +131,18 @@ Check the logs:
 
 ```sh
 kubectl -n flux-system logs deployment/flux-operator --follow
+```
+
+To test the Flux Operator CLI, build it with:
+
+```sh
+make cli-build
+```
+
+Then run the CLI with:
+
+```sh
+./bin/flux-operator-cli get instance flux -n flux-system
 ```
 
 To clean up the resources, run:
