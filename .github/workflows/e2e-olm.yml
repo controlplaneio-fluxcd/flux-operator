@@ -44,6 +44,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Run OLM tests
-        run: make test-olm
+        run: make test-olm-e2e
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
