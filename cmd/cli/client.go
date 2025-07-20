@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"strings"
 	"time"
 
 	"github.com/fluxcd/cli-utils/pkg/kstatus/status"
@@ -21,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
 	cliopts "k8s.io/cli-runtime/pkg/genericclioptions"
+	cliresource "k8s.io/cli-runtime/pkg/resource"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
@@ -272,6 +274,40 @@ func preferredFluxGVK(kind string, cf *cliopts.ConfigFlags) (*schema.GroupVersio
 	}
 
 	return &mapping.GroupVersionKind, nil
+}
+
+// getObjectByKindName retrieves a Kubernetes object by its kind and name
+// from the cluster using the preferred API version and group for the specified kind.
+func getObjectByKindName(args []string) (*unstructured.Unstructured, error) {
+	r := cliresource.NewBuilder(kubeconfigArgs).
+		Unstructured().
+		NamespaceParam(*kubeconfigArgs.Namespace).DefaultNamespace().
+		ResourceTypeOrNameArgs(false, args...).
+		ContinueOnError().
+		Latest().
+		Do()
+
+	if err := r.Err(); err != nil {
+		if cliresource.IsUsageError(err) {
+			return nil, fmt.Errorf("either `<resource>/<name>` or `<resource> <name>` is required as an argument")
+		}
+		return nil, err
+	}
+
+	infos, err := r.Infos()
+	if err != nil {
+		return nil, fmt.Errorf("x: %v", err)
+	}
+
+	if len(infos) == 0 {
+		return nil, fmt.Errorf("failed to find object: %s", strings.Join(args[:], " "))
+	} else if len(infos) > 1 {
+		return nil, fmt.Errorf("multiple objects found for: %s", strings.Join(args[:], " "))
+	}
+
+	obj := &unstructured.Unstructured{}
+	obj.Object, err = apiruntime.DefaultUnstructuredConverter.ToUnstructured(infos[0].Object)
+	return obj, err
 }
 
 // timeNow returns the current time in RFC3339Nano format.
