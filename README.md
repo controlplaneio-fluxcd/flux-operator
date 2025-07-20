@@ -8,9 +8,9 @@
 [![SLSA 3](https://slsa.dev/images/gh-badge-level3.svg)](https://fluxcd.control-plane.io/distribution/security/)
 
 The Flux Operator is a Kubernetes CRD controller that manages
-the lifecycle of CNCF [Flux CD](https://fluxcd.io) and the
-[ControlPlane enterprise distribution](https://github.com/controlplaneio-fluxcd/distribution). The operator extends Flux with self-service
-capabilities and preview environments for GitLab and GitHub pull requests testing.
+the lifecycle of CNCF [Flux CD](https://fluxcd.io) and the [ControlPlane enterprise distribution](https://github.com/controlplaneio-fluxcd/distribution).
+The operator extends Flux with self-service capabilities, deployment windows,
+and preview environments for GitHub, GitLab and Azure DevOps pull requests testing.
 
 ## Features
 
@@ -30,7 +30,7 @@ readiness status, reconcilers statistics, and cluster state synchronization.
 **Self-Service Environments** - The operator [ResourceSet API](https://fluxcd.control-plane.io/operator/resourcesets/introduction/)
 enables platform teams to define their own application standard as a group of Flux and Kubernetes resources
 that can be templated, parameterized and deployed as a single unit on self-service environments.
-The ResourceSet API integrates with GitLab and GitHub pull requests to create ephemeral environments
+The ResourceSet API integrates with Git pull requests to create ephemeral environments
 for testing and validation.
 
 **AI-Assisted GitOps** - The [Flux MCP Server](https://fluxcd.control-plane.io/mcp/) connects

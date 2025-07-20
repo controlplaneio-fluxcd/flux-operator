@@ -12,19 +12,42 @@ By contributing to this project, you agree to the Developer Certificate of
 Origin ([DCO](https://developercertificate.org/)). This document was created by the Linux Kernel community and is a
 simple statement that you, as a contributor, have the legal right to make the contribution.
 
-## Project Code Structure
+> You must sign-off your commits with your name and email address using `git commit -s`.
+
+## Project Overview
 
 The project is structured as a [Go module](https://go.dev/doc/modules/developing) with the following components:
+
+- [Flux Operator Kubernetes Controller](#flux-operator-kubernetes-controller)
+- [Flux Operator CLI](#flux-operator-cli)
+- [Flux Operator MCP Server](#flux-operator-mcp-server)
+
+The documentation is structured as follows:
+
+- [API documentation](#api-documentation-flux-operator-repository)
+- [User Guides](#website-distribution-repository)
+
+## Source Code Structure
 
 ### Flux Operator Kubernetes Controller
 
 The Flux Operator is built using the Kubernetes [controller-runtime](https://github.com/kubernetes-sigs/controller-runtime)
 framework and the [Flux runtime SDK](https://pkg.go.dev/github.com/fluxcd/pkg/runtime).
 
+The test framework is based on controller-runtime's [envtest](https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/envtest)
+and [Gomega](https://pkg.go.dev/github.com/onsi/gomega).
+
 Packages:
-- `api/` - contains the API definitions for the Flux Operator Kubernetes CRDs
-- `cmd/operator/` - contains the entrypoint of the Kubernetes controller
-- `internal/controller` - contains the controller-runtime reconcilers and watchers
+
+- [api](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/api/) - contains the API definitions for the Flux Operator Kubernetes CRDs
+- [cmd/operator](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/cmd/operator/) - contains the entrypoint of the Kubernetes controller
+- [internal/controller](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/internal/controller/) - contains the reconcilers for `FluxInstance`, `FluxReport`, `ResourceSet`, and `ResourceSetInputProvider` resources
+- [internal/builder](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/internal/builder/) - contains utilities for building and templating Flux manifests
+- [internal/entitlement](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/internal/entitlement/) - contains metering and entitlement validation logic
+- [internal/gitprovider](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/internal/gitprovider/) - contains integrations for GitHub, GitLab, and Azure DevOps
+- [internal/inventory](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/internal/inventory/) - contains inventory management for tracking applied resources
+- [internal/reporter](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/internal/reporter/) - contains cluster reporting and metrics collection utilities
+- [internal/schedule](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/internal/schedule/) - contains scheduling utilities for automated operations
 
 To test and build the operator binary, run:
 
@@ -40,29 +63,27 @@ To run the controller locally, first create a Kubernetes cluster using `kind`:
 kind create cluster
 ```
 
-To build the container image and deploy the operator to the kind cluster, run:
-
-```shell
-IMG=flux-operator:dev make build docker-build load-image deploy
-```
-
 To run the integration tests against the kind cluster, run:
 
 ```shell
 make test-e2e
 ```
 
+For more information on how to run the controller locally and perform manual testing, refer to the
+[development](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/docs/dev#local-development) guide.
+
 ### Flux Operator CLI
 
 The Flux Operator command-line interface (CLI) is built using the [Cobra](https://github.com/spf13/cobra) library.
 
 Packages:
-- `cmd/cli/` - contains the commands for the Flux Operator CLI
+
+- [cmd/cli](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/cmd/cli/) - contains the commands for the Flux Operator CLI
 
 To test and build the CLI binary, run:
 
 ```shell
-make test cli-build
+make cli-test cli-build
 ```
 
 The build command writes the binary at `bin/flux-operator-cli` relative to the repository root.
@@ -73,20 +94,24 @@ To run the CLI locally, use the binary built in the previous step:
 ./bin/flux-operator-cli --help
 ```
 
+The CLI commands documentation is maintained in the
+[cmd/cli/README.md](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/cmd/cli/README.md) file.
+
 ### Flux Operator MCP Server
 
 The Flux Operator MCP Server is built using the [mcp-go](https://github.com/mark3labs/mcp-go) library.
 
 Packages:
-- `cmd/mcp/k8s` - contains the Kubernetes client
-- `cmd/mcp/prompter` - contains the MCP prompts
-- `cmd/mcp/toolbox` - contains the MCP tools
-- `cmd/mcp/main.go` - contains the server entrypoint
+
+- [cmd/mcp/k8s](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/cmd/mcp/k8s/) - contains the Kubernetes client
+- [cmd/mcp/prompter](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/cmd/mcp/prompter/) - contains the MCP prompts
+- [cmd/mcp/toolbox](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/cmd/mcp/toolbox/) - contains the MCP tools
+- [cmd/mcp/main.go](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/cmd/mcp/main.go) - contains the server entrypoint
 
 To test and build the MCP Server binary, run:
 
 ```shell
-make test mcp-build
+make mcp-test mcp-build
 ```
 
 The build command writes the binary at `bin/flux-operator-mcp` relative to the repository root.
@@ -151,6 +176,8 @@ To contribute to the documentation, you can edit the Markdown files in the follo
 - [docs/operator](https://github.com/controlplaneio-fluxcd/distribution/tree/main/docs/operator) - contains the user guides for the Flux Operator
 - [docs/mcp](https://github.com/controlplaneio-fluxcd/distribution/tree/main/docs/mcp) - contains the user guides for the MCP Server
 
+The documentation website is built using [Material for MkDocs](https://squidfunk.github.io/mkdocs-material/).
+
 ## Acceptance policy
 
 These things will make a PR more likely to be accepted:
@@ -169,7 +196,7 @@ These things will make a PR more likely to be accepted:
 Before opening a PR, please check that your code passes the following:
 
 ```shell
-make test lint
+make all
 ```
 
 In general, we will merge a PR once one maintainer has endorsed it.
@@ -178,7 +205,7 @@ get asked to resubmit the PR or divide the changes into more than one PR.
 
 ### Format of the Commit Message
 
-For this project we prefer the following rules for good commit messages:
+For this project, we prefer the following rules for good commit messages:
 
 - Limit the subject to 50 characters and write as the continuation
   of the sentence "If applied, this commit will ..."
