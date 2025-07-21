@@ -126,6 +126,17 @@ including their reconciliation status and the amount of cumulative storage used 
 
 - `flux-operator stats`: Displays statistics about the Flux resources in the cluster.
 
+### Trace Command
+
+This command is used to trace Kubernetes objects throughout the GitOps delivery pipeline
+to identify which Flux reconciler manages them and from which source they originate.
+
+- `flux-operator trace <kind>/<name>`: Trace a Kubernetes object to its Flux reconciler and source.
+
+Arguments:
+
+- `-n, --namespace`: Specifies the namespace scope of the command.
+
 ### Create Secret Commands
 
 The `flux-operator create secret` commands are used to create Kubernetes secrets specific to Flux.
