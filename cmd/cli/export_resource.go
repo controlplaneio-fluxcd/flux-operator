@@ -13,6 +13,8 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
+
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
 var exportResourceCmd = &cobra.Command{
@@ -118,7 +120,7 @@ func cleanObjectForExport(obj *unstructured.Unstructured) {
 	if labels, exists := cleanMetadata["labels"]; exists {
 		if labelMap, ok := labels.(map[string]any); ok {
 			for key := range labelMap {
-				if strings.Contains(key, "fluxcd") &&
+				if fluxcdv1.IsFluxAPI(key) &&
 					(strings.HasSuffix(key, "/name") || strings.HasSuffix(key, "/namespace")) {
 					delete(labelMap, key)
 				}

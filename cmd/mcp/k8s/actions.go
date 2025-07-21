@@ -71,8 +71,8 @@ func (k *Client) IsManagedByFlux(ctx context.Context, gvk schema.GroupVersionKin
 	fluxLabels := []string{
 		"fluxcd.controlplane.io/namespace",
 		"resourceset.fluxcd.controlplane.io/namespace",
-		"kustomize.toolkit.fluxcd.io/namespace",
-		"helm.toolkit.fluxcd.io/namespace",
+		fluxcdv1.FluxKustomizeGroup + "/namespace",
+		fluxcdv1.FluxHelmGroup + "/namespace",
 	}
 
 	for key := range resource.GetLabels() {

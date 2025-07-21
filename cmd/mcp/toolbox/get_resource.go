@@ -9,6 +9,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/k8s"
 )
 
@@ -92,14 +93,14 @@ func (m *Manager) HandleGetKubernetesResources(ctx context.Context, request mcp.
 
 func (m *Manager) GetFluxTip(kind string) string {
 	switch kind {
-	case "GitRepository", "Bucket", "OCIRepository":
+	case fluxcdv1.FluxGitRepositoryKind, fluxcdv1.FluxBucketKind, fluxcdv1.FluxOCIRepositoryKind:
 		return `
 If asked for recommendations:
 1. Check if the interval is less than 1 minute and if so, recommend to increase it to one minute.
 2. Check if the GitRepository has ref.branch set and if so, recommend to set ref.name to refs/heads/<branch name>.
 3. Check if the GitRepository has ref.tag set and if so, recommend to set ref.name to refs/tags/<tag name>.
 `
-	case "Kustomization":
+	case fluxcdv1.FluxKustomizationKind:
 		return `
 If asked for recommendations:
 1. Check if the Kustomization interval is less than 10 minutes and if so, recommend to increase it.
@@ -113,7 +114,7 @@ If asked for recommendations:
    Explain that force recreates resources and can cause downtime,
    it should be used only in emergencies when patching fails due to immutable field changes.
 `
-	case "HelmRelease":
+	case fluxcdv1.FluxHelmReleaseKind:
 		return `
 If asked for recommendations:
 1. Check if the interval is less than 10 minutes and if so, recommend to increase it.

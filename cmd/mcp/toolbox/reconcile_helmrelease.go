@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/k8s"
 )
 
@@ -61,8 +62,8 @@ func (m *Manager) HandleReconcileHelmRelease(ctx context.Context, request mcp.Ca
 
 	hr := &unstructured.Unstructured{
 		Object: map[string]any{
-			"apiVersion": "helm.toolkit.fluxcd.io/v2",
-			"kind":       "HelmRelease",
+			"apiVersion": fluxcdv1.FluxHelmGroup + "/v2",
+			"kind":       fluxcdv1.FluxHelmReleaseKind,
 		},
 	}
 	hr.SetName(name)
@@ -84,23 +85,23 @@ func (m *Manager) HandleReconcileHelmRelease(ctx context.Context, request mcp.Ca
 
 			var err error
 			switch chartRefType {
-			case "HelmChart":
+			case fluxcdv1.FluxHelmChartKind:
 				err = kubeClient.Annotate(ctx,
 					schema.GroupVersionKind{
-						Group:   "source.toolkit.fluxcd.io",
+						Group:   fluxcdv1.FluxSourceGroup,
 						Version: "v1",
-						Kind:    "HelmChart",
+						Kind:    fluxcdv1.FluxHelmChartKind,
 					},
 					chartRefName,
 					chartRefNamespace,
 					[]string{meta.ReconcileRequestAnnotation},
 					ts)
-			case "OCIRepository":
+			case fluxcdv1.FluxOCIRepositoryKind:
 				err = kubeClient.Annotate(ctx,
 					schema.GroupVersionKind{
-						Group:   "source.toolkit.fluxcd.io",
+						Group:   fluxcdv1.FluxSourceGroup,
 						Version: "v1beta2",
-						Kind:    "OCIRepository",
+						Kind:    fluxcdv1.FluxOCIRepositoryKind,
 					},
 					chartRefName,
 					chartRefNamespace,
@@ -117,9 +118,9 @@ func (m *Manager) HandleReconcileHelmRelease(ctx context.Context, request mcp.Ca
 
 	err = kubeClient.Annotate(ctx,
 		schema.GroupVersionKind{
-			Group:   "helm.toolkit.fluxcd.io",
+			Group:   fluxcdv1.FluxHelmGroup,
 			Version: "v2",
-			Kind:    "HelmRelease",
+			Kind:    fluxcdv1.FluxHelmReleaseKind,
 		},
 		name,
 		namespace,

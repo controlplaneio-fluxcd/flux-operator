@@ -242,8 +242,9 @@ func toggleSuspension(ctx context.Context, gvk schema.GroupVersionKind, name, na
 
 // preferredFluxGVK returns the preferred GroupVersionKind for a given Flux kind.
 func preferredFluxGVK(kind string, cf *cliopts.ConfigFlags) (*schema.GroupVersionKind, error) {
-	gk := schema.GroupKind{
-		Kind: kind,
+	gk, err := fluxcdv1.FluxGroupFor(kind)
+	if err != nil {
+		return nil, err
 	}
 
 	mapper, err := cf.ToRESTMapper()
@@ -251,24 +252,7 @@ func preferredFluxGVK(kind string, cf *cliopts.ConfigFlags) (*schema.GroupVersio
 		return nil, fmt.Errorf("unable to create REST mapper: %w", err)
 	}
 
-	switch kind {
-	case "FluxInstance", "FluxReport", "ResourceSet", "ResourceSetInputProvider":
-		gk.Group = fluxcdv1.GroupVersion.Group
-	case "GitRepository", "OCIRepository", "Bucket", "HelmChart", "HelmRepository":
-		gk.Group = "source.toolkit.fluxcd.io"
-	case "Alert", "Provider", "Receiver":
-		gk.Group = "notification.toolkit.fluxcd.io"
-	case "ImageRepository", "ImagePolicy", "ImageUpdateAutomation":
-		gk.Group = "image.toolkit.fluxcd.io"
-	case "Kustomization":
-		gk.Group = "kustomize.toolkit.fluxcd.io"
-	case "HelmRelease":
-		gk.Group = "helm.toolkit.fluxcd.io"
-	default:
-		return nil, fmt.Errorf("unknown Flux kind %s", kind)
-	}
-
-	mapping, err := mapper.RESTMapping(gk)
+	mapping, err := mapper.RESTMapping(*gk)
 	if err != nil {
 		return nil, err
 	}

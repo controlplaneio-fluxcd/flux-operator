@@ -6,7 +6,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/fluxcd/cli-utils/pkg/object"
 	"github.com/spf13/cobra"
@@ -79,9 +78,9 @@ func treeFromResourceSet(ctx context.Context, kubeClient client.Client, rset flu
 
 		root := tree.Add(objMetadata)
 
-		if strings.Contains(objMetadata.GroupKind.Group, "fluxcd") {
+		if fluxcdv1.IsFluxAPI(objMetadata.GroupKind.Group) {
 			switch objMetadata.GroupKind.Kind {
-			case "HelmRelease":
+			case fluxcdv1.FluxHelmReleaseKind:
 				refs, err := inventory.FromHelmRelease(ctx, kubeClient, entry)
 				if err != nil {
 					return err
@@ -93,7 +92,7 @@ func treeFromResourceSet(ctx context.Context, kubeClient client.Client, rset flu
 					}
 					root.Add(refObjMetadata)
 				}
-			case "Kustomization":
+			case fluxcdv1.FluxKustomizationKind:
 				err = treeFromKustomization(ctx, kubeClient, entry, root)
 				if err != nil {
 					return err

@@ -6,7 +6,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/fluxcd/cli-utils/pkg/object"
 	"github.com/spf13/cobra"
@@ -27,9 +26,9 @@ var treeKustomizationCmd = &cobra.Command{
 	Args: cobra.ExactArgs(1),
 	RunE: treeKustomizationCmdRun,
 	ValidArgsFunction: resourceNamesCompletionFunc(schema.GroupVersionKind{
-		Group:   "kustomize.toolkit.fluxcd.io",
+		Group:   fluxcdv1.FluxKustomizeGroup,
 		Version: "v1",
-		Kind:    "Kustomization",
+		Kind:    fluxcdv1.FluxKustomizationKind,
 	}),
 }
 
@@ -55,7 +54,7 @@ func treeKustomizationCmdRun(cmd *cobra.Command, args []string) error {
 	objMeta := object.ObjMetadata{
 		Namespace: *kubeconfigArgs.Namespace,
 		Name:      name,
-		GroupKind: schema.GroupKind{Group: "kustomize.toolkit.fluxcd.io", Kind: "Kustomization"},
+		GroupKind: schema.GroupKind{Group: fluxcdv1.FluxKustomizeGroup, Kind: fluxcdv1.FluxKustomizationKind},
 	}
 
 	tree := NewTree(objMeta)
@@ -82,9 +81,9 @@ func treeFromKustomization(ctx context.Context, kubeClient client.Client, ks flu
 
 		root := tree.Add(objMetadata)
 
-		if strings.Contains(objMetadata.GroupKind.Group, "fluxcd") {
+		if fluxcdv1.IsFluxAPI(objMetadata.GroupKind.Group) {
 			switch objMetadata.GroupKind.Kind {
-			case "Kustomization":
+			case fluxcdv1.FluxKustomizationKind:
 				if entry.ID == ks.ID {
 					// Skip self-referencing Kustomization
 					continue
@@ -93,7 +92,7 @@ func treeFromKustomization(ctx context.Context, kubeClient client.Client, ks flu
 				if err != nil {
 					return err
 				}
-			case "HelmRelease":
+			case fluxcdv1.FluxHelmReleaseKind:
 				refs, err := inventory.FromHelmRelease(ctx, kubeClient, entry)
 				if err != nil {
 					return err

@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/k8s"
 )
 
@@ -60,8 +61,8 @@ func (m *Manager) HandleReconcileKustomization(ctx context.Context, request mcp.
 	}
 	ks := &unstructured.Unstructured{
 		Object: map[string]any{
-			"apiVersion": "kustomize.toolkit.fluxcd.io/v1",
-			"kind":       "Kustomization",
+			"apiVersion": fluxcdv1.FluxKustomizeGroup + "/v1",
+			"kind":       fluxcdv1.FluxKustomizationKind,
 		},
 	}
 	ks.SetName(name)
@@ -82,34 +83,34 @@ func (m *Manager) HandleReconcileKustomization(ctx context.Context, request mcp.
 
 		var err error
 		switch sourceRefType {
-		case "GitRepository":
+		case fluxcdv1.FluxGitRepositoryKind:
 			err = kubeClient.Annotate(ctx,
 				schema.GroupVersionKind{
-					Group:   "source.toolkit.fluxcd.io",
+					Group:   fluxcdv1.FluxSourceGroup,
 					Version: "v1",
-					Kind:    "GitRepository",
+					Kind:    fluxcdv1.FluxGitRepositoryKind,
 				},
 				sourceRefName,
 				sourceRefNamespace,
 				[]string{meta.ReconcileRequestAnnotation},
 				ts)
-		case "Bucket":
+		case fluxcdv1.FluxBucketKind:
 			err = kubeClient.Annotate(ctx,
 				schema.GroupVersionKind{
-					Group:   "source.toolkit.fluxcd.io",
+					Group:   fluxcdv1.FluxSourceGroup,
 					Version: "v1",
-					Kind:    "Bucket",
+					Kind:    fluxcdv1.FluxBucketKind,
 				},
 				sourceRefName,
 				sourceRefNamespace,
 				[]string{meta.ReconcileRequestAnnotation},
 				ts)
-		case "OCIRepository":
+		case fluxcdv1.FluxOCIRepositoryKind:
 			err = kubeClient.Annotate(ctx,
 				schema.GroupVersionKind{
-					Group:   "source.toolkit.fluxcd.io",
+					Group:   fluxcdv1.FluxSourceGroup,
 					Version: "v1beta2",
-					Kind:    "OCIRepository",
+					Kind:    fluxcdv1.FluxOCIRepositoryKind,
 				},
 				sourceRefName,
 				sourceRefNamespace,
@@ -125,9 +126,9 @@ func (m *Manager) HandleReconcileKustomization(ctx context.Context, request mcp.
 
 	err = kubeClient.Annotate(ctx,
 		schema.GroupVersionKind{
-			Group:   "kustomize.toolkit.fluxcd.io",
+			Group:   fluxcdv1.FluxKustomizeGroup,
 			Version: "v1",
-			Kind:    "Kustomization",
+			Kind:    fluxcdv1.FluxKustomizationKind,
 		},
 		name,
 		namespace,
