@@ -137,6 +137,20 @@ Arguments:
 
 - `-n, --namespace`: Specifies the namespace scope of the command.
 
+### Tree Commands
+
+The `flux-operator tree` commands are used to visualize the Flux-managed Kubernetes objects in a tree format
+by recursively traversing the Flux resources such as ResourceSets, Kustomizations and HelmReleases.
+
+The following commands are available:
+
+- `flux-operator tree rset <name>`: Print a tree view of the ResourceSet managed objects.
+- `flux-operator tree ks <name>`: Print a tree view of the Flux Kustomization managed objects.
+
+Arguments:
+
+- `-n, --namespace`: Specifies the namespace scope of the command.
+
 ### Create Secret Commands
 
 The `flux-operator create secret` commands are used to create Kubernetes secrets specific to Flux.
