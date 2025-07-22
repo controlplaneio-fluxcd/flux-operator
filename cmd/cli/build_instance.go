@@ -135,6 +135,11 @@ func buildInstanceCmdRun(cmd *cobra.Command, args []string) error {
 		options.Patches += builder.GetMultitenantProfile(instance.GetCluster().TenantDefaultServiceAccount)
 	}
 
+	if instance.GetCluster().ObjectLevelWorkloadIdentity {
+		options.EnableObjectLevelWorkloadIdentity = true
+		options.SupportsObjectLevelWorkloadIdentity = true
+	}
+
 	if options.HasNotificationController() {
 		options.Patches += builder.GetNotificationPatch(options.Namespace)
 	}

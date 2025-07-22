@@ -141,7 +141,6 @@ patches:
       value: --watch-label-selector=!{{.ShardingKey}}
 {{- end }}
 {{- if and .SupportsObjectLevelWorkloadIdentity .EnableObjectLevelWorkloadIdentity }}
-patches:
 - target:
     kind: Deployment
     name: "(source-controller|kustomize-controller|notification-controller|image-reflector-controller|image-automation-controller)"
