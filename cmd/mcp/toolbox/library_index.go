@@ -3,13 +3,17 @@
 
 package toolbox
 
+import (
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+)
+
 // docsMetadata is a collection of DocumentMetadata instances,
 // each describing metadata like URL, group, kind, and related keywords.
 var docsMetadata = []DocumentMetadata{
 	{
 		URL:   "https://raw.githubusercontent.com/fluxcd/source-controller/refs/heads/main/docs/spec/v1/gitrepositories.md",
-		Group: "source.toolkit.fluxcd.io",
-		Kind:  "GitRepository",
+		Group: fluxcdv1.FluxSourceGroup,
+		Kind:  fluxcdv1.FluxGitRepositoryKind,
 		Keywords: []string{
 			"source-controller", "git", "branch", "commit", "sha", "ref", "tag", "semver",
 			"verification", "pgp", "signature", "ssh", "private", "public", "tls", "auth",
@@ -19,8 +23,8 @@ var docsMetadata = []DocumentMetadata{
 	},
 	{
 		URL:   "https://raw.githubusercontent.com/fluxcd/source-controller/refs/heads/main/docs/spec/v1beta2/ocirepositories.md",
-		Group: "source.toolkit.fluxcd.io",
-		Kind:  "OCIRepository",
+		Group: fluxcdv1.FluxSourceGroup,
+		Kind:  fluxcdv1.FluxOCIRepositoryKind,
 		Keywords: []string{
 			"source-controller", "oci", "registry", "artifact", "tag", "semver", "digest",
 			"verification", "cosign", "notation", "signature", "keyless", "layer", "proxy",
@@ -29,24 +33,24 @@ var docsMetadata = []DocumentMetadata{
 	},
 	{
 		URL:   "https://raw.githubusercontent.com/fluxcd/source-controller/refs/heads/main/docs/spec/v1/helmrepositories.md",
-		Group: "source.toolkit.fluxcd.io",
-		Kind:  "HelmRepository",
+		Group: fluxcdv1.FluxSourceGroup,
+		Kind:  fluxcdv1.FluxHelmRepositoryKind,
 		Keywords: []string{
 			"source-controller", "index.yaml", "authentication",
 		},
 	},
 	{
 		URL:   "https://raw.githubusercontent.com/fluxcd/source-controller/refs/heads/main/docs/spec/v1/helmcharts.md",
-		Group: "source.toolkit.fluxcd.io",
-		Kind:  "HelmChart",
+		Group: fluxcdv1.FluxSourceGroup,
+		Kind:  fluxcdv1.FluxHelmChartKind,
 		Keywords: []string{
 			"source-controller", "chart", "valuesfiles", "strategy", "version",
 		},
 	},
 	{
 		URL:   "https://raw.githubusercontent.com/fluxcd/source-controller/refs/heads/main/docs/spec/v1/buckets.md",
-		Group: "source.toolkit.fluxcd.io",
-		Kind:  "Bucket",
+		Group: fluxcdv1.FluxSourceGroup,
+		Kind:  fluxcdv1.FluxBucketKind,
 		Keywords: []string{
 			"source-controller", "s3", "storage", "minio", "blob", "endpoint",
 			"region", "insecure", "managed-identity", "sas", "token", "certificate",
@@ -55,8 +59,8 @@ var docsMetadata = []DocumentMetadata{
 	},
 	{
 		URL:   "https://raw.githubusercontent.com/fluxcd/kustomize-controller/refs/heads/main/docs/spec/v1/kustomizations.md",
-		Group: "kustomize.toolkit.fluxcd.io",
-		Kind:  "Kustomization",
+		Group: fluxcdv1.FluxKustomizeGroup,
+		Kind:  fluxcdv1.FluxKustomizationKind,
 		Keywords: []string{
 			"kustomize-controller", "kustomize", "git", "oci", "retry", "wait", "timeout",
 			"validation", "health", "cel", "drift", "patches", "substitution", "variables",
@@ -67,8 +71,8 @@ var docsMetadata = []DocumentMetadata{
 	},
 	{
 		URL:   "https://raw.githubusercontent.com/fluxcd/helm-controller/refs/heads/main/docs/spec/v2/helmreleases.md",
-		Group: "helm.toolkit.fluxcd.io",
-		Kind:  "HelmRelease",
+		Group: fluxcdv1.FluxHelmGroup,
+		Kind:  fluxcdv1.FluxHelmReleaseKind,
 		Keywords: []string{
 			"helm-controller", "helm", "chart", "release", "values", "upgrade", "install",
 			"uninstall", "rollback", "test", "remediation", "drift", "detection", "kubeconfig",
@@ -77,8 +81,8 @@ var docsMetadata = []DocumentMetadata{
 	},
 	{
 		URL:   "https://raw.githubusercontent.com/fluxcd/notification-controller/refs/heads/main/docs/spec/v1/receivers.md",
-		Group: "notification.toolkit.fluxcd.io",
-		Kind:  "Receiver",
+		Group: fluxcdv1.FluxNotificationGroup,
+		Kind:  fluxcdv1.FluxReceiverKind,
 		Keywords: []string{
 			"notification-controller", "webhook", "receiver", "hmac", "trigger",
 			"github", "gitlab", "bitbucket", "harbor", "cdevents", "payload",
@@ -86,8 +90,8 @@ var docsMetadata = []DocumentMetadata{
 	},
 	{
 		URL:   "https://raw.githubusercontent.com/fluxcd/notification-controller/refs/heads/main/docs/spec/v1beta3/alerts.md",
-		Group: "notification.toolkit.fluxcd.io",
-		Kind:  "Alert",
+		Group: fluxcdv1.FluxNotificationGroup,
+		Kind:  fluxcdv1.FluxAlertKind,
 		Keywords: []string{
 			"notification-controller", "alerting", "event", "notification", "observability",
 			"incident", "error", "info", "severity",
@@ -95,8 +99,8 @@ var docsMetadata = []DocumentMetadata{
 	},
 	{
 		URL:   "https://raw.githubusercontent.com/fluxcd/notification-controller/refs/heads/main/docs/spec/v1beta3/providers.md",
-		Group: "notification.toolkit.fluxcd.io",
-		Kind:  "Provider",
+		Group: fluxcdv1.FluxNotificationGroup,
+		Kind:  fluxcdv1.FluxAlertProviderKind,
 		Keywords: []string{
 			"notification-controller", "alert", "notification", "slack", "teams",
 			"pagerduty", "discord", "matrix", "lark", "rocket", "datadog", "grafana",
@@ -105,8 +109,8 @@ var docsMetadata = []DocumentMetadata{
 	},
 	{
 		URL:   "https://raw.githubusercontent.com/fluxcd/image-reflector-controller/refs/heads/main/docs/spec/v1beta2/imagerepositories.md",
-		Group: "image.toolkit.fluxcd.io",
-		Kind:  "ImageRepository",
+		Group: fluxcdv1.FluxImageGroup,
+		Kind:  fluxcdv1.FluxImageRepositoryKind,
 		Keywords: []string{
 			"image-reflector-controller", "container", "image", "tags",
 			"docker", "ecr", "gar", "acr", "scan",
@@ -114,8 +118,8 @@ var docsMetadata = []DocumentMetadata{
 	},
 	{
 		URL:   "https://raw.githubusercontent.com/fluxcd/image-reflector-controller/refs/heads/main/docs/spec/v1beta2/imagepolicies.md",
-		Group: "image.toolkit.fluxcd.io",
-		Kind:  "ImagePolicy",
+		Group: fluxcdv1.FluxImageGroup,
+		Kind:  fluxcdv1.FluxImagePolicyKind,
 		Keywords: []string{
 			"image-reflector-controller", "container", "image", "policy", "tag", "semver", "range",
 			"numerical", "alphabetical", "order", "filter", "pattern", "regex", "latest",
@@ -123,8 +127,8 @@ var docsMetadata = []DocumentMetadata{
 	},
 	{
 		URL:   "https://raw.githubusercontent.com/fluxcd/image-automation-controller/refs/heads/main/docs/spec/v1beta2/imageupdateautomations.md",
-		Group: "image.toolkit.fluxcd.io",
-		Kind:  "ImageUpdateAutomation",
+		Group: fluxcdv1.FluxImageGroup,
+		Kind:  fluxcdv1.FluxImageUpdateAutomationKind,
 		Keywords: []string{
 			"image-automation-controller", "docker", "container", "image", "tag",
 			"policy", "update", "commit", "push", "git", "scan", "automation", "automate",
@@ -132,8 +136,8 @@ var docsMetadata = []DocumentMetadata{
 	},
 	{
 		URL:   "https://raw.githubusercontent.com/controlplaneio-fluxcd/flux-operator/refs/heads/main/docs/api/v1/fluxinstance.md",
-		Group: "fluxcd.controlplane.io",
-		Kind:  "FluxInstance",
+		Group: fluxcdv1.GroupVersion.Group,
+		Kind:  fluxcdv1.FluxInstanceKind,
 		Keywords: []string{
 			"flux-operator", "distribution", "registry", "components", "sync",
 			"cluster", "storage", "multitenant", "network", "controller",
@@ -142,8 +146,8 @@ var docsMetadata = []DocumentMetadata{
 	},
 	{
 		URL:   "https://raw.githubusercontent.com/controlplaneio-fluxcd/flux-operator/refs/heads/main/docs/api/v1/fluxreport.md",
-		Group: "fluxcd.controlplane.io",
-		Kind:  "FluxReport",
+		Group: fluxcdv1.GroupVersion.Group,
+		Kind:  fluxcdv1.FluxReportKind,
 		Keywords: []string{
 			"flux-operator", "report", "monitor", "stats", "readiness",
 			"metric", "prometheus", "entitlement", "size", "info", "troubleshooting",
@@ -151,8 +155,8 @@ var docsMetadata = []DocumentMetadata{
 	},
 	{
 		URL:   "https://raw.githubusercontent.com/controlplaneio-fluxcd/flux-operator/refs/heads/main/docs/api/v1/resourceset.md",
-		Group: "fluxcd.controlplane.io",
-		Kind:  "ResourceSet",
+		Group: fluxcdv1.GroupVersion.Group,
+		Kind:  fluxcdv1.ResourceSetKind,
 		Keywords: []string{
 			"flux-operator", "resource", "inputs", "template", "templating",
 			"common", "depends", "wait", "timeout", "account",
@@ -161,8 +165,8 @@ var docsMetadata = []DocumentMetadata{
 	},
 	{
 		URL:   "https://raw.githubusercontent.com/controlplaneio-fluxcd/flux-operator/refs/heads/main/docs/api/v1/resourcesetinputprovider.md",
-		Group: "fluxcd.controlplane.io",
-		Kind:  "ResourceSetInputProvider",
+		Group: fluxcdv1.GroupVersion.Group,
+		Kind:  fluxcdv1.ResourceSetInputProviderKind,
 		Keywords: []string{
 			"flux-operator", "input", "provider", "pull", "merge", "request",
 			"author", "github", "gitlab", "filter", "labels", "branch",

@@ -12,6 +12,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
 var completionCmd = &cobra.Command{
@@ -85,31 +87,31 @@ type FluxKind struct {
 // fluxKinds contains all Flux resource kinds with their properties.
 var fluxKinds = []FluxKind{
 	// Flux Operator resources
-	{Name: "FluxInstance", Reconcilable: true},
-	{Name: "FluxReport", Reconcilable: true},
-	{Name: "ResourceSet", Reconcilable: true},
-	{Name: "ResourceSetInputProvider", Reconcilable: true},
+	{Name: fluxcdv1.FluxInstanceKind, Reconcilable: true},
+	{Name: fluxcdv1.FluxReportKind, Reconcilable: true},
+	{Name: fluxcdv1.ResourceSetKind, Reconcilable: true},
+	{Name: fluxcdv1.ResourceSetInputProviderKind, Reconcilable: true},
 
 	// Flux sources
-	{Name: "GitRepository", Reconcilable: true},
-	{Name: "OCIRepository", Reconcilable: true},
-	{Name: "Bucket", Reconcilable: true},
-	{Name: "HelmRepository", Reconcilable: true},
-	{Name: "HelmChart", Reconcilable: true},
+	{Name: fluxcdv1.FluxGitRepositoryKind, Reconcilable: true},
+	{Name: fluxcdv1.FluxOCIRepositoryKind, Reconcilable: true},
+	{Name: fluxcdv1.FluxBucketKind, Reconcilable: true},
+	{Name: fluxcdv1.FluxHelmRepositoryKind, Reconcilable: true},
+	{Name: fluxcdv1.FluxHelmChartKind, Reconcilable: true},
 
 	// Flux appliers
-	{Name: "HelmRelease", Reconcilable: true},
-	{Name: "Kustomization", Reconcilable: true},
+	{Name: fluxcdv1.FluxHelmReleaseKind, Reconcilable: true},
+	{Name: fluxcdv1.FluxKustomizationKind, Reconcilable: true},
 
 	// Flux image automation
-	{Name: "ImageRepository", Reconcilable: true},
-	{Name: "ImagePolicy", Reconcilable: false},
-	{Name: "ImageUpdateAutomation", Reconcilable: true},
+	{Name: fluxcdv1.FluxImageRepositoryKind, Reconcilable: true},
+	{Name: fluxcdv1.FluxImagePolicyKind, Reconcilable: false},
+	{Name: fluxcdv1.FluxImageUpdateAutomationKind, Reconcilable: true},
 
 	// Flux notifications
-	{Name: "Alert", Reconcilable: false},
-	{Name: "Provider", Reconcilable: false},
-	{Name: "Receiver", Reconcilable: true},
+	{Name: fluxcdv1.FluxAlertKind, Reconcilable: false},
+	{Name: fluxcdv1.FluxAlertProviderKind, Reconcilable: false},
+	{Name: fluxcdv1.FluxReceiverKind, Reconcilable: true},
 }
 
 // getFluxKinds returns a list of Flux kind names, optionally filtered by reconcilable status.

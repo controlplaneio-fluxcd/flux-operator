@@ -12,6 +12,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/k8s"
 )
 
@@ -64,56 +65,56 @@ func (m *Manager) HandleReconcileSource(ctx context.Context, request mcp.CallToo
 
 	ts := time.Now().Format(time.RFC3339Nano)
 	switch kind {
-	case "GitRepository":
+	case fluxcdv1.FluxGitRepositoryKind:
 		err = kubeClient.Annotate(ctx,
 			schema.GroupVersionKind{
-				Group:   "source.toolkit.fluxcd.io",
+				Group:   fluxcdv1.FluxSourceGroup,
 				Version: "v1",
-				Kind:    "GitRepository",
+				Kind:    fluxcdv1.FluxGitRepositoryKind,
 			},
 			name,
 			namespace,
 			[]string{meta.ReconcileRequestAnnotation},
 			ts)
-	case "Bucket":
+	case fluxcdv1.FluxBucketKind:
 		err = kubeClient.Annotate(ctx,
 			schema.GroupVersionKind{
-				Group:   "source.toolkit.fluxcd.io",
+				Group:   fluxcdv1.FluxSourceGroup,
 				Version: "v1",
-				Kind:    "Bucket",
+				Kind:    fluxcdv1.FluxBucketKind,
 			},
 			name,
 			namespace,
 			[]string{meta.ReconcileRequestAnnotation},
 			ts)
-	case "HelmChart":
+	case fluxcdv1.FluxHelmChartKind:
 		err = kubeClient.Annotate(ctx,
 			schema.GroupVersionKind{
-				Group:   "source.toolkit.fluxcd.io",
+				Group:   fluxcdv1.FluxSourceGroup,
 				Version: "v1",
-				Kind:    "HelmChart",
+				Kind:    fluxcdv1.FluxHelmChartKind,
 			},
 			name,
 			namespace,
 			[]string{meta.ReconcileRequestAnnotation},
 			ts)
-	case "HelmRepository":
+	case fluxcdv1.FluxHelmRepositoryKind:
 		err = kubeClient.Annotate(ctx,
 			schema.GroupVersionKind{
-				Group:   "source.toolkit.fluxcd.io",
+				Group:   fluxcdv1.FluxSourceGroup,
 				Version: "v1",
-				Kind:    "HelmRepository",
+				Kind:    fluxcdv1.FluxHelmRepositoryKind,
 			},
 			name,
 			namespace,
 			[]string{meta.ReconcileRequestAnnotation},
 			ts)
-	case "OCIRepository":
+	case fluxcdv1.FluxOCIRepositoryKind:
 		err = kubeClient.Annotate(ctx,
 			schema.GroupVersionKind{
-				Group:   "source.toolkit.fluxcd.io",
+				Group:   fluxcdv1.FluxSourceGroup,
 				Version: "v1beta2",
-				Kind:    "OCIRepository",
+				Kind:    fluxcdv1.FluxOCIRepositoryKind,
 			},
 			name,
 			namespace,

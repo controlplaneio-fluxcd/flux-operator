@@ -660,8 +660,8 @@ func (r *ResourceSetReconciler) deleteAllStaged(ctx context.Context,
 	var fluxObjects []*unstructured.Unstructured
 	var nativeObjects []*unstructured.Unstructured
 	for _, res := range objects {
-		if strings.HasPrefix(res.GetAPIVersion(), "kustomize.toolkit.fluxcd.io/") ||
-			strings.HasPrefix(res.GetAPIVersion(), "helm.toolkit.fluxcd.io/") {
+		if strings.HasPrefix(res.GetAPIVersion(), fluxcdv1.FluxKustomizeGroup) ||
+			strings.HasPrefix(res.GetAPIVersion(), fluxcdv1.FluxHelmGroup) {
 			fluxObjects = append(fluxObjects, res)
 		} else {
 			nativeObjects = append(nativeObjects, res)

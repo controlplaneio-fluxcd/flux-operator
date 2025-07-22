@@ -196,11 +196,11 @@ func fluxLabelsToValues(obj unstructured.Unstructured) prometheus.Labels {
 	}
 
 	switch obj.GetKind() {
-	case "Kustomization":
+	case fluxcdv1.FluxKustomizationKind:
 		if sourcePath, found, _ := unstructured.NestedString(obj.Object, "spec", "path"); found {
 			labels["path"] = sourcePath
 		}
-	case "GitRepository":
+	case fluxcdv1.FluxGitRepositoryKind:
 		if sourceRef, found, _ := unstructured.NestedString(obj.Object, "spec", "ref", "branch"); found {
 			labels["ref"] = sourceRef
 		}
@@ -213,44 +213,44 @@ func fluxLabelsToValues(obj unstructured.Unstructured) prometheus.Labels {
 		if sourceRef, found, _ := unstructured.NestedString(obj.Object, "spec", "ref", "name"); found {
 			labels["ref"] = sourceRef
 		}
-	case "OCIRepository":
+	case fluxcdv1.FluxOCIRepositoryKind:
 		if sourceRef, found, _ := unstructured.NestedString(obj.Object, "spec", "ref", "tag"); found {
 			labels["ref"] = sourceRef
 		}
 		if sourceRef, found, _ := unstructured.NestedString(obj.Object, "spec", "ref", "semver"); found {
 			labels["ref"] = sourceRef
 		}
-	case "Bucket":
+	case fluxcdv1.FluxBucketKind:
 		if sourceURL, found, _ := unstructured.NestedString(obj.Object, "spec", "endpoint"); found {
 			labels["url"] = sourceURL
 		}
 		if sourceRef, found, _ := unstructured.NestedString(obj.Object, "spec", "bucketName"); found {
 			labels["ref"] = sourceRef
 		}
-	case "HelmRelease":
+	case fluxcdv1.FluxHelmReleaseKind:
 		if source, found, _ := unstructured.NestedString(obj.Object, "spec", "chartRef", "name"); found {
 			labels["source_name"] = source
 		}
 		if source, found, _ := unstructured.NestedString(obj.Object, "spec", "chart", "spec", "sourceRef", "name"); found {
 			labels["source_name"] = source
 		}
-	case "HelmRepository":
+	case fluxcdv1.FluxHelmRepositoryKind:
 		if t, _, _ := unstructured.NestedString(obj.Object, "spec", "type"); t == "oci" {
 			labels["ready"] = trueValue
 		}
-	case "Alert":
+	case fluxcdv1.FluxAlertKind:
 		labels["ready"] = trueValue
-	case "Provider":
+	case fluxcdv1.FluxAlertProviderKind:
 		labels["ready"] = trueValue
-	case "Receiver":
+	case fluxcdv1.FluxReceiverKind:
 		if url, found, _ := unstructured.NestedString(obj.Object, "status", "webhookPath"); found {
 			labels["url"] = url
 		}
-	case "ImageRepository":
+	case fluxcdv1.FluxImageRepositoryKind:
 		if image, found, _ := unstructured.NestedString(obj.Object, "spec", "image"); found {
 			labels["url"] = image
 		}
-	case "ImagePolicy":
+	case fluxcdv1.FluxImagePolicyKind:
 		if source, found, _ := unstructured.NestedString(obj.Object, "spec", "imageRepositoryRef", "name"); found {
 			labels["source_name"] = source
 		}

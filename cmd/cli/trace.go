@@ -15,6 +15,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
 var traceCmd = &cobra.Command{
@@ -92,7 +94,7 @@ func getFluxReconciler(obj *unstructured.Unstructured) (*FluxManagedObjectReconc
 			break
 		}
 
-		if !strings.Contains(k, "fluxcd.") {
+		if !fluxcdv1.IsFluxAPI(k) {
 			continue
 		}
 
@@ -101,11 +103,11 @@ func getFluxReconciler(obj *unstructured.Unstructured) (*FluxManagedObjectReconc
 			if len(parts) > 0 {
 				switch parts[0] {
 				case "kustomize":
-					manager.Kind = "Kustomization"
+					manager.Kind = fluxcdv1.FluxKustomizationKind
 				case "helm":
-					manager.Kind = "HelmRelease"
+					manager.Kind = fluxcdv1.FluxHelmReleaseKind
 				case "resourceset":
-					manager.Kind = "ResourceSet"
+					manager.Kind = fluxcdv1.ResourceSetKind
 				}
 			}
 			manager.Name = v

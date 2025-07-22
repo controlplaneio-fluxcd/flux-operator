@@ -22,7 +22,7 @@ import (
 func (r *FluxStatusReporter) getSyncStatus(ctx context.Context, crds []metav1.GroupVersionKind) (*fluxcdv1.FluxSyncStatus, error) {
 	syncName := r.getSyncNameFromInstance(ctx)
 
-	syncKind := "Kustomization"
+	syncKind := fluxcdv1.FluxKustomizationKind
 	syncGKV := gvkFor(syncKind, crds)
 	if syncGKV == nil {
 		return nil, fmt.Errorf("source kind %s not found", syncKind)

@@ -77,7 +77,7 @@ func (k *Client) Export(ctx context.Context,
 				}
 
 				// Add inventory for HelmRelease resources
-				if item.GetKind() == "HelmRelease" {
+				if item.GetKind() == fluxcdv1.FluxHelmReleaseKind {
 					inventory, err := k.GetHelmInventory(ctx, item.GetAPIVersion(), ctrlclient.ObjectKey{
 						Namespace: item.GetNamespace(),
 						Name:      item.GetName(),
@@ -111,7 +111,7 @@ func (k *Client) Export(ctx context.Context,
 				}
 
 				// Add Kubernetes events for Flux resources
-				if strings.Contains(item.GetAPIVersion(), "fluxcd") {
+				if fluxcdv1.IsFluxAPI(item.GetAPIVersion()) {
 					events, err := k.GetEvents(ctx, item.GetKind(), item.GetName(), item.GetNamespace(), "ReconciliationSucceeded")
 					if err == nil && len(events) > 0 {
 						ev := make([]any, len(events))

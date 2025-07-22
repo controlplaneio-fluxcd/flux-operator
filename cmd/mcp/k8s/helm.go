@@ -20,6 +20,8 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
 // HelmStorage is a struct used to decode the Helm storage secret.
@@ -53,7 +55,7 @@ func (k *Client) GetHelmInventory(ctx context.Context, apiVersion string, object
 	hr := &unstructured.Unstructured{
 		Object: map[string]any{
 			"apiVersion": apiVersion,
-			"kind":       "HelmRelease",
+			"kind":       fluxcdv1.FluxHelmReleaseKind,
 		},
 	}
 	if err := k.Client.Get(ctx, objectKey, hr); err != nil {

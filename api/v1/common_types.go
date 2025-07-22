@@ -5,6 +5,7 @@ package v1
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -74,4 +75,61 @@ type CommonMetadata struct {
 	// Labels to be added to the object's metadata.
 	// +optional
 	Labels map[string]string `json:"labels,omitempty"`
+}
+
+// Flux APIs Kind and Group constants.
+const (
+	FluxKustomizeGroup    = "kustomize.toolkit.fluxcd.io"
+	FluxKustomizationKind = "Kustomization"
+
+	FluxHelmGroup       = "helm.toolkit.fluxcd.io"
+	FluxHelmReleaseKind = "HelmRelease"
+
+	FluxSourceGroup        = "source.toolkit.fluxcd.io"
+	FluxGitRepositoryKind  = "GitRepository"
+	FluxBucketKind         = "Bucket"
+	FluxOCIRepositoryKind  = "OCIRepository"
+	FluxHelmRepositoryKind = "HelmRepository"
+	FluxHelmChartKind      = "HelmChart"
+
+	FluxNotificationGroup = "notification.toolkit.fluxcd.io"
+	FluxAlertKind         = "Alert"
+	FluxAlertProviderKind = "Provider"
+	FluxReceiverKind      = "Receiver"
+
+	FluxImageGroup                = "image.toolkit.fluxcd.io"
+	FluxImageRepositoryKind       = "ImageRepository"
+	FluxImagePolicyKind           = "ImagePolicy"
+	FluxImageUpdateAutomationKind = "ImageUpdateAutomation"
+)
+
+// FluxGroupFor returns the GroupKind for the given kind.
+func FluxGroupFor(kind string) (*schema.GroupKind, error) {
+	gk := schema.GroupKind{
+		Kind: kind,
+	}
+
+	switch kind {
+	case FluxInstanceKind, FluxReportKind, ResourceSetKind, ResourceSetInputProviderKind:
+		gk.Group = GroupVersion.Group
+	case FluxGitRepositoryKind, FluxOCIRepositoryKind, FluxBucketKind, FluxHelmChartKind, FluxHelmRepositoryKind:
+		gk.Group = FluxSourceGroup
+	case FluxAlertKind, FluxAlertProviderKind, FluxReceiverKind:
+		gk.Group = FluxNotificationGroup
+	case FluxImageRepositoryKind, FluxImagePolicyKind, FluxImageUpdateAutomationKind:
+		gk.Group = FluxImageGroup
+	case FluxKustomizationKind:
+		gk.Group = FluxKustomizeGroup
+	case FluxHelmReleaseKind:
+		gk.Group = FluxHelmGroup
+	default:
+		return nil, fmt.Errorf("unknown kind %s", kind)
+	}
+	return &gk, nil
+}
+
+// IsFluxAPI checks if the given API version or API group
+// is part of the Flux API group.
+func IsFluxAPI(apiVersion string) bool {
+	return strings.Contains(apiVersion, "fluxcd.")
 }
