@@ -430,6 +430,15 @@ func TestBuild_ObjectLevelWorkloadIdentity(t *testing.T) {
 	for _, obj := range result.Objects {
 		if obj.GetName() == "source-controller" && obj.GetKind() == deploymentKind {
 			found = true
+			g.Expect(ssautil.ObjectToYAML(obj)).To(ContainSubstring("nodeSelector"))
+		}
+	}
+	g.Expect(found).To(BeTrue())
+
+	found = false
+	for _, obj := range result.Objects {
+		if obj.GetName() == "source-controller" && obj.GetKind() == deploymentKind {
+			found = true
 			g.Expect(ssautil.ObjectToYAML(obj)).To(ContainSubstring("--feature-gates=ObjectLevelWorkloadIdentity=true"))
 		}
 	}
