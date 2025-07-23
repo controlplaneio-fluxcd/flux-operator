@@ -27,39 +27,39 @@ func TestCreateSecretProxyCmd(t *testing.T) {
 	}{
 		{
 			name:        "create proxy secret",
-			args:        []string{"create", "secret", "proxy", "test-proxy", "--address=proxy.example.com:8080", "--username=admin", "--password=secret", "-n", ns.Name},
+			args:        []string{"create", "secret", "proxy", "test-proxy", "--address=proxy.example.com:8080", "--username=admin", "--password=secret"},
 			expectError: false,
 		},
 		{
 			name:         "create proxy secret with export",
-			args:         []string{"create", "secret", "proxy", "test-proxy", "--address=proxy.example.com:8080", "--username=admin", "--password=secret", "--export", "-n", ns.Name},
+			args:         []string{"create", "secret", "proxy", "test-proxy", "--address=proxy.example.com:8080", "--username=admin", "--password=secret", "--export"},
 			expectError:  false,
 			expectExport: true,
 		},
 		{
 			name:        "create proxy secret with annotations and labels",
-			args:        []string{"create", "secret", "proxy", "test-proxy", "--address=proxy.example.com:8080", "--username=admin", "--password=secret", "--annotation=test.io/annotation=value", "--label=test.io/label=value", "-n", ns.Name},
+			args:        []string{"create", "secret", "proxy", "test-proxy", "--address=proxy.example.com:8080", "--username=admin", "--password=secret", "--annotation=test.io/annotation=value", "--label=test.io/label=value"},
 			expectError: false,
 		},
 		{
 			name:        "create immutable proxy secret",
-			args:        []string{"create", "secret", "proxy", "test-proxy", "--address=proxy.example.com:8080", "--username=admin", "--password=secret", "--immutable", "-n", ns.Name},
+			args:        []string{"create", "secret", "proxy", "test-proxy", "--address=proxy.example.com:8080", "--username=admin", "--password=secret", "--immutable"},
 			expectError: false,
 		},
 		{
 			name:        "create proxy secret without username/password",
-			args:        []string{"create", "secret", "proxy", "test-proxy", "--address=proxy.example.com:8080", "-n", ns.Name},
+			args:        []string{"create", "secret", "proxy", "test-proxy", "--address=proxy.example.com:8080"},
 			expectError: false,
 		},
 		{
 			name:         "missing address",
-			args:         []string{"create", "secret", "proxy", "test-proxy", "--username=admin", "--password=secret", "--export", "-n", ns.Name},
+			args:         []string{"create", "secret", "proxy", "test-proxy", "--username=admin", "--password=secret", "--export"},
 			expectError:  true,
 			expectExport: true,
 		},
 		{
 			name:        "missing secret name",
-			args:        []string{"create", "secret", "proxy", "--address=proxy.example.com:8080", "--username=admin", "--password=secret", "-n", ns.Name},
+			args:        []string{"create", "secret", "proxy", "--address=proxy.example.com:8080", "--username=admin", "--password=secret"},
 			expectError: true,
 		},
 	}
@@ -72,6 +72,7 @@ func TestCreateSecretProxyCmd(t *testing.T) {
 			g := NewWithT(t)
 
 			// Execute command
+			kubeconfigArgs.Namespace = &ns.Name
 			output, err := executeCommand(tt.args)
 
 			if tt.expectError {

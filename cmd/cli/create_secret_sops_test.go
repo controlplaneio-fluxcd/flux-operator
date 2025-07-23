@@ -32,14 +32,14 @@ func TestCreateSecretSOPSCmd(t *testing.T) {
 	}{
 		{
 			name:         "create sops secret with age key from stdin",
-			args:         []string{"create", "secret", "sops", "test-sops", "--age-key-stdin", "-n", ns.Name},
+			args:         []string{"create", "secret", "sops", "test-sops", "--age-key-stdin"},
 			stdin:        "AGE-SECRET-KEY-1EXAMPLE123456789ABCDEF",
 			expectError:  false,
 			expectAgeKey: true,
 		},
 		{
 			name:         "create sops secret with age key from stdin and export",
-			args:         []string{"create", "secret", "sops", "test-sops", "--age-key-stdin", "--export", "-n", ns.Name},
+			args:         []string{"create", "secret", "sops", "test-sops", "--age-key-stdin", "--export"},
 			stdin:        "AGE-SECRET-KEY-1EXAMPLE123456789ABCDEF",
 			expectError:  false,
 			expectExport: true,
@@ -47,14 +47,14 @@ func TestCreateSecretSOPSCmd(t *testing.T) {
 		},
 		{
 			name:         "create sops secret with gpg key from stdin",
-			args:         []string{"create", "secret", "sops", "test-sops", "--gpg-key-stdin", "-n", ns.Name},
+			args:         []string{"create", "secret", "sops", "test-sops", "--gpg-key-stdin"},
 			stdin:        "-----BEGIN PGP PRIVATE KEY BLOCK-----\n...test gpg key content...\n-----END PGP PRIVATE KEY BLOCK-----",
 			expectError:  false,
 			expectGPGKey: true,
 		},
 		{
 			name:         "create sops secret with gpg key from stdin and export",
-			args:         []string{"create", "secret", "sops", "test-sops", "--gpg-key-stdin", "--export", "-n", ns.Name},
+			args:         []string{"create", "secret", "sops", "test-sops", "--gpg-key-stdin", "--export"},
 			stdin:        "-----BEGIN PGP PRIVATE KEY BLOCK-----\n...test gpg key content...\n-----END PGP PRIVATE KEY BLOCK-----",
 			expectError:  false,
 			expectExport: true,
@@ -62,32 +62,32 @@ func TestCreateSecretSOPSCmd(t *testing.T) {
 		},
 		{
 			name:        "create sops secret with both age and gpg keys from stdin",
-			args:        []string{"create", "secret", "sops", "test-sops", "--age-key-stdin", "--gpg-key-stdin", "-n", ns.Name},
+			args:        []string{"create", "secret", "sops", "test-sops", "--age-key-stdin", "--gpg-key-stdin"},
 			stdin:       "AGE-SECRET-KEY-1EXAMPLE123456789ABCDEF\n-----BEGIN PGP PRIVATE KEY BLOCK-----\n...test gpg key content...\n-----END PGP PRIVATE KEY BLOCK-----",
 			expectError: true,
 		},
 		{
 			name:         "create sops secret with annotations and labels",
-			args:         []string{"create", "secret", "sops", "test-sops", "--age-key-stdin", "--annotation=test.io/annotation=value", "--label=test.io/label=value", "-n", ns.Name},
+			args:         []string{"create", "secret", "sops", "test-sops", "--age-key-stdin", "--annotation=test.io/annotation=value", "--label=test.io/label=value"},
 			stdin:        "AGE-SECRET-KEY-1EXAMPLE123456789ABCDEF",
 			expectError:  false,
 			expectAgeKey: true,
 		},
 		{
 			name:         "create immutable sops secret",
-			args:         []string{"create", "secret", "sops", "test-sops", "--age-key-stdin", "--immutable", "-n", ns.Name},
+			args:         []string{"create", "secret", "sops", "test-sops", "--age-key-stdin", "--immutable"},
 			stdin:        "AGE-SECRET-KEY-1EXAMPLE123456789ABCDEF",
 			expectError:  false,
 			expectAgeKey: true,
 		},
 		{
 			name:        "missing keys",
-			args:        []string{"create", "secret", "sops", "test-sops", "-n", ns.Name},
+			args:        []string{"create", "secret", "sops", "test-sops"},
 			expectError: true,
 		},
 		{
 			name:        "missing secret name",
-			args:        []string{"create", "secret", "sops", "--age-key-stdin", "-n", ns.Name},
+			args:        []string{"create", "secret", "sops", "--age-key-stdin"},
 			stdin:       "AGE-SECRET-KEY-1EXAMPLE123456789ABCDEF",
 			expectError: true,
 		},
@@ -108,6 +108,7 @@ func TestCreateSecretSOPSCmd(t *testing.T) {
 			}
 
 			// Execute command
+			kubeconfigArgs.Namespace = &ns.Name
 			output, err := executeCommand(tt.args)
 
 			if tt.expectError {

@@ -28,46 +28,46 @@ func TestCreateSecretRegistryCmd(t *testing.T) {
 	}{
 		{
 			name:        "create registry secret",
-			args:        []string{"create", "secret", "registry", "test-registry", "--server=ghcr.io", "--username=admin", "--password=secret", "-n", ns.Name},
+			args:        []string{"create", "secret", "registry", "test-registry", "--server=ghcr.io", "--username=admin", "--password=secret"},
 			expectError: false,
 		},
 		{
 			name:         "create registry secret with export",
-			args:         []string{"create", "secret", "registry", "test-registry", "--server=ghcr.io", "--username=admin", "--password=secret", "--export", "-n", ns.Name},
+			args:         []string{"create", "secret", "registry", "test-registry", "--server=ghcr.io", "--username=admin", "--password=secret", "--export"},
 			expectError:  false,
 			expectExport: true,
 		},
 		{
 			name:        "create registry secret with annotations and labels",
-			args:        []string{"create", "secret", "registry", "test-registry", "--server=ghcr.io", "--username=admin", "--password=secret", "--annotation=test.io/annotation=value", "--label=test.io/label=value", "-n", ns.Name},
+			args:        []string{"create", "secret", "registry", "test-registry", "--server=ghcr.io", "--username=admin", "--password=secret", "--annotation=test.io/annotation=value", "--label=test.io/label=value"},
 			expectError: false,
 		},
 		{
 			name:        "create immutable registry secret",
-			args:        []string{"create", "secret", "registry", "test-registry", "--server=ghcr.io", "--username=admin", "--password=secret", "--immutable", "-n", ns.Name},
+			args:        []string{"create", "secret", "registry", "test-registry", "--server=ghcr.io", "--username=admin", "--password=secret", "--immutable"},
 			expectError: false,
 		},
 		{
 			name:         "missing server",
-			args:         []string{"create", "secret", "registry", "test-registry", "--username=admin", "--password=secret", "--export", "-n", ns.Name},
+			args:         []string{"create", "secret", "registry", "test-registry", "--username=admin", "--password=secret", "--export"},
 			expectError:  true,
 			expectExport: true,
 		},
 		{
 			name:         "missing username",
-			args:         []string{"create", "secret", "registry", "test-registry", "--server=ghcr.io", "--password=secret", "--export", "-n", ns.Name},
+			args:         []string{"create", "secret", "registry", "test-registry", "--server=ghcr.io", "--password=secret", "--export"},
 			expectError:  true,
 			expectExport: true,
 		},
 		{
 			name:         "missing password",
-			args:         []string{"create", "secret", "registry", "test-registry", "--server=ghcr.io", "--username=admin", "--export", "-n", ns.Name},
+			args:         []string{"create", "secret", "registry", "test-registry", "--server=ghcr.io", "--username=admin", "--export"},
 			expectError:  true,
 			expectExport: true,
 		},
 		{
 			name:        "missing secret name",
-			args:        []string{"create", "secret", "registry", "--server=ghcr.io", "--username=admin", "--password=secret", "-n", ns.Name},
+			args:        []string{"create", "secret", "registry", "--server=ghcr.io", "--username=admin", "--password=secret"},
 			expectError: true,
 		},
 	}
@@ -80,6 +80,7 @@ func TestCreateSecretRegistryCmd(t *testing.T) {
 			g := NewWithT(t)
 
 			// Execute command
+			kubeconfigArgs.Namespace = &ns.Name
 			output, err := executeCommand(tt.args)
 
 			if tt.expectError {
