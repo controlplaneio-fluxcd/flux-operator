@@ -16,6 +16,7 @@ import (
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	apiruntime "k8s.io/apimachinery/pkg/runtime"
@@ -181,6 +182,11 @@ func isResourceReconciledFunc(kubeClient client.Client, obj *unstructured.Unstru
 	return func(ctx context.Context) (bool, error) {
 		err := kubeClient.Get(ctx, client.ObjectKeyFromObject(obj), obj)
 		if err != nil {
+			if apierrors.IsNotFound(err) && requestTime == "" {
+				// If the resource is not found and no request time is specified,
+				// we wait for the resource to be created.
+				return false, nil
+			}
 			return false, err
 		}
 
