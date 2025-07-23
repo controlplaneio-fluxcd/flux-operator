@@ -82,14 +82,6 @@ docker-build: ## Build flux-operator docker image.
 docker-push: ## Push flux-operator docker image.
 	$(CONTAINER_TOOL) push ${IMG}
 
-PLATFORMS ?= linux/arm64,linux/amd64
-.PHONY: docker-buildx
-docker-buildx: ## Build and push flux-operator docker image with cross-platform support.
-	- $(CONTAINER_TOOL) buildx create --name flux-operator-builder
-	$(CONTAINER_TOOL) buildx use flux-operator-builder
-	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile.cross .
-	- $(CONTAINER_TOOL) buildx rm flux-operator-builder
-
 .PHONY: build-installer
 build-installer: generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
 	mkdir -p dist
@@ -129,6 +121,8 @@ test-olm-e2e: build-olm-manifests operator-sdk ## Test OLM manifests for current
 
 ##@ CLI
 
+CLI_IMG ?= ghcr.io/controlplaneio-fluxcd/flux-operator-cli:latest
+
 .PHONY: cli-test
 cli-test: tidy fmt vet ## Run CLI tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./cmd/cli/... -v
@@ -136,6 +130,10 @@ cli-test: tidy fmt vet ## Run CLI tests.
 .PHONY: cli-build
 cli-build: tidy fmt vet ## Build CLI binary.
 	CGO_ENABLED=0 go build -ldflags="-s -w -X main.VERSION=$(FLUX_OPERATOR_DEV_VERSION)" -o ./bin/flux-operator-cli ./cmd/cli/
+
+.PHONY: cli-docker-build
+cli-docker-build: ## Build docker image with the CLI.
+	$(CONTAINER_TOOL) build -t ${CLI_IMG} --build-arg VERSION=$(FLUX_OPERATOR_VERSION) -f cmd/cli/Dockerfile .
 
 ##@ MCP
 
