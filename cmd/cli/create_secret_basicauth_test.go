@@ -27,40 +27,40 @@ func TestCreateSecretBasicAuthCmd(t *testing.T) {
 	}{
 		{
 			name:        "create basic auth secret",
-			args:        []string{"create", "secret", "basic-auth", "test-secret", "--username=admin", "--password=secret", "-n", ns.Name},
+			args:        []string{"create", "secret", "basic-auth", "test-secret", "--username=admin", "--password=secret"},
 			expectError: false,
 		},
 		{
 			name:         "create basic auth secret with export",
-			args:         []string{"create", "secret", "basic-auth", "test-secret", "--username=admin", "--password=secret", "--export", "-n", ns.Name},
+			args:         []string{"create", "secret", "basic-auth", "test-secret", "--username=admin", "--password=secret", "--export"},
 			expectError:  false,
 			expectExport: true,
 		},
 		{
 			name:        "create basic auth secret with annotations and labels",
-			args:        []string{"create", "secret", "basic-auth", "test-secret", "--username=admin", "--password=secret", "--annotation=test.io/annotation=value", "--label=test.io/label=value", "-n", ns.Name},
+			args:        []string{"create", "secret", "basic-auth", "test-secret", "--username=admin", "--password=secret", "--annotation=test.io/annotation=value", "--label=test.io/label=value"},
 			expectError: false,
 		},
 		{
 			name:        "create immutable basic auth secret",
-			args:        []string{"create", "secret", "basic-auth", "test-secret", "--username=admin", "--password=secret", "--immutable", "-n", ns.Name},
+			args:        []string{"create", "secret", "basic-auth", "test-secret", "--username=admin", "--password=secret", "--immutable"},
 			expectError: false,
 		},
 		{
 			name:         "missing username",
-			args:         []string{"create", "secret", "basic-auth", "test-secret", "--password=secret", "--export", "-n", ns.Name},
+			args:         []string{"create", "secret", "basic-auth", "test-secret", "--password=secret", "--export"},
 			expectError:  true,
 			expectExport: true,
 		},
 		{
 			name:         "missing password",
-			args:         []string{"create", "secret", "basic-auth", "test-secret", "--username=admin", "--export", "-n", ns.Name},
+			args:         []string{"create", "secret", "basic-auth", "test-secret", "--username=admin", "--export"},
 			expectError:  true,
 			expectExport: true,
 		},
 		{
 			name:        "missing secret name",
-			args:        []string{"create", "secret", "basic-auth", "--username=admin", "--password=secret", "-n", ns.Name},
+			args:        []string{"create", "secret", "basic-auth", "--username=admin", "--password=secret"},
 			expectError: true,
 		},
 	}
@@ -73,6 +73,7 @@ func TestCreateSecretBasicAuthCmd(t *testing.T) {
 			g := NewWithT(t)
 
 			// Execute command
+			kubeconfigArgs.Namespace = &ns.Name
 			output, err := executeCommand(tt.args)
 
 			if tt.expectError {

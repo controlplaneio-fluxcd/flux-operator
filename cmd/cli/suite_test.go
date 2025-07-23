@@ -125,6 +125,10 @@ func executeCommand(args []string) (string, error) {
 // resetCmdArgs resets all command-specific flags to their default values.
 // This should be called between tests to ensure clean state.
 func resetCmdArgs() {
+	rootArgs.timeout = timeout
+	defaultNamespace := ""
+	kubeconfigArgs.Namespace = &defaultNamespace
+
 	// Version command
 	versionArgs = versionFlags{}
 

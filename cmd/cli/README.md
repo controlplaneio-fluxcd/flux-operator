@@ -165,6 +165,24 @@ Arguments:
 
 - `-n, --namespace`: Specifies the namespace scope of the command.
 
+### Wait Commands
+
+The `flux-operator wait` commands are used to wait for Flux Operator resources to become ready.
+These commands will poll the resource status until it reaches a ready state or times out.
+If the resource is not created or its status is not ready within the specified timeout,
+the command will return an error.
+
+The following commands are available:
+
+- `flux-operator wait instance <name>`: Wait for a FluxInstance to become ready.
+- `flux-operator wait rset <name>`: Wait for a ResourceSet to become ready.
+- `flux-operator wait rsip <name>`: Wait for a ResourceSetInputProvider to become ready.
+
+Arguments:
+
+- `-n, --namespace`: Specifies the namespace scope of the command.
+- `--timeout`: The length of time to wait before giving up (default 1m).
+
 ### Create Secret Commands
 
 The `flux-operator create secret` commands are used to create Kubernetes secrets specific to Flux.

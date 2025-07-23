@@ -16,6 +16,7 @@ import (
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	apiruntime "k8s.io/apimachinery/pkg/runtime"
@@ -117,6 +118,10 @@ func waitForResourceReconciliation(ctx context.Context, gvk schema.GroupVersionK
 
 	if err := wait.PollUntilContextTimeout(ctx, 2*time.Second, timeout, true,
 		isResourceReconciledFunc(kubeClient, resource, requestTime)); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || strings.Contains(err.Error(), "exceed context deadline") {
+			return "", fmt.Errorf("timed out waiting for %s/%s to become ready", namespace, name)
+		}
+
 		return "", err
 	}
 
@@ -128,7 +133,48 @@ func waitForResourceReconciliation(ctx context.Context, gvk schema.GroupVersionK
 		}
 	}
 
-	return "reconciliation completed successfully", nil
+	return "Reconciliation completed successfully", nil
+}
+
+// isReady checks if a resource is ready by examining its Ready condition.
+// It verifies that the observed generation matches the current generation and the condition status is True.
+func isReady(obj *unstructured.Unstructured) (bool, error) {
+	conditions, found, err := unstructured.NestedSlice(obj.Object, "status", "conditions")
+	if !found || err != nil {
+		return false, nil
+	}
+
+	for _, conditionRaw := range conditions {
+		condition, ok := conditionRaw.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		condType, _, _ := unstructured.NestedString(condition, "type")
+		if condType == meta.ReadyCondition {
+			// Check if the observed generation matches the current generation
+			observedGeneration, _, _ := unstructured.NestedInt64(condition, "observedGeneration")
+			currentGeneration := obj.GetGeneration()
+			if observedGeneration != currentGeneration {
+				return false, nil
+			}
+
+			// Check the condition status and return the reason and message on failure
+			condStatus, _, _ := unstructured.NestedString(condition, "status")
+			switch condStatus {
+			case string(corev1.ConditionTrue):
+				return true, nil
+			case string(corev1.ConditionUnknown):
+				return false, nil
+			case string(corev1.ConditionFalse):
+				reason, _, _ := unstructured.NestedString(condition, "reason")
+				message, _, _ := unstructured.NestedString(condition, "message")
+				return false, fmt.Errorf("%s: %s", reason, message)
+			}
+		}
+	}
+
+	return false, nil
 }
 
 // isResourceReconciledFunc returns a function that checks if a resource has been reconciled and is ready.
@@ -136,6 +182,11 @@ func isResourceReconciledFunc(kubeClient client.Client, obj *unstructured.Unstru
 	return func(ctx context.Context) (bool, error) {
 		err := kubeClient.Get(ctx, client.ObjectKeyFromObject(obj), obj)
 		if err != nil {
+			if apierrors.IsNotFound(err) && requestTime == "" {
+				// If the resource is not found and no request time is specified,
+				// we wait for the resource to be created.
+				return false, nil
+			}
 			return false, err
 		}
 
@@ -152,28 +203,15 @@ func isResourceReconciledFunc(kubeClient client.Client, obj *unstructured.Unstru
 		}
 
 		// Check if the status.lastHandledReconcileAt matches the request time
-		lastHandledReconcileAt, _, _ := unstructured.NestedString(obj.Object, "status", "lastHandledReconcileAt")
-		if lastHandledReconcileAt != requestTime {
-			return false, nil
-		}
-
-		// Check if the resource is ready
-		if res, err := status.GetObjectWithConditions(obj.Object); err == nil {
-			for _, cond := range res.Status.Conditions {
-				if cond.Type == meta.ReadyCondition {
-					switch cond.Status {
-					case corev1.ConditionTrue:
-						return true, nil
-					case corev1.ConditionUnknown:
-						return false, nil
-					case corev1.ConditionFalse:
-						return false, errors.New(cond.Message)
-					}
-				}
+		if requestTime != "" {
+			lastHandledReconcileAt, _, _ := unstructured.NestedString(obj.Object, "status", "lastHandledReconcileAt")
+			if lastHandledReconcileAt != requestTime {
+				return false, nil
 			}
 		}
 
-		return false, nil
+		// Check if the resource is ready
+		return isReady(obj)
 	}
 }
 
