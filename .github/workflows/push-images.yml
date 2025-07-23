@@ -1,4 +1,4 @@
-name: push-mcp
+name: push-images
 on:
   workflow_dispatch:
   workflow_run:
@@ -9,10 +9,15 @@ permissions:
   contents: read
 
 env:
-  IMAGE: ${{ github.event.repository.name }}-mcp
+  IMAGE: ghcr.io/controlplaneio-fluxcd/${{ github.event.repository.name }}
 
 jobs:
   docker:
+    strategy:
+      matrix:
+        pkg:
+          - cli
+          - mcp
     runs-on: ubuntu-latest
     permissions:
       id-token: write # for creating OIDC tokens for signing.
@@ -43,7 +48,7 @@ jobs:
         uses: docker/metadata-action@902fa8ec7d6ecbf8d84d538b9b233a880e428804 # v5.7.0
         with:
           images: |
-            ghcr.io/controlplaneio-fluxcd/${{ env.IMAGE }}
+            ${{ env.IMAGE }}-${{ matrix.pkg }}
           tags: |
             type=raw,value=${{ steps.prep.outputs.VERSION }}
       - name: Publish images
@@ -55,7 +60,7 @@ jobs:
           push: true
           builder: ${{ steps.buildx.outputs.name }}
           context: .
-          file: ./cmd/mcp/Dockerfile
+          file: ./cmd/${{ matrix.pkg }}/Dockerfile
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -65,4 +70,5 @@ jobs:
         env:
           COSIGN_EXPERIMENTAL: 1
         run: |
-          cosign sign --yes ghcr.io/controlplaneio-fluxcd/${{ env.IMAGE }}@${{ steps.build-push.outputs.digest }}
+          cosign sign --yes \
+          ${{ env.IMAGE }}-${{ matrix.pkg }}@${{ steps.build-push.outputs.digest }}

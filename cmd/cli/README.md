@@ -28,6 +28,20 @@ echo "source <(flux-operator completion bash)" >> ~/.bash_profile
 
 Zsh, Fish, and PowerShell are also supported with their own sub-commands.
 
+### Container Image
+
+The Flux Operator CLI is also available as a container image, which can be used in CI pipelines
+or Kubernetes Jobs. The image contains the `flux-operator` CLI binary and the `kubectl` binary.
+
+The multi-arch image (Linux AMD64/ARM64) is hosted on GitHub Container Registry at
+`ghcr.io/controlplaneio-fluxcd/flux-operator-cli`.
+
+```shell
+version=$(gh release view --repo controlplaneio-fluxcd/flux-operator --json tagName -q '.tagName')
+docker run --rm -it --entrypoint=flux-operator ghcr.io/controlplaneio-fluxcd/flux-operator-cli:$version help
+docker run --rm -it --entrypoint=kubectl ghcr.io/controlplaneio-fluxcd/flux-operator-cli:$version help
+```
+
 ## Commands
 
 The Flux Operator CLI provides commands to manage the Flux Operator resources.
