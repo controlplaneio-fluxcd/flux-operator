@@ -536,12 +536,13 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 	}
 
 	// Wait for the resources to become ready.
-	if obj.GetWait() && len(resultSet.Entries) > 0 {
-		if err := resourceManager.WaitForSet(resultSet.ToObjMetadataSet(), ssa.WaitOptions{
+	if obj.GetWait() && len(changeSet.Entries) > 0 {
+		if err := resourceManager.WaitForSet(changeSet.ToObjMetadataSet(), ssa.WaitOptions{
 			Interval: 5 * time.Second,
 			Timeout:  obj.GetTimeout(),
 		}); err != nil {
-			return err
+			readyStatus := aggregateNotReadyStatus(ctx, kubeClient, objects)
+			return fmt.Errorf("%w\n%s", err, readyStatus)
 		}
 		log.Info("Health check completed", "revision", buildResult.Revision)
 	}
