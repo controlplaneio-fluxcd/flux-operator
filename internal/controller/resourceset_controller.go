@@ -556,7 +556,7 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 			Timeout:  obj.GetTimeout(),
 			FailFast: true,
 		}); err != nil {
-			readyStatus := r.aggregateNotReadyStatus(ctx, kubeClient, objects)
+			readyStatus := aggregateNotReadyStatus(ctx, kubeClient, objects)
 			return "", fmt.Errorf("%w\n%s", err, readyStatus)
 		}
 		log.Info("Health check completed")
@@ -624,27 +624,6 @@ func (r *ResourceSetReconciler) copyResources(ctx context.Context,
 		}
 	}
 	return nil
-}
-
-// aggregateNotReadyStatus returns the status of the Flux resources not ready.
-func (r *ResourceSetReconciler) aggregateNotReadyStatus(ctx context.Context,
-	kubeClient client.Client, objects []*unstructured.Unstructured) string {
-	var result strings.Builder
-	for _, res := range objects {
-		if strings.HasSuffix(res.GetObjectKind().GroupVersionKind().Group, ".fluxcd.io") {
-			if err := kubeClient.Get(ctx, client.ObjectKeyFromObject(res), res); err == nil {
-				if obj, err := status.GetObjectWithConditions(res.Object); err == nil {
-					for _, cond := range obj.Status.Conditions {
-						if cond.Type == meta.ReadyCondition && cond.Status != corev1.ConditionTrue {
-							result.WriteString(fmt.Sprintf("%s status: %s\n", ssautil.FmtUnstructured(res), cond.Message))
-						}
-					}
-				}
-			}
-		}
-	}
-
-	return strings.TrimSuffix(result.String(), "\n")
 }
 
 // deleteAllStaged removes resources in stages, first the Flux resources and then the rest.
