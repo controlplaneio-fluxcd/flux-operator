@@ -4,11 +4,18 @@
 package controller
 
 import (
+	"context"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/fluxcd/cli-utils/pkg/kstatus/status"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
+	ssautil "github.com/fluxcd/pkg/ssa/utils"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
@@ -79,4 +86,24 @@ func fmtDuration(t time.Time) string {
 	} else {
 		return time.Since(t).Round(time.Second).String()
 	}
+}
+
+// aggregateNotReadyStatus returns the Ready condition message of the Flux resources in a failed state.
+func aggregateNotReadyStatus(ctx context.Context, kubeClient client.Client, objects []*unstructured.Unstructured) string {
+	var result strings.Builder
+	for _, res := range objects {
+		if strings.HasSuffix(res.GetObjectKind().GroupVersionKind().Group, ".fluxcd.io") {
+			if err := kubeClient.Get(ctx, client.ObjectKeyFromObject(res), res); err == nil {
+				if obj, err := status.GetObjectWithConditions(res.Object); err == nil {
+					for _, cond := range obj.Status.Conditions {
+						if cond.Type == meta.ReadyCondition && cond.Status != corev1.ConditionTrue {
+							result.WriteString(fmt.Sprintf("%s status: %s\n", ssautil.FmtUnstructured(res), cond.Message))
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return strings.TrimSuffix(result.String(), "\n")
 }

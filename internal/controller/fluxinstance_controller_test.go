@@ -785,6 +785,88 @@ func TestFluxInstanceReconciler_NewVersion(t *testing.T) {
 
 }
 
+func TestFluxInstanceReconciler_WaitTimeout(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getFluxInstanceReconciler(t)
+	spec := getDefaultFluxSpec(t)
+	spec.Wait = ptr.To(true)
+	spec.Sync = nil
+	spec.Kustomize = &fluxcdv1.Kustomize{
+		Patches: []kustomize.Patch{
+			{
+				Target: &kustomize.Selector{
+					Kind: "CustomResourceDefinition",
+				},
+				Patch: `
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: all
+$patch: delete  
+`,
+			},
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	obj := &fluxcdv1.FluxInstance{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "flux",
+			Namespace: ns.Name,
+			Annotations: map[string]string{
+				fluxcdv1.ReconcileTimeoutAnnotation: "4s",
+			},
+		},
+		Spec: spec,
+	}
+
+	err = testClient.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize the instance.
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Install the instance, which should timed out waiting for deployments to be ready.
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("timeout waiting"))
+
+	// On subsequent reconciliations, the instance should still fail the health check.
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("source-controller status: 'InProgress'"))
+
+	// Delete the instance.
+	err = testClient.Delete(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Reconcile to remove the finalizer and clean up resources.
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.IsZero()).To(BeTrue())
+
+	// Check if the instance was uninstalled.
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), obj)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+
+}
+
 func getDefaultFluxSpec(t *testing.T) fluxcdv1.FluxInstanceSpec {
 	// Disable notifications for the tests as no pod is running.
 	// This is required to avoid the 30s retry loop performed by the HTTP client.
