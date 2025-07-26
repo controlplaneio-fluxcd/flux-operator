@@ -419,7 +419,7 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 	// Create a resource manager to reconcile the resources.
 	resourceManager := ssa.NewResourceManager(kubeClient, statusPoller, ssa.Owner{
 		Field: r.StatusManager,
-		Group: fmt.Sprintf("resourceset.%s", fluxcdv1.GroupVersion.Group),
+		Group: fluxcdv1.GroupOwnerLabelResourceSet,
 	})
 	resourceManager.SetOwnerLabels(objects, obj.GetName(), obj.GetNamespace())
 

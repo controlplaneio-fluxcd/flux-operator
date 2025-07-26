@@ -185,15 +185,15 @@ func TestResourceSetInputProviderReconciler_buildOCIOptions(t *testing.T) {
 	}{
 		{
 			provider: fluxcdv1.InputProviderACRArtifactTag,
-			err:      "provider 'azure': ObjectLevelWorkloadIdentity feature gate is not enabled",
+			err:      "provider 'azure': invalid Azure registry",
 		},
 		{
 			provider: fluxcdv1.InputProviderECRArtifactTag,
-			err:      "provider 'aws': ObjectLevelWorkloadIdentity feature gate is not enabled",
+			err:      "provider 'aws': invalid AWS registry",
 		},
 		{
 			provider: fluxcdv1.InputProviderGARArtifactTag,
-			err:      "provider 'gcp': ObjectLevelWorkloadIdentity feature gate is not enabled",
+			err:      "provider 'gcp': invalid GCP registry",
 		},
 		{
 			provider: fluxcdv1.InputProviderOCIArtifactTag,

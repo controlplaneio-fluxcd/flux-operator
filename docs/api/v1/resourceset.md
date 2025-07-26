@@ -367,6 +367,25 @@ Note that on [multi-tenant clusters](#role-based-access-control), the service ac
 used by the ResourceSet must have the necessary permissions to read the ConfigMaps
 and Secrets from the source namespace.
 
+To trigger a reconciliation of the ResourceSet when changes occur in
+the source ConfigMap or Secret, you can set the following label on the
+source ConfigMap or Secret:
+
+```yaml
+metadata:
+  labels:
+    reconcile.fluxcd.io/watch: Enabled
+```
+
+Note that neither this label nor any other metadata is copied to the generated
+ConfigMaps and Secrets, you must label every ConfigMap or Secret that you want
+to watch for changes.
+
+An alternative to labeling every ConfigMap or Secret is
+setting the `--watch-configs-label-selector=owner!=helm`
+flag in flux-operator, which allows watching all ConfigMaps
+and Secrets except for Helm storage Secrets.
+
 #### Conditionally resource exclusion
 
 To exclude a resource based on input values, the `fluxcd.controlplane.io/reconcile` annotation can be set

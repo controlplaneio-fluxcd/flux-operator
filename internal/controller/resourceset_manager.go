@@ -6,8 +6,10 @@ package controller
 import (
 	"context"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -24,7 +26,8 @@ import (
 
 // ResourceSetReconcilerOptions contains options for the reconciler.
 type ResourceSetReconcilerOptions struct {
-	RateLimiter workqueue.TypedRateLimiter[reconcile.Request]
+	RateLimiter           workqueue.TypedRateLimiter[reconcile.Request]
+	WatchConfigsPredicate predicate.Predicate
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -39,31 +42,38 @@ func (r *ResourceSetReconciler) SetupWithManager(ctx context.Context, mgr ctrl.M
 			)).
 		Watches(
 			&fluxcdv1.ResourceSetInputProvider{},
-			handler.EnqueueRequestsFromMapFunc(r.requestsForChangeOf),
+			handler.EnqueueRequestsFromMapFunc(r.requestsForResourceSetInputProviders),
 			builder.WithPredicates(exportedInputsChangePredicate),
+		).
+		WatchesMetadata(
+			&corev1.ConfigMap{},
+			handler.EnqueueRequestsFromMapFunc(r.requestsForConfigMapsOrSecrets),
+			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}, opts.WatchConfigsPredicate),
+		).
+		WatchesMetadata(
+			&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(r.requestsForConfigMapsOrSecrets),
+			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}, opts.WatchConfigsPredicate),
 		).
 		WithOptions(controller.Options{
 			RateLimiter: opts.RateLimiter,
 		}).Complete(r)
 }
 
-// requestsForChangeOf lists all ResourceSets in the same namespace as the
+// requestsForResourceSetInputProviders lists all ResourceSets in the same namespace as the
 // object that triggered the event and returns a list of reconcile.Requests
 // for those ResourceSets that have an InputsFrom field that matches the
 // object that triggered the event. It works for any object type that
 // implements the client.Object interface.
-func (r *ResourceSetReconciler) requestsForChangeOf(ctx context.Context, obj client.Object) []reconcile.Request {
+func (r *ResourceSetReconciler) requestsForResourceSetInputProviders(
+	ctx context.Context, clientObject client.Object) []reconcile.Request {
+
 	log := ctrl.LoggerFrom(ctx)
+	obj := clientObject.(*fluxcdv1.ResourceSetInputProvider)
 
 	// Compute object metadata.
-	var objAPIVersion, objKind string
-	switch obj.(type) {
-	case *fluxcdv1.ResourceSetInputProvider:
-		objAPIVersion = fluxcdv1.GroupVersion.String()
-		objKind = fluxcdv1.ResourceSetInputProviderKind
-	default:
-		return nil
-	}
+	objAPIVersion := fluxcdv1.GroupVersion.String()
+	objKind := fluxcdv1.ResourceSetInputProviderKind
 	objName := obj.GetName()
 	objLabels := labels.Set(obj.GetLabels())
 
@@ -149,6 +159,74 @@ func (r *ResourceSetReconciler) requestsForChangeOf(ctx context.Context, obj cli
 	return reqs
 }
 
+// requestsForConfigMapsOrSecrets lists the metadata of all ConfigMaps or Secrets created
+// by ResourceSets (depending on the kind of the object that triggered the event), and for
+// each ResourceSet being referenced in a copyFrom annotation, a reconcile.Request is
+// included in the returned slice.
+func (r *ResourceSetReconciler) requestsForConfigMapsOrSecrets(ctx context.Context,
+	obj client.Object) []reconcile.Request {
+
+	log := ctrl.LoggerFrom(ctx)
+
+	// Compute object metadata.
+	objKind := obj.GetObjectKind().GroupVersionKind().Kind
+	objKey := client.ObjectKeyFromObject(obj).String()
+
+	// List the metadata of all objects of the same kind that were created by
+	// ResourceSets. The WatchesMetadata call in SetupWithManager causes
+	// controller-runtime to cache the metadata of the object type, even if
+	// caching for the concrete type is disabled (which is the case for
+	// ConfigMaps and Secrets). The documentation states that controllers
+	// fetching such watched objects should use the
+	// metav1.PartialObjectMetadataList type to avoid duplicating the cache:
+	//
+	// https://github.com/kubernetes-sigs/controller-runtime/blob/98b5b2285d1b38eff457e126e3fcb41908dc7606/pkg/builder/controller.go#L177-L203
+	//
+	// Hence the List operation will hit the cache, and not API server.
+	var appliedObjects metav1.PartialObjectMetadataList
+	appliedObjects.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind(objKind))
+	listOpts := []client.ListOption{
+		client.MatchingLabelsSelector{
+			Selector: resourceSetOwnerSelector,
+		},
+		// We will be listing potentially a large number of objects, so we
+		// disable deep copy to avoid unnecessary memory allocations. It's
+		// safe to do so because we are not modifying the objects here.
+		client.UnsafeDisableDeepCopy,
+	}
+	if err := r.List(ctx, &appliedObjects, listOpts...); err != nil {
+		log.Error(err, "failed to list config objects applied by ResourceSets",
+			"eventTrigger", map[string]any{
+				"kind":      objKind,
+				"name":      obj.GetName(),
+				"namespace": obj.GetNamespace(),
+			})
+		return nil
+	}
+
+	// Match listed objects with the object that triggered the event
+	// to generate a list of reconcile.Requests.
+	resourceSets := make(map[types.NamespacedName]struct{})
+	for _, appliedObject := range appliedObjects.Items {
+		copyFrom := appliedObject.GetAnnotations()[fluxcdv1.CopyFromAnnotation]
+		if copyFrom != objKey {
+			continue
+		}
+		objLabels := appliedObject.GetLabels()
+		rset := types.NamespacedName{
+			Name:      objLabels[fluxcdv1.OwnerLabelResourceSetName],
+			Namespace: objLabels[fluxcdv1.OwnerLabelResourceSetNamespace],
+		}
+		resourceSets[rset] = struct{}{}
+	}
+	reqs := make([]reconcile.Request, 0, len(resourceSets))
+	for rset := range resourceSets {
+		reqs = append(reqs, reconcile.Request{NamespacedName: rset})
+	}
+
+	return reqs
+}
+
 var exportedInputsChangePredicate = predicate.Funcs{
 	UpdateFunc: func(e event.UpdateEvent) bool {
 		oldObj := e.ObjectOld.(*fluxcdv1.ResourceSetInputProvider)
@@ -158,3 +236,15 @@ var exportedInputsChangePredicate = predicate.Funcs{
 		return oldObj.Status.LastExportedRevision != newObj.Status.LastExportedRevision
 	},
 }
+
+var resourceSetOwnerSelector = func() labels.Selector {
+	name, err := labels.NewRequirement(fluxcdv1.OwnerLabelResourceSetName, selection.Exists, nil)
+	if err != nil {
+		panic(err)
+	}
+	namespace, err := labels.NewRequirement(fluxcdv1.OwnerLabelResourceSetNamespace, selection.Exists, nil)
+	if err != nil {
+		panic(err)
+	}
+	return labels.NewSelector().Add(*name, *namespace)
+}()

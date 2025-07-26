@@ -19,6 +19,12 @@ const (
 	ResourceSetKind = "ResourceSet"
 )
 
+var (
+	GroupOwnerLabelResourceSet     = fmt.Sprintf("resourceset.%s", GroupVersion.Group)
+	OwnerLabelResourceSetName      = fmt.Sprintf("%s/name", GroupOwnerLabelResourceSet)
+	OwnerLabelResourceSetNamespace = fmt.Sprintf("%s/namespace", GroupOwnerLabelResourceSet)
+)
+
 // ResourceSetSpec defines the desired state of ResourceSet
 type ResourceSetSpec struct {
 	// CommonMetadata specifies the common labels and annotations that are

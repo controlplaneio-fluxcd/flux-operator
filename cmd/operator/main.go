@@ -12,6 +12,7 @@ import (
 	"github.com/fluxcd/cli-utils/pkg/kstatus/polling"
 	"github.com/fluxcd/cli-utils/pkg/kstatus/polling/clusterreader"
 	"github.com/fluxcd/cli-utils/pkg/kstatus/polling/engine"
+	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/auth"
 	"github.com/fluxcd/pkg/cache"
 	runtimeCtrl "github.com/fluxcd/pkg/runtime/controller"
@@ -74,6 +75,7 @@ func main() {
 		rateLimiterOptions    runtimeCtrl.RateLimiterOptions
 		storagePath           string
 		defaultServiceAccount string
+		watchOptions          runtimeCtrl.WatchOptions
 	)
 
 	flag.IntVar(&concurrent, "concurrent", 10,
@@ -91,6 +93,8 @@ func main() {
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", true,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
+	flag.CommandLine.StringVar(&watchOptions.ConfigsLabelSelector, "watch-configs-label-selector", meta.LabelKeyWatch+"="+meta.LabelValueWatchEnabled,
+		"Watch for ConfigMaps and Secrets with matching labels.")
 
 	tokenCacheOptions.BindFlags(flag.CommandLine, tokenCacheDefaultMaxSize)
 	logOptions.BindFlags(flag.CommandLine)
@@ -114,6 +118,12 @@ func main() {
 	}
 
 	auth.EnableObjectLevelWorkloadIdentity()
+
+	watchConfigsPredicate, err := runtimeCtrl.GetWatchConfigsPredicate(watchOptions)
+	if err != nil {
+		setupLog.Error(err, "unable to configure watch configs label selector for controller")
+		os.Exit(1)
+	}
 
 	// Allow the default service account name to be set by an environment variable.
 	// Needed for the OLM Subscription that only allows env var configuration.
@@ -270,7 +280,8 @@ func main() {
 		DefaultServiceAccount: defaultServiceAccount,
 	}).SetupWithManager(ctx, mgr,
 		controller.ResourceSetReconcilerOptions{
-			RateLimiter: runtimeCtrl.GetRateLimiter(rateLimiterOptions),
+			RateLimiter:           runtimeCtrl.GetRateLimiter(rateLimiterOptions),
+			WatchConfigsPredicate: watchConfigsPredicate,
 		}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", fluxcdv1.ResourceSetKind)
 		os.Exit(1)

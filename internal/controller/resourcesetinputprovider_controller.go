@@ -272,7 +272,8 @@ func (r *ResourceSetInputProviderReconciler) callExternalProvider(
 			Namespace: obj.GetNamespace(),
 		}
 		var err error
-		tlsConfig, err = secrets.TLSConfigFromSecretRef(ctx, r.Client, key)
+		const insecure = false
+		tlsConfig, err = secrets.TLSConfigFromSecretRef(ctx, r.Client, key, obj.Spec.URL, insecure)
 		if err != nil {
 			return nil, err
 		}
@@ -560,7 +561,7 @@ func (r *ResourceSetInputProviderReconciler) getGitHubToken(
 		return "", nil
 	}
 
-	if _, ok := authData[github.AppIDKey]; !ok {
+	if _, ok := authData[github.KeyAppID]; !ok {
 		_, password, err := r.getBasicAuth(obj, authData)
 		return password, err
 	}
