@@ -456,23 +456,21 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 			"kustomize.toolkit.fluxcd.io/name",
 			"kustomize.toolkit.fluxcd.io/namespace",
 		},
-		// Take ownership of the Flux resources if they
-		// were previously managed by other tools.
+		// Undo changes made by kubectl.
 		FieldManagers: []ssa.FieldManager{
 			{
-				Name:          "flux",
+				// to undo changes made with 'kubectl apply --server-side --force-conflicts'
+				Name:          "kubectl",
 				OperationType: metav1.ManagedFieldsOperationApply,
 			},
 			{
-				Name:          "kustomize-controller",
-				OperationType: metav1.ManagedFieldsOperationApply,
-			},
-			{
-				Name:          "helm",
+				// to undo changes made with 'kubectl apply'
+				Name:          "kubectl",
 				OperationType: metav1.ManagedFieldsOperationUpdate,
 			},
 			{
-				Name:          "kubectl",
+				// to undo changes made with 'kubectl apply'
+				Name:          "before-first-apply",
 				OperationType: metav1.ManagedFieldsOperationUpdate,
 			},
 		},
