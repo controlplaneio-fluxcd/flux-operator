@@ -80,6 +80,9 @@ func (r *FluxReportReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// Set the operator info.
 	report.Operator = r.getInfo()
 
+	// Record the Flux Operator version and platform.
+	reporter.RecordOperatorInfoMetric(report.Operator)
+
 	// Update the FluxReport with the computed spec.
 	obj.Spec = report
 
