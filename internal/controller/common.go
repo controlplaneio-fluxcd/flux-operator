@@ -12,8 +12,10 @@ import (
 	"github.com/fluxcd/cli-utils/pkg/kstatus/status"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
+	"github.com/fluxcd/pkg/ssa"
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -106,4 +108,54 @@ func aggregateNotReadyStatus(ctx context.Context, kubeClient client.Client, obje
 	}
 
 	return strings.TrimSuffix(result.String(), "\n")
+}
+
+// takeOwnershipFrom returns a list of field managers that should be used
+// for taking ownership of resources from other controllers and tools.
+// By default, it includes managers for kustomize-controller, helm, and kubectl.
+func takeOwnershipFrom(managers []string) []ssa.FieldManager {
+	fieldManagers := []ssa.FieldManager{
+		{
+			Name:          "kustomize-controller",
+			OperationType: metav1.ManagedFieldsOperationApply,
+			ExactMatch:    true,
+		},
+		{
+			Name:          "helm",
+			OperationType: metav1.ManagedFieldsOperationUpdate,
+			ExactMatch:    true,
+		},
+		{
+			// to undo changes made with 'kubectl apply'
+			Name:          "kubectl",
+			OperationType: metav1.ManagedFieldsOperationUpdate,
+		},
+		{
+			// to undo changes made with 'kubectl apply --server-side'
+			Name:          "before-first-apply",
+			OperationType: metav1.ManagedFieldsOperationUpdate,
+		},
+		{
+			// to undo changes made with 'kubectl apply --server-side --force-conflicts'
+			Name:          "kubectl",
+			OperationType: metav1.ManagedFieldsOperationApply,
+		},
+	}
+
+	for _, manager := range managers {
+		fieldManagers = append(fieldManagers,
+			ssa.FieldManager{
+				Name:          manager,
+				OperationType: metav1.ManagedFieldsOperationApply,
+				ExactMatch:    true,
+			},
+			ssa.FieldManager{
+				Name:          manager,
+				OperationType: metav1.ManagedFieldsOperationUpdate,
+				ExactMatch:    true,
+			},
+		)
+	}
+
+	return fieldManagers
 }

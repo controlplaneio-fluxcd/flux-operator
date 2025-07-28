@@ -15,7 +15,7 @@ require (
 	github.com/fluxcd/pkg/git v0.34.0
 	github.com/fluxcd/pkg/kustomize v1.19.0
 	github.com/fluxcd/pkg/runtime v0.75.0
-	github.com/fluxcd/pkg/ssa v0.51.0
+	github.com/fluxcd/pkg/ssa v0.52.0
 	github.com/fluxcd/pkg/tar v0.13.0
 	github.com/fluxcd/pkg/version v0.9.0
 	github.com/go-logr/logr v1.4.3

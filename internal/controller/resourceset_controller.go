@@ -456,24 +456,9 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 			"kustomize.toolkit.fluxcd.io/name",
 			"kustomize.toolkit.fluxcd.io/namespace",
 		},
-		// Undo changes made by kubectl.
-		FieldManagers: []ssa.FieldManager{
-			{
-				// to undo changes made with 'kubectl apply --server-side --force-conflicts'
-				Name:          "kubectl",
-				OperationType: metav1.ManagedFieldsOperationApply,
-			},
-			{
-				// to undo changes made with 'kubectl apply'
-				Name:          "kubectl",
-				OperationType: metav1.ManagedFieldsOperationUpdate,
-			},
-			{
-				// to undo changes made with 'kubectl apply'
-				Name:          "before-first-apply",
-				OperationType: metav1.ManagedFieldsOperationUpdate,
-			},
-		},
+		// Take ownership of existing resources and
+		// undo changes made with kubectl or helm.
+		FieldManagers: takeOwnershipFrom(nil),
 	}
 
 	resultSet := ssa.NewChangeSet()

@@ -440,28 +440,7 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 		},
 		// Take ownership of the Flux resources if they
 		// were previously managed by other tools.
-		FieldManagers: []ssa.FieldManager{
-			{
-				Name:          "flux",
-				OperationType: metav1.ManagedFieldsOperationApply,
-			},
-			{
-				Name:          "kustomize-controller",
-				OperationType: metav1.ManagedFieldsOperationApply,
-			},
-			{
-				Name:          "helm",
-				OperationType: metav1.ManagedFieldsOperationUpdate,
-			},
-			{
-				Name:          "kubectl",
-				OperationType: metav1.ManagedFieldsOperationUpdate,
-			},
-			{
-				Name:          "flux-controller",
-				OperationType: metav1.ManagedFieldsOperationApply,
-			},
-		},
+		FieldManagers: takeOwnershipFrom([]string{"flux"}),
 	}
 
 	resultSet := ssa.NewChangeSet()
