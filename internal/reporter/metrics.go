@@ -85,6 +85,16 @@ func RecordMetrics(obj unstructured.Unstructured) {
 	}
 }
 
+// RecordOperatorInfoMetric records the version information of the Flux Operator.
+func RecordOperatorInfoMetric(obj *fluxcdv1.OperatorInfo) {
+	metrics["FluxOperatorInfo"].Reset()
+	metrics["FluxOperatorInfo"].With(prometheus.Labels{
+		"version":     obj.Version,
+		"api_version": obj.APIVersion,
+		"platform":    obj.Platform,
+	}).Set(1)
+}
+
 // ResetMetrics resets the metrics for the given kind.
 func ResetMetrics(kind string) {
 	metrics[kind].Reset()
@@ -138,6 +148,13 @@ var metrics = map[string]*prometheus.GaugeVec{
 			"source_name",
 			"path",
 		),
+	),
+	"FluxOperatorInfo": prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "flux_operator_info",
+			Help: "The version information of Flux Operator.",
+		},
+		[]string{"version", "api_version", "platform"},
 	),
 }
 
