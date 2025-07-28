@@ -373,8 +373,8 @@ spec:
                       periodSeconds: 10
                     resources:
                       limits:
-                        cpu: 1000m
-                        memory: 1Gi
+                        cpu: 2000m
+                        memory: 2Gi
                       requests:
                         cpu: 10m
                         memory: 64Mi
