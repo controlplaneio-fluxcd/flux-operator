@@ -456,23 +456,21 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 			"kustomize.toolkit.fluxcd.io/name",
 			"kustomize.toolkit.fluxcd.io/namespace",
 		},
-		// Take ownership of the Flux resources if they
-		// were previously managed by other tools.
+		// Undo changes made by kubectl.
 		FieldManagers: []ssa.FieldManager{
 			{
-				Name:          "flux",
+				// to undo changes made with 'kubectl apply --server-side --force-conflicts'
+				Name:          "kubectl",
 				OperationType: metav1.ManagedFieldsOperationApply,
 			},
 			{
-				Name:          "kustomize-controller",
-				OperationType: metav1.ManagedFieldsOperationApply,
-			},
-			{
-				Name:          "helm",
+				// to undo changes made with 'kubectl apply'
+				Name:          "kubectl",
 				OperationType: metav1.ManagedFieldsOperationUpdate,
 			},
 			{
-				Name:          "kubectl",
+				// to undo changes made with 'kubectl apply'
+				Name:          "before-first-apply",
 				OperationType: metav1.ManagedFieldsOperationUpdate,
 			},
 		},
@@ -556,7 +554,7 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 			Timeout:  obj.GetTimeout(),
 			FailFast: true,
 		}); err != nil {
-			readyStatus := r.aggregateNotReadyStatus(ctx, kubeClient, objects)
+			readyStatus := aggregateNotReadyStatus(ctx, kubeClient, objects)
 			return "", fmt.Errorf("%w\n%s", err, readyStatus)
 		}
 		log.Info("Health check completed")
@@ -624,27 +622,6 @@ func (r *ResourceSetReconciler) copyResources(ctx context.Context,
 		}
 	}
 	return nil
-}
-
-// aggregateNotReadyStatus returns the status of the Flux resources not ready.
-func (r *ResourceSetReconciler) aggregateNotReadyStatus(ctx context.Context,
-	kubeClient client.Client, objects []*unstructured.Unstructured) string {
-	var result strings.Builder
-	for _, res := range objects {
-		if strings.HasSuffix(res.GetObjectKind().GroupVersionKind().Group, ".fluxcd.io") {
-			if err := kubeClient.Get(ctx, client.ObjectKeyFromObject(res), res); err == nil {
-				if obj, err := status.GetObjectWithConditions(res.Object); err == nil {
-					for _, cond := range obj.Status.Conditions {
-						if cond.Type == meta.ReadyCondition && cond.Status != corev1.ConditionTrue {
-							result.WriteString(fmt.Sprintf("%s status: %s\n", ssautil.FmtUnstructured(res), cond.Message))
-						}
-					}
-				}
-			}
-		}
-	}
-
-	return strings.TrimSuffix(result.String(), "\n")
 }
 
 // deleteAllStaged removes resources in stages, first the Flux resources and then the rest.
