@@ -179,6 +179,14 @@ func TestRecordMetrics_ResourceSet(t *testing.T) {
 						"reason": "ReconciliationSucceeded",
 					},
 				},
+				"inventory": map[string]any{
+					"entries": []any{
+						map[string]any{
+							"id": "test_flux__ServiceAccount",
+							"v":  "v1",
+						},
+					},
+				},
 				"lastAppliedRevision": "b0c487c6b217bed8e6a53fca25f6ee1a7dd573e3",
 			},
 		},
@@ -197,7 +205,7 @@ func TestRecordMetrics_ResourceSet(t *testing.T) {
 
 	rsMetric := metricFamilies[0].Metric[0]
 	rsLabels := rsMetric.GetLabel()
-	g.Expect(rsLabels).To(HaveLen(8))
+	g.Expect(rsLabels).To(HaveLen(9))
 	g.Expect(rsLabels[0].GetName()).To(Equal("exported_namespace"))
 	g.Expect(rsLabels[0].GetValue()).To(Equal("flux-system"))
 	g.Expect(rsLabels[1].GetName()).To(Equal("kind"))
@@ -208,8 +216,10 @@ func TestRecordMetrics_ResourceSet(t *testing.T) {
 	g.Expect(rsLabels[3].GetValue()).To(Equal("True"))
 	g.Expect(rsLabels[4].GetName()).To(Equal("reason"))
 	g.Expect(rsLabels[4].GetValue()).To(Equal("ReconciliationSucceeded"))
-	g.Expect(rsLabels[5].GetName()).To(Equal("revision"))
-	g.Expect(rsLabels[5].GetValue()).To(Equal("b0c487c6b217bed8e6a53fca25f6ee1a7dd573e3"))
+	g.Expect(rsLabels[5].GetName()).To(Equal("resources"))
+	g.Expect(rsLabels[5].GetValue()).To(Equal("1"))
+	g.Expect(rsLabels[6].GetName()).To(Equal("revision"))
+	g.Expect(rsLabels[6].GetValue()).To(Equal("b0c487c6b217bed8e6a53fca25f6ee1a7dd573e3"))
 
 	DeleteMetricsFor(fluxcdv1.ResourceSetKind, rs.GetName(), rs.GetNamespace())
 	metricFamilies, err = reg.Gather()

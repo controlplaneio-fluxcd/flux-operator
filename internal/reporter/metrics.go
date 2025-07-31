@@ -4,6 +4,7 @@
 package reporter
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -59,6 +60,9 @@ func RecordMetrics(obj unstructured.Unstructured) {
 		if ok && strings.ToLower(val) == fluxcdv1.DisabledValue {
 			labels["suspended"] = trueValue
 		}
+
+		entries, _, _ := unstructured.NestedSlice(obj.Object, "status", "inventory", "entries")
+		labels["resources"] = fmt.Sprintf("%d", len(entries))
 
 		metrics[kind].DeletePartialMatch(map[string]string{
 			"name":               labels["name"],
@@ -127,7 +131,7 @@ var metrics = map[string]*prometheus.GaugeVec{
 			Name: "flux_resourceset_info",
 			Help: "The current status of a Flux Operator ResourceSet.",
 		},
-		append(commonLabels, "revision"),
+		append(commonLabels, "resources", "revision"),
 	),
 	fluxcdv1.ResourceSetInputProviderKind: prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
