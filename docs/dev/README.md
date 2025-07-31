@@ -32,14 +32,13 @@
 
 ### RedHat OpenShift Bundle
 
-1. Trigger the Redhat UBI build by running the `push-ubi` GitHub Workflow in the [`controlplaneio-fluxcd/flux-operator` repository](https://github.com/controlplaneio-fluxcd/flux-operator/actions/workflows/push-ubi.yml).
-2. Generate the OLM manifests for the UBI version locally by running `make build-olm-manifests-ubi`.
-3. Fork the [redhat-openshift-ecosystem/community-operators-prod repository](https://github.com/redhat-openshift-ecosystem/community-operators-prod) and clone it locally.
-4. Create a new branch from `main`, e.g. `flux-operator-1.0.0`.
-5. Copy the OLM manifests from the `flux-operator/bin/olm/1.0.0` dir to the `community-operators-prod/operators/flux-operator/1.0.0`.
-6. Commit the changes with the title `operator flux-operator (1.0.0)` and push the branch to the fork.
-7. Open a PR in the upstream repository and wait for the CI to pass.
-8. After the PR is merged, the new version will be available in the OpenShift Container Platform catalog.
+1. Generate the OLM manifests for the UBI version locally by running `make build-olm-manifests-ubi`.
+2. Fork the [redhat-openshift-ecosystem/community-operators-prod repository](https://github.com/redhat-openshift-ecosystem/community-operators-prod) and clone it locally.
+3. Create a new branch from `main`, e.g. `flux-operator-1.0.0`.
+4. Copy the OLM manifests from the `flux-operator/bin/olm/1.0.0` dir to the `community-operators-prod/operators/flux-operator/1.0.0`.
+5. Commit the changes with the title `operator flux-operator (1.0.0)` and push the branch to the fork.
+6. Open a PR in the upstream repository and wait for the CI to pass.
+7. After the PR is merged, the new version will be available in the OpenShift Container Platform catalog.
 
 ### Homebrew Tap
 
