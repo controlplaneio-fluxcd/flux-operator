@@ -11,6 +11,7 @@ import (
 	"github.com/fluxcd/cli-utils/pkg/kstatus/status"
 	"github.com/fluxcd/pkg/apis/meta"
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
+	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/exp/slices"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -24,7 +25,7 @@ import (
 
 func (r *FluxStatusReporter) getReconcilersStatus(ctx context.Context, crds []metav1.GroupVersionKind) ([]fluxcdv1.FluxReconcilerStatus, error) {
 	var multiErr error
-	ResetMetrics("FluxResource")
+	metricList := make([]prometheus.Labels, 0)
 	resStats := make([]fluxcdv1.FluxReconcilerStatus, len(crds))
 	for i, gvk := range crds {
 		var total int
@@ -41,9 +42,8 @@ func (r *FluxStatusReporter) getReconcilersStatus(ctx context.Context, crds []me
 
 		if err := r.List(ctx, &list, client.InNamespace("")); err == nil {
 			total = len(list.Items)
-
 			for _, item := range list.Items {
-				RecordMetrics(item)
+				metricList = append(metricList, fluxLabelsToValues(item))
 
 				if s, _, _ := unstructured.NestedBool(item.Object, "spec", "suspend"); s {
 					suspended++
@@ -75,6 +75,12 @@ func (r *FluxStatusReporter) getReconcilersStatus(ctx context.Context, crds []me
 				TotalSize: formatSize(totalSize),
 			},
 		}
+	}
+
+	// Record the per resource metrics.
+	ResetMetrics("FluxResource")
+	for _, labels := range metricList {
+		metrics["FluxResource"].With(labels).Set(1)
 	}
 
 	opStats, err := r.getOperatorReconcilersStatus(ctx)
