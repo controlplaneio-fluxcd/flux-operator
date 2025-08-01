@@ -425,7 +425,7 @@ func (r *ResourceSetInputProviderReconciler) makeFilters(
 
 // restoreSkippedGitProviderResults skip git provider results when matches skip condition.
 func (r *ResourceSetInputProviderReconciler) restoreSkippedGitProviderResults(results []gitprovider.Result, obj *fluxcdv1.ResourceSetInputProvider) ([]gitprovider.Result, error) {
-	if obj.Spec.Skip == nil || len(obj.Spec.Skip.Labels) == 0 {
+	if obj.Spec.Skip == nil || (len(obj.Spec.Skip.Labels) == 0 && obj.Spec.Skip.Toggle == "") {
 		return results, nil
 	}
 
@@ -433,10 +433,16 @@ func (r *ResourceSetInputProviderReconciler) restoreSkippedGitProviderResults(re
 	if err != nil {
 		return nil, fmt.Errorf("invalid exportedInputs values: %w", err)
 	}
+	exportedInputsMap := make(map[string]map[string]any, len(exportedInputs))
+	for _, ei := range exportedInputs {
+		exportedInputsMap[ei["id"].(string)] = ei
+	}
 
 	res := make([]gitprovider.Result, 0, len(results))
 	for _, result := range results {
 		isSkipped := false
+
+		// Check .spec.skip.labels.
 		for _, label := range obj.Spec.Skip.Labels {
 			// handle the case when the label is prefixed with ! to skip the result if it does not have the label
 			if strings.HasPrefix(label, "!") {
@@ -449,14 +455,30 @@ func (r *ResourceSetInputProviderReconciler) restoreSkippedGitProviderResults(re
 			}
 		}
 
-		if isSkipped {
-			var exportedInput map[string]any
-			for _, ei := range exportedInputs {
-				if ei["id"] == result.ID {
-					exportedInput = ei
-					break
+		// Check .spec.skip.toggle.
+		if !isSkipped && obj.Spec.Skip.Toggle != "" {
+			// If there isn't a previous exported input set with this ID,
+			// we do not skip updating through the toggle rule.
+			if prevInputs, ok := exportedInputsMap[result.ID]; ok {
+				toggle := obj.Spec.Skip.Toggle
+				presentOnNewResult := slices.Contains(result.Labels, toggle)
+				presentOnOldResult := false
+				if v, ok := prevInputs["labels"]; ok {
+					if prevLabels, ok := v.([]any); ok {
+						for _, prevLabel := range prevLabels {
+							if label, ok := prevLabel.(string); ok && label == toggle {
+								presentOnOldResult = true
+								break
+							}
+						}
+					}
 				}
+				isSkipped = presentOnNewResult == presentOnOldResult
 			}
+		}
+
+		if isSkipped {
+			exportedInput := exportedInputsMap[result.ID]
 
 			// when the result is newly added, we completely skip it
 			if exportedInput == nil {

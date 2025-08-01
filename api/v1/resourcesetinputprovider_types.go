@@ -151,10 +151,20 @@ type ResourceSetInputFilter struct {
 
 // ResourceSetInputSkip defines whether we need to skip input updates.
 type ResourceSetInputSkip struct {
-	// Labels specifies list of labels to skip input provider response when any of the label conditions matched.
-	// When prefixed with !, input provider response will be skipped if it does not have this label.
+	// Labels specifies a list of labels to skip the input provider response when any of the label
+	// conditions matched.
+	// When prefixed with !, the input provider response will be skipped if it does not have this label.
 	// +optional
 	Labels []string `json:"labels,omitempty"`
+
+	// Toggle defines a label whose presence needs to alternate between two scans for a new scan
+	// to be taken into account. If the label was previously present, then updating the exported
+	// inputs will be skipped until the label is removed. If the label was previously absent,
+	// then updating the exported inputs will be skipped until the label is added.
+	// This allows for safely transitioning between pull/merge request commits without running into
+	// race conditions.
+	// +optional
+	Toggle string `json:"toggle,omitempty"`
 }
 
 // ResourceSetInputProviderStatus defines the observed state of ResourceSetInputProvider.
