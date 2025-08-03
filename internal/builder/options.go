@@ -11,28 +11,29 @@ import (
 
 // Options defines the builder configuration.
 type Options struct {
-	Version                             string
-	Namespace                           string
-	Components                          []string
-	ComponentImages                     []ComponentImage
-	EventsAddr                          string
-	Registry                            string
-	ImagePullSecret                     string
-	WatchAllNamespaces                  bool
-	NetworkPolicy                       bool
-	LogLevel                            string
-	ClusterDomain                       string
-	TolerationKeys                      []string
-	Patches                             string
-	ArtifactStorage                     *ArtifactStorage
-	Sync                                *Sync
-	ShardingKey                         string
-	ShardingStorage                     bool
-	Shards                              []string
-	ShardName                           string
-	SourceAPIVersion                    string
-	EnableObjectLevelWorkloadIdentity   bool
-	SupportsObjectLevelWorkloadIdentity bool
+	Version                                string
+	Namespace                              string
+	Components                             []string
+	ComponentImages                        []ComponentImage
+	EventsAddr                             string
+	Registry                               string
+	ImagePullSecret                        string
+	WatchAllNamespaces                     bool
+	NetworkPolicy                          bool
+	LogLevel                               string
+	ClusterDomain                          string
+	TolerationKeys                         []string
+	Patches                                string
+	ArtifactStorage                        *ArtifactStorage
+	Sync                                   *Sync
+	ShardingKey                            string
+	ShardingStorage                        bool
+	Shards                                 []string
+	ShardName                              string
+	SourceAPIVersion                       string
+	EnableObjectLevelWorkloadIdentity      bool
+	SupportsObjectLevelWorkloadIdentity    bool
+	ObjectLevelWorkloadIdentityControllers string
 }
 
 // MakeDefaultOptions returns the default builder configuration.

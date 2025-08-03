@@ -143,7 +143,7 @@ patches:
 {{- if and .SupportsObjectLevelWorkloadIdentity .EnableObjectLevelWorkloadIdentity }}
 - target:
     kind: Deployment
-    name: "(source-controller|kustomize-controller|notification-controller|image-reflector-controller|image-automation-controller)"
+    name: "{{.ObjectLevelWorkloadIdentityControllers}}"
   patch: |
     - op: add
       path: /spec/template/spec/containers/0/args/-
