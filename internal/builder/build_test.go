@@ -19,8 +19,11 @@ import (
 )
 
 const (
-	deploymentKind = "Deployment"
-	pvcKind        = "PersistentVolumeClaim"
+	deploymentKind          = "Deployment"
+	pvcKind                 = "PersistentVolumeClaim"
+	clusterRole             = "ClusterRole"
+	sourceController        = "source-controller"
+	crdControllerFluxSystem = "crd-controller-flux-system"
 )
 
 func TestBuild(t *testing.T) {
@@ -236,7 +239,7 @@ func TestBuild_ArtifactStorage(t *testing.T) {
 	for _, obj := range result.Objects {
 		if obj.GetKind() == pvcKind {
 			found = true
-			g.Expect(obj.GetName()).To(Equal("source-controller"))
+			g.Expect(obj.GetName()).To(Equal(sourceController))
 		}
 		g.Expect(obj.GetAnnotations()).To(HaveKeyWithValue("kustomize.toolkit.fluxcd.io/ssa", "Ignore"))
 	}
@@ -349,7 +352,7 @@ func TestBuild_Sync_OCIRepository(t *testing.T) {
 
 	found = false
 	for _, obj := range result.Objects {
-		if obj.GetName() == "crd-controller-flux-system" && obj.GetKind() == "ClusterRole" {
+		if obj.GetName() == crdControllerFluxSystem && obj.GetKind() == clusterRole {
 			found = true
 			g.Expect(ssautil.ObjectToYAML(obj)).ToNot(ContainSubstring("serviceaccounts/token"))
 		}
@@ -419,7 +422,7 @@ func TestBuild_ObjectLevelWorkloadIdentity_260(t *testing.T) {
 
 	found := false
 	for _, obj := range result.Objects {
-		if obj.GetName() == "crd-controller-flux-system" && obj.GetKind() == "ClusterRole" {
+		if obj.GetName() == crdControllerFluxSystem && obj.GetKind() == clusterRole {
 			found = true
 			g.Expect(ssautil.ObjectToYAML(obj)).To(ContainSubstring("serviceaccounts/token"))
 		}
@@ -428,7 +431,7 @@ func TestBuild_ObjectLevelWorkloadIdentity_260(t *testing.T) {
 
 	found = false
 	for _, obj := range result.Objects {
-		if obj.GetName() == "source-controller" && obj.GetKind() == deploymentKind {
+		if obj.GetName() == sourceController && obj.GetKind() == deploymentKind {
 			found = true
 			g.Expect(ssautil.ObjectToYAML(obj)).To(ContainSubstring("nodeSelector"))
 		}
@@ -437,7 +440,7 @@ func TestBuild_ObjectLevelWorkloadIdentity_260(t *testing.T) {
 
 	numFound := 0
 	for _, obj := range result.Objects {
-		if obj.GetName() == "source-controller" && obj.GetKind() == deploymentKind {
+		if obj.GetName() == sourceController && obj.GetKind() == deploymentKind {
 			numFound++
 			g.Expect(ssautil.ObjectToYAML(obj)).To(ContainSubstring("--feature-gates=ObjectLevelWorkloadIdentity=true"))
 		}
@@ -469,7 +472,7 @@ func TestBuild_ObjectLevelWorkloadIdentity_270(t *testing.T) {
 
 	found := false
 	for _, obj := range result.Objects {
-		if obj.GetName() == "crd-controller-flux-system" && obj.GetKind() == "ClusterRole" {
+		if obj.GetName() == crdControllerFluxSystem && obj.GetKind() == clusterRole {
 			found = true
 			g.Expect(ssautil.ObjectToYAML(obj)).To(ContainSubstring("serviceaccounts/token"))
 		}
@@ -478,7 +481,7 @@ func TestBuild_ObjectLevelWorkloadIdentity_270(t *testing.T) {
 
 	found = false
 	for _, obj := range result.Objects {
-		if obj.GetName() == "source-controller" && obj.GetKind() == deploymentKind {
+		if obj.GetName() == sourceController && obj.GetKind() == deploymentKind {
 			found = true
 			g.Expect(ssautil.ObjectToYAML(obj)).To(ContainSubstring("nodeSelector"))
 		}
@@ -487,7 +490,7 @@ func TestBuild_ObjectLevelWorkloadIdentity_270(t *testing.T) {
 
 	numFound := 0
 	for _, obj := range result.Objects {
-		if obj.GetName() == "source-controller" && obj.GetKind() == deploymentKind {
+		if obj.GetName() == sourceController && obj.GetKind() == deploymentKind {
 			numFound++
 			g.Expect(ssautil.ObjectToYAML(obj)).To(ContainSubstring("--feature-gates=ObjectLevelWorkloadIdentity=true"))
 		}
@@ -586,7 +589,7 @@ func TestBuild_Sharding(t *testing.T) {
 	for _, obj := range result.Objects {
 		if obj.GetKind() == pvcKind {
 			foundPVCs++
-			g.Expect(obj.GetName()).To(ContainSubstring("source-controller"))
+			g.Expect(obj.GetName()).To(ContainSubstring(sourceController))
 		}
 	}
 	g.Expect(foundPVCs).To(Equal(1))
@@ -655,7 +658,7 @@ func TestBuild_ShardingWithStorage(t *testing.T) {
 	for _, obj := range result.Objects {
 		if obj.GetKind() == "PersistentVolumeClaim" {
 			foundPVCs++
-			g.Expect(obj.GetName()).To(ContainSubstring("source-controller"))
+			g.Expect(obj.GetName()).To(ContainSubstring(sourceController))
 		}
 	}
 	g.Expect(foundPVCs).To(Equal(3))
