@@ -83,38 +83,6 @@ func MatchVersion(dataDir, semverRange string) (string, error) {
 	return matchingVersions[0].Original(), nil
 }
 
-// SupportsObjectLevelWorkloadFeature checks if the Flux version
-// supports the object level workload feature.
-func SupportsObjectLevelWorkloadFeature(fluxVersion string) (bool, error) {
-	c, err := semver.NewConstraint("< 2.6.0")
-	if err != nil {
-		return false, fmt.Errorf("semver constraint parse error: %w", err)
-	}
-
-	version, err := semver.NewVersion(fluxVersion)
-	if err != nil {
-		return false, fmt.Errorf("version '%s' parse error: %w", fluxVersion, err)
-	}
-
-	if c.Check(version) {
-		return false, nil
-	}
-
-	return true, nil
-}
-
-// EnableObjectLevelWorkloadFeature checks if the object level workload feature
-// should be enabled based on the Flux version and the object level workload ID.
-func EnableObjectLevelWorkloadFeature(fluxVersion string, objectLevelWorkloadID bool) (bool, error) {
-	supported, err := SupportsObjectLevelWorkloadFeature(fluxVersion)
-	if err != nil {
-		return false, err
-	}
-
-	// If the Flux version is >= 2.6.0, we check if the object level workload ID is enabled.
-	return supported && objectLevelWorkloadID, nil
-}
-
 // getSourceAPIVersion determines the API version of the source based on the provided Flux version.
 func getSourceAPIVersion(fluxVersion string) (string, error) {
 	sourceAPIVersion := "source.toolkit.fluxcd.io/v1beta2"
