@@ -165,6 +165,13 @@ type Cluster struct {
 	// +kubebuilder:default:=kubernetes
 	// +optional
 	Type string `json:"type,omitempty"`
+
+	// Size defines the vertical scaling profile of the Flux controllers.
+	// The size is used to determine the concurrency and CPU/Memory limits for the Flux controllers.
+	// Accepted values are: 'small', 'medium' and 'large'.
+	// +kubebuilder:validation:Enum:=small;medium;large
+	// +optional
+	Size string `json:"size,omitempty"`
 }
 
 type Sharding struct {
