@@ -1,0 +1,183 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: flux-system
+transformers:
+  - annotations.yaml
+  - labels.yaml
+resources:
+  - namespace.yaml
+  - policies.yaml
+  - roles
+  - source-controller.yaml
+  - kustomize-controller.yaml
+  - helm-controller.yaml
+  - notification-controller.yaml
+  - image-reflector-controller.yaml
+  - image-automation-controller.yaml
+images:
+  - name: fluxcd/source-controller
+    newName: ghcr.io/fluxcd/source-controller
+    newTag: v1.6.0
+  - name: fluxcd/kustomize-controller
+    newName: ghcr.io/fluxcd/kustomize-controller
+    newTag: v1.6.0
+  - name: fluxcd/helm-controller
+    newName: ghcr.io/fluxcd/helm-controller
+    newTag: v1.3.0
+  - name: fluxcd/notification-controller
+    newName: ghcr.io/fluxcd/notification-controller
+    newTag: v1.6.0
+  - name: fluxcd/image-reflector-controller
+    newName: ghcr.io/fluxcd/image-reflector-controller
+    newTag: v0.35.0
+  - name: fluxcd/image-automation-controller
+    newName: ghcr.io/fluxcd/image-automation-controller
+    newTag: v0.41.0
+patches:
+- path: node-selector.yaml
+  target:
+    kind: Deployment
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: source-controller
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/args/0
+      value: --events-addr=http://notification-controller.flux-system.svc.cluster.local./
+    - op: replace
+      path: /spec/template/spec/containers/0/args/1
+      value: --watch-all-namespaces=true
+    - op: replace
+      path: /spec/template/spec/containers/0/args/2
+      value: --log-level=info
+    - op: replace
+      path: /spec/template/spec/containers/0/args/6
+      value: --storage-adv-addr=source-controller.$(RUNTIME_NAMESPACE).svc.cluster.local.
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: kustomize-controller
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/args/0
+      value: --events-addr=http://notification-controller.flux-system.svc.cluster.local./
+    - op: replace
+      path: /spec/template/spec/containers/0/args/1
+      value: --watch-all-namespaces=true
+    - op: replace
+      path: /spec/template/spec/containers/0/args/2
+      value: --log-level=info
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: helm-controller
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/args/0
+      value: --events-addr=http://notification-controller.flux-system.svc.cluster.local./
+    - op: replace
+      path: /spec/template/spec/containers/0/args/1
+      value: --watch-all-namespaces=true
+    - op: replace
+      path: /spec/template/spec/containers/0/args/2
+      value: --log-level=info
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: notification-controller
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/args/0
+      value: --watch-all-namespaces=true
+    - op: replace
+      path: /spec/template/spec/containers/0/args/1
+      value: --log-level=info
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: image-reflector-controller
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/args/0
+      value: --events-addr=http://notification-controller.flux-system.svc.cluster.local./
+    - op: replace
+      path: /spec/template/spec/containers/0/args/1
+      value: --watch-all-namespaces=true
+    - op: replace
+      path: /spec/template/spec/containers/0/args/2
+      value: --log-level=info
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: image-automation-controller
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/args/0
+      value: --events-addr=http://notification-controller.flux-system.svc.cluster.local./
+    - op: replace
+      path: /spec/template/spec/containers/0/args/1
+      value: --watch-all-namespaces=true
+    - op: replace
+      path: /spec/template/spec/containers/0/args/2
+      value: --log-level=info
+
+- target:
+    kind: Deployment
+  patch: |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: all
+      annotations:
+        fluxcd.controlplane.io/profile: "small"
+    spec:
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/part-of: flux
+          annotations:
+            cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+- target:
+    kind: Deployment
+  patch: |
+    - op: replace
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          cpu: 100m
+          memory: 64Mi
+        limits:
+          cpu: 1000m
+          memory: 512Mi
+- target:
+    kind: Deployment
+    name: "(kustomize-controller|helm-controller)"
+  patch: |
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --concurrent=5
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --requeue-dependency=10s
+- target:
+    kind: Deployment
+    name: "(source-controller)"
+  patch: |
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --helm-cache-max-size=10
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --helm-cache-ttl=720m
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --helm-cache-purge-interval=60m
+

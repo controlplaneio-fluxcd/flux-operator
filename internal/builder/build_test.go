@@ -30,7 +30,7 @@ func TestBuild(t *testing.T) {
 	options.Version = version
 	options.ShardingStorage = true
 	options.Shards = []string{"shard1", "shard2"}
-	options.Patches = ProfileOpenShift + GetMultitenantProfile("")
+	options.Patches = profileClusterTypeOpenShift + GetProfileMultitenant("")
 	options.ArtifactStorage = &ArtifactStorage{
 		Class: "standard",
 		Size:  "10Gi",
@@ -144,7 +144,72 @@ func TestBuild_Patches(t *testing.T) {
 	g.Expect(found).To(BeTrue())
 }
 
-func TestBuild_Profiles(t *testing.T) {
+func TestBuild_ProfileClusterSize(t *testing.T) {
+	const version = "v2.6.0"
+
+	testCases := []struct {
+		name    string
+		profile string
+	}{
+		{
+			name:    "small profile",
+			profile: "small",
+		},
+		{
+			name:    "medium profile",
+			profile: "medium",
+		},
+		{
+			name:    "large profile",
+			profile: "large",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			g := NewWithT(t)
+			options := MakeDefaultOptions()
+			options.Version = version
+
+			srcDir := filepath.Join("testdata", version)
+
+			dstDir, err := testTempDir(t)
+			g.Expect(err).NotTo(HaveOccurred())
+
+			ci, err := ExtractComponentImages(srcDir, options)
+			g.Expect(err).NotTo(HaveOccurred())
+			options.ComponentImages = ci
+
+			options.Patches = GetProfileClusterSize(tc.profile)
+			goldenFile := filepath.Join("testdata", version+"-golden", "size."+tc.profile+".kustomization.yaml")
+
+			result, err := Build(srcDir, dstDir, options)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(result.Objects).NotTo(BeEmpty())
+
+			if shouldGenGolden() {
+				err = cp.Copy(filepath.Join(dstDir, "kustomization.yaml"), goldenFile)
+				g.Expect(err).NotTo(HaveOccurred())
+			}
+
+			genK, err := os.ReadFile(filepath.Join(dstDir, "kustomization.yaml"))
+			g.Expect(err).NotTo(HaveOccurred())
+
+			goldenK, err := os.ReadFile(goldenFile)
+			g.Expect(err).NotTo(HaveOccurred())
+
+			g.Expect(string(genK)).To(Equal(string(goldenK)))
+
+			for _, obj := range result.Objects {
+				if obj.GetKind() == "Deployment" {
+					g.Expect(obj.GetAnnotations()).To(HaveKeyWithValue("fluxcd.controlplane.io/profile", tc.profile))
+				}
+			}
+		})
+	}
+}
+
+func TestBuild_ProfileClusterType(t *testing.T) {
 	g := NewWithT(t)
 	const version = "v2.3.0"
 	options := MakeDefaultOptions()
@@ -160,7 +225,7 @@ func TestBuild_Profiles(t *testing.T) {
 	g.Expect(err).NotTo(HaveOccurred())
 	options.ComponentImages = ci
 
-	options.Patches = ProfileOpenShift + GetMultitenantProfile("")
+	options.Patches = GetProfileClusterType("openshift") + GetProfileMultitenant("")
 
 	result, err := Build(srcDir, dstDir, options)
 	g.Expect(err).NotTo(HaveOccurred())
@@ -485,7 +550,7 @@ func TestBuild_Sharding(t *testing.T) {
 	options := MakeDefaultOptions()
 	options.Version = version
 	options.Shards = []string{"shard1", "shard2"}
-	options.Patches = ProfileOpenShift + GetMultitenantProfile("")
+	options.Patches = profileClusterTypeOpenShift + GetProfileMultitenant("")
 	options.ArtifactStorage = &ArtifactStorage{
 		Class: "standard",
 		Size:  "10Gi",
