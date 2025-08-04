@@ -128,11 +128,11 @@ func buildInstanceCmdRun(cmd *cobra.Command, args []string) error {
 	options.NetworkPolicy = instance.GetCluster().NetworkPolicy
 	options.ClusterDomain = instance.GetCluster().Domain
 
-	if instance.GetCluster().Type == "openshift" {
-		options.Patches += builder.ProfileOpenShift
-	}
+	options.Patches += builder.GetProfileClusterType(instance.GetCluster().Type)
+	options.Patches += builder.GetProfileClusterSize(instance.GetCluster().Size)
+
 	if instance.GetCluster().Multitenant {
-		options.Patches += builder.GetMultitenantProfile(instance.GetCluster().TenantDefaultServiceAccount)
+		options.Patches += builder.GetProfileMultitenant(instance.GetCluster().TenantDefaultServiceAccount)
 	}
 
 	if instance.GetCluster().ObjectLevelWorkloadIdentity {
@@ -141,7 +141,7 @@ func buildInstanceCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	if options.HasNotificationController() {
-		options.Patches += builder.GetNotificationPatch(options.Namespace)
+		options.Patches += builder.GetProfileNotification(options.Namespace)
 	}
 
 	if instance.Spec.Sharding != nil {
