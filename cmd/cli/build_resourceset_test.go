@@ -99,3 +99,41 @@ func TestBuildResourceSetCmdWithInputsFile(t *testing.T) {
 
 	g.Expect(output).To(Equal(expected))
 }
+
+func TestBuildResourceSetCmdWithInputsFromProviderWithLabels(t *testing.T) {
+	g := NewWithT(t)
+	rsetFile := "testdata/build_resourceset/rset-with-rsip-labeled.yaml"
+	inputsFile := "testdata/build_resourceset/rsip-labeled.yaml"
+
+	// Execute command with inputs file
+	output, err := executeCommand([]string{"build", "rset", "-f", rsetFile, "--inputs-from-provider", inputsFile})
+
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(output).ToNot(BeEmpty())
+
+	// Read expected golden output
+	expectedBytes, err := os.ReadFile("testdata/build_resourceset/golden-labeled.yaml")
+	g.Expect(err).ToNot(HaveOccurred())
+	expected := string(expectedBytes)
+
+	g.Expect(output).To(Equal(expected))
+}
+
+func TestBuildResourceSetCmdWithInputsFromProviderWithNames(t *testing.T) {
+	g := NewWithT(t)
+	rsetFile := "testdata/build_resourceset/rset-with-rsip-named.yaml"
+	inputsFile := "testdata/build_resourceset/rsip-named.yaml"
+
+	// Execute command with inputs file
+	output, err := executeCommand([]string{"build", "rset", "-f", rsetFile, "--inputs-from-provider", inputsFile})
+
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(output).ToNot(BeEmpty())
+
+	// Read expected golden output
+	expectedBytes, err := os.ReadFile("testdata/build_resourceset/golden-named.yaml")
+	g.Expect(err).ToNot(HaveOccurred())
+	expected := string(expectedBytes)
+
+	g.Expect(output).To(Equal(expected))
+}

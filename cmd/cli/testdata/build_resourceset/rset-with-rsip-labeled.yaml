@@ -1,0 +1,41 @@
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: app1
+  namespace: apps
+spec:
+  inputsFrom:
+    - kind: ResourceSetInputProvider
+      selector:
+        matchLabels:
+          some: label
+        matchExpressions:
+          - key: anotherLabel
+            operator: In
+            values:
+              - value1
+              - value2
+  resources:
+    - apiVersion: source.toolkit.fluxcd.io/v1
+      kind: OCIRepository
+      metadata:
+        name: app1-<< inputs.tenant >>
+        namespace: apps
+      spec:
+        interval: 10m
+        url: oci://my.registry/org/charts/app1
+        ref:
+          semver: << inputs.app.version | quote >>
+    - apiVersion: helm.toolkit.fluxcd.io/v2
+      kind: HelmRelease
+      metadata:
+        name: app1-<< inputs.tenant >>
+        namespace: apps
+      spec:
+        interval: 1h
+        releaseName: app1-<< inputs.tenant >>
+        chartRef:
+          kind: OCIRepository
+          name: app1-<< inputs.tenant >>
+        values:
+          replicaCount: << inputs.app.replicas | int >>

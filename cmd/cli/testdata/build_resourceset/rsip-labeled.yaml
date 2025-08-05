@@ -1,0 +1,31 @@
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSetInputProvider
+metadata:
+  name: app1-tenant1
+  namespace: apps
+  labels:
+    some: label
+    anotherLabel: value1
+spec:
+  type: Static
+  defaultValues:
+    tenant: "tenant1"
+    app:
+      version: "6.7.x"
+      replicas: 2
+---
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSetInputProvider
+metadata:
+  name: app1-tenant2
+  namespace: apps
+  labels:
+    some: label
+    anotherLabel: value2
+spec:
+  type: Static
+  defaultValues:
+    tenant: "tenant2"
+    app:
+      version: "6.6.x"
+      replicas: 3

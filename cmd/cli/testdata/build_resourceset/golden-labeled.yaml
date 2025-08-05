@@ -1,0 +1,62 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  labels:
+    resourceset.fluxcd.controlplane.io/name: app1
+    resourceset.fluxcd.controlplane.io/namespace: apps
+  name: app1-tenant1
+  namespace: apps
+spec:
+  interval: 10m
+  ref:
+    semver: 6.7.x
+  url: oci://my.registry/org/charts/app1
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  labels:
+    resourceset.fluxcd.controlplane.io/name: app1
+    resourceset.fluxcd.controlplane.io/namespace: apps
+  name: app1-tenant2
+  namespace: apps
+spec:
+  interval: 10m
+  ref:
+    semver: 6.6.x
+  url: oci://my.registry/org/charts/app1
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  labels:
+    resourceset.fluxcd.controlplane.io/name: app1
+    resourceset.fluxcd.controlplane.io/namespace: apps
+  name: app1-tenant1
+  namespace: apps
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: app1-tenant1
+  interval: 1h
+  releaseName: app1-tenant1
+  values:
+    replicaCount: 2
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  labels:
+    resourceset.fluxcd.controlplane.io/name: app1
+    resourceset.fluxcd.controlplane.io/namespace: apps
+  name: app1-tenant2
+  namespace: apps
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: app1-tenant2
+  interval: 1h
+  releaseName: app1-tenant2
+  values:
+    replicaCount: 3
