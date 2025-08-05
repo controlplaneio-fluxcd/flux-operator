@@ -90,6 +90,7 @@ spec:
     - image-automation-controller
   cluster:
     type: kubernetes
+    size: medium
     multitenant: false
     networkPolicy: true
     domain: "cluster.local"
@@ -97,14 +98,16 @@ spec:
     patches:
       - target:
           kind: Deployment
-          name: "(kustomize-controller|helm-controller)"
         patch: |
+          - op: replace
+            path: /spec/template/spec/nodeSelector
+            value:
+              kubernetes.io/os: linux
           - op: add
-            path: /spec/template/spec/containers/0/args/-
-            value: --concurrent=10
-          - op: add
-            path: /spec/template/spec/containers/0/args/-
-            value: --requeue-dependency=5s
+            path: /spec/template/spec/tolerations
+            value:
+              - key: "CriticalAddonsOnly"
+                operator: "Exists"
 ```
 
 > [!NOTE]

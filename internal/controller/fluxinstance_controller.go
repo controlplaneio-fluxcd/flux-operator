@@ -318,15 +318,15 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 		options.ClusterDomain = obj.GetCluster().Domain
 	}
 
-	if obj.GetCluster().Type == "openshift" {
-		options.Patches += builder.ProfileOpenShift
-	}
+	options.Patches += builder.GetProfileClusterType(obj.GetCluster().Type)
+	options.Patches += builder.GetProfileClusterSize(obj.GetCluster().Size)
+
 	if obj.GetCluster().Multitenant {
-		options.Patches += builder.GetMultitenantProfile(obj.GetCluster().TenantDefaultServiceAccount)
+		options.Patches += builder.GetProfileMultitenant(obj.GetCluster().TenantDefaultServiceAccount)
 	}
 
 	if options.HasNotificationController() {
-		options.Patches += builder.GetNotificationPatch(options.Namespace)
+		options.Patches += builder.GetProfileNotification(options.Namespace)
 	}
 
 	if obj.Spec.Sharding != nil {

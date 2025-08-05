@@ -196,7 +196,7 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 	g.Expect(result.Status.Components[2].Repository).To(Equal("ghcr.io/fluxcd/helm-controller"))
 	g.Expect(result.Status.Components[3].Repository).To(Equal("ghcr.io/fluxcd/notification-controller"))
 
-	// Check if the deployments images have digests.
+	// Check if the deployment images have digests.
 	sc := &appsv1.Deployment{}
 	err = testClient.Get(ctx, types.NamespacedName{Name: "source-controller", Namespace: ns.Name}, sc)
 	g.Expect(err).ToNot(HaveOccurred())
@@ -205,6 +205,9 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 
 	// Check if the deployments have the correct labels.
 	g.Expect(sc.Labels).To(HaveKeyWithValue("app.kubernetes.io/name", "flux"))
+
+	// Check if the pods have the correct labels.
+	g.Expect(sc.Spec.Template.GetLabels()["app.kubernetes.io/part-of"]).To(Equal("flux"))
 
 	// Update the instance.
 	resultP := result.DeepCopy()
@@ -620,6 +623,7 @@ func TestFluxInstanceReconciler_Profiles(t *testing.T) {
 	spec.Cluster = &fluxcdv1.Cluster{
 		Type:        "openshift",
 		Multitenant: true,
+		Size:        "large",
 	}
 	spec.Sharding = &fluxcdv1.Sharding{
 		Shards: []string{"shard1", "shard2"},
@@ -678,6 +682,10 @@ func TestFluxInstanceReconciler_Profiles(t *testing.T) {
 		"--no-remote-bases=true",
 	))
 
+	// Check if the limits were set according to the profile.
+	g.Expect(kc.Spec.Template.Spec.Containers[0].Resources.Limits.Cpu().String()).To(Equal("3"))
+	g.Expect(kc.Spec.Template.Spec.Containers[0].Resources.Limits.Memory().String()).To(Equal("3Gi"))
+
 	// Check openshift profile.
 	g.Expect(kc.Spec.Template.Spec.Containers[0].SecurityContext.SeccompProfile).To(BeNil())
 
@@ -693,6 +701,15 @@ func TestFluxInstanceReconciler_Profiles(t *testing.T) {
 			fmt.Sprintf("--watch-label-selector=sharding.fluxcd.io/key=%s", shard),
 			fmt.Sprintf("--storage-adv-addr=source-controller-%s.$(RUNTIME_NAMESPACE).svc.cluster.local.", shard),
 		))
+	}
+
+	// Check the performance profile for sharding.
+	for _, shard := range spec.Sharding.Shards {
+		kcs := &appsv1.Deployment{}
+		err = testClient.Get(ctx, types.NamespacedName{Name: "kustomize-controller-" + shard, Namespace: ns.Name}, kcs)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(kcs.Spec.Template.Spec.Containers[0].Resources.Limits.Cpu().String()).To(Equal("3"))
+		g.Expect(kcs.Spec.Template.Spec.Containers[0].Resources.Limits.Memory().String()).To(Equal("3Gi"))
 	}
 
 	// Check if the notification CRD was patched.

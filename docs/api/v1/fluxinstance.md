@@ -28,7 +28,7 @@ metadata:
   annotations:
     fluxcd.controlplane.io/reconcile: "enabled"
     fluxcd.controlplane.io/reconcileEvery: "1h"
-    fluxcd.controlplane.io/reconcileTimeout: "3m"
+    fluxcd.controlplane.io/reconcileTimeout: "5m"
 spec:
   distribution:
     version: "2.x"
@@ -42,6 +42,7 @@ spec:
     - image-automation-controller
   cluster:
     type: kubernetes
+    size: medium
     multitenant: false
     networkPolicy: true
     domain: "cluster.local"
@@ -55,14 +56,16 @@ spec:
     patches:
       - target:
           kind: Deployment
-          name: "(kustomize-controller|helm-controller)"
         patch: |
+          - op: replace
+            path: /spec/template/spec/nodeSelector
+            value:
+              kubernetes.io/os: linux
           - op: add
-            path: /spec/template/spec/containers/0/args/-
-            value: --concurrent=10
-          - op: add
-            path: /spec/template/spec/containers/0/args/-
-            value: --requeue-dependency=5s
+            path: /spec/template/spec/tolerations
+            value:
+              - key: "CriticalAddonsOnly"
+                operator: "Exists"
 ```
 
 You can run this example by saving the manifest into `fluxinstance.yaml`.
@@ -302,6 +305,7 @@ Example using the OpenShift cluster configuration:
 spec:
   cluster:
     type: openshift
+    size: medium
     multitenant: true
     tenantDefaultServiceAccount: "flux"
     objectLevelWorkloadIdentity: false
@@ -315,6 +319,33 @@ The `.spec.cluster.type` field is optional and specifies the type of the Kuberne
 This field is used to enable specific configuration for AKS, EKS, GKE and OpenShift clusters.
 
 The supported values are `kubernetes` (default), `openshift`, `azure`, `aws` and `gcp`.
+
+#### Cluster size
+
+The `.spec.cluster.size` field is optional and specifies the size of the Kubernetes cluster.
+The size is used to determine the vertical scaling profile for the Flux controllers based on
+the number of applications and the deployment frequency.
+
+The supported values are `small`, `medium` and `large` which correspond to the following
+configuration for Flux `kustomize-controller` and `helm-controller`:
+
+| Size       | Concurrency | CPU limit | Memory limit | Requeue deps |
+|------------|-------------|-----------|--------------|--------------|
+| **small**  | 5           | 1000m     | 512Mi        | 10s          |
+| **medium** | 10          | 2000m     | 1Gi          | 5s           |
+| **large**  | 20          | 3000m     | 3Gi          | 5s           |
+
+For all sizes, the `source-controller` is configured to cache artifacts
+and the concurrency is set between 2 and 10.
+
+The `small` size is suitable for edge clusters with limited resources (Raspberry Pi) or
+for clusters with tens of apps and moderate deployment frequency.
+
+The `medium` size is suitable for clusters with hundreds of apps, while the `large`
+size is for clusters with up to a thousand apps and high deployment frequency.
+
+When Flux manages thousands of apps,
+the recommended scaling strategy is to use [sharding](#sharding-configuration).
 
 #### Cluster multitenant
 
@@ -457,12 +488,12 @@ spec:
           kind: Deployment
           name: "(kustomize-controller|helm-controller)"
         patch: |
-          - op: add
-            path: /spec/template/spec/containers/0/args/-
-            value: --concurrent=10
-          - op: add
-            path: /spec/template/spec/containers/0/args/-
-            value: --requeue-dependency=5s
+          - op: replace
+            path: /spec/template/spec/volumes/0
+            value:
+              name: temp
+              emptyDir:
+                medium: Memory
 ```
 
 ### Reconciliation configuration
