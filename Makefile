@@ -68,11 +68,11 @@ lint-fix: golangci-lint ## Run golangci linters and perform fixes.
 
 .PHONY: build
 build: generate fmt vet ## Build the flux-operator binary.
-	CGO_ENABLED=0 go build -ldflags="-s -w -X main.VERSION=$(FLUX_OPERATOR_DEV_VERSION)" -o ./bin/flux-operator ./cmd/operator/
+	CGO_ENABLED=0 GOFIPS140=latest go build -ldflags="-s -w -X main.VERSION=$(FLUX_OPERATOR_DEV_VERSION)" -o ./bin/flux-operator ./cmd/operator/
 
 .PHONY: run
 run: generate fmt vet ## Run the flux-operator locally.
-	go run ./cmd/operator/main.go --enable-leader-election=false
+	CGO_ENABLED=0 GOFIPS140=latest go run ./cmd/operator/main.go --enable-leader-election=false
 
 .PHONY: docker-build
 docker-build: ## Build flux-operator docker image.
