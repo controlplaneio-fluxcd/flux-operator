@@ -1,3 +1,27 @@
+variable "flux_version" {
+  description = "Flux version semver range"
+  type        = string
+  default     = "2.x"
+}
+
+variable "flux_registry" {
+  description = "Flux distribution registry"
+  type        = string
+  default     = "ghcr.io/fluxcd"
+}
+
+variable "cluster_type" {
+  description = "Cluster type, e.g. kubernetes, openshift, azure, aws, gcp"
+  type        = string
+  default     = "kubernetes"
+}
+
+variable "cluster_size" {
+  description = "Cluster size, e.g. small, medium, large"
+  type        = string
+  default     = "medium"
+}
+
 variable "git_token" {
   description = "Git PAT"
   sensitive   = true
@@ -40,16 +64,4 @@ variable "git_ref" {
   description = "Git branch or tag in the format refs/heads/main or refs/tags/v1.0.0"
   type        = string
   default     = "refs/heads/main"
-}
-
-variable "flux_version" {
-  description = "Flux version semver range"
-  type        = string
-  default     = "2.x"
-}
-
-variable "flux_registry" {
-  description = "Flux distribution registry"
-  type        = string
-  default     = "ghcr.io/fluxcd"
 }
