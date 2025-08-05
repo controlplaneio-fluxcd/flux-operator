@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - flux-controllers.yaml
+  - flux-operator.yaml
+configMapGenerator:
+  - name: flux-grafana-dashboards
+    files:
+      - dashboards/flux-k8s-api-performance.json
+      - dashboards/flux-performance.json
+    options:
+      labels:
+        grafana_dashboard: "1"
+        app.kubernetes.io/component: monitoring
+        app.kubernetes.io/part-of: flux
