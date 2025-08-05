@@ -160,6 +160,7 @@ The following commands are available:
 
 - `flux-operator tree rset <name>`: Print a tree view of the ResourceSet managed objects.
 - `flux-operator tree ks <name>`: Print a tree view of the Flux Kustomization managed objects.
+- `flux-operator tree hr <name>`: Print a tree view of the Flux HelmRelease managed objects.
 
 Arguments:
 
