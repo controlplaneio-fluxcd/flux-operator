@@ -4,4 +4,4 @@ updateGraph: semver-mode
 addReviewers: true
 reviewers:
   - stefanprodan
-  - souleb
+  - matheuscscp

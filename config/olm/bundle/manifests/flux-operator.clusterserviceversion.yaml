@@ -239,15 +239,15 @@ spec:
     to help with monitoring and troubleshooting Flux.
 
     ### Operator Features
-    
+
     The operator extends Flux with self-service capabilities, deployment windows,
     and preview environments for GitHub, GitLab and Azure DevOps pull requests testing.
-    
+
     The operator ResourceSet API enables platform teams to define their own application standard
     as a group of Flux and Kubernetes resources that can be templated, parameterized and deployed
     as a single unit on self-service environments. For more information, please see the
     [ResourceSet documentation](https://fluxcd.control-plane.io/operator/resourcesets/introduction/).
-    
+
     ### OpenShift Support
 
     The Flux Operator should be installed in a dedicated namespace, e.g. `flux-system`.
