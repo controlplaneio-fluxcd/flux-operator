@@ -189,6 +189,13 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 		},
 	))
 
+	// Check that the namespace is protected from pruning.
+	resultNS := &corev1.Namespace{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(ns), resultNS)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(resultNS.Annotations).To(HaveKeyWithValue(fluxcdv1.PruneAnnotation, fluxcdv1.DisabledValue))
+	g.Expect(resultNS.Annotations).To(HaveKeyWithValue("kustomize.toolkit.fluxcd.io/prune", "Disabled"))
+
 	// Check if components images were recorded.
 	g.Expect(result.Status.Components).To(HaveLen(4))
 	g.Expect(result.Status.Components[0].Repository).To(Equal("ghcr.io/fluxcd/source-controller"))
