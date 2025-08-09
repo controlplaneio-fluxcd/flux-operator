@@ -310,6 +310,7 @@ metadata:
   name: annotations
 annotations:
   kustomize.toolkit.fluxcd.io/ssa: Ignore
+  kustomize.toolkit.fluxcd.io/prune: Disabled
 fieldSpecs:
   - path: metadata/annotations
     create: true
