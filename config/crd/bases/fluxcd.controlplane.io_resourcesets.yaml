@@ -319,12 +319,18 @@ spec:
                       description: Metadata contains additional information about
                         the snapshot.
                       type: object
+                    totalReconciliations:
+                      description: TotalReconciliations is the total number of reconciliations
+                        that have occurred for this snapshot.
+                      format: int64
+                      type: integer
                   required:
                   - digest
                   - firstReconciled
                   - lastReconciled
                   - lastReconciledDuration
                   - lastReconciledStatus
+                  - totalReconciliations
                   type: object
                 type: array
               inventory:

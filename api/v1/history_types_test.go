@@ -13,11 +13,12 @@ import (
 
 func TestHistoryUpsert(t *testing.T) {
 	tests := []struct {
-		name     string
-		setup    func() *History
-		digest   string
-		status   string
-		expected int // expected length after upsert
+		name           string
+		setup          func() *History
+		digest         string
+		status         string
+		expectedLength int
+		expectedTotal  int64
 	}{
 		{
 			name: "add new snapshot to empty history",
@@ -25,9 +26,10 @@ func TestHistoryUpsert(t *testing.T) {
 				h := &History{}
 				return h
 			},
-			digest:   "sha256:abc123",
-			status:   "Success",
-			expected: 1,
+			digest:         "sha256:abc123",
+			status:         "Success",
+			expectedLength: 1,
+			expectedTotal:  1,
 		},
 		{
 			name: "update existing snapshot",
@@ -39,13 +41,51 @@ func TestHistoryUpsert(t *testing.T) {
 						LastReconciled:         metav1.NewTime(time.Now().Add(-1 * time.Hour)),
 						LastReconciledDuration: metav1.Duration{Duration: 30 * time.Second},
 						LastReconciledStatus:   "Success",
+						TotalReconciliations:   1,
 					},
 				}
 				return h
 			},
-			digest:   "sha256:abc123",
-			status:   "Success",
-			expected: 1,
+			digest:         "sha256:abc123",
+			status:         "Success",
+			expectedLength: 1,
+			expectedTotal:  2,
+		},
+		{
+			name: "update existing snapshot and move to front",
+			setup: func() *History {
+				h := &History{
+					{
+						Digest:                 "sha256:xyz123",
+						FirstReconciled:        metav1.NewTime(time.Now().Add(-1 * time.Minute)),
+						LastReconciled:         metav1.NewTime(time.Now().Add(-1 * time.Minute)),
+						LastReconciledDuration: metav1.Duration{Duration: time.Second},
+						LastReconciledStatus:   "Success",
+						TotalReconciliations:   1,
+					},
+					{
+						Digest:                 "sha256:abc123",
+						FirstReconciled:        metav1.NewTime(time.Now().Add(-1 * time.Hour)),
+						LastReconciled:         metav1.NewTime(time.Now().Add(-1 * time.Minute)),
+						LastReconciledDuration: metav1.Duration{Duration: 15 * time.Second},
+						LastReconciledStatus:   "Failed",
+						TotalReconciliations:   1,
+					},
+					{
+						Digest:                 "sha256:abc123",
+						FirstReconciled:        metav1.NewTime(time.Now().Add(-1 * time.Hour)),
+						LastReconciled:         metav1.NewTime(time.Now().Add(-1 * time.Hour)),
+						LastReconciledDuration: metav1.Duration{Duration: 30 * time.Second},
+						LastReconciledStatus:   "Success",
+						TotalReconciliations:   1,
+					},
+				}
+				return h
+			},
+			digest:         "sha256:abc123",
+			status:         "Success",
+			expectedLength: 3,
+			expectedTotal:  2,
 		},
 		{
 			name: "add new snapshot due to different status",
@@ -57,13 +97,15 @@ func TestHistoryUpsert(t *testing.T) {
 						LastReconciled:         metav1.NewTime(time.Now().Add(-1 * time.Hour)),
 						LastReconciledDuration: metav1.Duration{Duration: 30 * time.Second},
 						LastReconciledStatus:   "Success",
+						TotalReconciliations:   1,
 					},
 				}
 				return h
 			},
-			digest:   "sha256:abc123",
-			status:   "Failure",
-			expected: 2,
+			digest:         "sha256:abc123",
+			status:         "Failure",
+			expectedLength: 2,
+			expectedTotal:  1,
 		},
 		{
 			name: "add new snapshot to existing history",
@@ -75,13 +117,15 @@ func TestHistoryUpsert(t *testing.T) {
 						LastReconciled:         metav1.NewTime(time.Now().Add(-1 * time.Hour)),
 						LastReconciledDuration: metav1.Duration{Duration: 30 * time.Second},
 						LastReconciledStatus:   "Success",
+						TotalReconciliations:   1,
 					},
 				}
 				return h
 			},
-			digest:   "sha256:abc123",
-			status:   "Success",
-			expected: 2,
+			digest:         "sha256:abc123",
+			status:         "Success",
+			expectedLength: 2,
+			expectedTotal:  1,
 		},
 	}
 
@@ -92,21 +136,27 @@ func TestHistoryUpsert(t *testing.T) {
 
 			h.Upsert(tt.digest, time.Now(), 45*time.Second, tt.status, metadata)
 
-			if len(*h) != tt.expected {
-				t.Errorf("expected length %d, got %d", tt.expected, len(*h))
+			if len(*h) != tt.expectedLength {
+				t.Errorf("expectedLength length %d, got %d", tt.expectedLength, len(*h))
 			}
 
 			// Verify latest entry matches the upserted snapshot
 			if h.Latest().Digest != tt.digest && h.Latest().LastReconciledStatus != tt.status {
-				t.Errorf("expected first snapshot digest %s status %s, got %s %s",
+				t.Errorf("expectedLength first snapshot digest %s status %s, got %s %s",
 					tt.digest, tt.status, h.Latest().Digest, h.Latest().LastReconciledStatus)
+			}
+
+			// Verify total reconciliations
+			if tt.expectedTotal != h.Latest().TotalReconciliations {
+				t.Errorf("expectedLength total reconciliations to be %d, got %d",
+					tt.expectedTotal, h.Latest().TotalReconciliations)
 			}
 
 			// Verify metadata was set
 			for _, snapshot := range *h {
 				if snapshot.Digest == tt.digest && snapshot.LastReconciledStatus == tt.status {
 					if snapshot.Metadata["test"] != "value" {
-						t.Errorf("expected metadata 'test'='value', got %v", snapshot.Metadata)
+						t.Errorf("expectedLength metadata 'test'='value', got %v", snapshot.Metadata)
 					}
 				}
 			}
@@ -129,14 +179,14 @@ func TestHistoryTruncate(t *testing.T) {
 
 	// Should be truncated to 5
 	if len(*h) != MaxHistorySize {
-		t.Errorf("expected length %d after truncation, got %d", MaxHistorySize, len(*h))
+		t.Errorf("expectedLength length %d after truncation, got %d", MaxHistorySize, len(*h))
 	}
 
 	// Verify it kept the most recent ones
 	latest := (*h)[0]
 	expectedLatestDigest := digests[6] // Last one added (index 6)
 	if latest.Digest != expectedLatestDigest {
-		t.Errorf("expected latest digest %s, got %s", expectedLatestDigest, latest.Digest)
+		t.Errorf("expectedLength latest digest %s, got %s", expectedLatestDigest, latest.Digest)
 	}
 }
 
@@ -197,13 +247,13 @@ func TestHistoryLatest(t *testing.T) {
 
 			if tt.expected == nil {
 				if result != nil {
-					t.Errorf("expected nil, got %v", result)
+					t.Errorf("expectedLength nil, got %v", result)
 				}
 			} else {
 				if result == nil {
-					t.Errorf("expected %v, got nil", tt.expected)
+					t.Errorf("expectedLength %v, got nil", tt.expected)
 				} else if result.Digest != tt.expected.Digest {
-					t.Errorf("expected digest %s, got %s", tt.expected.Digest, result.Digest)
+					t.Errorf("expectedLength digest %s, got %s", tt.expected.Digest, result.Digest)
 				}
 			}
 		})
@@ -223,16 +273,16 @@ func TestSnapshotString(t *testing.T) {
 
 	// Should contain the short ID (first 8 chars after colon)
 	if !strings.Contains(result, "id=abc123de") {
-		t.Errorf("expected string to contain 'id=abc123de', got %s", result)
+		t.Errorf("expectedLength string to contain 'id=abc123de', got %s", result)
 	}
 
 	// Should contain status
 	if !strings.Contains(result, "status=Success") {
-		t.Errorf("expected string to contain 'status=Success', got %s", result)
+		t.Errorf("expectedLength string to contain 'status=Success', got %s", result)
 	}
 
 	// Should contain duration
 	if !strings.Contains(result, "duration=45s") {
-		t.Errorf("expected string to contain 'duration=45s', got %s", result)
+		t.Errorf("expectedLength string to contain 'duration=45s', got %s", result)
 	}
 }
