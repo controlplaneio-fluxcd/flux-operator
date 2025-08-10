@@ -5,6 +5,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -159,6 +160,19 @@ func (r *ResourceSetReconciler) reconcile(ctx context.Context,
 			meta.ReadyCondition,
 			meta.ReconciliationFailedReason,
 			"%s", msg)
+
+		// Track input failure in history
+		reconcileDuration := time.Since(reconcileStart)
+		reason := conditions.GetReason(obj, meta.ReadyCondition)
+		// Use the spec digest to track the inputs failure
+		specData, _ := json.Marshal(obj.Spec)
+		specDigest := digest.FromString(string(specData)).String()
+		metadata := map[string]string{
+			"inputs":    "0",
+			"resources": "0",
+		}
+		obj.Status.History.Upsert(specDigest, time.Now(), reconcileDuration, reason, metadata)
+
 		r.notify(ctx, obj, corev1.EventTypeWarning, meta.BuildFailedReason, msg)
 		return ctrl.Result{}, err
 	}
@@ -179,6 +193,19 @@ func (r *ResourceSetReconciler) reconcile(ctx context.Context,
 			conditions.MarkStalled(obj,
 				meta.BuildFailedReason,
 				"%s", msg)
+
+			// Track build failure in history
+			reconcileDuration := time.Since(reconcileStart)
+			reason := conditions.GetReason(obj, meta.ReadyCondition)
+			// Use the spec digest to track the build failure
+			specData, _ := json.Marshal(obj.Spec)
+			specDigest := digest.FromString(string(specData)).String()
+			metadata := map[string]string{
+				"inputs":    fmt.Sprintf("%d", len(inputSet)),
+				"resources": "0",
+			}
+			obj.Status.History.Upsert(specDigest, time.Now(), reconcileDuration, reason, metadata)
+
 			log.Error(err, msg)
 			r.notify(ctx, obj, corev1.EventTypeWarning, meta.BuildFailedReason, msg)
 			return ctrl.Result{}, nil
@@ -194,6 +221,19 @@ func (r *ResourceSetReconciler) reconcile(ctx context.Context,
 			meta.ReadyCondition,
 			meta.ReconciliationFailedReason,
 			"%s", msg)
+
+		// Track apply failure in history
+		reconcileDuration := time.Since(reconcileStart)
+		reason := conditions.GetReason(obj, meta.ReadyCondition)
+		// Use digest from objects since they were built successfully
+		data, _ := ssautil.ObjectsToYAML(objects)
+		applyFailureDigest := digest.FromString(data).String()
+		metadata := map[string]string{
+			"inputs":    fmt.Sprintf("%d", len(inputSet)),
+			"resources": fmt.Sprintf("%d", len(objects)),
+		}
+		obj.Status.History.Upsert(applyFailureDigest, time.Now(), reconcileDuration, reason, metadata)
+
 		r.notify(ctx, obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
 
 		return ctrl.Result{}, err
@@ -206,6 +246,16 @@ func (r *ResourceSetReconciler) reconcile(ctx context.Context,
 		meta.ReadyCondition,
 		meta.ReconciliationSucceededReason,
 		"%s", msg)
+
+	// Track successful reconciliation in history
+	reconcileDuration := time.Since(reconcileStart)
+	reason := conditions.GetReason(obj, meta.ReadyCondition)
+	metadata := map[string]string{
+		"inputs":    fmt.Sprintf("%d", len(inputSet)),
+		"resources": fmt.Sprintf("%d", len(objects)),
+	}
+	obj.Status.History.Upsert(applySetDigest, time.Now(), reconcileDuration, reason, metadata)
+
 	log.Info(msg)
 	r.EventRecorder.Event(obj,
 		corev1.EventTypeNormal,
