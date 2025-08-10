@@ -5,7 +5,6 @@ package v1
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -18,7 +17,7 @@ const (
 )
 
 // History represents a collection of snapshots that tracks the reconciliation
-// history of a group of resources, automatically sorted by LastReconciled timestamp.
+// history of a group of resources, automatically sorted by last reconciled timestamp.
 type History []Snapshot
 
 // Len returns the length of the history slice.
@@ -39,22 +38,20 @@ func (h History) Latest() *Snapshot {
 	if len(h) == 0 {
 		return nil
 	}
-	sort.Sort(h)
 	return &h[0]
 }
 
 // Truncate keeps only the latest snapshots in the history up to MaxHistorySize.
-// The history is sorted before truncation to ensure the most recent snapshots are kept.
+// Since the history is maintained with most recent first, we simply truncate from the end.
 func (h *History) Truncate() {
 	if len(*h) <= MaxHistorySize {
 		return
 	}
-	sort.Sort(*h)
 	*h = (*h)[:MaxHistorySize]
 }
 
 // Upsert adds a new snapshot to the history or updates an existing one
-// with the same digest. The history is reordered by LastReconciled after the operation.
+// with the same digest and status. The most recent snapshot is moved to the front of the array.
 // When adding new snapshots, the history is automatically truncated to MaxHistorySize.
 func (h *History) Upsert(digest string, timestamp time.Time, duration time.Duration, status string, metadata map[string]string) {
 	now := metav1.NewTime(timestamp)
@@ -62,19 +59,22 @@ func (h *History) Upsert(digest string, timestamp time.Time, duration time.Durat
 
 	// Look for existing snapshot with same digest
 	for i := range *h {
-		if (*h)[i].Digest == digest {
+		if (*h)[i].Digest == digest && (*h)[i].LastReconciledStatus == status {
 			// Update existing snapshot
 			(*h)[i].LastReconciled = now
 			(*h)[i].LastReconciledDuration = durationMeta
-			(*h)[i].LastReconciledStatus = status
 			(*h)[i].Metadata = metadata
-			// Sort and return
-			sort.Sort(*h)
+			// Move to front if not already there
+			if i > 0 {
+				snapshot := (*h)[i]
+				copy((*h)[1:i+1], (*h)[0:i])
+				(*h)[0] = snapshot
+			}
 			return
 		}
 	}
 
-	// Add new snapshot
+	// Add new snapshot at the front
 	newSnapshot := Snapshot{
 		Digest:                 digest,
 		FirstReconciled:        now,
@@ -84,7 +84,7 @@ func (h *History) Upsert(digest string, timestamp time.Time, duration time.Durat
 		Metadata:               metadata,
 	}
 
-	*h = append(*h, newSnapshot)
+	*h = append([]Snapshot{newSnapshot}, *h...)
 	h.Truncate()
 }
 
@@ -92,7 +92,6 @@ func (h *History) Upsert(digest string, timestamp time.Time, duration time.Durat
 // including timing information, status, and a unique digest identifier.
 type Snapshot struct {
 	// Digest is the checksum in the format `<algo>:<hex>` of the resources in this snapshot.
-	// It acts as a unique identifier for the snapshot.
 	// +required
 	Digest string `json:"digest"`
 
@@ -101,13 +100,11 @@ type Snapshot struct {
 	FirstReconciled metav1.Time `json:"firstReconciled"`
 
 	// LastReconciled is the time when this revision was last reconciled to the cluster.
-	// It acts as the sorting key for the history.
 	// +required
 	LastReconciled metav1.Time `json:"lastReconciled"`
 
 	// LastReconciledDuration is time it took to reconcile the resources in this revision.
 	// +kubebuilder:validation:Type=string
-	// +kubebuilder:validation:Pattern="^([0-9]+(\\.[0-9]+)?(ms|s|m|h))+$"
 	// +required
 	LastReconciledDuration metav1.Duration `json:"lastReconciledDuration"`
 
@@ -116,8 +113,6 @@ type Snapshot struct {
 	LastReconciledStatus string `json:"lastReconciledStatus"`
 
 	// Metadata contains additional information about the snapshot.
-	// Consumers can add useful information here, such as revision numbers,
-	// resource counts, or other reconciler-specific data.
 	// +optional
 	Metadata map[string]string `json:"metadata,omitempty"`
 }

@@ -16,6 +16,7 @@ func TestHistoryUpsert(t *testing.T) {
 		name     string
 		setup    func() *History
 		digest   string
+		status   string
 		expected int // expected length after upsert
 	}{
 		{
@@ -25,6 +26,7 @@ func TestHistoryUpsert(t *testing.T) {
 				return h
 			},
 			digest:   "sha256:abc123",
+			status:   "Success",
 			expected: 1,
 		},
 		{
@@ -42,7 +44,26 @@ func TestHistoryUpsert(t *testing.T) {
 				return h
 			},
 			digest:   "sha256:abc123",
+			status:   "Success",
 			expected: 1,
+		},
+		{
+			name: "add new snapshot due to different status",
+			setup: func() *History {
+				h := &History{
+					{
+						Digest:                 "sha256:abc123",
+						FirstReconciled:        metav1.NewTime(time.Now().Add(-1 * time.Hour)),
+						LastReconciled:         metav1.NewTime(time.Now().Add(-1 * time.Hour)),
+						LastReconciledDuration: metav1.Duration{Duration: 30 * time.Second},
+						LastReconciledStatus:   "Success",
+					},
+				}
+				return h
+			},
+			digest:   "sha256:abc123",
+			status:   "Failure",
+			expected: 2,
 		},
 		{
 			name: "add new snapshot to existing history",
@@ -59,6 +80,7 @@ func TestHistoryUpsert(t *testing.T) {
 				return h
 			},
 			digest:   "sha256:abc123",
+			status:   "Success",
 			expected: 2,
 		},
 	}
@@ -68,15 +90,21 @@ func TestHistoryUpsert(t *testing.T) {
 			h := tt.setup()
 			metadata := map[string]string{"test": "value"}
 
-			h.Upsert(tt.digest, time.Now(), 45*time.Second, "Success", metadata)
+			h.Upsert(tt.digest, time.Now(), 45*time.Second, tt.status, metadata)
 
 			if len(*h) != tt.expected {
 				t.Errorf("expected length %d, got %d", tt.expected, len(*h))
 			}
 
+			// Verify latest entry matches the upserted snapshot
+			if h.Latest().Digest != tt.digest && h.Latest().LastReconciledStatus != tt.status {
+				t.Errorf("expected first snapshot digest %s status %s, got %s %s",
+					tt.digest, tt.status, h.Latest().Digest, h.Latest().LastReconciledStatus)
+			}
+
 			// Verify metadata was set
 			for _, snapshot := range *h {
-				if snapshot.Digest == tt.digest {
+				if snapshot.Digest == tt.digest && snapshot.LastReconciledStatus == tt.status {
 					if snapshot.Metadata["test"] != "value" {
 						t.Errorf("expected metadata 'test'='value', got %v", snapshot.Metadata)
 					}
@@ -146,12 +174,12 @@ func TestHistoryLatest(t *testing.T) {
 				now := time.Now()
 				return History{
 					{
-						Digest:         "sha256:old123",
-						LastReconciled: metav1.NewTime(now.Add(-1 * time.Hour)),
-					},
-					{
 						Digest:         "sha256:new123",
 						LastReconciled: metav1.NewTime(now),
+					},
+					{
+						Digest:         "sha256:old123",
+						LastReconciled: metav1.NewTime(now.Add(-1 * time.Hour)),
 					},
 				}
 			},
@@ -179,29 +207,6 @@ func TestHistoryLatest(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestHistorySorting(t *testing.T) {
-	now := time.Now()
-	h := History{
-		{
-			Digest:         "sha256:old123",
-			LastReconciled: metav1.NewTime(now.Add(-2 * time.Hour)),
-		},
-		{
-			Digest:         "sha256:new123",
-			LastReconciled: metav1.NewTime(now),
-		},
-		{
-			Digest:         "sha256:mid123",
-			LastReconciled: metav1.NewTime(now.Add(-1 * time.Hour)),
-		},
-	}
-
-	latest := h.Latest()
-	if latest.Digest != "sha256:new123" {
-		t.Errorf("expected latest digest sha256:new123, got %s", latest.Digest)
 	}
 }
 
