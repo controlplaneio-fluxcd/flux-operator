@@ -5,6 +5,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -642,8 +643,8 @@ spec:
 	r, err = reconciler.Reconcile(ctx, reconcile.Request{
 		NamespacedName: client.ObjectKeyFromObject(obj),
 	})
-	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(r.RequeueAfter).To(Equal(time.Duration(0)))
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(errors.Is(err, reconcile.TerminalError(nil))).To(BeTrue())
 
 	// Check if the instance was installed.
 	result := &fluxcdv1.ResourceSet{}
@@ -651,6 +652,7 @@ spec:
 	g.Expect(err).ToNot(HaveOccurred())
 
 	testutils.LogObjectStatus(t, result)
+	g.Expect(conditions.IsStalled(result)).To(BeTrue())
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.InvalidCELExpressionReason))
 	g.Expect(conditions.GetMessage(result, meta.ReadyCondition)).To(ContainSubstring("failed to parse expression"))
 }
@@ -1289,12 +1291,12 @@ spec:
 
 	// Update to cause a build error (invalid Go template function)
 	resultP := result.DeepCopy()
-	resultP.Spec.ResourcesTemplate = fmt.Sprintf(`
+	resultP.Spec.ResourcesTemplate = `
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: << invalidFunc inputs.tenant >>-readonly
-  namespace: "%s"`, ns.Name)
+  namespace: << inputs.provider.namespace >>`
 
 	err = testClient.Patch(ctx, resultP, client.MergeFrom(result))
 	g.Expect(err).ToNot(HaveOccurred())
@@ -1303,7 +1305,8 @@ metadata:
 	_, err = reconciler.Reconcile(ctx, reconcile.Request{
 		NamespacedName: client.ObjectKeyFromObject(obj),
 	})
-	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(errors.Is(err, reconcile.TerminalError(nil))).To(BeTrue())
 
 	// Check the build error result.
 	resultBuildError := &fluxcdv1.ResourceSet{}
@@ -1313,28 +1316,24 @@ metadata:
 	testutils.LogObjectStatus(t, resultBuildError)
 
 	// Check if the ready condition is set to false with build failed reason.
-	readyCondition := conditions.Get(resultBuildError, meta.ReadyCondition)
-	g.Expect(readyCondition).ToNot(BeNil())
-	g.Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
-	g.Expect(readyCondition.Reason).To(Equal(meta.BuildFailedReason))
+	g.Expect(conditions.IsStalled(resultBuildError)).To(BeTrue())
+	g.Expect(conditions.GetReason(resultBuildError, meta.ReadyCondition)).To(BeIdenticalTo(meta.BuildFailedReason))
 
 	// Check if the history has two entries - build error should be first (most recent)
 	g.Expect(resultBuildError.Status.History).To(HaveLen(2))
 	g.Expect(resultBuildError.Status.History[0].LastReconciledStatus).To(Equal(meta.BuildFailedReason))
-	g.Expect(resultBuildError.Status.History[0].Metadata).To(HaveKeyWithValue("resources", "0"))
-	g.Expect(resultBuildError.Status.History[0].Metadata).To(HaveKeyWithValue("inputs", "1"))
 	g.Expect(resultBuildError.Status.History[1].LastReconciledStatus).To(Equal(meta.ReconciliationSucceededReason))
 
 	// Update to cause an apply error (non-existing kind)
 	resultP2 := resultBuildError.DeepCopy()
-	resultP2.Spec.ResourcesTemplate = fmt.Sprintf(`
+	resultP2.Spec.ResourcesTemplate = `
 apiVersion: example.com/v1
 kind: NonExistentKind
 metadata:
   name: << inputs.tenant >>-test
-  namespace: "%s"
+  namespace: << inputs.provider.namespace >>
 spec:
-  data: test`, ns.Name)
+  data: test`
 
 	err = testClient.Patch(ctx, resultP2, client.MergeFrom(resultBuildError))
 	g.Expect(err).ToNot(HaveOccurred())
@@ -1353,10 +1352,8 @@ spec:
 	testutils.LogObjectStatus(t, resultApplyError)
 
 	// Check if the ready condition is set to false with reconciliation failed reason.
-	readyConditionApply := conditions.Get(resultApplyError, meta.ReadyCondition)
-	g.Expect(readyConditionApply).ToNot(BeNil())
-	g.Expect(readyConditionApply.Status).To(Equal(metav1.ConditionFalse))
-	g.Expect(readyConditionApply.Reason).To(Equal(meta.ReconciliationFailedReason))
+	g.Expect(conditions.IsReady(resultApplyError)).To(BeFalse())
+	g.Expect(conditions.GetReason(resultApplyError, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationFailedReason))
 
 	// Check if the history has three entries - apply error should be first (most recent)
 	g.Expect(resultApplyError.Status.History).To(HaveLen(3))
@@ -1390,6 +1387,7 @@ metadata:
 	testutils.LogObjectStatus(t, resultFinal)
 
 	// Check if the ready condition is set to true with reconciliation succeeded reason.
+	g.Expect(conditions.IsReady(resultFinal)).To(BeTrue())
 	g.Expect(conditions.GetReason(resultFinal, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
 
 	// Check if the history has three entries - working spec should move existing entry to front

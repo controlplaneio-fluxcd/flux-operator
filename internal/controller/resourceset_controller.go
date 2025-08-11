@@ -35,6 +35,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/builder"
@@ -111,9 +112,8 @@ func (r *ResourceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		errMsg := fmt.Sprintf("%s: %v", msgTerminalError, err)
 		conditions.MarkFalse(obj, meta.ReadyCondition, meta.InvalidCELExpressionReason, "%s", errMsg)
 		conditions.MarkStalled(obj, meta.InvalidCELExpressionReason, "%s", errMsg)
-		log.Error(err, msgTerminalError)
 		r.notify(ctx, obj, corev1.EventTypeWarning, meta.InvalidCELExpressionReason, errMsg)
-		return ctrl.Result{}, nil
+		return ctrl.Result{}, reconcile.TerminalError(err)
 	}
 
 	// Check dependencies and requeue the reconciliation if the check fails.
@@ -140,7 +140,7 @@ func (r *ResourceSetReconciler) reconcile(ctx context.Context,
 	log := ctrl.LoggerFrom(ctx)
 	reconcileStart := time.Now()
 
-	// Mark the object as reconciling.
+	// Mark the object as reconciling and remove any previous error conditions.
 	conditions.MarkUnknown(obj,
 		meta.ReadyCondition,
 		meta.ProgressingReason,
@@ -155,26 +155,28 @@ func (r *ResourceSetReconciler) reconcile(ctx context.Context,
 	// Compute the final inputs from providers and in-line inputs.
 	inputSet, err := r.getInputs(ctx, obj)
 	if err != nil {
+		// Mark the object as not ready and stalled due to input failure.
 		msg := fmt.Sprintf("failed to compute inputs: %s", err.Error())
 		conditions.MarkFalse(obj,
 			meta.ReadyCondition,
-			meta.ReconciliationFailedReason,
+			meta.BuildFailedReason,
+			"%s", msg)
+		conditions.MarkStalled(obj,
+			meta.BuildFailedReason,
 			"%s", msg)
 
-		// Track input failure in history
-		reconcileDuration := time.Since(reconcileStart)
-		reason := conditions.GetReason(obj, meta.ReadyCondition)
-		// Use the spec digest to track the inputs failure
+		// Track input failure in history using the spec digest.
 		specData, _ := json.Marshal(obj.Spec)
 		specDigest := digest.FromString(string(specData)).String()
-		metadata := map[string]string{
-			"inputs":    "0",
-			"resources": "0",
-		}
-		obj.Status.History.Upsert(specDigest, time.Now(), reconcileDuration, reason, metadata)
+		obj.Status.History.Upsert(specDigest,
+			time.Now(),
+			time.Since(reconcileStart),
+			conditions.GetReason(obj, meta.ReadyCondition),
+			nil)
 
+		// Emit warning event and return a terminal error.
 		r.notify(ctx, obj, corev1.EventTypeWarning, meta.BuildFailedReason, msg)
-		return ctrl.Result{}, err
+		return ctrl.Result{}, reconcile.TerminalError(err)
 	}
 
 	var objects []*unstructured.Unstructured
@@ -185,6 +187,7 @@ func (r *ResourceSetReconciler) reconcile(ctx context.Context,
 		// Build the resources using the inputs.
 		buildResult, err := builder.BuildResourceSet(obj.Spec.ResourcesTemplate, obj.Spec.Resources, inputSet)
 		if err != nil {
+			// Mark the object as not ready and stalled due to build failure.
 			msg := fmt.Sprintf("build failed: %s", err.Error())
 			conditions.MarkFalse(obj,
 				meta.ReadyCondition,
@@ -194,21 +197,18 @@ func (r *ResourceSetReconciler) reconcile(ctx context.Context,
 				meta.BuildFailedReason,
 				"%s", msg)
 
-			// Track build failure in history
-			reconcileDuration := time.Since(reconcileStart)
-			reason := conditions.GetReason(obj, meta.ReadyCondition)
-			// Use the spec digest to track the build failure
+			// Track build failure in history using the spec digest.
 			specData, _ := json.Marshal(obj.Spec)
 			specDigest := digest.FromString(string(specData)).String()
-			metadata := map[string]string{
-				"inputs":    fmt.Sprintf("%d", len(inputSet)),
-				"resources": "0",
-			}
-			obj.Status.History.Upsert(specDigest, time.Now(), reconcileDuration, reason, metadata)
+			obj.Status.History.Upsert(specDigest,
+				time.Now(),
+				time.Since(reconcileStart),
+				conditions.GetReason(obj, meta.ReadyCondition),
+				nil)
 
-			log.Error(err, msg)
+			// Emit warning event and return a terminal error.
 			r.notify(ctx, obj, corev1.EventTypeWarning, meta.BuildFailedReason, msg)
-			return ctrl.Result{}, nil
+			return ctrl.Result{}, reconcile.TerminalError(err)
 		}
 		objects = buildResult
 	}
@@ -222,20 +222,20 @@ func (r *ResourceSetReconciler) reconcile(ctx context.Context,
 			meta.ReconciliationFailedReason,
 			"%s", msg)
 
-		// Track apply failure in history
-		reconcileDuration := time.Since(reconcileStart)
-		reason := conditions.GetReason(obj, meta.ReadyCondition)
-		// Use digest from objects since they were built successfully
+		// Track apply failure in history using digest from objects.
 		data, _ := ssautil.ObjectsToYAML(objects)
 		applyFailureDigest := digest.FromString(data).String()
-		metadata := map[string]string{
-			"inputs":    fmt.Sprintf("%d", len(inputSet)),
-			"resources": fmt.Sprintf("%d", len(objects)),
-		}
-		obj.Status.History.Upsert(applyFailureDigest, time.Now(), reconcileDuration, reason, metadata)
+		obj.Status.History.Upsert(applyFailureDigest,
+			time.Now(),
+			time.Since(reconcileStart),
+			conditions.GetReason(obj, meta.ReadyCondition),
+			map[string]string{
+				"inputs":    fmt.Sprintf("%d", len(inputSet)),
+				"resources": fmt.Sprintf("%d", len(objects)),
+			})
 
+		// Emit warning event and return an error to retry with backoff the reconciliation.
 		r.notify(ctx, obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
-
 		return ctrl.Result{}, err
 	}
 
@@ -247,15 +247,17 @@ func (r *ResourceSetReconciler) reconcile(ctx context.Context,
 		meta.ReconciliationSucceededReason,
 		"%s", msg)
 
-	// Track successful reconciliation in history
-	reconcileDuration := time.Since(reconcileStart)
-	reason := conditions.GetReason(obj, meta.ReadyCondition)
-	metadata := map[string]string{
-		"inputs":    fmt.Sprintf("%d", len(inputSet)),
-		"resources": fmt.Sprintf("%d", len(objects)),
-	}
-	obj.Status.History.Upsert(applySetDigest, time.Now(), reconcileDuration, reason, metadata)
+	// Track successful reconciliation in history.
+	obj.Status.History.Upsert(applySetDigest,
+		time.Now(),
+		time.Since(reconcileStart),
+		conditions.GetReason(obj, meta.ReadyCondition),
+		map[string]string{
+			"inputs":    fmt.Sprintf("%d", len(inputSet)),
+			"resources": fmt.Sprintf("%d", len(objects)),
+		})
 
+	// Log and emit the reconciliation success event.
 	log.Info(msg)
 	r.EventRecorder.Event(obj,
 		corev1.EventTypeNormal,
