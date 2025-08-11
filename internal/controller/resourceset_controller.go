@@ -18,6 +18,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/cel"
 	runtimeClient "github.com/fluxcd/pkg/runtime/client"
 	"github.com/fluxcd/pkg/runtime/conditions"
+	"github.com/fluxcd/pkg/runtime/jitter"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/ssa"
 	"github.com/fluxcd/pkg/ssa/normalize"
@@ -56,6 +57,8 @@ type ResourceSetReconciler struct {
 
 	StatusManager         string
 	DefaultServiceAccount string
+
+	RequeueDependency time.Duration
 }
 
 // +kubebuilder:rbac:groups=fluxcd.controlplane.io,resources=resourcesets,verbs=get;list;watch;create;update;patch;delete
@@ -127,7 +130,7 @@ func (r *ResourceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			meta.ReadyCondition,
 			meta.DependencyNotReadyReason,
 			"%s", msg)
-		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: r.RequeueDependency}, nil
 	}
 
 	// Reconcile the object.
@@ -837,6 +840,7 @@ func requeueAfterResourceSet(obj *fluxcdv1.ResourceSet) ctrl.Result {
 	result := ctrl.Result{}
 	if obj.GetInterval() > 0 {
 		result.RequeueAfter = obj.GetInterval()
+		return jitter.JitteredRequeueInterval(result)
 	}
 
 	return result

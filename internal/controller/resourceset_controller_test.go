@@ -1420,10 +1420,11 @@ func getResourceSetReconciler(t *testing.T) *ResourceSetReconciler {
 	t.Setenv("NOTIFICATIONS_DISABLED", "yes")
 
 	return &ResourceSetReconciler{
-		Client:        testClient,
-		APIReader:     testClient,
-		Scheme:        NewTestScheme(),
-		StatusManager: controllerName,
-		EventRecorder: testEnv.GetEventRecorderFor(controllerName),
+		Client:            testClient,
+		APIReader:         testClient,
+		Scheme:            NewTestScheme(),
+		StatusManager:     controllerName,
+		EventRecorder:     testEnv.GetEventRecorderFor(controllerName),
+		RequeueDependency: 5 * time.Second,
 	}
 }
