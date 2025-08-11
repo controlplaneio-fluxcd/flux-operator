@@ -108,7 +108,7 @@ func main() {
 	if fips140.Enabled() {
 		setupLog.Info("Operating in FIPS 140-3 mode, integrity check passed")
 	} else {
-		setupLog.Error(errors.New("FIPS 140-3 mode disabled"), "integrity check failed")
+		setupLog.Error(errors.New("FIPS 140-3 mode disabled"), "Operating in non-FIPS mode is not supported")
 		os.Exit(1)
 	}
 
