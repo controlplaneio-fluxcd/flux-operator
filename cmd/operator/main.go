@@ -16,6 +16,7 @@ import (
 	"github.com/fluxcd/pkg/auth"
 	"github.com/fluxcd/pkg/cache"
 	runtimeCtrl "github.com/fluxcd/pkg/runtime/controller"
+	"github.com/fluxcd/pkg/runtime/jitter"
 	"github.com/fluxcd/pkg/runtime/logger"
 	"github.com/fluxcd/pkg/runtime/pprof"
 	"github.com/fluxcd/pkg/runtime/probes"
@@ -67,12 +68,14 @@ func main() {
 	var (
 		concurrent            int
 		reportingInterval     time.Duration
+		requeueDependency     time.Duration
 		tokenCacheOptions     cache.TokenFlags
 		metricsAddr           string
 		healthAddr            string
 		enableLeaderElection  bool
 		logOptions            logger.Options
 		rateLimiterOptions    runtimeCtrl.RateLimiterOptions
+		intervalJitterOptions jitter.IntervalOptions
 		storagePath           string
 		defaultServiceAccount string
 		watchOptions          runtimeCtrl.WatchOptions
@@ -82,6 +85,8 @@ func main() {
 		"The number of concurrent resource reconciles.")
 	flag.DurationVar(&reportingInterval, "reporting-interval", 5*time.Minute,
 		"The interval at which the report is computed.")
+	flag.DurationVar(&requeueDependency, "requeue-dependency", 5*time.Second,
+		"The interval at which failing dependencies are reevaluated.")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080",
 		"The address the metric endpoint binds to.")
 	flag.StringVar(&healthAddr, "health-addr", ":8081",
@@ -99,6 +104,7 @@ func main() {
 	tokenCacheOptions.BindFlags(flag.CommandLine, tokenCacheDefaultMaxSize)
 	logOptions.BindFlags(flag.CommandLine)
 	rateLimiterOptions.BindFlags(flag.CommandLine)
+	intervalJitterOptions.BindFlags(flag.CommandLine)
 
 	flag.Parse()
 
@@ -116,6 +122,11 @@ func main() {
 	if runtimeNamespace == "" {
 		runtimeNamespace = fluxcdv1.DefaultNamespace
 		setupLog.Info("RUNTIME_NAMESPACE env var not set, defaulting to " + fluxcdv1.DefaultNamespace)
+	}
+
+	if err := intervalJitterOptions.SetGlobalJitter(nil); err != nil {
+		setupLog.Error(err, "unable to set global jitter")
+		os.Exit(1)
 	}
 
 	auth.EnableObjectLevelWorkloadIdentity()
@@ -279,6 +290,7 @@ func main() {
 		StatusManager:         controllerName,
 		EventRecorder:         mgr.GetEventRecorderFor(controllerName),
 		DefaultServiceAccount: defaultServiceAccount,
+		RequeueDependency:     requeueDependency,
 	}).SetupWithManager(ctx, mgr,
 		controller.ResourceSetReconcilerOptions{
 			RateLimiter:           runtimeCtrl.GetRateLimiter(rateLimiterOptions),
