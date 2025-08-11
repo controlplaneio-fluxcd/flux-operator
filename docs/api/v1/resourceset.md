@@ -766,7 +766,53 @@ Misconfigurations can include:
 When this happens, the flux-operator will not attempt to reconcile the ResourceSet
 until the misconfiguration is fixed. The `Ready` Condition status is also set to `False`.
 
-### Inventory status
+### History
+
+With `.status.history` the operator tracks the reconciliation attempts over time, providing insights
+into the ResourceSet's behavior which can be used for audit, anomaly detection and debugging purposes.
+
+The history is stored as a list of snapshots, ordered by last reconciliation time. Each snapshot contains:
+
+- `digest`: A SHA256 digest that uniquely identifies the set of generated resources being reconciled
+- `firstReconciled`: The timestamp when this particular configuration was first reconciled
+- `lastReconciled`: The timestamp of the most recent reconciliation attempt for this configuration
+- `lastReconciledDuration`: How long the most recent reconciliation attempt took
+- `lastReconciledStatus`: The status of the most recent reconciliation (e.g., `ReconciliationSucceeded`, `BuildFailed`, `ReconciliationFailed`)
+- `totalReconciliations`: The total number of reconciliations for this configuration
+- `metadata`: Additional information about the reconciliation, including the number of generated resources and inputs processed
+
+The operator deduplicates entries based on the digest and status.
+The history is automatically truncated to keep only the 5 most recent entries.
+
+Example:
+
+```yaml
+status:
+  history:
+    - digest: sha256:43ad78c94b2655429d84f21488f29d7cca9cd45b7f54d2b27e16bbec8eff9228
+      firstReconciled: "2025-07-15T10:11:00Z"
+      lastReconciled: "2025-07-15T14:30:00Z"
+      lastReconciledDuration: 2.818583s
+      lastReconciledStatus: ReconciliationSucceeded
+      totalReconciliations: 5
+      metadata:
+        inputs: "2"
+        resources: "4"
+    - digest: sha256:ec8dbfe61777b65001190260cf873ffe454451bd2e464bd6f9a154cffcdcd7e5
+      firstReconciled: "2025-07-14T13:10:00Z"
+      lastReconciled: "2025-07-15T10:10:00Z"
+      lastReconciledDuration: 4.813292s
+      lastReconciledStatus: ReconciliationFailed
+      totalReconciliations: 120
+      metadata:
+        inputs: "1"
+        resources: "2"
+```
+
+Note that for `BuildFailed` errors, the digest is calculated from the resource templates, as the final resources
+are not available.
+
+### Inventory
 
 In order to perform operations such as drift detection, garbage collection, upgrades, etc.,
 the flux-operator needs to keep track of all Kubernetes objects that are
@@ -777,16 +823,14 @@ records are in the format `Id: <namespace>_<name>_<group>_<kind>, V: <version>`.
 
 Example:
 
-```text
-Status:
-  Inventory:
-    Entries:
-      Id: default_podinfo__ServiceAccount
-      V:  v1
-      Id: default_podinfo__Service
-      V:  v1
-      Id: default_podinfo_apps_Deployment
-      V:  v1
+```yaml
+status:
+  inventory:
+    entries:
+      - id: apps_podinfo_helm.toolkit.fluxcd.io_HelmRelease
+        v: v2
+      - id: apps_podinfo_source.toolkit.fluxcd.io_OCIRepository
+        v: v1
 ```
 
 ## ResourceSet Metrics

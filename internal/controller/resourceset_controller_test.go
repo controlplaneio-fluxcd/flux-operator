@@ -5,6 +5,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -114,6 +115,15 @@ spec:
 	g.Expect(result.Status.LastAppliedRevision).ToNot(BeEmpty())
 	lastAppliedRevision := result.Status.LastAppliedRevision
 
+	// Check if the history was updated.
+	g.Expect(result.Status.History).To(HaveLen(1))
+	g.Expect(result.Status.History[0].Digest).To(Equal(result.Status.LastAppliedRevision))
+	g.Expect(result.Status.History[0].FirstReconciled).To(Equal(result.Status.History[0].LastReconciled))
+	g.Expect(result.Status.History[0].LastReconciledDuration.Milliseconds()).To(BeNumerically(">", 0))
+	g.Expect(result.Status.History[0].LastReconciledStatus).To(Equal(meta.ReconciliationSucceededReason))
+	g.Expect(result.Status.History[0].Metadata).To(HaveKeyWithValue("inputs", "2"))
+	g.Expect(result.Status.History[0].Metadata).To(HaveKeyWithValue("resources", "4"))
+
 	// Check if the resources were created and labeled.
 	resultSA := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
@@ -184,6 +194,13 @@ spec:
 	// Check if the status last applied revision was updated.
 	g.Expect(resultFinal.Status.LastAppliedRevision).ToNot(BeEmpty())
 	g.Expect(resultFinal.Status.LastAppliedRevision).ToNot(BeEquivalentTo(lastAppliedRevision))
+
+	// Check if the history was updated.
+	g.Expect(resultFinal.Status.History).To(HaveLen(2))
+	g.Expect(resultFinal.Status.History[0].Digest).To(Equal(resultFinal.Status.LastAppliedRevision))
+	g.Expect(resultFinal.Status.History[1].Digest).To(Equal(result.Status.LastAppliedRevision))
+	g.Expect(resultFinal.Status.History[0].Metadata).To(HaveKeyWithValue("resources", "2"))
+	g.Expect(resultFinal.Status.History[1].Metadata).To(HaveKeyWithValue("resources", "4"))
 
 	// Check if the resources were deleted.
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(resultSA), resultSA)
@@ -626,8 +643,8 @@ spec:
 	r, err = reconciler.Reconcile(ctx, reconcile.Request{
 		NamespacedName: client.ObjectKeyFromObject(obj),
 	})
-	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(r.RequeueAfter).To(Equal(time.Duration(0)))
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(errors.Is(err, reconcile.TerminalError(nil))).To(BeTrue())
 
 	// Check if the instance was installed.
 	result := &fluxcdv1.ResourceSet{}
@@ -635,6 +652,7 @@ spec:
 	g.Expect(err).ToNot(HaveOccurred())
 
 	testutils.LogObjectStatus(t, result)
+	g.Expect(conditions.IsStalled(result)).To(BeTrue())
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.InvalidCELExpressionReason))
 	g.Expect(conditions.GetMessage(result, meta.ReadyCondition)).To(ContainSubstring("failed to parse expression"))
 }
@@ -1206,6 +1224,185 @@ spec:
 	})
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(r.IsZero()).To(BeTrue())
+}
+
+func TestResourceSetReconciler_HistoryErrorTracking(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceSetReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Start with a working ResourceSet
+	objDefWorking := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: error-tracking-test
+  namespace: "%[1]s"
+spec:
+  inputs:
+    - tenant: team1
+  resourcesTemplate: |
+    apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+     name: << inputs.tenant >>-readonly
+     namespace: << inputs.provider.namespace >>
+`, ns.Name)
+
+	obj := &fluxcdv1.ResourceSet{}
+	err = yaml.Unmarshal([]byte(objDefWorking), obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize the instance.
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Reconcile the working ResourceSet.
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Check if the ResourceSet was deployed successfully.
+	result := &fluxcdv1.ResourceSet{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	testutils.LogObjectStatus(t, result)
+
+	// Check if the ready condition is set to true.
+	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
+
+	// Check if the history has one successful entry.
+	g.Expect(result.Status.History).To(HaveLen(1))
+	g.Expect(result.Status.History[0].LastReconciledStatus).To(Equal(meta.ReconciliationSucceededReason))
+	g.Expect(result.Status.History[0].Metadata).To(HaveKeyWithValue("resources", "1"))
+	g.Expect(result.Status.History[0].Metadata).To(HaveKeyWithValue("inputs", "1"))
+
+	// Update to cause a build error (invalid Go template function)
+	resultP := result.DeepCopy()
+	resultP.Spec.ResourcesTemplate = `
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: << invalidFunc inputs.tenant >>-readonly
+  namespace: << inputs.provider.namespace >>`
+
+	err = testClient.Patch(ctx, resultP, client.MergeFrom(result))
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Reconcile with build error
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(errors.Is(err, reconcile.TerminalError(nil))).To(BeTrue())
+
+	// Check the build error result.
+	resultBuildError := &fluxcdv1.ResourceSet{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), resultBuildError)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	testutils.LogObjectStatus(t, resultBuildError)
+
+	// Check if the ready condition is set to false with build failed reason.
+	g.Expect(conditions.IsStalled(resultBuildError)).To(BeTrue())
+	g.Expect(conditions.GetReason(resultBuildError, meta.ReadyCondition)).To(BeIdenticalTo(meta.BuildFailedReason))
+
+	// Check if the history has two entries - build error should be first (most recent)
+	g.Expect(resultBuildError.Status.History).To(HaveLen(2))
+	g.Expect(resultBuildError.Status.History[0].LastReconciledStatus).To(Equal(meta.BuildFailedReason))
+	g.Expect(resultBuildError.Status.History[1].LastReconciledStatus).To(Equal(meta.ReconciliationSucceededReason))
+
+	// Update to cause an apply error (non-existing kind)
+	resultP2 := resultBuildError.DeepCopy()
+	resultP2.Spec.ResourcesTemplate = `
+apiVersion: example.com/v1
+kind: NonExistentKind
+metadata:
+  name: << inputs.tenant >>-test
+  namespace: << inputs.provider.namespace >>
+spec:
+  data: test`
+
+	err = testClient.Patch(ctx, resultP2, client.MergeFrom(resultBuildError))
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Reconcile with apply error
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).To(HaveOccurred())
+
+	// Check the apply error result.
+	resultApplyError := &fluxcdv1.ResourceSet{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), resultApplyError)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	testutils.LogObjectStatus(t, resultApplyError)
+
+	// Check if the ready condition is set to false with reconciliation failed reason.
+	g.Expect(conditions.IsReady(resultApplyError)).To(BeFalse())
+	g.Expect(conditions.GetReason(resultApplyError, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationFailedReason))
+
+	// Check if the history has three entries - apply error should be first (most recent)
+	g.Expect(resultApplyError.Status.History).To(HaveLen(3))
+	g.Expect(resultApplyError.Status.History[0].LastReconciledStatus).To(Equal(meta.ReconciliationFailedReason))
+	g.Expect(resultApplyError.Status.History[1].LastReconciledStatus).To(Equal(meta.BuildFailedReason))
+	g.Expect(resultApplyError.Status.History[2].LastReconciledStatus).To(Equal(meta.ReconciliationSucceededReason))
+
+	// Update back to working spec to verify successful reconciliation gets added to history
+	resultP3 := resultApplyError.DeepCopy()
+	resultP3.Spec.ResourcesTemplate = `
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: << inputs.tenant >>-readonly
+  namespace: << inputs.provider.namespace >>`
+
+	err = testClient.Patch(ctx, resultP3, client.MergeFrom(resultApplyError))
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Reconcile with working spec
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Check the final working result.
+	resultFinal := &fluxcdv1.ResourceSet{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), resultFinal)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	testutils.LogObjectStatus(t, resultFinal)
+
+	// Check if the ready condition is set to true with reconciliation succeeded reason.
+	g.Expect(conditions.IsReady(resultFinal)).To(BeTrue())
+	g.Expect(conditions.GetReason(resultFinal, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
+
+	// Check if the history has three entries - working spec should move existing entry to front
+	g.Expect(resultFinal.Status.History).To(HaveLen(3))
+	g.Expect(resultFinal.Status.History[0].Digest).To(Equal(resultFinal.Status.LastAppliedRevision))
+	g.Expect(resultFinal.Status.History[0].LastReconciledStatus).To(Equal(meta.ReconciliationSucceededReason))
+	g.Expect(resultFinal.Status.History[0].TotalReconciliations).To(BeEquivalentTo(2))
+	g.Expect(resultFinal.Status.History[1].LastReconciledStatus).To(Equal(meta.ReconciliationFailedReason))
+	g.Expect(resultFinal.Status.History[1].TotalReconciliations).To(BeEquivalentTo(1))
+	g.Expect(resultFinal.Status.History[2].LastReconciledStatus).To(Equal(meta.BuildFailedReason))
+	g.Expect(resultFinal.Status.History[2].TotalReconciliations).To(BeEquivalentTo(1))
+
+	// Clean up
+	err = testClient.Delete(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
 }
 
 func getResourceSetReconciler(t *testing.T) *ResourceSetReconciler {

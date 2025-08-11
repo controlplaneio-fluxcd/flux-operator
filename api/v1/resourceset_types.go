@@ -164,6 +164,10 @@ type ResourceSetStatus struct {
 	// generated resources that were last reconcile.
 	// +optional
 	LastAppliedRevision string `json:"lastAppliedRevision,omitempty"`
+
+	// History contains the reconciliation history of the ResourceSet
+	// as a list of snapshots ordered by the last reconciled time.
+	History History `json:"history,omitempty"`
 }
 
 // GetConditions returns the status conditions of the object.
