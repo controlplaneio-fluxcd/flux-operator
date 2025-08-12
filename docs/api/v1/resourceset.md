@@ -606,10 +606,15 @@ For testing the CEL expressions, you can use the [CEL playground](https://playce
 
 The reconciliation behavior of a ResourceSet can be configured using the following annotations:
 
-- `fluxcd.controlplane.io/reconcile`: Enable or disable the reconciliation loop. Default is `enabled`, set to `disabled` to pause the reconciliation.
-- `fluxcd.controlplane.io/reconcileEvery`: Set the reconciliation interval used for drift detection and correction. Default is `1h`.
-- `fluxcd.controlplane.io/reconcileTimeout`: Set the reconciliation timeout including health checks. Default is `5m`.
-- `fluxcd.controlplane.io/force`: When set to `enabled`, the controller will replace the generated resources that contain immutable field changes.
+- `fluxcd.controlplane.io/reconcile`:
+  Enable or disable the reconciliation loop. Default is `enabled`, set to `disabled` to pause the reconciliation.
+- `fluxcd.controlplane.io/reconcileEvery`:
+  Set the reconciliation interval used for drift detection and correction. Default is `1h`.
+- `fluxcd.controlplane.io/reconcileTimeout`:
+  Set the reconciliation timeout including health checks. Default is `5m`.
+- `fluxcd.controlplane.io/force`:
+  When set to `enabled`, the controller will replace the generated resources that contain immutable field changes.
+  This annotation can also be used on individual resources to force their reconciliation.
 
 ### Health check configuration
 
