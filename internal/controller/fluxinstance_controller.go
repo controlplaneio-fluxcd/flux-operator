@@ -5,6 +5,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -22,6 +23,7 @@ import (
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
 	"github.com/google/go-containerregistry/pkg/authn"
 	kauth "github.com/google/go-containerregistry/pkg/authn/kubernetes"
+	"github.com/opencontainers/go-digest"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,6 +35,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/yaml"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
@@ -164,9 +167,18 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 		conditions.MarkStalled(obj,
 			meta.BuildFailedReason,
 			"%s", msg)
-		log.Error(err, msg)
+
+		// Track build failure in history using the spec digest.
+		specData, _ := json.Marshal(obj.Spec)
+		specDigest := digest.FromString(string(specData)).String()
+		obj.Status.History.Upsert(specDigest,
+			time.Now(),
+			time.Since(reconcileStart),
+			conditions.GetReason(obj, meta.ReadyCondition),
+			nil)
+
 		r.notify(ctx, obj, meta.BuildFailedReason, corev1.EventTypeWarning, msg)
-		return ctrl.Result{}, nil
+		return ctrl.Result{}, reconcile.TerminalError(err)
 	}
 
 	// Update latest attempted revision.
@@ -183,6 +195,12 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 		return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
 	}
 
+	// Extract the revision digest and version from the build result.
+	version, revisionDigest, err := builder.ExtractVersionDigest(buildResult.Revision)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to parse revision %s: %w", buildResult.Revision, err)
+	}
+
 	// Apply the distribution manifests.
 	if err := r.apply(ctx, obj, buildResult); err != nil {
 		msg := fmt.Sprintf("reconciliation failed: %s", err.Error())
@@ -190,6 +208,16 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 			meta.ReadyCondition,
 			meta.ReconciliationFailedReason,
 			"%s", msg)
+
+		// Track apply failure in history using the revision digest.
+		obj.Status.History.Upsert(revisionDigest,
+			time.Now(),
+			time.Since(reconcileStart),
+			conditions.GetReason(obj, meta.ReadyCondition),
+			map[string]string{
+				"flux": version,
+			})
+
 		r.notify(ctx, obj, meta.ReconciliationFailedReason, corev1.EventTypeWarning, msg)
 		return ctrl.Result{}, err
 	}
@@ -202,6 +230,16 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 		meta.ReadyCondition,
 		meta.ReconciliationSucceededReason,
 		"%s", msg)
+
+	// Track successful reconciliation in history.
+	obj.Status.History.Upsert(revisionDigest,
+		time.Now(),
+		time.Since(reconcileStart),
+		conditions.GetReason(obj, meta.ReadyCondition),
+		map[string]string{
+			"flux": version,
+		})
+
 	log.Info(msg, "revision", obj.Status.LastAppliedRevision)
 	r.EventRecorder.AnnotatedEventf(obj,
 		map[string]string{fluxcdv1.RevisionAnnotation: obj.Status.LastAppliedRevision},

@@ -775,6 +775,47 @@ Misconfigurations can include:
 When this happens, the flux-operator will not attempt to reconcile the FluxInstance
 until the misconfiguration is fixed. The `Ready` Condition status is also set to `False`.
 
+### History
+
+With `.status.history` the operator tracks the reconciliation attempts over time, providing insights
+into the FluxInstance's behavior which can be used for audit, anomaly detection and debugging purposes.
+
+The history is stored as a list of snapshots, ordered by last reconciliation time. Each snapshot contains:
+
+- `digest`: A SHA256 digest that uniquely identifies the Flux configuration being reconciled
+- `firstReconciled`: The timestamp when this particular configuration was first reconciled
+- `lastReconciled`: The timestamp of the most recent reconciliation attempt for this configuration
+- `lastReconciledDuration`: How long the most recent reconciliation attempt took
+- `lastReconciledStatus`: The status of the most recent reconciliation (e.g., `ReconciliationSucceeded`, `BuildFailed`, `ReconciliationFailed`)
+- `totalReconciliations`: The total number of reconciliations for this configuration
+- `metadata`: Additional information about the reconciliation, including the Flux semantic version being applied
+
+The operator deduplicates entries based on the digest and status.
+The history is automatically truncated to keep only the 5 most recent entries.
+
+Example:
+
+```yaml
+status:
+  history:
+    - digest: sha256:43ad78c94b2655429d84f21488f29d7cca9cd45b7f54d2b27e16bbec8eff9228
+      firstReconciled: "2025-07-15T10:11:00Z"
+      lastReconciled: "2025-07-15T11:12:00Z"
+      lastReconciledDuration: 2.818583s
+      lastReconciledStatus: ReconciliationSucceeded
+      totalReconciliations: 2
+      metadata:
+        flux: "v2.6.4"
+    - digest: sha256:ec8dbfe61777b65001190260cf873ffe454451bd2e464bd6f9a154cffcdcd7e5
+      firstReconciled: "2025-06-14T13:10:00Z"
+      lastReconciled: "2025-07-15T10:00:00Z"
+      lastReconciledDuration: 4.813292s
+      lastReconciledStatus: ReconciliationSucceeded
+      totalReconciliations: 120
+      metadata:
+        flux: "v2.6.3"
+```
+
 ### Components status
 
 In order to provide visibility into the Flux components that are installed,
@@ -796,27 +837,27 @@ Status:
     Tag:         v1.3.0
 ```
 
-### Inventory status
+### Inventory Status
 
 In order to perform operations such as drift detection, garbage collection, upgrades, etc.,
 the flux-operator needs to keep track of all Kubernetes objects that are
 reconciled as part of a FluxInstance. To do this, it maintains an inventory
 containing the list of Kubernetes resource object references that have been
 successfully applied and records it in `.status.inventory`. The inventory
-records are in the format `Id: <namespace>_<name>_<group>_<kind>, V: <version>`.
+records are in the format `id: <namespace>_<name>_<group>_<kind>, v: <version>`.
 
 Example:
 
-```text
-Status:
-  Inventory:
-    Entries:
-      Id: flux-system_source-controller__ServiceAccount
-      V:  v1
-      Id: flux-system_source-controller__Service
-      V:  v1
-      Id: flux-system_source-controller_apps_Deployment
-      V:  v1
+```yaml
+status:
+  inventory:
+    entries:
+      - id: flux-system_source-controller__ServiceAccount
+        v: v1
+      - id: flux-system_source-controller__Service
+        v: v1
+      - id: flux-system_source-controller_apps_Deployment
+        v: v1
 ```
 
 ### Last applied revision

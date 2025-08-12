@@ -5,6 +5,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -189,6 +190,12 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 		},
 	))
 
+	// Check if the history was updated.
+	g.Expect(result.Status.History).To(HaveLen(1))
+	g.Expect(result.Status.History[0].LastReconciledStatus).To(Equal(meta.ReconciliationSucceededReason))
+	g.Expect(result.Status.History[0].Digest).To(BeIdenticalTo(strings.Split(result.Status.LastAppliedRevision, "@")[1]))
+	g.Expect(result.Status.History[0].Metadata).To(HaveKeyWithValue("flux", strings.Split(result.Status.LastAppliedRevision, "@")[0]))
+
 	// Check that the namespace is protected from pruning.
 	resultNS := &corev1.Namespace{}
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(ns), resultNS)
@@ -280,6 +287,11 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 	g.Expect(resultFinal.Status.Components).To(HaveLen(2))
 	g.Expect(resultFinal.Status.Components[0].Repository).To(Equal("docker.io/fluxcd/source-controller"))
 	g.Expect(resultFinal.Status.Components[1].Repository).To(Equal("docker.io/fluxcd/kustomize-controller"))
+
+	// Check if the history was updated.
+	g.Expect(resultFinal.Status.History).To(HaveLen(2))
+	g.Expect(resultFinal.Status.History[0].LastReconciledStatus).To(Equal(meta.ReconciliationSucceededReason))
+	g.Expect(resultFinal.Status.History[1].LastReconciledStatus).To(Equal(meta.ReconciliationSucceededReason))
 
 	// Check if events were recorded for each step.
 	events := getEvents(result.Name, result.Namespace)
@@ -412,8 +424,9 @@ func TestFluxInstanceReconciler_BuildFail(t *testing.T) {
 	r, err = reconciler.Reconcile(ctx, reconcile.Request{
 		NamespacedName: client.ObjectKeyFromObject(obj),
 	})
-	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(err).To(HaveOccurred())
 	g.Expect(r.IsZero()).To(BeTrue())
+	g.Expect(errors.Is(err, reconcile.TerminalError(nil))).To(BeTrue())
 
 	// Check if the instance was marked as failed.
 	result := &fluxcdv1.FluxInstance{}
@@ -424,6 +437,10 @@ func TestFluxInstanceReconciler_BuildFail(t *testing.T) {
 	g.Expect(conditions.IsStalled(result)).To(BeTrue())
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.BuildFailedReason))
 	g.Expect(conditions.GetMessage(result, meta.ReadyCondition)).To(ContainSubstring(reconciler.StoragePath))
+
+	// Check if the history was updated.
+	g.Expect(result.Status.History).To(HaveLen(1))
+	g.Expect(result.Status.History[0].LastReconciledStatus).To(Equal(meta.BuildFailedReason))
 
 	// Check if events were recorded for each step.
 	events := getEvents(result.Name, result.Namespace)
@@ -496,7 +513,8 @@ func TestFluxInstanceReconciler_Downgrade(t *testing.T) {
 	r, err = reconciler.Reconcile(ctx, reconcile.Request{
 		NamespacedName: client.ObjectKeyFromObject(obj),
 	})
-	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(errors.Is(err, reconcile.TerminalError(nil))).To(BeTrue())
 
 	// Check the final status.
 	resultFinal := &fluxcdv1.FluxInstance{}
