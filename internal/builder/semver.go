@@ -136,6 +136,48 @@ func getSourceAPIVersion(fluxVersion string) (string, error) {
 	return sourceAPIVersion, nil
 }
 
+// ExtractVersionDigest extracts the version and digest from the given string.
+// The input string is expected to be in one of the following formats:
+// - "proto://host:port/org/app:vX.Y.Z@sha256:hex"
+// - "host:port/org/app:vX.Y.Z@sha256:hex"
+// - "host/org/app:vX.Y.Z"
+// - "vX.Y.Z-RC.N@sha256:hex"
+// - "vX.Y.Z"
+// This function returns the version and optionally the digest as separate strings.
+// An error is returned if the input string does not conform to the expected patterns.
+func ExtractVersionDigest(input string) (string, string, error) {
+	// Remove protocol prefix if present
+	cleaned := input
+	if strings.Contains(input, "://") {
+		parts := strings.SplitN(input, "://", 2)
+		if len(parts) == 2 {
+			cleaned = parts[1]
+		}
+	}
+
+	// Split by @ to separate version from digest
+	parts := strings.Split(cleaned, "@")
+	if len(parts) > 2 {
+		return "", "", fmt.Errorf("invalid input format: %s", input)
+	}
+
+	versionPart := parts[0]
+	digest := ""
+	if len(parts) == 2 {
+		digest = parts[1]
+	}
+
+	// Find the last occurrence of : to separate image from version
+	lastColon := strings.LastIndex(versionPart, ":")
+	if lastColon == -1 {
+		// No version separator found, treat entire string as version
+		return versionPart, digest, nil
+	}
+
+	version := versionPart[lastColon+1:]
+	return version, digest, nil
+}
+
 // MkdirTempAbs creates a tmp dir and returns the absolute path to the dir.
 // This is required since certain OSes like MacOS create temporary files in
 // e.g. `/private/var`, to which `/var` is a symlink.
