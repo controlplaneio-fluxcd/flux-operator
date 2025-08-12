@@ -315,6 +315,10 @@ type FluxInstanceStatus struct {
 	// last applied on the cluster.
 	// +optional
 	Inventory *ResourceInventory `json:"inventory,omitempty"`
+
+	// History contains the reconciliation history of the FluxInstance
+	// as a list of snapshots ordered by the last reconciled time.
+	History History `json:"history,omitempty"`
 }
 
 // GetDistribution returns the distribution specification with defaults.
