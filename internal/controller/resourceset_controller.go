@@ -499,6 +499,9 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 
 	applyOpts := ssa.DefaultApplyOptions()
 	applyOpts.Force = obj.IsForceEnabled()
+	applyOpts.ForceSelector = map[string]string{
+		fluxcdv1.ForceAnnotation: fluxcdv1.EnabledValue,
+	}
 	applyOpts.Cleanup = ssa.ApplyCleanupOptions{
 		// Remove the kubectl and helm annotations.
 		Annotations: []string{
