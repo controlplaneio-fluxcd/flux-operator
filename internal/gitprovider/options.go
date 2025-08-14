@@ -4,15 +4,15 @@
 package gitprovider
 
 import (
-	"crypto/x509"
+	"crypto/tls"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/filtering"
 )
 
 // Options holds the configuration for the Git SaaS provider.
 type Options struct {
-	URL      string
-	CertPool *x509.CertPool
-	Token    string
-	Filters  filtering.Filters
+	URL       string
+	TLSConfig *tls.Config
+	Token     string
+	Filters   filtering.Filters
 }

@@ -5,7 +5,6 @@ package gitprovider
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -42,11 +41,9 @@ func NewGitHubProvider(ctx context.Context, opts Options) (*GitHubProvider, erro
 	} else {
 		// Create a GitHub client for GitHub Enterprise with a custom cert pool.
 		var httpClient *http.Client
-		if opts.CertPool != nil {
+		if opts.TLSConfig != nil {
 			tr := &http.Transport{
-				TLSClientConfig: &tls.Config{
-					RootCAs: opts.CertPool,
-				},
+				TLSClientConfig: opts.TLSConfig,
 			}
 			ctxCA := context.WithValue(ctx, oauth2.HTTPClient, &http.Client{Transport: tr})
 			httpClient = oauth2.NewClient(ctxCA, ts)
