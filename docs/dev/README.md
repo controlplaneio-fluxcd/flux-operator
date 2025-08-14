@@ -75,7 +75,7 @@
 
 ### Prerequisites
 
-- [Go](https://golang.org/doc/install) 1.24+
+- [Go](https://golang.org/doc/install) 1.25+
 - [Docker](https://docs.docker.com/get-docker/)
 - [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/)
 - [Kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
@@ -150,3 +150,14 @@ To clean up the resources, run:
 kubectl -n flux-system delete fluxinstance/flux
 make undeploy
 ```
+
+### Upgrading the Go Version
+
+To upgrade Go to the latest minor version, follow these steps:
+
+1. Bump the `go` minor version in the `go.mod` file.
+2. Bump `GOLANGCI_LINT_VERSION` to match the new Go version.
+3. Run `make` to validate that the build and tests pass with the new Go version.
+4. Bump the `golang` image tag in all `Dockerfile`s.
+5. Bump the `go-version` in all GitHub workflows.
+6. Bump the Go version in [prerequisites](#prerequisites) section of this document.
