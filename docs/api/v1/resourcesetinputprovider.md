@@ -407,11 +407,9 @@ This field is not supported by the following provider [types](#type):
 - `ECRArtifactTag`
 - `GARArtifactTag`
 
-For Git services that use self-signed certificates, the secret should contain the `ca.crt` key.
-
-For the `OCIArtifactTag` provider [type](#type), the secret should contain either or both of
-the `ca.crt` key with a CA certificate, and the pair `tls.crt` and `tls.key` keys with an
-mTLS client certificate and key.
+For Git services that use self-signed certificates, or the `OCIArtifactTag` provider [type](#type),
+the secret should contain either or both of the `ca.crt` key with a CA certificate, and the pair
+`tls.crt` and `tls.key` keys with an mTLS client certificate and key.
 
 Example secret:
 

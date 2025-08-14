@@ -737,7 +737,7 @@ func TestResourceSetInputProviderReconciler_getGitHubToken_cached(t *testing.T) 
 		"githubAppInstallationID": []byte("123456"),
 		"githubAppBaseURL":        []byte("https://github.com"),
 		"githubAppPrivateKey":     privateKeyPEM,
-	})
+	}, nil)
 
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(token).To(Equal("my-gh-app-token"))

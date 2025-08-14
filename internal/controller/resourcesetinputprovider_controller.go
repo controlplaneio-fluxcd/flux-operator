@@ -6,7 +6,6 @@ package controller
 import (
 	"context"
 	"crypto/tls"
-	"crypto/x509"
 	"errors"
 	"fmt"
 	"net/http"
@@ -316,28 +315,16 @@ func (r *ResourceSetInputProviderReconciler) newGitProvider(ctx context.Context,
 	tlsConfig *tls.Config,
 	authData map[string][]byte) (gitprovider.Interface, error) {
 
-	// For Git providers, we currently return an error if the certSecretRef is set
-	// but the ca.crt key is missing.
-	// TODO(matheuscscp): Remove this restriction when we support mTLS for Git providers.
-	var certPool *x509.CertPool
-	if obj.Spec.CertSecretRef != nil && tlsConfig.RootCAs == nil {
-		return nil, fmt.Errorf("invalid secret '%s/%s': key 'ca.crt' is missing",
-			obj.GetNamespace(), obj.Spec.CertSecretRef.Name)
-	}
-	if tlsConfig != nil {
-		certPool = tlsConfig.RootCAs
-	}
-
 	switch {
 	case strings.HasPrefix(obj.Spec.Type, "GitHub"):
-		token, err := r.getGitHubToken(ctx, obj, authData)
+		token, err := r.getGitHubToken(ctx, obj, authData, tlsConfig)
 		if err != nil {
 			return nil, err
 		}
 		return gitprovider.NewGitHubProvider(ctx, gitprovider.Options{
-			URL:      obj.Spec.URL,
-			CertPool: certPool,
-			Token:    token,
+			URL:       obj.Spec.URL,
+			TLSConfig: tlsConfig,
+			Token:     token,
 		})
 	case strings.HasPrefix(obj.Spec.Type, "GitLab"):
 		token, err := r.getGitLabToken(obj, authData)
@@ -345,9 +332,9 @@ func (r *ResourceSetInputProviderReconciler) newGitProvider(ctx context.Context,
 			return nil, err
 		}
 		return gitprovider.NewGitLabProvider(ctx, gitprovider.Options{
-			URL:      obj.Spec.URL,
-			CertPool: certPool,
-			Token:    token,
+			URL:       obj.Spec.URL,
+			TLSConfig: tlsConfig,
+			Token:     token,
 		})
 	case strings.HasPrefix(obj.Spec.Type, "AzureDevOps"):
 		token, err := r.getAzureDevOpsToken(ctx, obj, authData)
@@ -355,9 +342,9 @@ func (r *ResourceSetInputProviderReconciler) newGitProvider(ctx context.Context,
 			return nil, err
 		}
 		return gitprovider.NewAzureDevOpsProvider(ctx, gitprovider.Options{
-			URL:      obj.Spec.URL,
-			CertPool: certPool,
-			Token:    token,
+			URL:       obj.Spec.URL,
+			TLSConfig: tlsConfig,
+			Token:     token,
 		})
 	default:
 		return nil, fmt.Errorf("unsupported type: %s", obj.Spec.Type)
@@ -554,7 +541,8 @@ func (r *ResourceSetInputProviderReconciler) getBasicAuth(
 func (r *ResourceSetInputProviderReconciler) getGitHubToken(
 	ctx context.Context,
 	obj *fluxcdv1.ResourceSetInputProvider,
-	authData map[string][]byte) (string, error) {
+	authData map[string][]byte,
+	tlsConfig *tls.Config) (string, error) {
 
 	if authData == nil {
 		return "", nil
@@ -566,6 +554,10 @@ func (r *ResourceSetInputProviderReconciler) getGitHubToken(
 	}
 
 	opts := []github.OptFunc{github.WithAppData(authData)}
+
+	if tlsConfig != nil {
+		opts = append(opts, github.WithTLSConfig(tlsConfig))
+	}
 
 	if r.TokenCache != nil {
 		opts = append(opts, github.WithCache(r.TokenCache,
