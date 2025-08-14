@@ -14,7 +14,7 @@ require (
 	github.com/fluxcd/pkg/cache v0.10.0
 	github.com/fluxcd/pkg/git v0.35.0
 	github.com/fluxcd/pkg/kustomize v1.19.0
-	github.com/fluxcd/pkg/runtime v0.79.0
+	github.com/fluxcd/pkg/runtime v0.80.0
 	github.com/fluxcd/pkg/ssa v0.52.0
 	github.com/fluxcd/pkg/tar v0.13.0
 	github.com/fluxcd/pkg/version v0.9.0

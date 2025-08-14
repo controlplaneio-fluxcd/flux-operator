@@ -271,7 +271,7 @@ func (r *ResourceSetInputProviderReconciler) callExternalProvider(
 			Namespace: obj.GetNamespace(),
 		}
 		var err error
-		tlsConfig, err = secrets.TLSConfigFromSecretRef(ctx, r.Client, key, obj.Spec.URL)
+		tlsConfig, err = secrets.TLSConfigFromSecretRef(ctx, r.Client, key)
 		if err != nil {
 			return nil, err
 		}
