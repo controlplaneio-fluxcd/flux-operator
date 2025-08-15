@@ -12,11 +12,13 @@ import (
 	"github.com/fluxcd/cli-utils/pkg/kstatus/status"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
+	"github.com/fluxcd/pkg/runtime/jitter"
 	"github.com/fluxcd/pkg/ssa"
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
@@ -72,10 +74,25 @@ func finalizeObjectStatus(obj fluxcdv1.FluxObject) {
 	}
 }
 
+// requeueAfter returns a ctrl.Result with the requeue time set to the
+// interval specified in the object's annotations or zero if not set.
+// If the interval is greater than zero, it applies jitter to the requeue time.
+func requeueAfter(obj fluxcdv1.FluxObject) ctrl.Result {
+	result := ctrl.Result{}
+	if obj.GetInterval() > 0 {
+		result.RequeueAfter = obj.GetInterval()
+		return jitter.JitteredRequeueInterval(result)
+	}
+
+	return result
+}
+
+// reconcileMessage returns a message indicating the reconciliation has finished
 func reconcileMessage(t time.Time) string {
 	return fmt.Sprintf("Reconciliation finished in %s", fmtDuration(t))
 }
 
+// uninstallMessage returns a message indicating the uninstallation has finished
 func uninstallMessage(t time.Time) string {
 	return fmt.Sprintf("Uninstallation compleated in %s", fmtDuration(t))
 }

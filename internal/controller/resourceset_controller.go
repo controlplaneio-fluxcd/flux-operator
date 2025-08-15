@@ -18,7 +18,6 @@ import (
 	"github.com/fluxcd/pkg/runtime/cel"
 	runtimeClient "github.com/fluxcd/pkg/runtime/client"
 	"github.com/fluxcd/pkg/runtime/conditions"
-	"github.com/fluxcd/pkg/runtime/jitter"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/ssa"
 	"github.com/fluxcd/pkg/ssa/normalize"
@@ -267,7 +266,7 @@ func (r *ResourceSetReconciler) reconcile(ctx context.Context,
 		meta.ReconciliationSucceededReason,
 		msg)
 
-	return requeueAfterResourceSet(obj), nil
+	return requeueAfter(obj), nil
 }
 
 func (r *ResourceSetReconciler) buildDependencyExpressions(obj *fluxcdv1.ResourceSet) ([]*cel.Expression, error) {
@@ -835,16 +834,4 @@ func (r *ResourceSetReconciler) notify(ctx context.Context, obj *fluxcdv1.Resour
 	notifier.
 		New(ctx, r.EventRecorder, r.Scheme, notifier.WithClient(r.Client)).
 		Event(obj, eventType, reason, message)
-}
-
-// requeueAfterResourceSet returns a ctrl.Result with the requeue time set to the
-// interval specified in the object's annotations.
-func requeueAfterResourceSet(obj *fluxcdv1.ResourceSet) ctrl.Result {
-	result := ctrl.Result{}
-	if obj.GetInterval() > 0 {
-		result.RequeueAfter = obj.GetInterval()
-		return jitter.JitteredRequeueInterval(result)
-	}
-
-	return result
 }

@@ -21,15 +21,12 @@ import (
 	"github.com/fluxcd/pkg/ssa"
 	"github.com/fluxcd/pkg/ssa/normalize"
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
-	"github.com/google/go-containerregistry/pkg/authn"
-	kauth "github.com/google/go-containerregistry/pkg/authn/kubernetes"
 	"github.com/opencontainers/go-digest"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
 	kuberecorder "k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -156,6 +153,24 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 		return ctrl.Result{}, err
 	}
 
+	// Sanity check for building the distribution manifests.
+	if err := builder.PreflightChecks(r.StoragePath,
+		builder.WithMinVersion("2.2.0"),
+		builder.WithContainerOS("distroless", 12),
+		builder.WithContainerOS("rhel", 8),
+	); err != nil {
+		// If this happens, then the operator image has been tampered with
+		// e.g.: the manifests are missing, or the Flux / OS version is not supported.
+		conditions.MarkFalse(obj,
+			meta.ReadyCondition,
+			meta.BuildFailedReason,
+			"%s", err.Error())
+		conditions.MarkStalled(obj,
+			meta.BuildFailedReason,
+			"%s", err.Error())
+		return ctrl.Result{}, reconcile.TerminalError(err)
+	}
+
 	// Build the distribution manifests.
 	buildResult, err := r.build(ctx, obj, manifestsDir)
 	if err != nil {
@@ -248,24 +263,6 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 		"%s", msg)
 
 	return requeueAfter(obj), nil
-}
-
-// GetDistributionKeychain creates a keychain from the artifactPullSecret secret if provided.
-func GetDistributionKeychain(ctx context.Context, kubeClient client.Client, obj *fluxcdv1.FluxInstance) (authn.Keychain, error) {
-	artifactPullSecret := obj.Spec.Distribution.ArtifactPullSecret
-	if artifactPullSecret == "" {
-		return nil, nil
-	}
-
-	key := types.NamespacedName{
-		Name:      artifactPullSecret,
-		Namespace: obj.GetNamespace(),
-	}
-	var secret corev1.Secret
-	if err := kubeClient.Get(ctx, key, &secret); err != nil {
-		return nil, err
-	}
-	return kauth.NewFromPullSecrets(ctx, []corev1.Secret{secret})
 }
 
 // fetch pulls the distribution OCI artifact and
@@ -639,17 +636,6 @@ func hasChanged(action ssa.Action) bool {
 	default:
 		return true
 	}
-}
-
-// requeueAfter returns a ctrl.Result with the requeue time set to the
-// interval specified in the object's annotations.
-func requeueAfter(obj *fluxcdv1.FluxInstance) ctrl.Result {
-	result := ctrl.Result{}
-	if obj.GetInterval() > 0 {
-		result.RequeueAfter = obj.GetInterval()
-	}
-
-	return result
 }
 
 func (r *FluxInstanceReconciler) recordMetrics(obj *fluxcdv1.FluxInstance) error {
