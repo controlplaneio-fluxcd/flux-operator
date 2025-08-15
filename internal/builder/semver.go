@@ -136,6 +136,25 @@ func getSourceAPIVersion(fluxVersion string) (string, error) {
 	return sourceAPIVersion, nil
 }
 
+// CheckMinimumVersion checks if the given Flux version is greater than or equal to the minimum required version.
+func CheckMinimumVersion(fluxVersion, minimumVersion string) error {
+	c, err := semver.NewConstraint(fmt.Sprintf(">= %s", minimumVersion))
+	if err != nil {
+		return fmt.Errorf("semver constraint parse error: %w", err)
+	}
+
+	version, err := semver.NewVersion(fluxVersion)
+	if err != nil {
+		return fmt.Errorf("version '%s' parse error: %w", fluxVersion, err)
+	}
+
+	if c.Check(version) {
+		return nil
+	}
+
+	return fmt.Errorf("constraint '%s' >= '%s' not satisfied", fluxVersion, minimumVersion)
+}
+
 // ExtractVersionDigest extracts the version and digest from the given string.
 // The input string is expected to be in one of the following formats:
 // - "proto://host:port/org/app:vX.Y.Z@sha256:hex"
