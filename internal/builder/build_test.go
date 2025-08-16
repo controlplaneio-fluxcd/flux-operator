@@ -201,7 +201,7 @@ func TestBuild_ProfileClusterSize(t *testing.T) {
 			g.Expect(string(genK)).To(Equal(string(goldenK)))
 
 			for _, obj := range result.Objects {
-				if obj.GetKind() == "Deployment" {
+				if obj.GetKind() == deploymentKind {
 					g.Expect(obj.GetAnnotations()).To(HaveKeyWithValue("fluxcd.controlplane.io/profile", tc.profile))
 				}
 			}

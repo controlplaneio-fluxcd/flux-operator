@@ -18,6 +18,68 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+// ExtractComponentImagesFromObjects extracts the container images from the
+// Deployment objects in the provided slice of unstructured objects.
+// It returns a slice of ComponentImage containing the component name,
+// repository, tag and digest (if available).
+func ExtractComponentImagesFromObjects(objects []*unstructured.Unstructured, opts Options) ([]ComponentImage, error) {
+	images := make([]ComponentImage, len(opts.Components))
+	for i, component := range opts.Components {
+		for _, obj := range objects {
+			if obj.GetKind() == "Deployment" && obj.GetName() == component {
+				containers, ok, _ := unstructured.NestedSlice(obj.Object, "spec", "template", "spec", "containers")
+				if !ok {
+					return nil, fmt.Errorf("containers not found in %s", obj.GetName())
+				}
+				for _, container := range containers {
+					cname := container.(map[string]any)["name"].(string)
+					if cname != "manager" {
+						continue
+
+					}
+
+					img := container.(map[string]any)["image"].(string)
+					ref, err := gcname.ParseReference(img, gcname.WeakValidation)
+					if err != nil {
+						return nil, err
+					}
+
+					repo := fmt.Sprintf("%s/%s", ref.Context().RegistryStr(), ref.Context().RepositoryStr())
+					tag := "latest"
+					digest := ""
+
+					id := strings.SplitN(img, ref.Context().RepositoryStr(), 2)[1]
+					if strings.Contains(id, "@") {
+						parts := strings.Split(id, "@")
+						if len(parts) == 2 {
+							digest = parts[1]
+							if strings.Contains(parts[0], ":") {
+								tag = strings.TrimPrefix(parts[0], ":")
+							}
+						} else {
+							digest = parts[0]
+						}
+					} else {
+						if strings.Contains(id, ":") {
+							tag = strings.TrimPrefix(id, ":")
+						}
+					}
+
+					images[i] = ComponentImage{
+						Name:       component,
+						Repository: repo,
+						Tag:        tag,
+						Digest:     digest,
+					}
+					break
+				}
+			}
+		}
+	}
+
+	return images, nil
+}
+
 // ExtractComponentImages reads the source directory and extracts the container images
 // from the components manifests.
 func ExtractComponentImages(srcDir string, opts Options) ([]ComponentImage, error) {

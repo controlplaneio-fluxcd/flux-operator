@@ -285,8 +285,8 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 
 	// Check if components images were updated.
 	g.Expect(resultFinal.Status.Components).To(HaveLen(2))
-	g.Expect(resultFinal.Status.Components[0].Repository).To(Equal("docker.io/fluxcd/source-controller"))
-	g.Expect(resultFinal.Status.Components[1].Repository).To(Equal("docker.io/fluxcd/kustomize-controller"))
+	g.Expect(resultFinal.Status.Components[0].Repository).To(Equal("index.docker.io/fluxcd/source-controller"))
+	g.Expect(resultFinal.Status.Components[1].Repository).To(Equal("index.docker.io/fluxcd/kustomize-controller"))
 
 	// Check if the history was updated.
 	g.Expect(resultFinal.Status.History).To(HaveLen(2))

@@ -48,6 +48,11 @@ func Build(srcDir, tmpDir string, options Options) (*Result, error) {
 	}
 	sort.Sort(ssa.SortableUnstructureds(objects))
 
+	images, err := ExtractComponentImagesFromObjects(objects, options)
+	if err != nil {
+		return nil, fmt.Errorf("extract component images failed: %w", err)
+	}
+
 	d := digest.FromBytes(data)
 
 	return &Result{
@@ -55,7 +60,7 @@ func Build(srcDir, tmpDir string, options Options) (*Result, error) {
 		Objects:         objects,
 		Digest:          d.String(),
 		Revision:        fmt.Sprintf("%s@%s", options.Version, d.String()),
-		ComponentImages: options.ComponentImages,
+		ComponentImages: images,
 	}, nil
 }
 

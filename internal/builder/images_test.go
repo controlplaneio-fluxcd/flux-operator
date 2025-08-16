@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 func TestBuild_ExtractImages(t *testing.T) {
@@ -87,4 +88,344 @@ func TestBuild_ExtractImagesWithDigest_AWS(t *testing.T) {
 			Digest:     "sha256:3b34a63a635779b2b3ea67ec02f5925704dc93d39efc4b92243e2170907615af",
 		},
 	))
+}
+
+func TestExtractComponentImagesFromObjects(t *testing.T) {
+	tests := []struct {
+		name        string
+		objects     []*unstructured.Unstructured
+		opts        Options
+		expected    []ComponentImage
+		expectError bool
+	}{
+		{
+			name: "standard image format",
+			objects: []*unstructured.Unstructured{
+				{
+					Object: map[string]any{
+						"apiVersion": "apps/v1",
+						"kind":       "Deployment",
+						"metadata": map[string]any{
+							"name": "source-controller",
+						},
+						"spec": map[string]any{
+							"template": map[string]any{
+								"spec": map[string]any{
+									"containers": []any{
+										map[string]any{
+											"name":  "manager",
+											"image": "ghcr.io/fluxcd/source-controller:v1.3.0",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			opts: Options{
+				Components: []string{"source-controller"},
+			},
+			expected: []ComponentImage{
+				{
+					Name:       "source-controller",
+					Repository: "ghcr.io/fluxcd/source-controller",
+					Tag:        "v1.3.0",
+					Digest:     "",
+				},
+			},
+			expectError: false,
+		},
+
+		{
+			name: "image with no tag and no digest",
+			objects: []*unstructured.Unstructured{
+				{
+					Object: map[string]any{
+						"apiVersion": "apps/v1",
+						"kind":       "Deployment",
+						"metadata": map[string]any{
+							"name": "kustomize-controller",
+						},
+						"spec": map[string]any{
+							"template": map[string]any{
+								"spec": map[string]any{
+									"containers": []any{
+										map[string]any{
+											"name":  "manager",
+											"image": "my.registry/kustomize-controller",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			opts: Options{
+				Components: []string{"kustomize-controller"},
+			},
+			expected: []ComponentImage{
+				{
+					Name:       "kustomize-controller",
+					Repository: "my.registry/kustomize-controller",
+					Tag:        "latest",
+					Digest:     "",
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "image with digest",
+			objects: []*unstructured.Unstructured{
+				{
+					Object: map[string]any{
+						"apiVersion": "apps/v1",
+						"kind":       "Deployment",
+						"metadata": map[string]any{
+							"name": "kustomize-controller",
+						},
+						"spec": map[string]any{
+							"template": map[string]any{
+								"spec": map[string]any{
+									"containers": []any{
+										map[string]any{
+											"name":  "manager",
+											"image": "ghcr.io/fluxcd/kustomize-controller:v1.3.0@sha256:e4cb9731b4db9e98d8eda886e16ced9896861e10cfbbf1153a2ec181bd68f770",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			opts: Options{
+				Components: []string{"kustomize-controller"},
+			},
+			expected: []ComponentImage{
+				{
+					Name:       "kustomize-controller",
+					Repository: "ghcr.io/fluxcd/kustomize-controller",
+					Tag:        "v1.3.0",
+					Digest:     "sha256:e4cb9731b4db9e98d8eda886e16ced9896861e10cfbbf1153a2ec181bd68f770",
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "localhost registry",
+			objects: []*unstructured.Unstructured{
+				{
+					Object: map[string]any{
+						"apiVersion": "apps/v1",
+						"kind":       "Deployment",
+						"metadata": map[string]any{
+							"name": "helm-controller",
+						},
+						"spec": map[string]any{
+							"template": map[string]any{
+								"spec": map[string]any{
+									"containers": []any{
+										map[string]any{
+											"name":  "manager",
+											"image": "localhost:5000/fluxcd/helm-controller:v0.37.4",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			opts: Options{
+				Components: []string{"helm-controller"},
+			},
+			expected: []ComponentImage{
+				{
+					Name:       "helm-controller",
+					Repository: "localhost:5000/fluxcd/helm-controller",
+					Tag:        "v0.37.4",
+					Digest:     "",
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "multiple components",
+			objects: []*unstructured.Unstructured{
+				{
+					Object: map[string]any{
+						"apiVersion": "apps/v1",
+						"kind":       "Deployment",
+						"metadata": map[string]any{
+							"name": "source-controller",
+						},
+						"spec": map[string]any{
+							"template": map[string]any{
+								"spec": map[string]any{
+									"containers": []any{
+										map[string]any{
+											"name":  "manager",
+											"image": "fluxcd/source-controller:v1.3.0",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Object: map[string]any{
+						"apiVersion": "apps/v1",
+						"kind":       "Deployment",
+						"metadata": map[string]any{
+							"name": "kustomize-controller",
+						},
+						"spec": map[string]any{
+							"template": map[string]any{
+								"spec": map[string]any{
+									"containers": []any{
+										map[string]any{
+											"name":  "manager",
+											"image": "ghcr.io/fluxcd/kustomize-controller:v1.3.0@sha256:e7487a8ef09c4f584b5e2620665950aef7814b95c366a9b88f9fbacdd7eb3269",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			opts: Options{
+				Components: []string{"source-controller", "kustomize-controller"},
+			},
+			expected: []ComponentImage{
+				{
+					Name:       "source-controller",
+					Repository: "index.docker.io/fluxcd/source-controller",
+					Tag:        "v1.3.0",
+					Digest:     "",
+				},
+				{
+					Name:       "kustomize-controller",
+					Repository: "ghcr.io/fluxcd/kustomize-controller",
+					Tag:        "v1.3.0",
+					Digest:     "sha256:e7487a8ef09c4f584b5e2620665950aef7814b95c366a9b88f9fbacdd7eb3269",
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "container with non-manager name should be skipped",
+			objects: []*unstructured.Unstructured{
+				{
+					Object: map[string]any{
+						"apiVersion": "apps/v1",
+						"kind":       "Deployment",
+						"metadata": map[string]any{
+							"name": "source-controller",
+						},
+						"spec": map[string]any{
+							"template": map[string]any{
+								"spec": map[string]any{
+									"containers": []any{
+										map[string]any{
+											"name":  "sidecar",
+											"image": "my.registry/sidecar:v1.0.0",
+										},
+										map[string]any{
+											"name":  "manager",
+											"image": "my.registry/source-controller@sha256:d5d97fb756e42c453f2f9a3d4e37cd5482c6e473437169016adbf50f8b495a37",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			opts: Options{
+				Components: []string{"source-controller"},
+			},
+			expected: []ComponentImage{
+				{
+					Name:       "source-controller",
+					Repository: "my.registry/source-controller",
+					Tag:        "latest",
+					Digest:     "sha256:d5d97fb756e42c453f2f9a3d4e37cd5482c6e473437169016adbf50f8b495a37",
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "missing containers should return error",
+			objects: []*unstructured.Unstructured{
+				{
+					Object: map[string]any{
+						"apiVersion": "apps/v1",
+						"kind":       "Deployment",
+						"metadata": map[string]any{
+							"name": "source-controller",
+						},
+						"spec": map[string]any{
+							"template": map[string]any{
+								"spec": map[string]any{},
+							},
+						},
+					},
+				},
+			},
+			opts: Options{
+				Components: []string{"source-controller"},
+			},
+			expected:    nil,
+			expectError: true,
+		},
+		{
+			name: "invalid digest should return error",
+			objects: []*unstructured.Unstructured{
+				{
+					Object: map[string]any{
+						"apiVersion": "apps/v1",
+						"kind":       "Deployment",
+						"metadata": map[string]any{
+							"name": "source-controller",
+						},
+						"spec": map[string]any{
+							"template": map[string]any{
+								"spec": map[string]any{
+									"containers": []any{
+										map[string]any{
+											"name":  "manager",
+											"image": "reg.internal/source-controller@sha256:abc123",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			opts: Options{
+				Components: []string{"source-controller"},
+			},
+			expected:    nil,
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			images, err := ExtractComponentImagesFromObjects(tt.objects, tt.opts)
+
+			if tt.expectError {
+				g.Expect(err).To(HaveOccurred())
+			} else {
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(images).To(Equal(tt.expected))
+			}
+		})
+	}
 }
