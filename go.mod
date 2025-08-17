@@ -18,6 +18,7 @@ require (
 	github.com/fluxcd/pkg/ssa v0.52.0
 	github.com/fluxcd/pkg/tar v0.13.0
 	github.com/fluxcd/pkg/version v0.9.0
+	github.com/go-jose/go-jose/v4 v4.1.2
 	github.com/go-logr/logr v1.4.3
 	github.com/go-task/slim-sprig/v3 v3.0.0
 	github.com/golang-jwt/jwt/v4 v4.5.2
@@ -39,6 +40,7 @@ require (
 	github.com/spf13/pflag v1.0.7
 	gitlab.com/gitlab-org/api/client-go v0.138.0
 	golang.org/x/exp v0.0.0-20250506013437-ce4c2cf36ca6
+	golang.org/x/mod v0.27.0
 	golang.org/x/oauth2 v0.30.0
 	k8s.io/api v0.33.2
 	k8s.io/apiextensions-apiserver v0.33.2
