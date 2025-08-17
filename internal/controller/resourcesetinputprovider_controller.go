@@ -608,15 +608,14 @@ func (r *ResourceSetInputProviderReconciler) getAzureDevOpsToken(
 	// Handle workload identity.
 	default:
 
-		var opts []auth.Option
+		opts := []auth.Option{
+			auth.WithClient(r.Client),
+			auth.WithServiceAccountNamespace(obj.GetNamespace()),
+		}
 
 		// Configure service account.
-		if obj.Spec.ServiceAccountName != "" {
-			sa := client.ObjectKey{
-				Name:      obj.Spec.ServiceAccountName,
-				Namespace: obj.GetNamespace(),
-			}
-			opts = append(opts, auth.WithServiceAccount(sa, r.Client))
+		if s := obj.Spec.ServiceAccountName; s != "" {
+			opts = append(opts, auth.WithServiceAccountName(s))
 		}
 
 		// Configure token cache.
@@ -702,15 +701,14 @@ func (r *ResourceSetInputProviderReconciler) buildOCIOptions(ctx context.Context
 
 	// Configure workload identity for cloud providers.
 	case obj.Spec.Type != fluxcdv1.InputProviderOCIArtifactTag:
-		var authOpts []auth.Option
+		authOpts := []auth.Option{
+			auth.WithClient(r.Client),
+			auth.WithServiceAccountNamespace(obj.GetNamespace()),
+		}
 
 		// Configure service account.
-		if obj.Spec.ServiceAccountName != "" {
-			sa := client.ObjectKey{
-				Name:      obj.Spec.ServiceAccountName,
-				Namespace: obj.GetNamespace(),
-			}
-			authOpts = append(authOpts, auth.WithServiceAccount(sa, r.Client))
+		if s := obj.Spec.ServiceAccountName; s != "" {
+			authOpts = append(authOpts, auth.WithServiceAccountName(s))
 		}
 
 		// Configure token cache.

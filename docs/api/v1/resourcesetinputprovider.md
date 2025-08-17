@@ -309,8 +309,20 @@ spec:
 
 The `.spec.serviceAccountName` field is optional and specifies the name of the Kubernetes
 ServiceAccount in the same namespace configured with workload identity to access a cloud
-provider service. This is called *object-level workload identity*. This field can only
-be used with the following provider [types](#type) for workload identity:
+provider service. This is called *object-level workload identity*. In order to force the
+use of object-level workload identity, the `--default-workload-identity-service-account`
+flag can be set in the operator. If this flag is specified and a ResourceSetInputProvider
+object does not have the field `.spec.serviceAccountName`, the operator will use the
+default service account specified by the flag for reconciling this object.
+
+When installing the Flux Operator on OpenShift from OperatorHub, the default workload identity
+service account name can be changed by setting the `DEFAULT_WORKLOAD_IDENTITY_SERVICE_ACCOUNT`
+environment variable using the OLM
+[Subscription](https://github.com/operator-framework/operator-lifecycle-manager/blob/master/doc/design/subscription-config.md)
+`.spec.config.env` field.
+
+The `.spec.serviceAccountName` field can only be used with the following provider
+[types](#type) for workload identity:
 
 - `AzureDevOpsPullRequest`
 - `AzureDevOpsBranch`
