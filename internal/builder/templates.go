@@ -140,14 +140,14 @@ patches:
       path: /spec/template/spec/containers/0/args/-
       value: --watch-label-selector=!{{.ShardingKey}}
 {{- end }}
-{{- if and .SupportsObjectLevelWorkloadIdentity .EnableObjectLevelWorkloadIdentity }}
+{{- if .SupportsObjectLevelWorkloadIdentity }}
 - target:
     kind: Deployment
     name: "{{.ObjectLevelWorkloadIdentityControllers}}"
   patch: |
     - op: add
       path: /spec/template/spec/containers/0/args/-
-      value: --feature-gates=ObjectLevelWorkloadIdentity=true
+      value: --feature-gates=ObjectLevelWorkloadIdentity={{ .EnableObjectLevelWorkloadIdentity }}
 {{- end }}
 {{ .Patches }}
 `
