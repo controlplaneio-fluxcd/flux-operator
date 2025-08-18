@@ -104,27 +104,6 @@ func TestDistroSignLicenseKeyCmd(t *testing.T) {
 			errorMessage: "--duration flag is required",
 		},
 		{
-			name: "negative duration",
-			setupFunc: func(tempDir string) ([]string, error) {
-				// Generate keys first
-				_, err := executeCommand([]string{"distro", "keygen", "test.issuer", "--output-dir", tempDir})
-				if err != nil {
-					return nil, err
-				}
-
-				// Find the private key file
-				privateKeyFile, _, err := findKeyFiles(tempDir)
-				if err != nil {
-					return nil, err
-				}
-
-				outputFile := filepath.Join(tempDir, "license.jwt")
-				return []string{"distro", "sign", "license-key", "--customer", "Test Company", "--duration", "-1", "--key-set", privateKeyFile, "--output", outputFile}, nil
-			},
-			expectError:  true,
-			errorMessage: "--duration flag is required",
-		},
-		{
 			name: "missing key set",
 			setupFunc: func(tempDir string) ([]string, error) {
 				outputFile := filepath.Join(tempDir, "license.jwt")

@@ -59,12 +59,15 @@ func distroSignLicenseKeyCmdRun(cmd *cobra.Command, args []string) error {
 	if distroSignLicenseKeyArgs.customer == "" {
 		return fmt.Errorf("--customer flag is required")
 	}
-	if distroSignLicenseKeyArgs.duration <= 0 {
+	if distroSignLicenseKeyArgs.duration == 0 {
 		return fmt.Errorf("--duration flag is required")
 	}
 
 	// Convert days to duration
 	duration := time.Duration(distroSignLicenseKeyArgs.duration) * 24 * time.Hour
+	if distroSignLicenseKeyArgs.duration < 0 {
+		rootCmd.Println("✗ warning: negative duration will result in an expired license key")
+	}
 
 	// Read the JWKS from file or environment variable
 	var jwksData []byte
