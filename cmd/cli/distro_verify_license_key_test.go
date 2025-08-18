@@ -220,7 +220,7 @@ func TestDistroVerifyLicenseKeyErrorCases(t *testing.T) {
 				return []string{"distro", "verify", "license-key", licenseFile, "--key-set", wrongPublicKeyFile}, nil
 			},
 			expectError:  true,
-			errorMessage: "key with ID",
+			errorMessage: "no public key found",
 		},
 	}
 

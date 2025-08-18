@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/go-jose/go-jose/v4"
 	"github.com/spf13/cobra"
 	"golang.org/x/mod/sumdb/dirhash"
 )
@@ -28,14 +27,6 @@ const (
 	distroPrivateKeySetEnvVar = "FLUX_DISTRO_PRIVATE_KEY_SET"
 	distroPublicKeySetEnvVar  = "FLUX_DISTRO_PUBLIC_KEY_SET"
 )
-
-// PrivateKeySet represents a JWK Set object for holding private keys.
-type PrivateKeySet struct {
-	// Issuer is the identifier of the entity that issued the keys.
-	Issuer string `json:"issuer"`
-	// Keys is a list of JSON Web Keys (JWKs) that make up the set.
-	Keys []jose.JSONWebKey `json:"keys"`
-}
 
 // isDir validates that the given path exists and is a directory
 func isDir(path string) error {

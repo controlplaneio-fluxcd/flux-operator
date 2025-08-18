@@ -4,7 +4,6 @@
 package main
 
 import (
-	"crypto/ed25519"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -13,6 +12,8 @@ import (
 	"github.com/go-jose/go-jose/v4"
 	"github.com/spf13/cobra"
 	"golang.org/x/mod/sumdb/dirhash"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/lkm"
 )
 
 var distroVerifyManifestsCmd = &cobra.Command{
@@ -94,13 +95,13 @@ func distroVerifyManifestsCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Extract the public key for the specific key ID
-	publicKey, err := parsePublicKeySet(jwksData, kid)
+	pk, err := lkm.EdPublicKeyFromSet(jwksData, kid)
 	if err != nil {
 		return err
 	}
 
 	// Verify the signature with the public key
-	payload, err := signedObject.Verify(publicKey)
+	payload, err := signedObject.Verify(pk.Key)
 	if err != nil {
 		return fmt.Errorf("failed to verify signature: %w", err)
 	}
@@ -150,35 +151,4 @@ func distroVerifyManifestsCmdRun(cmd *cobra.Command, args []string) error {
 	rootCmd.Println(fmt.Sprintf("✔ signature issued by %s is valid", issuer))
 
 	return nil
-}
-
-// parsePublicKeySet extracts an Ed25519 public key from JWKS data using the specified key ID
-func parsePublicKeySet(jwksData []byte, kid string) (ed25519.PublicKey, error) {
-	var jwks jose.JSONWebKeySet
-	if err := json.Unmarshal(jwksData, &jwks); err != nil {
-		return nil, fmt.Errorf("failed to parse JWKS: %w", err)
-	}
-
-	// Find the key with matching key ID
-	for _, key := range jwks.Keys {
-		if key.KeyID == kid {
-			// Validate the key properties
-			if key.Algorithm != string(jose.EdDSA) {
-				return nil, fmt.Errorf("key %s has unsupported algorithm %s, expected %s", kid, key.Algorithm, jose.EdDSA)
-			}
-			if key.Use != "sig" {
-				return nil, fmt.Errorf("key %s has unsupported use %s, expected 'sig'", kid, key.Use)
-			}
-
-			// Extract the Ed25519 public key
-			publicKey, ok := key.Key.(ed25519.PublicKey)
-			if !ok {
-				return nil, fmt.Errorf("key %s is not an Ed25519 public key", kid)
-			}
-
-			return publicKey, nil
-		}
-	}
-
-	return nil, fmt.Errorf("key with ID %s not found in JWKS", kid)
 }

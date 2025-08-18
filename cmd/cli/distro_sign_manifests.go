@@ -4,7 +4,6 @@
 package main
 
 import (
-	"crypto/ed25519"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -14,6 +13,8 @@ import (
 	"github.com/go-jose/go-jose/v4"
 	"github.com/spf13/cobra"
 	"golang.org/x/mod/sumdb/dirhash"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/lkm"
 )
 
 var distroSignManifestsCmd = &cobra.Command{
@@ -77,8 +78,8 @@ func distroSignManifestsCmdRun(cmd *cobra.Command, args []string) error {
 			distroPrivateKeySetEnvVar)
 	}
 
-	// Extract the private key and issuer from the JWKS data
-	privateKey, issuer, keyID, err := parsePrivateKeySet(jwksData)
+	// Parse the JWKS data and extract the private key
+	pk, err := lkm.EdPrivateKeyFromSet(jwksData)
 	if err != nil {
 		return err
 	}
@@ -105,7 +106,7 @@ func distroSignManifestsCmdRun(cmd *cobra.Command, args []string) error {
 
 	// Generate claims with issuer and checksum
 	claims := map[string]any{
-		"iss": issuer,
+		"iss": pk.Issuer,
 		"sub": checksum,
 		"aud": "flux-operator",
 		"iat": time.Now().Unix(),
@@ -120,11 +121,11 @@ func distroSignManifestsCmdRun(cmd *cobra.Command, args []string) error {
 	// Create signer with Ed25519 private key
 	signerOpts := jose.SignerOptions{}
 	signerOpts.WithType("JWT")
-	signerOpts.WithHeader("kid", keyID)
+	signerOpts.WithHeader("kid", pk.KeyID)
 
 	signer, err := jose.NewSigner(jose.SigningKey{
 		Algorithm: jose.EdDSA,
-		Key:       privateKey,
+		Key:       pk.Key,
 	}, &signerOpts)
 	if err != nil {
 		return fmt.Errorf("failed to create signer: %w", err)
@@ -151,43 +152,4 @@ func distroSignManifestsCmdRun(cmd *cobra.Command, args []string) error {
 	rootCmd.Println(fmt.Sprintf("✔ signature written to: %s", distroSignManifestsArgs.signatureOutputPath))
 
 	return nil
-}
-
-// parsePrivateKeySet parses Ed25519 private key from PrivateKeySet JSON data
-func parsePrivateKeySet(keySetData []byte) (ed25519.PrivateKey, string, string, error) {
-	var privateKeySet PrivateKeySet
-	if err := json.Unmarshal(keySetData, &privateKeySet); err != nil {
-		return nil, "", "", fmt.Errorf("failed to parse private key set: %w", err)
-	}
-
-	if privateKeySet.Issuer == "" {
-		return nil, "", "", fmt.Errorf("issuer information is missing in the private key set")
-	}
-
-	if len(privateKeySet.Keys) == 0 {
-		return nil, "", "", fmt.Errorf("no keys found in private key set")
-	}
-
-	// Use the first key as specified
-	firstKey := privateKeySet.Keys[0]
-
-	if firstKey.KeyID == "" {
-		return nil, "", "", fmt.Errorf("key ID is missing in the first key")
-	}
-
-	if firstKey.Algorithm != string(jose.EdDSA) {
-		return nil, "", "", fmt.Errorf("first key has unsupported algorithm %s, expected %s", firstKey.Algorithm, jose.EdDSA)
-	}
-
-	if firstKey.Use != "sig" {
-		return nil, "", "", fmt.Errorf("first key has unsupported use %s, expected 'sig'", firstKey.Use)
-	}
-
-	// Extract the Ed25519 private key
-	privateKey, ok := firstKey.Key.(ed25519.PrivateKey)
-	if !ok {
-		return nil, "", "", fmt.Errorf("first key is not an Ed25519 private key")
-	}
-
-	return privateKey, privateKeySet.Issuer, firstKey.KeyID, nil
 }

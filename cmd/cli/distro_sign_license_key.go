@@ -11,7 +11,10 @@ import (
 	"time"
 
 	"github.com/go-jose/go-jose/v4"
+	"github.com/google/uuid"
 	"github.com/spf13/cobra"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/lkm"
 )
 
 var distroSignLicenseKeyCmd = &cobra.Command{
@@ -86,8 +89,8 @@ func distroSignLicenseKeyCmdRun(cmd *cobra.Command, args []string) error {
 			distroPrivateKeySetEnvVar)
 	}
 
-	// Extract the private key and issuer from the JWKS data
-	privateKey, issuer, keyID, err := parsePrivateKeySet(jwksData)
+	// Parse the JWKS data and extract the private key
+	pk, err := lkm.EdPrivateKeyFromSet(jwksData)
 	if err != nil {
 		return err
 	}
@@ -99,7 +102,8 @@ func distroSignLicenseKeyCmdRun(cmd *cobra.Command, args []string) error {
 	// Generate claims with issuer, subject, and expiration
 	now := time.Now()
 	claims := map[string]any{
-		"iss": issuer,
+		"jti": uuid.NewString(),
+		"iss": pk.Issuer,
 		"sub": subject,
 		"aud": "flux-operator",
 		"iat": now.Unix(),
@@ -115,11 +119,11 @@ func distroSignLicenseKeyCmdRun(cmd *cobra.Command, args []string) error {
 	// Create signer with Ed25519 private key
 	signerOpts := jose.SignerOptions{}
 	signerOpts.WithType("JWT")
-	signerOpts.WithHeader("kid", keyID)
+	signerOpts.WithHeader("kid", pk.KeyID)
 
 	signer, err := jose.NewSigner(jose.SigningKey{
 		Algorithm: jose.EdDSA,
-		Key:       privateKey,
+		Key:       pk.Key,
 	}, &signerOpts)
 	if err != nil {
 		return fmt.Errorf("failed to create signer: %w", err)

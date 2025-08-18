@@ -12,6 +12,8 @@ import (
 
 	"github.com/go-jose/go-jose/v4"
 	. "github.com/onsi/gomega"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/lkm"
 )
 
 func TestDistroKeygenCmd(t *testing.T) {
@@ -151,7 +153,7 @@ func TestDistroKeygenCmd(t *testing.T) {
 			privateData, err := os.ReadFile(privateKeyFile)
 			g.Expect(err).ToNot(HaveOccurred())
 
-			var privateKeySet PrivateKeySet
+			var privateKeySet lkm.EdKeySet
 			err = json.Unmarshal(privateData, &privateKeySet)
 			g.Expect(err).ToNot(HaveOccurred())
 
@@ -203,7 +205,7 @@ func TestDistroKeygenUniqueKeyIDs(t *testing.T) {
 			data, err := os.ReadFile(filepath.Join(tempDir1, file.Name()))
 			g.Expect(err).ToNot(HaveOccurred())
 
-			var keySet PrivateKeySet
+			var keySet lkm.EdKeySet
 			err = json.Unmarshal(data, &keySet)
 			g.Expect(err).ToNot(HaveOccurred())
 
@@ -228,7 +230,7 @@ func TestDistroKeygenUniqueKeyIDs(t *testing.T) {
 			data, err := os.ReadFile(filepath.Join(tempDir2, file.Name()))
 			g.Expect(err).ToNot(HaveOccurred())
 
-			var keySet PrivateKeySet
+			var keySet lkm.EdKeySet
 			err = json.Unmarshal(data, &keySet)
 			g.Expect(err).ToNot(HaveOccurred())
 
