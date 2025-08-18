@@ -117,7 +117,7 @@ data:
 				return []string{"distro", "sign", "manifests", tempDir, "--key-set", invalidKeyFile, "--signature", signatureFile}, nil
 			},
 			expectError:  true,
-			errorMessage: "failed to parse private key set",
+			errorMessage: "failed to unmarshal",
 		},
 	}
 

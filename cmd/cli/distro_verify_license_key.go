@@ -11,6 +11,8 @@ import (
 
 	"github.com/go-jose/go-jose/v4"
 	"github.com/spf13/cobra"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/lkm"
 )
 
 var distroVerifyLicenseKeyCmd = &cobra.Command{
@@ -82,13 +84,13 @@ func distroVerifyLicenseKeyCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Extract the public key for the specific key ID
-	publicKey, err := parsePublicKeySet(jwksData, kid)
+	pk, err := lkm.EdPublicKeyFromSet(jwksData, kid)
 	if err != nil {
 		return err
 	}
 
 	// Verify the signature with the public key
-	payload, err := signedObject.Verify(publicKey)
+	payload, err := signedObject.Verify(pk.Key)
 	if err != nil {
 		return fmt.Errorf("failed to verify license key signature: %w", err)
 	}
@@ -99,17 +101,11 @@ func distroVerifyLicenseKeyCmdRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to parse license key claims: %w", err)
 	}
 
-	// Validate required claims
-	if err := validateLicenseKeyClaims(claims); err != nil {
+	// Extract the issuer and expiration time from the claims
+	issuer, expirationTime, err := parseLicenseKeyClaims(claims)
+	if err != nil {
 		return err
 	}
-
-	// Get issuer from the JWT claims
-	issuer, _ := claims["iss"].(string)
-
-	// Get expiration time
-	exp, _ := claims["exp"].(float64)
-	expirationTime := time.Unix(int64(exp), 0)
 
 	// Display license information and check validity
 	rootCmd.Println(fmt.Sprintf("✔ license key is issued by %s", issuer))
@@ -121,58 +117,64 @@ func distroVerifyLicenseKeyCmdRun(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// validateLicenseKeyClaims validates the JWT claims for a license key
-func validateLicenseKeyClaims(claims map[string]any) error {
+// parseLicenseKeyClaims validates the JWT claims and extracts the issuer and expiration time.
+func parseLicenseKeyClaims(claims map[string]any) (issuer string, expire time.Time, err error) {
+	// Check identifier (jti)
+	if jti, ok := claims["jti"].(string); !ok || jti == "" {
+		return issuer, expire, fmt.Errorf("identifier (jti) not found or empty in license key claims")
+	}
+
 	// Check issuer
 	issuer, ok := claims["iss"].(string)
 	if !ok {
-		return fmt.Errorf("issuer not found in license key claims")
+		return issuer, expire, fmt.Errorf("issuer not found in license key claims")
 	}
 	if issuer == "" {
-		return fmt.Errorf("issuer cannot be empty in license key claims")
+		return issuer, expire, fmt.Errorf("issuer cannot be empty in license key claims")
 	}
 
 	// Check subject (customer id)
 	subject, ok := claims["sub"].(string)
 	if !ok {
-		return fmt.Errorf("subject not found in license key claims")
+		return issuer, expire, fmt.Errorf("subject not found in license key claims")
 	}
 	if subject == "" {
-		return fmt.Errorf("subject cannot be empty in license key claims")
+		return issuer, expire, fmt.Errorf("subject cannot be empty in license key claims")
 	}
 
 	// Check audience
 	audience, ok := claims["aud"].(string)
 	if !ok {
-		return fmt.Errorf("audience not found in license key claims")
+		return issuer, expire, fmt.Errorf("audience not found in license key claims")
 	}
 	if audience == "" {
-		return fmt.Errorf("audience cannot be empty in license key claims")
+		return issuer, expire, fmt.Errorf("audience cannot be empty in license key claims")
 	}
 
 	// Check expiration time
 	exp, ok := claims["exp"].(float64)
 	if !ok {
-		return fmt.Errorf("expiration time not found in license key claims")
+		return issuer, expire, fmt.Errorf("expiration time not found in license key claims")
 	}
 	if exp <= 0 {
-		return fmt.Errorf("invalid expiration time in license key claims")
+		return issuer, expire, fmt.Errorf("invalid expiration time in license key claims")
 	}
+	expire = time.Unix(int64(exp), 0)
 
 	// Check issued at time
 	iat, ok := claims["iat"].(float64)
 	if !ok {
-		return fmt.Errorf("issued at time not found in license key claims")
+		return issuer, expire, fmt.Errorf("issued at time not found in license key claims")
 	}
 	if iat <= 0 {
-		return fmt.Errorf("invalid issued at time in license key claims")
+		return issuer, expire, fmt.Errorf("invalid issued at time in license key claims")
 	}
 
 	// Validate issued at time is not in the future (allow 1 minute clock skew)
 	issuedAtTime := time.Unix(int64(iat), 0)
 	if issuedAtTime.After(time.Now().Add(time.Minute)) {
-		return fmt.Errorf("license key issued at time is in the future: %s", issuedAtTime.Format(time.RFC3339))
+		return issuer, expire, fmt.Errorf("license key issued at time is in the future: %s", issuedAtTime.Format(time.RFC3339))
 	}
 
-	return nil
+	return issuer, expire, nil
 }

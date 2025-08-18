@@ -4,16 +4,13 @@
 package main
 
 import (
-	"crypto/ed25519"
-	"crypto/rand"
-	"encoding/json"
 	"fmt"
 	"hash/adler32"
-	"os"
 	"path"
 
-	"github.com/go-jose/go-jose/v4"
 	"github.com/spf13/cobra"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/lkm"
 )
 
 var distroKeygenCmd = &cobra.Command{
@@ -48,66 +45,23 @@ func distroKeygenCmdRun(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Generate unique key ID
-	checksum := adler32.Checksum([]byte(issuer + timeNow()))
-	keyID := fmt.Sprintf("%08x", checksum)
+	// Generate issuer ID
+	issuerID := fmt.Sprintf("%08x", adler32.Checksum([]byte(issuer)))
 
-	privateKeySetPath := path.Join(distroKeygenArgs.outputDir, fmt.Sprintf("%s-private.jwks", keyID))
-	publicKeyKeySetPath := path.Join(distroKeygenArgs.outputDir, fmt.Sprintf("%s-public.jwks", keyID))
+	privateKeySetPath := path.Join(distroKeygenArgs.outputDir, fmt.Sprintf("%s-private.jwks", issuerID))
+	publicKeyKeySetPath := path.Join(distroKeygenArgs.outputDir, fmt.Sprintf("%s-public.jwks", issuerID))
 
-	for _, file := range []string{privateKeySetPath, publicKeyKeySetPath} {
-		if _, err := os.Stat(file); !os.IsNotExist(err) {
-			return fmt.Errorf("output file already exists: %s", file)
-		}
-	}
-
-	// Generate Ed25519 key pair.
-	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	publicKeyKeySet, privateKeySet, err := lkm.NewKeySetPair(issuer)
 	if err != nil {
-		return fmt.Errorf("failed to generate ed25519 key: %w", err)
+		return err
 	}
 
-	// Generate PrivateKeySet with the private key
-	privateKeySet := PrivateKeySet{
-		Issuer: issuer,
-		Keys: []jose.JSONWebKey{
-			{
-				Key:       privateKey,
-				KeyID:     keyID,
-				Algorithm: string(jose.EdDSA),
-				Use:       "sig",
-			},
-		},
+	if err := privateKeySet.WriteFile(privateKeySetPath); err != nil {
+		return fmt.Errorf("failed to write private key set: %w", err)
 	}
 
-	privateKeySetBytes, err := json.MarshalIndent(privateKeySet, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal private key set: %w", err)
-	}
-
-	// Generate JWKS (JSON Web Key Set) for the public key
-	publicSet := jose.JSONWebKeySet{
-		Keys: []jose.JSONWebKey{
-			{
-				Key:       publicKey,
-				KeyID:     keyID,
-				Algorithm: string(jose.EdDSA),
-				Use:       "sig",
-			},
-		},
-	}
-
-	publicSetBytes, err := json.MarshalIndent(publicSet, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal public key set: %w", err)
-	}
-
-	// Write PrivateKeySet and public JWKS to files.
-	if err := os.WriteFile(privateKeySetPath, privateKeySetBytes, 0600); err != nil {
-		return fmt.Errorf("failed to write private key set to file: %w", err)
-	}
-	if err := os.WriteFile(publicKeyKeySetPath, publicSetBytes, 0644); err != nil {
-		return fmt.Errorf("failed to write public key set to file: %w", err)
+	if err := publicKeyKeySet.WriteFile(publicKeyKeySetPath); err != nil {
+		return fmt.Errorf("failed to write public key set: %w", err)
 	}
 
 	rootCmd.Printf("✔ private key set written to: %s\n", privateKeySetPath)

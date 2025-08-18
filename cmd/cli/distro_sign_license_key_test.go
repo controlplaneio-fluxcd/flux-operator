@@ -126,7 +126,7 @@ func TestDistroSignLicenseKeyCmd(t *testing.T) {
 				return []string{"distro", "sign", "license-key", "--customer", "Test Company", "--duration", "30", "--key-set", invalidKeyFile, "--output", outputFile}, nil
 			},
 			expectError:  true,
-			errorMessage: "failed to parse private key set",
+			errorMessage: "failed to unmarshal",
 		},
 	}
 
