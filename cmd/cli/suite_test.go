@@ -162,4 +162,9 @@ func resetCmdArgs() {
 	createSecretSSHArgs = createSecretSSHFlags{}
 	createSecretRegistryArgs = createSecretRegistryFlags{}
 	createSecretSOPSArgs = createSecretSOPSFlags{}
+
+	// Distro commands
+	distroKeygenArgs = distroKeygenFlags{}
+	distroSignManifestsArgs = distroSignManifestsFlags{}
+	distroVerifyManifestsArgs = distroVerifyManifestsFlags{}
 }
