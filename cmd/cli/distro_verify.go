@@ -9,7 +9,7 @@ import (
 
 var distroVerifyCmd = &cobra.Command{
 	Use:   "verify",
-	Short: "Verify signatures",
+	Short: "Verify the signature of license keys and attestations",
 }
 
 func init() {

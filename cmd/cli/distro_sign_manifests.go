@@ -4,39 +4,35 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
 
-	"github.com/go-jose/go-jose/v4"
 	"github.com/spf13/cobra"
-	"golang.org/x/mod/sumdb/dirhash"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/lkm"
 )
 
 var distroSignManifestsCmd = &cobra.Command{
 	Use:   "manifests [DIRECTORY]",
-	Short: "Sign manifests",
+	Short: "Issue a signed attestation for manifests",
 	Example: `  # Sign the manifests in the current directory
   cat /secrets/12345678-private.jwks | flux-operator distro sign manifests \
   --key-set=/dev/stdin \
-  --signature=signature.jwt
+  --attestation=attestation.jwt
 
   # Sign by reading the private key set from env
   export FLUX_DISTRO_PRIVATE_KEY_SET="$(cat /secrets/12345678-private.jwks)"
   flux-operator distro sign manifests ./distro \
-  --signature=./distro/signature.jwt
+  --output=./distro/attestation.jwt
 `,
 	Args: cobra.MaximumNArgs(1),
 	RunE: distroSignManifestsCmdRun,
 }
 
 type distroSignManifestsFlags struct {
-	privateKeySetPath   string
-	signatureOutputPath string
+	privateKeySetPath string
+	outputPath        string
 }
 
 var distroSignManifestsArgs distroSignManifestsFlags
@@ -44,14 +40,14 @@ var distroSignManifestsArgs distroSignManifestsFlags
 func init() {
 	distroSignManifestsCmd.Flags().StringVarP(&distroSignManifestsArgs.privateKeySetPath, "key-set", "k", "",
 		"path to the private key set file or /dev/stdin (required)")
-	distroSignManifestsCmd.Flags().StringVarP(&distroSignManifestsArgs.signatureOutputPath, "signature", "s", "",
-		"path to output file for the signature (required)")
+	distroSignManifestsCmd.Flags().StringVarP(&distroSignManifestsArgs.outputPath, "attestation", "a", "",
+		"path to to the output file for the attestation (required)")
 	distroSignCmd.AddCommand(distroSignManifestsCmd)
 }
 
 func distroSignManifestsCmdRun(cmd *cobra.Command, args []string) error {
-	if distroSignManifestsArgs.signatureOutputPath == "" {
-		return fmt.Errorf("--signature flag is required")
+	if distroSignManifestsArgs.outputPath == "" {
+		return fmt.Errorf("--attestation flag is required")
 	}
 	srcDir := "."
 	if len(args) > 0 {
@@ -62,20 +58,9 @@ func distroSignManifestsCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Read the JWKS from file or environment variable
-	var jwksData []byte
-	var err error
-	if distroSignManifestsArgs.privateKeySetPath != "" {
-		// Load from file or /dev/stdin
-		jwksData, err = os.ReadFile(distroSignManifestsArgs.privateKeySetPath)
-		if err != nil {
-			return err
-		}
-	} else if keyData := os.Getenv(distroPrivateKeySetEnvVar); keyData != "" {
-		// Load from environment variable
-		jwksData = []byte(keyData)
-	} else {
-		return fmt.Errorf("JWKS set must be specified with --key-set flag or %s environment variable",
-			distroPrivateKeySetEnvVar)
+	jwksData, err := loadKeySet(distroSignManifestsArgs.privateKeySetPath, distroPrivateKeySetEnvVar)
+	if err != nil {
+		return err
 	}
 
 	// Parse the JWKS data and extract the private key
@@ -85,71 +70,30 @@ func distroSignManifestsCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Exclude the signature output file from the directory hash
-	exclusion := filepath.Base(distroSignManifestsArgs.signatureOutputPath)
+	exclusion := filepath.Base(distroSignManifestsArgs.outputPath)
 
-	// Print all files that will be processed
-	files, err := dirFiles(srcDir, "", exclusion)
+	// Create a new attestation and compute manifests checksum
+	att := lkm.NewManifestsAttestation(distroDefaultAudience)
+	tokenString, files, err := att.Sign(pk, srcDir, []string{exclusion})
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to sign manifests: %w", err)
 	}
+
+	// Print files included in the attestation
 	rootCmd.Println("processing files:")
 	for _, file := range files {
 		rootCmd.Println(" ", file)
 	}
 
-	// Calculate the directory hash excluding the signature output file
-	checksum, err := hashDir(srcDir, "", exclusion, dirhash.DefaultHash)
-	if err != nil {
-		return err
-	}
-	rootCmd.Println(fmt.Sprintf("✔ checksum: %s", checksum))
-
-	// Generate claims with issuer and checksum
-	claims := map[string]any{
-		"iss": pk.Issuer,
-		"sub": checksum,
-		"aud": distroDefaultAudience,
-		"iat": time.Now().Unix(),
-	}
-
-	// Create payload
-	payload, err := json.Marshal(claims)
-	if err != nil {
-		return fmt.Errorf("failed to marshal claims: %w", err)
-	}
-
-	// Create signer with Ed25519 private key
-	signerOpts := jose.SignerOptions{}
-	signerOpts.WithType("JWT")
-	signerOpts.WithHeader("kid", pk.KeyID)
-
-	signer, err := jose.NewSigner(jose.SigningKey{
-		Algorithm: jose.EdDSA,
-		Key:       pk.Key,
-	}, &signerOpts)
-	if err != nil {
-		return fmt.Errorf("failed to create signer: %w", err)
-	}
-
-	// Sign the payload
-	signedObject, err := signer.Sign(payload)
-	if err != nil {
-		return fmt.Errorf("failed to sign payload: %w", err)
-	}
-
-	// Get the compact serialization (JWT format)
-	tokenString, err := signedObject.CompactSerialize()
-	if err != nil {
-		return fmt.Errorf("failed to serialize signed token: %w", err)
-	}
+	rootCmd.Println(fmt.Sprintf("✔ checksum: %s", att.GetChecksum()))
 
 	// Write the signed JWT token to the output file
-	err = os.WriteFile(distroSignManifestsArgs.signatureOutputPath, []byte(tokenString), 0644)
+	err = os.WriteFile(distroSignManifestsArgs.outputPath, []byte(tokenString), 0644)
 	if err != nil {
-		return fmt.Errorf("failed to write signature to file: %w", err)
+		return fmt.Errorf("failed to write attestation to file: %w", err)
 	}
 
-	rootCmd.Println(fmt.Sprintf("✔ signature written to: %s", distroSignManifestsArgs.signatureOutputPath))
+	rootCmd.Println(fmt.Sprintf("✔ attestation written to: %s", distroSignManifestsArgs.outputPath))
 
 	return nil
 }

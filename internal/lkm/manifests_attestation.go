@@ -36,6 +36,16 @@ func (m *ManifestsAttestation) GetAttestation() Attestation {
 	return m.att
 }
 
+// GetChecksum returns the checksum of the ManifestsAttestation.
+func (m *ManifestsAttestation) GetChecksum() string {
+	return m.att.Checksum
+}
+
+// GetIssuer returns the issuer of the ManifestsAttestation.
+func (m *ManifestsAttestation) GetIssuer() string {
+	return m.att.Issuer
+}
+
 // Validate checks if the Attestation contains all required fields
 // and that the timestamps are valid.
 func (m *ManifestsAttestation) Validate() error {

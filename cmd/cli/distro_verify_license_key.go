@@ -57,29 +57,19 @@ func distroVerifyLicenseKeyCmdRun(cmd *cobra.Command, args []string) error {
 	// Extract the public key ID from the JWT header
 	kid, err := lkm.GetKeyIDFromToken(jwtData)
 	if err != nil {
-		return err
+		return lkm.InvalidLicenseKeyError(err)
 	}
 
 	// Read the JWKS data from the specified source
-	var jwksData []byte
-	if distroVerifyLicenseKeyArgs.publicKeySetPath != "" {
-		// Load from file or /dev/stdin
-		jwksData, err = os.ReadFile(distroVerifyLicenseKeyArgs.publicKeySetPath)
-		if err != nil {
-			return err
-		}
-	} else if keyData := os.Getenv(distroPublicKeySetEnvVar); keyData != "" {
-		// Load from environment variable
-		jwksData = []byte(keyData)
-	} else {
-		return fmt.Errorf("JWKS must be specified with --key-set flag or %s environment variable",
-			distroPublicKeySetEnvVar)
+	jwksData, err := loadKeySet(distroVerifyLicenseKeyArgs.publicKeySetPath, distroPublicKeySetEnvVar)
+	if err != nil {
+		return err
 	}
 
 	// Extract the public key for the specific ID
 	pk, err := lkm.EdPublicKeyFromSet(jwksData, kid)
 	if err != nil {
-		return fmt.Errorf("invalid license key: %w", err)
+		return lkm.InvalidLicenseKeyError(err)
 	}
 
 	// Verify the JWT signature and extract the license information

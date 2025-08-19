@@ -49,12 +49,12 @@ data:
 				}
 
 				signatureFile := filepath.Join(tempDir, "signature.sig")
-				return []string{"distro", "sign", "manifests", tempDir, "--key-set", privateKeyFile, "--signature", signatureFile}, nil
+				return []string{"distro", "sign", "manifests", tempDir, "--key-set", privateKeyFile, "--attestation", signatureFile}, nil
 			},
 			expectError: false,
 		},
 		{
-			name: "missing signature flag",
+			name: "missing attestation flag",
 			setupFunc: func(tempDir string) ([]string, error) {
 				// Generate keys first
 				_, err := executeCommand([]string{"distro", "keygen", "test.issuer", "--output-dir", tempDir})
@@ -71,16 +71,16 @@ data:
 				return []string{"distro", "sign", "manifests", tempDir, "--key-set", privateKeyFile}, nil
 			},
 			expectError:  true,
-			errorMessage: "--signature flag is required",
+			errorMessage: "--attestation flag is required",
 		},
 		{
 			name: "missing key set",
 			setupFunc: func(tempDir string) ([]string, error) {
 				signatureFile := filepath.Join(tempDir, "signature.sig")
-				return []string{"distro", "sign", "manifests", tempDir, "--signature", signatureFile}, nil
+				return []string{"distro", "sign", "manifests", tempDir, "--attestation", signatureFile}, nil
 			},
 			expectError:  true,
-			errorMessage: "JWKS set must be specified",
+			errorMessage: "JWKS must be specified",
 		},
 		{
 			name: "invalid directory",
@@ -98,7 +98,7 @@ data:
 
 				signatureFile := filepath.Join(tempDir, "signature.sig")
 				nonExistentDir := filepath.Join(tempDir, "nonexistent")
-				return []string{"distro", "sign", "manifests", nonExistentDir, "--key-set", privateKeyFile, "--signature", signatureFile}, nil
+				return []string{"distro", "sign", "manifests", nonExistentDir, "--key-set", privateKeyFile, "--attestation", signatureFile}, nil
 			},
 			expectError:  true,
 			errorMessage: "does not exist",
@@ -114,7 +114,7 @@ data:
 				}
 
 				signatureFile := filepath.Join(tempDir, "signature.sig")
-				return []string{"distro", "sign", "manifests", tempDir, "--key-set", invalidKeyFile, "--signature", signatureFile}, nil
+				return []string{"distro", "sign", "manifests", tempDir, "--key-set", invalidKeyFile, "--attestation", signatureFile}, nil
 			},
 			expectError:  true,
 			errorMessage: "failed to unmarshal",
@@ -146,7 +146,7 @@ data:
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(output).To(ContainSubstring("processing files:"))
 			g.Expect(output).To(ContainSubstring("checksum:"))
-			g.Expect(output).To(ContainSubstring("signature written to:"))
+			g.Expect(output).To(ContainSubstring("attestation written to:"))
 
 			// Verify signature file was created
 			signatureFile := ""
@@ -218,14 +218,14 @@ spec:
 	g.Expect(err).ToNot(HaveOccurred())
 
 	signatureFile := filepath.Join(tempDir, "env-signature.sig")
-	args := []string{"distro", "sign", "manifests", tempDir, "--signature", signatureFile}
+	args := []string{"distro", "sign", "manifests", tempDir, "--attestation", signatureFile}
 
 	// Execute command (should use env var for key)
 	output, err := executeCommand(args)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(output).To(ContainSubstring("processing files:"))
 	g.Expect(output).To(ContainSubstring("deployment.yaml"))
-	g.Expect(output).To(ContainSubstring("signature written to:"))
+	g.Expect(output).To(ContainSubstring("attestation written to:"))
 
 	// Verify signature file was created
 	sigData, err := os.ReadFile(signatureFile)
@@ -267,7 +267,7 @@ metadata:
 	signatureFile := filepath.Join(tempDir, "signature.sig")
 
 	// First signing
-	args1 := []string{"distro", "sign", "manifests", tempDir, "--key-set", privateKeyFile, "--signature", signatureFile}
+	args1 := []string{"distro", "sign", "manifests", tempDir, "--key-set", privateKeyFile, "--attestation", signatureFile}
 	_, err = executeCommand(args1)
 	g.Expect(err).ToNot(HaveOccurred())
 

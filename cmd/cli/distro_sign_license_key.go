@@ -55,7 +55,7 @@ func init() {
 	distroSignLicenseKeyCmd.Flags().StringVarP(&distroSignLicenseKeyArgs.privateKeySetPath, "key-set", "k", "",
 		"path to the private key set file or /dev/stdin")
 	distroSignLicenseKeyCmd.Flags().StringVarP(&distroSignLicenseKeyArgs.outputPath, "output", "o", "",
-		"path to output file for the license key (defaults to stdout)")
+		"path to the output file for the license key (required)")
 	distroSignCmd.AddCommand(distroSignLicenseKeyCmd)
 }
 
@@ -66,25 +66,17 @@ func distroSignLicenseKeyCmdRun(cmd *cobra.Command, args []string) error {
 	if distroSignLicenseKeyArgs.duration == 0 {
 		return fmt.Errorf("--duration flag is required")
 	}
+	if distroSignLicenseKeyArgs.outputPath == "" {
+		return fmt.Errorf("--output flag is required")
+	}
 	if distroSignLicenseKeyArgs.duration < 0 {
 		rootCmd.Println("✗ warning: negative duration will result in an expired license key")
 	}
 
 	// Read the JWKS from file or environment variable
-	var jwksData []byte
-	var err error
-	if distroSignLicenseKeyArgs.privateKeySetPath != "" {
-		// Load from file or /dev/stdin
-		jwksData, err = os.ReadFile(distroSignLicenseKeyArgs.privateKeySetPath)
-		if err != nil {
-			return err
-		}
-	} else if keyData := os.Getenv(distroPrivateKeySetEnvVar); keyData != "" {
-		// Load from environment variable
-		jwksData = []byte(keyData)
-	} else {
-		return fmt.Errorf("JWKS set must be specified with --key-set flag or %s environment variable",
-			distroPrivateKeySetEnvVar)
+	jwksData, err := loadKeySet(distroSignLicenseKeyArgs.privateKeySetPath, distroPrivateKeySetEnvVar)
+	if err != nil {
+		return err
 	}
 
 	// Parse the JWKS data and extract the private key
@@ -111,16 +103,12 @@ func distroSignLicenseKeyCmdRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to sign license key: %w", err)
 	}
 
-	// Write the signed JWT token to the output file or stdout
-	if distroSignLicenseKeyArgs.outputPath != "" {
-		err = os.WriteFile(distroSignLicenseKeyArgs.outputPath, []byte(token), 0644)
-		if err != nil {
-			return fmt.Errorf("failed to write license key to file: %w", err)
-		}
-		rootCmd.Println(fmt.Sprintf("✔ license key written to: %s", distroSignLicenseKeyArgs.outputPath))
-	} else {
-		rootCmd.Println(token)
+	// Write the signed JWT token to the output file
+	err = os.WriteFile(distroSignLicenseKeyArgs.outputPath, []byte(token), 0644)
+	if err != nil {
+		return fmt.Errorf("failed to write license key to file: %w", err)
 	}
+	rootCmd.Println(fmt.Sprintf("✔ license key written to: %s", distroSignLicenseKeyArgs.outputPath))
 
 	return nil
 }

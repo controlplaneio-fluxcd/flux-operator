@@ -5,13 +5,9 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/mod/sumdb/dirhash"
 )
 
 var distroCmd = &cobra.Command{
@@ -44,52 +40,20 @@ func isDir(path string) error {
 	return nil
 }
 
-// hashDir returns the hash of the local file system directory dir,
-// replacing the directory name itself with prefix in the file names
-// used in the hash function.
-func hashDir(dir, prefix, exclude string, hash dirhash.Hash) (string, error) {
-	files, err := dirFiles(dir, prefix, exclude)
-	if err != nil {
-		return "", err
-	}
-	osOpen := func(name string) (io.ReadCloser, error) {
-		return os.Open(filepath.Join(dir, strings.TrimPrefix(name, prefix)))
-	}
-	return hash(files, osOpen)
-}
-
-// dirFiles returns the list of files in the tree rooted at dir,
-// replacing the directory name dir with prefix in each name.
-// The resulting names always use forward slashes.
-func dirFiles(dir, prefix, exclude string) ([]string, error) {
-	var files []string
-	dir = filepath.Clean(dir)
-	err := filepath.Walk(dir, func(file string, info os.FileInfo, err error) error {
+// loadKeySet reads the JWKS from file path or environment variable
+func loadKeySet(keySetPath, envVarName string) ([]byte, error) {
+	if keySetPath != "" {
+		// Load from file or /dev/stdin
+		jwksData, err := os.ReadFile(keySetPath)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		if info.IsDir() {
-			return nil
-		} else if file == dir {
-			return fmt.Errorf("%s is not a directory", dir)
-		}
-
-		rel := file
-		if dir != "." {
-			rel = file[len(dir)+1:]
-		}
-		f := filepath.Join(prefix, rel)
-
-		if exclude != "" && strings.HasSuffix(f, exclude) {
-			// Skip files that match the exclude pattern
-			return nil
-		}
-
-		files = append(files, filepath.ToSlash(f))
-		return nil
-	})
-	if err != nil {
-		return nil, err
+		return jwksData, nil
+	} else if keyData := os.Getenv(envVarName); keyData != "" {
+		// Load from environment variable
+		return []byte(keyData), nil
+	} else {
+		return nil, fmt.Errorf("JWKS must be specified with --key-set flag or %s environment variable",
+			envVarName)
 	}
-	return files, nil
 }

@@ -4,30 +4,27 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 
-	"github.com/go-jose/go-jose/v4"
 	"github.com/spf13/cobra"
-	"golang.org/x/mod/sumdb/dirhash"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/lkm"
 )
 
 var distroVerifyManifestsCmd = &cobra.Command{
 	Use:   "manifests [DIRECTORY]",
-	Short: "Verify signed manifests",
-	Example: `  # Verify the signed manifests in the current directory
+	Short: "Verify the attestation of manifests",
+	Example: `  # Verify the attestation of manifests in the current directory
   cat /secrets/12345678-public.jwks | flux-operator distro verify manifests \
   --key-set=/dev/stdin \
-  --signature=signature.jwt
+  --attestation=attestation.jwt
 
   # Verify by reading the public key set from env
   export FLUX_DISTRO_PUBLIC_KEY_SET="$(cat /secrets/12345678-public.jwks)"
   flux-operator distro verify manifests ./distro \
-  --signature=signature.jwt
+  --attestation=attestation.jwt
 `,
 	Args: cobra.MaximumNArgs(1),
 	RunE: distroVerifyManifestsCmdRun,
@@ -35,7 +32,7 @@ var distroVerifyManifestsCmd = &cobra.Command{
 
 type distroVerifyManifestsFlags struct {
 	publicKeySetPath string
-	signaturePath    string
+	attestationPath  string
 }
 
 var distroVerifyManifestsArgs distroVerifyManifestsFlags
@@ -43,8 +40,8 @@ var distroVerifyManifestsArgs distroVerifyManifestsFlags
 func init() {
 	distroVerifyManifestsCmd.Flags().StringVarP(&distroVerifyManifestsArgs.publicKeySetPath, "key-set", "k", "",
 		"path to the public key set file or /dev/stdin (required)")
-	distroVerifyManifestsCmd.Flags().StringVarP(&distroVerifyManifestsArgs.signaturePath, "signature", "s", "",
-		"path to the signature file (required)")
+	distroVerifyManifestsCmd.Flags().StringVarP(&distroVerifyManifestsArgs.attestationPath, "attestation", "a", "",
+		"path to the attestation file (required)")
 	distroVerifyCmd.AddCommand(distroVerifyManifestsCmd)
 }
 
@@ -57,41 +54,22 @@ func distroVerifyManifestsCmdRun(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Read the JWT signature from file to extract the key ID
-	signatureData, err := os.ReadFile(distroVerifyManifestsArgs.signaturePath)
+	// Read the signed JWT from file
+	jwtData, err := os.ReadFile(distroVerifyManifestsArgs.attestationPath)
 	if err != nil {
-		return fmt.Errorf("failed to read signature file: %w", err)
+		return fmt.Errorf("failed to read the attestion file: %w", err)
 	}
 
-	// Parse the JWT signature to extract the key ID
-	signedObject, err := jose.ParseSigned(string(signatureData), []jose.SignatureAlgorithm{jose.EdDSA})
+	// Extract the public key ID from the JWT header
+	kid, err := lkm.GetKeyIDFromToken(jwtData)
 	if err != nil {
-		return fmt.Errorf("failed to parse signed token: %w", err)
-	}
-
-	// Extract key ID from the protected header
-	if len(signedObject.Signatures) == 0 {
-		return fmt.Errorf("no signatures found in JWT")
-	}
-	kid := signedObject.Signatures[0].Protected.KeyID
-	if kid == "" {
-		return fmt.Errorf("no key ID found in JWT protected header")
+		return lkm.InvalidAttestationError(err)
 	}
 
 	// Load the JWKS and find the matching key
-	var jwksData []byte
-	if distroVerifyManifestsArgs.publicKeySetPath != "" {
-		// Load from file or /dev/stdin
-		jwksData, err = os.ReadFile(distroVerifyManifestsArgs.publicKeySetPath)
-		if err != nil {
-			return err
-		}
-	} else if keyData := os.Getenv(distroPublicKeySetEnvVar); keyData != "" {
-		// Load from environment variable
-		jwksData = []byte(keyData)
-	} else {
-		return fmt.Errorf("JWKS must be specified with --key-set flag or %s environment variable",
-			distroPublicKeySetEnvVar)
+	jwksData, err := loadKeySet(distroVerifyManifestsArgs.publicKeySetPath, distroPublicKeySetEnvVar)
+	if err != nil {
+		return err
 	}
 
 	// Extract the public key for the specific key ID
@@ -100,55 +78,27 @@ func distroVerifyManifestsCmdRun(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Verify the signature with the public key
-	payload, err := signedObject.Verify(pk.Key)
-	if err != nil {
-		return fmt.Errorf("failed to verify signature: %w", err)
-	}
-
-	// Parse the claims from the payload
-	var claims map[string]any
-	if err := json.Unmarshal(payload, &claims); err != nil {
-		return fmt.Errorf("failed to parse claims: %w", err)
-	}
-
-	// Get the expected checksum from the JWT subject
-	expectedChecksum, ok := claims["sub"].(string)
-	if !ok {
-		return fmt.Errorf("checksum not found in claims")
-	}
-
-	// Get issuer from the JWT claims
-	issuer, ok := claims["iss"].(string)
-	if !ok {
-		return fmt.Errorf("issuer not found in claims")
-	}
-
 	// Exclude the signature file from the directory hash
-	exclusion := filepath.Base(distroVerifyManifestsArgs.signaturePath)
+	exclusion := filepath.Base(distroVerifyManifestsArgs.attestationPath)
 
-	// Print all files that will be processed
-	files, err := dirFiles(srcDir, "", exclusion)
+	// Create an attestation verifier
+	att := lkm.NewManifestsAttestation(distroDefaultAudience)
+
+	// Verify the JWT signature, calculate the expected checksum, and list files
+	files, err := att.Verify(jwtData, pk, srcDir, []string{exclusion})
 	if err != nil {
 		return err
 	}
+
+	// Print files included in the checksum
 	rootCmd.Println("processing files:")
 	for _, file := range files {
 		rootCmd.Println(" ", file)
 	}
 
-	// Calculate the current directory hash excluding the signature file
-	actualChecksum, err := hashDir(srcDir, "", exclusion, dirhash.DefaultHash)
-	if err != nil {
-		return err
-	}
-
-	// Compare checksums
-	if actualChecksum != expectedChecksum {
-		return fmt.Errorf("checksum verification failed: calculated %s, expected %s", actualChecksum, expectedChecksum)
-	}
-
-	rootCmd.Println(fmt.Sprintf("✔ signature issued by %s is valid", issuer))
+	// Print the checksum and issuer
+	rootCmd.Println(fmt.Sprintf("✔ checksum: %s", att.GetChecksum()))
+	rootCmd.Println(fmt.Sprintf("✔ attestation issued by %s is valid", att.GetIssuer()))
 
 	return nil
 }

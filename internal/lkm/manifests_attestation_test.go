@@ -488,3 +488,100 @@ func TestManifestsAttestation_Verify(t *testing.T) {
 	})
 
 }
+
+func TestManifestsAttestation_GetChecksum(t *testing.T) {
+	t.Run("returns checksum from populated attestation", func(t *testing.T) {
+		g := NewWithT(t)
+		att := testAttestation()
+		ma := &ManifestsAttestation{att: att}
+
+		checksum := ma.GetChecksum()
+		g.Expect(checksum).To(Equal(att.Checksum))
+		g.Expect(checksum).To(Equal("h1:test-checksum+hash"))
+	})
+
+	t.Run("returns checksum from signed attestation", func(t *testing.T) {
+		g := NewWithT(t)
+		ma := NewManifestsAttestation("test-audience")
+		privateKey, _ := testEdPrivateKeyForAttestation(t)
+		testDir := createTestDirectory(t)
+
+		// Sign the attestation to populate checksum
+		_, _, err := ma.Sign(privateKey, testDir, nil)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		checksum := ma.GetChecksum()
+		g.Expect(checksum).ToNot(BeEmpty())
+		g.Expect(checksum).To(HavePrefix("h1:")) // Checksum should follow dirhash format
+	})
+
+	t.Run("returns checksum from verified attestation", func(t *testing.T) {
+		g := NewWithT(t)
+		// Create and sign attestation
+		ma := NewManifestsAttestation("test-audience")
+		privateKey, publicKey := testEdPrivateKeyForAttestation(t)
+		testDir := createTestDirectory(t)
+
+		token, _, err := ma.Sign(privateKey, testDir, nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		originalChecksum := ma.GetChecksum()
+
+		// Verify attestation and check checksum
+		ma2 := NewManifestsAttestation("test-audience")
+		_, err = ma2.Verify([]byte(token), publicKey, testDir, nil)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		verifiedChecksum := ma2.GetChecksum()
+		g.Expect(verifiedChecksum).To(Equal(originalChecksum))
+		g.Expect(verifiedChecksum).ToNot(BeEmpty())
+	})
+
+	t.Run("returns empty string for uninitialized attestation", func(t *testing.T) {
+		g := NewWithT(t)
+		ma := &ManifestsAttestation{}
+
+		checksum := ma.GetChecksum()
+		g.Expect(checksum).To(BeEmpty())
+	})
+}
+
+func TestManifestsAttestation_GetIssuer(t *testing.T) {
+	t.Run("returns issuer from populated attestation", func(t *testing.T) {
+		g := NewWithT(t)
+		att := testAttestation()
+		ma := &ManifestsAttestation{att: att}
+
+		issuer := ma.GetIssuer()
+		g.Expect(issuer).To(Equal(att.Issuer))
+		g.Expect(issuer).To(Equal("test-issuer"))
+	})
+
+	t.Run("returns issuer from verified attestation", func(t *testing.T) {
+		g := NewWithT(t)
+		// Create and sign attestation
+		ma := NewManifestsAttestation("test-audience")
+		privateKey, publicKey := testEdPrivateKeyForAttestation(t)
+		testDir := createTestDirectory(t)
+
+		token, _, err := ma.Sign(privateKey, testDir, nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		originalIssuer := ma.GetIssuer()
+
+		// Verify attestation and check issuer
+		ma2 := NewManifestsAttestation("test-audience")
+		_, err = ma2.Verify([]byte(token), publicKey, testDir, nil)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		verifiedIssuer := ma2.GetIssuer()
+		g.Expect(verifiedIssuer).To(Equal(originalIssuer))
+		g.Expect(verifiedIssuer).To(Equal("test-issuer"))
+	})
+
+	t.Run("returns empty string for uninitialized attestation", func(t *testing.T) {
+		g := NewWithT(t)
+		ma := &ManifestsAttestation{}
+
+		issuer := ma.GetIssuer()
+		g.Expect(issuer).To(BeEmpty())
+	})
+}

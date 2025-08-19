@@ -31,13 +31,13 @@ data:
 	signatureFile := filepath.Join(manifestDir, "signature.sig")
 
 	// Sign the manifests
-	_, err = executeCommand([]string{"distro", "sign", "manifests", manifestDir, "--key-set", privateKeyFile, "--signature", signatureFile})
+	_, err = executeCommand([]string{"distro", "sign", "manifests", manifestDir, "--key-set", privateKeyFile, "--attestation", signatureFile})
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// Verify the manifests
-	output, err := executeCommand([]string{"distro", "verify", "manifests", manifestDir, "--key-set", publicKeyFile, "--signature", signatureFile})
+	output, err := executeCommand([]string{"distro", "verify", "manifests", manifestDir, "--key-set", publicKeyFile, "--attestation", signatureFile})
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(output).To(ContainSubstring("signature issued by test.issuer is valid"))
+	g.Expect(output).To(ContainSubstring("attestation issued by test.issuer is valid"))
 }
 
 func TestDistroVerifyManifestsErrorCases(t *testing.T) { //nolint:gocyclo
@@ -48,7 +48,7 @@ func TestDistroVerifyManifestsErrorCases(t *testing.T) { //nolint:gocyclo
 		errorMessage string
 	}{
 		{
-			name: "missing signature flag",
+			name: "missing attestation flag",
 			setupFunc: func(tempDir string) ([]string, error) {
 				_, _, publicKeyFile, err := setupBasicVerifyTest(tempDir, "test.issuer")
 				if err != nil {
@@ -57,7 +57,7 @@ func TestDistroVerifyManifestsErrorCases(t *testing.T) { //nolint:gocyclo
 				return []string{"distro", "verify", "manifests", tempDir, "--key-set", publicKeyFile}, nil
 			},
 			expectError:  true,
-			errorMessage: "failed to read signature file",
+			errorMessage: "failed to read",
 		},
 		{
 			name: "missing key set",
@@ -96,13 +96,13 @@ metadata:
 				signatureFile := filepath.Join(manifestDir, "signature.sig")
 
 				// Create a valid signature
-				_, err = executeCommand([]string{"distro", "sign", "manifests", manifestDir, "--key-set", privateKeyFile, "--signature", signatureFile})
+				_, err = executeCommand([]string{"distro", "sign", "manifests", manifestDir, "--key-set", privateKeyFile, "--attestation", signatureFile})
 				if err != nil {
 					return nil, err
 				}
 
 				// Return verify command without key set
-				return []string{"distro", "verify", "manifests", manifestDir, "--signature", signatureFile}, nil
+				return []string{"distro", "verify", "manifests", manifestDir, "--attestation", signatureFile}, nil
 			},
 			expectError:  true,
 			errorMessage: "JWKS must be specified",
@@ -134,7 +134,7 @@ metadata:
 					return nil, err
 				}
 
-				return []string{"distro", "verify", "manifests", tempDir, "--key-set", publicKeyFile, "--signature", signatureFile}, nil
+				return []string{"distro", "verify", "manifests", tempDir, "--key-set", publicKeyFile, "--attestation", signatureFile}, nil
 			},
 			expectError:  true,
 			errorMessage: "failed to parse signed token",
@@ -178,7 +178,7 @@ data:
 				signatureFile := filepath.Join(manifestDir, "signature.sig")
 
 				// Sign with initial content
-				_, err = executeCommand([]string{"distro", "sign", "manifests", manifestDir, "--key-set", privateKeyFile, "--signature", signatureFile})
+				_, err = executeCommand([]string{"distro", "sign", "manifests", manifestDir, "--key-set", privateKeyFile, "--attestation", signatureFile})
 				if err != nil {
 					return nil, err
 				}
@@ -196,10 +196,10 @@ data:
 				}
 
 				// Return verify command args (should fail due to checksum mismatch)
-				return []string{"distro", "verify", "manifests", manifestDir, "--key-set", publicKeyFile, "--signature", signatureFile}, nil
+				return []string{"distro", "verify", "manifests", manifestDir, "--key-set", publicKeyFile, "--attestation", signatureFile}, nil
 			},
 			expectError:  true,
-			errorMessage: "checksum verification failed",
+			errorMessage: "checksum mismatch",
 		},
 		{
 			name: "invalid directory",
@@ -224,7 +224,7 @@ data:
 				signatureFile := filepath.Join(tempDir, "signature.sig")
 				nonExistentDir := filepath.Join(tempDir, "nonexistent")
 
-				return []string{"distro", "verify", "manifests", nonExistentDir, "--key-set", publicKeyFile, "--signature", signatureFile}, nil
+				return []string{"distro", "verify", "manifests", nonExistentDir, "--key-set", publicKeyFile, "--attestation", signatureFile}, nil
 			},
 			expectError:  true,
 			errorMessage: "does not exist",
@@ -255,7 +255,7 @@ data:
 
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(output).To(ContainSubstring("processing files:"))
-			g.Expect(output).To(ContainSubstring("signature issued by"))
+			g.Expect(output).To(ContainSubstring("attestation issued by"))
 			g.Expect(output).To(ContainSubstring("is valid"))
 		})
 	}
@@ -294,7 +294,7 @@ spec:
 	signatureFile := filepath.Join(manifestDir, "signature.sig")
 
 	// Sign manifests
-	_, err = executeCommand([]string{"distro", "sign", "manifests", manifestDir, "--key-set", privateKeyFile, "--signature", signatureFile})
+	_, err = executeCommand([]string{"distro", "sign", "manifests", manifestDir, "--key-set", privateKeyFile, "--attestation", signatureFile})
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// Read the public key content
@@ -305,12 +305,12 @@ spec:
 	t.Setenv(distroPublicKeySetEnvVar, string(publicKeyData))
 
 	// Verify using env var (no --key-set flag)
-	args := []string{"distro", "verify", "manifests", manifestDir, "--signature", signatureFile}
+	args := []string{"distro", "verify", "manifests", manifestDir, "--attestation", signatureFile}
 	output, err := executeCommand(args)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(output).To(ContainSubstring("processing files:"))
 	g.Expect(output).To(ContainSubstring("deployment.yaml"))
-	g.Expect(output).To(ContainSubstring("signature issued by env.verify.issuer is valid"))
+	g.Expect(output).To(ContainSubstring("attestation issued by env.verify.issuer is valid"))
 }
 
 func TestDistroVerifyManifestsKeyMatching(t *testing.T) {
@@ -351,16 +351,16 @@ metadata:
 	signatureFile := filepath.Join(manifestDir, "signature.sig")
 
 	// Sign with first key pair
-	_, err = executeCommand([]string{"distro", "sign", "manifests", manifestDir, "--key-set", privateKeyFile1, "--signature", signatureFile})
+	_, err = executeCommand([]string{"distro", "sign", "manifests", manifestDir, "--key-set", privateKeyFile1, "--attestation", signatureFile})
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// Verify with correct public key (should succeed)
-	output, err := executeCommand([]string{"distro", "verify", "manifests", manifestDir, "--key-set", publicKeyFile1, "--signature", signatureFile})
+	output, err := executeCommand([]string{"distro", "verify", "manifests", manifestDir, "--key-set", publicKeyFile1, "--attestation", signatureFile})
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(output).To(ContainSubstring("signature issued by issuer1 is valid"))
+	g.Expect(output).To(ContainSubstring("attestation issued by issuer1 is valid"))
 
 	// Verify with wrong public key (should fail)
-	_, err = executeCommand([]string{"distro", "verify", "manifests", manifestDir, "--key-set", publicKeyFile2, "--signature", signatureFile})
+	_, err = executeCommand([]string{"distro", "verify", "manifests", manifestDir, "--key-set", publicKeyFile2, "--attestation", signatureFile})
 	g.Expect(err).To(HaveOccurred())
 
 	// The error should be about key ID not found, since the JWT contains key ID from first key pair
