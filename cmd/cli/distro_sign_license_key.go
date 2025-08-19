@@ -5,11 +5,9 @@ package main
 
 import (
 	"fmt"
-	"hash/adler32"
 	"os"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/lkm"
@@ -68,9 +66,6 @@ func distroSignLicenseKeyCmdRun(cmd *cobra.Command, args []string) error {
 	if distroSignLicenseKeyArgs.duration == 0 {
 		return fmt.Errorf("--duration flag is required")
 	}
-
-	// Convert days to duration
-	duration := time.Duration(distroSignLicenseKeyArgs.duration) * 24 * time.Hour
 	if distroSignLicenseKeyArgs.duration < 0 {
 		rootCmd.Println("✗ warning: negative duration will result in an expired license key")
 	}
@@ -98,23 +93,16 @@ func distroSignLicenseKeyCmdRun(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Generate the subject for the license key
-	checksum := adler32.Checksum([]byte(distroSignLicenseKeyArgs.customer))
-	subject := fmt.Sprintf("customer-%08x", checksum)
-
 	// Generate the license
-	now := time.Now()
-	lic, err := lkm.NewLicense(lkm.LicenseKey{
-		ID:           uuid.NewString(),
-		Issuer:       pk.Issuer,
-		Subject:      subject,
-		Audience:     "flux-operator",
-		Expiry:       now.Add(duration).Unix(),
-		IssuedAt:     now.Unix(),
-		Capabilities: distroSignLicenseKeyArgs.capabilities,
-	})
+	lic, err := lkm.NewLicense(
+		pk.Issuer,
+		distroSignLicenseKeyArgs.customer,
+		distroDefaultAudience,
+		time.Duration(distroSignLicenseKeyArgs.duration)*24*time.Hour,
+		distroSignLicenseKeyArgs.capabilities,
+	)
 	if err != nil {
-		return fmt.Errorf("failed to create license key: %w", err)
+		return fmt.Errorf("failed to create license: %w", err)
 	}
 
 	// Generate the license key as a signed JWT token

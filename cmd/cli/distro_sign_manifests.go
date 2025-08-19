@@ -108,7 +108,7 @@ func distroSignManifestsCmdRun(cmd *cobra.Command, args []string) error {
 	claims := map[string]any{
 		"iss": pk.Issuer,
 		"sub": checksum,
-		"aud": "flux-operator",
+		"aud": distroDefaultAudience,
 		"iat": time.Now().Unix(),
 	}
 
