@@ -6,6 +6,7 @@ package lkm
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"fmt"
 
 	"github.com/google/uuid"
 )
@@ -19,16 +20,19 @@ func NewKeySetPair(issuer string) (publicKeySet *EdKeySet, privateKeySet *EdKeyS
 		return nil, nil, err
 	}
 
-	keyID := uuid.NewString()
+	kid, err := uuid.NewV6()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to generate key ID: %w", err)
+	}
 
 	publicKeySet = NewPublicKeySet()
-	err = publicKeySet.AddPublicKey(publicKey, keyID)
+	err = publicKeySet.AddPublicKey(publicKey, kid.String())
 	if err != nil {
 		return nil, nil, err
 	}
 
 	privateKeySet = NewPrivateKeySet(issuer)
-	err = privateKeySet.AddPrivateKey(privateKey, keyID)
+	err = privateKeySet.AddPrivateKey(privateKey, kid.String())
 	if err != nil {
 		return nil, nil, err
 	}

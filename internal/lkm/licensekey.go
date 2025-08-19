@@ -8,7 +8,7 @@ package lkm
 // and custom claims specific to the Flux distribution.
 // RFC7519: https://datatracker.ietf.org/doc/rfc7519
 type LicenseKey struct {
-	// ID is the unique identifier for the license key
+	// ID is the unique identifier UUID v6 for the license key
 	// (RFC 7519 JTI claim).
 	// +required
 	ID string `json:"jti"`

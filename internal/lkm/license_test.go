@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	. "github.com/onsi/gomega"
 )
 
@@ -48,11 +49,125 @@ func testEdPrivateKey(t *testing.T) (*EdPrivateKey, *EdPublicKey) {
 
 func TestNewLicense(t *testing.T) {
 
+	t.Run("creates license with valid parameters", func(t *testing.T) {
+		g := NewWithT(t)
+
+		issuer := "test-issuer"
+		subject := "Test Company LLC"
+		audience := "flux-operator"
+		expiryInHours := 24
+		capabilities := []string{"feature1", "feature2"}
+
+		license, err := NewLicense(issuer, subject, audience, time.Duration(expiryInHours)*time.Hour, capabilities)
+
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(license).ToNot(BeNil())
+
+		// Verify the license key fields
+		lk := license.GetKey()
+		g.Expect(lk.Issuer).To(Equal(issuer))
+		g.Expect(lk.Audience).To(Equal(audience))
+		g.Expect(lk.Capabilities).To(Equal(capabilities))
+
+		// Verify subject is anonymized with "c-" prefix and 8-character hex
+		g.Expect(lk.Subject).To(HavePrefix("c-"))
+		g.Expect(lk.Subject).To(HaveLen(10)) // "c-" + 8 hex characters
+
+		// Verify ID is a valid UUID v6 format
+		parsedUUID, err := uuid.Parse(lk.ID)
+		g.Expect(err).ToNot(HaveOccurred(), "ID should be a valid UUID")
+		g.Expect(parsedUUID.Version()).To(Equal(uuid.Version(6)), "should be UUID v6")
+
+		// Verify timestamps are reasonable (within last minute and future)
+		now := time.Now().Unix()
+		g.Expect(lk.IssuedAt).To(BeNumerically("~", now, 60))
+		expectedExpiry := now + int64(expiryInHours*3600)
+		g.Expect(lk.Expiry).To(BeNumerically("~", expectedExpiry, 60))
+	})
+
+	t.Run("creates license with empty capabilities", func(t *testing.T) {
+		g := NewWithT(t)
+
+		license, err := NewLicense("issuer", "subject", "audience", 1, nil)
+
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(license).ToNot(BeNil())
+		g.Expect(license.GetKey().Capabilities).To(BeNil())
+	})
+
+	t.Run("creates license with zero expiry hours", func(t *testing.T) {
+		g := NewWithT(t)
+
+		license, err := NewLicense("issuer", "subject", "audience", 0, []string{})
+
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(license).ToNot(BeNil())
+
+		lk := license.GetKey()
+		// With 0 hours, expiry should be approximately equal to issued at
+		g.Expect(lk.Expiry).To(BeNumerically("~", lk.IssuedAt, 2))
+	})
+
+	t.Run("creates license with negative expiry hours", func(t *testing.T) {
+		g := NewWithT(t)
+
+		license, err := NewLicense("issuer", "subject", "audience", -1*time.Hour, []string{})
+
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(license).ToNot(BeNil())
+
+		lk := license.GetKey()
+		// With -1 hours, expiry should be 1 hour before issued at
+		g.Expect(lk.Expiry).To(BeNumerically("~", lk.IssuedAt-3600, 2))
+	})
+
+	t.Run("anonymizes different subjects consistently", func(t *testing.T) {
+		g := NewWithT(t)
+
+		// Same subject should produce same anonymized ID
+		license1, err := NewLicense("issuer", "Test Company", "audience", 1, nil)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		license2, err := NewLicense("issuer", "Test Company", "audience", 1, nil)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		g.Expect(license1.GetKey().Subject).To(Equal(license2.GetKey().Subject))
+
+		// Different subject should produce different anonymized ID
+		license3, err := NewLicense("issuer", "Different Company", "audience", 1, nil)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		g.Expect(license1.GetKey().Subject).ToNot(Equal(license3.GetKey().Subject))
+	})
+
+	t.Run("fails with empty issuer", func(t *testing.T) {
+		g := NewWithT(t)
+
+		license, err := NewLicense("", "subject", "audience", 1, nil)
+
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(license).To(BeNil())
+		g.Expect(errors.Is(err, ErrClaimIssuerEmpty)).To(BeTrue())
+	})
+
+	t.Run("fails with empty audience", func(t *testing.T) {
+		g := NewWithT(t)
+
+		license, err := NewLicense("issuer", "subject", "", 1, nil)
+
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(license).To(BeNil())
+		g.Expect(errors.Is(err, ErrClaimAudienceEmpty)).To(BeTrue())
+	})
+}
+
+func TestNewLicenseWithKey(t *testing.T) {
+
 	t.Run("creates license with valid key", func(t *testing.T) {
 		g := NewWithT(t)
 		lk := testLicenseKey()
 
-		license, err := NewLicense(lk)
+		license, err := NewLicenseWithKey(lk)
 
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(license).ToNot(BeNil())
@@ -64,7 +179,7 @@ func TestNewLicense(t *testing.T) {
 		lk := testLicenseKey()
 		lk.ID = "" // Make it invalid
 
-		license, err := NewLicense(lk)
+		license, err := NewLicenseWithKey(lk)
 
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(license).To(BeNil())
@@ -75,7 +190,7 @@ func TestNewLicense(t *testing.T) {
 func TestLicense_String(t *testing.T) {
 	g := NewWithT(t)
 	lk := testLicenseKey()
-	license, err := NewLicense(lk)
+	license, err := NewLicenseWithKey(lk)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	str := license.String()
@@ -95,7 +210,7 @@ func TestLicense_String(t *testing.T) {
 func TestLicense_GetMethods(t *testing.T) {
 	g := NewWithT(t)
 	lk := testLicenseKey()
-	license, err := NewLicense(lk)
+	license, err := NewLicenseWithKey(lk)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	t.Run("GetKey returns license key", func(t *testing.T) {
@@ -219,7 +334,7 @@ func TestLicense_IsExpired(t *testing.T) {
 	t.Run("returns false for valid license", func(t *testing.T) {
 		g := NewWithT(t)
 		lk := testLicenseKey()
-		license, err := NewLicense(lk)
+		license, err := NewLicenseWithKey(lk)
 		g.Expect(err).ToNot(HaveOccurred())
 
 		expired := license.IsExpired(time.Minute)
@@ -230,7 +345,7 @@ func TestLicense_IsExpired(t *testing.T) {
 		g := NewWithT(t)
 		lk := testLicenseKey()
 		lk.Expiry = time.Now().Add(-time.Hour).Unix() // Expired 1 hour ago
-		license, err := NewLicense(lk)
+		license, err := NewLicenseWithKey(lk)
 		g.Expect(err).ToNot(HaveOccurred())
 
 		expired := license.IsExpired(time.Minute)
@@ -241,7 +356,7 @@ func TestLicense_IsExpired(t *testing.T) {
 		g := NewWithT(t)
 		lk := testLicenseKey()
 		lk.Expiry = time.Now().Add(-30 * time.Second).Unix() // Expired 30s ago
-		license, err := NewLicense(lk)
+		license, err := NewLicenseWithKey(lk)
 		g.Expect(err).ToNot(HaveOccurred())
 
 		// With 1 minute leeway, should not be considered expired
@@ -258,7 +373,7 @@ func TestLicense_HasAudience(t *testing.T) {
 	g := NewWithT(t)
 	lk := testLicenseKey()
 	lk.Audience = "test-audience"
-	license, err := NewLicense(lk)
+	license, err := NewLicenseWithKey(lk)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	t.Run("returns true for exact match", func(t *testing.T) {
@@ -284,7 +399,7 @@ func TestLicense_HasCapability(t *testing.T) {
 	g := NewWithT(t)
 	lk := testLicenseKey()
 	lk.Capabilities = []string{"feature1", "feature2"}
-	license, err := NewLicense(lk)
+	license, err := NewLicenseWithKey(lk)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	t.Run("returns true for existing capability", func(t *testing.T) {
@@ -309,7 +424,7 @@ func TestLicense_HasCapability(t *testing.T) {
 		g := NewWithT(t)
 		lk := testLicenseKey()
 		lk.Capabilities = nil
-		license, err := NewLicense(lk)
+		license, err := NewLicenseWithKey(lk)
 		g.Expect(err).ToNot(HaveOccurred())
 
 		has := license.HasCapability("feature1")
@@ -320,7 +435,7 @@ func TestLicense_HasCapability(t *testing.T) {
 func TestLicense_ToJSON(t *testing.T) {
 	g := NewWithT(t)
 	lk := testLicenseKey()
-	license, err := NewLicense(lk)
+	license, err := NewLicenseWithKey(lk)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	data, err := license.ToJSON()
@@ -340,7 +455,7 @@ func TestLicense_Sign(t *testing.T) {
 	t.Run("successfully signs license", func(t *testing.T) {
 		g := NewWithT(t)
 		lk := testLicenseKey()
-		license, err := NewLicense(lk)
+		license, err := NewLicenseWithKey(lk)
 		g.Expect(err).ToNot(HaveOccurred())
 
 		privateKey, _ := testEdPrivateKey(t)
@@ -355,7 +470,7 @@ func TestLicense_Sign(t *testing.T) {
 	t.Run("fails with nil private key", func(t *testing.T) {
 		g := NewWithT(t)
 		lk := testLicenseKey()
-		license, err := NewLicense(lk)
+		license, err := NewLicenseWithKey(lk)
 		g.Expect(err).ToNot(HaveOccurred())
 
 		token, err := license.Sign(nil)
@@ -371,7 +486,7 @@ func TestGetKeyIDFromToken(t *testing.T) {
 	t.Run("extracts key ID from valid token", func(t *testing.T) {
 		g := NewWithT(t)
 		lk := testLicenseKey()
-		license, err := NewLicense(lk)
+		license, err := NewLicenseWithKey(lk)
 		g.Expect(err).ToNot(HaveOccurred())
 
 		privateKey, _ := testEdPrivateKey(t)
@@ -400,7 +515,7 @@ func TestGetLicenseFromToken(t *testing.T) {
 	t.Run("successfully extracts license from token", func(t *testing.T) {
 		g := NewWithT(t)
 		lk := testLicenseKey()
-		originalLicense, err := NewLicense(lk)
+		originalLicense, err := NewLicenseWithKey(lk)
 		g.Expect(err).ToNot(HaveOccurred())
 
 		privateKey, publicKey := testEdPrivateKey(t)
@@ -438,7 +553,7 @@ func TestGetLicenseFromToken(t *testing.T) {
 	t.Run("fails with wrong public key", func(t *testing.T) {
 		g := NewWithT(t)
 		lk := testLicenseKey()
-		license, err := NewLicense(lk)
+		license, err := NewLicenseWithKey(lk)
 		g.Expect(err).ToNot(HaveOccurred())
 
 		privateKey, _ := testEdPrivateKey(t)
