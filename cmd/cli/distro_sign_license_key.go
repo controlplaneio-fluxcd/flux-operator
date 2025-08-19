@@ -26,17 +26,20 @@ var distroSignLicenseKeyCmd = &cobra.Command{
   --key-set=/dev/stdin \
   --output=license.jwt
 
-  # Sign by reading the private key set from env
+  # Generate a license key that grants access to specific capabilities
   export FLUX_DISTRO_PRIVATE_KEY_SET="$(cat /secrets/12345678-private.jwks)"
   flux-operator distro sign license-key \
   --customer="Company Name INC" \
-  --duration=30 > demo-license.jwt
+  --capabilities="feature1,feature2" \
+  --duration=30 \
+  --output=license.jwt
 `,
 	RunE: distroSignLicenseKeyCmdRun,
 }
 
 type distroSignLicenseKeyFlags struct {
 	customer          string
+	capabilities      []string
 	duration          int
 	privateKeySetPath string
 	outputPath        string
@@ -47,6 +50,8 @@ var distroSignLicenseKeyArgs distroSignLicenseKeyFlags
 func init() {
 	distroSignLicenseKeyCmd.Flags().StringVarP(&distroSignLicenseKeyArgs.customer, "customer", "c", "",
 		"organization name for the license (required)")
+	distroSignLicenseKeyCmd.Flags().StringSliceVar(&distroSignLicenseKeyArgs.capabilities, "capabilities", nil,
+		"license capabilities (optional)")
 	distroSignLicenseKeyCmd.Flags().IntVarP(&distroSignLicenseKeyArgs.duration, "duration", "d", 0,
 		"license duration in days (required)")
 	distroSignLicenseKeyCmd.Flags().StringVarP(&distroSignLicenseKeyArgs.privateKeySetPath, "key-set", "k", "",
@@ -106,7 +111,7 @@ func distroSignLicenseKeyCmdRun(cmd *cobra.Command, args []string) error {
 		Audience:     "flux-operator",
 		Expiry:       now.Add(duration).Unix(),
 		IssuedAt:     now.Unix(),
-		Capabilities: nil,
+		Capabilities: distroSignLicenseKeyArgs.capabilities,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create license key: %w", err)

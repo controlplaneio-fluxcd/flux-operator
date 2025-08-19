@@ -6,6 +6,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -86,6 +87,9 @@ func distroVerifyLicenseKeyCmdRun(cmd *cobra.Command, args []string) error {
 
 	// Display license key information
 	rootCmd.Println(fmt.Sprintf("✔ license key was issued by %s at %s", lic.GetIssuer(), lic.GetIssuedAt()))
+	if caps := lic.GetKey().Capabilities; len(caps) > 0 {
+		rootCmd.Println(fmt.Sprintf("✔ license key capabilities: %s", strings.Join(caps, ", ")))
+	}
 
 	// Check if the license key is expired
 	if lic.IsExpired(time.Second) {
