@@ -104,13 +104,33 @@ func TestDistroSignLicenseKeyCmd(t *testing.T) {
 			errorMessage: "--duration flag is required",
 		},
 		{
+			name: "missing output flag",
+			setupFunc: func(tempDir string) ([]string, error) {
+				// Generate keys first
+				_, err := executeCommand([]string{"distro", "keygen", "test.issuer", "--output-dir", tempDir})
+				if err != nil {
+					return nil, err
+				}
+
+				// Find the private key file
+				privateKeyFile, _, err := findKeyFiles(tempDir)
+				if err != nil {
+					return nil, err
+				}
+
+				return []string{"distro", "sign", "license-key", "--customer", "Test Company", "--duration", "30", "--key-set", privateKeyFile}, nil
+			},
+			expectError:  true,
+			errorMessage: "--output flag is required",
+		},
+		{
 			name: "missing key set",
 			setupFunc: func(tempDir string) ([]string, error) {
 				outputFile := filepath.Join(tempDir, "license.jwt")
 				return []string{"distro", "sign", "license-key", "--customer", "Test Company", "--duration", "30", "--output", outputFile}, nil
 			},
 			expectError:  true,
-			errorMessage: "JWKS set must be specified",
+			errorMessage: "JWKS must be specified",
 		},
 		{
 			name: "invalid key file",

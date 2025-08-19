@@ -9,7 +9,7 @@ import (
 
 var distroSignCmd = &cobra.Command{
 	Use:   "sign",
-	Short: "Issue signatures",
+	Short: "Issue signed license keys and attestations",
 }
 
 func init() {
