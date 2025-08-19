@@ -133,8 +133,6 @@ func TestDistroSignLicenseKeyCmd(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
-
-			// Create temporary directory for this test
 			tempDir := t.TempDir()
 
 			// Setup the test scenario
@@ -190,6 +188,7 @@ func TestDistroSignLicenseKeyCmd(t *testing.T) {
 			g.Expect(claims).To(HaveKey("iat"), "should have issued at claim")
 			g.Expect(claims).To(HaveKey("exp"), "should have expiration claim")
 			g.Expect(claims["aud"]).To(Equal("flux-operator"), "audience should be flux-operator")
+			g.Expect(claims).ToNot(HaveKey("caps"), "should not have capabilities claim")
 
 			// Verify subject starts with "customer-"
 			subject, ok := claims["sub"].(string)
@@ -206,4 +205,61 @@ func TestDistroSignLicenseKeyCmd(t *testing.T) {
 			g.Expect(int64(exp)).To(BeNumerically(">", expectedExpiration))
 		})
 	}
+}
+
+func TestDistroSignLicenseKeyCmdCapabilities(t *testing.T) {
+	g := NewWithT(t)
+	tempDir := t.TempDir()
+
+	// Generate keys first
+	_, err := executeCommand([]string{"distro", "keygen", "test.issuer", "--output-dir", tempDir})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Find the private key file
+	privateKeyFile, _, err := findKeyFiles(tempDir)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	outputFile := filepath.Join(tempDir, "license.jwt")
+
+	// Test with capabilities flag
+	args := []string{
+		"distro", "sign", "license-key",
+		"--customer", "Test Company",
+		"--duration", "30",
+		"--capabilities", "feature1,feature2,feature3",
+		"--key-set", privateKeyFile,
+		"--output", outputFile,
+	}
+
+	// Execute command
+	_, err = executeCommand(args)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Verify license key file was created
+	licenseData, err := os.ReadFile(outputFile)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(licenseData).ToNot(BeEmpty())
+
+	// Parse the JWT using go-jose
+	licenseString := string(licenseData)
+	jws, err := jose.ParseSigned(licenseString, []jose.SignatureAlgorithm{jose.EdDSA})
+	g.Expect(err).ToNot(HaveOccurred(), "license key should be a valid JWT")
+
+	// Verify payload contains capabilities
+	var claims map[string]any
+	err = json.Unmarshal(jws.UnsafePayloadWithoutVerification(), &claims)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Check that capabilities claim exists and has the expected values
+	g.Expect(claims).To(HaveKey("caps"), "should have capabilities claim")
+
+	capabilities, ok := claims["caps"].([]any)
+	g.Expect(ok).To(BeTrue(), "capabilities claim should be an array")
+	g.Expect(capabilities).To(HaveLen(3), "should have 3 capabilities")
+
+	capStrings := make([]string, len(capabilities))
+	for i, c := range capabilities {
+		capStrings[i] = c.(string)
+	}
+	g.Expect(capStrings).To(ContainElements("feature1", "feature2", "feature3"))
 }
