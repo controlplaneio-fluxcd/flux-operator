@@ -61,7 +61,7 @@ func (r *RevocationKeySet) IsRevoked(lic *License) (bool, string) {
 
 // ToJSON serializes the RevocationKeySet to JSON format.
 func (r *RevocationKeySet) ToJSON() ([]byte, error) {
-	return json.MarshalIndent(*r, "", "  ")
+	return json.MarshalIndent(r, "", "  ")
 }
 
 // WriteFile writes the RevocationKeySet to a file in JSON format.

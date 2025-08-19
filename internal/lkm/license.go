@@ -64,15 +64,6 @@ func NewLicenseWithKey(lk LicenseKey) (*License, error) {
 	return l, nil
 }
 
-// String returns a JSON representation of the License.
-func (lic *License) String() string {
-	data, err := json.MarshalIndent(lic.lk, "", "  ")
-	if err != nil {
-		return "invalid license key"
-	}
-	return string(data)
-}
-
 // GetKey returns the LicenseKey object.
 func (lic *License) GetKey() LicenseKey {
 	return lic.lk
@@ -146,7 +137,7 @@ func (lic *License) HasCapability(capability string) bool {
 
 // ToJSON converts the License to a JSON byte slice.
 func (lic *License) ToJSON() ([]byte, error) {
-	data, err := json.MarshalIndent(lic.lk, "", "  ")
+	data, err := json.Marshal(lic.lk)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal license key: %w", err)
 	}
@@ -156,7 +147,7 @@ func (lic *License) ToJSON() ([]byte, error) {
 // Sign returns a JWT token signed with the provided EdPrivateKey.
 func (lic *License) Sign(privateKey *EdPrivateKey) (string, error) {
 	if privateKey == nil {
-		return "", fmt.Errorf("private key cannot be nil")
+		return "", ErrPrivateKeyRequired
 	}
 
 	// Marshal the claims to JSON
@@ -191,31 +182,12 @@ func (lic *License) Sign(privateKey *EdPrivateKey) (string, error) {
 	return tokenString, nil
 }
 
-// GetKeyIDFromToken extracts the EdPublicKey ID (KID header) from a signed JWT token.
-func GetKeyIDFromToken(jwtData []byte) (string, error) {
-	jws, err := jose.ParseSigned(string(jwtData), []jose.SignatureAlgorithm{jose.EdDSA})
-	if err != nil {
-		return "", InvalidLicenseKeyError(ErrParseToken)
-	}
-
-	if len(jws.Signatures) == 0 {
-		return "", InvalidLicenseKeyError(ErrSigNotFound)
-	}
-
-	kid := jws.Signatures[0].Protected.KeyID
-	if kid == "" {
-		return "", InvalidLicenseKeyError(ErrKIDNotFound)
-	}
-
-	return kid, nil
-}
-
 // GetLicenseFromToken extracts the License from a signed JWT token.
 // It returns an error if the token signature cannot be verified using
 // the provided EdPublicKey or if the JWT claims of the LicenseKey are invalid.
 func GetLicenseFromToken(jwtData []byte, publicKey *EdPublicKey) (*License, error) {
 	if publicKey == nil {
-		return nil, fmt.Errorf("public key cannot be nil")
+		return nil, ErrPublicKeyRequired
 	}
 
 	jws, err := jose.ParseSigned(string(jwtData), []jose.SignatureAlgorithm{jose.EdDSA})

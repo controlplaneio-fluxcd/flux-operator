@@ -187,26 +187,6 @@ func TestNewLicenseWithKey(t *testing.T) {
 	})
 }
 
-func TestLicense_String(t *testing.T) {
-	g := NewWithT(t)
-	lk := testLicenseKey()
-	license, err := NewLicenseWithKey(lk)
-	g.Expect(err).ToNot(HaveOccurred())
-
-	str := license.String()
-
-	g.Expect(str).To(ContainSubstring(lk.ID))
-	g.Expect(str).To(ContainSubstring(lk.Issuer))
-	g.Expect(str).To(ContainSubstring(lk.Subject))
-	g.Expect(str).To(ContainSubstring(lk.Audience))
-
-	// Verify it's valid JSON
-	var parsed LicenseKey
-	err = json.Unmarshal([]byte(str), &parsed)
-	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(parsed).To(Equal(lk))
-}
-
 func TestLicense_GetMethods(t *testing.T) {
 	g := NewWithT(t)
 	lk := testLicenseKey()
@@ -477,7 +457,7 @@ func TestLicense_Sign(t *testing.T) {
 
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(token).To(BeEmpty())
-		g.Expect(err.Error()).To(ContainSubstring("private key cannot be nil"))
+		g.Expect(errors.Is(err, ErrPrivateKeyRequired)).To(BeTrue())
 	})
 }
 
@@ -505,8 +485,7 @@ func TestGetKeyIDFromToken(t *testing.T) {
 
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(keyID).To(BeEmpty())
-		g.Expect(err.Error()).To(ContainSubstring("invalid license key"))
-		g.Expect(err.Error()).To(ContainSubstring("failed to parse signed token"))
+		g.Expect(errors.Is(err, ErrParseToken)).To(BeTrue())
 	})
 }
 
@@ -535,7 +514,7 @@ func TestGetLicenseFromToken(t *testing.T) {
 
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(license).To(BeNil())
-		g.Expect(err.Error()).To(ContainSubstring("public key cannot be nil"))
+		g.Expect(errors.Is(err, ErrPublicKeyRequired)).To(BeTrue())
 	})
 
 	t.Run("fails with invalid token", func(t *testing.T) {
@@ -546,8 +525,7 @@ func TestGetLicenseFromToken(t *testing.T) {
 
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(license).To(BeNil())
-		g.Expect(err.Error()).To(ContainSubstring("invalid license key"))
-		g.Expect(err.Error()).To(ContainSubstring("failed to parse signed token"))
+		g.Expect(errors.Is(err, ErrParseToken)).To(BeTrue())
 	})
 
 	t.Run("fails with wrong public key", func(t *testing.T) {
@@ -567,7 +545,6 @@ func TestGetLicenseFromToken(t *testing.T) {
 
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(extractedLicense).To(BeNil())
-		g.Expect(err.Error()).To(ContainSubstring("invalid license key"))
-		g.Expect(err.Error()).To(ContainSubstring("failed to verify signature"))
+		g.Expect(errors.Is(err, ErrVerifySig)).To(BeTrue())
 	})
 }

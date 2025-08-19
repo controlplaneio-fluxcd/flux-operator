@@ -3,6 +3,8 @@
 
 package lkm
 
+import "encoding/json"
+
 // LicenseKey represents a license key object that contains
 // standard claims as defined in RFC 7519 (JSON Web Token)
 // and custom claims specific to the Flux distribution.
@@ -41,4 +43,13 @@ type LicenseKey struct {
 	// Capabilities is a list of features granted by the license key.
 	// +optional
 	Capabilities []string `json:"caps,omitempty"`
+}
+
+// String returns a JSON representation of the LicenseKey object.
+func (lk LicenseKey) String() string {
+	data, err := json.MarshalIndent(lk, "", "  ")
+	if err != nil {
+		return "invalid license key"
+	}
+	return string(data)
 }

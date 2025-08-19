@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"fmt"
 
+	"github.com/go-jose/go-jose/v4"
 	"github.com/google/uuid"
 )
 
@@ -37,4 +38,23 @@ func NewKeySetPair(issuer string) (publicKeySet *EdKeySet, privateKeySet *EdKeyS
 		return nil, nil, err
 	}
 	return
+}
+
+// GetKeyIDFromToken extracts the EdPublicKey ID (KID header) from a signed JWT token.
+func GetKeyIDFromToken(jwtData []byte) (string, error) {
+	jws, err := jose.ParseSigned(string(jwtData), []jose.SignatureAlgorithm{jose.EdDSA})
+	if err != nil {
+		return "", ErrParseToken
+	}
+
+	if len(jws.Signatures) == 0 {
+		return "", ErrSigNotFound
+	}
+
+	kid := jws.Signatures[0].Protected.KeyID
+	if kid == "" {
+		return "", ErrKIDNotFound
+	}
+
+	return kid, nil
 }
