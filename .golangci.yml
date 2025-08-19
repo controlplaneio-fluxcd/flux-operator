@@ -74,6 +74,9 @@ linters:
           - dupl
           - lll
         path: test/*
+      - linters:
+          - goconst
+        path: ".*_test\\.go$"
     paths:
       - third_party$
       - builtin$
