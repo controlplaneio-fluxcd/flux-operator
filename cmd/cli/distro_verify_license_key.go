@@ -31,7 +31,8 @@ var distroVerifyLicenseKeyCmd = &cobra.Command{
 }
 
 type distroVerifyLicenseKeyFlags struct {
-	publicKeySetPath string
+	publicKeySetPath  string
+	revokedKeySetPath string
 }
 
 var distroVerifyLicenseKeyArgs distroVerifyLicenseKeyFlags
@@ -39,6 +40,8 @@ var distroVerifyLicenseKeyArgs distroVerifyLicenseKeyFlags
 func init() {
 	distroVerifyLicenseKeyCmd.Flags().StringVarP(&distroVerifyLicenseKeyArgs.publicKeySetPath, "key-set", "k", "",
 		"path to the public key set file or /dev/stdin")
+	distroVerifyLicenseKeyCmd.Flags().StringVarP(&distroVerifyLicenseKeyArgs.revokedKeySetPath, "revoked-set", "r", "",
+		"path to the revoked key set file (optional)")
 	distroVerifyCmd.AddCommand(distroVerifyLicenseKeyCmd)
 }
 
@@ -89,6 +92,25 @@ func distroVerifyLicenseKeyCmdRun(cmd *cobra.Command, args []string) error {
 	rootCmd.Println(fmt.Sprintf("✔ license key was issued by %s at %s", lic.GetIssuer(), lic.GetIssuedAt()))
 	if caps := lic.GetKey().Capabilities; len(caps) > 0 {
 		rootCmd.Println(fmt.Sprintf("✔ license key capabilities: %s", strings.Join(caps, ", ")))
+	}
+
+	// Check if the license key is revoked
+	if distroVerifyLicenseKeyArgs.revokedKeySetPath != "" {
+		// Load the revoked key set from file
+		rksData, err := os.ReadFile(distroVerifyLicenseKeyArgs.revokedKeySetPath)
+		if err != nil {
+			return fmt.Errorf("failed to read the revoked key set: %w", err)
+		}
+
+		rks, err := lkm.RevocationKeySetFromJSON(rksData)
+		if err != nil {
+			return fmt.Errorf("failed to parse revoked key set: %w", err)
+		}
+
+		// Check if the license key ID is in the revoked set
+		if revoked, ts := rks.IsRevoked(lic); revoked {
+			return fmt.Errorf("license key is revoked since %s", ts)
+		}
 	}
 
 	// Check if the license key is expired
