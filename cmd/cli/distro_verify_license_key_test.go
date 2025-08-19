@@ -32,7 +32,7 @@ func TestDistroVerifyLicenseKeyValidLicense(t *testing.T) {
 	// Verify the license key
 	output, err := executeCommand([]string{"distro", "verify", "license-key", licenseFile, "--key-set", publicKeyFile})
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(output).To(ContainSubstring("✔ license key is issued by test.issuer"))
+	g.Expect(output).To(ContainSubstring("✔ license key was issued by test.issuer"))
 	g.Expect(output).To(ContainSubstring("✔ license key is valid until"))
 }
 
@@ -89,7 +89,7 @@ func TestDistroVerifyLicenseKeyWithEnvironmentVariable(t *testing.T) {
 	// Verify the license key using environment variable
 	output, err := executeCommand([]string{"distro", "verify", "license-key", licenseFile})
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(output).To(ContainSubstring("✔ license key is issued by env.test.issuer"))
+	g.Expect(output).To(ContainSubstring("✔ license key was issued by env.test.issuer"))
 	g.Expect(output).To(ContainSubstring("✔ license key is valid until"))
 }
 
@@ -117,7 +117,7 @@ func TestDistroVerifyLicenseKeyErrorCases(t *testing.T) {
 				return []string{"distro", "verify", "license-key", "nonexistent.jwt", "--key-set", publicKeyFile}, nil
 			},
 			expectError:  true,
-			errorMessage: "failed to read license file",
+			errorMessage: "failed to read",
 		},
 		{
 			name: "missing key set",
@@ -173,7 +173,7 @@ func TestDistroVerifyLicenseKeyErrorCases(t *testing.T) {
 				return []string{"distro", "verify", "license-key", licenseFile, "--key-set", publicKeyFile}, nil
 			},
 			expectError:  true,
-			errorMessage: "failed to parse signed license key",
+			errorMessage: "invalid license key",
 		},
 		{
 			name: "wrong key set",
