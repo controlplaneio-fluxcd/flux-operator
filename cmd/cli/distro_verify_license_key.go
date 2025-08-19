@@ -4,12 +4,10 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"time"
 
-	"github.com/go-jose/go-jose/v4"
 	"github.com/spf13/cobra"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/lkm"
@@ -46,28 +44,19 @@ func init() {
 func distroVerifyLicenseKeyCmdRun(cmd *cobra.Command, args []string) error {
 	licenseFile := args[0]
 
-	// Read the JWT license key from file
-	licenseData, err := os.ReadFile(licenseFile)
+	// Read the signed JWT from file
+	jwtData, err := os.ReadFile(licenseFile)
 	if err != nil {
-		return fmt.Errorf("failed to read license file: %w", err)
+		return fmt.Errorf("failed to read the license key: %w", err)
 	}
 
-	// Parse the JWT license key to extract the key ID
-	signedObject, err := jose.ParseSigned(string(licenseData), []jose.SignatureAlgorithm{jose.EdDSA})
+	// Extract the public key ID from the JWT header
+	kid, err := lkm.GetKeyIDFromToken(jwtData)
 	if err != nil {
-		return fmt.Errorf("failed to parse signed license key: %w", err)
+		return err
 	}
 
-	// Extract key ID from the protected header
-	if len(signedObject.Signatures) == 0 {
-		return fmt.Errorf("no signatures found in license key")
-	}
-	kid := signedObject.Signatures[0].Protected.KeyID
-	if kid == "" {
-		return fmt.Errorf("no key ID found in license key protected header")
-	}
-
-	// Load the JWKS and find the matching key
+	// Read the JWKS data from the specified source
 	var jwksData []byte
 	if distroVerifyLicenseKeyArgs.publicKeySetPath != "" {
 		// Load from file or /dev/stdin
@@ -83,98 +72,25 @@ func distroVerifyLicenseKeyCmdRun(cmd *cobra.Command, args []string) error {
 			distroPublicKeySetEnvVar)
 	}
 
-	// Extract the public key for the specific key ID
+	// Extract the public key for the specific ID
 	pk, err := lkm.EdPublicKeyFromSet(jwksData, kid)
 	if err != nil {
-		return err
+		return fmt.Errorf("invalid license key: %w", err)
 	}
 
-	// Verify the signature with the public key
-	payload, err := signedObject.Verify(pk.Key)
-	if err != nil {
-		return fmt.Errorf("failed to verify license key signature: %w", err)
-	}
-
-	// Parse the claims from the payload
-	var claims map[string]any
-	if err := json.Unmarshal(payload, &claims); err != nil {
-		return fmt.Errorf("failed to parse license key claims: %w", err)
-	}
-
-	// Extract the issuer and expiration time from the claims
-	issuer, expirationTime, err := parseLicenseKeyClaims(claims)
+	// Verify the JWT signature and extract the license information
+	lic, err := lkm.GetLicenseFromToken(jwtData, pk)
 	if err != nil {
 		return err
 	}
 
-	// Display license information and check validity
-	rootCmd.Println(fmt.Sprintf("✔ license key is issued by %s", issuer))
-	if expirationTime.Before(time.Now()) {
-		return fmt.Errorf("license key has expired on %s", expirationTime.Format(time.RFC3339))
-	}
+	// Display license key information
+	rootCmd.Println(fmt.Sprintf("✔ license key was issued by %s at %s", lic.GetIssuer(), lic.GetIssuedAt()))
 
-	rootCmd.Println(fmt.Sprintf("✔ license key is valid until %s", expirationTime.Format(time.RFC3339)))
+	// Check if the license key is expired
+	if lic.IsExpired(time.Second) {
+		return fmt.Errorf("license key has expired on %s", lic.GetExpiry())
+	}
+	rootCmd.Println(fmt.Sprintf("✔ license key is valid until %s", lic.GetExpiry()))
 	return nil
-}
-
-// parseLicenseKeyClaims validates the JWT claims and extracts the issuer and expiration time.
-func parseLicenseKeyClaims(claims map[string]any) (issuer string, expire time.Time, err error) {
-	// Check identifier (jti)
-	if jti, ok := claims["jti"].(string); !ok || jti == "" {
-		return issuer, expire, fmt.Errorf("identifier (jti) not found or empty in license key claims")
-	}
-
-	// Check issuer
-	issuer, ok := claims["iss"].(string)
-	if !ok {
-		return issuer, expire, fmt.Errorf("issuer not found in license key claims")
-	}
-	if issuer == "" {
-		return issuer, expire, fmt.Errorf("issuer cannot be empty in license key claims")
-	}
-
-	// Check subject (customer id)
-	subject, ok := claims["sub"].(string)
-	if !ok {
-		return issuer, expire, fmt.Errorf("subject not found in license key claims")
-	}
-	if subject == "" {
-		return issuer, expire, fmt.Errorf("subject cannot be empty in license key claims")
-	}
-
-	// Check audience
-	audience, ok := claims["aud"].(string)
-	if !ok {
-		return issuer, expire, fmt.Errorf("audience not found in license key claims")
-	}
-	if audience == "" {
-		return issuer, expire, fmt.Errorf("audience cannot be empty in license key claims")
-	}
-
-	// Check expiration time
-	exp, ok := claims["exp"].(float64)
-	if !ok {
-		return issuer, expire, fmt.Errorf("expiration time not found in license key claims")
-	}
-	if exp <= 0 {
-		return issuer, expire, fmt.Errorf("invalid expiration time in license key claims")
-	}
-	expire = time.Unix(int64(exp), 0)
-
-	// Check issued at time
-	iat, ok := claims["iat"].(float64)
-	if !ok {
-		return issuer, expire, fmt.Errorf("issued at time not found in license key claims")
-	}
-	if iat <= 0 {
-		return issuer, expire, fmt.Errorf("invalid issued at time in license key claims")
-	}
-
-	// Validate issued at time is not in the future (allow 1 minute clock skew)
-	issuedAtTime := time.Unix(int64(iat), 0)
-	if issuedAtTime.After(time.Now().Add(time.Minute)) {
-		return issuer, expire, fmt.Errorf("license key issued at time is in the future: %s", issuedAtTime.Format(time.RFC3339))
-	}
-
-	return issuer, expire, nil
 }

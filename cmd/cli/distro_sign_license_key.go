@@ -4,13 +4,11 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"hash/adler32"
 	"os"
 	"time"
 
-	"github.com/go-jose/go-jose/v4"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
@@ -95,61 +93,40 @@ func distroSignLicenseKeyCmdRun(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Generate JWT subject from the customer name
+	// Generate the subject for the license key
 	checksum := adler32.Checksum([]byte(distroSignLicenseKeyArgs.customer))
 	subject := fmt.Sprintf("customer-%08x", checksum)
 
-	// Generate claims with issuer, subject, and expiration
+	// Generate the license
 	now := time.Now()
-	claims := map[string]any{
-		"jti": uuid.NewString(),
-		"iss": pk.Issuer,
-		"sub": subject,
-		"aud": "flux-operator",
-		"iat": now.Unix(),
-		"exp": now.Add(duration).Unix(),
+	lic, err := lkm.NewLicense(lkm.LicenseKey{
+		ID:           uuid.NewString(),
+		Issuer:       pk.Issuer,
+		Subject:      subject,
+		Audience:     "flux-operator",
+		Expiry:       now.Add(duration).Unix(),
+		IssuedAt:     now.Unix(),
+		Capabilities: nil,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create license key: %w", err)
 	}
 
-	// Create payload
-	payload, err := json.Marshal(claims)
+	// Generate the license key as a signed JWT token
+	token, err := lic.Sign(pk)
 	if err != nil {
-		return fmt.Errorf("failed to marshal claims: %w", err)
-	}
-
-	// Create signer with Ed25519 private key
-	signerOpts := jose.SignerOptions{}
-	signerOpts.WithType("JWT")
-	signerOpts.WithHeader("kid", pk.KeyID)
-
-	signer, err := jose.NewSigner(jose.SigningKey{
-		Algorithm: jose.EdDSA,
-		Key:       pk.Key,
-	}, &signerOpts)
-	if err != nil {
-		return fmt.Errorf("failed to create signer: %w", err)
-	}
-
-	// Sign the payload
-	signedObject, err := signer.Sign(payload)
-	if err != nil {
-		return fmt.Errorf("failed to sign payload: %w", err)
-	}
-
-	// Get the compact serialization (JWT format)
-	tokenString, err := signedObject.CompactSerialize()
-	if err != nil {
-		return fmt.Errorf("failed to serialize signed token: %w", err)
+		return fmt.Errorf("failed to sign license key: %w", err)
 	}
 
 	// Write the signed JWT token to the output file or stdout
 	if distroSignLicenseKeyArgs.outputPath != "" {
-		err = os.WriteFile(distroSignLicenseKeyArgs.outputPath, []byte(tokenString), 0644)
+		err = os.WriteFile(distroSignLicenseKeyArgs.outputPath, []byte(token), 0644)
 		if err != nil {
 			return fmt.Errorf("failed to write license key to file: %w", err)
 		}
 		rootCmd.Println(fmt.Sprintf("✔ license key written to: %s", distroSignLicenseKeyArgs.outputPath))
 	} else {
-		rootCmd.Println(tokenString)
+		rootCmd.Println(token)
 	}
 
 	return nil
