@@ -26,6 +26,7 @@ func init() {
 const (
 	distroPrivateKeySetEnvVar = "FLUX_DISTRO_PRIVATE_KEY_SET"
 	distroPublicKeySetEnvVar  = "FLUX_DISTRO_PUBLIC_KEY_SET"
+	distroDefaultAudience     = "flux-operator"
 )
 
 // isDir validates that the given path exists and is a directory

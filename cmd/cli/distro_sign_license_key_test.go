@@ -182,18 +182,18 @@ func TestDistroSignLicenseKeyCmd(t *testing.T) {
 			var claims map[string]any
 			err = json.Unmarshal(jws.UnsafePayloadWithoutVerification(), &claims)
 			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(claims["aud"]).To(Equal(distroDefaultAudience))
 			g.Expect(claims).To(HaveKey("iss"), "should have issuer claim")
 			g.Expect(claims).To(HaveKey("sub"), "should have subject claim")
 			g.Expect(claims).To(HaveKey("aud"), "should have audience claim")
 			g.Expect(claims).To(HaveKey("iat"), "should have issued at claim")
 			g.Expect(claims).To(HaveKey("exp"), "should have expiration claim")
-			g.Expect(claims["aud"]).To(Equal("flux-operator"), "audience should be flux-operator")
 			g.Expect(claims).ToNot(HaveKey("caps"), "should not have capabilities claim")
 
-			// Verify subject starts with "customer-"
+			// Verify subject starts with "c-"
 			subject, ok := claims["sub"].(string)
 			g.Expect(ok).To(BeTrue(), "subject claim should be a string")
-			g.Expect(subject).To(HavePrefix("customer-"), "subject should start with 'customer-'")
+			g.Expect(subject).To(HavePrefix("c-"), "subject should start with 'c-'")
 
 			// Verify expiration is in the future
 			iat, ok := claims["iat"].(float64)
