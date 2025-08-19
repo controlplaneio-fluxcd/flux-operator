@@ -109,7 +109,7 @@ func (k *EdKeySet) AddPrivateKey(key ed25519.PrivateKey, keyID string) error {
 
 // ToJSON converts the EdKeySet to a JSON byte slice.
 func (k *EdKeySet) ToJSON() ([]byte, error) {
-	return json.MarshalIndent(*k, "", "  ")
+	return json.MarshalIndent(k, "", "  ")
 }
 
 // WriteFile writes the EdKeySet to the specified file in JSON format.

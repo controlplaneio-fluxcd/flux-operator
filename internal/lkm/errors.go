@@ -17,6 +17,12 @@ var ErrSigNotFound = errors.New("no signatures found")
 // ErrKIDNotFound is returned when no public key ID is found in the token.
 var ErrKIDNotFound = errors.New("no public key ID found")
 
+// ErrPublicKeyRequired is returned when a public key is required but not provided.
+var ErrPublicKeyRequired = errors.New("public key is required")
+
+// ErrPrivateKeyRequired is returned when a private key is required but not provided.
+var ErrPrivateKeyRequired = errors.New("private key is required")
+
 // ErrVerifySig is returned when signature verification fails.
 var ErrVerifySig = errors.New("failed to verify signature")
 
@@ -44,7 +50,18 @@ var ErrClaimIssuedAtFuture = errors.New("issued at (iat) cannot be in the future
 // ErrClaimExpiryZero is returned when the license key expiry time is zero.
 var ErrClaimExpiryZero = errors.New("expiry (exp) cannot be zero")
 
+// ErrClaimChecksumEmpty is returned when the attestation checksum is empty.
+var ErrClaimChecksumEmpty = errors.New("checksum cannot be empty")
+
+// ErrClaimChecksumMismatch is returned when the attestation checksum does not match the expected value.
+var ErrClaimChecksumMismatch = errors.New("checksum mismatch")
+
 // InvalidLicenseKeyError wraps an error with the "invalid license key" prefix.
 func InvalidLicenseKeyError(err error) error {
 	return fmt.Errorf("invalid license key: %w", err)
+}
+
+// InvalidAttestationError wraps an error with the "invalid attestation" prefix.
+func InvalidAttestationError(err error) error {
+	return fmt.Errorf("invalid attestation: %w", err)
 }
