@@ -6,10 +6,12 @@ package lkm
 import (
 	"encoding/json"
 	"fmt"
+	"hash/adler32"
 	"strings"
 	"time"
 
 	"github.com/go-jose/go-jose/v4"
+	"github.com/google/uuid"
 )
 
 // License represents a license object that contains a LicenseKey.
@@ -18,9 +20,41 @@ type License struct {
 	lk LicenseKey
 }
 
-// NewLicense creates a new License object with the given LicenseKey.
+// NewLicense creates a new License for the given issuer, subject,
+// audience, expiry time duration, and capabilities.
+// The subject is anonymized and stored in the license key as 'c-<adler32checksum>'.
+// It generates a unique and chronologically sortable ID for the license key using UUID v6.
+func NewLicense(issuer, subject, audience string, expiry time.Duration, capabilities []string) (*License, error) {
+	// Generate the license ID.
+	jti, err := uuid.NewV6()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate UUID for license key: %w", err)
+	}
+
+	// Anonymize the subject.
+	subjectID := fmt.Sprintf("c-%08x", adler32.Checksum([]byte(subject)))
+
+	// Calculate the expiry time based on the current time
+	// and the provided duration.
+	now := time.Now()
+	expiryTime := now.Add(expiry)
+
+	// Create the LicenseKey object with the required fields.
+	lk := LicenseKey{
+		ID:           jti.String(),
+		IssuedAt:     now.Unix(),
+		Expiry:       expiryTime.Unix(),
+		Issuer:       issuer,
+		Subject:      subjectID,
+		Audience:     audience,
+		Capabilities: capabilities,
+	}
+	return NewLicenseWithKey(lk)
+}
+
+// NewLicenseWithKey creates a new License object with the given LicenseKey.
 // if the LicenseKey is invalid, it returns an error.
-func NewLicense(lk LicenseKey) (*License, error) {
+func NewLicenseWithKey(lk LicenseKey) (*License, error) {
 	l := &License{
 		lk: lk,
 	}
@@ -199,5 +233,5 @@ func GetLicenseFromToken(jwtData []byte, publicKey *EdPublicKey) (*License, erro
 		return nil, InvalidLicenseKeyError(ErrParseClaims)
 	}
 
-	return NewLicense(lk)
+	return NewLicenseWithKey(lk)
 }
