@@ -17,6 +17,8 @@ import (
 	"golang.org/x/mod/sumdb/dirhash"
 )
 
+// ManifestsAttestation represents an attestation for manifests.
+// It provides methods to sign, verify, and validate the claims of the attestation.
 type ManifestsAttestation struct {
 	att Attestation
 }
@@ -38,7 +40,10 @@ func (m *ManifestsAttestation) GetAttestation() Attestation {
 
 // GetChecksum returns the checksum of the ManifestsAttestation.
 func (m *ManifestsAttestation) GetChecksum() string {
-	return m.att.Checksum
+	if len(m.att.Digests) == 0 {
+		return ""
+	}
+	return m.att.Digests[0]
 }
 
 // GetIssuer returns the issuer of the ManifestsAttestation.
@@ -69,7 +74,7 @@ func (m *ManifestsAttestation) Validate() error {
 		return InvalidAttestationError(ErrClaimIssuedAtFuture)
 	}
 
-	if m.att.Checksum == "" {
+	if len(m.att.Digests) == 0 {
 		return InvalidAttestationError(ErrClaimChecksumEmpty)
 	}
 	return nil
@@ -91,14 +96,14 @@ func (m *ManifestsAttestation) Sign(privateKey *EdPrivateKey, dirPath string, ig
 	if privateKey == nil {
 		return "", nil, ErrPrivateKeyRequired
 	}
-	if m.att.Checksum != "" {
-		return "", nil, fmt.Errorf("attestation already scanned")
+	if len(m.att.Digests) != 0 {
+		return "", nil, ErrClaimChecksumExists
 	}
 
 	// Generate the license ID.
 	jti, err := uuid.NewV6()
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to generate UUID for license key: %w", err)
+		return "", nil, fmt.Errorf("failed to generate UUID: %w", err)
 	}
 
 	// Compute the checksum of the directory contents.
@@ -111,7 +116,7 @@ func (m *ManifestsAttestation) Sign(privateKey *EdPrivateKey, dirPath string, ig
 	m.att.ID = jti.String()
 	m.att.Issuer = privateKey.Issuer
 	m.att.IssuedAt = time.Now().Unix()
-	m.att.Checksum = checksum
+	m.att.Digests = []string{checksum}
 
 	// Validate the attestation.
 	if err := m.Validate(); err != nil {
@@ -188,7 +193,7 @@ func (m *ManifestsAttestation) Verify(jwtData []byte, publicKey *EdPublicKey, di
 	}
 
 	// Verify that the computed checksum matches the one in the attestation.
-	if checksum != m.att.Checksum {
+	if len(m.att.Digests) == 0 || checksum != m.att.Digests[0] {
 		return nil, InvalidAttestationError(ErrClaimChecksumMismatch)
 	}
 

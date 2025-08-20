@@ -40,9 +40,9 @@ type Attestation struct {
 	// +required
 	IssuedAt int64 `json:"iat"`
 
-	// Checksum is the hash used to verify the integrity of the subject's data.
+	// Digests is a list of digests used to verify the integrity of the subject's data.
 	// +required
-	Checksum string `json:"checksum"`
+	Digests []string `json:"digests"`
 }
 
 // String returns a JSON representation of the Attestation object.

@@ -27,7 +27,7 @@ func testAttestation() Attestation {
 		Subject:  "manifests",
 		Audience: "test-audience",
 		IssuedAt: now.Unix(),
-		Checksum: "h1:test-checksum+hash",
+		Digests:  []string{"h1:test-checksum+hash"},
 	}
 }
 
@@ -87,7 +87,7 @@ func TestNewManifestsAttestation(t *testing.T) {
 		g.Expect(att.ID).To(BeEmpty())
 		g.Expect(att.Issuer).To(BeEmpty())
 		g.Expect(att.IssuedAt).To(BeZero())
-		g.Expect(att.Checksum).To(BeEmpty())
+		g.Expect(att.Digests).To(BeEmpty())
 	})
 
 	t.Run("creates attestation with empty audience", func(t *testing.T) {
@@ -201,7 +201,7 @@ func TestManifestsAttestation_Validate(t *testing.T) {
 	t.Run("fails when Checksum is empty", func(t *testing.T) {
 		g := NewWithT(t)
 		att := testAttestation()
-		att.Checksum = ""
+		att.Digests = []string{}
 		ma := &ManifestsAttestation{att: att}
 
 		err := ma.Validate()
@@ -264,7 +264,8 @@ func TestManifestsAttestation_Sign(t *testing.T) {
 		g.Expect(att.Subject).To(Equal("manifests"))
 		g.Expect(att.Audience).To(Equal("test-audience"))
 		g.Expect(att.IssuedAt).To(BeNumerically(">", 0))
-		g.Expect(att.Checksum).ToNot(BeEmpty())
+		g.Expect(att.Digests).ToNot(BeEmpty())
+		g.Expect(len(att.Digests)).To(Equal(1))
 
 		// Verify ID is a valid UUID v6
 		parsedUUID, err := uuid.Parse(att.ID)
@@ -320,7 +321,7 @@ func TestManifestsAttestation_Sign(t *testing.T) {
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(token).To(BeEmpty())
 		g.Expect(files).To(BeNil())
-		g.Expect(err.Error()).To(ContainSubstring("attestation already scanned"))
+		g.Expect(errors.Is(err, ErrClaimChecksumExists)).To(BeTrue())
 	})
 
 	t.Run("fails with non-existent directory", func(t *testing.T) {
@@ -496,7 +497,7 @@ func TestManifestsAttestation_GetChecksum(t *testing.T) {
 		ma := &ManifestsAttestation{att: att}
 
 		checksum := ma.GetChecksum()
-		g.Expect(checksum).To(Equal(att.Checksum))
+		g.Expect(checksum).To(Equal(att.Digests[0]))
 		g.Expect(checksum).To(Equal("h1:test-checksum+hash"))
 	})
 

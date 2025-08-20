@@ -50,10 +50,16 @@ var ErrClaimIssuedAtFuture = errors.New("issued at (iat) cannot be in the future
 // ErrClaimExpiryZero is returned when the license key expiry time is zero.
 var ErrClaimExpiryZero = errors.New("expiry (exp) cannot be zero")
 
-// ErrClaimChecksumEmpty is returned when the attestation checksum is empty.
+// ErrClaimDigestsEmpty is returned when the attestation digests list is empty.
+var ErrClaimDigestsEmpty = errors.New("digests list cannot be empty")
+
+// ErrClaimChecksumEmpty is returned when the manifests attestation checksum is empty.
 var ErrClaimChecksumEmpty = errors.New("checksum cannot be empty")
 
-// ErrClaimChecksumMismatch is returned when the attestation checksum does not match the expected value.
+// ErrClaimChecksumExists is returned when the manifests attestation already contains a checksum.
+var ErrClaimChecksumExists = errors.New("checksum cannot be overwritten")
+
+// ErrClaimChecksumMismatch is returned when the manifests attestation checksum does not match the expected value.
 var ErrClaimChecksumMismatch = errors.New("checksum mismatch")
 
 // InvalidLicenseKeyError wraps an error with the "invalid license key" prefix.
