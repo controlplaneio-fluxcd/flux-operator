@@ -39,6 +39,12 @@ func (m *ManifestsAttestation) GetAttestation() Attestation {
 	return m.att
 }
 
+// GetIssuedAt returns the timestamp when the underlying Attestation
+// was issued, formatted as an RFC3339 string.
+func (m *ManifestsAttestation) GetIssuedAt() string {
+	return time.Unix(m.att.IssuedAt, 0).Format(time.RFC3339)
+}
+
 // GetChecksum returns the checksum of the ManifestsAttestation.
 func (m *ManifestsAttestation) GetChecksum() string {
 	if len(m.att.Digests) == 0 {

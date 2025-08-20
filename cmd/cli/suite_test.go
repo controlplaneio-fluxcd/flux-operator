@@ -170,4 +170,6 @@ func resetCmdArgs() {
 	distroSignLicenseKeyArgs = distroSignLicenseKeyFlags{}
 	distroVerifyLicenseKeyArgs = distroVerifyLicenseKeyFlags{}
 	distroRevokeLicenseKeyArgs = distroRevokeLicenseKeyFlags{}
+	distroSignArtifactsArgs = distroSignArtifactsFlags{}
+	distroVerifyArtifactsArgs = distroVerifyArtifactsFlags{}
 }
