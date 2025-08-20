@@ -37,7 +37,7 @@ data:
 	// Verify the manifests
 	output, err := executeCommand([]string{"distro", "verify", "manifests", manifestDir, "--key-set", publicKeyFile, "--attestation", signatureFile})
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(output).To(ContainSubstring("attestation issued by test.issuer is valid"))
+	g.Expect(output).To(ContainSubstring("attestation issued by test.issuer"))
 }
 
 func TestDistroVerifyManifestsErrorCases(t *testing.T) { //nolint:gocyclo
@@ -310,7 +310,7 @@ spec:
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(output).To(ContainSubstring("processing files:"))
 	g.Expect(output).To(ContainSubstring("deployment.yaml"))
-	g.Expect(output).To(ContainSubstring("attestation issued by env.verify.issuer is valid"))
+	g.Expect(output).To(ContainSubstring("attestation issued by env.verify.issuer"))
 }
 
 func TestDistroVerifyManifestsKeyMatching(t *testing.T) {
@@ -357,7 +357,7 @@ metadata:
 	// Verify with correct public key (should succeed)
 	output, err := executeCommand([]string{"distro", "verify", "manifests", manifestDir, "--key-set", publicKeyFile1, "--attestation", signatureFile})
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(output).To(ContainSubstring("attestation issued by issuer1 is valid"))
+	g.Expect(output).To(ContainSubstring("attestation issued by issuer1"))
 
 	// Verify with wrong public key (should fail)
 	_, err = executeCommand([]string{"distro", "verify", "manifests", manifestDir, "--key-set", publicKeyFile2, "--attestation", signatureFile})

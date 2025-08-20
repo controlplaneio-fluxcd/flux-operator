@@ -97,8 +97,8 @@ func distroVerifyManifestsCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Print the checksum and issuer
-	rootCmd.Println(fmt.Sprintf("✔ checksum: %s", att.GetChecksum()))
-	rootCmd.Println(fmt.Sprintf("✔ attestation issued by %s is valid", att.GetIssuer()))
+	rootCmd.Println(fmt.Sprintf("✔ attestation issued by %s at %s is valid", att.GetIssuer(), att.GetIssuedAt()))
+	rootCmd.Println(fmt.Sprintf("✔ verified checksum: %s", att.GetChecksum()))
 
 	return nil
 }

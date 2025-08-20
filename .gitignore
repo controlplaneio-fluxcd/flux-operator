@@ -29,3 +29,4 @@ disto/
 .terraform.lock.hcl
 .terraformrc
 /internal/builder/testdata/output/
+/cmd/cli/testdata/distro/
