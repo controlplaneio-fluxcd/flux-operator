@@ -156,30 +156,7 @@ func (lic *License) Sign(privateKey *EdPrivateKey) (string, error) {
 		return "", err
 	}
 
-	// Create the signer options
-	signerOpts := jose.SignerOptions{}
-	signerOpts.WithType("JWT")
-	signerOpts.WithHeader("kid", privateKey.KeyID)
-
-	signer, err := jose.NewSigner(jose.SigningKey{
-		Algorithm: jose.EdDSA,
-		Key:       privateKey.Key,
-	}, &signerOpts)
-	if err != nil {
-		return "", fmt.Errorf("failed to create signer: %w", err)
-	}
-
-	signedObject, err := signer.Sign(payload)
-	if err != nil {
-		return "", fmt.Errorf("failed to sign payload: %w", err)
-	}
-
-	tokenString, err := signedObject.CompactSerialize()
-	if err != nil {
-		return "", fmt.Errorf("failed to serialize signed token: %w", err)
-	}
-
-	return tokenString, nil
+	return GenerateSignedToken(payload, privateKey)
 }
 
 // GetLicenseFromToken extracts the License from a signed JWT token.

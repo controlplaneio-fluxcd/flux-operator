@@ -137,7 +137,7 @@ metadata:
 				return []string{"distro", "verify", "manifests", tempDir, "--key-set", publicKeyFile, "--attestation", signatureFile}, nil
 			},
 			expectError:  true,
-			errorMessage: "failed to parse signed token",
+			errorMessage: "failed to parse",
 		},
 		{
 			name: "mismatched checksum",

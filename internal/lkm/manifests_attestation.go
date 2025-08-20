@@ -5,6 +5,7 @@ package lkm
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -74,6 +75,9 @@ func (m *ManifestsAttestation) Validate() error {
 		return InvalidAttestationError(ErrClaimIssuedAtFuture)
 	}
 
+	if m.att.Subject != "manifests" {
+		return InvalidAttestationError(errors.New("subject must be 'manifests'"))
+	}
 	if len(m.att.Digests) == 0 {
 		return InvalidAttestationError(ErrClaimChecksumEmpty)
 	}
@@ -97,7 +101,7 @@ func (m *ManifestsAttestation) Sign(privateKey *EdPrivateKey, dirPath string, ig
 		return "", nil, ErrPrivateKeyRequired
 	}
 	if len(m.att.Digests) != 0 {
-		return "", nil, ErrClaimChecksumExists
+		return "", nil, ErrClaimChecksumImmutable
 	}
 
 	// Generate the license ID.
@@ -129,29 +133,9 @@ func (m *ManifestsAttestation) Sign(privateKey *EdPrivateKey, dirPath string, ig
 		return "", nil, err
 	}
 
-	// Create the signer options
-	signerOpts := jose.SignerOptions{}
-	signerOpts.WithType("JWT")
-	signerOpts.WithHeader("kid", privateKey.KeyID)
-
-	// Create the signer using the Ed25519 private key
-	signer, err := jose.NewSigner(jose.SigningKey{
-		Algorithm: jose.EdDSA,
-		Key:       privateKey.Key,
-	}, &signerOpts)
+	tokenString, err := GenerateSignedToken(payload, privateKey)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to create signer: %w", err)
-	}
-
-	// Sign the payload
-	signedObject, err := signer.Sign(payload)
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to sign payload: %w", err)
-	}
-
-	tokenString, err := signedObject.CompactSerialize()
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to serialize signed token: %w", err)
+		return "", nil, err
 	}
 
 	return tokenString, files, nil

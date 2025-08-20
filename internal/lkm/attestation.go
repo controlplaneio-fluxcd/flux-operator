@@ -3,7 +3,9 @@
 
 package lkm
 
-import "encoding/json"
+import (
+	"encoding/json"
+)
 
 // Attestation represents a cryptographic attestation that contains
 // standard claims as defined in RFC 7519 (JSON Web Token)
