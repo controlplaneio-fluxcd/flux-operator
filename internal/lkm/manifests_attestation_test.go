@@ -4,8 +4,6 @@
 package lkm
 
 import (
-	"crypto/ed25519"
-	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"os"
@@ -29,23 +27,6 @@ func testAttestation() Attestation {
 		IssuedAt: now.Unix(),
 		Digests:  []string{"h1:test-checksum+hash"},
 	}
-}
-
-// testEdPrivateKeyForAttestation generates a test EdPrivateKey and EdPublicKey pair for attestations
-func testEdPrivateKeyForAttestation(t *testing.T) (*EdPrivateKey, *EdPublicKey) {
-	g := NewWithT(t)
-
-	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
-	g.Expect(err).ToNot(HaveOccurred())
-
-	return &EdPrivateKey{
-			Key:    privateKey,
-			KeyID:  "test-key-id",
-			Issuer: "test-issuer",
-		}, &EdPublicKey{
-			Key:   publicKey,
-			KeyID: "test-key-id",
-		}
 }
 
 // createTestDirectory creates a temporary directory with test files
@@ -247,7 +228,7 @@ func TestManifestsAttestation_Sign(t *testing.T) {
 	t.Run("successfully signs directory", func(t *testing.T) {
 		g := NewWithT(t)
 		ma := NewManifestsAttestation("test-audience")
-		privateKey, _ := testEdPrivateKeyForAttestation(t)
+		_, privateKey := genTestKeys(t)
 		testDir := createTestDirectory(t)
 
 		token, files, err := ma.Sign(privateKey, testDir, nil)
@@ -265,7 +246,7 @@ func TestManifestsAttestation_Sign(t *testing.T) {
 		g.Expect(att.Audience).To(Equal("test-audience"))
 		g.Expect(att.IssuedAt).To(BeNumerically(">", 0))
 		g.Expect(att.Digests).ToNot(BeEmpty())
-		g.Expect(len(att.Digests)).To(Equal(1))
+		g.Expect(att.Digests).To(HaveLen(1))
 
 		// Verify ID is a valid UUID v6
 		parsedUUID, err := uuid.Parse(att.ID)
@@ -276,7 +257,7 @@ func TestManifestsAttestation_Sign(t *testing.T) {
 	t.Run("signs directory with ignore patterns", func(t *testing.T) {
 		g := NewWithT(t)
 		ma := NewManifestsAttestation("test-audience")
-		privateKey, _ := testEdPrivateKeyForAttestation(t)
+		_, privateKey := genTestKeys(t)
 		testDir := createTestDirectory(t)
 
 		// Create a file to ignore
@@ -313,7 +294,7 @@ func TestManifestsAttestation_Sign(t *testing.T) {
 		g := NewWithT(t)
 		att := testAttestation()
 		ma := &ManifestsAttestation{att: att}
-		privateKey, _ := testEdPrivateKeyForAttestation(t)
+		_, privateKey := genTestKeys(t)
 		testDir := createTestDirectory(t)
 
 		token, files, err := ma.Sign(privateKey, testDir, nil)
@@ -321,13 +302,13 @@ func TestManifestsAttestation_Sign(t *testing.T) {
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(token).To(BeEmpty())
 		g.Expect(files).To(BeNil())
-		g.Expect(errors.Is(err, ErrClaimChecksumExists)).To(BeTrue())
+		g.Expect(errors.Is(err, ErrClaimChecksumImmutable)).To(BeTrue())
 	})
 
 	t.Run("fails with non-existent directory", func(t *testing.T) {
 		g := NewWithT(t)
 		ma := NewManifestsAttestation("test-audience")
-		privateKey, _ := testEdPrivateKeyForAttestation(t)
+		_, privateKey := genTestKeys(t)
 
 		token, files, err := ma.Sign(privateKey, "/non-existent-dir", nil)
 
@@ -342,7 +323,7 @@ func TestManifestsAttestation_Verify(t *testing.T) {
 	t.Run("successfully verifies valid attestation", func(t *testing.T) {
 		g := NewWithT(t)
 		ma := NewManifestsAttestation("test-audience")
-		privateKey, publicKey := testEdPrivateKeyForAttestation(t)
+		publicKey, privateKey := genTestKeys(t)
 		testDir := createTestDirectory(t)
 
 		// First sign to create attestation
@@ -365,7 +346,7 @@ func TestManifestsAttestation_Verify(t *testing.T) {
 	t.Run("verifies with ignore patterns", func(t *testing.T) {
 		g := NewWithT(t)
 		ma := NewManifestsAttestation("test-audience")
-		privateKey, publicKey := testEdPrivateKeyForAttestation(t)
+		publicKey, privateKey := genTestKeys(t)
 		testDir := createTestDirectory(t)
 
 		// Create a file to ignore
@@ -399,7 +380,7 @@ func TestManifestsAttestation_Verify(t *testing.T) {
 	t.Run("fails with invalid token", func(t *testing.T) {
 		g := NewWithT(t)
 		ma := NewManifestsAttestation("test-audience")
-		_, publicKey := testEdPrivateKeyForAttestation(t)
+		publicKey, _ := genTestKeys(t)
 		testDir := createTestDirectory(t)
 
 		files, err := ma.Verify([]byte("invalid-token"), publicKey, testDir, nil)
@@ -412,14 +393,14 @@ func TestManifestsAttestation_Verify(t *testing.T) {
 	t.Run("fails with wrong public key", func(t *testing.T) {
 		g := NewWithT(t)
 		ma := NewManifestsAttestation("test-audience")
-		privateKey, _ := testEdPrivateKeyForAttestation(t)
+		_, privateKey := genTestKeys(t)
 		testDir := createTestDirectory(t)
 
 		token, _, err := ma.Sign(privateKey, testDir, nil)
 		g.Expect(err).ToNot(HaveOccurred())
 
 		// Use different public key
-		_, wrongPublicKey := testEdPrivateKeyForAttestation(t)
+		wrongPublicKey, _ := genTestKeys(t)
 
 		ma2 := NewManifestsAttestation("test-audience")
 		files, err := ma2.Verify([]byte(token), wrongPublicKey, testDir, nil)
@@ -432,7 +413,7 @@ func TestManifestsAttestation_Verify(t *testing.T) {
 	t.Run("fails when directory contents changed", func(t *testing.T) {
 		g := NewWithT(t)
 		ma := NewManifestsAttestation("test-audience")
-		privateKey, publicKey := testEdPrivateKeyForAttestation(t)
+		publicKey, privateKey := genTestKeys(t)
 		testDir := createTestDirectory(t)
 
 		token, _, err := ma.Sign(privateKey, testDir, nil)
@@ -453,7 +434,7 @@ func TestManifestsAttestation_Verify(t *testing.T) {
 	t.Run("fails when file content changed", func(t *testing.T) {
 		g := NewWithT(t)
 		ma := NewManifestsAttestation("test-audience")
-		privateKey, publicKey := testEdPrivateKeyForAttestation(t)
+		publicKey, privateKey := genTestKeys(t)
 		testDir := createTestDirectory(t)
 
 		token, _, err := ma.Sign(privateKey, testDir, nil)
@@ -474,7 +455,7 @@ func TestManifestsAttestation_Verify(t *testing.T) {
 	t.Run("fails with non-existent directory", func(t *testing.T) {
 		g := NewWithT(t)
 		ma := NewManifestsAttestation("test-audience")
-		privateKey, publicKey := testEdPrivateKeyForAttestation(t)
+		publicKey, privateKey := genTestKeys(t)
 		testDir := createTestDirectory(t)
 
 		token, _, err := ma.Sign(privateKey, testDir, nil)
@@ -504,7 +485,7 @@ func TestManifestsAttestation_GetChecksum(t *testing.T) {
 	t.Run("returns checksum from signed attestation", func(t *testing.T) {
 		g := NewWithT(t)
 		ma := NewManifestsAttestation("test-audience")
-		privateKey, _ := testEdPrivateKeyForAttestation(t)
+		_, privateKey := genTestKeys(t)
 		testDir := createTestDirectory(t)
 
 		// Sign the attestation to populate checksum
@@ -520,7 +501,7 @@ func TestManifestsAttestation_GetChecksum(t *testing.T) {
 		g := NewWithT(t)
 		// Create and sign attestation
 		ma := NewManifestsAttestation("test-audience")
-		privateKey, publicKey := testEdPrivateKeyForAttestation(t)
+		publicKey, privateKey := genTestKeys(t)
 		testDir := createTestDirectory(t)
 
 		token, _, err := ma.Sign(privateKey, testDir, nil)
@@ -561,7 +542,7 @@ func TestManifestsAttestation_GetIssuer(t *testing.T) {
 		g := NewWithT(t)
 		// Create and sign attestation
 		ma := NewManifestsAttestation("test-audience")
-		privateKey, publicKey := testEdPrivateKeyForAttestation(t)
+		publicKey, privateKey := genTestKeys(t)
 		testDir := createTestDirectory(t)
 
 		token, _, err := ma.Sign(privateKey, testDir, nil)

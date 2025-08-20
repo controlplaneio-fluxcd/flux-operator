@@ -4,8 +4,6 @@
 package lkm
 
 import (
-	"crypto/ed25519"
-	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -28,23 +26,6 @@ func testLicenseKey() LicenseKey {
 		Expiry:       now.Add(24 * time.Hour).Unix(),
 		Capabilities: []string{"feature1", "feature2"},
 	}
-}
-
-// testEdPrivateKey generates a test EdPrivateKey and EdPublicKey pair
-func testEdPrivateKey(t *testing.T) (*EdPrivateKey, *EdPublicKey) {
-	g := NewWithT(t)
-
-	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
-	g.Expect(err).ToNot(HaveOccurred())
-
-	return &EdPrivateKey{
-			Key:    privateKey,
-			KeyID:  "test-key-id",
-			Issuer: "test-issuer",
-		}, &EdPublicKey{
-			Key:   publicKey,
-			KeyID: "test-key-id",
-		}
 }
 
 func TestNewLicense(t *testing.T) {
@@ -438,7 +419,7 @@ func TestLicense_Sign(t *testing.T) {
 		license, err := NewLicenseWithKey(lk)
 		g.Expect(err).ToNot(HaveOccurred())
 
-		privateKey, _ := testEdPrivateKey(t)
+		_, privateKey := genTestKeys(t)
 
 		token, err := license.Sign(privateKey)
 
@@ -461,34 +442,6 @@ func TestLicense_Sign(t *testing.T) {
 	})
 }
 
-func TestGetKeyIDFromToken(t *testing.T) {
-
-	t.Run("extracts key ID from valid token", func(t *testing.T) {
-		g := NewWithT(t)
-		lk := testLicenseKey()
-		license, err := NewLicenseWithKey(lk)
-		g.Expect(err).ToNot(HaveOccurred())
-
-		privateKey, _ := testEdPrivateKey(t)
-		token, err := license.Sign(privateKey)
-		g.Expect(err).ToNot(HaveOccurred())
-
-		keyID, err := GetKeyIDFromToken([]byte(token))
-
-		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(keyID).To(Equal(privateKey.KeyID))
-	})
-
-	t.Run("fails with invalid token", func(t *testing.T) {
-		g := NewWithT(t)
-		keyID, err := GetKeyIDFromToken([]byte("invalid-token"))
-
-		g.Expect(err).To(HaveOccurred())
-		g.Expect(keyID).To(BeEmpty())
-		g.Expect(errors.Is(err, ErrParseToken)).To(BeTrue())
-	})
-}
-
 func TestGetLicenseFromToken(t *testing.T) {
 
 	t.Run("successfully extracts license from token", func(t *testing.T) {
@@ -497,7 +450,7 @@ func TestGetLicenseFromToken(t *testing.T) {
 		originalLicense, err := NewLicenseWithKey(lk)
 		g.Expect(err).ToNot(HaveOccurred())
 
-		privateKey, publicKey := testEdPrivateKey(t)
+		publicKey, privateKey := genTestKeys(t)
 		token, err := originalLicense.Sign(privateKey)
 		g.Expect(err).ToNot(HaveOccurred())
 
@@ -519,7 +472,7 @@ func TestGetLicenseFromToken(t *testing.T) {
 
 	t.Run("fails with invalid token", func(t *testing.T) {
 		g := NewWithT(t)
-		_, publicKey := testEdPrivateKey(t)
+		publicKey, _ := genTestKeys(t)
 
 		license, err := GetLicenseFromToken([]byte("invalid-token"), publicKey)
 
@@ -534,12 +487,12 @@ func TestGetLicenseFromToken(t *testing.T) {
 		license, err := NewLicenseWithKey(lk)
 		g.Expect(err).ToNot(HaveOccurred())
 
-		privateKey, _ := testEdPrivateKey(t)
+		_, privateKey := genTestKeys(t)
 		token, err := license.Sign(privateKey)
 		g.Expect(err).ToNot(HaveOccurred())
 
 		// Use different public key
-		_, wrongPublicKey := testEdPrivateKey(t)
+		wrongPublicKey, _ := genTestKeys(t)
 
 		extractedLicense, err := GetLicenseFromToken([]byte(token), wrongPublicKey)
 

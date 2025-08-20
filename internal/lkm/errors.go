@@ -9,13 +9,16 @@ import (
 )
 
 // ErrParseToken is returned when a signed token cannot be parsed.
-var ErrParseToken = errors.New("failed to parse signed token")
+var ErrParseToken = errors.New("failed to parse JWT token")
 
 // ErrSigNotFound is returned when no signatures are found in the token.
-var ErrSigNotFound = errors.New("no signatures found")
+var ErrSigNotFound = errors.New("no signatures found in JWT token")
 
-// ErrKIDNotFound is returned when no public key ID is found in the token.
-var ErrKIDNotFound = errors.New("no public key ID found")
+// ErrKIDNotFoundInJWT is returned when no public key ID is found in the JWT token.
+var ErrKIDNotFoundInJWT = errors.New("public key ID (kid) not found in JWT headers")
+
+// ErrKIDNotFoundInJWKs is returned when the given public key ID is not found in the JWKs.
+var ErrKIDNotFoundInJWKs = errors.New("public key ID (kid) not found in JWTs")
 
 // ErrPublicKeyRequired is returned when a public key is required but not provided.
 var ErrPublicKeyRequired = errors.New("public key is required")
@@ -53,11 +56,14 @@ var ErrClaimExpiryZero = errors.New("expiry (exp) cannot be zero")
 // ErrClaimDigestsEmpty is returned when the attestation digests list is empty.
 var ErrClaimDigestsEmpty = errors.New("digests list cannot be empty")
 
+// ErrClaimDigestsImmutable is returned when the attestation digests already contain values.
+var ErrClaimDigestsImmutable = errors.New("digests claim cannot be overwritten")
+
 // ErrClaimChecksumEmpty is returned when the manifests attestation checksum is empty.
 var ErrClaimChecksumEmpty = errors.New("checksum cannot be empty")
 
-// ErrClaimChecksumExists is returned when the manifests attestation already contains a checksum.
-var ErrClaimChecksumExists = errors.New("checksum cannot be overwritten")
+// ErrClaimChecksumImmutable is returned when the manifests attestation already contains a checksum.
+var ErrClaimChecksumImmutable = errors.New("checksum claim cannot be overwritten")
 
 // ErrClaimChecksumMismatch is returned when the manifests attestation checksum does not match the expected value.
 var ErrClaimChecksumMismatch = errors.New("checksum mismatch")
