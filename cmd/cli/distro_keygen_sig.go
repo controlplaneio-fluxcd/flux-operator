@@ -48,8 +48,8 @@ func distroKeygenSigCmdRun(cmd *cobra.Command, args []string) error {
 	// Generate issuer ID
 	issuerID := fmt.Sprintf("%08x", adler32.Checksum([]byte(issuer)))
 
-	privateKeySetPath := path.Join(distroKeygenSigArgs.outputDir, fmt.Sprintf("%s-private.jwks", issuerID))
-	publicKeyKeySetPath := path.Join(distroKeygenSigArgs.outputDir, fmt.Sprintf("%s-public.jwks", issuerID))
+	privateKeySetPath := path.Join(distroKeygenSigArgs.outputDir, fmt.Sprintf("%s-sig-private.jwks", issuerID))
+	publicKeyKeySetPath := path.Join(distroKeygenSigArgs.outputDir, fmt.Sprintf("%s-sig-public.jwks", issuerID))
 
 	publicKeyKeySet, privateKeySet, err := lkm.NewSigningKeySet(issuer)
 	if err != nil {
