@@ -25,7 +25,7 @@ func TestDistroSignManifestsCmd(t *testing.T) {
 			name: "valid manifest signing",
 			setupFunc: func(tempDir string) ([]string, error) {
 				// Generate keys first
-				_, err := executeCommand([]string{"distro", "keygen", "test.issuer", "--output-dir", tempDir})
+				_, err := executeCommand([]string{"distro", "keygen", "sig", "test.issuer", "--output-dir", tempDir})
 				if err != nil {
 					return nil, err
 				}
@@ -57,7 +57,7 @@ data:
 			name: "missing attestation flag",
 			setupFunc: func(tempDir string) ([]string, error) {
 				// Generate keys first
-				_, err := executeCommand([]string{"distro", "keygen", "test.issuer", "--output-dir", tempDir})
+				_, err := executeCommand([]string{"distro", "keygen", "sig", "test.issuer", "--output-dir", tempDir})
 				if err != nil {
 					return nil, err
 				}
@@ -86,7 +86,7 @@ data:
 			name: "invalid directory",
 			setupFunc: func(tempDir string) ([]string, error) {
 				// Generate keys first
-				_, err := executeCommand([]string{"distro", "keygen", "test.issuer", "--output-dir", tempDir})
+				_, err := executeCommand([]string{"distro", "keygen", "sig", "test.issuer", "--output-dir", tempDir})
 				if err != nil {
 					return nil, err
 				}
@@ -192,7 +192,7 @@ func TestDistroSignManifestsWithEnvVar(t *testing.T) {
 	tempDir := t.TempDir()
 
 	// Generate keys first
-	_, err := executeCommand([]string{"distro", "keygen", "env.test.issuer", "--output-dir", tempDir})
+	_, err := executeCommand([]string{"distro", "keygen", "sig", "env.test.issuer", "--output-dir", tempDir})
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// Find and read the private key file
@@ -205,7 +205,7 @@ func TestDistroSignManifestsWithEnvVar(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// Set environment variable
-	t.Setenv(distroPrivateKeySetEnvVar, string(privateKeyData))
+	t.Setenv(distroSigPrivateKeySetEnvVar, string(privateKeyData))
 
 	// Create manifest file
 	manifestContent := `apiVersion: apps/v1
@@ -247,7 +247,7 @@ func TestDistroSignManifestsSignatureExclusion(t *testing.T) {
 	keyDir := t.TempDir()
 
 	// Generate keys in separate directory
-	_, err := executeCommand([]string{"distro", "keygen", "exclusion.test.issuer", "--output-dir", keyDir})
+	_, err := executeCommand([]string{"distro", "keygen", "sig", "exclusion.test.issuer", "--output-dir", keyDir})
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// Find the private key file

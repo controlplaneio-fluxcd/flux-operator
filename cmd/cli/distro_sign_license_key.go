@@ -18,14 +18,14 @@ var distroSignLicenseKeyCmd = &cobra.Command{
 	Aliases: []string{"lk"},
 	Short:   "Issue a signed license key",
 	Example: `  # Generate a license key that expires in one year
-  cat /secrets/12345678-private.jwks | flux-operator distro sign license-key \
+  flux-operator distro sign license-key \
+  --key-set=/path/to/private.jwks \
   --customer="Company Name LLC" \
   --duration=365 \
-  --key-set=/dev/stdin \
   --output=license.jwt
 
   # Generate a license key that grants access to specific capabilities
-  export FLUX_DISTRO_PRIVATE_KEY_SET="$(cat /secrets/12345678-private.jwks)"
+  export FLUX_DISTRO_SIG_PRIVATE_JWKS="$(cat /path/to/private.jwks)"
   flux-operator distro sign license-key \
   --customer="Company Name INC" \
   --capabilities="feature1,feature2" \
@@ -74,7 +74,7 @@ func distroSignLicenseKeyCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Read the JWKS from file or environment variable
-	jwksData, err := loadKeySet(distroSignLicenseKeyArgs.privateKeySetPath, distroPrivateKeySetEnvVar)
+	jwksData, err := loadKeySet(distroSignLicenseKeyArgs.privateKeySetPath, distroSigPrivateKeySetEnvVar)
 	if err != nil {
 		return err
 	}

@@ -24,7 +24,7 @@ func TestDistroSignLicenseKeyCmd(t *testing.T) {
 			name: "valid license key signing",
 			setupFunc: func(tempDir string) ([]string, error) {
 				// Generate keys first
-				_, err := executeCommand([]string{"distro", "keygen", "test.issuer", "--output-dir", tempDir})
+				_, err := executeCommand([]string{"distro", "keygen", "sig", "test.issuer", "--output-dir", tempDir})
 				if err != nil {
 					return nil, err
 				}
@@ -44,7 +44,7 @@ func TestDistroSignLicenseKeyCmd(t *testing.T) {
 			name: "missing customer flag",
 			setupFunc: func(tempDir string) ([]string, error) {
 				// Generate keys first
-				_, err := executeCommand([]string{"distro", "keygen", "test.issuer", "--output-dir", tempDir})
+				_, err := executeCommand([]string{"distro", "keygen", "sig", "test.issuer", "--output-dir", tempDir})
 				if err != nil {
 					return nil, err
 				}
@@ -65,7 +65,7 @@ func TestDistroSignLicenseKeyCmd(t *testing.T) {
 			name: "missing duration flag",
 			setupFunc: func(tempDir string) ([]string, error) {
 				// Generate keys first
-				_, err := executeCommand([]string{"distro", "keygen", "test.issuer", "--output-dir", tempDir})
+				_, err := executeCommand([]string{"distro", "keygen", "sig", "test.issuer", "--output-dir", tempDir})
 				if err != nil {
 					return nil, err
 				}
@@ -86,7 +86,7 @@ func TestDistroSignLicenseKeyCmd(t *testing.T) {
 			name: "zero duration",
 			setupFunc: func(tempDir string) ([]string, error) {
 				// Generate keys first
-				_, err := executeCommand([]string{"distro", "keygen", "test.issuer", "--output-dir", tempDir})
+				_, err := executeCommand([]string{"distro", "keygen", "sig", "test.issuer", "--output-dir", tempDir})
 				if err != nil {
 					return nil, err
 				}
@@ -107,7 +107,7 @@ func TestDistroSignLicenseKeyCmd(t *testing.T) {
 			name: "missing output flag",
 			setupFunc: func(tempDir string) ([]string, error) {
 				// Generate keys first
-				_, err := executeCommand([]string{"distro", "keygen", "test.issuer", "--output-dir", tempDir})
+				_, err := executeCommand([]string{"distro", "keygen", "sig", "test.issuer", "--output-dir", tempDir})
 				if err != nil {
 					return nil, err
 				}
@@ -232,7 +232,7 @@ func TestDistroSignLicenseKeyCmdCapabilities(t *testing.T) {
 	tempDir := t.TempDir()
 
 	// Generate keys first
-	_, err := executeCommand([]string{"distro", "keygen", "test.issuer", "--output-dir", tempDir})
+	_, err := executeCommand([]string{"distro", "keygen", "sig", "test.issuer", "--output-dir", tempDir})
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// Find the private key file

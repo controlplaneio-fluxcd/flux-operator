@@ -12,7 +12,7 @@ import (
 
 var distroCmd = &cobra.Command{
 	Use:   "distro",
-	Short: "Provides utilities for managing the Flux distribution",
+	Short: "Provides utilities for managing the Flux distribution and licensing",
 }
 
 func init() {
@@ -20,9 +20,9 @@ func init() {
 }
 
 const (
-	distroPrivateKeySetEnvVar = "FLUX_DISTRO_PRIVATE_KEY_SET"
-	distroPublicKeySetEnvVar  = "FLUX_DISTRO_PUBLIC_KEY_SET"
-	distroDefaultAudience     = "flux-operator"
+	distroSigPrivateKeySetEnvVar = "FLUX_DISTRO_SIG_PRIVATE_JWKS"
+	distroSigPublicKeySetEnvVar  = "FLUX_DISTRO_SIG_PUBLIC_JWKS"
+	distroDefaultAudience        = "flux-operator"
 )
 
 // isDir validates that the given path exists and is a directory

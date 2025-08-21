@@ -23,7 +23,7 @@ func TestDistroSignArtifactsCmd(t *testing.T) {
 			name: "successfully signs artifacts with digest URLs",
 			setupFunc: func(tempDir string) ([]string, error) {
 				// Generate keys first
-				_, err := executeCommand([]string{"distro", "keygen", "test-issuer", "--output-dir", tempDir})
+				_, err := executeCommand([]string{"distro", "keygen", "sig", "test-issuer", "--output-dir", tempDir})
 				if err != nil {
 					return nil, err
 				}
@@ -55,7 +55,7 @@ func TestDistroSignArtifactsCmd(t *testing.T) {
 			name: "fails with missing attestation flag",
 			setupFunc: func(tempDir string) ([]string, error) {
 				// Generate keys first
-				_, err := executeCommand([]string{"distro", "keygen", "test-issuer", "--output-dir", tempDir})
+				_, err := executeCommand([]string{"distro", "keygen", "sig", "test-issuer", "--output-dir", tempDir})
 				if err != nil {
 					return nil, err
 				}
@@ -78,7 +78,7 @@ func TestDistroSignArtifactsCmd(t *testing.T) {
 			name: "fails with missing URL flags",
 			setupFunc: func(tempDir string) ([]string, error) {
 				// Generate keys first
-				_, err := executeCommand([]string{"distro", "keygen", "test-issuer", "--output-dir", tempDir})
+				_, err := executeCommand([]string{"distro", "keygen", "sig", "test-issuer", "--output-dir", tempDir})
 				if err != nil {
 					return nil, err
 				}
@@ -113,7 +113,7 @@ func TestDistroSignArtifactsCmd(t *testing.T) {
 			name: "successfully signs single artifact",
 			setupFunc: func(tempDir string) ([]string, error) {
 				// Generate keys first
-				_, err := executeCommand([]string{"distro", "keygen", "test-issuer", "--output-dir", tempDir})
+				_, err := executeCommand([]string{"distro", "keygen", "sig", "test-issuer", "--output-dir", tempDir})
 				if err != nil {
 					return nil, err
 				}

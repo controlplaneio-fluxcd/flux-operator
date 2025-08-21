@@ -26,12 +26,12 @@ func TestDistroKeygenCmd(t *testing.T) {
 	}{
 		{
 			name:        "valid key generation",
-			args:        []string{"distro", "keygen", "some.issuer"},
+			args:        []string{"distro", "keygen", "sig", "some.issuer"},
 			expectError: false,
 		},
 		{
 			name: "custom output directory",
-			args: []string{"distro", "keygen", "custom.issuer", "--output-dir", "subdir"},
+			args: []string{"distro", "keygen", "sig", "custom.issuer", "--output-dir", "subdir"},
 			setupFunc: func(tempDir string) error {
 				// Create subdirectory
 				return os.Mkdir(filepath.Join(tempDir, "subdir"), 0755)
@@ -40,25 +40,25 @@ func TestDistroKeygenCmd(t *testing.T) {
 		},
 		{
 			name:         "missing issuer argument",
-			args:         []string{"distro", "keygen"},
+			args:         []string{"distro", "keygen", "sig"},
 			expectError:  true,
 			errorMessage: "accepts 1 arg(s), received 0",
 		},
 		{
 			name:         "empty issuer argument",
-			args:         []string{"distro", "keygen", ""},
+			args:         []string{"distro", "keygen", "sig", ""},
 			expectError:  true,
 			errorMessage: "issuer is required",
 		},
 		{
 			name:         "invalid output directory",
-			args:         []string{"distro", "keygen", "test.issuer", "--output-dir", "/nonexistent/path"},
+			args:         []string{"distro", "keygen", "sig", "test.issuer", "--output-dir", "/nonexistent/path"},
 			expectError:  true,
 			errorMessage: "directory /nonexistent/path does not exist",
 		},
 		{
 			name: "output directory is file",
-			args: []string{"distro", "keygen", "test.issuer", "--output-dir", "testfile"},
+			args: []string{"distro", "keygen", "sig", "test.issuer", "--output-dir", "testfile"},
 			setupFunc: func(tempDir string) error {
 				// Create a file instead of directory
 				return os.WriteFile(filepath.Join(tempDir, "testfile"), []byte("test"), 0644)
@@ -157,7 +157,7 @@ func TestDistroKeygenCmd(t *testing.T) {
 			err = json.Unmarshal(privateData, &privateKeySet)
 			g.Expect(err).ToNot(HaveOccurred())
 
-			expectedIssuer := tt.args[2]
+			expectedIssuer := tt.args[3]
 			g.Expect(privateKeySet.Issuer).To(Equal(expectedIssuer))
 			g.Expect(privateKeySet.Keys).To(HaveLen(1))
 			g.Expect(privateKeySet.Keys[0].Algorithm).To(Equal(string(jose.EdDSA)))
@@ -191,7 +191,7 @@ func TestDistroKeygenUniqueKeyIDs(t *testing.T) {
 	tempDir2 := t.TempDir()
 
 	// Generate first key pair
-	args1 := []string{"distro", "keygen", "test1.issuer", "--output-dir", tempDir1}
+	args1 := []string{"distro", "keygen", "sig", "test1.issuer", "--output-dir", tempDir1}
 	_, err := executeCommand(args1)
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -216,7 +216,7 @@ func TestDistroKeygenUniqueKeyIDs(t *testing.T) {
 	g.Expect(keyID1).ToNot(BeEmpty())
 
 	// Generate second key pair (different issuer should produce different key ID)
-	args2 := []string{"distro", "keygen", "test2.issuer", "--output-dir", tempDir2}
+	args2 := []string{"distro", "keygen", "sig", "test2.issuer", "--output-dir", tempDir2}
 	_, err = executeCommand(args2)
 	g.Expect(err).ToNot(HaveOccurred())
 

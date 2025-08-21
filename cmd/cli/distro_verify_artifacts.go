@@ -27,7 +27,7 @@ var distroVerifyArtifactsCmd = &cobra.Command{
   --url=ghcr.io/fluxcd/helm-controller:v1.3.0
 
   # Verify by reading the public key set from env
-  export FLUX_DISTRO_PUBLIC_KEY_SET="$(cat /path/to/public.jwks)"
+  export FLUX_DISTRO_SIG_PUBLIC_JWKS="$(cat /path/to/public.jwks)"
   flux-operator distro verify artifacts \
   -a /path/to/flux-operator-v0.28.0.jwt \
   -u ghcr.io/controlplaneio-fluxcd/flux-operator:v0.28.0 \
@@ -71,7 +71,7 @@ func distroVerifyArtifactsCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Load the JWKS from file or environment variable
-	jwksData, err := loadKeySet(distroVerifyArtifactsArgs.publicKeySetPath, distroPublicKeySetEnvVar)
+	jwksData, err := loadKeySet(distroVerifyArtifactsArgs.publicKeySetPath, distroSigPublicKeySetEnvVar)
 	if err != nil {
 		return err
 	}

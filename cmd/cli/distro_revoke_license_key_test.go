@@ -25,7 +25,7 @@ func TestDistroRevokeLicenseKeyCmd(t *testing.T) {
 			name: "successfully revokes license key",
 			setupFunc: func(tempDir string) ([]string, error) {
 				// Generate keys first
-				_, err := executeCommand([]string{"distro", "keygen", "test.issuer", "--output-dir", tempDir})
+				_, err := executeCommand([]string{"distro", "keygen", "sig", "test.issuer", "--output-dir", tempDir})
 				if err != nil {
 					return nil, err
 				}
@@ -62,7 +62,7 @@ func TestDistroRevokeLicenseKeyCmd(t *testing.T) {
 			name: "fails without output flag",
 			setupFunc: func(tempDir string) ([]string, error) {
 				// Generate keys and license
-				_, err := executeCommand([]string{"distro", "keygen", "test.issuer", "--output-dir", tempDir})
+				_, err := executeCommand([]string{"distro", "keygen", "sig", "test.issuer", "--output-dir", tempDir})
 				if err != nil {
 					return nil, err
 				}
@@ -186,7 +186,7 @@ func TestDistroRevokeLicenseKeyCmdMerging(t *testing.T) {
 	tempDir := t.TempDir()
 
 	// Generate keys
-	_, err := executeCommand([]string{"distro", "keygen", "test.issuer", "--output-dir", tempDir})
+	_, err := executeCommand([]string{"distro", "keygen", "sig", "test.issuer", "--output-dir", tempDir})
 	g.Expect(err).ToNot(HaveOccurred())
 
 	privateKeyFile, _, err := findKeyFiles(tempDir)
