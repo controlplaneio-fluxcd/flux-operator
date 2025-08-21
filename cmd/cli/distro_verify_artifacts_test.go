@@ -22,7 +22,7 @@ func TestDistroVerifyArtifactsCmd(t *testing.T) {
 			name: "successfully verifies artifacts with digest URLs",
 			setupFunc: func(tempDir string) ([]string, error) {
 				// Generate keys first
-				_, err := executeCommand([]string{"distro", "keygen", "test-issuer", "--output-dir", tempDir})
+				_, err := executeCommand([]string{"distro", "keygen", "sig", "test-issuer", "--output-dir", tempDir})
 				if err != nil {
 					return nil, err
 				}
@@ -65,7 +65,7 @@ func TestDistroVerifyArtifactsCmd(t *testing.T) {
 			name: "fails with missing attestation flag",
 			setupFunc: func(tempDir string) ([]string, error) {
 				// Generate keys first
-				_, err := executeCommand([]string{"distro", "keygen", "test-issuer", "--output-dir", tempDir})
+				_, err := executeCommand([]string{"distro", "keygen", "sig", "test-issuer", "--output-dir", tempDir})
 				if err != nil {
 					return nil, err
 				}
@@ -88,7 +88,7 @@ func TestDistroVerifyArtifactsCmd(t *testing.T) {
 			name: "fails with missing URL flags",
 			setupFunc: func(tempDir string) ([]string, error) {
 				// Generate keys first
-				_, err := executeCommand([]string{"distro", "keygen", "test-issuer", "--output-dir", tempDir})
+				_, err := executeCommand([]string{"distro", "keygen", "sig", "test-issuer", "--output-dir", tempDir})
 				if err != nil {
 					return nil, err
 				}
@@ -111,7 +111,7 @@ func TestDistroVerifyArtifactsCmd(t *testing.T) {
 			name: "fails with missing key-set flag",
 			setupFunc: func(tempDir string) ([]string, error) {
 				// Generate keys and create a dummy attestation file first
-				_, err := executeCommand([]string{"distro", "keygen", "test-issuer", "--output-dir", tempDir})
+				_, err := executeCommand([]string{"distro", "keygen", "sig", "test-issuer", "--output-dir", tempDir})
 				if err != nil {
 					return nil, err
 				}
@@ -143,7 +143,7 @@ func TestDistroVerifyArtifactsCmd(t *testing.T) {
 			name: "fails with non-existent attestation file",
 			setupFunc: func(tempDir string) ([]string, error) {
 				// Generate keys first
-				_, err := executeCommand([]string{"distro", "keygen", "test-issuer", "--output-dir", tempDir})
+				_, err := executeCommand([]string{"distro", "keygen", "sig", "test-issuer", "--output-dir", tempDir})
 				if err != nil {
 					return nil, err
 				}
@@ -167,7 +167,7 @@ func TestDistroVerifyArtifactsCmd(t *testing.T) {
 			name: "fails when URL digest not found in attestation",
 			setupFunc: func(tempDir string) ([]string, error) {
 				// Generate keys first
-				_, err := executeCommand([]string{"distro", "keygen", "test-issuer", "--output-dir", tempDir})
+				_, err := executeCommand([]string{"distro", "keygen", "sig", "test-issuer", "--output-dir", tempDir})
 				if err != nil {
 					return nil, err
 				}
@@ -200,7 +200,7 @@ func TestDistroVerifyArtifactsCmd(t *testing.T) {
 			name: "successfully verifies single artifact",
 			setupFunc: func(tempDir string) ([]string, error) {
 				// Generate keys first
-				_, err := executeCommand([]string{"distro", "keygen", "test-issuer", "--output-dir", tempDir})
+				_, err := executeCommand([]string{"distro", "keygen", "sig", "test-issuer", "--output-dir", tempDir})
 				if err != nil {
 					return nil, err
 				}

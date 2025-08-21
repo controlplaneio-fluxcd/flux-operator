@@ -31,7 +31,7 @@ var distroSignArtifactsCmd = &cobra.Command{
   --url=ghcr.io/fluxcd/image-automation-controller:v0.41.2
 
   # Attest artifacts by reading the private key set from env
-  export FLUX_DISTRO_PRIVATE_KEY_SET="$(cat /path/to/private.jwks)"
+  export FLUX_DISTRO_SIG_PRIVATE_JWKS="$(cat /path/to/private.jwks)"
   flux-operator distro sign artifacts \
   -a flux-operator-v0.28.0.jwt \
   -u ghcr.io/controlplaneio-fluxcd/flux-operator:v0.28.0 \
@@ -69,7 +69,7 @@ func distroSignArtifactsCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Read the JWKS from file or environment variable
-	jwksData, err := loadKeySet(distroSignArtifactsArgs.privateKeySetPath, distroPrivateKeySetEnvVar)
+	jwksData, err := loadKeySet(distroSignArtifactsArgs.privateKeySetPath, distroSigPrivateKeySetEnvVar)
 	if err != nil {
 		return err
 	}

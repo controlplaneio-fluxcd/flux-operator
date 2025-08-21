@@ -16,7 +16,7 @@ func TestDistroVerifyLicenseKeyValidLicense(t *testing.T) {
 	tempDir := t.TempDir()
 
 	// Generate keys first
-	_, err := executeCommand([]string{"distro", "keygen", "test.issuer", "--output-dir", tempDir})
+	_, err := executeCommand([]string{"distro", "keygen", "sig", "test.issuer", "--output-dir", tempDir})
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// Find the key files
@@ -41,7 +41,7 @@ func TestDistroVerifyLicenseKeyExpiredLicense(t *testing.T) {
 	tempDir := t.TempDir()
 
 	// Generate keys first
-	_, err := executeCommand([]string{"distro", "keygen", "test.issuer", "--output-dir", tempDir})
+	_, err := executeCommand([]string{"distro", "keygen", "sig", "test.issuer", "--output-dir", tempDir})
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// Find the key files
@@ -66,7 +66,7 @@ func TestDistroVerifyLicenseKeyWithEnvironmentVariable(t *testing.T) {
 	tempDir := t.TempDir()
 
 	// Generate keys first
-	_, err := executeCommand([]string{"distro", "keygen", "env.test.issuer", "--output-dir", tempDir})
+	_, err := executeCommand([]string{"distro", "keygen", "sig", "env.test.issuer", "--output-dir", tempDir})
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// Find the key files
@@ -84,7 +84,7 @@ func TestDistroVerifyLicenseKeyWithEnvironmentVariable(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// Set environment variable
-	t.Setenv(distroPublicKeySetEnvVar, string(publicKeyData))
+	t.Setenv(distroSigPublicKeySetEnvVar, string(publicKeyData))
 
 	// Verify the license key using environment variable
 	output, err := executeCommand([]string{"distro", "verify", "license-key", licenseFile})
@@ -104,7 +104,7 @@ func TestDistroVerifyLicenseKeyErrorCases(t *testing.T) {
 			name: "missing license file",
 			setupFunc: func(tempDir string) ([]string, error) {
 				// Generate keys first
-				_, err := executeCommand([]string{"distro", "keygen", "test.issuer", "--output-dir", tempDir})
+				_, err := executeCommand([]string{"distro", "keygen", "sig", "test.issuer", "--output-dir", tempDir})
 				if err != nil {
 					return nil, err
 				}
@@ -123,7 +123,7 @@ func TestDistroVerifyLicenseKeyErrorCases(t *testing.T) {
 			name: "missing key set",
 			setupFunc: func(tempDir string) ([]string, error) {
 				// Generate keys first
-				_, err := executeCommand([]string{"distro", "keygen", "test.issuer", "--output-dir", tempDir})
+				_, err := executeCommand([]string{"distro", "keygen", "sig", "test.issuer", "--output-dir", tempDir})
 				if err != nil {
 					return nil, err
 				}
@@ -151,7 +151,7 @@ func TestDistroVerifyLicenseKeyErrorCases(t *testing.T) {
 			name: "invalid license file content",
 			setupFunc: func(tempDir string) ([]string, error) {
 				// Generate keys first
-				_, err := executeCommand([]string{"distro", "keygen", "test.issuer", "--output-dir", tempDir})
+				_, err := executeCommand([]string{"distro", "keygen", "sig", "test.issuer", "--output-dir", tempDir})
 				if err != nil {
 					return nil, err
 				}
@@ -179,7 +179,7 @@ func TestDistroVerifyLicenseKeyErrorCases(t *testing.T) {
 			name: "wrong key set",
 			setupFunc: func(tempDir string) ([]string, error) {
 				// Generate first key set
-				_, err := executeCommand([]string{"distro", "keygen", "test.issuer", "--output-dir", tempDir})
+				_, err := executeCommand([]string{"distro", "keygen", "sig", "test.issuer", "--output-dir", tempDir})
 				if err != nil {
 					return nil, err
 				}
@@ -197,7 +197,7 @@ func TestDistroVerifyLicenseKeyErrorCases(t *testing.T) {
 					return nil, err
 				}
 
-				_, err = executeCommand([]string{"distro", "keygen", "wrong.issuer", "--output-dir", wrongKeyDir})
+				_, err = executeCommand([]string{"distro", "keygen", "sig", "wrong.issuer", "--output-dir", wrongKeyDir})
 				if err != nil {
 					return nil, err
 				}

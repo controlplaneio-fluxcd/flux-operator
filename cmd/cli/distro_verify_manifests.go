@@ -17,12 +17,12 @@ var distroVerifyManifestsCmd = &cobra.Command{
 	Use:   "manifests [DIRECTORY]",
 	Short: "Verify the attestation of manifests",
 	Example: `  # Verify the attestation of manifests in the current directory
-  cat /secrets/12345678-public.jwks | flux-operator distro verify manifests \
+  cat /path/to/public.jwks | flux-operator distro verify manifests \
   --key-set=/dev/stdin \
   --attestation=attestation.jwt
 
   # Verify by reading the public key set from env
-  export FLUX_DISTRO_PUBLIC_KEY_SET="$(cat /secrets/12345678-public.jwks)"
+  export FLUX_DISTRO_SIG_PUBLIC_JWKS="$(cat /path/to/public.jwks)"
   flux-operator distro verify manifests ./distro \
   --attestation=attestation.jwt
 `,
@@ -67,7 +67,7 @@ func distroVerifyManifestsCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Load the JWKS and find the matching key
-	jwksData, err := loadKeySet(distroVerifyManifestsArgs.publicKeySetPath, distroPublicKeySetEnvVar)
+	jwksData, err := loadKeySet(distroVerifyManifestsArgs.publicKeySetPath, distroSigPublicKeySetEnvVar)
 	if err != nil {
 		return err
 	}

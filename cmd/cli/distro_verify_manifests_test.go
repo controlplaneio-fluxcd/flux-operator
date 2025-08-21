@@ -72,7 +72,7 @@ func TestDistroVerifyManifestsErrorCases(t *testing.T) { //nolint:gocyclo
 				}
 
 				// Generate keys and create a valid signature first
-				_, err := executeCommand([]string{"distro", "keygen", "test.issuer", "--output-dir", keyDir})
+				_, err := executeCommand([]string{"distro", "keygen", "sig", "test.issuer", "--output-dir", keyDir})
 				if err != nil {
 					return nil, err
 				}
@@ -116,7 +116,7 @@ metadata:
 				}
 
 				// Generate keys
-				_, err := executeCommand([]string{"distro", "keygen", "test.issuer", "--output-dir", keyDir})
+				_, err := executeCommand([]string{"distro", "keygen", "sig", "test.issuer", "--output-dir", keyDir})
 				if err != nil {
 					return nil, err
 				}
@@ -152,7 +152,7 @@ metadata:
 				}
 
 				// Generate keys
-				_, err := executeCommand([]string{"distro", "keygen", "mismatch.issuer", "--output-dir", keyDir})
+				_, err := executeCommand([]string{"distro", "keygen", "sig", "mismatch.issuer", "--output-dir", keyDir})
 				if err != nil {
 					return nil, err
 				}
@@ -210,7 +210,7 @@ data:
 				}
 
 				// Generate keys
-				_, err := executeCommand([]string{"distro", "keygen", "test.issuer", "--output-dir", keyDir})
+				_, err := executeCommand([]string{"distro", "keygen", "sig", "test.issuer", "--output-dir", keyDir})
 				if err != nil {
 					return nil, err
 				}
@@ -274,7 +274,7 @@ func TestDistroVerifyManifestsWithEnvVar(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// Generate keys
-	_, err = executeCommand([]string{"distro", "keygen", "env.verify.issuer", "--output-dir", keyDir})
+	_, err = executeCommand([]string{"distro", "keygen", "sig", "env.verify.issuer", "--output-dir", keyDir})
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// Find key files
@@ -302,7 +302,7 @@ spec:
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// Set environment variable
-	t.Setenv(distroPublicKeySetEnvVar, string(publicKeyData))
+	t.Setenv(distroSigPublicKeySetEnvVar, string(publicKeyData))
 
 	// Verify using env var (no --key-set flag)
 	args := []string{"distro", "verify", "manifests", manifestDir, "--attestation", signatureFile}
@@ -329,9 +329,9 @@ func TestDistroVerifyManifestsKeyMatching(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// Generate two different key pairs
-	_, err = executeCommand([]string{"distro", "keygen", "issuer1", "--output-dir", keyDir1})
+	_, err = executeCommand([]string{"distro", "keygen", "sig", "issuer1", "--output-dir", keyDir1})
 	g.Expect(err).ToNot(HaveOccurred())
-	_, err = executeCommand([]string{"distro", "keygen", "issuer2", "--output-dir", keyDir2})
+	_, err = executeCommand([]string{"distro", "keygen", "sig", "issuer2", "--output-dir", keyDir2})
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// Find key pairs
@@ -381,7 +381,7 @@ func setupBasicVerifyTest(tempDir, issuer string) (manifestDir, privateKeyFile, 
 	}
 
 	// Generate keys
-	_, err = executeCommand([]string{"distro", "keygen", issuer, "--output-dir", keyDir})
+	_, err = executeCommand([]string{"distro", "keygen", "sig", issuer, "--output-dir", keyDir})
 	if err != nil {
 		return
 	}

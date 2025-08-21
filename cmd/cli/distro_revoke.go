@@ -9,7 +9,7 @@ import (
 
 var distroRevokeCmd = &cobra.Command{
 	Use:   "revoke",
-	Short: "Revoke issued signatures",
+	Short: "Maintain a ledger of revoked license keys",
 }
 
 func init() {

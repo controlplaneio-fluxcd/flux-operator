@@ -19,12 +19,12 @@ var distroVerifyLicenseKeyCmd = &cobra.Command{
 	Aliases: []string{"lk"},
 	Short:   "Verify a signed license key",
 	Example: `  # Verify a license key with public key set from file
-  cat /secrets/12345678-public.jwks | flux-operator distro verify license-key license.jwt \
-  --key-set=/dev/stdin
+  flux-operator distro verify license-key /path/to/license.jwt \
+  --key-set=/path/to/public.jwks
 
   # Verify by reading the public key set from env
-  export FLUX_DISTRO_PUBLIC_KEY_SET="$(cat /secrets/12345678-public.jwks)"
-  flux-operator distro verify license-key ./license.jwt
+  export FLUX_DISTRO_SIG_PUBLIC_JWKS="$(cat /path/to/public.jwks)"
+  flux-operator distro verify license-key /path/to/license.jwt
 `,
 	Args: cobra.ExactArgs(1),
 	RunE: distroVerifyLicenseKeyCmdRun,
@@ -61,7 +61,7 @@ func distroVerifyLicenseKeyCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Read the JWKS data from the specified source
-	jwksData, err := loadKeySet(distroVerifyLicenseKeyArgs.publicKeySetPath, distroPublicKeySetEnvVar)
+	jwksData, err := loadKeySet(distroVerifyLicenseKeyArgs.publicKeySetPath, distroSigPublicKeySetEnvVar)
 	if err != nil {
 		return err
 	}

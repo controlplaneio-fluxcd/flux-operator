@@ -17,12 +17,12 @@ var distroSignManifestsCmd = &cobra.Command{
 	Use:   "manifests [DIRECTORY]",
 	Short: "Issue a signed attestation for manifests",
 	Example: `  # Sign the manifests in the current directory
-  cat /secrets/12345678-private.jwks | flux-operator distro sign manifests \
-  --key-set=/dev/stdin \
+  flux-operator distro sign manifests \
+  --key-set=/path/to/private.jwks \
   --attestation=attestation.jwt
 
   # Sign by reading the private key set from env
-  export FLUX_DISTRO_PRIVATE_KEY_SET="$(cat /secrets/12345678-private.jwks)"
+  export FLUX_DISTRO_SIG_PRIVATE_JWKS="$(cat /secrets/12345678-private.jwks)"
   flux-operator distro sign manifests ./distro \
   --output=./distro/attestation.jwt
 `,
@@ -58,7 +58,7 @@ func distroSignManifestsCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Read the JWKS from file or environment variable
-	jwksData, err := loadKeySet(distroSignManifestsArgs.privateKeySetPath, distroPrivateKeySetEnvVar)
+	jwksData, err := loadKeySet(distroSignManifestsArgs.privateKeySetPath, distroSigPrivateKeySetEnvVar)
 	if err != nil {
 		return err
 	}
