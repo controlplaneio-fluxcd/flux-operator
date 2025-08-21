@@ -174,4 +174,11 @@ func resetCmdArgs() {
 	distroVerifyArtifactsArgs = distroVerifyArtifactsFlags{}
 	distroEncryptTokenArgs = distroEncryptTokenFlags{}
 	distroDecryptTokenArgs = distroDecryptTokenFlags{}
+	distroEncryptManifestsArgs = distroEncryptManifestsFlags{
+		ignore: []string{"*.jws"},
+	}
+	distroDecryptManifestsArgs = distroDecryptManifestsFlags{
+		outputPath: ".",
+		overwrite:  false,
+	}
 }

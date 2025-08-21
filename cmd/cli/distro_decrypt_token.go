@@ -29,6 +29,7 @@ var distroDecryptTokenCmd = &cobra.Command{
   --input=/dev/stdin \
   --output=/dev/stdout
 `,
+	Args: cobra.NoArgs,
 	RunE: distroDecryptTokenCmdRun,
 }
 

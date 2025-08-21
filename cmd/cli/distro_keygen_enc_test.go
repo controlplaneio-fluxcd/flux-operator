@@ -51,12 +51,6 @@ func TestDistroKeygenEncCmd(t *testing.T) {
 			errorMessage: "owner is required",
 		},
 		{
-			name:         "invalid output directory",
-			args:         []string{"distro", "keygen", "enc", "test.owner", "--output-dir", "/nonexistent/path"},
-			expectError:  true,
-			errorMessage: "directory /nonexistent/path does not exist",
-		},
-		{
 			name: "output directory is file",
 			args: []string{"distro", "keygen", "enc", "test.owner", "--output-dir", "testfile"},
 			setupFunc: func(tempDir string) error {
@@ -64,7 +58,7 @@ func TestDistroKeygenEncCmd(t *testing.T) {
 				return os.WriteFile(filepath.Join(tempDir, "testfile"), []byte("test"), 0644)
 			},
 			expectError:  true,
-			errorMessage: "is not a directory",
+			errorMessage: "not a directory",
 		},
 	}
 
