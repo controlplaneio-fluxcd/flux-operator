@@ -64,7 +64,7 @@ func VerifySignedToken(jwtData []byte, jwksData []byte) ([]byte, error) {
 	// Extract the KID from the JWT headers
 	kid := jws.Signatures[0].Protected.KeyID
 	if kid == "" {
-		return nil, ErrKIDNotFoundInJWT
+		return nil, ErrKIDNotFoundInHeaders
 	}
 
 	// Read the public key for the specific key ID
@@ -95,7 +95,7 @@ func GetKeyIDFromToken(jwtData []byte) (string, error) {
 
 	kid := jws.Signatures[0].Protected.KeyID
 	if kid == "" {
-		return "", ErrKIDNotFoundInJWT
+		return "", ErrKIDNotFoundInHeaders
 	}
 
 	return kid, nil

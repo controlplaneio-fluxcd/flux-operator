@@ -16,6 +16,14 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	// UseTypeEnc is the use type for encryption keys.
+	UseTypeEnc = "enc"
+
+	// UseTypeSig is the use type for signing keys.
+	UseTypeSig = "sig"
+)
+
 // NewSigningKeySet generates a new Ed25519 key pair
 // and returns a public and private JSON Web Key Set.
 // The private key set is associated with the issuer.
@@ -67,7 +75,7 @@ func NewEncryptionKeySet() (publicKeySet *jose.JSONWebKeySet, privateKeySet *jos
 				Key:       key.Public(),
 				KeyID:     kid.String(),
 				Algorithm: string(jose.ECDH_ES_A128KW),
-				Use:       "enc",
+				Use:       UseTypeEnc,
 			},
 		},
 	}
@@ -78,7 +86,7 @@ func NewEncryptionKeySet() (publicKeySet *jose.JSONWebKeySet, privateKeySet *jos
 				Key:       key,
 				KeyID:     kid.String(),
 				Algorithm: string(jose.ECDH_ES_A128KW),
-				Use:       "enc",
+				Use:       UseTypeEnc,
 			},
 		},
 	}
@@ -86,25 +94,16 @@ func NewEncryptionKeySet() (publicKeySet *jose.JSONWebKeySet, privateKeySet *jos
 	return publicKeySet, privateKeySet, nil
 }
 
-// WriteECDHKeySet writes the JWKs containing ECDH-ES+A128KW
+// WriteEncryptionKeySet writes the JWKs containing ECDH-ES+A128KW
 // public or private keys to a file.
-func WriteECDHKeySet(filename string, keySet *jose.JSONWebKeySet) error {
+func WriteEncryptionKeySet(filename string, keySet *jose.JSONWebKeySet) error {
 	// Validate the key set
 	if keySet == nil || len(keySet.Keys) == 0 {
-		return fmt.Errorf("key set is empty")
+		return ErrKeySetEmpty
 	}
 	for _, jwk := range keySet.Keys {
-		if jwk.KeyID == "" {
-			return fmt.Errorf("key ID is missing in the key set")
-		}
-		if jwk.Use != "enc" {
-			return fmt.Errorf("key %s has unsupported use", jwk.KeyID)
-		}
-		if jwk.Algorithm != string(jose.ECDH_ES_A128KW) {
-			return fmt.Errorf("key %s has unsupported algorithm", jwk.KeyID)
-		}
-		if !jwk.Valid() {
-			return fmt.Errorf("key %s is not valid", jwk.KeyID)
+		if err := validateEncryptionKey(jwk); err != nil {
+			return err
 		}
 	}
 
@@ -130,9 +129,9 @@ func WriteECDHKeySet(filename string, keySet *jose.JSONWebKeySet) error {
 	return nil
 }
 
-// ReadECDHKeySet reads a file containing ECDH-ES+A128KW
+// ReadEncryptionKeySet reads a file containing ECDH-ES+A128KW
 // public or private keys and returns a JWKs.
-func ReadECDHKeySet(filename string) (*jose.JSONWebKeySet, error) {
+func ReadEncryptionKeySet(filename string) (*jose.JSONWebKeySet, error) {
 	// Read the file content
 	data, err := os.ReadFile(filename)
 	if err != nil {
@@ -147,22 +146,29 @@ func ReadECDHKeySet(filename string) (*jose.JSONWebKeySet, error) {
 
 	// Validate the key set
 	if len(keySet.Keys) == 0 {
-		return nil, fmt.Errorf("key set is empty")
+		return nil, ErrKeySetEmpty
 	}
 	for _, jwk := range keySet.Keys {
-		if jwk.KeyID == "" {
-			return nil, fmt.Errorf("key ID is missing in the key set")
-		}
-		if jwk.Use != "enc" {
-			return nil, fmt.Errorf("key %s has unsupported use '%s'", jwk.KeyID, jwk.Use)
-		}
-		if jwk.Algorithm != string(jose.ECDH_ES_A128KW) {
-			return nil, fmt.Errorf("key %s has unsupported algorithm %s", jwk.KeyID, jwk.Algorithm)
-		}
-		if !jwk.Valid() {
-			return nil, fmt.Errorf("key %s is not valid", jwk.KeyID)
+		if err := validateEncryptionKey(jwk); err != nil {
+			return nil, err
 		}
 	}
 
 	return &keySet, nil
+}
+
+func validateEncryptionKey(jwk jose.JSONWebKey) error {
+	if jwk.KeyID == "" {
+		return ErrKIDMissing
+	}
+	if jwk.Use != UseTypeEnc {
+		return fmt.Errorf("key %s has unsupported use", jwk.KeyID)
+	}
+	if jwk.Algorithm != string(jose.ECDH_ES_A128KW) {
+		return fmt.Errorf("key %s has unsupported algorithm", jwk.KeyID)
+	}
+	if !jwk.Valid() {
+		return fmt.Errorf("key %s is not valid", jwk.KeyID)
+	}
+	return nil
 }

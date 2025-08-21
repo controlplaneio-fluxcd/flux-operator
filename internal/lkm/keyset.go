@@ -77,7 +77,7 @@ func (k *EdKeySet) AddPublicKey(key ed25519.PublicKey, keyID string) error {
 		Key:       key,
 		KeyID:     keyID,
 		Algorithm: string(jose.EdDSA),
-		Use:       "sig",
+		Use:       UseTypeSig,
 	}
 
 	// Prepend the key to the set to ensure the most recent key is first.
@@ -100,7 +100,7 @@ func (k *EdKeySet) AddPrivateKey(key ed25519.PrivateKey, keyID string) error {
 		Key:       key,
 		KeyID:     keyID,
 		Algorithm: string(jose.EdDSA),
-		Use:       "sig",
+		Use:       UseTypeSig,
 	}
 
 	k.Keys = append(k.Keys, jwk)
@@ -119,7 +119,7 @@ func (k *EdKeySet) ToJSON() ([]byte, error) {
 // ensuring no duplicate key IDs are added.
 func (k *EdKeySet) WriteFile(filePath string) error {
 	if len(k.Keys) == 0 {
-		return fmt.Errorf("cannot write empty EdKeySet to file")
+		return ErrKeySetEmpty
 	}
 
 	data, err := k.ToJSON()
@@ -183,7 +183,7 @@ func EdKeySetFromJSON(data []byte) (*EdKeySet, error) {
 		return nil, fmt.Errorf("failed to unmarshal EdKeySet: %w", err)
 	}
 	if len(keySet.Keys) == 0 {
-		return nil, fmt.Errorf("EdKeySet has no keys")
+		return nil, ErrKeySetEmpty
 	}
 
 	if keySet.Issuer != "" && len(keySet.Keys) > 1 {
@@ -197,7 +197,7 @@ func EdKeySetFromJSON(data []byte) (*EdKeySet, error) {
 func EdKeySetFromFile(filePath string) (*EdKeySet, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read EdKeySet from file %s: %w", filePath, err)
+		return nil, fmt.Errorf("failed to read from file %s: %w", filePath, err)
 	}
 	return EdKeySetFromJSON(data)
 }
@@ -213,10 +213,10 @@ func EdPublicKeyFromSet(data []byte, keyID string) (*EdPublicKey, error) {
 	for _, key := range keySet.Keys {
 		if key.KeyID == keyID {
 			if key.Algorithm != string(jose.EdDSA) {
-				return nil, fmt.Errorf("key with ID %s has unsupported algorithm %s, expected %s", keyID, key.Algorithm, jose.EdDSA)
+				return nil, fmt.Errorf("key with ID %s has unsupported algorithm: %w", keyID, ErrKeyAlgNotEdDA)
 			}
-			if key.Use != "sig" {
-				return nil, fmt.Errorf("key with ID %s has unsupported use %s, expected 'sig'", keyID, key.Use)
+			if key.Use != UseTypeSig {
+				return nil, fmt.Errorf("key with ID %s has unsupported use: %w", keyID, ErrKeyUseNotSig)
 			}
 
 			publicKey, ok := key.Key.(ed25519.PublicKey)
@@ -231,7 +231,7 @@ func EdPublicKeyFromSet(data []byte, keyID string) (*EdPublicKey, error) {
 		}
 	}
 
-	return nil, fmt.Errorf("no public key found with ID %s", keyID)
+	return nil, ErrKeyNotFound
 }
 
 // EdPrivateKeyFromSet extracts the first Ed25519 private key
@@ -242,26 +242,22 @@ func EdPrivateKeyFromSet(data []byte) (*EdPrivateKey, error) {
 		return nil, err
 	}
 
-	if len(keySet.Keys) == 0 {
-		return nil, fmt.Errorf("no keys found in set")
-	}
-
 	firstKey := keySet.Keys[0]
 	if firstKey.KeyID == "" {
-		return nil, fmt.Errorf("key ID is missing")
+		return nil, ErrKIDMissing
 	}
 
 	if firstKey.Algorithm != string(jose.EdDSA) {
-		return nil, fmt.Errorf("key has unsupported algorithm %s, expected %s", firstKey.Algorithm, jose.EdDSA)
+		return nil, ErrKeyAlgNotEdDA
 	}
 
-	if firstKey.Use != "sig" {
-		return nil, fmt.Errorf("key has unsupported use %s, expected 'sig'", firstKey.Use)
+	if firstKey.Use != UseTypeSig {
+		return nil, ErrKeyUseNotSig
 	}
 
 	privateKey, ok := firstKey.Key.(ed25519.PrivateKey)
 	if !ok {
-		return nil, fmt.Errorf("key is not an Ed25519 private key")
+		return nil, ErrKeyNotPrivate
 	}
 
 	return &EdPrivateKey{

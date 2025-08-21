@@ -7,6 +7,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -171,7 +172,7 @@ func TestNewEncryptionKeySet(t *testing.T) {
 		filename := filepath.Join(tmpDir, "public.jwks")
 
 		// Write key set to file
-		err = WriteECDHKeySet(filename, publicKeySet)
+		err = WriteEncryptionKeySet(filename, publicKeySet)
 		g.Expect(err).ToNot(HaveOccurred())
 
 		// Verify file exists and has correct permissions (0644 for public key)
@@ -180,7 +181,7 @@ func TestNewEncryptionKeySet(t *testing.T) {
 		g.Expect(info.Mode().Perm()).To(Equal(os.FileMode(0644)))
 
 		// Read key set from file
-		readKeySet, err := ReadECDHKeySet(filename)
+		readKeySet, err := ReadEncryptionKeySet(filename)
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(readKeySet).ToNot(BeNil())
 
@@ -202,7 +203,7 @@ func TestNewEncryptionKeySet(t *testing.T) {
 		filename := filepath.Join(tmpDir, "private.jwks")
 
 		// Write key set to file
-		err = WriteECDHKeySet(filename, privateKeySet)
+		err = WriteEncryptionKeySet(filename, privateKeySet)
 		g.Expect(err).ToNot(HaveOccurred())
 
 		// Verify file exists and has correct permissions (0600 for private key)
@@ -211,7 +212,7 @@ func TestNewEncryptionKeySet(t *testing.T) {
 		g.Expect(info.Mode().Perm()).To(Equal(os.FileMode(0600)))
 
 		// Read key set from file
-		readKeySet, err := ReadECDHKeySet(filename)
+		readKeySet, err := ReadEncryptionKeySet(filename)
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(readKeySet).ToNot(BeNil())
 
@@ -229,15 +230,15 @@ func TestNewEncryptionKeySet(t *testing.T) {
 		filename := filepath.Join(tmpDir, "empty.jwks")
 
 		// Test with nil key set
-		err := WriteECDHKeySet(filename, nil)
+		err := WriteEncryptionKeySet(filename, nil)
 		g.Expect(err).To(HaveOccurred())
-		g.Expect(err.Error()).To(ContainSubstring("key set is empty"))
+		g.Expect(errors.Is(err, ErrKeySetEmpty)).To(BeTrue())
 
 		// Test with empty key set
 		emptyKeySet := &jose.JSONWebKeySet{}
-		err = WriteECDHKeySet(filename, emptyKeySet)
+		err = WriteEncryptionKeySet(filename, emptyKeySet)
 		g.Expect(err).To(HaveOccurred())
-		g.Expect(err.Error()).To(ContainSubstring("key set is empty"))
+		g.Expect(errors.Is(err, ErrKeySetEmpty)).To(BeTrue())
 	})
 
 	t.Run("write fails with invalid key", func(t *testing.T) {
@@ -256,14 +257,14 @@ func TestNewEncryptionKeySet(t *testing.T) {
 			},
 		}
 
-		err := WriteECDHKeySet(filename, invalidKeySet)
+		err := WriteEncryptionKeySet(filename, invalidKeySet)
 		g.Expect(err).To(HaveOccurred())
-		g.Expect(err.Error()).To(ContainSubstring("key ID is missing"))
+		g.Expect(errors.Is(err, ErrKIDMissing)).To(BeTrue())
 	})
 
 	t.Run("read fails with non-existent file", func(t *testing.T) {
 		g := NewWithT(t)
-		_, err := ReadECDHKeySet("/non/existent/file.jwks")
+		_, err := ReadEncryptionKeySet("/non/existent/file.jwks")
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).To(ContainSubstring("failed to read key set from file"))
 	})
@@ -277,7 +278,7 @@ func TestNewEncryptionKeySet(t *testing.T) {
 		err := os.WriteFile(filename, []byte("invalid json"), 0644)
 		g.Expect(err).ToNot(HaveOccurred())
 
-		_, err = ReadECDHKeySet(filename)
+		_, err = ReadEncryptionKeySet(filename)
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).To(ContainSubstring("failed to unmarshal key set"))
 	})
@@ -294,8 +295,8 @@ func TestNewEncryptionKeySet(t *testing.T) {
 		err = os.WriteFile(filename, data, 0644)
 		g.Expect(err).ToNot(HaveOccurred())
 
-		_, err = ReadECDHKeySet(filename)
+		_, err = ReadEncryptionKeySet(filename)
 		g.Expect(err).To(HaveOccurred())
-		g.Expect(err.Error()).To(ContainSubstring("key set is empty"))
+		g.Expect(errors.Is(err, ErrKeySetEmpty)).To(BeTrue())
 	})
 }

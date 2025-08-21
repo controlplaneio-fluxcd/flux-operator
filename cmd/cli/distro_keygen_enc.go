@@ -56,11 +56,11 @@ func distroKeygenEncCmdRun(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if err := lkm.WriteECDHKeySet(privateKeySetPath, privateKeySet); err != nil {
+	if err := lkm.WriteEncryptionKeySet(privateKeySetPath, privateKeySet); err != nil {
 		return fmt.Errorf("failed to write private key set: %w", err)
 	}
 
-	if err := lkm.WriteECDHKeySet(publicKeySetPath, publicKeySet); err != nil {
+	if err := lkm.WriteEncryptionKeySet(publicKeySetPath, publicKeySet); err != nil {
 		return fmt.Errorf("failed to write public key set: %w", err)
 	}
 
