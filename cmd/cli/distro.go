@@ -22,6 +22,7 @@ func init() {
 const (
 	distroSigPrivateKeySetEnvVar = "FLUX_DISTRO_SIG_PRIVATE_JWKS"
 	distroSigPublicKeySetEnvVar  = "FLUX_DISTRO_SIG_PUBLIC_JWKS"
+	distroEncPublicKeySetEnvVar  = "FLUX_DISTRO_ENC_PUBLIC_JWKS"
 	distroDefaultAudience        = "flux-operator"
 )
 
