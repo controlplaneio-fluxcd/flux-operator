@@ -9,7 +9,7 @@ import (
 
 var distroKeygenCmd = &cobra.Command{
 	Use:   "keygen",
-	Short: "Generate JWKs with asymmetric key pairs for signing and encryption",
+	Short: "Generate asymmetric key pairs for encryption and signing",
 }
 
 func init() {

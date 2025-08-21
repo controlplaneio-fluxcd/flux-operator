@@ -173,4 +173,5 @@ func resetCmdArgs() {
 	distroSignArtifactsArgs = distroSignArtifactsFlags{}
 	distroVerifyArtifactsArgs = distroVerifyArtifactsFlags{}
 	distroEncryptTokenArgs = distroEncryptTokenFlags{}
+	distroDecryptTokenArgs = distroDecryptTokenFlags{}
 }
