@@ -26,12 +26,12 @@ func TestDistroKeygenEncCmd(t *testing.T) {
 	}{
 		{
 			name:        "valid key generation",
-			args:        []string{"distro", "keygen", "enc", "some.issuer"},
+			args:        []string{"distro", "keygen", "enc", "some.owner"},
 			expectError: false,
 		},
 		{
 			name: "custom output directory",
-			args: []string{"distro", "keygen", "enc", "custom.issuer", "--output-dir", "subdir"},
+			args: []string{"distro", "keygen", "enc", "custom.owner", "--output-dir", "subdir"},
 			setupFunc: func(tempDir string) error {
 				// Create subdirectory
 				return os.Mkdir(filepath.Join(tempDir, "subdir"), 0755)
@@ -39,26 +39,26 @@ func TestDistroKeygenEncCmd(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name:         "missing issuer argument",
+			name:         "missing owner argument",
 			args:         []string{"distro", "keygen", "enc"},
 			expectError:  true,
 			errorMessage: "accepts 1 arg(s), received 0",
 		},
 		{
-			name:         "empty issuer argument",
+			name:         "empty owner argument",
 			args:         []string{"distro", "keygen", "enc", ""},
 			expectError:  true,
-			errorMessage: "issuer is required",
+			errorMessage: "owner is required",
 		},
 		{
 			name:         "invalid output directory",
-			args:         []string{"distro", "keygen", "enc", "test.issuer", "--output-dir", "/nonexistent/path"},
+			args:         []string{"distro", "keygen", "enc", "test.owner", "--output-dir", "/nonexistent/path"},
 			expectError:  true,
 			errorMessage: "directory /nonexistent/path does not exist",
 		},
 		{
 			name: "output directory is file",
-			args: []string{"distro", "keygen", "enc", "test.issuer", "--output-dir", "testfile"},
+			args: []string{"distro", "keygen", "enc", "test.owner", "--output-dir", "testfile"},
 			setupFunc: func(tempDir string) error {
 				// Create a file instead of directory
 				return os.WriteFile(filepath.Join(tempDir, "testfile"), []byte("test"), 0644)
@@ -171,7 +171,7 @@ func TestDistroKeygenEncUniqueKeyIDs(t *testing.T) {
 	tempDir2 := t.TempDir()
 
 	// Generate first key pair
-	args1 := []string{"distro", "keygen", "enc", "test1.issuer", "--output-dir", tempDir1}
+	args1 := []string{"distro", "keygen", "enc", "test1.owner", "--output-dir", tempDir1}
 	_, err := executeCommand(args1)
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -195,8 +195,8 @@ func TestDistroKeygenEncUniqueKeyIDs(t *testing.T) {
 	}
 	g.Expect(keyID1).ToNot(BeEmpty())
 
-	// Generate second key pair (different issuer should produce different key ID)
-	args2 := []string{"distro", "keygen", "enc", "test2.issuer", "--output-dir", tempDir2}
+	// Generate second key pair (different owner should produce different key ID)
+	args2 := []string{"distro", "keygen", "enc", "test2.owner", "--output-dir", tempDir2}
 	_, err = executeCommand(args2)
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -220,6 +220,6 @@ func TestDistroKeygenEncUniqueKeyIDs(t *testing.T) {
 	}
 	g.Expect(keyID2).ToNot(BeEmpty())
 
-	// Key IDs should be different for different issuers
+	// Key IDs should be different for different owners
 	g.Expect(keyID1).ToNot(Equal(keyID2))
 }

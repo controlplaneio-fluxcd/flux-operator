@@ -14,8 +14,8 @@ import (
 )
 
 var distroKeygenEncCmd = &cobra.Command{
-	Use:   "enc [ISSUER]",
-	Short: "Generate ECDH-ES+A128KW JWKs for JWE exchange",
+	Use:   "enc [OWNER]",
+	Short: "Generate ECC key pairs in JWKS format for secure data exchange",
 	Example: `  # Generate key pair in the current directory
   flux-operator distro keygen enc fluxcd.control-plane.io
 `,
@@ -37,7 +37,7 @@ func init() {
 
 func distroKeygenEncCmdRun(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 || len(args[0]) < 1 {
-		return fmt.Errorf("issuer is required")
+		return fmt.Errorf("owner is required")
 	}
 	issuer := args[0]
 
@@ -46,10 +46,10 @@ func distroKeygenEncCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Generate issuer ID
-	issuerID := fmt.Sprintf("%08x", adler32.Checksum([]byte(issuer)))
+	ownerID := fmt.Sprintf("%08x", adler32.Checksum([]byte(issuer)))
 
-	privateKeySetPath := path.Join(distroKeygenEncArgs.outputDir, fmt.Sprintf("%s-enc-private.jwks", issuerID))
-	publicKeySetPath := path.Join(distroKeygenEncArgs.outputDir, fmt.Sprintf("%s-enc-public.jwks", issuerID))
+	privateKeySetPath := path.Join(distroKeygenEncArgs.outputDir, fmt.Sprintf("%s-enc-private.jwks", ownerID))
+	publicKeySetPath := path.Join(distroKeygenEncArgs.outputDir, fmt.Sprintf("%s-enc-public.jwks", ownerID))
 
 	publicKeySet, privateKeySet, err := lkm.NewEncryptionKeySet()
 	if err != nil {

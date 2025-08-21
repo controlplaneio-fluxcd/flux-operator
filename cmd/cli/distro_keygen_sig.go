@@ -15,7 +15,7 @@ import (
 
 var distroKeygenSigCmd = &cobra.Command{
 	Use:   "sig [ISSUER]",
-	Short: "Generate EdDSA JWKs for signing and verifying license keys and attestations",
+	Short: "Generate EdDSA key pair in JWKS format for signing and verification",
 	Example: `  # Generate key pair in the current directory
   flux-operator distro keygen sig https://fluxcd.control-plane.io
 `,

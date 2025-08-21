@@ -9,7 +9,7 @@ import (
 
 var distroEncryptCmd = &cobra.Command{
 	Use:   "encrypt",
-	Short: "Encrypt data using JWE with asymmetric key pairs",
+	Short: "Encrypt sensitive information using JWE with asymmetric key pairs",
 }
 
 func init() {
