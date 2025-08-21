@@ -92,7 +92,7 @@ func TestVerifyToken(t *testing.T) {
 
 		_, err = VerifySignedToken([]byte(token), jwksData)
 		g.Expect(err).To(HaveOccurred())
-		g.Expect(errors.Is(err, ErrKIDNotFoundInJWT)).To(BeTrue())
+		g.Expect(errors.Is(err, ErrKIDNotFoundInHeaders)).To(BeTrue())
 	})
 
 	t.Run("fails with kid not found in JWKs", func(t *testing.T) {
@@ -278,7 +278,7 @@ func TestGetKeyIDFromToken(t *testing.T) {
 		keyID, err := GetKeyIDFromToken([]byte(token))
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(keyID).To(BeEmpty())
-		g.Expect(errors.Is(err, ErrKIDNotFoundInJWT)).To(BeTrue())
+		g.Expect(errors.Is(err, ErrKIDNotFoundInHeaders)).To(BeTrue())
 	})
 }
 

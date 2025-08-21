@@ -4,11 +4,14 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
 	. "github.com/onsi/gomega"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/lkm"
 )
 
 func TestDistroVerifyManifestsValidVerification(t *testing.T) {
@@ -365,7 +368,7 @@ metadata:
 
 	// The error should be about key ID not found, since the JWT contains key ID from first key pair
 	// but we're trying to verify with second key pair which has different key IDs
-	g.Expect(err.Error()).To(ContainSubstring("no public key found"))
+	g.Expect(errors.Is(err, lkm.ErrKeyNotFound)).To(BeTrue())
 }
 
 // Helper function to setup basic key generation and manifest creation

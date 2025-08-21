@@ -150,13 +150,13 @@ func TestDistroKeygenEncCmd(t *testing.T) {
 			g.Expect(publicInfo.Mode().Perm()).To(Equal(os.FileMode(0644)), "public key should have 0644 permissions")
 
 			// Validate private key set
-			privateKeySet, err := lkm.ReadECDHKeySet(privateKeyFile)
+			privateKeySet, err := lkm.ReadEncryptionKeySet(privateKeyFile)
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(privateKeySet.Keys).To(HaveLen(1))
 			g.Expect(privateKeySet.Keys[0].IsPublic()).To(BeFalse())
 
 			// Validate public key set JSON structure
-			publicKeySet, err := lkm.ReadECDHKeySet(publicKeyFile)
+			publicKeySet, err := lkm.ReadEncryptionKeySet(publicKeyFile)
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(publicKeySet.Keys).To(HaveLen(1))
 			g.Expect(publicKeySet.Keys[0].IsPublic()).To(BeTrue())

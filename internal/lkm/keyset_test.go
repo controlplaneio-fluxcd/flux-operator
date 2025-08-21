@@ -6,6 +6,7 @@ package lkm
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -224,7 +225,7 @@ func TestEdKeySet_WriteFile(t *testing.T) {
 		filePath := filepath.Join(tempDir, "empty.json")
 		err := keySet.WriteFile(filePath)
 		g.Expect(err).To(HaveOccurred())
-		g.Expect(err.Error()).To(ContainSubstring("cannot write empty EdKeySet"))
+		g.Expect(errors.Is(err, ErrKeySetEmpty)).To(BeTrue())
 	})
 
 	t.Run("appends new keys to existing public key file", func(t *testing.T) {
@@ -345,7 +346,7 @@ func TestEdKeySetFromJSON(t *testing.T) {
 		emptyJSON := []byte(`{"keys": []}`)
 		_, err := EdKeySetFromJSON(emptyJSON)
 		g.Expect(err).To(HaveOccurred())
-		g.Expect(err.Error()).To(ContainSubstring("EdKeySet has no keys"))
+		g.Expect(errors.Is(err, ErrKeySetEmpty)).To(BeTrue())
 	})
 
 	t.Run("fails on private key set with multiple keys", func(t *testing.T) {
@@ -386,7 +387,7 @@ func TestEdKeySetFromFile(t *testing.T) {
 		g := NewWithT(t)
 		_, err := EdKeySetFromFile(filepath.Join(tempDir, "nonexistent.json"))
 		g.Expect(err).To(HaveOccurred())
-		g.Expect(err.Error()).To(ContainSubstring("failed to read EdKeySet from file"))
+		g.Expect(err.Error()).To(ContainSubstring("failed to read"))
 	})
 }
 
@@ -421,7 +422,7 @@ func TestEdPublicKeyFromSet(t *testing.T) {
 		g := NewWithT(t)
 		_, err := EdPublicKeyFromSet(jsonData, "nonexistent")
 		g.Expect(err).To(HaveOccurred())
-		g.Expect(err.Error()).To(ContainSubstring("no public key found with ID nonexistent"))
+		g.Expect(errors.Is(err, ErrKeyNotFound)).To(BeTrue())
 	})
 
 	t.Run("fails on invalid JSON", func(t *testing.T) {
