@@ -30,6 +30,7 @@ var distroEncryptTokenCmd = &cobra.Command{
   --input=/dev/stdin \
   --output=pat.jwe
 `,
+	Args: cobra.NoArgs,
 	RunE: distroEncryptTokenCmdRun,
 }
 

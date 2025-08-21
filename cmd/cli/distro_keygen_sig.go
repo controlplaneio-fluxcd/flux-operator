@@ -6,6 +6,7 @@ package main
 import (
 	"fmt"
 	"hash/adler32"
+	"os"
 	"path"
 
 	"github.com/spf13/cobra"
@@ -41,8 +42,9 @@ func distroKeygenSigCmdRun(cmd *cobra.Command, args []string) error {
 	}
 	issuer := args[0]
 
-	if err := isDir(distroKeygenSigArgs.outputDir); err != nil {
-		return err
+	// Create output directory if it doesn't exist
+	if err := os.MkdirAll(distroKeygenSigArgs.outputDir, 0755); err != nil {
+		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
 	// Generate issuer ID
