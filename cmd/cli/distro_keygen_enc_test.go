@@ -16,7 +16,7 @@ import (
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/lkm"
 )
 
-func TestDistroKeygenSigCmd(t *testing.T) {
+func TestDistroKeygenEncCmd(t *testing.T) {
 	tests := []struct {
 		name         string
 		args         []string
@@ -26,12 +26,12 @@ func TestDistroKeygenSigCmd(t *testing.T) {
 	}{
 		{
 			name:        "valid key generation",
-			args:        []string{"distro", "keygen", "sig", "some.issuer"},
+			args:        []string{"distro", "keygen", "enc", "some.issuer"},
 			expectError: false,
 		},
 		{
 			name: "custom output directory",
-			args: []string{"distro", "keygen", "sig", "custom.issuer", "--output-dir", "subdir"},
+			args: []string{"distro", "keygen", "enc", "custom.issuer", "--output-dir", "subdir"},
 			setupFunc: func(tempDir string) error {
 				// Create subdirectory
 				return os.Mkdir(filepath.Join(tempDir, "subdir"), 0755)
@@ -40,25 +40,25 @@ func TestDistroKeygenSigCmd(t *testing.T) {
 		},
 		{
 			name:         "missing issuer argument",
-			args:         []string{"distro", "keygen", "sig"},
+			args:         []string{"distro", "keygen", "enc"},
 			expectError:  true,
 			errorMessage: "accepts 1 arg(s), received 0",
 		},
 		{
 			name:         "empty issuer argument",
-			args:         []string{"distro", "keygen", "sig", ""},
+			args:         []string{"distro", "keygen", "enc", ""},
 			expectError:  true,
 			errorMessage: "issuer is required",
 		},
 		{
 			name:         "invalid output directory",
-			args:         []string{"distro", "keygen", "sig", "test.issuer", "--output-dir", "/nonexistent/path"},
+			args:         []string{"distro", "keygen", "enc", "test.issuer", "--output-dir", "/nonexistent/path"},
 			expectError:  true,
 			errorMessage: "directory /nonexistent/path does not exist",
 		},
 		{
 			name: "output directory is file",
-			args: []string{"distro", "keygen", "sig", "test.issuer", "--output-dir", "testfile"},
+			args: []string{"distro", "keygen", "enc", "test.issuer", "--output-dir", "testfile"},
 			setupFunc: func(tempDir string) error {
 				// Create a file instead of directory
 				return os.WriteFile(filepath.Join(tempDir, "testfile"), []byte("test"), 0644)
@@ -138,9 +138,7 @@ func TestDistroKeygenSigCmd(t *testing.T) {
 			g.Expect(err).ToNot(HaveOccurred())
 
 			g.Expect(privateKeyFile).ToNot(BeEmpty(), "private key file should be generated")
-			g.Expect(privateKeyFile).To(HaveSuffix("sig-private.jwks"))
 			g.Expect(publicKeyFile).ToNot(BeEmpty(), "public key file should be generated")
-			g.Expect(publicKeyFile).To(HaveSuffix("sig-public.jwks"))
 
 			// Check file permissions
 			privateInfo, err := os.Stat(privateKeyFile)
@@ -151,51 +149,29 @@ func TestDistroKeygenSigCmd(t *testing.T) {
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(publicInfo.Mode().Perm()).To(Equal(os.FileMode(0644)), "public key should have 0644 permissions")
 
-			// Validate private key set JSON structure
-			privateData, err := os.ReadFile(privateKeyFile)
+			// Validate private key set
+			privateKeySet, err := lkm.ReadECDHKeySet(privateKeyFile)
 			g.Expect(err).ToNot(HaveOccurred())
-
-			var privateKeySet lkm.EdKeySet
-			err = json.Unmarshal(privateData, &privateKeySet)
-			g.Expect(err).ToNot(HaveOccurred())
-
-			expectedIssuer := tt.args[3]
-			g.Expect(privateKeySet.Issuer).To(Equal(expectedIssuer))
 			g.Expect(privateKeySet.Keys).To(HaveLen(1))
-			g.Expect(privateKeySet.Keys[0].Algorithm).To(Equal(string(jose.EdDSA)))
-			g.Expect(privateKeySet.Keys[0].Use).To(Equal("sig"))
-			g.Expect(privateKeySet.Keys[0].KeyID).ToNot(BeEmpty())
+			g.Expect(privateKeySet.Keys[0].IsPublic()).To(BeFalse())
 
 			// Validate public key set JSON structure
-			publicData, err := os.ReadFile(publicKeyFile)
+			publicKeySet, err := lkm.ReadECDHKeySet(publicKeyFile)
 			g.Expect(err).ToNot(HaveOccurred())
-
-			var publicKeySet jose.JSONWebKeySet
-			err = json.Unmarshal(publicData, &publicKeySet)
-			g.Expect(err).ToNot(HaveOccurred())
-
 			g.Expect(publicKeySet.Keys).To(HaveLen(1))
-			g.Expect(publicKeySet.Keys[0].Algorithm).To(Equal(string(jose.EdDSA)))
-			g.Expect(publicKeySet.Keys[0].Use).To(Equal("sig"))
-			g.Expect(publicKeySet.Keys[0].KeyID).To(Equal(privateKeySet.Keys[0].KeyID))
-
-			// Validate that private and public keys are a valid Ed25519 key pair
-			g.Expect(privateKeySet.Keys[0].Valid()).To(BeTrue())
-			g.Expect(privateKeySet.Keys[0].IsPublic()).ToNot(BeTrue())
-			g.Expect(publicKeySet.Keys[0].Valid()).To(BeTrue())
 			g.Expect(publicKeySet.Keys[0].IsPublic()).To(BeTrue())
 		})
 	}
 }
 
-func TestDistroKeygenSigUniqueKeyIDs(t *testing.T) {
+func TestDistroKeygenEncUniqueKeyIDs(t *testing.T) {
 	g := NewWithT(t)
 
 	tempDir1 := t.TempDir()
 	tempDir2 := t.TempDir()
 
 	// Generate first key pair
-	args1 := []string{"distro", "keygen", "sig", "test1.issuer", "--output-dir", tempDir1}
+	args1 := []string{"distro", "keygen", "enc", "test1.issuer", "--output-dir", tempDir1}
 	_, err := executeCommand(args1)
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -205,11 +181,11 @@ func TestDistroKeygenSigUniqueKeyIDs(t *testing.T) {
 
 	var keyID1 string
 	for _, file := range files1 {
-		if strings.Contains(file.Name(), "sig-private") && filepath.Ext(file.Name()) == ".jwks" {
+		if strings.Contains(file.Name(), "private") && strings.Contains(file.Name(), "enc") && filepath.Ext(file.Name()) == ".jwks" {
 			data, err := os.ReadFile(filepath.Join(tempDir1, file.Name()))
 			g.Expect(err).ToNot(HaveOccurred())
 
-			var keySet lkm.EdKeySet
+			var keySet jose.JSONWebKeySet
 			err = json.Unmarshal(data, &keySet)
 			g.Expect(err).ToNot(HaveOccurred())
 
@@ -220,7 +196,7 @@ func TestDistroKeygenSigUniqueKeyIDs(t *testing.T) {
 	g.Expect(keyID1).ToNot(BeEmpty())
 
 	// Generate second key pair (different issuer should produce different key ID)
-	args2 := []string{"distro", "keygen", "sig", "test2.issuer", "--output-dir", tempDir2}
+	args2 := []string{"distro", "keygen", "enc", "test2.issuer", "--output-dir", tempDir2}
 	_, err = executeCommand(args2)
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -230,11 +206,11 @@ func TestDistroKeygenSigUniqueKeyIDs(t *testing.T) {
 
 	var keyID2 string
 	for _, file := range files2 {
-		if strings.Contains(file.Name(), "sig-private") && filepath.Ext(file.Name()) == ".jwks" {
+		if strings.Contains(file.Name(), "private") && strings.Contains(file.Name(), "enc") && filepath.Ext(file.Name()) == ".jwks" {
 			data, err := os.ReadFile(filepath.Join(tempDir2, file.Name()))
 			g.Expect(err).ToNot(HaveOccurred())
 
-			var keySet lkm.EdKeySet
+			var keySet jose.JSONWebKeySet
 			err = json.Unmarshal(data, &keySet)
 			g.Expect(err).ToNot(HaveOccurred())
 
@@ -246,21 +222,4 @@ func TestDistroKeygenSigUniqueKeyIDs(t *testing.T) {
 
 	// Key IDs should be different for different issuers
 	g.Expect(keyID1).ToNot(Equal(keyID2))
-}
-
-// Helper function to find key files in a directory
-func findKeyFiles(dir string) (privateKey, publicKey string, err error) {
-	files, err := os.ReadDir(dir)
-	if err != nil {
-		return "", "", err
-	}
-
-	for _, file := range files {
-		if strings.Contains(file.Name(), "private") && strings.HasSuffix(file.Name(), ".jwks") {
-			privateKey = filepath.Join(dir, file.Name())
-		} else if strings.Contains(file.Name(), "public") && strings.HasSuffix(file.Name(), ".jwks") {
-			publicKey = filepath.Join(dir, file.Name())
-		}
-	}
-	return privateKey, publicKey, nil
 }
