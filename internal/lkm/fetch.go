@@ -18,13 +18,30 @@ import (
 	"github.com/hashicorp/go-retryablehttp"
 )
 
+// ContentType represents the accepted content types of Fetch requests.
+type ContentType string
+
+const (
+	// ContentTypeKeySet represents the JSON Web Key Set content type.
+	// Suitable for fetching jose.JSONWebKeySet documents with Ed25519 or ECC keys.
+	ContentTypeKeySet ContentType = "application/jwks"
+
+	// ContentTypeToken represents the JSON Web Token content type.
+	// Suitable for fetching jose.JSONWebSignature documents with EdDSA signed payloads.
+	ContentTypeToken ContentType = "application/jwt"
+
+	// ContentTypeEncryptedToken represents the JSON Web Encryption content type.
+	// Suitable for fetching jose.JSONWebEncryption documents with ECDH-ES+A128KW encrypted payloads.
+	ContentTypeEncryptedToken ContentType = "application/jwe"
+)
+
 // fetchOptions holds the internal configuration for the Fetch function.
 type fetchOptions struct {
 	retries            int
 	allowLocalhost     bool
 	userAgent          string
 	insecureSkipVerify bool
-	contentType        string
+	contentType        ContentType
 }
 
 // FetchOption configures a Fetch operation.
@@ -37,7 +54,7 @@ var FetchOpt fetchOptionBuilder
 type fetchOptionBuilder struct{}
 
 // WithContentType sets the expected Content-Type header for HTTP requests.
-func (fetchOptionBuilder) WithContentType(contentType string) FetchOption {
+func (fetchOptionBuilder) WithContentType(contentType ContentType) FetchOption {
 	return func(opts *fetchOptions) {
 		opts.contentType = contentType
 	}
@@ -72,8 +89,8 @@ func (fetchOptionBuilder) WithInsecureSkipVerify(skip bool) FetchOption {
 }
 
 // Fetch performs an HTTP GET request to the specified URL.
-// It enforces HTTPS unless connecting to localhost and allows various options
-// to customize the request behavior.
+// It enforces HTTPS unless connecting to localhost and allows
+// various options to customize the request behavior.
 func Fetch(ctx context.Context, rawURL string, opts ...FetchOption) ([]byte, error) {
 	// Configure default options.
 	options := &fetchOptions{
@@ -100,7 +117,7 @@ func Fetch(ctx context.Context, rawURL string, opts ...FetchOption) ([]byte, err
 
 	// Enforce HTTPS unless connecting to localhost and allowed.
 	if !strings.EqualFold(parsedURL.Scheme, "https") && (!isLocalhost || !options.allowLocalhost) {
-		return nil, errors.New("URL must use HTTPS scheme")
+		return nil, errors.New("HTTPS scheme is required")
 	}
 
 	// Set up the retryable HTTP client.
@@ -115,14 +132,19 @@ func Fetch(ctx context.Context, rawURL string, opts ...FetchOption) ([]byte, err
 		}
 	}
 
-	// Create the HTTP request with context.
+	// Create the HTTP request with timeout context.
 	req, err := retryablehttp.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header.Set("User-Agent", options.userAgent)
-	if options.contentType != "" {
-		req.Header.Set("Content-Type", options.contentType)
+
+	// Set the Accept header based on the content type.
+	switch options.contentType {
+	case ContentTypeKeySet:
+		req.Header.Set("Accept", fmt.Sprintf("application/json, %s", options.contentType))
+	case ContentTypeToken, ContentTypeEncryptedToken:
+		req.Header.Set("Accept", fmt.Sprintf("application/jose, %s", options.contentType))
 	}
 
 	// Perform the HTTP GET request.
@@ -148,8 +170,20 @@ func Fetch(ctx context.Context, rawURL string, opts ...FetchOption) ([]byte, err
 		return nil, errors.New("response body is empty")
 	}
 
-	if strings.EqualFold(options.contentType, "application/json") && !json.Valid(body) {
-		return nil, errors.New("invalid JSON response")
+	// Basic response body validation based on accepted content type.
+	switch options.contentType {
+	case ContentTypeKeySet:
+		if !json.Valid(body) {
+			return nil, errors.New("invalid JWKS response")
+		}
+	case ContentTypeToken:
+		if strings.Count(string(body), ".") != 2 {
+			return nil, errors.New("invalid JWT response")
+		}
+	case ContentTypeEncryptedToken:
+		if strings.Count(string(body), ".") != 4 {
+			return nil, errors.New("invalid JWE response")
+		}
 	}
 
 	return body, nil
