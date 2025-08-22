@@ -6,7 +6,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -20,12 +19,12 @@ var distroVerifyManifestsCmd = &cobra.Command{
 	Example: `  # Verify the attestation of manifests in the current directory
   flux-operator distro verify manifests \
   --key-set=https://example.com/jwks.json \
-  --attestation=attestation.jwt
+  --attestation=https://example.com/attestation.jwt
 
   # Verify by reading the public key set from env
   export FLUX_DISTRO_SIG_PUBLIC_JWKS="$(cat /path/to/public.jwks)"
   flux-operator distro verify manifests ./distro \
-  --attestation=attestation.jwt
+  -a /path/to/attestation.jwt
 `,
 	Args: cobra.MaximumNArgs(1),
 	RunE: distroVerifyManifestsCmdRun,
@@ -42,7 +41,7 @@ func init() {
 	distroVerifyManifestsCmd.Flags().StringVarP(&distroVerifyManifestsArgs.publicKeySetPath, "key-set", "k", "",
 		"path to the JWKS file containing the public keys or HTTPS URL")
 	distroVerifyManifestsCmd.Flags().StringVarP(&distroVerifyManifestsArgs.attestationPath, "attestation", "a", "",
-		"path to the attestation file (required)")
+		"path to the attestation file or HTTPS URL (required)")
 	distroVerifyCmd.AddCommand(distroVerifyManifestsCmd)
 }
 
@@ -55,10 +54,13 @@ func distroVerifyManifestsCmdRun(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Read the signed JWT from file
-	jwtData, err := os.ReadFile(distroVerifyManifestsArgs.attestationPath)
+	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
+	defer cancel()
+
+	// Read the signed JWT from HTTP URL or file
+	jwtData, err := loadAttestation(ctx, distroVerifyManifestsArgs.attestationPath)
 	if err != nil {
-		return fmt.Errorf("failed to read the attestion file: %w", err)
+		return err
 	}
 
 	// Extract the public key ID from the JWT header
@@ -68,8 +70,6 @@ func distroVerifyManifestsCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Load the JWKS and find the matching key
-	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
-	defer cancel()
 	jwksData, err := loadKeySet(ctx, distroVerifyManifestsArgs.publicKeySetPath, distroSigPublicKeySetEnvVar)
 	if err != nil {
 		return err
@@ -90,7 +90,7 @@ func distroVerifyManifestsCmdRun(cmd *cobra.Command, args []string) error {
 	// Verify the JWT signature, calculate the expected checksum, and list files
 	files, err := att.Verify(jwtData, pk, srcDir, []string{exclusion})
 	if err != nil {
-		return err
+		return fmt.Errorf("verification failed: %w", err)
 	}
 
 	// Print files included in the checksum

@@ -4,11 +4,17 @@
 package main
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	. "github.com/onsi/gomega"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/lkm"
 )
 
 func TestDistroVerifyArtifactsCmd(t *testing.T) {
@@ -161,7 +167,7 @@ func TestDistroVerifyArtifactsCmd(t *testing.T) {
 				return args, nil
 			},
 			expectError:  true,
-			errorMessage: "failed to read the attestation file",
+			errorMessage: "no such file",
 		},
 		{
 			name: "fails when URL digest not found in attestation",
@@ -262,5 +268,72 @@ func TestDistroVerifyArtifactsCmd(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestDistroVerifyArtifactsCmd_RemoteAttestation(t *testing.T) {
+	g := NewWithT(t)
+	tempDir := t.TempDir()
+
+	// Generate signing key pair
+	publicKeySet, privateKeySet, err := lkm.NewSigningKeySet("http-artifacts-test-issuer")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Create HTTP server for public key set (verification)
+	publicServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/jwks+json")
+		_ = json.NewEncoder(w).Encode(publicKeySet)
+	}))
+	defer publicServer.Close()
+
+	// First, create a local attestation file by signing artifacts
+	digestURLs := []string{
+		"ghcr.io/controlplaneio-fluxcd/flux-operator@sha256:9b2225dcba561daf2e58f004a37704232b1bae7c65af41693aad259e7cce5150",
+		"ghcr.io/fluxcd/source-controller@sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+	}
+
+	// Write private key set to file for signing
+	privateKeyFile := filepath.Join(tempDir, "private.json")
+	privateKeyData, err := json.Marshal(privateKeySet)
+	g.Expect(err).ToNot(HaveOccurred())
+	err = os.WriteFile(privateKeyFile, privateKeyData, 0600)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Create local attestation file
+	localAttestationFile := filepath.Join(tempDir, "artifacts.jwt")
+	signArgs := []string{"distro", "sign", "artifacts", "--key-set", privateKeyFile, "--attestation", localAttestationFile}
+	for _, url := range digestURLs {
+		signArgs = append(signArgs, "--url", url)
+	}
+	_, err = executeCommand(signArgs)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Read the created attestation file
+	attestationData, err := os.ReadFile(localAttestationFile)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Create HTTP server for attestation
+	attestationServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/jwt")
+		_, _ = w.Write(attestationData)
+	}))
+	defer attestationServer.Close()
+
+	// Now verify using HTTP-hosted attestation and key-set
+	verifyArgs := []string{"distro", "verify", "artifacts", "--key-set", publicServer.URL, "--attestation", attestationServer.URL}
+	for _, url := range digestURLs {
+		verifyArgs = append(verifyArgs, "--url", url)
+	}
+
+	output, err := executeCommand(verifyArgs)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(output).To(ContainSubstring("verified"))
+
+	// Each digest should appear in the output with a checkmark
+	for _, url := range digestURLs {
+		if strings.Contains(url, "@sha256:") {
+			digest := strings.Split(url, "@")[1] // Get the sha256:... part
+			g.Expect(output).To(ContainSubstring("✔ " + digest))
+		}
 	}
 }

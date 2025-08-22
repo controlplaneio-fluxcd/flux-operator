@@ -6,7 +6,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -20,7 +19,7 @@ var distroVerifyArtifactsCmd = &cobra.Command{
 	Example: `  # Verify artifacts attestation
   flux-operator distro verify artifacts \
   --key-set=https://example.com/jwks.json \
-  --attestation=/path/to/fluxcd-v2.6.4.jwt \
+  --attestation=https://example.com/fluxcd-v2.6.4.jwt \
   --url=ghcr.io/fluxcd/source-controller:v1.6.2 \
   --url=ghcr.io/fluxcd/kustomize-controller:v1.6.1 \
   --url=ghcr.io/fluxcd/notification-controller:v1.6.0 \
@@ -50,29 +49,27 @@ func init() {
 	distroVerifyArtifactsCmd.Flags().StringVarP(&distroVerifyArtifactsArgs.publicKeySetPath, "key-set", "k", "",
 		"path to the JWKS file containing the public keys or HTTPS URL")
 	distroVerifyArtifactsCmd.Flags().StringVarP(&distroVerifyArtifactsArgs.attestationPath, "attestation", "a", "",
-		"path to the attestation file (required)")
+		"path to the attestation file or HTTPS URL (required)")
 	distroVerifyArtifactsCmd.Flags().StringSliceVarP(&distroVerifyArtifactsArgs.urls, "url", "u", nil,
 		"OCI artifact URLs to verify (required, can be specified multiple times)")
 	distroVerifyCmd.AddCommand(distroVerifyArtifactsCmd)
 }
 
 func distroVerifyArtifactsCmdRun(cmd *cobra.Command, args []string) error {
-	if distroVerifyArtifactsArgs.attestationPath == "" {
-		return fmt.Errorf("--attestation flag is required")
-	}
 	if len(distroVerifyArtifactsArgs.urls) == 0 {
 		return fmt.Errorf("--url flag is required, specify one or more OCI artifact URLs")
 	}
 
-	// Read the signed JWT from file
-	jwtData, err := os.ReadFile(distroVerifyArtifactsArgs.attestationPath)
-	if err != nil {
-		return fmt.Errorf("failed to read the attestation file: %w", err)
-	}
-
-	// Load the JWKS from file, HTTP URL, or environment variable
 	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
 	defer cancel()
+
+	// Read the signed JWT from HTTP URL or file
+	jwtData, err := loadAttestation(ctx, distroVerifyArtifactsArgs.attestationPath)
+	if err != nil {
+		return err
+	}
+
+	// Read the JWKS from file, HTTP URL, or environment variable
 	jwksData, err := loadKeySet(ctx, distroVerifyArtifactsArgs.publicKeySetPath, distroSigPublicKeySetEnvVar)
 	if err != nil {
 		return err
@@ -81,7 +78,7 @@ func distroVerifyArtifactsCmdRun(cmd *cobra.Command, args []string) error {
 	// Verify the JWT signature and extract the verified payload
 	verifiedPayload, err := lkm.VerifySignedToken(jwtData, jwksData)
 	if err != nil {
-		return fmt.Errorf("failed to verify JWT signature: %w", err)
+		return fmt.Errorf("failed to verify attestation: %w", err)
 	}
 
 	// Create an ArtifactsAttestation from the verified data
@@ -96,17 +93,17 @@ func distroVerifyArtifactsCmdRun(cmd *cobra.Command, args []string) error {
 	rootCmd.Println("processing artifacts:")
 	for _, url := range distroVerifyArtifactsArgs.urls {
 		// First check if URL already contains a digest
-		if digest, err := hasArtifactDigest(url); err == nil {
-			rootCmd.Println(fmt.Sprintf("  %s -> %s (from URL)\n", strings.Split(url, "@")[0], digest))
-			digests = append(digests, digest)
+		if d, err := hasArtifactDigest(url); err == nil {
+			rootCmd.Println(fmt.Sprintf("  %s -> %s (from URL)\n", strings.Split(url, "@")[0], d))
+			digests = append(digests, d)
 		} else {
 			// If no digest in URL, fetch it from the registry
-			digest, err := getArtifactDigest(ctx, url)
+			du, err := getArtifactDigest(ctx, url)
 			if err != nil {
 				return fmt.Errorf("failed to get digest for %s: %w", url, err)
 			}
-			rootCmd.Println(fmt.Sprintf("  %s -> %s (from registry)", url, digest))
-			digests = append(digests, digest)
+			rootCmd.Println(fmt.Sprintf("  %s -> %s (from registry)", url, du))
+			digests = append(digests, du)
 		}
 	}
 
