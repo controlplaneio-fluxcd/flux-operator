@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -20,7 +21,7 @@ var distroVerifyLicenseKeyCmd = &cobra.Command{
 	Short:   "Verify a signed license key",
 	Example: `  # Verify a license key with public key set from file
   flux-operator distro verify license-key /path/to/license.jwt \
-  --key-set=/path/to/public.jwks
+  --key-set=https://example.com/jwks.json
 
   # Verify by reading the public key set from env
   export FLUX_DISTRO_SIG_PUBLIC_JWKS="$(cat /path/to/public.jwks)"
@@ -39,7 +40,7 @@ var distroVerifyLicenseKeyArgs distroVerifyLicenseKeyFlags
 
 func init() {
 	distroVerifyLicenseKeyCmd.Flags().StringVarP(&distroVerifyLicenseKeyArgs.publicKeySetPath, "key-set", "k", "",
-		"path to the public key set file or /dev/stdin")
+		"path to the JWKS file containing the public keys or HTTPS URL")
 	distroVerifyLicenseKeyCmd.Flags().StringVarP(&distroVerifyLicenseKeyArgs.revokedKeySetPath, "revoked-set", "r", "",
 		"path to the revoked key set file (optional)")
 	distroVerifyCmd.AddCommand(distroVerifyLicenseKeyCmd)
@@ -61,7 +62,9 @@ func distroVerifyLicenseKeyCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Read the JWKS data from the specified source
-	jwksData, err := loadKeySet(distroVerifyLicenseKeyArgs.publicKeySetPath, distroSigPublicKeySetEnvVar)
+	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
+	defer cancel()
+	jwksData, err := loadKeySet(ctx, distroVerifyLicenseKeyArgs.publicKeySetPath, distroSigPublicKeySetEnvVar)
 	if err != nil {
 		return err
 	}

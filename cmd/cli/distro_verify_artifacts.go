@@ -19,7 +19,7 @@ var distroVerifyArtifactsCmd = &cobra.Command{
 	Short: "Verify the attestation of OCI artifacts",
 	Example: `  # Verify artifacts attestation
   flux-operator distro verify artifacts \
-  --key-set=/path/to/public.jwks \
+  --key-set=https://example.com/jwks.json \
   --attestation=/path/to/fluxcd-v2.6.4.jwt \
   --url=ghcr.io/fluxcd/source-controller:v1.6.2 \
   --url=ghcr.io/fluxcd/kustomize-controller:v1.6.1 \
@@ -48,7 +48,7 @@ var distroVerifyArtifactsArgs distroVerifyArtifactsFlags
 
 func init() {
 	distroVerifyArtifactsCmd.Flags().StringVarP(&distroVerifyArtifactsArgs.publicKeySetPath, "key-set", "k", "",
-		"path to the public key set file or /dev/stdin (required)")
+		"path to the JWKS file containing the public keys or HTTPS URL")
 	distroVerifyArtifactsCmd.Flags().StringVarP(&distroVerifyArtifactsArgs.attestationPath, "attestation", "a", "",
 		"path to the attestation file (required)")
 	distroVerifyArtifactsCmd.Flags().StringSliceVarP(&distroVerifyArtifactsArgs.urls, "url", "u", nil,
@@ -70,8 +70,10 @@ func distroVerifyArtifactsCmdRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to read the attestation file: %w", err)
 	}
 
-	// Load the JWKS from file or environment variable
-	jwksData, err := loadKeySet(distroVerifyArtifactsArgs.publicKeySetPath, distroSigPublicKeySetEnvVar)
+	// Load the JWKS from file, HTTP URL, or environment variable
+	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
+	defer cancel()
+	jwksData, err := loadKeySet(ctx, distroVerifyArtifactsArgs.publicKeySetPath, distroSigPublicKeySetEnvVar)
 	if err != nil {
 		return err
 	}
@@ -90,8 +92,6 @@ func distroVerifyArtifactsCmdRun(cmd *cobra.Command, args []string) error {
 
 	// Process URLs to collect artifact digests
 	var digests []string
-	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
-	defer cancel()
 
 	rootCmd.Println("processing artifacts:")
 	for _, url := range distroVerifyArtifactsArgs.urls {

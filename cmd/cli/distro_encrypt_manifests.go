@@ -6,6 +6,7 @@ package main
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -24,13 +25,13 @@ var distroEncryptManifestsCmd = &cobra.Command{
 	Short: "Encrypt manifests in a directory",
 	Example: `  # Zip and encrypt the manifests in the current dir ignoring hidden files
   flux-operator distro encrypt manifests \
-  --key-set=/path/to/enc-public.jwks \
+  --key-set=https://example.com/jwks.json \
   --ignore=".*,*.jwe,*private.jwks" \
   --output=manifests.zip.jwe
 
   # Zip and encrypt a directory using a specific public key ID
+  export FLUX_DISTRO_ENC_PUBLIC_JWKS="$(cat /path/to/enc-public.jwks)"
   flux-operator distro encrypt manifests ./distro \
-  --key-set=/path/to/enc-public.jwks \
   --key-id=12345678-1234-1234-1234-123456789abc \
   --output=distro.zip.jwe
 `,
@@ -49,7 +50,7 @@ var distroEncryptManifestsArgs distroEncryptManifestsFlags
 
 func init() {
 	distroEncryptManifestsCmd.Flags().StringVarP(&distroEncryptManifestsArgs.keySetPath, "key-set", "k", "",
-		"path to public key set JWKS file or set the environment variable "+distroEncPublicKeySetEnvVar)
+		"path to the JWKS file containing the public keys or HTTPS URL")
 	distroEncryptManifestsCmd.Flags().StringVar(&distroEncryptManifestsArgs.keyID, "key-id", "",
 		"specific key ID to use from the key set (optional, uses first suitable key if not specified)")
 	distroEncryptManifestsCmd.Flags().StringVarP(&distroEncryptManifestsArgs.outputPath, "output", "o", "",
@@ -78,7 +79,9 @@ func distroEncryptManifestsCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Load public key set
-	jwksData, err := loadKeySet(distroEncryptManifestsArgs.keySetPath, distroEncPublicKeySetEnvVar)
+	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
+	defer cancel()
+	jwksData, err := loadKeySet(ctx, distroEncryptManifestsArgs.keySetPath, distroEncPublicKeySetEnvVar)
 	if err != nil {
 		return err
 	}

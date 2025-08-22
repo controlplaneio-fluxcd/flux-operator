@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,8 +18,8 @@ var distroVerifyManifestsCmd = &cobra.Command{
 	Use:   "manifests [DIRECTORY]",
 	Short: "Verify the attestation of manifests",
 	Example: `  # Verify the attestation of manifests in the current directory
-  cat /path/to/public.jwks | flux-operator distro verify manifests \
-  --key-set=/dev/stdin \
+  flux-operator distro verify manifests \
+  --key-set=https://example.com/jwks.json \
   --attestation=attestation.jwt
 
   # Verify by reading the public key set from env
@@ -39,7 +40,7 @@ var distroVerifyManifestsArgs distroVerifyManifestsFlags
 
 func init() {
 	distroVerifyManifestsCmd.Flags().StringVarP(&distroVerifyManifestsArgs.publicKeySetPath, "key-set", "k", "",
-		"path to the public key set file or /dev/stdin (required)")
+		"path to the JWKS file containing the public keys or HTTPS URL")
 	distroVerifyManifestsCmd.Flags().StringVarP(&distroVerifyManifestsArgs.attestationPath, "attestation", "a", "",
 		"path to the attestation file (required)")
 	distroVerifyCmd.AddCommand(distroVerifyManifestsCmd)
@@ -67,7 +68,9 @@ func distroVerifyManifestsCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Load the JWKS and find the matching key
-	jwksData, err := loadKeySet(distroVerifyManifestsArgs.publicKeySetPath, distroSigPublicKeySetEnvVar)
+	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
+	defer cancel()
+	jwksData, err := loadKeySet(ctx, distroVerifyManifestsArgs.publicKeySetPath, distroSigPublicKeySetEnvVar)
 	if err != nil {
 		return err
 	}

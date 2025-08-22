@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"time"
@@ -53,7 +54,7 @@ func init() {
 	distroSignLicenseKeyCmd.Flags().IntVarP(&distroSignLicenseKeyArgs.duration, "duration", "d", 0,
 		"license duration in days (required)")
 	distroSignLicenseKeyCmd.Flags().StringVarP(&distroSignLicenseKeyArgs.privateKeySetPath, "key-set", "k", "",
-		"path to the private key set file or /dev/stdin")
+		"path to the JWKS file containing the private key")
 	distroSignLicenseKeyCmd.Flags().StringVarP(&distroSignLicenseKeyArgs.outputPath, "output", "o", "",
 		"path to the output file for the license key (required)")
 	distroSignCmd.AddCommand(distroSignLicenseKeyCmd)
@@ -74,7 +75,9 @@ func distroSignLicenseKeyCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Read the JWKS from file or environment variable
-	jwksData, err := loadKeySet(distroSignLicenseKeyArgs.privateKeySetPath, distroSigPrivateKeySetEnvVar)
+	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
+	defer cancel()
+	jwksData, err := loadKeySet(ctx, distroSignLicenseKeyArgs.privateKeySetPath, distroSigPrivateKeySetEnvVar)
 	if err != nil {
 		return err
 	}

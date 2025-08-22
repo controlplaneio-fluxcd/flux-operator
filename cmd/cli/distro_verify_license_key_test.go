@@ -4,11 +4,16 @@
 package main
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 
 	. "github.com/onsi/gomega"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/lkm"
 )
 
 func TestDistroVerifyLicenseKeyValidLicense(t *testing.T) {
@@ -243,4 +248,49 @@ func TestDistroVerifyLicenseKeyErrorCases(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDistroSignAndVerifyLicenseKeyWithHTTPKeySet(t *testing.T) {
+	g := NewWithT(t)
+	tempDir := t.TempDir()
+
+	// Generate signing key pair
+	publicKeySet, privateKeySet, err := lkm.NewSigningKeySet("http-test-issuer")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Create HTTP server for private key set (signing)
+	privateServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(privateKeySet)
+	}))
+	defer privateServer.Close()
+
+	// Create HTTP server for public key set (verification)
+	publicServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(publicKeySet)
+	}))
+	defer publicServer.Close()
+
+	licenseFile := filepath.Join(tempDir, "remote-license.jwt")
+
+	// Sign license key using HTTP-hosted private key set
+	signOutput, err := executeCommand([]string{
+		"distro", "sign", "license-key",
+		"--customer", "HTTP Test Company",
+		"--duration", "30",
+		"--key-set", privateServer.URL,
+		"--output", licenseFile,
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(signOutput).To(ContainSubstring("✔ license key written to:"))
+
+	// Verify license key using HTTP-hosted public key set
+	verifyOutput, err := executeCommand([]string{
+		"distro", "verify", "license-key", licenseFile,
+		"--key-set", publicServer.URL,
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(verifyOutput).To(ContainSubstring("✔ license key was issued by http-test-issuer"))
+	g.Expect(verifyOutput).To(ContainSubstring("✔ license key is valid until"))
 }
