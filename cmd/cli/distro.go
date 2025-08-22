@@ -51,7 +51,7 @@ func loadKeySet(ctx context.Context, keySetPath, envVarName string) ([]byte, err
 	if keySetPath != "" {
 		// Load from HTTP URL
 		if strings.HasPrefix(keySetPath, "http://") || strings.HasPrefix(keySetPath, "https://") {
-			return lkm.Fetch(ctx, keySetPath, lkm.FetchOpt.WithContentType("application/jwks"))
+			return lkm.Fetch(ctx, keySetPath, lkm.FetchOpt.WithContentType(lkm.ContentTypeKeySet))
 		}
 		// Load from file or /dev/stdin
 		return os.ReadFile(keySetPath)
@@ -71,7 +71,7 @@ func loadAttestation(ctx context.Context, attestationPath string) ([]byte, error
 	}
 
 	if strings.HasPrefix(attestationPath, "http://") || strings.HasPrefix(attestationPath, "https://") {
-		return lkm.Fetch(ctx, attestationPath, lkm.FetchOpt.WithContentType("application/jwt"))
+		return lkm.Fetch(ctx, attestationPath, lkm.FetchOpt.WithContentType(lkm.ContentTypeToken))
 	}
 	return os.ReadFile(attestationPath)
 }
