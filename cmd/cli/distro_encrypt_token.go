@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -19,13 +20,13 @@ var distroEncryptTokenCmd = &cobra.Command{
 	Short: "Encrypt tokens using JWE with ECDH-ES+A128KW",
 	Example: `  # Encrypt a license using the first public key in set
   flux-operator distro encrypt token \
-  --key-set=/path/to/enc-public.jwks \
+  --key-set=https://example.com/jwks.json \
   --input=license-key.jwt \
   --output=license-key.jwe
 
   # Encrypt from stdin using a specific public key ID
+  export FLUX_DISTRO_ENC_PUBLIC_JWKS="$(cat /path/to/enc-public.jwks)"
   echo "$GITHUB_TOKEN" | flux-operator distro encrypt token \
-  --key-set=/path/to/enc-public.jwks \
   --key-id=12345678-1234-1234-1234-123456789abc \
   --input=/dev/stdin \
   --output=pat.jwe
@@ -45,7 +46,7 @@ var distroEncryptTokenArgs distroEncryptTokenFlags
 
 func init() {
 	distroEncryptTokenCmd.Flags().StringVarP(&distroEncryptTokenArgs.keySetPath, "key-set", "k", "",
-		"path to public key set JWKS file or set the environment variable "+distroEncPublicKeySetEnvVar)
+		"path to the JWKS file containing the public keys or HTTPS URL")
 	distroEncryptTokenCmd.Flags().StringVar(&distroEncryptTokenArgs.keyID, "key-id", "",
 		"specific key ID to use from the key set (optional, uses first suitable key if not specified)")
 	distroEncryptTokenCmd.Flags().StringVarP(&distroEncryptTokenArgs.inputPath, "input", "i", "",
@@ -58,7 +59,9 @@ func init() {
 
 func distroEncryptTokenCmdRun(cmd *cobra.Command, args []string) error {
 	// Load public key set
-	jwksData, err := loadKeySet(distroEncryptTokenArgs.keySetPath, distroEncPublicKeySetEnvVar)
+	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
+	defer cancel()
+	jwksData, err := loadKeySet(ctx, distroEncryptTokenArgs.keySetPath, distroEncPublicKeySetEnvVar)
 	if err != nil {
 		return err
 	}

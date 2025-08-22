@@ -4,10 +4,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/lkm"
 )
 
 var distroCmd = &cobra.Command{
@@ -42,9 +46,13 @@ func isDir(path string) error {
 	return nil
 }
 
-// loadKeySet reads the JWKS from file path or environment variable
-func loadKeySet(keySetPath, envVarName string) ([]byte, error) {
+// loadKeySet reads the JWKS from file path, HTTP URL, or environment variable
+func loadKeySet(ctx context.Context, keySetPath, envVarName string) ([]byte, error) {
 	if keySetPath != "" {
+		// Check if it's an HTTP URL
+		if strings.HasPrefix(keySetPath, "http://") || strings.HasPrefix(keySetPath, "https://") {
+			return lkm.Fetch(ctx, keySetPath, lkm.FetchOpt.WithContentType("application/json"))
+		}
 		// Load from file or /dev/stdin
 		jwksData, err := os.ReadFile(keySetPath)
 		if err != nil {

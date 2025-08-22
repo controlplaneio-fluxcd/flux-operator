@@ -52,7 +52,7 @@ var distroSignArtifactsArgs distroSignArtifactsFlags
 
 func init() {
 	distroSignArtifactsCmd.Flags().StringVarP(&distroSignArtifactsArgs.privateKeySetPath, "key-set", "k", "",
-		"path to the private key set file or /dev/stdin (required)")
+		"path to the JWKS file containing the private key")
 	distroSignArtifactsCmd.Flags().StringVarP(&distroSignArtifactsArgs.attestationPath, "attestation", "a", "",
 		"path to the output file for the attestation (required)")
 	distroSignArtifactsCmd.Flags().StringSliceVarP(&distroSignArtifactsArgs.urls, "url", "u", nil,
@@ -69,7 +69,9 @@ func distroSignArtifactsCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Read the JWKS from file or environment variable
-	jwksData, err := loadKeySet(distroSignArtifactsArgs.privateKeySetPath, distroSigPrivateKeySetEnvVar)
+	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
+	defer cancel()
+	jwksData, err := loadKeySet(ctx, distroSignArtifactsArgs.privateKeySetPath, distroSigPrivateKeySetEnvVar)
 	if err != nil {
 		return err
 	}
@@ -82,8 +84,6 @@ func distroSignArtifactsCmdRun(cmd *cobra.Command, args []string) error {
 
 	// Process URLs to collect artifact digests
 	var digests []string
-	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
-	defer cancel()
 
 	rootCmd.Println("processing artifacts:")
 	for _, url := range distroSignArtifactsArgs.urls {

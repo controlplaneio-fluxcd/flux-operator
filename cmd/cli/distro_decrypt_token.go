@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -24,8 +25,8 @@ var distroDecryptTokenCmd = &cobra.Command{
   --output=license-key.jwt
 
   # Decrypt from stdin to stdout
+  export FLUX_DISTRO_ENC_PRIVATE_JWKS="$(cat /path/to/private.jwks)"
   cat pat.jwe | flux-operator distro decrypt token \
-  --key-set=/path/to/enc-private.jwks \
   --input=/dev/stdin \
   --output=/dev/stdout
 `,
@@ -43,7 +44,7 @@ var distroDecryptTokenArgs distroDecryptTokenFlags
 
 func init() {
 	distroDecryptTokenCmd.Flags().StringVarP(&distroDecryptTokenArgs.keySetPath, "key-set", "k", "",
-		"path to private key set JWKS file or set the environment variable "+distroEncPrivateKeySetEnvVar)
+		"path to JWKS file containing the private key")
 	distroDecryptTokenCmd.Flags().StringVarP(&distroDecryptTokenArgs.inputPath, "input", "i", "",
 		"path to input JWE file or /dev/stdin (required)")
 	distroDecryptTokenCmd.Flags().StringVarP(&distroDecryptTokenArgs.outputPath, "output", "o", "",
@@ -54,7 +55,9 @@ func init() {
 
 func distroDecryptTokenCmdRun(cmd *cobra.Command, args []string) error {
 	// Load private key set
-	jwksData, err := loadKeySet(distroDecryptTokenArgs.keySetPath, distroEncPrivateKeySetEnvVar)
+	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
+	defer cancel()
+	jwksData, err := loadKeySet(ctx, distroDecryptTokenArgs.keySetPath, distroEncPrivateKeySetEnvVar)
 	if err != nil {
 		return err
 	}

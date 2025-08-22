@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -39,7 +40,7 @@ var distroSignManifestsArgs distroSignManifestsFlags
 
 func init() {
 	distroSignManifestsCmd.Flags().StringVarP(&distroSignManifestsArgs.privateKeySetPath, "key-set", "k", "",
-		"path to the private key set file or /dev/stdin (required)")
+		"path to the JWKS file containing the private key")
 	distroSignManifestsCmd.Flags().StringVarP(&distroSignManifestsArgs.outputPath, "attestation", "a", "",
 		"path to to the output file for the attestation (required)")
 	distroSignCmd.AddCommand(distroSignManifestsCmd)
@@ -58,7 +59,9 @@ func distroSignManifestsCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Read the JWKS from file or environment variable
-	jwksData, err := loadKeySet(distroSignManifestsArgs.privateKeySetPath, distroSigPrivateKeySetEnvVar)
+	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
+	defer cancel()
+	jwksData, err := loadKeySet(ctx, distroSignManifestsArgs.privateKeySetPath, distroSigPrivateKeySetEnvVar)
 	if err != nil {
 		return err
 	}

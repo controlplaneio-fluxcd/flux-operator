@@ -6,6 +6,7 @@ package main
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -45,7 +46,7 @@ var distroDecryptManifestsArgs distroDecryptManifestsFlags
 
 func init() {
 	distroDecryptManifestsCmd.Flags().StringVarP(&distroDecryptManifestsArgs.keySetPath, "key-set", "k", "",
-		"path to private key set JWKS file or set the environment variable "+distroEncPrivateKeySetEnvVar)
+		"path to JWKS file containing the private key")
 	distroDecryptManifestsCmd.Flags().StringVarP(&distroDecryptManifestsArgs.outputPath, "output-dir", "o", ".",
 		"path to output directory (defaults to current directory)")
 	distroDecryptManifestsCmd.Flags().BoolVar(&distroDecryptManifestsArgs.overwrite, "overwrite", false,
@@ -68,7 +69,9 @@ func distroDecryptManifestsCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Load private key set
-	jwksData, err := loadKeySet(distroDecryptManifestsArgs.keySetPath, distroEncPrivateKeySetEnvVar)
+	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
+	defer cancel()
+	jwksData, err := loadKeySet(ctx, distroDecryptManifestsArgs.keySetPath, distroEncPrivateKeySetEnvVar)
 	if err != nil {
 		return err
 	}
