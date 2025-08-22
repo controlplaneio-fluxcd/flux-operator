@@ -182,12 +182,24 @@ func EdKeySetFromJSON(data []byte) (*EdKeySet, error) {
 	if err := json.Unmarshal(data, &keySet); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal EdKeySet: %w", err)
 	}
+
+	// Validate the key set
 	if len(keySet.Keys) == 0 {
 		return nil, ErrKeySetEmpty
 	}
-
 	if keySet.Issuer != "" && len(keySet.Keys) > 1 {
 		return nil, fmt.Errorf("EdKeySet with issuer %s cannot contain multiple keys", keySet.Issuer)
+	}
+	for _, key := range keySet.Keys {
+		if key.KeyID == "" {
+			return nil, ErrKIDMissing
+		}
+		if key.Use != UseTypeSig {
+			return nil, ErrKeyUseNotSig
+		}
+		if key.Algorithm != string(jose.EdDSA) {
+			return nil, ErrKeyAlgNotEdDA
+		}
 	}
 
 	return &keySet, nil
