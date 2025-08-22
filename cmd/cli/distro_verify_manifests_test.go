@@ -60,7 +60,7 @@ func TestDistroVerifyManifestsErrorCases(t *testing.T) { //nolint:gocyclo
 				return []string{"distro", "verify", "manifests", tempDir, "--key-set", publicKeyFile}, nil
 			},
 			expectError:  true,
-			errorMessage: "failed to read",
+			errorMessage: "flag is required",
 		},
 		{
 			name: "missing key set",
