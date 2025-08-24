@@ -64,6 +64,9 @@ func (m *ManifestsAttestation) Validate() error {
 	if m.att.ID == "" {
 		return InvalidAttestationError(ErrClaimIDEmpty)
 	}
+	if err := validateUUID(m.att.ID); err != nil {
+		return InvalidAttestationError(err)
+	}
 	if m.att.Issuer == "" {
 		return InvalidAttestationError(ErrClaimIssuerEmpty)
 	}
@@ -77,8 +80,11 @@ func (m *ManifestsAttestation) Validate() error {
 	if m.att.IssuedAt <= 0 {
 		return InvalidAttestationError(ErrClaimIssuedAtZero)
 	}
-	if time.Unix(m.att.IssuedAt, 0).After(time.Now().Add(time.Minute)) {
+	if time.Unix(m.att.IssuedAt, 0).After(time.Now().Add(30 * time.Second)) {
 		return InvalidAttestationError(ErrClaimIssuedAtFuture)
+	}
+	if m.att.Expiry > 0 && time.Now().Add(-30*time.Second).After(time.Unix(m.att.Expiry, 0)) {
+		return InvalidAttestationError(ErrClaimExpired)
 	}
 
 	if m.att.Subject != "manifests" {
