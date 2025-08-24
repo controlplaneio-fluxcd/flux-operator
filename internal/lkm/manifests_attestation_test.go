@@ -20,7 +20,7 @@ import (
 func testAttestation() Attestation {
 	now := time.Now()
 	return Attestation{
-		ID:       "test-id",
+		ID:       "01f080cb-8881-6194-a0de-c69c5184ad4d",
 		Issuer:   "test-issuer",
 		Subject:  "manifests",
 		Audience: "test-audience",

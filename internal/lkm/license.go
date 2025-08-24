@@ -4,9 +4,9 @@
 package lkm
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"hash/adler32"
 	"strings"
 	"time"
 
@@ -32,7 +32,8 @@ func NewLicense(issuer, subject, audience string, expiry time.Duration, capabili
 	}
 
 	// Anonymize the subject.
-	subjectID := fmt.Sprintf("c-%08x", adler32.Checksum([]byte(subject)))
+	hash := sha256.Sum256([]byte(subject))
+	subjectID := fmt.Sprintf("c-%016x", hash[:8])
 
 	// Calculate the expiry time based on the current time
 	// and the provided duration.
@@ -90,6 +91,9 @@ func (lic *License) Validate() error {
 	if lic.lk.ID == "" {
 		return InvalidLicenseKeyError(ErrClaimIDEmpty)
 	}
+	if err := validateUUID(lic.lk.ID); err != nil {
+		return InvalidLicenseKeyError(err)
+	}
 	if lic.lk.Issuer == "" {
 		return InvalidLicenseKeyError(ErrClaimIssuerEmpty)
 	}
@@ -103,7 +107,7 @@ func (lic *License) Validate() error {
 	if lic.lk.IssuedAt <= 0 {
 		return InvalidLicenseKeyError(ErrClaimIssuedAtZero)
 	}
-	if time.Unix(lic.lk.IssuedAt, 0).After(time.Now().Add(time.Minute)) {
+	if time.Unix(lic.lk.IssuedAt, 0).After(time.Now().Add(30 * time.Second)) {
 		return InvalidLicenseKeyError(ErrClaimIssuedAtFuture)
 	}
 
@@ -183,4 +187,18 @@ func GetLicenseFromToken(jwtData []byte, publicKey *EdPublicKey) (*License, erro
 	}
 
 	return NewLicenseWithKey(lk)
+}
+
+// validateUUID checks if the provided string is a valid UUID v6.
+func validateUUID(id string) error {
+	parsed, err := uuid.Parse(id)
+	if err != nil {
+		return ErrInvalidUUID
+	}
+
+	if parsed.Version() != uuid.Version(6) {
+		return ErrInvalidUUID
+	}
+
+	return nil
 }

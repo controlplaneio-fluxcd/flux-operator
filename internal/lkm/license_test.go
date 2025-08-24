@@ -18,7 +18,7 @@ import (
 func testLicenseKey() LicenseKey {
 	now := time.Now()
 	return LicenseKey{
-		ID:           "test-id",
+		ID:           "01f080cb-8881-6194-a0de-c69c5184ad4d",
 		Issuer:       "test-issuer",
 		Subject:      "test-subject",
 		Audience:     "test-audience",
@@ -50,9 +50,9 @@ func TestNewLicense(t *testing.T) {
 		g.Expect(lk.Audience).To(Equal(audience))
 		g.Expect(lk.Capabilities).To(Equal(capabilities))
 
-		// Verify subject is anonymized with "c-" prefix and 8-character hex
+		// Verify subject is anonymized with "c-" prefix
 		g.Expect(lk.Subject).To(HavePrefix("c-"))
-		g.Expect(lk.Subject).To(HaveLen(10)) // "c-" + 8 hex characters
+		g.Expect(lk.Subject).To(HaveLen(18)) // "c-" + 16 hex characters
 
 		// Verify ID is a valid UUID v6 format
 		parsedUUID, err := uuid.Parse(lk.ID)

@@ -19,7 +19,7 @@ func testArtifactsAttestation() ArtifactsAttestation {
 	now := time.Now()
 	return ArtifactsAttestation{
 		att: Attestation{
-			ID:       "test-id",
+			ID:       "01f080cb-8881-6194-a0de-c69c5184ad4d",
 			Issuer:   "test-issuer",
 			Subject:  "artifacts",
 			Audience: "test-audience",
@@ -30,6 +30,7 @@ func testArtifactsAttestation() ArtifactsAttestation {
 }
 
 func TestNewArtifactsAttestation(t *testing.T) {
+	jti, _ := uuid.NewV6()
 	t.Run("creates attestation from valid verified data", func(t *testing.T) {
 		g := NewWithT(t)
 
@@ -44,7 +45,7 @@ func TestNewArtifactsAttestation(t *testing.T) {
 		g.Expect(aa).ToNot(BeNil())
 
 		att := aa.GetAttestation()
-		g.Expect(att.ID).To(Equal("test-id"))
+		g.Expect(att.ID).ToNot(BeEmpty())
 		g.Expect(att.Issuer).To(Equal("test-issuer"))
 		g.Expect(att.Subject).To(Equal("artifacts"))
 		g.Expect(att.Audience).To(Equal("test-audience"))
@@ -102,7 +103,7 @@ func TestNewArtifactsAttestation(t *testing.T) {
 
 		// Create attestation with wrong subject
 		invalidAtt := Attestation{
-			ID:       "test-id",
+			ID:       jti.String(),
 			Issuer:   "test-issuer",
 			Subject:  "wrong-subject",
 			Audience: "test-audience",
@@ -124,7 +125,7 @@ func TestNewArtifactsAttestation(t *testing.T) {
 
 		// Create attestation with empty digests
 		invalidAtt := Attestation{
-			ID:       "test-id",
+			ID:       jti.String(),
 			Issuer:   "test-issuer",
 			Subject:  "artifacts",
 			Audience: "test-audience",

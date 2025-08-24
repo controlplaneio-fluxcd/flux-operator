@@ -26,6 +26,9 @@ var ErrClaimDigestsEmpty = errors.New("digests list cannot be empty")
 // ErrClaimDigestsImmutable is returned when the attestation digests already contain values.
 var ErrClaimDigestsImmutable = errors.New("digests claim cannot be overwritten")
 
+// ErrClaimExpired is returned when the claim expiry time is in the past.
+var ErrClaimExpired = errors.New("expiry (exp) cannot be in the past")
+
 // ErrClaimExpiryZero is returned when the license key expiry time is zero.
 var ErrClaimExpiryZero = errors.New("expiry (exp) cannot be zero")
 
@@ -109,6 +112,9 @@ var ErrPublicKeyRequired = errors.New("public key is required")
 
 // ErrSigNotFound is returned when no signatures are found in the token.
 var ErrSigNotFound = errors.New("no signatures found in JWT token")
+
+// ErrInvalidUUID is returned when a string is not a valid UUID v6.
+var ErrInvalidUUID = errors.New("invalid UUID v6")
 
 // ErrVerifySig is returned when signature verification fails.
 var ErrVerifySig = errors.New("failed to verify signature")
