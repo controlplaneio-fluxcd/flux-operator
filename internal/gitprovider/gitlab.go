@@ -194,6 +194,58 @@ func (p *GitLabProvider) ListRequests(ctx context.Context, opts Options) ([]Resu
 	return results, nil
 }
 
+func (p *GitLabProvider) ListEnvironments(ctx context.Context, opts Options) ([]Result, error) {
+	glOpts := &gitlab.ListEnvironmentsOptions{
+		ListOptions: gitlab.ListOptions{
+			PerPage: 100,
+		},
+		States: gitlab.Ptr("available"),
+	}
+
+	results := make([]Result, 0)
+	for {
+		envs, resp, err := p.Client.Environments.ListEnvironments(p.Project, glOpts)
+		if err != nil {
+			return nil, fmt.Errorf("could not list environments: %v", err)
+		}
+
+		for _, env := range envs {
+			if !opts.Filters.MatchString(env.Name) {
+				continue
+			}
+
+			// In the list call only few fields are set, but we need the "last_deployment" field with details on the current commit.
+			env, _, err = p.Client.Environments.GetEnvironment(p.Project, env.ID)
+			if err != nil {
+				return nil, fmt.Errorf("could not describe environment: %v", err)
+			}
+
+			if env.LastDeployment == nil {
+				continue
+			}
+
+			results = append(results, Result{
+				ID:     fmt.Sprintf("%d", env.ID),
+				SHA:    env.LastDeployment.Deployable.Commit.ID,
+				Branch: env.LastDeployment.Deployable.Ref,
+				Title:  env.Slug,
+				Author: env.LastDeployment.User.Username,
+			})
+
+			if opts.Filters.Limit > 0 && len(results) >= opts.Filters.Limit {
+				return results, nil
+			}
+		}
+
+		if resp.NextPage == 0 {
+			break
+		}
+		glOpts.Page = resp.NextPage
+	}
+
+	return results, nil
+}
+
 // parseGitHubURL parses a GitLab URL and returns the host and project.
 func parseGitLabURL(glURL string) (string, string, error) {
 	u, err := url.Parse(glURL)

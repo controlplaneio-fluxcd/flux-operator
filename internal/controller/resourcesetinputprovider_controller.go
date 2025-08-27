@@ -496,6 +496,11 @@ func (r *ResourceSetInputProviderReconciler) callGitProvider(ctx context.Context
 		if err != nil {
 			return nil, fmt.Errorf("failed to list requests: %w", err)
 		}
+	case strings.HasSuffix(obj.Spec.Type, "Environment"):
+		results, err = provider.ListEnvironments(ctx, opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list environments: %w", err)
+		}
 	default:
 		return nil, fmt.Errorf("unsupported type: %s", obj.Spec.Type)
 	}

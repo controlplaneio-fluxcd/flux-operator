@@ -22,6 +22,11 @@ type AzureDevOpsProvider struct {
 	Repo    string
 }
 
+func (p *AzureDevOpsProvider) ListEnvironments(_ context.Context, _ Options) ([]Result, error) {
+	// TODO implement me
+	panic("implement me")
+}
+
 func NewAzureDevOpsProvider(ctx context.Context, opts Options) (*AzureDevOpsProvider, error) {
 	var client git.Client
 

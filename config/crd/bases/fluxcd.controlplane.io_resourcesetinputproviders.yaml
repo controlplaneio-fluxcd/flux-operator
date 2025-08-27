@@ -194,6 +194,7 @@ spec:
                 - GitLabBranch
                 - GitLabTag
                 - GitLabMergeRequest
+                - GitLabEnvironment
                 - AzureDevOpsBranch
                 - AzureDevOpsTag
                 - AzureDevOpsPullRequest

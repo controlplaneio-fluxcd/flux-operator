@@ -22,6 +22,11 @@ type GitHubProvider struct {
 	Repo   string
 }
 
+func (p *GitHubProvider) ListEnvironments(_ context.Context, _ Options) ([]Result, error) {
+	// TODO implement me
+	panic("implement me")
+}
+
 func NewGitHubProvider(ctx context.Context, opts Options) (*GitHubProvider, error) {
 	var client *github.Client
 	var ts oauth2.TokenSource
