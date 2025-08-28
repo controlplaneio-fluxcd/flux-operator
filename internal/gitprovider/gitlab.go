@@ -215,21 +215,35 @@ func (p *GitLabProvider) ListEnvironments(ctx context.Context, opts Options) ([]
 			}
 
 			// In the list call only few fields are set, but we need the "last_deployment" field with details on the current commit.
-			env, _, err = p.Client.Environments.GetEnvironment(p.Project, env.ID)
+			deployments, _, err := p.Client.Deployments.ListProjectDeployments(p.Project, &gitlab.ListProjectDeploymentsOptions{
+				ListOptions: gitlab.ListOptions{},
+				OrderBy:     gitlab.Ptr("created_at"),
+				Sort:        gitlab.Ptr("desc"),
+				Environment: gitlab.Ptr(env.Name),
+			})
 			if err != nil {
-				return nil, fmt.Errorf("could not describe environment: %v", err)
+				return nil, fmt.Errorf("could not list deployments for environment: %v", err)
 			}
 
-			if env.LastDeployment == nil {
+			var lastDeployment *gitlab.Deployment
+
+			for _, deployment := range deployments {
+				if deployment.Status == "running" || deployment.Status == "success" {
+					lastDeployment = deployment
+					break
+				}
+			}
+
+			if lastDeployment == nil {
 				continue
 			}
 
 			results = append(results, Result{
 				ID:     fmt.Sprintf("%d", env.ID),
-				SHA:    env.LastDeployment.Deployable.Commit.ID,
-				Branch: env.LastDeployment.Deployable.Ref,
+				SHA:    lastDeployment.Deployable.Commit.ID,
+				Branch: lastDeployment.Deployable.Ref,
 				Title:  env.Slug,
-				Author: env.LastDeployment.User.Username,
+				Author: lastDeployment.User.Username,
 			})
 
 			if opts.Filters.Limit > 0 && len(results) >= opts.Filters.Limit {
