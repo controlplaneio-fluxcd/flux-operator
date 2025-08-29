@@ -5,7 +5,6 @@ package lkm
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -58,44 +57,6 @@ func (m *ManifestsAttestation) GetIssuer() string {
 	return m.att.Issuer
 }
 
-// Validate checks if the Attestation contains all required fields
-// and that the timestamps are valid.
-func (m *ManifestsAttestation) Validate() error {
-	if m.att.ID == "" {
-		return InvalidAttestationError(ErrClaimIDEmpty)
-	}
-	if err := validateUUID(m.att.ID); err != nil {
-		return InvalidAttestationError(err)
-	}
-	if m.att.Issuer == "" {
-		return InvalidAttestationError(ErrClaimIssuerEmpty)
-	}
-	if m.att.Subject == "" {
-		return InvalidAttestationError(ErrClaimSubjectEmpty)
-	}
-	if m.att.Audience == "" {
-		return InvalidAttestationError(ErrClaimAudienceEmpty)
-	}
-
-	if m.att.IssuedAt <= 0 {
-		return InvalidAttestationError(ErrClaimIssuedAtZero)
-	}
-	if time.Unix(m.att.IssuedAt, 0).After(time.Now().Add(30 * time.Second)) {
-		return InvalidAttestationError(ErrClaimIssuedAtFuture)
-	}
-	if m.att.Expiry > 0 && time.Now().Add(-30*time.Second).After(time.Unix(m.att.Expiry, 0)) {
-		return InvalidAttestationError(ErrClaimExpired)
-	}
-
-	if m.att.Subject != "manifests" {
-		return InvalidAttestationError(errors.New("subject must be 'manifests'"))
-	}
-	if len(m.att.Digests) == 0 {
-		return InvalidAttestationError(ErrClaimChecksumEmpty)
-	}
-	return nil
-}
-
 // ToJSON serializes the attestation to JSON format.
 func (m *ManifestsAttestation) ToJSON() ([]byte, error) {
 	data, err := json.Marshal(m.att)
@@ -135,7 +96,7 @@ func (m *ManifestsAttestation) Sign(privateKey *EdPrivateKey, dirPath string, ig
 	m.att.Digests = []string{checksum}
 
 	// Validate the attestation.
-	if err := m.Validate(); err != nil {
+	if err := m.att.Validate("", "manifests"); err != nil {
 		return "", nil, err
 	}
 
@@ -178,7 +139,7 @@ func (m *ManifestsAttestation) Verify(jwtData []byte, publicKey *EdPublicKey, di
 	m.att = att
 
 	// Validate the attestation.
-	if err := m.Validate(); err != nil {
+	if err := m.att.Validate("", "manifests"); err != nil {
 		return nil, err
 	}
 
