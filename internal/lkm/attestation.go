@@ -5,6 +5,8 @@ package lkm
 
 import (
 	"encoding/json"
+	"fmt"
+	"time"
 )
 
 // Attestation represents a cryptographic attestation that contains
@@ -54,4 +56,51 @@ func (a Attestation) String() string {
 		return "invalid attestation"
 	}
 	return string(data)
+}
+
+// Validate checks if the Attestation contains all required fields
+// and that the timestamps are valid. It also checks that the audience
+// and subject match the expected values.
+func (a Attestation) Validate(withAudience, withSubject string) error {
+	if a.ID == "" {
+		return InvalidAttestationError(ErrClaimIDEmpty)
+	}
+	if err := validateUUID(a.ID); err != nil {
+		return InvalidAttestationError(err)
+	}
+
+	if a.Issuer == "" {
+		return InvalidAttestationError(ErrClaimIssuerEmpty)
+	}
+
+	if a.Audience == "" {
+		return InvalidAttestationError(ErrClaimAudienceEmpty)
+	}
+	if withAudience != "" && a.Audience != withAudience {
+		return InvalidAttestationError(fmt.Errorf("audience must be '%s'", withAudience))
+	}
+
+	if a.Subject == "" {
+		return InvalidAttestationError(ErrClaimSubjectEmpty)
+	}
+	if a.Subject != withSubject {
+		return InvalidAttestationError(fmt.Errorf("subject must be '%s'", withSubject))
+	}
+
+	if a.IssuedAt <= 0 {
+		return InvalidAttestationError(ErrClaimIssuedAtZero)
+	}
+	if time.Unix(a.IssuedAt, 0).After(time.Now().Add(30 * time.Second)) {
+		return InvalidAttestationError(ErrClaimIssuedAtFuture)
+	}
+
+	if a.Expiry > 0 && time.Now().Add(-30*time.Second).After(time.Unix(a.Expiry, 0)) {
+		return InvalidAttestationError(ErrClaimExpired)
+	}
+
+	if len(a.Digests) == 0 {
+		return InvalidAttestationError(ErrClaimDigestsEmpty)
+	}
+
+	return nil
 }

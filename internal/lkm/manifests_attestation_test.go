@@ -16,8 +16,8 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-// testAttestation returns a valid Attestation for testing
-func testAttestation() Attestation {
+// testManifestAttestation returns a valid Attestation for testing
+func testManifestAttestation() Attestation {
 	now := time.Now()
 	return Attestation{
 		ID:       "01f080cb-8881-6194-a0de-c69c5184ad4d",
@@ -86,115 +86,17 @@ func TestNewManifestsAttestation(t *testing.T) {
 func TestManifestsAttestation_GetAttestation(t *testing.T) {
 	g := NewWithT(t)
 
-	att := testAttestation()
+	att := testManifestAttestation()
 	ma := &ManifestsAttestation{att: att}
 
 	result := ma.GetAttestation()
 	g.Expect(result).To(Equal(att))
 }
 
-func TestManifestsAttestation_Validate(t *testing.T) {
-	t.Run("valid attestation passes validation", func(t *testing.T) {
-		g := NewWithT(t)
-		att := testAttestation()
-		ma := &ManifestsAttestation{att: att}
-
-		err := ma.Validate()
-		g.Expect(err).ToNot(HaveOccurred())
-	})
-
-	t.Run("fails when ID is empty", func(t *testing.T) {
-		g := NewWithT(t)
-		att := testAttestation()
-		att.ID = ""
-		ma := &ManifestsAttestation{att: att}
-
-		err := ma.Validate()
-		g.Expect(err).To(HaveOccurred())
-		g.Expect(errors.Is(err, ErrClaimIDEmpty)).To(BeTrue())
-	})
-
-	t.Run("fails when Issuer is empty", func(t *testing.T) {
-		g := NewWithT(t)
-		att := testAttestation()
-		att.Issuer = ""
-		ma := &ManifestsAttestation{att: att}
-
-		err := ma.Validate()
-		g.Expect(err).To(HaveOccurred())
-		g.Expect(errors.Is(err, ErrClaimIssuerEmpty)).To(BeTrue())
-	})
-
-	t.Run("fails when Subject is empty", func(t *testing.T) {
-		g := NewWithT(t)
-		att := testAttestation()
-		att.Subject = ""
-		ma := &ManifestsAttestation{att: att}
-
-		err := ma.Validate()
-		g.Expect(err).To(HaveOccurred())
-		g.Expect(errors.Is(err, ErrClaimSubjectEmpty)).To(BeTrue())
-	})
-
-	t.Run("fails when Audience is empty", func(t *testing.T) {
-		g := NewWithT(t)
-		att := testAttestation()
-		att.Audience = ""
-		ma := &ManifestsAttestation{att: att}
-
-		err := ma.Validate()
-		g.Expect(err).To(HaveOccurred())
-		g.Expect(errors.Is(err, ErrClaimAudienceEmpty)).To(BeTrue())
-	})
-
-	t.Run("fails when IssuedAt is zero", func(t *testing.T) {
-		g := NewWithT(t)
-		att := testAttestation()
-		att.IssuedAt = 0
-		ma := &ManifestsAttestation{att: att}
-
-		err := ma.Validate()
-		g.Expect(err).To(HaveOccurred())
-		g.Expect(errors.Is(err, ErrClaimIssuedAtZero)).To(BeTrue())
-	})
-
-	t.Run("fails when IssuedAt is in the future", func(t *testing.T) {
-		g := NewWithT(t)
-		att := testAttestation()
-		att.IssuedAt = time.Now().Add(2 * time.Minute).Unix()
-		ma := &ManifestsAttestation{att: att}
-
-		err := ma.Validate()
-		g.Expect(err).To(HaveOccurred())
-		g.Expect(errors.Is(err, ErrClaimIssuedAtFuture)).To(BeTrue())
-	})
-
-	t.Run("allows IssuedAt within future tolerance", func(t *testing.T) {
-		g := NewWithT(t)
-		att := testAttestation()
-		att.IssuedAt = time.Now().Add(30 * time.Second).Unix() // Within 1 minute tolerance
-		ma := &ManifestsAttestation{att: att}
-
-		err := ma.Validate()
-		g.Expect(err).ToNot(HaveOccurred())
-	})
-
-	t.Run("fails when Checksum is empty", func(t *testing.T) {
-		g := NewWithT(t)
-		att := testAttestation()
-		att.Digests = []string{}
-		ma := &ManifestsAttestation{att: att}
-
-		err := ma.Validate()
-		g.Expect(err).To(HaveOccurred())
-		g.Expect(errors.Is(err, ErrClaimChecksumEmpty)).To(BeTrue())
-	})
-}
-
 func TestManifestsAttestation_ToJSON(t *testing.T) {
 	t.Run("serializes attestation to JSON", func(t *testing.T) {
 		g := NewWithT(t)
-		att := testAttestation()
+		att := testManifestAttestation()
 		ma := &ManifestsAttestation{att: att}
 
 		data, err := ma.ToJSON()
@@ -292,7 +194,7 @@ func TestManifestsAttestation_Sign(t *testing.T) {
 
 	t.Run("fails when attestation already scanned", func(t *testing.T) {
 		g := NewWithT(t)
-		att := testAttestation()
+		att := testManifestAttestation()
 		ma := &ManifestsAttestation{att: att}
 		_, privateKey := genTestKeys(t)
 		testDir := createTestDirectory(t)
@@ -474,7 +376,7 @@ func TestManifestsAttestation_Verify(t *testing.T) {
 func TestManifestsAttestation_GetChecksum(t *testing.T) {
 	t.Run("returns checksum from populated attestation", func(t *testing.T) {
 		g := NewWithT(t)
-		att := testAttestation()
+		att := testManifestAttestation()
 		ma := &ManifestsAttestation{att: att}
 
 		checksum := ma.GetChecksum()
@@ -530,7 +432,7 @@ func TestManifestsAttestation_GetChecksum(t *testing.T) {
 func TestManifestsAttestation_GetIssuer(t *testing.T) {
 	t.Run("returns issuer from populated attestation", func(t *testing.T) {
 		g := NewWithT(t)
-		att := testAttestation()
+		att := testManifestAttestation()
 		ma := &ManifestsAttestation{att: att}
 
 		issuer := ma.GetIssuer()
