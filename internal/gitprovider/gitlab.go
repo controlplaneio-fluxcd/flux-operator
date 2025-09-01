@@ -214,7 +214,8 @@ func (p *GitLabProvider) ListEnvironments(ctx context.Context, opts Options) ([]
 				continue
 			}
 
-			// In the list call only few fields are set, but we need the "last_deployment" field with details on the current commit.
+			// We need to also consider "running" deployments to allow users to "flux-operator reconcile rsip ..." in the deployment job itself.
+			// This is only available through the Deployments API.
 			deployments, _, err := p.Client.Deployments.ListProjectDeployments(p.Project, &gitlab.ListProjectDeploymentsOptions{
 				ListOptions: gitlab.ListOptions{},
 				OrderBy:     gitlab.Ptr("created_at"),
@@ -238,12 +239,17 @@ func (p *GitLabProvider) ListEnvironments(ctx context.Context, opts Options) ([]
 				continue
 			}
 
+			author := ""
+			if lastDeployment.User != nil {
+				author = lastDeployment.User.Username
+			}
+
 			results = append(results, Result{
 				ID:     fmt.Sprintf("%d", env.ID),
 				SHA:    lastDeployment.Deployable.Commit.ID,
 				Branch: lastDeployment.Deployable.Ref,
 				Title:  env.Slug,
-				Author: lastDeployment.User.Username,
+				Author: author,
 			})
 
 			if opts.Filters.Limit > 0 && len(results) >= opts.Filters.Limit {
