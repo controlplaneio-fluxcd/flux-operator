@@ -62,7 +62,7 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&rootArgs.readOnly, "read-only", false,
 		"Run the MCP server in read-only mode, disabling write and delete operations.")
 	rootCmd.PersistentFlags().StringVar(&rootArgs.transport, "transport", "stdio",
-		"The transport protocol to use for the MCP server. Options: [stdio, sse].")
+		"The transport protocol to use for the MCP server. Options: [stdio, sse, http].")
 	rootCmd.PersistentFlags().IntVar(&rootArgs.port, "port", 8080,
 		"The port to use for the MCP server. This is only used when the transport is set to 'sse'.")
 	addKubeConfigFlags(rootCmd)
@@ -177,12 +177,18 @@ func serveCmdRun(cmd *cobra.Command, args []string) error {
 	pm := prompter.NewManager()
 	pm.RegisterPrompts(mcpServer)
 
-	if rootArgs.transport == "sse" {
+	switch rootArgs.transport {
+	case "http":
+		streamableServer := server.NewStreamableHTTPServer(mcpServer)
+		if err := streamableServer.Start(fmt.Sprintf(":%d", rootArgs.port)); err != nil {
+			return err
+		}
+	case "sse":
 		sseServer := server.NewSSEServer(mcpServer, server.WithKeepAlive(true))
 		if err := sseServer.Start(fmt.Sprintf(":%d", rootArgs.port)); err != nil {
 			return err
 		}
-	} else {
+	default:
 		if err := server.ServeStdio(mcpServer); err != nil {
 			return err
 		}
