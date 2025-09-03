@@ -58,27 +58,29 @@ func init() {
 
 func main() {
 	const (
-		controllerName              = "flux-operator"
-		defaultServiceAccountEnvKey = "DEFAULT_SERVICE_ACCOUNT"
-		reportingIntervalEnvKey     = "REPORTING_INTERVAL"
-		runtimeNamespaceEnvKey      = "RUNTIME_NAMESPACE"
-		tokenCacheDefaultMaxSize    = 100
+		controllerName                              = "flux-operator"
+		defaultServiceAccountEnvKey                 = "DEFAULT_SERVICE_ACCOUNT"
+		defaultWorkloadIdentityServiceAccountEnvKey = "DEFAULT_WORKLOAD_IDENTITY_SERVICE_ACCOUNT"
+		reportingIntervalEnvKey                     = "REPORTING_INTERVAL"
+		runtimeNamespaceEnvKey                      = "RUNTIME_NAMESPACE"
+		tokenCacheDefaultMaxSize                    = 100
 	)
 
 	var (
-		concurrent            int
-		reportingInterval     time.Duration
-		requeueDependency     time.Duration
-		tokenCacheOptions     cache.TokenFlags
-		metricsAddr           string
-		healthAddr            string
-		enableLeaderElection  bool
-		logOptions            logger.Options
-		rateLimiterOptions    runtimeCtrl.RateLimiterOptions
-		intervalJitterOptions jitter.IntervalOptions
-		storagePath           string
-		defaultServiceAccount string
-		watchOptions          runtimeCtrl.WatchOptions
+		concurrent                            int
+		reportingInterval                     time.Duration
+		requeueDependency                     time.Duration
+		tokenCacheOptions                     cache.TokenFlags
+		metricsAddr                           string
+		healthAddr                            string
+		enableLeaderElection                  bool
+		logOptions                            logger.Options
+		rateLimiterOptions                    runtimeCtrl.RateLimiterOptions
+		intervalJitterOptions                 jitter.IntervalOptions
+		storagePath                           string
+		defaultServiceAccount                 string
+		defaultWorkloadIdentityServiceAccount string
+		watchOptions                          runtimeCtrl.WatchOptions
 	)
 
 	flag.IntVar(&concurrent, "concurrent", 10,
@@ -95,6 +97,8 @@ func main() {
 		"The local storage path.")
 	flag.StringVar(&defaultServiceAccount, "default-service-account", "",
 		"Default service account used for impersonation.")
+	flag.StringVar(&defaultWorkloadIdentityServiceAccount, "default-workload-identity-service-account", "",
+		"Default service account to use for workload identity when not specified in resources.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", true,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
@@ -129,7 +133,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	// auth setup.
 	auth.EnableObjectLevelWorkloadIdentity()
+	if s := defaultWorkloadIdentityServiceAccount; s != "" {
+		auth.SetDefaultServiceAccount(s)
+	}
 
 	watchConfigsPredicate, err := runtimeCtrl.GetWatchConfigsPredicate(watchOptions)
 	if err != nil {
@@ -137,11 +145,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Allow the default service account name to be set by an environment variable.
+	// Allow the default service account names to be set by the environment variables.
 	// Needed for the OLM Subscription that only allows env var configuration.
-	defaultSA := os.Getenv(defaultServiceAccountEnvKey)
-	if defaultSA != "" {
-		defaultServiceAccount = defaultSA
+	if s := os.Getenv(defaultServiceAccountEnvKey); s != "" {
+		defaultServiceAccount = s
+	}
+	if s := os.Getenv(defaultWorkloadIdentityServiceAccountEnvKey); s != "" {
+		defaultWorkloadIdentityServiceAccount = s
 	}
 
 	// Allow the reporting interval to be set by an environment variable.
