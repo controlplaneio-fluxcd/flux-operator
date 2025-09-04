@@ -199,7 +199,6 @@ func (p *GitLabProvider) ListEnvironments(ctx context.Context, opts Options) ([]
 		ListOptions: gitlab.ListOptions{
 			PerPage: 100,
 		},
-		States: gitlab.Ptr("available"),
 	}
 
 	results := make([]Result, 0)
@@ -214,7 +213,7 @@ func (p *GitLabProvider) ListEnvironments(ctx context.Context, opts Options) ([]
 				continue
 			}
 
-			// We need to also consider "running" deployments to allow users to "flux-operator reconcile rsip ..." in the deployment job itself.
+			// We need to also consider "running" deployments to allow users to `flux-operator reconcile rsip ...` in the deployment job itself.
 			// This is only available through the Deployments API.
 			deployments, _, err := p.Client.Deployments.ListProjectDeployments(p.Project, &gitlab.ListProjectDeploymentsOptions{
 				ListOptions: gitlab.ListOptions{},
@@ -227,9 +226,11 @@ func (p *GitLabProvider) ListEnvironments(ctx context.Context, opts Options) ([]
 			}
 
 			var lastDeployment *gitlab.Deployment
-
 			for _, deployment := range deployments {
-				if deployment.Status == "running" || deployment.Status == "success" {
+				// When an environment has been stopped, it will stay so until the next deployment job has finished successfully.
+				// There still will be a new running deployment during this time, however, so we can filter for that.
+				// When the environment is available (again), also consider the latest successful deployment.
+				if deployment.Status == "running" || (env.State == "available" && deployment.Status == "success") {
 					lastDeployment = deployment
 					break
 				}
