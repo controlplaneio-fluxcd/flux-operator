@@ -315,6 +315,17 @@ flag can be set in the operator. If this flag is specified and a ResourceSetInpu
 object does not have the field `.spec.serviceAccountName`, the operator will use the
 default service account specified by the flag for reconciling this object.
 
+When installing the Flux Operator with Helm, you can change the default workload identity
+service account name with:
+
+```shell
+helm install flux-operator oci://ghcr.io/controlplaneio-fluxcd/charts/flux-operator \
+  --namespace flux-system \
+  --create-namespace \
+  --set multitenancy.enabledForWorkloadIdentity=true \
+  --set multitenancy.defaultWorkloadIdentityServiceAccount=flux-operator
+```
+
 When installing the Flux Operator on OpenShift from OperatorHub, the default workload identity
 service account name can be changed by setting the `DEFAULT_WORKLOAD_IDENTITY_SERVICE_ACCOUNT`
 environment variable using the OLM
