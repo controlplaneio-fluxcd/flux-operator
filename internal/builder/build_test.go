@@ -19,8 +19,11 @@ import (
 )
 
 const (
-	deploymentKind = "Deployment"
-	pvcKind        = "PersistentVolumeClaim"
+	deploymentKind          = "Deployment"
+	pvcKind                 = "PersistentVolumeClaim"
+	clusterRole             = "ClusterRole"
+	sourceController        = "source-controller"
+	crdControllerFluxSystem = "crd-controller-flux-system"
 )
 
 func TestBuild(t *testing.T) {
@@ -301,7 +304,7 @@ func TestBuild_ArtifactStorage(t *testing.T) {
 	for _, obj := range result.Objects {
 		if obj.GetKind() == pvcKind {
 			found = true
-			g.Expect(obj.GetName()).To(Equal("source-controller"))
+			g.Expect(obj.GetName()).To(Equal(sourceController))
 		}
 		g.Expect(obj.GetAnnotations()).To(HaveKeyWithValue("kustomize.toolkit.fluxcd.io/ssa", "Ignore"))
 	}
@@ -414,7 +417,7 @@ func TestBuild_Sync_OCIRepository(t *testing.T) {
 
 	found = false
 	for _, obj := range result.Objects {
-		if obj.GetName() == "crd-controller-flux-system" && obj.GetKind() == "ClusterRole" {
+		if obj.GetName() == crdControllerFluxSystem && obj.GetKind() == clusterRole {
 			found = true
 			g.Expect(ssautil.ObjectToYAML(obj)).ToNot(ContainSubstring("serviceaccounts/token"))
 		}
@@ -463,7 +466,7 @@ func TestBuild_Sync_Bucket(t *testing.T) {
 	g.Expect(found).To(BeTrue())
 }
 
-func TestBuild_ObjectLevelWorkloadIdentity(t *testing.T) {
+func TestBuild_ObjectLevelWorkloadIdentity_260(t *testing.T) {
 	g := NewWithT(t)
 	const version = "v2.6.0"
 	options := MakeDefaultOptions()
@@ -484,7 +487,7 @@ func TestBuild_ObjectLevelWorkloadIdentity(t *testing.T) {
 
 	found := false
 	for _, obj := range result.Objects {
-		if obj.GetName() == "crd-controller-flux-system" && obj.GetKind() == "ClusterRole" {
+		if obj.GetName() == crdControllerFluxSystem && obj.GetKind() == clusterRole {
 			found = true
 			g.Expect(ssautil.ObjectToYAML(obj)).To(ContainSubstring("serviceaccounts/token"))
 		}
@@ -493,21 +496,75 @@ func TestBuild_ObjectLevelWorkloadIdentity(t *testing.T) {
 
 	found = false
 	for _, obj := range result.Objects {
-		if obj.GetName() == "source-controller" && obj.GetKind() == deploymentKind {
+		if obj.GetName() == sourceController && obj.GetKind() == deploymentKind {
 			found = true
 			g.Expect(ssautil.ObjectToYAML(obj)).To(ContainSubstring("nodeSelector"))
 		}
 	}
 	g.Expect(found).To(BeTrue())
 
-	found = false
+	numFound := 0
 	for _, obj := range result.Objects {
-		if obj.GetName() == "source-controller" && obj.GetKind() == deploymentKind {
-			found = true
+		if obj.GetName() == sourceController && obj.GetKind() == deploymentKind {
+			numFound++
 			g.Expect(ssautil.ObjectToYAML(obj)).To(ContainSubstring("--feature-gates=ObjectLevelWorkloadIdentity=true"))
+		}
+		if obj.GetName() == "helm-controller" && obj.GetKind() == deploymentKind {
+			numFound++
+			g.Expect(ssautil.ObjectToYAML(obj)).NotTo(ContainSubstring("--feature-gates=ObjectLevelWorkloadIdentity=true"))
+		}
+	}
+	g.Expect(numFound).To(Equal(2))
+}
+
+func TestBuild_ObjectLevelWorkloadIdentity_270(t *testing.T) {
+	g := NewWithT(t)
+	options := MakeDefaultOptions()
+	options.Version = "v2.7.0"
+	options.EnableObjectLevelWorkloadIdentity = true
+
+	srcDir := filepath.Join("testdata", "v2.6.0")
+
+	dstDir, err := testTempDir(t)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	ci, err := ExtractComponentImages(srcDir, options)
+	g.Expect(err).NotTo(HaveOccurred())
+	options.ComponentImages = ci
+
+	result, err := Build(srcDir, dstDir, options)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	found := false
+	for _, obj := range result.Objects {
+		if obj.GetName() == crdControllerFluxSystem && obj.GetKind() == clusterRole {
+			found = true
+			g.Expect(ssautil.ObjectToYAML(obj)).To(ContainSubstring("serviceaccounts/token"))
 		}
 	}
 	g.Expect(found).To(BeTrue())
+
+	found = false
+	for _, obj := range result.Objects {
+		if obj.GetName() == sourceController && obj.GetKind() == deploymentKind {
+			found = true
+			g.Expect(ssautil.ObjectToYAML(obj)).To(ContainSubstring("nodeSelector"))
+		}
+	}
+	g.Expect(found).To(BeTrue())
+
+	numFound := 0
+	for _, obj := range result.Objects {
+		if obj.GetName() == sourceController && obj.GetKind() == deploymentKind {
+			numFound++
+			g.Expect(ssautil.ObjectToYAML(obj)).To(ContainSubstring("--feature-gates=ObjectLevelWorkloadIdentity=true"))
+		}
+		if obj.GetName() == "helm-controller" && obj.GetKind() == deploymentKind {
+			numFound++
+			g.Expect(ssautil.ObjectToYAML(obj)).To(ContainSubstring("--feature-gates=ObjectLevelWorkloadIdentity=true"))
+		}
+	}
+	g.Expect(numFound).To(Equal(2))
 }
 
 func TestBuild_InvalidPatches(t *testing.T) {
@@ -597,7 +654,7 @@ func TestBuild_Sharding(t *testing.T) {
 	for _, obj := range result.Objects {
 		if obj.GetKind() == pvcKind {
 			foundPVCs++
-			g.Expect(obj.GetName()).To(ContainSubstring("source-controller"))
+			g.Expect(obj.GetName()).To(ContainSubstring(sourceController))
 		}
 	}
 	g.Expect(foundPVCs).To(Equal(1))
@@ -666,7 +723,7 @@ func TestBuild_ShardingWithStorage(t *testing.T) {
 	for _, obj := range result.Objects {
 		if obj.GetKind() == "PersistentVolumeClaim" {
 			foundPVCs++
-			g.Expect(obj.GetName()).To(ContainSubstring("source-controller"))
+			g.Expect(obj.GetName()).To(ContainSubstring(sourceController))
 		}
 	}
 	g.Expect(foundPVCs).To(Equal(3))
