@@ -346,94 +346,72 @@ func (r *ResourceSetReconciler) checkDependencies(ctx context.Context,
 // The API version, kind, name and namespace of the provider are added
 // to each input map.
 func (r *ResourceSetReconciler) getInputs(ctx context.Context,
-	obj *fluxcdv1.ResourceSet) ([]map[string]any, error) {
+	obj *fluxcdv1.ResourceSet) (inputs.Combined, error) {
 
-	// Initialize the map of providers with the ResourceSet itself.
-	obj.SetGroupVersionKind(fluxcdv1.GroupVersion.WithKind(fluxcdv1.ResourceSetKind))
-	providers := map[inputs.ProviderKey]fluxcdv1.InputProvider{
-		inputs.NewProviderKey(obj): obj,
-	}
-
-	// List providers in inputsFrom.
+	// List providers from spec.inputsFrom.
+	providerMap := make(map[inputs.ProviderKey]fluxcdv1.InputProvider)
 	rsipGVK := fluxcdv1.GroupVersion.WithKind(fluxcdv1.ResourceSetInputProviderKind)
 	for _, inputSource := range obj.Spec.InputsFrom {
-		switch inputSource.Kind {
-		case fluxcdv1.ResourceSetInputProviderKind:
 
-			switch {
-			// Get provider by name.
-			case inputSource.Name != "":
+		switch {
+		// Get provider by name.
+		case inputSource.Name != "":
 
-				mapKey := inputs.ProviderKey{
-					GVK:       rsipGVK,
-					Name:      inputSource.Name,
-					Namespace: obj.GetNamespace(),
-				}
-				if _, found := providers[mapKey]; found {
-					continue
-				}
+			mapKey := inputs.ProviderKey{
+				GVK:       rsipGVK,
+				Name:      inputSource.Name,
+				Namespace: obj.GetNamespace(),
+			}
+			if _, found := providerMap[mapKey]; found {
+				continue
+			}
 
-				objKey := client.ObjectKey{
-					Name:      inputSource.Name,
-					Namespace: obj.GetNamespace(),
-				}
+			objKey := client.ObjectKey{
+				Name:      inputSource.Name,
+				Namespace: obj.GetNamespace(),
+			}
 
-				var rsip fluxcdv1.ResourceSetInputProvider
-				if err := r.Get(ctx, objKey, &rsip); err != nil {
-					return nil, fmt.Errorf("failed to get provider %s/%s: %w", objKey.Namespace, objKey.Name, err)
-				}
+			var rsip fluxcdv1.ResourceSetInputProvider
+			if err := r.Get(ctx, objKey, &rsip); err != nil {
+				return nil, fmt.Errorf("failed to get provider %s/%s: %w", objKey.Namespace, objKey.Name, err)
+			}
 
+			rsip.SetGroupVersionKind(rsipGVK)
+			providerMap[mapKey] = &rsip
+
+		// List providers by selector.
+		case inputSource.Selector != nil:
+
+			selector, err := metav1.LabelSelectorAsSelector(inputSource.Selector)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse selector %s: %w", inputSource.Selector, err)
+			}
+
+			var rsipList fluxcdv1.ResourceSetInputProviderList
+
+			listOpts := []client.ListOption{
+				client.InNamespace(obj.GetNamespace()),
+				client.MatchingLabelsSelector{Selector: selector},
+			}
+
+			if err := r.List(ctx, &rsipList, listOpts...); err != nil {
+				return nil, fmt.Errorf("failed to list providers with selector %s: %w", inputSource.Selector, err)
+			}
+
+			for _, rsip := range rsipList.Items {
 				rsip.SetGroupVersionKind(rsipGVK)
-				providers[mapKey] = &rsip
-
-			// List providers by selector.
-			case inputSource.Selector != nil:
-
-				selector, err := metav1.LabelSelectorAsSelector(inputSource.Selector)
-				if err != nil {
-					return nil, fmt.Errorf("failed to parse selector %s: %w", inputSource.Selector, err)
-				}
-
-				var rsipList fluxcdv1.ResourceSetInputProviderList
-
-				listOpts := []client.ListOption{
-					client.InNamespace(obj.GetNamespace()),
-					client.MatchingLabelsSelector{Selector: selector},
-				}
-
-				if err := r.List(ctx, &rsipList, listOpts...); err != nil {
-					return nil, fmt.Errorf("failed to list providers with selector %s: %w", inputSource.Selector, err)
-				}
-
-				for _, rsip := range rsipList.Items {
-					rsip.SetGroupVersionKind(rsipGVK)
-					providers[inputs.NewProviderKey(&rsip)] = &rsip
-				}
-
-			default:
-				return nil, fmt.Errorf("input provider '%s' must have either name or selector set", inputSource.Kind)
+				providerMap[inputs.NewProviderKey(&rsip)] = &rsip
 			}
 
 		default:
-			return nil, fmt.Errorf("unsupported provider kind: '%s'", inputSource.Kind)
+			return nil, errors.New("input provider reference must have either name or selector set")
 		}
 	}
 
-	// List exportedInputs from all providers.
-	var exportedInputs []map[string]any
-	for _, provider := range providers {
-		providerInputs, err := provider.GetInputs()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get inputs from %s/%s: %w",
-				provider.GroupVersionKind().Kind, provider.GetName(), err)
-		}
-		for _, input := range providerInputs {
-			inputs.AddProviderReference(input, provider)
-		}
-		exportedInputs = append(exportedInputs, providerInputs...)
-	}
+	// Ensure correct GVK for the ResourceSet object.
+	obj.SetGroupVersionKind(fluxcdv1.GroupVersion.WithKind(fluxcdv1.ResourceSetKind))
 
-	return exportedInputs, nil
+	return inputs.Combine(obj, providerMap)
 }
 
 // apply reconciles the resources in the cluster by performing

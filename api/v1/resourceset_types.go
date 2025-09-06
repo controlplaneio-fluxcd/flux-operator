@@ -23,6 +23,9 @@ var (
 	GroupOwnerLabelResourceSet     = fmt.Sprintf("resourceset.%s", GroupVersion.Group)
 	OwnerLabelResourceSetName      = fmt.Sprintf("%s/name", GroupOwnerLabelResourceSet)
 	OwnerLabelResourceSetNamespace = fmt.Sprintf("%s/namespace", GroupOwnerLabelResourceSet)
+
+	InputStrategyFlatten = "Flatten"
+	InputStrategyPermute = "Permute"
 )
 
 // ResourceSetSpec defines the desired state of ResourceSet
@@ -32,6 +35,12 @@ type ResourceSetSpec struct {
 	// overridden if its key matches a common one.
 	// +optional
 	CommonMetadata *CommonMetadata `json:"commonMetadata,omitempty"`
+
+	// InputStrategy defines how the inputs are combined when multiple
+	// input provider objects are used. Defaults to flattening all inputs
+	// from all providers into a single list of input sets.
+	// +optional
+	InputStrategy *InputStrategySpec `json:"inputStrategy,omitempty"`
 
 	// Inputs contains the list of ResourceSet inputs.
 	// +optional
@@ -71,6 +80,36 @@ type ResourceSetSpec struct {
 	Wait bool `json:"wait,omitempty"`
 }
 
+// InputStrategySpec defines how the inputs are combined when multiple
+// input provider objects are used. Defaults to flattening all inputs
+// from all providers into a single list of input sets.
+type InputStrategySpec struct {
+	// Name defines how the inputs are combined when multiple
+	// input provider objects are used. Supported values are:
+	// - Flatten: all inputs sets from all input provider objects are
+	//   flattened into a single list of input sets.
+	// - Permute: all inputs sets from all input provider objects are
+	//   combined using a Cartesian product, resulting in a list of input sets
+	//   that contains every possible combination of input values.
+	//   For example, if provider A has inputs [{x: 1}, {x: 2}] and provider B has
+	//   inputs [{y: "a"}, {y: "b"}], the resulting input sets will be:
+	//   [{x: 1, y: "a"}, {x: 1, y: "b"}, {x: 2, y: "a"}, {x: 2, y: "b"}].
+	//   This strategy can lead to a large number of input sets and should be
+	//   used with caution. Users should use filtering features from
+	//   ResourceSetInputProvider to limit the amount of exported inputs.
+	// +kubebuilder:validation:Enum=Flatten;Permute
+	// +required
+	Name string `json:"name,omitempty"`
+}
+
+// GetInputStrategy returns the input strategy name.
+func (in *ResourceSet) GetInputStrategy() string {
+	if in.Spec.InputStrategy == nil || in.Spec.InputStrategy.Name == "" {
+		return InputStrategyFlatten
+	}
+	return in.Spec.InputStrategy.Name
+}
+
 // InputProviderReference defines a reference to an input provider resource
 // in the same namespace as the ResourceSet.
 // +kubebuilder:validation:XValidation:rule="has(self.name) || has(self.selector)", message="at least one of name or selector must be set for input provider references"
@@ -78,13 +117,14 @@ type ResourceSetSpec struct {
 type InputProviderReference struct {
 	// APIVersion of the input provider resource.
 	// When not set, the APIVersion of the ResourceSet is used.
+	// +kubebuilder:validation:Enum=fluxcd.controlplane.io/v1
 	// +optional
 	APIVersion string `json:"apiVersion,omitempty"`
 
 	// Kind of the input provider resource.
 	// +kubebuilder:validation:Enum=ResourceSetInputProvider
-	// +required
-	Kind string `json:"kind"`
+	// +optional
+	Kind string `json:"kind,omitempty"`
 
 	// Name of the input provider resource. Cannot be set
 	// when the Selector field is set.
