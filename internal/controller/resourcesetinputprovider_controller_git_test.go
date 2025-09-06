@@ -62,8 +62,7 @@ metadata:
   namespace: "%[1]s"
 spec:
   inputsFrom:
-    - kind: ResourceSetInputProvider
-      selector:
+    - selector:
         matchLabels:
           app: test
   resources:
@@ -254,8 +253,7 @@ metadata:
   namespace: "%[1]s"
 spec:
   inputsFrom:
-    - kind: ResourceSetInputProvider
-      name: test
+    - name: test
   resources:
     - apiVersion: v1
       kind: ConfigMap
@@ -458,8 +456,7 @@ metadata:
   namespace: "%[1]s"
 spec:
   inputsFrom:
-    - kind: ResourceSetInputProvider
-      name: test
+    - name: test
   resources:
     - apiVersion: v1
       kind: ConfigMap

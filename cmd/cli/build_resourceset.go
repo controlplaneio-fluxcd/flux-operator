@@ -14,9 +14,7 @@ import (
 
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
 	"github.com/spf13/cobra"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/util/json"
 	"sigs.k8s.io/yaml"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
@@ -62,7 +60,7 @@ var buildResourceSetArgs buildResourceSetFlags
 func init() {
 	buildResourceSetCmd.Flags().StringVarP(&buildResourceSetArgs.filename, "filename", "f", "", "Path to the ResourceSet YAML manifest.")
 	buildResourceSetCmd.Flags().StringVarP(&buildResourceSetArgs.inputsFrom, "inputs-from", "i", "", "Path to the ResourceSet inputs YAML manifest.")
-	buildResourceSetCmd.Flags().StringVar(&buildResourceSetArgs.inputsFromProvider, "inputs-from-provider", "", "Path to the ResourceSetInputProvider static type YAML manifest.")
+	buildResourceSetCmd.Flags().StringVar(&buildResourceSetArgs.inputsFromProvider, "inputs-from-provider", "", "Path to a file containing YAML manifests of ResourceSetInputProvider objects of type Static.")
 
 	buildCmd.AddCommand(buildResourceSetCmd)
 }
@@ -98,6 +96,22 @@ func buildResourceSetCmdRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("error parsing ResourceSet: %w", err)
 	}
 
+	// Ensure correct GVK.
+	rset.SetGroupVersionKind(fluxcdv1.GroupVersion.WithKind(fluxcdv1.ResourceSetKind))
+
+	// Ensure non-empty namespace.
+	if rset.GetNamespace() == "" {
+		rset.SetNamespace(*kubeconfigArgs.Namespace)
+	}
+	if rset.GetNamespace() == "" {
+		return fmt.Errorf("ResourceSet namespace must be set either in the manifest or with --namespace")
+	}
+
+	// Ensure non-empty name.
+	if rset.GetName() == "" {
+		return fmt.Errorf("ResourceSet name must be set in the manifest")
+	}
+
 	if len(rset.Spec.InputsFrom) > 0 &&
 		buildResourceSetArgs.inputsFrom == "" &&
 		buildResourceSetArgs.inputsFromProvider == "" {
@@ -115,32 +129,26 @@ func buildResourceSetCmdRun(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	var providerMap map[inputs.ProviderKey]fluxcdv1.InputProvider
+
 	if buildResourceSetArgs.inputsFromProvider != "" {
-		providers, err := loadProvidersFromFile(buildResourceSetArgs.inputsFromProvider)
+		providers, err := loadProvidersFromFile(&rset, buildResourceSetArgs.inputsFromProvider)
 		if err != nil {
 			return fmt.Errorf("error loading providers from file: %w", err)
 		}
 
-		filteredProviders, err := filterProviders(rset.Spec.InputsFrom, providers)
+		providerMap, err = filterProviders(&rset, providers)
 		if err != nil {
 			return fmt.Errorf("error filtering providers: %w", err)
 		}
-
-		if err := appendInputs(&rset, filteredProviders); err != nil {
-			return fmt.Errorf("failed to append inputs: %w", err)
-		}
 	}
 
-	providerInputs, err := rset.GetInputs()
+	combinedInputs, err := inputs.Combine(&rset, providerMap)
 	if err != nil {
-		return fmt.Errorf("error reading '.spec.inputs': %w", err)
+		return fmt.Errorf("error combining inputs: %w", err)
 	}
 
-	for _, input := range providerInputs {
-		inputs.AddProviderReference(input, &rset)
-	}
-
-	objects, err := builder.BuildResourceSet(rset.Spec.ResourcesTemplate, rset.Spec.Resources, providerInputs)
+	objects, err := builder.BuildResourceSet(rset.Spec.ResourcesTemplate, rset.Spec.Resources, combinedInputs)
 	if err != nil {
 		return err
 	}
@@ -193,7 +201,10 @@ func saveReaderToFile(reader io.Reader) (string, error) {
 	return f.Name(), nil
 }
 
-func loadProvidersFromFile(path string) ([]*fluxcdv1.ResourceSetInputProvider, error) {
+func loadProvidersFromFile(rset *fluxcdv1.ResourceSet, path string) ([]*fluxcdv1.ResourceSetInputProvider, error) {
+	rsipGVK := fluxcdv1.GroupVersion.WithKind(fluxcdv1.ResourceSetInputProviderKind)
+	rsetNamespace := rset.GetNamespace()
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("error reading file: %w", err)
@@ -212,11 +223,44 @@ func loadProvidersFromFile(path string) ([]*fluxcdv1.ResourceSetInputProvider, e
 			return nil, fmt.Errorf("error parsing inputs provider file: %w", err)
 		}
 
+		// Ensure correct GVK.
+		provider.SetGroupVersionKind(rsipGVK)
+
+		// Ensure non-empty namespace.
+		if provider.GetNamespace() == "" {
+			provider.SetNamespace(rsetNamespace)
+		}
+
+		// Ignore providers from different namespaces.
+		if provider.GetNamespace() != rsetNamespace {
+			continue
+		}
+
+		// Ensure non-empty name.
+		if provider.GetName() == "" {
+			return nil, fmt.Errorf("ResourceSetInputProvider name must be set in the manifest")
+		}
+
 		if provider.Spec.Type != fluxcdv1.InputProviderStatic {
 			return nil, fmt.Errorf("unsupported provider type '%s', only '%s' is supported",
 				provider.Spec.Type,
 				fluxcdv1.InputProviderStatic)
 		}
+
+		vals := provider.Spec.DefaultValues
+		if len(vals) == 0 {
+			vals = make(fluxcdv1.ResourceSetInput)
+		}
+
+		// Note: In runtime the operator uses the RSIP UID provided by the Kubernetes API server.
+		// Since here we are loading from a file, we cannot use the UID to compute the export ID.
+		jsonID, err := inputs.JSON(inputs.ID(provider.GetName()))
+		if err != nil {
+			return nil, err
+		}
+		vals["id"] = jsonID
+
+		provider.Status.ExportedInputs = []fluxcdv1.ResourceSetInput{vals}
 
 		providers = append(providers, &provider)
 	}
@@ -224,57 +268,50 @@ func loadProvidersFromFile(path string) ([]*fluxcdv1.ResourceSetInputProvider, e
 	return providers, nil
 }
 
-func filterProviders(inputSources []fluxcdv1.InputProviderReference, allProviders []*fluxcdv1.ResourceSetInputProvider) ([]*fluxcdv1.ResourceSetInputProvider, error) {
-	filtered := make([]*fluxcdv1.ResourceSetInputProvider, 0, len(inputSources))
-	providerByName := make(map[string]*fluxcdv1.ResourceSetInputProvider, len(allProviders))
+func filterProviders(rset *fluxcdv1.ResourceSet,
+	allProviders []*fluxcdv1.ResourceSetInputProvider,
+) (map[inputs.ProviderKey]fluxcdv1.InputProvider, error) {
 
+	rsipGVK := fluxcdv1.GroupVersion.WithKind(fluxcdv1.ResourceSetInputProviderKind)
+
+	providerMap := make(map[inputs.ProviderKey]fluxcdv1.InputProvider)
 	for _, p := range allProviders {
-		providerByName[p.Name] = p
+		providerMap[inputs.NewProviderKey(p)] = p
 	}
 
-	for _, inputSource := range inputSources {
-		if inputSource.Name != "" {
-			if provider, ok := providerByName[inputSource.Name]; ok {
-				filtered = append(filtered, provider)
+	filtered := make(map[inputs.ProviderKey]fluxcdv1.InputProvider)
+	for _, inputSource := range rset.Spec.InputsFrom {
+		switch {
+		case inputSource.Name != "":
+			key := inputs.ProviderKey{
+				GVK:       rsipGVK,
+				Name:      inputSource.Name,
+				Namespace: rset.GetNamespace(),
 			}
-			continue
-		}
-
-		if inputSource.Selector != nil {
+			if _, ok := filtered[key]; ok {
+				continue
+			}
+			if p, ok := providerMap[key]; ok {
+				filtered[key] = p
+			}
+		case inputSource.Selector != nil:
 			selector, err := metav1.LabelSelectorAsSelector(inputSource.Selector)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse selector: %w", err)
 			}
-
-			for _, provider := range allProviders {
-				if selector.Matches(labels.Set(provider.Labels)) {
-					filtered = append(filtered, provider)
+			for _, p := range allProviders {
+				key := inputs.NewProviderKey(p)
+				if _, ok := filtered[key]; ok {
+					continue
+				}
+				if selector.Matches(labels.Set(p.GetLabels())) {
+					filtered[key] = p
 				}
 			}
+		default:
+			return nil, errors.New("input provider reference must have either name or selector set")
 		}
 	}
 
 	return filtered, nil
-}
-
-func appendInputs(rset *fluxcdv1.ResourceSet, providers []*fluxcdv1.ResourceSetInputProvider) error {
-	for _, provider := range providers {
-		// copy defaultValues from the provider to the ResourceSet inputs
-		if len(provider.Spec.DefaultValues) > 0 {
-			if rset.Spec.Inputs == nil {
-				rset.Spec.Inputs = []fluxcdv1.ResourceSetInput{}
-			}
-			vals := provider.Spec.DefaultValues
-
-			// compute the provider ID and add it to the inputs
-			b, err := json.Marshal(inputs.ID(provider.GetName()))
-			if err != nil {
-				return fmt.Errorf("failed to compute provider ID: %w", err)
-			}
-			vals["id"] = &apiextensionsv1.JSON{Raw: b}
-			rset.Spec.Inputs = append(rset.Spec.Inputs, vals)
-		}
-	}
-
-	return nil
 }

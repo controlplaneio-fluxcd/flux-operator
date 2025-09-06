@@ -1,0 +1,288 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  annotations:
+    fluxcd.controlplane.io/id: "340788154"
+    permutation-id: "3776973979"
+  labels:
+    resourceset.fluxcd.controlplane.io/name: color-environments
+    resourceset.fluxcd.controlplane.io/namespace: test
+  name: app1
+  namespace: team1-staging-blue
+spec:
+  interval: 10m
+  ref:
+    tag: v1.0.1
+  url: oci://registry.example.com/app1
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  annotations:
+    fluxcd.controlplane.io/id: "340788154"
+    permutation-id: "3776973979"
+  labels:
+    resourceset.fluxcd.controlplane.io/name: color-environments
+    resourceset.fluxcd.controlplane.io/namespace: test
+  name: app1
+  namespace: team1-staging-blue
+spec:
+  interval: 1h
+  path: ./
+  prune: true
+  sourceRef:
+    kind: OCIRepository
+    name: app1
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  annotations:
+    fluxcd.controlplane.io/id: "340788154"
+    permutation-id: "3776973979"
+  labels:
+    resourceset.fluxcd.controlplane.io/name: color-environments
+    resourceset.fluxcd.controlplane.io/namespace: test
+  name: app1
+  namespace: team1-production-blue
+spec:
+  interval: 10m
+  ref:
+    tag: v1.0.0
+  url: oci://registry.example.com/app1
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  annotations:
+    fluxcd.controlplane.io/id: "340788154"
+    permutation-id: "3776973979"
+  labels:
+    resourceset.fluxcd.controlplane.io/name: color-environments
+    resourceset.fluxcd.controlplane.io/namespace: test
+  name: app1
+  namespace: team1-production-blue
+spec:
+  interval: 1h
+  path: ./
+  prune: true
+  sourceRef:
+    kind: OCIRepository
+    name: app1
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  annotations:
+    fluxcd.controlplane.io/id: "340788154"
+    permutation-id: "3777891484"
+  labels:
+    resourceset.fluxcd.controlplane.io/name: color-environments
+    resourceset.fluxcd.controlplane.io/namespace: test
+  name: app1
+  namespace: team1-staging-green
+spec:
+  interval: 10m
+  ref:
+    tag: v1.0.1
+  url: oci://registry.example.com/app1
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  annotations:
+    fluxcd.controlplane.io/id: "340788154"
+    permutation-id: "3777891484"
+  labels:
+    resourceset.fluxcd.controlplane.io/name: color-environments
+    resourceset.fluxcd.controlplane.io/namespace: test
+  name: app1
+  namespace: team1-staging-green
+spec:
+  interval: 1h
+  path: ./
+  prune: true
+  sourceRef:
+    kind: OCIRepository
+    name: app1
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  annotations:
+    fluxcd.controlplane.io/id: "340788154"
+    permutation-id: "3777891484"
+  labels:
+    resourceset.fluxcd.controlplane.io/name: color-environments
+    resourceset.fluxcd.controlplane.io/namespace: test
+  name: app1
+  namespace: team1-production-green
+spec:
+  interval: 10m
+  ref:
+    tag: v1.0.0
+  url: oci://registry.example.com/app1
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  annotations:
+    fluxcd.controlplane.io/id: "340788154"
+    permutation-id: "3777891484"
+  labels:
+    resourceset.fluxcd.controlplane.io/name: color-environments
+    resourceset.fluxcd.controlplane.io/namespace: test
+  name: app1
+  namespace: team1-production-green
+spec:
+  interval: 1h
+  path: ./
+  prune: true
+  sourceRef:
+    kind: OCIRepository
+    name: app1
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  annotations:
+    fluxcd.controlplane.io/id: "340788154"
+    permutation-id: "3778808989"
+  labels:
+    resourceset.fluxcd.controlplane.io/name: color-environments
+    resourceset.fluxcd.controlplane.io/namespace: test
+  name: app1
+  namespace: team1-staging-red
+spec:
+  interval: 10m
+  ref:
+    tag: v1.0.1
+  url: oci://registry.example.com/app1
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  annotations:
+    fluxcd.controlplane.io/id: "340788154"
+    permutation-id: "3778808989"
+  labels:
+    resourceset.fluxcd.controlplane.io/name: color-environments
+    resourceset.fluxcd.controlplane.io/namespace: test
+  name: app1
+  namespace: team1-staging-red
+spec:
+  interval: 1h
+  path: ./
+  prune: true
+  sourceRef:
+    kind: OCIRepository
+    name: app1
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  annotations:
+    fluxcd.controlplane.io/id: "340788154"
+    permutation-id: "3778808989"
+  labels:
+    resourceset.fluxcd.controlplane.io/name: color-environments
+    resourceset.fluxcd.controlplane.io/namespace: test
+  name: app1
+  namespace: team1-production-red
+spec:
+  interval: 10m
+  ref:
+    tag: v1.0.0
+  url: oci://registry.example.com/app1
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  annotations:
+    fluxcd.controlplane.io/id: "340788154"
+    permutation-id: "3778808989"
+  labels:
+    resourceset.fluxcd.controlplane.io/name: color-environments
+    resourceset.fluxcd.controlplane.io/namespace: test
+  name: app1
+  namespace: team1-production-red
+spec:
+  interval: 1h
+  path: ./
+  prune: true
+  sourceRef:
+    kind: OCIRepository
+    name: app1
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  annotations:
+    fluxcd.controlplane.io/id: "340788154"
+    permutation-id: "3779726494"
+  labels:
+    resourceset.fluxcd.controlplane.io/name: color-environments
+    resourceset.fluxcd.controlplane.io/namespace: test
+  name: app1
+  namespace: team1-staging-yellow
+spec:
+  interval: 10m
+  ref:
+    tag: v1.0.1
+  url: oci://registry.example.com/app1
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  annotations:
+    fluxcd.controlplane.io/id: "340788154"
+    permutation-id: "3779726494"
+  labels:
+    resourceset.fluxcd.controlplane.io/name: color-environments
+    resourceset.fluxcd.controlplane.io/namespace: test
+  name: app1
+  namespace: team1-staging-yellow
+spec:
+  interval: 1h
+  path: ./
+  prune: true
+  sourceRef:
+    kind: OCIRepository
+    name: app1
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  annotations:
+    fluxcd.controlplane.io/id: "340788154"
+    permutation-id: "3779726494"
+  labels:
+    resourceset.fluxcd.controlplane.io/name: color-environments
+    resourceset.fluxcd.controlplane.io/namespace: test
+  name: app1
+  namespace: team1-production-yellow
+spec:
+  interval: 10m
+  ref:
+    tag: v1.0.0
+  url: oci://registry.example.com/app1
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  annotations:
+    fluxcd.controlplane.io/id: "340788154"
+    permutation-id: "3779726494"
+  labels:
+    resourceset.fluxcd.controlplane.io/name: color-environments
+    resourceset.fluxcd.controlplane.io/namespace: test
+  name: app1
+  namespace: team1-production-yellow
+spec:
+  interval: 1h
+  path: ./
+  prune: true
+  sourceRef:
+    kind: OCIRepository
+    name: app1

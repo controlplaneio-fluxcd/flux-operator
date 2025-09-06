@@ -104,6 +104,34 @@ spec:
                   - name
                   type: object
                 type: array
+              inputStrategy:
+                description: |-
+                  InputStrategy defines how the inputs are combined when multiple
+                  input provider objects are used. Defaults to flattening all inputs
+                  from all providers into a single list of input sets.
+                properties:
+                  name:
+                    description: |-
+                      Name defines how the inputs are combined when multiple
+                      input provider objects are used. Supported values are:
+                      - Flatten: all inputs sets from all input provider objects are
+                        flattened into a single list of input sets.
+                      - Permute: all inputs sets from all input provider objects are
+                        combined using a Cartesian product, resulting in a list of input sets
+                        that contains every possible combination of input values.
+                        For example, if provider A has inputs [{x: 1}, {x: 2}] and provider B has
+                        inputs [{y: "a"}, {y: "b"}], the resulting input sets will be:
+                        [{x: 1, y: "a"}, {x: 1, y: "b"}, {x: 2, y: "a"}, {x: 2, y: "b"}].
+                        This strategy can lead to a large number of input sets and should be
+                        used with caution. Users should use filtering features from
+                        ResourceSetInputProvider to limit the amount of exported inputs.
+                    enum:
+                    - Flatten
+                    - Permute
+                    type: string
+                required:
+                - name
+                type: object
               inputs:
                 description: Inputs contains the list of ResourceSet inputs.
                 items:
@@ -125,11 +153,15 @@ spec:
                   properties:
                     apiVersion:
                       description: |-
-                        APIVersion of the input provider resource.
-                        When not set, the APIVersion of the ResourceSet is used.
+                        Deprecated: The only accepted value is 'fluxcd.controlplane.io/v1'.
+                        If the field is not set, it defaults to 'fluxcd.controlplane.io/v1'.
+                      enum:
+                      - fluxcd.controlplane.io/v1
                       type: string
                     kind:
-                      description: Kind of the input provider resource.
+                      description: |-
+                        Deprecated: The only accepted value is 'ResourceSetInputProvider'.
+                        If the field is not set, it defaults to 'ResourceSetInputProvider'.
                       enum:
                       - ResourceSetInputProvider
                       type: string
@@ -186,8 +218,6 @@ spec:
                           type: object
                       type: object
                       x-kubernetes-map-type: atomic
-                  required:
-                  - kind
                   type: object
                   x-kubernetes-validations:
                   - message: at least one of name or selector must be set for input

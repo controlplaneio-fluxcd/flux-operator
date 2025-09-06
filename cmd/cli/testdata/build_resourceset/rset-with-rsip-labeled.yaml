@@ -5,8 +5,7 @@ metadata:
   namespace: apps
 spec:
   inputsFrom:
-    - kind: ResourceSetInputProvider
-      selector:
+    - selector:
         matchLabels:
           some: label
         matchExpressions:
