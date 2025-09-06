@@ -2,17 +2,24 @@
 apiVersion: fluxcd.controlplane.io/v1
 kind: ResourceSet
 metadata:
-  name: apps
+  name: color-environments
   namespace: test
 spec:
+  inputStrategy:
+    name: Permute
+  inputs:
+    - id: blue
+    - id: green
+    - id: red
+    - id: yellow
   inputsFrom:
     - selector:
         matchLabels:
           fluxcd.controlplane.io/role: provisioning
   resourcesTemplate: |
-    <<- $id := inputs.id >>
-    <<- $tenant := inputs.tenantName >>
-    <<- range $app := inputs.applications >>
+    <<- $id := inputs.team1_apps.id >>
+    <<- $tenant := inputs.team1_apps.tenantName >>
+    <<- range $app := inputs.team1_apps.applications >>
     <<- $appName := $app.name >>
     <<- range $env := $app.envs >>
     ---
@@ -20,8 +27,9 @@ spec:
     kind: OCIRepository
     metadata:
       name: << $appName >>
-      namespace: << $tenant >>-<< $env.name >>
+      namespace: << $tenant >>-<< $env.name >>-<< inputs.color_environments.id >>
       annotations:
+        permutation-id: << inputs.id | quote >>
         fluxcd.controlplane.io/id: << $id | quote >>
     spec:
       interval: 10m
@@ -33,8 +41,9 @@ spec:
     kind: Kustomization
     metadata:
       name: << $appName >>
-      namespace: << $tenant >>-<< $env.name >>
+      namespace: << $tenant >>-<< $env.name >>-<< inputs.color_environments.id >>
       annotations:
+        permutation-id: << inputs.id | quote >>
         fluxcd.controlplane.io/id: << $id | quote >>
     spec:
       interval: 1h

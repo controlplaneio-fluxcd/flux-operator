@@ -72,8 +72,6 @@ func (r *ResourceSetReconciler) requestsForResourceSetInputProviders(
 	obj := clientObject.(*fluxcdv1.ResourceSetInputProvider)
 
 	// Compute object metadata.
-	objAPIVersion := fluxcdv1.GroupVersion.String()
-	objKind := fluxcdv1.ResourceSetInputProviderKind
 	objName := obj.GetName()
 	objLabels := labels.Set(obj.GetLabels())
 
@@ -95,27 +93,12 @@ func (r *ResourceSetReconciler) requestsForResourceSetInputProviders(
 	// Match listed ResourceSets with the object that triggered the event
 	// to generate a list of reconcile.Requests.
 	var reqs []reconcile.Request
-	inputsFromDefaultAPIVersion := fluxcdv1.GroupVersion.String()
 	for _, rset := range list.Items {
 
 		var matches bool
 
 		// Check if it least one item in InputsFrom matches the object.
 		for i, inputsFrom := range rset.Spec.InputsFrom {
-
-			// Skip if API version doesn't match.
-			apiVersion := inputsFrom.APIVersion
-			if apiVersion == "" {
-				apiVersion = inputsFromDefaultAPIVersion
-			}
-			if apiVersion != objAPIVersion {
-				continue
-			}
-
-			// Skip if kind doesn't match.
-			if inputsFrom.Kind != objKind {
-				continue
-			}
 
 			// Skip if name doesn't match.
 			if name := inputsFrom.Name; name != "" {

@@ -5,10 +5,8 @@ metadata:
   namespace: apps
 spec:
   inputsFrom:
-    - kind: ResourceSetInputProvider
-      name: app1-tenant1
-    - kind: ResourceSetInputProvider
-      name: app1-tenant2     
+    - name: app1-tenant1
+    - name: app1-tenant2
   resources:
     - apiVersion: source.toolkit.fluxcd.io/v1
       kind: OCIRepository

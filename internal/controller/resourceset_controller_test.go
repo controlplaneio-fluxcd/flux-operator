@@ -673,7 +673,6 @@ func TestResourceSetInputsFromValidation(t *testing.T) {
 		},
 		Spec: fluxcdv1.ResourceSetSpec{
 			InputsFrom: []fluxcdv1.InputProviderReference{{
-				Kind:     fluxcdv1.ResourceSetInputProviderKind,
 				Name:     "test",
 				Selector: &metav1.LabelSelector{},
 			}},
@@ -689,9 +688,7 @@ func TestResourceSetInputsFromValidation(t *testing.T) {
 			Namespace: ns.Name,
 		},
 		Spec: fluxcdv1.ResourceSetSpec{
-			InputsFrom: []fluxcdv1.InputProviderReference{{
-				Kind: fluxcdv1.ResourceSetInputProviderKind,
-			}},
+			InputsFrom: []fluxcdv1.InputProviderReference{{}},
 		},
 	})
 	g.Expect(err).To(HaveOccurred())
@@ -793,14 +790,11 @@ spec:
       foo: rset-foo
       baz: rset-baz
   inputsFrom:
-    - kind: ResourceSetInputProvider
-      name: app-0
-    - kind: ResourceSetInputProvider # this tests deduplication
-      selector:
+    - name: app-0
+    - selector:
         matchLabels:
           my: tenant
-    - kind: ResourceSetInputProvider
-      selector:
+    - selector:
         matchExpressions:
           - key: app
             operator: In
@@ -997,8 +991,7 @@ metadata:
   namespace: "%[1]s"
 spec:
   inputsFrom:
-    - kind: ResourceSetInputProvider
-      selector:
+    - selector:
         matchLabels:
           my: tenant
   resources:
@@ -1115,6 +1108,170 @@ spec:
 	}, cm)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+}
+
+func TestResourceSetReconciler_InputPermutations(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceSetReconciler(t)
+	rsipReconciler := getResourceSetInputProviderReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	rsipZeroDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSetInputProvider
+metadata:
+  name: app-0
+  namespace: "%[1]s"
+spec:
+  type: Static
+  defaultValues:
+    foo: app-0-foo
+    baz: app-0-baz
+`, ns.Name)
+
+	// Create, initialize and reconcile the ResourceSetInputProviders.
+	rsip := &fluxcdv1.ResourceSetInputProvider{}
+	err = yaml.Unmarshal([]byte(rsipZeroDef), rsip)
+	g.Expect(err).NotTo(HaveOccurred())
+	err = testEnv.Create(ctx, rsip)
+	g.Expect(err).NotTo(HaveOccurred())
+	r, err := rsipReconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(rsip),
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+	r, err = rsipReconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(rsip),
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(r.Requeue).To(BeFalse())
+	rsipResult := &fluxcdv1.ResourceSetInputProvider{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(rsip), rsipResult)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(conditions.IsReady(rsipResult)).To(BeTrue())
+	rsipID := inputs.ID(string(rsipResult.GetUID()))
+
+	rsetDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: tenants
+  namespace: "%[1]s"
+spec:
+  inputStrategy:
+    name: Permute
+  inputs:
+    - id: inputs-dont-have-a-default-id-0
+      bar: rset-bar-0
+      qux: rset-qux-0
+    - id: inputs-dont-have-a-default-id-1
+      bar: rset-bar-1
+      qux: rset-qux-1
+  inputsFrom:
+    - name: app-0
+  resources:
+    - apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: cm-<< inputs.id >>
+        namespace: "%[1]s"
+      data:
+        rsetID: << inputs.tenants.id | quote >>
+        rsetProviderAPIVersion: << inputs.tenants.provider.apiVersion >>
+        rsetProviderKind: << inputs.tenants.provider.kind >>
+        rsetProviderName: << inputs.tenants.provider.name >>
+        rsetProviderNamespace: << inputs.tenants.provider.namespace >>
+        rsetBar: << inputs.tenants.bar >>
+        rsetQux: << inputs.tenants.qux >>
+        rsipID: << inputs.app_0.id | quote >>
+        rsipProviderAPIVersion: << inputs.app_0.provider.apiVersion >>
+        rsipProviderKind: << inputs.app_0.provider.kind >>
+        rsipProviderName: << inputs.app_0.provider.name >>
+        rsipProviderNamespace: << inputs.app_0.provider.namespace >>
+        rsipFoo: << inputs.app_0.foo >>
+        rsipBaz: << inputs.app_0.baz >>
+`, ns.Name)
+
+	obj := &fluxcdv1.ResourceSet{}
+	err = yaml.Unmarshal([]byte(rsetDef), obj)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Initialize and reconcile the ResourceSet.
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).NotTo(HaveOccurred())
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(r.Requeue).To(BeFalse())
+	result := &fluxcdv1.ResourceSet{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(conditions.IsReady(result)).To(BeTrue())
+
+	// Assert inventory entries.
+	g.Expect(result.Status.Inventory.Entries).To(HaveLen(2))
+	g.Expect(result.Status.Inventory.Entries).To(ContainElements(
+		fluxcdv1.ResourceRef{
+			ID:      fmt.Sprintf("%s_cm-964888023__ConfigMap", ns.Name),
+			Version: "v1",
+		},
+		fluxcdv1.ResourceRef{
+			ID:      fmt.Sprintf("%s_cm-965477848__ConfigMap", ns.Name),
+			Version: "v1",
+		},
+	))
+
+	// Get ConfigMaps and assert data.
+	cm := &corev1.ConfigMap{}
+	err = testClient.Get(ctx, client.ObjectKey{
+		Name:      "cm-964888023",
+		Namespace: ns.Name,
+	}, cm)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(cm.Data["rsetID"]).To(Equal("inputs-dont-have-a-default-id-0"))
+	g.Expect(cm.Data["rsetProviderAPIVersion"]).To(Equal("fluxcd.controlplane.io/v1"))
+	g.Expect(cm.Data["rsetProviderKind"]).To(Equal("ResourceSet"))
+	g.Expect(cm.Data["rsetProviderName"]).To(Equal("tenants"))
+	g.Expect(cm.Data["rsetProviderNamespace"]).To(Equal(ns.Name))
+	g.Expect(cm.Data["rsetBar"]).To(Equal("rset-bar-0"))
+	g.Expect(cm.Data["rsetQux"]).To(Equal("rset-qux-0"))
+	g.Expect(cm.Data["rsipID"]).To(Equal(rsipID))
+	g.Expect(cm.Data["rsipProviderAPIVersion"]).To(Equal("fluxcd.controlplane.io/v1"))
+	g.Expect(cm.Data["rsipProviderKind"]).To(Equal("ResourceSetInputProvider"))
+	g.Expect(cm.Data["rsipProviderName"]).To(Equal("app-0"))
+	g.Expect(cm.Data["rsipProviderNamespace"]).To(Equal(ns.Name))
+	g.Expect(cm.Data["rsipFoo"]).To(Equal("app-0-foo"))
+	g.Expect(cm.Data["rsipBaz"]).To(Equal("app-0-baz"))
+	cm = &corev1.ConfigMap{}
+	err = testClient.Get(ctx, client.ObjectKey{
+		Name:      "cm-965477848",
+		Namespace: ns.Name,
+	}, cm)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(cm.Data["rsetID"]).To(Equal("inputs-dont-have-a-default-id-1"))
+	g.Expect(cm.Data["rsetProviderAPIVersion"]).To(Equal("fluxcd.controlplane.io/v1"))
+	g.Expect(cm.Data["rsetProviderKind"]).To(Equal("ResourceSet"))
+	g.Expect(cm.Data["rsetProviderName"]).To(Equal("tenants"))
+	g.Expect(cm.Data["rsetProviderNamespace"]).To(Equal(ns.Name))
+	g.Expect(cm.Data["rsetBar"]).To(Equal("rset-bar-1"))
+	g.Expect(cm.Data["rsetQux"]).To(Equal("rset-qux-1"))
+	g.Expect(cm.Data["rsipID"]).To(Equal(rsipID))
+	g.Expect(cm.Data["rsipProviderAPIVersion"]).To(Equal("fluxcd.controlplane.io/v1"))
+	g.Expect(cm.Data["rsipProviderKind"]).To(Equal("ResourceSetInputProvider"))
+	g.Expect(cm.Data["rsipProviderName"]).To(Equal("app-0"))
+	g.Expect(cm.Data["rsipProviderNamespace"]).To(Equal(ns.Name))
+	g.Expect(cm.Data["rsipFoo"]).To(Equal("app-0-foo"))
+	g.Expect(cm.Data["rsipBaz"]).To(Equal("app-0-baz"))
 }
 
 func TestResourceSetReconciler_Impersonation(t *testing.T) {
