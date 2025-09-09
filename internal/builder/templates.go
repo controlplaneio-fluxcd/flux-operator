@@ -4,9 +4,7 @@
 package builder
 
 import (
-	"bufio"
 	"bytes"
-	"io"
 	"os"
 	"text/template"
 )
@@ -140,15 +138,6 @@ patches:
       path: /spec/template/spec/containers/0/args/-
       value: --watch-label-selector=!{{.ShardingKey}}
 {{- end }}
-{{- if .SupportsObjectLevelWorkloadIdentity }}
-- target:
-    kind: Deployment
-    name: "{{.ObjectLevelWorkloadIdentityControllers}}"
-  patch: |
-    - op: add
-      path: /spec/template/spec/containers/0/args/-
-      value: --feature-gates=ObjectLevelWorkloadIdentity={{ .EnableObjectLevelWorkloadIdentity }}
-{{- end }}
 {{ .Patches }}
 `
 
@@ -252,8 +241,7 @@ namespace: {{.Namespace}}
 resources:
   - rbac.yaml
 nameSuffix: -{{.Namespace}}
-{{- if .SupportsObjectLevelWorkloadIdentity }}
-{{- if not .EnableObjectLevelWorkloadIdentity }}
+{{- if .RemovePermissionForCreatingServiceAccountTokens }}
 patches:
   - target:
      kind: ClusterRole
@@ -261,7 +249,6 @@ patches:
     patch: |-
      - op: remove
        path: /rules/10
-{{- end }}
 {{- end }}
 `
 
@@ -405,27 +392,9 @@ func execTemplate(obj any, tmpl, filename string) (err error) {
 	}
 
 	var data bytes.Buffer
-	writer := bufio.NewWriter(&data)
-	if err := t.Execute(writer, obj); err != nil {
+	if err := t.Execute(&data, obj); err != nil {
 		return err
 	}
 
-	if err := writer.Flush(); err != nil {
-		return err
-	}
-
-	file, err := os.Create(filename)
-	if err != nil {
-		return err
-	}
-	defer func(file *os.File) {
-		err = file.Close()
-	}(file)
-
-	_, err = io.WriteString(file, data.String())
-	if err != nil {
-		return err
-	}
-
-	return file.Sync()
+	return os.WriteFile(filename, data.Bytes(), 0644)
 }

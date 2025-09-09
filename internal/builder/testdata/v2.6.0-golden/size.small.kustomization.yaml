@@ -128,13 +128,6 @@ patches:
     - op: replace
       path: /spec/template/spec/containers/0/args/2
       value: --log-level=info
-- target:
-    kind: Deployment
-    name: "(source-controller|kustomize-controller|notification-controller|image-reflector-controller|image-automation-controller)"
-  patch: |
-    - op: add
-      path: /spec/template/spec/containers/0/args/-
-      value: --feature-gates=ObjectLevelWorkloadIdentity=false
 
 - target:
     kind: Deployment

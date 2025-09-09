@@ -129,6 +129,7 @@ type ComponentImage struct {
 }
 
 // Cluster is the specification for the Kubernetes cluster.
+// +kubebuilder:validation:XValidation:rule="(has(self.objectLevelWorkloadIdentity) && self.objectLevelWorkloadIdentity) || !has(self.multitenantWorkloadIdentity) || !self.multitenantWorkloadIdentity", message=".objectLevelWorkloadIdentity must be set to true when .multitenantWorkloadIdentity is set to true"
 type Cluster struct {
 	// Domain is the cluster domain used for generating the FQDN of services.
 	// Defaults to 'cluster.local'.
@@ -141,11 +142,36 @@ type Cluster struct {
 	// +optional
 	Multitenant bool `json:"multitenant,omitempty"`
 
+	// MultitenantWorkloadIdentity enables the multitenancy lockdown for
+	// workload identity. Defaults to false.
+	// +kubebuilder:default:=false
+	// +optional
+	MultitenantWorkloadIdentity bool `json:"multitenantWorkloadIdentity,omitempty"`
+
 	// TenantDefaultServiceAccount is the name of the service account
-	// to use as default when the multitenant lockdown is enabled.
+	// to use as default when the multitenant lockdown is enabled, for
+	// kustomize-controller and helm-controller.
+	// This field will also be used for multitenant workload identity
+	// lockdown for source-controller, notification-controller,
+	// image-reflector-controller and image-automation-controller.
 	// Defaults to the 'default' service account from the tenant namespace.
 	// +optional
 	TenantDefaultServiceAccount string `json:"tenantDefaultServiceAccount,omitempty"`
+
+	// TenantDefaultDecryptionServiceAccount is the name of the service account
+	// to use as default for kustomize-controller SOPS decryption when the
+	// multitenant lockdown for workload identity is enabled. Defaults to the
+	// 'default' service account from the tenant namespace.
+	// +optional
+	TenantDefaultDecryptionServiceAccount string `json:"tenantDefaultDecryptionServiceAccount,omitempty"`
+
+	// TenantDefaultKubeConfigServiceAccount is the name of the service account
+	// to use as default for kustomize-controller and helm-controller remote
+	// cluster access via spec.kubeConfig.configMapRef when the multitenant
+	// lockdown for workload identity is enabled. Defaults to the 'default'
+	// service account from the tenant namespace.
+	// +optional
+	TenantDefaultKubeConfigServiceAccount string `json:"tenantDefaultKubeConfigServiceAccount,omitempty"`
 
 	// ObjectLevelWorkloadIdentity enables the feature gate
 	// required for object-level workload identity.

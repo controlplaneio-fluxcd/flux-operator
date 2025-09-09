@@ -65,14 +65,6 @@ func Build(srcDir, tmpDir string, options Options) (*Result, error) {
 }
 
 func generate(base string, options Options) error {
-	objLevelWIDConfig, err := newObjectLevelWorkloadIdentity(options.Version, options.EnableObjectLevelWorkloadIdentity)
-	if err != nil {
-		return fmt.Errorf("create ObjectLevelWorkloadIdentity config failed: %w", err)
-	}
-	options.SupportsObjectLevelWorkloadIdentity = objLevelWIDConfig.supported
-	options.EnableObjectLevelWorkloadIdentity = objLevelWIDConfig.enabled
-	options.ObjectLevelWorkloadIdentityControllers = objLevelWIDConfig.controllersForTemplate()
-
 	if options.HasNotificationController() {
 		options.EventsAddr = notifier.Address(options.Namespace, options.ClusterDomain)
 	}

@@ -135,9 +135,8 @@ func buildInstanceCmdRun(cmd *cobra.Command, args []string) error {
 		options.Patches += builder.GetProfileMultitenant(instance.GetCluster().TenantDefaultServiceAccount)
 	}
 
-	if instance.GetCluster().ObjectLevelWorkloadIdentity {
-		options.EnableObjectLevelWorkloadIdentity = true
-		options.SupportsObjectLevelWorkloadIdentity = true
+	if err := options.ValidateAndApplyWorkloadIdentityConfig(instance.GetCluster()); err != nil {
+		return fmt.Errorf("failed to validate workload identity configuration: %w", err)
 	}
 
 	if options.HasNotificationController() {

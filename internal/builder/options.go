@@ -5,35 +5,31 @@ package builder
 
 import (
 	"slices"
-
-	notification "github.com/controlplaneio-fluxcd/flux-operator/internal/notifier"
 )
 
 // Options defines the builder configuration.
 type Options struct {
-	Version                                string
-	Namespace                              string
-	Components                             []string
-	ComponentImages                        []ComponentImage
-	EventsAddr                             string
-	Registry                               string
-	ImagePullSecret                        string
-	WatchAllNamespaces                     bool
-	NetworkPolicy                          bool
-	LogLevel                               string
-	ClusterDomain                          string
-	TolerationKeys                         []string
-	Patches                                string
-	ArtifactStorage                        *ArtifactStorage
-	Sync                                   *Sync
-	ShardingKey                            string
-	ShardingStorage                        bool
-	Shards                                 []string
-	ShardName                              string
-	SourceAPIVersion                       string
-	EnableObjectLevelWorkloadIdentity      bool
-	SupportsObjectLevelWorkloadIdentity    bool
-	ObjectLevelWorkloadIdentityControllers string
+	Version                                         string
+	Namespace                                       string
+	Components                                      []string
+	ComponentImages                                 []ComponentImage
+	EventsAddr                                      string
+	Registry                                        string
+	ImagePullSecret                                 string
+	WatchAllNamespaces                              bool
+	NetworkPolicy                                   bool
+	LogLevel                                        string
+	ClusterDomain                                   string
+	TolerationKeys                                  []string
+	Patches                                         string
+	ArtifactStorage                                 *ArtifactStorage
+	Sync                                            *Sync
+	ShardingKey                                     string
+	ShardingStorage                                 bool
+	Shards                                          []string
+	ShardName                                       string
+	SourceAPIVersion                                string
+	RemovePermissionForCreatingServiceAccountTokens bool
 }
 
 // MakeDefaultOptions returns the default builder configuration.
@@ -45,7 +41,7 @@ func MakeDefaultOptions() Options {
 			"source-controller",
 			"kustomize-controller",
 			"helm-controller",
-			notification.Controller,
+			"notification-controller",
 			"image-reflector-controller",
 			"image-automation-controller",
 		},
@@ -61,7 +57,7 @@ func MakeDefaultOptions() Options {
 }
 
 func (o *Options) HasNotificationController() bool {
-	return slices.Contains(o.Components, notification.Controller)
+	return slices.Contains(o.Components, "notification-controller")
 }
 
 // ComponentImage represents a container image used by a component.

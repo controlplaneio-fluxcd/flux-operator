@@ -16,6 +16,8 @@ import (
 	cp "github.com/otiai10/copy"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/yaml"
+
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
 const (
@@ -380,6 +382,7 @@ func TestBuild_Sync_OCIRepository(t *testing.T) {
 	const version = "v2.6.0"
 	options := MakeDefaultOptions()
 	options.Version = version
+	options.RemovePermissionForCreatingServiceAccountTokens = true
 
 	srcDir := filepath.Join("testdata", version)
 
@@ -466,105 +469,319 @@ func TestBuild_Sync_Bucket(t *testing.T) {
 	g.Expect(found).To(BeTrue())
 }
 
-func TestBuild_ObjectLevelWorkloadIdentity_260(t *testing.T) {
-	g := NewWithT(t)
-	const version = "v2.6.0"
-	options := MakeDefaultOptions()
-	options.Version = version
-	options.EnableObjectLevelWorkloadIdentity = true
+func TestBuild_WorkloadIdentity_ValidateAndApplyConfig(t *testing.T) {
+	testCases := []struct {
+		name               string
+		version            string
+		cluster            fluxcdv1.Cluster
+		expectedErr        string
+		expectRemoveTokens bool
+	}{
+		// Pre-2.6.0 versions
+		{
+			name:    "pre-2.6.0 disabled features",
+			version: "v2.5.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectLevelWorkloadIdentity: false,
+				MultitenantWorkloadIdentity: false,
+			},
+		},
+		{
+			name:    "pre-2.6.0 object level enabled",
+			version: "v2.5.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectLevelWorkloadIdentity: true,
+			},
+			expectedErr: ".objectLevelWorkloadIdentity and .multitenantWorkloadIdentity are not supported in Flux versions < 2.6.0",
+		},
+		{
+			name:    "pre-2.6.0 multitenant enabled",
+			version: "v2.5.0",
+			cluster: fluxcdv1.Cluster{
+				MultitenantWorkloadIdentity: true,
+			},
+			expectedErr: ".objectLevelWorkloadIdentity and .multitenantWorkloadIdentity are not supported in Flux versions < 2.6.0",
+		},
 
-	srcDir := filepath.Join("testdata", version)
+		// 2.6.x versions
+		{
+			name:    "2.6.x disabled",
+			version: "v2.6.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectLevelWorkloadIdentity: false,
+			},
+			expectRemoveTokens: true,
+		},
+		{
+			name:    "2.6.x object level enabled",
+			version: "v2.6.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectLevelWorkloadIdentity: true,
+			},
+		},
+		{
+			name:    "2.6.x multitenant not supported",
+			version: "v2.6.0",
+			cluster: fluxcdv1.Cluster{
+				MultitenantWorkloadIdentity: true,
+			},
+			expectedErr: ".multitenantWorkloadIdentity is not supported in Flux versions 2.6.x",
+		},
 
-	dstDir, err := testTempDir(t)
-	g.Expect(err).NotTo(HaveOccurred())
+		// >= 2.7.0 versions
+		{
+			name:    "2.7.0+ disabled",
+			version: "v2.7.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectLevelWorkloadIdentity: false,
+			},
+			expectRemoveTokens: true,
+		},
+		{
+			name:    "2.7.0+ object level only",
+			version: "v2.7.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectLevelWorkloadIdentity: true,
+				MultitenantWorkloadIdentity: false,
+			},
+		},
+		{
+			name:    "2.7.0+ multitenant enabled",
+			version: "v2.7.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectLevelWorkloadIdentity: true,
+				MultitenantWorkloadIdentity: true,
+			},
+		},
+		{
+			name:    "2.7.0+ multitenant without object level",
+			version: "v2.7.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectLevelWorkloadIdentity: false,
+				MultitenantWorkloadIdentity: true,
+			},
+			expectedErr: ".objectLevelWorkloadIdentity must be set to true when .multitenantWorkloadIdentity is set to true",
+		},
 
-	ci, err := ExtractComponentImages(srcDir, options)
-	g.Expect(err).NotTo(HaveOccurred())
-	options.ComponentImages = ci
-
-	result, err := Build(srcDir, dstDir, options)
-	g.Expect(err).NotTo(HaveOccurred())
-
-	found := false
-	for _, obj := range result.Objects {
-		if obj.GetName() == crdControllerFluxSystem && obj.GetKind() == clusterRole {
-			found = true
-			g.Expect(ssautil.ObjectToYAML(obj)).To(ContainSubstring("serviceaccounts/token"))
-		}
+		// Invalid version
+		{
+			name:        "invalid version",
+			version:     "invalid",
+			cluster:     fluxcdv1.Cluster{},
+			expectedErr: "failed to parse Flux version",
+		},
 	}
-	g.Expect(found).To(BeTrue())
 
-	found = false
-	for _, obj := range result.Objects {
-		if obj.GetName() == sourceController && obj.GetKind() == deploymentKind {
-			found = true
-			g.Expect(ssautil.ObjectToYAML(obj)).To(ContainSubstring("nodeSelector"))
-		}
-	}
-	g.Expect(found).To(BeTrue())
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			g := NewWithT(t)
+			options := MakeDefaultOptions()
+			options.Version = tc.version
 
-	numFound := 0
-	for _, obj := range result.Objects {
-		if obj.GetName() == sourceController && obj.GetKind() == deploymentKind {
-			numFound++
-			g.Expect(ssautil.ObjectToYAML(obj)).To(ContainSubstring("--feature-gates=ObjectLevelWorkloadIdentity=true"))
-		}
-		if obj.GetName() == "helm-controller" && obj.GetKind() == deploymentKind {
-			numFound++
-			g.Expect(ssautil.ObjectToYAML(obj)).NotTo(ContainSubstring("--feature-gates=ObjectLevelWorkloadIdentity=true"))
-		}
+			err := options.ValidateAndApplyWorkloadIdentityConfig(tc.cluster)
+
+			if tc.expectedErr != "" {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tc.expectedErr))
+			} else {
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(options.RemovePermissionForCreatingServiceAccountTokens).To(Equal(tc.expectRemoveTokens))
+			}
+		})
 	}
-	g.Expect(numFound).To(Equal(2))
 }
 
-func TestBuild_ObjectLevelWorkloadIdentity_270(t *testing.T) {
-	g := NewWithT(t)
-	options := MakeDefaultOptions()
-	options.Version = "v2.7.0"
-	options.EnableObjectLevelWorkloadIdentity = true
-
-	srcDir := filepath.Join("testdata", "v2.6.0")
-
-	dstDir, err := testTempDir(t)
-	g.Expect(err).NotTo(HaveOccurred())
-
-	ci, err := ExtractComponentImages(srcDir, options)
-	g.Expect(err).NotTo(HaveOccurred())
-	options.ComponentImages = ci
-
-	result, err := Build(srcDir, dstDir, options)
-	g.Expect(err).NotTo(HaveOccurred())
-
-	found := false
-	for _, obj := range result.Objects {
-		if obj.GetName() == crdControllerFluxSystem && obj.GetKind() == clusterRole {
-			found = true
-			g.Expect(ssautil.ObjectToYAML(obj)).To(ContainSubstring("serviceaccounts/token"))
-		}
+func TestBuild_WorkloadIdentity_FeatureGateAndFlags(t *testing.T) {
+	testCases := []struct {
+		name                      string
+		version                   string
+		cluster                   fluxcdv1.Cluster
+		srcDir                    string
+		expectedFeatureGate       string
+		controllersWithGate       []string
+		expectServiceAccountFlags bool
+		expectTokensRemoved       bool
+	}{
+		{
+			name:                "2.6.0 object level enabled",
+			version:             "v2.6.0",
+			cluster:             fluxcdv1.Cluster{ObjectLevelWorkloadIdentity: true},
+			srcDir:              "v2.6.0",
+			expectedFeatureGate: "--feature-gates=ObjectLevelWorkloadIdentity=true",
+			controllersWithGate: []string{sourceController, "kustomize-controller", "notification-controller", "image-reflector-controller", "image-automation-controller"},
+			expectTokensRemoved: false,
+		},
+		{
+			name:                "2.6.0 object level disabled",
+			version:             "v2.6.0",
+			cluster:             fluxcdv1.Cluster{ObjectLevelWorkloadIdentity: false},
+			srcDir:              "v2.6.0",
+			expectTokensRemoved: true,
+		},
+		{
+			name:                "2.7.0 object level enabled",
+			version:             "v2.7.0",
+			cluster:             fluxcdv1.Cluster{ObjectLevelWorkloadIdentity: true},
+			srcDir:              "v2.6.0",
+			expectedFeatureGate: "--feature-gates=ObjectLevelWorkloadIdentity=true",
+			controllersWithGate: []string{sourceController, "kustomize-controller", "helm-controller", "notification-controller", "image-reflector-controller", "image-automation-controller"},
+			expectTokensRemoved: false,
+		},
+		{
+			name:                "2.7.0 object level disabled",
+			version:             "v2.7.0",
+			cluster:             fluxcdv1.Cluster{ObjectLevelWorkloadIdentity: false},
+			srcDir:              "v2.6.0",
+			expectedFeatureGate: "--feature-gates=ObjectLevelWorkloadIdentity=false",
+			controllersWithGate: []string{sourceController, "kustomize-controller", "helm-controller", "notification-controller", "image-reflector-controller", "image-automation-controller"},
+			expectTokensRemoved: true,
+		},
+		{
+			name:    "2.7.0 multitenant enabled with defaults",
+			version: "v2.7.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectLevelWorkloadIdentity: true,
+				MultitenantWorkloadIdentity: true,
+			},
+			srcDir:                    "v2.6.0",
+			expectedFeatureGate:       "--feature-gates=ObjectLevelWorkloadIdentity=true",
+			controllersWithGate:       []string{sourceController, "kustomize-controller", "helm-controller", "notification-controller", "image-reflector-controller", "image-automation-controller"},
+			expectServiceAccountFlags: true,
+			expectTokensRemoved:       false,
+		},
+		{
+			name:    "2.7.0 multitenant enabled with custom service accounts",
+			version: "v2.7.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectLevelWorkloadIdentity:           true,
+				MultitenantWorkloadIdentity:           true,
+				TenantDefaultServiceAccount:           "custom-sa",
+				TenantDefaultDecryptionServiceAccount: "custom-decryption-sa",
+				TenantDefaultKubeConfigServiceAccount: "custom-kubeconfig-sa",
+			},
+			srcDir:                    "v2.6.0",
+			expectedFeatureGate:       "--feature-gates=ObjectLevelWorkloadIdentity=true",
+			controllersWithGate:       []string{sourceController, "kustomize-controller", "helm-controller", "notification-controller", "image-reflector-controller", "image-automation-controller"},
+			expectServiceAccountFlags: true,
+			expectTokensRemoved:       false,
+		},
 	}
-	g.Expect(found).To(BeTrue())
 
-	found = false
-	for _, obj := range result.Objects {
-		if obj.GetName() == sourceController && obj.GetKind() == deploymentKind {
-			found = true
-			g.Expect(ssautil.ObjectToYAML(obj)).To(ContainSubstring("nodeSelector"))
-		}
-	}
-	g.Expect(found).To(BeTrue())
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			g := NewWithT(t)
+			options := MakeDefaultOptions()
+			options.Version = tc.version
 
-	numFound := 0
-	for _, obj := range result.Objects {
-		if obj.GetName() == sourceController && obj.GetKind() == deploymentKind {
-			numFound++
-			g.Expect(ssautil.ObjectToYAML(obj)).To(ContainSubstring("--feature-gates=ObjectLevelWorkloadIdentity=true"))
-		}
-		if obj.GetName() == "helm-controller" && obj.GetKind() == deploymentKind {
-			numFound++
-			g.Expect(ssautil.ObjectToYAML(obj)).To(ContainSubstring("--feature-gates=ObjectLevelWorkloadIdentity=true"))
-		}
+			srcDir := filepath.Join("testdata", tc.srcDir)
+			dstDir, err := testTempDir(t)
+			g.Expect(err).NotTo(HaveOccurred())
+
+			ci, err := ExtractComponentImages(srcDir, options)
+			g.Expect(err).NotTo(HaveOccurred())
+			options.ComponentImages = ci
+
+			err = options.ValidateAndApplyWorkloadIdentityConfig(tc.cluster)
+			g.Expect(err).NotTo(HaveOccurred())
+
+			result, err := Build(srcDir, dstDir, options)
+			g.Expect(err).NotTo(HaveOccurred())
+
+			// Check feature gates
+			if tc.expectedFeatureGate != "" {
+				for _, controllerName := range tc.controllersWithGate {
+					found := false
+					for _, obj := range result.Objects {
+						if obj.GetName() == controllerName && obj.GetKind() == deploymentKind {
+							found = true
+							g.Expect(ssautil.ObjectToYAML(obj)).To(ContainSubstring(tc.expectedFeatureGate))
+						}
+					}
+					g.Expect(found).To(BeTrue(), fmt.Sprintf("Controller %s should have feature gate", controllerName))
+				}
+
+				// helm-controller should not have feature gate in 2.6.0
+				if tc.version == "v2.6.0" {
+					found := false
+					for _, obj := range result.Objects {
+						if obj.GetName() == "helm-controller" && obj.GetKind() == deploymentKind {
+							found = true
+							g.Expect(ssautil.ObjectToYAML(obj)).NotTo(ContainSubstring("--feature-gates=ObjectLevelWorkloadIdentity=true"))
+						}
+					}
+					g.Expect(found).To(BeTrue())
+				}
+			}
+
+			// Check service account tokens permission
+			found := false
+			for _, obj := range result.Objects {
+				if obj.GetName() == crdControllerFluxSystem && obj.GetKind() == clusterRole {
+					found = true
+					if tc.expectTokensRemoved {
+						g.Expect(ssautil.ObjectToYAML(obj)).NotTo(ContainSubstring("serviceaccounts/token"))
+					} else {
+						g.Expect(ssautil.ObjectToYAML(obj)).To(ContainSubstring("serviceaccounts/token"))
+					}
+				}
+			}
+			g.Expect(found).To(BeTrue())
+
+			// Check multitenant service account flags
+			if tc.expectServiceAccountFlags {
+				const defaultSA = "default"
+				expectedSA := defaultSA
+				expectedDecryptionSA := defaultSA
+				expectedKubeConfigSA := defaultSA
+
+				if tc.cluster.TenantDefaultServiceAccount != "" {
+					expectedSA = tc.cluster.TenantDefaultServiceAccount
+				}
+				if tc.cluster.TenantDefaultDecryptionServiceAccount != "" {
+					expectedDecryptionSA = tc.cluster.TenantDefaultDecryptionServiceAccount
+				}
+				if tc.cluster.TenantDefaultKubeConfigServiceAccount != "" {
+					expectedKubeConfigSA = tc.cluster.TenantDefaultKubeConfigServiceAccount
+				}
+
+				// Check --default-service-account flag
+				controllersWithDefaultSA := []string{sourceController, "notification-controller", "image-reflector-controller", "image-automation-controller"}
+				for _, controllerName := range controllersWithDefaultSA {
+					found := false
+					for _, obj := range result.Objects {
+						if obj.GetName() == controllerName && obj.GetKind() == deploymentKind {
+							found = true
+							g.Expect(ssautil.ObjectToYAML(obj)).To(ContainSubstring(fmt.Sprintf("--default-service-account=%s", expectedSA)))
+						}
+					}
+					g.Expect(found).To(BeTrue(), fmt.Sprintf("Controller %s should have default service account flag", controllerName))
+				}
+
+				// Check --default-decryption-service-account flag
+				found := false
+				for _, obj := range result.Objects {
+					if obj.GetName() == "kustomize-controller" && obj.GetKind() == deploymentKind {
+						found = true
+						g.Expect(ssautil.ObjectToYAML(obj)).To(ContainSubstring(fmt.Sprintf("--default-decryption-service-account=%s", expectedDecryptionSA)))
+					}
+				}
+				g.Expect(found).To(BeTrue())
+
+				// Check --default-kubeconfig-service-account flag
+				controllersWithKubeConfigSA := []string{"kustomize-controller", "helm-controller"}
+				for _, controllerName := range controllersWithKubeConfigSA {
+					found := false
+					for _, obj := range result.Objects {
+						if obj.GetName() == controllerName && obj.GetKind() == deploymentKind {
+							found = true
+							g.Expect(ssautil.ObjectToYAML(obj)).To(ContainSubstring(fmt.Sprintf("--default-kubeconfig-service-account=%s", expectedKubeConfigSA)))
+						}
+					}
+					g.Expect(found).To(BeTrue(), fmt.Sprintf("Controller %s should have default kubeconfig service account flag", controllerName))
+				}
+			}
+		})
 	}
-	g.Expect(numFound).To(Equal(2))
 }
 
 func TestBuild_InvalidPatches(t *testing.T) {

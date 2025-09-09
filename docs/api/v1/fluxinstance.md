@@ -307,8 +307,11 @@ spec:
     type: openshift
     size: medium
     multitenant: true
+    multitenantWorkloadIdentity: true
+    objectLevelWorkloadIdentity: true
     tenantDefaultServiceAccount: "flux"
-    objectLevelWorkloadIdentity: false
+    tenantDefaultDecryptionServiceAccount: "flux-decryption"
+    tenantDefaultKubeConfigServiceAccount: "flux-kubeconfig"
     networkPolicy: true
     domain: "cluster.local"
 ```
@@ -357,8 +360,90 @@ The `.spec.cluster.tenantDefaultServiceAccount` is optional and specifies the de
 service account used by Flux when reconciling `Kustomization` and `HelmRelease`
 resources found in the tenant namespaces.
 
+#### Cluster workload identity
+
+The workload identity configuration provides fine-grained control over service account
+usage across Flux controllers, enabling secure multi-tenant deployments in cloud environments.
+
+##### Object-level workload identity
+
 The `.spec.cluster.objectLevelWorkloadIdentity` field is optional and specifies whether to
 enable the object-level workload identity feature gate and RBAC for the Flux controllers.
+This feature allows Flux resources to specify their own service accounts via the
+`spec.serviceAccountName` field.
+
+Version requirements:
+
+- Flux v2.6.0 and later: Supported for `source-controller`, `kustomize-controller`,
+  `notification-controller`, `image-reflector-controller`, and `image-automation-controller`
+- Flux v2.7.0 and later: Additionally supported for `helm-controller`
+
+Example:
+
+```yaml
+spec:
+  cluster:
+    objectLevelWorkloadIdentity: true
+```
+
+##### Multitenant workload identity
+
+The `.spec.cluster.multitenantWorkloadIdentity` field is optional and enables workload identity
+multi-tenancy lockdown. When enabled, Flux controllers will use tenant-specific service accounts
+as defaults, preventing cross-tenant access in workload identity scenarios.
+
+Requirements:
+
+- Requires `objectLevelWorkloadIdentity: true`
+- Available in Flux v2.7.0 and later
+- Designed for cloud environments with workload identity (AWS IRSA, Azure Workload Identity, GCP Workload Identity)
+
+Example:
+
+```yaml
+spec:
+  cluster:
+    objectLevelWorkloadIdentity: true
+    multitenantWorkloadIdentity: true
+```
+
+##### Service account configuration
+
+When `multitenantWorkloadIdentity` is enabled, you can configure default service accounts
+for different controller operations:
+
+- `.spec.cluster.tenantDefaultServiceAccount` (optional): Default service account for
+  `source-controller`, `notification-controller`, `image-reflector-controller`, and
+  `image-automation-controller` operations. Defaults to `"default"`. (Also used by
+  `kustomize-controller` and `helm-controller` for Kubernetes API operations when
+  [`.spec.cluster.multitenant`](#cluster-multitenant) is set to `true`.)
+- `.spec.cluster.tenantDefaultDecryptionServiceAccount` (optional): Default service account
+  for `kustomize-controller` SOPS decryption operations. Defaults to `"default"`.
+- `.spec.cluster.tenantDefaultKubeConfigServiceAccount` (optional): Default service account
+  for `kustomize-controller` and `helm-controller` remote cluster access via
+  `spec.kubeConfig.configMapRef`. Defaults to `"default"`.
+
+Complete example:
+
+```yaml
+spec:
+  cluster:
+    objectLevelWorkloadIdentity: true
+    multitenantWorkloadIdentity: true
+    tenantDefaultServiceAccount: "flux-tenant"
+    tenantDefaultDecryptionServiceAccount: "flux-decryption"
+    tenantDefaultKubeConfigServiceAccount: "flux-kubeconfig"
+```
+
+Use cases:
+
+- **Cloud workload identity**: Each tenant namespace has service accounts bound to cloud IAM roles
+- **Secret management**: Different service accounts for decryption operations (e.g. SOPS with cloud KMS)
+- **Multi-cluster**: Separate service accounts for accessing remote clusters via cloud IAM
+- **Zero-trust**: Prevent controllers from accessing resources outside their intended scope
+
+See the complete workload identity documentation for CNCF Flux
+[here](https://fluxcd.io/flux/integrations/).
 
 #### Cluster network policy
 
