@@ -157,11 +157,4 @@ patches:
     - op: add
       path: /spec/template/spec/containers/0/args/-
       value: --watch-label-selector=!sharding.fluxcd.io/key
-- target:
-    kind: Deployment
-    name: "(source-controller|kustomize-controller|notification-controller|image-reflector-controller|image-automation-controller)"
-  patch: |
-    - op: add
-      path: /spec/template/spec/containers/0/args/-
-      value: --feature-gates=ObjectLevelWorkloadIdentity=false
 

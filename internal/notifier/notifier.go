@@ -6,6 +6,7 @@ package notifier
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"slices"
 
@@ -17,6 +18,12 @@ import (
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
+
+// Address returns the address of the notification-controller for
+// the given namespace and clusterDomain for sending events.
+func Address(namespace, clusterDomain string) string {
+	return fmt.Sprintf("http://notification-controller.%s.svc.%s./", namespace, clusterDomain)
+}
 
 type options struct {
 	fluxInstance *fluxcdv1.FluxInstance
@@ -72,7 +79,7 @@ func New(ctx context.Context, base record.EventRecorder, scheme *runtime.Scheme,
 			}
 			fluxInstance = &instanceList.Items[0]
 		}
-		if slices.Contains(fluxInstance.GetComponents(), Controller) {
+		if slices.Contains(fluxInstance.GetComponents(), "notification-controller") {
 			eventsAddr = Address(fluxInstance.GetNamespace(), fluxInstance.GetCluster().Domain)
 		}
 	}

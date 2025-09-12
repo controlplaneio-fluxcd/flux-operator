@@ -32,25 +32,112 @@ import (
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/testutils"
 )
 
-func TestFluxInstanceReconciler_CELNameValidation(t *testing.T) {
-	g := NewWithT(t)
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	ns, err := testEnv.CreateNamespace(ctx, "test")
-	g.Expect(err).ToNot(HaveOccurred())
-
-	obj := &fluxcdv1.FluxInstance{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "invalid-name",
-			Namespace: ns.Name,
+func TestFluxInstanceReconciler_CELValidation(t *testing.T) {
+	for _, tt := range []struct {
+		name        string
+		obj         func(t *testing.T) *fluxcdv1.FluxInstance
+		expectedErr string
+	}{
+		{
+			name: "invalid name",
+			obj: func(t *testing.T) *fluxcdv1.FluxInstance {
+				return &fluxcdv1.FluxInstance{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "invalid-name",
+					},
+					Spec: getDefaultFluxSpec(t),
+				}
+			},
+			expectedErr: "the only accepted name for a FluxInstance is 'flux'",
 		},
-		Spec: getDefaultFluxSpec(t),
-	}
+		{
+			name: "cannot enable workload identity lockdown without also enabling object level",
+			obj: func(t *testing.T) *fluxcdv1.FluxInstance {
+				spec := getDefaultFluxSpec(t)
+				spec.Cluster = &fluxcdv1.Cluster{
+					ObjectLevelWorkloadIdentity: false,
+					MultitenantWorkloadIdentity: true,
+				}
+				return &fluxcdv1.FluxInstance{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "flux",
+					},
+					Spec: spec,
+				}
+			},
+			expectedErr: ".objectLevelWorkloadIdentity must be set to true when .multitenantWorkloadIdentity is set to true",
+		},
+		{
+			name: "can enable object level workload identity without lockdown",
+			obj: func(t *testing.T) *fluxcdv1.FluxInstance {
+				spec := getDefaultFluxSpec(t)
+				spec.Cluster = &fluxcdv1.Cluster{
+					ObjectLevelWorkloadIdentity: true,
+					MultitenantWorkloadIdentity: false,
+				}
+				return &fluxcdv1.FluxInstance{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "flux",
+					},
+					Spec: spec,
+				}
+			},
+		},
+		{
+			name: "can create a flux instance without any object level workload identity features",
+			obj: func(t *testing.T) *fluxcdv1.FluxInstance {
+				spec := getDefaultFluxSpec(t)
+				spec.Cluster = &fluxcdv1.Cluster{
+					ObjectLevelWorkloadIdentity: false,
+					MultitenantWorkloadIdentity: false,
+				}
+				return &fluxcdv1.FluxInstance{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "flux",
+					},
+					Spec: spec,
+				}
+			},
+		},
+		{
+			name: "can create a flux instance with workload identity lockdown",
+			obj: func(t *testing.T) *fluxcdv1.FluxInstance {
+				spec := getDefaultFluxSpec(t)
+				spec.Cluster = &fluxcdv1.Cluster{
+					ObjectLevelWorkloadIdentity: true,
+					MultitenantWorkloadIdentity: true,
+				}
+				return &fluxcdv1.FluxInstance{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "flux",
+					},
+					Spec: spec,
+				}
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
 
-	err = testEnv.Create(ctx, obj)
-	g.Expect(err).To(HaveOccurred())
-	g.Expect(err.Error()).To(ContainSubstring("the only accepted name for a FluxInstance is 'flux'"))
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			defer cancel()
+
+			obj := tt.obj(t)
+
+			ns, err := testEnv.CreateNamespace(ctx, "test")
+			g.Expect(err).NotTo(HaveOccurred())
+
+			obj.Namespace = ns.Name
+
+			err = testEnv.Create(ctx, obj)
+			if tt.expectedErr != "" {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.expectedErr))
+			} else {
+				g.Expect(err).NotTo(HaveOccurred())
+			}
+		})
+	}
 }
 
 func TestFluxInstanceReconciler_InitDisabled(t *testing.T) {

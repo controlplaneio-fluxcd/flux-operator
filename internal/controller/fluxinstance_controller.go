@@ -347,7 +347,6 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 	options.Namespace = obj.GetNamespace()
 	options.Components = obj.GetComponents()
 	options.NetworkPolicy = obj.GetCluster().NetworkPolicy
-	options.EnableObjectLevelWorkloadIdentity = obj.GetCluster().ObjectLevelWorkloadIdentity
 
 	if obj.GetCluster().Domain != "" {
 		options.ClusterDomain = obj.GetCluster().Domain
@@ -358,6 +357,10 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 
 	if obj.GetCluster().Multitenant {
 		options.Patches += builder.GetProfileMultitenant(obj.GetCluster().TenantDefaultServiceAccount)
+	}
+
+	if err := options.ValidateAndApplyWorkloadIdentityConfig(obj.GetCluster()); err != nil {
+		return nil, err
 	}
 
 	if options.HasNotificationController() {

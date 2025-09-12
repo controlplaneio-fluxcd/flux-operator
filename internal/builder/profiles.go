@@ -3,7 +3,16 @@
 
 package builder
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+)
+
+const (
+	defaultServiceAccount = "default"
+)
 
 // GetProfileClusterSize returns a patch that configures the
 // Flux controllers for a specific cluster size.
@@ -248,7 +257,7 @@ const profileClusterTypeOpenShift = `
 // GetProfileMultitenant returns a patch to enable multitenancy in the Flux controllers.
 func GetProfileMultitenant(defaultSA string) string {
 	if defaultSA == "" {
-		defaultSA = "default"
+		defaultSA = defaultServiceAccount
 	}
 
 	return fmt.Sprintf(profileClusterMultitenant, defaultSA)
@@ -282,6 +291,72 @@ const profileClusterMultitenant = `
     - op: add
       path: /spec/serviceAccountName
       value: kustomize-controller
+`
+
+// GetProfileMultitenantWorkloadIdentity returns a patch to enable
+// multitenant workload identity in the Flux controllers through
+// the feature gate.
+func GetProfileMultitenantWorkloadIdentity(cluster fluxcdv1.Cluster) string {
+	defaultSA := cluster.TenantDefaultServiceAccount
+	if defaultSA == "" {
+		defaultSA = defaultServiceAccount
+	}
+
+	defaultDecryptionSA := cluster.TenantDefaultDecryptionServiceAccount
+	if defaultDecryptionSA == "" {
+		defaultDecryptionSA = defaultServiceAccount
+	}
+
+	defaultKubeConfigSA := cluster.TenantDefaultKubeConfigServiceAccount
+	if defaultKubeConfigSA == "" {
+		defaultKubeConfigSA = defaultServiceAccount
+	}
+
+	return fmt.Sprintf(profileClusterMultitenantWorkloadIdentity,
+		defaultSA, defaultDecryptionSA, defaultKubeConfigSA)
+}
+
+const profileClusterMultitenantWorkloadIdentity = `
+- target:
+    kind: Deployment
+    name: "(source-controller|notification-controller|image-reflector-controller|image-automation-controller)"
+  patch: |
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --default-service-account=%[1]s
+- target:
+    kind: Deployment
+    name: "(kustomize-controller)"
+  patch: |
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --default-decryption-service-account=%[2]s
+- target:
+    kind: Deployment
+    name: "(kustomize-controller|helm-controller)"
+  patch: |
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --default-kubeconfig-service-account=%[3]s
+`
+
+// GetProfileObjectLevelWorkloadIdentity returns a patch to enable
+// object level workload identity in the Flux controllers through
+// the feature gate.
+func GetProfileObjectLevelWorkloadIdentity(controllers []string, enabled bool) string {
+	c := strings.Join(controllers, "|")
+
+	return fmt.Sprintf(profileClusterObjectLevelWorkloadIdentity, c, enabled)
+}
+
+const profileClusterObjectLevelWorkloadIdentity = `
+- target:
+    kind: Deployment
+    name: "(%[1]s)"
+  patch: |
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --feature-gates=ObjectLevelWorkloadIdentity=%[2]v
 `
 
 // GetProfileNotification returns a patch to enable the FluxInstance
