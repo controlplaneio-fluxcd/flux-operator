@@ -13,13 +13,19 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/auth"
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/k8s"
+)
+
+const (
+	// ToolReconcileFluxSource is the name of the reconcile_flux_source tool.
+	ToolReconcileFluxSource = "reconcile_flux_source"
 )
 
 // NewReconcileSourceTool creates a new tool for reconciling a Flux source.
 func (m *Manager) NewReconcileSourceTool() SystemTool {
 	return SystemTool{
-		Tool: mcp.NewTool("reconcile_flux_source",
+		Tool: mcp.NewTool(ToolReconcileFluxSource,
 			mcp.WithDescription("This tool triggers the reconciliation of a Flux source."),
 			mcp.WithString("kind",
 				mcp.Description("The Flux source kind. Can only one of GitRepository, OCIRepository, Bucket, HelmChart, HelmRepository."),
@@ -42,6 +48,10 @@ func (m *Manager) NewReconcileSourceTool() SystemTool {
 
 // HandleReconcileSource is the handler function for the reconcile_flux_source tool.
 func (m *Manager) HandleReconcileSource(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := auth.CheckScopes(ctx, getScopeNames(ToolReconcileFluxSource, m.readonly)); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
 	kind := mcp.ParseString(request, "kind", "")
 	if kind == "" {
 		return mcp.NewToolResultError("kind is required"), nil
@@ -58,7 +68,7 @@ func (m *Manager) HandleReconcileSource(ctx context.Context, request mcp.CallToo
 	ctx, cancel := context.WithTimeout(ctx, m.timeout)
 	defer cancel()
 
-	kubeClient, err := k8s.NewClient(m.flags)
+	kubeClient, err := k8s.NewClient(ctx, m.flags)
 	if err != nil {
 		return mcp.NewToolResultErrorFromErr("Failed to create Kubernetes client", err), nil
 	}

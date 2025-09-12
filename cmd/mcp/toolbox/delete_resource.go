@@ -8,13 +8,19 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 
+	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/auth"
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/k8s"
+)
+
+const (
+	// ToolDeleteKubernetesResource is the name of the delete_kubernetes_resource tool.
+	ToolDeleteKubernetesResource = "delete_kubernetes_resource"
 )
 
 // NewDeleteKubernetesResourceTool creates a new tool for deleting Kubernetes resources.
 func (m *Manager) NewDeleteKubernetesResourceTool() SystemTool {
 	return SystemTool{
-		Tool: mcp.NewTool("delete_kubernetes_resource",
+		Tool: mcp.NewTool(ToolDeleteKubernetesResource,
 			mcp.WithDescription("This tool deletes a Kubernetes resource based on its API version, kind, name, and namespace."),
 			mcp.WithString("apiVersion",
 				mcp.Description("The apiVersion of the resource to delete."),
@@ -40,6 +46,10 @@ func (m *Manager) NewDeleteKubernetesResourceTool() SystemTool {
 
 // HandleDeleteKubernetesResource is the handler function for the delete_kubernetes_resource tool.
 func (m *Manager) HandleDeleteKubernetesResource(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := auth.CheckScopes(ctx, getScopeNames(ToolDeleteKubernetesResource, m.readonly)); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
 	apiVersion := mcp.ParseString(request, "apiVersion", "")
 	if apiVersion == "" {
 		return mcp.NewToolResultError("apiVersion is required"), nil
@@ -57,7 +67,7 @@ func (m *Manager) HandleDeleteKubernetesResource(ctx context.Context, request mc
 	ctx, cancel := context.WithTimeout(ctx, m.timeout)
 	defer cancel()
 
-	kubeClient, err := k8s.NewClient(m.flags)
+	kubeClient, err := k8s.NewClient(ctx, m.flags)
 	if err != nil {
 		return mcp.NewToolResultErrorFromErr("Failed to create Kubernetes client", err), nil
 	}

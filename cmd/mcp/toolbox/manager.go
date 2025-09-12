@@ -35,26 +35,27 @@ type Manager struct {
 	flags       *cli.ConfigFlags
 	timeout     time.Duration
 	maskSecrets bool
+	readonly    bool
 }
 
 // NewManager initializes and returns a new Manager instance
 // with the provided configuration and settings.
-func NewManager(flags *cli.ConfigFlags, timeout time.Duration, maskSecrets bool) *Manager {
+func NewManager(flags *cli.ConfigFlags, timeout time.Duration, maskSecrets bool, readonly bool) *Manager {
 	m := &Manager{
 		kubeconfig:  k8s.NewKubeConfig(),
 		flags:       flags,
 		timeout:     timeout,
 		maskSecrets: maskSecrets,
+		readonly:    readonly,
 	}
 
 	return m
 }
 
-// RegisterTools registers tools with the given server,
-// optionally filtering by readonly status.
-func (m *Manager) RegisterTools(server *mcpserver.MCPServer, readonly bool, inCluster bool) {
+// RegisterTools registers tools with the given server.
+func (m *Manager) RegisterTools(server *mcpserver.MCPServer, inCluster bool) {
 	for _, t := range m.ToolSet() {
-		if readonly && !t.ReadOnly {
+		if m.readonly && !t.ReadOnly {
 			continue
 		}
 		if inCluster && !t.InCluster {

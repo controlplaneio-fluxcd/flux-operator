@@ -8,13 +8,19 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 
+	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/auth"
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/k8s"
+)
+
+const (
+	// ToolApplyKubernetesManifest is the name of the apply_kubernetes_manifest tool.
+	ToolApplyKubernetesManifest = "apply_kubernetes_manifest"
 )
 
 // NewApplyKubernetesManifestTool creates a new tool for applying Kubernetes manifests.
 func (m *Manager) NewApplyKubernetesManifestTool() SystemTool {
 	return SystemTool{
-		Tool: mcp.NewTool("apply_kubernetes_manifest",
+		Tool: mcp.NewTool(ToolApplyKubernetesManifest,
 			mcp.WithDescription("This tool applies a Kubernetes YAML manifest on the cluster."),
 			mcp.WithString("yaml_content",
 				mcp.Description("The multi-doc YAML content."),
@@ -32,6 +38,10 @@ func (m *Manager) NewApplyKubernetesManifestTool() SystemTool {
 
 // HandleApplyKubernetesManifest is the handler function for the apply_kubernetes_manifest tool.
 func (m *Manager) HandleApplyKubernetesManifest(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := auth.CheckScopes(ctx, getScopeNames(ToolApplyKubernetesManifest, m.readonly)); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
 	manifest := mcp.ParseString(request, "yaml_content", "")
 	if manifest == "" {
 		return mcp.NewToolResultError("YAML manifest cannot be empty"), nil
@@ -41,7 +51,7 @@ func (m *Manager) HandleApplyKubernetesManifest(ctx context.Context, request mcp
 	ctx, cancel := context.WithTimeout(ctx, m.timeout)
 	defer cancel()
 
-	kubeClient, err := k8s.NewClient(m.flags)
+	kubeClient, err := k8s.NewClient(ctx, m.flags)
 	if err != nil {
 		return mcp.NewToolResultErrorFromErr("Failed to create Kubernetes client", err), nil
 	}

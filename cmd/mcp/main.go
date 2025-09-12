@@ -4,27 +4,42 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/mark3labs/mcp-go/client"
+	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/tools/clientcmd"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/yaml"
 
+	authfactory "github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/auth/factory"
+	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/config"
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/prompter"
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/toolbox"
 )
 
 var (
 	VERSION = "0.0.0-dev.0"
+
+	transportOptions = strings.Join([]string{
+		config.TransportSTDIO,
+		config.TransportHTTP,
+		config.TransportSSE,
+	}, ", ")
 )
 
 var rootCmd = &cobra.Command{
@@ -45,6 +60,7 @@ type rootFlags struct {
 	readOnly    bool
 	transport   string
 	port        int
+	configFile  string
 }
 
 var (
@@ -61,13 +77,17 @@ func init() {
 		"Mask secrets in the MCP server output")
 	rootCmd.PersistentFlags().BoolVar(&rootArgs.readOnly, "read-only", false,
 		"Run the MCP server in read-only mode, disabling write and delete operations.")
-	rootCmd.PersistentFlags().StringVar(&rootArgs.transport, "transport", "stdio",
-		"The transport protocol to use for the MCP server. Options: [stdio, sse, http].")
+	rootCmd.PersistentFlags().StringVar(&rootArgs.transport, "transport", config.TransportSTDIO,
+		fmt.Sprintf("The transport protocol to use for the MCP server. Options: [%s].", transportOptions))
 	rootCmd.PersistentFlags().IntVar(&rootArgs.port, "port", 8080,
-		"The port to use for the MCP server. This is only used when the transport is set to 'sse'.")
+		"The port to use for the MCP server. This is only used when the transport is not 'stdio'.")
+	rootCmd.PersistentFlags().StringVar(&rootArgs.configFile, "config", "",
+		"The path to the configuration file.")
 	addKubeConfigFlags(rootCmd)
 	rootCmd.SetOut(os.Stdout)
 	rootCmd.AddCommand(serveCmd)
+	rootCmd.AddCommand(debugCmd)
+	debugCmd.AddCommand(debugScopesCmd)
 }
 
 func main() {
@@ -132,14 +152,14 @@ func getCurrentKubeconfigPath() string {
 
 	var currentContext string
 	for _, path := range paths {
-		config, err := clientcmd.LoadFromFile(path)
+		conf, err := clientcmd.LoadFromFile(path)
 		if err != nil {
 			continue
 		}
 		if currentContext == "" {
-			currentContext = config.CurrentContext
+			currentContext = conf.CurrentContext
 		}
-		_, ok := config.Contexts[currentContext]
+		_, ok := conf.Contexts[currentContext]
 		if ok {
 			return path
 		}
@@ -149,49 +169,160 @@ func getCurrentKubeconfigPath() string {
 
 var serveCmd = &cobra.Command{
 	Use:   "serve",
-	Short: "Start the MCP server in stdio or sse mode",
+	Short: "Start the MCP server",
 	RunE:  serveCmdRun,
 }
 
 func serveCmdRun(cmd *cobra.Command, args []string) error {
+	var conf config.Config
+	if rootArgs.configFile != "" {
+		b, err := os.ReadFile(rootArgs.configFile)
+		if err != nil {
+			return fmt.Errorf("failed to read config file '%s': %w", rootArgs.configFile, err)
+		}
+		if err := yaml.Unmarshal(b, &conf); err != nil {
+			return fmt.Errorf("failed to unmarshal config file '%s' as YAML: %w", rootArgs.configFile, err)
+		}
+		if conf.GroupVersionKind() != config.GroupVersion.WithKind(config.ConfigKind) {
+			return fmt.Errorf("invalid config file '%s': expected apiVersion '%s' and kind '%s', got '%s' and '%s'",
+				rootArgs.configFile, config.GroupVersion.String(), config.ConfigKind, conf.APIVersion, conf.Kind)
+		}
+		if conf.Spec.Transport == config.TransportSSE {
+			return fmt.Errorf("the '%s' transport is not supported in the Config API", config.TransportSSE)
+		}
+		if conf.Spec.Transport == "" {
+			return fmt.Errorf("the 'transport' field is required in the Config API")
+		}
+	}
+
+	transport := conf.Spec.Transport
+	if transport == "" { // If --config is not set, fallback to the CLI flag.
+		transport = rootArgs.transport
+	}
+
+	readOnly := conf.Spec.ReadOnly
+	if !readOnly { // If --config is not set, fallback to the CLI flag.
+		readOnly = rootArgs.readOnly
+	}
+
 	inCluster := os.Getenv("KUBERNETES_SERVICE_HOST") != ""
 	if inCluster {
-		log.Printf("Starting the MCP server in-cluster with read-only mode set to %t", rootArgs.readOnly)
+		log.Printf("Starting the MCP server in-cluster with read-only mode set to %t", readOnly)
 	}
 
 	if os.Getenv("KUBECONFIG") == "" && !inCluster {
 		return errors.New("KUBECONFIG environment variable is not set")
 	}
 
-	mcpServer := server.NewMCPServer(
-		"flux-operator-mcp",
-		VERSION,
+	opts := []server.ServerOption{
 		server.WithResourceCapabilities(true, true),
 		server.WithToolCapabilities(true),
 		server.WithPromptCapabilities(true),
-	)
+	}
 
-	tm := toolbox.NewManager(kubeconfigArgs, rootArgs.timeout, rootArgs.maskSecrets)
-	tm.RegisterTools(mcpServer, rootArgs.readOnly, inCluster)
+	if conf.Spec.Authentication != nil && transport == config.TransportHTTP {
+		authFunc, err := authfactory.New(*conf.Spec.Authentication)
+		if err != nil {
+			return fmt.Errorf("failed to create authentication layer: %w", err)
+		}
+		hooks := &server.Hooks{}
+		hooks.AddAfterListTools(func(ctx context.Context, id any, message *mcp.ListToolsRequest, result *mcp.ListToolsResult) {
+			authCtx, err := authFunc(ctx, message.Header)
+			if err != nil {
+				authCtx = nil
+			}
+			toolbox.AddScopesAndFilter(authCtx, result, readOnly)
+		})
+		opts = append(opts, server.WithHooks(hooks))
+		opts = append(opts, server.WithToolHandlerMiddleware(func(next server.ToolHandlerFunc) server.ToolHandlerFunc {
+			return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				ctx, err := authFunc(ctx, request.Header)
+				if err != nil {
+					return mcp.NewToolResultError(err.Error()), nil
+				}
+				return next(ctx, request)
+			}
+		}))
+	}
+
+	mcpServer := server.NewMCPServer("flux-operator-mcp", VERSION, opts...)
+
+	tm := toolbox.NewManager(kubeconfigArgs, rootArgs.timeout, rootArgs.maskSecrets, readOnly)
+	tm.RegisterTools(mcpServer, inCluster)
 
 	pm := prompter.NewManager()
 	pm.RegisterPrompts(mcpServer)
 
-	switch rootArgs.transport {
-	case "http":
+	switch transport {
+	case config.TransportSTDIO:
+		if err := server.ServeStdio(mcpServer); err != nil {
+			return err
+		}
+	case config.TransportHTTP:
 		streamableServer := server.NewStreamableHTTPServer(mcpServer)
 		if err := streamableServer.Start(fmt.Sprintf(":%d", rootArgs.port)); err != nil {
 			return err
 		}
-	case "sse":
+	case config.TransportSSE:
+		log.Printf("⚠️ The '%s' transport is still supported but is now considered legacy. Please switch to the '%s' transport.",
+			config.TransportSSE, config.TransportHTTP)
 		sseServer := server.NewSSEServer(mcpServer, server.WithKeepAlive(true))
 		if err := sseServer.Start(fmt.Sprintf(":%d", rootArgs.port)); err != nil {
 			return err
 		}
 	default:
-		if err := server.ServeStdio(mcpServer); err != nil {
-			return err
-		}
+		return fmt.Errorf("unknown transport: '%s'", transport)
+	}
+
+	return nil
+}
+
+var debugCmd = &cobra.Command{
+	Use:   "debug",
+	Short: "Debug the MCP server",
+}
+
+var debugScopesCmd = &cobra.Command{
+	Use:   "scopes <Flux MCP URL>",
+	Short: "Debug the MCP server scopes",
+	Args:  cobra.ExactArgs(1),
+	RunE:  debugScopesCmdRun,
+}
+
+func debugScopesCmdRun(cmd *cobra.Command, args []string) error {
+	ctx, cancel := context.WithTimeout(cmd.Context(), rootArgs.timeout)
+	defer cancel()
+
+	endpoint, err := url.Parse(args[0])
+	if err != nil {
+		return fmt.Errorf("failed to parse MCP server endpoint: %w", err)
+	}
+	endpoint.Path = "/mcp"
+
+	c, err := client.NewStreamableHttpClient(endpoint.String())
+	if err != nil {
+		return fmt.Errorf("failed to create MCP client for: %w", err)
+	}
+	defer c.Close()
+
+	if _, err := c.Initialize(ctx, mcp.InitializeRequest{}); err != nil {
+		return fmt.Errorf("failed to initialize MCP client: %w", err)
+	}
+
+	resp, err := c.ListTools(ctx, mcp.ListToolsRequest{})
+	if err != nil {
+		return fmt.Errorf("failed to list MCP tools: %w", err)
+	}
+
+	scopes, ok := resp.Meta.AdditionalFields["scopes"]
+	if !ok {
+		return errors.New("the MCP server did not return the available scopes")
+	}
+
+	enc := json.NewEncoder(cmd.OutOrStdout())
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(scopes); err != nil {
+		return fmt.Errorf("failed to marshal scopes to JSON: %w", err)
 	}
 
 	return nil

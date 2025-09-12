@@ -9,13 +9,19 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"sigs.k8s.io/yaml"
 
+	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/auth"
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/k8s"
+)
+
+const (
+	// ToolGetKubernetesMetrics is the name of the get_kubernetes_metrics tool.
+	ToolGetKubernetesMetrics = "get_kubernetes_metrics"
 )
 
 // NewGetKubernetesMetricsTool creates a new tool for retrieving pod metrics.
 func (m *Manager) NewGetKubernetesMetricsTool() SystemTool {
 	return SystemTool{
-		Tool: mcp.NewTool("get_kubernetes_metrics",
+		Tool: mcp.NewTool(ToolGetKubernetesMetrics,
 			mcp.WithDescription("This tool retrieves CPU and Memory usage of Kubernetes pods."),
 			mcp.WithString("pod_name",
 				mcp.Description("The name of the pod, when not specified all pods are selected."),
@@ -39,6 +45,10 @@ func (m *Manager) NewGetKubernetesMetricsTool() SystemTool {
 
 // HandleGetKubernetesMetrics is the handler function for the get_kubernetes_metrics tool.
 func (m *Manager) HandleGetKubernetesMetrics(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := auth.CheckScopes(ctx, getScopeNames(ToolGetKubernetesMetrics, m.readonly)); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
 	podName := mcp.ParseString(request, "pod_name", "")
 	podNamespace := mcp.ParseString(request, "pod_namespace", "")
 	if podNamespace == "" {
@@ -50,7 +60,7 @@ func (m *Manager) HandleGetKubernetesMetrics(ctx context.Context, request mcp.Ca
 	ctx, cancel := context.WithTimeout(ctx, m.timeout)
 	defer cancel()
 
-	kubeClient, err := k8s.NewClient(m.flags)
+	kubeClient, err := k8s.NewClient(ctx, m.flags)
 	if err != nil {
 		return mcp.NewToolResultErrorFromErr("Failed to create Kubernetes client", err), nil
 	}

@@ -9,13 +9,19 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"sigs.k8s.io/yaml"
 
+	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/auth"
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/k8s"
+)
+
+const (
+	// ToolGetKubernetesLogs is the name of the get_kubernetes_logs tool.
+	ToolGetKubernetesLogs = "get_kubernetes_logs"
 )
 
 // NewGetKubernetesLogsTool creates a new tool for retrieving the pod logs.
 func (m *Manager) NewGetKubernetesLogsTool() SystemTool {
 	return SystemTool{
-		Tool: mcp.NewTool("get_kubernetes_logs",
+		Tool: mcp.NewTool(ToolGetKubernetesLogs,
 			mcp.WithDescription("This tool retrieves the the most recent logs of a Kubernetes pod."),
 			mcp.WithString("pod_name",
 				mcp.Description("The name of the pod."),
@@ -41,6 +47,10 @@ func (m *Manager) NewGetKubernetesLogsTool() SystemTool {
 
 // HandleGetKubernetesLogs is the handler function for the get_kubernetes_logs tool.
 func (m *Manager) HandleGetKubernetesLogs(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := auth.CheckScopes(ctx, getScopeNames(ToolGetKubernetesLogs, m.readonly)); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
 	podName := mcp.ParseString(request, "pod_name", "")
 	if podName == "" {
 		return mcp.NewToolResultError("pod name is required"), nil
@@ -58,7 +68,7 @@ func (m *Manager) HandleGetKubernetesLogs(ctx context.Context, request mcp.CallT
 	ctx, cancel := context.WithTimeout(ctx, m.timeout)
 	defer cancel()
 
-	kubeClient, err := k8s.NewClient(m.flags)
+	kubeClient, err := k8s.NewClient(ctx, m.flags)
 	if err != nil {
 		return mcp.NewToolResultErrorFromErr("Failed to create Kubernetes client", err), nil
 	}
