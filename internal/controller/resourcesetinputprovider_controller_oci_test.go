@@ -59,8 +59,7 @@ metadata:
   namespace: "%[1]s"
 spec:
   inputsFrom:
-    - kind: ResourceSetInputProvider
-      selector:
+    - selector:
         matchLabels:
           app: test
   resources:

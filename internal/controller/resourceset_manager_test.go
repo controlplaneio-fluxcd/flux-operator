@@ -33,7 +33,6 @@ func TestResourceSetReconciler_requestsForResourceSetInputProviders(t *testing.T
 		},
 		Spec: fluxcdv1.ResourceSetSpec{
 			InputsFrom: []fluxcdv1.InputProviderReference{{
-				Kind: fluxcdv1.ResourceSetInputProviderKind,
 				Selector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{"app": "test"},
 				},
@@ -50,7 +49,6 @@ func TestResourceSetReconciler_requestsForResourceSetInputProviders(t *testing.T
 		},
 		Spec: fluxcdv1.ResourceSetSpec{
 			InputsFrom: []fluxcdv1.InputProviderReference{{
-				Kind: fluxcdv1.ResourceSetInputProviderKind,
 				Name: "test",
 			}},
 		},

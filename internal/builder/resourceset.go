@@ -17,16 +17,18 @@ import (
 	"sigs.k8s.io/yaml"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/inputs"
 )
 
 // BuildResourceSet builds a list of Kubernetes resources
-// from a list of JSON templates using the provided inputs.
-func BuildResourceSet(yamlTemplate string, templates []*apix.JSON, inputs []map[string]any) ([]*unstructured.Unstructured, error) {
+// from a YAML template, a list of JSON templates and the
+// given combined inputs.
+func BuildResourceSet(yamlTemplate string, templates []*apix.JSON, combinedInputs inputs.Combined) ([]*unstructured.Unstructured, error) {
 	var objects []*unstructured.Unstructured
 
 	// build resources from JSON templates
 	for i, tmpl := range templates {
-		if len(inputs) == 0 {
+		if len(combinedInputs) == 0 {
 			object, err := BuildResource(tmpl, nil)
 			if err != nil {
 				return nil, fmt.Errorf("failed to build resource: %w", err)
@@ -36,7 +38,7 @@ func BuildResourceSet(yamlTemplate string, templates []*apix.JSON, inputs []map[
 			continue
 		}
 
-		for _, input := range inputs {
+		for _, input := range combinedInputs {
 			object, err := BuildResource(tmpl, input)
 			if err != nil {
 				return nil, fmt.Errorf("failed to build resources[%d]: %w", i, err)
@@ -57,7 +59,7 @@ func BuildResourceSet(yamlTemplate string, templates []*apix.JSON, inputs []map[
 	// build resources from multi-doc YAML template
 	if yamlTemplate != "" {
 		var objectsFromTemplate []*unstructured.Unstructured
-		if len(inputs) == 0 {
+		if len(combinedInputs) == 0 {
 			objs, err := BuildResourcesFromYAML(yamlTemplate, nil)
 			if err != nil {
 				return nil, fmt.Errorf("failed to build resource: %w", err)
@@ -65,7 +67,7 @@ func BuildResourceSet(yamlTemplate string, templates []*apix.JSON, inputs []map[
 
 			objectsFromTemplate = append(objectsFromTemplate, objs...)
 		}
-		for _, input := range inputs {
+		for _, input := range combinedInputs {
 			objs, err := BuildResourcesFromYAML(yamlTemplate, input)
 			if err != nil {
 				return nil, fmt.Errorf("failed to build resources: %w", err)
@@ -92,13 +94,13 @@ func BuildResourceSet(yamlTemplate string, templates []*apix.JSON, inputs []map[
 // Template functions are provided by the slim-sprig library https://go-task.github.io/slim-sprig/.
 // In addition, the slugify function is available to generate slugs from strings using https://github.com/gosimple/slug/.
 // And for readability, a toYaml function is available to encode an input value into a YAML string.
-func BuildResource(tmpl *apix.JSON, inputs map[string]any) (*unstructured.Unstructured, error) {
+func BuildResource(tmpl *apix.JSON, inputSet map[string]any) (*unstructured.Unstructured, error) {
 	yamlTemplate, err := yaml.JSONToYAML(tmpl.Raw)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert template to YAML: %w", err)
 	}
 
-	tp, err := newTemplate(string(yamlTemplate), inputs)
+	tp, err := newTemplate(string(yamlTemplate), inputSet)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse template: %w", err)
 	}
@@ -119,8 +121,8 @@ func BuildResource(tmpl *apix.JSON, inputs map[string]any) (*unstructured.Unstru
 
 // BuildResourcesFromYAML builds a list of Kubernetes resources from a multi-doc YAML template
 // using the same templating functions as BuildResource.
-func BuildResourcesFromYAML(yamlTemplate string, inputs map[string]any) ([]*unstructured.Unstructured, error) {
-	tp, err := newTemplate(yamlTemplate, inputs)
+func BuildResourcesFromYAML(yamlTemplate string, inputSet map[string]any) ([]*unstructured.Unstructured, error) {
+	tp, err := newTemplate(yamlTemplate, inputSet)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse multi-doc YAML template: %w", err)
 	}
@@ -139,12 +141,12 @@ func BuildResourcesFromYAML(yamlTemplate string, inputs map[string]any) ([]*unst
 	return objects, nil
 }
 
-func newTemplate(yamlTemplate string, inputs map[string]any) (*template.Template, error) {
+func newTemplate(yamlTemplate string, inputSet map[string]any) (*template.Template, error) {
 	tp, err := template.New("resourceset").
 		Delims("<<", ">>").
 		Funcs(sprig.HermeticTxtFuncMap()).
 		Funcs(template.FuncMap{"slugify": slug.Make}).
-		Funcs(template.FuncMap{"inputs": func() any { return inputs }}).
+		Funcs(template.FuncMap{"inputs": func() any { return inputSet }}).
 		Funcs(template.FuncMap{"toYaml": toYaml, "mustToYaml": mustToYaml}).
 		Option("missingkey=error").
 		Parse(yamlTemplate)

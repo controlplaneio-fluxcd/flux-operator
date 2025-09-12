@@ -11,7 +11,7 @@ import (
 )
 
 /*
-To regenerate the golden file:
+To regenerate a golden file:
 make cli-build
 ./bin/flux-operator-cli build resourceset \
 -f cmd/cli/testdata/build_resourceset/rset-with-rsip.yaml \
@@ -23,34 +23,38 @@ func TestBuildResourceSetCmd(t *testing.T) {
 	tests := []struct {
 		name        string
 		args        []string
-		expectError bool
-		errorMsg    string
+		goldenFile  string
+		expectError string
 	}{
 		{
-			name: "standalone resourceset",
-			args: []string{"build", "resourceset", "-f", "testdata/build_resourceset/rset-standalone.yaml"},
+			name:       "standalone resourceset",
+			args:       []string{"build", "resourceset", "-f", "testdata/build_resourceset/rset-standalone.yaml"},
+			goldenFile: "testdata/build_resourceset/golden.yaml",
 		},
 		{
-			name: "resourceset with input provider",
-			args: []string{"build", "resourceset", "-f", "testdata/build_resourceset/rset-with-rsip.yaml", "--inputs-from-provider", "testdata/build_resourceset/rsip.yaml"},
+			name:       "resourceset with input provider",
+			args:       []string{"build", "resourceset", "-f", "testdata/build_resourceset/rset-with-rsip.yaml", "--inputs-from-provider", "testdata/build_resourceset/rsip.yaml"},
+			goldenFile: "testdata/build_resourceset/golden.yaml",
+		},
+		{
+			name:       "resourceset with input provider and permutations",
+			args:       []string{"build", "resourceset", "-f", "testdata/build_resourceset/rset-with-rsip-permuted.yaml", "--inputs-from-provider", "testdata/build_resourceset/rsip.yaml"},
+			goldenFile: "testdata/build_resourceset/golden-permuted.yaml",
 		},
 		{
 			name:        "no filename flag",
 			args:        []string{"build", "resourceset"},
-			expectError: true,
-			errorMsg:    "--filename is required",
+			expectError: "--filename is required",
 		},
 		{
 			name:        "invalid filename",
 			args:        []string{"build", "resourceset", "-f", "nonexistent.yaml"},
-			expectError: true,
-			errorMsg:    "must point to an existing file",
+			expectError: "must point to an existing file",
 		},
 		{
 			name:        "resourceset with inputsFrom but no provider",
 			args:        []string{"build", "resourceset", "-f", "testdata/build_resourceset/rset-with-rsip.yaml"},
-			expectError: true,
-			errorMsg:    "please provide the inputs with --inputs-from",
+			expectError: "please provide the inputs with --inputs-from",
 		},
 	}
 
@@ -60,11 +64,9 @@ func TestBuildResourceSetCmd(t *testing.T) {
 
 			output, err := executeCommand(tt.args)
 
-			if tt.expectError {
+			if tt.expectError != "" {
 				g.Expect(err).To(HaveOccurred())
-				if tt.errorMsg != "" {
-					g.Expect(err.Error()).To(ContainSubstring(tt.errorMsg))
-				}
+				g.Expect(err.Error()).To(ContainSubstring(tt.expectError))
 				return
 			}
 
@@ -72,11 +74,11 @@ func TestBuildResourceSetCmd(t *testing.T) {
 			g.Expect(output).ToNot(BeEmpty())
 
 			// Read expected golden output
-			expectedBytes, err := os.ReadFile("testdata/build_resourceset/golden.yaml")
+			expectedBytes, err := os.ReadFile(tt.goldenFile)
 			g.Expect(err).ToNot(HaveOccurred())
 			expected := string(expectedBytes)
 
-			g.Expect(output).To(Equal(expected))
+			g.Expect(output).To(MatchYAML(expected))
 		})
 	}
 }

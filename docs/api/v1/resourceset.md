@@ -144,8 +144,19 @@ spec:
      role: privileged
 ```
 
-The `.spec.inputsFrom` field is optional and specifies a list of [ResourceSetInputProvider](resourcesetinputprovider.md)
-objects that provide input values to the ResourceSet.
+The `.spec.inputsFrom` field is optional and specifies a list of
+[ResourceSetInputProvider](resourcesetinputprovider.md)
+references to objects that provide input values to the ResourceSet.
+It has the following subfields (exactly one of them must be set):
+
+- `apiVersion`: The API version of the referenced object. Must be
+  `fluxcd.controlplane.io/v1`. Optional.
+- `kind`: The kind of the referenced object. Must be
+  `ResourceSetInputProvider`. Optional.
+- `.name`: The name of a `ResourceSetInputProvider` object in the same namespace
+  as the `ResourceSet`. Optional.
+- `.selector`: A label selector to select multiple `ResourceSetInputProvider`
+  objects in the same namespace as the `ResourceSet`. Optional.
 
 Example of inputs generated from GitHub Pull Requests:
 
@@ -179,7 +190,112 @@ spec:
 At runtime, the operator will fetch the input values every time the `ResourceSetInputProvider`
 reconciler detects a change in the upstream source.
 
-When both `.spec.inputs` and `.spec.inputsFrom` are set, the resulting inputs are the union of the two.
+When both `.spec.inputs` and `.spec.inputsFrom` are set, the resulting inputs are the
+flattened concatenation of the `.spec.inputs` input sets with the input sets from each
+selected `ResourceSetInputProvider` object.
+
+#### Input strategy
+
+By default, the resulting inputs are the flattened concatenation of the `.spec.inputs` input sets
+with the input sets from each selected `ResourceSetInputProvider` object. The `.spec.inputStrategy`
+field can be set to change this default behavior.
+
+The `.spec.inputStrategy` field has the following subfields:
+
+- `.name`: The name of the input strategy. If `.spec.inputStrategy` is not set, the behavior
+  matches setting `.spec.inputStrategy.name` to `Flatten`. Supported values are `Flatten` and
+  `Permute`.
+
+When `.spec.inputStrategy.name` is set to `Permute`, the resulting inputs are the Cartesian product
+of the input sets from each selected `ResourceSetInputProvider` object, and from the `ResourceSet`
+object itself if `.spec.inputs` is set. Therefore, the total amount of permutations, i.e. input sets,
+is the product of the number of input sets from each source, i.e. `A_1 x A_2 x ... x A_n`, where `A_i`
+is the number of input sets from the `i`-th source.
+
+**Note**: The combinatorial explosion of the `Permute` strategy can lead to a very large
+number of permutations and can impact the performance of the operator. It is recommended
+to use this strategy together with `ResourceSetInputProvider` filters to export only a
+single input set per `ResourceSetInputProvider` object. If the number of permutations
+exceeds `10000`, the operator will fail the reconciliation of the `ResourceSet` with
+a `Stalled` condition.
+
+When merging the input sets from each object, the `Permute` strategy places each input
+set under a key that is the normalized name of the object providing the input set. The
+normalization process is as follows:
+
+1. Uppercase letters are converted to lowercase.
+2. Spaces and punctuation (including `-`) are converted to underscores (`_`).
+3. All characters not in the set [a-z0-9_] are removed.
+4. The remaining string is split by underscores and the resulting non-empty words are rejoined with underscores.
+
+The name normalization applied by the `Permute` strategy ensures that the resulting key is
+compatible with the templating engine used in the resources templates.
+
+Example of the `Permute` strategy with two `ResourceSetInputProvider` objects,
+one selecting a single Git tag and the other selecting a single OCI tag:
+
+```yaml
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: my-rset
+  namespace: default
+spec:
+  inputStrategy:
+    name: Permute
+  inputs:
+    - id: id1
+      someField: foo
+    - id: id2
+      someField: bar
+  inputsFrom:
+    - kind: ResourceSetInputProvider
+      name: git-tag
+    - kind: ResourceSetInputProvider
+      name: oci-tag
+  resources:
+    - apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: my-cm-<< inputs.id >>
+        namespace: default
+      data:
+        rsetID: << inputs.my_rset.id | quote >>
+        rsipGitID: << inputs.git_tag.id | quote >>
+        rsipOCIID: << inputs.oci_tag.id | quote >>
+        someField: << inputs.my_rset.someField | quote >>
+        sha: << inputs.git_tag.sha | quote >>
+        digest: << inputs.oci_tag.digest | quote >>
+```
+
+In the example above, the resulting input sets are similar to the following:
+
+```yaml
+- id: "768965678"
+  my_rset:
+    id: id1
+    someField: foo
+  git_tag:
+    id: "8765674567"
+    sha: bf5d6e01cf802734853f6f3417b237e3ad0ba35d
+  oci_tag:
+    id: "9876543210"
+    digest: sha256:d4ec9861522d4961b2acac5a070ef4f92d732480dff2062c2f3a1dcf9a5d1e91
+- id: "234567654"
+  my_rset:
+    id: id2
+    someField: bar
+  git_tag:
+    id: "8765674567"
+    sha: bf5d6e01cf802734853f6f3417b237e3ad0ba35d
+  oci_tag:
+    id: "9876543210"
+    digest: sha256:d4ec9861522d4961b2acac5a070ef4f92d732480dff2062c2f3a1dcf9a5d1e91
+```
+
+This will generate two `ConfigMap` resources, one whose name will be `my-cm-768965678`,
+and the other `my-cm-234567654`, each containing the rendered `.data` according to the
+input set.
 
 ### Resources configuration
 
@@ -386,7 +502,7 @@ setting the `--watch-configs-label-selector=owner!=helm`
 flag in flux-operator, which allows watching all ConfigMaps
 and Secrets except for Helm storage Secrets.
 
-#### Conditionally resource exclusion
+#### Conditional resource exclusion
 
 To exclude a resource based on input values, the `fluxcd.controlplane.io/reconcile` annotation can be set
 to `disabled` on the resource metadata. This will prevent the resource from being reconciled by the operator.
@@ -416,9 +532,14 @@ In the above example, the `ServiceAccount` resource is generated only for the `t
 
 #### Built-in input fields
 
-For every set of inputs, the reference of the object providing those inputs is injected
-by Flux Operator when templating the resources. The reference can be used in templates
-through the `inputs` object, through the following fields:
+When computing all the input sets for generating the resource matrix, the operator
+adds a few built-in fields to each input set. Users cannot override these fields.
+
+Every input set contains a built-in `inputs.id` field that is a unique identifier
+for the input set amongst all the input sets generated for the ResourceSet. This
+field can be used in the resource templates to generate unique resource names.
+
+Every input set also contains the reference of the object providing those inputs:
 
 - `inputs.provider.apiVersion`: The API version of the object providing the inputs.
 - `inputs.provider.kind`: The kind of the object providing the inputs.
@@ -433,8 +554,18 @@ In the case of inputs provided through a `ResourceSetInputProvider` referenced i
 `.spec.inputsFrom` field of a `ResourceSet`, `inputs.provider.apiVersion` is
 `fluxcd.controlplane.io/v1` and `inputs.provider.kind` is `ResourceSetInputProvider`.
 
-The `inputs.provider` field is always overwritten with the data above and cannot
-be set by the user.
+If the `.spec.inputStrategy.name` [field](#input-strategy) is set to `Permute`, the
+built-in fields above are nested under a key that is the normalized name of the object
+providing the inputs, i.e.:
+
+- `inputs.<normalized object name>.id`
+- `inputs.<normalized object name>.provider.apiVersion`
+- `inputs.<normalized object name>.provider.kind`
+- `inputs.<normalized object name>.provider.name`
+- `inputs.<normalized object name>.provider.namespace`
+
+And `inputs.id` will be derived from the permutation configuration, making each
+permutation have a unique ID.
 
 ### Resources template
 

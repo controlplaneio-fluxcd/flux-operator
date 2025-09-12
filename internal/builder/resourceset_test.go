@@ -13,6 +13,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	v1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/inputs"
 )
 
 func TestBuildResourceSet(t *testing.T) {
@@ -66,10 +67,10 @@ func TestBuildResourceSet(t *testing.T) {
 			err = yaml.Unmarshal(data, &rg)
 			g.Expect(err).ToNot(HaveOccurred())
 
-			inputs, err := rg.GetInputs()
+			inps, err := rg.GetInputs()
 			g.Expect(err).ToNot(HaveOccurred())
 
-			objects, err := BuildResourceSet(rg.Spec.ResourcesTemplate, rg.Spec.Resources, inputs)
+			objects, err := BuildResourceSet(rg.Spec.ResourcesTemplate, rg.Spec.Resources, inputs.ToCombined(inps))
 			g.Expect(err).ToNot(HaveOccurred())
 
 			manifests, err := ssautil.ObjectsToYAML(objects)
@@ -100,10 +101,10 @@ func TestBuildResourceSet_Empty(t *testing.T) {
 	err = yaml.Unmarshal(data, &rg)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	inputs, err := rg.GetInputs()
+	inps, err := rg.GetInputs()
 	g.Expect(err).ToNot(HaveOccurred())
 
-	objects, err := BuildResourceSet(rg.Spec.ResourcesTemplate, rg.Spec.Resources, inputs)
+	objects, err := BuildResourceSet(rg.Spec.ResourcesTemplate, rg.Spec.Resources, inputs.ToCombined(inps))
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(objects).To(BeEmpty())
 }
@@ -139,10 +140,10 @@ func TestBuildResourceSet_Error(t *testing.T) {
 			err = yaml.Unmarshal(data, &rg)
 			g.Expect(err).ToNot(HaveOccurred())
 
-			inputs, err := rg.GetInputs()
+			inps, err := rg.GetInputs()
 			g.Expect(err).ToNot(HaveOccurred())
 
-			_, err = BuildResourceSet(rg.Spec.ResourcesTemplate, rg.Spec.Resources, inputs)
+			_, err = BuildResourceSet(rg.Spec.ResourcesTemplate, rg.Spec.Resources, inputs.ToCombined(inps))
 			g.Expect(err).To(HaveOccurred())
 			g.Expect(err.Error()).To(ContainSubstring(tt.matchErr))
 		})
