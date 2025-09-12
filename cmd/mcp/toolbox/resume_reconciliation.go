@@ -9,6 +9,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 
+	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/auth"
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/k8s"
 )
 
@@ -42,6 +43,13 @@ func (m *Manager) NewResumeReconciliationTool() SystemTool {
 
 // HandleResumeReconciliation is the handler function for the resume_flux_reconciliation tool.
 func (m *Manager) HandleResumeReconciliation(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := auth.CheckScopes(ctx, []string{
+		ScopeReadWrite,
+		ScopeResumeReconciliation,
+	}); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
 	apiVersion := mcp.ParseString(request, "apiVersion", "")
 	if apiVersion == "" {
 		return mcp.NewToolResultError("apiVersion is required"), nil
@@ -62,7 +70,7 @@ func (m *Manager) HandleResumeReconciliation(ctx context.Context, request mcp.Ca
 	ctx, cancel := context.WithTimeout(ctx, m.timeout)
 	defer cancel()
 
-	kubeClient, err := k8s.NewClient(m.flags)
+	kubeClient, err := k8s.NewClient(ctx, m.flags)
 	if err != nil {
 		return mcp.NewToolResultErrorFromErr("Failed to create Kubernetes client", err), nil
 	}

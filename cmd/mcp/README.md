@@ -61,6 +61,7 @@ and other assistants, please refer to the [documentation website](https://fluxcd
 - [Effective Prompting Guide](https://fluxcd.control-plane.io/mcp/prompt-engineering/)
 - [MCP Tools Reference](https://fluxcd.control-plane.io/mcp/tools/)
 - [MCP Prompts Reference](https://fluxcd.control-plane.io/mcp/prompts/)
+- [Streamable HTTP Authentication Configuration](https://fluxcd.control-plane.io/mcp/auth-config/)
 
 ## Contributing
 

@@ -19,6 +19,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 
+	auth "github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/auth/factory"
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/prompter"
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/toolbox"
 )
@@ -45,6 +46,7 @@ type rootFlags struct {
 	readOnly    bool
 	transport   string
 	port        int
+	authConfig  string
 }
 
 var (
@@ -65,6 +67,8 @@ func init() {
 		"The transport protocol to use for the MCP server. Options: [stdio, sse, http].")
 	rootCmd.PersistentFlags().IntVar(&rootArgs.port, "port", 8080,
 		"The port to use for the MCP server. This is only used when the transport is set to 'sse'.")
+	rootCmd.PersistentFlags().StringVar(&rootArgs.authConfig, "auth-config", "",
+		"The path to the authentication configuration file. If not provided, no authentication is used.")
 	addKubeConfigFlags(rootCmd)
 	rootCmd.SetOut(os.Stdout)
 	rootCmd.AddCommand(serveCmd)
@@ -154,6 +158,11 @@ var serveCmd = &cobra.Command{
 }
 
 func serveCmdRun(cmd *cobra.Command, args []string) error {
+	const (
+		transportHTTP = "http"
+		transportSSE  = "sse"
+	)
+
 	inCluster := os.Getenv("KUBERNETES_SERVICE_HOST") != ""
 	if inCluster {
 		log.Printf("Starting the MCP server in-cluster with read-only mode set to %t", rootArgs.readOnly)
@@ -163,13 +172,31 @@ func serveCmdRun(cmd *cobra.Command, args []string) error {
 		return errors.New("KUBECONFIG environment variable is not set")
 	}
 
-	mcpServer := server.NewMCPServer(
-		"flux-operator-mcp",
-		VERSION,
+	opts := []server.ServerOption{
 		server.WithResourceCapabilities(true, true),
 		server.WithToolCapabilities(true),
 		server.WithPromptCapabilities(true),
-	)
+	}
+
+	if rootArgs.authConfig != "" && rootArgs.transport == transportHTTP {
+		f, err := os.Open(rootArgs.authConfig)
+		if err != nil {
+			return fmt.Errorf("failed to open auth config file '%s': %w", rootArgs.authConfig, err)
+		}
+		defer f.Close()
+
+		authMiddleware, err := auth.New(f)
+		if err != nil {
+			return fmt.Errorf("failed to create authentication layer: %w", err)
+		}
+		if err := f.Close(); err != nil {
+			return fmt.Errorf("failed to close auth config file '%s': %w", rootArgs.authConfig, err)
+		}
+
+		opts = append(opts, server.WithToolHandlerMiddleware(authMiddleware))
+	}
+
+	mcpServer := server.NewMCPServer("flux-operator-mcp", VERSION, opts...)
 
 	tm := toolbox.NewManager(kubeconfigArgs, rootArgs.timeout, rootArgs.maskSecrets)
 	tm.RegisterTools(mcpServer, rootArgs.readOnly, inCluster)
@@ -178,12 +205,12 @@ func serveCmdRun(cmd *cobra.Command, args []string) error {
 	pm.RegisterPrompts(mcpServer)
 
 	switch rootArgs.transport {
-	case "http":
+	case transportHTTP:
 		streamableServer := server.NewStreamableHTTPServer(mcpServer)
 		if err := streamableServer.Start(fmt.Sprintf(":%d", rootArgs.port)); err != nil {
 			return err
 		}
-	case "sse":
+	case transportSSE:
 		sseServer := server.NewSSEServer(mcpServer, server.WithKeepAlive(true))
 		if err := sseServer.Start(fmt.Sprintf(":%d", rootArgs.port)); err != nil {
 			return err

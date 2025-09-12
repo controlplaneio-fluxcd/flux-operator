@@ -6,6 +6,7 @@ package toolbox
 import (
 	"context"
 
+	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/auth"
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
@@ -30,6 +31,14 @@ func (m *Manager) NewSearchFluxDocsTool() SystemTool {
 
 // HandleSearchFluxDocs is the handler function for the search_flux_docs tool.
 func (m *Manager) HandleSearchFluxDocs(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := auth.CheckScopes(ctx, []string{
+		ScopeReadOnly,
+		ScopeReadWrite,
+		ScopeSearchFluxDocs,
+	}); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
 	query := mcp.ParseString(request, "query", "")
 	limit := mcp.ParseInt(request, "limit", 1)
 
