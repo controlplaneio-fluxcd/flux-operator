@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/auth"
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/k8s"
 )
 
@@ -42,6 +43,13 @@ func (m *Manager) NewReconcileKustomizationTool() SystemTool {
 
 // HandleReconcileKustomization is the handler function for the reconcile_flux_kustomization tool.
 func (m *Manager) HandleReconcileKustomization(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := auth.CheckScopes(ctx, []string{
+		ScopeReadWrite,
+		ScopeReconcileKustomization,
+	}); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
 	name := mcp.ParseString(request, "name", "")
 	if name == "" {
 		return mcp.NewToolResultError("name is required"), nil
@@ -55,7 +63,7 @@ func (m *Manager) HandleReconcileKustomization(ctx context.Context, request mcp.
 	ctx, cancel := context.WithTimeout(ctx, m.timeout)
 	defer cancel()
 
-	kubeClient, err := k8s.NewClient(m.flags)
+	kubeClient, err := k8s.NewClient(ctx, m.flags)
 	if err != nil {
 		return mcp.NewToolResultErrorFromErr("Failed to create Kubernetes client", err), nil
 	}
