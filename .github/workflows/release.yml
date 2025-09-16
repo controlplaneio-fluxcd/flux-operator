@@ -32,7 +32,7 @@ jobs:
       - name: Unshallow
         run: git fetch --prune --unshallow
       - name: Setup Go
-        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
         with:
           go-version: 1.25.x
       - name: Setup Kustomize
@@ -40,7 +40,7 @@ jobs:
       - name: Setup Flux
         uses: fluxcd/flux2/action@6bf37f6a560fd84982d67f853162e4b3c2235edb #v2.6.4
       - name: Setup Syft
-        uses: anchore/sbom-action/download-syft@da167eac915b4e86f08b264dbdbc867b61be6f0c # v0.20.5
+        uses: anchore/sbom-action/download-syft@f8bdd1d8ac5e901a77a92f111440fdb1b593736b # v0.20.6
       - name: Prepare
         id: prep
         run: |
@@ -83,7 +83,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: "VERSION=${{ steps.prep.outputs.VERSION }}"
-      - uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
+      - uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
       - name: Sign images
         env:
           COSIGN_EXPERIMENTAL: 1
@@ -118,7 +118,7 @@ jobs:
           kustomize build config/crd > bin/release/crds.yaml
       - name: Generate OpenAPI JSON schemas from CRDs
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: fluxcd/pkg/actions/crdjsonschema@9e79277372c4746ff091eba1f10aee82974ecdaa # main
+        uses: fluxcd/pkg/actions/crdjsonschema@bf02f0a2d612cc07e0892166369fa8f63246aabb # main
         with:
           crd: bin/release/crds.yaml
           output: schemas
@@ -214,7 +214,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: "VERSION=${{ steps.prep.outputs.VERSION }}"
-      - uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
+      - uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
       - name: Sign images
         env:
           COSIGN_EXPERIMENTAL: 1
@@ -272,7 +272,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: "VERSION=${{ steps.prep.outputs.VERSION }}"
-      - uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
+      - uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
       - name: Sign images
         env:
           COSIGN_EXPERIMENTAL: 1
