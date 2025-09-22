@@ -21,7 +21,7 @@ func testLicenseKey() LicenseKey {
 		ID:           "01f080cb-8881-6194-a0de-c69c5184ad4d",
 		Issuer:       "test-issuer",
 		Subject:      "test-subject",
-		Audience:     "test-audience",
+		Audience:     []string{"test-audience"},
 		IssuedAt:     now.Unix(),
 		Expiry:       now.Add(24 * time.Hour).Unix(),
 		Capabilities: []string{"feature1", "feature2"},
@@ -47,7 +47,7 @@ func TestNewLicense(t *testing.T) {
 		// Verify the license key fields
 		lk := license.GetKey()
 		g.Expect(lk.Issuer).To(Equal(issuer))
-		g.Expect(lk.Audience).To(Equal(audience))
+		g.Expect(lk.Audience).To(Equal([]string{audience}))
 		g.Expect(lk.Capabilities).To(Equal(capabilities))
 
 		// Verify subject is anonymized with "c-" prefix
@@ -248,7 +248,7 @@ func TestLicense_Validate(t *testing.T) {
 	t.Run("fails when Audience is empty", func(t *testing.T) {
 		g := NewWithT(t)
 		lk := testLicenseKey()
-		lk.Audience = ""
+		lk.Audience = []string{}
 		license := &License{lk: lk}
 
 		err := license.Validate()
@@ -333,7 +333,7 @@ func TestLicense_IsExpired(t *testing.T) {
 func TestLicense_HasAudience(t *testing.T) {
 	g := NewWithT(t)
 	lk := testLicenseKey()
-	lk.Audience = "test-audience"
+	lk.Audience = []string{"test-audience"}
 	license, err := NewLicenseWithKey(lk)
 	g.Expect(err).ToNot(HaveOccurred())
 

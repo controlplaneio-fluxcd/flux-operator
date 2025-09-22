@@ -22,7 +22,7 @@ func testArtifactsAttestation() ArtifactsAttestation {
 			ID:       "01f080cb-8881-6194-a0de-c69c5184ad4d",
 			Issuer:   "test-issuer",
 			Subject:  "artifacts",
-			Audience: "test-audience",
+			Audience: []string{"test-audience"},
 			IssuedAt: now.Unix(),
 			Digests:  []string{"sha256:abc123", "sha256:def456"},
 		},
@@ -48,7 +48,7 @@ func TestNewArtifactsAttestation(t *testing.T) {
 		g.Expect(att.ID).ToNot(BeEmpty())
 		g.Expect(att.Issuer).To(Equal("test-issuer"))
 		g.Expect(att.Subject).To(Equal("artifacts"))
-		g.Expect(att.Audience).To(Equal("test-audience"))
+		g.Expect(att.Audience).To(Equal([]string{"test-audience"}))
 		g.Expect(att.Digests).To(Equal([]string{"sha256:abc123", "sha256:def456"}))
 		g.Expect(att.IssuedAt).To(BeNumerically(">", 0))
 	})
@@ -84,7 +84,7 @@ func TestNewArtifactsAttestation(t *testing.T) {
 		invalidAtt := Attestation{
 			Issuer:   "test-issuer",
 			Subject:  "artifacts",
-			Audience: "test-audience",
+			Audience: []string{"test-audience"},
 			IssuedAt: time.Now().Unix(),
 			Digests:  []string{"sha256:abc123"},
 		}
@@ -106,7 +106,7 @@ func TestNewArtifactsAttestation(t *testing.T) {
 			ID:       jti.String(),
 			Issuer:   "test-issuer",
 			Subject:  "wrong-subject",
-			Audience: "test-audience",
+			Audience: []string{"test-audience"},
 			IssuedAt: time.Now().Unix(),
 			Digests:  []string{"sha256:abc123"},
 		}
@@ -128,7 +128,7 @@ func TestNewArtifactsAttestation(t *testing.T) {
 			ID:       jti.String(),
 			Issuer:   "test-issuer",
 			Subject:  "artifacts",
-			Audience: "test-audience",
+			Audience: []string{"test-audience"},
 			IssuedAt: time.Now().Unix(),
 			Digests:  []string{},
 		}
@@ -150,7 +150,7 @@ func TestNewArtifactsAttestationForAudience(t *testing.T) {
 
 		g.Expect(aa).ToNot(BeNil())
 		att := aa.GetAttestation()
-		g.Expect(att.Audience).To(Equal("test-audience"))
+		g.Expect(att.Audience).To(Equal([]string{"test-audience"}))
 		g.Expect(att.Subject).To(Equal("artifacts"))
 		// Other fields should be empty initially
 		g.Expect(att.ID).To(BeEmpty())
@@ -293,7 +293,7 @@ func TestArtifactsAttestation_Sign(t *testing.T) {
 		g.Expect(att.ID).ToNot(BeEmpty())
 		g.Expect(att.Issuer).To(Equal(privateKey.Issuer))
 		g.Expect(att.Subject).To(Equal("artifacts"))
-		g.Expect(att.Audience).To(Equal("test-audience"))
+		g.Expect(att.Audience).To(Equal([]string{"test-audience"}))
 		g.Expect(att.IssuedAt).To(BeNumerically(">", 0))
 		g.Expect(att.Digests).To(Equal(digests))
 

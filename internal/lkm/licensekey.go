@@ -28,7 +28,7 @@ type LicenseKey struct {
 	// Audience is the intended audience for the license key
 	// (RFC 7519 AUD claim).
 	// +required
-	Audience string `json:"aud"`
+	Audience []string `json:"aud"`
 
 	// Expiry is the expiration time of the license key in Unix timestamp format
 	// (RFC 7519 EXP claim).

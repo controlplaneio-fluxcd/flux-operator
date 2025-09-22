@@ -17,7 +17,7 @@ func testAttestation() Attestation {
 		ID:       "01f080cb-8881-6194-a0de-c69c5184ad4d",
 		Issuer:   "test-issuer",
 		Subject:  "artifacts",
-		Audience: "test-audience",
+		Audience: []string{"test-audience"},
 		IssuedAt: time.Now().Unix(),
 		Digests: []string{
 			"sha256:9b2225dcba561daf2e58f004a37704232b1bae7c65af41693aad259e7cce5150",
@@ -77,7 +77,7 @@ func TestAttestation_Validate(t *testing.T) {
 	t.Run("fails when Audience is empty", func(t *testing.T) {
 		g := NewWithT(t)
 		testAtt := testAttestation()
-		testAtt.Audience = ""
+		testAtt.Audience = []string{}
 
 		err := testAtt.Validate("", "artifacts")
 		g.Expect(err).To(HaveOccurred())

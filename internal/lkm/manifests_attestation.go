@@ -25,9 +25,13 @@ type ManifestsAttestation struct {
 
 // NewManifestsAttestation creates a new ManifestsAttestation instance.
 func NewManifestsAttestation(audience string) *ManifestsAttestation {
+	var audiences []string
+	if audience != "" {
+		audiences = []string{audience}
+	}
 	return &ManifestsAttestation{
 		att: Attestation{
-			Audience: audience,
+			Audience: audiences,
 			Subject:  "manifests",
 		},
 	}

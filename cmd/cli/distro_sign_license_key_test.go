@@ -202,7 +202,7 @@ func TestDistroSignLicenseKeyCmd(t *testing.T) {
 			var claims map[string]any
 			err = json.Unmarshal(jws.UnsafePayloadWithoutVerification(), &claims)
 			g.Expect(err).ToNot(HaveOccurred())
-			g.Expect(claims["aud"]).To(Equal(distroDefaultAudience))
+			g.Expect(claims["aud"]).To(Equal([]any{distroDefaultAudience}))
 			g.Expect(claims).To(HaveKey("iss"), "should have issuer claim")
 			g.Expect(claims).To(HaveKey("sub"), "should have subject claim")
 			g.Expect(claims).To(HaveKey("aud"), "should have audience claim")

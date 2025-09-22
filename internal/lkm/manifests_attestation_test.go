@@ -23,7 +23,7 @@ func testManifestAttestation() Attestation {
 		ID:       "01f080cb-8881-6194-a0de-c69c5184ad4d",
 		Issuer:   "test-issuer",
 		Subject:  "manifests",
-		Audience: "test-audience",
+		Audience: []string{"test-audience"},
 		IssuedAt: now.Unix(),
 		Digests:  []string{"h1:test-checksum+hash"},
 	}
@@ -62,7 +62,7 @@ func TestNewManifestsAttestation(t *testing.T) {
 
 		g.Expect(ma).ToNot(BeNil())
 		att := ma.GetAttestation()
-		g.Expect(att.Audience).To(Equal(audience))
+		g.Expect(att.Audience).To(Equal([]string{audience}))
 		g.Expect(att.Subject).To(Equal("manifests"))
 		// Other fields should be empty initially
 		g.Expect(att.ID).To(BeEmpty())
@@ -145,7 +145,7 @@ func TestManifestsAttestation_Sign(t *testing.T) {
 		g.Expect(att.ID).ToNot(BeEmpty())
 		g.Expect(att.Issuer).To(Equal(privateKey.Issuer))
 		g.Expect(att.Subject).To(Equal("manifests"))
-		g.Expect(att.Audience).To(Equal("test-audience"))
+		g.Expect(att.Audience).To(Equal([]string{"test-audience"}))
 		g.Expect(att.IssuedAt).To(BeNumerically(">", 0))
 		g.Expect(att.Digests).ToNot(BeEmpty())
 		g.Expect(att.Digests).To(HaveLen(1))

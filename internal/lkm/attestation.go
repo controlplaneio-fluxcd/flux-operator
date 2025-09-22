@@ -6,6 +6,7 @@ package lkm
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"time"
 )
 
@@ -32,7 +33,7 @@ type Attestation struct {
 	// Audience is the intended audience for the attestation
 	// (RFC 7519 AUD claim).
 	// +required
-	Audience string `json:"aud"`
+	Audience []string `json:"aud"`
 
 	// Expiry is the expiration time of the attestation in Unix timestamp format
 	// (RFC 7519 EXP claim).
@@ -73,11 +74,11 @@ func (a Attestation) Validate(withAudience, withSubject string) error {
 		return InvalidAttestationError(ErrClaimIssuerEmpty)
 	}
 
-	if a.Audience == "" {
+	if len(a.Audience) == 0 {
 		return InvalidAttestationError(ErrClaimAudienceEmpty)
 	}
-	if withAudience != "" && a.Audience != withAudience {
-		return InvalidAttestationError(fmt.Errorf("audience must be '%s'", withAudience))
+	if withAudience != "" && !slices.Contains(a.Audience, withAudience) {
+		return InvalidAttestationError(fmt.Errorf("audience must contain '%s'", withAudience))
 	}
 
 	if a.Subject == "" {

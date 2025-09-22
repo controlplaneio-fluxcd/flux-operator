@@ -181,7 +181,7 @@ data:
 			g.Expect(claims).To(HaveKey("sub"), "should have subject claim (checksum)")
 			g.Expect(claims).To(HaveKey("aud"), "should have audience claim")
 			g.Expect(claims).To(HaveKey("iat"), "should have issued at claim")
-			g.Expect(claims["aud"]).To(Equal("flux-operator"), "audience should be flux-operator")
+			g.Expect(claims["aud"]).To(Equal([]any{"flux-operator"}), "audience should be flux-operator")
 		})
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -25,6 +26,17 @@ type License struct {
 // The subject is anonymized and stored in the license key as 'c-<adler32checksum>'.
 // It generates a unique and chronologically sortable ID for the license key using UUID v6.
 func NewLicense(issuer, subject, audience string, expiry time.Duration, capabilities []string) (*License, error) {
+	// Validate input parameters
+	if issuer == "" {
+		return nil, InvalidLicenseKeyError(ErrClaimIssuerEmpty)
+	}
+	if subject == "" {
+		return nil, InvalidLicenseKeyError(ErrClaimSubjectEmpty)
+	}
+	if audience == "" {
+		return nil, InvalidLicenseKeyError(ErrClaimAudienceEmpty)
+	}
+
 	// Generate the license ID.
 	jti, err := uuid.NewV6()
 	if err != nil {
@@ -47,7 +59,7 @@ func NewLicense(issuer, subject, audience string, expiry time.Duration, capabili
 		Expiry:       expiryTime.Unix(),
 		Issuer:       issuer,
 		Subject:      subjectID,
-		Audience:     audience,
+		Audience:     []string{audience},
 		Capabilities: capabilities,
 	}
 	return NewLicenseWithKey(lk)
@@ -100,7 +112,7 @@ func (lic *License) Validate() error {
 	if lic.lk.Subject == "" {
 		return InvalidLicenseKeyError(ErrClaimSubjectEmpty)
 	}
-	if lic.lk.Audience == "" {
+	if len(lic.lk.Audience) == 0 {
 		return InvalidLicenseKeyError(ErrClaimAudienceEmpty)
 	}
 
@@ -126,17 +138,16 @@ func (lic *License) IsExpired(leeway time.Duration) bool {
 
 // HasAudience checks if the license is intended for the specified audience.
 func (lic *License) HasAudience(audience string) bool {
-	return strings.EqualFold(lic.lk.Audience, audience)
+	return slices.ContainsFunc(lic.lk.Audience, func(aud string) bool {
+		return strings.EqualFold(aud, audience)
+	})
 }
 
 // HasCapability checks if the license contains the specified capability.
 func (lic *License) HasCapability(capability string) bool {
-	for _, c := range lic.lk.Capabilities {
-		if strings.EqualFold(c, capability) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(lic.lk.Capabilities, func(cap string) bool {
+		return strings.EqualFold(cap, capability)
+	})
 }
 
 // ToJSON converts the License to a JSON byte slice.

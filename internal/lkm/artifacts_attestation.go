@@ -41,9 +41,13 @@ func NewArtifactsAttestation(verifiedData []byte) (*ArtifactsAttestation, error)
 
 // NewArtifactsAttestationForAudience creates a new ArtifactsAttestation instance for the specified audience.
 func NewArtifactsAttestationForAudience(audience string) *ArtifactsAttestation {
+	var audiences []string
+	if audience != "" {
+		audiences = []string{audience}
+	}
 	return &ArtifactsAttestation{
 		att: Attestation{
-			Audience: audience,
+			Audience: audiences,
 			Subject:  "artifacts",
 		},
 	}
