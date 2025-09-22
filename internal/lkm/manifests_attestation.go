@@ -94,9 +94,11 @@ func (m *ManifestsAttestation) Sign(privateKey *EdPrivateKey, dirPath string, ig
 	}
 
 	// Set the attestation fields.
+	now := time.Now()
 	m.att.ID = jti.String()
 	m.att.Issuer = privateKey.Issuer
-	m.att.IssuedAt = time.Now().Unix()
+	m.att.IssuedAt = now.Unix()
+	m.att.Expiry = now.AddDate(999, 0, 0).Unix()
 	m.att.Digests = []string{checksum}
 
 	// Validate the attestation.

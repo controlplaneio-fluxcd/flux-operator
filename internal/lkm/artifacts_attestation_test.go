@@ -24,6 +24,7 @@ func testArtifactsAttestation() ArtifactsAttestation {
 			Subject:  "artifacts",
 			Audience: []string{"test-audience"},
 			IssuedAt: now.Unix(),
+			Expiry:   now.AddDate(999, 0, 0).Unix(),
 			Digests:  []string{"sha256:abc123", "sha256:def456"},
 		},
 	}
@@ -81,11 +82,13 @@ func TestNewArtifactsAttestation(t *testing.T) {
 		g := NewWithT(t)
 
 		// Create attestation with missing ID
+		now := time.Now()
 		invalidAtt := Attestation{
 			Issuer:   "test-issuer",
 			Subject:  "artifacts",
 			Audience: []string{"test-audience"},
-			IssuedAt: time.Now().Unix(),
+			IssuedAt: now.Unix(),
+			Expiry:   now.AddDate(999, 0, 0).Unix(),
 			Digests:  []string{"sha256:abc123"},
 		}
 		verifiedData, err := json.Marshal(invalidAtt)
@@ -102,12 +105,14 @@ func TestNewArtifactsAttestation(t *testing.T) {
 		g := NewWithT(t)
 
 		// Create attestation with wrong subject
+		now := time.Now()
 		invalidAtt := Attestation{
 			ID:       jti.String(),
 			Issuer:   "test-issuer",
 			Subject:  "wrong-subject",
 			Audience: []string{"test-audience"},
-			IssuedAt: time.Now().Unix(),
+			IssuedAt: now.Unix(),
+			Expiry:   now.AddDate(999, 0, 0).Unix(),
 			Digests:  []string{"sha256:abc123"},
 		}
 		verifiedData, err := json.Marshal(invalidAtt)
@@ -124,12 +129,14 @@ func TestNewArtifactsAttestation(t *testing.T) {
 		g := NewWithT(t)
 
 		// Create attestation with empty digests
+		now := time.Now()
 		invalidAtt := Attestation{
 			ID:       jti.String(),
 			Issuer:   "test-issuer",
 			Subject:  "artifacts",
 			Audience: []string{"test-audience"},
-			IssuedAt: time.Now().Unix(),
+			IssuedAt: now.Unix(),
+			Expiry:   now.AddDate(999, 0, 0).Unix(),
 			Digests:  []string{},
 		}
 		verifiedData, err := json.Marshal(invalidAtt)

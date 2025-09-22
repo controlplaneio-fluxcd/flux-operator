@@ -37,8 +37,8 @@ type Attestation struct {
 
 	// Expiry is the expiration time of the attestation in Unix timestamp format
 	// (RFC 7519 EXP claim).
-	// +optional
-	Expiry int64 `json:"exp,omitempty"`
+	// +required
+	Expiry int64 `json:"exp"`
 
 	// IssuedAt is the time when the attestation was issued in Unix timestamp format
 	// (RFC 7519 IAT claim).
@@ -95,7 +95,10 @@ func (a Attestation) Validate(withAudience, withSubject string) error {
 		return InvalidAttestationError(ErrClaimIssuedAtFuture)
 	}
 
-	if a.Expiry > 0 && time.Now().Add(-30*time.Second).After(time.Unix(a.Expiry, 0)) {
+	if a.Expiry <= 0 {
+		return InvalidAttestationError(ErrClaimExpiryZero)
+	}
+	if time.Now().Add(-30 * time.Second).After(time.Unix(a.Expiry, 0)) {
 		return InvalidAttestationError(ErrClaimExpired)
 	}
 
