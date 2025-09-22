@@ -19,13 +19,14 @@ func testArtifactsAttestation() ArtifactsAttestation {
 	now := time.Now()
 	return ArtifactsAttestation{
 		att: Attestation{
-			ID:       "01f080cb-8881-6194-a0de-c69c5184ad4d",
-			Issuer:   "test-issuer",
-			Subject:  "artifacts",
-			Audience: []string{"test-audience"},
-			IssuedAt: now.Unix(),
-			Expiry:   now.AddDate(999, 0, 0).Unix(),
-			Digests:  []string{"sha256:abc123", "sha256:def456"},
+			ID:        "01f080cb-8881-6194-a0de-c69c5184ad4d",
+			Issuer:    "test-issuer",
+			Subject:   "artifacts",
+			Audience:  []string{"test-audience"},
+			IssuedAt:  now.Unix(),
+			NotBefore: now.Unix(),
+			Expiry:    now.AddDate(999, 0, 0).Unix(),
+			Digests:   []string{"sha256:abc123", "sha256:def456"},
 		},
 	}
 }
@@ -84,12 +85,13 @@ func TestNewArtifactsAttestation(t *testing.T) {
 		// Create attestation with missing ID
 		now := time.Now()
 		invalidAtt := Attestation{
-			Issuer:   "test-issuer",
-			Subject:  "artifacts",
-			Audience: []string{"test-audience"},
-			IssuedAt: now.Unix(),
-			Expiry:   now.AddDate(999, 0, 0).Unix(),
-			Digests:  []string{"sha256:abc123"},
+			Issuer:    "test-issuer",
+			Subject:   "artifacts",
+			Audience:  []string{"test-audience"},
+			IssuedAt:  now.Unix(),
+			NotBefore: now.Unix(),
+			Expiry:    now.AddDate(999, 0, 0).Unix(),
+			Digests:   []string{"sha256:abc123"},
 		}
 		verifiedData, err := json.Marshal(invalidAtt)
 		g.Expect(err).ToNot(HaveOccurred())
@@ -107,13 +109,14 @@ func TestNewArtifactsAttestation(t *testing.T) {
 		// Create attestation with wrong subject
 		now := time.Now()
 		invalidAtt := Attestation{
-			ID:       jti.String(),
-			Issuer:   "test-issuer",
-			Subject:  "wrong-subject",
-			Audience: []string{"test-audience"},
-			IssuedAt: now.Unix(),
-			Expiry:   now.AddDate(999, 0, 0).Unix(),
-			Digests:  []string{"sha256:abc123"},
+			ID:        jti.String(),
+			Issuer:    "test-issuer",
+			Subject:   "wrong-subject",
+			Audience:  []string{"test-audience"},
+			IssuedAt:  now.Unix(),
+			NotBefore: now.Unix(),
+			Expiry:    now.AddDate(999, 0, 0).Unix(),
+			Digests:   []string{"sha256:abc123"},
 		}
 		verifiedData, err := json.Marshal(invalidAtt)
 		g.Expect(err).ToNot(HaveOccurred())
@@ -131,13 +134,14 @@ func TestNewArtifactsAttestation(t *testing.T) {
 		// Create attestation with empty digests
 		now := time.Now()
 		invalidAtt := Attestation{
-			ID:       jti.String(),
-			Issuer:   "test-issuer",
-			Subject:  "artifacts",
-			Audience: []string{"test-audience"},
-			IssuedAt: now.Unix(),
-			Expiry:   now.AddDate(999, 0, 0).Unix(),
-			Digests:  []string{},
+			ID:        jti.String(),
+			Issuer:    "test-issuer",
+			Subject:   "artifacts",
+			Audience:  []string{"test-audience"},
+			IssuedAt:  now.Unix(),
+			NotBefore: now.Unix(),
+			Expiry:    now.AddDate(999, 0, 0).Unix(),
+			Digests:   []string{},
 		}
 		verifiedData, err := json.Marshal(invalidAtt)
 		g.Expect(err).ToNot(HaveOccurred())

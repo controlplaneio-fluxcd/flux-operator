@@ -45,6 +45,12 @@ type Attestation struct {
 	// +required
 	IssuedAt int64 `json:"iat"`
 
+	// NotBefore is the time before which the attestation must not be accepted
+	// for processing in Unix timestamp format
+	// (RFC 7519 NBF claim).
+	// +required
+	NotBefore int64 `json:"nbf"`
+
 	// Digests is a list of digests used to verify the integrity of the subject's data.
 	// +required
 	Digests []string `json:"digests"`
@@ -100,6 +106,13 @@ func (a Attestation) Validate(withAudience, withSubject string) error {
 	}
 	if time.Now().Add(-30 * time.Second).After(time.Unix(a.Expiry, 0)) {
 		return InvalidAttestationError(ErrClaimExpired)
+	}
+
+	if a.NotBefore <= 0 {
+		return InvalidAttestationError(ErrClaimNotBeforeZero)
+	}
+	if time.Unix(a.NotBefore, 0).After(time.Now().Add(30 * time.Second)) {
+		return InvalidAttestationError(ErrClaimNotBeforeFuture)
 	}
 
 	if len(a.Digests) == 0 {

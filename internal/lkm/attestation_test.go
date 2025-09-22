@@ -15,12 +15,13 @@ import (
 func testAttestation() Attestation {
 	now := time.Now()
 	return Attestation{
-		ID:       "01f080cb-8881-6194-a0de-c69c5184ad4d",
-		Issuer:   "test-issuer",
-		Subject:  "artifacts",
-		Audience: []string{"test-audience"},
-		IssuedAt: now.Unix(),
-		Expiry:   now.AddDate(999, 0, 0).Unix(),
+		ID:        "01f080cb-8881-6194-a0de-c69c5184ad4d",
+		Issuer:    "test-issuer",
+		Subject:   "artifacts",
+		Audience:  []string{"test-audience"},
+		IssuedAt:  now.Unix(),
+		NotBefore: now.Unix(),
+		Expiry:    now.AddDate(999, 0, 0).Unix(),
 		Digests: []string{
 			"sha256:9b2225dcba561daf2e58f004a37704232b1bae7c65af41693aad259e7cce5150",
 			"sha256:52c30b7b1b998045cb5b6a70a19430feb88425aca6c84afe0fde69e0cf5302ae",
@@ -139,6 +140,35 @@ func TestAttestation_Validate(t *testing.T) {
 		g := NewWithT(t)
 		testAtt := testAttestation()
 		testAtt.IssuedAt = time.Now().Add(29 * time.Second).Unix()
+
+		err := testAtt.Validate("", "artifacts")
+		g.Expect(err).ToNot(HaveOccurred())
+	})
+
+	t.Run("fails when NotBefore is zero", func(t *testing.T) {
+		g := NewWithT(t)
+		testAtt := testAttestation()
+		testAtt.NotBefore = 0
+
+		err := testAtt.Validate("", "artifacts")
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(errors.Is(err, ErrClaimNotBeforeZero)).To(BeTrue())
+	})
+
+	t.Run("fails when NotBefore is too far in the future", func(t *testing.T) {
+		g := NewWithT(t)
+		testAtt := testAttestation()
+		testAtt.NotBefore = time.Now().Add(2 * time.Minute).Unix()
+
+		err := testAtt.Validate("", "artifacts")
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(errors.Is(err, ErrClaimNotBeforeFuture)).To(BeTrue())
+	})
+
+	t.Run("allows NotBefore within future tolerance", func(t *testing.T) {
+		g := NewWithT(t)
+		testAtt := testAttestation()
+		testAtt.NotBefore = time.Now().Add(29 * time.Second).Unix()
 
 		err := testAtt.Validate("", "artifacts")
 		g.Expect(err).ToNot(HaveOccurred())

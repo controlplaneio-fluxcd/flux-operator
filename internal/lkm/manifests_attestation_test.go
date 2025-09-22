@@ -20,12 +20,14 @@ import (
 func testManifestAttestation() Attestation {
 	now := time.Now()
 	return Attestation{
-		ID:       "01f080cb-8881-6194-a0de-c69c5184ad4d",
-		Issuer:   "test-issuer",
-		Subject:  "manifests",
-		Audience: []string{"test-audience"},
-		IssuedAt: now.Unix(),
-		Digests:  []string{"h1:test-checksum+hash"},
+		ID:        "01f080cb-8881-6194-a0de-c69c5184ad4d",
+		Issuer:    "test-issuer",
+		Subject:   "manifests",
+		Audience:  []string{"test-audience"},
+		IssuedAt:  now.Unix(),
+		NotBefore: now.Unix(),
+		Expiry:    now.AddDate(999, 0, 0).Unix(),
+		Digests:   []string{"h1:test-checksum+hash"},
 	}
 }
 

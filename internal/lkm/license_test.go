@@ -23,6 +23,7 @@ func testLicenseKey() LicenseKey {
 		Subject:      "test-subject",
 		Audience:     []string{"test-audience"},
 		IssuedAt:     now.Unix(),
+		NotBefore:    now.Unix(),
 		Expiry:       now.Add(24 * time.Hour).Unix(),
 		Capabilities: []string{"feature1", "feature2"},
 	}
@@ -62,6 +63,7 @@ func TestNewLicense(t *testing.T) {
 		// Verify timestamps are reasonable (within last minute and future)
 		now := time.Now().Unix()
 		g.Expect(lk.IssuedAt).To(BeNumerically("~", now, 60))
+		g.Expect(lk.NotBefore).To(BeNumerically("~", now, 60))
 		expectedExpiry := now + int64(expiryInHours*3600)
 		g.Expect(lk.Expiry).To(BeNumerically("~", expectedExpiry, 60))
 	})
@@ -287,6 +289,28 @@ func TestLicense_Validate(t *testing.T) {
 		err := license.Validate()
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(errors.Is(err, ErrClaimExpiryZero)).To(BeTrue())
+	})
+
+	t.Run("fails when NotBefore is zero", func(t *testing.T) {
+		g := NewWithT(t)
+		lk := testLicenseKey()
+		lk.NotBefore = 0
+		license := &License{lk: lk}
+
+		err := license.Validate()
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(errors.Is(err, ErrClaimNotBeforeZero)).To(BeTrue())
+	})
+
+	t.Run("fails when NotBefore is too far in the future", func(t *testing.T) {
+		g := NewWithT(t)
+		lk := testLicenseKey()
+		lk.NotBefore = time.Now().Add(2 * time.Minute).Unix()
+		license := &License{lk: lk}
+
+		err := license.Validate()
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(errors.Is(err, ErrClaimNotBeforeFuture)).To(BeTrue())
 	})
 }
 

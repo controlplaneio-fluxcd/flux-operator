@@ -40,6 +40,12 @@ type LicenseKey struct {
 	// +required
 	IssuedAt int64 `json:"iat"`
 
+	// NotBefore is the time before which the license key must not be accepted
+	// for processing in Unix timestamp format
+	// (RFC 7519 NBF claim).
+	// +required
+	NotBefore int64 `json:"nbf"`
+
 	// Capabilities is a list of features granted by the license key.
 	// +optional
 	Capabilities []string `json:"caps,omitempty"`

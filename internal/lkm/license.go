@@ -56,6 +56,7 @@ func NewLicense(issuer, subject, audience string, expiry time.Duration, capabili
 	lk := LicenseKey{
 		ID:           jti.String(),
 		IssuedAt:     now.Unix(),
+		NotBefore:    now.Unix(),
 		Expiry:       expiryTime.Unix(),
 		Issuer:       issuer,
 		Subject:      subjectID,
@@ -126,6 +127,14 @@ func (lic *License) Validate() error {
 	if lic.lk.Expiry <= 0 {
 		return InvalidLicenseKeyError(ErrClaimExpiryZero)
 	}
+
+	if lic.lk.NotBefore <= 0 {
+		return InvalidLicenseKeyError(ErrClaimNotBeforeZero)
+	}
+	if time.Unix(lic.lk.NotBefore, 0).After(time.Now().Add(30 * time.Second)) {
+		return InvalidLicenseKeyError(ErrClaimNotBeforeFuture)
+	}
+
 	return nil
 }
 

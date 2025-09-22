@@ -47,6 +47,12 @@ var ErrClaimIssuerEmpty = errors.New("issuer (iss) cannot be empty")
 // ErrClaimSubjectEmpty is returned when the license key subject is empty.
 var ErrClaimSubjectEmpty = errors.New("subject (sub) cannot be empty")
 
+// ErrClaimNotBeforeZero is returned when the license key not before time is zero.
+var ErrClaimNotBeforeZero = errors.New("not before (nbf) cannot be zero")
+
+// ErrClaimNotBeforeFuture is returned when the license key not before time is too far in the future.
+var ErrClaimNotBeforeFuture = errors.New("not before (nbf) cannot be too far in the future")
+
 // ErrCreateEncrypter is returned when JWE encrypter creation fails.
 var ErrCreateEncrypter = errors.New("failed to create encrypter")
 

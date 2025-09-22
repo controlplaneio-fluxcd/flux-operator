@@ -108,6 +108,7 @@ func (m *ArtifactsAttestation) Sign(privateKey *EdPrivateKey, digests []string) 
 	m.att.ID = jti.String()
 	m.att.Issuer = privateKey.Issuer
 	m.att.IssuedAt = now.Unix()
+	m.att.NotBefore = now.Unix()
 	m.att.Expiry = now.AddDate(999, 0, 0).Unix()
 	m.att.Digests = digests
 
