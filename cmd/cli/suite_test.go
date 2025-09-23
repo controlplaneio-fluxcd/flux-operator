@@ -162,4 +162,23 @@ func resetCmdArgs() {
 	createSecretSSHArgs = createSecretSSHFlags{}
 	createSecretRegistryArgs = createSecretRegistryFlags{}
 	createSecretSOPSArgs = createSecretSOPSFlags{}
+
+	// Distro commands
+	distroKeygenSigArgs = distroKeygenSigFlags{}
+	distroSignManifestsArgs = distroSignManifestsFlags{}
+	distroVerifyManifestsArgs = distroVerifyManifestsFlags{}
+	distroSignLicenseKeyArgs = distroSignLicenseKeyFlags{}
+	distroVerifyLicenseKeyArgs = distroVerifyLicenseKeyFlags{}
+	distroRevokeLicenseKeyArgs = distroRevokeLicenseKeyFlags{}
+	distroSignArtifactsArgs = distroSignArtifactsFlags{}
+	distroVerifyArtifactsArgs = distroVerifyArtifactsFlags{}
+	distroEncryptTokenArgs = distroEncryptTokenFlags{}
+	distroDecryptTokenArgs = distroDecryptTokenFlags{}
+	distroEncryptManifestsArgs = distroEncryptManifestsFlags{
+		ignore: []string{"*.jws"},
+	}
+	distroDecryptManifestsArgs = distroDecryptManifestsFlags{
+		outputPath: ".",
+		overwrite:  false,
+	}
 }

@@ -18,12 +18,14 @@ require (
 	github.com/fluxcd/pkg/ssa v0.52.0
 	github.com/fluxcd/pkg/tar v0.13.0
 	github.com/fluxcd/pkg/version v0.9.0
+	github.com/go-jose/go-jose/v4 v4.1.2
 	github.com/go-logr/logr v1.4.3
 	github.com/go-task/slim-sprig/v3 v3.0.0
 	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/google/go-containerregistry v0.20.6
 	github.com/google/go-containerregistry/pkg/authn/kubernetes v0.0.0-20250613215107-59a4b8593039
 	github.com/google/go-github/v69 v69.2.0
+	github.com/google/uuid v1.6.0
 	github.com/gosimple/slug v1.15.0
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/mark3labs/mcp-go v0.39.1
@@ -39,6 +41,7 @@ require (
 	github.com/spf13/pflag v1.0.7
 	gitlab.com/gitlab-org/api/client-go v0.138.0
 	golang.org/x/exp v0.0.0-20250506013437-ce4c2cf36ca6
+	golang.org/x/mod v0.27.0
 	golang.org/x/oauth2 v0.30.0
 	k8s.io/api v0.33.2
 	k8s.io/apiextensions-apiserver v0.33.2
@@ -121,7 +124,6 @@ require (
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/pprof v0.0.0-20250630185457-6e76a2b096b5 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.6 // indirect
 	github.com/googleapis/gax-go/v2 v2.14.2 // indirect
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
