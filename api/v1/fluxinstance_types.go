@@ -106,7 +106,7 @@ type Distribution struct {
 }
 
 // Component is the name of a controller to install.
-// +kubebuilder:validation:Enum:=source-controller;kustomize-controller;helm-controller;notification-controller;image-reflector-controller;image-automation-controller
+// +kubebuilder:validation:Enum:=source-controller;kustomize-controller;helm-controller;notification-controller;image-reflector-controller;image-automation-controller;source-watcher
 type Component string
 
 // ComponentImage represents a container image used by a component.
