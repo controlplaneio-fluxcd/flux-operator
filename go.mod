@@ -16,7 +16,7 @@ require (
 	github.com/fluxcd/pkg/git v0.36.0
 	github.com/fluxcd/pkg/kustomize v1.22.0
 	github.com/fluxcd/pkg/runtime v0.86.0
-	github.com/fluxcd/pkg/ssa v0.57.0
+	github.com/fluxcd/pkg/ssa v0.58.0
 	github.com/fluxcd/pkg/tar v0.14.0
 	github.com/fluxcd/pkg/version v0.10.0
 	github.com/go-jose/go-jose/v4 v4.1.2
