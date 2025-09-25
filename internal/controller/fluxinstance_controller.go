@@ -554,7 +554,7 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 
 	// Wait for the resources to become ready.
 	if obj.GetWait() && len(changeSet.Entries) > 0 {
-		if err := resourceManager.WaitForSet(changeSet.ToObjMetadataSet(), ssa.WaitOptions{
+		if err := resourceManager.WaitForSetWithContext(ctx, changeSet.ToObjMetadataSet(), ssa.WaitOptions{
 			Interval: 5 * time.Second,
 			Timeout:  obj.GetTimeout(),
 		}); err != nil {
