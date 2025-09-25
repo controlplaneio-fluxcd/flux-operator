@@ -106,6 +106,7 @@ The following commands are available:
 - `flux-operator reconcile rset <name>`: Reconciles the ResourceSet resource in the cluster.
 - `flux-operator reconcile rsip <name>`: Reconciles the ResourceSetInputProvider resource in the cluster.
 - `flux-operator reconcile resource <kind>/<name>`: Reconciles a Flux resource in the specified namespace.
+- `flux-operator reconcile all`: Reconciles all Flux resources in the cluster (supports filtering by ready status).
 
 Arguments:
 
