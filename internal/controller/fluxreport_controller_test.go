@@ -44,6 +44,8 @@ func TestFluxReportReconciler_CELNameValidation(t *testing.T) {
 func TestFluxReportReconciler_Reconcile(t *testing.T) {
 	g := NewWithT(t)
 	instRec := getFluxInstanceReconciler(t)
+	instSpec := getDefaultFluxSpec(t)
+	instSpec.Distribution.Version = "2.x"
 	reportRec := getFluxReportReconciler()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -67,7 +69,7 @@ func TestFluxReportReconciler_Reconcile(t *testing.T) {
 			Name:      "flux",
 			Namespace: ns.Name,
 		},
-		Spec: getDefaultFluxSpec(t),
+		Spec: instSpec,
 	}
 	err = testEnv.Create(ctx, instance)
 	g.Expect(err).ToNot(HaveOccurred())
@@ -171,6 +173,8 @@ func TestFluxReportReconciler_Reconcile(t *testing.T) {
 func TestFluxReportReconciler_CustomSyncName(t *testing.T) {
 	g := NewWithT(t)
 	instRec := getFluxInstanceReconciler(t)
+	instSpec := getDefaultFluxSpec(t)
+	instSpec.Distribution.Version = "2.x"
 	reportRec := getFluxReportReconciler()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -194,7 +198,7 @@ func TestFluxReportReconciler_CustomSyncName(t *testing.T) {
 			Name:      "flux",
 			Namespace: ns.Name,
 		},
-		Spec: getDefaultFluxSpec(t),
+		Spec: instSpec,
 	}
 
 	// Set custom sync name.
