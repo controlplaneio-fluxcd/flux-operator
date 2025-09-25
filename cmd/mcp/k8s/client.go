@@ -4,6 +4,7 @@
 package k8s
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -18,6 +19,7 @@ import (
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/auth"
 )
 
 // Client embeds the controller-runtime client to provide
@@ -30,10 +32,17 @@ type Client struct {
 
 // NewClient creates a new Kubernetes client using the provided cli.ConfigFlags,
 // configuring QPS, Burst, and custom schemes.
-func NewClient(flags *cli.ConfigFlags) (*Client, error) {
+func NewClient(ctx context.Context, flags *cli.ConfigFlags) (*Client, error) {
 	cfg, err := flags.ToRESTConfig()
 	if err != nil {
 		return nil, fmt.Errorf("loading kubeconfig failed: %w", err)
+	}
+
+	if sess := auth.FromContext(ctx); sess != nil {
+		cfg.Impersonate = rest.ImpersonationConfig{
+			UserName: sess.UserName,
+			Groups:   sess.Groups,
+		}
 	}
 
 	cfg.QPS = 100.0

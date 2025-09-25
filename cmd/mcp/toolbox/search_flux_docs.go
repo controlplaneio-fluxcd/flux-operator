@@ -6,13 +6,19 @@ package toolbox
 import (
 	"context"
 
+	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/auth"
 	"github.com/mark3labs/mcp-go/mcp"
+)
+
+const (
+	// ToolSearchFluxDocs is the name of the search_flux_docs tool.
+	ToolSearchFluxDocs = "search_flux_docs"
 )
 
 // NewSearchFluxDocsTool creates a new tool for searching Flux documentation.
 func (m *Manager) NewSearchFluxDocsTool() SystemTool {
 	return SystemTool{
-		Tool: mcp.NewTool("search_flux_docs",
+		Tool: mcp.NewTool(ToolSearchFluxDocs,
 			mcp.WithDescription("This tool searches the Flux documentation and returns relevant up-to-date API specifications in markdown format."),
 			mcp.WithString("query",
 				mcp.Description("The search query."),
@@ -30,6 +36,10 @@ func (m *Manager) NewSearchFluxDocsTool() SystemTool {
 
 // HandleSearchFluxDocs is the handler function for the search_flux_docs tool.
 func (m *Manager) HandleSearchFluxDocs(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := auth.CheckScopes(ctx, getScopeNames(ToolSearchFluxDocs, m.readonly)); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
 	query := mcp.ParseString(request, "query", "")
 	limit := mcp.ParseInt(request, "limit", 1)
 

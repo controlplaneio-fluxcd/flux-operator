@@ -9,13 +9,19 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 
+	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/auth"
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/k8s"
+)
+
+const (
+	// ToolSuspendFluxReconciliation is the name of the suspend_flux_reconciliation tool.
+	ToolSuspendFluxReconciliation = "suspend_flux_reconciliation"
 )
 
 // NewSuspendReconciliationTool creates a new tool for suspending the reconciliation of a Flux resource.
 func (m *Manager) NewSuspendReconciliationTool() SystemTool {
 	return SystemTool{
-		Tool: mcp.NewTool("suspend_flux_reconciliation",
+		Tool: mcp.NewTool(ToolSuspendFluxReconciliation,
 			mcp.WithDescription("This tool suspends the reconciliation of a Flux resource."),
 			mcp.WithString("apiVersion",
 				mcp.Description("The apiVersion of the Flux resource."),
@@ -42,6 +48,10 @@ func (m *Manager) NewSuspendReconciliationTool() SystemTool {
 
 // HandleSuspendReconciliation is the handler function for the suspend_flux_reconciliation tool.
 func (m *Manager) HandleSuspendReconciliation(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := auth.CheckScopes(ctx, getScopeNames(ToolSuspendFluxReconciliation, m.readonly)); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
 	apiVersion := mcp.ParseString(request, "apiVersion", "")
 	if apiVersion == "" {
 		return mcp.NewToolResultError("apiVersion is required"), nil
@@ -62,7 +72,7 @@ func (m *Manager) HandleSuspendReconciliation(ctx context.Context, request mcp.C
 	ctx, cancel := context.WithTimeout(ctx, m.timeout)
 	defer cancel()
 
-	kubeClient, err := k8s.NewClient(m.flags)
+	kubeClient, err := k8s.NewClient(ctx, m.flags)
 	if err != nil {
 		return mcp.NewToolResultErrorFromErr("Failed to create Kubernetes client", err), nil
 	}

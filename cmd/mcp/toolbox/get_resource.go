@@ -10,13 +10,19 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/auth"
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/k8s"
+)
+
+const (
+	// ToolGetKubernetesResources is the name of the get_kubernetes_resources tool.
+	ToolGetKubernetesResources = "get_kubernetes_resources"
 )
 
 // NewGetKubernetesResourcesTool creates a new tool for retrieving Kubernetes resources.
 func (m *Manager) NewGetKubernetesResourcesTool() SystemTool {
 	return SystemTool{
-		Tool: mcp.NewTool("get_kubernetes_resources",
+		Tool: mcp.NewTool(ToolGetKubernetesResources,
 			mcp.WithDescription("This tool retrieves Kubernetes resources including Flux own resources, their status, and events"),
 			mcp.WithString("apiVersion",
 				mcp.Description("The apiVersion of the Kubernetes resource. Use the get_kubernetes_api_versions tool to get the available apiVersions."),
@@ -47,6 +53,10 @@ func (m *Manager) NewGetKubernetesResourcesTool() SystemTool {
 
 // HandleGetKubernetesResources is the handler function for the get_kubernetes_resources tool.
 func (m *Manager) HandleGetKubernetesResources(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := auth.CheckScopes(ctx, getScopeNames(ToolGetKubernetesResources, m.readonly)); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
 	apiVersion := mcp.ParseString(request, "apiVersion", "")
 	if apiVersion == "" {
 		return mcp.NewToolResultError("apiVersion is required"), nil
@@ -63,7 +73,7 @@ func (m *Manager) HandleGetKubernetesResources(ctx context.Context, request mcp.
 	ctx, cancel := context.WithTimeout(ctx, m.timeout)
 	defer cancel()
 
-	kubeClient, err := k8s.NewClient(m.flags)
+	kubeClient, err := k8s.NewClient(ctx, m.flags)
 	if err != nil {
 		return mcp.NewToolResultErrorFromErr("Failed to create Kubernetes client", err), nil
 	}

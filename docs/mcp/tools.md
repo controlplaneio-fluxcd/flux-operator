@@ -260,3 +260,237 @@ Searches the Flux documentation for specific information, ensuring the AI assist
 **Output:**
 
 Relevant documentation from the Flux project that matches the search query.
+
+## Scopes and the `tools/list` request
+
+**Note:** The feature described in this section is available only with the Streamable HTTP
+transport mode and when [authentication](config-api.md#authentication) is configured.
+
+[Scopes](config-api.md#scopes) are a part of the Flux MCP Server authentication and
+authorization system. Credentials can have a set of scopes on them to indicate to
+the Flux MCP Server which operations are allowed for that credential. For responding
+to the `tools/list` request, the server checks the scopes of the credential to
+dynamically filter the list of available tools out of those remaining after
+considering if the MCP server is running in read-only mode. In other words, the tools
+advertised in the `tools/list` request will be those that are not eliminated by the
+read-only mode and that are not eliminated by the scopes granted to the credential.
+
+Furthermore, the Flux MCP Server leverages the `_meta` field of the `tools/list`
+response (as defined by the MCP specification) to advertise the available scopes
+in `_meta.scopes`. Those will be the scopes that can be useful for the tools
+available in the server taking the read-only mode into account.
+
+Each scope has the following fields:
+
+- `name`: The scope identifier. Will always have the prefix `toolbox:`.
+- `description`: A short human-readable description of what the scope allows.
+- `tools`: The list of tools the scope grants access to, discarding any tools that
+  are not available due to the read-only mode if enabled.
+
+The advertised scopes for a given instance of the Flux MCP Server can be inspected
+by running the following command:
+
+```bash
+flux-operator-mcp debug scopes <Flux MCP URL>
+```
+
+This command will make a `tools/list` request to the pointed MCP URL and will print
+in the JSON format the content of the `_meta.scopes` field returned in the response.
+
+Output when *not* running in read-only mode:
+
+```json
+[
+  {
+    "description": "Allow all read-only toolbox operations.",
+    "name": "toolbox:read_only",
+    "tools": [
+      "get_flux_instance",
+      "get_kubernetes_api_versions",
+      "get_kubernetes_logs",
+      "get_kubernetes_metrics",
+      "get_kubernetes_resources",
+      "search_flux_docs"
+    ]
+  },
+  {
+    "description": "Allow all toolbox operations.",
+    "name": "toolbox:read_write",
+    "tools": [
+      "apply_kubernetes_manifest",
+      "delete_kubernetes_resource",
+      "get_flux_instance",
+      "get_kubernetes_api_versions",
+      "get_kubernetes_logs",
+      "get_kubernetes_metrics",
+      "get_kubernetes_resources",
+      "reconcile_flux_helmrelease",
+      "reconcile_flux_kustomization",
+      "reconcile_flux_resourceset",
+      "reconcile_flux_source",
+      "resume_flux_reconciliation",
+      "search_flux_docs",
+      "suspend_flux_reconciliation"
+    ]
+  },
+  {
+    "description": "Allow applying Kubernetes manifests.",
+    "name": "toolbox:apply_kubernetes_manifest",
+    "tools": [
+      "apply_kubernetes_manifest"
+    ]
+  },
+  {
+    "description": "Allow deleting Kubernetes resources.",
+    "name": "toolbox:delete_kubernetes_resource",
+    "tools": [
+      "delete_kubernetes_resource"
+    ]
+  },
+  {
+    "description": "Allow getting a FluxInstance resource.",
+    "name": "toolbox:get_flux_instance",
+    "tools": [
+      "get_flux_instance"
+    ]
+  },
+  {
+    "description": "Allow getting available Kubernetes APIs.",
+    "name": "toolbox:get_kubernetes_api_versions",
+    "tools": [
+      "get_kubernetes_api_versions"
+    ]
+  },
+  {
+    "description": "Allow getting logs from pods.",
+    "name": "toolbox:get_kubernetes_logs",
+    "tools": [
+      "get_kubernetes_logs"
+    ]
+  },
+  {
+    "description": "Allow getting metrics from the Kubernetes API.",
+    "name": "toolbox:get_kubernetes_metrics",
+    "tools": [
+      "get_kubernetes_metrics"
+    ]
+  },
+  {
+    "description": "Allow getting Kubernetes resources.",
+    "name": "toolbox:get_kubernetes_resources",
+    "tools": [
+      "get_kubernetes_resources"
+    ]
+  },
+  {
+    "description": "Allow reconciling HelmRelease resources.",
+    "name": "toolbox:reconcile_flux_helmrelease",
+    "tools": [
+      "reconcile_flux_helmrelease"
+    ]
+  },
+  {
+    "description": "Allow reconciling Kustomization resources.",
+    "name": "toolbox:reconcile_flux_kustomization",
+    "tools": [
+      "reconcile_flux_kustomization"
+    ]
+  },
+  {
+    "description": "Allow reconciling ResourceSet resources.",
+    "name": "toolbox:reconcile_flux_resourceset",
+    "tools": [
+      "reconcile_flux_resourceset"
+    ]
+  },
+  {
+    "description": "Allow reconciling Flux source resources.",
+    "name": "toolbox:reconcile_flux_source",
+    "tools": [
+      "reconcile_flux_source"
+    ]
+  },
+  {
+    "description": "Allow resuming the reconciliation of Flux resources.",
+    "name": "toolbox:resume_flux_reconciliation",
+    "tools": [
+      "resume_flux_reconciliation"
+    ]
+  },
+  {
+    "description": "Allow searching the Flux documentation.",
+    "name": "toolbox:search_flux_docs",
+    "tools": [
+      "search_flux_docs"
+    ]
+  },
+  {
+    "description": "Allow suspending the reconciliation of Flux resources.",
+    "name": "toolbox:suspend_flux_reconciliation",
+    "tools": [
+      "suspend_flux_reconciliation"
+    ]
+  }
+]
+```
+
+Output when running in read-only mode:
+
+```json
+[
+  {
+    "description": "Allow all read-only toolbox operations.",
+    "name": "toolbox:read_only",
+    "tools": [
+      "get_flux_instance",
+      "get_kubernetes_api_versions",
+      "get_kubernetes_logs",
+      "get_kubernetes_metrics",
+      "get_kubernetes_resources",
+      "search_flux_docs"
+    ]
+  },
+  {
+    "description": "Allow getting a FluxInstance resource.",
+    "name": "toolbox:get_flux_instance",
+    "tools": [
+      "get_flux_instance"
+    ]
+  },
+  {
+    "description": "Allow getting available Kubernetes APIs.",
+    "name": "toolbox:get_kubernetes_api_versions",
+    "tools": [
+      "get_kubernetes_api_versions"
+    ]
+  },
+  {
+    "description": "Allow getting logs from pods.",
+    "name": "toolbox:get_kubernetes_logs",
+    "tools": [
+      "get_kubernetes_logs"
+    ]
+  },
+  {
+    "description": "Allow getting metrics from the Kubernetes API.",
+    "name": "toolbox:get_kubernetes_metrics",
+    "tools": [
+      "get_kubernetes_metrics"
+    ]
+  },
+  {
+    "description": "Allow getting Kubernetes resources.",
+    "name": "toolbox:get_kubernetes_resources",
+    "tools": [
+      "get_kubernetes_resources"
+    ]
+  },
+  {
+    "description": "Allow searching the Flux documentation.",
+    "name": "toolbox:search_flux_docs",
+    "tools": [
+      "search_flux_docs"
+    ]
+  }
+]
+```
