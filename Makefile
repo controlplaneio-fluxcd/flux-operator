@@ -8,7 +8,7 @@ IMG ?= ghcr.io/controlplaneio-fluxcd/flux-operator:latest
 FLUX_OPERATOR_VERSION ?= $(shell gh release view --json tagName -q '.tagName')
 FLUX_OPERATOR_DEV_VERSION?=0.0.0-$(shell git rev-parse --abbrev-ref HEAD)-$(shell git rev-parse --short HEAD)-$(shell date +%s)
 FLUX_VERSION = $(shell gh release view --repo fluxcd/flux2 --json tagName -q '.tagName')
-ENVTEST_K8S_VERSION = 1.34.0
+ENVTEST_K8S_VERSION = 1.34.1
 
 # Get the currently used golang install path
 # (in GOPATH/bin, unless GOBIN is set).
