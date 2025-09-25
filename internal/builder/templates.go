@@ -110,6 +110,34 @@ patches:
         name: persistent-data
         mountPath: /data
 {{- end }}
+{{- else if eq $component "source-watcher" }}
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: {{$component}}
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/args/0
+      value: --events-addr={{$eventsAddr}}
+    - op: replace
+      path: /spec/template/spec/containers/0/args/1
+      value: --watch-all-namespaces={{$watchAllNamespaces}}
+    - op: replace
+      path: /spec/template/spec/containers/0/args/2
+      value: --log-level={{$logLevel}}
+    - op: replace
+      path: /spec/template/spec/containers/0/args/6
+      value: --storage-adv-addr=source-watcher.$(RUNTIME_NAMESPACE).svc.{{$clusterDomain}}.
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: "(kustomize-controller|helm-controller)"
+  patch: |-
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --feature-gates=ExternalArtifact=true
 {{- else }}
 - target:
     group: apps

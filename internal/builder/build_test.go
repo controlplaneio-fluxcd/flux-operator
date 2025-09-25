@@ -965,6 +965,59 @@ func TestBuild_ShardingWithStorage(t *testing.T) {
 	g.Expect(found).To(BeTrue())
 }
 
+func TestBuild_SourceWatcher(t *testing.T) {
+	g := NewWithT(t)
+	const version = "v2.7.0"
+	options := MakeDefaultOptions()
+	options.Components = []string{
+		"source-controller",
+		"kustomize-controller",
+		"helm-controller",
+		"notification-controller",
+		"source-watcher",
+	}
+	options.Version = version
+
+	srcDir := filepath.Join("testdata", version)
+	goldenFile := filepath.Join("testdata", version+"-golden", "source-watcher.kustomization.yaml")
+
+	dstDir, err := testTempDir(t)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	ci, err := ExtractComponentImages(srcDir, options)
+	g.Expect(err).NotTo(HaveOccurred())
+	options.ComponentImages = ci
+
+	result, err := Build(srcDir, dstDir, options)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(result.Objects).NotTo(BeEmpty())
+
+	if shouldGenGolden() {
+		err = cp.Copy(filepath.Join(dstDir, "kustomization.yaml"), goldenFile)
+		g.Expect(err).NotTo(HaveOccurred())
+	}
+
+	genK, err := os.ReadFile(filepath.Join(dstDir, "kustomization.yaml"))
+	g.Expect(err).NotTo(HaveOccurred())
+
+	goldenK, err := os.ReadFile(goldenFile)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	g.Expect(string(genK)).To(Equal(string(goldenK)))
+
+	found := false
+	for _, obj := range result.Objects {
+		if obj.GetKind() == "Deployment" && obj.GetName() == "source-watcher" {
+			found = true
+		}
+		if obj.GetKind() == "CustomResourceDefinition" &&
+			obj.GetName() == "artifactgenerators.source.extensions.fluxcd.io" {
+			g.Expect(obj.GetLabels()).To(HaveKeyWithValue("app.kubernetes.io/component", "source-watcher"))
+		}
+	}
+	g.Expect(found).To(BeTrue(), "source-watcher deployment should be present")
+}
+
 func testTempDir(t *testing.T) (string, error) {
 	tmpDir := t.TempDir()
 

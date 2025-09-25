@@ -1,0 +1,124 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: flux-system
+transformers:
+  - annotations.yaml
+  - labels.yaml
+resources:
+  - namespace.yaml
+  - policies.yaml
+  - roles
+  - source-controller.yaml
+  - kustomize-controller.yaml
+  - helm-controller.yaml
+  - notification-controller.yaml
+  - source-watcher.yaml
+images:
+  - name: fluxcd/source-controller
+    newName: ghcr.io/fluxcd/source-controller
+    newTag: v1.7.0
+  - name: fluxcd/kustomize-controller
+    newName: ghcr.io/fluxcd/kustomize-controller
+    newTag: v1.7.0
+  - name: fluxcd/helm-controller
+    newName: ghcr.io/fluxcd/helm-controller
+    newTag: v1.4.0
+  - name: fluxcd/notification-controller
+    newName: ghcr.io/fluxcd/notification-controller
+    newTag: v1.7.1
+  - name: fluxcd/source-watcher
+    newName: ghcr.io/fluxcd/source-watcher
+    newTag: v2.0.0
+patches:
+- path: node-selector.yaml
+  target:
+    kind: Deployment
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: source-controller
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/args/0
+      value: --events-addr=http://notification-controller.flux-system.svc.cluster.local./
+    - op: replace
+      path: /spec/template/spec/containers/0/args/1
+      value: --watch-all-namespaces=true
+    - op: replace
+      path: /spec/template/spec/containers/0/args/2
+      value: --log-level=info
+    - op: replace
+      path: /spec/template/spec/containers/0/args/6
+      value: --storage-adv-addr=source-controller.$(RUNTIME_NAMESPACE).svc.cluster.local.
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: kustomize-controller
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/args/0
+      value: --events-addr=http://notification-controller.flux-system.svc.cluster.local./
+    - op: replace
+      path: /spec/template/spec/containers/0/args/1
+      value: --watch-all-namespaces=true
+    - op: replace
+      path: /spec/template/spec/containers/0/args/2
+      value: --log-level=info
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: helm-controller
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/args/0
+      value: --events-addr=http://notification-controller.flux-system.svc.cluster.local./
+    - op: replace
+      path: /spec/template/spec/containers/0/args/1
+      value: --watch-all-namespaces=true
+    - op: replace
+      path: /spec/template/spec/containers/0/args/2
+      value: --log-level=info
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: notification-controller
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/args/0
+      value: --watch-all-namespaces=true
+    - op: replace
+      path: /spec/template/spec/containers/0/args/1
+      value: --log-level=info
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: source-watcher
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/args/0
+      value: --events-addr=http://notification-controller.flux-system.svc.cluster.local./
+    - op: replace
+      path: /spec/template/spec/containers/0/args/1
+      value: --watch-all-namespaces=true
+    - op: replace
+      path: /spec/template/spec/containers/0/args/2
+      value: --log-level=info
+    - op: replace
+      path: /spec/template/spec/containers/0/args/6
+      value: --storage-adv-addr=source-watcher.$(RUNTIME_NAMESPACE).svc.cluster.local.
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: "(kustomize-controller|helm-controller)"
+  patch: |-
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --feature-gates=ExternalArtifact=true
+
