@@ -75,7 +75,7 @@ The following commands are available:
 - `flux-operator get instance`: Retrieves the FluxInstance resource in the cluster.
 - `flux-operator get rset`: Retrieves the ResourceSet resources in the cluster.
 - `flux-operator get rsip`: Retrieves the ResourceSetInputProvider resources in the cluster.
-- `flux-operator get resources`: Retrieves all Flux resources in the cluster.
+- `flux-operator get all`: Retrieves all Flux resources in the cluster (supports filtering by ready status).
 
 Arguments:
 

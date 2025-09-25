@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
@@ -19,16 +20,20 @@ import (
 )
 
 var getResourcesCmd = &cobra.Command{
-	Use:   "resources",
-	Short: "List Flux custom resources and their status",
+	Use:     "all",
+	Aliases: []string{"resources"},
+	Short:   "List Flux custom resources and their status",
 	Example: `  # List Flux resources in all namespaces
-  flux-operator get resources -A
+  flux-operator get all -A
+
+  # List Flux resources filtered by their ready status
+  flux-operator get all -A --ready-status Suspended
 
   # List Flux resources by specific kinds and namespace
-  flux-operator -n flux-system get resources --kind ResourceSet,GitRepository,Kustomization
+  flux-operator -n flux-system get all --kind ResourceSet,GitRepository,Kustomization
 
   # List Flux resources in JSON format
-  flux-operator get resources -A --output json | jq
+  flux-operator get all -A --output json | jq
 `,
 	RunE: geResourcesCmdRun,
 	Args: cobra.NoArgs,
@@ -38,6 +43,7 @@ type getResourcesFlags struct {
 	allNamespaces bool
 	kinds         []string
 	output        string
+	readyStatus   string
 }
 
 var getResourcesArgs getResourcesFlags
@@ -47,6 +53,8 @@ func init() {
 		"List resources in all namespaces.")
 	getResourcesCmd.Flags().StringSliceVar(&getResourcesArgs.kinds, "kind", nil,
 		"List only resources of the specified kinds, accepts comma-separated values.")
+	getResourcesCmd.Flags().StringVar(&getResourcesArgs.readyStatus, "ready-status", "",
+		"Filter resources by their ready status, one of: True, False, Unknown, Suspended.")
 	getResourcesCmd.Flags().StringVarP(&getResourcesArgs.output, "output", "o", "table",
 		"Output format. One of: table, json, yaml.")
 	getCmd.AddCommand(getResourcesCmd)
@@ -133,6 +141,10 @@ func geResourcesCmdRun(cmd *cobra.Command, args []string) error {
 
 			if suspend, found, err := unstructured.NestedBool(obj.Object, "spec", "suspend"); suspend && found && err == nil {
 				ready = "Suspended"
+			}
+
+			if getResourcesArgs.readyStatus != "" && !strings.EqualFold(ready, getResourcesArgs.readyStatus) {
+				continue
 			}
 
 			result = append(result, ResourceStatus{
