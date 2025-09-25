@@ -8,7 +8,7 @@ IMG ?= ghcr.io/controlplaneio-fluxcd/flux-operator:latest
 FLUX_OPERATOR_VERSION ?= $(shell gh release view --json tagName -q '.tagName')
 FLUX_OPERATOR_DEV_VERSION?=0.0.0-$(shell git rev-parse --abbrev-ref HEAD)-$(shell git rev-parse --short HEAD)-$(shell date +%s)
 FLUX_VERSION = $(shell gh release view --repo fluxcd/flux2 --json tagName -q '.tagName')
-ENVTEST_K8S_VERSION = 1.30.0
+ENVTEST_K8S_VERSION = 1.34.0
 
 # Get the currently used golang install path
 # (in GOPATH/bin, unless GOBIN is set).
@@ -212,9 +212,9 @@ OPERATOR_SDK ?= $(LOCALBIN)/operator-sdk-$(OPERATOR_SDK_VERSION)
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.7.0
-CONTROLLER_TOOLS_VERSION ?= v0.18.0
+CONTROLLER_TOOLS_VERSION ?= v0.19.0
 ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
-GOLANGCI_LINT_VERSION ?= v2.4.0
+GOLANGCI_LINT_VERSION ?= v2.5.0
 OPERATOR_SDK_VERSION ?= v1.41.1
 
 .PHONY: operator-sdk
