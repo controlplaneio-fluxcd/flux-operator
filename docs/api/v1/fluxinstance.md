@@ -284,7 +284,10 @@ and must be of type `kubernetes.io/dockerconfigjson`.
 
 The `.spec.components` field is optional and specifies the list of Flux components to install.
 
-When not specified, the operator will install the default set of components for the Flux distribution:
+When not specified, the operator will install the default set of components: `source-controller`,
+`kustomize-controller`, `helm-controller` and `notification-controller`.
+
+The supported components are:
 
 ```yaml
 spec:
@@ -293,7 +296,12 @@ spec:
     - kustomize-controller
     - helm-controller
     - notification-controller
+    - image-reflector-controller
+    - image-automation-controller
+    - source-watcher
 ```
+
+Note that the `source-watcher` component requires Flux v2.7.0 or later.
 
 ### Cluster configuration
 
