@@ -50,13 +50,15 @@ func (r *FluxInstanceReconciler) uninstall(ctx context.Context,
 
 	objects, _ := inventory.List(obj.Status.Inventory)
 
+	// Step1: delete the deployments and wait for them to be removed.
+	// This ensures that the controllers will not be running while we
+	// remove the finalizers from the custom resources.
 	deployments := []*unstructured.Unstructured{}
 	for _, entry := range objects {
 		if entry.GetKind() == "Deployment" {
 			deployments = append(deployments, entry)
 		}
 	}
-
 	_, err := resourceManager.DeleteAll(ctx, deployments, opts)
 	if err != nil {
 		log.Error(err, "deleting deployments failed")
@@ -69,16 +71,38 @@ func (r *FluxInstanceReconciler) uninstall(ctx context.Context,
 		}
 	}
 
-	changeSet, err := resourceManager.DeleteAll(ctx, objects, opts)
-	if err != nil {
-		log.Error(err, "pruning for deleted resource failed")
-	}
-
+	// Step2: discover the Flux custom resources in the cluster and remove their finalizers.
+	// This ensures that the resources can be deleted without being blocked by finalizers.
 	err = r.removeFluxFinalizers(ctx)
 	if err != nil {
 		log.Error(err, "removing finalizers failed")
 	}
 
+	// Step3: delete all the resources from the inventory.
+	// This will also delete all Flux custom resources as the Kubernetes
+	// garbage collector will take care of removing the resources owned by CRDs.
+	changeSet, err := resourceManager.DeleteAll(ctx, objects, opts)
+	if err != nil {
+		log.Error(err, "pruning for deleted resource failed")
+	}
+
+	// Step4: wait for the CRDs to be deleted.
+	// This will block until all Flux custom resources are deleted.
+	crds := []*unstructured.Unstructured{}
+	for _, entry := range objects {
+		if entry.GetKind() == "CustomResourceDefinition" {
+			crds = append(crds, entry)
+		}
+	}
+	if err := resourceManager.WaitForTermination(crds, ssa.WaitOptions{
+		Interval: 5 * time.Second,
+		Timeout:  5 * time.Minute,
+	}); err != nil {
+		log.Error(err, "waiting for CRDs to be deleted failed")
+	}
+
+	// Step5: remove the finalizer from the FluxInstance.
+	// The object will be deleted by Kubernetes once the finalizer is removed.
 	controllerutil.RemoveFinalizer(obj, fluxcdv1.Finalizer)
 	msg := uninstallMessage(reconcileStart)
 	log.Info(msg, "output", changeSet.ToMap())
@@ -90,46 +114,52 @@ func (r *FluxInstanceReconciler) uninstall(ctx context.Context,
 // removeFluxFinalizers removes the finalizers from the Flux custom resources.
 func (r *FluxInstanceReconciler) removeFluxFinalizers(ctx context.Context) error {
 	var errs []error
-	versions := []struct {
-		apiVersion string
-		listKind   string
-	}{
-		{"kustomize.toolkit.fluxcd.io/v1", "KustomizationList"},
-		{"helm.toolkit.fluxcd.io/v2beta1", "HelmReleaseList"},
-		{"helm.toolkit.fluxcd.io/v2beta2", "HelmReleaseList"},
-		{"helm.toolkit.fluxcd.io/v2", "HelmReleaseList"},
-		{"source.toolkit.fluxcd.io/v1beta2", "HelmRepositoryList"},
-		{"source.toolkit.fluxcd.io/v1", "HelmRepositoryList"},
-		{"source.toolkit.fluxcd.io/v1beta2", "HelmChartList"},
-		{"source.toolkit.fluxcd.io/v1", "HelmChartList"},
-		{"source.toolkit.fluxcd.io/v1", "GitRepositoryList"},
-		{"source.toolkit.fluxcd.io/v1beta2", "OCIRepositoryList"},
-		{"source.toolkit.fluxcd.io/v1beta2", "BucketList"},
-		{"source.toolkit.fluxcd.io/v1", "BucketList"},
-		{"notification.toolkit.fluxcd.io/v1", "ReceiverList"},
-		{"notification.toolkit.fluxcd.io/v1beta2", "ProviderList"},
-		{"notification.toolkit.fluxcd.io/v1beta3", "ProviderList"},
-		{"notification.toolkit.fluxcd.io/v1beta2", "AlertList"},
-		{"notification.toolkit.fluxcd.io/v1beta3", "AlertList"},
-		{"image.toolkit.fluxcd.io/v1beta2", "ImageRepositoryList"},
-		{"image.toolkit.fluxcd.io/v1beta2", "ImagePolicyList"},
-		{"image.toolkit.fluxcd.io/v1beta1", "ImageUpdateAutomationList"},
-		{"image.toolkit.fluxcd.io/v1beta2", "ImageUpdateAutomationList"},
+	versions, err := r.getInstalledGVKs()
+	if err != nil {
+		errs = append(errs, err)
 	}
 
-	for _, v := range versions {
+	for kind, apiVersion := range versions {
 		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-			return r.removeFinalizersFor(ctx, v.apiVersion, v.listKind)
+			return r.removeFinalizersFor(ctx, apiVersion, kind+"List")
 		})
 		if err != nil {
 			if !strings.Contains(err.Error(), "the server could not find the requested resource") &&
 				!strings.Contains(err.Error(), "no matches for kind") {
 				errs = append(errs, err)
 			}
+		} else {
+			ctrl.LoggerFrom(ctx).Info("removed finalizers for " + kind)
 		}
 	}
 
 	return errors.Join(errs...)
+}
+
+// getInstalledGVKs returns a map of installed Flux custom resource kinds to their preferred API versions.
+func (r *FluxInstanceReconciler) getInstalledGVKs() (map[string]string, error) {
+	var errs []error
+	result := make(map[string]string)
+
+	for _, kind := range fluxcdv1.FluxKinds {
+		gk, err := fluxcdv1.FluxGroupFor(kind)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+
+		mapping, err := r.RESTMapper().RESTMapping(*gk)
+		if err != nil {
+			if !strings.Contains(err.Error(), "no matches for kind") {
+				errs = append(errs, err)
+			}
+			continue
+		}
+
+		result[kind] = mapping.GroupVersionKind.GroupVersion().String()
+	}
+
+	return result, errors.Join(errs...)
 }
 
 // removeFinalizersFor is generic function to remove finalizers from all resources.

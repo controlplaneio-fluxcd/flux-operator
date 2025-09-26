@@ -3,10 +3,6 @@
 
 package builder
 
-import (
-	"slices"
-)
-
 // Options defines the builder configuration.
 type Options struct {
 	Version                                         string
@@ -54,10 +50,6 @@ func MakeDefaultOptions() Options {
 		ClusterDomain:      "cluster.local",
 		ShardingKey:        "sharding.fluxcd.io/key",
 	}
-}
-
-func (o *Options) HasNotificationController() bool {
-	return slices.Contains(o.Components, "notification-controller")
 }
 
 // ComponentImage represents a container image used by a component.

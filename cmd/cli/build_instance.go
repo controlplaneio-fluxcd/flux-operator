@@ -135,12 +135,12 @@ func buildInstanceCmdRun(cmd *cobra.Command, args []string) error {
 		options.Patches += builder.GetProfileMultitenant(instance.GetCluster().TenantDefaultServiceAccount)
 	}
 
-	if err := options.ValidateAndApplyWorkloadIdentityConfig(instance.GetCluster()); err != nil {
-		return fmt.Errorf("failed to validate workload identity configuration: %w", err)
+	if err := options.ValidateAndPatchComponents(); err != nil {
+		return err
 	}
 
-	if options.HasNotificationController() {
-		options.Patches += builder.GetProfileNotification(options.Namespace)
+	if err := options.ValidateAndApplyWorkloadIdentityConfig(instance.GetCluster()); err != nil {
+		return fmt.Errorf("failed to validate workload identity configuration: %w", err)
 	}
 
 	if instance.Spec.Sharding != nil {

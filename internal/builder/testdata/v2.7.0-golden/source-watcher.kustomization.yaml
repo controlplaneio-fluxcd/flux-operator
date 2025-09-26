@@ -13,27 +13,23 @@ resources:
   - kustomize-controller.yaml
   - helm-controller.yaml
   - notification-controller.yaml
-  - image-reflector-controller.yaml
-  - image-automation-controller.yaml
+  - source-watcher.yaml
 images:
   - name: fluxcd/source-controller
     newName: ghcr.io/fluxcd/source-controller
-    newTag: v1.3.0
+    newTag: v1.7.0
   - name: fluxcd/kustomize-controller
     newName: ghcr.io/fluxcd/kustomize-controller
-    newTag: v1.3.0
+    newTag: v1.7.0
   - name: fluxcd/helm-controller
     newName: ghcr.io/fluxcd/helm-controller
-    newTag: v1.0.1
+    newTag: v1.4.0
   - name: fluxcd/notification-controller
     newName: ghcr.io/fluxcd/notification-controller
-    newTag: v1.3.0
-  - name: fluxcd/image-reflector-controller
-    newName: ghcr.io/fluxcd/image-reflector-controller
-    newTag: v0.32.0
-  - name: fluxcd/image-automation-controller
-    newName: ghcr.io/fluxcd/image-automation-controller
-    newTag: v0.38.0
+    newTag: v1.7.1
+  - name: fluxcd/source-watcher
+    newName: ghcr.io/fluxcd/source-watcher
+    newTag: v2.0.0
 patches:
 - path: node-selector.yaml
   target:
@@ -102,7 +98,7 @@ patches:
     group: apps
     version: v1
     kind: Deployment
-    name: image-reflector-controller
+    name: source-watcher
   patch: |-
     - op: replace
       path: /spec/template/spec/containers/0/args/0
@@ -113,64 +109,70 @@ patches:
     - op: replace
       path: /spec/template/spec/containers/0/args/2
       value: --log-level=info
-- target:
-    group: apps
-    version: v1
-    kind: Deployment
-    name: image-automation-controller
-  patch: |-
     - op: replace
-      path: /spec/template/spec/containers/0/args/0
-      value: --events-addr=http://notification-controller.flux-system.svc.cluster.local./
-    - op: replace
-      path: /spec/template/spec/containers/0/args/1
-      value: --watch-all-namespaces=true
-    - op: replace
-      path: /spec/template/spec/containers/0/args/2
-      value: --log-level=info
+      path: /spec/template/spec/containers/0/args/6
+      value: --storage-adv-addr=source-watcher.$(RUNTIME_NAMESPACE).svc.cluster.local.
 
-- target:
-    kind: Deployment
-  patch: |-
-    - op: remove
-      path: /spec/template/spec/securityContext
-    - op: remove
-      path: /spec/template/spec/containers/0/securityContext/seccompProfile
-    - op: remove
-      path: /spec/template/spec/containers/0/securityContext/runAsNonRoot
-- target:
-    kind: Namespace
-  patch: |-
-    - op: remove
-      path: /metadata/labels/pod-security.kubernetes.io~1warn
-    - op: remove
-      path: /metadata/labels/pod-security.kubernetes.io~1warn-version
-
-- target:
-    kind: Deployment
-    name: "(kustomize-controller|helm-controller|notification-controller|image-reflector-controller|image-automation-controller|source-watcher)"
-  patch: |-
-    - op: add
-      path: /spec/template/spec/containers/0/args/-
-      value: --no-cross-namespace-refs=true
-- target:
-    kind: Deployment
-    name: "(kustomize-controller)"
-  patch: |-
-    - op: add
-      path: /spec/template/spec/containers/0/args/-
-      value: --no-remote-bases=true
 - target:
     kind: Deployment
     name: "(kustomize-controller|helm-controller)"
   patch: |-
     - op: add
       path: /spec/template/spec/containers/0/args/-
-      value: --default-service-account=default
+      value: --feature-gates=ExternalArtifact=true
+
 - target:
-    kind: Kustomization
+    kind: CustomResourceDefinition
+    name: alerts.notification.toolkit.fluxcd.io
   patch: |-
     - op: add
-      path: /spec/serviceAccountName
-      value: kustomize-controller
+      path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
+      value: FluxInstance
+    - op: add
+      path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
+      value: FluxInstance
+    - op: add
+      path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
+      value: ResourceSet
+    - op: add
+      path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
+      value: ResourceSet
+    - op: add
+      path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
+      value: ResourceSetInputProvider
+    - op: add
+      path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
+      value: ResourceSetInputProvider
+- target:
+    kind: CustomResourceDefinition
+    name: receivers.notification.toolkit.fluxcd.io
+  patch: |-
+    - op: add
+      path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
+      value: FluxInstance
+    - op: add
+      path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
+      value: FluxInstance
+    - op: add
+      path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
+      value: ResourceSet
+    - op: add
+      path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
+      value: ResourceSet
+    - op: add
+      path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
+      value: ResourceSetInputProvider
+    - op: add
+      path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
+      value: ResourceSetInputProvider
+- target:
+    kind: ClusterRole
+    name: crd-controller-flux-system
+  patch: |-
+    - op: add
+      path: /rules/-
+      value:
+       apiGroups: [ 'fluxcd.controlplane.io' ]
+       resources: [ '*' ]
+       verbs: [ '*' ]
 

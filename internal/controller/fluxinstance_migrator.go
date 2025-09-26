@@ -5,6 +5,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -18,6 +19,7 @@ import (
 // migrateResources migrates the resources for the CRDs that match the given label selector
 // to the latest storage version and updates the CRD status to contain only the latest storage version.
 func (r *FluxInstanceReconciler) migrateResources(ctx context.Context, labelSelector client.MatchingLabels) error {
+	var errs []error
 	crdList := &apiextensionsv1.CustomResourceDefinitionList{}
 
 	if err := r.Client.List(ctx, crdList, labelSelector); err != nil {
@@ -26,11 +28,11 @@ func (r *FluxInstanceReconciler) migrateResources(ctx context.Context, labelSele
 
 	for _, crd := range crdList.Items {
 		if err := r.migrateCRD(ctx, crd.Name); err != nil {
-			return err
+			errs = append(errs, err)
 		}
 	}
 
-	return nil
+	return errors.Join(errs...)
 }
 
 // migrateCRD migrates the custom resources for the given CRD to the latest storage version

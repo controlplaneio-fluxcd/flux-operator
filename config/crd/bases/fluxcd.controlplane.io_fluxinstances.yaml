@@ -167,6 +167,7 @@ spec:
                   - notification-controller
                   - image-reflector-controller
                   - image-automation-controller
+                  - source-watcher
                   type: string
                 type: array
               distribution:

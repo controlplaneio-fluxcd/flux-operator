@@ -731,7 +731,14 @@ func TestFluxInstanceReconciler_Profiles(t *testing.T) {
 	g := NewWithT(t)
 	reconciler := getFluxInstanceReconciler(t)
 	spec := getDefaultFluxSpec(t)
-	spec.Distribution.Version = "v2.4.x"
+	spec.Distribution.Version = "v2.7.x"
+	spec.Components = []fluxcdv1.Component{
+		"source-controller",
+		"kustomize-controller",
+		"helm-controller",
+		"notification-controller",
+		"source-watcher",
+	}
 	spec.Cluster = &fluxcdv1.Cluster{
 		Type:        "openshift",
 		Multitenant: true,
@@ -787,11 +794,12 @@ func TestFluxInstanceReconciler_Profiles(t *testing.T) {
 	err = testClient.Get(ctx, types.NamespacedName{Name: "kustomize-controller", Namespace: ns.Name}, kc)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	// Check multitenant profile.
+	// Check profiles args.
 	g.Expect(kc.Spec.Template.Spec.Containers[0].Args).To(ContainElements(
 		"--no-cross-namespace-refs=true",
 		"--default-service-account=default",
 		"--no-remote-bases=true",
+		"--feature-gates=ExternalArtifact=true",
 	))
 
 	// Check if the limits were set according to the profile.
@@ -831,7 +839,7 @@ func TestFluxInstanceReconciler_Profiles(t *testing.T) {
 	err = testClient.Get(ctx, types.NamespacedName{Name: "alerts.notification.toolkit.fluxcd.io"}, crd)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(
-		crd.Object["spec"].(map[string]any)["versions"].([]any)[2].(map[string]any)["schema"].(map[string]any)["openAPIV3Schema"].(map[string]any)["properties"].(map[string]any)["spec"].(map[string]any)["properties"].(map[string]any)["eventSources"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)["kind"].(map[string]any)["enum"]).
+		crd.Object["spec"].(map[string]any)["versions"].([]any)[1].(map[string]any)["schema"].(map[string]any)["openAPIV3Schema"].(map[string]any)["properties"].(map[string]any)["spec"].(map[string]any)["properties"].(map[string]any)["eventSources"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)["kind"].(map[string]any)["enum"]).
 		To(ContainElement("FluxInstance"))
 
 	// Check if the receivers CRD was patched.
