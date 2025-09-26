@@ -266,7 +266,7 @@ func GetProfileMultitenant(defaultSA string) string {
 const profileClusterMultitenant = `
 - target:
     kind: Deployment
-    name: "(kustomize-controller|helm-controller|notification-controller|image-reflector-controller|image-automation-controller)"
+    name: "(kustomize-controller|helm-controller|notification-controller|image-reflector-controller|image-automation-controller|source-watcher)"
   patch: |-
     - op: add
       path: /spec/template/spec/containers/0/args/-
@@ -359,87 +359,12 @@ const profileClusterObjectLevelWorkloadIdentity = `
       value: --feature-gates=ObjectLevelWorkloadIdentity=%[2]v
 `
 
-// GetProfileNotification returns a patch to enable the FluxInstance
-// and ResourceSet kinds in the notification-controller CRDs.
-func GetProfileNotification(namespace string) string {
-	if namespace == "" {
-		namespace = "flux-system"
-	}
-
-	return fmt.Sprintf(profileNotification, namespace)
-}
-
-const profileNotification = `
+const profileExternalArtifactFeatureGate = `
 - target:
-    kind: CustomResourceDefinition
-    name: alerts.notification.toolkit.fluxcd.io
+    kind: Deployment
+    name: "(kustomize-controller|helm-controller)"
   patch: |-
     - op: add
-      path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
-      value: FluxInstance
-    - op: add
-      path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
-      value: FluxInstance
-    - op: add
-      path: /spec/versions/2/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
-      value: FluxInstance
-    - op: add
-      path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
-      value: ResourceSet
-    - op: add
-      path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
-      value: ResourceSet
-    - op: add
-      path: /spec/versions/2/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
-      value: ResourceSet
-    - op: add
-      path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
-      value: ResourceSetInputProvider
-    - op: add
-      path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
-      value: ResourceSetInputProvider
-    - op: add
-      path: /spec/versions/2/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
-      value: ResourceSetInputProvider
-- target:
-    kind: CustomResourceDefinition
-    name: receivers.notification.toolkit.fluxcd.io
-  patch: |-
-    - op: add
-      path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
-      value: FluxInstance
-    - op: add
-      path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
-      value: FluxInstance
-    - op: add
-      path: /spec/versions/2/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
-      value: FluxInstance
-    - op: add
-      path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
-      value: ResourceSet
-    - op: add
-      path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
-      value: ResourceSet
-    - op: add
-      path: /spec/versions/2/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
-      value: ResourceSet
-    - op: add
-      path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
-      value: ResourceSetInputProvider
-    - op: add
-      path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
-      value: ResourceSetInputProvider
-    - op: add
-      path: /spec/versions/2/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
-      value: ResourceSetInputProvider
-- target:
-    kind: ClusterRole
-    name: crd-controller-%s
-  patch: |-
-    - op: add
-      path: /rules/-
-      value:
-       apiGroups: [ 'fluxcd.controlplane.io' ]
-       resources: [ '*' ]
-       verbs: [ '*' ]
+      path: /spec/template/spec/containers/0/args/-
+      value: --feature-gates=ExternalArtifact=true
 `

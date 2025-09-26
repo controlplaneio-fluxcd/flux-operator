@@ -978,6 +978,9 @@ func TestBuild_SourceWatcher(t *testing.T) {
 	}
 	options.Version = version
 
+	err := options.ValidateAndPatchComponents()
+	g.Expect(err).NotTo(HaveOccurred())
+
 	srcDir := filepath.Join("testdata", version)
 	goldenFile := filepath.Join("testdata", version+"-golden", "source-watcher.kustomization.yaml")
 

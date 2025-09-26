@@ -129,15 +129,6 @@ patches:
     - op: replace
       path: /spec/template/spec/containers/0/args/6
       value: --storage-adv-addr=source-watcher.$(RUNTIME_NAMESPACE).svc.{{$clusterDomain}}.
-- target:
-    group: apps
-    version: v1
-    kind: Deployment
-    name: "(kustomize-controller|helm-controller)"
-  patch: |-
-    - op: add
-      path: /spec/template/spec/containers/0/args/-
-      value: --feature-gates=ExternalArtifact=true
 {{- else }}
 - target:
     group: apps
@@ -411,6 +402,93 @@ spec:
   sourceRef:
     kind: {{$sync.Kind}}
     name: {{$name}}
+`
+
+var notificationPatchTmpl = `
+- target:
+    kind: CustomResourceDefinition
+    name: alerts.notification.toolkit.fluxcd.io
+  patch: |-
+    - op: add
+      path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
+      value: FluxInstance
+    - op: add
+      path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
+      value: FluxInstance
+{{- if .Lt270 }}
+    - op: add
+      path: /spec/versions/2/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
+      value: FluxInstance
+{{- end }}
+    - op: add
+      path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
+      value: ResourceSet
+    - op: add
+      path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
+      value: ResourceSet
+{{- if .Lt270 }}
+    - op: add
+      path: /spec/versions/2/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
+      value: ResourceSet
+{{- end }}
+    - op: add
+      path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
+      value: ResourceSetInputProvider
+    - op: add
+      path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
+      value: ResourceSetInputProvider
+{{- if .Lt270 }}
+    - op: add
+      path: /spec/versions/2/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
+      value: ResourceSetInputProvider
+{{- end }}
+- target:
+    kind: CustomResourceDefinition
+    name: receivers.notification.toolkit.fluxcd.io
+  patch: |-
+    - op: add
+      path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
+      value: FluxInstance
+    - op: add
+      path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
+      value: FluxInstance
+{{- if .Lt270 }}
+    - op: add
+      path: /spec/versions/2/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
+      value: FluxInstance
+{{- end }}
+    - op: add
+      path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
+      value: ResourceSet
+    - op: add
+      path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
+      value: ResourceSet
+{{- if .Lt270 }}
+    - op: add
+      path: /spec/versions/2/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
+      value: ResourceSet
+{{- end }}
+    - op: add
+      path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
+      value: ResourceSetInputProvider
+    - op: add
+      path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
+      value: ResourceSetInputProvider
+{{- if .Lt270 }}
+    - op: add
+      path: /spec/versions/2/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
+      value: ResourceSetInputProvider
+{{- end }}
+- target:
+    kind: ClusterRole
+    name: crd-controller-{{.Namespace}}
+  patch: |-
+    - op: add
+      path: /rules/-
+      value:
+       apiGroups: [ 'fluxcd.controlplane.io' ]
+       resources: [ '*' ]
+       verbs: [ '*' ]
 `
 
 func execTemplate(obj any, tmpl, filename string) (err error) {

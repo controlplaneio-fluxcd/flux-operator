@@ -359,12 +359,12 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 		options.Patches += builder.GetProfileMultitenant(obj.GetCluster().TenantDefaultServiceAccount)
 	}
 
-	if err := options.ValidateAndApplyWorkloadIdentityConfig(obj.GetCluster()); err != nil {
+	if err := options.ValidateAndPatchComponents(); err != nil {
 		return nil, err
 	}
 
-	if options.HasNotificationController() {
-		options.Patches += builder.GetProfileNotification(options.Namespace)
+	if err := options.ValidateAndApplyWorkloadIdentityConfig(obj.GetCluster()); err != nil {
+		return nil, err
 	}
 
 	if obj.Spec.Sharding != nil {

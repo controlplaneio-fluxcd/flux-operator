@@ -45,7 +45,6 @@ func TestFluxReportReconciler_Reconcile(t *testing.T) {
 	g := NewWithT(t)
 	instRec := getFluxInstanceReconciler(t)
 	instSpec := getDefaultFluxSpec(t)
-	instSpec.Distribution.Version = "2.x"
 	reportRec := getFluxReportReconciler()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
