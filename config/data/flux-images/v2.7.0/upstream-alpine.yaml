@@ -18,5 +18,5 @@ images:
     newTag: v1.0.0
     digest: sha256:349d24e6b246c2579902e1eb8c229e8041ac9d08771f5ee7d2a13ac1b62b2c00
   - name: ghcr.io/fluxcd/source-watcher
-    newTag: v2.0.0
-    digest: sha256:95d2fe1f1f08fe44495bfc6eeda1cb5a05857c0acdf93110d5901bc9486bb1f1
+    newTag: v2.0.1
+    digest: sha256:a601e4e1a4e4b21b469544bc083126c681e43e61822f8ca9d5b0ab89b06d2438

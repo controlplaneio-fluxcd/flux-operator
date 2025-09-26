@@ -361,7 +361,7 @@ spec:
             resourceFieldRef:
               containerName: manager
               resource: limits.memory
-        image: fluxcd/source-watcher:v2.0.0
+        image: fluxcd/source-watcher:v2.0.1
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -404,6 +404,8 @@ spec:
         - mountPath: /tmp
           name: tmp
       priorityClassName: system-cluster-critical
+      securityContext:
+        fsGroup: 1337
       serviceAccountName: source-watcher
       terminationGracePeriodSeconds: 10
       volumes:
