@@ -85,12 +85,13 @@ const (
 	FluxHelmGroup       = "helm.toolkit.fluxcd.io"
 	FluxHelmReleaseKind = "HelmRelease"
 
-	FluxSourceGroup        = "source.toolkit.fluxcd.io"
-	FluxGitRepositoryKind  = "GitRepository"
-	FluxBucketKind         = "Bucket"
-	FluxOCIRepositoryKind  = "OCIRepository"
-	FluxHelmRepositoryKind = "HelmRepository"
-	FluxHelmChartKind      = "HelmChart"
+	FluxSourceGroup          = "source.toolkit.fluxcd.io"
+	FluxGitRepositoryKind    = "GitRepository"
+	FluxBucketKind           = "Bucket"
+	FluxOCIRepositoryKind    = "OCIRepository"
+	FluxHelmRepositoryKind   = "HelmRepository"
+	FluxHelmChartKind        = "HelmChart"
+	FluxExternalArtifactKind = "ExternalArtifact"
 
 	FluxNotificationGroup = "notification.toolkit.fluxcd.io"
 	FluxAlertKind         = "Alert"
@@ -101,7 +102,29 @@ const (
 	FluxImageRepositoryKind       = "ImageRepository"
 	FluxImagePolicyKind           = "ImagePolicy"
 	FluxImageUpdateAutomationKind = "ImageUpdateAutomation"
+
+	FluxSourceExtensionsGroup = "source.extensions.fluxcd.io"
+	FluxArtifactGeneratorKind = "ArtifactGenerator"
 )
+
+// FluxKinds is a list of all supported Flux kinds.
+var FluxKinds = []string{
+	FluxKustomizationKind,
+	FluxHelmReleaseKind,
+	FluxGitRepositoryKind,
+	FluxBucketKind,
+	FluxOCIRepositoryKind,
+	FluxHelmRepositoryKind,
+	FluxHelmChartKind,
+	FluxExternalArtifactKind,
+	FluxAlertKind,
+	FluxAlertProviderKind,
+	FluxReceiverKind,
+	FluxImageRepositoryKind,
+	FluxImagePolicyKind,
+	FluxImageUpdateAutomationKind,
+	FluxArtifactGeneratorKind,
+}
 
 // FluxGroupFor returns the GroupKind for the given kind.
 func FluxGroupFor(kind string) (*schema.GroupKind, error) {
@@ -112,7 +135,7 @@ func FluxGroupFor(kind string) (*schema.GroupKind, error) {
 	switch kind {
 	case FluxInstanceKind, FluxReportKind, ResourceSetKind, ResourceSetInputProviderKind:
 		gk.Group = GroupVersion.Group
-	case FluxGitRepositoryKind, FluxOCIRepositoryKind, FluxBucketKind, FluxHelmChartKind, FluxHelmRepositoryKind:
+	case FluxGitRepositoryKind, FluxOCIRepositoryKind, FluxBucketKind, FluxHelmChartKind, FluxHelmRepositoryKind, FluxExternalArtifactKind:
 		gk.Group = FluxSourceGroup
 	case FluxAlertKind, FluxAlertProviderKind, FluxReceiverKind:
 		gk.Group = FluxNotificationGroup
@@ -122,6 +145,8 @@ func FluxGroupFor(kind string) (*schema.GroupKind, error) {
 		gk.Group = FluxKustomizeGroup
 	case FluxHelmReleaseKind:
 		gk.Group = FluxHelmGroup
+	case FluxArtifactGeneratorKind:
+		gk.Group = FluxSourceExtensionsGroup
 	default:
 		return nil, fmt.Errorf("unknown kind %s", kind)
 	}

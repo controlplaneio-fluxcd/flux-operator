@@ -1010,7 +1010,7 @@ func TestBuild_SourceWatcher(t *testing.T) {
 
 	found := false
 	for _, obj := range result.Objects {
-		if obj.GetKind() == "Deployment" && obj.GetName() == "source-watcher" {
+		if obj.GetKind() == deploymentKind && obj.GetName() == "source-watcher" {
 			found = true
 		}
 		if obj.GetKind() == "CustomResourceDefinition" &&
