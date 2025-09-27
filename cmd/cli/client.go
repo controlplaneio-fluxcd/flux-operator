@@ -336,3 +336,50 @@ func getObjectByKindName(args []string) (*unstructured.Unstructured, error) {
 func timeNow() string {
 	return metav1.Now().Format(time.RFC3339Nano)
 }
+
+// ResourceStatus represents the status of a Flux resource.
+type ResourceStatus struct {
+	Kind           string `json:"kind"`
+	Name           string `json:"name"`
+	LastReconciled string `json:"lastReconciled"`
+	Ready          string `json:"ready"`
+	ReadyMessage   string `json:"message"`
+}
+
+// resourceStatusFromUnstructured extracts the ResourceStatus from an unstructured Kubernetes object.
+func resourceStatusFromUnstructured(obj unstructured.Unstructured) ResourceStatus {
+	name := fmt.Sprintf("%s/%s", obj.GetNamespace(), obj.GetName())
+	ready := "Unknown"
+	readyMsg := "Not initialized"
+	lastReconciled := "Unknown"
+	if conditions, found, err := unstructured.NestedSlice(obj.Object, "status", "conditions"); found && err == nil {
+		for _, cond := range conditions {
+			if condition, ok := cond.(map[string]any); ok && condition["type"] == meta.ReadyCondition {
+				ready = condition["status"].(string)
+				if msg, exists := condition["message"]; exists {
+					readyMsg = msg.(string)
+				}
+				if lastTransitionTime, exists := condition["lastTransitionTime"]; exists {
+					lastReconciled = lastTransitionTime.(string)
+				}
+			}
+		}
+	}
+
+	if ssautil.AnyInMetadata(&obj,
+		map[string]string{fluxcdv1.ReconcileAnnotation: fluxcdv1.DisabledValue}) {
+		ready = "Suspended"
+	}
+
+	if suspend, found, err := unstructured.NestedBool(obj.Object, "spec", "suspend"); suspend && found && err == nil {
+		ready = "Suspended"
+	}
+
+	return ResourceStatus{
+		Kind:           obj.GetKind(),
+		Name:           name,
+		LastReconciled: lastReconciled,
+		Ready:          ready,
+		ReadyMessage:   readyMsg,
+	}
+}

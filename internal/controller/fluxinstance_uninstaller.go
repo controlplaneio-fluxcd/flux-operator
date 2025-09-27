@@ -141,8 +141,8 @@ func (r *FluxInstanceReconciler) getInstalledGVKs() (map[string]string, error) {
 	var errs []error
 	result := make(map[string]string)
 
-	for _, kind := range fluxcdv1.FluxKinds {
-		gk, err := fluxcdv1.FluxGroupFor(kind)
+	for _, info := range fluxcdv1.FluxKinds {
+		gk, err := fluxcdv1.FluxGroupFor(info.Name)
 		if err != nil {
 			errs = append(errs, err)
 			continue
@@ -156,7 +156,7 @@ func (r *FluxInstanceReconciler) getInstalledGVKs() (map[string]string, error) {
 			continue
 		}
 
-		result[kind] = mapping.GroupVersionKind.GroupVersion().String()
+		result[info.Name] = mapping.GroupVersionKind.GroupVersion().String()
 	}
 
 	return result, errors.Join(errs...)

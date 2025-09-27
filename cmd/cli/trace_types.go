@@ -150,7 +150,7 @@ func (f *FluxManagedObject) extractSource(
 	reconciler *FluxManagedObjectReconciler,
 ) (*FluxManagedObjectSource, error) {
 	switch reconciler.Kind {
-	case "Kustomization":
+	case fluxcdv1.FluxKustomizationKind:
 		if sourceRef, found, err := unstructured.NestedMap(obj.Object, "spec", "sourceRef"); found && err == nil {
 			if name, exists := sourceRef["name"]; exists {
 				if kind, exists := sourceRef["kind"]; exists {
@@ -162,7 +162,7 @@ func (f *FluxManagedObject) extractSource(
 				}
 			}
 		}
-	case "HelmRelease":
+	case fluxcdv1.FluxHelmReleaseKind:
 		// Try spec.chartRef (direct chart reference)
 		if chartRef, found, err := unstructured.NestedMap(obj.Object, "spec", "chartRef"); found && err == nil {
 			if name, exists := chartRef["name"]; exists {
@@ -239,7 +239,7 @@ func extractSourceURL(
 	var url, originURL, originRevision string
 
 	switch kind {
-	case "HelmChart":
+	case fluxcdv1.FluxHelmChartKind:
 		// For HelmChart, the URL is in its sourceRef object
 		if sourceRef, found, err := unstructured.NestedMap(sourceObj.Object, "spec", "sourceRef"); found && err == nil {
 			if chartSourceName, exists := sourceRef["name"]; exists {
@@ -257,10 +257,14 @@ func extractSourceURL(
 				}
 			}
 		}
-	case "Bucket":
+	case fluxcdv1.FluxBucketKind:
 		// For Bucket, the URL is in spec.endpoint
 		if endpoint, found, err := unstructured.NestedString(sourceObj.Object, "spec", "endpoint"); found && err == nil {
 			url = endpoint
+		}
+	case fluxcdv1.FluxExternalArtifactKind:
+		if u, found, err := unstructured.NestedString(sourceObj.Object, "status", "artifact", "url"); found && err == nil {
+			url = u
 		}
 	default:
 		// For all other types, the URL is in spec.url
@@ -274,9 +278,9 @@ func extractSourceURL(
 	if annotations, found, err := unstructured.NestedStringMap(sourceObj.Object, "status", "artifact", "metadata"); found && err == nil {
 		if sourceOrigin, exists := annotations["org.opencontainers.image.source"]; exists {
 			originURL = sourceOrigin
-			if revision, exists := annotations["org.opencontainers.image.revision"]; exists {
-				originRevision = revision
-			}
+		}
+		if revision, exists := annotations["org.opencontainers.image.revision"]; exists {
+			originRevision = revision
 		}
 	}
 

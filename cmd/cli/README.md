@@ -75,10 +75,24 @@ The following commands are available:
 - `flux-operator get instance`: Retrieves the FluxInstance resource in the cluster.
 - `flux-operator get rset`: Retrieves the ResourceSet resources in the cluster.
 - `flux-operator get rsip`: Retrieves the ResourceSetInputProvider resources in the cluster.
-- `flux-operator get all`: Retrieves all Flux resources in the cluster (supports filtering by ready status).
 
 Arguments:
 
+- `-n, --namespace`: Specifies the namespace to filter the resources.
+- `-A, --all-namespaces`: Retrieves resources from all namespaces.
+
+### Get All Command
+
+This command can be used to retrieve information about all Flux resources in the cluster,
+it supports filtering by resource kind, namespace and ready status.
+
+- `flux-operator get all`: Retrieves all Flux resources and their status.
+
+Arguments:
+
+- `--kind`: Specifies the kind of resources to filter (e.g. Kustomization, HelmRelease, etc.).
+- `--ready-status`: Filters resources by their ready status (True, False, Unknown or Suspended).
+- `-o, --output`: Specifies the output format (table, json, yaml). Default is table.
 - `-n, --namespace`: Specifies the namespace to filter the resources.
 - `-A, --all-namespaces`: Retrieves resources from all namespaces.
 

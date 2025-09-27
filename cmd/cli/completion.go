@@ -5,6 +5,8 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -78,41 +80,8 @@ func resourceNamesCompletionFunc(gvk schema.GroupVersionKind) func(cmd *cobra.Co
 	}
 }
 
-// FluxKind represents a Flux resource kind with its properties.
-type FluxKind struct {
-	Name         string
-	Reconcilable bool
-}
-
-// fluxKinds contains all Flux resource kinds with their properties.
-var fluxKinds = []FluxKind{
-	// Flux Operator resources
-	{Name: fluxcdv1.FluxInstanceKind, Reconcilable: true},
-	{Name: fluxcdv1.FluxReportKind, Reconcilable: true},
-	{Name: fluxcdv1.ResourceSetKind, Reconcilable: true},
-	{Name: fluxcdv1.ResourceSetInputProviderKind, Reconcilable: true},
-
-	// Flux sources
-	{Name: fluxcdv1.FluxGitRepositoryKind, Reconcilable: true},
-	{Name: fluxcdv1.FluxOCIRepositoryKind, Reconcilable: true},
-	{Name: fluxcdv1.FluxBucketKind, Reconcilable: true},
-	{Name: fluxcdv1.FluxHelmRepositoryKind, Reconcilable: true},
-	{Name: fluxcdv1.FluxHelmChartKind, Reconcilable: true},
-
-	// Flux appliers
-	{Name: fluxcdv1.FluxHelmReleaseKind, Reconcilable: true},
-	{Name: fluxcdv1.FluxKustomizationKind, Reconcilable: true},
-
-	// Flux image automation
-	{Name: fluxcdv1.FluxImageRepositoryKind, Reconcilable: true},
-	{Name: fluxcdv1.FluxImagePolicyKind, Reconcilable: false},
-	{Name: fluxcdv1.FluxImageUpdateAutomationKind, Reconcilable: true},
-
-	// Flux notifications
-	{Name: fluxcdv1.FluxAlertKind, Reconcilable: false},
-	{Name: fluxcdv1.FluxAlertProviderKind, Reconcilable: false},
-	{Name: fluxcdv1.FluxReceiverKind, Reconcilable: true},
-}
+// fluxKinds contains all Flux resource kinds.
+var fluxKinds = slices.Concat(fluxcdv1.FluxOperatorKinds, fluxcdv1.FluxKinds)
 
 // getFluxKinds returns a list of Flux kind names, optionally filtered by reconcilable status.
 func getFluxKinds(reconcilableOnly bool) []string {
@@ -123,6 +92,35 @@ func getFluxKinds(reconcilableOnly bool) []string {
 		}
 	}
 	return kinds
+}
+
+// findFluxKind searches for a Flux kind in a case-insensitive way and returns the proper casing.
+// Returns an error if the kind is not found in the fluxKinds list.
+func findFluxKind(kind string) (string, error) {
+	for _, fluxKind := range fluxKinds {
+		if strings.EqualFold(fluxKind.Name, kind) {
+			return fluxKind.Name, nil
+		}
+		if strings.EqualFold(fluxKind.ShortName, kind) {
+			return fluxKind.Name, nil
+		}
+	}
+	return "", fmt.Errorf("kind %s not found", kind)
+}
+
+// resourceKindCompletionFunc returns a function that provides completion for resource kinds.
+func resourceKindCompletionFunc(reconcilableOnly bool) func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		var comps []string
+		for _, kind := range fluxKinds {
+			if !reconcilableOnly || kind.Reconcilable {
+				if strings.HasPrefix(kind.Name, toComplete) {
+					comps = append(comps, kind.Name)
+				}
+			}
+		}
+		return comps, cobra.ShellCompDirectiveNoFileComp
+	}
 }
 
 // resourceKindNameCompletionFunc returns a function that provides completion for <kind>/<name> format.

@@ -107,23 +107,53 @@ const (
 	FluxArtifactGeneratorKind = "ArtifactGenerator"
 )
 
-// FluxKinds is a list of all supported Flux kinds.
-var FluxKinds = []string{
-	FluxKustomizationKind,
-	FluxHelmReleaseKind,
-	FluxGitRepositoryKind,
-	FluxBucketKind,
-	FluxOCIRepositoryKind,
-	FluxHelmRepositoryKind,
-	FluxHelmChartKind,
-	FluxExternalArtifactKind,
-	FluxAlertKind,
-	FluxAlertProviderKind,
-	FluxReceiverKind,
-	FluxImageRepositoryKind,
-	FluxImagePolicyKind,
-	FluxImageUpdateAutomationKind,
-	FluxArtifactGeneratorKind,
+// FluxKindInfo holds information about a Flux resource kind.
+type FluxKindInfo struct {
+	// Name is the singular name of the resource kind.
+	Name string
+
+	// ShortName is a short alias for the resource kind.
+	ShortName string
+
+	// Reconcilable indicates if the resource kind supports reconciliation operations.
+	Reconcilable bool
+}
+
+// FluxOperatorKinds is a list of all supported Flux Operator kinds and their properties.
+var FluxOperatorKinds = []FluxKindInfo{
+	// Flux lifecycle management
+	{Name: FluxInstanceKind, ShortName: "instance", Reconcilable: true},
+	{Name: FluxReportKind, ShortName: "report", Reconcilable: true},
+
+	// App lifecycle management
+	{Name: ResourceSetKind, ShortName: "rset", Reconcilable: true},
+	{Name: ResourceSetInputProviderKind, ShortName: "rsip", Reconcilable: true},
+}
+
+// FluxKinds is a list of all supported Flux kinds and their properties.
+var FluxKinds = []FluxKindInfo{
+	// Flux appliers
+	{Name: FluxKustomizationKind, ShortName: "ks", Reconcilable: true},
+	{Name: FluxHelmReleaseKind, ShortName: "hr", Reconcilable: true},
+
+	// Flux sources
+	{Name: FluxGitRepositoryKind, ShortName: "gitrepo", Reconcilable: true},
+	{Name: FluxOCIRepositoryKind, ShortName: "ocirepo", Reconcilable: true},
+	{Name: FluxBucketKind, ShortName: "bucket", Reconcilable: true},
+	{Name: FluxHelmRepositoryKind, ShortName: "helmrepo", Reconcilable: true},
+	{Name: FluxHelmChartKind, ShortName: "hc", Reconcilable: true},
+	{Name: FluxArtifactGeneratorKind, ShortName: "ag", Reconcilable: true},
+	{Name: FluxExternalArtifactKind, ShortName: "ea", Reconcilable: false},
+
+	// Flux notifications
+	{Name: FluxAlertKind, ShortName: "alert", Reconcilable: false},
+	{Name: FluxAlertProviderKind, ShortName: "provider", Reconcilable: false},
+	{Name: FluxReceiverKind, ShortName: "receiver", Reconcilable: true},
+
+	// Flux image automation
+	{Name: FluxImageRepositoryKind, ShortName: "imgrepo", Reconcilable: true},
+	{Name: FluxImagePolicyKind, ShortName: "imgpol", Reconcilable: true},
+	{Name: FluxImageUpdateAutomationKind, ShortName: "imgauto", Reconcilable: true},
 }
 
 // FluxGroupFor returns the GroupKind for the given kind.

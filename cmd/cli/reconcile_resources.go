@@ -49,6 +49,10 @@ func init() {
 		"Filter resources by their ready status, one of: True, False, Unknown.")
 	reconcileResourcesCmd.Flags().BoolVarP(&reconcileResourcesArgs.allNamespaces, "all-namespaces", "A", false,
 		"Reconcile resources in all namespaces.")
+	err := reconcileResourcesCmd.RegisterFlagCompletionFunc("kind", resourceKindCompletionFunc(true))
+	if err != nil {
+		rootCmd.PrintErrf("✗ failed to register kind completion function: %v\n", err)
+	}
 	reconcileCmd.AddCommand(reconcileResourcesCmd)
 }
 
@@ -56,8 +60,10 @@ func reconcileResourcesCmdRun(cmd *cobra.Command, args []string) error {
 	if reconcileResourcesArgs.kind == "" {
 		return fmt.Errorf("--kind is required")
 	}
-	kind := reconcileResourcesArgs.kind
-	now := timeNow()
+	kind, err := findFluxKind(reconcileResourcesArgs.kind)
+	if err != nil {
+		return err
+	}
 
 	gvk, err := preferredFluxGVK(kind, kubeconfigArgs)
 	if err != nil {
@@ -67,10 +73,10 @@ func reconcileResourcesCmdRun(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
 	defer cancel()
 
+	now := timeNow()
 	annotations := map[string]string{
 		meta.ReconcileRequestAnnotation: now,
 	}
-
 	if reconcileResourcesArgs.force {
 		annotations[meta.ForceRequestAnnotation] = now
 	}
