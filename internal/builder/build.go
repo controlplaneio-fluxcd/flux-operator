@@ -65,6 +65,11 @@ func Build(srcDir, tmpDir string, options Options) (*Result, error) {
 }
 
 func generate(base string, options Options) error {
+	err := options.buildVersionInfo()
+	if err != nil {
+		return fmt.Errorf("get version info failed: %w", err)
+	}
+
 	if options.HasNotificationController() {
 		options.EventsAddr = notifier.Address(options.Namespace, options.ClusterDomain)
 	}

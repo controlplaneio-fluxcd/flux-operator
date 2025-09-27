@@ -267,7 +267,11 @@ patches:
      name: crd-controller
     patch: |-
      - op: remove
+{{- if le .VersionInfo.Minor 6 }}
        path: /rules/10
+{{- else }}
+       path: /rules/11
+{{- end }}
 {{- end }}
 `
 
@@ -415,7 +419,7 @@ var notificationPatchTmpl = `
     - op: add
       path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
       value: FluxInstance
-{{- if .Lt270 }}
+{{- if le .VersionInfo.Minor 6 }}
     - op: add
       path: /spec/versions/2/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
       value: FluxInstance
@@ -426,7 +430,7 @@ var notificationPatchTmpl = `
     - op: add
       path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
       value: ResourceSet
-{{- if .Lt270 }}
+{{- if le .VersionInfo.Minor 6 }}
     - op: add
       path: /spec/versions/2/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
       value: ResourceSet
@@ -437,7 +441,7 @@ var notificationPatchTmpl = `
     - op: add
       path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
       value: ResourceSetInputProvider
-{{- if .Lt270 }}
+{{- if le .VersionInfo.Minor 6 }}
     - op: add
       path: /spec/versions/2/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
       value: ResourceSetInputProvider
@@ -452,7 +456,7 @@ var notificationPatchTmpl = `
     - op: add
       path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
       value: FluxInstance
-{{- if .Lt270 }}
+{{- if le .VersionInfo.Minor 6 }}
     - op: add
       path: /spec/versions/2/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
       value: FluxInstance
@@ -463,7 +467,7 @@ var notificationPatchTmpl = `
     - op: add
       path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
       value: ResourceSet
-{{- if .Lt270 }}
+{{- if le .VersionInfo.Minor 6 }}
     - op: add
       path: /spec/versions/2/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
       value: ResourceSet
@@ -474,7 +478,7 @@ var notificationPatchTmpl = `
     - op: add
       path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
       value: ResourceSetInputProvider
-{{- if .Lt270 }}
+{{- if le .VersionInfo.Minor 6 }}
     - op: add
       path: /spec/versions/2/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
       value: ResourceSetInputProvider

@@ -9,8 +9,6 @@ import (
 	"fmt"
 	"slices"
 	"text/template"
-
-	"github.com/Masterminds/semver/v3"
 )
 
 // DefaultComponents defines the default set of Flux controllers.
@@ -58,19 +56,13 @@ func (o *Options) ValidateAndPatchComponents() error {
 	}
 
 	// Parse Flux version.
-	ver, err := semver.NewVersion(o.Version)
-	if err != nil {
-		return fmt.Errorf("failed to parse Flux version '%s': %w", o.Version, err)
-	}
-
-	// Check if the version is less than 2.7.0 (source-watcher was introduced in 2.7.0).
-	lt270, err := checkVersionAgainstConstraint(ver, "< 2.7.0")
+	err := o.buildVersionInfo()
 	if err != nil {
 		return err
 	}
 
 	// Ensure that source-watcher is not enabled for versions < 2.7.0.
-	if lt270 && o.HasSourceWatcher() {
+	if o.VersionInfo.Minor < 7 && o.HasSourceWatcher() {
 		return errors.New("source-watcher is only supported in Flux versions >= 2.7.0")
 	}
 
@@ -88,16 +80,8 @@ func (o *Options) ValidateAndPatchComponents() error {
 			return err
 		}
 
-		obj := struct {
-			Namespace string
-			Lt270     bool
-		}{
-			Namespace: o.Namespace,
-			Lt270:     lt270,
-		}
-
 		var data bytes.Buffer
-		if err := t.Execute(&data, obj); err != nil {
+		if err := t.Execute(&data, o); err != nil {
 			return err
 		}
 		o.Patches += data.String()
