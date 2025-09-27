@@ -12,13 +12,12 @@ of the Flux MCP Server.
 
 The `Config` API supports:
 
-1. **MCP Transport Modes** - How the MCP server receives and sends messages
-   - **Streamable HTTP** - HTTP transport with support for streaming responses and authentication
-   - **Standard Input/Output (stdio)** - Simple transport using standard input and output streams
-
-2. **Authentication** - Secure access control for MCP server operations
-   - **Credentials** - How credentials are extracted from incoming requests
-   - **Providers** - How extracted credentials are validated and converted to user sessions
+- **MCP Transport Modes** - How the MCP server receives and sends messages
+    - **Streamable HTTP** - HTTP transport with support for streaming responses and authentication
+    - **Standard Input/Output (stdio)** - Simple transport using standard input and output streams
+- **Authentication** - Secure access control for MCP server operations when running with Streamable HTTP
+    - **Credentials** - How credentials are extracted from incoming requests
+    - **Providers** - How extracted credentials are validated and converted to user sessions
 
 A YAML configuration file defines the features and settings to be used by the MCP server.
 This file must be specified with `--config=<path to file>` when starting the MCP server.
@@ -142,8 +141,7 @@ under `spec.authentication.providers` to support different authentication system
 The first provider that successfully validates the extracted credentials and
 successfully extracts a user session is used.
 
-A user session consists of a username, a list of groups, and optionally
-a list of scopes.
+A user session consists of a username, a list of groups, and a list of scopes.
 
 The username and groups in a user session are used for Kubernetes
 impersonation. RBAC permissions are expected to be properly granted
