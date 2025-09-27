@@ -133,12 +133,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// auth setup.
-	auth.EnableObjectLevelWorkloadIdentity()
-	if s := defaultWorkloadIdentityServiceAccount; s != "" {
-		auth.SetDefaultServiceAccount(s)
-	}
-
 	watchConfigsPredicate, err := runtimeCtrl.GetWatchConfigsPredicate(watchOptions)
 	if err != nil {
 		setupLog.Error(err, "unable to configure watch configs label selector for controller")
@@ -152,6 +146,12 @@ func main() {
 	}
 	if s := os.Getenv(defaultWorkloadIdentityServiceAccountEnvKey); s != "" {
 		defaultWorkloadIdentityServiceAccount = s
+	}
+
+	// auth setup.
+	auth.EnableObjectLevelWorkloadIdentity()
+	if s := defaultWorkloadIdentityServiceAccount; s != "" {
+		auth.SetDefaultServiceAccount(s)
 	}
 
 	// Allow the reporting interval to be set by an environment variable.
