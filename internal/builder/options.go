@@ -3,9 +3,16 @@
 
 package builder
 
+import (
+	"fmt"
+
+	"github.com/Masterminds/semver/v3"
+)
+
 // Options defines the builder configuration.
 type Options struct {
 	Version                                         string
+	VersionInfo                                     *VersionInfo
 	Namespace                                       string
 	Components                                      []string
 	ComponentImages                                 []ComponentImage
@@ -75,4 +82,23 @@ type Sync struct {
 	Interval   string
 	PullSecret string
 	Provider   string
+}
+
+type VersionInfo struct {
+	Major int
+	Minor int
+	Patch int
+}
+
+func (o *Options) buildVersionInfo() error {
+	ver, err := semver.NewVersion(o.Version)
+	if err != nil {
+		return fmt.Errorf("failed to parse Flux version '%s': %w", o.Version, err)
+	}
+	o.VersionInfo = &VersionInfo{
+		Major: int(ver.Major()),
+		Minor: int(ver.Minor()),
+		Patch: int(ver.Patch()),
+	}
+	return nil
 }
