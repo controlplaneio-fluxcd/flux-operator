@@ -8,15 +8,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/fluxcd/pkg/apis/meta"
-	ssautil "github.com/fluxcd/pkg/ssa/utils"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/json"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
-
-	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
 var getResourcesCmd = &cobra.Command{
@@ -31,6 +27,9 @@ var getResourcesCmd = &cobra.Command{
 
   # List Flux resources by specific kinds and namespace
   flux-operator -n flux-system get all --kind ResourceSet,GitRepository,Kustomization
+
+  # List Flux resources by specific kind short names
+  flux-operator -n flux-system get all --kind ks,hr,gitrepo,ocirepo
 
   # List Flux resources in JSON format
   flux-operator get all -A --output json | jq
@@ -57,15 +56,12 @@ func init() {
 		"Filter resources by their ready status, one of: True, False, Unknown, Suspended.")
 	getResourcesCmd.Flags().StringVarP(&getResourcesArgs.output, "output", "o", "table",
 		"Output format. One of: table, json, yaml.")
-	getCmd.AddCommand(getResourcesCmd)
-}
+	err := getResourcesCmd.RegisterFlagCompletionFunc("kind", resourceKindCompletionFunc(true))
+	if err != nil {
+		rootCmd.PrintErrf("✗ failed to register kind completion function: %v\n", err)
+	}
 
-type ResourceStatus struct {
-	Kind           string `json:"kind"`
-	Name           string `json:"name"`
-	LastReconciled string `json:"lastReconciled"`
-	Ready          string `json:"ready"`
-	ReadyMessage   string `json:"message"`
+	getCmd.AddCommand(getResourcesCmd)
 }
 
 func geResourcesCmdRun(cmd *cobra.Command, args []string) error {
@@ -83,24 +79,31 @@ func geResourcesCmdRun(cmd *cobra.Command, args []string) error {
 		lsOpts.Namespace = *kubeconfigArgs.Namespace
 	}
 
-	kinds := []string{
-		"ResourceSet",
-		"ResourceSetInputProvider",
-		"GitRepository",
-		"OCIRepository",
-		"Bucket",
-		"HelmRepository",
-		"HelmChart",
-		"HelmRelease",
-		"Kustomization",
+	var kinds []string
+	for _, kind := range fluxKinds {
+		if kind.Reconcilable {
+			kinds = append(kinds, kind.Name)
+		}
 	}
+
 	if len(getResourcesArgs.kinds) > 0 {
-		kinds = getResourcesArgs.kinds
+		var validatedKinds []string
+		for _, k := range getResourcesArgs.kinds {
+			kind, err := findFluxKind(k)
+			if err != nil {
+				return err
+			}
+			validatedKinds = append(validatedKinds, kind)
+		}
+		kinds = validatedKinds
 	}
 
 	for _, kind := range kinds {
 		gvk, err := preferredFluxGVK(kind, kubeconfigArgs)
 		if err != nil {
+			if strings.Contains(err.Error(), "no matches for kind") {
+				continue
+			}
 			return fmt.Errorf("unable to get gvk for kind %s : %w", kind, err)
 		}
 
@@ -116,44 +119,13 @@ func geResourcesCmdRun(cmd *cobra.Command, args []string) error {
 		}
 
 		for _, obj := range list.Items {
-			name := fmt.Sprintf("%s/%s", obj.GetNamespace(), obj.GetName())
-			ready := "Unknown"
-			readyMsg := "Not initialized"
-			lastReconciled := "Unknown"
-			if conditions, found, err := unstructured.NestedSlice(obj.Object, "status", "conditions"); found && err == nil {
-				for _, cond := range conditions {
-					if condition, ok := cond.(map[string]any); ok && condition["type"] == meta.ReadyCondition {
-						ready = condition["status"].(string)
-						if msg, exists := condition["message"]; exists {
-							readyMsg = msg.(string)
-						}
-						if lastTransitionTime, exists := condition["lastTransitionTime"]; exists {
-							lastReconciled = lastTransitionTime.(string)
-						}
-					}
-				}
-			}
+			rs := resourceStatusFromUnstructured(obj)
 
-			if ssautil.AnyInMetadata(&obj,
-				map[string]string{fluxcdv1.ReconcileAnnotation: fluxcdv1.DisabledValue}) {
-				ready = "Suspended"
-			}
-
-			if suspend, found, err := unstructured.NestedBool(obj.Object, "spec", "suspend"); suspend && found && err == nil {
-				ready = "Suspended"
-			}
-
-			if getResourcesArgs.readyStatus != "" && !strings.EqualFold(ready, getResourcesArgs.readyStatus) {
+			if getResourcesArgs.readyStatus != "" && !strings.EqualFold(rs.Ready, getResourcesArgs.readyStatus) {
 				continue
 			}
 
-			result = append(result, ResourceStatus{
-				Kind:           gvk.Kind,
-				Name:           name,
-				LastReconciled: lastReconciled,
-				Ready:          ready,
-				ReadyMessage:   readyMsg,
-			})
+			result = append(result, rs)
 		}
 	}
 

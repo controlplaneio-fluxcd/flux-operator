@@ -190,6 +190,16 @@ func TestFluxInstanceReconciler_InitDisabled(t *testing.T) {
 	// Check if the Ready condition is set to ReconciliationDisabled.
 	checkInstanceReadiness(g, result)
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(fluxcdv1.ReconciliationDisabledReason))
+
+	// Uninstall the instance.
+	err = testClient.Delete(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.IsZero()).To(BeTrue())
 }
 
 func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
@@ -469,6 +479,7 @@ func TestFluxInstanceReconciler_FetchFail(t *testing.T) {
 	g.Expect(events).To(HaveLen(1))
 	g.Expect(events[0].Reason).To(Equal(meta.ArtifactFailedReason))
 
+	// Uninstall the instance.
 	err = testClient.Delete(ctx, obj)
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -535,6 +546,7 @@ func TestFluxInstanceReconciler_BuildFail(t *testing.T) {
 	g.Expect(events[0].Reason).To(Equal(meta.BuildFailedReason))
 	g.Expect(events[0].Message).To(ContainSubstring(reconciler.StoragePath))
 
+	// Uninstall the instance.
 	err = testClient.Delete(ctx, obj)
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -911,6 +923,7 @@ func TestFluxInstanceReconciler_NewVersion(t *testing.T) {
 	g.Expect(events).To(HaveLen(4))
 	g.Expect(events[0].Reason).To(Equal("OutdatedVersion"))
 
+	// Uninstall the instance.
 	err = testClient.Delete(ctx, obj)
 	g.Expect(err).ToNot(HaveOccurred())
 

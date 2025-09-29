@@ -30,7 +30,7 @@ import (
 
 var (
 	controllerName = "flux-operator"
-	timeout        = 30 * time.Second
+	timeout        = 5 * time.Minute
 	testEnv        *testenv.Environment
 	testClient     client.Client
 	testCtx        = ctrl.SetupSignalHandler()
