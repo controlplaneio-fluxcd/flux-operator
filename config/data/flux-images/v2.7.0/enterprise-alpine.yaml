@@ -1,0 +1,22 @@
+images:
+  - name: ghcr.io/controlplaneio-fluxcd/alpine/source-controller
+    newTag: v1.7.0
+    digest: sha256:e6eb74be173cdc7247ae3d6cc23b7d8389bb61b7cebaf63caee9f19814b2d796
+  - name: ghcr.io/controlplaneio-fluxcd/alpine/kustomize-controller
+    newTag: v1.7.0
+    digest: sha256:52dbb5be888c8e68df554bf84f4b809cc503d064eb0dc97cfb168d10a817138a
+  - name: ghcr.io/controlplaneio-fluxcd/alpine/helm-controller
+    newTag: v1.4.0
+    digest: sha256:7cd42255075dff8a9cab32ad524e699dc970fd73f74cb3c8ca1554c5808f7f86
+  - name: ghcr.io/controlplaneio-fluxcd/alpine/notification-controller
+    newTag: v1.7.1
+    digest: sha256:852a2675ac1cb014fc7b5f72f8c7ecc600398866b0b23409a0a71fa8d5f8465a
+  - name: ghcr.io/controlplaneio-fluxcd/alpine/image-reflector-controller
+    newTag: v1.0.1
+    digest: sha256:fbb855dc322ab2358e837fbf68c02a58e961f9077ce8de9ab9a3dc34930c580e
+  - name: ghcr.io/controlplaneio-fluxcd/alpine/image-automation-controller
+    newTag: v1.0.1
+    digest: sha256:2e6b1fde971901c27df79942b9a637c3fb8300eac3545ddbbbc02d8fee21e3f1
+  - name: ghcr.io/controlplaneio-fluxcd/alpine/source-watcher
+    newTag: v2.0.1
+    digest: sha256:9b3c2a45d6cec611254bd6305caec2b15d6fa85f55527750aa4e4c270d33bfff

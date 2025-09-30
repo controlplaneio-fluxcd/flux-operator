@@ -15,8 +15,8 @@ images:
     newTag: v1.0.1
     digest: sha256:5c72668cc9248883391218f3b329f08cfece2bcd570e1ac47fac62bfac153ec8
   - name: ghcr.io/fluxcd/image-automation-controller
-    newTag: v1.0.0
-    digest: sha256:349d24e6b246c2579902e1eb8c229e8041ac9d08771f5ee7d2a13ac1b62b2c00
+    newTag: v1.0.1
+    digest: sha256:efbc480151bb1a853b35091131484c62c99fea40654c4e1e3cd7f2eab6c0d69c
   - name: ghcr.io/fluxcd/source-watcher
     newTag: v2.0.1
     digest: sha256:a601e4e1a4e4b21b469544bc083126c681e43e61822f8ca9d5b0ab89b06d2438
