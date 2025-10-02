@@ -564,9 +564,13 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 		log.Info("Health check completed", "revision", buildResult.Revision)
 	}
 
+	// Check if we need to force the migration of
+	// all resources regardless of their storage version.
+	force := meta.ShouldHandleForceRequest(obj)
+
 	// Migrate all custom resources if the Flux CRDs storage version has changed.
 	if obj.GetMigrateResources() {
-		if err := r.migrateResources(ctx, client.MatchingLabels{"app.kubernetes.io/part-of": obj.Name}); err != nil {
+		if err := r.migrateResources(ctx, client.MatchingLabels{"app.kubernetes.io/part-of": obj.Name}, force); err != nil {
 			log.Error(err, "failed to migrate resources to the latest storage version")
 		}
 	}

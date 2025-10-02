@@ -313,6 +313,7 @@ type ResourceRef struct {
 // FluxInstanceStatus defines the observed state of FluxInstance
 type FluxInstanceStatus struct {
 	meta.ReconcileRequestStatus `json:",inline"`
+	meta.ForceRequestStatus     `json:",inline"`
 
 	// Conditions contains the readiness conditions of the object.
 	// +optional
@@ -411,6 +412,16 @@ func (in *FluxInstance) GetWait() bool {
 // GetConditions returns the status conditions of the object.
 func (in *FluxInstance) GetConditions() []metav1.Condition {
 	return in.Status.Conditions
+}
+
+// GetLastHandledReconcileRequest returns the last handled reconcile request.
+func (in *FluxInstance) GetLastHandledReconcileRequest() string {
+	return in.Status.GetLastHandledReconcileRequest()
+}
+
+// GetLastHandledForceRequestStatus returns the last handled force request status.
+func (in *FluxInstance) GetLastHandledForceRequestStatus() *string {
+	return &in.Status.LastHandledForceAt
 }
 
 // SetConditions sets the status conditions on the object.

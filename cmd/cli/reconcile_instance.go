@@ -19,6 +19,9 @@ var reconcileInstanceCmd = &cobra.Command{
 	Example: `  # Trigger the reconciliation of an instance
   flux-operator -n flux-system reconcile instance flux
 
+  # Force the reconciliation by migrating all Flux resources to their latest API version
+  flux-operator -n flux-system reconcile instance flux --force
+
   # Trigger the reconciliation of an instance without waiting for it to become ready
   flux-operator -n flux-system reconcile instance flux --wait=false
 `,
@@ -28,12 +31,15 @@ var reconcileInstanceCmd = &cobra.Command{
 }
 
 type reconcileInstanceFlags struct {
-	wait bool
+	force bool
+	wait  bool
 }
 
 var reconcileInstanceArgs reconcileInstanceFlags
 
 func init() {
+	reconcileInstanceCmd.Flags().BoolVar(&reconcileInstanceArgs.force, "force", false,
+		"Force the reconciliation of the instance by migrating all Flux resources to their latest API version")
 	reconcileInstanceCmd.Flags().BoolVar(&reconcileInstanceArgs.wait, "wait", true,
 		"Wait for the resource to become ready.")
 
@@ -47,12 +53,18 @@ func reconcileInstanceCmdRun(cmd *cobra.Command, args []string) error {
 
 	name := args[0]
 	now := timeNow()
+	annotations := map[string]string{
+		meta.ReconcileRequestAnnotation: now,
+	}
+	if reconcileInstanceArgs.force {
+		annotations[meta.ForceRequestAnnotation] = now
+	}
 	gvk := fluxcdv1.GroupVersion.WithKind(fluxcdv1.FluxInstanceKind)
 
 	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
 	defer cancel()
 
-	err := annotateResource(ctx, gvk, name, *kubeconfigArgs.Namespace, meta.ReconcileRequestAnnotation, now)
+	err := annotateResourceWithMap(ctx, gvk, name, *kubeconfigArgs.Namespace, annotations)
 	if err != nil {
 		return err
 	}

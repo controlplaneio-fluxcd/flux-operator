@@ -576,6 +576,12 @@ spec:
                   LastAttemptedRevision is the version and digest of the
                   distribution config that was last attempted to reconcile.
                 type: string
+              lastHandledForceAt:
+                description: |-
+                  LastHandledForceAt holds the value of the most recent
+                  force request value, so a change of the annotation value
+                  can be detected.
+                type: string
               lastHandledReconcileAt:
                 description: |-
                   LastHandledReconcileAt holds the value of the most recent
