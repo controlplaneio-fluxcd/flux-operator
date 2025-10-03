@@ -5,12 +5,15 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
+	"github.com/fluxcd/pkg/ssa"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -75,8 +78,8 @@ func (r *FluxInstanceReconciler) migrateCRD(ctx context.Context, name string, fo
 	return nil
 }
 
-// migrateCR migrates the resources for the given CRD to the specified version
-// by patching them with an empty patch.
+// migrateCR migrates the resources for the given CRD to the specified version.
+// If a resource contains managed fields with an older version, it will be patched to the latest version.
 func (r *FluxInstanceReconciler) migrateCR(ctx context.Context, crd *apiextensionsv1.CustomResourceDefinition, version string) error {
 	list := &unstructured.UnstructuredList{}
 
@@ -96,13 +99,37 @@ func (r *FluxInstanceReconciler) migrateCR(ctx context.Context, crd *apiextensio
 	}
 
 	for _, item := range list.Items {
-		// patch the resource with an empty patch to update the version
-		if err := r.Client.Patch(
-			ctx,
-			&item,
-			client.RawPatch(client.Merge.Type(), []byte("{}")),
-		); err != nil && !apierrors.IsNotFound(err) {
-			return fmt.Errorf("failed to patch resource %s: %w", item.GetName(), err)
+		patches, err := ssa.PatchMigrateToVersion(&item, apiVersion)
+		if err != nil {
+			return fmt.Errorf("failed to create migration patch for %s/%s/%s: %w",
+				item.GetKind(), item.GetNamespace(), item.GetName(), err)
+		}
+
+		if len(patches) == 0 {
+			// patch the resource with an empty patch to update the version
+			if err := r.Patch(
+				ctx,
+				&item,
+				client.RawPatch(client.Merge.Type(), []byte("{}")),
+			); err != nil && !apierrors.IsNotFound(err) {
+				return fmt.Errorf(" %s/%s/%s failed to migrate: %w",
+					item.GetKind(), item.GetNamespace(), item.GetName(), err)
+			}
+		} else {
+			// patch the resource to migrate the managed fields to the latest apiVersion
+			rawPatch, err := json.Marshal(patches)
+			if err != nil {
+				return fmt.Errorf("failed to marshal migration patch for %s/%s/%s: %w",
+					item.GetKind(), item.GetNamespace(), item.GetName(), err)
+			}
+			if err := r.Patch(
+				ctx,
+				&item,
+				client.RawPatch(types.JSONPatchType, rawPatch),
+			); err != nil && !apierrors.IsNotFound(err) {
+				return fmt.Errorf(" %s/%s/%s failed to migrate managed fields: %w",
+					item.GetKind(), item.GetNamespace(), item.GetName(), err)
+			}
 		}
 	}
 
