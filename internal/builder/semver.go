@@ -39,6 +39,36 @@ func IsCompatibleVersion(fromVer, toVer string) error {
 	return nil
 }
 
+// IsMinorUpgrade checks if the version upgrade is a minor version upgrade.
+// It returns true if the major version is the same and the minor version is greater.
+func IsMinorUpgrade(fromVer, toVer string) (bool, error) {
+	if fromVer == "" {
+		return false, nil
+	}
+
+	if strings.Contains(fromVer, "@") {
+		fromVer = strings.Split(fromVer, "@")[0]
+	}
+	from, err := semver.NewVersion(fromVer)
+	if err != nil {
+		return false, fmt.Errorf("from version '%s' parse error: %w", fromVer, err)
+	}
+
+	if strings.Contains(toVer, "@") {
+		toVer = strings.Split(toVer, "@")[0]
+	}
+	to, err := semver.NewVersion(toVer)
+	if err != nil {
+		return false, fmt.Errorf("to version '%s' parse error: %w", toVer, err)
+	}
+
+	if to.Major() == from.Major() && to.Minor() > from.Minor() {
+		return true, nil
+	}
+
+	return false, nil
+}
+
 // MatchVersion returns the latest version dir path that matches the given semver range.
 func MatchVersion(dataDir, semverRange string) (string, error) {
 	if _, err := os.Stat(dataDir); os.IsNotExist(err) {
