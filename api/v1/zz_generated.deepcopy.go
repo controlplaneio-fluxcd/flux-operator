@@ -273,6 +273,7 @@ func (in *FluxInstanceSpec) DeepCopy() *FluxInstanceSpec {
 func (in *FluxInstanceStatus) DeepCopyInto(out *FluxInstanceStatus) {
 	*out = *in
 	out.ReconcileRequestStatus = in.ReconcileRequestStatus
+	out.ForceRequestStatus = in.ForceRequestStatus
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
 		*out = make([]metav1.Condition, len(*in))

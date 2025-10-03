@@ -18,7 +18,7 @@ import (
 
 // migrateResources migrates the resources for the CRDs that match the given label selector
 // to the latest storage version and updates the CRD status to contain only the latest storage version.
-func (r *FluxInstanceReconciler) migrateResources(ctx context.Context, labelSelector client.MatchingLabels) error {
+func (r *FluxInstanceReconciler) migrateResources(ctx context.Context, labelSelector client.MatchingLabels, force bool) error {
 	var errs []error
 	crdList := &apiextensionsv1.CustomResourceDefinitionList{}
 
@@ -27,7 +27,7 @@ func (r *FluxInstanceReconciler) migrateResources(ctx context.Context, labelSele
 	}
 
 	for _, crd := range crdList.Items {
-		if err := r.migrateCRD(ctx, crd.Name); err != nil {
+		if err := r.migrateCRD(ctx, crd.Name, force); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -37,7 +37,7 @@ func (r *FluxInstanceReconciler) migrateResources(ctx context.Context, labelSele
 
 // migrateCRD migrates the custom resources for the given CRD to the latest storage version
 // and updates the CRD status to contain only the latest storage version.
-func (r *FluxInstanceReconciler) migrateCRD(ctx context.Context, name string) error {
+func (r *FluxInstanceReconciler) migrateCRD(ctx context.Context, name string, force bool) error {
 	log := ctrl.LoggerFrom(ctx)
 	crd := &apiextensionsv1.CustomResourceDefinition{}
 
@@ -51,8 +51,8 @@ func (r *FluxInstanceReconciler) migrateCRD(ctx context.Context, name string) er
 		return fmt.Errorf("no storage version found for CRD %s", name)
 	}
 
-	// return early if the CRD has a single stored version
-	if len(crd.Status.StoredVersions) == 1 && crd.Status.StoredVersions[0] == storageVersion {
+	// return early if the CRD has a single stored version and force is not set
+	if !force && len(crd.Status.StoredVersions) == 1 && crd.Status.StoredVersions[0] == storageVersion {
 		return nil
 	}
 
