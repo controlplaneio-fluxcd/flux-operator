@@ -1,0 +1,112 @@
+name: Setup Flux Operator CLI
+description: A GitHub Action for installing the Flux Operator CLI
+author: Stefan Prodan
+branding:
+  color: blue
+  icon: command
+inputs:
+  version:
+    description: Flux Operator version e.g. v0.30.0 (defaults to latest stable release)
+    default: "latest"
+    required: false
+  bindir:
+    description: Alternative location for the CLI binary, defaults to path relative to $RUNNER_TOOL_CACHE.
+    required: false
+outputs:
+  version:
+    description: Flux Operator version
+    value: ${{ steps.cli.outputs.version }}
+runs:
+  using: composite
+  steps:
+    - name: Download the Flux Operator CLI binary to the runner's cache dir
+      id: cli
+      shell: bash
+      env:
+        FLUX_OPERATOR_VERSION: ${{ inputs.version }}
+        FLUX_OPERATOR_URL: "https://github.com/controlplaneio-fluxcd/flux-operator/releases/latest"
+        BIN_DIR: ${{ inputs.bindir }}
+      run: |
+        if [[ -z "$FLUX_OPERATOR_VERSION" ]] || [[ "$FLUX_OPERATOR_VERSION" = "latest" ]]; then
+          FLUX_OPERATOR_VERSION=$(curl -fsSL -I -w '%{url_effective}' -o /dev/null ${FLUX_OPERATOR_URL} | grep -o 'v[0-9].*')
+        fi
+        if [[ -z "$FLUX_OPERATOR_VERSION" ]]; then
+          echo "Unable to determine the latest Flux Operator version"
+          exit 1
+        fi
+        if [[ $FLUX_OPERATOR_VERSION = v* ]]; then
+          FLUX_OPERATOR_VERSION="${FLUX_OPERATOR_VERSION:1}"
+        fi
+
+        OS=$(echo "${RUNNER_OS}" | tr '[:upper:]' '[:lower:]')
+        if [[ "$OS" == "macos" ]]; then
+          OS="darwin"
+        fi
+
+        ARCH=$(echo "${RUNNER_ARCH}" | tr '[:upper:]' '[:lower:]')
+        if [[ "$ARCH" == "x64" ]]; then
+          ARCH="amd64"
+        elif [[ "$ARCH" == "x86" ]]; then
+          ARCH="386"
+        fi
+
+        FLUX_OPERATOR_EXEC_FILE="flux-operator"
+        if [[ "$OS" == "windows" ]]; then
+            FLUX_OPERATOR_EXEC_FILE="${FLUX_OPERATOR_EXEC_FILE}.exe"
+        fi
+
+        FLUX_OPERATOR_TOOL_DIR=$BIN_DIR
+        if [[ -z "$FLUX_OPERATOR_TOOL_DIR" ]]; then
+          FLUX_OPERATOR_TOOL_DIR="${RUNNER_TOOL_CACHE}/flux-operator/${FLUX_OPERATOR_VERSION}/${OS}/${ARCH}"
+        fi
+        if [[ ! -x "$FLUX_OPERATOR_TOOL_DIR/$FLUX_OPERATOR_EXEC_FILE" ]]; then
+          DL_DIR="$(mktemp -dt flux-operator-XXXXXX)"
+          trap 'rm -rf $DL_DIR' EXIT
+
+          echo "Downloading flux-operator ${FLUX_OPERATOR_VERSION} for ${OS}/${ARCH}"
+          FLUX_OPERATOR_TARGET_FILE="flux-operator_${FLUX_OPERATOR_VERSION}_${OS}_${ARCH}.tar.gz"
+          if [[ "$OS" == "windows" ]]; then
+            FLUX_OPERATOR_TARGET_FILE="flux-operator_${FLUX_OPERATOR_VERSION}_${OS}_${ARCH}.zip"
+          fi
+
+          OPERATOR_CHECKSUMS_FILE="flux-operator_${FLUX_OPERATOR_VERSION}_checksums.txt"
+
+          OPERATOR_DOWNLOAD_URL="https://github.com/controlplaneio-fluxcd/flux-operator/releases/download/v${FLUX_OPERATOR_VERSION}/"
+
+          curl -fsSL -o "$DL_DIR/$FLUX_OPERATOR_TARGET_FILE" "$OPERATOR_DOWNLOAD_URL/$FLUX_OPERATOR_TARGET_FILE"
+          curl -fsSL -o "$DL_DIR/$OPERATOR_CHECKSUMS_FILE" "$OPERATOR_DOWNLOAD_URL/$OPERATOR_CHECKSUMS_FILE"
+
+          echo "Verifying checksum"
+          sum=""
+          if command -v openssl > /dev/null; then
+            sum=$(openssl sha256 "$DL_DIR/$FLUX_OPERATOR_TARGET_FILE" | awk '{print $2}')
+          elif command -v sha256sum > /dev/null; then
+            sum=$(sha256sum "$DL_DIR/$FLUX_OPERATOR_TARGET_FILE" | awk '{print $1}')
+          fi
+
+          if [[ -z "$sum" ]]; then
+            echo "Neither openssl nor sha256sum found. Cannot calculate checksum."
+            exit 1
+          fi
+
+          expected_sum=$(grep " $FLUX_OPERATOR_TARGET_FILE\$" "$DL_DIR/$OPERATOR_CHECKSUMS_FILE" | awk '{print $1}')
+          if [ "$sum" != "$expected_sum" ]; then
+            echo "SHA sum of ${FLUX_OPERATOR_TARGET_FILE} does not match. Aborting."
+            exit 1
+          fi
+
+          echo "Installing flux-operator to ${FLUX_OPERATOR_TOOL_DIR}"
+          mkdir -p "$FLUX_OPERATOR_TOOL_DIR"
+
+          if [[ "$OS" == "windows" ]]; then
+            unzip "$DL_DIR/$FLUX_OPERATOR_TARGET_FILE" "$FLUX_OPERATOR_EXEC_FILE" -d "$FLUX_OPERATOR_TOOL_DIR"
+          else
+            tar xzf "$DL_DIR/$FLUX_OPERATOR_TARGET_FILE" -C "$FLUX_OPERATOR_TOOL_DIR" $FLUX_OPERATOR_EXEC_FILE
+          fi
+
+          chmod +x "$FLUX_OPERATOR_TOOL_DIR/$FLUX_OPERATOR_EXEC_FILE"
+        fi
+
+        echo "Adding flux-operator to path"
+        echo "$FLUX_OPERATOR_TOOL_DIR" >> "$GITHUB_PATH"
+        echo "version=v${FLUX_OPERATOR_VERSION}" >> "$GITHUB_OUTPUT"

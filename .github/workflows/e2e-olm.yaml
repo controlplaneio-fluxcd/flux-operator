@@ -7,7 +7,7 @@ on:
     paths:
     - 'config/olm/**'
     - 'test/olm/**'
-    - '.github/workflows/e2e-olm.yml'
+    - '.github/workflows/e2e-olm.yaml'
 
 permissions:
   contents: read
