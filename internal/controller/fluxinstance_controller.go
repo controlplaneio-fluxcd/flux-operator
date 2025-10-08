@@ -343,6 +343,7 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 	options := builder.MakeDefaultOptions()
 	options.Version = ver
 	options.Registry = obj.GetDistribution().Registry
+	options.Variant = obj.GetDistribution().Variant
 	options.ImagePullSecret = obj.GetDistribution().ImagePullSecret
 	options.Namespace = obj.GetNamespace()
 	options.Components = obj.GetComponents()

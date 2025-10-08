@@ -18,6 +18,12 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+const (
+	UpstreamAlpine       string = "upstream-alpine"
+	EnterpriseAlpine     string = "enterprise-alpine"
+	EnterpriseDistroless string = "enterprise-distroless"
+)
+
 // ExtractComponentImagesFromObjects extracts the container images from the
 // Deployment objects in the provided slice of unstructured objects.
 // It returns a slice of ComponentImage containing the component name,
@@ -123,24 +129,30 @@ func ExtractComponentImages(srcDir string, opts Options) ([]ComponentImage, erro
 // the container images with digest from the kustomize images patches.
 func ExtractComponentImagesWithDigest(srcDir string, opts Options) (images []ComponentImage, err error) {
 	registry := strings.TrimSuffix(opts.Registry, "/")
-	var distro string
+	variant := opts.Variant
 
-	switch registry {
-	case "fluxcd":
-		distro = "upstream-alpine"
-	case "ghcr.io/fluxcd":
-		distro = "upstream-alpine"
-	case "ghcr.io/controlplaneio-fluxcd/alpine":
-		distro = "enterprise-alpine"
-	case "ghcr.io/controlplaneio-fluxcd/distroless":
-		distro = "enterprise-distroless"
-	case "709825985650.dkr.ecr.us-east-1.amazonaws.com/controlplane/fluxcd":
-		distro = "enterprise-distroless"
-	default:
-		return nil, fmt.Errorf("unsupported registry: %s", registry)
+	if variant == "" {
+		switch registry {
+		case "fluxcd":
+			variant = UpstreamAlpine
+		case "ghcr.io/fluxcd":
+			variant = UpstreamAlpine
+		case "ghcr.io/controlplaneio-fluxcd/alpine":
+			variant = EnterpriseAlpine
+		case "ghcr.io/controlplaneio-fluxcd/distroless":
+			variant = EnterpriseDistroless
+		case "709825985650.dkr.ecr.us-east-1.amazonaws.com/controlplane/fluxcd":
+			variant = EnterpriseDistroless
+		default:
+			return nil, fmt.Errorf("unsupported registry. consider specifying the distribution variant for registry: %s", registry)
+		}
 	}
 
-	imageFile := fmt.Sprintf("%s/%s/%s.yaml", srcDir, opts.Version, distro)
+	if variant != UpstreamAlpine && variant != EnterpriseAlpine && variant != EnterpriseDistroless {
+		return nil, fmt.Errorf("unsupported variant: %s", variant)
+	}
+
+	imageFile := fmt.Sprintf("%s/%s/%s.yaml", srcDir, opts.Version, variant)
 
 	data, err := os.ReadFile(imageFile)
 	if err != nil {

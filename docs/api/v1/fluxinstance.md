@@ -216,6 +216,34 @@ spec:
     registry: "ghcr.io/fluxcd"
 ```
 
+#### Distribution registry mirrors
+
+The `.spec.distribution.variant` field is required, when specifying a third-party
+registry where the Flux distribution images are pulled from. This is useful for registry
+mirrors, for example in corporate environments.
+
+Valid values are `upstream-alpine`, `enterprise-alpine` and `enterprise-distroless`.
+
+Example using a hypothetical `ghcr.io` mirror:
+
+```yaml
+spec:
+  distribution:
+    version: "2.x"
+    registry: "my-ghcr-mirror.io/fluxcd"
+    variant: "upstream-alpine"
+```
+
+Example using a hypothetical mirror of the ControlPlane enterprise registry:
+
+```yaml
+spec:
+  distribution:
+    version: "2.x"
+    registry: "my-ghcr-mirror.io/controlplaneio-fluxcd/distroless"
+    variant: "enterprise-distroless"
+```
+
 #### Distribution image pull secret
 
 The `.spec.distribution.imagePullSecret` field is optional and specifies the name of the Kubernetes secret
