@@ -814,6 +814,11 @@ func (in *ResourceSetInputProviderSpec) DeepCopyInto(out *ResourceSetInputProvid
 		*out = new(ResourceSetInputSkip)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.PreviewLimit != nil {
+		in, out := &in.PreviewLimit, &out.PreviewLimit
+		*out = new(int)
+		**out = **in
+	}
 	if in.Schedule != nil {
 		in, out := &in.Schedule, &out.Schedule
 		*out = make([]Schedule, len(*in))

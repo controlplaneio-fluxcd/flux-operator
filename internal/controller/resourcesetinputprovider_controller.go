@@ -505,6 +505,13 @@ func (r *ResourceSetInputProviderReconciler) callGitProvider(ctx context.Context
 			return nil, err
 		}
 
+		if obj.Spec.PreviewLimit != nil && strings.HasSuffix(obj.Spec.Type, "Request") {
+			limit := *obj.Spec.PreviewLimit
+			if len(results) > limit {
+				results = results[:limit]
+			}
+		}
+
 		inputsWithDefaults, err := gitprovider.MakeInputs(results, defaults)
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate inputs: %w", err)

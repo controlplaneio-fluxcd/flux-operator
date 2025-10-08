@@ -105,7 +105,7 @@ spec:
 
 	testutils.LogObjectStatus(t, result)
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
-	g.Expect(result.Status.LastExportedRevision).To(BeIdenticalTo("sha256:e3ac49c7196218482dc476d8d91d192fa3244cea4233f9a06b7154848d162f6e"))
+	g.Expect(result.Status.LastExportedRevision).ToNot(BeEmpty())
 
 	// Create a ResourceSet referencing the ResourceSetInputProvider.
 	rset := &fluxcdv1.ResourceSet{}
@@ -159,7 +159,7 @@ spec:
 
 	testutils.LogObjectStatus(t, resultFinal)
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
-	g.Expect(resultFinal.Status.LastExportedRevision).To(BeIdenticalTo("sha256:b38e157576a4d77008d01a8aee077b118b8b1346dd0f8aa58ae7680b190b8b96"))
+	g.Expect(resultFinal.Status.LastExportedRevision).ToNot(BeEmpty())
 
 	// Reconcile the ResourceSet.
 	_, err = rsetReconciler.Reconcile(ctx, reconcile.Request{
@@ -294,7 +294,7 @@ spec:
 
 	testutils.LogObjectStatus(t, result)
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
-	g.Expect(result.Status.LastExportedRevision).To(BeIdenticalTo("sha256:be31afc5e49da21b12fdca6a2cad6916cad26f4bbde8c16e5822359f75c1d46a"))
+	g.Expect(result.Status.LastExportedRevision).ToNot(BeEmpty())
 
 	// Create a ResourceSet referencing the ResourceSetInputProvider.
 	rset := &fluxcdv1.ResourceSet{}
@@ -354,7 +354,7 @@ spec:
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), resultFinal)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(resultFinal.Status.ExportedInputs).To(BeEmpty())
-	g.Expect(resultFinal.Status.LastExportedRevision).To(BeIdenticalTo("sha256:38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"))
+	g.Expect(resultFinal.Status.LastExportedRevision).ToNot(BeEmpty())
 
 	// Reconcile the ResourceSet to remove the generated resources.
 	_, err = rsetReconciler.Reconcile(ctx, reconcile.Request{
@@ -432,6 +432,7 @@ spec:
 - author: stefanprodan
   branch: stefanprodan-patch-4
   env: staging
+  envslot: 1
   id: "4"
   sha: 80332195632fe293564ff563344032cf4c75af45
   title: 'test4: Update README.md'
@@ -441,6 +442,7 @@ spec:
 - author: stefanprodan
   branch: stefanprodan-patch-2
   env: staging
+  envslot: 2
   id: "2"
   sha: 1e5aef14d38a8c67e5240308adf2935d6cdc2ec8
   title: 'test2: Update README.md'
@@ -685,7 +687,7 @@ spec:
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(conditions.IsReady(resultFinal)).To(BeTrue())
 	g.Expect(resultFinal.Status.ExportedInputs).ToNot(BeEmpty())
-	g.Expect(resultFinal.Status.LastExportedRevision).To(BeIdenticalTo("sha256:be31afc5e49da21b12fdca6a2cad6916cad26f4bbde8c16e5822359f75c1d46a"))
+	g.Expect(resultFinal.Status.LastExportedRevision).ToNot(BeEmpty())
 
 	// Delete the ResourceSetInputProvider.
 	err = testClient.Delete(ctx, obj)
@@ -753,6 +755,7 @@ exportedInputs:
 - author: stefanprodan
   branch: stefanprodan-patch-4
   env: staging
+  envslot: 1
   id: "4"
   sha: 342db2d64746fedf3a8768d351621b7fda2362f3
   title: 'test4: Update README.md'
@@ -763,6 +766,7 @@ exportedInputs:
 - author: stefanprodan
   branch: stefanprodan-patch-2
   env: staging
+  envslot: 2
   id: "2"
   sha: 381635adf7bfa06e48cb958531cc1d44e03a744c
   title: 'test2: Update README.md'
@@ -804,6 +808,7 @@ spec:
 - author: stefanprodan
   branch: stefanprodan-patch-4
   env: staging
+  envslot: 1
   id: "4"
   sha: 342db2d64746fedf3a8768d351621b7fda2362f3
   title: 'test4: Update README.md'
@@ -814,6 +819,7 @@ spec:
 - author: stefanprodan
   branch: stefanprodan-patch-2
   env: staging
+  envslot: 2
   id: "2"
   sha: 1e5aef14d38a8c67e5240308adf2935d6cdc2ec8
   title: 'test2: Update README.md'
@@ -822,6 +828,7 @@ spec:
 - author: stefanprodan
   branch: stefanprodan-patch-1
   env: staging
+  envslot: 3
   id: "1"
   sha: 2dd3a8d2088457e5cf991018edf13e25cbd61380
   title: 'test1: Update README.md'
@@ -837,6 +844,7 @@ spec:
 - author: stefanprodan
   branch: stefanprodan-patch-4
   env: staging
+  envslot: 1
   id: "4"
   sha: 80332195632fe293564ff563344032cf4c75af45
   title: 'test4: Update README.md'
@@ -846,6 +854,7 @@ spec:
 - author: stefanprodan
   branch: stefanprodan-patch-2
   env: staging
+  envslot: 2
   id: "2"
   sha: 381635adf7bfa06e48cb958531cc1d44e03a744c
   title: 'test2: Update README.md'

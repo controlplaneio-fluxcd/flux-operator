@@ -26,6 +26,10 @@ spec:
     - jsonPath: .status.conditions[?(@.type=="Ready")].message
       name: Status
       type: string
+    - jsonPath: .status.history[0].metadata.inputs
+      name: Inputs
+      priority: 1
+      type: string
     name: v1
     schema:
       openAPIV3Schema:

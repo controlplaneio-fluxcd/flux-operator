@@ -104,6 +104,12 @@ type ResourceSetInputProviderSpec struct {
 	// +optional
 	Skip *ResourceSetInputSkip `json:"skip,omitempty"`
 
+	// PreviewLimit optionally sets the maximum number of preview environments
+	// that can exist concurrently for pull request and merge request providers.
+	// When this limit is reached, the oldest requests beyond the limit are excluded.
+	// +optional
+	PreviewLimit *int `json:"previewLimit,omitempty"`
+
 	// Schedule defines the schedules for the input provider to run.
 	// +optional
 	Schedule []Schedule `json:"schedule,omitempty"`
@@ -290,6 +296,8 @@ func (in *ResourceSetInputProvider) GetLastHandledForceRequestStatus() *string {
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description=""
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",description=""
+// +kubebuilder:printcolumn:name="Inputs",type="integer",JSONPath=".status.exportedInputs.length()",description="",priority=1
+// +kubebuilder:printcolumn:name="PreviewLimit",type="integer",JSONPath=".spec.previewLimit",description="",priority=1
 
 // ResourceSetInputProvider is the Schema for the ResourceSetInputProviders API.
 type ResourceSetInputProvider struct {

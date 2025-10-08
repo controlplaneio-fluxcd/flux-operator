@@ -10,6 +10,7 @@ metadata:
 spec:
   type: GitHubPullRequest
   url: "https://github.com/fluxcd-testing/pr-testing"
+  previewLimit: 5
   filter:
     limit: 10
     includeBranch: "^stefanprodan-patch-.*$"

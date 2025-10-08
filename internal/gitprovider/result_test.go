@@ -43,9 +43,11 @@ func TestMakeInputs(t *testing.T) {
 - id: "1433470881"
   sha: "2dd3a8d2088457e5cf991018edf13e25cbd61380"
   branch: "patch-1"
+  envslot: 1
 - id: "1433536418"
   sha: "1e5aef14d38a8c67e5240308adf2935d6cdc2ec8"
   branch: "patch-2"
+  envslot: 2
 - id: "1433470822"
   sha: "6889f7524d5796de2570466f0bf50afdb78fb30e"
   branch: "patch-3"
@@ -53,6 +55,7 @@ func TestMakeInputs(t *testing.T) {
   labels:
   - "enhancement"
   - "development"
+  envslot: 3
 `,
 		},
 		{
@@ -91,6 +94,7 @@ func TestMakeInputs(t *testing.T) {
   numbers:
   - 1
   - 2
+  envslot: 1
 - id: "1433536418"
   sha: "1e5aef14d38a8c67e5240308adf2935d6cdc2ec8"
   branch: "patch-2"
@@ -99,6 +103,7 @@ func TestMakeInputs(t *testing.T) {
   numbers:
   - 1
   - 2
+  envslot: 2
 - id: "1433470822"
   sha: "6889f7524d5796de2570466f0bf50afdb78fb30e"
   branch: "patch-3"
@@ -110,6 +115,7 @@ func TestMakeInputs(t *testing.T) {
   numbers:
   - 1
   - 2
+  envslot: 3
 `,
 		},
 	}

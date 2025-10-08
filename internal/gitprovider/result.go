@@ -70,8 +70,10 @@ func (r *Result) OverrideFromExportedInputs(input map[string]any) error {
 // MakeInputs converts a list of results into a list of ResourceSet inputs with defaults.
 func MakeInputs(results []Result, defaults map[string]any) ([]fluxcdv1.ResourceSetInput, error) {
 	inputs := make([]fluxcdv1.ResourceSetInput, 0, len(results))
-	for _, item := range results {
-		input, err := fluxcdv1.NewResourceSetInput(defaults, item.ToMap())
+	for i, item := range results {
+		resultMap := item.ToMap()
+		resultMap["envslot"] = i + 1
+		input, err := fluxcdv1.NewResourceSetInput(defaults, resultMap)
 		if err != nil {
 			return nil, err
 		}

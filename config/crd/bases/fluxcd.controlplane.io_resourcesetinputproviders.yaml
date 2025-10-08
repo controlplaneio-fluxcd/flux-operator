@@ -26,6 +26,14 @@ spec:
     - jsonPath: .status.conditions[?(@.type=="Ready")].message
       name: Status
       type: string
+    - jsonPath: .status.exportedInputs.length()
+      name: Inputs
+      priority: 1
+      type: integer
+    - jsonPath: .spec.previewLimit
+      name: PreviewLimit
+      priority: 1
+      type: integer
     name: v1
     schema:
       openAPIV3Schema:
@@ -123,6 +131,12 @@ spec:
                       Supported only for tags at the moment.
                     type: string
                 type: object
+              previewLimit:
+                description: |-
+                  PreviewLimit optionally sets the maximum number of preview environments
+                  that can exist concurrently for pull request and merge request providers.
+                  When this limit is reached, the oldest requests beyond the limit are excluded.
+                type: integer
               schedule:
                 description: Schedule defines the schedules for the input provider
                   to run.
