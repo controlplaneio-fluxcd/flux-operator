@@ -4,8 +4,106 @@
   "author": "flux-enterprise@control-plane.io",
   "role": "Enterprise Flux Maintainers",
   "timestamp": "2025-09-30T12:26:04.422544+03:00",
-  "last_updated": "2025-09-30T12:26:04.422544+03:00",
+  "last_updated": "2025-10-08T12:20:00.000000+03:00",
   "version": 2,
   "statements": [
+    {
+      "vulnerability": {
+        "name": "CVE-2025-9230"
+      },
+      "timestamp": "2025-10-08T12:20:00.000000+03:00",
+      "products": [
+        {
+          "@id": "pkg:apk/alpine/libssl3@3.5.1-r0"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The vulnerable code is not executed by Flux"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-9230"
+      },
+      "timestamp": "2025-10-08T12:20:00.000000+03:00",
+      "products": [
+        {
+          "@id": "pkg:apk/alpine/libcrypto3@3.5.1-r0"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The vulnerable code is not executed by Flux"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-9231"
+      },
+      "timestamp": "2025-10-08T12:20:00.000000+03:00",
+      "products": [
+        {
+          "@id": "pkg:apk/alpine/libssl3@3.5.1-r0"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The vulnerable code is not executed by Flux"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-9231"
+      },
+      "timestamp": "2025-10-08T12:20:00.000000+03:00",
+      "products": [
+        {
+          "@id": "pkg:apk/alpine/libcrypto3@3.5.1-r0"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The vulnerable code is not executed by Flux"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-9232"
+      },
+      "timestamp": "2025-10-08T12:20:00.000000+03:00",
+      "products": [
+        {
+          "@id": "pkg:apk/alpine/libssl3@3.5.1-r0"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The vulnerable code is not executed by Flux"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-9086"
+      },
+      "timestamp": "2025-10-08T12:20:00.000000+03:00",
+      "products": [
+        {
+          "@id": "pkg:apk/alpine/libcurl@8.14.1-r1"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The vulnerable code is not executed by Flux"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-10148"
+      },
+      "timestamp": "2025-10-08T12:20:00.000000+03:00",
+      "products": [
+        {
+          "@id": "pkg:apk/alpine/libcurl@8.14.1-r1"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The vulnerable code is not executed by Flux"
+    }
   ]
 }
