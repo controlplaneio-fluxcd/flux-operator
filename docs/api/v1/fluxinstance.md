@@ -40,6 +40,7 @@ spec:
     - notification-controller
     - image-reflector-controller
     - image-automation-controller
+    - source-watcher
   cluster:
     type: kubernetes
     size: medium
