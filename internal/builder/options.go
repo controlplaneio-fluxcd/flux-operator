@@ -18,6 +18,7 @@ type Options struct {
 	ComponentImages                                 []ComponentImage
 	EventsAddr                                      string
 	Registry                                        string
+	Variant                                         string
 	ImagePullSecret                                 string
 	WatchAllNamespaces                              bool
 	NetworkPolicy                                   bool
@@ -50,6 +51,7 @@ func MakeDefaultOptions() Options {
 		},
 		EventsAddr:         "",
 		Registry:           "ghcr.io/fluxcd",
+		Variant:            "",
 		ImagePullSecret:    "",
 		WatchAllNamespaces: true,
 		NetworkPolicy:      true,

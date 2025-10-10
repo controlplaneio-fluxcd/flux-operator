@@ -63,10 +63,38 @@ func TestBuild_ExtractImagesWithDigest(t *testing.T) {
 		},
 	))
 
+	opts.Registry = "registry-mirror.io/ghcr.io/fluxcd"
+	opts.Variant = "upstream-alpine"
+
+	images, err = ExtractComponentImagesWithDigest(imagePath, opts)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(images).To(HaveLen(6))
+	g.Expect(images).To(ContainElements(
+		ComponentImage{
+			Name:       "source-controller",
+			Repository: "registry-mirror.io/ghcr.io/fluxcd/source-controller",
+			Tag:        "v1.3.0",
+			Digest:     "sha256:161da425b16b64dda4b3cec2ba0f8d7442973aba29bb446db3b340626181a0bc",
+		},
+		ComponentImage{
+			Name:       "kustomize-controller",
+			Repository: "registry-mirror.io/ghcr.io/fluxcd/kustomize-controller",
+			Tag:        "v1.3.0",
+			Digest:     "sha256:48a032574dd45c39750ba0f1488e6f1ae36756a38f40976a6b7a588d83acefc1",
+		},
+	))
+
 	opts.Registry = "registry.local/fluxcd"
+	opts.Variant = ""
 	_, err = ExtractComponentImagesWithDigest(imagePath, opts)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("unsupported registry"))
+
+	opts.Registry = "registry.local/fluxcd"
+	opts.Variant = "downstream-ubuntu"
+	_, err = ExtractComponentImagesWithDigest(imagePath, opts)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("unsupported variant"))
 }
 
 func TestBuild_ExtractImagesWithDigest_AWS(t *testing.T) {
@@ -84,6 +112,21 @@ func TestBuild_ExtractImagesWithDigest_AWS(t *testing.T) {
 		ComponentImage{
 			Name:       "source-controller",
 			Repository: "709825985650.dkr.ecr.us-east-1.amazonaws.com/controlplane/fluxcd/source-controller",
+			Tag:        "v1.3.0",
+			Digest:     "sha256:3b34a63a635779b2b3ea67ec02f5925704dc93d39efc4b92243e2170907615af",
+		},
+	))
+
+	opts.Registry = "registry-mirror.io/709825985650.dkr.ecr.us-east-1.amazonaws.com/controlplane/fluxcd"
+	opts.Variant = "enterprise-distroless"
+
+	images, err = ExtractComponentImagesWithDigest(imagePath, opts)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(images).To(HaveLen(6))
+	g.Expect(images).To(ContainElements(
+		ComponentImage{
+			Name:       "source-controller",
+			Repository: "registry-mirror.io/709825985650.dkr.ecr.us-east-1.amazonaws.com/controlplane/fluxcd/source-controller",
 			Tag:        "v1.3.0",
 			Digest:     "sha256:3b34a63a635779b2b3ea67ec02f5925704dc93d39efc4b92243e2170907615af",
 		},

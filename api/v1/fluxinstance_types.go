@@ -87,6 +87,12 @@ type Distribution struct {
 	// +required
 	Registry string `json:"registry"`
 
+	// Variant specifies the Flux distribution flavor stored
+	// in the registry.
+	// +kubebuilder:validation:Enum=upstream-alpine;enterprise-alpine;enterprise-distroless
+	// +optional
+	Variant string `json:"variant,omitempty"`
+
 	// ImagePullSecret is the name of the Kubernetes secret
 	// to use for pulling images.
 	// +optional
