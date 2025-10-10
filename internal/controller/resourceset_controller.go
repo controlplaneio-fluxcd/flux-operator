@@ -19,6 +19,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/cel"
 	runtimeClient "github.com/fluxcd/pkg/runtime/client"
 	"github.com/fluxcd/pkg/runtime/conditions"
+	"github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/ssa"
 	"github.com/fluxcd/pkg/ssa/normalize"
@@ -219,6 +220,10 @@ func (r *ResourceSetReconciler) reconcile(ctx context.Context,
 	// Apply the resources to the cluster.
 	applySetDigest, err := r.apply(ctx, obj, objects)
 	if err != nil {
+		if qesErr := new(controller.QueueEventSource); errors.As(err, &qesErr) {
+			return returnHealthChecksCanceled(ctx, obj, qesErr, r.EventRecorder)
+		}
+
 		msg := fmt.Sprintf("reconciliation failed: %s", err.Error())
 		conditions.MarkFalse(obj,
 			meta.ReadyCondition,
@@ -583,11 +588,15 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 
 	// Wait for the resources to become ready.
 	if obj.Spec.Wait && len(changeSet.Entries) > 0 {
-		if err := resourceManager.WaitForSetWithContext(ctx, changeSet.ToObjMetadataSet(), ssa.WaitOptions{
+		healthCtx := controller.GetInterruptContext(ctx)
+		if err := resourceManager.WaitForSetWithContext(healthCtx, changeSet.ToObjMetadataSet(), ssa.WaitOptions{
 			Interval: 5 * time.Second,
 			Timeout:  obj.GetTimeout(),
 			FailFast: true,
 		}); err != nil {
+			if is, err := controller.IsObjectEnqueued(ctx); is {
+				return "", err
+			}
 			readyStatus := aggregateNotReadyStatus(ctx, kubeClient, objects)
 			return "", fmt.Errorf("%w\n%s", err, readyStatus)
 		}

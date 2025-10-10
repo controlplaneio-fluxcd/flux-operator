@@ -21,43 +21,63 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	runtimectrl "github.com/fluxcd/pkg/runtime/controller"
+
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
 // ResourceSetReconcilerOptions contains options for the reconciler.
 type ResourceSetReconcilerOptions struct {
-	RateLimiter           workqueue.TypedRateLimiter[reconcile.Request]
-	WatchConfigsPredicate predicate.Predicate
+	RateLimiter             workqueue.TypedRateLimiter[reconcile.Request]
+	WatchConfigsPredicate   predicate.Predicate
+	DisableWaitInterruption bool
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ResourceSetReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, opts ResourceSetReconcilerOptions) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&fluxcdv1.ResourceSet{},
-			builder.WithPredicates(
-				predicate.Or(
-					predicate.GenerationChangedPredicate{},
-					predicate.AnnotationChangedPredicate{},
-				),
-			)).
+	var blder *builder.Builder
+	var toComplete reconcile.TypedReconciler[reconcile.Request]
+	var enqueueRequestsFromMapFunc func(objKind string, fn handler.MapFunc) handler.EventHandler
+
+	rsetPredicate := predicate.Or(
+		predicate.GenerationChangedPredicate{},
+		predicate.AnnotationChangedPredicate{},
+	)
+
+	if opts.DisableWaitInterruption {
+		toComplete = r
+		enqueueRequestsFromMapFunc = func(objKind string, fn handler.MapFunc) handler.EventHandler {
+			return handler.EnqueueRequestsFromMapFunc(fn)
+		}
+		blder = ctrl.NewControllerManagedBy(mgr).
+			For(&fluxcdv1.ResourceSet{}, builder.WithPredicates(rsetPredicate))
+	} else {
+		wr := runtimectrl.WrapReconciler(r)
+		toComplete = wr
+		enqueueRequestsFromMapFunc = wr.EnqueueRequestsFromMapFunc
+		blder = runtimectrl.NewControllerManagedBy(mgr, wr).
+			For(&fluxcdv1.ResourceSet{}, rsetPredicate).Builder
+	}
+
+	return blder.
 		Watches(
 			&fluxcdv1.ResourceSetInputProvider{},
-			handler.EnqueueRequestsFromMapFunc(r.requestsForResourceSetInputProviders),
+			enqueueRequestsFromMapFunc(fluxcdv1.ResourceSetInputProviderKind, r.requestsForResourceSetInputProviders),
 			builder.WithPredicates(exportedInputsChangePredicate),
 		).
 		WatchesMetadata(
 			&corev1.ConfigMap{},
-			handler.EnqueueRequestsFromMapFunc(r.requestsForConfigMapsOrSecrets),
+			enqueueRequestsFromMapFunc("ConfigMap", r.requestsForConfigMapsOrSecrets),
 			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}, opts.WatchConfigsPredicate),
 		).
 		WatchesMetadata(
 			&corev1.Secret{},
-			handler.EnqueueRequestsFromMapFunc(r.requestsForConfigMapsOrSecrets),
+			enqueueRequestsFromMapFunc("Secret", r.requestsForConfigMapsOrSecrets),
 			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}, opts.WatchConfigsPredicate),
 		).
 		WithOptions(controller.Options{
 			RateLimiter: opts.RateLimiter,
-		}).Complete(r)
+		}).Complete(toComplete)
 }
 
 // requestsForResourceSetInputProviders lists all ResourceSets in the same namespace as the

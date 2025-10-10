@@ -12,12 +12,14 @@ import (
 	"github.com/fluxcd/cli-utils/pkg/kstatus/status"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
+	"github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/jitter"
 	"github.com/fluxcd/pkg/ssa"
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	kuberecorder "k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -175,4 +177,24 @@ func takeOwnershipFrom(managers []string) []ssa.FieldManager {
 	}
 
 	return fieldManagers
+}
+
+// returnHealthChecksCanceled logs, sends an event, marks the object and returns the appropriate
+// ctrl.Result for when a new reconciliation request is detected during health checks.
+func returnHealthChecksCanceled(ctx context.Context, obj conditions.Setter,
+	qes *controller.QueueEventSource, recorder kuberecorder.EventRecorder) (ctrl.Result, error) {
+
+	ctrl.LoggerFrom(ctx).Info("New reconciliation triggered, canceling health checks", "trigger", qes)
+
+	recorder.Eventf(obj, corev1.EventTypeNormal, meta.HealthCheckCanceledReason,
+		"Health checks canceled due to new reconciliation triggered by %s/%s/%s",
+		qes.Kind, qes.Namespace, qes.Name)
+
+	conditions.MarkFalse(obj,
+		meta.ReadyCondition,
+		meta.HealthCheckCanceledReason,
+		"New reconciliation triggered by %s/%s/%s", qes.Kind, qes.Namespace, qes.Name)
+
+	// No need to return an error here since there's already a new reconciliation request in the queue.
+	return ctrl.Result{}, nil
 }
