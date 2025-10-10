@@ -12,6 +12,7 @@ import (
 	"github.com/fluxcd/cli-utils/pkg/kstatus/status"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
+	"github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/jitter"
 	"github.com/fluxcd/pkg/ssa"
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
@@ -175,4 +176,16 @@ func takeOwnershipFrom(managers []string) []ssa.FieldManager {
 	}
 
 	return fieldManagers
+}
+
+// returnHealthChecksCanceled logs and returns the appropriate reconcile.Result
+// when a new reconciliation request is detected during health checks.
+func returnHealthChecksCanceled(ctx context.Context, obj conditions.Setter,
+	qes *controller.QueueEventSource) (ctrl.Result, error) {
+	ctrl.LoggerFrom(ctx).Info("New reconciliation triggered, canceling health checks", "trigger", qes)
+	conditions.MarkFalse(obj,
+		meta.ReadyCondition,
+		meta.HealthCheckCanceledReason,
+		"New reconciliation triggered by %s/%s/%s", qes.Kind, qes.Namespace, qes.Name)
+	return ctrl.Result{}, nil
 }
