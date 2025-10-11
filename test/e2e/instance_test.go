@@ -38,9 +38,7 @@ var _ = Describe("FluxInstance", Ordered, func() {
 				_, err := Run(cmd, "/test/e2e")
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
 
-				cmd = exec.Command("kubectl", "wait", "FluxInstance/flux", "-n", namespace,
-					"--for=condition=Ready", "--timeout=5m",
-				)
+				cmd = exec.Command(cli, "wait", "instance", "flux", "-n", namespace)
 				_, err = Run(cmd, "/test/e2e")
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
 
@@ -93,9 +91,7 @@ var _ = Describe("FluxInstance", Ordered, func() {
 				_, err = Run(cmd, "/test/e2e")
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
 
-				cmd = exec.Command("kubectl", "wait", "ResourceSet/podinfo",
-					"--for=condition=Ready", "--timeout=5m",
-				)
+				cmd = exec.Command(cli, "wait", "rset", "podinfo")
 				_, err = Run(cmd, "/test/e2e")
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
 
@@ -114,9 +110,10 @@ var _ = Describe("FluxInstance", Ordered, func() {
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
 				ExpectWithOffset(2, output).To(ContainSubstring("ResourceSet"))
 
-				cmd = exec.Command("kubectl", "delete", "ResourceSet/podinfo")
-				_, err = Run(cmd, "/test/e2e")
+				cmd = exec.Command(cli, "delete", "rset", "podinfo")
+				output, err = Run(cmd, "/test/e2e")
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
+				ExpectWithOffset(2, output).To(ContainSubstring("completed"))
 				return nil
 			}
 			EventuallyWithOffset(1, reconcile, 5*time.Minute, 10*time.Second).Should(Succeed())
@@ -133,9 +130,7 @@ var _ = Describe("FluxInstance", Ordered, func() {
 				_, err := Run(cmd, "/test/e2e")
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
 
-				cmd = exec.Command("kubectl", "wait", "ResourceSetInputProvider/demo",
-					"--for=condition=Ready", "--timeout=5m",
-				)
+				cmd = exec.Command(cli, "wait", "rsip", "demo")
 				_, err = Run(cmd, "/test/e2e")
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
 
@@ -144,9 +139,10 @@ var _ = Describe("FluxInstance", Ordered, func() {
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
 				ExpectWithOffset(2, output).To(ContainSubstring("demo"))
 
-				cmd = exec.Command("kubectl", "delete", "ResourceSetInputProvider/demo")
-				_, err = Run(cmd, "/test/e2e")
+				cmd = exec.Command(cli, "delete", "rsip", "demo")
+				output, err = Run(cmd, "/test/e2e")
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
+				ExpectWithOffset(2, output).To(ContainSubstring("completed"))
 				return nil
 			}
 			EventuallyWithOffset(1, reconcile, 5*time.Minute, 10*time.Second).Should(Succeed())
@@ -163,9 +159,7 @@ var _ = Describe("FluxInstance", Ordered, func() {
 				_, err := Run(cmd, "/test/e2e")
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
 
-				cmd = exec.Command("kubectl", "wait", "FluxInstance/flux", "-n", namespace,
-					"--for=condition=Ready", "--timeout=5m",
-				)
+				cmd = exec.Command(cli, "wait", "instance", "flux", "-n", namespace)
 				_, err = Run(cmd, "/test/e2e")
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
 
@@ -202,15 +196,16 @@ var _ = Describe("FluxInstance", Ordered, func() {
 	Context("uninstallation", func() {
 		It("should run successfully", func() {
 			By("delete FluxInstance")
-			cmd := exec.Command("kubectl", "delete", "FluxInstance/flux",
-				"--timeout=30s", "-n", namespace)
+			cmd := exec.Command(cli, "delete", "instance", "flux", "-n", namespace)
 			_, err := Run(cmd, "/test/e2e")
 			Expect(err).NotTo(HaveOccurred())
+
 			By("source-controller deleted")
 			cmd = exec.Command("kubectl", "get", "deploy/source-controller", "-n", namespace)
 			_, err = Run(cmd, "/test/e2e")
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("not found"))
+
 			By("namespace exists")
 			cmd = exec.Command("kubectl", "get", "ns", namespace)
 			_, err = Run(cmd, "/test/e2e")

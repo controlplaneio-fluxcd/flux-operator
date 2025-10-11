@@ -136,6 +136,40 @@ func waitForResourceReconciliation(ctx context.Context, gvk schema.GroupVersionK
 	return "Reconciliation completed successfully", nil
 }
 
+// waitForTermination waits for a resource to be deleted from the cluster.
+func waitForTermination(ctx context.Context, gvk schema.GroupVersionKind, name, namespace string, timeout time.Duration) error {
+	resource := &unstructured.Unstructured{}
+	resource.SetGroupVersionKind(gvk)
+	resource.SetName(name)
+	resource.SetNamespace(namespace)
+
+	kubeClient, err := newKubeClient()
+	if err != nil {
+		return fmt.Errorf("unable to create kube client error: %w", err)
+	}
+
+	if err := wait.PollUntilContextTimeout(ctx, 2*time.Second, timeout, true,
+		func(ctx context.Context) (bool, error) {
+			err := kubeClient.Get(ctx, client.ObjectKeyFromObject(resource), resource)
+			if apierrors.IsNotFound(err) {
+				// Resource is deleted
+				return true, nil
+			}
+			if err != nil {
+				return false, err
+			}
+			// Resource still exists, keep waiting
+			return false, nil
+		}); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || strings.Contains(err.Error(), "exceed context deadline") {
+			return fmt.Errorf("timed out waiting for %s/%s to be deleted", namespace, name)
+		}
+		return err
+	}
+
+	return nil
+}
+
 // isReady checks if a resource is ready by examining its Ready condition.
 // It verifies that the observed generation matches the current generation and the condition status is True.
 func isReady(obj *unstructured.Unstructured) (bool, error) {
