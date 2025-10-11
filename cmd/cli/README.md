@@ -148,6 +148,22 @@ Arguments:
 - `-n, --namespace`: Specifies the namespace scope of the command.
 - `--wait`: On resume, waits for the reconciliation to complete before returning.
 
+### Delete Commands
+
+The `flux-operator delete` commands are used to delete the Flux Operator resources from the cluster.
+
+The following commands are available:
+
+- `flux-operator delete instance <name>`: Deletes the FluxInstance resource from the cluster.
+- `flux-operator delete rset <name>`: Deletes the ResourceSet resource from the cluster.
+- `flux-operator delete rsip <name>`: Deletes the ResourceSetInputProvider resource from the cluster.
+
+Arguments:
+
+- `-n, --namespace`: Specifies the namespace scope of the command.
+- `--wait`: Waits for the resource to be deleted before returning (enabled by default).
+- `--with-suspend`: Suspends the resource before deleting it (leaving the managed resources in-place).
+
 ### Statistics Command
 
 This command is used to retrieve statistics about the Flux resources
