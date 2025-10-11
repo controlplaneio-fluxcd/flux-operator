@@ -154,6 +154,11 @@ func resetCmdArgs() {
 	resumeInputProviderArgs = resumeInputProviderFlags{}
 	resumeResourceArgs = resumeResourceFlags{}
 
+	// Delete commands
+	deleteInstanceArgs = deleteInstanceFlags{}
+	deleteResourceSetArgs = deleteResourceSetFlags{}
+	deleteInputProviderArgs = deleteInputProviderFlags{}
+
 	// Create commands
 	createSecretBasicAuthArgs = createSecretBasicAuthFlags{}
 	createSecretGitHubAppArgs = createSecretGitHubAppFlags{}
