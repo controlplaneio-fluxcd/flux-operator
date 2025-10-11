@@ -442,7 +442,7 @@ and referred by all `HelmRelease` resources.
 #### Copying data from existing ConfigMaps and Secrets
 
 To generate resources with data copied from existing ConfigMaps and Secrets,
-the `fluxcd.toolkit.fluxcd.io/copyFrom: namespace/name` annotation must be
+the `fluxcd.controlplane.io/copyFrom: namespace/name` annotation must be
 set in the ConfigMap or Secret template.
 
 Example of copying data from an existing ConfigMap and Secret:
