@@ -272,3 +272,36 @@ and of the Flux distribution running in the cluster.
 
 - `flux-operator version`: Displays the version information for the CLI and the Flux Operator.
     - `--client`:  If true, shows the client version only (no server required).
+
+### Install Command
+
+The `flux-operator install` command provides a quick way to bootstrap a Kubernetes cluster with the Flux Operator and a Flux instance.
+
+This command performs the following steps:
+
+1. Downloads the Flux Operator distribution artifact from `oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests`.
+2. Installs the Flux Operator in the `flux-system` namespace and waits for it to become ready.
+3. Installs the Flux instance in the `flux-system` namespace according to the provided configuration.
+4. Configures the pull secret for the instance sync source if credentials are provided.
+5. Configures Flux to bootstrap the cluster from a Git repository or OCI repository if a sync URL is provided.
+6. Configures automatic updates of the Flux Operator from the distribution artifact.
+
+This command is intended for development and testing purposes. On production environments,
+it is recommended to follow the [installation guide](https://fluxcd.control-plane.io/operator/install/).
+
+- `flux-operator install`: Installs the Flux Operator and a Flux instance in the cluster.
+    - `--instance-distribution-version`: Flux distribution version.
+    - `--instance-distribution-registry`: Container registry to pull Flux images from.
+    - `--instance-distribution-artifact`: OCI artifact containing the Flux distribution manifests.
+    - `--instance-components`: List of Flux components to install.
+    - `--instance-components-extra`: Additional Flux components to install on top of the default set.
+    - `--instance-cluster-type`: Cluster type (kubernetes, openshift, aws, azure, gcp).
+    - `--instance-cluster-size`: Cluster size profile for vertical scaling (small, medium, large).
+    - `--instance-cluster-domain`: Cluster domain used for generating the FQDN of services.
+    - `--instance-cluster-multitenant`: Enable multitenant lockdown for Flux controllers.
+    - `--instance-cluster-network-policy`: Restrict network access to the current namespace.
+    - `--instance-sync-url`: URL of the source for cluster sync (Git repository URL or OCI repository address).
+    - `--instance-sync-ref`: Source reference for cluster sync (Git ref name or OCI tag).
+    - `--instance-sync-path`: Path to the manifests directory in the source.
+    - `--instance-sync-creds`: Credentials for the source in the format `username:token`.
+    - `--auto-update`: Enable automatic updates of the Flux Operator from the distribution artifact.
