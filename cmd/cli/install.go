@@ -8,7 +8,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"text/template"
 	"time"
@@ -25,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/yaml"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/builder"
@@ -65,12 +65,33 @@ it is recommended to follow the installation guide at https://fluxcd.control-pla
     --instance-sync-ref=latest \
     --instance-sync-path=./ \
     --instance-sync-creds=flux:${GITHUB_TOKEN}
+
+  # Install using a Flux instance YAML file
+  flux-operator install -f flux-instance.yaml
+
+  # Install using a Flux instance from a GitHub URL
+  flux-operator install \
+    --instance-sync-creds=git:${GITHUB_TOKEN} \
+    -f https://github.com/org/repo/blob/main/flux-instance.yaml
+
+  # Install using a Flux instance from a GitLab URL
+  flux-operator install \
+    --instance-sync-creds=git:${GITLAB_TOKEN} \
+    -f https://gitlab.com/org/proj/-/blob/main/flux-instance.yaml?ref_type=heads
+
+  # Install using a Flux instance from an OCI artifact
+  flux-operator install \
+	-f oci://ghcr.io/org/manifests:latest#clusters/dev/flux-instance.yaml
+
+  # Install using a Flux instance from a GitHub Gist
+  flux-operator install -f https://gist.github.com/username/gist-id#file-flux-instance-yaml
 `,
 	Args: cobra.NoArgs,
 	RunE: installCmdRun,
 }
 
 type installFlags struct {
+	instanceFile         string
 	components           []string
 	componentsExtra      []string
 	distributionVersion  string
@@ -93,6 +114,8 @@ const defaultInstallNamespace = "flux-system"
 var installArgs installFlags
 
 func init() {
+	installCmd.Flags().StringVarP(&installArgs.instanceFile, "instance-file", "f", "",
+		"path to Flux instance YAML file (local file or HTTPS URL)")
 	installCmd.Flags().StringSliceVar(&installArgs.components, "instance-components",
 		[]string{"source-controller", "kustomize-controller", "helm-controller", "notification-controller"},
 		"list of Flux components to install (can specify multiple components with a comma-separated list)")
@@ -136,19 +159,45 @@ func installCmdRun(cmd *cobra.Command, args []string) error {
 
 	now := time.Now()
 
-	// Step 1: Download the distribution artifact and extract the manifests
+	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
+	defer cancel()
+
+	// Step 1: Load Flux instance from file if specified
+
+	var instance *fluxcdv1.FluxInstance
+	artifactURL := installArgs.distributionArtifact
+
+	if installArgs.instanceFile != "" {
+		var err error
+		instance, err = instanceFromFile(ctx, installArgs.instanceFile)
+		if err != nil {
+			return fmt.Errorf("failed to load instance: %w", err)
+		}
+
+		// Set namespace to flux-system
+		instance.Namespace = defaultInstallNamespace
+
+		// Use artifact URL from file if present
+		if instance.Spec.Distribution.Artifact != "" {
+			artifactURL = instance.Spec.Distribution.Artifact
+		}
+
+		// Use multitenant setting from file if present
+		if instance.Spec.Cluster != nil && instance.Spec.Cluster.Multitenant {
+			installArgs.clusterMultitenant = true
+		}
+	}
+
+	// Step 2: Download the distribution artifact and extract the manifests
 
 	rootCmd.Println(`◎`, "Downloading distribution artifact...")
-	objects, err := fetchOperatorManifests()
+	objects, err := fetchOperatorManifests(artifactURL)
 	if err != nil {
 		return err
 	}
-	rootCmd.Println(`✔`, "Download completed")
+	rootCmd.Println(`✔`, "Download completed in", time.Since(now).Round(time.Second).String())
 
-	// Step 2: Install or upgrade the Flux Operator
-
-	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
-	defer cancel()
+	// Step 3: Install or upgrade the Flux Operator
 
 	installed, err := isInstalled(ctx)
 	if err != nil {
@@ -165,19 +214,30 @@ func installCmdRun(cmd *cobra.Command, args []string) error {
 	}
 	rootCmd.Println(`✔`, "Flux Operator has been installed successfully")
 
-	// Step 3: Create or update the sync credentials secret if specified
+	// Step 4: Create or update the sync credentials secret if specified
 
 	if installArgs.syncCreds != "" {
 		rootCmd.Println(`◎`, "Configuring sync credentials...")
-		if err := applySyncSecret(ctx); err != nil {
+		secretName := defaultInstallNamespace
+		syncURL := installArgs.syncURL
+
+		// Override secret name and sync URL if using a file-based instance
+		if instance != nil && instance.Spec.Sync != nil {
+			if instance.Spec.Sync.PullSecret != "" {
+				secretName = instance.Spec.Sync.PullSecret
+			}
+			syncURL = instance.Spec.Sync.URL
+		}
+
+		if err := applySyncSecret(ctx, secretName, syncURL); err != nil {
 			return err
 		}
 	}
 
-	// Step 4: Install or upgrade the Flux instance
+	// Step 5: Install or upgrade the Flux instance
 
 	rootCmd.Println(`◎`, "Installing the Flux instance...")
-	if err := applyFluxInstance(ctx); err != nil {
+	if err := applyFluxInstance(ctx, instance); err != nil {
 		return err
 	}
 	rootCmd.Println(`✔`, "Flux has been installed successfully")
@@ -185,7 +245,7 @@ func installCmdRun(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Step 5: Configure automatic updates if enabled
+	// Step 6: Configure automatic updates if enabled
 
 	if installArgs.autoUpdate {
 		rootCmd.Println(`◎`, "Configuring automatic updates...")
@@ -203,33 +263,18 @@ func installCmdRun(cmd *cobra.Command, args []string) error {
 
 // fetchOperatorManifests downloads the Flux Operator distribution artifact
 // and returns the list of Kubernetes objects from the install manifest.
-func fetchOperatorManifests() ([]*unstructured.Unstructured, error) {
-	tmpArtifactDir, err := builder.MkdirTempAbs("", "flux-artifact")
-	if err != nil {
-		return nil, fmt.Errorf("failed to create tmp dir: %w", err)
-	}
-	defer os.RemoveAll(tmpArtifactDir)
-
+func fetchOperatorManifests(artifactURL string) ([]*unstructured.Unstructured, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
 	defer cancel()
 
-	if _, err := builder.PullArtifact(
+	data, err := builder.ExtractFileFromArtifact(
 		ctx,
-		installArgs.distributionArtifact,
-		tmpArtifactDir,
+		artifactURL,
+		"flux-operator/install.yaml",
 		authn.DefaultKeychain,
-	); err != nil {
-		return nil, fmt.Errorf("failed to pull distribution artifact: %w", err)
-	}
-
-	installManifest := filepath.Join(tmpArtifactDir, "flux-operator", "install.yaml")
-	if _, err := os.Stat(installManifest); os.IsNotExist(err) {
-		return nil, fmt.Errorf("invalid distribution artifact, missing flux-operator/install.yaml")
-	}
-
-	data, err := os.ReadFile(installManifest)
+	)
 	if err != nil {
-		return nil, fmt.Errorf("error reading file: %w", err)
+		return nil, fmt.Errorf("failed to pull distribution artifact: %w", err)
 	}
 
 	objects, err := ssautil.ReadObjects(bytes.NewReader(data))
@@ -273,15 +318,35 @@ func isInstalled(ctx context.Context) (bool, error) {
 }
 
 // applyOperatorManifests applies the Flux Operator manifests to the cluster and waits for them to be ready.
+// It sets consistent labels on all objects and ensures Deployment resources have matching selector and template labels.
 func applyOperatorManifests(ctx context.Context, objects []*unstructured.Unstructured) error {
 	operatorManager, err := newManager()
 	if err != nil {
 		return fmt.Errorf("unable to create operator manager: %w", err)
 	}
 
-	ssautil.SetCommonMetadata(objects, map[string]string{
-		"app.kubernetes.io/name": "flux-operator",
-	}, nil)
+	labels := map[string]string{
+		"app.kubernetes.io/name":     "flux-operator",
+		"app.kubernetes.io/instance": "flux-operator",
+	}
+
+	ssautil.SetCommonMetadata(objects, labels, nil)
+
+	// Iterate through objects and set label selectors to ensure
+	// that helm-controller can adopt the Flux Operator deployment
+	for _, obj := range objects {
+		if obj.GetKind() == "Deployment" {
+			// Set spec.selector.matchLabels
+			if err := unstructured.SetNestedStringMap(obj.Object, labels, "spec", "selector", "matchLabels"); err != nil {
+				return fmt.Errorf("failed to set deployment selector labels: %w", err)
+			}
+
+			// Set spec.template.metadata.labels
+			if err := unstructured.SetNestedStringMap(obj.Object, labels, "spec", "template", "metadata", "labels"); err != nil {
+				return fmt.Errorf("failed to set deployment template labels: %w", err)
+			}
+		}
+	}
 
 	changeSet, err := operatorManager.ApplyAllStaged(ctx, objects, ssa.DefaultApplyOptions())
 	if err != nil {
@@ -300,9 +365,11 @@ func applyOperatorManifests(ctx context.Context, objects []*unstructured.Unstruc
 }
 
 // applySyncSecret creates and applies the sync credentials secret to the cluster.
-func applySyncSecret(ctx context.Context) error {
-	if installArgs.syncURL == "" {
-		return fmt.Errorf("--instance-sync-creds requires --instance-sync-url to be set")
+// It accepts the secret name and sync URL as parameters to support both flag-based
+// and file-based FluxInstance configurations.
+func applySyncSecret(ctx context.Context, secretName, syncURL string) error {
+	if syncURL == "" {
+		return fmt.Errorf("--instance-sync-creds requires sync URL to be set")
 	}
 
 	// Parse credentials
@@ -317,14 +384,14 @@ func applySyncSecret(ctx context.Context) error {
 	var err error
 
 	// Determine source type and create appropriate secret
-	if strings.HasPrefix(installArgs.syncURL, "oci://") {
+	if strings.HasPrefix(syncURL, "oci://") {
 		// Extract server from OCI URL (strip oci:// prefix and take host part)
-		server := strings.TrimPrefix(installArgs.syncURL, "oci://")
+		server := strings.TrimPrefix(syncURL, "oci://")
 		if idx := strings.Index(server, "/"); idx > 0 {
 			server = server[:idx]
 		}
 		secret, err = secrets.MakeRegistrySecret(
-			defaultInstallNamespace,
+			secretName,
 			defaultInstallNamespace,
 			server,
 			username,
@@ -333,7 +400,7 @@ func applySyncSecret(ctx context.Context) error {
 	} else {
 		// Git source (HTTP/S or SSH)
 		secret, err = secrets.MakeBasicAuthSecret(
-			defaultInstallNamespace,
+			secretName,
 			defaultInstallNamespace,
 			username,
 			password,
@@ -368,68 +435,77 @@ func applySyncSecret(ctx context.Context) error {
 
 // applyFluxInstance generates a FluxInstance from the install flags
 // and applies it to the cluster, waiting for it to be ready.
-func applyFluxInstance(ctx context.Context) error {
-	instance := &fluxcdv1.FluxInstance{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: fluxcdv1.GroupVersion.String(),
-			Kind:       fluxcdv1.FluxInstanceKind,
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fluxcdv1.DefaultInstanceName,
-			Namespace: defaultInstallNamespace,
-		},
-		Spec: fluxcdv1.FluxInstanceSpec{
-			Distribution: fluxcdv1.Distribution{
-				Version:  installArgs.distributionVersion,
-				Registry: installArgs.distributionRegistry,
-				Artifact: installArgs.distributionArtifact,
+// If a pre-loaded instance is provided, it is used instead of building from flags.
+func applyFluxInstance(ctx context.Context, preLoadedInstance *fluxcdv1.FluxInstance) error {
+	var instance *fluxcdv1.FluxInstance
+
+	if preLoadedInstance != nil {
+		// Use the pre-loaded instance
+		instance = preLoadedInstance
+	} else {
+		// Build instance from flags
+		instance = &fluxcdv1.FluxInstance{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: fluxcdv1.GroupVersion.String(),
+				Kind:       fluxcdv1.FluxInstanceKind,
 			},
-			Cluster: &fluxcdv1.Cluster{
-				Type:          installArgs.clusterType,
-				Size:          installArgs.clusterSize,
-				Domain:        installArgs.clusterDomain,
-				Multitenant:   installArgs.clusterMultitenant,
-				NetworkPolicy: installArgs.clusterNetworkPolicy,
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fluxcdv1.DefaultInstanceName,
+				Namespace: defaultInstallNamespace,
 			},
-		},
-	}
-
-	// Add components if specified
-	if len(installArgs.components) > 0 {
-		// Combine default components with extra components
-		allComponents := installArgs.components
-		if len(installArgs.componentsExtra) > 0 {
-			allComponents = append(allComponents, installArgs.componentsExtra...)
+			Spec: fluxcdv1.FluxInstanceSpec{
+				Distribution: fluxcdv1.Distribution{
+					Version:  installArgs.distributionVersion,
+					Registry: installArgs.distributionRegistry,
+					Artifact: installArgs.distributionArtifact,
+				},
+				Cluster: &fluxcdv1.Cluster{
+					Type:          installArgs.clusterType,
+					Size:          installArgs.clusterSize,
+					Domain:        installArgs.clusterDomain,
+					Multitenant:   installArgs.clusterMultitenant,
+					NetworkPolicy: installArgs.clusterNetworkPolicy,
+				},
+			},
 		}
 
-		components := make([]fluxcdv1.Component, len(allComponents))
-		for i, c := range allComponents {
-			components[i] = fluxcdv1.Component(c)
-		}
-		instance.Spec.Components = components
-	}
+		// Add components if specified
+		if len(installArgs.components) > 0 {
+			// Combine default components with extra components
+			allComponents := installArgs.components
+			if len(installArgs.componentsExtra) > 0 {
+				allComponents = append(allComponents, installArgs.componentsExtra...)
+			}
 
-	// Add sync configuration if URL is specified
-	if installArgs.syncURL != "" {
-		sync := &fluxcdv1.Sync{
-			URL:  installArgs.syncURL,
-			Ref:  installArgs.syncRef,
-			Path: installArgs.syncPath,
-		}
-
-		// Determine kind based on URL prefix
-		if strings.HasPrefix(installArgs.syncURL, "oci://") {
-			sync.Kind = "OCIRepository"
-		} else {
-			sync.Kind = "GitRepository"
+			components := make([]fluxcdv1.Component, len(allComponents))
+			for i, c := range allComponents {
+				components[i] = fluxcdv1.Component(c)
+			}
+			instance.Spec.Components = components
 		}
 
-		// Set PullSecret if credentials were provided
-		if installArgs.syncCreds != "" {
-			sync.PullSecret = defaultInstallNamespace
-		}
+		// Add sync configuration if URL is specified
+		if installArgs.syncURL != "" {
+			sync := &fluxcdv1.Sync{
+				URL:  installArgs.syncURL,
+				Ref:  installArgs.syncRef,
+				Path: installArgs.syncPath,
+			}
 
-		instance.Spec.Sync = sync
+			// Determine kind based on URL prefix
+			if strings.HasPrefix(installArgs.syncURL, "oci://") {
+				sync.Kind = "OCIRepository"
+			} else {
+				sync.Kind = "GitRepository"
+			}
+
+			// Set PullSecret if credentials were provided
+			if installArgs.syncCreds != "" {
+				sync.PullSecret = defaultInstallNamespace
+			}
+
+			instance.Spec.Sync = sync
+		}
 	}
 
 	// Convert to unstructured
@@ -514,6 +590,38 @@ func printVersionInfo(ctx context.Context) error {
 		rootCmd.Println(`✔`, "Flux Distribution version:", report.Spec.Distribution.Version)
 	}
 	return nil
+}
+
+// instanceFromFile loads a FluxInstance from a local file or HTTPS URL.
+// GitHub, GitHub Gist, and GitLab URLs are automatically converted to raw content URLs.
+func instanceFromFile(ctx context.Context, filePath string) (*fluxcdv1.FluxInstance, error) {
+	var data []byte
+	var err error
+
+	// Check if the file path is a URL
+	if strings.HasPrefix(filePath, "https://") ||
+		strings.HasPrefix(filePath, "http://") ||
+		strings.HasPrefix(filePath, "oci://") {
+		// Fetch from URL
+		data, err = builder.FetchManifestFromURL(ctx, filePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read response body: %w", err)
+		}
+	} else {
+		// Read from local file
+		data, err = os.ReadFile(filePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read file: %w", err)
+		}
+	}
+
+	// Unmarshal the FluxInstance
+	instance := &fluxcdv1.FluxInstance{}
+	if err := yaml.Unmarshal(data, instance); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal FluxInstance: %w", err)
+	}
+
+	return instance, nil
 }
 
 // autoUpdateData holds the data for rendering the auto-update template.
@@ -619,14 +727,29 @@ spec:
         timeout: 5m
         wait: true
         prune: true
+        force: true
         deletionPolicy: Orphan
         serviceAccountName: << inputs.provider.name >>
         sourceRef:
           kind: OCIRepository
           name: << inputs.provider.name >>
         path: ./flux-operator
+        commonMetadata:
+          labels:
+            app.kubernetes.io/name: flux-operator
+            app.kubernetes.io/instance: flux-operator
         patches:
           - patch: |-
+              - op: replace
+                path: "/spec/selector/matchLabels"
+                value:
+                  app.kubernetes.io/name: flux-operator
+                  app.kubernetes.io/instance: flux-operator
+              - op: replace
+                path: "/spec/template/metadata/labels"
+                value:
+                  app.kubernetes.io/name: flux-operator
+                  app.kubernetes.io/instance: flux-operator
               - op: add
                 path: "/spec/template/spec/containers/0/env/-"
                 value:

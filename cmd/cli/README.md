@@ -290,6 +290,7 @@ This command is intended for development and testing purposes. On production env
 it is recommended to follow the [installation guide](https://fluxcd.control-plane.io/operator/install/).
 
 - `flux-operator install`: Installs the Flux Operator and a Flux instance in the cluster.
+    - `--instance-file, -f`: Path to FluxInstance YAML file (local file, OCI or HTTPS URL).
     - `--instance-distribution-version`: Flux distribution version.
     - `--instance-distribution-registry`: Container registry to pull Flux images from.
     - `--instance-distribution-artifact`: OCI artifact containing the Flux distribution manifests.
