@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/fluxcd/pkg/tar"
+	untar "github.com/fluxcd/pkg/tar"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/crane"
 )
@@ -41,7 +41,7 @@ func PullArtifact(ctx context.Context, ociURL, dstDir string, keyChain authn.Key
 		return "", fmt.Errorf("extracting layer from artifact %s failed: %w", ociURL, err)
 	}
 
-	if err = tar.Untar(blob, dstDir, tar.WithMaxUntarSize(-1)); err != nil {
+	if err = untar.Untar(blob, dstDir, untar.WithMaxUntarSize(-1)); err != nil {
 		return "", fmt.Errorf("extracting layer from artifact %s failed: %w", ociURL, err)
 	}
 
