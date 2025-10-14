@@ -11,10 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fluxcd/cli-utils/pkg/kstatus/polling"
 	"github.com/fluxcd/cli-utils/pkg/kstatus/status"
 	"github.com/fluxcd/pkg/apis/meta"
-	"github.com/fluxcd/pkg/ssa"
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -64,45 +62,6 @@ func newKubeClient() (client.Client, error) {
 	}
 
 	return client.WithFieldOwner(kubeClient, "flux-operator-ctl"), nil
-}
-
-func newManager() (*ssa.ResourceManager, error) {
-	cfg, err := kubeconfigArgs.ToRESTConfig()
-	if err != nil {
-		return nil, fmt.Errorf("loading kubeconfig failed: %w", err)
-	}
-
-	// bump limits
-	cfg.QPS = 100.0
-	cfg.Burst = 300
-
-	restMapper, err := kubeconfigArgs.ToRESTMapper()
-	if err != nil {
-		return nil, err
-	}
-
-	scheme := apiruntime.NewScheme()
-	if err := apiextensionsv1.AddToScheme(scheme); err != nil {
-		return nil, err
-	}
-	if err := corev1.AddToScheme(scheme); err != nil {
-		return nil, err
-	}
-	if err := fluxcdv1.AddToScheme(scheme); err != nil {
-		return nil, err
-	}
-
-	kubeClient, err := client.New(cfg, client.Options{Mapper: restMapper, Scheme: scheme})
-	if err != nil {
-		return nil, err
-	}
-
-	kubePoller := polling.NewStatusPoller(kubeClient, restMapper, polling.Options{})
-
-	return ssa.NewResourceManager(kubeClient, kubePoller, ssa.Owner{
-		Field: "kubectl-flux-operator", // allow Flux to take ownership of applied resources
-		Group: "fluxcd.io",
-	}), nil
 }
 
 // annotateResource annotates a resource with the specified key and value.
