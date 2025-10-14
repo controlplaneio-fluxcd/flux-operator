@@ -23,5 +23,6 @@ func (m *Manager) ToolSet() []SystemTool {
 		m.NewGetKubeconfigContextsTool(),
 		m.NewSetKubeconfigContextTool(),
 		m.NewSearchFluxDocsTool(),
+		m.NewInstallFluxInstanceTool(),
 	}
 }

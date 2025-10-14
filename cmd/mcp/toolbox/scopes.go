@@ -114,6 +114,10 @@ var scopesPerTool = map[string]toolScopes{
 		ownScopeDescription: "Allow suspending the reconciliation of Flux resources.",
 		extraScopes:         []string{},
 	},
+	ToolInstallFluxInstance: {
+		ownScopeDescription: "Allow installing Flux Operator and Flux instance.",
+		extraScopes:         []string{},
+	},
 }
 
 // getScopes returns the scopes that grant access to the given tool.

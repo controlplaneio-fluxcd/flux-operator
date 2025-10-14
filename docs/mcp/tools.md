@@ -244,6 +244,41 @@ Deletes a Kubernetes resource from the cluster.
 
 Confirmation message indicating the resource has been deleted.
 
+## Install Tool
+
+This tool enables automated installation of Flux Operator and Flux instances on Kubernetes clusters.
+
+### install_flux_instance
+
+Installs Flux Operator and a Flux instance on the cluster from a manifest URL.
+
+**Parameters:**
+
+- `instance_url` (required): The URL pointing to the Flux Instance manifest file (supports HTTPS and OCI URLs)
+- `timeout` (optional): The installation timeout duration (default: 5m)
+
+**Output:**
+
+Returns a detailed installation log including deployed resources with their change status.
+
+**Installation Steps:**
+
+The tool performs the following operations:
+
+1. Downloads the Flux instance manifest from the provided URL
+2. Downloads the Flux Operator manifests from the distribution artifact
+3. Installs or upgrades the Flux Operator in the `flux-system` namespace
+4. Installs or upgrades the Flux instance according to the manifest configuration
+5. Waits for the Flux instance to become ready
+6. Configures automatic updates for the Flux Operator
+
+**Example URLs:**
+
+- OCI Artifact: `oci://ghcr.io/org/manifests:latest#clusters/dev/flux-system/flux-instance.yaml`
+- GitHub Gist: `https://gist.github.com/user/id#file-flux-instance-yaml`
+- GitHub Repo: `https://github.com/org/repo/blob/main/clusters/dev/flux-system/flux-instance.yaml`
+- GitLab Repo: `https://gitlab.com/org/proj/-/blob/main/clusters/dev/flux-system/flux-instance.yaml`
+
 ## Documentation Tool
 
 This tool provides access to the latest Flux documentation.
@@ -296,201 +331,3 @@ flux-operator-mcp debug scopes <Flux MCP URL>
 
 This command will make a `tools/list` request to the pointed MCP URL and will print
 in the JSON format the content of the `_meta.scopes` field returned in the response.
-
-Output when *not* running in read-only mode:
-
-```json
-[
-  {
-    "description": "Allow all read-only toolbox operations.",
-    "name": "toolbox:read_only",
-    "tools": [
-      "get_flux_instance",
-      "get_kubernetes_api_versions",
-      "get_kubernetes_logs",
-      "get_kubernetes_metrics",
-      "get_kubernetes_resources",
-      "search_flux_docs"
-    ]
-  },
-  {
-    "description": "Allow all toolbox operations.",
-    "name": "toolbox:read_write",
-    "tools": [
-      "apply_kubernetes_manifest",
-      "delete_kubernetes_resource",
-      "get_flux_instance",
-      "get_kubernetes_api_versions",
-      "get_kubernetes_logs",
-      "get_kubernetes_metrics",
-      "get_kubernetes_resources",
-      "reconcile_flux_helmrelease",
-      "reconcile_flux_kustomization",
-      "reconcile_flux_resourceset",
-      "reconcile_flux_source",
-      "resume_flux_reconciliation",
-      "search_flux_docs",
-      "suspend_flux_reconciliation"
-    ]
-  },
-  {
-    "description": "Allow applying Kubernetes manifests.",
-    "name": "toolbox:apply_kubernetes_manifest",
-    "tools": [
-      "apply_kubernetes_manifest"
-    ]
-  },
-  {
-    "description": "Allow deleting Kubernetes resources.",
-    "name": "toolbox:delete_kubernetes_resource",
-    "tools": [
-      "delete_kubernetes_resource"
-    ]
-  },
-  {
-    "description": "Allow getting a FluxInstance resource.",
-    "name": "toolbox:get_flux_instance",
-    "tools": [
-      "get_flux_instance"
-    ]
-  },
-  {
-    "description": "Allow getting available Kubernetes APIs.",
-    "name": "toolbox:get_kubernetes_api_versions",
-    "tools": [
-      "get_kubernetes_api_versions"
-    ]
-  },
-  {
-    "description": "Allow getting logs from pods.",
-    "name": "toolbox:get_kubernetes_logs",
-    "tools": [
-      "get_kubernetes_logs"
-    ]
-  },
-  {
-    "description": "Allow getting metrics from the Kubernetes API.",
-    "name": "toolbox:get_kubernetes_metrics",
-    "tools": [
-      "get_kubernetes_metrics"
-    ]
-  },
-  {
-    "description": "Allow getting Kubernetes resources.",
-    "name": "toolbox:get_kubernetes_resources",
-    "tools": [
-      "get_kubernetes_resources"
-    ]
-  },
-  {
-    "description": "Allow reconciling HelmRelease resources.",
-    "name": "toolbox:reconcile_flux_helmrelease",
-    "tools": [
-      "reconcile_flux_helmrelease"
-    ]
-  },
-  {
-    "description": "Allow reconciling Kustomization resources.",
-    "name": "toolbox:reconcile_flux_kustomization",
-    "tools": [
-      "reconcile_flux_kustomization"
-    ]
-  },
-  {
-    "description": "Allow reconciling ResourceSet resources.",
-    "name": "toolbox:reconcile_flux_resourceset",
-    "tools": [
-      "reconcile_flux_resourceset"
-    ]
-  },
-  {
-    "description": "Allow reconciling Flux source resources.",
-    "name": "toolbox:reconcile_flux_source",
-    "tools": [
-      "reconcile_flux_source"
-    ]
-  },
-  {
-    "description": "Allow resuming the reconciliation of Flux resources.",
-    "name": "toolbox:resume_flux_reconciliation",
-    "tools": [
-      "resume_flux_reconciliation"
-    ]
-  },
-  {
-    "description": "Allow searching the Flux documentation.",
-    "name": "toolbox:search_flux_docs",
-    "tools": [
-      "search_flux_docs"
-    ]
-  },
-  {
-    "description": "Allow suspending the reconciliation of Flux resources.",
-    "name": "toolbox:suspend_flux_reconciliation",
-    "tools": [
-      "suspend_flux_reconciliation"
-    ]
-  }
-]
-```
-
-Output when running in read-only mode:
-
-```json
-[
-  {
-    "description": "Allow all read-only toolbox operations.",
-    "name": "toolbox:read_only",
-    "tools": [
-      "get_flux_instance",
-      "get_kubernetes_api_versions",
-      "get_kubernetes_logs",
-      "get_kubernetes_metrics",
-      "get_kubernetes_resources",
-      "search_flux_docs"
-    ]
-  },
-  {
-    "description": "Allow getting a FluxInstance resource.",
-    "name": "toolbox:get_flux_instance",
-    "tools": [
-      "get_flux_instance"
-    ]
-  },
-  {
-    "description": "Allow getting available Kubernetes APIs.",
-    "name": "toolbox:get_kubernetes_api_versions",
-    "tools": [
-      "get_kubernetes_api_versions"
-    ]
-  },
-  {
-    "description": "Allow getting logs from pods.",
-    "name": "toolbox:get_kubernetes_logs",
-    "tools": [
-      "get_kubernetes_logs"
-    ]
-  },
-  {
-    "description": "Allow getting metrics from the Kubernetes API.",
-    "name": "toolbox:get_kubernetes_metrics",
-    "tools": [
-      "get_kubernetes_metrics"
-    ]
-  },
-  {
-    "description": "Allow getting Kubernetes resources.",
-    "name": "toolbox:get_kubernetes_resources",
-    "tools": [
-      "get_kubernetes_resources"
-    ]
-  },
-  {
-    "description": "Allow searching the Flux documentation.",
-    "name": "toolbox:search_flux_docs",
-    "tools": [
-      "search_flux_docs"
-    ]
-  }
-]
-```
