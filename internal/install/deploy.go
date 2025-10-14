@@ -18,7 +18,8 @@ import (
 
 // ApplyOperator applies the Flux Operator manifests to the cluster.
 // It sets consistent labels on all objects and ensures Deployment resources have matching selector and template labels.
-func (in *Installer) ApplyOperator(ctx context.Context, objects []*unstructured.Unstructured) (*ssa.ChangeSet, error) {
+// The multitenant parameter controls whether to set the DEFAULT_SERVICE_ACCOUNT environment variable.
+func (in *Installer) ApplyOperator(ctx context.Context, objects []*unstructured.Unstructured, multitenant bool) (*ssa.ChangeSet, error) {
 	labels := map[string]string{
 		"app.kubernetes.io/name":     "flux-operator",
 		"app.kubernetes.io/instance": "flux-operator",
@@ -37,6 +38,46 @@ func (in *Installer) ApplyOperator(ctx context.Context, objects []*unstructured.
 			// Set spec.template.metadata.labels
 			if err := unstructured.SetNestedStringMap(obj.Object, labels, "spec", "template", "metadata", "labels"); err != nil {
 				return nil, fmt.Errorf("failed to set deployment template labels: %w", err)
+			}
+
+			// Get existing env vars
+			containers, found, err := unstructured.NestedSlice(obj.Object, "spec", "template", "spec", "containers")
+			if err != nil || !found || len(containers) == 0 {
+				return nil, fmt.Errorf("failed to get deployment containers: %w", err)
+			}
+
+			container, ok := containers[0].(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("invalid container structure")
+			}
+
+			envVars, _, _ := unstructured.NestedSlice(container, "env")
+			if envVars == nil {
+				envVars = []any{}
+			}
+
+			// Add REPORTING_INTERVAL env var
+			envVars = append(envVars, map[string]any{
+				"name":  "REPORTING_INTERVAL",
+				"value": "30s",
+			})
+
+			// Add DEFAULT_SERVICE_ACCOUNT env var if multitenant
+			if multitenant {
+				envVars = append(envVars, map[string]any{
+					"name":  "DEFAULT_SERVICE_ACCOUNT",
+					"value": "flux-operator",
+				})
+			}
+
+			// Set updated env vars
+			if err := unstructured.SetNestedSlice(container, envVars, "env"); err != nil {
+				return nil, fmt.Errorf("failed to set deployment env vars: %w", err)
+			}
+
+			containers[0] = container
+			if err := unstructured.SetNestedSlice(obj.Object, containers, "spec", "template", "spec", "containers"); err != nil {
+				return nil, fmt.Errorf("failed to set deployment containers: %w", err)
 			}
 		}
 		if obj.GetKind() == "Service" {
