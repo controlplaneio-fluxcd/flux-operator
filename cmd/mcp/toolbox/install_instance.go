@@ -62,13 +62,12 @@ func (m *Manager) HandleInstallFluxInstance(ctx context.Context, request mcp.Cal
 	if err != nil {
 		return mcp.NewToolResultError("The timeout is not a valid duration"), nil
 	}
-	if timeout < 2*time.Minute {
+	if timeout < 5*time.Minute {
 		timeout = 5 * time.Minute
 	}
 	waitTimeout := timeout - 30*time.Second
 
-	// TODO: figure out a way to stream logs back the MCP client
-	//  while the installation is in progress.
+	// TODO: stream logs back to the MCP client while the installation is in progress.
 	installLog := strings.Builder{}
 
 	ctx, cancel := context.WithTimeout(ctx, timeout)
@@ -117,7 +116,8 @@ func (m *Manager) HandleInstallFluxInstance(ctx context.Context, request mcp.Cal
 	} else {
 		installLog.WriteString("Upgrading Flux Operator...\n")
 	}
-	cs, err := installer.ApplyOperator(ctx, operatorObjects)
+	multitenant := instance.Spec.Cluster != nil && instance.Spec.Cluster.Multitenant
+	cs, err := installer.ApplyOperator(ctx, operatorObjects, multitenant)
 	if err != nil {
 		return mcp.NewToolResultErrorFromErr("failed to install the operator: %w", err), nil
 	}
@@ -144,7 +144,6 @@ func (m *Manager) HandleInstallFluxInstance(ctx context.Context, request mcp.Cal
 	// Step 5: Configure automatic updates
 
 	installLog.WriteString("Configuring automatic updates...\n")
-	multitenant := instance.Spec.Cluster != nil && instance.Spec.Cluster.Multitenant
 	cs, err = installer.ApplyAutoUpdate(ctx, multitenant)
 	if err != nil {
 		return mcp.NewToolResultErrorFromErr("failed to configure automatic updates: %w", err), nil
