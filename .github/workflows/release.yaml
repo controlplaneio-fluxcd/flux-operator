@@ -38,7 +38,7 @@ jobs:
       - name: Setup Kustomize
         uses: fluxcd/pkg/actions/kustomize@main
       - name: Setup Flux
-        uses: fluxcd/flux2/action@ca29bb1a41d662495cbf3a8ee6dba7f088ae7310 #v2.7.1
+        uses: fluxcd/flux2/action@4a15fa6a023259353ef750acf1c98fe88407d4d0 #v2.7.2
       - name: Setup Syft
         uses: anchore/sbom-action/download-syft@f8bdd1d8ac5e901a77a92f111440fdb1b593736b # v0.20.6
       - name: Prepare
@@ -118,7 +118,7 @@ jobs:
           kustomize build config/crd > bin/release/crds.yaml
       - name: Generate OpenAPI JSON schemas from CRDs
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: fluxcd/pkg/actions/crdjsonschema@bf02f0a2d612cc07e0892166369fa8f63246aabb # main
+        uses: fluxcd/pkg/actions/crdjsonschema@413a95f34fd69e98b3f3d79f7283dc9d85df8e7c # main
         with:
           crd: bin/release/crds.yaml
           output: schemas
