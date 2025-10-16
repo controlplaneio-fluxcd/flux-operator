@@ -38,9 +38,9 @@ jobs:
       - name: Setup Kustomize
         uses: fluxcd/pkg/actions/kustomize@main
       - name: Setup Flux
-        uses: fluxcd/flux2/action@ca29bb1a41d662495cbf3a8ee6dba7f088ae7310 #v2.7.1
+        uses: fluxcd/flux2/action@4a15fa6a023259353ef750acf1c98fe88407d4d0 #v2.7.2
       - name: Setup Syft
-        uses: anchore/sbom-action/download-syft@f8bdd1d8ac5e901a77a92f111440fdb1b593736b # v0.20.6
+        uses: anchore/sbom-action/download-syft@aa0e114b2e19480f157109b9922bda359bd98b90 # v0.20.8
       - name: Prepare
         id: prep
         run: |
@@ -83,7 +83,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: "VERSION=${{ steps.prep.outputs.VERSION }}"
-      - uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
+      - uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
       - name: Sign images
         env:
           COSIGN_EXPERIMENTAL: 1
@@ -118,7 +118,7 @@ jobs:
           kustomize build config/crd > bin/release/crds.yaml
       - name: Generate OpenAPI JSON schemas from CRDs
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: fluxcd/pkg/actions/crdjsonschema@bf02f0a2d612cc07e0892166369fa8f63246aabb # main
+        uses: fluxcd/pkg/actions/crdjsonschema@413a95f34fd69e98b3f3d79f7283dc9d85df8e7c # main
         with:
           crd: bin/release/crds.yaml
           output: schemas
@@ -214,7 +214,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: "VERSION=${{ steps.prep.outputs.VERSION }}"
-      - uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
+      - uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
       - name: Sign images
         env:
           COSIGN_EXPERIMENTAL: 1
@@ -272,7 +272,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: "VERSION=${{ steps.prep.outputs.VERSION }}"
-      - uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
+      - uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
       - name: Sign images
         env:
           COSIGN_EXPERIMENTAL: 1
