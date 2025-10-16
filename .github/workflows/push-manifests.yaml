@@ -20,7 +20,7 @@ jobs:
       - name: Setup Kustomize
         uses: fluxcd/pkg/actions/kustomize@main
       - name: Setup Flux
-        uses: fluxcd/flux2/action@ca29bb1a41d662495cbf3a8ee6dba7f088ae7310 #v2.7.1
+        uses: fluxcd/flux2/action@4a15fa6a023259353ef750acf1c98fe88407d4d0 #v2.7.2
       - name: Prepare
         id: prep
         run: |
@@ -35,7 +35,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
+      - uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
       - name: Push and sign manifests
         env:
           COSIGN_EXPERIMENTAL: 1
