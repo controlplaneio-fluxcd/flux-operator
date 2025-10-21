@@ -164,7 +164,7 @@ Example of inputs generated from GitHub Pull Requests:
 spec:
   inputsFrom:
     - apiVersion: fluxcd.controlplane.io/v1
-      kind: ResourceSetInputsProvider
+      kind: ResourceSetInputProvider
       name: podinfo-pull-requests
 ```
 
@@ -175,7 +175,7 @@ Example of inputs generated from multiple `ResourceSetInputProvider` objects via
 spec:
   inputsFrom:
     - apiVersion: fluxcd.controlplane.io/v1
-      kind: ResourceSetInputsProvider
+      kind: ResourceSetInputProvider
       selector:
         matchLabels:
           app: podinfo
