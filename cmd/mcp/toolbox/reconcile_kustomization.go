@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
@@ -23,51 +23,39 @@ const (
 	ToolReconcileFluxKustomization = "reconcile_flux_kustomization"
 )
 
-// NewReconcileKustomizationTool creates a new tool for reconciling a Flux Kustomization.
-func (m *Manager) NewReconcileKustomizationTool() SystemTool {
-	return SystemTool{
-		Tool: mcp.NewTool(ToolReconcileFluxKustomization,
-			mcp.WithDescription("This tool triggers the reconciliation of a Flux Kustomization and optionally its source reference."),
-			mcp.WithString("name",
-				mcp.Description("The name of the Flux Kustomization."),
-				mcp.Required(),
-			),
-			mcp.WithString("namespace",
-				mcp.Description("The namespace of the Flux Kustomization."),
-				mcp.Required(),
-			),
-			mcp.WithBoolean("with_source",
-				mcp.Description("If true, the source will be reconciled as well."),
-			),
-		),
-		Handler:   m.HandleReconcileKustomization,
-		ReadOnly:  false,
-		InCluster: true,
+func init() {
+	systemTools[ToolReconcileFluxKustomization] = systemTool{
+		readOnly:  false,
+		inCluster: true,
 	}
 }
 
+// reconcileFluxKustomizationInput defines the input parameters for reconciling a Flux Kustomization.
+type reconcileFluxKustomizationInput struct {
+	Name       string `json:"name" jsonschema:"The name of the Flux Kustomization."`
+	Namespace  string `json:"namespace" jsonschema:"The namespace of the Flux Kustomization."`
+	WithSource bool   `json:"with_source,omitempty" jsonschema:"If true the source will be reconciled as well."`
+}
+
 // HandleReconcileKustomization is the handler function for the reconcile_flux_kustomization tool.
-func (m *Manager) HandleReconcileKustomization(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	if err := auth.CheckScopes(ctx, getScopeNames(ToolReconcileFluxKustomization, m.readonly)); err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+func (m *Manager) HandleReconcileKustomization(ctx context.Context, request *mcp.CallToolRequest, input reconcileFluxKustomizationInput) (*mcp.CallToolResult, any, error) {
+	if err := auth.CheckScopes(ctx, getScopeNames(ToolReconcileFluxKustomization, m.readOnly)); err != nil {
+		return NewToolResultError(err.Error())
 	}
 
-	name := mcp.ParseString(request, "name", "")
-	if name == "" {
-		return mcp.NewToolResultError("name is required"), nil
+	if input.Name == "" {
+		return NewToolResultError("name is required")
 	}
-	namespace := mcp.ParseString(request, "namespace", "")
-	if namespace == "" {
-		return mcp.NewToolResultError("namespace is required"), nil
+	if input.Namespace == "" {
+		return NewToolResultError("namespace is required")
 	}
-	withSource := mcp.ParseBoolean(request, "with_source", false)
 
 	ctx, cancel := context.WithTimeout(ctx, m.timeout)
 	defer cancel()
 
 	kubeClient, err := k8s.NewClient(ctx, m.flags)
 	if err != nil {
-		return mcp.NewToolResultErrorFromErr("Failed to create Kubernetes client", err), nil
+		return NewToolResultErrorFromErr("Failed to create Kubernetes client", err)
 	}
 	ks := &unstructured.Unstructured{
 		Object: map[string]any{
@@ -75,20 +63,20 @@ func (m *Manager) HandleReconcileKustomization(ctx context.Context, request mcp.
 			"kind":       fluxcdv1.FluxKustomizationKind,
 		},
 	}
-	ks.SetName(name)
-	ks.SetNamespace(namespace)
+	ks.SetName(input.Name)
+	ks.SetNamespace(input.Namespace)
 
 	if err := kubeClient.Get(ctx, kubeClient.ObjectKeyFromObject(ks), ks); err != nil {
-		return mcp.NewToolResultErrorFromErr("Failed to get Kustomization", err), nil
+		return NewToolResultErrorFromErr("Failed to get Kustomization", err)
 	}
 
 	ts := time.Now().Format(time.RFC3339Nano)
-	if withSource {
+	if input.WithSource {
 		sourceRefType, _, _ := unstructured.NestedString(ks.Object, "spec", "sourceRef", "kind")
 		sourceRefName, _, _ := unstructured.NestedString(ks.Object, "spec", "sourceRef", "name")
 		sourceRefNamespace, _, _ := unstructured.NestedString(ks.Object, "spec", "sourceRef", "namespace")
 		if sourceRefNamespace == "" {
-			sourceRefNamespace = namespace
+			sourceRefNamespace = input.Namespace
 		}
 
 		var err error
@@ -127,10 +115,10 @@ func (m *Manager) HandleReconcileKustomization(ctx context.Context, request mcp.
 				[]string{meta.ReconcileRequestAnnotation},
 				ts)
 		default:
-			return mcp.NewToolResultError(fmt.Sprintf("Unknown sourceRef kind %s", sourceRefType)), nil
+			return NewToolResultError(fmt.Sprintf("Unknown sourceRef kind %s", sourceRefType))
 		}
 		if err != nil {
-			return mcp.NewToolResultErrorFromErr("Failed to reconcile source", err), nil
+			return NewToolResultErrorFromErr("Failed to reconcile source", err)
 		}
 	}
 
@@ -140,14 +128,14 @@ func (m *Manager) HandleReconcileKustomization(ctx context.Context, request mcp.
 			Version: "v1",
 			Kind:    fluxcdv1.FluxKustomizationKind,
 		},
-		name,
-		namespace,
+		input.Name,
+		input.Namespace,
 		[]string{meta.ReconcileRequestAnnotation},
 		ts)
 	if err != nil {
-		return mcp.NewToolResultErrorFromErr("Failed to reconcile Kustomization", err), nil
+		return NewToolResultErrorFromErr("Failed to reconcile Kustomization", err)
 	}
 
-	return mcp.NewToolResultText(`Kustomization reconciliation triggered.
-To verify check the status lastHandledReconcileAt field matches the requestedAt annotation`), nil
+	return NewToolResultText(`Kustomization reconciliation triggered.
+To verify check the status lastHandledReconcileAt field matches the requestedAt annotation`)
 }

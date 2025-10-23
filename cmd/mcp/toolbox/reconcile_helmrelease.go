@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
@@ -23,51 +23,39 @@ const (
 	ToolReconcileFluxHelmRelease = "reconcile_flux_helmrelease"
 )
 
-// NewReconcileHelmReleaseTool creates a new tool for reconciling a Flux HelmRelease.
-func (m *Manager) NewReconcileHelmReleaseTool() SystemTool {
-	return SystemTool{
-		Tool: mcp.NewTool(ToolReconcileFluxHelmRelease,
-			mcp.WithDescription("This tool triggers the reconciliation of a Flux HelmRelease  and optionally its source reference."),
-			mcp.WithString("name",
-				mcp.Description("The name of the HelmRelease."),
-				mcp.Required(),
-			),
-			mcp.WithString("namespace",
-				mcp.Description("The namespace of the HelmRelease."),
-				mcp.Required(),
-			),
-			mcp.WithBoolean("with_source",
-				mcp.Description("If true, the source will be reconciled as well."),
-			),
-		),
-		Handler:   m.HandleReconcileHelmRelease,
-		ReadOnly:  false,
-		InCluster: true,
+func init() {
+	systemTools[ToolReconcileFluxHelmRelease] = systemTool{
+		readOnly:  false,
+		inCluster: true,
 	}
 }
 
+// reconcileFluxHelmReleaseInput defines the input parameters for reconciling a Flux HelmRelease.
+type reconcileFluxHelmReleaseInput struct {
+	Name       string `json:"name" jsonschema:"The name of the HelmRelease."`
+	Namespace  string `json:"namespace" jsonschema:"The namespace of the HelmRelease."`
+	WithSource bool   `json:"with_source,omitempty" jsonschema:"If true the source will be reconciled as well."`
+}
+
 // HandleReconcileHelmRelease is the handler function for the reconcile_flux_helmrelease tool.
-func (m *Manager) HandleReconcileHelmRelease(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	if err := auth.CheckScopes(ctx, getScopeNames(ToolReconcileFluxHelmRelease, m.readonly)); err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+func (m *Manager) HandleReconcileHelmRelease(ctx context.Context, request *mcp.CallToolRequest, input reconcileFluxHelmReleaseInput) (*mcp.CallToolResult, any, error) {
+	if err := auth.CheckScopes(ctx, getScopeNames(ToolReconcileFluxHelmRelease, m.readOnly)); err != nil {
+		return NewToolResultError(err.Error())
 	}
 
-	name := mcp.ParseString(request, "name", "")
-	if name == "" {
-		return mcp.NewToolResultError("name is required"), nil
+	if input.Name == "" {
+		return NewToolResultError("name is required")
 	}
-	namespace := mcp.ParseString(request, "namespace", "")
-	if namespace == "" {
-		return mcp.NewToolResultError("namespace is required"), nil
+	if input.Namespace == "" {
+		return NewToolResultError("namespace is required")
 	}
-	withSource := mcp.ParseBoolean(request, "with_source", false)
 
 	ctx, cancel := context.WithTimeout(ctx, m.timeout)
 	defer cancel()
 
 	kubeClient, err := k8s.NewClient(ctx, m.flags)
 	if err != nil {
-		return mcp.NewToolResultErrorFromErr("Failed to create Kubernetes client", err), nil
+		return NewToolResultErrorFromErr("Failed to create Kubernetes client", err)
 	}
 
 	hr := &unstructured.Unstructured{
@@ -76,21 +64,21 @@ func (m *Manager) HandleReconcileHelmRelease(ctx context.Context, request mcp.Ca
 			"kind":       fluxcdv1.FluxHelmReleaseKind,
 		},
 	}
-	hr.SetName(name)
-	hr.SetNamespace(namespace)
+	hr.SetName(input.Name)
+	hr.SetNamespace(input.Namespace)
 
 	if err := kubeClient.Get(ctx, kubeClient.ObjectKeyFromObject(hr), hr); err != nil {
-		return mcp.NewToolResultErrorFromErr("Failed to get HelmRelease", err), nil
+		return NewToolResultErrorFromErr("Failed to get HelmRelease", err)
 	}
 
 	ts := time.Now().Format(time.RFC3339Nano)
-	if withSource {
+	if input.WithSource {
 		chartRefType, found, err := unstructured.NestedString(hr.Object, "spec", "chartRef", "kind")
 		if found && err == nil {
 			chartRefName, _, _ := unstructured.NestedString(hr.Object, "spec", "chartRef", "name")
 			chartRefNamespace, _, _ := unstructured.NestedString(hr.Object, "spec", "chartRef", "namespace")
 			if chartRefNamespace == "" {
-				chartRefNamespace = namespace
+				chartRefNamespace = input.Namespace
 			}
 
 			var err error
@@ -118,10 +106,10 @@ func (m *Manager) HandleReconcileHelmRelease(ctx context.Context, request mcp.Ca
 					[]string{meta.ReconcileRequestAnnotation},
 					ts)
 			default:
-				return mcp.NewToolResultError(fmt.Sprintf("Unknown chartRef kind %s", chartRefType)), nil
+				return NewToolResultError(fmt.Sprintf("Unknown chartRef kind %s", chartRefType))
 			}
 			if err != nil {
-				return mcp.NewToolResultErrorFromErr("Failed to reconcile source", err), nil
+				return NewToolResultErrorFromErr("Failed to reconcile source", err)
 			}
 		}
 	}
@@ -132,8 +120,8 @@ func (m *Manager) HandleReconcileHelmRelease(ctx context.Context, request mcp.Ca
 			Version: "v2",
 			Kind:    fluxcdv1.FluxHelmReleaseKind,
 		},
-		name,
-		namespace,
+		input.Name,
+		input.Namespace,
 		[]string{
 			meta.ReconcileRequestAnnotation,
 			"reconcile.fluxcd.io/forceAt",
@@ -141,9 +129,9 @@ func (m *Manager) HandleReconcileHelmRelease(ctx context.Context, request mcp.Ca
 		ts)
 
 	if err != nil {
-		return mcp.NewToolResultErrorFromErr("Failed to reconcile HelmRelease", err), nil
+		return NewToolResultErrorFromErr("Failed to reconcile HelmRelease", err)
 	}
 
-	return mcp.NewToolResultText(`HelmRelease reconciliation triggered.
-To verify check the status lastHandledForceAt field matches the forceAt annotation.`), nil
+	return NewToolResultText(`HelmRelease reconciliation triggered.
+To verify check the status lastHandledForceAt field matches the forceAt annotation.`)
 }

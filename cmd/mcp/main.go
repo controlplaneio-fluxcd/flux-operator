@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -16,13 +17,12 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/mark3labs/mcp-go/client"
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/tools/clientcmd"
+	ctrl "sigs.k8s.io/controller-runtime"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/yaml"
 
@@ -40,6 +40,11 @@ var (
 		config.TransportHTTP,
 		config.TransportSSE,
 	}, ", ")
+
+	mcpImpl = &mcp.Implementation{
+		Name:    "flux-operator-mcp",
+		Version: VERSION,
+	}
 )
 
 var rootCmd = &cobra.Command{
@@ -214,66 +219,110 @@ func serveCmdRun(cmd *cobra.Command, args []string) error {
 		return errors.New("KUBECONFIG environment variable is not set")
 	}
 
-	opts := []server.ServerOption{
-		server.WithResourceCapabilities(true, true),
-		server.WithToolCapabilities(true),
-		server.WithPromptCapabilities(true),
-	}
+	// Create the MCP server
+	mcpServer := mcp.NewServer(mcpImpl, &mcp.ServerOptions{
+		HasTools:   true,
+		HasPrompts: true,
+	})
 
-	if conf.Spec.Authentication != nil && transport == config.TransportHTTP {
+	// Add authentication middleware if configured
+	if conf.Spec.Authentication != nil {
+		if transport != config.TransportHTTP {
+			return fmt.Errorf("authentication is only supported with the '%s' transport", config.TransportHTTP)
+		}
+
 		authFunc, err := authfactory.New(*conf.Spec.Authentication)
 		if err != nil {
 			return fmt.Errorf("failed to create authentication layer: %w", err)
 		}
-		hooks := &server.Hooks{}
-		hooks.AddAfterListTools(func(ctx context.Context, id any, message *mcp.ListToolsRequest, result *mcp.ListToolsResult) {
-			authCtx, err := authFunc(ctx, message.Header)
-			if err != nil {
-				authCtx = nil
-			}
-			toolbox.AddScopesAndFilter(authCtx, result, readOnly)
-		})
-		opts = append(opts, server.WithHooks(hooks))
-		opts = append(opts, server.WithToolHandlerMiddleware(func(next server.ToolHandlerFunc) server.ToolHandlerFunc {
-			return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				ctx, err := authFunc(ctx, request.Header)
-				if err != nil {
-					return mcp.NewToolResultError(err.Error()), nil
+
+		// Add receiving middleware for authentication
+		mcpServer.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
+			return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+				header := req.GetExtra().Header
+				switch method {
+				case "tools/call":
+					ctx, err := authFunc(ctx, header)
+					if err != nil {
+						res, _, _ := toolbox.NewToolResultError(err.Error())
+						return res, nil
+					}
+					return next(ctx, method, req)
+				case "tools/list":
+					res, err := next(ctx, method, req)
+					if err != nil {
+						return res, err
+					}
+					authCtx, err := authFunc(ctx, header)
+					if err != nil {
+						authCtx = nil
+					}
+					toolbox.AddScopesAndFilter(authCtx, res.(*mcp.ListToolsResult), readOnly)
+					return res, nil
+				default:
+					return next(ctx, method, req)
 				}
-				return next(ctx, request)
 			}
-		}))
+		})
 	}
 
-	mcpServer := server.NewMCPServer("flux-operator-mcp", VERSION, opts...)
-
+	// Register tools and prompts
 	tm := toolbox.NewManager(kubeconfigArgs, rootArgs.timeout, rootArgs.maskSecrets, readOnly)
 	tm.RegisterTools(mcpServer, inCluster)
 
 	pm := prompter.NewManager()
 	pm.RegisterPrompts(mcpServer)
 
+	// Start server based on transport type
+	var mcpHandler http.Handler
+	ctx := ctrl.SetupSignalHandler()
+
 	switch transport {
 	case config.TransportSTDIO:
-		if err := server.ServeStdio(mcpServer); err != nil {
-			return err
+		if err := mcpServer.Run(ctx, &mcp.StdioTransport{}); err != nil && !errors.Is(err, context.Canceled) {
+			return fmt.Errorf("failed to run MCP server over stdio: %w", err)
 		}
+		return nil
 	case config.TransportHTTP:
-		streamableServer := server.NewStreamableHTTPServer(mcpServer)
-		if err := streamableServer.Start(fmt.Sprintf(":%d", rootArgs.port)); err != nil {
-			return err
-		}
+		handler := mcp.NewStreamableHTTPHandler(
+			func(*http.Request) *mcp.Server { return mcpServer },
+			&mcp.StreamableHTTPOptions{},
+		)
+		mux := http.NewServeMux()
+		mux.Handle("/mcp", handler)
+		mcpHandler = mux
 	case config.TransportSSE:
 		log.Printf("⚠️ The '%s' transport is still supported but is now considered legacy. Please switch to the '%s' transport.",
 			config.TransportSSE, config.TransportHTTP)
-		sseServer := server.NewSSEServer(mcpServer, server.WithKeepAlive(true))
-		if err := sseServer.Start(fmt.Sprintf(":%d", rootArgs.port)); err != nil {
-			return err
-		}
+		handler := mcp.NewSSEHandler(
+			func(*http.Request) *mcp.Server { return mcpServer },
+			&mcp.SSEOptions{},
+		)
+		mux := http.NewServeMux()
+		mux.Handle("/sse", handler)
+		mcpHandler = mux
 	default:
 		return fmt.Errorf("unknown transport: '%s'", transport)
 	}
 
+	// If the code reaches here, we have an HTTP server to start.
+	httpServer := &http.Server{
+		Addr:    fmt.Sprintf(":%d", rootArgs.port),
+		Handler: mcpHandler,
+	}
+	go func() {
+		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("Failed to start HTTP server: %v", err)
+		}
+	}()
+	<-ctx.Done()
+	log.Println("Shutting down HTTP server...")
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := httpServer.Shutdown(shutdownCtx); err != nil {
+		log.Fatalf("Failed to shutdown HTTP server: %v", err)
+	}
+	log.Println("HTTP server stopped.")
 	return nil
 }
 
@@ -299,22 +348,19 @@ func debugScopesCmdRun(cmd *cobra.Command, args []string) error {
 	}
 	endpoint.Path = "/mcp"
 
-	c, err := client.NewStreamableHttpClient(endpoint.String())
+	client := mcp.NewClient(mcpImpl, nil)
+	cs, err := client.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: endpoint.String()}, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create MCP client for: %w", err)
 	}
-	defer c.Close()
+	defer cs.Close()
 
-	if _, err := c.Initialize(ctx, mcp.InitializeRequest{}); err != nil {
-		return fmt.Errorf("failed to initialize MCP client: %w", err)
-	}
-
-	resp, err := c.ListTools(ctx, mcp.ListToolsRequest{})
+	resp, err := cs.ListTools(ctx, &mcp.ListToolsParams{})
 	if err != nil {
 		return fmt.Errorf("failed to list MCP tools: %w", err)
 	}
 
-	scopes, ok := resp.Meta.AdditionalFields["scopes"]
+	scopes, ok := resp.Meta["scopes"]
 	if !ok {
 		return errors.New("the MCP server did not return the available scopes")
 	}

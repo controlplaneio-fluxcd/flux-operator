@@ -5,15 +5,19 @@ package toolbox
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	. "github.com/onsi/gomega"
 )
 
 func TestManager_HandleSearchFluxDocs(t *testing.T) {
-	request := mcp.CallToolRequest{}
-	request.Params.Name = "search_flux_docs"
+	request := &mcp.CallToolRequest{
+		Params: &mcp.CallToolParamsRaw{
+			Name: "search_flux_docs",
+		},
+	}
 	m := &Manager{}
 
 	tests := []struct {
@@ -52,18 +56,25 @@ func TestManager_HandleSearchFluxDocs(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.testName, func(t *testing.T) {
 			g := NewWithT(t)
-			request.Params.Arguments = test.arguments
+			argsJSON, _ := json.Marshal(test.arguments)
+			request.Params.Arguments = argsJSON
 
-			result, err := m.HandleSearchFluxDocs(context.Background(), request)
+			var input searchFluxDocsInput
+			err := json.Unmarshal(request.Params.Arguments, &input)
 			g.Expect(err).ToNot(HaveOccurred())
-			textContent, ok := mcp.AsTextContent(result.Content[0])
+			result, _, err := m.HandleSearchFluxDocs(context.Background(), request, input)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			g.Expect(result).ToNot(BeNil())
+			g.Expect(result.Content).ToNot(BeEmpty())
+			textContent, ok := result.Content[0].(*mcp.TextContent)
 			g.Expect(ok).To(BeTrue())
 
 			if test.matchErr != "" {
 				g.Expect(result.IsError).To(BeTrue())
 				g.Expect(textContent.Text).To(ContainSubstring(test.matchErr))
 			} else {
-				g.Expect(result.IsError).ToNot(BeTrue())
+				g.Expect(result.IsError).To(BeFalse())
 				for _, matchResult := range test.matchResults {
 					g.Expect(textContent.Text).To(ContainSubstring(matchResult))
 				}

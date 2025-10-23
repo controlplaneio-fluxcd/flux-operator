@@ -7,15 +7,12 @@ import (
 	"context"
 	"testing"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	. "github.com/onsi/gomega"
 )
 
 func TestManager_HandleDebugKustomization(t *testing.T) {
 	m := &Manager{}
-
-	request := mcp.GetPromptRequest{}
-	request.Params.Name = "debug_flux_kustomization"
 
 	tests := []struct {
 		testName     string
@@ -59,7 +56,13 @@ func TestManager_HandleDebugKustomization(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.testName, func(t *testing.T) {
 			g := NewWithT(t)
-			request.Params.Arguments = test.arguments
+
+			request := &mcp.GetPromptRequest{
+				Params: &mcp.GetPromptParams{
+					Name:      "debug_flux_kustomization",
+					Arguments: test.arguments,
+				},
+			}
 
 			result, err := m.HandleDebugKustomization(context.Background(), request)
 
@@ -69,9 +72,10 @@ func TestManager_HandleDebugKustomization(t *testing.T) {
 			} else {
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(result.Messages).To(HaveLen(1))
-				g.Expect(result.Messages[0].Role).To(Equal(mcp.RoleAssistant))
+				g.Expect(result.Messages[0].Role).To(Equal(mcp.Role("assistant")))
 
-				textContent, ok := mcp.AsTextContent(result.Messages[0].Content)
+				// In the new SDK, Content is a pointer to TextContent
+				textContent, ok := result.Messages[0].Content.(*mcp.TextContent)
 				g.Expect(ok).To(BeTrue())
 
 				g.Expect(textContent.Text).To(ContainSubstring(test.matchMessage))

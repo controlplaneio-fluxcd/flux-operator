@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/auth"
 )
@@ -17,13 +17,13 @@ func TestGetScopes(t *testing.T) {
 	tests := []struct {
 		name     string
 		tool     string
-		readonly bool
+		readOnly bool
 		expected []Scope
 	}{
 		{
 			name:     "read-only tool with extra scope",
 			tool:     ToolSearchFluxDocs,
-			readonly: false,
+			readOnly: false,
 			expected: []Scope{
 				{
 					Name:        "toolbox:" + ToolSearchFluxDocs,
@@ -45,7 +45,7 @@ func TestGetScopes(t *testing.T) {
 		{
 			name:     "read-only tool GetKubernetesAPIVersions",
 			tool:     ToolGetKubernetesAPIVersions,
-			readonly: false,
+			readOnly: false,
 			expected: []Scope{
 				{
 					Name:        "toolbox:" + ToolGetKubernetesAPIVersions,
@@ -67,7 +67,7 @@ func TestGetScopes(t *testing.T) {
 		{
 			name:     "read-only tool GetFluxInstance",
 			tool:     ToolGetFluxInstance,
-			readonly: false,
+			readOnly: false,
 			expected: []Scope{
 				{
 					Name:        "toolbox:" + ToolGetFluxInstance,
@@ -89,7 +89,7 @@ func TestGetScopes(t *testing.T) {
 		{
 			name:     "read-only tool GetKubernetesLogs",
 			tool:     ToolGetKubernetesLogs,
-			readonly: false,
+			readOnly: false,
 			expected: []Scope{
 				{
 					Name:        "toolbox:" + ToolGetKubernetesLogs,
@@ -111,7 +111,7 @@ func TestGetScopes(t *testing.T) {
 		{
 			name:     "read-only tool GetKubernetesMetrics",
 			tool:     ToolGetKubernetesMetrics,
-			readonly: false,
+			readOnly: false,
 			expected: []Scope{
 				{
 					Name:        "toolbox:" + ToolGetKubernetesMetrics,
@@ -133,7 +133,7 @@ func TestGetScopes(t *testing.T) {
 		{
 			name:     "read-only tool GetKubernetesResources",
 			tool:     ToolGetKubernetesResources,
-			readonly: false,
+			readOnly: false,
 			expected: []Scope{
 				{
 					Name:        "toolbox:" + ToolGetKubernetesResources,
@@ -155,7 +155,7 @@ func TestGetScopes(t *testing.T) {
 		{
 			name:     "write tool without extra scopes",
 			tool:     ToolApplyKubernetesManifest,
-			readonly: false,
+			readOnly: false,
 			expected: []Scope{
 				{
 					Name:        "toolbox:" + ToolApplyKubernetesManifest,
@@ -172,7 +172,7 @@ func TestGetScopes(t *testing.T) {
 		{
 			name:     "delete tool without extra scopes",
 			tool:     ToolDeleteKubernetesResource,
-			readonly: false,
+			readOnly: false,
 			expected: []Scope{
 				{
 					Name:        "toolbox:" + ToolDeleteKubernetesResource,
@@ -189,7 +189,7 @@ func TestGetScopes(t *testing.T) {
 		{
 			name:     "reconcile HelmRelease tool",
 			tool:     ToolReconcileFluxHelmRelease,
-			readonly: false,
+			readOnly: false,
 			expected: []Scope{
 				{
 					Name:        "toolbox:" + ToolReconcileFluxHelmRelease,
@@ -206,7 +206,7 @@ func TestGetScopes(t *testing.T) {
 		{
 			name:     "reconcile Kustomization tool",
 			tool:     ToolReconcileFluxKustomization,
-			readonly: false,
+			readOnly: false,
 			expected: []Scope{
 				{
 					Name:        "toolbox:" + ToolReconcileFluxKustomization,
@@ -223,7 +223,7 @@ func TestGetScopes(t *testing.T) {
 		{
 			name:     "reconcile ResourceSet tool",
 			tool:     ToolReconcileFluxResourceSet,
-			readonly: false,
+			readOnly: false,
 			expected: []Scope{
 				{
 					Name:        "toolbox:" + ToolReconcileFluxResourceSet,
@@ -240,7 +240,7 @@ func TestGetScopes(t *testing.T) {
 		{
 			name:     "reconcile Source tool",
 			tool:     ToolReconcileFluxSource,
-			readonly: false,
+			readOnly: false,
 			expected: []Scope{
 				{
 					Name:        "toolbox:" + ToolReconcileFluxSource,
@@ -257,7 +257,7 @@ func TestGetScopes(t *testing.T) {
 		{
 			name:     "resume reconciliation tool",
 			tool:     ToolResumeFluxReconciliation,
-			readonly: false,
+			readOnly: false,
 			expected: []Scope{
 				{
 					Name:        "toolbox:" + ToolResumeFluxReconciliation,
@@ -274,7 +274,7 @@ func TestGetScopes(t *testing.T) {
 		{
 			name:     "suspend reconciliation tool",
 			tool:     ToolSuspendFluxReconciliation,
-			readonly: false,
+			readOnly: false,
 			expected: []Scope{
 				{
 					Name:        "toolbox:" + ToolSuspendFluxReconciliation,
@@ -291,7 +291,7 @@ func TestGetScopes(t *testing.T) {
 		{
 			name:     "read-only tool with readonly=true",
 			tool:     ToolGetKubernetesResources,
-			readonly: true,
+			readOnly: true,
 			expected: []Scope{
 				{
 					Name:        "toolbox:" + ToolGetKubernetesResources,
@@ -308,7 +308,7 @@ func TestGetScopes(t *testing.T) {
 		{
 			name:     "write tool with readonly=true",
 			tool:     ToolApplyKubernetesManifest,
-			readonly: true,
+			readOnly: true,
 			expected: []Scope{
 				{
 					Name:        "toolbox:" + ToolApplyKubernetesManifest,
@@ -321,9 +321,9 @@ func TestGetScopes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			actual := getScopes(tt.tool, tt.readonly)
+			actual := getScopes(tt.tool, tt.readOnly)
 			if !reflect.DeepEqual(actual, tt.expected) {
-				t.Errorf("getScopes(%q, %v) = %+v, expected %+v", tt.tool, tt.readonly, actual, tt.expected)
+				t.Errorf("getScopes(%q, %v) = %+v, expected %+v", tt.tool, tt.readOnly, actual, tt.expected)
 			}
 		})
 	}
@@ -409,7 +409,7 @@ func TestGetScopeNames(t *testing.T) {
 func TestAddScopesAndFilter(t *testing.T) {
 	tests := []struct {
 		name           string
-		tools          []mcp.Tool
+		tools          []*mcp.Tool
 		contextScopes  []string
 		expectedTools  []string
 		expectedScopes int
@@ -417,7 +417,7 @@ func TestAddScopesAndFilter(t *testing.T) {
 	}{
 		{
 			name: "no context - all tools included",
-			tools: []mcp.Tool{
+			tools: []*mcp.Tool{
 				{Name: ToolSearchFluxDocs},
 				{Name: ToolApplyKubernetesManifest},
 				{Name: ToolGetKubernetesResources},
@@ -428,7 +428,7 @@ func TestAddScopesAndFilter(t *testing.T) {
 		},
 		{
 			name: "context with read_only scope",
-			tools: []mcp.Tool{
+			tools: []*mcp.Tool{
 				{Name: ToolSearchFluxDocs},
 				{Name: ToolApplyKubernetesManifest},
 				{Name: ToolGetKubernetesResources},
@@ -440,7 +440,7 @@ func TestAddScopesAndFilter(t *testing.T) {
 		},
 		{
 			name: "context with read_write scope",
-			tools: []mcp.Tool{
+			tools: []*mcp.Tool{
 				{Name: ToolSearchFluxDocs},
 				{Name: ToolApplyKubernetesManifest},
 				{Name: ToolGetKubernetesResources},
@@ -452,7 +452,7 @@ func TestAddScopesAndFilter(t *testing.T) {
 		},
 		{
 			name: "context with specific tool scope",
-			tools: []mcp.Tool{
+			tools: []*mcp.Tool{
 				{Name: ToolSearchFluxDocs},
 				{Name: ToolApplyKubernetesManifest},
 				{Name: ToolGetKubernetesResources},
@@ -464,7 +464,7 @@ func TestAddScopesAndFilter(t *testing.T) {
 		},
 		{
 			name: "context with multiple scopes",
-			tools: []mcp.Tool{
+			tools: []*mcp.Tool{
 				{Name: ToolSearchFluxDocs},
 				{Name: ToolApplyKubernetesManifest},
 				{Name: ToolGetKubernetesResources},
@@ -480,14 +480,14 @@ func TestAddScopesAndFilter(t *testing.T) {
 		},
 		{
 			name:           "empty tools list",
-			tools:          []mcp.Tool{},
+			tools:          []*mcp.Tool{},
 			hasContext:     false,
 			expectedTools:  []string{},
 			expectedScopes: 0,
 		},
 		{
 			name: "context with no matching scopes",
-			tools: []mcp.Tool{
+			tools: []*mcp.Tool{
 				{Name: ToolApplyKubernetesManifest},
 				{Name: ToolDeleteKubernetesResource},
 			},
@@ -498,7 +498,7 @@ func TestAddScopesAndFilter(t *testing.T) {
 		},
 		{
 			name: "all write tools with read_only scope",
-			tools: []mcp.Tool{
+			tools: []*mcp.Tool{
 				{Name: ToolApplyKubernetesManifest},
 				{Name: ToolDeleteKubernetesResource},
 				{Name: ToolReconcileFluxHelmRelease},
@@ -511,7 +511,7 @@ func TestAddScopesAndFilter(t *testing.T) {
 		},
 		{
 			name: "mix of read and write tools with various scopes",
-			tools: []mcp.Tool{
+			tools: []*mcp.Tool{
 				{Name: ToolGetKubernetesLogs},
 				{Name: ToolGetKubernetesMetrics},
 				{Name: ToolReconcileFluxKustomization},
@@ -528,7 +528,7 @@ func TestAddScopesAndFilter(t *testing.T) {
 		},
 		{
 			name: "scope ordering verification",
-			tools: []mcp.Tool{
+			tools: []*mcp.Tool{
 				{Name: ToolSearchFluxDocs},
 				{Name: ToolApplyKubernetesManifest},
 				{Name: ToolGetKubernetesResources},
@@ -569,7 +569,7 @@ func TestAddScopesAndFilter(t *testing.T) {
 			}
 
 			// Check metadata was added
-			if result.Meta == nil || result.Meta.AdditionalFields == nil {
+			if result.Meta == nil {
 				if tt.expectedScopes > 0 {
 					t.Error("expected metadata to be added but it was nil")
 				}
@@ -577,7 +577,7 @@ func TestAddScopesAndFilter(t *testing.T) {
 			}
 
 			// Check scopes in metadata
-			scopesInterface, ok := result.Meta.AdditionalFields["scopes"]
+			scopesInterface, ok := result.Meta["scopes"]
 			if !ok {
 				if tt.expectedScopes > 0 {
 					t.Error("expected scopes in metadata but not found")

@@ -6,7 +6,7 @@ package toolbox
 import (
 	"context"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
@@ -19,86 +19,66 @@ const (
 	ToolGetKubernetesResources = "get_kubernetes_resources"
 )
 
-// NewGetKubernetesResourcesTool creates a new tool for retrieving Kubernetes resources.
-func (m *Manager) NewGetKubernetesResourcesTool() SystemTool {
-	return SystemTool{
-		Tool: mcp.NewTool(ToolGetKubernetesResources,
-			mcp.WithDescription("This tool retrieves Kubernetes resources including Flux own resources, their status, and events"),
-			mcp.WithString("apiVersion",
-				mcp.Description("The apiVersion of the Kubernetes resource. Use the get_kubernetes_api_versions tool to get the available apiVersions."),
-				mcp.Required(),
-			),
-			mcp.WithString("kind",
-				mcp.Description("The kind of the Kubernetes resource. Use the get_kubernetes_api_versions tool to get the available kinds."),
-				mcp.Required(),
-			),
-			mcp.WithString("name",
-				mcp.Description("The name of the Kubernetes resource."),
-			),
-			mcp.WithString("namespace",
-				mcp.Description("The namespace of the Kubernetes resource."),
-			),
-			mcp.WithString("selector",
-				mcp.Description("The label selector in the format key1=value1,key2=value2."),
-			),
-			mcp.WithNumber("limit",
-				mcp.Description("The maximum number of resources to return."),
-			),
-		),
-		Handler:   m.HandleGetKubernetesResources,
-		ReadOnly:  true,
-		InCluster: true,
+func init() {
+	systemTools[ToolGetKubernetesResources] = systemTool{
+		readOnly:  true,
+		inCluster: true,
 	}
 }
 
+// getKubernetesResourcesInput defines the input parameters for retrieving Kubernetes resources.
+type getKubernetesResourcesInput struct {
+	APIVersion string  `json:"apiVersion" jsonschema:"The apiVersion of the Kubernetes resource. Use the get_kubernetes_api_versions tool to get the available apiVersions."`
+	Kind       string  `json:"kind" jsonschema:"The kind of the Kubernetes resource. Use the get_kubernetes_api_versions tool to get the available kinds."`
+	Name       string  `json:"name,omitempty" jsonschema:"The name of the Kubernetes resource."`
+	Namespace  string  `json:"namespace,omitempty" jsonschema:"The namespace of the Kubernetes resource."`
+	Selector   string  `json:"selector,omitempty" jsonschema:"The label selector in the format key1=value1 key2=value2."`
+	Limit      float64 `json:"limit,omitempty" jsonschema:"The maximum number of resources to return."`
+}
+
 // HandleGetKubernetesResources is the handler function for the get_kubernetes_resources tool.
-func (m *Manager) HandleGetKubernetesResources(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	if err := auth.CheckScopes(ctx, getScopeNames(ToolGetKubernetesResources, m.readonly)); err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+func (m *Manager) HandleGetKubernetesResources(ctx context.Context, request *mcp.CallToolRequest, input getKubernetesResourcesInput) (*mcp.CallToolResult, any, error) {
+	if err := auth.CheckScopes(ctx, getScopeNames(ToolGetKubernetesResources, m.readOnly)); err != nil {
+		return NewToolResultError(err.Error())
 	}
 
-	apiVersion := mcp.ParseString(request, "apiVersion", "")
-	if apiVersion == "" {
-		return mcp.NewToolResultError("apiVersion is required"), nil
+	if input.APIVersion == "" {
+		return NewToolResultError("apiVersion is required")
 	}
-	kind := mcp.ParseString(request, "kind", "")
-	if kind == "" {
-		return mcp.NewToolResultError("kind is required"), nil
+	if input.Kind == "" {
+		return NewToolResultError("kind is required")
 	}
-	name := mcp.ParseString(request, "name", "")
-	namespace := mcp.ParseString(request, "namespace", "")
-	selector := mcp.ParseString(request, "selector", "")
-	limit := mcp.ParseInt(request, "limit", 0)
+	limit := int(input.Limit)
 
 	ctx, cancel := context.WithTimeout(ctx, m.timeout)
 	defer cancel()
 
 	kubeClient, err := k8s.NewClient(ctx, m.flags)
 	if err != nil {
-		return mcp.NewToolResultErrorFromErr("Failed to create Kubernetes client", err), nil
+		return NewToolResultErrorFromErr("Failed to create Kubernetes client", err)
 	}
 
-	gvk, err := kubeClient.ParseGroupVersionKind(apiVersion, kind)
+	gvk, err := kubeClient.ParseGroupVersionKind(input.APIVersion, input.Kind)
 	if err != nil {
-		return mcp.NewToolResultErrorFromErr("Failed to parse group version kind", err), nil
+		return NewToolResultErrorFromErr("Failed to parse group version kind", err)
 	}
 
 	result, err := kubeClient.Export(ctx,
 		[]schema.GroupVersionKind{gvk},
-		name,
-		namespace,
-		selector,
+		input.Name,
+		input.Namespace,
+		input.Selector,
 		limit,
 		m.maskSecrets)
 	if err != nil {
-		return mcp.NewToolResultErrorFromErr("Failed to export resources", err), nil
+		return NewToolResultErrorFromErr("Failed to export resources", err)
 	}
 
 	if result == "" {
-		return mcp.NewToolResultError("No resources found"), nil
+		return NewToolResultError("No resources found")
 	}
 
-	return mcp.NewToolResultText(result + m.GetFluxTip(kind)), nil
+	return NewToolResultText(result + m.GetFluxTip(input.Kind))
 }
 
 func (m *Manager) GetFluxTip(kind string) string {

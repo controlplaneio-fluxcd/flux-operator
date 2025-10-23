@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
@@ -22,47 +22,34 @@ const (
 	ToolReconcileFluxSource = "reconcile_flux_source"
 )
 
-// NewReconcileSourceTool creates a new tool for reconciling a Flux source.
-func (m *Manager) NewReconcileSourceTool() SystemTool {
-	return SystemTool{
-		Tool: mcp.NewTool(ToolReconcileFluxSource,
-			mcp.WithDescription("This tool triggers the reconciliation of a Flux source."),
-			mcp.WithString("kind",
-				mcp.Description("The Flux source kind. Can only one of GitRepository, OCIRepository, Bucket, HelmChart, HelmRepository."),
-				mcp.Required(),
-			),
-			mcp.WithString("name",
-				mcp.Description("The name of the Flux object."),
-				mcp.Required(),
-			),
-			mcp.WithString("namespace",
-				mcp.Description("The namespace of the Flux object."),
-				mcp.Required(),
-			),
-		),
-		Handler:   m.HandleReconcileSource,
-		ReadOnly:  false,
-		InCluster: true,
+func init() {
+	systemTools[ToolReconcileFluxSource] = systemTool{
+		readOnly:  false,
+		inCluster: true,
 	}
 }
 
+// reconcileFluxSourceInput defines the input parameters for reconciling a Flux source.
+type reconcileFluxSourceInput struct {
+	Kind      string `json:"kind" jsonschema:"The Flux source kind. Can only one of GitRepository OCIRepository Bucket HelmChart HelmRepository."`
+	Name      string `json:"name" jsonschema:"The name of the Flux object."`
+	Namespace string `json:"namespace" jsonschema:"The namespace of the Flux object."`
+}
+
 // HandleReconcileSource is the handler function for the reconcile_flux_source tool.
-func (m *Manager) HandleReconcileSource(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	if err := auth.CheckScopes(ctx, getScopeNames(ToolReconcileFluxSource, m.readonly)); err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+func (m *Manager) HandleReconcileSource(ctx context.Context, request *mcp.CallToolRequest, input reconcileFluxSourceInput) (*mcp.CallToolResult, any, error) {
+	if err := auth.CheckScopes(ctx, getScopeNames(ToolReconcileFluxSource, m.readOnly)); err != nil {
+		return NewToolResultError(err.Error())
 	}
 
-	kind := mcp.ParseString(request, "kind", "")
-	if kind == "" {
-		return mcp.NewToolResultError("kind is required"), nil
+	if input.Kind == "" {
+		return NewToolResultError("kind is required")
 	}
-	name := mcp.ParseString(request, "name", "")
-	if name == "" {
-		return mcp.NewToolResultError("name is required"), nil
+	if input.Name == "" {
+		return NewToolResultError("name is required")
 	}
-	namespace := mcp.ParseString(request, "namespace", "")
-	if namespace == "" {
-		return mcp.NewToolResultError("namespace is required"), nil
+	if input.Namespace == "" {
+		return NewToolResultError("namespace is required")
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, m.timeout)
@@ -70,11 +57,11 @@ func (m *Manager) HandleReconcileSource(ctx context.Context, request mcp.CallToo
 
 	kubeClient, err := k8s.NewClient(ctx, m.flags)
 	if err != nil {
-		return mcp.NewToolResultErrorFromErr("Failed to create Kubernetes client", err), nil
+		return NewToolResultErrorFromErr("Failed to create Kubernetes client", err)
 	}
 
 	ts := time.Now().Format(time.RFC3339Nano)
-	switch kind {
+	switch input.Kind {
 	case fluxcdv1.FluxGitRepositoryKind:
 		err = kubeClient.Annotate(ctx,
 			schema.GroupVersionKind{
@@ -82,8 +69,8 @@ func (m *Manager) HandleReconcileSource(ctx context.Context, request mcp.CallToo
 				Version: "v1",
 				Kind:    fluxcdv1.FluxGitRepositoryKind,
 			},
-			name,
-			namespace,
+			input.Name,
+			input.Namespace,
 			[]string{meta.ReconcileRequestAnnotation},
 			ts)
 	case fluxcdv1.FluxBucketKind:
@@ -93,8 +80,8 @@ func (m *Manager) HandleReconcileSource(ctx context.Context, request mcp.CallToo
 				Version: "v1",
 				Kind:    fluxcdv1.FluxBucketKind,
 			},
-			name,
-			namespace,
+			input.Name,
+			input.Namespace,
 			[]string{meta.ReconcileRequestAnnotation},
 			ts)
 	case fluxcdv1.FluxHelmChartKind:
@@ -104,8 +91,8 @@ func (m *Manager) HandleReconcileSource(ctx context.Context, request mcp.CallToo
 				Version: "v1",
 				Kind:    fluxcdv1.FluxHelmChartKind,
 			},
-			name,
-			namespace,
+			input.Name,
+			input.Namespace,
 			[]string{meta.ReconcileRequestAnnotation},
 			ts)
 	case fluxcdv1.FluxHelmRepositoryKind:
@@ -115,8 +102,8 @@ func (m *Manager) HandleReconcileSource(ctx context.Context, request mcp.CallToo
 				Version: "v1",
 				Kind:    fluxcdv1.FluxHelmRepositoryKind,
 			},
-			name,
-			namespace,
+			input.Name,
+			input.Namespace,
 			[]string{meta.ReconcileRequestAnnotation},
 			ts)
 	case fluxcdv1.FluxOCIRepositoryKind:
@@ -126,17 +113,17 @@ func (m *Manager) HandleReconcileSource(ctx context.Context, request mcp.CallToo
 				Version: "v1beta2",
 				Kind:    fluxcdv1.FluxOCIRepositoryKind,
 			},
-			name,
-			namespace,
+			input.Name,
+			input.Namespace,
 			[]string{meta.ReconcileRequestAnnotation},
 			ts)
 	default:
-		return mcp.NewToolResultError(fmt.Sprintf("Unknown source kind %s", kind)), nil
+		return NewToolResultError(fmt.Sprintf("Unknown source kind %s", input.Kind))
 	}
 	if err != nil {
-		return mcp.NewToolResultErrorFromErr("Failed to annotate source", err), nil
+		return NewToolResultErrorFromErr("Failed to annotate source", err)
 	}
 
-	return mcp.NewToolResultText(`Source reconciliation triggered.
-To verify check the status lastHandledReconcileAt field matches the requestedAt annotation`), nil
+	return NewToolResultText(`Source reconciliation triggered.
+To verify check the status lastHandledReconcileAt field matches the requestedAt annotation`)
 }

@@ -6,33 +6,33 @@ package toolbox
 import (
 	"context"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"sigs.k8s.io/yaml"
 )
 
-// NewGetKubeconfigContextsTool creates a new tool for retrieving Kubernetes contexts from the kubeconfig.
-func (m *Manager) NewGetKubeconfigContextsTool() SystemTool {
-	return SystemTool{
-		Tool: mcp.NewTool("get_kubeconfig_contexts",
-			mcp.WithDescription("This tool retrieves the Kubernetes clusters name and context found in the kubeconfig."),
-		),
-		Handler:   m.HandleGetKubeconfigContexts,
-		ReadOnly:  true,
-		InCluster: false,
+const (
+	// ToolGetKubeConfigContexts is the name of the get_kubeconfig_contexts tool.
+	ToolGetKubeConfigContexts = "get_kubeconfig_contexts"
+)
+
+func init() {
+	systemTools[ToolGetKubeConfigContexts] = systemTool{
+		readOnly:  true,
+		inCluster: false,
 	}
 }
 
 // HandleGetKubeconfigContexts is the handler function for the get_kubeconfig_contexts tool.
-func (m *Manager) HandleGetKubeconfigContexts(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func (m *Manager) HandleGetKubeconfigContexts(ctx context.Context, request *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, any, error) {
 	err := m.kubeconfig.Load()
 	if err != nil {
-		return mcp.NewToolResultErrorFromErr("Failed to read kubeconfig", err), nil
+		return NewToolResultErrorFromErr("Failed to read kubeconfig", err)
 	}
 
 	data, err := yaml.Marshal(m.kubeconfig.Contexts())
 	if err != nil {
-		return mcp.NewToolResultErrorFromErr("Failed marshalling data", err), nil
+		return NewToolResultErrorFromErr("Failed marshalling data", err)
 	}
 
-	return mcp.NewToolResultText(string(data)), nil
+	return NewToolResultText(string(data))
 }

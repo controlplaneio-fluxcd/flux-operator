@@ -6,7 +6,7 @@ package toolbox
 import (
 	"context"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"sigs.k8s.io/yaml"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/auth"
@@ -18,70 +18,58 @@ const (
 	ToolGetKubernetesLogs = "get_kubernetes_logs"
 )
 
-// NewGetKubernetesLogsTool creates a new tool for retrieving the pod logs.
-func (m *Manager) NewGetKubernetesLogsTool() SystemTool {
-	return SystemTool{
-		Tool: mcp.NewTool(ToolGetKubernetesLogs,
-			mcp.WithDescription("This tool retrieves the the most recent logs of a Kubernetes pod."),
-			mcp.WithString("pod_name",
-				mcp.Description("The name of the pod."),
-				mcp.Required(),
-			),
-			mcp.WithString("container_name",
-				mcp.Description("The name of the container."),
-				mcp.Required(),
-			),
-			mcp.WithString("pod_namespace",
-				mcp.Description("The namespace of the pod."),
-				mcp.Required(),
-			),
-			mcp.WithNumber("limit",
-				mcp.Description("The maximum number of log lines to return. Defaults to 100."),
-			),
-		),
-		Handler:   m.HandleGetKubernetesLogs,
-		ReadOnly:  true,
-		InCluster: true,
+func init() {
+	systemTools[ToolGetKubernetesLogs] = systemTool{
+		readOnly:  true,
+		inCluster: true,
 	}
 }
 
+// getKubernetesLogsInput defines the input parameters for retrieving pod logs.
+type getKubernetesLogsInput struct {
+	PodName       string  `json:"pod_name" jsonschema:"The name of the pod."`
+	ContainerName string  `json:"container_name" jsonschema:"The name of the container."`
+	PodNamespace  string  `json:"pod_namespace" jsonschema:"The namespace of the pod."`
+	Limit         float64 `json:"limit,omitempty" jsonschema:"The maximum number of log lines to return. Defaults to 100."`
+}
+
 // HandleGetKubernetesLogs is the handler function for the get_kubernetes_logs tool.
-func (m *Manager) HandleGetKubernetesLogs(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	if err := auth.CheckScopes(ctx, getScopeNames(ToolGetKubernetesLogs, m.readonly)); err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+func (m *Manager) HandleGetKubernetesLogs(ctx context.Context, request *mcp.CallToolRequest, input getKubernetesLogsInput) (*mcp.CallToolResult, any, error) {
+	if err := auth.CheckScopes(ctx, getScopeNames(ToolGetKubernetesLogs, m.readOnly)); err != nil {
+		return NewToolResultError(err.Error())
 	}
 
-	podName := mcp.ParseString(request, "pod_name", "")
-	if podName == "" {
-		return mcp.NewToolResultError("pod name is required"), nil
+	if input.PodName == "" {
+		return NewToolResultError("pod name is required")
 	}
-	containerName := mcp.ParseString(request, "container_name", "")
-	if containerName == "" {
-		return mcp.NewToolResultError("container name is required"), nil
+	if input.ContainerName == "" {
+		return NewToolResultError("container name is required")
 	}
-	podNamespace := mcp.ParseString(request, "pod_namespace", "")
-	if podNamespace == "" {
-		return mcp.NewToolResultError("pod namespace is required"), nil
+	if input.PodNamespace == "" {
+		return NewToolResultError("pod namespace is required")
 	}
-	limit := mcp.ParseInt(request, "limit", 100)
+	limit := int64(input.Limit)
+	if limit == 0 {
+		limit = 100
+	}
 
 	ctx, cancel := context.WithTimeout(ctx, m.timeout)
 	defer cancel()
 
 	kubeClient, err := k8s.NewClient(ctx, m.flags)
 	if err != nil {
-		return mcp.NewToolResultErrorFromErr("Failed to create Kubernetes client", err), nil
+		return NewToolResultErrorFromErr("Failed to create Kubernetes client", err)
 	}
 
-	result, err := kubeClient.GetLogs(ctx, podName, containerName, podNamespace, int64(limit))
+	result, err := kubeClient.GetLogs(ctx, input.PodName, input.ContainerName, input.PodNamespace, limit)
 	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+		return NewToolResultError(err.Error())
 	}
 
 	data, err := yaml.Marshal(result)
 	if err != nil {
-		return mcp.NewToolResultErrorFromErr("Failed marshalling data", err), nil
+		return NewToolResultErrorFromErr("Failed marshalling data", err)
 	}
 
-	return mcp.NewToolResultText(string(data)), nil
+	return NewToolResultText(string(data))
 }

@@ -5,9 +5,10 @@ package toolbox
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	. "github.com/onsi/gomega"
 	cli "k8s.io/cli-runtime/pkg/genericclioptions"
 
@@ -24,8 +25,11 @@ func TestManager_HandleSetKubeconfigContext(t *testing.T) {
 		flags:      flags,
 	}
 
-	request := mcp.CallToolRequest{}
-	request.Params.Name = "set_kubeconfig_context"
+	request := &mcp.CallToolRequest{
+		Params: &mcp.CallToolParamsRaw{
+			Name: "set_kubeconfig_context",
+		},
+	}
 
 	tests := []struct {
 		testName    string
@@ -59,18 +63,25 @@ func TestManager_HandleSetKubeconfigContext(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.testName, func(t *testing.T) {
 			g := NewWithT(t)
-			request.Params.Arguments = test.arguments
+			argsJSON, _ := json.Marshal(test.arguments)
+			request.Params.Arguments = argsJSON
 
-			result, err := m.HandleSetKubeconfigContext(context.Background(), request)
+			var input setKubeconfigContextInput
+			err := json.Unmarshal(request.Params.Arguments, &input)
 			g.Expect(err).ToNot(HaveOccurred())
-			textContent, ok := mcp.AsTextContent(result.Content[0])
+			result, _, err := m.HandleSetKubeconfigContext(context.Background(), request, input)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			g.Expect(result).ToNot(BeNil())
+			g.Expect(result.Content).ToNot(BeEmpty())
+			textContent, ok := result.Content[0].(*mcp.TextContent)
 			g.Expect(ok).To(BeTrue())
 
 			if test.matchErr != "" {
 				g.Expect(result.IsError).To(BeTrue())
 				g.Expect(textContent.Text).To(ContainSubstring(test.matchErr))
 			} else {
-				g.Expect(result.IsError).ToNot(BeTrue())
+				g.Expect(result.IsError).To(BeFalse())
 				g.Expect(textContent.Text).To(ContainSubstring(test.matchResult))
 				g.Expect(*flags.Context).To(Equal(test.arguments["name"]))
 			}

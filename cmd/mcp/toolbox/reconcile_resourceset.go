@@ -5,11 +5,10 @@ package toolbox
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
@@ -22,39 +21,30 @@ const (
 	ToolReconcileFluxResourceSet = "reconcile_flux_resourceset"
 )
 
-// NewReconcileResourceSetTool creates a new tool for reconciling a Flux ResourceSet.
-func (m *Manager) NewReconcileResourceSetTool() SystemTool {
-	return SystemTool{
-		Tool: mcp.NewTool(ToolReconcileFluxResourceSet,
-			mcp.WithDescription("This tool triggers the reconciliation of a Flux ResourceSet."),
-			mcp.WithString("name",
-				mcp.Description("The name of the ResourceSet."),
-				mcp.Required(),
-			),
-			mcp.WithString("namespace",
-				mcp.Description("The namespace of the ResourceSet."),
-				mcp.Required(),
-			),
-		),
-		Handler:   m.HandleReconcileResourceSet,
-		ReadOnly:  false,
-		InCluster: true,
+func init() {
+	systemTools[ToolReconcileFluxResourceSet] = systemTool{
+		readOnly:  false,
+		inCluster: true,
 	}
 }
 
+// reconcileFluxResourceSetInput defines the input parameters for reconciling a Flux ResourceSet.
+type reconcileFluxResourceSetInput struct {
+	Name      string `json:"name" jsonschema:"The name of the ResourceSet."`
+	Namespace string `json:"namespace" jsonschema:"The namespace of the ResourceSet."`
+}
+
 // HandleReconcileResourceSet is the handler function for the reconcile_flux_resourceset tool.
-func (m *Manager) HandleReconcileResourceSet(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	if err := auth.CheckScopes(ctx, getScopeNames(ToolReconcileFluxResourceSet, m.readonly)); err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+func (m *Manager) HandleReconcileResourceSet(ctx context.Context, request *mcp.CallToolRequest, input reconcileFluxResourceSetInput) (*mcp.CallToolResult, any, error) {
+	if err := auth.CheckScopes(ctx, getScopeNames(ToolReconcileFluxResourceSet, m.readOnly)); err != nil {
+		return NewToolResultError(err.Error())
 	}
 
-	name := mcp.ParseString(request, "name", "")
-	if name == "" {
-		return mcp.NewToolResultError("name is required"), nil
+	if input.Name == "" {
+		return NewToolResultError("name is required")
 	}
-	namespace := mcp.ParseString(request, "namespace", "")
-	if namespace == "" {
-		return mcp.NewToolResultError("namespace is required"), nil
+	if input.Namespace == "" {
+		return NewToolResultError("namespace is required")
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, m.timeout)
@@ -62,7 +52,7 @@ func (m *Manager) HandleReconcileResourceSet(ctx context.Context, request mcp.Ca
 
 	kubeClient, err := k8s.NewClient(ctx, m.flags)
 	if err != nil {
-		return mcp.NewToolResultErrorFromErr("Failed to create Kubernetes client", err), nil
+		return NewToolResultErrorFromErr("Failed to create Kubernetes client", err)
 	}
 
 	err = kubeClient.Annotate(ctx,
@@ -71,15 +61,15 @@ func (m *Manager) HandleReconcileResourceSet(ctx context.Context, request mcp.Ca
 			Version: fluxcdv1.GroupVersion.Version,
 			Kind:    fluxcdv1.ResourceSetKind,
 		},
-		name,
-		namespace,
+		input.Name,
+		input.Namespace,
 		[]string{meta.ReconcileRequestAnnotation},
 		time.Now().Format(time.RFC3339Nano))
 
 	if err != nil {
-		return nil, fmt.Errorf("unable to reconcile ResourceSet: %w", err)
+		return NewToolResultErrorFromErr("Unable to reconcile ResourceSet", err)
 	}
 
-	return mcp.NewToolResultText(`ResourceSet reconciliation triggered.
-to verify check the status lastHandledReconcileAt field matches the requestedAt annotation`), nil
+	return NewToolResultText(`ResourceSet reconciliation triggered.
+to verify check the status lastHandledReconcileAt field matches the requestedAt annotation`)
 }
