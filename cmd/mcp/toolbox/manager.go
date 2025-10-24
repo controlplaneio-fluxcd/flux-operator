@@ -52,6 +52,15 @@ func NewManager(flags *cli.ConfigFlags, timeout time.Duration, maskSecrets bool,
 
 // RegisterTools registers tools with the given server.
 func (m *Manager) RegisterTools(server *mcp.Server, inCluster bool) {
+	if m.shouldRegisterTool(ToolInstallFluxInstance, inCluster) {
+		mcp.AddTool(server,
+			&mcp.Tool{
+				Name:        ToolInstallFluxInstance,
+				Description: "This tool installs Flux Operator and a Flux instance on the cluster from a manifest URL.",
+			},
+			m.HandleInstallFluxInstance,
+		)
+	}
 	if m.shouldRegisterTool(ToolGetFluxInstance, inCluster) {
 		mcp.AddTool(server,
 			&mcp.Tool{

@@ -12,7 +12,7 @@ import (
 
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
 	"github.com/google/go-containerregistry/pkg/authn"
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/yaml"
@@ -27,40 +27,36 @@ const (
 	ToolInstallFluxInstance = "install_flux_instance"
 )
 
-// NewInstallFluxInstanceTool creates a new tool for installing Flux Operator and a Flux instance.
-func (m *Manager) NewInstallFluxInstanceTool() SystemTool {
-	return SystemTool{
-		Tool: mcp.NewTool(ToolInstallFluxInstance,
-			mcp.WithDescription("This tool installs Flux Operator and Flux instance on the cluster."),
-			mcp.WithString("instance_url",
-				mcp.Description("The URL pointing to the Flux Instance manifest file."),
-				mcp.Required(),
-			),
-			mcp.WithString("timeout",
-				mcp.Description("The installation timeout. Default is 5m."),
-			),
-		),
-		Handler:   m.HandleInstallFluxInstance,
-		ReadOnly:  false,
-		InCluster: true,
+func init() {
+	systemTools[ToolInstallFluxInstance] = systemTool{
+		readOnly:  false,
+		inCluster: true,
 	}
 }
 
+// installFluxInstanceInput defines the input parameters for installing Flux instance.
+type installFluxInstanceInput struct {
+	InstanceURL string `json:"instance_url" jsonschema:"The URL pointing to the Flux Instance manifest file."`
+	Timeout     string `json:"timeout,omitempty" jsonschema:"The installation timeout. Default is 5m."`
+}
+
 // HandleInstallFluxInstance is the handler function for the install_flux_instance tool.
-func (m *Manager) HandleInstallFluxInstance(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	if err := auth.CheckScopes(ctx, getScopeNames(ToolInstallFluxInstance, m.readonly)); err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+func (m *Manager) HandleInstallFluxInstance(ctx context.Context, request *mcp.CallToolRequest, input installFluxInstanceInput) (*mcp.CallToolResult, any, error) {
+	if err := auth.CheckScopes(ctx, getScopeNames(ToolInstallFluxInstance, m.readOnly)); err != nil {
+		return NewToolResultError(err.Error())
 	}
 	now := time.Now()
-	instanceURL := mcp.ParseString(request, "instance_url", "")
-	if instanceURL == "" {
-		return mcp.NewToolResultError("The instance URL cannot be empty"), nil
+	if input.InstanceURL == "" {
+		return NewToolResultError("The instance URL cannot be empty")
 	}
 
-	timeoutStr := mcp.ParseString(request, "timeout", "5m")
+	timeoutStr := input.Timeout
+	if timeoutStr == "" {
+		timeoutStr = "5m"
+	}
 	timeout, err := time.ParseDuration(timeoutStr)
 	if err != nil {
-		return mcp.NewToolResultError("The timeout is not a valid duration"), nil
+		return NewToolResultError("The timeout is not a valid duration")
 	}
 	if timeout < 5*time.Minute {
 		timeout = 5 * time.Minute
@@ -75,14 +71,14 @@ func (m *Manager) HandleInstallFluxInstance(ctx context.Context, request mcp.Cal
 
 	// Step 1: Download the Flux instance manifest and operator manifests
 
-	instance, err := m.fetchInstanceManifest(ctx, instanceURL)
+	instance, err := m.fetchInstanceManifest(ctx, input.InstanceURL)
 	if err != nil {
-		return mcp.NewToolResultErrorFromErr("failed to fetch instance manifest: %w", err), nil
+		return NewToolResultErrorFromErr("failed to fetch instance manifest", err)
 	}
 
 	operatorObjects, err := m.fetchOperatorManifest(ctx, instance)
 	if err != nil {
-		return mcp.NewToolResultErrorFromErr("failed to fetch operator manifest: %w", err), nil
+		return NewToolResultErrorFromErr("failed to fetch operator manifest", err)
 	}
 	installLog.WriteString(fmt.Sprintf("Artifact download completed in %s\n", time.Since(now).Round(time.Second)))
 
@@ -90,7 +86,7 @@ func (m *Manager) HandleInstallFluxInstance(ctx context.Context, request mcp.Cal
 
 	cfg, err := m.flags.ToRESTConfig()
 	if err != nil {
-		return nil, fmt.Errorf("loading kubeconfig failed: %w", err)
+		return NewToolResultErrorFromErr("loading kubeconfig failed", err)
 	}
 
 	if sess := auth.FromContext(ctx); sess != nil {
@@ -102,14 +98,14 @@ func (m *Manager) HandleInstallFluxInstance(ctx context.Context, request mcp.Cal
 
 	installer, err := install.NewInstaller(ctx, cfg)
 	if err != nil {
-		return mcp.NewToolResultErrorFromErr("failed to create installer", err), nil
+		return NewToolResultErrorFromErr("failed to create installer", err)
 	}
 
 	// Step 3: Install or upgrade the Flux Operator
 
 	isInstalled, err := installer.IsInstalled(ctx)
 	if err != nil {
-		return mcp.NewToolResultErrorFromErr("failed prerequisites", err), nil
+		return NewToolResultErrorFromErr("failed prerequisites", err)
 	}
 	if !isInstalled {
 		installLog.WriteString("Installing Flux Operator...\n")
@@ -119,12 +115,12 @@ func (m *Manager) HandleInstallFluxInstance(ctx context.Context, request mcp.Cal
 	multitenant := instance.Spec.Cluster != nil && instance.Spec.Cluster.Multitenant
 	cs, err := installer.ApplyOperator(ctx, operatorObjects, multitenant)
 	if err != nil {
-		return mcp.NewToolResultErrorFromErr("failed to install the operator: %w", err), nil
+		return NewToolResultErrorFromErr("failed to install the operator", err)
 	}
 	installLog.WriteString(cs.String())
 	installLog.WriteString("\n")
 	if err := installer.WaitFor(ctx, cs, waitTimeout); err != nil {
-		return mcp.NewToolResultErrorFromErr("failed to wait for the operator: %w", err), nil
+		return NewToolResultErrorFromErr("failed to wait for the operator", err)
 	}
 	installLog.WriteString("Flux Operator is ready.\n")
 
@@ -133,12 +129,12 @@ func (m *Manager) HandleInstallFluxInstance(ctx context.Context, request mcp.Cal
 	installLog.WriteString("Installing Flux Instance...\n")
 	cs, err = installer.ApplyInstance(ctx, instance)
 	if err != nil {
-		return mcp.NewToolResultErrorFromErr("failed to install instance: %w", err), nil
+		return NewToolResultErrorFromErr("failed to install instance", err)
 	}
 	installLog.WriteString(cs.String())
 	installLog.WriteString("\n")
 	if err := installer.WaitFor(ctx, cs, waitTimeout-30*time.Second); err != nil {
-		return mcp.NewToolResultErrorFromErr("failed to wait for the instance: %w", err), nil
+		return NewToolResultErrorFromErr("failed to wait for the instance", err)
 	}
 
 	// Step 5: Configure automatic updates
@@ -146,16 +142,16 @@ func (m *Manager) HandleInstallFluxInstance(ctx context.Context, request mcp.Cal
 	installLog.WriteString("Configuring automatic updates...\n")
 	cs, err = installer.ApplyAutoUpdate(ctx, multitenant)
 	if err != nil {
-		return mcp.NewToolResultErrorFromErr("failed to configure automatic updates: %w", err), nil
+		return NewToolResultErrorFromErr("failed to configure automatic updates", err)
 	}
 	installLog.WriteString(cs.String())
 	installLog.WriteString("\n")
 	if err := installer.WaitFor(ctx, cs, waitTimeout-time.Minute); err != nil {
-		return mcp.NewToolResultErrorFromErr("failed to wait for automatic updates: %w", err), nil
+		return NewToolResultErrorFromErr("failed to wait for automatic updates", err)
 	}
 	installLog.WriteString(fmt.Sprintf("Installation completed in %s\n", time.Since(now).Round(time.Second)))
 
-	return mcp.NewToolResultText(installLog.String()), nil
+	return NewToolResultText(installLog.String())
 }
 
 // fetchInstanceManifest downloads and parses the FluxInstance manifest from the given URL.
