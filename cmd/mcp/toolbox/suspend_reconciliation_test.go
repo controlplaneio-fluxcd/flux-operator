@@ -5,10 +5,11 @@ package toolbox
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	. "github.com/onsi/gomega"
 	cli "k8s.io/cli-runtime/pkg/genericclioptions"
 
@@ -25,8 +26,11 @@ func TestManager_HandleSuspendReconciliation(t *testing.T) {
 		timeout:    time.Second,
 	}
 
-	request := mcp.CallToolRequest{}
-	request.Params.Name = "suspend_flux_reconciliation"
+	request := &mcp.CallToolRequest{
+		Params: &mcp.CallToolParamsRaw{
+			Name: "suspend_flux_reconciliation",
+		},
+	}
 
 	tests := []struct {
 		testName  string
@@ -79,15 +83,20 @@ func TestManager_HandleSuspendReconciliation(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.testName, func(t *testing.T) {
 			g := NewWithT(t)
-			request.Params.Arguments = test.arguments
+			argsJSON, _ := json.Marshal(test.arguments)
+			request.Params.Arguments = argsJSON
 
-			result, err := m.HandleSuspendReconciliation(context.Background(), request)
+			var input suspendFluxReconciliationInput
+			err := json.Unmarshal(request.Params.Arguments, &input)
 			g.Expect(err).ToNot(HaveOccurred())
-			textContent, ok := mcp.AsTextContent(result.Content[0])
+			result, content, err := m.HandleSuspendReconciliation(context.Background(), request, input)
+			g.Expect(err).ToNot(HaveOccurred())
+			textContent, ok := result.Content[0].(*mcp.TextContent)
 			g.Expect(ok).To(BeTrue())
 
 			g.Expect(result.IsError).To(BeTrue())
 			g.Expect(textContent.Text).To(ContainSubstring(test.matchErr))
+			_ = content
 		})
 	}
 }

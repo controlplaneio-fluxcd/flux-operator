@@ -7,7 +7,7 @@ import (
 	"context"
 	"slices"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/auth"
 )
@@ -120,12 +120,12 @@ var scopesPerTool = map[string]toolScopes{
 // Those are the tool-specific scope, the ScopeReadWrite scope, and
 // any other extra scopes the tool can accept according to the
 // static/global scopesPerTool map.
-func getScopes(tool string, readonly bool) []Scope {
+func getScopes(tool string, readOnly bool) []Scope {
 	ts := scopesPerTool[tool]
 	scopes := make([]Scope, 0, 2+len(ts.extraScopes))
 	scopes = append(scopes, Scope{scopesPrefix + tool, ts.ownScopeDescription, []string{tool}})
 	var extraScopes []string
-	if !readonly {
+	if !readOnly {
 		extraScopes = []string{scopeReadWrite}
 	}
 	for _, name := range append(extraScopes, ts.extraScopes...) {
@@ -136,8 +136,8 @@ func getScopes(tool string, readonly bool) []Scope {
 
 // getScopeNames returns the names of the scopes that grant access to
 // the given tool according to GetScopes.
-func getScopeNames(tool string, readonly bool) []string {
-	scopes := getScopes(tool, readonly)
+func getScopeNames(tool string, readOnly bool) []string {
+	scopes := getScopes(tool, readOnly)
 	scopeNames := make([]string, 0, len(scopes))
 	for _, s := range scopes {
 		scopeNames = append(scopeNames, s.Name)
@@ -150,7 +150,7 @@ func getScopeNames(tool string, readonly bool) []string {
 // that the user session does not have access to based on the scopes
 // present in the provided context. If the context is nil, no filtering
 // is done.
-func AddScopesAndFilter(ctx context.Context, result *mcp.ListToolsResult, readonly bool) {
+func AddScopesAndFilter(ctx context.Context, result *mcp.ListToolsResult, readOnly bool) {
 	// Sweep tools accumulating scopes and filtering out the tools
 	// that the user session does not have access to.
 	// The scopes are accumulated in a map to avoid duplicates.
@@ -160,9 +160,9 @@ func AddScopesAndFilter(ctx context.Context, result *mcp.ListToolsResult, readon
 		scopeReadOnly:  -2,
 		scopeReadWrite: -1,
 	}
-	var filteredTools []mcp.Tool
+	var filteredTools []*mcp.Tool
 	for idx, t := range result.Tools {
-		toolScopes := getScopes(t.Name, readonly)
+		toolScopes := getScopes(t.Name, readOnly)
 		toolScopeNames := make([]string, 0, len(toolScopes))
 		for _, ts := range toolScopes {
 			scope, ok := scopesMap[ts.Name]
@@ -197,11 +197,8 @@ func AddScopesAndFilter(ctx context.Context, result *mcp.ListToolsResult, readon
 
 	// Add the scopes to the result metadata and update the tools.
 	if result.Meta == nil {
-		result.Meta = &mcp.Meta{}
+		result.Meta = make(map[string]any)
 	}
-	if result.Meta.AdditionalFields == nil {
-		result.Meta.AdditionalFields = map[string]any{}
-	}
-	result.Meta.AdditionalFields["scopes"] = scopes
+	result.Meta["scopes"] = scopes
 	result.Tools = filteredTools
 }

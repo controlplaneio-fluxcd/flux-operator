@@ -7,31 +7,39 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // NewDebugKustomizationPrompt creates a prompt for debugging lux Kustomization.
 func (m *Manager) NewDebugKustomizationPrompt() SystemPrompt {
 	return SystemPrompt{
-		Prompt: mcp.NewPrompt("debug_flux_kustomization",
-			mcp.WithArgument("name",
-				mcp.ArgumentDescription("The name of the Flux resource."),
-				mcp.RequiredArgument(),
-			),
-			mcp.WithArgument("namespace",
-				mcp.ArgumentDescription("The namespace of the Flux resource."),
-				mcp.RequiredArgument(),
-			),
-			mcp.WithArgument("cluster",
-				mcp.ArgumentDescription("The context name of the cluster, defaults to current."),
-			),
-		),
+		Prompt: &mcp.Prompt{
+			Name:        "debug_flux_kustomization",
+			Description: "",
+			Arguments: []*mcp.PromptArgument{
+				{
+					Name:        "name",
+					Description: "The name of the Flux resource.",
+					Required:    true,
+				},
+				{
+					Name:        "namespace",
+					Description: "The namespace of the Flux resource.",
+					Required:    true,
+				},
+				{
+					Name:        "cluster",
+					Description: "The context name of the cluster, defaults to current.",
+					Required:    false,
+				},
+			},
+		},
 		Handler: m.HandleDebugKustomization,
 	}
 }
 
 // HandleDebugKustomization is the handler function for the debug_flux_kustomization prompt.
-func (m *Manager) HandleDebugKustomization(ctx context.Context, request mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+func (m *Manager) HandleDebugKustomization(ctx context.Context, request *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
 	name := request.Params.Arguments["name"]
 	if name == "" {
 		return nil, fmt.Errorf("missing name argument")
@@ -45,12 +53,13 @@ func (m *Manager) HandleDebugKustomization(ctx context.Context, request mcp.GetP
 		cluster = "current"
 	}
 
-	return mcp.NewGetPromptResult(
-		"Debug instructions for a Kustomization",
-		[]mcp.PromptMessage{
-			mcp.NewPromptMessage(
-				mcp.RoleAssistant,
-				mcp.NewTextContent(fmt.Sprintf(`
+	return &mcp.GetPromptResult{
+		Description: "Debug instructions for a Kustomization",
+		Messages: []*mcp.PromptMessage{
+			{
+				Role: "assistant",
+				Content: &mcp.TextContent{
+					Text: fmt.Sprintf(`
 To debug the Flux Kustomization %[1]s in namespace %[2]s on the %[3]s cluster, follow these steps:
 
 0. Use the get_kubeconfig_contexts tool to find the context name for the %[3]s cluster
@@ -66,8 +75,9 @@ conditions and events for any error messages.
 5. Use the get_kubernetes_resources tool to check the status of the resources
 found in the Kustomization status inventory.
 6. Write a detailed report of the issue, including the Kustomization spec, status, and any error messages.
-`, name, namespace, cluster)),
-			),
+`, name, namespace, cluster),
+				},
+			},
 		},
-	), nil
+	}, nil
 }

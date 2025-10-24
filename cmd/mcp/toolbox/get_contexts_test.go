@@ -8,7 +8,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	. "github.com/onsi/gomega"
 	cli "k8s.io/cli-runtime/pkg/genericclioptions"
 
@@ -27,18 +27,21 @@ func TestManager_HandleGetKubeconfigContexts(t *testing.T) {
 		flags:      cli.NewConfigFlags(false),
 	}
 
-	request := mcp.CallToolRequest{}
-	request.Params.Name = "get_kubeconfig_contexts"
+	request := &mcp.CallToolRequest{
+		Params: &mcp.CallToolParamsRaw{
+			Name: "get_kubeconfig_contexts",
+		},
+	}
 
-	result, err := m.HandleGetKubeconfigContexts(context.Background(), request)
+	result, _, err := m.HandleGetKubeconfigContexts(context.Background(), request, struct{}{})
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(result.IsError).ToNot(BeTrue())
-
-	textContent, ok := mcp.AsTextContent(result.Content[0])
-	g.Expect(ok).To(BeTrue())
+	g.Expect(result).ToNot(BeNil())
+	g.Expect(result.Content).ToNot(BeEmpty())
 
 	goldenContent, err := os.ReadFile(goldenFile)
 	g.Expect(err).ToNot(HaveOccurred())
 
+	textContent, ok := result.Content[0].(*mcp.TextContent)
+	g.Expect(ok).To(BeTrue())
 	g.Expect(textContent.Text).To(MatchYAML(string(goldenContent)))
 }

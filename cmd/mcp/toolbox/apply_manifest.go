@@ -6,7 +6,7 @@ package toolbox
 import (
 	"context"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/auth"
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/k8s"
@@ -17,49 +17,41 @@ const (
 	ToolApplyKubernetesManifest = "apply_kubernetes_manifest"
 )
 
-// NewApplyKubernetesManifestTool creates a new tool for applying Kubernetes manifests.
-func (m *Manager) NewApplyKubernetesManifestTool() SystemTool {
-	return SystemTool{
-		Tool: mcp.NewTool(ToolApplyKubernetesManifest,
-			mcp.WithDescription("This tool applies a Kubernetes YAML manifest on the cluster."),
-			mcp.WithString("yaml_content",
-				mcp.Description("The multi-doc YAML content."),
-				mcp.Required(),
-			),
-			mcp.WithBoolean("overwrite",
-				mcp.Description("Overwrite resources managed by Flux."),
-			),
-		),
-		Handler:   m.HandleApplyKubernetesManifest,
-		ReadOnly:  false,
-		InCluster: true,
+func init() {
+	systemTools[ToolApplyKubernetesManifest] = systemTool{
+		readOnly:  false,
+		inCluster: true,
 	}
 }
 
+// applyKubernetesManifestInput defines the input parameters for applying a Kubernetes manifest.
+type applyKubernetesManifestInput struct {
+	YAMLContent string `json:"yaml_content" jsonschema:"The multi-doc YAML content."`
+	Overwrite   bool   `json:"overwrite,omitempty" jsonschema:"Overwrite resources managed by Flux."`
+}
+
 // HandleApplyKubernetesManifest is the handler function for the apply_kubernetes_manifest tool.
-func (m *Manager) HandleApplyKubernetesManifest(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	if err := auth.CheckScopes(ctx, getScopeNames(ToolApplyKubernetesManifest, m.readonly)); err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+func (m *Manager) HandleApplyKubernetesManifest(ctx context.Context, request *mcp.CallToolRequest, input applyKubernetesManifestInput) (*mcp.CallToolResult, any, error) {
+	if err := auth.CheckScopes(ctx, getScopeNames(ToolApplyKubernetesManifest, m.readOnly)); err != nil {
+		return NewToolResultError(err.Error())
 	}
 
-	manifest := mcp.ParseString(request, "yaml_content", "")
-	if manifest == "" {
-		return mcp.NewToolResultError("YAML manifest cannot be empty"), nil
+	if input.YAMLContent == "" {
+		return NewToolResultError("YAML manifest cannot be empty")
 	}
-	overwrite := mcp.ParseBoolean(request, "overwrite", false)
 
 	ctx, cancel := context.WithTimeout(ctx, m.timeout)
 	defer cancel()
 
 	kubeClient, err := k8s.NewClient(ctx, m.flags)
 	if err != nil {
-		return mcp.NewToolResultErrorFromErr("Failed to create Kubernetes client", err), nil
+		return NewToolResultErrorFromErr("Failed to create Kubernetes client", err)
 	}
 
-	changeSet, err := kubeClient.Apply(ctx, manifest, overwrite)
+	changeSet, err := kubeClient.Apply(ctx, input.YAMLContent, input.Overwrite)
 	if err != nil {
-		return mcp.NewToolResultErrorFromErr("Failed to apply manifest", err), nil
+		return NewToolResultErrorFromErr("Failed to apply manifest", err)
 	}
 
-	return mcp.NewToolResultText(changeSet), nil
+	return NewToolResultText(changeSet)
 }

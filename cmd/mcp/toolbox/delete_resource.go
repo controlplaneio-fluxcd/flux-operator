@@ -6,7 +6,7 @@ package toolbox
 import (
 	"context"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/auth"
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/k8s"
@@ -17,70 +17,54 @@ const (
 	ToolDeleteKubernetesResource = "delete_kubernetes_resource"
 )
 
-// NewDeleteKubernetesResourceTool creates a new tool for deleting Kubernetes resources.
-func (m *Manager) NewDeleteKubernetesResourceTool() SystemTool {
-	return SystemTool{
-		Tool: mcp.NewTool(ToolDeleteKubernetesResource,
-			mcp.WithDescription("This tool deletes a Kubernetes resource based on its API version, kind, name, and namespace."),
-			mcp.WithString("apiVersion",
-				mcp.Description("The apiVersion of the resource to delete."),
-				mcp.Required(),
-			),
-			mcp.WithString("kind",
-				mcp.Description("The kind of the resource to delete."),
-				mcp.Required(),
-			),
-			mcp.WithString("name",
-				mcp.Description("The name of the resource to delete."),
-				mcp.Required(),
-			),
-			mcp.WithString("namespace",
-				mcp.Description("The namespace of the resource to delete."),
-			),
-		),
-		Handler:   m.HandleDeleteKubernetesResource,
-		ReadOnly:  false,
-		InCluster: true,
+func init() {
+	systemTools[ToolDeleteKubernetesResource] = systemTool{
+		readOnly:  false,
+		inCluster: true,
 	}
 }
 
+// deleteKubernetesResourceInput defines the input parameters for deleting a Kubernetes resource.
+type deleteKubernetesResourceInput struct {
+	APIVersion string `json:"apiVersion" jsonschema:"The apiVersion of the resource to delete."`
+	Kind       string `json:"kind" jsonschema:"The kind of the resource to delete."`
+	Name       string `json:"name" jsonschema:"The name of the resource to delete."`
+	Namespace  string `json:"namespace,omitempty" jsonschema:"The namespace of the resource to delete."`
+}
+
 // HandleDeleteKubernetesResource is the handler function for the delete_kubernetes_resource tool.
-func (m *Manager) HandleDeleteKubernetesResource(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	if err := auth.CheckScopes(ctx, getScopeNames(ToolDeleteKubernetesResource, m.readonly)); err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+func (m *Manager) HandleDeleteKubernetesResource(ctx context.Context, request *mcp.CallToolRequest, input deleteKubernetesResourceInput) (*mcp.CallToolResult, any, error) {
+	if err := auth.CheckScopes(ctx, getScopeNames(ToolDeleteKubernetesResource, m.readOnly)); err != nil {
+		return NewToolResultError(err.Error())
 	}
 
-	apiVersion := mcp.ParseString(request, "apiVersion", "")
-	if apiVersion == "" {
-		return mcp.NewToolResultError("apiVersion is required"), nil
+	if input.APIVersion == "" {
+		return NewToolResultError("apiVersion is required")
 	}
-	kind := mcp.ParseString(request, "kind", "")
-	if kind == "" {
-		return mcp.NewToolResultError("kind is required"), nil
+	if input.Kind == "" {
+		return NewToolResultError("kind is required")
 	}
-	name := mcp.ParseString(request, "name", "")
-	if name == "" {
-		return mcp.NewToolResultError("name is required"), nil
+	if input.Name == "" {
+		return NewToolResultError("name is required")
 	}
-	namespace := mcp.ParseString(request, "namespace", "")
 
 	ctx, cancel := context.WithTimeout(ctx, m.timeout)
 	defer cancel()
 
 	kubeClient, err := k8s.NewClient(ctx, m.flags)
 	if err != nil {
-		return mcp.NewToolResultErrorFromErr("Failed to create Kubernetes client", err), nil
+		return NewToolResultErrorFromErr("Failed to create Kubernetes client", err)
 	}
 
-	gvk, err := kubeClient.ParseGroupVersionKind(apiVersion, kind)
+	gvk, err := kubeClient.ParseGroupVersionKind(input.APIVersion, input.Kind)
 	if err != nil {
-		return mcp.NewToolResultErrorFromErr("Failed to parse group version kind", err), nil
+		return NewToolResultErrorFromErr("Failed to parse group version kind", err)
 	}
 
-	err = kubeClient.Delete(ctx, gvk, name, namespace)
+	err = kubeClient.Delete(ctx, gvk, input.Name, input.Namespace)
 	if err != nil {
-		return mcp.NewToolResultErrorFromErr("Failed to delete resource", err), nil
+		return NewToolResultErrorFromErr("Failed to delete resource", err)
 	}
 
-	return mcp.NewToolResultText("Resource deleted successfully"), nil
+	return NewToolResultText("Resource deleted successfully")
 }

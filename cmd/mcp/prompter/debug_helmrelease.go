@@ -7,31 +7,39 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // NewDebugHelmReleasePrompt creates a prompt for debugging Flux HelmRelease.
 func (m *Manager) NewDebugHelmReleasePrompt() SystemPrompt {
 	return SystemPrompt{
-		Prompt: mcp.NewPrompt("debug_flux_helmrelease",
-			mcp.WithArgument("name",
-				mcp.ArgumentDescription("The name of the Flux resource."),
-				mcp.RequiredArgument(),
-			),
-			mcp.WithArgument("namespace",
-				mcp.ArgumentDescription("The namespace of the Flux resource."),
-				mcp.RequiredArgument(),
-			),
-			mcp.WithArgument("cluster",
-				mcp.ArgumentDescription("The context name of the cluster, defaults to current."),
-			),
-		),
+		Prompt: &mcp.Prompt{
+			Name:        "debug_flux_helmrelease",
+			Description: "",
+			Arguments: []*mcp.PromptArgument{
+				{
+					Name:        "name",
+					Description: "The name of the Flux resource.",
+					Required:    true,
+				},
+				{
+					Name:        "namespace",
+					Description: "The namespace of the Flux resource.",
+					Required:    true,
+				},
+				{
+					Name:        "cluster",
+					Description: "The context name of the cluster, defaults to current.",
+					Required:    false,
+				},
+			},
+		},
 		Handler: m.HandleDebugHelmRelease,
 	}
 }
 
 // HandleDebugHelmRelease is the handler function for the debug_flux_helmrelease prompt.
-func (m *Manager) HandleDebugHelmRelease(ctx context.Context, request mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+func (m *Manager) HandleDebugHelmRelease(ctx context.Context, request *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
 	name := request.Params.Arguments["name"]
 	if name == "" {
 		return nil, fmt.Errorf("missing name argument")
@@ -45,12 +53,13 @@ func (m *Manager) HandleDebugHelmRelease(ctx context.Context, request mcp.GetPro
 		cluster = "current"
 	}
 
-	return mcp.NewGetPromptResult(
-		"Debug instructions for a HelmRelease",
-		[]mcp.PromptMessage{
-			mcp.NewPromptMessage(
-				mcp.RoleAssistant,
-				mcp.NewTextContent(fmt.Sprintf(`
+	return &mcp.GetPromptResult{
+		Description: "Debug instructions for a HelmRelease",
+		Messages: []*mcp.PromptMessage{
+			{
+				Role: "assistant",
+				Content: &mcp.TextContent{
+					Text: fmt.Sprintf(`
 To debug the Flux HelmRelease %s in namespace %s on the %s cluster, follow these steps:
 
 0. Use the get_kubeconfig_contexts tool to find the context name for the %[3]s cluster
@@ -66,8 +75,9 @@ conditions and events for any error messages.
 5. Use the get_kubernetes_resources tool to check the status of the resources
 found in the HelmRelease status inventory.
 6. Write a detailed report of the issue, including the release spec, status, and any error messages.
-`, name, namespace, cluster)),
-			),
+`, name, namespace, cluster),
+				},
+			},
 		},
-	), nil
+	}, nil
 }

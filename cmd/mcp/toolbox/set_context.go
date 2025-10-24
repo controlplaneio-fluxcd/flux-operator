@@ -7,42 +7,42 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// NewSetKubeconfigContextTool creates a new tool for setting the current kubeconfig context.
-func (m *Manager) NewSetKubeconfigContextTool() SystemTool {
-	return SystemTool{
-		Tool: mcp.NewTool("set_kubeconfig_context",
-			mcp.WithDescription("This tool changes the kubeconfig context for this session."),
-			mcp.WithString("name",
-				mcp.Description("The name of the kubeconfig context."),
-				mcp.Required(),
-			),
-		),
-		Handler:   m.HandleSetKubeconfigContext,
-		ReadOnly:  true,
-		InCluster: false,
+const (
+	// ToolSetKubeConfigContext is the name of the set_kubeconfig_context tool.
+	ToolSetKubeConfigContext = "set_kubeconfig_context"
+)
+
+func init() {
+	systemTools[ToolSetKubeConfigContext] = systemTool{
+		readOnly:  true,
+		inCluster: false,
 	}
 }
 
+// setKubeconfigContextInput defines the input parameters for setting the kubeconfig context.
+type setKubeconfigContextInput struct {
+	Name string `json:"name" jsonschema:"The name of the kubeconfig context."`
+}
+
 // HandleSetKubeconfigContext is the handler function for the set_kubeconfig_context tool.
-func (m *Manager) HandleSetKubeconfigContext(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	name := mcp.ParseString(request, "name", "")
-	if name == "" {
-		return mcp.NewToolResultError("name is required"), nil
+func (m *Manager) HandleSetKubeconfigContext(ctx context.Context, request *mcp.CallToolRequest, input setKubeconfigContextInput) (*mcp.CallToolResult, any, error) {
+	if input.Name == "" {
+		return NewToolResultError("name is required")
 	}
 
 	err := m.kubeconfig.Load()
 	if err != nil {
-		return mcp.NewToolResultErrorFromErr("error reading kubeconfig contexts", err), nil
+		return NewToolResultErrorFromErr("error reading kubeconfig contexts", err)
 	}
 
-	err = m.kubeconfig.SetCurrentContext(name)
+	err = m.kubeconfig.SetCurrentContext(input.Name)
 	if err != nil {
-		return mcp.NewToolResultErrorFromErr("error setting kubeconfig context", err), nil
+		return NewToolResultErrorFromErr("error setting kubeconfig context", err)
 	}
-	m.flags.Context = &name
+	m.flags.Context = &input.Name
 
-	return mcp.NewToolResultText(fmt.Sprintf("Context changed to %s", name)), nil
+	return NewToolResultText(fmt.Sprintf("Context changed to %s", input.Name))
 }

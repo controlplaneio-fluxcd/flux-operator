@@ -4,18 +4,12 @@
 package prompter
 
 import (
-	"github.com/mark3labs/mcp-go/mcp"
-	mcpserver "github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type SystemPrompt struct {
-	Prompt  mcp.Prompt
-	Handler mcpserver.PromptHandlerFunc
-}
-
-type DocResource struct {
-	Resource mcp.Resource
-	Handler  mcpserver.ResourceHandlerFunc
+	Prompt  *mcp.Prompt
+	Handler mcp.PromptHandler
 }
 
 // Manager represents an entity responsible for managing and
@@ -29,7 +23,7 @@ func NewManager() *Manager {
 }
 
 // RegisterPrompts registers all prompts in the Manager's PromptSet with the provided server.
-func (m *Manager) RegisterPrompts(server *mcpserver.MCPServer) {
+func (m *Manager) RegisterPrompts(server *mcp.Server) {
 	for _, p := range m.PromptSet() {
 		server.AddPrompt(p.Prompt, p.Handler)
 	}
