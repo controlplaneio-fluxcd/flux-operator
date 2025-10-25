@@ -196,7 +196,8 @@ func installCmdRun(cmd *cobra.Command, args []string) error {
 	} else {
 		rootCmd.Println(`◎`, "Installing Flux Operator in flux-system namespace...")
 	}
-	cs, err := installer.ApplyOperator(ctx, objects)
+	multitenant := instance.Spec.Cluster != nil && instance.Spec.Cluster.Multitenant
+	cs, err := installer.ApplyOperator(ctx, objects, multitenant)
 	if err != nil {
 		return err
 	}
@@ -261,7 +262,7 @@ func installCmdRun(cmd *cobra.Command, args []string) error {
 
 	if installArgs.autoUpdate {
 		rootCmd.Println(`◎`, "Configuring automatic updates...")
-		cs, err := installer.ApplyAutoUpdate(ctx, installArgs.clusterMultitenant)
+		cs, err := installer.ApplyAutoUpdate(ctx, multitenant)
 		if err != nil {
 			return err
 		}
@@ -326,11 +327,6 @@ func makeFluxInstance(ctx context.Context) (instance *fluxcdv1.FluxInstance, art
 		// Use artifact URL from file if present
 		if instance.Spec.Distribution.Artifact != "" {
 			artifactURL = instance.Spec.Distribution.Artifact
-		}
-
-		// Use multitenant setting from file if present
-		if instance.Spec.Cluster != nil && instance.Spec.Cluster.Multitenant {
-			installArgs.clusterMultitenant = true
 		}
 	} else {
 		// No file provided, build from flags
