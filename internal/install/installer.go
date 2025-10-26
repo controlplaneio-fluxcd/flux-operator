@@ -27,6 +27,7 @@ func NewInstaller(ctx context.Context, cfg *rest.Config, opts ...Option) (*Insta
 		WithArtifactURL(DefaultArtifactURL),
 		WithOwner(DefaultOwner),
 		WithNamespace(DefaultNamespace),
+		WithTerminationTimeout(DefaultTerminationTimeout),
 	}
 
 	// User options override defaults
