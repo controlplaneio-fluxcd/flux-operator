@@ -19,6 +19,8 @@ const (
 
 	ReconciliationDisabledReason  = "ReconciliationDisabled"
 	ReconciliationDisabledMessage = "Reconciliation is disabled"
+
+	HealthCheckExpr = "status.conditions.filter(c, c.type == 'Ready').all(c, c.status == 'True' && c.observedGeneration == metadata.generation)"
 )
 
 var (
