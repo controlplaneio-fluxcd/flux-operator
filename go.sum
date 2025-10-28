@@ -117,8 +117,8 @@ github.com/fluxcd/pkg/apis/event v0.20.0 h1:Vxd1kkS/CsQNPHTbmlL4qOcCmUmavEtaEOod
 github.com/fluxcd/pkg/apis/event v0.20.0/go.mod h1:wyY+8BHicfFP7sXzhMrKpZTQeojCsSpK9idAidjv61c=
 github.com/fluxcd/pkg/apis/kustomize v1.13.0 h1:GGf0UBVRIku+gebY944icVeEIhyg1P/KE3IrhOyJJnE=
 github.com/fluxcd/pkg/apis/kustomize v1.13.0/go.mod h1:TLKVqbtnzkhDuhWnAsN35977HvRfIjs+lgMuNro/LEc=
-github.com/fluxcd/pkg/apis/meta v1.22.0 h1:EHWQH5ZWml7i8eZ/AMjm1jxid3j/PQ31p+hIwCt6crM=
-github.com/fluxcd/pkg/apis/meta v1.22.0/go.mod h1:Kc1+bWe5p0doROzuV9XiTfV/oL3ddsemYXt8ZYWdVVg=
+github.com/fluxcd/pkg/apis/meta v1.22.1-0.20251010220540-14b66b2de1ab h1:qV92SLmuKonakYhMSTX3//eRaJHVfCAGcmbdb/7tBrA=
+github.com/fluxcd/pkg/apis/meta v1.22.1-0.20251010220540-14b66b2de1ab/go.mod h1:Kc1+bWe5p0doROzuV9XiTfV/oL3ddsemYXt8ZYWdVVg=
 github.com/fluxcd/pkg/auth v0.32.0 h1:D0RkbWlT2gqcEaEr6GLnm1XP1KDIYQI8zWzuZVnsE5I=
 github.com/fluxcd/pkg/auth v0.32.0/go.mod h1:Yhe6p3/wTUj80yrOqhpsbA48hQRM14OKwo3Qr4199XM=
 github.com/fluxcd/pkg/cache v0.12.0 h1:mabABT3jIfuo84VbIW+qvfqMZ7PbM5tXQgQvA2uo2rc=
@@ -129,8 +129,8 @@ github.com/fluxcd/pkg/git v0.37.0 h1:JBw88fgcJ7AqQfGRVbHRCb2HGzG1Mu3AX4e+GoE05Go
 github.com/fluxcd/pkg/git v0.37.0/go.mod h1:+bBrFMnLNROz0aMZ7+ddiX8RS/GwpHtx/gqL9FWjcl0=
 github.com/fluxcd/pkg/kustomize v1.23.0 h1:4tNh30OsIj96YRfVP7qP0Fv3QTwdBo/udfZIcccL6NI=
 github.com/fluxcd/pkg/kustomize v1.23.0/go.mod h1:ZojUvmI4RiHk3BH3L3mBQ4ZDbNkiWfX9LvOMBjKq5Tc=
-github.com/fluxcd/pkg/runtime v0.88.0 h1:EFPJ0jnRino6yUEwiNtQTpUNyCf96N2MJb+S7LVG648=
-github.com/fluxcd/pkg/runtime v0.88.0/go.mod h1:qkmPX009tgiWufQ2Vj0QhyNgEU+0Cnz7Xy/naihLM10=
+github.com/fluxcd/pkg/runtime v0.89.1-0.20251010220540-14b66b2de1ab h1:MuF0vVykSXQoVP9vTYjP6xUoj41TUhuIXyL8NQG5fJU=
+github.com/fluxcd/pkg/runtime v0.89.1-0.20251010220540-14b66b2de1ab/go.mod h1:qkmPX009tgiWufQ2Vj0QhyNgEU+0Cnz7Xy/naihLM10=
 github.com/fluxcd/pkg/sourceignore v0.15.0 h1:tB30fuk4jlB3UGlR7ppJguZ3zaJh1iwuTCEufs91jSM=
 github.com/fluxcd/pkg/sourceignore v0.15.0/go.mod h1:mZ9X6gNtNkq9ZsD35LebEYjePc7DRvB2JdowMNoj6IU=
 github.com/fluxcd/pkg/ssa v0.60.0 h1:ikA78TWSLDmIc8I/goGAU/buYF6jto/gswE5hnOfWGk=

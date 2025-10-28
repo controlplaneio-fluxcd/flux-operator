@@ -10,12 +10,12 @@ require (
 	github.com/coreos/go-oidc/v3 v3.16.0
 	github.com/fluxcd/cli-utils v0.36.0-flux.15
 	github.com/fluxcd/pkg/apis/kustomize v1.13.0
-	github.com/fluxcd/pkg/apis/meta v1.22.0
+	github.com/fluxcd/pkg/apis/meta v1.22.1-0.20251010220540-14b66b2de1ab
 	github.com/fluxcd/pkg/auth v0.32.0
 	github.com/fluxcd/pkg/cache v0.12.0
 	github.com/fluxcd/pkg/git v0.37.0
 	github.com/fluxcd/pkg/kustomize v1.23.0
-	github.com/fluxcd/pkg/runtime v0.88.0
+	github.com/fluxcd/pkg/runtime v0.89.1-0.20251010220540-14b66b2de1ab
 	github.com/fluxcd/pkg/ssa v0.60.0
 	github.com/fluxcd/pkg/tar v0.15.0
 	github.com/fluxcd/pkg/version v0.11.0
