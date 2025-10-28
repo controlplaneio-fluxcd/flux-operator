@@ -351,7 +351,7 @@ func debugScopesCmdRun(cmd *cobra.Command, args []string) error {
 	client := mcp.NewClient(mcpImpl, nil)
 	cs, err := client.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: endpoint.String()}, nil)
 	if err != nil {
-		return fmt.Errorf("failed to create MCP client for: %w", err)
+		return fmt.Errorf("failed to create MCP client for %s: %w", endpoint, err)
 	}
 	defer cs.Close()
 
