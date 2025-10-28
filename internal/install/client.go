@@ -89,7 +89,7 @@ func NewStatusPoller(ctx context.Context, reader client.Reader, mapper meta.REST
 			APIVersion: fluxcdv1.GroupVersion.String(),
 			Kind:       kind,
 			HealthCheckExpressions: kustomize.HealthCheckExpressions{
-				Current: "status.conditions.filter(e, e.type == 'Ready').all(e, e.status == 'True' && e.observedGeneration == metadata.generation)",
+				Current: fluxcdv1.HealthCheckExpr,
 			},
 		})
 	}
