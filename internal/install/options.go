@@ -6,6 +6,7 @@ package install
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 const (
@@ -17,6 +18,9 @@ const (
 
 	// DefaultNamespace is the default namespace for Flux Operator and Flux instance.
 	DefaultNamespace = "flux-system"
+
+	// DefaultTerminationTimeout is the default timeout for waiting for resource termination.
+	DefaultTerminationTimeout = 30 * time.Second
 )
 
 // Options holds the configuration for installing the Flux Operator and FluxInstance.
@@ -35,6 +39,9 @@ type Options struct {
 
 	// namespace is the namespace where Flux Operator and Flux instance will be installed.
 	namespace string
+
+	// terminationTimeout is the timeout for waiting for resource termination during uninstall.
+	terminationTimeout time.Duration
 }
 
 // Option is a functional option for configuring the installer.
@@ -65,6 +72,13 @@ func WithOwner(owner string) Option {
 func WithNamespace(namespace string) Option {
 	return func(o *Options) {
 		o.namespace = namespace
+	}
+}
+
+// WithTerminationTimeout sets the timeout for waiting for resource termination during uninstall.
+func WithTerminationTimeout(timeout time.Duration) Option {
+	return func(o *Options) {
+		o.terminationTimeout = timeout
 	}
 }
 
@@ -116,4 +130,9 @@ func (o *Options) Owner() string {
 // Namespace returns the installation namespace.
 func (o *Options) Namespace() string {
 	return o.namespace
+}
+
+// TerminationTimeout returns the timeout for waiting for resource termination during uninstall.
+func (o *Options) TerminationTimeout() time.Duration {
+	return o.terminationTimeout
 }

@@ -306,3 +306,22 @@ it is recommended to follow the [installation guide](https://fluxcd.control-plan
     - `--instance-sync-path`: Path to the manifests directory in the source.
     - `--instance-sync-creds`: Credentials for the source in the format `username:token`.
     - `--auto-update`: Enable automatic updates of the Flux Operator from the distribution artifact.
+
+### Uninstall Command
+
+The `flux-operator uninstall` command safely removes the Flux Operator and Flux instance from the cluster.
+
+This command performs the following steps:
+
+1. Deletes the cluster role bindings of Flux Operator and Flux controllers.
+2. Deletes the deployments of Flux Operator and Flux controllers.
+3. Removes finalizers from Flux Operator and Flux custom resources.
+4. Deletes the CustomResourceDefinitions of Flux Operator and Flux.
+5. Deletes the namespace where Flux Operator is installed (unless `--keep-namespace` is specified).
+
+- `flux-operator -n flux-system uninstall`: Uninstalls the Flux Operator and Flux instance from the cluster.
+    - `--keep-namespace`: Keep the namespace after uninstalling Flux Operator and Flux instance.
+
+Note that the `uninstall` command will not delete any Kubernetes objects or Helm releases
+that were reconciled on the cluster by Flux. It is safe to run this command and re-install
+Flux Operator later to resume managing the existing resources.
