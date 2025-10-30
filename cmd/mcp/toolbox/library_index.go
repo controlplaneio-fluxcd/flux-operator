@@ -22,7 +22,7 @@ var docsMetadata = []DocumentMetadata{
 		},
 	},
 	{
-		URL:   "https://raw.githubusercontent.com/fluxcd/source-controller/refs/heads/main/docs/spec/v1beta2/ocirepositories.md",
+		URL:   "https://raw.githubusercontent.com/fluxcd/source-controller/refs/heads/main/docs/spec/v1/ocirepositories.md",
 		Group: fluxcdv1.FluxSourceGroup,
 		Kind:  fluxcdv1.FluxOCIRepositoryKind,
 		Keywords: []string{
@@ -55,6 +55,15 @@ var docsMetadata = []DocumentMetadata{
 			"source-controller", "s3", "storage", "minio", "blob", "endpoint",
 			"region", "insecure", "managed-identity", "sas", "token", "certificate",
 			"proxy", "authentication", "provider", "aws", "azure", "gcp",
+		},
+	},
+	{
+		URL:   "https://raw.githubusercontent.com/fluxcd/source-watcher/refs/heads/main/docs/spec/v1beta1/artifactgenerators.md",
+		Group: fluxcdv1.FluxSourceExtensionsGroup,
+		Kind:  fluxcdv1.FluxArtifactGeneratorKind,
+		Keywords: []string{
+			"source-watcher", "artifact", "generator", "external", "composition", "decomposition", "multiple",
+			"copy", "alias", "originrevision", "exclude", "extension",
 		},
 	},
 	{
@@ -108,7 +117,7 @@ var docsMetadata = []DocumentMetadata{
 		},
 	},
 	{
-		URL:   "https://raw.githubusercontent.com/fluxcd/image-reflector-controller/refs/heads/main/docs/spec/v1beta2/imagerepositories.md",
+		URL:   "https://raw.githubusercontent.com/fluxcd/image-reflector-controller/refs/heads/main/docs/spec/v1/imagerepositories.md",
 		Group: fluxcdv1.FluxImageGroup,
 		Kind:  fluxcdv1.FluxImageRepositoryKind,
 		Keywords: []string{
@@ -117,7 +126,7 @@ var docsMetadata = []DocumentMetadata{
 		},
 	},
 	{
-		URL:   "https://raw.githubusercontent.com/fluxcd/image-reflector-controller/refs/heads/main/docs/spec/v1beta2/imagepolicies.md",
+		URL:   "https://raw.githubusercontent.com/fluxcd/image-reflector-controller/refs/heads/main/docs/spec/v1/imagepolicies.md",
 		Group: fluxcdv1.FluxImageGroup,
 		Kind:  fluxcdv1.FluxImagePolicyKind,
 		Keywords: []string{
@@ -126,7 +135,7 @@ var docsMetadata = []DocumentMetadata{
 		},
 	},
 	{
-		URL:   "https://raw.githubusercontent.com/fluxcd/image-automation-controller/refs/heads/main/docs/spec/v1beta2/imageupdateautomations.md",
+		URL:   "https://raw.githubusercontent.com/fluxcd/image-automation-controller/refs/heads/main/docs/spec/v1/imageupdateautomations.md",
 		Group: fluxcdv1.FluxImageGroup,
 		Kind:  fluxcdv1.FluxImageUpdateAutomationKind,
 		Keywords: []string{

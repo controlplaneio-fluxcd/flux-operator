@@ -13,13 +13,16 @@ Flux consists of the following Kubernetes controllers and custom resource defini
     - **FluxInstance**: Manages the Flux controllers installation and configuration
     - **FluxReport**: Reflects the state of a Flux installation
     - **ResourceSet**: Manages groups of Kubernetes resources based on input matrices
-    - **ResourceSetInputProvider**: Fetches input values from external services (GitHub, GitLab)
+    - **ResourceSetInputProvider**: Fetches input values from external services (GitHub, GitLab, AzureDevOps, OCI registries)
 - Source Controller
     - **GitRepository**: Points to a Git repository containing Kubernetes manifests or Helm charts
     - **OCIRepository**: Points to a container registry containing OCI artifacts (manifests or Helm charts)
     - **Bucket**: Points to an S3-compatible bucket containing manifests
     - **HelmRepository**: Points to a Helm chart repository
     - **HelmChart**: References a chart from a HelmRepository or a GitRepository
+    - **ExternalArtifact**: Represents a 3rd-party source controller artifact that Flux can consume
+- Source Watcher
+    - **ArtifactGenerator**: Composes and decomposes sources into new artifacts for Flux consumption
 - Kustomize Controller
     - **Kustomization**: Builds and applies Kubernetes manifests from sources
 - Helm Controller
@@ -38,14 +41,12 @@ For a deep understanding of the Flux CRDs, call the `search_flux_docs` tool for 
 ## General rules
 
 - When asked about the Flux installation status, call the `get_flux_instance` tool.
-- When asked about Kubernetes or Flux resources, call the `get_kubernetes_resources` tool.
+- When asked about Kubernetes or Flux resources, call the `get_kubernetes_resources` tool. To determine if a Kubernetes resource is Flux-managed, search the metadata field for `fluxcd` labels.
 - Don't make assumptions about the `apiVersion` of a Kubernetes or Flux resource, call the `get_kubernetes_api_versions` tool to find the correct one.
 - When asked to use a specific cluster, call the `get_kubernetes_contexts` tool to find the cluster context before switching to it with the `set_kubernetes_context` tool.
 - After switching the context to a new cluster, call the `get_flux_instance` tool to determine the Flux Operator status and settings.
-- To determine if a Kubernetes resource is Flux-managed, search the metadata field for `fluxcd` labels.
-- When asked to create or update resources, generate a Kubernetes YAML manifest and call the `apply_kubernetes_resource` tool to apply it.
-- Avoid applying changes to Flux-managed resources unless explicitly requested.
-- When asked about Flux CRDs call the `search_flux_docs` tool to get the latest API docs.
+- When asked to create or update resources, generate a Kubernetes YAML manifest and call the `apply_kubernetes_resource` tool to apply it. Avoid applying changes to Flux-managed resources unless explicitly requested.
+- When asked to install Flux use the `install_flux_instance` tool.
 
 ## Kubernetes logs analysis
 
