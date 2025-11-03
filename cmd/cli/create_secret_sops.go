@@ -192,6 +192,6 @@ func createSecretSOPSCmdRun(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	rootCmd.Println(`✔`, fmt.Sprintf("Secret %s/%s applied succefuly", secret.GetNamespace(), secret.GetName()))
+	rootCmd.Println(`✔`, fmt.Sprintf("Secret %s/%s applied successfully", secret.GetNamespace(), secret.GetName()))
 	return nil
 }
