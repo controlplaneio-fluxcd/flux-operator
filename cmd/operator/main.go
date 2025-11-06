@@ -7,6 +7,7 @@ import (
 	"crypto/fips140"
 	"errors"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/fluxcd/cli-utils/pkg/kstatus/polling"
@@ -39,6 +40,7 @@ import (
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/controller"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/entitlement"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/web"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -63,6 +65,7 @@ func main() {
 		defaultWorkloadIdentityServiceAccountEnvKey = "DEFAULT_WORKLOAD_IDENTITY_SERVICE_ACCOUNT"
 		reportingIntervalEnvKey                     = "REPORTING_INTERVAL"
 		runtimeNamespaceEnvKey                      = "RUNTIME_NAMESPACE"
+		webServerPortEnvKey                         = "WEB_SERVER_PORT"
 		tokenCacheDefaultMaxSize                    = 100
 	)
 
@@ -81,6 +84,8 @@ func main() {
 		defaultServiceAccount                 string
 		defaultWorkloadIdentityServiceAccount string
 		watchOptions                          runtimeCtrl.WatchOptions
+		webServerPort                         int
+		webServerOnly                         bool
 	)
 
 	flag.IntVar(&concurrent, "concurrent", 10,
@@ -104,6 +109,10 @@ func main() {
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.CommandLine.StringVar(&watchOptions.ConfigsLabelSelector, "watch-configs-label-selector", meta.LabelKeyWatch+"="+meta.LabelValueWatchEnabled,
 		"Watch for ConfigMaps and Secrets with matching labels.")
+	flag.IntVar(&webServerPort, "web-server-port", 9080,
+		"The port for the web server to listen on. If set to 0, the web server is disabled.")
+	flag.BoolVar(&webServerOnly, "web-server-only", false,
+		"Run only the web server without starting the controllers.")
 
 	tokenCacheOptions.BindFlags(flag.CommandLine, tokenCacheDefaultMaxSize)
 	logOptions.BindFlags(flag.CommandLine)
@@ -168,7 +177,12 @@ func main() {
 	// Disable the status poller cache to reduce memory usage.
 	clusterReader := engine.ClusterReaderFactoryFunc(clusterreader.NewDirectClusterReader)
 
-	reporter.MustRegisterMetrics()
+	if webServerOnly {
+		setupLog.Info("Starting in web server only mode, controllers are disabled")
+		enableLeaderElection = false
+	} else {
+		reporter.MustRegisterMetrics()
+	}
 
 	ctx := ctrl.SetupSignalHandler()
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
@@ -214,118 +228,145 @@ func main() {
 		os.Exit(1)
 	}
 
-	entitlementClient, err := entitlement.NewClient()
-	if err != nil {
-		setupLog.Error(err, "unable to create entitlement client")
-		os.Exit(1)
-	}
-
-	var tokenCache *cache.TokenCache
-	if tokenCacheOptions.MaxSize > 0 {
-		tokenCache, err = cache.NewTokenCache(tokenCacheOptions.MaxSize,
-			cache.WithMaxDuration(tokenCacheOptions.MaxDuration),
-			cache.WithMetricsRegisterer(reporter.Registerer()),
-			cache.WithMetricsPrefix("flux_token_"),
-			cache.WithEventNamespaceLabel("exported_namespace"))
+	if !webServerOnly {
+		entitlementClient, err := entitlement.NewClient()
 		if err != nil {
-			setupLog.Error(err, "unable to create token cache")
+			setupLog.Error(err, "unable to create entitlement client")
 			os.Exit(1)
 		}
-	}
 
-	if err = (&controller.EntitlementReconciler{
-		Client:            mgr.GetClient(),
-		Scheme:            mgr.GetScheme(),
-		StatusPoller:      polling.NewStatusPoller(mgr.GetClient(), mgr.GetRESTMapper(), polling.Options{}),
-		StatusManager:     controllerName,
-		EventRecorder:     mgr.GetEventRecorderFor(controllerName),
-		WatchNamespace:    runtimeNamespace,
-		EntitlementClient: entitlementClient,
-	}).SetupWithManager(mgr,
-		controller.EntitlementReconcilerOptions{
-			RateLimiter: runtimeCtrl.GetRateLimiter(rateLimiterOptions),
-		}); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Entitlement")
-		os.Exit(1)
-	}
+		var tokenCache *cache.TokenCache
+		if tokenCacheOptions.MaxSize > 0 {
+			tokenCache, err = cache.NewTokenCache(tokenCacheOptions.MaxSize,
+				cache.WithMaxDuration(tokenCacheOptions.MaxDuration),
+				cache.WithMetricsRegisterer(reporter.Registerer()),
+				cache.WithMetricsPrefix("flux_token_"),
+				cache.WithEventNamespaceLabel("exported_namespace"))
+			if err != nil {
+				setupLog.Error(err, "unable to create token cache")
+				os.Exit(1)
+			}
+		}
 
-	if err = (&controller.FluxInstanceReconciler{
-		Client:        mgr.GetClient(),
-		Scheme:        mgr.GetScheme(),
-		ClusterReader: clusterReader,
-		StoragePath:   storagePath,
-		StatusManager: controllerName,
-		EventRecorder: mgr.GetEventRecorderFor(controllerName),
-	}).SetupWithManager(mgr,
-		controller.FluxInstanceReconcilerOptions{
-			RateLimiter: runtimeCtrl.GetRateLimiter(rateLimiterOptions),
-		}); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", fluxcdv1.FluxInstanceKind)
-		os.Exit(1)
-	}
+		if err = (&controller.EntitlementReconciler{
+			Client:            mgr.GetClient(),
+			Scheme:            mgr.GetScheme(),
+			StatusPoller:      polling.NewStatusPoller(mgr.GetClient(), mgr.GetRESTMapper(), polling.Options{}),
+			StatusManager:     controllerName,
+			EventRecorder:     mgr.GetEventRecorderFor(controllerName),
+			WatchNamespace:    runtimeNamespace,
+			EntitlementClient: entitlementClient,
+		}).SetupWithManager(mgr,
+			controller.EntitlementReconcilerOptions{
+				RateLimiter: runtimeCtrl.GetRateLimiter(rateLimiterOptions),
+			}); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "Entitlement")
+			os.Exit(1)
+		}
 
-	if err = (&controller.FluxInstanceArtifactReconciler{
-		Client:        mgr.GetClient(),
-		StatusManager: controllerName,
-		EventRecorder: mgr.GetEventRecorderFor(controllerName),
-	}).SetupWithManager(mgr,
-		controller.FluxInstanceArtifactReconcilerOptions{
-			RateLimiter: runtimeCtrl.GetRateLimiter(rateLimiterOptions),
-		}); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", fluxcdv1.FluxInstanceKind+"Artifact")
-		os.Exit(1)
-	}
+		if err = (&controller.FluxInstanceReconciler{
+			Client:        mgr.GetClient(),
+			Scheme:        mgr.GetScheme(),
+			ClusterReader: clusterReader,
+			StoragePath:   storagePath,
+			StatusManager: controllerName,
+			EventRecorder: mgr.GetEventRecorderFor(controllerName),
+		}).SetupWithManager(mgr,
+			controller.FluxInstanceReconcilerOptions{
+				RateLimiter: runtimeCtrl.GetRateLimiter(rateLimiterOptions),
+			}); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", fluxcdv1.FluxInstanceKind)
+			os.Exit(1)
+		}
 
-	if err = (&controller.FluxReportReconciler{
-		Client:            mgr.GetClient(),
-		Scheme:            mgr.GetScheme(),
-		StatusManager:     controllerName,
-		EventRecorder:     mgr.GetEventRecorderFor(controllerName),
-		WatchNamespace:    runtimeNamespace,
-		ReportingInterval: reportingInterval,
-		Version:           VERSION,
-	}).SetupWithManager(mgr,
-		controller.FluxReportReconcilerOptions{
-			RateLimiter: runtimeCtrl.GetRateLimiter(rateLimiterOptions),
-		}); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", fluxcdv1.FluxReportKind)
-		os.Exit(1)
-	}
+		if err = (&controller.FluxInstanceArtifactReconciler{
+			Client:        mgr.GetClient(),
+			StatusManager: controllerName,
+			EventRecorder: mgr.GetEventRecorderFor(controllerName),
+		}).SetupWithManager(mgr,
+			controller.FluxInstanceArtifactReconcilerOptions{
+				RateLimiter: runtimeCtrl.GetRateLimiter(rateLimiterOptions),
+			}); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", fluxcdv1.FluxInstanceKind+"Artifact")
+			os.Exit(1)
+		}
 
-	if err = (&controller.ResourceSetReconciler{
-		Client:                mgr.GetClient(),
-		APIReader:             mgr.GetAPIReader(),
-		Scheme:                mgr.GetScheme(),
-		ClusterReader:         clusterReader,
-		StatusManager:         controllerName,
-		EventRecorder:         mgr.GetEventRecorderFor(controllerName),
-		DefaultServiceAccount: defaultServiceAccount,
-		RequeueDependency:     requeueDependency,
-	}).SetupWithManager(ctx, mgr,
-		controller.ResourceSetReconcilerOptions{
-			RateLimiter:           runtimeCtrl.GetRateLimiter(rateLimiterOptions),
-			WatchConfigsPredicate: watchConfigsPredicate,
-		}); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", fluxcdv1.ResourceSetKind)
-		os.Exit(1)
-	}
+		if err = (&controller.FluxReportReconciler{
+			Client:            mgr.GetClient(),
+			Scheme:            mgr.GetScheme(),
+			StatusManager:     controllerName,
+			EventRecorder:     mgr.GetEventRecorderFor(controllerName),
+			WatchNamespace:    runtimeNamespace,
+			ReportingInterval: reportingInterval,
+			Version:           VERSION,
+		}).SetupWithManager(mgr,
+			controller.FluxReportReconcilerOptions{
+				RateLimiter: runtimeCtrl.GetRateLimiter(rateLimiterOptions),
+			}); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", fluxcdv1.FluxReportKind)
+			os.Exit(1)
+		}
 
-	if err = (&controller.ResourceSetInputProviderReconciler{
-		Client:        mgr.GetClient(),
-		Scheme:        mgr.GetScheme(),
-		StatusManager: controllerName,
-		EventRecorder: mgr.GetEventRecorderFor(controllerName),
-		TokenCache:    tokenCache,
-	}).SetupWithManager(mgr,
-		controller.ResourceSetInputProviderReconcilerOptions{
-			RateLimiter: runtimeCtrl.GetRateLimiter(rateLimiterOptions),
-		}); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", fluxcdv1.ResourceSetInputProviderKind)
-		os.Exit(1)
+		if err = (&controller.ResourceSetReconciler{
+			Client:                mgr.GetClient(),
+			APIReader:             mgr.GetAPIReader(),
+			Scheme:                mgr.GetScheme(),
+			ClusterReader:         clusterReader,
+			StatusManager:         controllerName,
+			EventRecorder:         mgr.GetEventRecorderFor(controllerName),
+			DefaultServiceAccount: defaultServiceAccount,
+			RequeueDependency:     requeueDependency,
+		}).SetupWithManager(ctx, mgr,
+			controller.ResourceSetReconcilerOptions{
+				RateLimiter:           runtimeCtrl.GetRateLimiter(rateLimiterOptions),
+				WatchConfigsPredicate: watchConfigsPredicate,
+			}); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", fluxcdv1.ResourceSetKind)
+			os.Exit(1)
+		}
+
+		if err = (&controller.ResourceSetInputProviderReconciler{
+			Client:        mgr.GetClient(),
+			Scheme:        mgr.GetScheme(),
+			StatusManager: controllerName,
+			EventRecorder: mgr.GetEventRecorderFor(controllerName),
+			TokenCache:    tokenCache,
+		}).SetupWithManager(mgr,
+			controller.ResourceSetInputProviderReconcilerOptions{
+				RateLimiter: runtimeCtrl.GetRateLimiter(rateLimiterOptions),
+			}); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", fluxcdv1.ResourceSetInputProviderKind)
+			os.Exit(1)
+		}
 	}
 	// +kubebuilder:scaffold:builder
 
 	probes.SetupChecks(mgr, setupLog)
+
+	if s := os.Getenv(webServerPortEnvKey); s != "" {
+		port, err := strconv.Atoi(s)
+		if err != nil {
+			setupLog.Error(err, "unable to parse web server port", "value", s)
+			os.Exit(1)
+		}
+		webServerPort = port
+	}
+
+	if webServerPort > 0 {
+		go func() {
+			<-mgr.Elected()
+			if err := web.StartServer(ctx,
+				time.Minute,
+				webServerPort,
+				mgr.GetAPIReader(),
+				mgr.GetClient(),
+				mgr.GetConfig(),
+				ctrl.Log.WithName("web-server")); err != nil {
+				setupLog.Error(err, "artifact server error")
+				os.Exit(1)
+			}
+		}()
+	}
 
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctx); err != nil {
