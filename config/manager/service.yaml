@@ -8,7 +8,7 @@ metadata:
 spec:
   ports:
   - name: http-web
-    port: 80
+    port: 9080
     protocol: TCP
     targetPort: 9080
   - name: http
