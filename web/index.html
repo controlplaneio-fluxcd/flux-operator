@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/flux-icon-white.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Flux Status Page</title>
+    <script>
+      // Apply theme before page renders to prevent flash
+      (function() {
+        const theme = localStorage.getItem('theme') || 'auto';
+        const isDark = theme === 'dark' ||
+          (theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (isDark) {
+          document.documentElement.classList.add('dark');
+        }
+      })();
+    </script>
+    <style>
+      /* Critical CSS to prevent flash of white background */
+      html {
+        background-color: #f9fafb; /* gray-50 for light */
+      }
+      html.dark {
+        background-color: #111827; /* gray-900 for dark */
+      }
+      body {
+        background-color: transparent;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
