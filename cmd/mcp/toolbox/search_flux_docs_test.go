@@ -49,8 +49,7 @@ func TestManager_HandleSearchFluxDocs(t *testing.T) {
 			matchResults: []string{
 				"ResourceSetInputProvider",
 				"GitRepository",
-			},
-		},
+			}},
 	}
 
 	for _, test := range tests {
