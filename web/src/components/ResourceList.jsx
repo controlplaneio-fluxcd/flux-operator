@@ -1,0 +1,408 @@
+import { signal } from '@preact/signals'
+import { useEffect, useState, useMemo } from 'preact/hooks'
+import { fetchWithMock } from '../utils/fetch'
+import { fluxKinds } from '../utils/constants'
+import { formatTimestamp } from '../utils/time'
+
+// Resources data signals
+export const resourcesData = signal([])
+export const resourcesLoading = signal(false)
+export const resourcesError = signal(null)
+
+// Filter signals - NO default namespace (show all namespaces)
+export const selectedResourceKind = signal('')
+export const selectedResourceName = signal('')
+export const selectedResourceNamespace = signal('')
+
+// Fetch resources from API
+export async function fetchResourcesStatus() {
+  resourcesLoading.value = true
+  resourcesError.value = null
+
+  const params = new URLSearchParams()
+  if (selectedResourceKind.value) params.append('kind', selectedResourceKind.value)
+  if (selectedResourceName.value) params.append('name', selectedResourceName.value)
+  if (selectedResourceNamespace.value) params.append('namespace', selectedResourceNamespace.value)
+
+  try {
+    const data = await fetchWithMock({
+      endpoint: `/api/v1/resources?${params.toString()}`,
+      mockPath: '../mock/resources',
+      mockExport: 'mockResources'
+    })
+    resourcesData.value = data.resources || []
+  } catch (error) {
+    console.error('Failed to fetch resources:', error)
+    resourcesError.value = error.message
+    resourcesData.value = []
+  } finally {
+    resourcesLoading.value = false
+  }
+}
+
+// Get status badge color and styling
+function getStatusBadgeClass(status) {
+  switch (status) {
+  case 'Ready':
+    return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+  case 'Failed':
+    return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+  case 'Progressing':
+    return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
+  case 'Suspended':
+    return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+  case 'Unknown':
+  default:
+    return 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+  }
+}
+
+/**
+ * Groups inventory items by apiVersion only
+ * @param {Array} inventory - Array of inventory items
+ * @returns {Object} Structure: { apiVersion: [items] }
+ */
+function groupInventoryByApiVersion(inventory) {
+  if (!inventory || inventory.length === 0) return {}
+
+  const grouped = {}
+
+  inventory.forEach(item => {
+    const apiVersion = item.apiVersion || 'unknown'
+
+    if (!grouped[apiVersion]) {
+      grouped[apiVersion] = []
+    }
+    grouped[apiVersion].push(item)
+  })
+
+  // Sort items within each apiVersion by kind, namespace, then name
+  Object.keys(grouped).forEach(apiVersion => {
+    grouped[apiVersion].sort((a, b) => {
+      // Sort by kind first
+      const kindCompare = a.kind.localeCompare(b.kind)
+      if (kindCompare !== 0) return kindCompare
+
+      // Then by namespace (cluster-scoped resources have no namespace, so they come first)
+      const nsA = a.namespace || ''
+      const nsB = b.namespace || ''
+      if (nsA !== nsB) return nsA.localeCompare(nsB)
+
+      // Finally by name
+      return a.name.localeCompare(b.name)
+    })
+  })
+
+  return grouped
+}
+
+// Inventory item component - displays kind/name or kind/namespace/name
+function InventoryItem({ item }) {
+  return (
+    <div class="py-1 px-2 text-xs break-all">
+      <span class="font-mono text-gray-900 dark:text-gray-100">
+        <span class="text-gray-600 dark:text-gray-400">{item.kind}/</span>
+        {item.namespace && (
+          <span class="text-gray-500 dark:text-gray-400">{item.namespace}/</span>
+        )}
+        {item.name}
+      </span>
+    </div>
+  )
+}
+
+// Inventory group by apiVersion component
+function InventoryGroupByApiVersion({ apiVersion, items }) {
+  return (
+    <div class="mb-3">
+      <div class="flex items-center gap-2 py-1 flex-wrap">
+        <span class="text-xs font-bold text-gray-800 dark:text-gray-200 break-all">
+          {apiVersion}
+        </span>
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+          {items.length}
+        </span>
+      </div>
+      <div class="ml-0 sm:ml-2">
+        {items.map((item, idx) => (
+          <InventoryItem key={idx} item={item} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// Resource card component
+function ResourceCard({ resource }) {
+  const [isExpanded, setIsExpanded] = useState(false)
+  const [isInventoryExpanded, setIsInventoryExpanded] = useState(false)
+
+  // Group inventory by apiVersion (memoized)
+  const groupedInventory = useMemo(
+    () => groupInventoryByApiVersion(resource.inventory),
+    [resource.inventory]
+  )
+
+  // Sort apiVersions (prioritize apiextensions.k8s.io/v1 first, then v1)
+  const sortedApiVersions = useMemo(() => {
+    const versions = Object.keys(groupedInventory)
+    return versions.sort((a, b) => {
+      // First: apiextensions.k8s.io/v1
+      if (a === 'apiextensions.k8s.io/v1' && b !== 'apiextensions.k8s.io/v1') return -1
+      if (b === 'apiextensions.k8s.io/v1' && a !== 'apiextensions.k8s.io/v1') return 1
+
+      // Second: v1
+      if (a === 'v1' && b !== 'v1') return -1
+      if (b === 'v1' && a !== 'v1') return 1
+
+      // Rest: alphabetically
+      return a.localeCompare(b)
+    })
+  }, [groupedInventory])
+
+  // Check if message is long or contains newlines
+  const isLongMessage = resource.message.length > 150 || resource.message.includes('\n')
+  const shouldTruncate = isLongMessage && !isExpanded
+
+  // Truncate to first line or 150 chars
+  const getTruncatedMessage = () => {
+    const firstLine = resource.message.split('\n')[0]
+    if (firstLine.length > 150) {
+      return firstLine.substring(0, 150) + '...'
+    }
+    return firstLine
+  }
+
+  const displayMessage = shouldTruncate ? getTruncatedMessage() : resource.message
+
+  return (
+    <div class="card p-4 hover:shadow-md transition-shadow">
+      {/* Header row: kind + status badge + timestamp */}
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-3">
+          <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
+            {resource.kind}
+          </span>
+          <span class={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeClass(resource.status)}`}>
+            {resource.status}
+          </span>
+        </div>
+        <span class="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap ml-4">
+          {formatTimestamp(resource.lastReconciled)}
+        </span>
+      </div>
+
+      {/* Resource namespace/name */}
+      <div class="mb-2">
+        <span class="font-mono text-sm text-gray-500 dark:text-gray-400">
+          {resource.namespace}/
+        </span>
+        <span class="font-mono text-sm font-semibold text-gray-900 dark:text-gray-100">
+          {resource.name}
+        </span>
+      </div>
+
+      {/* Message */}
+      <div class="text-sm text-gray-700 dark:text-gray-300">
+        <pre class="whitespace-pre-wrap break-words font-sans">
+          {displayMessage}
+        </pre>
+        {isLongMessage && (
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            class="text-flux-blue dark:text-blue-400 text-xs mt-1 hover:underline focus:outline-none"
+          >
+            {isExpanded ? 'Show less' : 'Show more'}
+          </button>
+        )}
+      </div>
+
+      {/* Inventory Section - Only show if inventory exists */}
+      {resource.inventory && resource.inventory.length > 0 && (
+        <>
+          {/* Inventory Toggle Button */}
+          <div class="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+            <button
+              onClick={() => setIsInventoryExpanded(!isInventoryExpanded)}
+              class="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-300 hover:text-flux-blue dark:hover:text-blue-400 focus:outline-none transition-colors"
+            >
+              <svg
+                class={`w-4 h-4 transition-transform ${isInventoryExpanded ? 'rotate-90' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+              </svg>
+              <span class="font-medium">
+                Inventory ({resource.inventory.length})
+              </span>
+            </button>
+          </div>
+
+          {/* Inventory List - Expanded (Grouped by apiVersion) */}
+          {isInventoryExpanded && (
+            <div class="mt-3">
+              {sortedApiVersions.map(apiVersion => (
+                <InventoryGroupByApiVersion
+                  key={apiVersion}
+                  apiVersion={apiVersion}
+                  items={groupedInventory[apiVersion]}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+// Main ResourceList component
+export function ResourceList() {
+  // Fetch resources on mount and when filters change
+  useEffect(() => {
+    fetchResourcesStatus()
+  }, [selectedResourceKind.value, selectedResourceName.value, selectedResourceNamespace.value])
+
+  const handleClearFilters = () => {
+    selectedResourceKind.value = ''
+    selectedResourceName.value = ''
+    selectedResourceNamespace.value = ''
+  }
+
+  return (
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
+      <div class="space-y-6">
+        {/* Page Title */}
+        <div class="flex items-center justify-between">
+          <h2 class="text-lg font-bold text-gray-900 dark:text-white">Flux Resources</h2>
+          {/* Resource count */}
+          {!resourcesLoading.value && resourcesData.value.length > 0 && (
+            <span class="text-sm text-gray-600 dark:text-gray-400">
+              {resourcesData.value.length} resources
+            </span>
+          )}
+        </div>
+
+        {/* Filters */}
+        <div class="card p-4">
+          <div class="flex flex-wrap gap-3 items-end">
+            {/* Kind Filter */}
+            <div class="flex-1 min-w-[200px]">
+              <label for="filter-kind" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Resource Kind
+              </label>
+              <select
+                id="filter-kind"
+                name="kind"
+                value={selectedResourceKind.value}
+                onChange={(e) => selectedResourceKind.value = e.target.value}
+                class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-flux-blue"
+              >
+                <option value="">All Kinds</option>
+                {fluxKinds.map(kind => (
+                  <option key={kind} value={kind}>{kind}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Name Filter */}
+            <div class="flex-1 min-w-[200px]">
+              <label for="filter-name" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Resource Name
+              </label>
+              <input
+                id="filter-name"
+                name="name"
+                type="text"
+                value={selectedResourceName.value}
+                onChange={(e) => selectedResourceName.value = e.target.value}
+                placeholder="e.g., flux-system"
+                class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-flux-blue"
+              />
+            </div>
+
+            {/* Namespace Filter */}
+            <div class="flex-1 min-w-[200px]">
+              <label for="filter-namespace" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Namespace
+              </label>
+              <input
+                id="filter-namespace"
+                name="namespace"
+                type="text"
+                value={selectedResourceNamespace.value}
+                onChange={(e) => selectedResourceNamespace.value = e.target.value}
+                placeholder="All namespaces"
+                class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-flux-blue"
+              />
+            </div>
+
+            {/* Clear Filters Button */}
+            <div>
+              <button
+                onClick={handleClearFilters}
+                class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white focus:outline-none whitespace-nowrap"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Error State */}
+        {resourcesError.value && (
+          <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-4">
+            <div class="flex">
+              <svg class="w-5 h-5 text-red-400 dark:text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+              </svg>
+              <div class="ml-3">
+                <p class="text-sm text-red-800 dark:text-red-200">
+                  Failed to load resources: {resourcesError.value}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Resources List */}
+        {/* Loading State */}
+        {resourcesLoading.value && (
+          <div class="card py-12">
+            <div class="flex items-center justify-center">
+              <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-flux-blue"></div>
+              <span class="ml-3 text-gray-600 dark:text-gray-400">Loading resources...</span>
+            </div>
+          </div>
+        )}
+
+        {/* Empty State */}
+        {!resourcesLoading.value && resourcesData.value.length === 0 && (
+          <div class="card py-12">
+            <div class="text-center">
+              <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+              </svg>
+              <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                No resources found for the selected filters
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Resource Cards */}
+        {!resourcesLoading.value && resourcesData.value.length > 0 && (
+          <div class="space-y-4">
+            {[...resourcesData.value]
+              .sort((a, b) => new Date(b.lastReconciled) - new Date(a.lastReconciled))
+              .map((resource, index) => (
+                <ResourceCard key={`${resource.namespace}-${resource.kind}-${resource.name}-${index}`} resource={resource} />
+              ))}
+          </div>
+        )}
+      </div>
+    </main>
+  )
+}

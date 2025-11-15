@@ -41,6 +41,14 @@ jobs:
         uses: fluxcd/flux2/action@b6e76ca2534f76dcb8dd94fb057cdfa923c3b641 #v2.7.3
       - name: Setup Syft
         uses: anchore/sbom-action/download-syft@8e94d75ddd33f69f691467e42275782e4bfefe84 # v0.20.9
+      - name: Setup Node
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version: 24
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+      - name: Build frontend
+        run: make web-ci-install web-build
       - name: Prepare
         id: prep
         run: |
