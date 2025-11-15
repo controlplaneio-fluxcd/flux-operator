@@ -5,9 +5,13 @@ package toolbox
 
 import (
 	"context"
+	"fmt"
+	"strings"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/auth"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/toolbox/library"
 )
 
 const (
@@ -39,17 +43,36 @@ func (m *Manager) HandleSearchFluxDocs(ctx context.Context, request *mcp.CallToo
 		limit = 1
 	}
 
-	library := NewLibrary()
+	// Use the embedded search index
+	index := library.GetSearchIndex()
+	if index == nil {
+		return NewToolResultError("Search index not available. Run 'make mcp-build-search-index' to build it.")
+	}
 
-	results := library.Search(input.Query, limit)
+	results := index.Search(input.Query, limit)
 	if len(results) == 0 {
 		return NewToolResultError("No documents found")
 	}
 
-	content, err := library.Fetch(results)
-	if err != nil {
-		return NewToolResultError(err.Error())
+	// Format results
+	var content strings.Builder
+	for i, result := range results {
+		if i > 0 {
+			content.WriteString("\n\n---\n\n")
+		}
+
+		// Add metadata header
+		content.WriteString(fmt.Sprintf("# %s (%s)\n\n",
+			result.Document.Metadata.Kind,
+			result.Document.Metadata.Group))
+		content.WriteString(fmt.Sprintf("**URL:** %s\n\n",
+			result.Document.Metadata.URL))
+		content.WriteString(fmt.Sprintf("**Score:** %v\n\n",
+			result.Score))
+
+		// Add document content
+		content.WriteString(result.Document.Content)
 	}
 
-	return NewToolResultText(content)
+	return NewToolResultText(content.String())
 }

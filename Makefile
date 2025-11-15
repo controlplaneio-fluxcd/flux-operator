@@ -139,6 +139,13 @@ cli-docker-build: ## Build docker image with the CLI.
 
 MCP_IMG ?= ghcr.io/controlplaneio-fluxcd/flux-operator-mcp:latest
 
+.PHONY: mcp-build-search-index
+mcp-build-search-index: ## Build search index for MCP docs tool.
+	@echo "Building MCP search index..."
+	@mkdir -p cmd/mcp/toolbox/library
+	@go run cmd/mcp/toolbox/indexer/main.go
+	@echo "MCP search index built successfully"
+
 .PHONY: mcp-test
 mcp-test: tidy fmt vet ## Run MCP tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./cmd/mcp/... -v

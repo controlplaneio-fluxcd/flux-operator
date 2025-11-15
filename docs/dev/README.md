@@ -61,8 +61,9 @@
 2. Generate the manifests for the latest Flux version by running `make vendor-flux`.
 3. Build the manifests with images digests by running `make build-manifests`.
 4. Write an end-to-end test for the upgrade if the new Flux version is a minor release.
-5. Commit changes and open a PR.
-6. After the PR is merged, publish the OCI artifact with the manifests by running the [`push-manifests` GitHub Workflow](https://github.com/controlplaneio-fluxcd/flux-operator/actions/workflows/push-manifests.yml).
+5. Run `make mcp-build-search-index` to rebuild the docs index if the new Flux version is a minor release. 
+6. Commit changes and open a PR.
+7. After the PR is merged, publish the OCI artifact with the manifests by running the [`push-manifests` GitHub Workflow](https://github.com/controlplaneio-fluxcd/flux-operator/actions/workflows/push-manifests.yml).
 
 ### Manifests Update for Enterprise CVE Fixes
 

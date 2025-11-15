@@ -1,11 +1,39 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-package toolbox
+package library
 
 import (
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
+
+// SearchDocument represents a searchable document.
+type SearchDocument struct {
+	ID      string // Unique identifier
+	Content string // Full markdown content
+	Length  int    // Word count (for BM25 normalization)
+
+	Metadata DocumentMetadata
+}
+
+// SearchIndex holds the inverted index and document corpus.
+type SearchIndex struct {
+	Terms        map[string][]Posting // term -> list of postings
+	Documents    []SearchDocument     // All searchable documents
+	AvgDocLength float64              // Average document length (for BM25)
+	TotalDocs    int                  // Total number of documents
+}
+
+// Posting represents a term occurrence in a document.
+type Posting struct {
+	DocID     int // Document index in Documents slice
+	Frequency int // Term frequency in this document
+}
+
+// GetDocsMetadata returns the collection of document metadata for indexing.
+func GetDocsMetadata() []DocumentMetadata {
+	return docsMetadata
+}
 
 // docsMetadata is a collection of DocumentMetadata instances,
 // each describing metadata like URL, group, kind, and related keywords.
