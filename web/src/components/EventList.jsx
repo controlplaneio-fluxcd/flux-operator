@@ -15,6 +15,7 @@ export const eventsError = signal(null)
 export const selectedEventsKind = signal('')
 export const selectedEventsName = signal('')
 export const selectedEventsNamespace = signal('')
+export const selectedEventsSeverity = signal('')
 
 // Fetch events from API
 export async function fetchEvents() {
@@ -25,6 +26,7 @@ export async function fetchEvents() {
   if (selectedEventsKind.value) params.append('kind', selectedEventsKind.value)
   if (selectedEventsName.value) params.append('name', selectedEventsName.value)
   if (selectedEventsNamespace.value) params.append('namespace', selectedEventsNamespace.value)
+  if (selectedEventsSeverity.value) params.append('type', selectedEventsSeverity.value)
 
   try {
     const data = await fetchWithMock({
@@ -128,12 +130,13 @@ export function EventList() {
   // Fetch events on mount and when filters change
   useEffect(() => {
     fetchEvents()
-  }, [selectedEventsKind.value, selectedEventsName.value, selectedEventsNamespace.value])
+  }, [selectedEventsKind.value, selectedEventsName.value, selectedEventsNamespace.value, selectedEventsSeverity.value])
 
   const handleClearFilters = () => {
     selectedEventsKind.value = ''
     selectedEventsName.value = ''
     selectedEventsNamespace.value = ''
+    selectedEventsSeverity.value = ''
   }
 
   return (
@@ -156,6 +159,7 @@ export function EventList() {
             kindSignal={selectedEventsKind}
             nameSignal={selectedEventsName}
             namespaceSignal={selectedEventsNamespace}
+            severitySignal={selectedEventsSeverity}
             namespaces={fluxReport.value?.spec?.namespaces || []}
             onClear={handleClearFilters}
           />

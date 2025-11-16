@@ -1,7 +1,7 @@
 import { signal } from '@preact/signals'
 import { showSearchView } from '../app'
 import { activeSearchTab } from './SearchView'
-import { selectedResourceKind, selectedResourceName, selectedResourceNamespace } from './ResourceList'
+import { selectedResourceKind, selectedResourceName, selectedResourceNamespace, selectedResourceStatus } from './ResourceList'
 
 // Store collapsed state for the grid
 const isExpanded = signal(true)
@@ -22,6 +22,18 @@ function ReconcilerCard({ reconciler }) {
     selectedResourceKind.value = reconciler.kind
     selectedResourceName.value = ''
     selectedResourceNamespace.value = ''
+    selectedResourceStatus.value = ''
+    activeSearchTab.value = 'resources'
+    showSearchView.value = true
+  }
+
+  // Handle status badge click - navigate to search with kind and status filters
+  const handleStatusClick = (e, status) => {
+    e.stopPropagation()
+    selectedResourceKind.value = reconciler.kind
+    selectedResourceName.value = ''
+    selectedResourceNamespace.value = ''
+    selectedResourceStatus.value = status
     activeSearchTab.value = 'resources'
     showSearchView.value = true
   }
@@ -47,17 +59,26 @@ function ReconcilerCard({ reconciler }) {
 
       <div class="flex flex-wrap gap-2">
         {stats.running > 0 && (
-          <span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-green-200 text-green-800">
+          <span
+            onClick={(e) => handleStatusClick(e, 'Ready')}
+            class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-green-200 text-green-800 hover:bg-green-300 cursor-pointer transition-colors"
+          >
             {stats.running} running
           </span>
         )}
         {stats.failing > 0 && (
-          <span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-800">
+          <span
+            onClick={(e) => handleStatusClick(e, 'Failed')}
+            class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-800 hover:bg-red-200 cursor-pointer transition-colors"
+          >
             {stats.failing} failing
           </span>
         )}
         {stats.suspended > 0 && (
-          <span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+          <span
+            onClick={(e) => handleStatusClick(e, 'Suspended')}
+            class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-yellow-100 text-yellow-800 hover:bg-yellow-200 cursor-pointer transition-colors"
+          >
             {stats.suspended} suspended
           </span>
         )}

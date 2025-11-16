@@ -14,6 +14,7 @@ export const resourcesError = signal(null)
 export const selectedResourceKind = signal('')
 export const selectedResourceName = signal('')
 export const selectedResourceNamespace = signal('')
+export const selectedResourceStatus = signal('')
 
 // Fetch resources from API
 export async function fetchResourcesStatus() {
@@ -24,6 +25,7 @@ export async function fetchResourcesStatus() {
   if (selectedResourceKind.value) params.append('kind', selectedResourceKind.value)
   if (selectedResourceName.value) params.append('name', selectedResourceName.value)
   if (selectedResourceNamespace.value) params.append('namespace', selectedResourceNamespace.value)
+  if (selectedResourceStatus.value) params.append('status', selectedResourceStatus.value)
 
   try {
     const data = await fetchWithMock({
@@ -264,12 +266,13 @@ export function ResourceList() {
   // Fetch resources on mount and when filters change
   useEffect(() => {
     fetchResourcesStatus()
-  }, [selectedResourceKind.value, selectedResourceName.value, selectedResourceNamespace.value])
+  }, [selectedResourceKind.value, selectedResourceName.value, selectedResourceNamespace.value, selectedResourceStatus.value])
 
   const handleClearFilters = () => {
     selectedResourceKind.value = ''
     selectedResourceName.value = ''
     selectedResourceNamespace.value = ''
+    selectedResourceStatus.value = ''
   }
 
   return (
@@ -292,6 +295,7 @@ export function ResourceList() {
             kindSignal={selectedResourceKind}
             nameSignal={selectedResourceName}
             namespaceSignal={selectedResourceNamespace}
+            statusSignal={selectedResourceStatus}
             namespaces={fluxReport.value?.spec?.namespaces || []}
             onClear={handleClearFilters}
           />
