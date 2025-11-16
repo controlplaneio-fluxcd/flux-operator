@@ -563,6 +563,38 @@ export const mockResources = {
       message: "Bucket contents synchronized successfully",
       lastReconciled: getTimestamp(100)
     },
+    {
+      name: "backups",
+      kind: "Bucket",
+      namespace: "flux-system",
+      status: "Ready",
+      message: "Bucket contents synchronized successfully",
+      lastReconciled: getTimestamp(25)
+    },
+    {
+      name: "artifacts",
+      kind: "Bucket",
+      namespace: "default",
+      status: "Ready",
+      message: "Bucket contents synchronized successfully",
+      lastReconciled: getTimestamp(15)
+    },
+    {
+      name: "archived-data",
+      kind: "Bucket",
+      namespace: "flux-system",
+      status: "Suspended",
+      message: "Reconciliation suspended",
+      lastReconciled: getTimestamp(120)
+    },
+    {
+      name: "legacy-storage",
+      kind: "Bucket",
+      namespace: "default",
+      status: "Suspended",
+      message: "Reconciliation disabled via annotation",
+      lastReconciled: getTimestamp(200)
+    },
     // ImageRepositories
     {
       name: "podinfo",
@@ -619,9 +651,9 @@ export const mockResources = {
       name: "on-call-alerts",
       kind: "Alert",
       namespace: "flux-system",
-      status: "Ready",
-      message: "Notification sent to slack channel #flux-alerts",
-      lastReconciled: getTimestamp(38)
+      status: "Unknown",
+      message: "No status information available",
+      lastReconciled: getTimestamp(0)
     },
     // Providers
     {
@@ -647,7 +679,7 @@ export const mockResources = {
       kind: "ArtifactGenerator",
       namespace: "flux-system",
       status: "Ready",
-      message: "Generated artifact from ConfigMap/app-config",
+      message: "Generated 2 artifact(s)",
       lastReconciled: getTimestamp(58)
     },
     // ExternalArtifacts
@@ -672,9 +704,10 @@ export const getMockResources = (endpoint) => {
   const kindFilter = params.get('kind')
   const nameFilter = params.get('name')
   const namespaceFilter = params.get('namespace')
+  const statusFilter = params.get('status')
 
   // If no filters, return all resources
-  if (!kindFilter && !nameFilter && !namespaceFilter) {
+  if (!kindFilter && !nameFilter && !namespaceFilter && !statusFilter) {
     return mockResources
   }
 
@@ -692,6 +725,11 @@ export const getMockResources = (endpoint) => {
 
     // Filter by namespace
     if (namespaceFilter && resource.namespace !== namespaceFilter) {
+      return false
+    }
+
+    // Filter by status (Ready, Failed, Progressing, Suspended, Unknown)
+    if (statusFilter && resource.status !== statusFilter) {
       return false
     }
 

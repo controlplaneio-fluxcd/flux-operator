@@ -23,8 +23,8 @@ import (
 )
 
 // ResourcesHandler handles GET /api/v1/resources requests and returns the status of Flux resources.
-// Supports optional query parameters: kind, name, namespace
-// Example: /api/v1/resources?kind=FluxInstance&name=flux&namespace=flux-system
+// Supports optional query parameters: kind, name, namespace, status
+// Example: /api/v1/resources?kind=FluxInstance&name=flux&namespace=flux-system&status=Ready
 func (r *Router) ResourcesHandler(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodGet && req.Method != http.MethodHead {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -36,6 +36,7 @@ func (r *Router) ResourcesHandler(w http.ResponseWriter, req *http.Request) {
 	kind := queryParams.Get("kind")
 	name := queryParams.Get("name")
 	namespace := queryParams.Get("namespace")
+	status := queryParams.Get("status")
 
 	// Build kinds array based on query parameter
 	var kinds []string
@@ -58,10 +59,10 @@ func (r *Router) ResourcesHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// Get resource status from the cluster using the request context
-	resources, err := r.GetResourcesStatus(req.Context(), kinds, name, namespace)
+	resources, err := r.GetResourcesStatus(req.Context(), kinds, name, namespace, status)
 	if err != nil {
 		r.log.Error(err, "failed to get resources status", "url", req.URL.String(),
-			"kind", kind, "name", name, "namespace", namespace)
+			"kind", kind, "name", name, "namespace", namespace, "status", status)
 		// Return empty array instead of error for better UX
 		resources = []ResourceStatus{}
 	}
@@ -112,7 +113,8 @@ type ResourceStatus struct {
 
 // GetResourcesStatus returns the status for the specified resource kinds and optional name in the given namespace.
 // If name is empty, returns the status for all resources of the specified kinds are returned.
-func (r *Router) GetResourcesStatus(ctx context.Context, kinds []string, name, namespace string) ([]ResourceStatus, error) {
+// Filters by status (Ready, Failed, Progressing, Suspended, Unknown) if provided.
+func (r *Router) GetResourcesStatus(ctx context.Context, kinds []string, name, namespace string, status string) ([]ResourceStatus, error) {
 	var result []ResourceStatus
 
 	if len(kinds) == 0 {
@@ -191,6 +193,17 @@ func (r *Router) GetResourcesStatus(ctx context.Context, kinds []string, name, n
 	// Check for errors
 	if len(errChan) > 0 {
 		return nil, <-errChan
+	}
+
+	// Filter by status if specified
+	if status != "" {
+		filteredResult := make([]ResourceStatus, 0, len(result))
+		for _, rs := range result {
+			if rs.Status == status {
+				filteredResult = append(filteredResult, rs)
+			}
+		}
+		return filteredResult, nil
 	}
 
 	return result, nil

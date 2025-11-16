@@ -327,9 +327,10 @@ export const getMockEvents = (endpoint) => {
   const kindFilter = params.get('kind')
   const nameFilter = params.get('name')
   const namespaceFilter = params.get('namespace')
+  const typeFilter = params.get('type')
 
   // If no filters, return all events
-  if (!kindFilter && !nameFilter && !namespaceFilter) {
+  if (!kindFilter && !nameFilter && !namespaceFilter && !typeFilter) {
     return mockEvents
   }
 
@@ -349,6 +350,11 @@ export const getMockEvents = (endpoint) => {
 
     // Filter by namespace
     if (namespaceFilter && event.namespace !== namespaceFilter) {
+      return false
+    }
+
+    // Filter by type (severity: Normal, Warning)
+    if (typeFilter && event.type !== typeFilter) {
       return false
     }
 

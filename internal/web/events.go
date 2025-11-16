@@ -22,8 +22,8 @@ import (
 )
 
 // EventsHandler handles GET /api/v1/events requests and returns Kubernetes events for Flux resources.
-// Supports optional query parameters: kind, name, namespace
-// Example: /api/v1/events?kind=FluxInstance&name=flux&namespace=flux-system
+// Supports optional query parameters: kind, name, namespace, type
+// Example: /api/v1/events?kind=FluxInstance&name=flux&namespace=flux-system&type=Warning
 func (r *Router) EventsHandler(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -35,6 +35,7 @@ func (r *Router) EventsHandler(w http.ResponseWriter, req *http.Request) {
 	kind := queryParams.Get("kind")
 	name := queryParams.Get("name")
 	namespace := queryParams.Get("namespace")
+	eventType := queryParams.Get("type")
 
 	// Build kinds array based on query parameter
 	var kinds []string
@@ -57,10 +58,10 @@ func (r *Router) EventsHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// Get events from the cluster using the request context
-	events, err := r.GetEvents(req.Context(), kinds, name, namespace, "")
+	events, err := r.GetEvents(req.Context(), kinds, name, namespace, "", eventType)
 	if err != nil {
 		r.log.Error(err, "failed to get events", "url", req.URL.String(),
-			"kind", kind, "name", name, "namespace", namespace)
+			"kind", kind, "name", name, "namespace", namespace, "type", eventType)
 		// Return empty array instead of error for better UX
 		events = []Event{}
 	}
@@ -88,7 +89,8 @@ type Event struct {
 
 // GetEvents retrieves events for the specified resource kinds.
 // Returns at most 500 events per kind (100 if multiple kinds are specified), sorted by timestamp descending.
-func (r *Router) GetEvents(ctx context.Context, kinds []string, name, namespace string, excludeReason string) ([]Event, error) {
+// Filters by eventType (Normal, Warning) if provided.
+func (r *Router) GetEvents(ctx context.Context, kinds []string, name, namespace string, excludeReason string, eventType string) ([]Event, error) {
 	var allEvents []corev1.Event
 
 	if len(kinds) == 0 {
@@ -170,9 +172,20 @@ func (r *Router) GetEvents(ctx context.Context, kinds []string, name, namespace 
 	// Sort all events by timestamp
 	sort.Sort(SortableEvents(allEvents))
 
+	// Filter by event type if specified
+	filteredEvents := allEvents
+	if eventType != "" {
+		filteredEvents = make([]corev1.Event, 0, len(allEvents))
+		for _, event := range allEvents {
+			if event.Type == eventType {
+				filteredEvents = append(filteredEvents, event)
+			}
+		}
+	}
+
 	// Convert to lighter Event representation
-	events := make([]Event, 0, len(allEvents))
-	for _, event := range allEvents {
+	events := make([]Event, 0, len(filteredEvents))
+	for _, event := range filteredEvents {
 		events = append(events, Event{
 			LastTimestamp: event.LastTimestamp,
 			Type:          event.Type,
