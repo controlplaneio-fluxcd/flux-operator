@@ -87,7 +87,7 @@ type Event struct {
 }
 
 // GetEvents retrieves events for the specified resource kinds.
-// Returns at most 100 events per kind (50 if multiple kinds are specified), sorted by timestamp descending.
+// Returns at most 500 events per kind (100 if multiple kinds are specified), sorted by timestamp descending.
 func (r *Router) GetEvents(ctx context.Context, kinds []string, name, namespace string, excludeReason string) ([]Event, error) {
 	var allEvents []corev1.Event
 
@@ -117,8 +117,9 @@ func (r *Router) GetEvents(ctx context.Context, kinds []string, name, namespace 
 				fields.OneTermEqualSelector("involvedObject.kind", kind),
 			}
 
-			// Add name filter if provided
-			if name != "" {
+			// Add name filter if provided and doesn't contain wildcards
+			// For exact match, use field selector (faster)
+			if name != "" && !hasWildcard(name) {
 				selectors = append(selectors, fields.OneTermEqualSelector("involvedObject.name", name))
 			}
 
@@ -141,8 +142,19 @@ func (r *Router) GetEvents(ctx context.Context, kinds []string, name, namespace 
 				return
 			}
 
+			// Filter by name using wildcard matching if needed
+			filteredEvents := el.Items
+			if hasWildcard(name) {
+				filteredEvents = []corev1.Event{}
+				for _, event := range el.Items {
+					if matchesWildcard(event.InvolvedObject.Name, name) {
+						filteredEvents = append(filteredEvents, event)
+					}
+				}
+			}
+
 			mu.Lock()
-			allEvents = append(allEvents, el.Items...)
+			allEvents = append(allEvents, filteredEvents...)
 			mu.Unlock()
 		}(kind)
 	}

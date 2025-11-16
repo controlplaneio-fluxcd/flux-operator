@@ -157,7 +157,9 @@ func (r *Router) GetResourcesStatus(ctx context.Context, kinds []string, name, n
 			if namespace != "" {
 				listOpts = append(listOpts, client.InNamespace(namespace))
 			}
-			if name != "" {
+
+			// Add name filter if provided and doesn't contain wildcards
+			if name != "" && !hasWildcard(name) {
 				listOpts = append(listOpts, client.MatchingFields{"metadata.name": name})
 			}
 
@@ -168,6 +170,14 @@ func (r *Router) GetResourcesStatus(ctx context.Context, kinds []string, name, n
 
 			mu.Lock()
 			for _, obj := range list.Items {
+				// Filter by name using wildcard matching if needed
+				if hasWildcard(name) {
+					objName, _, _ := unstructured.NestedString(obj.Object, "metadata", "name")
+					if !matchesWildcard(objName, name) {
+						continue
+					}
+				}
+
 				rs := r.resourceStatusFromUnstructured(ctx, obj)
 				result = append(result, rs)
 			}

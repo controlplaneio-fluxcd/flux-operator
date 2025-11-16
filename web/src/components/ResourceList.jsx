@@ -1,8 +1,9 @@
 import { signal } from '@preact/signals'
 import { useEffect, useState, useMemo } from 'preact/hooks'
 import { fetchWithMock } from '../utils/fetch'
-import { fluxKinds } from '../utils/constants'
 import { formatTimestamp } from '../utils/time'
+import { fluxReport } from '../app'
+import { FilterForm } from './FilterForm'
 
 // Resources data signals
 export const resourcesData = signal([])
@@ -28,7 +29,7 @@ export async function fetchResourcesStatus() {
     const data = await fetchWithMock({
       endpoint: `/api/v1/resources?${params.toString()}`,
       mockPath: '../mock/resources',
-      mockExport: 'mockResources'
+      mockExport: 'getMockResources'
     })
     resourcesData.value = data.resources || []
   } catch (error) {
@@ -287,68 +288,13 @@ export function ResourceList() {
 
         {/* Filters */}
         <div class="card p-4">
-          <div class="flex flex-wrap gap-3 items-end">
-            {/* Kind Filter */}
-            <div class="flex-1 min-w-[200px]">
-              <label for="filter-kind" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Resource Kind
-              </label>
-              <select
-                id="filter-kind"
-                name="kind"
-                value={selectedResourceKind.value}
-                onChange={(e) => selectedResourceKind.value = e.target.value}
-                class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-flux-blue"
-              >
-                <option value="">All Kinds</option>
-                {fluxKinds.map(kind => (
-                  <option key={kind} value={kind}>{kind}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Name Filter */}
-            <div class="flex-1 min-w-[200px]">
-              <label for="filter-name" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Resource Name
-              </label>
-              <input
-                id="filter-name"
-                name="name"
-                type="text"
-                value={selectedResourceName.value}
-                onChange={(e) => selectedResourceName.value = e.target.value}
-                placeholder="e.g., flux-system"
-                class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-flux-blue"
-              />
-            </div>
-
-            {/* Namespace Filter */}
-            <div class="flex-1 min-w-[200px]">
-              <label for="filter-namespace" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Namespace
-              </label>
-              <input
-                id="filter-namespace"
-                name="namespace"
-                type="text"
-                value={selectedResourceNamespace.value}
-                onChange={(e) => selectedResourceNamespace.value = e.target.value}
-                placeholder="All namespaces"
-                class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-flux-blue"
-              />
-            </div>
-
-            {/* Clear Filters Button */}
-            <div>
-              <button
-                onClick={handleClearFilters}
-                class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white focus:outline-none whitespace-nowrap"
-              >
-                Clear
-              </button>
-            </div>
-          </div>
+          <FilterForm
+            kindSignal={selectedResourceKind}
+            nameSignal={selectedResourceName}
+            namespaceSignal={selectedResourceNamespace}
+            namespaces={fluxReport.value?.spec?.namespaces || []}
+            onClear={handleClearFilters}
+          />
         </div>
 
         {/* Error State */}
