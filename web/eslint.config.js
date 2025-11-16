@@ -41,4 +41,35 @@ export default [
       'no-console': ['error', { 'allow': ['warn', 'error'] }]
     },
   },
+  {
+    files: ['src/**/*.test.{js,jsx}', 'vitest.setup.js'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      globals: {
+        describe: 'readonly',
+        it: 'readonly',
+        expect: 'readonly',
+        beforeEach: 'readonly',
+        afterEach: 'readonly',
+        beforeAll: 'readonly',
+        afterAll: 'readonly',
+        vi: 'readonly',
+        global: 'readonly',
+        window: 'readonly',
+        document: 'readonly',
+      },
+    },
+    rules: {
+      ...js.configs.recommended.rules,
+      indent: ['error', 2],
+      'no-unused-vars': [
+        'warn',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^[A-Z]',
+        },
+      ],
+    },
+  },
 ]

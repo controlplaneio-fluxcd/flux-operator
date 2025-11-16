@@ -16,7 +16,8 @@ const getInitialTheme = () => {
 // Check system preference
 const getSystemTheme = () => {
   if (typeof window === 'undefined') return themes.light
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? themes.dark : themes.light
+  const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+  return systemPrefersDark ? themes.dark : themes.light
 }
 
 // Current theme selection (light/dark/auto)
@@ -59,7 +60,7 @@ if (typeof window !== 'undefined') {
 
 // Toggle between themes
 export const cycleTheme = () => {
-  const themeOrder = [themes.light, themes.dark, themes.auto]
+  const themeOrder = [themes.auto, themes.dark, themes.light]
   const currentIndex = themeOrder.indexOf(themeMode.value)
   const nextIndex = (currentIndex + 1) % themeOrder.length
   themeMode.value = themeOrder[nextIndex]

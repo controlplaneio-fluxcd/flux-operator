@@ -104,6 +104,10 @@ vendor-flux: ## Download Flux base manifests and image patches to config/flux di
 
 ##@ Frontend
 
+.PHONY: web-test
+web-test: ## Run frontend tests.
+	cd web && npm test
+
 .PHONY: web-lint
 web-lint: ## Run ESLint on frontend code.
 	cd web && npm run lint
