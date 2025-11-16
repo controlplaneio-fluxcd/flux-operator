@@ -1,7 +1,7 @@
 import { signal } from '@preact/signals'
 import { showSearchView } from '../app'
 import { activeSearchTab } from './SearchView'
-import { selectedResourceKind } from './ResourceList'
+import { selectedResourceKind, selectedResourceName, selectedResourceNamespace } from './ResourceList'
 
 // Store collapsed state for the grid
 const isExpanded = signal(true)
@@ -20,6 +20,8 @@ function ReconcilerCard({ reconciler }) {
   // Handle card click - navigate to search view with resources tab and kind prefilled
   const handleClick = () => {
     selectedResourceKind.value = reconciler.kind
+    selectedResourceName.value = ''
+    selectedResourceNamespace.value = ''
     activeSearchTab.value = 'resources'
     showSearchView.value = true
   }

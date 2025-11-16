@@ -1,4 +1,3 @@
-// Mock FluxReport data for POC - matches config/testdata/flux-report.yaml
 export const mockReport = {
   apiVersion: 'fluxcd.controlplane.io/v1',
   kind: 'FluxReport',
@@ -226,6 +225,13 @@ export const mockReport = {
         cpuLimit: 1.0,
         memoryLimit: 1073741824
       }
+    ],
+    namespaces: [
+      'cert-manager',
+      'default',
+      'flux-system',
+      'kube-system',
+      'monitoring'
     ]
   }
 }

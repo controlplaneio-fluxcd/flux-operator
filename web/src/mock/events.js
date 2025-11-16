@@ -5,7 +5,37 @@ const getTimestamp = (minutesAgo) => {
   return time.toISOString()
 }
 
-export const mockEvents = {
+// Helper to parse involvedObject field (format: "Kind/name")
+const parseInvolvedObject = (involvedObject) => {
+  const parts = involvedObject.split('/')
+  return {
+    kind: parts[0] || '',
+    name: parts[1] || ''
+  }
+}
+
+// Helper to match name with wildcard pattern
+// Supports * (matches any characters). If no wildcards, does exact match.
+const matchesWildcard = (name, pattern) => {
+  name = name.toLowerCase()
+  pattern = pattern.toLowerCase()
+
+  // If no wildcards, do exact match
+  if (!pattern.includes('*')) {
+    return name === pattern
+  }
+
+  // Convert wildcard pattern to regex
+  // Escape special regex characters except *
+  const regexPattern = pattern
+    .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*/g, '.*')
+
+  const regex = new RegExp(`^${regexPattern}$`, 'i')
+  return regex.test(name)
+}
+
+const mockEvents = {
   events: [
     // FluxInstance (3 events)
     {
@@ -285,4 +315,45 @@ export const mockEvents = {
       namespace: "flux-system"
     }
   ]
+}
+
+// Export function that filters events based on query parameters
+export const getMockEvents = (endpoint) => {
+  // Parse query params from endpoint URL
+  // eslint-disable-next-line no-undef
+  const url = new URL(endpoint, 'http://localhost')
+  const params = url.searchParams
+
+  const kindFilter = params.get('kind')
+  const nameFilter = params.get('name')
+  const namespaceFilter = params.get('namespace')
+
+  // If no filters, return all events
+  if (!kindFilter && !nameFilter && !namespaceFilter) {
+    return mockEvents
+  }
+
+  // Filter events based on query parameters
+  const filteredEvents = mockEvents.events.filter(event => {
+    const { kind, name } = parseInvolvedObject(event.involvedObject)
+
+    // Filter by kind
+    if (kindFilter && kind !== kindFilter) {
+      return false
+    }
+
+    // Filter by name (exact or wildcard match, case-insensitive)
+    if (nameFilter && !matchesWildcard(name, nameFilter)) {
+      return false
+    }
+
+    // Filter by namespace
+    if (namespaceFilter && event.namespace !== namespaceFilter) {
+      return false
+    }
+
+    return true
+  })
+
+  return { events: filteredEvents }
 }

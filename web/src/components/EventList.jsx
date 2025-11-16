@@ -2,8 +2,9 @@ import { signal } from '@preact/signals'
 import { useEffect } from 'preact/hooks'
 import { useState } from 'preact/hooks'
 import { fetchWithMock } from '../utils/fetch'
-import { fluxKinds } from '../utils/constants'
 import { formatTimestamp } from '../utils/time'
+import { fluxReport } from '../app'
+import { FilterForm } from './FilterForm'
 
 // Events data signals
 export const eventsData = signal([])
@@ -29,7 +30,7 @@ export async function fetchEvents() {
     const data = await fetchWithMock({
       endpoint: `/api/v1/events?${params.toString()}`,
       mockPath: '../mock/events',
-      mockExport: 'mockEvents'
+      mockExport: 'getMockEvents'
     })
     eventsData.value = data.events || []
   } catch (error) {
@@ -151,68 +152,13 @@ export function EventList() {
 
         {/* Filters */}
         <div class="card p-4">
-          <div class="flex flex-wrap gap-3 items-end">
-            {/* Kind Filter */}
-            <div class="flex-1 min-w-[200px]">
-              <label for="filter-kind" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Resource Kind
-              </label>
-              <select
-                id="filter-kind"
-                name="kind"
-                value={selectedEventsKind.value}
-                onChange={(e) => selectedEventsKind.value = e.target.value}
-                class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-flux-blue"
-              >
-                <option value="">All Kinds</option>
-                {fluxKinds.map(kind => (
-                  <option key={kind} value={kind}>{kind}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Name Filter */}
-            <div class="flex-1 min-w-[200px]">
-              <label for="filter-name" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Resource Name
-              </label>
-              <input
-                id="filter-name"
-                name="name"
-                type="text"
-                value={selectedEventsName.value}
-                onChange={(e) => selectedEventsName.value = e.target.value}
-                placeholder="e.g., flux-system"
-                class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-flux-blue"
-              />
-            </div>
-
-            {/* Namespace Filter */}
-            <div class="flex-1 min-w-[200px]">
-              <label for="filter-namespace" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Namespace
-              </label>
-              <input
-                id="filter-namespace"
-                name="namespace"
-                type="text"
-                value={selectedEventsNamespace.value}
-                onChange={(e) => selectedEventsNamespace.value = e.target.value}
-                placeholder="All namespaces"
-                class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-flux-blue"
-              />
-            </div>
-
-            {/* Clear Filters Button */}
-            <div>
-              <button
-                onClick={handleClearFilters}
-                class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white focus:outline-none whitespace-nowrap"
-              >
-                Clear
-              </button>
-            </div>
-          </div>
+          <FilterForm
+            kindSignal={selectedEventsKind}
+            nameSignal={selectedEventsName}
+            namespaceSignal={selectedEventsNamespace}
+            namespaces={fluxReport.value?.spec?.namespaces || []}
+            onClear={handleClearFilters}
+          />
         </div>
 
         {/* Error State */}

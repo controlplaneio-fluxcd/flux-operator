@@ -15,7 +15,15 @@ export async function fetchWithMock({ endpoint, mockPath, mockExport }) {
     await new Promise(resolve => setTimeout(resolve, 300))
     // Dynamic import only happens in non-production mode with mocks enabled
     const module = await import(/* @vite-ignore */ mockPath)
-    return module[mockExport]
+    const mockData = module[mockExport]
+
+    // If the mock export is a function, call it with the endpoint URL to support filtering
+    // Otherwise, return the static mock data object
+    if (typeof mockData === 'function') {
+      return mockData(endpoint)
+    } else {
+      return mockData
+    }
   } else {
     // Fetch from real API
     const response = await fetch(endpoint)
