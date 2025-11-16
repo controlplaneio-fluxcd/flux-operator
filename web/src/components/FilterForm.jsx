@@ -1,5 +1,11 @@
 import { fluxKinds } from '../utils/constants'
 
+// Event severity options (based on Kubernetes event Type field)
+const eventSeverities = ['Normal', 'Warning']
+
+// Resource status options
+const resourceStatuses = ['Ready', 'Failed', 'Progressing', 'Suspended', 'Unknown']
+
 /**
  * FilterForm component - Reusable filter form for Events and Resources
  *
@@ -8,9 +14,11 @@ import { fluxKinds } from '../utils/constants'
  * @param {Signal} props.nameSignal - Signal for selected name
  * @param {Signal} props.namespaceSignal - Signal for selected namespace
  * @param {Array<string>} props.namespaces - Array of namespace names from report
+ * @param {Signal} [props.severitySignal] - Optional signal for event severity filter (Normal, Warning)
+ * @param {Signal} [props.statusSignal] - Optional signal for resource status filter (Ready, Failed, etc.)
  * @param {Function} props.onClear - Callback function to clear filters
  */
-export function FilterForm({ kindSignal, nameSignal, namespaceSignal, namespaces, onClear }) {
+export function FilterForm({ kindSignal, nameSignal, namespaceSignal, namespaces, severitySignal, statusSignal, onClear }) {
   return (
     <div class="flex flex-wrap gap-4 items-center">
       {/* Name Filter */}
@@ -35,7 +43,7 @@ export function FilterForm({ kindSignal, nameSignal, namespaceSignal, namespaces
           onChange={(e) => namespaceSignal.value = e.target.value}
           class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-flux-blue"
         >
-          <option value="">All Namespaces</option>
+          <option value="">All namespaces</option>
           {(namespaces || []).map(ns => (
             <option key={ns} value={ns}>{ns}</option>
           ))}
@@ -51,20 +59,60 @@ export function FilterForm({ kindSignal, nameSignal, namespaceSignal, namespaces
           onChange={(e) => kindSignal.value = e.target.value}
           class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-flux-blue"
         >
-          <option value="">All Kinds</option>
+          <option value="">All kinds</option>
           {fluxKinds.map(kind => (
             <option key={kind} value={kind}>{kind}</option>
           ))}
         </select>
       </div>
 
+      {/* Severity Filter (Events only) */}
+      {severitySignal && (
+        <div class="flex-1 min-w-[200px]">
+          <select
+            id="filter-severity"
+            name="severity"
+            value={severitySignal.value}
+            onChange={(e) => severitySignal.value = e.target.value}
+            class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-flux-blue"
+          >
+            <option value="">All severities</option>
+            {eventSeverities.map(severity => (
+              <option key={severity} value={severity}>{severity}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* Status Filter (Resources only) */}
+      {statusSignal && (
+        <div class="flex-1 min-w-[200px]">
+          <select
+            id="filter-status"
+            name="status"
+            value={statusSignal.value}
+            onChange={(e) => statusSignal.value = e.target.value}
+            class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-flux-blue"
+          >
+            <option value="">All statuses</option>
+            {resourceStatuses.map(status => (
+              <option key={status} value={status}>{status}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {/* Clear Filters Button */}
       <div>
         <button
           onClick={onClear}
-          class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white focus:outline-none whitespace-nowrap"
+          title="Clear"
+          aria-label="Clear filters"
+          class="p-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white focus:outline-none transition-colors"
         >
-          Clear
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
         </button>
       </div>
     </div>
