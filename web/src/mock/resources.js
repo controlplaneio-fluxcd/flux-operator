@@ -5,6 +5,27 @@ const getTimestamp = (minutesAgo) => {
   return time.toISOString()
 }
 
+// Helper to match name with wildcard pattern
+// Supports * (matches any characters). If no wildcards, does exact match.
+const matchesWildcard = (name, pattern) => {
+  name = name.toLowerCase()
+  pattern = pattern.toLowerCase()
+
+  // If no wildcards, do exact match
+  if (!pattern.includes('*')) {
+    return name === pattern
+  }
+
+  // Convert wildcard pattern to regex
+  // Escape special regex characters except *
+  const regexPattern = pattern
+    .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*/g, '.*')
+
+  const regex = new RegExp(`^${regexPattern}$`, 'i')
+  return regex.test(name)
+}
+
 export const mockResources = {
   resources: [
     // FluxInstance
@@ -639,4 +660,43 @@ export const mockResources = {
       lastReconciled: getTimestamp(68)
     }
   ]
+}
+
+// Export function that filters resources based on query parameters
+export const getMockResources = (endpoint) => {
+  // Parse query params from endpoint URL
+  // eslint-disable-next-line no-undef
+  const url = new URL(endpoint, 'http://localhost')
+  const params = url.searchParams
+
+  const kindFilter = params.get('kind')
+  const nameFilter = params.get('name')
+  const namespaceFilter = params.get('namespace')
+
+  // If no filters, return all resources
+  if (!kindFilter && !nameFilter && !namespaceFilter) {
+    return mockResources
+  }
+
+  // Filter resources based on query parameters
+  const filteredResources = mockResources.resources.filter(resource => {
+    // Filter by kind
+    if (kindFilter && resource.kind !== kindFilter) {
+      return false
+    }
+
+    // Filter by name (exact or wildcard match, case-insensitive)
+    if (nameFilter && !matchesWildcard(resource.name, nameFilter)) {
+      return false
+    }
+
+    // Filter by namespace
+    if (namespaceFilter && resource.namespace !== namespaceFilter) {
+      return false
+    }
+
+    return true
+  })
+
+  return { resources: filteredResources }
 }

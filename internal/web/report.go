@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -78,6 +79,17 @@ func (r *Router) GetReport(ctx context.Context) (*unstructured.Unstructured, err
 			// Add metrics to the result under spec.metrics
 			if spec, found := result.Object["spec"].(map[string]any); found {
 				spec["metrics"] = items
+			}
+		}
+	}
+
+	// Fetch namespaces from the cluster (non-fatal if it fails)
+	if namespaces, err := r.GetNamespaces(ctx); err == nil {
+		// Extract the items array from namespaces
+		if items, found := namespaces.Object["items"]; found {
+			// Add namespaces to the result under spec.namespaces
+			if spec, found := result.Object["spec"].(map[string]any); found {
+				spec["namespaces"] = items
 			}
 		}
 	}
@@ -160,6 +172,31 @@ func cleanObjectForExport(obj *unstructured.Unstructured) {
 
 	// Replace metadata with the clean version
 	obj.Object["metadata"] = cleanMetadata
+}
+
+// GetNamespaces retrieves all namespace names from the cluster sorted alphabetically.
+func (r *Router) GetNamespaces(ctx context.Context) (*unstructured.Unstructured, error) {
+	var namespaceList corev1.NamespaceList
+	if err := r.kubeClient.List(ctx, &namespaceList); err != nil {
+		return nil, err
+	}
+
+	if len(namespaceList.Items) == 0 {
+		return nil, fmt.Errorf("no namespaces found")
+	}
+
+	names := make([]string, 0, len(namespaceList.Items))
+	for _, ns := range namespaceList.Items {
+		names = append(names, ns.Name)
+	}
+
+	sort.Strings(names)
+
+	return &unstructured.Unstructured{
+		Object: map[string]any{
+			"items": names,
+		},
+	}, nil
 }
 
 // GetMetrics retrieves the CPU and Memory metrics for a list of pods in the given namespace.
