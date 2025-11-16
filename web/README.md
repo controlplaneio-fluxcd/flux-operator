@@ -23,6 +23,12 @@ make web-run
 make web-dev
 ```
 
+Run unit tests:
+
+```bash
+make web-test
+```
+
 ## Features
 
 - **Dark/Light theme** - Auto mode theme to follow system preference

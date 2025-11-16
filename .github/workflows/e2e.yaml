@@ -36,10 +36,12 @@ jobs:
         with:
           version: v0.30.0
           cluster_name: kind
+      - name: Run linters
+        run: make lint
+      - name: Run frontend tests
+        run: make web-test
       - name: Run controller e2e tests
         run: make test-e2e
-      - name: Run golangci lint
-        run: make lint
       - name: Check if working tree is dirty
         run: |
           if [[ $(git diff --stat) != '' ]]; then
