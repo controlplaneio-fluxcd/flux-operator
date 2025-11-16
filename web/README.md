@@ -238,3 +238,128 @@ cycleTheme()       // Function to cycle through theme modes
 3. **Descriptive suffixes**: When tracking collections, use descriptive suffixes (`expandedComponentRows`, not just `expanded`)
 4. **Pattern adherence**: Follow established patterns for common use cases (data fetching, filtering, navigation)
 5. **Avoid overloading**: Don't use the same word (like "expanded") for different purposes in the same component
+
+## Testing
+
+The project uses [Vitest](https://vitest.dev/) as the test framework with [jsdom](https://github.com/jsdom/jsdom) for DOM simulation and [@testing-library/preact](https://testing-library.com/docs/preact-testing-library/intro/) for component testing.
+
+### Running Tests
+
+Run all unit tests:
+
+```bash
+make web-test
+```
+
+Run tests with coverage:
+
+```bash
+cd web && npm test -- --coverage
+```
+
+### Writing Tests
+
+#### Test File Naming
+
+- Test files should be named `*.test.js` and placed alongside the code they test
+- Example: `src/utils/theme.js` → `src/utils/theme.test.js`
+
+#### Test Structure
+
+Tests use Vitest's global APIs (`describe`, `it`, `expect`, `beforeEach`, etc.):
+
+```javascript
+import { myFunction } from './myModule'
+
+describe('myFunction', () => {
+  beforeEach(() => {
+    // Setup before each test
+  })
+
+  it('should do something specific', () => {
+    const result = myFunction('input')
+    expect(result).toBe('expected output')
+  })
+})
+```
+
+#### Testing Utilities
+
+The `vitest.setup.js` file provides global mocks for browser APIs:
+
+- **localStorage**: Mocked with `getItem`, `setItem`, and `clear` methods
+  ```javascript
+  // Access in tests via global.localStorageMock
+  global.localStorageMock.getItem.mockReturnValue('value')
+  ```
+
+- **matchMedia**: Mocked for testing theme detection
+  ```javascript
+  // Simulate dark mode preference
+  global.matchMediaMock.mockReturnValue({
+    matches: true, // true = dark, false = light
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  })
+  ```
+
+#### Testing Signals
+
+When testing Preact Signals, reset modules between tests to ensure clean state:
+
+```javascript
+import { mySignal } from './myModule'
+
+describe('signal tests', () => {
+  beforeEach(async () => {
+    // Reset module cache for fresh signal state
+    vi.resetModules()
+
+    // Re-import if needed for initial state tests
+    const module = await vi.importActual('./myModule')
+
+    // Or reset existing signals to known values
+    mySignal.value = initialValue
+  })
+
+  it('should update signal value', () => {
+    mySignal.value = 'new value'
+    expect(mySignal.value).toBe('new value')
+  })
+})
+```
+
+#### Example Test Patterns
+
+**Testing utility functions** (`src/utils/time.test.js`):
+```javascript
+import { formatTimestamp } from './time'
+
+describe('formatTimestamp', () => {
+  it('should return "just now" for recent timestamps', () => {
+    const date = new Date(Date.now() - 30 * 1000) // 30 seconds ago
+    expect(formatTimestamp(date)).toBe('just now')
+  })
+})
+```
+
+**Testing state management** (`src/utils/theme.test.js`):
+```javascript
+import { themeMode, themes } from './theme'
+
+describe('theme utilities', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    themeMode.value = themes.auto
+  })
+
+  it('should cycle through themes', () => {
+    cycleTheme()
+    expect(themeMode.value).toBe(themes.dark)
+  })
+})
+```
+
+### ESLint Configuration for Tests
+
+Test files and `vitest.setup.js` automatically have access to Vitest globals (`describe`, `it`, `expect`, `vi`, etc.) without needing to import them. This is configured in `eslint.config.js`.
