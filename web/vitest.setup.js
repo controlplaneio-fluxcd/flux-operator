@@ -1,5 +1,8 @@
 // web/vitest.setup.js
 
+// Import jest-dom matchers for DOM assertions
+import '@testing-library/jest-dom/vitest'
+
 // Mock localStorage globally before any modules are imported
 const localStorageMock = {
   getItem: vi.fn(),

@@ -1,10 +1,7 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { signal } from '@preact/signals'
-
-// Store collapsed state for the sync section
-const isExpanded = signal(true)
+import { useSignal } from '@preact/signals'
 
 /**
  * ClusterSync component - Displays Flux cluster sync configuration and status
@@ -20,6 +17,7 @@ const isExpanded = signal(true)
  * - Collapsible panel
  */
 export function ClusterSync({ sync }) {
+  const isExpanded = useSignal(true)
   const isSuspended = sync.status && sync.status.startsWith('Suspended')
 
   const getStatusInfo = () => {

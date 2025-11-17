@@ -315,7 +315,7 @@ export function ResourceList() {
   }
 
   return (
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
+    <main data-testid="resource-list" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
       <div class="space-y-6">
         {/* Page Title */}
         <div class="flex items-center justify-between">

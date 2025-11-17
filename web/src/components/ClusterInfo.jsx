@@ -1,10 +1,7 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { signal } from '@preact/signals'
-
-// Store collapsed state for the cluster info panel
-const isExpanded = signal(true)
+import { useSignal } from '@preact/signals'
 
 // Calculate aggregate resource usage from metrics
 function calculateTotalResources(metrics) {
@@ -78,6 +75,8 @@ function ResourceMetric({ label, value, limit, percent, unit }) {
  * - Collapsible panel
  */
 export function ClusterInfo({ cluster, distribution, operator, components, metrics }) {
+  const isExpanded = useSignal(true)
+
   const k8sVersion = cluster?.serverVersion === '' ? 'Unknown' : (cluster?.serverVersion ?? 'Unknown')
   const platform = cluster?.platform === '' ? 'Unknown' : (cluster?.platform ?? 'Unknown')
   const nodes = cluster?.nodes ?? 0

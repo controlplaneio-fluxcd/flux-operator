@@ -1,12 +1,9 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { signal } from '@preact/signals'
 import { EventList } from './EventList'
 import { ResourceList } from './ResourceList'
-
-// Active tab signal ('events' or 'resources')
-export const activeSearchTab = signal('events')
+import { activeSearchTab } from '../app'
 
 /**
  * SearchView component - Tabbed view for searching Events and Resources
