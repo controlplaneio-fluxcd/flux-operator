@@ -1,47 +1,7 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { signal } from '@preact/signals'
-
-// Store expanded state for each component row
-const expandedComponentRows = signal(new Set())
-
-// Store collapsed state for the entire table
-const isExpanded = signal(true)
-
-function toggleComponent(name) {
-  const newSet = new Set(expandedComponentRows.value)
-  if (newSet.has(name)) {
-    newSet.delete(name)
-  } else {
-    newSet.add(name)
-  }
-  expandedComponentRows.value = newSet
-}
-
-// Find metrics for a component by matching pod name pattern: {component-name}-{hash}-{pod-id}
-function findComponentMetrics(componentName, metrics) {
-  if (!metrics || metrics.length === 0) return null
-
-  return metrics.find(m => {
-    if (!m.pod) return false
-
-    // Pod name format: {component-name}-{replicaset-hash}-{pod-id}
-    // Extract component name by removing last two dash-separated segments
-    const parts = m.pod.split('-')
-    if (parts.length < 3) return false
-
-    // Join all parts except the last two (hash and pod-id)
-    const extractedComponentName = parts.slice(0, -2).join('-')
-
-    return extractedComponentName === componentName
-  })
-}
-
-// Format bytes to MiB
-function formatMemory(bytes) {
-  return (bytes / (1024 ** 2)).toFixed(0)
-}
+import { useSignal } from '@preact/signals'
 
 /**
  * ComponentRow - Table row displaying a Flux controller component
@@ -49,19 +9,15 @@ function formatMemory(bytes) {
  * @param {Object} props
  * @param {Object} props.component - Component object with name, image, ready status
  * @param {Array} props.metrics - Array of pod metrics for resource usage
- *
- * Features:
- * - Shows component name, version, and readiness status
- * - Expandable row reveals detailed metrics (CPU, memory usage/limits)
- * - Links to full image name and digest
- * - Matches component to pod metrics by name pattern
+ * @param {Boolean} props.isRowExpanded - Whether the row is expanded
+ * @param {Function} props.toggleComponent - Function to toggle the row's expanded state
  */
-function ComponentRow({component, metrics}) {
-  const isRowExpanded = expandedComponentRows.value.has(component.name)
+function ComponentRow({component, metrics, isRowExpanded, toggleComponent}) {
   const componentMetrics = findComponentMetrics(component.name, metrics)
 
   // Extract image name and version from full image string
   const getImageInfo = (imageStr) => {
+    if (!imageStr) return { name: '', version: 'unknown' };
     const parts = imageStr.split(':')
     const name = parts[0].split('/').pop()
     const version = parts[1]?.split('@')[0] || 'latest'
@@ -105,24 +61,25 @@ function ComponentRow({component, metrics}) {
         <tr class="bg-gray-50 dark:bg-gray-700/50">
           <td colspan="3" class="px-6 py-4">
             <div class="space-y-2 text-xs sm:text-sm">
-              {componentMetrics && (
+              {componentMetrics ? (
                 <>
                   <div>
                     <span class="text-gray-600 dark:text-gray-400">CPU:</span>
                     <span class="ml-2 text-gray-900 dark:text-white">
                       {componentMetrics.cpu.toFixed(3)} / {componentMetrics.cpuLimit.toFixed(1)} cores
-                      ({((componentMetrics.cpu / componentMetrics.cpuLimit) * 100).toFixed(0)}%)
+                      ({(componentMetrics.cpuLimit > 0 ? (componentMetrics.cpu / componentMetrics.cpuLimit) * 100 : 0).toFixed(0)}%)
                     </span>
                   </div>
                   <div>
                     <span class="text-gray-600 dark:text-gray-400">Memory:</span>
                     <span class="ml-2 text-gray-900 dark:text-white">
                       {formatMemory(componentMetrics.memory)} / {formatMemory(componentMetrics.memoryLimit)} MiB
-                      ({((componentMetrics.memory / componentMetrics.memoryLimit) * 100).toFixed(0)}%)
+                      ({(componentMetrics.memoryLimit > 0 ? (componentMetrics.memory / componentMetrics.memoryLimit) * 100 : 0).toFixed(0)}%)
                     </span>
                   </div>
                 </>
-              )}
+              ) : <div><span class="text-gray-600 dark:text-gray-400">Metrics:</span><span class="ml-2 text-gray-900 dark:text-white">Not available</span></div>
+              }
               <div>
                 <span class="text-gray-600 dark:text-gray-400">Image:</span>
                 <span class="ml-2 text-gray-900 dark:text-white break-all">{component.image}</span>
@@ -153,6 +110,19 @@ function ComponentRow({component, metrics}) {
  * - Collapsible table with total component count and failing count
  */
 export function ComponentList({components, metrics}) {
+  const expandedComponentRows = useSignal(new Set())
+  const isExpanded = useSignal(true)
+
+  function toggleComponent(name) {
+    const newSet = new Set(expandedComponentRows.value)
+    if (newSet.has(name)) {
+      newSet.delete(name)
+    } else {
+      newSet.add(name)
+    }
+    expandedComponentRows.value = newSet
+  }
+
   const totalFailing = components.filter(c => !c.ready).length
 
   return (
@@ -183,7 +153,7 @@ export function ComponentList({components, metrics}) {
           </svg>
         </div>
       </button>
-      {isExpanded.value && (
+      {isExpanded.value && components.length > 0 && (
         <div class="overflow-x-auto">
           <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead class="bg-gray-50 dark:bg-gray-700/50">
@@ -201,7 +171,13 @@ export function ComponentList({components, metrics}) {
             </thead>
             <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               {components.map(component => (
-                <ComponentRow key={component.name} component={component} metrics={metrics}/>
+                <ComponentRow
+                  key={component.name}
+                  component={component}
+                  metrics={metrics}
+                  isRowExpanded={expandedComponentRows.value.has(component.name)}
+                  toggleComponent={toggleComponent}
+                />
               ))}
             </tbody>
           </table>
@@ -209,4 +185,29 @@ export function ComponentList({components, metrics}) {
       )}
     </div>
   )
+}
+
+// Find metrics for a component by matching pod name pattern: {component-name}-{hash}-{pod-id}
+function findComponentMetrics(componentName, metrics) {
+  if (!metrics || metrics.length === 0) return null
+
+  return metrics.find(m => {
+    if (!m.pod) return false
+
+    // Pod name format: {component-name}-{replicaset-hash}-{pod-id}
+    // Extract component name by removing last two dash-separated segments
+    const parts = m.pod.split('-')
+    if (parts.length < 3) return false
+
+    // Join all parts except the last two (hash and pod-id)
+    const extractedComponentName = parts.slice(0, -2).join('-')
+
+    return extractedComponentName === componentName
+  })
+}
+
+// Format bytes to MiB
+function formatMemory(bytes) {
+  if (typeof bytes !== 'number' || bytes < 0) return '0'
+  return (bytes / (1024 ** 2)).toFixed(0)
 }
