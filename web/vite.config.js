@@ -7,6 +7,10 @@ export default defineConfig(() => ({
     globals: true,
     environment: 'jsdom',
     setupFiles: './vitest.setup.js',
+    env: {
+      MODE: 'test',
+      VITE_USE_MOCK_DATA: 'false'
+    }
   },
   build: {
     outDir: 'dist',

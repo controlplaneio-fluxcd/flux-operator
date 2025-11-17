@@ -32,6 +32,9 @@ export const connectionStatus = signal('loading')
 // Dashboard shows overview cards, search shows filterable events/resources
 export const showSearchView = signal(false)
 
+// Active tab for search view: 'events' or 'resources'
+export const activeSearchTab = signal('events')
+
 /**
  * Fetches FluxReport data from the API or mock data
  *

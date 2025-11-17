@@ -1,13 +1,9 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { signal } from '@preact/signals'
-import { showSearchView } from '../app'
-import { activeSearchTab } from './SearchView'
+import { useSignal } from '@preact/signals'
+import { showSearchView, activeSearchTab } from '../app'
 import { selectedResourceKind, selectedResourceName, selectedResourceNamespace, selectedResourceStatus } from './ResourceList'
-
-// Store collapsed state for the grid
-const isExpanded = signal(true)
 
 /**
  * ReconcilerCard - Individual card displaying a Flux CRD with resource statistics
@@ -144,6 +140,8 @@ function ReconcilerGroup({ title, reconcilers }) {
  * - Collapsible grid view
  */
 export function ReconcilerList({ reconcilers }) {
+  const isExpanded = useSignal(true)
+
   const totalResources = reconcilers.reduce((sum, r) => {
     return sum + (r.stats.failing || 0) + (r.stats.running || 0) + (r.stats.suspended || 0)
   }, 0)

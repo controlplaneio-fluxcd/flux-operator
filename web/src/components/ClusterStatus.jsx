@@ -1,9 +1,8 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { lastUpdated, showSearchView } from '../app'
+import { lastUpdated, showSearchView, activeSearchTab } from '../app'
 import { formatTime } from '../utils/time'
-import { activeSearchTab } from './SearchView'
 import {
   selectedResourceStatus,
   selectedResourceKind,
