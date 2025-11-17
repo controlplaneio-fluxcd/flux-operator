@@ -1,10 +1,7 @@
-import { fluxKinds } from '../utils/constants'
+// Copyright 2025 Stefan Prodan.
+// SPDX-License-Identifier: AGPL-3.0
 
-// Event severity options (based on Kubernetes event Type field)
-const eventSeverities = ['Normal', 'Warning']
-
-// Resource status options
-const resourceStatuses = ['Ready', 'Failed', 'Progressing', 'Suspended', 'Unknown']
+import { fluxKinds, eventSeverities, resourceStatuses } from '../utils/constants'
 
 /**
  * FilterForm component - Reusable filter form for Events and Resources

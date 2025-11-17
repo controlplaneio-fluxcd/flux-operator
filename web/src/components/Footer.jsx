@@ -1,5 +1,19 @@
+// Copyright 2025 Stefan Prodan.
+// SPDX-License-Identifier: AGPL-3.0
+
 import { appliedTheme, themes } from '../utils/theme'
 
+/**
+ * Footer component - Application footer with links and license information
+ *
+ * Features:
+ * - Link to Flux Operator GitHub repository
+ * - Link to documentation
+ * - Link to enterprise support email
+ * - License information (AGPL-3.0)
+ * - Theme-aware Flux logo
+ * - Responsive layout
+ */
 export function Footer() {
   // Use appropriate Flux logo based on theme
   const fluxLogoSrc = appliedTheme.value === themes.dark ? '/flux-icon-white.svg' : '/flux-icon-black.svg'

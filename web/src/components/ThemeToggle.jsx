@@ -1,5 +1,18 @@
+// Copyright 2025 Stefan Prodan.
+// SPDX-License-Identifier: AGPL-3.0
+
 import { themeMode, appliedTheme, cycleTheme, themes } from '../utils/theme'
 
+/**
+ * ThemeToggle component - Button to cycle through theme modes
+ *
+ * Features:
+ * - Cycles through three theme modes: Light → Dark → Auto
+ * - Displays appropriate icon for current theme (sun, moon, lightbulb)
+ * - Shows current theme label
+ * - Tooltip with theme information
+ * - Persists theme preference to localStorage
+ */
 export function ThemeToggle() {
   const getIcon = () => {
     if (themeMode.value === themes.auto) {

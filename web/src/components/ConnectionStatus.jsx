@@ -1,5 +1,16 @@
+// Copyright 2025 Stefan Prodan.
+// SPDX-License-Identifier: AGPL-3.0
+
 import { connectionStatus } from '../app'
 
+/**
+ * ConnectionStatus component - Displays server connection status banner
+ *
+ * Shows a colored banner at the top of the page indicating:
+ * - Loading: Yellow banner with spinner
+ * - Disconnected: Red banner with error message
+ * - Connected: No banner (hidden)
+ */
 export function ConnectionStatus() {
   const status = connectionStatus.value
   const isDisconnected = status === 'disconnected'

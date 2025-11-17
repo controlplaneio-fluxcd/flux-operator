@@ -1,3 +1,6 @@
+// Copyright 2025 Stefan Prodan.
+// SPDX-License-Identifier: AGPL-3.0
+
 import { signal } from '@preact/signals'
 import { useEffect, useState, useMemo } from 'preact/hooks'
 import { fetchWithMock } from '../utils/fetch'
@@ -99,7 +102,14 @@ function groupInventoryByApiVersion(inventory) {
   return grouped
 }
 
-// Inventory item component - displays kind/name or kind/namespace/name
+/**
+ * InventoryItem - Displays a single inventory item (managed resource)
+ *
+ * @param {Object} props
+ * @param {Object} props.item - Inventory item with kind, name, and optional namespace
+ *
+ * Shows: kind/namespace/name (or kind/name for cluster-scoped resources)
+ */
 function InventoryItem({ item }) {
   return (
     <div class="py-1 px-2 text-xs break-all">
@@ -114,7 +124,15 @@ function InventoryItem({ item }) {
   )
 }
 
-// Inventory group by apiVersion component
+/**
+ * InventoryGroupByApiVersion - Groups inventory items under an API version heading
+ *
+ * @param {Object} props
+ * @param {string} props.apiVersion - API version (e.g., "v1", "apps/v1")
+ * @param {Array} props.items - Array of inventory items for this API version
+ *
+ * Displays API version header with item count and lists all items in the group
+ */
 function InventoryGroupByApiVersion({ apiVersion, items }) {
   return (
     <div class="mb-3">
@@ -135,7 +153,19 @@ function InventoryGroupByApiVersion({ apiVersion, items }) {
   )
 }
 
-// Resource card component
+/**
+ * ResourceCard - Individual card displaying a Flux resource with status and inventory
+ *
+ * @param {Object} props
+ * @param {Object} props.resource - Resource object with kind, name, status, message, inventory
+ *
+ * Features:
+ * - Shows resource kind, namespace, and name
+ * - Displays status badge (Ready, Failed, Progressing, Suspended, Unknown)
+ * - Shows status message with expand/collapse for long messages
+ * - Displays last reconciled timestamp
+ * - Expandable inventory section showing managed resources grouped by API version
+ */
 function ResourceCard({ resource }) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [isInventoryExpanded, setIsInventoryExpanded] = useState(false)
@@ -261,7 +291,16 @@ function ResourceCard({ resource }) {
   )
 }
 
-// Main ResourceList component
+/**
+ * ResourceList component - Displays and filters Flux resource statuses
+ *
+ * Features:
+ * - Fetches resource statuses from the API with optional filters (kind, name, namespace, status)
+ * - Auto-refetches when filter signals change
+ * - Displays resources in card format with status badges and expandable inventory
+ * - Sorts resources by last reconciled timestamp (newest first)
+ * - Shows loading, error, and empty states
+ */
 export function ResourceList() {
   // Fetch resources on mount and when filters change
   useEffect(() => {

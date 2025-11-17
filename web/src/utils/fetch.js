@@ -1,3 +1,6 @@
+// Copyright 2025 Stefan Prodan.
+// SPDX-License-Identifier: AGPL-3.0
+
 /**
  * Unified API fetch utility that handles mock data vs real API calls
  *
