@@ -1,3 +1,6 @@
+// Copyright 2025 Stefan Prodan.
+// SPDX-License-Identifier: AGPL-3.0
+
 import { signal } from '@preact/signals'
 import { useEffect } from 'preact/hooks'
 import { useState } from 'preact/hooks'
@@ -55,7 +58,18 @@ function getEventStatusBadgeClass(type) {
   }
 }
 
-// Event card component
+/**
+ * EventCard - Individual card displaying a Kubernetes event
+ *
+ * @param {Object} props
+ * @param {Object} props.event - Event object with type, message, involvedObject, timestamp
+ *
+ * Features:
+ * - Shows resource kind and name from involvedObject
+ * - Displays event severity badge (Info for Normal, Warning for Warning)
+ * - Shows event message with expand/collapse for long messages
+ * - Displays namespace and timestamp
+ */
 function EventCard({ event }) {
   const [isExpanded, setIsExpanded] = useState(false)
 
@@ -125,7 +139,15 @@ function EventCard({ event }) {
   )
 }
 
-// Main EventList component
+/**
+ * EventList component - Displays and filters Kubernetes events for Flux resources
+ *
+ * Features:
+ * - Fetches events from the API with optional filters (kind, name, namespace, severity)
+ * - Auto-refetches when filter signals change
+ * - Displays events in card format with expandable messages
+ * - Shows loading, error, and empty states
+ */
 export function EventList() {
   // Fetch events on mount and when filters change
   useEffect(() => {

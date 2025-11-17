@@ -1,3 +1,6 @@
+// Copyright 2025 Stefan Prodan.
+// SPDX-License-Identifier: AGPL-3.0
+
 // Helper to generate timestamps within the last 2 hours (events expire after 2h)
 const now = new Date()
 const getTimestamp = (minutesAgo) => {

@@ -1,3 +1,6 @@
+// Copyright 2025 Stefan Prodan.
+// SPDX-License-Identifier: AGPL-3.0
+
 export const mockReport = {
   apiVersion: 'fluxcd.controlplane.io/v1',
   kind: 'FluxReport',
