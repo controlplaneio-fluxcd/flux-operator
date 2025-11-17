@@ -1,3 +1,6 @@
+// Copyright 2025 Stefan Prodan.
+// SPDX-License-Identifier: AGPL-3.0
+
 import { describe, it, expect } from 'vitest'
 import { getMockEvents } from './events'
 

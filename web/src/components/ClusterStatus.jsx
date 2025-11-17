@@ -1,6 +1,28 @@
-import { lastUpdated } from '../app'
-import { formatTime } from '../utils/time'
+// Copyright 2025 Stefan Prodan.
+// SPDX-License-Identifier: AGPL-3.0
 
+import { lastUpdated, showSearchView } from '../app'
+import { formatTime } from '../utils/time'
+import { activeSearchTab } from './SearchView'
+import {
+  selectedResourceStatus,
+  selectedResourceKind,
+  selectedResourceName,
+  selectedResourceNamespace
+} from './ResourceList'
+
+/**
+ * ClusterStatus component - Displays overall health status of the Flux cluster
+ *
+ * @param {Object} props
+ * @param {Object} props.report - FluxReport spec containing cluster status information
+ *
+ * Shows aggregate status metrics:
+ * - Controller components (ready/failed count)
+ * - Flux reconcilers (total/failing count)
+ * - Cluster sync status
+ * - Last update timestamp
+ */
 export function ClusterStatus({ report }) {
   // Calculate counters
   const totalComponents = report.components?.length ?? 0
@@ -85,8 +107,33 @@ export function ClusterStatus({ report }) {
 
   const statusInfo = getStatusInfo()
 
+  // Handler to navigate to ResourceList with Failed filter
+  const handleViewFailures = () => {
+    // Clear all filters first
+    selectedResourceKind.value = ''
+    selectedResourceName.value = ''
+    selectedResourceNamespace.value = ''
+    // Set status filter to Failed
+    selectedResourceStatus.value = 'Failed'
+    // Navigate to search view and resources tab
+    activeSearchTab.value = 'resources'
+    showSearchView.value = true
+  }
+
+  // Check if status has failures (clickable states)
+  const hasFailures = ['degraded', 'partial-outage', 'major-outage'].includes(statusInfo.status)
+
+  // Wrapper element - button if clickable, div otherwise
+  const WrapperElement = hasFailures ? 'button' : 'div'
+  const wrapperProps = hasFailures ? {
+    onClick: handleViewFailures,
+    class: `card ${statusInfo.bgColor} dark:bg-opacity-20 border-2 ${statusInfo.borderColor} w-full text-left cursor-pointer hover:shadow-lg transition-shadow focus:outline-none focus:ring-2 focus:ring-flux-blue focus:ring-offset-2`
+  } : {
+    class: `card ${statusInfo.bgColor} dark:bg-opacity-20 border-2 ${statusInfo.borderColor}`
+  }
+
   return (
-    <div class={`card ${statusInfo.bgColor} dark:bg-opacity-20 border-2 ${statusInfo.borderColor}`}>
+    <WrapperElement {...wrapperProps}>
       <div class="flex items-center space-x-4">
         <div class="flex-shrink-0">
           <div class={`w-16 h-16 rounded-full ${statusInfo.bgColor} dark:bg-opacity-30 flex items-center justify-center`}>
@@ -124,13 +171,20 @@ export function ClusterStatus({ report }) {
         </div>
         <div class="flex-grow">
           <h2 class={`text-2xl font-bold ${statusInfo.color}`}>{statusInfo.title}</h2>
-          <p class="hidden md:block text-gray-700 dark:text-gray-300 mt-1">{statusInfo.message}</p>
+          <div class="flex items-center gap-2 text-gray-700 dark:text-gray-300 mt-1">
+            <p class="hidden md:block">{statusInfo.message}</p>
+            {hasFailures && (
+              <svg class="hidden md:block w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+              </svg>
+            )}
+          </div>
         </div>
         <div class="hidden md:block text-right">
           <div class="text-sm text-gray-600 dark:text-gray-400">Last Updated</div>
           <div class="text-lg font-semibold text-gray-900 dark:text-white">{formatTime(lastUpdated.value)}</div>
         </div>
       </div>
-    </div>
+    </WrapperElement>
   )
 }

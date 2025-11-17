@@ -1,3 +1,6 @@
+// Copyright 2025 Stefan Prodan.
+// SPDX-License-Identifier: AGPL-3.0
+
 import { themeMode, appliedTheme, themes } from './theme'
 
 describe('theme utilities', () => {

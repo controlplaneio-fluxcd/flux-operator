@@ -1,3 +1,6 @@
+// Copyright 2025 Stefan Prodan.
+// SPDX-License-Identifier: AGPL-3.0
+
 import { signal } from '@preact/signals'
 import { showSearchView } from '../app'
 import { activeSearchTab } from './SearchView'
@@ -6,6 +9,20 @@ import { selectedResourceKind, selectedResourceName, selectedResourceNamespace, 
 // Store collapsed state for the grid
 const isExpanded = signal(true)
 
+/**
+ * ReconcilerCard - Individual card displaying a Flux CRD with resource statistics
+ *
+ * @param {Object} props
+ * @param {Object} props.reconciler - Reconciler object with kind, apiVersion, and stats
+ *
+ * Features:
+ * - Shows CRD kind and API version
+ * - Displays total resource count
+ * - Shows status badges (running, failing, suspended) with counts
+ * - Entire card is clickable to filter by kind in search view
+ * - Individual status badges are clickable to filter by kind + status
+ * - Color-coded border based on resource health
+ */
 function ReconcilerCard({ reconciler }) {
   const stats = reconciler.stats
   const total = (stats.failing || 0) + (stats.running || 0) + (stats.suspended || 0)
@@ -87,6 +104,13 @@ function ReconcilerCard({ reconciler }) {
   )
 }
 
+/**
+ * ReconcilerGroup - Groups reconciler cards under a category heading
+ *
+ * @param {Object} props
+ * @param {string} props.title - Group title (e.g., "Appliers", "Sources")
+ * @param {Array} props.reconcilers - Array of reconcilers in this group
+ */
 function ReconcilerGroup({ title, reconcilers }) {
   if (reconcilers.length === 0) return null
 
@@ -105,6 +129,20 @@ function ReconcilerGroup({ title, reconcilers }) {
   )
 }
 
+/**
+ * ReconcilerList component - Displays Flux Custom Resource Definitions (CRDs) grouped by type
+ *
+ * @param {Object} props
+ * @param {Array} props.reconcilers - Array of Flux reconciler CRDs with statistics
+ *
+ * Features:
+ * - Groups reconcilers by API type (Appliers, Sources, Notifications, Image Automation)
+ * - Displays resource counts (running, failing, suspended) for each CRD
+ * - Clickable cards navigate to search view with kind filter
+ * - Clickable status badges navigate to search view with kind + status filters
+ * - Shows total resource count and failing count
+ * - Collapsible grid view
+ */
 export function ReconcilerList({ reconcilers }) {
   const totalResources = reconcilers.reduce((sum, r) => {
     return sum + (r.stats.failing || 0) + (r.stats.running || 0) + (r.stats.suspended || 0)

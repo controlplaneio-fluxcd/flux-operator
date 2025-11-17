@@ -1,8 +1,24 @@
+// Copyright 2025 Stefan Prodan.
+// SPDX-License-Identifier: AGPL-3.0
+
 import { signal } from '@preact/signals'
 
 // Store collapsed state for the sync section
 const isExpanded = signal(true)
 
+/**
+ * ClusterSync component - Displays Flux cluster sync configuration and status
+ *
+ * @param {Object} props
+ * @param {Object} props.sync - Sync configuration (URL, ref, path, interval, status)
+ *
+ * Features:
+ * - Shows Git repository sync source (URL, branch/tag, path)
+ * - Displays sync interval
+ * - Shows sync status (Ready, Suspended, or Not Ready with reason)
+ * - Color-coded status badges
+ * - Collapsible panel
+ */
 export function ClusterSync({ sync }) {
   const isSuspended = sync.status && sync.status.startsWith('Suspended')
 

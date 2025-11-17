@@ -1,3 +1,6 @@
+// Copyright 2025 Stefan Prodan.
+// SPDX-License-Identifier: AGPL-3.0
+
 import { signal } from '@preact/signals'
 
 // Store collapsed state for the cluster info panel
@@ -57,6 +60,23 @@ function ResourceMetric({ label, value, limit, percent, unit }) {
   )
 }
 
+/**
+ * ClusterInfo component - Displays cluster and Flux distribution information
+ *
+ * @param {Object} props
+ * @param {Object} props.cluster - Cluster metadata (Kubernetes version, platform, node count)
+ * @param {Object} props.distribution - Flux distribution information (version, entitlement)
+ * @param {Object} props.operator - Flux operator version and build info
+ * @param {Array} props.components - Array of Flux controller components
+ * @param {Array} props.metrics - Array of pod metrics for resource usage calculations
+ *
+ * Features:
+ * - Shows Kubernetes cluster info (version, platform, nodes)
+ * - Displays Flux distribution version and entitlement status
+ * - Shows Flux operator version
+ * - Displays aggregate resource usage (CPU/memory) with progress bars
+ * - Collapsible panel
+ */
 export function ClusterInfo({ cluster, distribution, operator, components, metrics }) {
   const k8sVersion = cluster?.serverVersion === '' ? 'Unknown' : (cluster?.serverVersion ?? 'Unknown')
   const platform = cluster?.platform === '' ? 'Unknown' : (cluster?.platform ?? 'Unknown')

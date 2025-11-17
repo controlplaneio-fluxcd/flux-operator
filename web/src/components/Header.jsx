@@ -1,7 +1,20 @@
+// Copyright 2025 Stefan Prodan.
+// SPDX-License-Identifier: AGPL-3.0
+
 import { showSearchView, fetchFluxReport } from '../app'
 import { ThemeToggle } from './ThemeToggle'
 import { appliedTheme, themes } from '../utils/theme'
 
+/**
+ * Header component - Main application header with navigation and controls
+ *
+ * Features:
+ * - Flux branding with theme-aware icon
+ * - Toggle button to switch between Dashboard and Search views
+ * - Refresh button to manually fetch latest data
+ * - Theme toggle control
+ * - Responsive design
+ */
 export function Header() {
   // Use appropriate icon based on theme
   const iconSrc = appliedTheme.value === themes.dark ? '/flux-icon-white.svg' : '/flux-icon-black.svg'

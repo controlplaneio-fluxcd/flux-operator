@@ -1,3 +1,6 @@
+// Copyright 2025 Stefan Prodan.
+// SPDX-License-Identifier: AGPL-3.0
+
 import { signal } from '@preact/signals'
 import { EventList } from './EventList'
 import { ResourceList } from './ResourceList'
@@ -5,6 +8,12 @@ import { ResourceList } from './ResourceList'
 // Active tab signal ('events' or 'resources')
 export const activeSearchTab = signal('events')
 
+/**
+ * SearchView component - Tabbed view for searching Events and Resources
+ *
+ * Provides a tab interface to switch between EventList and ResourceList views.
+ * The active tab state is managed by the activeSearchTab signal.
+ */
 export function SearchView() {
   return (
     <div class="flex flex-col h-full">

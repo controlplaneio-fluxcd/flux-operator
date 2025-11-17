@@ -1,3 +1,6 @@
+// Copyright 2025 Stefan Prodan.
+// SPDX-License-Identifier: AGPL-3.0
+
 import { signal } from '@preact/signals'
 
 // Store expanded state for each component row
@@ -40,6 +43,19 @@ function formatMemory(bytes) {
   return (bytes / (1024 ** 2)).toFixed(0)
 }
 
+/**
+ * ComponentRow - Table row displaying a Flux controller component
+ *
+ * @param {Object} props
+ * @param {Object} props.component - Component object with name, image, ready status
+ * @param {Array} props.metrics - Array of pod metrics for resource usage
+ *
+ * Features:
+ * - Shows component name, version, and readiness status
+ * - Expandable row reveals detailed metrics (CPU, memory usage/limits)
+ * - Links to full image name and digest
+ * - Matches component to pod metrics by name pattern
+ */
 function ComponentRow({component, metrics}) {
   const isRowExpanded = expandedComponentRows.value.has(component.name)
   const componentMetrics = findComponentMetrics(component.name, metrics)
@@ -123,6 +139,19 @@ function ComponentRow({component, metrics}) {
   )
 }
 
+/**
+ * ComponentList component - Displays Flux controller components in a collapsible table
+ *
+ * @param {Object} props
+ * @param {Array} props.components - Array of Flux controller components
+ * @param {Array} props.metrics - Array of pod metrics (CPU/memory usage)
+ *
+ * Features:
+ * - Shows component name, version, and readiness status
+ * - Expandable rows display detailed metrics (CPU, memory usage and limits)
+ * - Links to full image name and digest
+ * - Collapsible table with total component count and failing count
+ */
 export function ComponentList({components, metrics}) {
   const totalFailing = components.filter(c => !c.ready).length
 
