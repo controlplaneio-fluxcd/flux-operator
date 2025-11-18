@@ -50,13 +50,13 @@ describe('getMockResources', () => {
   it('should filter resources by kind and status', () => {
     const result = getMockResources('/api/v1/resources?kind=Bucket&status=Ready')
     expect(result.resources.every(r => r.kind === 'Bucket' && r.status === 'Ready')).toBe(true)
-    expect(result.resources.length).toBe(3) // We have 3 Ready Buckets in the mock
+    expect(result.resources.length).toBe(2) // We have 2 Ready Buckets in the mock
   })
 
   it('should filter Buckets by status (Suspended)', () => {
     const result = getMockResources('/api/v1/resources?kind=Bucket&status=Suspended')
     expect(result.resources.every(r => r.kind === 'Bucket' && r.status === 'Suspended')).toBe(true)
-    expect(result.resources.length).toBe(2) // We have 2 Suspended Buckets in the mock
+    expect(result.resources.length).toBe(1) // We have 1 Suspended Bucket in the mock
   })
 
   it('should filter Buckets by status (Failed)', () => {
@@ -101,10 +101,14 @@ describe('getMockResources', () => {
     const readyBuckets = getMockResources('/api/v1/resources?kind=Bucket&status=Ready')
     const failedBuckets = getMockResources('/api/v1/resources?kind=Bucket&status=Failed')
     const suspendedBuckets = getMockResources('/api/v1/resources?kind=Bucket&status=Suspended')
+    const progressingBuckets = getMockResources('/api/v1/resources?kind=Bucket&status=Progressing')
+    const unknownBuckets = getMockResources('/api/v1/resources?kind=Bucket&status=Unknown')
 
     expect(allBuckets.resources.length).toBe(6) // Total Buckets
-    expect(readyBuckets.resources.length).toBe(3) // Ready Buckets
-    expect(failedBuckets.resources.length).toBe(1) // Failed Buckets
-    expect(suspendedBuckets.resources.length).toBe(2) // Suspended Buckets
+    expect(readyBuckets.resources.length).toBe(2) // Ready Buckets (prod-configs, dev-configs)
+    expect(failedBuckets.resources.length).toBe(1) // Failed Buckets (aws-configs)
+    expect(suspendedBuckets.resources.length).toBe(1) // Suspended Buckets (preview-configs)
+    expect(progressingBuckets.resources.length).toBe(1) // Progressing Buckets (staging-configs)
+    expect(unknownBuckets.resources.length).toBe(1) // Unknown Buckets (default-configs)
   })
 })
