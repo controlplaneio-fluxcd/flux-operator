@@ -63,7 +63,7 @@ func (r *Router) GetReport(ctx context.Context) (*unstructured.Unstructured, err
 	}
 
 	result := &reportList.Items[0]
-	cleanObjectForExport(result)
+	cleanObjectForExport(result, false)
 
 	// Inject pod metrics into the report
 	// Use the namespace from the report, or fall back to "flux-system"
@@ -120,9 +120,11 @@ func uninitialisedReport() *unstructured.Unstructured {
 }
 
 // cleanObjectForExport removes fields that shouldn't be included in exports
-func cleanObjectForExport(obj *unstructured.Unstructured) {
+func cleanObjectForExport(obj *unstructured.Unstructured, keepStatus bool) {
 	// Remove status subresource
-	unstructured.RemoveNestedField(obj.Object, "status")
+	if !keepStatus {
+		unstructured.RemoveNestedField(obj.Object, "status")
+	}
 
 	// Remove runtime metadata - keep only name, namespace, labels, and annotations
 	metadata := obj.Object["metadata"].(map[string]any)
