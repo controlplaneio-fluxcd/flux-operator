@@ -35,6 +35,19 @@ vi.mock('./FilterForm', () => ({
   )
 }))
 
+// Mock ResourceView component to simplify testing
+vi.mock('./ResourceView', () => ({
+  ResourceView: ({ kind, name, namespace, isExpanded }) => (
+    isExpanded ? (
+      <div data-testid="resource-view">
+        <span data-testid="resource-view-kind">{kind}</span>
+        <span data-testid="resource-view-name">{name}</span>
+        <span data-testid="resource-view-namespace">{namespace}</span>
+      </div>
+    ) : null
+  )
+}))
+
 describe('ResourceList', () => {
   const mockResources = [
     {
@@ -424,142 +437,32 @@ describe('ResourceList', () => {
       expect(screen.getByText('Show less')).toBeInTheDocument()
     })
 
-    it('should display inventory toggle when inventory exists', async () => {
+    it('should display details toggle for all resources', async () => {
+      fetchWithMock.mockResolvedValue({ resources: mockResources })
+
+      render(<ResourceList />)
+
+      await waitFor(() => {
+        const detailsButtons = screen.getAllByText('Details')
+        expect(detailsButtons).toHaveLength(2) // One for each resource
+      })
+    })
+
+    it('should expand ResourceView when details toggle is clicked', async () => {
       fetchWithMock.mockResolvedValue({ resources: [mockResources[0]] })
 
       render(<ResourceList />)
 
+      const detailsToggle = await screen.findByText('Details')
+      fireEvent.click(detailsToggle)
+
+      // Check that ResourceView is rendered with correct props
       await waitFor(() => {
-        expect(screen.getByText(/Inventory \(2\)/)).toBeInTheDocument()
+        expect(screen.getByTestId('resource-view')).toBeInTheDocument()
       })
-    })
-
-    it('should not display inventory toggle when inventory is empty', async () => {
-      resourcesData.value = [mockResources[1]] // Empty inventory
-      resourcesLoading.value = false
-
-      render(<ResourceList />)
-
-      expect(screen.queryByText(/Inventory/)).not.toBeInTheDocument()
-    })
-
-    it('should expand inventory when toggle is clicked', async () => {
-      fetchWithMock.mockResolvedValue({ resources: [mockResources[0]] })
-
-      render(<ResourceList />)
-
-      const inventoryToggle = await screen.findByText(/Inventory \(2\)/)
-      fireEvent.click(inventoryToggle)
-
-      // Check for inventory items
-      await waitFor(() => {
-        expect(screen.getByText(/Namespace/)).toBeInTheDocument()
-      })
-      expect(screen.getByText(/Deployment/)).toBeInTheDocument()
-    })
-  })
-
-  describe('Inventory sorting', () => {
-    it('should sort inventory items by kind, namespace, then name', async () => {
-      const resourceWithSortedInventory = {
-        kind: 'Kustomization',
-        name: 'apps',
-        namespace: 'flux-system',
-        status: 'Ready',
-        message: 'Applied revision: main@sha1:abc123',
-        lastReconciled: new Date('2025-01-15T10:00:00Z'),
-        inventory: [
-          // Same kind, different namespaces
-          { apiVersion: 'v1', kind: 'ConfigMap', namespace: 'prod', name: 'config-a' },
-          { apiVersion: 'v1', kind: 'ConfigMap', namespace: 'dev', name: 'config-b' },
-          // Same kind and namespace, different names
-          { apiVersion: 'v1', kind: 'Secret', namespace: 'default', name: 'secret-z' },
-          { apiVersion: 'v1', kind: 'Secret', namespace: 'default', name: 'secret-a' },
-          // Cluster-scoped (no namespace) should come before namespaced
-          { apiVersion: 'v1', kind: 'Namespace', name: 'test' },
-          { apiVersion: 'v1', kind: 'Namespace', name: 'prod' }
-        ]
-      }
-
-      fetchWithMock.mockResolvedValue({ resources: [resourceWithSortedInventory] })
-
-      render(<ResourceList />)
-
-      const inventoryToggle = await screen.findByText(/Inventory \(6\)/)
-      fireEvent.click(inventoryToggle)
-
-      // Wait for inventory to be visible and verify sorting is applied
-      await waitFor(() => {
-        // Verify ConfigMaps are present (sorted by namespace)
-        expect(screen.getByText('config-b')).toBeInTheDocument()
-        expect(screen.getByText('config-a')).toBeInTheDocument()
-
-        // Verify Namespaces are present (cluster-scoped)
-        const namespaces = screen.getAllByText(/Namespace/)
-        expect(namespaces.length).toBeGreaterThan(0)
-
-        // Verify Secrets are present (sorted by name)
-        expect(screen.getByText('secret-a')).toBeInTheDocument()
-        expect(screen.getByText('secret-z')).toBeInTheDocument()
-      })
-    })
-
-    it('should handle inventory items with missing namespace (cluster-scoped)', async () => {
-      const resourceWithClusterScoped = {
-        kind: 'Kustomization',
-        name: 'infrastructure',
-        namespace: 'flux-system',
-        status: 'Ready',
-        message: 'Applied',
-        lastReconciled: new Date('2025-01-15T10:00:00Z'),
-        inventory: [
-          { apiVersion: 'v1', kind: 'Namespace', name: 'test' },
-          { apiVersion: 'v1', kind: 'ConfigMap', namespace: 'default', name: 'config' }
-        ]
-      }
-
-      fetchWithMock.mockResolvedValue({ resources: [resourceWithClusterScoped] })
-
-      render(<ResourceList />)
-
-      const inventoryToggle = await screen.findByText(/Inventory \(2\)/)
-      fireEvent.click(inventoryToggle)
-
-      await waitFor(() => {
-        expect(screen.getByText(/Namespace/)).toBeInTheDocument()
-      })
-    })
-
-    it('should sort apiVersions alphabetically when not in priority list', async () => {
-      const resourceWithMixedApiVersions = {
-        kind: 'Kustomization',
-        name: 'apps',
-        namespace: 'flux-system',
-        status: 'Ready',
-        message: 'Applied',
-        lastReconciled: new Date('2025-01-15T10:00:00Z'),
-        inventory: [
-          // Custom apiVersions that should be sorted alphabetically
-          { apiVersion: 'custom.io/v1', kind: 'Custom', name: 'item1' },
-          { apiVersion: 'another.io/v1', kind: 'Another', name: 'item2' },
-          { apiVersion: 'zzz.io/v1', kind: 'ZZZ', name: 'item3' }
-        ]
-      }
-
-      fetchWithMock.mockResolvedValue({ resources: [resourceWithMixedApiVersions] })
-
-      render(<ResourceList />)
-
-      const inventoryToggle = await screen.findByText(/Inventory \(3\)/)
-      fireEvent.click(inventoryToggle)
-
-      await waitFor(() => {
-        expect(screen.getByText(/Custom/)).toBeInTheDocument()
-      })
-
-      // Verify alphabetical sorting happens
-      const apiVersionHeaders = document.querySelectorAll('[class*="text-xs font-semibold"]')
-      expect(apiVersionHeaders.length).toBeGreaterThan(0)
+      expect(screen.getByTestId('resource-view-kind')).toHaveTextContent('GitRepository')
+      expect(screen.getByTestId('resource-view-name')).toHaveTextContent('flux-system')
+      expect(screen.getByTestId('resource-view-namespace')).toHaveTextContent('flux-system')
     })
   })
 

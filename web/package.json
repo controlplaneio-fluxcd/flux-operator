@@ -12,13 +12,16 @@
   },
   "dependencies": {
     "@preact/signals": "^2.3.2",
-    "preact": "^10.26.1"
+    "js-yaml": "^4.1.1",
+    "preact": "^10.26.1",
+    "prismjs": "^1.30.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",
     "@preact/preset-vite": "^2.9.3",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/preact": "^3.2.4",
+    "@testing-library/user-event": "^14.6.1",
     "@vitest/coverage-v8": "^4.0.10",
     "autoprefixer": "^10.4.20",
     "eslint": "^9.39.0",

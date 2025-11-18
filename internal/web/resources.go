@@ -106,9 +106,6 @@ type ResourceStatus struct {
 
 	// LastReconciled is the timestamp of the last reconciliation.
 	LastReconciled metav1.Time `json:"lastReconciled"`
-
-	// Inventory holds the list of managed resources.
-	Inventory []InventoryEntry `json:"inventory,omitempty"`
 }
 
 // GetResourcesStatus returns the status for the specified resource kinds and optional name in the given namespace.
@@ -180,7 +177,7 @@ func (r *Router) GetResourcesStatus(ctx context.Context, kinds []string, name, n
 					}
 				}
 
-				rs := r.resourceStatusFromUnstructured(ctx, obj)
+				rs := r.resourceStatusFromUnstructured(obj)
 				result = append(result, rs)
 			}
 			mu.Unlock()
@@ -211,7 +208,8 @@ func (r *Router) GetResourcesStatus(ctx context.Context, kinds []string, name, n
 
 // resourceStatusFromUnstructured extracts the ResourceStatus from an unstructured Kubernetes object.
 // Maps Kubernetes condition status to one of: "Ready", "Failed", "Progressing", "Suspended", "Unknown"
-func (r *Router) resourceStatusFromUnstructured(ctx context.Context, obj unstructured.Unstructured) ResourceStatus {
+// nolint: gocyclo
+func (r *Router) resourceStatusFromUnstructured(obj unstructured.Unstructured) ResourceStatus {
 	status := StatusUnknown
 	message := "No status information available"
 	lastReconciled := metav1.Now()
@@ -274,6 +272,16 @@ func (r *Router) resourceStatusFromUnstructured(ctx context.Context, obj unstruc
 		message = "Valid configuration"
 	}
 
+	// if kind is HelmRepository and has .spec.type of 'oci', set status to Ready
+	if obj.GetKind() == fluxcdv1.FluxHelmRepositoryKind {
+		if specType, found, err := unstructured.NestedString(obj.Object, "spec", "type"); found && err == nil {
+			if specType == "oci" && status == StatusUnknown {
+				status = StatusReady
+				message = "Valid configuration"
+			}
+		}
+	}
+
 	// Check for suspended state (takes precedence over condition status)
 	// Check reconcile annotation
 	if ssautil.AnyInMetadata(&obj,
@@ -297,10 +305,5 @@ func (r *Router) resourceStatusFromUnstructured(ctx context.Context, obj unstruc
 		Message:        message,
 	}
 
-	// Extract inventory of managed resources
-	inventory := r.getInventory(ctx, obj)
-	if len(inventory) > 0 {
-		rs.Inventory = inventory
-	}
 	return rs
 }
