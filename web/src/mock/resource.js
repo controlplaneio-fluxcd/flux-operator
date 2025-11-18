@@ -3560,6 +3560,9 @@ export const mockResourcesArray =
     "apiVersion": "source.toolkit.fluxcd.io/v1",
     "kind": "Bucket",
     "metadata": {
+      "annotations": {
+        "kustomize.toolkit.fluxcd.io/ssa": "Ignore"
+      },
       "name": "default-configs",
       "namespace": "default"
     },
@@ -3570,17 +3573,7 @@ export const mockResourcesArray =
       "provider": "generic"
     },
     "status": {
-      "conditions": [
-        {
-          "lastTransitionTime": "2025-11-18T08:00:00Z",
-          "message": "No status information available",
-          "observedGeneration": 1,
-          "reason": "Unknown",
-          "status": "Unknown",
-          "type": "Ready"
-        }
-      ],
-      "observedGeneration": 1
+      "observedGeneration": -1
     }
   },
   {

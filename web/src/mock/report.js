@@ -73,27 +73,27 @@ export const mockReport = {
       {
         apiVersion: 'fluxcd.controlplane.io/v1',
         kind: 'ResourceSet',
-        stats: { failing: 0, running: 7, suspended: 0 }
+        stats: { failing: 0, running: 8, suspended: 0 }
       },
       {
         apiVersion: 'fluxcd.controlplane.io/v1',
         kind: 'ResourceSetInputProvider',
-        stats: { failing: 0, running: 4, suspended: 1 }
+        stats: { failing: 0, running: 1, suspended: 0 }
       },
       {
         apiVersion: 'helm.toolkit.fluxcd.io/v2',
         kind: 'HelmRelease',
-        stats: { failing: 0, running: 1600, suspended: 0 }
+        stats: { failing: 0, running: 4, suspended: 0 }
       },
       {
         apiVersion: 'image.toolkit.fluxcd.io/v1',
         kind: 'ImagePolicy',
-        stats: { failing: 0, running: 80, suspended: 0 }
+        stats: { failing: 0, running: 1, suspended: 1 }
       },
       {
         apiVersion: 'image.toolkit.fluxcd.io/v1',
         kind: 'ImageRepository',
-        stats: { failing: 0, running: 80, suspended: 0 }
+        stats: { failing: 0, running: 1, suspended: 1 }
       },
       {
         apiVersion: 'image.toolkit.fluxcd.io/v1',
@@ -103,57 +103,57 @@ export const mockReport = {
       {
         apiVersion: 'kustomize.toolkit.fluxcd.io/v1',
         kind: 'Kustomization',
-        stats: { failing: 1, running: 2200, suspended: 0 }
+        stats: { failing: 0, running: 3, suspended: 0 }
       },
       {
         apiVersion: 'notification.toolkit.fluxcd.io/v1',
         kind: 'Receiver',
-        stats: { failing: 0, running: 1, suspended: 0 }
+        stats: { failing: 0, running: 2, suspended: 0 }
       },
       {
         apiVersion: 'notification.toolkit.fluxcd.io/v1beta3',
         kind: 'Alert',
-        stats: { failing: 0, running: 20, suspended: 5 }
+        stats: { failing: 0, running: 2, suspended: 0 }
       },
       {
         apiVersion: 'notification.toolkit.fluxcd.io/v1beta3',
         kind: 'Provider',
-        stats: { failing: 0, running: 25, suspended: 0 }
+        stats: { failing: 0, running: 2, suspended: 0 }
       },
       {
         apiVersion: 'source.extensions.fluxcd.io/v1beta1',
         kind: 'ArtifactGenerator',
-        stats: { failing: 0, running: 2, suspended: 0 }
+        stats: { failing: 0, running: 0, suspended: 0 }
       },
       {
         apiVersion: 'source.toolkit.fluxcd.io/v1',
         kind: 'Bucket',
-        stats: { failing: 1, running: 3, suspended: 2 }
+        stats: { failing: 1, running: 4, suspended: 1, totalSize: '256 KiB' }
       },
       {
         apiVersion: 'source.toolkit.fluxcd.io/v1',
         kind: 'ExternalArtifact',
-        stats: { failing: 0, running: 5, suspended: 0 }
+        stats: { failing: 0, running: 0, suspended: 0 }
       },
       {
         apiVersion: 'source.toolkit.fluxcd.io/v1',
         kind: 'GitRepository',
-        stats: { failing: 0, running: 1, suspended: 0, totalSize: '11.9 KiB' }
+        stats: { failing: 0, running: 2, suspended: 0, totalSize: '11.9 KiB' }
       },
       {
         apiVersion: 'source.toolkit.fluxcd.io/v1',
         kind: 'HelmChart',
-        stats: { failing: 0, running: 416, suspended: 0, totalSize: '50.6 KiB' }
+        stats: { failing: 0, running: 2, suspended: 0, totalSize: '50.6 KiB' }
       },
       {
         apiVersion: 'source.toolkit.fluxcd.io/v1',
         kind: 'HelmRepository',
-        stats: { failing: 0, running: 10, suspended: 0, totalSize: '75.6 KiB' }
+        stats: { failing: 1, running: 2, suspended: 0, totalSize: '75.6 KiB' }
       },
       {
         apiVersion: 'source.toolkit.fluxcd.io/v1',
         kind: 'OCIRepository',
-        stats: { failing: 0, running: 623, suspended: 0, totalSize: '1.0 MiB' }
+        stats: { failing: 0, running: 3, suspended: 0, totalSize: '1.0 MiB' }
       }
     ],
     sync: {

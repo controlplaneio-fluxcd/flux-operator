@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { signal } from '@preact/signals'
-import { useEffect, useState, useMemo } from 'preact/hooks'
+import { useEffect, useState } from 'preact/hooks'
 import { fetchWithMock } from '../utils/fetch'
 import { formatTimestamp } from '../utils/time'
 import { fluxReport } from '../app'
 import { FilterForm } from './FilterForm'
+import { ResourceView } from './ResourceView'
 
 // Resources data signals
 export const resourcesData = signal([])
@@ -64,134 +65,21 @@ function getStatusBadgeClass(status) {
 }
 
 /**
- * Groups inventory items by apiVersion only
- * @param {Array} inventory - Array of inventory items
- * @returns {Object} Structure: { apiVersion: [items] }
- */
-function groupInventoryByApiVersion(inventory) {
-  if (!inventory || inventory.length === 0) return {}
-
-  const grouped = {}
-
-  inventory.forEach(item => {
-    const apiVersion = item.apiVersion || 'unknown'
-
-    if (!grouped[apiVersion]) {
-      grouped[apiVersion] = []
-    }
-    grouped[apiVersion].push(item)
-  })
-
-  // Sort items within each apiVersion by kind, namespace, then name
-  Object.keys(grouped).forEach(apiVersion => {
-    grouped[apiVersion].sort((a, b) => {
-      // Sort by kind first
-      const kindCompare = a.kind.localeCompare(b.kind)
-      if (kindCompare !== 0) return kindCompare
-
-      // Then by namespace (cluster-scoped resources have no namespace, so they come first)
-      const nsA = a.namespace || ''
-      const nsB = b.namespace || ''
-      if (nsA !== nsB) return nsA.localeCompare(nsB)
-
-      // Finally by name
-      return a.name.localeCompare(b.name)
-    })
-  })
-
-  return grouped
-}
-
-/**
- * InventoryItem - Displays a single inventory item (managed resource)
+ * ResourceCard - Individual card displaying a Flux resource with status and details
  *
  * @param {Object} props
- * @param {Object} props.item - Inventory item with kind, name, and optional namespace
- *
- * Shows: kind/namespace/name (or kind/name for cluster-scoped resources)
- */
-function InventoryItem({ item }) {
-  return (
-    <div class="py-1 px-2 text-xs break-all">
-      <span class="font-mono text-gray-900 dark:text-gray-100">
-        <span class="text-gray-600 dark:text-gray-400">{item.kind}/</span>
-        {item.namespace && (
-          <span class="text-gray-500 dark:text-gray-400">{item.namespace}/</span>
-        )}
-        {item.name}
-      </span>
-    </div>
-  )
-}
-
-/**
- * InventoryGroupByApiVersion - Groups inventory items under an API version heading
- *
- * @param {Object} props
- * @param {string} props.apiVersion - API version (e.g., "v1", "apps/v1")
- * @param {Array} props.items - Array of inventory items for this API version
- *
- * Displays API version header with item count and lists all items in the group
- */
-function InventoryGroupByApiVersion({ apiVersion, items }) {
-  return (
-    <div class="mb-3">
-      <div class="flex items-center gap-2 py-1 flex-wrap">
-        <span class="text-xs font-bold text-gray-800 dark:text-gray-200 break-all">
-          {apiVersion}
-        </span>
-        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
-          {items.length}
-        </span>
-      </div>
-      <div class="ml-0 sm:ml-2">
-        {items.map((item, idx) => (
-          <InventoryItem key={idx} item={item} />
-        ))}
-      </div>
-    </div>
-  )
-}
-
-/**
- * ResourceCard - Individual card displaying a Flux resource with status and inventory
- *
- * @param {Object} props
- * @param {Object} props.resource - Resource object with kind, name, status, message, inventory
+ * @param {Object} props.resource - Resource object with kind, name, status, message
  *
  * Features:
  * - Shows resource kind, namespace, and name
  * - Displays status badge (Ready, Failed, Progressing, Suspended, Unknown)
  * - Shows status message with expand/collapse for long messages
  * - Displays last reconciled timestamp
- * - Expandable inventory section showing managed resources grouped by API version
+ * - Expandable details section showing spec and inventory (lazy-loaded via ResourceView)
  */
 function ResourceCard({ resource }) {
   const [isExpanded, setIsExpanded] = useState(false)
-  const [isInventoryExpanded, setIsInventoryExpanded] = useState(false)
-
-  // Group inventory by apiVersion (memoized)
-  const groupedInventory = useMemo(
-    () => groupInventoryByApiVersion(resource.inventory),
-    [resource.inventory]
-  )
-
-  // Sort apiVersions (prioritize apiextensions.k8s.io/v1 first, then v1)
-  const sortedApiVersions = useMemo(() => {
-    const versions = Object.keys(groupedInventory)
-    return versions.sort((a, b) => {
-      // First: apiextensions.k8s.io/v1
-      if (a === 'apiextensions.k8s.io/v1' && b !== 'apiextensions.k8s.io/v1') return -1
-      if (b === 'apiextensions.k8s.io/v1' && a !== 'apiextensions.k8s.io/v1') return 1
-
-      // Second: v1
-      if (a === 'v1' && b !== 'v1') return -1
-      if (b === 'v1' && a !== 'v1') return 1
-
-      // Rest: alphabetically
-      return a.localeCompare(b)
-    })
-  }, [groupedInventory])
+  const [isDetailsExpanded, setIsDetailsExpanded] = useState(false)
 
   // Check if message is long or contains newlines
   const isLongMessage = resource.message.length > 150 || resource.message.includes('\n')
@@ -250,43 +138,31 @@ function ResourceCard({ resource }) {
         )}
       </div>
 
-      {/* Inventory Section - Only show if inventory exists */}
-      {resource.inventory && resource.inventory.length > 0 && (
-        <>
-          {/* Inventory Toggle Button */}
-          <div class="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-            <button
-              onClick={() => setIsInventoryExpanded(!isInventoryExpanded)}
-              class="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-300 hover:text-flux-blue dark:hover:text-blue-400 focus:outline-none transition-colors"
-            >
-              <svg
-                class={`w-4 h-4 transition-transform ${isInventoryExpanded ? 'rotate-90' : ''}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-              </svg>
-              <span class="font-medium">
-                Inventory ({resource.inventory.length})
-              </span>
-            </button>
-          </div>
+      {/* Details Panel - Spec + Inventory (Lazy Loaded) */}
+      <div class="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+        <button
+          onClick={() => setIsDetailsExpanded(!isDetailsExpanded)}
+          class="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-300 hover:text-flux-blue dark:hover:text-blue-400 focus:outline-none transition-colors"
+        >
+          <svg
+            class={`w-4 h-4 transition-transform ${isDetailsExpanded ? 'rotate-90' : ''}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+          </svg>
+          <span class="font-medium">Details</span>
+        </button>
+      </div>
 
-          {/* Inventory List - Expanded (Grouped by apiVersion) */}
-          {isInventoryExpanded && (
-            <div class="mt-3">
-              {sortedApiVersions.map(apiVersion => (
-                <InventoryGroupByApiVersion
-                  key={apiVersion}
-                  apiVersion={apiVersion}
-                  items={groupedInventory[apiVersion]}
-                />
-              ))}
-            </div>
-          )}
-        </>
-      )}
+      {/* ResourceView Component */}
+      <ResourceView
+        kind={resource.kind}
+        name={resource.name}
+        namespace={resource.namespace}
+        isExpanded={isDetailsExpanded}
+      />
     </div>
   )
 }

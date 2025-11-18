@@ -29,17 +29,19 @@ jobs:
           node-version: 24
           cache: 'npm'
           cache-dependency-path: web/package-lock.json
-      - name: Build frontend
-        run: make web-ci-install web-build
       - name: Setup Kubernetes
         uses: helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab # v1.13.0
         with:
           version: v0.30.0
           cluster_name: kind
+      - name: Build frontend
+        run: make web-ci-install web-build
       - name: Run linters
         run: make lint
       - name: Run frontend tests
         run: make web-test
+      - name: Run controller tests
+        run: make test
       - name: Run controller e2e tests
         run: make test-e2e
       - name: Check if working tree is dirty

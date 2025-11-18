@@ -40,282 +40,201 @@ const matchesWildcard = (name, pattern) => {
 
 const mockEvents = {
   events: [
-    // FluxInstance (3 events)
     {
-      lastTimestamp: getTimestamp(5),
+      lastTimestamp: getTimestamp(1),
       type: "Normal",
-      message: "Reconciliation finished in 3s",
-      involvedObject: "FluxInstance/flux",
-      namespace: "flux-system"
-    },
-    {
-      lastTimestamp: getTimestamp(45),
-      type: "Normal",
-      message: "FluxInstance health check passed",
-      involvedObject: "FluxInstance/flux",
-      namespace: "flux-system"
-    },
-    {
-      lastTimestamp: getTimestamp(90),
-      type: "Normal",
-      message: "Upgrade completed to version v2.7.3",
-      involvedObject: "FluxInstance/flux",
-      namespace: "flux-system"
-    },
-    // ResourceSet (2 events)
-    {
-      lastTimestamp: getTimestamp(8),
-      type: "Normal",
-      message: "Applied 15 resources, Health: Healthy",
-      involvedObject: "ResourceSet/flux-controllers",
-      namespace: "flux-system"
-    },
-    {
-      lastTimestamp: getTimestamp(75),
-      type: "Normal",
-      message: "All resources reconciled successfully",
-      involvedObject: "ResourceSet/monitoring",
-      namespace: "flux-system"
-    },
-    // ResourceSetInputProvider (2 events)
-    {
-      lastTimestamp: getTimestamp(10),
-      type: "Normal",
-      message: "Input synchronized from GitRepository/flux-system",
-      involvedObject: "ResourceSetInputProvider/flux-config",
-      namespace: "flux-system"
-    },
-    {
-      lastTimestamp: getTimestamp(55),
-      type: "Warning",
-      message: "Input source temporarily unavailable, using cached version",
-      involvedObject: "ResourceSetInputProvider/apps-config",
-      namespace: "flux-system"
-    },
-    // Kustomization (4 events)
-    {
-      lastTimestamp: getTimestamp(15),
-      type: "Normal",
-      message: "Reconciliation finished in 145ms, next run in 10m0s",
+      message: "Applied revision: refs/heads/main@sha1:d676e33990dc2865d67c022d26dea93d5e3236ff",
       involvedObject: "Kustomization/flux-system",
       namespace: "flux-system"
     },
     {
-      lastTimestamp: getTimestamp(30),
-      type: "Warning",
-      message: "Reconciliation failed\nError: failed to apply manifests\n  Caused by:\n    - manifest validation failed for Deployment/podinfo\n    - field spec.replicas: Invalid value: \"invalid\": must be an integer\n  Retrying in 5m0s",
-      involvedObject: "Kustomization/apps",
-      namespace: "flux-system"
-    },
-    {
-      lastTimestamp: getTimestamp(65),
+      lastTimestamp: getTimestamp(1),
       type: "Normal",
-      message: "Pruned 3 resources that are no longer in the source",
-      involvedObject: "Kustomization/infrastructure",
+      message: "Server-side apply completed\nFluxInstance/flux-system/flux updated\nResourceSet/flux-system/cluster-infra updated",
+      involvedObject: "Kustomization/flux-system",
       namespace: "flux-system"
     },
     {
-      lastTimestamp: getTimestamp(105),
+      lastTimestamp: getTimestamp(2),
       type: "Normal",
-      message: "Health assessment passed: all resources ready",
-      involvedObject: "Kustomization/apps",
+      message: "Reconciliation finished in 2s",
+      involvedObject: "FluxInstance/flux",
       namespace: "flux-system"
     },
-    // HelmRelease (4 events)
     {
-      lastTimestamp: getTimestamp(95),
-      type: "Warning",
-      message: "Helm install failed: failed to download chart from https://stefanprodan.github.io/podinfo\nError details:\n  Status: 404 Not Found\n  URL: https://stefanprodan.github.io/podinfo/podinfo-6.5.0.tgz\n  Response: The requested chart version does not exist in the repository\n\nPlease verify:\n  1. Chart name is correct\n  2. Chart version exists in the repository\n  3. Repository URL is accessible\n\nThis is a very long error message that will definitely need truncation and the show more/less functionality to work properly. It contains multiple lines and detailed debugging information that should be preserved when expanded.",
-      involvedObject: "HelmRelease/podinfo",
-      namespace: "default"
+      lastTimestamp: getTimestamp(3),
+      type: "Normal",
+      message: "Reconciliation finished in 35ms",
+      involvedObject: "ResourceSet/flux-operator",
+      namespace: "flux-system"
+    },
+    {
+      lastTimestamp: getTimestamp(5),
+      type: "Normal",
+      message: "Reconciliation finished in 31ms",
+      involvedObject: "ResourceSet/tailscale-config",
+      namespace: "flux-system"
+    },
+    {
+      lastTimestamp: getTimestamp(5),
+      type: "Normal",
+      message: "stored artifact for revision 'main@sha1:c1b613a1e083a8918185b11b317f3c75e3c1b6d0'",
+      involvedObject: "GitRepository/podinfo",
+      namespace: "automation"
+    },
+    {
+      lastTimestamp: getTimestamp(6),
+      type: "Normal",
+      message: "Applied revision: refs/heads/main@sha1:d676e33990dc2865d67c022d26dea93d5e3236ff",
+      involvedObject: "Kustomization/cluster-infra",
+      namespace: "flux-system"
+    },
+    {
+      lastTimestamp: getTimestamp(8),
+      type: "Normal",
+      message: "Reconciliation finished in 27ms",
+      involvedObject: "ResourceSet/cluster-infra",
+      namespace: "flux-system"
+    },
+    {
+      lastTimestamp: getTimestamp(10),
+      type: "Normal",
+      message: "Reconciliation finished in 207ms",
+      involvedObject: "ResourceSetInputProvider/flux-status-server",
+      namespace: "flux-system"
+    },
+    {
+      lastTimestamp: getTimestamp(10),
+      type: "Normal",
+      message: "successful scan, found 211 tags",
+      involvedObject: "ImageRepository/podinfo",
+      namespace: "automation"
     },
     {
       lastTimestamp: getTimestamp(12),
       type: "Normal",
-      message: "Helm upgrade succeeded, chart version: 6.5.4",
-      involvedObject: "HelmRelease/ingress-nginx",
-      namespace: "kube-system"
+      message: "Reconciliation finished in 41ms",
+      involvedObject: "ResourceSet/cert-manager",
+      namespace: "flux-system"
     },
     {
-      lastTimestamp: getTimestamp(40),
+      lastTimestamp: getTimestamp(14),
       type: "Normal",
-      message: "Helm test completed successfully",
-      involvedObject: "HelmRelease/cert-manager",
-      namespace: "cert-manager"
+      message: "Reconciliation finished in 44ms",
+      involvedObject: "ResourceSet/tailscale-operator",
+      namespace: "flux-system"
     },
     {
-      lastTimestamp: getTimestamp(80),
-      type: "Warning",
-      message: "Helm rollback initiated due to failed upgrade\nRolling back to revision 5",
-      involvedObject: "HelmRelease/prometheus",
-      namespace: "monitoring"
+      lastTimestamp: getTimestamp(15),
+      type: "Normal",
+      message: "Latest image tag for 'ghcr.io/stefanprodan/podinfo' resolved to 6.2.0",
+      involvedObject: "ImagePolicy/podinfo",
+      namespace: "automation"
     },
-    // GitRepository (3 events)
     {
-      lastTimestamp: getTimestamp(35),
-      type: "Warning",
-      message: "Failed to fetch artifact: connection timeout",
-      involvedObject: "GitRepository/flux-system",
+      lastTimestamp: getTimestamp(16),
+      type: "Normal",
+      message: "Reconciliation finished in 41ms",
+      involvedObject: "ResourceSet/zot-registry",
       namespace: "flux-system"
     },
     {
       lastTimestamp: getTimestamp(18),
       type: "Normal",
-      message: "Stored artifact for revision: main@sha1:a7b3c2d",
-      involvedObject: "GitRepository/podinfo",
-      namespace: "default"
-    },
-    {
-      lastTimestamp: getTimestamp(60),
-      type: "Normal",
-      message: "Repository cloned successfully",
-      involvedObject: "GitRepository/apps",
+      message: "Reconciliation finished in 36ms",
+      involvedObject: "ResourceSet/metrics-server",
       namespace: "flux-system"
     },
-    // OCIRepository (2 events)
     {
       lastTimestamp: getTimestamp(20),
       type: "Normal",
-      message: "artifact up-to-date with remote revision: '0.33.0@sha256:5a303365aa7479964476cb151926616b6cb5980002e3e28f9007772a12673c42'",
-      involvedObject: "OCIRepository/prometheus-config",
-      namespace: "monitoring"
+      message: "pushed commit '3ebb95c' to branch 'main'",
+      involvedObject: "ImageUpdateAutomation/podinfo",
+      namespace: "automation"
     },
-    {
-      lastTimestamp: getTimestamp(70),
-      type: "Normal",
-      message: "Pulled OCI artifact from ghcr.io/stefanprodan/manifests",
-      involvedObject: "OCIRepository/manifests",
-      namespace: "flux-system"
-    },
-    // HelmRepository (2 events)
-    {
-      lastTimestamp: getTimestamp(22),
-      type: "Normal",
-      message: "Fetched index: 247 charts",
-      involvedObject: "HelmRepository/bitnami",
-      namespace: "flux-system"
-    },
-    {
-      lastTimestamp: getTimestamp(85),
-      type: "Warning",
-      message: "Repository index download failed: TLS handshake timeout",
-      involvedObject: "HelmRepository/stable",
-      namespace: "flux-system"
-    },
-    // HelmChart (2 events)
     {
       lastTimestamp: getTimestamp(25),
       type: "Normal",
-      message: "Pulled chart version 15.2.3",
-      involvedObject: "HelmChart/nginx",
+      message: "stored artifact for revision 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'",
+      involvedObject: "Bucket/dev-configs",
       namespace: "flux-system"
     },
     {
-      lastTimestamp: getTimestamp(50),
+      lastTimestamp: getTimestamp(25),
       type: "Normal",
-      message: "Chart package verified with digest sha256:xyz789",
-      involvedObject: "HelmChart/prometheus",
-      namespace: "monitoring"
-    },
-    // Bucket (2 events)
-    {
-      lastTimestamp: getTimestamp(42),
-      type: "Warning",
-      message: "Failed to download bucket: access denied\nError: The AWS Access Key Id you provided does not exist in our records\nBucket: s3://my-flux-bucket\nRegion: us-west-2",
-      involvedObject: "Bucket/terraform-state",
+      message: "reconciliation in progress: fetching artifact",
+      involvedObject: "Bucket/staging-configs",
       namespace: "flux-system"
     },
     {
-      lastTimestamp: getTimestamp(100),
+      lastTimestamp: getTimestamp(25),
       type: "Normal",
-      message: "Bucket contents synchronized successfully",
-      involvedObject: "Bucket/configs",
-      namespace: "flux-system"
-    },
-    // ImageRepository (2 events)
-    {
-      lastTimestamp: getTimestamp(28),
-      type: "Normal",
-      message: "Found 12 tags for image ghcr.io/stefanprodan/podinfo",
-      involvedObject: "ImageRepository/podinfo",
+      message: "Reconciliation finished in 55ms",
+      involvedObject: "ResourceSet/flux-status-server",
       namespace: "flux-system"
     },
     {
-      lastTimestamp: getTimestamp(110),
+      lastTimestamp: getTimestamp(25),
       type: "Normal",
-      message: "Scanning image repository for new tags",
-      involvedObject: "ImageRepository/app",
-      namespace: "default"
+      message: "Valid configuration",
+      involvedObject: "Alert/msteams",
+      namespace: "automation"
     },
-    // ImagePolicy (2 events)
     {
-      lastTimestamp: getTimestamp(32),
+      lastTimestamp: getTimestamp(30),
       type: "Normal",
-      message: "Latest image tag for policy semver:^6.x is: 6.5.4",
-      involvedObject: "ImagePolicy/podinfo",
+      message: "Valid configuration",
+      involvedObject: "Alert/slack",
       namespace: "flux-system"
     },
     {
-      lastTimestamp: getTimestamp(88),
+      lastTimestamp: getTimestamp(30),
       type: "Normal",
-      message: "Policy evaluation successful, selected tag: v1.2.3",
-      involvedObject: "ImagePolicy/backend",
-      namespace: "default"
-    },
-    // ImageUpdateAutomation (2 events)
-    {
-      lastTimestamp: getTimestamp(48),
-      type: "Normal",
-      message: "Committed and pushed change to branch main",
-      involvedObject: "ImageUpdateAutomation/flux-system",
-      namespace: "flux-system"
+      message: "Valid configuration",
+      involvedObject: "Provider/msteams",
+      namespace: "automation"
     },
     {
-      lastTimestamp: getTimestamp(115),
-      type: "Warning",
-      message: "Failed to push commits: authentication failed\nVerify git credentials and permissions",
-      involvedObject: "ImageUpdateAutomation/apps",
-      namespace: "default"
-    },
-    // Alert (1 event)
-    {
-      lastTimestamp: getTimestamp(38),
+      lastTimestamp: getTimestamp(35),
       type: "Normal",
-      message: "Notification sent to slack channel #flux-alerts",
-      involvedObject: "Alert/on-call-alerts",
-      namespace: "flux-system"
-    },
-    // Provider (1 event)
-    {
-      lastTimestamp: getTimestamp(52),
-      type: "Normal",
-      message: "Provider initialized: Slack webhook configured",
+      message: "Valid configuration",
       involvedObject: "Provider/slack",
       namespace: "flux-system"
     },
-    // Receiver (1 event)
     {
-      lastTimestamp: getTimestamp(78),
+      lastTimestamp: getTimestamp(35),
       type: "Normal",
-      message: "Webhook received, triggered reconciliation for GitRepository/flux-system",
+      message: "Receiver initialized for path: /hook/cbdee599b7977a520a36692e5b872c39d09ee53dd75b2e3ae117fea283958fbf",
+      involvedObject: "Receiver/podinfo-webhook",
+      namespace: "automation"
+    },
+    {
+      lastTimestamp: getTimestamp(40),
+      type: "Normal",
+      message: "Receiver initialized for path: /hook/bed6d00b5555b1603e1f59b94d7fdbca58089cb5663633fb83f2815dc626d92b",
       involvedObject: "Receiver/github-webhook",
       namespace: "flux-system"
     },
-    // ArtifactGenerator (1 event)
     {
-      lastTimestamp: getTimestamp(58),
+      lastTimestamp: getTimestamp(40),
       type: "Normal",
-      message: "Generated artifact from ConfigMap/app-config",
-      involvedObject: "ArtifactGenerator/config-bundle",
+      message: "successful scan, found 50 tags",
+      involvedObject: "ImageRepository/redis",
+      namespace: "automation"
+    },
+    {
+      lastTimestamp: getTimestamp(42),
+      type: "Warning",
+      message: 'authentication failed:\nSTS: AssumeRoleWithWebIdentity, https response error\nPost "https://sts.arn.amazonaws.com/": dial tcp: lookupts.arn.amazonaws.com on 10.100.0.10:53: no such host',
+      involvedObject: "Bucket/aws-configs",
       namespace: "flux-system"
     },
-    // ExternalArtifact (1 event)
     {
-      lastTimestamp: getTimestamp(68),
+      lastTimestamp: getTimestamp(45),
       type: "Normal",
-      message: "Artifact synchronized from external source",
-      involvedObject: "ExternalArtifact/vendor-manifests",
-      namespace: "flux-system"
+      message: "Latest image tag for 'redis' resolved to 7.0.5",
+      involvedObject: "ImagePolicy/redis",
+      namespace: "automation"
     }
   ]
 }
