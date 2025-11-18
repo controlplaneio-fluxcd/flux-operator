@@ -1,12 +1,7 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-// Helper to generate timestamps within the last 2 hours (events expire after 2h)
-const now = new Date()
-const getTimestamp = (minutesAgo) => {
-  const time = new Date(now.getTime() - minutesAgo * 60000)
-  return time.toISOString()
-}
+// Real data from cluster API fetched on 2025-11-18
 
 // Helper to match name with wildcard pattern
 // Supports * (matches any characters). If no wildcards, does exact match.
@@ -29,634 +24,81 @@ const matchesWildcard = (name, pattern) => {
   return regex.test(name)
 }
 
+// Generate timestamps relative to now (same pattern as events.js)
+const now = new Date()
+const getTimestamp = (minutesAgo) => {
+  const time = new Date(now.getTime() - minutesAgo * 60000)
+  return time.toISOString()
+}
+
 export const mockResources = {
   resources: [
-    // FluxInstance
+    // GitRepository
     {
-      name: "flux",
-      kind: "FluxInstance",
+      name: "flux-system",
+      kind: "GitRepository",
       namespace: "flux-system",
       status: "Ready",
-      message: "Reconciliation finished in 2s",
-      lastReconciled: getTimestamp(5),
-      inventory: [
-        {
-          name: "alerts.notification.toolkit.fluxcd.io",
-          kind: "CustomResourceDefinition",
-          apiVersion: "apiextensions.k8s.io/v1"
-        },
-        {
-          name: "artifactgenerators.source.extensions.fluxcd.io",
-          kind: "CustomResourceDefinition",
-          apiVersion: "apiextensions.k8s.io/v1"
-        },
-        {
-          name: "buckets.source.toolkit.fluxcd.io",
-          kind: "CustomResourceDefinition",
-          apiVersion: "apiextensions.k8s.io/v1"
-        },
-        {
-          name: "externalartifacts.source.toolkit.fluxcd.io",
-          kind: "CustomResourceDefinition",
-          apiVersion: "apiextensions.k8s.io/v1"
-        },
-        {
-          name: "gitrepositories.source.toolkit.fluxcd.io",
-          kind: "CustomResourceDefinition",
-          apiVersion: "apiextensions.k8s.io/v1"
-        },
-        {
-          name: "helmcharts.source.toolkit.fluxcd.io",
-          kind: "CustomResourceDefinition",
-          apiVersion: "apiextensions.k8s.io/v1"
-        },
-        {
-          name: "helmreleases.helm.toolkit.fluxcd.io",
-          kind: "CustomResourceDefinition",
-          apiVersion: "apiextensions.k8s.io/v1"
-        },
-        {
-          name: "helmrepositories.source.toolkit.fluxcd.io",
-          kind: "CustomResourceDefinition",
-          apiVersion: "apiextensions.k8s.io/v1"
-        },
-        {
-          name: "kustomizations.kustomize.toolkit.fluxcd.io",
-          kind: "CustomResourceDefinition",
-          apiVersion: "apiextensions.k8s.io/v1"
-        },
-        {
-          name: "ocirepositories.source.toolkit.fluxcd.io",
-          kind: "CustomResourceDefinition",
-          apiVersion: "apiextensions.k8s.io/v1"
-        },
-        {
-          name: "providers.notification.toolkit.fluxcd.io",
-          kind: "CustomResourceDefinition",
-          apiVersion: "apiextensions.k8s.io/v1"
-        },
-        {
-          name: "receivers.notification.toolkit.fluxcd.io",
-          kind: "CustomResourceDefinition",
-          apiVersion: "apiextensions.k8s.io/v1"
-        },
-        {
-          name: "flux-system",
-          kind: "Namespace",
-          apiVersion: "v1"
-        },
-        {
-          name: "crd-controller-flux-system",
-          kind: "ClusterRole",
-          apiVersion: "rbac.authorization.k8s.io/v1"
-        },
-        {
-          name: "flux-edit-flux-system",
-          kind: "ClusterRole",
-          apiVersion: "rbac.authorization.k8s.io/v1"
-        },
-        {
-          name: "flux-view-flux-system",
-          kind: "ClusterRole",
-          apiVersion: "rbac.authorization.k8s.io/v1"
-        },
-        {
-          name: "cluster-reconciler-flux-system",
-          kind: "ClusterRoleBinding",
-          apiVersion: "rbac.authorization.k8s.io/v1"
-        },
-        {
-          name: "crd-controller-flux-system",
-          kind: "ClusterRoleBinding",
-          apiVersion: "rbac.authorization.k8s.io/v1"
-        },
-        {
-          name: "critical-pods-flux-system",
-          namespace: "flux-system",
-          kind: "ResourceQuota",
-          apiVersion: "v1"
-        },
-        {
-          name: "helm-controller",
-          namespace: "flux-system",
-          kind: "ServiceAccount",
-          apiVersion: "v1"
-        },
-        {
-          name: "kustomize-controller",
-          namespace: "flux-system",
-          kind: "ServiceAccount",
-          apiVersion: "v1"
-        },
-        {
-          name: "notification-controller",
-          namespace: "flux-system",
-          kind: "ServiceAccount",
-          apiVersion: "v1"
-        },
-        {
-          name: "source-controller",
-          namespace: "flux-system",
-          kind: "ServiceAccount",
-          apiVersion: "v1"
-        },
-        {
-          name: "source-watcher",
-          namespace: "flux-system",
-          kind: "ServiceAccount",
-          apiVersion: "v1"
-        },
-        {
-          name: "notification-controller",
-          namespace: "flux-system",
-          kind: "Service",
-          apiVersion: "v1"
-        },
-        {
-          name: "source-controller",
-          namespace: "flux-system",
-          kind: "Service",
-          apiVersion: "v1"
-        },
-        {
-          name: "source-watcher",
-          namespace: "flux-system",
-          kind: "Service",
-          apiVersion: "v1"
-        },
-        {
-          name: "webhook-receiver",
-          namespace: "flux-system",
-          kind: "Service",
-          apiVersion: "v1"
-        },
-        {
-          name: "helm-controller",
-          namespace: "flux-system",
-          kind: "Deployment",
-          apiVersion: "apps/v1"
-        },
-        {
-          name: "kustomize-controller",
-          namespace: "flux-system",
-          kind: "Deployment",
-          apiVersion: "apps/v1"
-        },
-        {
-          name: "notification-controller",
-          namespace: "flux-system",
-          kind: "Deployment",
-          apiVersion: "apps/v1"
-        },
-        {
-          name: "source-controller",
-          namespace: "flux-system",
-          kind: "Deployment",
-          apiVersion: "apps/v1"
-        },
-        {
-          name: "source-watcher",
-          namespace: "flux-system",
-          kind: "Deployment",
-          apiVersion: "apps/v1"
-        },
-        {
-          name: "flux-system",
-          namespace: "flux-system",
-          kind: "Kustomization",
-          apiVersion: "kustomize.toolkit.fluxcd.io/v1"
-        },
-        {
-          name: "allow-egress",
-          namespace: "flux-system",
-          kind: "NetworkPolicy",
-          apiVersion: "networking.k8s.io/v1"
-        },
-        {
-          name: "allow-scraping",
-          namespace: "flux-system",
-          kind: "NetworkPolicy",
-          apiVersion: "networking.k8s.io/v1"
-        },
-        {
-          name: "allow-webhooks",
-          namespace: "flux-system",
-          kind: "NetworkPolicy",
-          apiVersion: "networking.k8s.io/v1"
-        },
-        {
-          name: "flux-system",
-          namespace: "flux-system",
-          kind: "GitRepository",
-          apiVersion: "source.toolkit.fluxcd.io/v1"
-        }
-      ]
-    },
-    // ResourceSets
-    {
-      name: "flux-controllers",
-      kind: "ResourceSet",
-      namespace: "flux-system",
-      status: "Ready",
-      message: "Reconciliation finished in 45ms",
-      lastReconciled: getTimestamp(8),
-      inventory: [
-        {
-          name: "flux-operator",
-          namespace: "flux-system",
-          kind: "Kustomization",
-          apiVersion: "kustomize.toolkit.fluxcd.io/v1"
-        },
-        {
-          name: "flux-operator",
-          namespace: "flux-system",
-          kind: "OCIRepository",
-          apiVersion: "source.toolkit.fluxcd.io/v1"
-        }
-      ]
-    },
-    {
-      name: "monitoring",
-      kind: "ResourceSet",
-      namespace: "flux-system",
-      status: "Ready",
-      message: "All resources reconciled successfully",
+      message: "stored artifact for revision 'refs/heads/main@sha1:d676e33990dc2865d67c022d26dea93d5e3236ff'",
       lastReconciled: getTimestamp(75)
-    },
-    // ResourceSetInputProviders
-    {
-      name: "flux-config",
-      kind: "ResourceSetInputProvider",
-      namespace: "flux-system",
-      status: "Ready",
-      message: "Input synchronized from GitRepository/flux-system",
-      lastReconciled: getTimestamp(10)
-    },
-    {
-      name: "apps-config",
-      kind: "ResourceSetInputProvider",
-      namespace: "flux-system",
-      status: "Progressing",
-      message: "Input source temporarily unavailable, using cached version",
-      lastReconciled: getTimestamp(55)
-    },
-    // Kustomizations
-    {
-      name: "flux-system",
-      kind: "Kustomization",
-      namespace: "flux-system",
-      status: "Ready",
-      message: "Applied revision: latest@sha256:a89edbf6e9600a8555ce0d7a12dd8ab7e6595f17770fa5af497f71ab96521961",
-      lastReconciled: getTimestamp(15),
-      inventory: [
-        {
-          name: "fluxinstances.fluxcd.controlplane.io",
-          kind: "CustomResourceDefinition",
-          apiVersion: "apiextensions.k8s.io/v1"
-        },
-        {
-          name: "fluxreports.fluxcd.controlplane.io",
-          kind: "CustomResourceDefinition",
-          apiVersion: "apiextensions.k8s.io/v1"
-        },
-        {
-          name: "resourcesetinputproviders.fluxcd.controlplane.io",
-          kind: "CustomResourceDefinition",
-          apiVersion: "apiextensions.k8s.io/v1"
-        },
-        {
-          name: "resourcesets.fluxcd.controlplane.io",
-          kind: "CustomResourceDefinition",
-          apiVersion: "apiextensions.k8s.io/v1"
-        },
-        {
-          name: "flux-operator-edit",
-          kind: "ClusterRole",
-          apiVersion: "rbac.authorization.k8s.io/v1"
-        },
-        {
-          name: "flux-operator-view",
-          kind: "ClusterRole",
-          apiVersion: "rbac.authorization.k8s.io/v1"
-        },
-        {
-          name: "flux-operator-cluster-admin",
-          kind: "ClusterRoleBinding",
-          apiVersion: "rbac.authorization.k8s.io/v1"
-        },
-        {
-          name: "flux-operator",
-          namespace: "flux-system",
-          kind: "ServiceAccount",
-          apiVersion: "v1"
-        },
-        {
-          name: "flux-operator",
-          namespace: "flux-system",
-          kind: "Service",
-          apiVersion: "v1"
-        },
-        {
-          name: "flux-operator",
-          namespace: "flux-system",
-          kind: "Deployment",
-          apiVersion: "apps/v1"
-        }
-      ]
-    },
-    {
-      name: "apps",
-      kind: "Kustomization",
-      namespace: "flux-system",
-      status: "Failed",
-      message: "Reconciliation failed: failed to apply manifests - manifest validation failed for Deployment/podinfo",
-      lastReconciled: getTimestamp(30)
-    },
-    {
-      name: "infrastructure",
-      kind: "Kustomization",
-      namespace: "flux-system",
-      status: "Ready",
-      message: "Health assessment passed: all resources ready",
-      lastReconciled: getTimestamp(65)
-    },
-    // HelmReleases
-    {
-      name: "podinfo",
-      kind: "HelmRelease",
-      namespace: "default",
-      status: "Failed",
-      message: "Helm install failed: failed to download chart from https://stefanprodan.github.io/podinfo",
-      lastReconciled: getTimestamp(95)
-    },
-    {
-      name: "ingress-nginx",
-      kind: "HelmRelease",
-      namespace: "kube-system",
-      status: "Ready",
-      message: "Helm upgrade succeeded, chart version: 6.5.4",
-      lastReconciled: getTimestamp(12),
-      inventory: [
-        {
-          name: "ingress-nginx",
-          namespace: "kube-system",
-          kind: "ServiceAccount",
-          apiVersion: "v1"
-        },
-        {
-          name: "ingress-nginx",
-          kind: "ClusterRole",
-          apiVersion: "rbac.authorization.k8s.io/v1"
-        },
-        {
-          name: "ingress-nginx",
-          kind: "ClusterRoleBinding",
-          apiVersion: "rbac.authorization.k8s.io/v1"
-        },
-        {
-          name: "ingress-nginx",
-          namespace: "kube-system",
-          kind: "Role",
-          apiVersion: "rbac.authorization.k8s.io/v1"
-        },
-        {
-          name: "ingress-nginx",
-          namespace: "kube-system",
-          kind: "RoleBinding",
-          apiVersion: "rbac.authorization.k8s.io/v1"
-        },
-        {
-          name: "ingress-nginx-controller",
-          namespace: "kube-system",
-          kind: "ConfigMap",
-          apiVersion: "v1"
-        },
-        {
-          name: "ingress-nginx-controller",
-          namespace: "kube-system",
-          kind: "Service",
-          apiVersion: "v1"
-        },
-        {
-          name: "ingress-nginx-controller",
-          namespace: "kube-system",
-          kind: "Deployment",
-          apiVersion: "apps/v1"
-        },
-        {
-          name: "ingress-nginx-admission",
-          namespace: "kube-system",
-          kind: "Job",
-          apiVersion: "batch/v1"
-        },
-        {
-          name: "ingress-nginx-admission",
-          namespace: "kube-system",
-          kind: "ValidatingWebhookConfiguration",
-          apiVersion: "admissionregistration.k8s.io/v1"
-        }
-      ]
-    },
-    {
-      name: "cert-manager",
-      kind: "HelmRelease",
-      namespace: "cert-manager",
-      status: "Ready",
-      message: "Helm test completed successfully",
-      lastReconciled: getTimestamp(40)
-    },
-    {
-      name: "prometheus",
-      kind: "HelmRelease",
-      namespace: "monitoring",
-      status: "Progressing",
-      message: "Helm rollback initiated due to failed upgrade",
-      lastReconciled: getTimestamp(80)
-    },
-    // GitRepositories
-    {
-      name: "flux-system",
-      kind: "GitRepository",
-      namespace: "flux-system",
-      status: "Failed",
-      message: "Failed to fetch artifact: connection timeout",
-      lastReconciled: getTimestamp(35)
-    },
-    {
-      name: "podinfo",
-      kind: "GitRepository",
-      namespace: "default",
-      status: "Ready",
-      message: "Stored artifact for revision: main@sha1:a7b3c2d",
-      lastReconciled: getTimestamp(18)
-    },
-    {
-      name: "apps",
-      kind: "GitRepository",
-      namespace: "flux-system",
-      status: "Ready",
-      message: "Repository cloned successfully",
-      lastReconciled: getTimestamp(60)
-    },
-    // OCIRepositories
-    {
-      name: "prometheus-config",
-      kind: "OCIRepository",
-      namespace: "monitoring",
-      status: "Ready",
-      message: "artifact up-to-date with remote revision: '0.33.0@sha256:5a303365'",
-      lastReconciled: getTimestamp(20)
-    },
-    {
-      name: "manifests",
-      kind: "OCIRepository",
-      namespace: "flux-system",
-      status: "Ready",
-      message: "Pulled OCI artifact from ghcr.io/stefanprodan/manifests",
-      lastReconciled: getTimestamp(70)
-    },
-    // HelmRepositories
-    {
-      name: "bitnami",
-      kind: "HelmRepository",
-      namespace: "flux-system",
-      status: "Ready",
-      message: "Fetched index: 247 charts",
-      lastReconciled: getTimestamp(22)
-    },
-    {
-      name: "stable",
-      kind: "HelmRepository",
-      namespace: "flux-system",
-      status: "Failed",
-      message: "Repository index download failed: TLS handshake timeout",
-      lastReconciled: getTimestamp(85)
-    },
-    // HelmCharts
-    {
-      name: "nginx",
-      kind: "HelmChart",
-      namespace: "flux-system",
-      status: "Ready",
-      message: "Pulled chart version 15.2.3",
-      lastReconciled: getTimestamp(25)
-    },
-    {
-      name: "prometheus",
-      kind: "HelmChart",
-      namespace: "monitoring",
-      status: "Ready",
-      message: "Chart package verified with digest sha256:xyz789",
-      lastReconciled: getTimestamp(50)
     },
     // Buckets
     {
-      name: "terraform-state",
+      name: "aws-configs",
       kind: "Bucket",
       namespace: "flux-system",
       status: "Failed",
-      message: "Failed to download bucket: access denied",
+      message: 'authentication failed:\nSTS: AssumeRoleWithWebIdentity, https response error\nPost "https://sts.arn.amazonaws.com/": dial tcp: lookupts.arn.amazonaws.com on 10.100.0.10:53: no such host',
       lastReconciled: getTimestamp(42)
     },
     {
-      name: "configs",
+      name: "prod-configs",
       kind: "Bucket",
       namespace: "flux-system",
       status: "Ready",
-      message: "Bucket contents synchronized successfully",
+      message: "stored artifact for revision 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'",
       lastReconciled: getTimestamp(100)
     },
     {
-      name: "backups",
+      name: "dev-configs",
       kind: "Bucket",
       namespace: "flux-system",
       status: "Ready",
-      message: "Bucket contents synchronized successfully",
+      message: "stored artifact for revision 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'",
       lastReconciled: getTimestamp(25)
     },
     {
-      name: "artifacts",
+      name: "staging-configs",
       kind: "Bucket",
-      namespace: "default",
-      status: "Ready",
-      message: "Bucket contents synchronized successfully",
-      lastReconciled: getTimestamp(15)
+      namespace: "flux-system",
+      status: "Progressing",
+      message: "reconciliation in progress: fetching artifact",
+      lastReconciled: getTimestamp(25)
     },
     {
-      name: "archived-data",
+      name: "preview-configs",
       kind: "Bucket",
       namespace: "flux-system",
       status: "Suspended",
-      message: "Reconciliation suspended",
+      message: "stored artifact for revision 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'",
       lastReconciled: getTimestamp(120)
     },
     {
-      name: "legacy-storage",
+      name: "default-configs",
       kind: "Bucket",
       namespace: "default",
-      status: "Suspended",
-      message: "Reconciliation disabled via annotation",
+      status: "Unknown",
+      message: "No status information available",
       lastReconciled: getTimestamp(200)
-    },
-    // ImageRepositories
-    {
-      name: "podinfo",
-      kind: "ImageRepository",
-      namespace: "flux-system",
-      status: "Ready",
-      message: "Found 12 tags for image ghcr.io/stefanprodan/podinfo",
-      lastReconciled: getTimestamp(28)
-    },
-    {
-      name: "app",
-      kind: "ImageRepository",
-      namespace: "default",
-      status: "Ready",
-      message: "Scanning image repository for new tags",
-      lastReconciled: getTimestamp(110)
-    },
-    // ImagePolicies
-    {
-      name: "podinfo",
-      kind: "ImagePolicy",
-      namespace: "flux-system",
-      status: "Ready",
-      message: "Latest image tag for policy semver:^6.x is: 6.5.4",
-      lastReconciled: getTimestamp(32)
-    },
-    {
-      name: "backend",
-      kind: "ImagePolicy",
-      namespace: "default",
-      status: "Ready",
-      message: "Policy evaluation successful, selected tag: v1.2.3",
-      lastReconciled: getTimestamp(88)
-    },
-    // ImageUpdateAutomations
-    {
-      name: "flux-system",
-      kind: "ImageUpdateAutomation",
-      namespace: "flux-system",
-      status: "Ready",
-      message: "Committed and pushed change to branch main",
-      lastReconciled: getTimestamp(48)
-    },
-    {
-      name: "apps",
-      kind: "ImageUpdateAutomation",
-      namespace: "default",
-      status: "Failed",
-      message: "Failed to push commits: authentication failed",
-      lastReconciled: getTimestamp(115)
     },
     // Alerts
     {
-      name: "on-call-alerts",
+      name: "slack",
       kind: "Alert",
       namespace: "flux-system",
-      status: "Unknown",
-      message: "No status information available",
-      lastReconciled: getTimestamp(0)
+      status: "Ready",
+      message: "Valid configuration",
+      lastReconciled: getTimestamp(30)
     },
     // Providers
     {
@@ -664,8 +106,8 @@ export const mockResources = {
       kind: "Provider",
       namespace: "flux-system",
       status: "Ready",
-      message: "Provider initialized: Slack webhook configured",
-      lastReconciled: getTimestamp(52)
+      message: "Valid configuration",
+      lastReconciled: getTimestamp(35)
     },
     // Receivers
     {
@@ -673,26 +115,289 @@ export const mockResources = {
       kind: "Receiver",
       namespace: "flux-system",
       status: "Ready",
-      message: "Webhook received, triggered reconciliation for GitRepository/flux-system",
-      lastReconciled: getTimestamp(78)
+      message: "Receiver initialized for path: /hook/bed6d00b5555b1603e1f59b94d7fdbca58089cb5663633fb83f2815dc626d92b",
+      lastReconciled: getTimestamp(40)
     },
-    // ArtifactGenerators
+    // ResourceSets
     {
-      name: "config-bundle",
-      kind: "ArtifactGenerator",
+      name: "cert-manager",
+      kind: "ResourceSet",
       namespace: "flux-system",
       status: "Ready",
-      message: "Generated 2 artifact(s)",
-      lastReconciled: getTimestamp(58)
+      message: "Reconciliation finished in 41ms",
+      lastReconciled: getTimestamp(12)
     },
-    // ExternalArtifacts
     {
-      name: "vendor-manifests",
-      kind: "ExternalArtifact",
+      name: "cluster-infra",
+      kind: "ResourceSet",
       namespace: "flux-system",
       status: "Ready",
-      message: "Artifact synchronized from external source",
-      lastReconciled: getTimestamp(68)
+      message: "Reconciliation finished in 27ms",
+      lastReconciled: getTimestamp(8)
+    },
+    {
+      name: "flux-operator",
+      kind: "ResourceSet",
+      namespace: "flux-system",
+      status: "Ready",
+      message: "Reconciliation finished in 35ms",
+      lastReconciled: getTimestamp(3)
+    },
+    {
+      name: "flux-status-server",
+      kind: "ResourceSet",
+      namespace: "flux-system",
+      status: "Ready",
+      message: "Reconciliation finished in 55ms",
+      lastReconciled: getTimestamp(25)
+    },
+    {
+      name: "metrics-server",
+      kind: "ResourceSet",
+      namespace: "flux-system",
+      status: "Ready",
+      message: "Reconciliation finished in 36ms",
+      lastReconciled: getTimestamp(18)
+    },
+    {
+      name: "tailscale-config",
+      kind: "ResourceSet",
+      namespace: "flux-system",
+      status: "Ready",
+      message: "Reconciliation finished in 31ms",
+      lastReconciled: getTimestamp(5)
+    },
+    {
+      name: "tailscale-operator",
+      kind: "ResourceSet",
+      namespace: "flux-system",
+      status: "Ready",
+      message: "Reconciliation finished in 44ms",
+      lastReconciled: getTimestamp(14)
+    },
+    {
+      name: "zot-registry",
+      kind: "ResourceSet",
+      namespace: "flux-system",
+      status: "Ready",
+      message: "Reconciliation finished in 41ms",
+      lastReconciled: getTimestamp(16)
+    },
+    // ResourceSetInputProvider
+    {
+      name: "flux-status-server",
+      kind: "ResourceSetInputProvider",
+      namespace: "flux-system",
+      status: "Ready",
+      message: "Reconciliation finished in 207ms",
+      lastReconciled: getTimestamp(10)
+    },
+    // FluxInstance
+    {
+      name: "flux",
+      kind: "FluxInstance",
+      namespace: "flux-system",
+      status: "Ready",
+      message: "Reconciliation finished in 2s",
+      lastReconciled: getTimestamp(2)
+    },
+    // OCIRepositories
+    {
+      name: "cert-manager",
+      kind: "OCIRepository",
+      namespace: "cert-manager",
+      status: "Ready",
+      message: "stored artifact for digest 'v1.19.1@sha256:9578566b26b2258bcb9a0be27feeaa7c0adaed635cc0f85b6293e42a80c58cc9'",
+      lastReconciled: getTimestamp(420)
+    },
+    {
+      name: "flux-operator",
+      kind: "OCIRepository",
+      namespace: "flux-system",
+      status: "Ready",
+      message: "stored artifact for digest 'latest@sha256:043536cc6ec06ff978777ca31cf0adc3d654575a2aa8050988aadf90b9f9877c'",
+      lastReconciled: getTimestamp(85)
+    },
+    {
+      name: "metrics-server",
+      kind: "OCIRepository",
+      namespace: "monitoring",
+      status: "Ready",
+      message: "stored artifact for digest '3.13.0@sha256:457df0544ec2553176bbaaba70bf5b68af6c400eff510a401b8eba1b13f9a8ad'",
+      lastReconciled: getTimestamp(425)
+    },
+    // HelmRepositories
+    {
+      "name": "zot-registry",
+      "kind": "HelmRepository",
+      "namespace": "registry",
+      "status": "Ready",
+      "message": "stored artifact: revision 'sha256:2b1fdd97e969c82ee149a7ee8b00f55061760832f23c39a3235936f0912f2125'",
+      "lastReconciled": getTimestamp(430)
+    },
+    {
+      "name": "tailscale-operator",
+      "kind": "HelmRepository",
+      "namespace": "tailscale",
+      "status": "Ready",
+      "message": "stored artifact: revision 'sha256:578d082975ad264ba4d09368febb298c3beb7f18e_459bb9d323d3b7c2fc4d475'",
+      "lastReconciled": getTimestamp(430)
+    },
+    {
+      "name": "bitnami",
+      "kind": "HelmRepository",
+      "namespace": "flux-system",
+      "status": "Failed",
+      "message": 'failed to fetch index: unable to connect to the server\nGet "https://charts.bitnami.com/bitnami/index.yaml": timeout awaiting response headers',
+      "lastReconciled": getTimestamp(435)
+    },
+    // HelmCharts
+    {
+      name: "registry-zot-registry",
+      kind: "HelmChart",
+      namespace: "registry",
+      status: "Ready",
+      message: "pulled 'zot' chart with version '0.1.89'",
+      lastReconciled: getTimestamp(430)
+    },
+    {
+      name: "tailscale-tailscale-operator",
+      kind: "HelmChart",
+      namespace: "tailscale",
+      status: "Ready",
+      message: "pulled 'tailscale-operator' chart with version '1.90.6'",
+      lastReconciled: getTimestamp(435)
+    },
+    // Kustomizations
+    {
+      name: "cluster-infra",
+      kind: "Kustomization",
+      namespace: "flux-system",
+      status: "Ready",
+      message: "Applied revision: refs/heads/main@sha1:d676e33990dc2865d67c022d26dea93d5e3236ff",
+      lastReconciled: getTimestamp(6)
+    },
+    {
+      name: "flux-operator",
+      kind: "Kustomization",
+      namespace: "flux-system",
+      status: "Ready",
+      message: "Applied revision: latest@sha256:043536cc6ec06ff978777ca31cf0adc3d654575a2aa8050988aadf90b9f9877c",
+      lastReconciled: getTimestamp(90)
+    },
+    {
+      name: "flux-system",
+      kind: "Kustomization",
+      namespace: "flux-system",
+      status: "Ready",
+      message: "Applied revision: refs/heads/main@sha1:d676e33990dc2865d67c022d26dea93d5e3236ff",
+      lastReconciled: getTimestamp(1)
+    },
+    // HelmReleases
+    {
+      name: "cert-manager",
+      kind: "HelmRelease",
+      namespace: "cert-manager",
+      status: "Ready",
+      message: "Helm install succeeded for release cert-manager/cert-manager.v1 with chart cert-manager@1.19.1+9578566b26b2",
+      lastReconciled: getTimestamp(440)
+    },
+    {
+      name: "metrics-server",
+      kind: "HelmRelease",
+      namespace: "monitoring",
+      status: "Ready",
+      message: "Helm install succeeded for release monitoring/metrics-server.v1 with chart metrics-server@3.13.0+457df0544ec2",
+      lastReconciled: getTimestamp(445)
+    },
+    {
+      name: "tailscale-operator",
+      kind: "HelmRelease",
+      namespace: "tailscale",
+      status: "Ready",
+      message: "Helm install succeeded for release tailscale/tailscale-operator.v1 with chart tailscale-operator@1.90.6+62f0e73f4f82",
+      lastReconciled: getTimestamp(450)
+    },
+    {
+      name: "zot-registry",
+      kind: "HelmRelease",
+      namespace: "registry",
+      status: "Ready",
+      message: "Helm install succeeded for release registry/zot-registry.v1 with chart zot@0.1.89+aa4f1c1aa5fe",
+      lastReconciled: getTimestamp(455)
+    },
+    // Image automation
+    {
+      name: "podinfo",
+      kind: "GitRepository",
+      namespace: "automation",
+      status: "Ready",
+      message: "stored artifact for revision 'main@sha1:c1b613a1e083a8918185b11b317f3c75e3c1b6d0'",
+      lastReconciled: getTimestamp(5)
+    },
+    {
+      name: "podinfo",
+      kind: "ImageRepository",
+      namespace: "automation",
+      status: "Ready",
+      message: "successful scan, found 211 tags",
+      lastReconciled: getTimestamp(10)
+    },
+    {
+      name: "podinfo",
+      kind: "ImagePolicy",
+      namespace: "automation",
+      status: "Ready",
+      message: "Latest image tag for 'ghcr.io/stefanprodan/podinfo' resolved to 6.2.0",
+      lastReconciled: getTimestamp(15)
+    },
+    {
+      name: "podinfo",
+      kind: "ImageUpdateAutomation",
+      namespace: "automation",
+      status: "Ready",
+      message: "pushed commit '3ebb95c' to branch 'main'",
+      lastReconciled: getTimestamp(20)
+    },
+    {
+      name: "msteams",
+      kind: "Alert",
+      namespace: "automation",
+      status: "Ready",
+      message: "Valid configuration",
+      lastReconciled: getTimestamp(25)
+    },
+    {
+      name: "msteams",
+      kind: "Provider",
+      namespace: "automation",
+      status: "Ready",
+      message: "Valid configuration",
+      lastReconciled: getTimestamp(30)
+    },
+    {
+      name: "podinfo-webhook",
+      kind: "Receiver",
+      namespace: "automation",
+      status: "Ready",
+      message: "Receiver initialized for path: /hook/cbdee599b7977a520a36692e5b872c39d09ee53dd75b2e3ae117fea283958fbf",
+      lastReconciled: getTimestamp(35)
+    },
+    {
+      name: "redis",
+      kind: "ImageRepository",
+      namespace: "automation",
+      status: "Suspended",
+      message: "successful scan, found 50 tags",
+      lastReconciled: getTimestamp(40)
+    },
+    {
+      name: "redis",
+      kind: "ImagePolicy",
+      namespace: "automation",
+      status: "Suspended",
+      message: "Latest image tag for 'redis' resolved to 7.0.5",
+      lastReconciled: getTimestamp(45)
     }
   ]
 }

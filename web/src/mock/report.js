@@ -230,11 +230,13 @@ export const mockReport = {
       }
     ],
     namespaces: [
+      'automation',
       'cert-manager',
       'default',
       'flux-system',
-      'kube-system',
-      'monitoring'
+      'monitoring',
+      'tailscale',
+      'registry'
     ]
   }
 }
