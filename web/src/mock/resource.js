@@ -11,9 +11,6 @@ export const mockResourcesArray =
     "apiVersion": "fluxcd.controlplane.io/v1",
     "kind": "FluxInstance",
     "metadata": {
-      "annotations": {
-        "reconcile.fluxcd.io/requestedAt": "2025-11-07T12:20:38.600281345Z"
-      },
       "name": "flux",
       "namespace": "flux-system"
     },
@@ -924,6 +921,16 @@ export const mockResourcesArray =
       "lastAttemptedRevision": "1.19.1+9578566b26b2",
       "lastAttemptedRevisionDigest": "sha256:9578566b26b2258bcb9a0be27feeaa7c0adaed635cc0f85b6293e42a80c58cc9",
       "observedGeneration": 1,
+      "sourceRef": {
+        "kind": "OCIRepository",
+        "message": "stored artifact for digest 'v1.19.1@sha256:9578566b26b2258bcb9a0be27feeaa7c0adaed635cc0f85b6293e42a80c58cc9'",
+        "name": "cert-manager",
+        "namespace": "cert-manager",
+        "originRevision": "",
+        "originURL": "https://github.com/cert-manager/cert-manager",
+        "status": "Ready",
+        "url": "oci://quay.io/jetstack/charts/cert-manager"
+      },
       "storageNamespace": "cert-manager"
     }
   },
@@ -1078,6 +1085,16 @@ export const mockResourcesArray =
       "lastAttemptedRevision": "3.13.0+457df0544ec2",
       "lastAttemptedRevisionDigest": "sha256:457df0544ec2553176bbaaba70bf5b68af6c400eff510a401b8eba1b13f9a8ad",
       "observedGeneration": 1,
+      "sourceRef": {
+        "kind": "OCIRepository",
+        "message": "stored artifact for digest '3.13.0@sha256:457df0544ec2553176bbaaba70bf5b68af6c400eff510a401b8eba1b13f9a8ad'",
+        "name": "metrics-server",
+        "namespace": "monitoring",
+        "originRevision": "",
+        "originURL": "https://github.com/kubernetes-sigs/metrics-server",
+        "status": "Ready",
+        "url": "oci://ghcr.io/controlplaneio-fluxcd/charts/metrics-server"
+      },
       "storageNamespace": "monitoring"
     }
   },
@@ -1289,6 +1306,16 @@ export const mockResourcesArray =
       "lastAttemptedReleaseActionDuration": "8.428667129s",
       "lastAttemptedRevision": "1.90.6",
       "observedGeneration": 1,
+      "sourceRef": {
+        "kind": "HelmRepository",
+        "message": "stored artifact: revision 'sha256:578d082975ad264ba4d09368febb298c3beb7f18e459bb9d323d3b7c2fc4d475'",
+        "name": "tailscale-operator",
+        "namespace": "tailscale",
+        "originRevision": "",
+        "originURL": "",
+        "status": "Ready",
+        "url": "https://pkgs.tailscale.com/helmcharts"
+      },
       "storageNamespace": "tailscale"
     }
   },
@@ -1443,6 +1470,16 @@ export const mockResourcesArray =
       "lastAttemptedReleaseActionDuration": "14.24459459s",
       "lastAttemptedRevision": "0.1.89",
       "observedGeneration": 2,
+      "sourceRef": {
+        "kind": "HelmRepository",
+        "message": "stored artifact: revision 'sha256:2b1fdd97e969c82ee149a7ee8b00f55061760832f23c39a3235936f0912f2125'",
+        "name": "zot-registry",
+        "namespace": "registry",
+        "originRevision": "",
+        "originURL": "",
+        "status": "Ready",
+        "url": "https://zotregistry.dev/helm-charts"
+      },
       "storageNamespace": "registry"
     }
   },
@@ -1595,7 +1632,17 @@ export const mockResourcesArray =
       ],
       "lastAppliedRevision": "refs/heads/main@sha1:d676e33990dc2865d67c022d26dea93d5e3236ff",
       "lastAttemptedRevision": "refs/heads/main@sha1:d676e33990dc2865d67c022d26dea93d5e3236ff",
-      "observedGeneration": 1
+      "observedGeneration": 1,
+      "sourceRef": {
+        "kind": "GitRepository",
+        "message": "stored artifact for revision 'refs/heads/main@sha1:d676e33990dc2865d67c022d26dea93d5e3236ff'",
+        "name": "flux-system",
+        "namespace": "flux-system",
+        "originRevision": "",
+        "originURL": "",
+        "status": "Ready",
+        "url": "https://github.com/stefanprodan/homelab.git"
+      }
     }
   },
   {
@@ -1732,7 +1779,17 @@ export const mockResourcesArray =
       "lastAppliedOriginRevision": "main@sha1:06e1897fcf773428155c5f6b9aadb5538169bb5c",
       "lastAppliedRevision": "latest@sha256:043536cc6ec06ff978777ca31cf0adc3d654575a2aa8050988aadf90b9f9877c",
       "lastAttemptedRevision": "latest@sha256:043536cc6ec06ff978777ca31cf0adc3d654575a2aa8050988aadf90b9f9877c",
-      "observedGeneration": 1
+      "observedGeneration": 1,
+      "sourceRef": {
+        "kind": "OCIRepository",
+        "message": "stored artifact for digest 'latest@sha256:043536cc6ec06ff978777ca31cf0adc3d654575a2aa8050988aadf90b9f9877c'",
+        "name": "flux-operator",
+        "namespace": "flux-system",
+        "originRevision": "main@sha1:06e1897fcf773428155c5f6b9aadb5538169bb5c",
+        "originURL": "git://github.com/controlplaneio-fluxcd/flux-operator.git",
+        "status": "Ready",
+        "url": "oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests"
+      }
     }
   },
   {
@@ -1803,7 +1860,17 @@ export const mockResourcesArray =
       "lastAppliedRevision": "refs/heads/main@sha1:d676e33990dc2865d67c022d26dea93d5e3236ff",
       "lastAttemptedRevision": "refs/heads/main@sha1:d676e33990dc2865d67c022d26dea93d5e3236ff",
       "lastHandledReconcileAt": "2025-11-06T23:35:16.275132+02:00",
-      "observedGeneration": 1
+      "observedGeneration": 1,
+      "sourceRef": {
+        "kind": "GitRepository",
+        "message": "stored artifact for revision 'refs/heads/main@sha1:d676e33990dc2865d67c022d26dea93d5e3236ff'",
+        "name": "flux-system",
+        "namespace": "flux-system",
+        "originRevision": "",
+        "originURL": "",
+        "status": "Ready",
+        "url": "https://github.com/stefanprodan/homelab.git"
+      }
     }
   },
   {
@@ -2352,7 +2419,6 @@ export const mockResourcesArray =
       "annotations": {
         "fluxcd.controlplane.io/reconcile": "enabled",
         "fluxcd.controlplane.io/reconcileTimeout": "5m",
-        "reconcile.fluxcd.io/requestedAt": "2025-11-06T23:33:00.823725+02:00"
       },
       "name": "flux-status-server",
       "namespace": "flux-system"
@@ -3334,7 +3400,6 @@ export const mockResourcesArray =
     "metadata": {
       "annotations": {
         "fluxcd.controlplane.io/reconcileEvery": "5m",
-        "reconcile.fluxcd.io/requestedAt": "2025-11-04T11:31:53.473116+02:00"
       },
       "name": "flux-status-server",
       "namespace": "flux-system"
@@ -3519,9 +3584,6 @@ export const mockResourcesArray =
     "apiVersion": "source.toolkit.fluxcd.io/v1",
     "kind": "Bucket",
     "metadata": {
-      "annotations": {
-        "reconcile.fluxcd.io/requestedAt": "2025-11-18T09:00:00Z"
-      },
       "name": "preview-configs",
       "namespace": "flux-system"
     },
