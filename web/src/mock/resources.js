@@ -1,7 +1,8 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-// Real data from cluster API fetched on 2025-11-18
+// Mock data for resources endpoint (GET /api/v1/resources)
+// Generated from real cluster API responses
 
 // Helper to match name with wildcard pattern
 // Supports * (matches any characters). If no wildcards, does exact match.

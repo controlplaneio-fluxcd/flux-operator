@@ -99,10 +99,11 @@ function InventoryGroupByApiVersion({ apiVersion, items }) {
  *
  * Features:
  * - Lazy loads complete resource data on expand
- * - Tabbed interface with three sections (in order):
+ * - Tabbed interface with up to four sections (in order):
  *   1. Inventory: Grouped list of managed resources (if present, shown first)
- *   2. Specification: Complete resource definition as syntax-highlighted YAML
- *   3. Status: YAML display of apiVersion, kind, metadata, and status (without inventory)
+ *   2. Source: Details about the resource's source (if present, GitRepository/HelmRepository/OCIRepository)
+ *   3. Specification: Complete resource definition as syntax-highlighted YAML
+ *   4. Status: YAML display of apiVersion, kind, metadata, and status (without inventory)
  * - Dynamically switches Prism theme (light/dark) based on app theme
  * - Caches data to avoid redundant fetches
  * - Handles loading and error states
@@ -157,9 +158,11 @@ export function ResourceView({ kind, name, namespace, isExpanded }) {
         })
         setResourceData(data)
 
-        // Set default active tab based on whether inventory exists
+        // Set default active tab: inventory > source > specification
         if (data.status?.inventory && data.status.inventory.length > 0) {
           setActiveTab('inventory')
+        } else if (data.status?.sourceRef) {
+          setActiveTab('source')
         } else {
           setActiveTab('specification')
         }
@@ -276,6 +279,18 @@ export function ResourceView({ kind, name, namespace, isExpanded }) {
                   Inventory ({resourceData.status.inventory.length})
                 </button>
               )}
+              {resourceData.status?.sourceRef && (
+                <button
+                  onClick={() => setActiveTab('source')}
+                  class={`py-2 px-1 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === 'source'
+                      ? 'border-flux-blue text-flux-blue dark:text-blue-400'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                  }`}
+                >
+                  Source
+                </button>
+              )}
               <button
                 onClick={() => setActiveTab('specification')}
                 class={`py-2 px-1 text-sm font-medium border-b-2 transition-colors ${
@@ -284,7 +299,8 @@ export function ResourceView({ kind, name, namespace, isExpanded }) {
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
                 }`}
               >
-                Specification
+                <span class="inline sm:hidden">Spec</span>
+                <span class="hidden sm:inline">Specification</span>
               </button>
               <button
                 onClick={() => setActiveTab('status')}
@@ -311,6 +327,61 @@ export function ResourceView({ kind, name, namespace, isExpanded }) {
                     items={groupedInventory[apiVersion]}
                   />
                 ))}
+              </div>
+            )}
+
+            {/* Source Tab */}
+            {activeTab === 'source' && resourceData.status?.sourceRef && (
+              <div class="space-y-2">
+                <div class="grid grid-cols-1 gap-1 text-xs">
+                  {/* ID: kind/namespace/name */}
+                  <div class="py-1 px-2">
+                    <span class="text-gray-600 dark:text-gray-400">ID: </span>
+                    <span class="text-gray-900 dark:text-gray-100 font-mono">
+                      {resourceData.status.sourceRef.kind}/{resourceData.status.sourceRef.namespace}/{resourceData.status.sourceRef.name}
+                    </span>
+                  </div>
+
+                  {/* URL */}
+                  <div class="py-1 px-2">
+                    <span class="text-gray-600 dark:text-gray-400">URL: </span>
+                    <span class="text-gray-900 dark:text-gray-100 font-mono break-all">{resourceData.status.sourceRef.url}</span>
+                  </div>
+
+                  {/* Origin URL (if present) */}
+                  {resourceData.status.sourceRef.originURL && (
+                    <div class="py-1 px-2">
+                      <span class="text-gray-600 dark:text-gray-400">Origin URL: </span>
+                      <span class="text-gray-900 dark:text-gray-100 font-mono break-all">{resourceData.status.sourceRef.originURL}</span>
+                    </div>
+                  )}
+
+                  {/* Origin Revision (if present) */}
+                  {resourceData.status.sourceRef.originRevision && (
+                    <div class="py-1 px-2">
+                      <span class="text-gray-600 dark:text-gray-400">Origin Revision: </span>
+                      <span class="text-gray-900 dark:text-gray-100 font-mono break-all">{resourceData.status.sourceRef.originRevision}</span>
+                    </div>
+                  )}
+
+                  {/* Status */}
+                  <div class="py-1 px-2">
+                    <span class="text-gray-600 dark:text-gray-400">Status: </span>
+                    <span class={`font-semibold ${
+                      resourceData.status.sourceRef.status === 'Ready'
+                        ? 'text-green-600 dark:text-green-400'
+                        : 'text-red-600 dark:text-red-400'
+                    }`}>
+                      {resourceData.status.sourceRef.status}
+                    </span>
+                  </div>
+
+                  {/* Message */}
+                  <div class="py-1 px-2">
+                    <span class="text-gray-600 dark:text-gray-400">Message: </span>
+                    <span class="text-gray-900 dark:text-gray-100 break-all">{resourceData.status.sourceRef.message}</span>
+                  </div>
+                </div>
               </div>
             )}
 

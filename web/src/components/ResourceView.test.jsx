@@ -471,4 +471,250 @@ describe('ResourceView component', () => {
 
     expect(fetchWithMock).not.toHaveBeenCalled()
   })
+
+  it('should display Source tab when sourceRef is present in status', async () => {
+    const resourceWithSourceRef = {
+      apiVersion: 'kustomize.toolkit.fluxcd.io/v1',
+      kind: 'Kustomization',
+      metadata: {
+        name: 'flux-system',
+        namespace: 'flux-system'
+      },
+      spec: {
+        interval: '10m',
+        path: './clusters/homelab',
+        sourceRef: {
+          kind: 'GitRepository',
+          name: 'flux-system'
+        }
+      },
+      status: {
+        sourceRef: {
+          kind: 'GitRepository',
+          message: "stored artifact for revision 'refs/heads/main@sha1:abc123'",
+          name: 'flux-system',
+          namespace: 'flux-system',
+          originRevision: '',
+          originURL: '',
+          status: 'Ready',
+          url: 'https://github.com/example/repo.git'
+        }
+      }
+    }
+
+    fetchWithMock.mockResolvedValue(resourceWithSourceRef)
+
+    render(
+      <ResourceView
+        kind="Kustomization"
+        name="flux-system"
+        namespace="flux-system"
+        isExpanded={true}
+      />
+    )
+
+    // Wait for Source tab to appear
+    await waitFor(() => {
+      expect(screen.getByText('Source')).toBeInTheDocument()
+    })
+
+    // Source tab should be visible along with Specification and Status
+    expect(screen.getByText('Source')).toBeInTheDocument()
+    expect(screen.getByText('Specification')).toBeInTheDocument()
+    expect(screen.getByText('Status')).toBeInTheDocument()
+  })
+
+  it('should show Source tab as default when no inventory but sourceRef exists', async () => {
+    const resourceWithSourceRef = {
+      apiVersion: 'kustomize.toolkit.fluxcd.io/v1',
+      kind: 'Kustomization',
+      metadata: {
+        name: 'flux-system',
+        namespace: 'flux-system'
+      },
+      spec: {
+        interval: '10m',
+        sourceRef: {
+          kind: 'GitRepository',
+          name: 'flux-system'
+        }
+      },
+      status: {
+        sourceRef: {
+          kind: 'GitRepository',
+          message: "stored artifact for revision 'refs/heads/main@sha1:abc123'",
+          name: 'flux-system',
+          namespace: 'flux-system',
+          originRevision: '',
+          originURL: '',
+          status: 'Ready',
+          url: 'https://github.com/example/repo.git'
+        }
+      }
+    }
+
+    fetchWithMock.mockResolvedValue(resourceWithSourceRef)
+
+    render(
+      <ResourceView
+        kind="Kustomization"
+        name="flux-system"
+        namespace="flux-system"
+        isExpanded={true}
+      />
+    )
+
+    // Wait for Source tab to appear and be active
+    await waitFor(() => {
+      const sourceTab = screen.getByText('Source')
+      expect(sourceTab).toBeInTheDocument()
+      expect(sourceTab).toHaveClass('border-flux-blue')
+    })
+  })
+
+  it('should display sourceRef data correctly in Source tab', async () => {
+    const resourceWithSourceRef = {
+      apiVersion: 'helm.toolkit.fluxcd.io/v2',
+      kind: 'HelmRelease',
+      metadata: {
+        name: 'cert-manager',
+        namespace: 'cert-manager'
+      },
+      spec: {
+        interval: '24h',
+        chartRef: {
+          kind: 'OCIRepository',
+          name: 'cert-manager'
+        }
+      },
+      status: {
+        sourceRef: {
+          kind: 'OCIRepository',
+          message: "stored artifact for digest 'v1.19.1@sha256:abc123'",
+          name: 'cert-manager',
+          namespace: 'cert-manager',
+          originRevision: '',
+          originURL: 'https://github.com/cert-manager/cert-manager',
+          status: 'Ready',
+          url: 'oci://quay.io/jetstack/charts/cert-manager'
+        }
+      }
+    }
+
+    fetchWithMock.mockResolvedValue(resourceWithSourceRef)
+    const user = userEvent.setup()
+
+    render(
+      <ResourceView
+        kind="HelmRelease"
+        name="cert-manager"
+        namespace="cert-manager"
+        isExpanded={true}
+      />
+    )
+
+    // Wait for Source tab and click it
+    const sourceTab = await screen.findByText('Source')
+    await user.click(sourceTab)
+
+    // Check that source data is displayed with correct format
+    await waitFor(() => {
+      const textContent = document.body.textContent
+
+      // Check ID format: kind/namespace/name
+      expect(textContent).toContain('ID:')
+      expect(textContent).toContain('OCIRepository/cert-manager/cert-manager')
+
+      // Check URL
+      expect(textContent).toContain('URL:')
+      expect(textContent).toContain('oci://quay.io/jetstack/charts/cert-manager')
+
+      // Check Origin URL
+      expect(textContent).toContain('Origin URL:')
+      expect(textContent).toContain('https://github.com/cert-manager/cert-manager')
+
+      // Check Status
+      expect(textContent).toContain('Status:')
+      expect(textContent).toContain('Ready')
+
+      // Check Message
+      expect(textContent).toContain('Message:')
+      expect(textContent).toContain("stored artifact for digest 'v1.19.1@sha256:abc123'")
+    })
+  })
+
+  it('should not show Origin URL when it is empty', async () => {
+    const resourceWithoutOriginURL = {
+      apiVersion: 'kustomize.toolkit.fluxcd.io/v1',
+      kind: 'Kustomization',
+      metadata: {
+        name: 'apps',
+        namespace: 'flux-system'
+      },
+      spec: {
+        interval: '10m'
+      },
+      status: {
+        sourceRef: {
+          kind: 'GitRepository',
+          message: "stored artifact for revision 'refs/heads/main@sha1:abc123'",
+          name: 'flux-system',
+          namespace: 'flux-system',
+          originRevision: '',
+          originURL: '',
+          status: 'Ready',
+          url: 'https://github.com/example/repo.git'
+        }
+      }
+    }
+
+    fetchWithMock.mockResolvedValue(resourceWithoutOriginURL)
+    const user = userEvent.setup()
+
+    render(
+      <ResourceView
+        kind="Kustomization"
+        name="apps"
+        namespace="flux-system"
+        isExpanded={true}
+      />
+    )
+
+    // Wait for Source tab and click it
+    const sourceTab = await screen.findByText('Source')
+    await user.click(sourceTab)
+
+    // Check that Origin URL is not displayed when empty
+    await waitFor(() => {
+      const textContent = document.body.textContent
+      expect(textContent).toContain('ID:')
+      expect(textContent).toContain('URL:')
+      expect(textContent).toContain('Status:')
+      expect(textContent).toContain('Message:')
+
+      // Origin URL should not appear when empty
+      const hasOriginURL = textContent.includes('Origin URL:')
+      expect(hasOriginURL).toBe(false)
+    })
+  })
+
+  it('should not show Source tab when sourceRef is not present', async () => {
+    fetchWithMock.mockResolvedValue(mockResourceDataNoInventory)
+
+    render(
+      <ResourceView
+        kind="GitRepository"
+        name="flux-system"
+        namespace="flux-system"
+        isExpanded={true}
+      />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Specification')).toBeInTheDocument()
+    })
+
+    // Source tab should not be present when sourceRef is missing
+    expect(screen.queryByText('Source')).not.toBeInTheDocument()
+  })
 })
