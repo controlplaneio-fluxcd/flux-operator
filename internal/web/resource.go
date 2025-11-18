@@ -100,6 +100,23 @@ func (r *Router) GetResource(ctx context.Context, kind, name, namespace string) 
 		}
 	}
 
+	// Get the source reference and inject the source details if available
+	if source, err := r.getReconcilerSource(ctx, *obj); err == nil && source != nil {
+		sourceMap := map[string]any{
+			"kind":           source.Kind,
+			"name":           source.Name,
+			"namespace":      source.Namespace,
+			"url":            source.URL,
+			"originURL":      source.OriginURL,
+			"originRevision": source.OriginRevision,
+			"status":         source.Status,
+			"message":        source.Message,
+		}
+		if err := unstructured.SetNestedMap(obj.Object, sourceMap, "status", "sourceRef"); err != nil {
+			return nil, fmt.Errorf("unable to set source in spec: %w", err)
+		}
+	}
+
 	cleanObjectForExport(obj, true)
 	return obj, nil
 }

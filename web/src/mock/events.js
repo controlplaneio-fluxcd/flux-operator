@@ -1,7 +1,10 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-// Helper to generate timestamps within the last 2 hours (events expire after 2h)
+// Mock data for resources endpoint (GET /api/v1/resources)
+// Generated from real cluster API responses
+
+// Helper to generate timestamps
 const now = new Date()
 const getTimestamp = (minutesAgo) => {
   const time = new Date(now.getTime() - minutesAgo * 60000)
@@ -38,6 +41,7 @@ const matchesWildcard = (name, pattern) => {
   return regex.test(name)
 }
 
+// Mock events data ordered by lastTimestamp descending
 const mockEvents = {
   events: [
     {
@@ -235,6 +239,125 @@ const mockEvents = {
       message: "Latest image tag for 'redis' resolved to 7.0.5",
       involvedObject: "ImagePolicy/redis",
       namespace: "automation"
+    },
+    {
+      lastTimestamp: getTimestamp(75),
+      type: "Normal",
+      message: "stored artifact for revision 'refs/heads/main@sha1:d676e33990dc2865d67c022d26dea93d5e3236ff'",
+      involvedObject: "GitRepository/flux-system",
+      namespace: "flux-system"
+    },
+    {
+      lastTimestamp: getTimestamp(85),
+      type: "Normal",
+      message: "stored artifact for digest 'latest@sha256:043536cc6ec06ff978777ca31cf0adc3d654575a2aa8050988aadf90b9f9877c'",
+      involvedObject: "OCIRepository/flux-operator",
+      namespace: "flux-system"
+    },
+    {
+      lastTimestamp: getTimestamp(90),
+      type: "Normal",
+      message: "Applied revision: latest@sha256:043536cc6ec06ff978777ca31cf0adc3d654575a2aa8050988aadf90b9f9877c",
+      involvedObject: "Kustomization/flux-operator",
+      namespace: "flux-system"
+    },
+    {
+      lastTimestamp: getTimestamp(100),
+      type: "Normal",
+      message: "stored artifact for revision 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'",
+      involvedObject: "Bucket/prod-configs",
+      namespace: "flux-system"
+    },
+    {
+      lastTimestamp: getTimestamp(120),
+      type: "Normal",
+      message: "stored artifact for revision 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'",
+      involvedObject: "Bucket/preview-configs",
+      namespace: "flux-system"
+    },
+    {
+      lastTimestamp: getTimestamp(200),
+      type: "Normal",
+      message: "No status information available",
+      involvedObject: "Bucket/default-configs",
+      namespace: "default"
+    },
+    {
+      lastTimestamp: getTimestamp(420),
+      type: "Normal",
+      message: "stored artifact for digest 'v1.19.1@sha256:9578566b26b2258bcb9a0be27feeaa7c0adaed635cc0f85b6293e42a80c58cc9'",
+      involvedObject: "OCIRepository/cert-manager",
+      namespace: "cert-manager"
+    },
+    {
+      lastTimestamp: getTimestamp(425),
+      type: "Normal",
+      message: "stored artifact for digest '3.13.0@sha256:457df0544ec2553176bbaaba70bf5b68af6c400eff510a401b8eba1b13f9a8ad'",
+      involvedObject: "OCIRepository/metrics-server",
+      namespace: "monitoring"
+    },
+    {
+      lastTimestamp: getTimestamp(430),
+      type: "Normal",
+      message: "stored artifact: revision 'sha256:2b1fdd97e969c82ee149a7ee8b00f55061760832f23c39a3235936f0912f2125'",
+      involvedObject: "HelmRepository/zot-registry",
+      namespace: "registry"
+    },
+    {
+      lastTimestamp: getTimestamp(430),
+      type: "Normal",
+      message: "stored artifact: revision 'sha256:578d082975ad264ba4d09368febb298c3beb7f18e_459bb9d323d3b7c2fc4d475'",
+      involvedObject: "HelmRepository/tailscale-operator",
+      namespace: "tailscale"
+    },
+    {
+      lastTimestamp: getTimestamp(430),
+      type: "Normal",
+      message: "pulled 'zot' chart with version '0.1.89'",
+      involvedObject: "HelmChart/registry-zot-registry",
+      namespace: "registry"
+    },
+    {
+      lastTimestamp: getTimestamp(435),
+      type: "Warning",
+      message: 'failed to fetch index: unable to connect to the server\nGet "https://charts.bitnami.com/bitnami/index.yaml": timeout awaiting response headers',
+      involvedObject: "HelmRepository/bitnami",
+      namespace: "flux-system"
+    },
+    {
+      lastTimestamp: getTimestamp(435),
+      type: "Normal",
+      message: "pulled 'tailscale-operator' chart with version '1.90.6'",
+      involvedObject: "HelmChart/tailscale-tailscale-operator",
+      namespace: "tailscale"
+    },
+    {
+      lastTimestamp: getTimestamp(440),
+      type: "Normal",
+      message: "Helm install succeeded for release cert-manager/cert-manager.v1 with chart cert-manager@1.19.1+9578566b26b2",
+      involvedObject: "HelmRelease/cert-manager",
+      namespace: "cert-manager"
+    },
+    {
+      lastTimestamp: getTimestamp(445),
+      type: "Normal",
+      message: "Helm install succeeded for release monitoring/metrics-server.v1 with chart metrics-server@3.13.0+457df0544ec2",
+      involvedObject: "HelmRelease/metrics-server",
+      namespace: "monitoring"
+    },
+    {
+      lastTimestamp: getTimestamp(450),
+      type: "Normal",
+      message: "Helm install succeeded for release tailscale/tailscale-operator.v1 with chart tailscale-operator@1.90.6+62f0e73f4f82",
+      involvedObject: "HelmRelease/tailscale-operator",
+      namespace: "tailscale"
+    },
+    {
+      lastTimestamp: getTimestamp(455),
+      type: "Normal",
+      message: "Helm install succeeded for release registry/zot-registry.v1 with chart zot@0.1.89+aa4f1c1aa5fe",
+      involvedObject: "HelmRelease/zot-registry",
+      namespace: "registry"
     }
   ]
 }

@@ -1,6 +1,10 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
+// Mock data for report endpoint (GET /api/v1/report)
+// Generated from real cluster API responses
+
+// Mock FluxReport resource
 export const mockReport = {
   apiVersion: 'fluxcd.controlplane.io/v1',
   kind: 'FluxReport',
