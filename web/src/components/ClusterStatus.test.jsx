@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/preact'
 import { ClusterStatus } from './ClusterStatus'
-import { lastUpdated, showSearchView } from '../app'
+import { reportUpdatedAt } from '../app'
 import { selectedResourceStatus } from './ResourceList'
 
 // Mock the time formatting utility
@@ -12,12 +12,24 @@ vi.mock('../utils/time', () => ({
   formatTime: () => '2 minutes ago'
 }))
 
+// Mock preact-iso
+const mockRoute = vi.fn()
+vi.mock('preact-iso', () => ({
+  useLocation: () => ({
+    path: '/',
+    query: {},
+    route: mockRoute
+  })
+}))
+
 describe('ClusterStatus', () => {
   beforeEach(() => {
     // Reset signals
-    lastUpdated.value = new Date()
-    showSearchView.value = false
+    reportUpdatedAt.value = new Date()
     selectedResourceStatus.value = ''
+
+    // Reset mocks
+    vi.clearAllMocks()
   })
 
   describe('Status: Initializing', () => {
@@ -360,7 +372,7 @@ describe('ClusterStatus', () => {
       const button = screen.getByText('Partial Outage').closest('button')
       fireEvent.click(button)
 
-      expect(showSearchView.value).toBe(true)
+      expect(mockRoute).toHaveBeenCalledWith('/resources?status=Failed')
       expect(selectedResourceStatus.value).toBe('Failed')
     })
 
@@ -382,6 +394,7 @@ describe('ClusterStatus', () => {
       const button = screen.getByText('Degraded Performance').closest('button')
       fireEvent.click(button)
 
+      expect(mockRoute).toHaveBeenCalledWith('/resources?status=Failed')
       expect(selectedResourceStatus.value).toBe('Failed')
     })
   })

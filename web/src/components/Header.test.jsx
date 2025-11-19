@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/preact'
 import { Header } from './Header'
-import { showSearchView, fetchFluxReport } from '../app'
+import { fetchFluxReport } from '../app'
 import { themeMode, themes } from '../utils/theme'
 
 // Mock the ThemeToggle component
@@ -21,14 +21,32 @@ vi.mock('../app', async () => {
   }
 })
 
+// Mock preact-iso
+const mockRoute = vi.fn()
+vi.mock('preact-iso', () => ({
+  useLocation: vi.fn(() => ({
+    path: '/',
+    query: {},
+    route: mockRoute
+  }))
+}))
+
+import { useLocation } from 'preact-iso'
+
 describe('Header', () => {
   beforeEach(() => {
-    // Reset signals
-    showSearchView.value = false
-    themeMode.value = themes.light // This will trigger effect to update appliedTheme
+    // Reset theme
+    themeMode.value = themes.light
 
     // Reset mocks
     vi.clearAllMocks()
+
+    // Default to root path
+    useLocation.mockReturnValue({
+      path: '/',
+      query: {},
+      route: mockRoute
+    })
   })
 
   describe('Branding', () => {
@@ -67,7 +85,11 @@ describe('Header', () => {
 
   describe('Logo/Title Click Behavior', () => {
     it('should call fetchFluxReport when logo clicked in dashboard view', () => {
-      showSearchView.value = false
+      useLocation.mockReturnValue({
+        path: '/',
+        query: {},
+        route: mockRoute
+      })
 
       render(<Header />)
 
@@ -75,17 +97,38 @@ describe('Header', () => {
       fireEvent.click(logoButton)
 
       expect(fetchFluxReport).toHaveBeenCalledTimes(1)
+      expect(mockRoute).not.toHaveBeenCalled()
     })
 
-    it('should return to dashboard when logo clicked in search view', () => {
-      showSearchView.value = true
+    it('should return to dashboard when logo clicked in events view', () => {
+      useLocation.mockReturnValue({
+        path: '/events',
+        query: {},
+        route: mockRoute
+      })
 
       render(<Header />)
 
       const logoButton = screen.getByAltText('Flux CD').closest('button')
       fireEvent.click(logoButton)
 
-      expect(showSearchView.value).toBe(false)
+      expect(mockRoute).toHaveBeenCalledWith('/')
+      expect(fetchFluxReport).not.toHaveBeenCalled()
+    })
+
+    it('should return to dashboard when logo clicked in resources view', () => {
+      useLocation.mockReturnValue({
+        path: '/resources',
+        query: {},
+        route: mockRoute
+      })
+
+      render(<Header />)
+
+      const logoButton = screen.getByAltText('Flux CD').closest('button')
+      fireEvent.click(logoButton)
+
+      expect(mockRoute).toHaveBeenCalledWith('/')
       expect(fetchFluxReport).not.toHaveBeenCalled()
     })
   })
@@ -100,7 +143,11 @@ describe('Header', () => {
     })
 
     it('should show search icon when in dashboard view', () => {
-      showSearchView.value = false
+      useLocation.mockReturnValue({
+        path: '/',
+        query: {},
+        route: mockRoute
+      })
 
       render(<Header />)
 
@@ -109,8 +156,12 @@ describe('Header', () => {
       expect(searchIcon).toBeInTheDocument()
     })
 
-    it('should show back arrow icon when in search view', () => {
-      showSearchView.value = true
+    it('should show back arrow icon when in events view', () => {
+      useLocation.mockReturnValue({
+        path: '/events',
+        query: {},
+        route: mockRoute
+      })
 
       render(<Header />)
 
@@ -119,8 +170,25 @@ describe('Header', () => {
       expect(backIcon).toBeInTheDocument()
     })
 
-    it('should navigate to search view when clicked from dashboard', () => {
-      showSearchView.value = false
+    it('should show back arrow icon when in resources view', () => {
+      useLocation.mockReturnValue({
+        path: '/resources',
+        query: {},
+        route: mockRoute
+      })
+
+      render(<Header />)
+
+      const backIcon = document.querySelector('path[d="M10 19l-7-7m0 0l7-7m-7 7h18"]')
+      expect(backIcon).toBeInTheDocument()
+    })
+
+    it('should navigate to events view when clicked from dashboard', () => {
+      useLocation.mockReturnValue({
+        path: '/',
+        query: {},
+        route: mockRoute
+      })
 
       render(<Header />)
 
@@ -132,11 +200,15 @@ describe('Header', () => {
 
       fireEvent.click(navButton)
 
-      expect(showSearchView.value).toBe(true)
+      expect(mockRoute).toHaveBeenCalledWith('/events')
     })
 
-    it('should navigate to dashboard when clicked from search view', () => {
-      showSearchView.value = true
+    it('should navigate to dashboard when clicked from events view', () => {
+      useLocation.mockReturnValue({
+        path: '/events',
+        query: {},
+        route: mockRoute
+      })
 
       render(<Header />)
 
@@ -148,11 +220,15 @@ describe('Header', () => {
 
       fireEvent.click(navButton)
 
-      expect(showSearchView.value).toBe(false)
+      expect(mockRoute).toHaveBeenCalledWith('/')
     })
 
-    it('should toggle between views when clicked multiple times', () => {
-      showSearchView.value = false
+    it('should navigate to dashboard when clicked from resources view', () => {
+      useLocation.mockReturnValue({
+        path: '/resources',
+        query: {},
+        route: mockRoute
+      })
 
       render(<Header />)
 
@@ -161,13 +237,9 @@ describe('Header', () => {
         btn.querySelector('svg') && !btn.querySelector('img')
       )
 
-      // Click to search
       fireEvent.click(navButton)
-      expect(showSearchView.value).toBe(true)
 
-      // Click back to dashboard
-      fireEvent.click(navButton)
-      expect(showSearchView.value).toBe(false)
+      expect(mockRoute).toHaveBeenCalledWith('/')
     })
   })
 

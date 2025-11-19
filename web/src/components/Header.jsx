@@ -1,7 +1,8 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { showSearchView, fetchFluxReport } from '../app'
+import { useLocation } from 'preact-iso'
+import { fetchFluxReport } from '../app'
 import { ThemeToggle } from './ThemeToggle'
 import { appliedTheme, themes } from '../utils/theme'
 
@@ -16,20 +17,31 @@ import { appliedTheme, themes } from '../utils/theme'
  * - Responsive design
  */
 export function Header() {
+  const location = useLocation()
+  const currentPath = location.path
+
+  // Check if we're in a search view (events or resources)
+  const isSearchView = currentPath === '/events' || currentPath === '/resources'
+
   // Use appropriate icon based on theme
   const iconSrc = appliedTheme.value === themes.dark ? '/flux-icon-white.svg' : '/flux-icon-black.svg'
 
   // Handle navigation button click
   const handleToggle = () => {
-    // Toggle between search view and dashboard
-    showSearchView.value = !showSearchView.value
+    if (isSearchView) {
+      // Return to dashboard from search view
+      location.route('/')
+    } else {
+      // Navigate to events page (default search view)
+      location.route('/events')
+    }
   }
 
   // Handle logo/title click
   const handleLogoClick = () => {
-    if (showSearchView.value) {
+    if (isSearchView) {
       // Return to dashboard if in search view
-      showSearchView.value = false
+      location.route('/')
     } else {
       // Trigger report fetch if in dashboard view
       fetchFluxReport()
@@ -53,7 +65,7 @@ export function Header() {
               onClick={handleToggle}
               class="inline-flex items-center justify-center p-2 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-flux-blue"
             >
-              {showSearchView.value ? (
+              {isSearchView ? (
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>

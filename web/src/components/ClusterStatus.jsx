@@ -1,7 +1,8 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { lastUpdated, showSearchView, activeSearchTab } from '../app'
+import { useLocation } from 'preact-iso'
+import { reportUpdatedAt } from '../app'
 import { formatTime } from '../utils/time'
 import {
   selectedResourceStatus,
@@ -106,6 +107,8 @@ export function ClusterStatus({ report }) {
 
   const statusInfo = getStatusInfo()
 
+  const location = useLocation()
+
   // Handler to navigate to ResourceList with Failed filter
   const handleViewFailures = () => {
     // Clear all filters first
@@ -114,9 +117,8 @@ export function ClusterStatus({ report }) {
     selectedResourceNamespace.value = ''
     // Set status filter to Failed
     selectedResourceStatus.value = 'Failed'
-    // Navigate to search view and resources tab
-    activeSearchTab.value = 'resources'
-    showSearchView.value = true
+    // Navigate to resources page with status filter
+    location.route('/resources?status=Failed')
   }
 
   // Check if status has failures (clickable states)
@@ -181,7 +183,7 @@ export function ClusterStatus({ report }) {
         </div>
         <div class="hidden md:block text-right">
           <div class="text-sm text-gray-600 dark:text-gray-400">Last Updated</div>
-          <div class="text-lg font-semibold text-gray-900 dark:text-white">{formatTime(lastUpdated.value)}</div>
+          <div class="text-lg font-semibold text-gray-900 dark:text-white">{formatTime(reportUpdatedAt.value)}</div>
         </div>
       </div>
     </WrapperElement>

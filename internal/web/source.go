@@ -30,7 +30,7 @@ type ReconcilerSource struct {
 // and retrieves the corresponding source URL, origin URL, and origin revision.
 func (r *Router) getReconcilerSource(ctx context.Context, obj unstructured.Unstructured) (*ReconcilerSource, error) {
 	switch obj.GetKind() {
-	case fluxcdv1.FluxKustomizationKind:
+	case fluxcdv1.FluxKustomizationKind, fluxcdv1.FluxHelmChartKind, fluxcdv1.FluxImageUpdateAutomationKind:
 		if sourceRef, found, err := unstructured.NestedMap(obj.Object, "spec", "sourceRef"); found && err == nil {
 			if name, exists := sourceRef["name"]; exists {
 				if kind, exists := sourceRef["kind"]; exists {

@@ -105,7 +105,7 @@ vendor-flux: ## Download Flux base manifests and image patches to config/flux di
 ##@ Frontend
 
 .PHONY: web-test
-web-test: ## Run frontend tests.
+web-test: web-lint ## Run frontend tests.
 	cd web && npm test
 
 .PHONY: web-lint

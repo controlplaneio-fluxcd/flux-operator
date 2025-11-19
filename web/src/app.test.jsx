@@ -6,13 +6,24 @@ import { render, screen, waitFor } from '@testing-library/preact'
 import {
   App,
   fetchFluxReport,
-  fluxReport,
-  lastUpdated,
-  isLoading,
-  connectionStatus,
-  showSearchView,
-  activeSearchTab
+  reportData,
+  reportUpdatedAt,
+  reportLoading,
+  reportError,
+  connectionStatus
 } from './app'
+
+// Mock preact-iso
+vi.mock('preact-iso', () => ({
+  LocationProvider: ({ children }) => <div data-testid="location-provider">{children}</div>,
+  Router: ({ children }) => <div data-testid="router">{children}</div>,
+  Route: ({ component: Component, ...props }) => Component ? <Component {...props} /> : null,
+  useLocation: () => ({
+    path: '/',
+    query: {},
+    route: vi.fn()
+  })
+}))
 
 // Mock child components
 vi.mock('./components/ConnectionStatus', () => ({
@@ -27,8 +38,12 @@ vi.mock('./components/DashboardView', () => ({
   DashboardView: ({ spec }) => <div data-testid="dashboard-view">DashboardView: {JSON.stringify(spec)}</div>
 }))
 
-vi.mock('./components/SearchView', () => ({
-  SearchView: () => <div data-testid="search-view">SearchView</div>
+vi.mock('./components/EventList', () => ({
+  EventList: () => <div data-testid="event-list">EventList</div>
+}))
+
+vi.mock('./components/ResourceList', () => ({
+  ResourceList: () => <div data-testid="resource-list">ResourceList</div>
 }))
 
 // Mock fetchWithMock utility
@@ -48,12 +63,11 @@ import { fetchWithMock } from './utils/fetch'
 describe('app.jsx', () => {
   beforeEach(() => {
     // Reset all signals to initial state
-    fluxReport.value = null
-    lastUpdated.value = null
-    isLoading.value = true
+    reportData.value = null
+    reportUpdatedAt.value = null
+    reportLoading.value = true
+    reportError.value = null
     connectionStatus.value = 'loading'
-    showSearchView.value = false
-    activeSearchTab.value = 'events'
 
     // Clear all mocks
     vi.clearAllMocks()
@@ -86,10 +100,11 @@ describe('app.jsx', () => {
         mockPath: '../mock/report',
         mockExport: 'mockReport'
       })
-      expect(fluxReport.value).toEqual(mockData)
+      expect(reportData.value).toEqual(mockData)
       expect(connectionStatus.value).toBe('connected')
-      expect(isLoading.value).toBe(false)
-      expect(lastUpdated.value).toBeInstanceOf(Date)
+      expect(reportLoading.value).toBe(false)
+      expect(reportError.value).toBe(null)
+      expect(reportUpdatedAt.value).toBeInstanceOf(Date)
     })
 
     it('should handle fetch errors', async () => {
@@ -99,9 +114,10 @@ describe('app.jsx', () => {
       await fetchFluxReport()
 
       expect(connectionStatus.value).toBe('disconnected')
-      expect(isLoading.value).toBe(false)
-      expect(lastUpdated.value).toBeInstanceOf(Date)
-      expect(fluxReport.value).toBeNull()
+      expect(reportLoading.value).toBe(false)
+      expect(reportUpdatedAt.value).toBeInstanceOf(Date)
+      expect(reportData.value).toBeNull()
+      expect(reportError.value).toBe('Network error')
       expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to fetch report:', expect.any(Error))
 
       consoleErrorSpy.mockRestore()
@@ -137,8 +153,8 @@ describe('app.jsx', () => {
 
       await fetchFluxReport()
 
-      expect(lastUpdated.value).toBeInstanceOf(Date)
-      expect(lastUpdated.value.getTime()).toBeGreaterThanOrEqual(beforeFetch.getTime())
+      expect(reportUpdatedAt.value).toBeInstanceOf(Date)
+      expect(reportUpdatedAt.value.getTime()).toBeGreaterThanOrEqual(beforeFetch.getTime())
     })
 
     it('should update lastUpdated timestamp on failure', async () => {
@@ -148,17 +164,17 @@ describe('app.jsx', () => {
 
       await fetchFluxReport()
 
-      expect(lastUpdated.value).toBeInstanceOf(Date)
-      expect(lastUpdated.value.getTime()).toBeGreaterThanOrEqual(beforeFetch.getTime())
+      expect(reportUpdatedAt.value).toBeInstanceOf(Date)
+      expect(reportUpdatedAt.value.getTime()).toBeGreaterThanOrEqual(beforeFetch.getTime())
 
       consoleErrorSpy.mockRestore()
     })
   })
 
   describe('App Component - Loading State', () => {
-    it('should show loading spinner when isLoading=true and no fluxReport', async () => {
-      isLoading.value = true
-      fluxReport.value = null
+    it('should show loading spinner when reportLoading=true and no reportData', async () => {
+      reportLoading.value = true
+      reportData.value = null
       fetchWithMock.mockResolvedValue({ spec: {} })
 
       render(<App />)
@@ -172,8 +188,8 @@ describe('app.jsx', () => {
     })
 
     it('should show ConnectionStatus in loading state', async () => {
-      isLoading.value = true
-      fluxReport.value = null
+      reportLoading.value = true
+      reportData.value = null
       fetchWithMock.mockResolvedValue({ spec: {} })
 
       render(<App />)
@@ -184,8 +200,8 @@ describe('app.jsx', () => {
     })
 
     it('should have loading spinner with proper styling', async () => {
-      isLoading.value = true
-      fluxReport.value = null
+      reportLoading.value = true
+      reportData.value = null
       fetchWithMock.mockResolvedValue({ spec: {} })
 
       render(<App />)
@@ -200,9 +216,9 @@ describe('app.jsx', () => {
       await waitFor(() => expect(fetchWithMock).toHaveBeenCalled())
     })
 
-    it('should not show loading state if fluxReport exists', async () => {
-      isLoading.value = true
-      fluxReport.value = { spec: { distribution: { version: 'v2.4.0' } } }
+    it('should not show loading state if reportData exists', async () => {
+      reportLoading.value = true
+      reportData.value = { spec: { distribution: { version: 'v2.4.0' } } }
       fetchWithMock.mockResolvedValue({ spec: {} })
 
       render(<App />)
@@ -214,9 +230,9 @@ describe('app.jsx', () => {
   })
 
   describe('App Component - Error State', () => {
-    it('should not show error if fluxReport exists even when disconnected', async () => {
-      isLoading.value = false
-      fluxReport.value = { spec: { distribution: { version: 'v2.4.0' } } }
+    it('should not show error if reportData exists even when disconnected', async () => {
+      reportLoading.value = false
+      reportData.value = { spec: { distribution: { version: 'v2.4.0' } } }
       connectionStatus.value = 'disconnected'
       fetchWithMock.mockResolvedValue({ spec: { distribution: { version: 'v2.4.0' } } })
 
@@ -237,32 +253,18 @@ describe('app.jsx', () => {
       }
     }
 
-    it('should render DashboardView when showSearchView=false', () => {
-      isLoading.value = false
-      fluxReport.value = mockReport
-      showSearchView.value = false
+    it('should render DashboardView on root path', () => {
+      reportLoading.value = false
+      reportData.value = mockReport
 
       render(<App />)
 
       expect(screen.getByTestId('dashboard-view')).toBeInTheDocument()
-      expect(screen.queryByTestId('search-view')).not.toBeInTheDocument()
-    })
-
-    it('should render SearchView when showSearchView=true', () => {
-      isLoading.value = false
-      fluxReport.value = mockReport
-      showSearchView.value = true
-
-      render(<App />)
-
-      expect(screen.getByTestId('search-view')).toBeInTheDocument()
-      expect(screen.queryByTestId('dashboard-view')).not.toBeInTheDocument()
     })
 
     it('should pass spec to DashboardView', () => {
-      isLoading.value = false
-      fluxReport.value = mockReport
-      showSearchView.value = false
+      reportLoading.value = false
+      reportData.value = mockReport
 
       render(<App />)
 
@@ -271,8 +273,8 @@ describe('app.jsx', () => {
     })
 
     it('should render Header in normal state', () => {
-      isLoading.value = false
-      fluxReport.value = mockReport
+      reportLoading.value = false
+      reportData.value = mockReport
 
       render(<App />)
 
@@ -280,25 +282,12 @@ describe('app.jsx', () => {
     })
 
     it('should render ConnectionStatus in normal state', () => {
-      isLoading.value = false
-      fluxReport.value = mockReport
+      reportLoading.value = false
+      reportData.value = mockReport
 
       render(<App />)
 
       expect(screen.getByTestId('connection-status')).toBeInTheDocument()
-    })
-
-    it('should toggle between dashboard and search views', () => {
-      isLoading.value = false
-      fluxReport.value = mockReport
-      showSearchView.value = false
-
-      const { rerender } = render(<App />)
-      expect(screen.getByTestId('dashboard-view')).toBeInTheDocument()
-
-      showSearchView.value = true
-      rerender(<App />)
-      expect(screen.getByTestId('search-view')).toBeInTheDocument()
     })
   })
 
@@ -358,23 +347,29 @@ describe('app.jsx', () => {
   })
 
   describe('Global Signals', () => {
-    it('should export fluxReport signal', () => {
-      expect(fluxReport.value).toBeNull()
-      fluxReport.value = { spec: {} }
-      expect(fluxReport.value).toEqual({ spec: {} })
+    it('should export reportData signal', () => {
+      expect(reportData.value).toBeNull()
+      reportData.value = { spec: {} }
+      expect(reportData.value).toEqual({ spec: {} })
     })
 
-    it('should export lastUpdated signal', () => {
-      expect(lastUpdated.value).toBeNull()
+    it('should export reportUpdatedAt signal', () => {
+      expect(reportUpdatedAt.value).toBeNull()
       const now = new Date()
-      lastUpdated.value = now
-      expect(lastUpdated.value).toBe(now)
+      reportUpdatedAt.value = now
+      expect(reportUpdatedAt.value).toBe(now)
     })
 
-    it('should export isLoading signal with default true', () => {
-      expect(isLoading.value).toBe(true)
-      isLoading.value = false
-      expect(isLoading.value).toBe(false)
+    it('should export reportLoading signal with default true', () => {
+      expect(reportLoading.value).toBe(true)
+      reportLoading.value = false
+      expect(reportLoading.value).toBe(false)
+    })
+
+    it('should export reportError signal with default null', () => {
+      expect(reportError.value).toBeNull()
+      reportError.value = 'Test error'
+      expect(reportError.value).toBe('Test error')
     })
 
     it('should export connectionStatus signal with default loading', () => {
@@ -382,41 +377,29 @@ describe('app.jsx', () => {
       connectionStatus.value = 'connected'
       expect(connectionStatus.value).toBe('connected')
     })
-
-    it('should export showSearchView signal with default false', () => {
-      expect(showSearchView.value).toBe(false)
-      showSearchView.value = true
-      expect(showSearchView.value).toBe(true)
-    })
-
-    it('should export activeSearchTab signal with default events', () => {
-      expect(activeSearchTab.value).toBe('events')
-      activeSearchTab.value = 'resources'
-      expect(activeSearchTab.value).toBe('resources')
-    })
   })
 
   describe('Layout and Styling', () => {
     it('should have min-h-screen on all states', () => {
-      isLoading.value = true
-      fluxReport.value = null
+      reportLoading.value = true
+      reportData.value = null
 
       const { container, rerender } = render(<App />)
       expect(container.querySelector('.min-h-screen')).toBeInTheDocument()
 
-      isLoading.value = false
+      reportLoading.value = false
       connectionStatus.value = 'disconnected'
       rerender(<App />)
       expect(container.querySelector('.min-h-screen')).toBeInTheDocument()
 
-      fluxReport.value = { spec: {} }
+      reportData.value = { spec: {} }
       rerender(<App />)
       expect(container.querySelector('.min-h-screen')).toBeInTheDocument()
     })
 
     it('should have dark mode support classes', () => {
-      isLoading.value = false
-      fluxReport.value = { spec: {} }
+      reportLoading.value = false
+      reportData.value = { spec: {} }
 
       const { container } = render(<App />)
       const root = container.querySelector('.bg-gray-50')
@@ -424,16 +407,16 @@ describe('app.jsx', () => {
     })
 
     it('should have transition-colors class', () => {
-      isLoading.value = false
-      fluxReport.value = { spec: {} }
+      reportLoading.value = false
+      reportData.value = { spec: {} }
 
       const { container } = render(<App />)
       expect(container.querySelector('.transition-colors')).toBeInTheDocument()
     })
 
     it('should have flex-col layout', () => {
-      isLoading.value = false
-      fluxReport.value = { spec: {} }
+      reportLoading.value = false
+      reportData.value = { spec: {} }
 
       const { container } = render(<App />)
       expect(container.querySelector('.flex-col')).toBeInTheDocument()
@@ -441,12 +424,12 @@ describe('app.jsx', () => {
   })
 
   describe('Edge Cases', () => {
-    it('should require valid fluxReport with spec to render normal state', async () => {
-      // In practice, the app always shows loading or error state if fluxReport is invalid
+    it('should require valid reportData with spec to render normal state', async () => {
+      // In practice, the app always shows loading or error state if reportData is invalid
       // This test verifies that the normal render path requires a valid spec
 
-      isLoading.value = false
-      fluxReport.value = { spec: { distribution: { version: 'v2.4.0' } } }
+      reportLoading.value = false
+      reportData.value = { spec: { distribution: { version: 'v2.4.0' } } }
       fetchWithMock.mockResolvedValue({ spec: { distribution: { version: 'v2.4.0' } } })
 
       const { container } = render(<App />)
@@ -459,8 +442,8 @@ describe('app.jsx', () => {
     })
 
     it('should handle spec with null values in nested properties', async () => {
-      isLoading.value = false
-      fluxReport.value = {
+      reportLoading.value = false
+      reportData.value = {
         spec: {
           distribution: null,
           components: [],

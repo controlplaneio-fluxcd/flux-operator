@@ -5,9 +5,10 @@ import { signal } from '@preact/signals'
 import { useEffect, useState } from 'preact/hooks'
 import { fetchWithMock } from '../utils/fetch'
 import { formatTimestamp } from '../utils/time'
-import { fluxReport } from '../app'
+import { reportData } from '../app'
 import { FilterForm } from './FilterForm'
 import { ResourceView } from './ResourceView'
+import { useRestoreFiltersFromUrl, useSyncFiltersToUrl } from '../utils/routing'
 
 // Resources data signals
 export const resourcesData = signal([])
@@ -178,6 +179,22 @@ function ResourceCard({ resource }) {
  * - Shows loading, error, and empty states
  */
 export function ResourceList() {
+  // Restore filter signals from URL query params on mount
+  useRestoreFiltersFromUrl({
+    kind: selectedResourceKind,
+    name: selectedResourceName,
+    namespace: selectedResourceNamespace,
+    status: selectedResourceStatus
+  })
+
+  // Sync filter signals to URL query params on change (debounced)
+  useSyncFiltersToUrl({
+    kind: selectedResourceKind,
+    name: selectedResourceName,
+    namespace: selectedResourceNamespace,
+    status: selectedResourceStatus
+  })
+
   // Fetch resources on mount and when filters change
   useEffect(() => {
     fetchResourcesStatus()
@@ -211,7 +228,7 @@ export function ResourceList() {
             nameSignal={selectedResourceName}
             namespaceSignal={selectedResourceNamespace}
             statusSignal={selectedResourceStatus}
-            namespaces={fluxReport.value?.spec?.namespaces || []}
+            namespaces={reportData.value?.spec?.namespaces || []}
             onClear={handleClearFilters}
           />
         </div>
