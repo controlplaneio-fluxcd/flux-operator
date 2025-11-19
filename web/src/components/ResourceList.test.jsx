@@ -14,12 +14,27 @@ import {
   selectedResourceStatus,
   fetchResourcesStatus
 } from './ResourceList'
-import { fluxReport } from '../app'
+import { reportData } from '../app'
 import { fetchWithMock } from '../utils/fetch'
 
 // Mock the fetch utility
 vi.mock('../utils/fetch', () => ({
   fetchWithMock: vi.fn()
+}))
+
+// Mock routing utilities
+vi.mock('../utils/routing', () => ({
+  useRestoreFiltersFromUrl: vi.fn(),
+  useSyncFiltersToUrl: vi.fn()
+}))
+
+// Mock preact-iso
+vi.mock('preact-iso', () => ({
+  useLocation: () => ({
+    path: '/resources',
+    query: {},
+    route: vi.fn()
+  })
 }))
 
 // Mock FilterForm component to simplify testing
@@ -83,8 +98,8 @@ describe('ResourceList', () => {
     selectedResourceNamespace.value = ''
     selectedResourceStatus.value = ''
 
-    // Reset fluxReport
-    fluxReport.value = {
+    // Reset reportData
+    reportData.value = {
       spec: {
         namespaces: ['flux-system', 'default']
       }

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { useSignal } from '@preact/signals'
-import { showSearchView, activeSearchTab } from '../app'
+import { useLocation } from 'preact-iso'
 import { selectedResourceKind, selectedResourceName, selectedResourceNamespace, selectedResourceStatus } from './ResourceList'
 
 /**
@@ -20,6 +20,7 @@ import { selectedResourceKind, selectedResourceName, selectedResourceNamespace, 
  * - Color-coded border based on resource health
  */
 function ReconcilerCard({ reconciler }) {
+  const location = useLocation()
   const stats = reconciler.stats
   const total = (stats.failing || 0) + (stats.running || 0) + (stats.suspended || 0)
 
@@ -30,25 +31,23 @@ function ReconcilerCard({ reconciler }) {
     return 'border-success'
   }
 
-  // Handle card click - navigate to search view with resources tab and kind prefilled
+  // Handle card click - navigate to resources page with kind filter
   const handleClick = () => {
     selectedResourceKind.value = reconciler.kind
     selectedResourceName.value = ''
     selectedResourceNamespace.value = ''
     selectedResourceStatus.value = ''
-    activeSearchTab.value = 'resources'
-    showSearchView.value = true
+    location.route(`/resources?kind=${encodeURIComponent(reconciler.kind)}`)
   }
 
-  // Handle status badge click - navigate to search with kind and status filters
+  // Handle status badge click - navigate to resources page with kind and status filters
   const handleStatusClick = (e, status) => {
     e.stopPropagation()
     selectedResourceKind.value = reconciler.kind
     selectedResourceName.value = ''
     selectedResourceNamespace.value = ''
     selectedResourceStatus.value = status
-    activeSearchTab.value = 'resources'
-    showSearchView.value = true
+    location.route(`/resources?kind=${encodeURIComponent(reconciler.kind)}&status=${encodeURIComponent(status)}`)
   }
 
   return (
@@ -148,18 +147,26 @@ export function ReconcilerList({ reconcilers }) {
 
   const totalFailing = reconcilers.reduce((sum, r) => sum + (r.stats.failing || 0), 0)
 
-  // Group reconcilers by API type
-  const appliers = reconcilers.filter(r =>
-    r.apiVersion.startsWith('fluxcd.controlplane') ||
-    r.apiVersion.startsWith('kustomize') ||
-    r.apiVersion.startsWith('helm')
-  )
+  // Group reconcilers by API type and sort by kind
+  const appliers = reconcilers
+    .filter(r =>
+      r.apiVersion.startsWith('fluxcd.controlplane') ||
+      r.apiVersion.startsWith('kustomize') ||
+      r.apiVersion.startsWith('helm')
+    )
+    .sort((a, b) => a.kind.localeCompare(b.kind))
 
-  const sources = reconcilers.filter(r => r.apiVersion.startsWith('source'))
+  const sources = reconcilers
+    .filter(r => r.apiVersion.startsWith('source'))
+    .sort((a, b) => a.kind.localeCompare(b.kind))
 
-  const notifications = reconcilers.filter(r => r.apiVersion.startsWith('notification'))
+  const notifications = reconcilers
+    .filter(r => r.apiVersion.startsWith('notification'))
+    .sort((a, b) => a.kind.localeCompare(b.kind))
 
-  const imageAutomation = reconcilers.filter(r => r.apiVersion.startsWith('image'))
+  const imageAutomation = reconcilers
+    .filter(r => r.apiVersion.startsWith('image'))
+    .sort((a, b) => a.kind.localeCompare(b.kind))
 
   return (
     <div class="card">

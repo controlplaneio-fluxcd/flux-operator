@@ -6,8 +6,9 @@ import { useEffect } from 'preact/hooks'
 import { useState } from 'preact/hooks'
 import { fetchWithMock } from '../utils/fetch'
 import { formatTimestamp } from '../utils/time'
-import { fluxReport } from '../app'
+import { reportData } from '../app'
 import { FilterForm } from './FilterForm'
+import { useRestoreFiltersFromUrl, useSyncFiltersToUrl } from '../utils/routing'
 
 // Events data signals
 export const eventsData = signal([])
@@ -149,6 +150,22 @@ function EventCard({ event }) {
  * - Shows loading, error, and empty states
  */
 export function EventList() {
+  // Restore filter signals from URL query params on mount
+  useRestoreFiltersFromUrl({
+    kind: selectedEventsKind,
+    name: selectedEventsName,
+    namespace: selectedEventsNamespace,
+    type: selectedEventsSeverity
+  })
+
+  // Sync filter signals to URL query params on change (debounced)
+  useSyncFiltersToUrl({
+    kind: selectedEventsKind,
+    name: selectedEventsName,
+    namespace: selectedEventsNamespace,
+    type: selectedEventsSeverity
+  })
+
   // Fetch events on mount and when filters change
   useEffect(() => {
     fetchEvents()
@@ -182,7 +199,7 @@ export function EventList() {
             nameSignal={selectedEventsName}
             namespaceSignal={selectedEventsNamespace}
             severitySignal={selectedEventsSeverity}
-            namespaces={fluxReport.value?.spec?.namespaces || []}
+            namespaces={reportData.value?.spec?.namespaces || []}
             onClear={handleClearFilters}
           />
         </div>

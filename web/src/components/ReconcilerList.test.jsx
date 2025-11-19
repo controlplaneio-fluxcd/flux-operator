@@ -1,11 +1,20 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/preact'
 import { ReconcilerList } from './ReconcilerList'
-import { showSearchView } from '../app'
 import { selectedResourceKind, selectedResourceStatus } from './ResourceList'
+
+// Mock preact-iso
+const mockRoute = vi.fn()
+vi.mock('preact-iso', () => ({
+  useLocation: () => ({
+    path: '/',
+    query: {},
+    route: mockRoute
+  })
+}))
 
 describe('ReconcilerList', () => {
   const mockReconcilers = [
@@ -43,9 +52,11 @@ describe('ReconcilerList', () => {
 
   beforeEach(() => {
     // Reset signals
-    showSearchView.value = false
     selectedResourceKind.value = ''
     selectedResourceStatus.value = ''
+
+    // Reset mocks
+    vi.clearAllMocks()
   })
 
   describe('Rendering', () => {
@@ -224,7 +235,7 @@ describe('ReconcilerList', () => {
       const gitRepoCard = screen.getByText('GitRepository').closest('button')
       fireEvent.click(gitRepoCard)
 
-      expect(showSearchView.value).toBe(true)
+      expect(mockRoute).toHaveBeenCalledWith('/resources?kind=GitRepository')
     })
 
     it('should set kind filter when card clicked', () => {
@@ -234,6 +245,7 @@ describe('ReconcilerList', () => {
       fireEvent.click(gitRepoCard)
 
       expect(selectedResourceKind.value).toBe('GitRepository')
+      expect(mockRoute).toHaveBeenCalledWith('/resources?kind=GitRepository')
     })
 
     it('should clear status filter when card clicked', () => {
@@ -245,6 +257,7 @@ describe('ReconcilerList', () => {
       fireEvent.click(gitRepoCard)
 
       expect(selectedResourceStatus.value).toBe('')
+      expect(mockRoute).toHaveBeenCalledWith('/resources?kind=GitRepository')
     })
   })
 
@@ -255,7 +268,7 @@ describe('ReconcilerList', () => {
       const runningBadge = screen.getByText('5 running')
       fireEvent.click(runningBadge)
 
-      expect(showSearchView.value).toBe(true)
+      expect(mockRoute).toHaveBeenCalledWith('/resources?kind=Kustomization&status=Ready')
     })
 
     it('should set kind and Ready status when running badge clicked', () => {
@@ -266,6 +279,7 @@ describe('ReconcilerList', () => {
 
       expect(selectedResourceKind.value).toBe('Kustomization')
       expect(selectedResourceStatus.value).toBe('Ready')
+      expect(mockRoute).toHaveBeenCalledWith('/resources?kind=Kustomization&status=Ready')
     })
 
     it('should set kind and Failed status when failing badge clicked', () => {
@@ -276,6 +290,7 @@ describe('ReconcilerList', () => {
 
       expect(selectedResourceKind.value).toBe('Kustomization')
       expect(selectedResourceStatus.value).toBe('Failed')
+      expect(mockRoute).toHaveBeenCalledWith('/resources?kind=Kustomization&status=Failed')
     })
 
     it('should set kind and Suspended status when suspended badge clicked', () => {
@@ -286,6 +301,7 @@ describe('ReconcilerList', () => {
 
       expect(selectedResourceKind.value).toBe('Kustomization')
       expect(selectedResourceStatus.value).toBe('Suspended')
+      expect(mockRoute).toHaveBeenCalledWith('/resources?kind=Kustomization&status=Suspended')
     })
 
     it('should prevent card click when status badge clicked', () => {
@@ -297,6 +313,7 @@ describe('ReconcilerList', () => {
 
       // Status should be 'Failed', not '' (which would happen if card click also fired)
       expect(selectedResourceStatus.value).toBe('Failed')
+      expect(mockRoute).toHaveBeenCalledWith('/resources?kind=Kustomization&status=Failed')
     })
   })
 
