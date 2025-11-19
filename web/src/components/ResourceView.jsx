@@ -101,7 +101,7 @@ function InventoryGroupByApiVersion({ apiVersion, items }) {
  * - Lazy loads complete resource data on expand
  * - Tabbed interface with up to four sections (in order):
  *   1. Inventory: Grouped list of managed resources (if present, shown first)
- *   2. Source: Details about the resource's source (if present, GitRepository/HelmRepository/OCIRepository)
+ *   2. Source: Details about the resource's source (if present)
  *   3. Specification: Complete resource definition as syntax-highlighted YAML
  *   4. Status: YAML display of apiVersion, kind, metadata, and status (without inventory)
  * - Dynamically switches Prism theme (light/dark) based on app theme
@@ -197,11 +197,11 @@ export function ResourceView({ kind, name, namespace, isExpanded }) {
   const statusYamlHighlighted = useMemo(() => {
     if (!resourceData) return ''
 
-    // Build status object without inventory
-    const statusWithoutInventory = resourceData.status
+    // Build status object without inventory and sourceRef
+    const cleanStatus = resourceData.status
       ? (() => {
         // eslint-disable-next-line no-unused-vars
-        const { inventory, ...rest } = resourceData.status
+        const { inventory, sourceRef, ...rest } = resourceData.status
         return rest
       })()
       : undefined
@@ -213,7 +213,7 @@ export function ResourceView({ kind, name, namespace, isExpanded }) {
         name: resourceData.metadata.name,
         namespace: resourceData.metadata.namespace
       },
-      status: statusWithoutInventory
+      status: cleanStatus
     }
 
     const yamlStr = yaml.dump(statusObj, { indent: 2, lineWidth: -1 })
