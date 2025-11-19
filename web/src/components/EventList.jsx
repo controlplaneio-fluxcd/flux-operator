@@ -4,11 +4,13 @@
 import { signal } from '@preact/signals'
 import { useEffect } from 'preact/hooks'
 import { useState } from 'preact/hooks'
+import { useLocation } from 'preact-iso'
 import { fetchWithMock } from '../utils/fetch'
 import { formatTimestamp } from '../utils/time'
 import { reportData } from '../app'
 import { FilterForm } from './FilterForm'
 import { useRestoreFiltersFromUrl, useSyncFiltersToUrl } from '../utils/routing'
+import { selectedResourceKind, selectedResourceName, selectedResourceNamespace, selectedResourceStatus } from './ResourceList'
 
 // Events data signals
 export const eventsData = signal([])
@@ -70,12 +72,23 @@ function getEventStatusBadgeClass(type) {
  * - Displays event severity badge (Info for Normal, Warning for Warning)
  * - Shows event message with expand/collapse for long messages
  * - Displays namespace and timestamp
+ * - Clickable resource name that navigates to resources page with filters
  */
 function EventCard({ event }) {
+  const location = useLocation()
   const [isExpanded, setIsExpanded] = useState(false)
 
   // Parse involvedObject to get kind and name
   const [kind, name] = event.involvedObject.split('/')
+
+  // Handle resource name click - navigate to resources page with filters
+  const handleResourceClick = () => {
+    selectedResourceKind.value = kind
+    selectedResourceName.value = name
+    selectedResourceNamespace.value = event.namespace
+    selectedResourceStatus.value = ''
+    location.route(`/resources?kind=${encodeURIComponent(kind)}&name=${encodeURIComponent(name)}&namespace=${encodeURIComponent(event.namespace)}`)
+  }
 
   // Map event type to display status
   const displayStatus = event.type === 'Normal' ? 'Info' : 'Warning'
@@ -112,14 +125,14 @@ function EventCard({ event }) {
         </span>
       </div>
 
-      {/* Resource namespace/name */}
+      {/* Resource namespace/name - clickable link */}
       <div class="mb-2">
-        <span class="font-mono text-sm text-gray-500 dark:text-gray-400">
-          {event.namespace}/
-        </span>
-        <span class="font-mono text-sm font-semibold text-gray-900 dark:text-gray-100">
-          {name}
-        </span>
+        <button
+          onClick={handleResourceClick}
+          class="font-mono text-sm text-left hover:opacity-80 transition-opacity focus:outline-none focus:ring-2 focus:ring-flux-blue focus:ring-offset-2 rounded inline-block group"
+        >
+          <span class="text-gray-500 dark:text-gray-400">{event.namespace}/</span><span class="font-semibold text-gray-900 dark:text-gray-100 group-hover:text-flux-blue dark:group-hover:text-blue-400">{name}</span><svg class="w-3.5 h-3.5 text-gray-400 group-hover:text-flux-blue dark:group-hover:text-blue-400 transition-colors ml-1 inline-block align-middle" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+        </button>
       </div>
 
       {/* Message */}
