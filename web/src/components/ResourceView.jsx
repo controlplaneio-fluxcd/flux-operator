@@ -2,11 +2,14 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { useState, useMemo, useEffect } from 'preact/hooks'
+import { useLocation } from 'preact-iso'
 import yaml from 'js-yaml'
 import Prism from 'prismjs'
 import 'prismjs/components/prism-yaml'
 import { fetchWithMock } from '../utils/fetch'
 import { appliedTheme } from '../utils/theme'
+import { fluxKinds } from '../utils/constants'
+import { selectedResourceKind, selectedResourceName, selectedResourceNamespace, selectedResourceStatus } from './ResourceList'
 
 // Import Prism themes as URLs for dynamic loading
 import prismLight from 'prismjs/themes/prism.css?url'
@@ -50,8 +53,46 @@ function groupInventoryByApiVersion(inventory) {
 
 /**
  * InventoryItem - Displays a single inventory item
+ *
+ * Features:
+ * - Displays kind, namespace (if present), and name
+ * - If kind matches a Flux resource kind, renders as clickable link to resources page
+ * - Includes navigation icon for clickable items
  */
 function InventoryItem({ item }) {
+  const location = useLocation()
+  const isFluxResource = fluxKinds.includes(item.kind)
+
+  // Handle click - navigate to resources page with filters
+  const handleClick = () => {
+    selectedResourceKind.value = item.kind
+    selectedResourceName.value = item.name
+    selectedResourceNamespace.value = item.namespace || ''
+    selectedResourceStatus.value = ''
+
+    const params = new URLSearchParams()
+    params.append('kind', item.kind)
+    params.append('name', item.name)
+    if (item.namespace) {
+      params.append('namespace', item.namespace)
+    }
+    location.route(`/resources?${params.toString()}`)
+  }
+
+  if (isFluxResource) {
+    return (
+      <div class="py-1 px-2 text-xs break-all">
+        <button
+          onClick={handleClick}
+          class="font-mono text-left hover:opacity-80 transition-opacity focus:outline-none focus:ring-2 focus:ring-flux-blue focus:ring-offset-1 rounded inline-block group"
+        >
+          <span class="text-gray-600 dark:text-gray-400">{item.kind}/</span>{item.namespace && <span class="text-gray-500 dark:text-gray-400">{item.namespace}/</span>}<span class="text-gray-900 dark:text-gray-100 group-hover:text-flux-blue dark:group-hover:text-blue-400">{item.name}</span><svg class="w-3 h-3 text-gray-400 group-hover:text-flux-blue dark:group-hover:text-blue-400 transition-colors ml-1 inline-block align-middle" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+        </button>
+      </div>
+    )
+  }
+
+  // Non-Flux resource - render as plain text
   return (
     <div class="py-1 px-2 text-xs break-all">
       <span class="font-mono text-gray-900 dark:text-gray-100">
