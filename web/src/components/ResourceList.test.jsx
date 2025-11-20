@@ -221,12 +221,14 @@ describe('ResourceList', () => {
   })
 
   describe('Component rendering', () => {
-    it('should render loading spinner on mount', async () => {
+    it('should render loading shimmer on mount', async () => {
       resourcesLoading.value = true
 
-      render(<ResourceList />)
+      const { container } = render(<ResourceList />)
 
-      expect(screen.getByText('Loading resources...')).toBeInTheDocument()
+      // Should show loading shimmer in timeline chart
+      const loadingShimmer = container.querySelector('.loading-shimmer')
+      expect(loadingShimmer).toBeInTheDocument()
     })
 
     it('should fetch resources on component mount', async () => {

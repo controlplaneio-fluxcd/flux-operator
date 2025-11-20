@@ -238,16 +238,6 @@ export function EventList() {
         )}
 
         {/* Events List */}
-        {/* Loading State */}
-        {eventsLoading.value && (
-          <div class="card py-12">
-            <div class="flex items-center justify-center">
-              <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-flux-blue"></div>
-              <span class="ml-3 text-gray-600 dark:text-gray-400">Loading events...</span>
-            </div>
-          </div>
-        )}
-
         {/* Empty State */}
         {!eventsLoading.value && eventsData.value.length === 0 && (
           <div class="card py-12">
