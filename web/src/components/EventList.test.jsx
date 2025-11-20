@@ -210,12 +210,14 @@ describe('EventList', () => {
   })
 
   describe('Component rendering', () => {
-    it('should render loading spinner on mount', async () => {
+    it('should render loading shimmer on mount', async () => {
       eventsLoading.value = true
 
-      render(<EventList />)
+      const { container } = render(<EventList />)
 
-      expect(screen.getByText('Loading events...')).toBeInTheDocument()
+      // Should show loading shimmer in timeline chart
+      const loadingShimmer = container.querySelector('.loading-shimmer')
+      expect(loadingShimmer).toBeInTheDocument()
     })
 
     it('should fetch events on component mount', async () => {

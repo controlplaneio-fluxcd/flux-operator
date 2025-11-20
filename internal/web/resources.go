@@ -122,9 +122,9 @@ func (r *Router) GetResourcesStatus(ctx context.Context, kinds []string, name, n
 	}
 
 	// Set limit based on number of kinds
-	limit := 500
+	limit := 5000
 	if len(kinds) > 1 {
-		limit = 100
+		limit = 2500
 	}
 
 	// Query resources for each kind in parallel

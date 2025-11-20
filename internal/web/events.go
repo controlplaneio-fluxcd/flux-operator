@@ -101,9 +101,9 @@ func (r *Router) GetEvents(ctx context.Context, kinds []string, name, namespace 
 	}
 
 	// Set limit based on number of kinds
-	limit := 500
+	limit := 1000
 	if len(kinds) > 1 {
-		limit = 100
+		limit = 500
 	}
 
 	// Query events for each kind in parallel
