@@ -9,6 +9,7 @@ import { reportData } from '../app'
 import { FilterForm } from './FilterForm'
 import { ResourceView } from './ResourceView'
 import { useRestoreFiltersFromUrl, useSyncFiltersToUrl } from '../utils/routing'
+import { TimelineChart } from './TimelineChart'
 
 // Resources data signals
 export const resourcesData = signal([])
@@ -232,6 +233,9 @@ export function ResourceList() {
             onClear={handleClearFilters}
           />
         </div>
+
+        {/* Timeline Chart */}
+        <TimelineChart items={resourcesData.value} loading={resourcesLoading.value} mode="resources" />
 
         {/* Error State */}
         {resourcesError.value && (

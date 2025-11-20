@@ -48,12 +48,15 @@ func (r *Router) ResourcesHandler(w http.ResponseWriter, req *http.Request) {
 			// Appliers
 			fluxcdv1.FluxInstanceKind,
 			fluxcdv1.ResourceSetKind,
+			fluxcdv1.ResourceSetInputProviderKind,
 			fluxcdv1.FluxKustomizationKind,
 			fluxcdv1.FluxHelmReleaseKind,
 			// Sources
 			fluxcdv1.FluxGitRepositoryKind,
 			fluxcdv1.FluxOCIRepositoryKind,
 			fluxcdv1.FluxHelmChartKind,
+			fluxcdv1.FluxHelmRepositoryKind,
+			fluxcdv1.FluxBucketKind,
 			fluxcdv1.FluxArtifactGeneratorKind,
 		}
 	}
@@ -212,7 +215,7 @@ func (r *Router) GetResourcesStatus(ctx context.Context, kinds []string, name, n
 func (r *Router) resourceStatusFromUnstructured(obj unstructured.Unstructured) ResourceStatus {
 	status := StatusUnknown
 	message := "No status information available"
-	lastReconciled := metav1.Now()
+	lastReconciled := metav1.Time{Time: obj.GetCreationTimestamp().Time}
 
 	// Check for status conditions (Ready condition)
 	if conditions, found, err := unstructured.NestedSlice(obj.Object, "status", "conditions"); found && err == nil {
