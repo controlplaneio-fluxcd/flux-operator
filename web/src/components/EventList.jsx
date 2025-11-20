@@ -11,6 +11,7 @@ import { reportData } from '../app'
 import { FilterForm } from './FilterForm'
 import { useRestoreFiltersFromUrl, useSyncFiltersToUrl } from '../utils/routing'
 import { selectedResourceKind, selectedResourceName, selectedResourceNamespace, selectedResourceStatus } from './ResourceList'
+import { TimelineChart } from './TimelineChart'
 
 // Events data signals
 export const eventsData = signal([])
@@ -216,6 +217,9 @@ export function EventList() {
             onClear={handleClearFilters}
           />
         </div>
+
+        {/* Timeline Chart */}
+        <TimelineChart items={eventsData.value} loading={eventsLoading.value} mode="events" />
 
         {/* Error State */}
         {eventsError.value && (

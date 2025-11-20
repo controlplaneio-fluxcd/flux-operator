@@ -47,12 +47,15 @@ func (r *Router) EventsHandler(w http.ResponseWriter, req *http.Request) {
 			// Appliers
 			fluxcdv1.FluxInstanceKind,
 			fluxcdv1.ResourceSetKind,
+			fluxcdv1.ResourceSetInputProviderKind,
 			fluxcdv1.FluxKustomizationKind,
 			fluxcdv1.FluxHelmReleaseKind,
 			// Sources
 			fluxcdv1.FluxGitRepositoryKind,
 			fluxcdv1.FluxOCIRepositoryKind,
 			fluxcdv1.FluxHelmChartKind,
+			fluxcdv1.FluxHelmRepositoryKind,
+			fluxcdv1.FluxBucketKind,
 			fluxcdv1.FluxArtifactGeneratorKind,
 		}
 	}
