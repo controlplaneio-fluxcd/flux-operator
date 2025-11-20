@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -203,8 +204,13 @@ func (r *Router) GetResourcesStatus(ctx context.Context, kinds []string, name, n
 				filteredResult = append(filteredResult, rs)
 			}
 		}
-		return filteredResult, nil
+		result = filteredResult
 	}
+
+	// Sort resources by LastReconciled timestamp (newest first)
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].LastReconciled.Time.After(result[j].LastReconciled.Time)
+	})
 
 	return result, nil
 }
