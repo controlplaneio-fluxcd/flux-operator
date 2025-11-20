@@ -84,7 +84,7 @@ describe('TimelineChart', () => {
   })
 
   describe('Responsive Behavior', () => {
-    it('renders 10 bars on mobile (< 1024px)', () => {
+    it('renders 7 bars on mobile (< 1024px)', () => {
       setWindowWidth(768)
 
       const events = createMockEvents(10)
@@ -93,10 +93,10 @@ describe('TimelineChart', () => {
       )
 
       const bars = container.querySelectorAll('.relative.flex-1.group')
-      expect(bars).toHaveLength(10)
+      expect(bars).toHaveLength(7)
     })
 
-    it('renders 20 bars on desktop (>= 1024px)', () => {
+    it('renders 10 bars on desktop (>= 1024px)', () => {
       setWindowWidth(1920)
 
       const events = createMockEvents(10)
@@ -105,7 +105,7 @@ describe('TimelineChart', () => {
       )
 
       const bars = container.querySelectorAll('.relative.flex-1.group')
-      expect(bars).toHaveLength(20)
+      expect(bars).toHaveLength(10)
     })
   })
 
@@ -429,9 +429,9 @@ describe('TimelineChart', () => {
         <TimelineChart items={events} loading={false} mode="events" />
       )
 
-      // Should still render fixed number of bars (20 on desktop)
+      // Should still render fixed number of bars (10 on desktop)
       const bars = container.querySelectorAll('.relative.flex-1.group')
-      expect(bars).toHaveLength(20)
+      expect(bars).toHaveLength(10)
     })
 
     it('handles items with same timestamp', () => {
@@ -497,9 +497,9 @@ describe('TimelineChart', () => {
         <TimelineChart items={events} loading={false} mode="events" />
       )
 
-      // When there are more than 5 unique timestamps, use standard bucketing (20 on desktop)
+      // When there are more than 5 unique timestamps, use standard bucketing (10 on desktop)
       const bars = container.querySelectorAll('.relative.flex-1.group')
-      expect(bars).toHaveLength(20)
+      expect(bars).toHaveLength(10)
     })
   })
 

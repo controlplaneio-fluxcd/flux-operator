@@ -225,7 +225,7 @@ function formatTimeRange(startTime, endTime) {
  * @param {string} props.mode - 'events' or 'resources'
  *
  * Features:
- * - Groups items into time buckets (20 on desktop, 10 on mobile)
+ * - Groups items into time buckets (10 on desktop, 7 on mobile)
  * - Color codes bars based on status/type
  * - Shows placeholder bars during loading
  * - Tooltip on hover with breakdown
@@ -263,7 +263,7 @@ export function TimelineChart({ items, loading, mode = 'events' }) {
     }
   }, [loading, itemsKey])
 
-  const bucketCount = isDesktop ? 20 : 10
+  const bucketCount = isDesktop ? 10 : 7
 
   // Create placeholder buckets for loading state
   const placeholderStats = mode === 'events'

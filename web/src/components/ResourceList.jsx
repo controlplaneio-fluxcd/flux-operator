@@ -10,6 +10,7 @@ import { FilterForm } from './FilterForm'
 import { ResourceView } from './ResourceView'
 import { useRestoreFiltersFromUrl, useSyncFiltersToUrl } from '../utils/routing'
 import { TimelineChart } from './TimelineChart'
+import { useInfiniteScroll } from '../utils/scroll'
 
 // Resources data signals
 export const resourcesData = signal([])
@@ -202,6 +203,16 @@ export function ResourceList() {
     fetchResourcesStatus()
   }, [selectedResourceKind.value, selectedResourceName.value, selectedResourceNamespace.value, selectedResourceStatus.value])
 
+  // Infinite scroll hook - reset when filters change or data refetches
+  const { visibleCount, sentinelRef, hasMore, loadMore } = useInfiniteScroll({
+    totalItems: resourcesData.value.length,
+    pageSize: 100,
+    deps: [selectedResourceKind.value, selectedResourceName.value, selectedResourceNamespace.value, selectedResourceStatus.value, resourcesData.value.length]
+  })
+
+  // Get visible resources (slice the array - already sorted by server)
+  const visibleResources = resourcesData.value.slice(0, visibleCount)
+
   const handleClearFilters = () => {
     selectedResourceKind.value = ''
     selectedResourceName.value = ''
@@ -272,11 +283,24 @@ export function ResourceList() {
         {/* Resource Cards */}
         {!resourcesLoading.value && resourcesData.value.length > 0 && (
           <div class="space-y-4">
-            {[...resourcesData.value]
-              .sort((a, b) => new Date(b.lastReconciled) - new Date(a.lastReconciled))
-              .map((resource, index) => (
-                <ResourceCard key={`${resource.namespace}-${resource.kind}-${resource.name}-${index}`} resource={resource} />
-              ))}
+            {visibleResources.map((resource, index) => (
+              <ResourceCard key={`${resource.namespace}-${resource.kind}-${resource.name}-${index}`} resource={resource} />
+            ))}
+
+            {/* Sentinel element for infinite scroll */}
+            {hasMore && <div ref={sentinelRef} class="h-4" />}
+
+            {/* Load more button - fallback for browsers without IntersectionObserver */}
+            {hasMore && !window.IntersectionObserver && (
+              <div class="flex justify-center py-4">
+                <button
+                  onClick={loadMore}
+                  class="px-4 py-2 bg-flux-blue text-white rounded-md hover:bg-blue-600 transition-colors focus:outline-none focus:ring-2 focus:ring-flux-blue focus:ring-offset-2"
+                >
+                  Load more resources ({resourcesData.value.length - visibleCount} remaining)
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
