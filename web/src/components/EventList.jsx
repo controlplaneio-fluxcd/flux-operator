@@ -12,6 +12,7 @@ import { FilterForm } from './FilterForm'
 import { useRestoreFiltersFromUrl, useSyncFiltersToUrl } from '../utils/routing'
 import { selectedResourceKind, selectedResourceName, selectedResourceNamespace, selectedResourceStatus } from './ResourceList'
 import { TimelineChart } from './TimelineChart'
+import { useInfiniteScroll } from '../utils/scroll'
 
 // Events data signals
 export const eventsData = signal([])
@@ -185,6 +186,16 @@ export function EventList() {
     fetchEvents()
   }, [selectedEventsKind.value, selectedEventsName.value, selectedEventsNamespace.value, selectedEventsSeverity.value])
 
+  // Infinite scroll hook - reset when filters change or data refetches
+  const { visibleCount, sentinelRef, hasMore, loadMore } = useInfiniteScroll({
+    totalItems: eventsData.value.length,
+    pageSize: 100,
+    deps: [selectedEventsKind.value, selectedEventsName.value, selectedEventsNamespace.value, selectedEventsSeverity.value, eventsData.value.length]
+  })
+
+  // Get visible events (slice the array)
+  const visibleEvents = eventsData.value.slice(0, visibleCount)
+
   const handleClearFilters = () => {
     selectedEventsKind.value = ''
     selectedEventsName.value = ''
@@ -255,9 +266,24 @@ export function EventList() {
         {/* Events Cards */}
         {!eventsLoading.value && eventsData.value.length > 0 && (
           <div class="space-y-4">
-            {eventsData.value.map((event, index) => (
+            {visibleEvents.map((event, index) => (
               <EventCard key={`${event.involvedObject}-${event.lastTimestamp}-${index}`} event={event} />
             ))}
+
+            {/* Sentinel element for infinite scroll */}
+            {hasMore && <div ref={sentinelRef} class="h-4" />}
+
+            {/* Load more button - fallback for browsers without IntersectionObserver */}
+            {hasMore && !window.IntersectionObserver && (
+              <div class="flex justify-center py-4">
+                <button
+                  onClick={loadMore}
+                  class="px-4 py-2 bg-flux-blue text-white rounded-md hover:bg-blue-600 transition-colors focus:outline-none focus:ring-2 focus:ring-flux-blue focus:ring-offset-2"
+                >
+                  Load more events ({eventsData.value.length - visibleCount} remaining)
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
