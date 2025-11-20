@@ -133,7 +133,9 @@ export function useSyncFiltersToUrl(filterSignals, debounceMs = 300) {
       const newUrl = queryString ? `${currentPath}?${queryString}` : currentPath
 
       // Only update if URL actually changed
-      const currentUrl = `${location.path}${location.search || ''}`
+      // Use window.location instead of preact-iso location for accurate comparison
+      const currentUrl = `${window.location.pathname}${window.location.search}`
+
       if (newUrl !== currentUrl) {
         // Use replaceState to avoid cluttering history with every keystroke
         window.history.replaceState(null, '', newUrl)
