@@ -150,14 +150,15 @@ export function ReconcilerList({ reconcilers }) {
   // Group reconcilers by API type and sort by kind
   const appliers = reconcilers
     .filter(r =>
-      r.apiVersion.startsWith('fluxcd.controlplane') ||
+      (r.apiVersion.startsWith('fluxcd.controlplane') ||
       r.apiVersion.startsWith('kustomize') ||
-      r.apiVersion.startsWith('helm')
+      r.apiVersion.startsWith('helm')) &&
+      r.kind !== 'ResourceSetInputProvider'
     )
-    .sort((a, b) => a.kind.localeCompare(b.kind))
+    .sort((a, b) => b.kind.localeCompare(a.kind))
 
   const sources = reconcilers
-    .filter(r => r.apiVersion.startsWith('source'))
+    .filter(r => r.apiVersion.startsWith('source') || r.kind === 'ResourceSetInputProvider')
     .sort((a, b) => a.kind.localeCompare(b.kind))
 
   const notifications = reconcilers
