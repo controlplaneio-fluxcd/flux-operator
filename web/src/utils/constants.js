@@ -34,3 +34,43 @@ export const eventSeverities = ['Normal', 'Warning']
 
 // Resource status options (based on Kubernetes condition status)
 export const resourceStatuses = ['Ready', 'Failed', 'Progressing', 'Suspended', 'Unknown']
+
+// Kubernetes workload kinds
+export const workloadKinds = [
+  'Deployment',
+  'StatefulSet',
+  'DaemonSet',
+  'Job',
+  'CronJob'
+]
+
+// Map resource kind to controller name
+const kindToControllerMap = {
+  'FluxInstance': 'flux-operator',
+  'ResourceSet': 'flux-operator',
+  'ResourceSetInputProvider': 'flux-operator',
+  'Kustomization': 'kustomize-controller',
+  'HelmRelease': 'helm-controller',
+  'GitRepository': 'source-controller',
+  'OCIRepository': 'source-controller',
+  'Bucket': 'source-controller',
+  'HelmRepository': 'source-controller',
+  'HelmChart': 'source-controller',
+  'ExternalArtifact': 'source-watcher',
+  'ArtifactGenerator': 'source-watcher',
+  'Alert': 'notification-controller',
+  'Provider': 'notification-controller',
+  'Receiver': 'notification-controller',
+  'ImageRepository': 'image-reflector-controller',
+  'ImagePolicy': 'image-reflector-controller',
+  'ImageUpdateAutomation': 'image-automation-controller'
+}
+
+/**
+ * Get the controller name for a given resource kind
+ * @param {string} kind - The resource kind
+ * @returns {string} - The controller name
+ */
+export function getControllerName(kind) {
+  return kindToControllerMap[kind] || 'unknown'
+}

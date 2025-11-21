@@ -10,7 +10,6 @@ import { formatTimestamp } from '../utils/time'
 import { reportData } from '../app'
 import { FilterForm } from './FilterForm'
 import { useRestoreFiltersFromUrl, useSyncFiltersToUrl } from '../utils/routing'
-import { selectedResourceKind, selectedResourceName, selectedResourceNamespace, selectedResourceStatus } from './ResourceList'
 import { TimelineChart } from './TimelineChart'
 import { useInfiniteScroll } from '../utils/scroll'
 
@@ -83,13 +82,9 @@ function EventCard({ event }) {
   // Parse involvedObject to get kind and name
   const [kind, name] = event.involvedObject.split('/')
 
-  // Handle resource name click - navigate to resources page with filters
+  // Handle resource name click - navigate to resource dashboard
   const handleResourceClick = () => {
-    selectedResourceKind.value = kind
-    selectedResourceName.value = name
-    selectedResourceNamespace.value = event.namespace
-    selectedResourceStatus.value = ''
-    location.route(`/resources?kind=${encodeURIComponent(kind)}&name=${encodeURIComponent(name)}&namespace=${encodeURIComponent(event.namespace)}`)
+    location.route(`/resource/${encodeURIComponent(kind)}/${encodeURIComponent(event.namespace)}/${encodeURIComponent(name)}`)
   }
 
   // Map event type to display status

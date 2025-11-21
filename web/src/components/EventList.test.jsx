@@ -14,7 +14,6 @@ import {
   selectedEventsSeverity,
   fetchEvents
 } from './EventList'
-import { selectedResourceKind, selectedResourceName, selectedResourceNamespace, selectedResourceStatus } from './ResourceList'
 import { reportData } from '../app'
 import { fetchWithMock } from '../utils/fetch'
 
@@ -79,12 +78,6 @@ describe('EventList', () => {
     selectedEventsName.value = ''
     selectedEventsNamespace.value = ''
     selectedEventsSeverity.value = ''
-
-    // Reset resource filter signals
-    selectedResourceKind.value = ''
-    selectedResourceName.value = ''
-    selectedResourceNamespace.value = ''
-    selectedResourceStatus.value = ''
 
     // Reset reportData
     reportData.value = {
@@ -418,8 +411,8 @@ describe('EventList', () => {
     })
   })
 
-  describe('Navigation to resources', () => {
-    it('should navigate to resources page when resource name is clicked', async () => {
+  describe('Navigation to resource dashboard', () => {
+    it('should navigate to resource dashboard when resource name is clicked', async () => {
       fetchWithMock.mockResolvedValue({ events: [mockEvents[0]] })
 
       render(<EventList />)
@@ -428,21 +421,7 @@ describe('EventList', () => {
       const resourceButton = await screen.findByRole('button', { name: /flux-system\/flux-system/ })
       fireEvent.click(resourceButton)
 
-      expect(mockRoute).toHaveBeenCalledWith('/resources?kind=GitRepository&name=flux-system&namespace=flux-system')
-    })
-
-    it('should set resource filter signals when resource name is clicked', async () => {
-      fetchWithMock.mockResolvedValue({ events: [mockEvents[0]] })
-
-      render(<EventList />)
-
-      const resourceButton = await screen.findByRole('button', { name: /flux-system\/flux-system/ })
-      fireEvent.click(resourceButton)
-
-      expect(selectedResourceKind.value).toBe('GitRepository')
-      expect(selectedResourceName.value).toBe('flux-system')
-      expect(selectedResourceNamespace.value).toBe('flux-system')
-      expect(selectedResourceStatus.value).toBe('')
+      expect(mockRoute).toHaveBeenCalledWith('/resource/GitRepository/flux-system/flux-system')
     })
 
     it('should navigate with correct params for different resource', async () => {
@@ -453,24 +432,7 @@ describe('EventList', () => {
       const resourceButton = await screen.findByRole('button', { name: /flux-system\/apps/ })
       fireEvent.click(resourceButton)
 
-      expect(mockRoute).toHaveBeenCalledWith('/resources?kind=Kustomization&name=apps&namespace=flux-system')
-      expect(selectedResourceKind.value).toBe('Kustomization')
-      expect(selectedResourceName.value).toBe('apps')
-      expect(selectedResourceNamespace.value).toBe('flux-system')
-    })
-
-    it('should clear resource status filter when navigating', async () => {
-      // Pre-set a status filter
-      selectedResourceStatus.value = 'Failed'
-
-      fetchWithMock.mockResolvedValue({ events: [mockEvents[0]] })
-
-      render(<EventList />)
-
-      const resourceButton = await screen.findByRole('button', { name: /flux-system\/flux-system/ })
-      fireEvent.click(resourceButton)
-
-      expect(selectedResourceStatus.value).toBe('')
+      expect(mockRoute).toHaveBeenCalledWith('/resource/Kustomization/flux-system/apps')
     })
 
     it('should display navigation icon in resource button', async () => {

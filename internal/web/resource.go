@@ -8,9 +8,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
 // ResourceHandler handles GET /api/v1/resource requests and returns a single Flux resource by kind, name and namespace.
@@ -57,8 +61,13 @@ func (r *Router) ResourceHandler(w http.ResponseWriter, req *http.Request) {
 // GetResource fetches a single Flux resource by kind, name and namespace,
 // and injects the inventory into the .status.inventory field before returning it.
 func (r *Router) GetResource(ctx context.Context, kind, name, namespace string) (*unstructured.Unstructured, error) {
+	exactKind, err := findFluxKind(kind)
+	if err != nil {
+		return nil, fmt.Errorf("unable to find Flux kind %s: %w", kind, err)
+	}
+
 	// Get the preferred GVK for the kind
-	gvk, err := r.preferredFluxGVK(kind)
+	gvk, err := r.preferredFluxGVK(exactKind)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get GVK for kind %s: %w", kind, err)
 	}
@@ -119,4 +128,19 @@ func (r *Router) GetResource(ctx context.Context, kind, name, namespace string) 
 
 	cleanObjectForExport(obj, true)
 	return obj, nil
+}
+
+// findFluxKind searches for a Flux kind in a case-insensitive way and returns the proper casing.
+// Returns an error if the kind is not found in the fluxKinds list.
+func findFluxKind(kind string) (string, error) {
+	fluxKinds := slices.Concat(fluxcdv1.FluxOperatorKinds, fluxcdv1.FluxKinds)
+	for _, fluxKind := range fluxKinds {
+		if strings.EqualFold(fluxKind.Name, kind) {
+			return fluxKind.Name, nil
+		}
+		if strings.EqualFold(fluxKind.ShortName, kind) {
+			return fluxKind.Name, nil
+		}
+	}
+	return "", fmt.Errorf("kind %s not found", kind)
 }
