@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	goruntime "runtime"
 	"sort"
 	"strings"
 
@@ -21,6 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
 )
 
 // ReportHandler handles GET /api/v1/report requests and returns the FluxReport from the cluster.
@@ -48,32 +50,54 @@ func (r *Router) ReportHandler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-// GetReport fetches the FluxReport resource from the cluster, cleans it for export,
-// and injects pod metrics into the report spec.
+// GetReport returns the cached FluxReport. If the cache is empty, it falls back to
+// building a fresh report (this should only happen during initial startup).
 func (r *Router) GetReport(ctx context.Context) (*unstructured.Unstructured, error) {
-	var reportList unstructured.UnstructuredList
-	reportList.SetGroupVersionKind(fluxcdv1.GroupVersion.WithKind(fluxcdv1.FluxReportKind + "List"))
+	if cached := r.getCachedReport(); cached != nil {
+		return cached, nil
+	}
+	// Fallback to building fresh report if cache is empty
+	return r.buildReport(ctx)
+}
 
-	if err := r.kubeClient.List(ctx, &reportList); err != nil {
-		return nil, fmt.Errorf("unable to list FluxReport resources: %w", err)
+// buildReport builds the FluxReport directly using the reporter package
+// and injects pod metrics into the report spec.
+func (r *Router) buildReport(ctx context.Context) (*unstructured.Unstructured, error) {
+	rep := reporter.NewFluxStatusReporter(r.kubeClient, fluxcdv1.DefaultInstanceName, r.statusManager, r.namespace)
+	reportSpec, err := rep.Compute(ctx)
+	if err != nil {
+		r.log.Error(err, "report computed with errors")
 	}
 
-	if len(reportList.Items) == 0 {
-		return nil, fmt.Errorf("no FluxReport resources found")
+	// Set the operator info
+	reportSpec.Operator = &fluxcdv1.OperatorInfo{
+		APIVersion: fluxcdv1.GroupVersion.String(),
+		Version:    r.version,
+		Platform:   fmt.Sprintf("%s/%s", goruntime.GOOS, goruntime.GOARCH),
 	}
 
-	result := &reportList.Items[0]
-	cleanObjectForExport(result, false)
-
-	// Inject pod metrics into the report
-	// Use the namespace from the report, or fall back to "flux-system"
-	namespace := "flux-system"
-	if ns, found, _ := unstructured.NestedString(result.Object, "metadata", "namespace"); found && ns != "" {
-		namespace = ns
+	// Build the FluxReport object
+	obj := &fluxcdv1.FluxReport{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: fluxcdv1.GroupVersion.String(),
+			Kind:       fluxcdv1.FluxReportKind,
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fluxcdv1.DefaultInstanceName,
+			Namespace: r.namespace,
+		},
+		Spec: reportSpec,
 	}
+
+	// Convert to unstructured
+	rawMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert report to unstructured: %w", err)
+	}
+	result := &unstructured.Unstructured{Object: rawMap}
 
 	// Fetch metrics for Flux components (non-fatal if it fails)
-	if metrics, err := r.GetMetrics(ctx, "", namespace, "app.kubernetes.io/part-of=flux", 100); err == nil {
+	if metrics, err := r.GetMetrics(ctx, "", r.namespace, "app.kubernetes.io/part-of=flux", 100); err == nil {
 		// Extract the items array from metrics
 		if items, found := metrics.Object["items"]; found {
 			// Add metrics to the result under spec.metrics
