@@ -46,6 +46,10 @@ vi.mock('./components/ResourceList', () => ({
   ResourceList: () => <div data-testid="resource-list">ResourceList</div>
 }))
 
+vi.mock('./components/ResourceDashboardView', () => ({
+  ResourceDashboardView: () => <div data-testid="resource-dashboard-view">ResourceDashboardView</div>
+}))
+
 // Mock fetchWithMock utility
 vi.mock('./utils/fetch', () => ({
   fetchWithMock: vi.fn()

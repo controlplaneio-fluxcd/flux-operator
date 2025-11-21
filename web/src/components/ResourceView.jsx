@@ -9,7 +9,6 @@ import 'prismjs/components/prism-yaml'
 import { fetchWithMock } from '../utils/fetch'
 import { appliedTheme } from '../utils/theme'
 import { fluxKinds } from '../utils/constants'
-import { selectedResourceKind, selectedResourceName, selectedResourceNamespace, selectedResourceStatus } from './ResourceList'
 
 // Import Prism themes as URLs for dynamic loading
 import prismLight from 'prismjs/themes/prism.css?url'
@@ -63,20 +62,10 @@ function InventoryItem({ item }) {
   const location = useLocation()
   const isFluxResource = fluxKinds.includes(item.kind)
 
-  // Handle click - navigate to resources page with filters
+  // Handle click - navigate to resource dashboard
   const handleClick = () => {
-    selectedResourceKind.value = item.kind
-    selectedResourceName.value = item.name
-    selectedResourceNamespace.value = item.namespace || ''
-    selectedResourceStatus.value = ''
-
-    const params = new URLSearchParams()
-    params.append('kind', item.kind)
-    params.append('name', item.name)
-    if (item.namespace) {
-      params.append('namespace', item.namespace)
-    }
-    location.route(`/resources?${params.toString()}`)
+    const ns = item.namespace || ''
+    location.route(`/resource/${encodeURIComponent(item.kind)}/${encodeURIComponent(ns)}/${encodeURIComponent(item.name)}`)
   }
 
   if (isFluxResource) {
@@ -378,7 +367,7 @@ export function ResourceView({ kind, name, namespace, isExpanded }) {
                   {/* ID: kind/namespace/name */}
                   <div class="py-1 px-2">
                     <span class="text-gray-600 dark:text-gray-400">ID: </span>
-                    <span class="text-gray-900 dark:text-gray-100 font-mono">
+                    <span class="text-gray-900 dark:text-gray-100">
                       {resourceData.status.sourceRef.kind}/{resourceData.status.sourceRef.namespace}/{resourceData.status.sourceRef.name}
                     </span>
                   </div>
@@ -386,14 +375,14 @@ export function ResourceView({ kind, name, namespace, isExpanded }) {
                   {/* URL */}
                   <div class="py-1 px-2">
                     <span class="text-gray-600 dark:text-gray-400">URL: </span>
-                    <span class="text-gray-900 dark:text-gray-100 font-mono break-all">{resourceData.status.sourceRef.url}</span>
+                    <span class="text-gray-900 dark:text-gray-100 break-all">{resourceData.status.sourceRef.url}</span>
                   </div>
 
                   {/* Origin URL (if present) */}
                   {resourceData.status.sourceRef.originURL && (
                     <div class="py-1 px-2">
                       <span class="text-gray-600 dark:text-gray-400">Origin URL: </span>
-                      <span class="text-gray-900 dark:text-gray-100 font-mono break-all">{resourceData.status.sourceRef.originURL}</span>
+                      <span class="text-gray-900 dark:text-gray-100 break-all">{resourceData.status.sourceRef.originURL}</span>
                     </div>
                   )}
 
@@ -401,7 +390,7 @@ export function ResourceView({ kind, name, namespace, isExpanded }) {
                   {resourceData.status.sourceRef.originRevision && (
                     <div class="py-1 px-2">
                       <span class="text-gray-600 dark:text-gray-400">Origin Revision: </span>
-                      <span class="text-gray-900 dark:text-gray-100 font-mono break-all">{resourceData.status.sourceRef.originRevision}</span>
+                      <span class="text-gray-900 dark:text-gray-100 break-all">{resourceData.status.sourceRef.originRevision}</span>
                     </div>
                   )}
 

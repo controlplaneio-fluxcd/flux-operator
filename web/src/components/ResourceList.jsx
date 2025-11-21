@@ -3,6 +3,7 @@
 
 import { signal } from '@preact/signals'
 import { useEffect, useState } from 'preact/hooks'
+import { useLocation } from 'preact-iso'
 import { fetchWithMock } from '../utils/fetch'
 import { formatTimestamp } from '../utils/time'
 import { reportData } from '../app'
@@ -82,8 +83,14 @@ function getStatusBadgeClass(status) {
  * - Expandable details section showing spec and inventory (lazy-loaded via ResourceView)
  */
 function ResourceCard({ resource }) {
+  const location = useLocation()
   const [isExpanded, setIsExpanded] = useState(false)
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(false)
+
+  // Handle resource name click - navigate to dashboard
+  const handleResourceClick = () => {
+    location.route(`/resource/${encodeURIComponent(resource.kind)}/${encodeURIComponent(resource.namespace)}/${encodeURIComponent(resource.name)}`)
+  }
 
   // Check if message is long or contains newlines
   const isLongMessage = resource.message.length > 150 || resource.message.includes('\n')
@@ -117,14 +124,14 @@ function ResourceCard({ resource }) {
         </span>
       </div>
 
-      {/* Resource namespace/name */}
+      {/* Resource namespace/name - clickable link to dashboard */}
       <div class="mb-2">
-        <span class="font-mono text-sm text-gray-500 dark:text-gray-400">
-          {resource.namespace}/
-        </span>
-        <span class="font-mono text-sm font-semibold text-gray-900 dark:text-gray-100">
-          {resource.name}
-        </span>
+        <button
+          onClick={handleResourceClick}
+          class="font-mono text-sm text-left hover:opacity-80 transition-opacity focus:outline-none focus:ring-2 focus:ring-flux-blue focus:ring-offset-2 rounded inline-block group"
+        >
+          <span class="text-gray-500 dark:text-gray-400">{resource.namespace}/</span><span class="font-semibold text-gray-900 dark:text-gray-100 group-hover:text-flux-blue dark:group-hover:text-blue-400">{resource.name}</span><svg class="w-3.5 h-3.5 text-gray-400 group-hover:text-flux-blue dark:group-hover:text-blue-400 transition-colors ml-1 inline-block align-middle" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+        </button>
       </div>
 
       {/* Message */}

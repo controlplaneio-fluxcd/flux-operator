@@ -79,6 +79,32 @@ func (r *Router) getInventory(
 	obj unstructured.Unstructured,
 ) []InventoryEntry {
 	inventory := make([]InventoryEntry, 0)
+
+	// If kind is ArtifactGenerator, extract ExternalArtifacts from status.inventory[]
+	if obj.GetKind() == fluxcdv1.FluxArtifactGeneratorKind {
+		if artifacts, exists, _ := unstructured.NestedSlice(obj.Object, "status", "inventory"); exists && len(artifacts) > 0 {
+			for _, artifact := range artifacts {
+				if artifactMap, ok := artifact.(map[string]any); ok {
+					name, found := artifactMap["name"].(string)
+					if !found {
+						continue
+					}
+					namespace, found := artifactMap["namespace"].(string)
+					if !found {
+						continue
+					}
+					inventory = append(inventory, InventoryEntry{
+						Name:       name,
+						Namespace:  namespace,
+						Kind:       fluxcdv1.FluxExternalArtifactKind,
+						APIVersion: fmt.Sprintf("%s/%s", fluxcdv1.FluxSourceGroup, "v1"),
+					})
+				}
+			}
+			return inventory
+		}
+	}
+
 	// If the object has a status.inventory.entries field, extract the entries.
 	if entries, exists, _ := unstructured.NestedSlice(obj.Object, "status", "inventory", "entries"); exists && len(entries) > 0 {
 		for _, entry := range entries {

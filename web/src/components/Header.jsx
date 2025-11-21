@@ -21,8 +21,10 @@ export function Header() {
   const location = useLocation()
   const currentPath = location.path
 
-  // Check if we're in a search view (events or resources)
+  // Check if we're in a search view (events or resources) or resource dashboard
   const isSearchView = currentPath === '/events' || currentPath === '/resources'
+  const isResourceDashboard = currentPath.startsWith('/resource/')
+  const isNotDashboard = isSearchView || isResourceDashboard
 
   // Use appropriate icon based on theme
   const iconSrc = appliedTheme.value === themes.dark ? '/flux-icon-white.svg' : '/flux-icon-black.svg'
@@ -42,8 +44,8 @@ export function Header() {
   // Handle logo/title click
   const handleLogoClick = () => {
     quickSearchOpen.value = false
-    if (isSearchView) {
-      // Return to dashboard if in search view
+    if (isNotDashboard) {
+      // Return to dashboard if not on main dashboard
       location.route('/')
     } else {
       // Trigger report fetch if in dashboard view

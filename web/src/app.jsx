@@ -11,6 +11,7 @@ import { Header } from './components/Header'
 import { DashboardView } from './components/DashboardView'
 import { EventList } from './components/EventList'
 import { ResourceList } from './components/ResourceList'
+import { ResourceDashboardView } from './components/ResourceDashboardView'
 
 // Global signals for FluxReport data and application state
 // These signals are exported and used by child components throughout the app
@@ -210,6 +211,7 @@ function AppContent({ spec }) {
         <Route path="/" component={DashboardView} spec={spec} />
         <Route path="/events" component={EventList} />
         <Route path="/resources" component={ResourceList} />
+        <Route path="/resource/:kind/:namespace/:name" component={ResourceDashboardView} />
       </Router>
     </div>
   )

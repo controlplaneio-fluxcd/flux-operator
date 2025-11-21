@@ -22,15 +22,6 @@ vi.mock('../utils/fetch', () => ({
 
 import { fetchWithMock } from '../utils/fetch'
 
-// Mock ResourceList signals
-vi.mock('./ResourceList', () => ({
-  selectedResourceKind: { value: '' },
-  selectedResourceName: { value: '' },
-  selectedResourceNamespace: { value: '' },
-  selectedResourceStatus: { value: '' }
-}))
-
-import { selectedResourceKind, selectedResourceName, selectedResourceNamespace, selectedResourceStatus } from './ResourceList'
 
 describe('QuickSearch', () => {
   beforeEach(() => {
@@ -276,25 +267,13 @@ describe('QuickSearch', () => {
       ]
     })
 
-    it('should navigate to resources page when result is clicked', () => {
+    it('should navigate to resource dashboard when result is clicked', () => {
       render(<QuickSearch />)
 
       const resultButton = screen.getByText('flux-system/flux').closest('button')
       fireEvent.click(resultButton)
 
-      expect(mockRoute).toHaveBeenCalledWith('/resources?kind=FluxInstance&name=flux&namespace=flux-system')
-    })
-
-    it('should set filter signals when result is clicked', () => {
-      render(<QuickSearch />)
-
-      const resultButton = screen.getByText('flux-system/flux').closest('button')
-      fireEvent.click(resultButton)
-
-      expect(selectedResourceKind.value).toBe('FluxInstance')
-      expect(selectedResourceName.value).toBe('flux')
-      expect(selectedResourceNamespace.value).toBe('flux-system')
-      expect(selectedResourceStatus.value).toBe('')
+      expect(mockRoute).toHaveBeenCalledWith('/resource/FluxInstance/flux-system/flux')
     })
 
     it('should close search after navigating', () => {
