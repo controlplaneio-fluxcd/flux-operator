@@ -3,7 +3,58 @@
 
 package web
 
-import "strings"
+import (
+	"encoding/json"
+	"net/http"
+	"strings"
+
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+)
+
+// SearchHandler handles GET /api/v1/search requests and returns the status of Flux resources.
+// Results are filtered by name with wildcard support.
+// Example: /api/v1/search?&name=flux
+func (r *Router) SearchHandler(w http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodGet && req.Method != http.MethodHead {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse query parameters
+	queryParams := req.URL.Query()
+	name := queryParams.Get("name")
+
+	// if name does not contain wildcard, append * to perform partial match
+	if name != "" && !hasWildcard(name) {
+		name = "*" + name + "*"
+	}
+
+	// Limit search to applier kinds
+	kinds := []string{
+		fluxcdv1.FluxInstanceKind,
+		fluxcdv1.ResourceSetKind,
+		fluxcdv1.FluxKustomizationKind,
+		fluxcdv1.FluxHelmReleaseKind,
+	}
+
+	// Get resource status from the cluster using the request context
+	resources, err := r.GetResourcesStatus(req.Context(), kinds, name, "", "", 10)
+	if err != nil {
+		r.log.Error(err, "failed to get resources status", "url", req.URL.String(), "name", name)
+		resources = []ResourceStatus{}
+	}
+
+	// Set response headers
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+
+	// Encode and send the response
+	response := map[string]any{"resources": resources}
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
 
 // hasWildcard returns true if the pattern contains wildcard characters.
 func hasWildcard(pattern string) bool {

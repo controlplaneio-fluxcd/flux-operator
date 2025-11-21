@@ -12,6 +12,12 @@ vi.mock('./ThemeToggle', () => ({
   ThemeToggle: () => <div data-testid="theme-toggle">Theme Toggle</div>
 }))
 
+// Mock the QuickSearch component and signal
+vi.mock('./QuickSearch', () => ({
+  QuickSearch: () => <div data-testid="quick-search">Quick Search</div>,
+  quickSearchOpen: { value: false }
+}))
+
 // Mock fetchFluxReport function
 vi.mock('../app', async () => {
   const actual = await vi.importActual('../app')
@@ -142,7 +148,7 @@ describe('Header', () => {
       expect(button).toBeInTheDocument()
     })
 
-    it('should show search icon when in dashboard view', () => {
+    it('should show inbox icon when in dashboard view', () => {
       useLocation.mockReturnValue({
         path: '/',
         query: {},
@@ -151,9 +157,9 @@ describe('Header', () => {
 
       render(<Header />)
 
-      // Search icon has path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-      const searchIcon = document.querySelector('path[d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"]')
-      expect(searchIcon).toBeInTheDocument()
+      // Inbox icon has path starting with d="M20 13V6a2 2 0 00-2-2H6..."
+      const inboxIcon = document.querySelector('path[d^="M20 13V6"]')
+      expect(inboxIcon).toBeInTheDocument()
     })
 
     it('should show back arrow icon when in events view', () => {
@@ -248,6 +254,14 @@ describe('Header', () => {
       render(<Header />)
 
       expect(screen.getByTestId('theme-toggle')).toBeInTheDocument()
+    })
+  })
+
+  describe('Quick Search', () => {
+    it('should render QuickSearch component', () => {
+      render(<Header />)
+
+      expect(screen.getByTestId('quick-search')).toBeInTheDocument()
     })
   })
 

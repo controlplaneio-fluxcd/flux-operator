@@ -60,4 +60,20 @@
   .border-warning {
     @apply border-yellow-500 dark:border-yellow-400;
   }
+
+  /* Animation for QuickSearch slide-in */
+  .animate-slide-in-right {
+    animation: slideInRight 0.2s ease-out;
+  }
+
+  @keyframes slideInRight {
+    from {
+      opacity: 0;
+      transform: translateX(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
 }
