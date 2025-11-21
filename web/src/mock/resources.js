@@ -434,3 +434,44 @@ export const getMockResources = (endpoint) => {
 
   return { resources: filteredResources }
 }
+
+// Export function that filters resources for quick search (GET /api/v1/search?name=<term>)
+// Filters by name (contains, case-insensitive) and limits to applier kinds
+export const getMockSearchResults = (endpoint) => {
+  // Parse query params from endpoint URL
+  // eslint-disable-next-line no-undef
+  const url = new URL(endpoint, 'http://localhost')
+  const params = url.searchParams
+
+  const nameFilter = params.get('name')
+
+  // If no name filter, return empty results
+  if (!nameFilter) {
+    return { resources: [] }
+  }
+
+  // Applier kinds that the search endpoint returns (matches search.go)
+  const searchKinds = ['FluxInstance', 'ResourceSet', 'Kustomization', 'HelmRelease']
+
+  const searchTerm = nameFilter.toLowerCase()
+
+  // Filter resources: match name (contains) and limit to applier kinds
+  const filteredResources = mockResources.resources.filter(resource => {
+    // Only include applier kinds
+    if (!searchKinds.includes(resource.kind)) {
+      return false
+    }
+
+    // Filter by name with case-insensitive contains
+    if (!resource.name.toLowerCase().includes(searchTerm)) {
+      return false
+    }
+
+    return true
+  })
+
+  // Limit to 10 results per kind (matches backend limit)
+  const limitedResources = filteredResources.slice(0, 40) // 10 per kind * 4 kinds max
+
+  return { resources: limitedResources }
+}

@@ -63,7 +63,7 @@ func (r *Router) ResourcesHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// Get resource status from the cluster using the request context
-	resources, err := r.GetResourcesStatus(req.Context(), kinds, name, namespace, status)
+	resources, err := r.GetResourcesStatus(req.Context(), kinds, name, namespace, status, 2500)
 	if err != nil {
 		r.log.Error(err, "failed to get resources status", "url", req.URL.String(),
 			"kind", kind, "name", name, "namespace", namespace, "status", status)
@@ -115,17 +115,17 @@ type ResourceStatus struct {
 // GetResourcesStatus returns the status for the specified resource kinds and optional name in the given namespace.
 // If name is empty, returns the status for all resources of the specified kinds are returned.
 // Filters by status (Ready, Failed, Progressing, Suspended, Unknown) if provided.
-func (r *Router) GetResourcesStatus(ctx context.Context, kinds []string, name, namespace string, status string) ([]ResourceStatus, error) {
+func (r *Router) GetResourcesStatus(ctx context.Context, kinds []string, name, namespace string, status string, byKindLimit int) ([]ResourceStatus, error) {
 	var result []ResourceStatus
 
 	if len(kinds) == 0 {
 		return nil, errors.New("no resource kinds specified")
 	}
 
-	// Set limit based on number of kinds
-	limit := 5000
+	// Set query limit based on number of kinds
+	queryLimit := 5000
 	if len(kinds) > 1 {
-		limit = 2500
+		queryLimit = 2500
 	}
 
 	// Query resources for each kind in parallel
@@ -155,7 +155,7 @@ func (r *Router) GetResourcesStatus(ctx context.Context, kinds []string, name, n
 			}
 
 			listOpts := []client.ListOption{
-				client.Limit(limit),
+				client.Limit(queryLimit),
 			}
 			if namespace != "" {
 				listOpts = append(listOpts, client.InNamespace(namespace))
@@ -171,7 +171,7 @@ func (r *Router) GetResourcesStatus(ctx context.Context, kinds []string, name, n
 				return
 			}
 
-			mu.Lock()
+			var byKindResult []ResourceStatus
 			for _, obj := range list.Items {
 				// Filter by name using wildcard matching if needed
 				if hasWildcard(name) {
@@ -182,8 +182,18 @@ func (r *Router) GetResourcesStatus(ctx context.Context, kinds []string, name, n
 				}
 
 				rs := r.resourceStatusFromUnstructured(obj)
-				result = append(result, rs)
+				byKindResult = append(byKindResult, rs)
 			}
+
+			mu.Lock()
+			// cap the results to the specified limit
+			if byKindLimit > 0 && len(byKindResult) > byKindLimit {
+				byKindResult = byKindResult[:byKindLimit]
+			}
+
+			// append to the main result
+			result = append(result, byKindResult...)
+
 			mu.Unlock()
 		}(kind)
 	}
