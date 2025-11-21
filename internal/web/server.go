@@ -24,14 +24,19 @@ func StartServer(ctx context.Context,
 	kubeReader client.Reader,
 	kubeClient client.Client,
 	kubeConfig *rest.Config,
-	log logr.Logger) error {
+	log logr.Logger,
+	version, statusManager, namespace string,
+	reportInterval time.Duration) error {
 
 	// Create HTTP request multiplexer
 	mux := http.NewServeMux()
 
 	// Create router with embedded filesystem and register routes
-	router := NewRouter(mux, web.GetFS(), kubeReader, kubeClient, kubeConfig, log)
+	router := NewRouter(mux, web.GetFS(), kubeReader, kubeClient, kubeConfig, log, version, statusManager, namespace, reportInterval)
 	router.RegisterRoutes()
+
+	// Start background report cache refresh
+	router.StartReportCache(ctx)
 
 	// Create HTTP server with timeouts
 	addr := fmt.Sprintf(":%d", port)

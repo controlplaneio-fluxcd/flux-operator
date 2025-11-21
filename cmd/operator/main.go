@@ -361,8 +361,12 @@ func main() {
 				mgr.GetAPIReader(),
 				mgr.GetClient(),
 				mgr.GetConfig(),
-				ctrl.Log.WithName("web-server")); err != nil {
-				setupLog.Error(err, "artifact server error")
+				ctrl.Log.WithName("web-server"),
+				VERSION,
+				controllerName,
+				runtimeNamespace,
+				20*time.Second); err != nil {
+				setupLog.Error(err, "web server error")
 				os.Exit(1)
 			}
 		}()
