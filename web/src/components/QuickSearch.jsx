@@ -5,7 +5,6 @@ import { signal } from '@preact/signals'
 import { useEffect, useRef, useState } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
 import { fetchWithMock } from '../utils/fetch'
-import { selectedResourceKind, selectedResourceName, selectedResourceNamespace, selectedResourceStatus } from './ResourceList'
 
 // QuickSearch state signals
 export const quickSearchOpen = signal(false)
@@ -160,13 +159,9 @@ export function QuickSearch() {
     }
   }
 
-  // Handle result click - navigate to resources page with filters
+  // Handle result click - navigate to resource dashboard
   const handleResultClick = (resource) => {
-    selectedResourceKind.value = resource.kind
-    selectedResourceName.value = resource.name
-    selectedResourceNamespace.value = resource.namespace
-    selectedResourceStatus.value = ''
-    location.route(`/resources?kind=${encodeURIComponent(resource.kind)}&name=${encodeURIComponent(resource.name)}&namespace=${encodeURIComponent(resource.namespace)}`)
+    location.route(`/resource/${encodeURIComponent(resource.kind)}/${encodeURIComponent(resource.namespace)}/${encodeURIComponent(resource.name)}`)
     handleClose()
   }
 

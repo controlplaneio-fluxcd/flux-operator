@@ -5,7 +5,6 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/preact'
 import userEvent from '@testing-library/user-event'
 import { ResourceView } from './ResourceView'
-import { selectedResourceKind, selectedResourceName, selectedResourceNamespace, selectedResourceStatus } from './ResourceList'
 import { fetchWithMock } from '../utils/fetch'
 
 // Mock the fetch utility
@@ -69,12 +68,6 @@ describe('ResourceView component', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockRoute.mockClear()
-
-    // Reset resource filter signals
-    selectedResourceKind.value = ''
-    selectedResourceName.value = ''
-    selectedResourceNamespace.value = ''
-    selectedResourceStatus.value = ''
   })
 
   it('should render nothing when isExpanded is false', () => {
@@ -777,12 +770,8 @@ describe('ResourceView component', () => {
       // Click the GitRepository inventory item
       await user.click(gitRepoButton)
 
-      // Verify navigation
-      expect(mockRoute).toHaveBeenCalledWith('/resources?kind=GitRepository&name=podinfo&namespace=flux-system')
-      expect(selectedResourceKind.value).toBe('GitRepository')
-      expect(selectedResourceName.value).toBe('podinfo')
-      expect(selectedResourceNamespace.value).toBe('flux-system')
-      expect(selectedResourceStatus.value).toBe('')
+      // Verify navigation to resource dashboard
+      expect(mockRoute).toHaveBeenCalledWith('/resource/GitRepository/flux-system/podinfo')
     })
 
     it('should not make non-Flux resource inventory items clickable', async () => {
@@ -868,9 +857,8 @@ describe('ResourceView component', () => {
       const fluxButton = await screen.findByRole('button', { name: /FluxInstance\/flux/ })
       await user.click(fluxButton)
 
-      // Verify navigation without namespace param
-      expect(mockRoute).toHaveBeenCalledWith('/resources?kind=FluxInstance&name=flux')
-      expect(selectedResourceNamespace.value).toBe('')
+      // Verify navigation to resource dashboard (with empty namespace)
+      expect(mockRoute).toHaveBeenCalledWith('/resource/FluxInstance//flux')
     })
 
     it('should display navigation icon for clickable Flux resources', async () => {
