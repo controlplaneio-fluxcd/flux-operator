@@ -72,6 +72,35 @@ export function InventoryPanel({ resourceData, onNavigate }) {
     return false
   }, [resourceData])
 
+  // Sort inventory items
+  const sortedInventory = useMemo(() => {
+    return [...resourceData.status.inventory].sort((a, b) => {
+      // Non-namespaced items first
+      const aHasNamespace = !!a.namespace
+      const bHasNamespace = !!b.namespace
+
+      if (!aHasNamespace && bHasNamespace) return -1
+      if (aHasNamespace && !bHasNamespace) return 1
+
+      // Both non-namespaced: sort by kind, then name
+      if (!aHasNamespace && !bHasNamespace) {
+        if (a.kind !== b.kind) {
+          return a.kind.localeCompare(b.kind)
+        }
+        return a.name.localeCompare(b.name)
+      }
+
+      // Both namespaced: sort by namespace, then kind, then name
+      if (a.namespace !== b.namespace) {
+        return a.namespace.localeCompare(b.namespace)
+      }
+      if (a.kind !== b.kind) {
+        return a.kind.localeCompare(b.kind)
+      }
+      return a.name.localeCompare(b.name)
+    })
+  }, [resourceData])
+
   // Handle navigation to a resource
   const handleNavigate = (item) => {
     if (onNavigate) {
@@ -105,7 +134,8 @@ export function InventoryPanel({ resourceData, onNavigate }) {
           <div class="border-b border-gray-200 dark:border-gray-700 mb-4">
             <nav class="flex space-x-4">
               <TabButton active={activeTab === 'overview'} onClick={() => setActiveTab('overview')}>
-                Overview
+                <span class="sm:hidden">Info</span>
+                <span class="hidden sm:inline">Overview</span>
               </TabButton>
               <TabButton active={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')}>
                 Inventory
@@ -201,7 +231,7 @@ export function InventoryPanel({ resourceData, onNavigate }) {
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-                  {resourceData.status.inventory.map((item, idx) => {
+                  {sortedInventory.map((item, idx) => {
                     const isFluxResource = fluxKinds.includes(item.kind)
                     return (
                       <tr key={idx} class="hover:bg-gray-50 dark:hover:bg-gray-800">
@@ -209,12 +239,9 @@ export function InventoryPanel({ resourceData, onNavigate }) {
                           {isFluxResource ? (
                             <button
                               onClick={() => handleNavigate(item)}
-                              class="text-gray-900 dark:text-gray-100 hover:text-flux-blue dark:hover:text-blue-400 inline-flex items-center gap-1"
+                              class="text-flux-blue dark:text-blue-400 hover:underline"
                             >
                               {item.name}
-                              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                              </svg>
                             </button>
                           ) : (
                             <span class="text-gray-900 dark:text-gray-100">{item.name}</span>

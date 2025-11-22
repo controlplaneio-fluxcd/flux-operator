@@ -329,8 +329,9 @@ describe('ReconcilerPanel component', () => {
       expect(screen.getByText('Something went wrong')).toBeInTheDocument()
     })
 
-    // Check badges (Info/Warning)
-    expect(screen.getByText('Info')).toBeInTheDocument()
+    // Check badges (Info/Warning) - using getAllByText since "Info" also appears in tab label
+    const infoBadges = screen.getAllByText('Info')
+    expect(infoBadges.length).toBeGreaterThan(0)
     expect(screen.getByText('Warning')).toBeInTheDocument()
   })
 

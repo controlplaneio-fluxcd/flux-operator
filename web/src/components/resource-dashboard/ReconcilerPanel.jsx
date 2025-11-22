@@ -7,6 +7,7 @@ import { fetchWithMock } from '../../utils/fetch'
 import { formatTimestamp } from '../../utils/time'
 import { getControllerName } from '../../utils/constants'
 import { TabButton, YamlBlock, getEventBadgeClass } from './PanelComponents'
+import { HistoryTimeline } from './HistoryTimeline'
 
 export function ReconcilerPanel({ kind, name, namespace, resourceData, overviewData }) {
   // State
@@ -160,13 +161,20 @@ export function ReconcilerPanel({ kind, name, namespace, resourceData, overviewD
           <div class="border-b border-gray-200 dark:border-gray-700 mb-4">
             <nav class="flex space-x-4">
               <TabButton active={infoTab === 'overview'} onClick={() => setInfoTab('overview')}>
-                    Overview
+                <span class="sm:hidden">Info</span>
+                <span class="hidden sm:inline">Overview</span>
               </TabButton>
+              {resourceData?.status?.history && resourceData.status.history.length > 0 && (
+                <TabButton active={infoTab === 'history'} onClick={() => setInfoTab('history')}>
+                      History
+                </TabButton>
+              )}
               <TabButton active={infoTab === 'events'} onClick={() => setInfoTab('events')}>
                     Events
               </TabButton>
               <TabButton active={infoTab === 'spec'} onClick={() => setInfoTab('spec')}>
-                    Specification
+                <span class="sm:hidden">Spec</span>
+                <span class="hidden sm:inline">Specification</span>
               </TabButton>
               <TabButton active={infoTab === 'status'} onClick={() => setInfoTab('status')}>
                     Status
@@ -228,6 +236,14 @@ export function ReconcilerPanel({ kind, name, namespace, resourceData, overviewD
                 </div>
               )}
             </div>
+          )}
+
+          {/* History Tab */}
+          {infoTab === 'history' && (
+            <HistoryTimeline
+              history={resourceData?.status?.history}
+              kind={kind}
+            />
           )}
 
           {infoTab === 'spec' && <YamlBlock data={specYaml} />}
