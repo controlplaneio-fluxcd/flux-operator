@@ -6,12 +6,12 @@ import { signal } from '@preact/signals'
 import { LocationProvider, Router, Route, useLocation } from 'preact-iso'
 import { fetchWithMock } from './utils/fetch'
 import './utils/theme'
-import { ConnectionStatus } from './components/ConnectionStatus'
-import { Header } from './components/Header'
-import { DashboardView } from './components/DashboardView'
-import { EventList } from './components/EventList'
-import { ResourceList } from './components/ResourceList'
-import { ResourceDashboardView } from './components/ResourceDashboardView'
+import { ConnectionStatus } from './components/layout/ConnectionStatus'
+import { Header } from './components/layout/Header'
+import { ClusterPage } from './components/cluster-dashboard/ClusterPage'
+import { EventList } from './components/resource-browser/EventList'
+import { ResourceList } from './components/resource-browser/ResourceList'
+import { ResourcePage } from './components/resource-dashboard/ResourcePage'
 
 // Global signals for FluxReport data and application state
 // These signals are exported and used by child components throughout the app
@@ -208,10 +208,10 @@ function AppContent({ spec }) {
 
       {/* Main content area: route-based navigation */}
       <Router>
-        <Route path="/" component={DashboardView} spec={spec} />
+        <Route path="/" component={ClusterPage} spec={spec} />
         <Route path="/events" component={EventList} />
         <Route path="/resources" component={ResourceList} />
-        <Route path="/resource/:kind/:namespace/:name" component={ResourceDashboardView} />
+        <Route path="/resource/:kind/:namespace/:name" component={ResourcePage} />
       </Router>
     </div>
   )
