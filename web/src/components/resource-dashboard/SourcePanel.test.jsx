@@ -554,4 +554,297 @@ describe('SourcePanel component', () => {
     // Should still only have been called twice (not fetched again)
     expect(fetchWithMock).toHaveBeenCalledTimes(2)
   })
+
+  describe('Source data auto-refresh', () => {
+    it('should show loading spinner on initial load', async () => {
+      let resolvePromise
+      const promise = new Promise((resolve) => { resolvePromise = resolve })
+      fetchWithMock.mockReturnValue(promise)
+
+      render(
+        <SourcePanel
+          sourceRef={mockSourceRef}
+          namespace="flux-system"
+        />
+      )
+
+      // Should show loading spinner (component is expanded by default)
+      expect(screen.getByText('Loading source...')).toBeInTheDocument()
+      expect(document.querySelector('.animate-spin')).toBeInTheDocument()
+
+      // Resolve the promise
+      resolvePromise(mockSourceData)
+
+      // Wait for loading to complete
+      await waitFor(() => {
+        expect(screen.queryByText('Loading source...')).not.toBeInTheDocument()
+      })
+    })
+
+    it('should NOT show loading spinner during auto-refresh', async () => {
+      // Initial render
+      fetchWithMock.mockResolvedValueOnce(mockSourceData)
+      const { rerender } = render(
+        <SourcePanel
+          sourceRef={mockSourceRef}
+          namespace="flux-system"
+        />
+      )
+
+      // Wait for initial load to complete
+      await waitFor(() => {
+        expect(screen.getByText('Overview')).toBeInTheDocument()
+        expect(screen.queryByText('Loading source...')).not.toBeInTheDocument()
+      })
+
+      // Simulate parent auto-refresh by changing sourceRef
+      const updatedSourceRef = {
+        ...mockSourceRef,
+        message: 'New artifact fetched'
+      }
+
+      fetchWithMock.mockResolvedValueOnce(mockSourceData)
+
+      rerender(
+        <SourcePanel
+          sourceRef={updatedSourceRef}
+          namespace="flux-system"
+        />
+      )
+
+      // Loading spinner should NOT appear during auto-refresh
+      await waitFor(() => {
+        expect(fetchWithMock).toHaveBeenCalledTimes(2)
+      })
+
+      // Should never show loading spinner
+      expect(screen.queryByText('Loading source...')).not.toBeInTheDocument()
+      expect(document.querySelector('.animate-spin')).not.toBeInTheDocument()
+    })
+
+    it('should preserve existing data when auto-refresh fails', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      // Initial render
+      fetchWithMock.mockResolvedValueOnce(mockSourceData)
+      const { rerender } = render(
+        <SourcePanel
+          sourceRef={mockSourceRef}
+          namespace="flux-system"
+        />
+      )
+
+      // Wait for initial load
+      await waitFor(() => {
+        expect(screen.getByText('Overview')).toBeInTheDocument()
+        const textContent = document.body.textContent
+        expect(textContent).toContain('https://github.com/example/repo.git')
+      })
+
+      // Simulate parent auto-refresh with fetch error
+      const updatedSourceRef = {
+        ...mockSourceRef,
+        message: 'New artifact fetched'
+      }
+
+      fetchWithMock.mockRejectedValueOnce(new Error('Network error'))
+
+      rerender(
+        <SourcePanel
+          sourceRef={updatedSourceRef}
+          namespace="flux-system"
+        />
+      )
+
+      // Should preserve existing source data
+      await waitFor(() => {
+        const textContent = document.body.textContent
+        expect(textContent).toContain('https://github.com/example/repo.git')
+      })
+
+      // Should not show error or loading state
+      expect(screen.queryByText('Loading source...')).not.toBeInTheDocument()
+
+      consoleSpy.mockRestore()
+    })
+  })
+
+  describe('Events auto-refresh', () => {
+    it('should refetch events when sourceRef changes if Events tab is open', async () => {
+      const user = userEvent.setup()
+
+      // Initial render
+      fetchWithMock.mockResolvedValueOnce(mockSourceData)
+      const { rerender } = render(
+        <SourcePanel
+          sourceRef={mockSourceRef}
+          namespace="flux-system"
+        />
+      )
+
+      // Wait for initial load
+      await waitFor(() => {
+        expect(screen.getByText('Events')).toBeInTheDocument()
+      })
+
+      // Click on Events tab
+      fetchWithMock.mockResolvedValueOnce(mockEvents)
+      const eventsTab = screen.getByText('Events')
+      await user.click(eventsTab)
+
+      // Wait for events to load
+      await waitFor(() => {
+        expect(fetchWithMock).toHaveBeenCalledTimes(2)
+        expect(screen.getByText('Artifact up to date with remote revision')).toBeInTheDocument()
+      })
+
+      // Simulate parent auto-refresh by changing sourceRef
+      const updatedSourceRef = {
+        ...mockSourceRef,
+        message: 'New artifact fetched'
+      }
+
+      fetchWithMock.mockResolvedValueOnce(mockSourceData)
+      fetchWithMock.mockResolvedValueOnce({
+        events: [
+          {
+            type: 'Normal',
+            message: 'New event after refresh',
+            lastTimestamp: '2025-01-15T10:05:00Z'
+          }
+        ]
+      })
+
+      rerender(
+        <SourcePanel
+          sourceRef={updatedSourceRef}
+          namespace="flux-system"
+        />
+      )
+
+      // Should refetch source data and events
+      await waitFor(() => {
+        expect(fetchWithMock).toHaveBeenCalledTimes(4) // source, events, source (refresh), events (refresh)
+        expect(screen.getByText('New event after refresh')).toBeInTheDocument()
+      })
+    })
+
+    it('should NOT refetch events when sourceRef changes if Events tab is not open', async () => {
+      // Initial render
+      fetchWithMock.mockResolvedValueOnce(mockSourceData)
+      const { rerender } = render(
+        <SourcePanel
+          sourceRef={mockSourceRef}
+          namespace="flux-system"
+        />
+      )
+
+      // Wait for initial load (on Overview tab)
+      await waitFor(() => {
+        expect(screen.getByText('Overview')).toBeInTheDocument()
+      })
+
+      // Only source data should be fetched
+      expect(fetchWithMock).toHaveBeenCalledTimes(1)
+
+      // Simulate parent auto-refresh by changing sourceRef
+      const updatedSourceRef = {
+        ...mockSourceRef,
+        message: 'New artifact fetched'
+      }
+
+      fetchWithMock.mockResolvedValueOnce(mockSourceData)
+
+      rerender(
+        <SourcePanel
+          sourceRef={updatedSourceRef}
+          namespace="flux-system"
+        />
+      )
+
+      // Should only refetch source data, not events
+      await waitFor(() => {
+        expect(fetchWithMock).toHaveBeenCalledTimes(2) // source, source (refresh)
+      })
+    })
+
+    it('should NOT refetch events on initial mount when Events tab is opened', async () => {
+      const user = userEvent.setup()
+
+      fetchWithMock.mockResolvedValueOnce(mockSourceData)
+      render(
+        <SourcePanel
+          sourceRef={mockSourceRef}
+          namespace="flux-system"
+        />
+      )
+
+      // Wait for initial load
+      await waitFor(() => {
+        expect(screen.getByText('Events')).toBeInTheDocument()
+      })
+
+      // Click on Events tab
+      fetchWithMock.mockResolvedValueOnce(mockEvents)
+      const eventsTab = screen.getByText('Events')
+      await user.click(eventsTab)
+
+      // Events should be fetched only once (not twice due to auto-refresh effect)
+      await waitFor(() => {
+        expect(fetchWithMock).toHaveBeenCalledTimes(2) // source, events (NOT events again)
+      })
+    })
+
+    it('should preserve event data when refetch fails during auto-refresh', async () => {
+      const user = userEvent.setup()
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      // Initial render
+      fetchWithMock.mockResolvedValueOnce(mockSourceData)
+      const { rerender } = render(
+        <SourcePanel
+          sourceRef={mockSourceRef}
+          namespace="flux-system"
+        />
+      )
+
+      // Wait for initial load
+      await waitFor(() => {
+        expect(screen.getByText('Events')).toBeInTheDocument()
+      })
+
+      // Click on Events tab
+      fetchWithMock.mockResolvedValueOnce(mockEvents)
+      const eventsTab = screen.getByText('Events')
+      await user.click(eventsTab)
+
+      // Wait for events to load
+      await waitFor(() => {
+        expect(screen.getByText('Artifact up to date with remote revision')).toBeInTheDocument()
+      })
+
+      // Simulate parent auto-refresh with events fetch error
+      const updatedSourceRef = {
+        ...mockSourceRef,
+        message: 'New artifact fetched'
+      }
+
+      fetchWithMock.mockResolvedValueOnce(mockSourceData)
+      fetchWithMock.mockRejectedValueOnce(new Error('Network error'))
+
+      rerender(
+        <SourcePanel
+          sourceRef={updatedSourceRef}
+          namespace="flux-system"
+        />
+      )
+
+      // Should preserve existing events
+      await waitFor(() => {
+        expect(screen.getByText('Artifact up to date with remote revision')).toBeInTheDocument()
+      })
+
+      consoleSpy.mockRestore()
+    })
+  })
 })

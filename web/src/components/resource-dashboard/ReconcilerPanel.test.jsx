@@ -381,4 +381,221 @@ describe('ReconcilerPanel component', () => {
     expect(consoleSpy).toHaveBeenCalled()
     consoleSpy.mockRestore()
   })
+
+  describe('Events auto-refresh', () => {
+    const mockEvents = {
+      events: [
+        {
+          type: 'Normal',
+          reason: 'Reconciled',
+          message: 'Reconciliation finished',
+          lastTimestamp: '2023-01-01T12:05:00Z'
+        }
+      ]
+    }
+
+    it('should refetch events when resourceData changes if Events tab is open', async () => {
+      const user = userEvent.setup()
+
+      // Initial render
+      const { rerender } = render(
+        <ReconcilerPanel
+          kind="FluxInstance"
+          name="flux"
+          namespace="flux-system"
+          resourceData={mockResourceData}
+          overviewData={mockOverviewData}
+        />
+      )
+
+      // Click on Events tab
+      fetchWithMock.mockResolvedValueOnce(mockEvents)
+      const eventsTab = screen.getByText('Events')
+      await user.click(eventsTab)
+
+      // Wait for events to load
+      await waitFor(() => {
+        expect(fetchWithMock).toHaveBeenCalledTimes(1)
+        expect(screen.getByText('Reconciliation finished')).toBeInTheDocument()
+      })
+
+      // Simulate parent auto-refresh by changing resourceData
+      const updatedResourceData = {
+        ...mockResourceData,
+        status: {
+          ...mockResourceData.status,
+          conditions: [
+            {
+              type: 'Ready',
+              status: 'True',
+              reason: 'ReconciliationSucceeded',
+              message: 'Applied revision: main/9999999',
+              lastTransitionTime: '2023-01-01T13:00:00Z'
+            }
+          ]
+        }
+      }
+
+      fetchWithMock.mockResolvedValueOnce({
+        events: [
+          {
+            type: 'Normal',
+            reason: 'Reconciled',
+            message: 'New reconciliation after refresh',
+            lastTimestamp: '2023-01-01T13:05:00Z'
+          }
+        ]
+      })
+
+      rerender(
+        <ReconcilerPanel
+          kind="FluxInstance"
+          name="flux"
+          namespace="flux-system"
+          resourceData={updatedResourceData}
+          overviewData={mockOverviewData}
+        />
+      )
+
+      // Should refetch events
+      await waitFor(() => {
+        expect(fetchWithMock).toHaveBeenCalledTimes(2) // events, events (refresh)
+        expect(screen.getByText('New reconciliation after refresh')).toBeInTheDocument()
+      })
+    })
+
+    it('should NOT refetch events when resourceData changes if Events tab is not open', async () => {
+      // Initial render (on Overview tab)
+      const { rerender } = render(
+        <ReconcilerPanel
+          kind="FluxInstance"
+          name="flux"
+          namespace="flux-system"
+          resourceData={mockResourceData}
+          overviewData={mockOverviewData}
+        />
+      )
+
+      // No events should be fetched yet
+      expect(fetchWithMock).not.toHaveBeenCalled()
+
+      // Simulate parent auto-refresh by changing resourceData
+      const updatedResourceData = {
+        ...mockResourceData,
+        status: {
+          ...mockResourceData.status,
+          conditions: [
+            {
+              type: 'Ready',
+              status: 'True',
+              reason: 'ReconciliationSucceeded',
+              message: 'Applied revision: main/9999999',
+              lastTransitionTime: '2023-01-01T13:00:00Z'
+            }
+          ]
+        }
+      }
+
+      rerender(
+        <ReconcilerPanel
+          kind="FluxInstance"
+          name="flux"
+          namespace="flux-system"
+          resourceData={updatedResourceData}
+          overviewData={mockOverviewData}
+        />
+      )
+
+      // Should NOT fetch events
+      await waitFor(() => {
+        expect(fetchWithMock).not.toHaveBeenCalled()
+      })
+    })
+
+    it('should NOT refetch events on initial mount when Events tab is opened', async () => {
+      const user = userEvent.setup()
+
+      render(
+        <ReconcilerPanel
+          kind="FluxInstance"
+          name="flux"
+          namespace="flux-system"
+          resourceData={mockResourceData}
+          overviewData={mockOverviewData}
+        />
+      )
+
+      // Click on Events tab
+      fetchWithMock.mockResolvedValueOnce(mockEvents)
+      const eventsTab = screen.getByText('Events')
+      await user.click(eventsTab)
+
+      // Events should be fetched only once (not twice due to auto-refresh effect)
+      await waitFor(() => {
+        expect(fetchWithMock).toHaveBeenCalledTimes(1) // events (NOT events again)
+      })
+    })
+
+    it('should preserve event data when refetch fails during auto-refresh', async () => {
+      const user = userEvent.setup()
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      // Initial render
+      const { rerender } = render(
+        <ReconcilerPanel
+          kind="FluxInstance"
+          name="flux"
+          namespace="flux-system"
+          resourceData={mockResourceData}
+          overviewData={mockOverviewData}
+        />
+      )
+
+      // Click on Events tab
+      fetchWithMock.mockResolvedValueOnce(mockEvents)
+      const eventsTab = screen.getByText('Events')
+      await user.click(eventsTab)
+
+      // Wait for events to load
+      await waitFor(() => {
+        expect(screen.getByText('Reconciliation finished')).toBeInTheDocument()
+      })
+
+      // Simulate parent auto-refresh with events fetch error
+      const updatedResourceData = {
+        ...mockResourceData,
+        status: {
+          ...mockResourceData.status,
+          conditions: [
+            {
+              type: 'Ready',
+              status: 'True',
+              reason: 'ReconciliationSucceeded',
+              message: 'Applied revision: main/9999999',
+              lastTransitionTime: '2023-01-01T13:00:00Z'
+            }
+          ]
+        }
+      }
+
+      fetchWithMock.mockRejectedValueOnce(new Error('Network error'))
+
+      rerender(
+        <ReconcilerPanel
+          kind="FluxInstance"
+          name="flux"
+          namespace="flux-system"
+          resourceData={updatedResourceData}
+          overviewData={mockOverviewData}
+        />
+      )
+
+      // Should preserve existing events
+      await waitFor(() => {
+        expect(screen.getByText('Reconciliation finished')).toBeInTheDocument()
+      })
+
+      consoleSpy.mockRestore()
+    })
+  })
 })
