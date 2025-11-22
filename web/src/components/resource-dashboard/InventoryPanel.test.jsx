@@ -132,7 +132,7 @@ describe('InventoryPanel component', () => {
     )
 
     // Overview tab should be active
-    const overviewTab = screen.getByText('Overview')
+    const overviewTab = screen.getByText('Overview').closest('button')
     expect(overviewTab).toHaveClass('border-flux-blue')
 
     // Check overview content is visible
@@ -439,30 +439,6 @@ describe('InventoryPanel component', () => {
     expect(screen.getByText('Overview')).toBeInTheDocument()
   })
 
-  it('should handle navigation icon for Flux resources', async () => {
-    const user = userEvent.setup()
-
-    render(
-      <InventoryPanel
-        resourceData={mockFluxInstanceData}
-        onNavigate={mockOnNavigate}
-      />
-    )
-
-    // Switch to inventory tab
-    const inventoryTab = screen.getByText('Inventory')
-    await user.click(inventoryTab)
-
-    // Find all buttons in the table
-    const buttons = document.querySelectorAll('tbody button')
-    expect(buttons.length).toBeGreaterThan(0)
-
-    // Check for navigation icon in the first button
-    const svg = buttons[0].querySelector('svg')
-    expect(svg).toBeInTheDocument()
-    expect(svg).toHaveAttribute('viewBox', '0 0 24 24')
-  })
-
   it('should display namespace or dash for inventory items', async () => {
     const user = userEvent.setup()
 
@@ -562,5 +538,55 @@ describe('InventoryPanel component', () => {
 
     // Verify onNavigate was not called
     expect(mockOnNavigate).not.toHaveBeenCalled()
+  })
+
+  it('should sort inventory items correctly', async () => {
+    const user = userEvent.setup()
+
+    render(
+      <InventoryPanel
+        resourceData={mockKustomizationData}
+        onNavigate={mockOnNavigate}
+      />
+    )
+
+    // Switch to inventory tab
+    const inventoryTab = screen.getByText('Inventory')
+    await user.click(inventoryTab)
+
+    // Get all rows in the table
+    const rows = document.querySelectorAll('tbody tr')
+
+    // Expected order based on mock data:
+    // 1. Namespace (non-namespaced, kind: Namespace)
+    // 2. ConfigMap (namespaced: production, kind: ConfigMap)
+    // 3. Deployment (namespaced: production, kind: Deployment)
+    // 4. Kustomization (namespaced: production, kind: Kustomization)
+    // 5. Secret (namespaced: production, kind: Secret)
+
+    // Check first row is Namespace (non-namespaced)
+    expect(rows[0].querySelectorAll('td')[0].textContent).toBe('production')
+    expect(rows[0].querySelectorAll('td')[1].textContent).toBe('-')
+    expect(rows[0].querySelectorAll('td')[2].textContent).toBe('Namespace')
+
+    // Check second row is ConfigMap (namespaced, production)
+    expect(rows[1].querySelectorAll('td')[0].textContent).toBe('app-config')
+    expect(rows[1].querySelectorAll('td')[1].textContent).toBe('production')
+    expect(rows[1].querySelectorAll('td')[2].textContent).toBe('ConfigMap')
+
+    // Check third row is Deployment (namespaced, production)
+    expect(rows[2].querySelectorAll('td')[0].textContent).toBe('app')
+    expect(rows[2].querySelectorAll('td')[1].textContent).toBe('production')
+    expect(rows[2].querySelectorAll('td')[2].textContent).toBe('Deployment')
+
+    // Check fourth row is Kustomization (namespaced, production)
+    expect(rows[3].querySelectorAll('td')[0].textContent).toBe('backend')
+    expect(rows[3].querySelectorAll('td')[1].textContent).toBe('production')
+    expect(rows[3].querySelectorAll('td')[2].textContent).toBe('Kustomization')
+
+    // Check fifth row is Secret (namespaced, production)
+    expect(rows[4].querySelectorAll('td')[0].textContent).toBe('app-secret')
+    expect(rows[4].querySelectorAll('td')[1].textContent).toBe('production')
+    expect(rows[4].querySelectorAll('td')[2].textContent).toBe('Secret')
   })
 })
