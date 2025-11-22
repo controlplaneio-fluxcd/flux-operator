@@ -5,7 +5,7 @@ import { useState, useEffect } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
 import { fetchWithMock } from '../../utils/fetch'
 import { appliedTheme } from '../../utils/theme'
-import { formatTimestamp } from '../../utils/time'
+import { formatTime } from '../../utils/time'
 import { ReconcilerPanel } from './ReconcilerPanel'
 import { SourcePanel } from './SourcePanel'
 import { InventoryPanel } from './InventoryPanel'
@@ -88,6 +88,7 @@ export function ResourcePage({ kind, namespace, name }) {
   const [overviewData, setOverviewData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [lastUpdatedAt, setLastUpdatedAt] = useState(null)
 
   // Dynamically load Prism theme
   useEffect(() => {
@@ -110,7 +111,11 @@ export function ResourcePage({ kind, namespace, name }) {
   // Fetch data
   useEffect(() => {
     const fetchData = async () => {
-      setLoading(true)
+      // Only show loading spinner on initial load (when no data exists)
+      if (!resourceData) {
+        setLoading(true)
+      }
+      // Clear error before fetching (will be set again if fetch fails)
       setError(null)
 
       const params = new URLSearchParams({ kind, name, namespace })
@@ -131,21 +136,30 @@ export function ResourcePage({ kind, namespace, name }) {
 
         setResourceData(resourceResp)
         setOverviewData(overviewResp)
+        setLastUpdatedAt(new Date())
+        setError(null) // Clear error on success
       } catch (err) {
         console.error('Failed to fetch resource data:', err)
         setError(err.message)
+        // Don't clear existing data on error - keep showing stale data
       } finally {
         setLoading(false)
       }
     }
 
+    // Fetch data immediately
     fetchData()
+
+    // Setup auto-refresh interval (30 seconds)
+    const interval = setInterval(fetchData, 30000)
+
+    // Cleanup interval on unmount or when dependencies change
+    return () => clearInterval(interval)
   }, [kind, namespace, name])
 
   // Derived data
   const status = overviewData?.status || 'Unknown'
   const statusInfo = getStatusInfo(status)
-  const lastReconciled = overviewData?.lastReconciled || resourceData?.status?.conditions?.[0]?.lastTransitionTime
   const hasSource = resourceData?.status?.sourceRef
 
   // Navigate to another resource
@@ -154,8 +168,8 @@ export function ResourcePage({ kind, namespace, name }) {
     location.route(`/resource/${encodeURIComponent(item.kind)}/${encodeURIComponent(ns)}/${encodeURIComponent(item.name)}`)
   }
 
-  // Loading state
-  if (loading) {
+  // Loading state - only show spinner on initial load when no data exists
+  if (loading && !resourceData) {
     return (
       <main data-testid="resource-dashboard-view" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
         <div class="flex items-center justify-center p-8">
@@ -166,8 +180,9 @@ export function ResourcePage({ kind, namespace, name }) {
     )
   }
 
-  // Error state
-  if (error) {
+  // Error state - only show error screen when no data exists (initial load failure)
+  // On auto-refresh failure, keep showing stale data
+  if (error && !resourceData) {
     return (
       <main data-testid="resource-dashboard-view" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
         <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-4">
@@ -208,8 +223,8 @@ export function ResourcePage({ kind, namespace, name }) {
               <span class="text-sm text-gray-500 dark:text-gray-400">{namespace} namespace</span>
             </div>
             <div class="hidden md:block text-right flex-shrink-0">
-              <div class="text-sm text-gray-600 dark:text-gray-400">Last Reconciled</div>
-              <div class="text-lg font-semibold text-gray-900 dark:text-white">{lastReconciled ? formatTimestamp(lastReconciled) : '-'}</div>
+              <div class="text-sm text-gray-600 dark:text-gray-400">Last Updated</div>
+              <div class="text-lg font-semibold text-gray-900 dark:text-white">{formatTime(lastUpdatedAt)}</div>
             </div>
           </div>
         </div>
