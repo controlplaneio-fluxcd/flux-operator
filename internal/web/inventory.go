@@ -74,6 +74,7 @@ type HelmHistory struct {
 // getInventory returns the inventory of Kubernetes object entries that are managed by the Flux.
 // In the case of a HelmRelease, it extracts the metadata from the Helm storage secret belonging
 // to the latest release version.
+// nolint: gocyclo
 func (r *Router) getInventory(
 	ctx context.Context,
 	obj unstructured.Unstructured,

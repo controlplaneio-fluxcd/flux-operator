@@ -1,0 +1,243 @@
+// Copyright 2025 Stefan Prodan.
+// SPDX-License-Identifier: AGPL-3.0
+
+import { useState, useEffect } from 'preact/hooks'
+import { useLocation } from 'preact-iso'
+import { fetchWithMock } from '../../utils/fetch'
+import { appliedTheme } from '../../utils/theme'
+import { formatTimestamp } from '../../utils/time'
+import { ReconcilerPanel } from './ReconcilerPanel'
+import { SourcePanel } from './SourcePanel'
+import { InventoryPanel } from './InventoryPanel'
+
+// Import Prism themes as URLs for dynamic loading
+import prismLight from 'prismjs/themes/prism.css?url'
+import prismDark from 'prismjs/themes/prism-tomorrow.css?url'
+
+/**
+ * Get status styling info
+ */
+function getStatusInfo(status) {
+  switch (status) {
+  case 'Ready':
+    return {
+      color: 'text-success',
+      bgColor: 'bg-green-50',
+      borderColor: 'border-success',
+      icon: (
+        <svg class="w-10 h-10 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+        </svg>
+      )
+    }
+  case 'Failed':
+    return {
+      color: 'text-danger',
+      bgColor: 'bg-red-50',
+      borderColor: 'border-danger',
+      icon: (
+        <svg class="w-10 h-10 text-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      )
+    }
+  case 'Progressing':
+    return {
+      color: 'text-blue-600 dark:text-blue-400',
+      bgColor: 'bg-blue-50',
+      borderColor: 'border-blue-500',
+      icon: (
+        <svg class="w-10 h-10 text-blue-600 dark:text-blue-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        </svg>
+      )
+    }
+  case 'Suspended':
+    return {
+      color: 'text-yellow-600 dark:text-yellow-400',
+      bgColor: 'bg-yellow-50',
+      borderColor: 'border-yellow-500',
+      icon: (
+        <svg class="w-10 h-10 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      )
+    }
+  default:
+    return {
+      color: 'text-gray-600 dark:text-gray-400',
+      bgColor: 'bg-gray-50',
+      borderColor: 'border-gray-400',
+      icon: (
+        <svg class="w-10 h-10 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      )
+    }
+  }
+}
+
+/**
+ * ResourcePage - Full page dashboard for a single Flux resource
+ */
+export function ResourcePage({ kind, namespace, name }) {
+  const location = useLocation()
+
+  // State
+  const [resourceData, setResourceData] = useState(null)
+  const [overviewData, setOverviewData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  // Dynamically load Prism theme
+  useEffect(() => {
+    const linkId = 'prism-theme-link'
+    const existingLink = document.getElementById(linkId)
+    if (existingLink) existingLink.remove()
+
+    const link = document.createElement('link')
+    link.id = linkId
+    link.rel = 'stylesheet'
+    link.href = appliedTheme.value === 'dark' ? prismDark : prismLight
+    document.head.appendChild(link)
+
+    return () => {
+      const link = document.getElementById(linkId)
+      if (link) link.remove()
+    }
+  }, [appliedTheme.value])
+
+  // Fetch data
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true)
+      setError(null)
+
+      const params = new URLSearchParams({ kind, name, namespace })
+
+      try {
+        const [resourceResp, overviewResp] = await Promise.all([
+          fetchWithMock({
+            endpoint: `/api/v1/resource?${params.toString()}`,
+            mockPath: '../mock/resource',
+            mockExport: 'getMockResource'
+          }),
+          fetchWithMock({
+            endpoint: `/api/v1/resources?${params.toString()}`,
+            mockPath: '../mock/resources',
+            mockExport: 'getMockResources'
+          }).then(data => data.resources?.[0] || null)
+        ])
+
+        setResourceData(resourceResp)
+        setOverviewData(overviewResp)
+      } catch (err) {
+        console.error('Failed to fetch resource data:', err)
+        setError(err.message)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [kind, namespace, name])
+
+  // Derived data
+  const status = overviewData?.status || 'Unknown'
+  const statusInfo = getStatusInfo(status)
+  const lastReconciled = overviewData?.lastReconciled || resourceData?.status?.conditions?.[0]?.lastTransitionTime
+  const hasSource = resourceData?.status?.sourceRef
+
+  // Navigate to another resource
+  const handleNavigate = (item) => {
+    const ns = item.namespace || namespace
+    location.route(`/resource/${encodeURIComponent(item.kind)}/${encodeURIComponent(ns)}/${encodeURIComponent(item.name)}`)
+  }
+
+  // Loading state
+  if (loading) {
+    return (
+      <main data-testid="resource-dashboard-view" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
+        <div class="flex items-center justify-center p-8">
+          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-flux-blue"></div>
+          <span class="ml-3 text-gray-600 dark:text-gray-400">Loading resource...</span>
+        </div>
+      </main>
+    )
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <main data-testid="resource-dashboard-view" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
+        <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-4">
+          <p class="text-sm text-red-800 dark:text-red-200">Failed to load resource: {error}</p>
+        </div>
+      </main>
+    )
+  }
+
+  // Not found state
+  if (!resourceData) {
+    return (
+      <main data-testid="resource-dashboard-view" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
+        <div class="card text-center py-8">
+          <p class="text-gray-600 dark:text-gray-400">Resource not found: {kind}/{namespace}/{name}</p>
+        </div>
+      </main>
+    )
+  }
+
+  return (
+    <main data-testid="resource-dashboard-view" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
+      <div class="space-y-6">
+
+        {/* Header */}
+        <div class={`card ${statusInfo.bgColor} dark:bg-opacity-20 border-2 ${statusInfo.borderColor}`}>
+          <div class="flex items-center space-x-4">
+            <div class="flex-shrink-0">
+              <div class={`w-16 h-16 rounded-full ${statusInfo.bgColor} dark:bg-opacity-30 flex items-center justify-center`}>
+                {statusInfo.icon}
+              </div>
+            </div>
+            <div class="flex-grow min-w-0">
+              <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">{kind}</span>
+              <h1 class="text-2xl font-bold text-gray-900 dark:text-white font-mono break-all">
+                {name}
+              </h1>
+              <span class="text-sm text-gray-500 dark:text-gray-400">{namespace} namespace</span>
+            </div>
+            <div class="hidden md:block text-right flex-shrink-0">
+              <div class="text-sm text-gray-600 dark:text-gray-400">Last Reconciled</div>
+              <div class="text-lg font-semibold text-gray-900 dark:text-white">{lastReconciled ? formatTimestamp(lastReconciled) : '-'}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Reconciler Section */}
+        <ReconcilerPanel
+          kind={kind}
+          name={name}
+          namespace={namespace}
+          resourceData={resourceData}
+          overviewData={overviewData}
+        />
+
+        {/* Managed Objects Section */}
+        <InventoryPanel
+          resourceData={resourceData}
+          onNavigate={handleNavigate}
+        />
+
+        {/* Source Section */}
+        {hasSource && (
+          <SourcePanel
+            sourceRef={resourceData.status.sourceRef}
+            namespace={namespace}
+          />
+        )}
+
+      </div>
+    </main>
+  )
+}

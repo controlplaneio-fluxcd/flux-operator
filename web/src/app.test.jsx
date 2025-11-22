@@ -26,28 +26,28 @@ vi.mock('preact-iso', () => ({
 }))
 
 // Mock child components
-vi.mock('./components/ConnectionStatus', () => ({
+vi.mock('./components/layout/ConnectionStatus', () => ({
   ConnectionStatus: () => <div data-testid="connection-status">ConnectionStatus</div>
 }))
 
-vi.mock('./components/Header', () => ({
+vi.mock('./components/layout/Header', () => ({
   Header: () => <div data-testid="header">Header</div>
 }))
 
-vi.mock('./components/DashboardView', () => ({
-  DashboardView: ({ spec }) => <div data-testid="dashboard-view">DashboardView: {JSON.stringify(spec)}</div>
+vi.mock('./components/cluster-dashboard/ClusterPage', () => ({
+  ClusterPage: ({ spec }) => <div data-testid="dashboard-view">ClusterPage: {JSON.stringify(spec)}</div>
 }))
 
-vi.mock('./components/EventList', () => ({
+vi.mock('./components/resource-browser/EventList', () => ({
   EventList: () => <div data-testid="event-list">EventList</div>
 }))
 
-vi.mock('./components/ResourceList', () => ({
+vi.mock('./components/resource-browser/ResourceList', () => ({
   ResourceList: () => <div data-testid="resource-list">ResourceList</div>
 }))
 
-vi.mock('./components/ResourceDashboardView', () => ({
-  ResourceDashboardView: () => <div data-testid="resource-dashboard-view">ResourceDashboardView</div>
+vi.mock('./components/resource-dashboard/ResourcePage', () => ({
+  ResourcePage: () => <div data-testid="resource-page">ResourcePage</div>
 }))
 
 // Mock fetchWithMock utility
@@ -257,7 +257,7 @@ describe('app.jsx', () => {
       }
     }
 
-    it('should render DashboardView on root path', () => {
+    it('should render ClusterPage on root path', () => {
       reportLoading.value = false
       reportData.value = mockReport
 
@@ -266,7 +266,7 @@ describe('app.jsx', () => {
       expect(screen.getByTestId('dashboard-view')).toBeInTheDocument()
     })
 
-    it('should pass spec to DashboardView', () => {
+    it('should pass spec to ClusterPage', () => {
       reportLoading.value = false
       reportData.value = mockReport
 
