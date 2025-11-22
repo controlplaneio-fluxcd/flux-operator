@@ -1,7 +1,7 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { useState, useMemo, useEffect } from 'preact/hooks'
+import { useState, useMemo, useEffect, useRef } from 'preact/hooks'
 import { useSignal } from '@preact/signals'
 import { useLocation } from 'preact-iso'
 import { fetchWithMock } from '../../utils/fetch'
@@ -23,6 +23,9 @@ export function SourcePanel({ sourceRef, namespace }) {
   const [sourceEventsLoaded, setSourceEventsLoaded] = useState(false)
   const [loading, setLoading] = useState(true)
 
+  // Track initial mount to avoid refetching on first render
+  const isInitialMount = useRef(true)
+
   // Tab state
   const [sourceTab, setSourceTab] = useState('overview')
 
@@ -32,7 +35,10 @@ export function SourcePanel({ sourceRef, namespace }) {
   // Fetch source data when component mounts
   useEffect(() => {
     const fetchSourceData = async () => {
-      setLoading(true)
+      // Only show loading spinner on initial load (when no data exists)
+      if (!sourceData) {
+        setLoading(true)
+      }
 
       const sourceParams = new URLSearchParams({
         kind: sourceRef.kind,
@@ -74,7 +80,7 @@ export function SourcePanel({ sourceRef, namespace }) {
             mockPath: '../mock/events',
             mockExport: 'getMockEvents'
           })
-          setSourceEventsData(eventsResp.events || [])
+          setSourceEventsData(eventsResp?.events || [])
           setSourceEventsLoaded(true)
         } catch (err) {
           console.error('Failed to fetch source events:', err)
@@ -86,6 +92,40 @@ export function SourcePanel({ sourceRef, namespace }) {
       fetchSourceEvents()
     }
   }, [sourceTab, sourceEventsLoaded, sourceEventsLoading, sourceRef, namespace])
+
+  // Refetch events when sourceRef changes (auto-refresh from parent) if Events tab is open
+  useEffect(() => {
+    // Skip on initial mount
+    if (isInitialMount.current) {
+      isInitialMount.current = false
+      return
+    }
+
+    // Only refetch if Events tab is open and events were previously loaded
+    if (sourceTab === 'events' && sourceEventsLoaded && !sourceEventsLoading) {
+      const refetchSourceEvents = async () => {
+        // Don't set loading state during auto-refresh to avoid showing spinner
+        const params = new URLSearchParams({
+          kind: sourceRef.kind,
+          name: sourceRef.name,
+          namespace: sourceRef.namespace || namespace
+        })
+
+        try {
+          const eventsResp = await fetchWithMock({
+            endpoint: `/api/v1/events?${params.toString()}`,
+            mockPath: '../mock/events',
+            mockExport: 'getMockEvents'
+          })
+          setSourceEventsData(eventsResp?.events || [])
+        } catch (err) {
+          console.error('Failed to refetch source events:', err)
+        }
+      }
+
+      refetchSourceEvents()
+    }
+  }, [sourceRef, namespace])
 
   // Memoized YAML data
   const sourceSpecYaml = useMemo(() => {
@@ -187,15 +227,15 @@ export function SourcePanel({ sourceRef, namespace }) {
                   </div>
 
                   {/* ID */}
-                  <div class="flex items-baseline space-x-2">
+                  <div class="flex flex-col md:flex-row md:items-baseline space-y-2 md:space-y-0 md:space-x-2">
                     <dt class="text-sm text-gray-500 dark:text-gray-400">ID:</dt>
                     <dd class="text-sm text-gray-900 dark:text-white">
                       <button
                         onClick={() => location.route(`/resource/${encodeURIComponent(sourceRef.kind)}/${encodeURIComponent(sourceRef.namespace || namespace)}/${encodeURIComponent(sourceRef.name)}`)}
-                        class="text-gray-900 dark:text-gray-100 hover:text-flux-blue dark:hover:text-blue-400 inline-flex items-center gap-1"
+                        class="text-gray-900 dark:text-gray-100 hover:text-flux-blue dark:hover:text-blue-400 inline-flex items-center gap-1 break-all"
                       >
                         {sourceRef.kind}/{sourceRef.namespace || namespace}/{sourceRef.name}
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                         </svg>
                       </button>
@@ -204,7 +244,7 @@ export function SourcePanel({ sourceRef, namespace }) {
 
                   {/* URL */}
                   {sourceRef.url && (
-                    <div class="flex items-baseline space-x-2">
+                    <div class="flex flex-col md:flex-row md:items-baseline space-y-2 md:space-y-0 md:space-x-2">
                       <dt class="text-sm text-gray-500 dark:text-gray-400">URL:</dt>
                       <dd class="text-sm text-gray-900 dark:text-white break-all">{sourceRef.url}</dd>
                     </div>
@@ -212,7 +252,7 @@ export function SourcePanel({ sourceRef, namespace }) {
 
                   {/* Origin URL */}
                   {sourceRef.originURL && (
-                    <div class="flex items-baseline space-x-2">
+                    <div class="flex flex-col md:flex-row md:items-baseline space-y-2 md:space-y-0 md:space-x-2">
                       <dt class="text-sm text-gray-500 dark:text-gray-400">Origin URL:</dt>
                       <dd class="text-sm text-gray-900 dark:text-white break-all">{sourceRef.originURL}</dd>
                     </div>
@@ -220,7 +260,7 @@ export function SourcePanel({ sourceRef, namespace }) {
 
                   {/* Origin Revision */}
                   {sourceRef.originRevision && (
-                    <div class="flex items-baseline space-x-2">
+                    <div class="flex flex-col md:flex-row md:items-baseline space-y-2 md:space-y-0 md:space-x-2">
                       <dt class="text-sm text-gray-500 dark:text-gray-400">Origin Revision:</dt>
                       <dd class="text-sm text-gray-900 dark:text-white break-all">{sourceRef.originRevision}</dd>
                     </div>
@@ -244,7 +284,7 @@ export function SourcePanel({ sourceRef, namespace }) {
 
                   {/* Fetch result */}
                   {sourceRef.message && (
-                    <div class="flex items-baseline space-x-2">
+                    <div class="flex flex-col md:flex-row md:items-baseline space-y-2 md:space-y-0 md:space-x-2">
                       <dt class="text-sm text-gray-500 dark:text-gray-400">Fetch result:</dt>
                       <dd class="text-sm text-gray-700 dark:text-gray-300">
                         <pre class="whitespace-pre-wrap break-words font-sans">{sourceRef.message}</pre>

@@ -1,7 +1,7 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { useState, useMemo, useEffect } from 'preact/hooks'
+import { useState, useMemo, useEffect, useRef } from 'preact/hooks'
 import { useSignal } from '@preact/signals'
 import { fetchWithMock } from '../../utils/fetch'
 import { formatTimestamp } from '../../utils/time'
@@ -14,6 +14,9 @@ export function ReconcilerPanel({ kind, name, namespace, resourceData, overviewD
   const [eventsData, setEventsData] = useState([])
   const [eventsLoading, setEventsLoading] = useState(false)
   const [eventsLoaded, setEventsLoaded] = useState(false)
+
+  // Track initial mount to avoid refetching on first render
+  const isInitialMount = useRef(true)
 
   // Collapsible state
   const isInfoExpanded = useSignal(true)
@@ -85,7 +88,7 @@ export function ReconcilerPanel({ kind, name, namespace, resourceData, overviewD
             mockPath: '../mock/events',
             mockExport: 'getMockEvents'
           })
-          setEventsData(eventsResp.events || [])
+          setEventsData(eventsResp?.events || [])
           setEventsLoaded(true)
         } catch (err) {
           console.error('Failed to fetch events:', err)
@@ -97,6 +100,38 @@ export function ReconcilerPanel({ kind, name, namespace, resourceData, overviewD
       fetchEvents()
     }
   }, [infoTab, eventsLoaded, eventsLoading, kind, namespace, name])
+
+  // Refetch events when resource data changes (auto-refresh) if Events tab is open
+  useEffect(() => {
+    // Skip if resource data hasn't been loaded yet or on initial mount
+    if (isInitialMount.current || !resourceData) {
+      if (isInitialMount.current && resourceData) {
+        isInitialMount.current = false
+      }
+      return
+    }
+
+    // Only refetch if Events tab is open and events were previously loaded
+    if (infoTab === 'events' && eventsLoaded && !eventsLoading) {
+      const refetchEvents = async () => {
+        // Don't set loading state during auto-refresh to avoid showing spinner
+        const params = new URLSearchParams({ kind, name, namespace })
+
+        try {
+          const eventsResp = await fetchWithMock({
+            endpoint: `/api/v1/events?${params.toString()}`,
+            mockPath: '../mock/events',
+            mockExport: 'getMockEvents'
+          })
+          setEventsData(eventsResp?.events || [])
+        } catch (err) {
+          console.error('Failed to refetch events:', err)
+        }
+      }
+
+      refetchEvents()
+    }
+  }, [resourceData])
 
   return (
     <div class="card p-0" data-testid="reconciler-panel">
