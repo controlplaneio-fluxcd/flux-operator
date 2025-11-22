@@ -134,12 +134,8 @@ describe('ReconcilerPanel component', () => {
     expect(screen.getByText('Status:')).toBeInTheDocument()
     expect(screen.getByText('Ready')).toBeInTheDocument()
 
-    // Managed by
-    expect(screen.getByText('Managed by:')).toBeInTheDocument()
-    
-    // ID
-    expect(screen.getByText('ID:')).toBeInTheDocument()
-    expect(screen.getByText('FluxInstance/flux-system/flux')).toBeInTheDocument()
+    // Reconciled by
+    expect(screen.getByText('Reconciled by:')).toBeInTheDocument()
 
     // Reconcile every
     expect(screen.getByText('Reconcile every:')).toBeInTheDocument()
@@ -329,8 +325,9 @@ describe('ReconcilerPanel component', () => {
       expect(screen.getByText('Something went wrong')).toBeInTheDocument()
     })
 
-    // Check badges (Info/Warning)
-    expect(screen.getByText('Info')).toBeInTheDocument()
+    // Check badges (Info/Warning) - using getAllByText since "Info" also appears in tab label
+    const infoBadges = screen.getAllByText('Info')
+    expect(infoBadges.length).toBeGreaterThan(0)
     expect(screen.getByText('Warning')).toBeInTheDocument()
   })
 

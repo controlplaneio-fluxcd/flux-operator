@@ -153,7 +153,7 @@ describe('SourcePanel component', () => {
     const textContent = document.body.textContent
     expect(textContent).toContain('Status:')
     expect(textContent).toContain('Ready')
-    expect(textContent).toContain('Managed by:')
+    expect(textContent).toContain('Reconciled by:')
     expect(textContent).toContain('source-controller')
     expect(textContent).toContain('ID:')
     expect(textContent).toContain('GitRepository/flux-system/flux-system')

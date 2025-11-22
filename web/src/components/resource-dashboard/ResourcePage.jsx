@@ -108,13 +108,17 @@ export function ResourcePage({ kind, namespace, name }) {
     }
   }, [appliedTheme.value])
 
+  // Reset state when navigating to a different resource
+  useEffect(() => {
+    setResourceData(null)
+    setOverviewData(null)
+    setLoading(true)
+    setError(null)
+  }, [kind, namespace, name])
+
   // Fetch data
   useEffect(() => {
     const fetchData = async () => {
-      // Only show loading spinner on initial load (when no data exists)
-      if (!resourceData) {
-        setLoading(true)
-      }
       // Clear error before fetching (will be set again if fetch fails)
       setError(null)
 

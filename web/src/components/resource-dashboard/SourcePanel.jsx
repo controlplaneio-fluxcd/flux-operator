@@ -181,7 +181,8 @@ export function SourcePanel({ sourceRef, namespace }) {
               <div class="border-b border-gray-200 dark:border-gray-700 mb-4">
                 <nav class="flex space-x-4">
                   <TabButton active={sourceTab === 'overview'} onClick={() => setSourceTab('overview')}>
-                    Overview
+                    <span class="sm:hidden">Info</span>
+                    <span class="hidden sm:inline">Overview</span>
                   </TabButton>
                   <TabButton active={sourceTab === 'events'} onClick={() => setSourceTab('events')}>
                     Events
@@ -189,7 +190,8 @@ export function SourcePanel({ sourceRef, namespace }) {
                   {sourceData && (
                     <>
                       <TabButton active={sourceTab === 'spec'} onClick={() => setSourceTab('spec')}>
-                        Specification
+                        <span class="sm:hidden">Spec</span>
+                        <span class="hidden sm:inline">Specification</span>
                       </TabButton>
                       <TabButton active={sourceTab === 'status'} onClick={() => setSourceTab('status')}>
                         Status
@@ -220,9 +222,9 @@ export function SourcePanel({ sourceRef, namespace }) {
                     </div>
                   )}
 
-                  {/* Managed by */}
+                  {/* Reconciled by */}
                   <div class="flex items-baseline space-x-2">
-                    <dt class="text-sm text-gray-500 dark:text-gray-400">Managed by:</dt>
+                    <dt class="text-sm text-gray-500 dark:text-gray-400">Reconciled by:</dt>
                     <dd class="text-sm text-gray-900 dark:text-white">{getControllerName(sourceRef.kind)}</dd>
                   </div>
 
