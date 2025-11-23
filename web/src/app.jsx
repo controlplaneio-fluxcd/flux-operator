@@ -175,13 +175,13 @@ export function App() {
     )
   }
 
-  // Extract spec from FluxReport for child components
-  const { spec } = reportData.value
+  // Extract spec and metadata from FluxReport for child components
+  const { spec, metadata } = reportData.value
 
   // NORMAL STATE: Render full application layout with routing
   return (
     <LocationProvider>
-      <AppContent spec={spec} />
+      <AppContent spec={spec} namespace={metadata?.namespace} />
     </LocationProvider>
   )
 }
@@ -190,7 +190,7 @@ export function App() {
  * AppContent - Main app content with routing
  * Separated to allow useLocation() hook usage
  */
-function AppContent({ spec }) {
+function AppContent({ spec, namespace }) {
   const location = useLocation()
   const currentPath = location.path
   const isSearchView = currentPath === '/events' || currentPath === '/resources'
@@ -208,7 +208,7 @@ function AppContent({ spec }) {
 
       {/* Main content area: route-based navigation */}
       <Router>
-        <Route path="/" component={ClusterPage} spec={spec} />
+        <Route path="/" component={ClusterPage} spec={spec} namespace={namespace} />
         <Route path="/events" component={EventList} />
         <Route path="/resources" component={ResourceList} />
         <Route path="/resource/:kind/:namespace/:name" component={ResourcePage} />

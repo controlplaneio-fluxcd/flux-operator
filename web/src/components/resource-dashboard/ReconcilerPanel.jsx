@@ -3,13 +3,16 @@
 
 import { useState, useMemo, useEffect, useRef } from 'preact/hooks'
 import { useSignal } from '@preact/signals'
+import { useLocation } from 'preact-iso'
 import { fetchWithMock } from '../../utils/fetch'
 import { formatTimestamp } from '../../utils/time'
 import { getControllerName } from '../../utils/constants'
 import { TabButton, YamlBlock, getEventBadgeClass } from './PanelComponents'
 import { HistoryTimeline } from './HistoryTimeline'
 
-export function ReconcilerPanel({ kind, name, namespace, resourceData, overviewData }) {
+export function ReconcilerPanel({ kind, name, namespace, resourceData }) {
+  const location = useLocation()
+
   // State
   const [infoTab, setInfoTab] = useState('overview')
   const [eventsData, setEventsData] = useState([])
@@ -23,9 +26,10 @@ export function ReconcilerPanel({ kind, name, namespace, resourceData, overviewD
   const isInfoExpanded = useSignal(true)
 
   // Derived data
-  const status = overviewData?.status || 'Unknown'
-  const message = overviewData?.message || resourceData?.status?.conditions?.[0]?.message || ''
-  const lastReconciled = overviewData?.lastReconciled || resourceData?.status?.conditions?.[0]?.lastTransitionTime
+  const reconcilerRef = resourceData?.status?.reconcilerRef
+  const status = reconcilerRef?.status || 'Unknown'
+  const message = reconcilerRef?.message || resourceData?.status?.conditions?.[0]?.message || ''
+  const lastReconciled = reconcilerRef?.lastReconciled || resourceData?.status?.conditions?.[0]?.lastTransitionTime
 
   const reconcileInterval = useMemo(() => {
     if (!resourceData) return null
@@ -53,6 +57,41 @@ export function ReconcilerPanel({ kind, name, namespace, resourceData, overviewD
     return null
   }, [resourceData])
 
+  const reconcileTimeout = useMemo(() => {
+    if (!resourceData) return null
+
+    const k = resourceData.kind
+    const spec = resourceData.spec || {}
+    const annotations = resourceData.metadata?.annotations || {}
+
+    // Any resource with spec.timeout field, use that value if set
+    if (spec.timeout) {
+      return spec.timeout
+    }
+
+    // Source types
+    if (resourceData.apiVersion && resourceData.apiVersion.startsWith('source.toolkit.fluxcd.io')) {
+      return '1m'
+    }
+
+    // Kustomization
+    if (k === 'Kustomization') {
+      return spec.interval || null
+    }
+
+    // HelmRelease
+    if (k === 'HelmRelease') {
+      return '5m'
+    }
+
+    // FluxInstance, ResourceSet, ResourceSetInputProvider
+    if (k === 'FluxInstance' || k === 'ResourceSet' || k === 'ResourceSetInputProvider') {
+      return annotations['fluxcd.controlplane.io/reconcileTimeout'] || '5m'
+    }
+
+    return null
+  }, [resourceData])
+
   // Memoized YAML data
   const specYaml = useMemo(() => {
     if (!resourceData) return null
@@ -67,7 +106,7 @@ export function ReconcilerPanel({ kind, name, namespace, resourceData, overviewD
   const statusYaml = useMemo(() => {
     if (!resourceData?.status) return null
     // eslint-disable-next-line no-unused-vars
-    const { inventory, sourceRef, ...rest } = resourceData.status
+    const { inventory, sourceRef, reconcilerRef, ...rest } = resourceData.status
     return {
       apiVersion: resourceData.apiVersion,
       kind: resourceData.kind,
@@ -188,41 +227,64 @@ export function ReconcilerPanel({ kind, name, namespace, resourceData, overviewD
               {/* Left column: Status and metadata */}
               <div class="space-y-4">
                 {/* Status Badge */}
-                <div class="flex items-baseline space-x-2">
-                  <dt class="text-sm text-gray-500 dark:text-gray-400">Status:</dt>
-                  <dd>
-                    <span class={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      status === 'Ready' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
-                        status === 'Failed' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' :
-                          status === 'Progressing' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' :
-                            status === 'Suspended' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400' :
-                              'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400'
-                    }`}>
-                      {status}
-                    </span>
-                  </dd>
+                <div class="text-sm">
+                  <span class="text-gray-500 dark:text-gray-400">Status</span>
+                  <span class={`ml-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    status === 'Ready' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
+                      status === 'Failed' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' :
+                        status === 'Progressing' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' :
+                          status === 'Suspended' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                            'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400'
+                  }`}>
+                    {status}
+                  </span>
                 </div>
 
                 {/* Reconciled by */}
-                <div class="flex items-baseline space-x-2">
-                  <dt class="text-sm text-gray-500 dark:text-gray-400">Reconciled by:</dt>
-                  <dd class="text-sm text-gray-900 dark:text-white">{getControllerName(kind)}</dd>
+                <div class="text-sm">
+                  <span class="text-gray-500 dark:text-gray-400">Reconciled by</span>
+                  <span class="ml-1 text-gray-900 dark:text-white">{getControllerName(kind)}</span>
                 </div>
 
                 {/* Reconcile every */}
                 {reconcileInterval && (
-                  <div class="flex items-baseline space-x-2">
-                    <dt class="text-sm text-gray-500 dark:text-gray-400">Reconcile every:</dt>
-                    <dd class="text-sm text-gray-900 dark:text-white">{reconcileInterval}</dd>
+                  <div class="text-sm">
+                    <span class="text-gray-500 dark:text-gray-400">Reconcile every</span>
+                    <span class="ml-1 text-gray-900 dark:text-white">
+                      {reconcileInterval}
+                    </span>
+                    {reconcileTimeout && (
+                      <span class="ml-1 text-gray-900 dark:text-white">
+                        (timeout {reconcileTimeout})
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* Managed by */}
+                {reconcilerRef?.managedBy && (
+                  <div class="text-sm">
+                    <span class="text-gray-500 dark:text-gray-400">Managed by</span>
+                    {(() => {
+                      const [refKind, refNamespace, refName] = reconcilerRef.managedBy.split('/')
+                      return (
+                        <button
+                          onClick={() => location.route(`/resource/${encodeURIComponent(refKind)}/${encodeURIComponent(refNamespace)}/${encodeURIComponent(refName)}`)}
+                          class="ml-1 text-flux-blue dark:text-blue-400 hover:underline break-words"
+                        >
+                          {reconcilerRef.managedBy}
+                        </button>
+                      )
+                    })()}
                   </div>
                 )}
               </div>
 
               {/* Right column: Last action message */}
               {message && (
-                <div class="space-y-2 border-gray-200 dark:border-gray-700 md:border-l md:pl-6">
+                <div class="space-y-2 border-gray-200 dark:border-gray-700 border-t pt-4 md:border-t-0 md:border-l md:pt-0 md:pl-6">
                   <div class="text-sm text-gray-500 dark:text-gray-400">
-                        Last action: <span class="text-gray-900 dark:text-white">{lastReconciled ? new Date(lastReconciled).toLocaleString().replace(',', '') : '-'}</span>
+                        Last action <span class="text-gray-900 dark:text-white">{lastReconciled ? new Date(lastReconciled).toLocaleString().replace(',', '') : '-'}</span>
                   </div>
                   <div class="text-sm text-gray-700 dark:text-gray-300">
                     <pre class="whitespace-pre-wrap break-words font-sans">{message}</pre>

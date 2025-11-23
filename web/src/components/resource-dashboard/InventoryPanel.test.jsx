@@ -136,10 +136,10 @@ describe('InventoryPanel component', () => {
     expect(overviewTab).toHaveClass('border-flux-blue')
 
     // Check overview content is visible
-    expect(screen.getByText('Garbage collection:')).toBeInTheDocument()
-    expect(screen.getByText('Health checking:')).toBeInTheDocument()
-    expect(screen.getByText('Secret Decryption:')).toBeInTheDocument()
-    expect(screen.getByText('Total resources:')).toBeInTheDocument()
+    expect(screen.getByText('Garbage collection')).toBeInTheDocument()
+    expect(screen.getByText('Health checking')).toBeInTheDocument()
+    expect(screen.getByText('Secret decryption')).toBeInTheDocument()
+    expect(screen.getByText('Total resources')).toBeInTheDocument()
   })
 
   it('should calculate total resources count correctly', () => {
@@ -151,7 +151,7 @@ describe('InventoryPanel component', () => {
     )
 
     const textContent = document.body.textContent
-    expect(textContent).toContain('Total resources:')
+    expect(textContent).toContain('Total resources')
     expect(textContent).toContain('5')
   })
 
@@ -164,7 +164,7 @@ describe('InventoryPanel component', () => {
     )
 
     const textContent = document.body.textContent
-    expect(textContent).toContain('Flux resources:')
+    expect(textContent).toContain('Flux resources')
     expect(textContent).toContain('1')
   })
 
@@ -177,7 +177,7 @@ describe('InventoryPanel component', () => {
     )
 
     const textContent = document.body.textContent
-    expect(textContent).toContain('Kubernetes workloads:')
+    expect(textContent).toContain('Kubernetes workloads')
     expect(textContent).toContain('1')
   })
 
@@ -190,7 +190,7 @@ describe('InventoryPanel component', () => {
     )
 
     const textContent = document.body.textContent
-    expect(textContent).toContain('Kubernetes secrets:')
+    expect(textContent).toContain('Kubernetes secrets')
     expect(textContent).toContain('1')
   })
 
@@ -203,7 +203,7 @@ describe('InventoryPanel component', () => {
     )
 
     const textContent = document.body.textContent
-    expect(textContent).toContain('Garbage collection:')
+    expect(textContent).toContain('Garbage collection')
     expect(textContent).toContain('Enabled')
   })
 
@@ -224,7 +224,7 @@ describe('InventoryPanel component', () => {
     )
 
     const textContent = document.body.textContent
-    expect(textContent).toContain('Garbage collection:')
+    expect(textContent).toContain('Garbage collection')
     expect(textContent).toContain('Disabled')
   })
 
@@ -237,7 +237,7 @@ describe('InventoryPanel component', () => {
     )
 
     const textContent = document.body.textContent
-    expect(textContent).toContain('Garbage collection:')
+    expect(textContent).toContain('Garbage collection')
     expect(textContent).toContain('Enabled')
   })
 
@@ -250,7 +250,7 @@ describe('InventoryPanel component', () => {
     )
 
     const textContent = document.body.textContent
-    expect(textContent).toContain('Health checking:')
+    expect(textContent).toContain('Health checking')
     expect(textContent).toContain('Enabled')
   })
 
@@ -271,7 +271,7 @@ describe('InventoryPanel component', () => {
     )
 
     const textContent = document.body.textContent
-    expect(textContent).toContain('Health checking:')
+    expect(textContent).toContain('Health checking')
     expect(textContent).toContain('Disabled')
   })
 
@@ -284,7 +284,7 @@ describe('InventoryPanel component', () => {
     )
 
     const textContent = document.body.textContent
-    expect(textContent).toContain('Secret Decryption:')
+    expect(textContent).toContain('Secret decryption')
     expect(textContent).toContain('Enabled')
   })
 
@@ -307,7 +307,7 @@ describe('InventoryPanel component', () => {
     )
 
     const textContent = document.body.textContent
-    expect(textContent).toContain('Secret Decryption:')
+    expect(textContent).toContain('Secret decryption')
     expect(textContent).toContain('Disabled')
   })
 
@@ -487,7 +487,7 @@ describe('InventoryPanel component', () => {
     await user.click(overviewTab)
 
     // Check overview content is displayed again
-    expect(screen.getByText('Garbage collection:')).toBeInTheDocument()
+    expect(screen.getByText('Garbage collection')).toBeInTheDocument()
     expect(screen.queryByText('Name')).not.toBeInTheDocument()
   })
 
@@ -502,15 +502,15 @@ describe('InventoryPanel component', () => {
     const textContent = document.body.textContent
 
     // FluxInstance should have garbage collection enabled
-    expect(textContent).toContain('Garbage collection:')
+    expect(textContent).toContain('Garbage collection')
     expect(textContent).toContain('Enabled')
 
     // FluxInstance with wait=true should have health checking enabled
-    expect(textContent).toContain('Health checking:')
+    expect(textContent).toContain('Health checking')
     expect(textContent).toContain('Enabled')
 
     // FluxInstance doesn't support secret decryption
-    expect(textContent).toContain('Secret Decryption:')
+    expect(textContent).toContain('Secret decryption')
     expect(textContent).toContain('Disabled')
   })
 

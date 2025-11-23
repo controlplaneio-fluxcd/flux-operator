@@ -149,72 +149,66 @@ export function InventoryPanel({ resourceData, onNavigate }) {
               {/* Left column: Feature toggles */}
               <div class="space-y-4">
                 {/* Garbage collection */}
-                <div class="flex items-baseline space-x-2">
-                  <dt class="text-sm text-gray-500 dark:text-gray-400">Garbage collection:</dt>
-                  <dd>
-                    <span class={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      pruningEnabled
-                        ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                        : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
-                    }`}>
-                      {pruningEnabled ? 'Enabled' : 'Disabled'}
-                    </span>
-                  </dd>
+                <div class="text-sm">
+                  <span class="text-gray-500 dark:text-gray-400">Garbage collection</span>
+                  <span class={`ml-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    pruningEnabled
+                      ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                      : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
+                  }`}>
+                    {pruningEnabled ? 'Enabled' : 'Disabled'}
+                  </span>
                 </div>
 
                 {/* Health checking */}
-                <div class="flex items-baseline space-x-2">
-                  <dt class="text-sm text-gray-500 dark:text-gray-400">Health checking:</dt>
-                  <dd>
-                    <span class={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      healthCheckEnabled
-                        ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                        : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
-                    }`}>
-                      {healthCheckEnabled ? 'Enabled' : 'Disabled'}
-                    </span>
-                  </dd>
+                <div class="text-sm">
+                  <span class="text-gray-500 dark:text-gray-400">Health checking</span>
+                  <span class={`ml-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    healthCheckEnabled
+                      ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                      : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
+                  }`}>
+                    {healthCheckEnabled ? 'Enabled' : 'Disabled'}
+                  </span>
                 </div>
 
-                {/* Secret Decryption */}
-                <div class="flex items-baseline space-x-2">
-                  <dt class="text-sm text-gray-500 dark:text-gray-400">Secret Decryption:</dt>
-                  <dd>
-                    <span class={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      secretDecryptionEnabled
-                        ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                        : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
-                    }`}>
-                      {secretDecryptionEnabled ? 'Enabled' : 'Disabled'}
-                    </span>
-                  </dd>
+                {/* Secret decryption */}
+                <div class="text-sm">
+                  <span class="text-gray-500 dark:text-gray-400">Secret decryption</span>
+                  <span class={`ml-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    secretDecryptionEnabled
+                      ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                      : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
+                  }`}>
+                    {secretDecryptionEnabled ? 'Enabled' : 'Disabled'}
+                  </span>
                 </div>
               </div>
 
               {/* Right column: Resource counts */}
-              <div class="space-y-4 border-gray-200 dark:border-gray-700 md:border-l md:pl-6">
+              <div class="space-y-4 border-gray-200 dark:border-gray-700 border-t pt-4 md:border-t-0 md:border-l md:pt-0 md:pl-6">
                 {/* Total resources */}
-                <div class="flex items-baseline space-x-2">
-                  <dt class="text-sm text-gray-500 dark:text-gray-400">Total resources:</dt>
-                  <dd class="text-sm text-gray-900 dark:text-white">{totalResourcesCount}</dd>
+                <div class="text-sm">
+                  <span class="text-gray-500 dark:text-gray-400">Total resources</span>
+                  <span class="ml-1 text-gray-900 dark:text-white">{totalResourcesCount}</span>
                 </div>
 
                 {/* Flux resources */}
-                <div class="flex items-baseline space-x-2">
-                  <dt class="text-sm text-gray-500 dark:text-gray-400">Flux resources:</dt>
-                  <dd class="text-sm text-gray-900 dark:text-white">{fluxResourcesCount}</dd>
+                <div class="text-sm">
+                  <span class="text-gray-500 dark:text-gray-400">Flux resources</span>
+                  <span class="ml-1 text-gray-900 dark:text-white">{fluxResourcesCount}</span>
                 </div>
 
                 {/* Kubernetes workloads */}
-                <div class="flex items-baseline space-x-2">
-                  <dt class="text-sm text-gray-500 dark:text-gray-400">Kubernetes workloads:</dt>
-                  <dd class="text-sm text-gray-900 dark:text-white">{workloadsCount}</dd>
+                <div class="text-sm">
+                  <span class="text-gray-500 dark:text-gray-400">Kubernetes workloads</span>
+                  <span class="ml-1 text-gray-900 dark:text-white">{workloadsCount}</span>
                 </div>
 
                 {/* Kubernetes secrets */}
-                <div class="flex items-baseline space-x-2">
-                  <dt class="text-sm text-gray-500 dark:text-gray-400">Kubernetes secrets:</dt>
-                  <dd class="text-sm text-gray-900 dark:text-white">{secretsCount}</dd>
+                <div class="text-sm">
+                  <span class="text-gray-500 dark:text-gray-400">Kubernetes secrets</span>
+                  <span class="ml-1 text-gray-900 dark:text-white">{secretsCount}</span>
                 </div>
               </div>
             </div>

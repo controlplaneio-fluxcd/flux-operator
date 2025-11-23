@@ -157,6 +157,16 @@ export function SourcePanel({ sourceRef, namespace }) {
         <div class="flex items-center justify-between">
           <div>
             <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Source</h3>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                location.route(`/resource/${encodeURIComponent(sourceRef.kind)}/${encodeURIComponent(sourceRef.namespace || namespace)}/${encodeURIComponent(sourceRef.name)}`)
+              }}
+              class="text-sm text-flux-blue dark:text-blue-400 hover:underline break-words mt-1"
+            >
+              <span class="sm:hidden">{sourceRef.name}</span>
+              <span class="hidden sm:inline">{sourceRef.kind}/{sourceRef.namespace || namespace}/{sourceRef.name}</span>
+            </button>
           </div>
           <svg
             class={`w-5 h-5 text-gray-400 dark:text-gray-500 transition-transform ${isExpanded.value ? 'rotate-180' : ''}`}
@@ -206,91 +216,71 @@ export function SourcePanel({ sourceRef, namespace }) {
                 <div class="space-y-4">
                   {/* Status Badge */}
                   {sourceRef.status && (
-                    <div class="flex items-baseline space-x-2">
-                      <dt class="text-sm text-gray-500 dark:text-gray-400">Status:</dt>
-                      <dd>
-                        <span class={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          sourceRef.status === 'Ready' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
-                            sourceRef.status === 'Failed' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' :
-                              sourceRef.status === 'Progressing' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' :
-                                sourceRef.status === 'Suspended' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400' :
-                                  'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400'
-                        }`}>
-                          {sourceRef.status}
-                        </span>
-                      </dd>
+                    <div class="text-sm">
+                      <span class="text-gray-500 dark:text-gray-400">Status</span>
+                      <span class={`ml-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        sourceRef.status === 'Ready' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
+                          sourceRef.status === 'Failed' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' :
+                            sourceRef.status === 'Progressing' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' :
+                              sourceRef.status === 'Suspended' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                                'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400'
+                      }`}>
+                        {sourceRef.status}
+                      </span>
                     </div>
                   )}
 
                   {/* Reconciled by */}
-                  <div class="flex items-baseline space-x-2">
-                    <dt class="text-sm text-gray-500 dark:text-gray-400">Reconciled by:</dt>
-                    <dd class="text-sm text-gray-900 dark:text-white">{getControllerName(sourceRef.kind)}</dd>
-                  </div>
-
-                  {/* ID */}
-                  <div class="flex flex-col md:flex-row md:items-baseline space-y-2 md:space-y-0 md:space-x-2">
-                    <dt class="text-sm text-gray-500 dark:text-gray-400">ID:</dt>
-                    <dd class="text-sm text-gray-900 dark:text-white">
-                      <button
-                        onClick={() => location.route(`/resource/${encodeURIComponent(sourceRef.kind)}/${encodeURIComponent(sourceRef.namespace || namespace)}/${encodeURIComponent(sourceRef.name)}`)}
-                        class="text-gray-900 dark:text-gray-100 hover:text-flux-blue dark:hover:text-blue-400 inline-flex items-center gap-1 break-all"
-                      >
-                        {sourceRef.kind}/{sourceRef.namespace || namespace}/{sourceRef.name}
-                        <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                        </svg>
-                      </button>
-                    </dd>
+                  <div class="text-sm">
+                    <span class="text-gray-500 dark:text-gray-400">Reconciled by</span>
+                    <span class="ml-1 text-gray-900 dark:text-white">{getControllerName(sourceRef.kind)}</span>
                   </div>
 
                   {/* URL */}
                   {sourceRef.url && (
-                    <div class="flex flex-col md:flex-row md:items-baseline space-y-2 md:space-y-0 md:space-x-2">
-                      <dt class="text-sm text-gray-500 dark:text-gray-400">URL:</dt>
-                      <dd class="text-sm text-gray-900 dark:text-white break-all">{sourceRef.url}</dd>
+                    <div class="text-sm">
+                      <span class="text-gray-500 dark:text-gray-400">URL</span>
+                      <span class="ml-1 text-gray-900 dark:text-white break-words">{sourceRef.url}</span>
                     </div>
                   )}
 
                   {/* Origin URL */}
                   {sourceRef.originURL && (
-                    <div class="flex flex-col md:flex-row md:items-baseline space-y-2 md:space-y-0 md:space-x-2">
-                      <dt class="text-sm text-gray-500 dark:text-gray-400">Origin URL:</dt>
-                      <dd class="text-sm text-gray-900 dark:text-white break-all">{sourceRef.originURL}</dd>
+                    <div class="text-sm">
+                      <span class="text-gray-500 dark:text-gray-400">Origin URL</span>
+                      <span class="ml-1 text-gray-900 dark:text-white break-words">{sourceRef.originURL}</span>
                     </div>
                   )}
 
                   {/* Origin Revision */}
                   {sourceRef.originRevision && (
-                    <div class="flex flex-col md:flex-row md:items-baseline space-y-2 md:space-y-0 md:space-x-2">
-                      <dt class="text-sm text-gray-500 dark:text-gray-400">Origin Revision:</dt>
-                      <dd class="text-sm text-gray-900 dark:text-white break-all">{sourceRef.originRevision}</dd>
+                    <div class="text-sm">
+                      <span class="text-gray-500 dark:text-gray-400">Origin Revision</span>
+                      <span class="ml-1 text-gray-900 dark:text-white break-words">{sourceRef.originRevision}</span>
                     </div>
                   )}
 
                   {/* Fetch every */}
                   {sourceData?.spec?.interval && (
-                    <div class="flex items-baseline space-x-2">
-                      <dt class="text-sm text-gray-500 dark:text-gray-400">Fetch every:</dt>
-                      <dd class="text-sm text-gray-900 dark:text-white">{sourceData.spec.interval}</dd>
+                    <div class="text-sm">
+                      <span class="text-gray-500 dark:text-gray-400">Fetch every</span>
+                      <span class="ml-1 text-gray-900 dark:text-white">{sourceData.spec.interval}</span>
                     </div>
                   )}
 
                   {/* Fetched at */}
                   {sourceData?.status?.conditions?.[0]?.lastTransitionTime && (
-                    <div class="flex items-baseline space-x-2">
-                      <dt class="text-sm text-gray-500 dark:text-gray-400">Fetched at:</dt>
-                      <dd class="text-sm text-gray-900 dark:text-white">{new Date(sourceData.status.conditions[0].lastTransitionTime).toLocaleString().replace(',', '')}</dd>
+                    <div class="text-sm">
+                      <span class="text-gray-500 dark:text-gray-400">Fetched at</span>
+                      <span class="ml-1 text-gray-900 dark:text-white">{new Date(sourceData.status.conditions[0].lastTransitionTime).toLocaleString().replace(',', '')}</span>
                     </div>
                   )}
 
                   {/* Fetch result */}
                   {sourceRef.message && (
-                    <div class="flex flex-col md:flex-row md:items-baseline space-y-2 md:space-y-0 md:space-x-2">
-                      <dt class="text-sm text-gray-500 dark:text-gray-400">Fetch result:</dt>
-                      <dd class="text-sm text-gray-700 dark:text-gray-300">
-                        <pre class="whitespace-pre-wrap break-words font-sans">{sourceRef.message}</pre>
-                      </dd>
+                    <div class="text-sm">
+                      <span class="text-gray-500 dark:text-gray-400">Fetch result</span>
+                      <span class="ml-1 text-gray-900 dark:text-white break-words">{sourceRef.message}</span>
                     </div>
                   )}
                 </div>

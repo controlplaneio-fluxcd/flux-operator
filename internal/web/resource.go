@@ -10,7 +10,9 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"time"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -43,6 +45,14 @@ func (r *Router) ResourceHandler(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		r.log.Error(err, "failed to get resource", "url", req.URL.String(),
 			"kind", kind, "name", name, "namespace", namespace)
+		if errors.IsNotFound(err) {
+			// return empty response if resource not found
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("{}"))
+			return
+		}
 		http.Error(w, fmt.Sprintf("Failed to get resource: %v", err), http.StatusInternalServerError)
 		return
 	}
@@ -85,6 +95,19 @@ func (r *Router) GetResource(ctx context.Context, kind, name, namespace string) 
 	// Fetch the resource from the cluster
 	if err := r.kubeClient.Get(ctx, key, obj); err != nil {
 		return nil, fmt.Errorf("unable to get resource %s/%s in namespace %s: %w", kind, name, namespace, err)
+	}
+
+	// Inject the reconciler reference
+	status := r.resourceStatusFromUnstructured(*obj)
+	reconciler := getReconcilerRef(obj)
+	reconcilerRef := map[string]any{
+		"status":         status.Status,
+		"message":        status.Message,
+		"lastReconciled": status.LastReconciled.Format(time.RFC3339),
+		"managedBy":      reconciler,
+	}
+	if err := unstructured.SetNestedMap(obj.Object, reconcilerRef, "status", "reconcilerRef"); err != nil {
+		return nil, fmt.Errorf("unable to set reconcilerRef: %w", err)
 	}
 
 	// Get the inventory for this resource
@@ -143,4 +166,59 @@ func findFluxKind(kind string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("kind %s not found", kind)
+}
+
+// getReconcilerRef retrieves the Flux reconciler information
+// from the labels of the provided unstructured object.
+func getReconcilerRef(obj *unstructured.Unstructured) string {
+	var kind, name, namespace string
+
+	if obj.GetKind() == fluxcdv1.FluxExternalArtifactKind {
+		if reconciler, found, _ := unstructured.NestedFieldCopy(obj.Object, "spec", "sourceRef"); found {
+			if refMap, ok := reconciler.(map[string]any); ok {
+				kindVal, kindFound := refMap["kind"].(string)
+				nameVal, nameFound := refMap["name"].(string)
+				namespaceVal, namespaceFound := refMap["namespace"].(string)
+				if kindFound && nameFound && namespaceFound {
+					return fmt.Sprintf("%s/%s/%s", kindVal, namespaceVal, nameVal)
+				}
+			}
+		}
+	}
+
+	for k, v := range obj.GetLabels() {
+		if k == "app.kubernetes.io/managed-by" && v == "flux-operator" {
+			kind = "FluxInstance"
+			name = obj.GetLabels()["fluxcd.controlplane.io/name"]
+			namespace = obj.GetLabels()["fluxcd.controlplane.io/namespace"]
+			break
+		}
+
+		if !fluxcdv1.IsFluxAPI(k) {
+			continue
+		}
+
+		if strings.HasSuffix(k, "/name") {
+			parts := strings.Split(k, ".")
+			if len(parts) > 0 {
+				switch parts[0] {
+				case "kustomize":
+					kind = fluxcdv1.FluxKustomizationKind
+				case "helm":
+					kind = fluxcdv1.FluxHelmReleaseKind
+				case "resourceset":
+					kind = fluxcdv1.ResourceSetKind
+				}
+			}
+			name = v
+		} else if strings.HasSuffix(k, "/namespace") {
+			namespace = v
+		}
+	}
+
+	if kind == "" || name == "" || namespace == "" {
+		return ""
+	}
+
+	return fmt.Sprintf("%s/%s/%s", kind, namespace, name)
 }

@@ -16,7 +16,8 @@ describe('SyncPanel', () => {
       interval: '10m0s',
       status: 'Applied revision: v2.4.0',
       ready: true
-    }
+    },
+    namespace: 'flux-system'
   }
 
   describe('Basic Rendering', () => {
@@ -25,9 +26,11 @@ describe('SyncPanel', () => {
       expect(screen.getByText('Cluster Sync')).toBeInTheDocument()
     })
 
-    it('should render sync id', () => {
+    it('should render sync id as Kustomization link', () => {
       render(<SyncPanel {...baseProps} />)
-      expect(screen.getByText(baseProps.sync.id)).toBeInTheDocument()
+      // syncName is extracted from sync.id by splitting and taking the last part
+      const syncName = baseProps.sync.id.split('/').pop()
+      expect(screen.getByText(`Kustomization/${baseProps.namespace}/${syncName}`)).toBeInTheDocument()
     })
 
     it('should render source and path', () => {
@@ -44,8 +47,8 @@ describe('SyncPanel', () => {
       // Content is visible by default
       expect(screen.getByText(baseProps.sync.source)).toBeInTheDocument()
 
-      // Click to collapse
-      const button = screen.getByRole('button')
+      // Click to collapse - find the button by the Cluster Sync text
+      const button = screen.getByText('Cluster Sync').closest('button')
       await fireEvent.click(button)
       expect(screen.queryByText(baseProps.sync.source)).not.toBeInTheDocument()
 

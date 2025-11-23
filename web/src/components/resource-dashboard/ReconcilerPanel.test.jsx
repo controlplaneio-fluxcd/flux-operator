@@ -12,6 +12,14 @@ vi.mock('../../utils/fetch', () => ({
   fetchWithMock: vi.fn()
 }))
 
+// Mock preact-iso
+const mockRoute = vi.fn()
+vi.mock('preact-iso', () => ({
+  useLocation: () => ({
+    route: mockRoute
+  })
+}))
+
 describe('ReconcilerPanel component', () => {
   const mockResourceData = {
     apiVersion: 'fluxcd.controlplane.io/v1',
@@ -33,6 +41,12 @@ describe('ReconcilerPanel component', () => {
       ]
     },
     status: {
+      reconcilerRef: {
+        status: 'Ready',
+        message: 'Applied revision: main/1234567',
+        lastReconciled: '2023-01-01T12:00:00Z',
+        managedBy: ''
+      },
       conditions: [
         {
           type: 'Ready',
@@ -50,12 +64,6 @@ describe('ReconcilerPanel component', () => {
     }
   }
 
-  const mockOverviewData = {
-    status: 'Ready',
-    message: 'Applied revision: main/1234567',
-    lastReconciled: '2023-01-01T12:00:00Z'
-  }
-
   beforeEach(() => {
     vi.clearAllMocks()
   })
@@ -67,7 +75,6 @@ describe('ReconcilerPanel component', () => {
         name="flux"
         namespace="flux-system"
         resourceData={mockResourceData}
-        overviewData={mockOverviewData}
       />
     )
 
@@ -81,7 +88,6 @@ describe('ReconcilerPanel component', () => {
         name="flux"
         namespace="flux-system"
         resourceData={mockResourceData}
-        overviewData={mockOverviewData}
       />
     )
 
@@ -98,7 +104,6 @@ describe('ReconcilerPanel component', () => {
         name="flux"
         namespace="flux-system"
         resourceData={mockResourceData}
-        overviewData={mockOverviewData}
       />
     )
 
@@ -126,20 +131,20 @@ describe('ReconcilerPanel component', () => {
         name="flux"
         namespace="flux-system"
         resourceData={mockResourceData}
-        overviewData={mockOverviewData}
       />
     )
 
     // Status
-    expect(screen.getByText('Status:')).toBeInTheDocument()
+    expect(screen.getAllByText('Status').length).toBeGreaterThan(0)
     expect(screen.getByText('Ready')).toBeInTheDocument()
 
     // Reconciled by
-    expect(screen.getByText('Reconciled by:')).toBeInTheDocument()
+    expect(screen.getByText('Reconciled by')).toBeInTheDocument()
 
     // Reconcile every
-    expect(screen.getByText('Reconcile every:')).toBeInTheDocument()
+    expect(screen.getByText('Reconcile every')).toBeInTheDocument()
     expect(screen.getByText('1m')).toBeInTheDocument()
+    expect(screen.getByText('(timeout 5m)')).toBeInTheDocument()
 
     // Message
     expect(screen.getByText(/Applied revision: main\/1234567/)).toBeInTheDocument()
@@ -152,11 +157,11 @@ describe('ReconcilerPanel component', () => {
         name="flux"
         namespace="flux-system"
         resourceData={mockResourceData}
-        overviewData={mockOverviewData}
       />
     )
-    expect(screen.getByText('Reconcile every:')).toBeInTheDocument()
+    expect(screen.getByText('Reconcile every')).toBeInTheDocument()
     expect(screen.getByText('1m')).toBeInTheDocument()
+    expect(screen.getByText('(timeout 5m)')).toBeInTheDocument()
   })
 
   it('should calculate reconcile interval from spec.interval', () => {
@@ -171,10 +176,10 @@ describe('ReconcilerPanel component', () => {
         name="flux"
         namespace="flux-system"
         resourceData={dataWithSpecInterval}
-        overviewData={mockOverviewData}
       />
     )
     expect(screen.getByText('5m')).toBeInTheDocument()
+    expect(screen.getByText('(timeout 5m)')).toBeInTheDocument()
   })
 
   it('should calculate reconcile interval from default for ResourceSet', () => {
@@ -190,10 +195,10 @@ describe('ReconcilerPanel component', () => {
         name="flux"
         namespace="flux-system"
         resourceData={dataResourceSet}
-        overviewData={mockOverviewData}
       />
     )
     expect(screen.getByText('60m')).toBeInTheDocument()
+    expect(screen.getByText('(timeout 5m)')).toBeInTheDocument()
   })
 
   it('should calculate reconcile interval from default for ResourceSetInputProvider', () => {
@@ -209,10 +214,10 @@ describe('ReconcilerPanel component', () => {
         name="flux"
         namespace="flux-system"
         resourceData={dataInputProvider}
-        overviewData={mockOverviewData}
       />
     )
     expect(screen.getByText('10m')).toBeInTheDocument()
+    expect(screen.getByText('(timeout 5m)')).toBeInTheDocument()
   })
 
   it('should not show reconcile interval if unknown', () => {
@@ -228,10 +233,75 @@ describe('ReconcilerPanel component', () => {
         name="flux"
         namespace="flux-system"
         resourceData={dataUnknown}
-        overviewData={mockOverviewData}
       />
     )
-    expect(screen.queryByText('Reconcile every:')).not.toBeInTheDocument()
+    expect(screen.queryByText('Reconcile every')).not.toBeInTheDocument()
+  })
+
+  it('should display "Managed by" field when reconcilerRef.managedBy exists', () => {
+    const dataWithReconcilerRef = {
+      ...mockResourceData,
+      status: {
+        ...mockResourceData.status,
+        reconcilerRef: {
+          ...mockResourceData.status.reconcilerRef,
+          managedBy: 'FluxInstance/flux-system/flux'
+        }
+      }
+    }
+    render(
+      <ReconcilerPanel
+        kind="ResourceSet"
+        name="apps"
+        namespace="flux-system"
+        resourceData={dataWithReconcilerRef}
+      />
+    )
+
+    expect(screen.getByText('Managed by')).toBeInTheDocument()
+    expect(screen.getByText('FluxInstance/flux-system/flux')).toBeInTheDocument()
+  })
+
+  it('should not display "Managed by" field when reconcilerRef.managedBy does not exist', () => {
+    render(
+      <ReconcilerPanel
+        kind="FluxInstance"
+        name="flux"
+        namespace="flux-system"
+        resourceData={mockResourceData}
+      />
+    )
+
+    expect(screen.queryByText('Managed by')).not.toBeInTheDocument()
+  })
+
+  it('should navigate to reconciler resource when clicking "Managed by" link', async () => {
+    const user = userEvent.setup()
+
+    const dataWithReconcilerRef = {
+      ...mockResourceData,
+      status: {
+        ...mockResourceData.status,
+        reconcilerRef: {
+          ...mockResourceData.status.reconcilerRef,
+          managedBy: 'FluxInstance/flux-system/flux'
+        }
+      }
+    }
+
+    render(
+      <ReconcilerPanel
+        kind="ResourceSet"
+        name="apps"
+        namespace="flux-system"
+        resourceData={dataWithReconcilerRef}
+      />
+    )
+
+    const managedByButton = screen.getByText('FluxInstance/flux-system/flux')
+    await user.click(managedByButton)
+
+    expect(mockRoute).toHaveBeenCalledWith('/resource/FluxInstance/flux-system/flux')
   })
 
   it('should switch to Specification tab', async () => {
@@ -243,7 +313,6 @@ describe('ReconcilerPanel component', () => {
         name="flux"
         namespace="flux-system"
         resourceData={mockResourceData}
-        overviewData={mockOverviewData}
       />
     )
 
@@ -267,11 +336,10 @@ describe('ReconcilerPanel component', () => {
         name="flux"
         namespace="flux-system"
         resourceData={mockResourceData}
-        overviewData={mockOverviewData}
       />
     )
 
-    const statusTab = screen.getByText('Status')
+    const statusTab = screen.getByRole('button', { name: 'Status' })
     await user.click(statusTab)
 
     // Should see yaml content
@@ -307,7 +375,6 @@ describe('ReconcilerPanel component', () => {
         name="flux"
         namespace="flux-system"
         resourceData={mockResourceData}
-        overviewData={mockOverviewData}
       />
     )
 
@@ -341,7 +408,6 @@ describe('ReconcilerPanel component', () => {
         name="flux"
         namespace="flux-system"
         resourceData={mockResourceData}
-        overviewData={mockOverviewData}
       />
     )
 
@@ -364,7 +430,6 @@ describe('ReconcilerPanel component', () => {
         name="flux"
         namespace="flux-system"
         resourceData={mockResourceData}
-        overviewData={mockOverviewData}
       />
     )
 
@@ -401,7 +466,6 @@ describe('ReconcilerPanel component', () => {
           name="flux"
           namespace="flux-system"
           resourceData={mockResourceData}
-          overviewData={mockOverviewData}
         />
       )
 
@@ -450,7 +514,6 @@ describe('ReconcilerPanel component', () => {
           name="flux"
           namespace="flux-system"
           resourceData={updatedResourceData}
-          overviewData={mockOverviewData}
         />
       )
 
@@ -469,7 +532,6 @@ describe('ReconcilerPanel component', () => {
           name="flux"
           namespace="flux-system"
           resourceData={mockResourceData}
-          overviewData={mockOverviewData}
         />
       )
 
@@ -499,7 +561,6 @@ describe('ReconcilerPanel component', () => {
           name="flux"
           namespace="flux-system"
           resourceData={updatedResourceData}
-          overviewData={mockOverviewData}
         />
       )
 
@@ -518,7 +579,6 @@ describe('ReconcilerPanel component', () => {
           name="flux"
           namespace="flux-system"
           resourceData={mockResourceData}
-          overviewData={mockOverviewData}
         />
       )
 
@@ -544,7 +604,6 @@ describe('ReconcilerPanel component', () => {
           name="flux"
           namespace="flux-system"
           resourceData={mockResourceData}
-          overviewData={mockOverviewData}
         />
       )
 
@@ -583,7 +642,6 @@ describe('ReconcilerPanel component', () => {
           name="flux"
           namespace="flux-system"
           resourceData={updatedResourceData}
-          overviewData={mockOverviewData}
         />
       )
 
@@ -593,6 +651,122 @@ describe('ReconcilerPanel component', () => {
       })
 
       consoleSpy.mockRestore()
+    })
+  })
+
+  describe('Reconcile timeout', () => {
+    it('should display timeout from spec.timeout', () => {
+      const data = {
+        ...mockResourceData,
+        spec: { ...mockResourceData.spec, interval: '1m', timeout: '2m' }
+      }
+      render(
+        <ReconcilerPanel
+          kind="FluxInstance"
+          name="flux"
+          namespace="flux-system"
+          resourceData={data}
+        />
+      )
+      expect(screen.getByText('1m')).toBeInTheDocument()
+      expect(screen.getByText('(timeout 2m)')).toBeInTheDocument()
+    })
+
+    it('should display default timeout 1m for Source types', () => {
+      const data = {
+        apiVersion: 'source.toolkit.fluxcd.io/v1beta2',
+        kind: 'GitRepository',
+        metadata: { name: 'git', namespace: 'flux-system' },
+        spec: { interval: '10m' },
+        status: {}
+      }
+      render(
+        <ReconcilerPanel
+          kind="GitRepository"
+          name="git"
+          namespace="flux-system"
+          resourceData={data}
+        />
+      )
+      expect(screen.getByText('10m')).toBeInTheDocument()
+      expect(screen.getByText('(timeout 1m)')).toBeInTheDocument()
+    })
+
+    it('should display default timeout from spec.interval for Kustomization', () => {
+      const data = {
+        apiVersion: 'kustomize.toolkit.fluxcd.io/v1',
+        kind: 'Kustomization',
+        metadata: { name: 'app', namespace: 'flux-system' },
+        spec: { interval: '5m' },
+        status: {}
+      }
+      render(
+        <ReconcilerPanel
+          kind="Kustomization"
+          name="app"
+          namespace="flux-system"
+          resourceData={data}
+        />
+      )
+      expect(screen.getAllByText('5m').length).toBeGreaterThan(0)
+      expect(screen.getByText('(timeout 5m)')).toBeInTheDocument()
+    })
+
+    it('should display default timeout 5m for HelmRelease', () => {
+      const data = {
+        apiVersion: 'helm.toolkit.fluxcd.io/v2beta1',
+        kind: 'HelmRelease',
+        metadata: { name: 'app', namespace: 'flux-system' },
+        spec: { interval: '10m' },
+        status: {}
+      }
+      render(
+        <ReconcilerPanel
+          kind="HelmRelease"
+          name="app"
+          namespace="flux-system"
+          resourceData={data}
+        />
+      )
+      expect(screen.getByText('10m')).toBeInTheDocument()
+      expect(screen.getByText('(timeout 5m)')).toBeInTheDocument()
+    })
+
+    it('should display default timeout 5m for FluxInstance', () => {
+      render(
+        <ReconcilerPanel
+          kind="FluxInstance"
+          name="flux"
+          namespace="flux-system"
+          resourceData={mockResourceData}
+        />
+      )
+      // mockResourceData has annotation reconcileEvery: 1m
+      expect(screen.getByText('1m')).toBeInTheDocument()
+      expect(screen.getByText('(timeout 5m)')).toBeInTheDocument()
+    })
+
+    it('should display timeout from annotation for FluxInstance', () => {
+      const data = {
+        ...mockResourceData,
+        metadata: {
+          ...mockResourceData.metadata,
+          annotations: {
+            'fluxcd.controlplane.io/reconcileEvery': '1m',
+            'fluxcd.controlplane.io/reconcileTimeout': '10m'
+          }
+        }
+      }
+      render(
+        <ReconcilerPanel
+          kind="FluxInstance"
+          name="flux"
+          namespace="flux-system"
+          resourceData={data}
+        />
+      )
+      expect(screen.getByText('1m')).toBeInTheDocument()
+      expect(screen.getByText('(timeout 10m)')).toBeInTheDocument()
     })
   })
 })
