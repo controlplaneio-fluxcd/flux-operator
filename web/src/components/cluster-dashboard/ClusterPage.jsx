@@ -13,8 +13,9 @@ import { Footer } from '../layout/Footer'
  *
  * @param {Object} props
  * @param {Object} props.spec - FluxReport spec containing cluster, components, reconcilers, etc.
+ * @param {string} props.namespace - FluxReport namespace
  */
-export function ClusterPage({ spec }) {
+export function ClusterPage({ spec, namespace }) {
   return (
     <>
       <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
@@ -32,7 +33,7 @@ export function ClusterPage({ spec }) {
           )}
 
           {spec.sync && (
-            <SyncPanel sync={spec.sync} />
+            <SyncPanel sync={spec.sync} namespace={namespace} />
           )}
 
           {spec.components && spec.components.length > 0 && (

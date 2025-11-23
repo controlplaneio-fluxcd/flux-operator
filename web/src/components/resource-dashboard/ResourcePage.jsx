@@ -85,7 +85,6 @@ export function ResourcePage({ kind, namespace, name }) {
 
   // State
   const [resourceData, setResourceData] = useState(null)
-  const [overviewData, setOverviewData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null)
@@ -111,7 +110,6 @@ export function ResourcePage({ kind, namespace, name }) {
   // Reset state when navigating to a different resource
   useEffect(() => {
     setResourceData(null)
-    setOverviewData(null)
     setLoading(true)
     setError(null)
   }, [kind, namespace, name])
@@ -125,21 +123,13 @@ export function ResourcePage({ kind, namespace, name }) {
       const params = new URLSearchParams({ kind, name, namespace })
 
       try {
-        const [resourceResp, overviewResp] = await Promise.all([
-          fetchWithMock({
-            endpoint: `/api/v1/resource?${params.toString()}`,
-            mockPath: '../mock/resource',
-            mockExport: 'getMockResource'
-          }),
-          fetchWithMock({
-            endpoint: `/api/v1/resources?${params.toString()}`,
-            mockPath: '../mock/resources',
-            mockExport: 'getMockResources'
-          }).then(data => data.resources?.[0] || null)
-        ])
+        const resourceResp = await fetchWithMock({
+          endpoint: `/api/v1/resource?${params.toString()}`,
+          mockPath: '../mock/resource',
+          mockExport: 'getMockResource'
+        })
 
         setResourceData(resourceResp)
-        setOverviewData(overviewResp)
         setLastUpdatedAt(new Date())
         setError(null) // Clear error on success
       } catch (err) {
@@ -162,7 +152,7 @@ export function ResourcePage({ kind, namespace, name }) {
   }, [kind, namespace, name])
 
   // Derived data
-  const status = overviewData?.status || 'Unknown'
+  const status = resourceData?.status?.reconcilerRef?.status || 'Unknown'
   const statusInfo = getStatusInfo(status)
   const hasSource = resourceData?.status?.sourceRef
 
@@ -196,12 +186,27 @@ export function ResourcePage({ kind, namespace, name }) {
     )
   }
 
-  // Not found state
-  if (!resourceData) {
+  // Not found state - check if resourceData is empty or missing required fields
+  if (!resourceData || !resourceData.metadata || !resourceData.metadata.name) {
     return (
       <main data-testid="resource-dashboard-view" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
-        <div class="card text-center py-8">
-          <p class="text-gray-600 dark:text-gray-400">Resource not found: {kind}/{namespace}/{name}</p>
+        <div class="card bg-red-50 dark:bg-opacity-20 border-2 border-danger">
+          <div class="flex items-center space-x-4">
+            <div class="flex-shrink-0">
+              <div class="w-16 h-16 rounded-full bg-red-50 dark:bg-opacity-30 flex items-center justify-center">
+                <svg class="w-10 h-10 text-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+            </div>
+            <div class="flex-grow min-w-0">
+              <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">{kind}</span>
+              <h1 class="text-2xl font-bold text-gray-900 dark:text-white font-mono break-all">
+                {name} not found
+              </h1>
+              <span class="text-sm text-gray-500 dark:text-gray-400">Namespace: {namespace}</span>
+            </div>
+          </div>
         </div>
       </main>
     )
@@ -224,7 +229,7 @@ export function ResourcePage({ kind, namespace, name }) {
               <h1 class="text-2xl font-bold text-gray-900 dark:text-white font-mono break-all">
                 {name}
               </h1>
-              <span class="text-sm text-gray-500 dark:text-gray-400">{namespace} namespace</span>
+              <span class="text-sm text-gray-500 dark:text-gray-400">Namespace: {namespace}</span>
             </div>
             <div class="hidden md:block text-right flex-shrink-0">
               <div class="text-sm text-gray-600 dark:text-gray-400">Last Updated</div>
@@ -239,7 +244,6 @@ export function ResourcePage({ kind, namespace, name }) {
           name={name}
           namespace={namespace}
           resourceData={resourceData}
-          overviewData={overviewData}
         />
 
         {/* Managed Objects Section */}

@@ -56,6 +56,12 @@ describe('ResourcePage component', () => {
       interval: '1m'
     },
     status: {
+      reconcilerRef: {
+        status: 'Ready',
+        message: 'Reconciliation succeeded',
+        lastReconciled: '2023-01-01T12:00:00Z',
+        managedBy: ''
+      },
       conditions: [
         {
           type: 'Ready',
@@ -70,12 +76,6 @@ describe('ResourcePage component', () => {
         namespace: 'flux-system'
       }
     }
-  }
-
-  const mockOverviewData = {
-    status: 'Ready',
-    message: 'Reconciliation succeeded',
-    lastReconciled: '2023-01-01T12:00:00Z'
   }
 
   beforeEach(() => {
@@ -102,23 +102,44 @@ describe('ResourcePage component', () => {
   })
 
   it('should render not found state when no data returned', async () => {
-    // Mock resource fetch returning null (not found), and overview fetch returning empty
-    fetchWithMock
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({ resources: [] })
+    // Mock resource fetch returning null (not found)
+    fetchWithMock.mockResolvedValueOnce(null)
 
     render(<ResourcePage kind="FluxInstance" namespace="flux-system" name="flux" />)
 
     await waitFor(() => {
-      expect(screen.getByText('Resource not found: FluxInstance/flux-system/flux')).toBeInTheDocument()
+      expect(screen.getByText('flux not found')).toBeInTheDocument()
+      expect(screen.getByText('FluxInstance')).toBeInTheDocument()
+      expect(screen.getByText('Namespace: flux-system')).toBeInTheDocument()
     })
+
+    // Check for error styling
+    const card = screen.getByText('flux not found').closest('.card')
+    expect(card).toHaveClass('bg-red-50')
+    expect(card).toHaveClass('border-danger')
+  })
+
+  it('should render not found state when empty object returned', async () => {
+    // Mock resource fetch returning empty object (server returns {} for not found)
+    fetchWithMock.mockResolvedValueOnce({})
+
+    render(<ResourcePage kind="FluxInstance" namespace="flux-system" name="flux" />)
+
+    await waitFor(() => {
+      expect(screen.getByText('flux not found')).toBeInTheDocument()
+      expect(screen.getByText('FluxInstance')).toBeInTheDocument()
+      expect(screen.getByText('Namespace: flux-system')).toBeInTheDocument()
+    })
+
+    // Check for error styling
+    const card = screen.getByText('flux not found').closest('.card')
+    expect(card).toHaveClass('bg-red-50')
+    expect(card).toHaveClass('border-danger')
   })
 
   it('should render resource header and panels on success', async () => {
-    // Mock both fetch calls: resource and overview
-    fetchWithMock
-      .mockResolvedValueOnce(mockResourceData) // resource detail
-      .mockResolvedValueOnce({ resources: [mockOverviewData] }) // overview list
+    // Mock resource fetch
+    fetchWithMock.mockResolvedValueOnce(mockResourceData)
 
     render(<ResourcePage kind="FluxInstance" namespace="flux-system" name="flux" />)
 
@@ -128,8 +149,8 @@ describe('ResourcePage component', () => {
     })
     // Note: The text in DOM is 'FluxInstance', CSS makes it uppercase
     expect(screen.getByText('FluxInstance')).toBeInTheDocument()
-    expect(screen.getByText('flux-system namespace')).toBeInTheDocument()
-    
+    expect(screen.getByText('Namespace: flux-system')).toBeInTheDocument()
+
     // Check Status Icon presence (Ready status)
     const iconContainer = screen.getByText('flux').closest('.card').querySelector('.bg-green-50')
     expect(iconContainer).toBeInTheDocument()
@@ -141,11 +162,18 @@ describe('ResourcePage component', () => {
   })
 
   it('should render correct status style for Failed status', async () => {
-    const failedOverview = { ...mockOverviewData, status: 'Failed' }
-    
-    fetchWithMock
-      .mockResolvedValueOnce(mockResourceData)
-      .mockResolvedValueOnce({ resources: [failedOverview] })
+    const failedData = {
+      ...mockResourceData,
+      status: {
+        ...mockResourceData.status,
+        reconcilerRef: {
+          ...mockResourceData.status.reconcilerRef,
+          status: 'Failed'
+        }
+      }
+    }
+
+    fetchWithMock.mockResolvedValueOnce(failedData)
 
     render(<ResourcePage kind="FluxInstance" namespace="flux-system" name="flux" />)
 
@@ -158,11 +186,18 @@ describe('ResourcePage component', () => {
   })
 
   it('should render correct status style for Progressing status', async () => {
-    const progressingOverview = { ...mockOverviewData, status: 'Progressing' }
-    
-    fetchWithMock
-      .mockResolvedValueOnce(mockResourceData)
-      .mockResolvedValueOnce({ resources: [progressingOverview] })
+    const progressingData = {
+      ...mockResourceData,
+      status: {
+        ...mockResourceData.status,
+        reconcilerRef: {
+          ...mockResourceData.status.reconcilerRef,
+          status: 'Progressing'
+        }
+      }
+    }
+
+    fetchWithMock.mockResolvedValueOnce(progressingData)
 
     render(<ResourcePage kind="FluxInstance" namespace="flux-system" name="flux" />)
 
@@ -175,11 +210,18 @@ describe('ResourcePage component', () => {
   })
 
   it('should render correct status style for Suspended status', async () => {
-    const suspendedOverview = { ...mockOverviewData, status: 'Suspended' }
-    
-    fetchWithMock
-      .mockResolvedValueOnce(mockResourceData)
-      .mockResolvedValueOnce({ resources: [suspendedOverview] })
+    const suspendedData = {
+      ...mockResourceData,
+      status: {
+        ...mockResourceData.status,
+        reconcilerRef: {
+          ...mockResourceData.status.reconcilerRef,
+          status: 'Suspended'
+        }
+      }
+    }
+
+    fetchWithMock.mockResolvedValueOnce(suspendedData)
 
     render(<ResourcePage kind="FluxInstance" namespace="flux-system" name="flux" />)
 
@@ -200,24 +242,28 @@ describe('ResourcePage component', () => {
       }
     }
 
-    fetchWithMock
-      .mockResolvedValueOnce(dataNoSource)
-      .mockResolvedValueOnce({ resources: [mockOverviewData] })
+    fetchWithMock.mockResolvedValueOnce(dataNoSource)
 
     render(<ResourcePage kind="FluxInstance" namespace="flux-system" name="flux" />)
 
     await waitFor(() => {
       expect(screen.getByTestId('reconciler-panel')).toBeInTheDocument()
     })
-    
+
     expect(screen.queryByTestId('source-panel')).not.toBeInTheDocument()
   })
 
-  it('should handle missing overview data gracefully', async () => {
-    // Mock resource data but empty overview response
-    fetchWithMock
-      .mockResolvedValueOnce(mockResourceData)
-      .mockResolvedValueOnce({ resources: [] }) // No overview found
+  it('should handle missing reconcilerRef data gracefully', async () => {
+    // Mock resource data but without reconcilerRef
+    const dataNoReconcilerRef = {
+      ...mockResourceData,
+      status: {
+        ...mockResourceData.status,
+        reconcilerRef: null
+      }
+    }
+
+    fetchWithMock.mockResolvedValueOnce(dataNoReconcilerRef)
 
     render(<ResourcePage kind="FluxInstance" namespace="flux-system" name="flux" />)
 
@@ -241,13 +287,12 @@ describe('ResourcePage component', () => {
 
     it('should fetch data on mount and setup auto-refresh interval', async () => {
       fetchWithMock.mockResolvedValue(mockResourceData)
-      fetchWithMock.mockResolvedValue({ resources: [mockOverviewData] })
 
       render(<ResourcePage kind="FluxInstance" namespace="flux-system" name="flux" />)
 
       // Initial fetch should happen
       await waitFor(() => {
-        expect(fetchWithMock).toHaveBeenCalledTimes(2) // resource + overview
+        expect(fetchWithMock).toHaveBeenCalledTimes(1) // resource only
       })
 
       // Clear mock call history
@@ -255,14 +300,13 @@ describe('ResourcePage component', () => {
 
       // Mock stays the same for auto-refresh
       fetchWithMock.mockResolvedValue(mockResourceData)
-      fetchWithMock.mockResolvedValue({ resources: [mockOverviewData] })
 
       // Fast-forward 30 seconds
       vi.advanceTimersByTime(30000)
 
       // Auto-refresh should trigger
       await waitFor(() => {
-        expect(fetchWithMock).toHaveBeenCalledTimes(2) // resource + overview
+        expect(fetchWithMock).toHaveBeenCalledTimes(1) // resource only
       })
     })
 
@@ -270,9 +314,7 @@ describe('ResourcePage component', () => {
       const now = new Date('2023-01-01T12:30:00Z')
       vi.setSystemTime(now)
 
-      fetchWithMock
-        .mockResolvedValueOnce(mockResourceData)
-        .mockResolvedValueOnce({ resources: [mockOverviewData] })
+      fetchWithMock.mockResolvedValueOnce(mockResourceData)
 
       render(<ResourcePage kind="FluxInstance" namespace="flux-system" name="flux" />)
 
@@ -287,7 +329,6 @@ describe('ResourcePage component', () => {
     it('should preserve existing data when auto-refresh fails', async () => {
       // Initial successful fetch
       fetchWithMock.mockResolvedValue(mockResourceData)
-      fetchWithMock.mockResolvedValue({ resources: [mockOverviewData] })
 
       render(<ResourcePage kind="FluxInstance" namespace="flux-system" name="flux" />)
 
@@ -315,7 +356,6 @@ describe('ResourcePage component', () => {
 
     it('should only show loading spinner on initial load, not on auto-refresh', async () => {
       fetchWithMock.mockResolvedValue(mockResourceData)
-      fetchWithMock.mockResolvedValue({ resources: [mockOverviewData] })
 
       render(<ResourcePage kind="FluxInstance" namespace="flux-system" name="flux" />)
 
@@ -337,7 +377,6 @@ describe('ResourcePage component', () => {
 
     it('should clear interval on unmount', async () => {
       fetchWithMock.mockResolvedValue(mockResourceData)
-      fetchWithMock.mockResolvedValue({ resources: [mockOverviewData] })
 
       const { unmount } = render(<ResourcePage kind="FluxInstance" namespace="flux-system" name="flux" />)
 
@@ -360,7 +399,6 @@ describe('ResourcePage component', () => {
 
     it('should restart interval when route parameters change', async () => {
       fetchWithMock.mockResolvedValue(mockResourceData)
-      fetchWithMock.mockResolvedValue({ resources: [mockOverviewData] })
 
       const { rerender } = render(<ResourcePage kind="FluxInstance" namespace="flux-system" name="flux" />)
 
@@ -374,14 +412,13 @@ describe('ResourcePage component', () => {
       // Change route parameter (different resource)
       const newResourceData = { ...mockResourceData, metadata: { ...mockResourceData.metadata, name: 'flux-2' } }
       fetchWithMock.mockResolvedValue(newResourceData)
-      fetchWithMock.mockResolvedValue({ resources: [mockOverviewData] })
 
       // Rerender with different name
       rerender(<ResourcePage kind="FluxInstance" namespace="flux-system" name="flux-2" />)
 
       // Should fetch immediately for new resource
       await waitFor(() => {
-        expect(fetchWithMock).toHaveBeenCalledTimes(2) // resource + overview
+        expect(fetchWithMock).toHaveBeenCalledTimes(1) // resource only
       })
     })
   })

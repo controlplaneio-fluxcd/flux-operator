@@ -5,7 +5,7 @@
 // Generated from real cluster API responses
 
 // Array containing all mock resources
-export const mockResourcesArray = 
+export const mockResourcesArray =
 [
   {
     "apiVersion": "fluxcd.controlplane.io/v1",
@@ -49,6 +49,12 @@ export const mockResourcesArray =
       "wait": true
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "Reconciliation finished in 2s",
+        "lastReconciled": "2025-11-18T11:10:59Z",
+        "managedBy": ""
+      },
       "components": [
         {
           "digest": "sha256:5be9b7257270fa1a98c3c42af2f254a35bd64375e719090fe2ffc24915d8be06",
@@ -423,6 +429,12 @@ export const mockResourcesArray =
       "url": "https://github.com/stefanprodan/homelab.git"
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "stored artifact for revision 'refs/heads/main@sha1:d676e33990dc2865d67c022d26dea93d5e3236ff'",
+        "lastReconciled": "2025-11-11T14:07:19Z",
+        "managedBy": "FluxInstance/flux-system/flux"
+      },
       "artifact": {
         "digest": "sha256:fe0450de125a2359c0e14106830910855756014b0f78b4cf3b21339505a5bf74",
         "lastUpdateTime": "2025-11-06T21:36:36Z",
@@ -471,6 +483,12 @@ export const mockResourcesArray =
       "version": "*"
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "pulled 'zot' chart with version '0.1.89'",
+        "lastReconciled": "2025-11-01T23:31:41Z",
+        "managedBy": ""
+      },
       "artifact": {
         "digest": "sha256:8c3ab9d44828c879be47874f0c3dca2603a0f0584ef383c18ad50a4a27829d67",
         "lastUpdateTime": "2025-11-01T23:31:41Z",
@@ -521,6 +539,12 @@ export const mockResourcesArray =
       "version": "*"
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "pulled 'tailscale-operator' chart with version '1.90.6'",
+        "lastReconciled": "2025-11-01T23:31:02Z",
+        "managedBy": ""
+      },
       "artifact": {
         "digest": "sha256:08247dd90325a32ae95c5b116917015458b569eadbd66e7116dcdc7502a82bd9",
         "lastUpdateTime": "2025-11-01T23:31:02Z",
@@ -590,6 +614,12 @@ export const mockResourcesArray =
       }
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "Helm install succeeded for release cert-manager/cert-manager.v1 with chart cert-manager@1.19.1+9578566b26b2",
+        "lastReconciled": "2025-11-01T23:31:36Z",
+        "managedBy": "ResourceSet/flux-system/cert-manager"
+      },
       "conditions": [
         {
           "lastTransitionTime": "2025-11-01T23:31:36Z",
@@ -976,6 +1006,12 @@ export const mockResourcesArray =
       }
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "Helm install succeeded for release monitoring/metrics-server.v1 with chart metrics-server@3.13.0+457df0544ec2",
+        "lastReconciled": "2025-11-01T23:31:10Z",
+        "managedBy": "ResourceSet/flux-system/metrics-server"
+      },
       "conditions": [
         {
           "lastTransitionTime": "2025-11-01T23:32:10Z",
@@ -1156,6 +1192,12 @@ export const mockResourcesArray =
       }
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "Helm install succeeded for release tailscale/tailscale-operator.v1 with chart tailscale-operator@1.90.6",
+        "lastReconciled": "2025-11-01T23:31:10Z",
+        "managedBy": "ResourceSet/flux-system/tailscale-operator"
+      },
       "conditions": [
         {
           "lastTransitionTime": "2025-11-01T23:31:10Z",
@@ -1397,6 +1439,12 @@ export const mockResourcesArray =
       }
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "Helm upgrade succeeded for release registry/zot-registry.v3 with chart zot@0.1.89",
+        "lastReconciled": "2025-11-02T08:48:52Z",
+        "managedBy": "ResourceSet/flux-system/zot-registry"
+      },
       "conditions": [
         {
           "lastTransitionTime": "2025-11-02T08:48:52Z",
@@ -1524,6 +1572,12 @@ export const mockResourcesArray =
       "wait": true
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "Applied revision: refs/heads/main@sha1:d676e33990dc2865d67c022d26dea93d5e3236ff",
+        "lastReconciled": "2025-11-18T11:09:21Z",
+        "managedBy": "Kustomization/flux-system/flux-system"
+      },
       "conditions": [
         {
           "lastTransitionTime": "2025-11-18T11:09:21Z",
@@ -1695,6 +1749,12 @@ export const mockResourcesArray =
       "wait": true
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "Applied revision: latest@sha256:043536cc6ec06ff978777ca31cf0adc3d654575a2aa8050988aadf90b9f9877c",
+        "lastReconciled": "2025-11-18T00:28:13Z",
+        "managedBy": ""
+      },
       "conditions": [
         {
           "lastTransitionTime": "2025-11-18T00:28:13Z",
@@ -1833,6 +1893,12 @@ export const mockResourcesArray =
       }
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "Applied revision: refs/heads/main@sha1:d676e33990dc2865d67c022d26dea93d5e3236ff",
+        "lastReconciled": "2025-11-01T23:31:36Z",
+        "managedBy": "FluxInstance/flux-system/flux"
+      },
       "conditions": [
         {
           "lastTransitionTime": "2025-11-18T11:49:21Z",
@@ -1910,6 +1976,12 @@ export const mockResourcesArray =
       "url": "oci://quay.io/jetstack/charts/cert-manager"
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "stored artifact for digest 'v1.19.1@sha256:9578566b26b2258bcb9a0be27feeaa7c0adaed635cc0f85b6293e42a80c58cc9'",
+        "lastReconciled": "2025-11-01T23:31:03Z",
+        "managedBy": "ResourceSet/flux-system/cert-manager"
+      },
       "artifact": {
         "digest": "sha256:f72a727b1749df3521e7a65af5f18505f93b572d758841890270b150344b2b41",
         "lastUpdateTime": "2025-11-01T23:31:03Z",
@@ -1974,6 +2046,12 @@ export const mockResourcesArray =
       "url": "oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests"
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "stored artifact for digest 'latest@sha256:043536cc6ec06ff978777ca31cf0adc3d654575a2aa8050988aadf90b9f9877c'",
+        "lastReconciled": "2025-11-07T12:23:03Z",
+        "managedBy": ""
+      },
       "artifact": {
         "digest": "sha256:f3084e90b5b4c023321f43e5fee08b6e4b3a6a6d1938c614ae0ee91890fa249c",
         "lastUpdateTime": "2025-11-07T12:23:03Z",
@@ -2034,6 +2112,12 @@ export const mockResourcesArray =
       "url": "oci://ghcr.io/controlplaneio-fluxcd/charts/metrics-server"
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "stored artifact for digest '3.13.0@sha256:457df0544ec2553176bbaaba70bf5b68af6c400eff510a401b8eba1b13f9a8ad'",
+        "lastReconciled": "2025-11-01T23:31:42Z",
+        "managedBy": "Kustomization/flux-system/flux-system"
+      },
       "artifact": {
         "digest": "sha256:a418dfdeb7b49a244cf6f848c4c3b7ee8eb6b0fdc19b0389cff98ceec4107a48",
         "lastUpdateTime": "2025-11-01T23:31:42Z",
@@ -2165,6 +2249,12 @@ export const mockResourcesArray =
       "wait": true
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "Reconciliation finished in 35ms",
+        "lastReconciled": "2025-11-18T11:52:14Z",
+        "managedBy": "Kustomization/flux-system/flux-system"
+      },
       "conditions": [
         {
           "lastTransitionTime": "2025-11-18T11:52:14Z",
@@ -2259,6 +2349,12 @@ export const mockResourcesArray =
       ]
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "Reconciliation finished in 27ms",
+        "lastReconciled": "2025-11-18T11:50:16Z",
+        "managedBy": "Kustomization/flux-system/flux-system"
+      },
       "conditions": [
         {
           "lastTransitionTime": "2025-11-18T11:50:16Z",
@@ -2372,6 +2468,12 @@ export const mockResourcesArray =
       "wait": true
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "Reconciliation finished in 35ms",
+        "lastReconciled": "2025-11-18T11:30:52Z",
+        "managedBy": "Kustomization/flux-system/flux-system"
+      },
       "conditions": [
         {
           "lastTransitionTime": "2025-11-18T11:30:52Z",
@@ -2649,6 +2751,12 @@ export const mockResourcesArray =
       "wait": true
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "Reconciliation finished in 50ms",
+        "lastReconciled": "2025-11-18T11:39:39Z",
+        "managedBy": "Kustomization/flux-system/flux-system"
+      },
       "conditions": [
         {
           "lastTransitionTime": "2025-11-18T11:39:39Z",
@@ -2852,6 +2960,12 @@ export const mockResourcesArray =
       "wait": true
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "Reconciliation finished in 36ms",
+        "lastReconciled": "2025-11-18T10:56:54Z",
+        "managedBy": "Kustomization/flux-system/flux-system"
+      },
       "conditions": [
         {
           "lastTransitionTime": "2025-11-18T10:56:54Z",
@@ -2984,6 +3098,12 @@ export const mockResourcesArray =
       ]
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "Reconciliation finished in 31ms",
+        "lastReconciled": "2025-11-18T11:25:10Z",
+        "managedBy": "Kustomization/flux-system/flux-system"
+      },
       "conditions": [
         {
           "lastTransitionTime": "2025-11-18T11:25:10Z",
@@ -3143,6 +3263,12 @@ export const mockResourcesArray =
       "wait": true
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "Reconciliation finished in 43ms",
+        "lastReconciled": "2025-11-18T11:52:24Z",
+        "managedBy": "Kustomization/flux-system/flux-system"
+      },
       "conditions": [
         {
           "lastTransitionTime": "2025-11-18T11:52:24Z",
@@ -3342,6 +3468,12 @@ export const mockResourcesArray =
       "wait": true
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "Reconciliation finished in 41ms",
+        "lastReconciled": "2025-11-18T10:54:54Z",
+        "managedBy": "Kustomization/flux-system/flux-system"
+      },
       "conditions": [
         {
           "lastTransitionTime": "2025-11-18T10:54:54Z",
@@ -3426,6 +3558,12 @@ export const mockResourcesArray =
       "url": "oci://homelab-registry.tailbeb47.ts.net/flux-operator"
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "Reconciliation finished in 207ms",
+        "lastReconciled": "2025-11-18T12:15:29Z",
+        "managedBy": "Kustomization/flux-system/flux-system"
+      },
       "conditions": [
         {
           "lastTransitionTime": "2025-11-18T12:15:29Z",
@@ -3462,6 +3600,12 @@ export const mockResourcesArray =
       "region": "us-east-1"
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Failed",
+        "message": "authentication failed:\nSTS: AssumeRoleWithWebIdentity, https response error\nPost \"https://sts.arn.amazonaws.com/\": dial tcp: lookupts.arn.amazonaws.com on 10.100.0.10:53: no such host",
+        "lastReconciled": "2025-11-18T10:30:00Z",
+        "managedBy": "Kustomization/flux-system/flux-system"
+      },
       "conditions": [
         {
           "lastTransitionTime": "2025-11-18T10:30:00Z",
@@ -3490,6 +3634,12 @@ export const mockResourcesArray =
       "region": "us-west-2"
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "stored artifact for revision 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'",
+        "lastReconciled": "2025-11-18T08:30:00Z",
+        "managedBy": "Kustomization/flux-system/flux-system"
+      },
       "artifact": {
         "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
         "lastUpdateTime": "2025-11-18T08:30:00Z",
@@ -3535,6 +3685,12 @@ export const mockResourcesArray =
       "region": "us-west-2"
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "stored artifact for revision 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'",
+        "lastReconciled": "2025-11-18T11:00:00Z",
+        "managedBy": "Kustomization/flux-system/flux-system"
+      },
       "artifact": {
         "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
         "lastUpdateTime": "2025-11-18T11:00:00Z",
@@ -3580,6 +3736,12 @@ export const mockResourcesArray =
       "region": "eu-west-1"
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Progressing",
+        "message": "reconciliation in progress: fetching artifact",
+        "lastReconciled": "2025-11-18T11:00:00Z",
+        "managedBy": "Kustomization/flux-system/flux-system"
+      },
       "conditions": [
         {
           "lastTransitionTime": "2025-11-18T11:00:00Z",
@@ -3609,6 +3771,12 @@ export const mockResourcesArray =
       "suspend": true
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Suspended",
+        "message": "stored artifact for revision 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'",
+        "lastReconciled": "2025-11-18T09:00:00Z",
+        "managedBy": "Kustomization/flux-system/flux-system"
+      },
       "artifact": {
         "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
         "lastUpdateTime": "2025-11-18T07:00:00Z",
@@ -3648,6 +3816,12 @@ export const mockResourcesArray =
       "provider": "generic"
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Unknown",
+        "message": "No status information available",
+        "lastReconciled": "2025-11-18T09:00:00Z",
+        "managedBy": "Kustomization/flux-system/flux-system"
+      },
       "observedGeneration": -1
     }
   },
@@ -3678,6 +3852,14 @@ export const mockResourcesArray =
         "name": "slack"
       },
       "suspend": false
+    },
+    "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "Valid configuration",
+        "lastReconciled": "2025-11-18T09:00:00Z",
+        "managedBy": "Kustomization/flux-system/flux-system"
+      }
     }
   },
   {
@@ -3695,6 +3877,14 @@ export const mockResourcesArray =
       },
       "type": "slack",
       "username": "Flux"
+    },
+    "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "Valid configuration",
+        "lastReconciled": "2025-11-18T09:00:00Z",
+        "managedBy": "Kustomization/flux-system/flux-system"
+      }
     }
   },
   {
@@ -3721,6 +3911,12 @@ export const mockResourcesArray =
       "type": "github"
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "Receiver initialized for path: /hook/bed6d00b5555b1603e1f59b94d7fdbca58089cb5663633fb83f2815dc626d92b",
+        "lastReconciled": "2025-11-18T10:20:00Z",
+        "managedBy": "Kustomization/flux-system/flux-system"
+      },
       "conditions": [
         {
           "lastTransitionTime": "2025-11-18T10:20:00Z",
@@ -3754,6 +3950,14 @@ export const mockResourcesArray =
         "name": "msteams"
       },
       "suspend": false
+    },
+    "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "Valid configuration",
+        "lastReconciled": "2025-11-18T09:00:00Z",
+        "managedBy": "Kustomization/flux-system/flux-system"
+      }
     }
   },
   {
@@ -3769,6 +3973,14 @@ export const mockResourcesArray =
         "name": "msteams-webhook-url"
       },
       "type": "msteams"
+    },
+    "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "Valid configuration",
+        "lastReconciled": "2025-11-18T09:00:00Z",
+        "managedBy": "Kustomization/flux-system/flux-system"
+      }
     }
   },
   {
@@ -3783,6 +3995,12 @@ export const mockResourcesArray =
       "url": "https://zotregistry.dev/helm-charts"
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "stored artifact for revision 'sha256:2b1fdd97e969c82ee149a7ee8b00f55061760832f23c39a3235936f0912f2125'",
+        "lastReconciled": "2025-11-01T23:31:41Z",
+        "managedBy": "ResourceSet/flux-system/zot-registry"
+      },
       "artifact": {
         "digest": "sha256:2b1fdd97e969c82ee149a7ee8b00f55061760832f23c39a3235936f0912f2125",
         "lastUpdateTime": "2025-11-01T23:31:41Z",
@@ -3815,6 +4033,12 @@ export const mockResourcesArray =
       "url": "https://pkgs.tailscale.com/helmcharts"
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "stored artifact for revision 'sha256:2b1fdd97e969c82ee149a7ee8b00f55061760832f23c39a3235936f0912f2125'",
+        "lastReconciled": "2025-11-01T23:31:02Z",
+        "managedBy": "ResourceSet/flux-system/tailscale-operator"
+      },
       "artifact": {
         "digest": "sha256:578d082975ad264ba4d09368febb298c3beb7f18e459bb9d323d3b7c2fc4d475",
         "lastUpdateTime": "2025-11-01T23:31:02Z",
@@ -3850,6 +4074,12 @@ export const mockResourcesArray =
       "url": "https://github.com/stefanprodan/podinfo"
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "stored artifact for revision 'main@sha1:c1b613a1e083a8918185b11b317f3c75e3c1b6d0'",
+        "lastReconciled": "2025-11-18T12:00:00Z",
+        "managedBy": "Kustomization/flux-system/apps"
+      },
       "artifact": {
         "digest": "sha256:9c224393021c31a3ce372812b0eaf81085e5a633c50115b79c1e3f72e21a6b8f",
         "lastUpdateTime": "2025-11-18T12:00:00Z",
@@ -3882,6 +4112,12 @@ export const mockResourcesArray =
       "interval": "5m0s"
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "successful scan, found 211 tags",
+        "lastReconciled": "2025-11-18T12:05:00Z",
+        "managedBy": "Kustomization/flux-system/apps"
+      },
       "canonicalImageName": "ghcr.io/stefanprodan/podinfo",
       "lastScanResult": {
         "latestTags": [
@@ -3921,6 +4157,12 @@ export const mockResourcesArray =
       }
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "Latest image tag for 'ghcr.io/stefanprodan/podinfo' resolved to 6.2.0",
+        "lastReconciled": "2025-11-18T12:10:00Z",
+        "managedBy": "Kustomization/flux-system/apps"
+      },
       "latestImage": "ghcr.io/stefanprodan/podinfo:6.2.0",
       "conditions": [
         {
@@ -3969,6 +4211,12 @@ export const mockResourcesArray =
       }
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "pushed commit '3ebb95c' to branch 'main'",
+        "lastReconciled": "2025-11-18T12:15:00Z",
+        "managedBy": "Kustomization/flux-system/apps"
+      },
       "lastAutomationRunTime": "2025-11-18T12:15:00Z",
       "lastPushCommit": "c1b613a1e083a8918185b11b317f3c75e3c1b6d0",
       "lastPushTime": "2025-11-18T12:15:00Z",
@@ -4007,6 +4255,12 @@ export const mockResourcesArray =
       ]
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "Receiver initialized for path: /hook/cbdee599b7977a520a36692e5b872c39d09ee53dd75b2e3ae117fea283958fbf",
+        "lastReconciled": "2025-11-18T12:00:00Z",
+        "managedBy": "Kustomization/flux-system/apps"
+      },
       "conditions": [
         {
           "lastTransitionTime": "2025-11-18T12:00:00Z",
@@ -4033,6 +4287,12 @@ export const mockResourcesArray =
       "url": "https://charts.bitnami.com/bitnami"
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Failed",
+        "message": "failed to fetch index: unable to connect to the server\nGet \"https://charts.bitnami.com/bitnami/index.yaml\": timeout awaiting response headers",
+        "lastReconciled": "2025-11-18T12:00:00Z",
+        "managedBy": "Kustomization/flux-system/flux-system"
+      },
       "conditions": [
         {
           "lastTransitionTime": "2025-11-18T12:00:00Z",
@@ -4058,6 +4318,12 @@ export const mockResourcesArray =
       "interval": "10m0s"
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "successful scan, found 50 tags",
+        "lastReconciled": "2025-11-18T12:00:00Z",
+        "managedBy": "Kustomization/flux-system/flux-system"
+      },
       "canonicalImageName": "redis",
       "lastScanResult": {
         "latestTags": [
@@ -4097,6 +4363,12 @@ export const mockResourcesArray =
       }
     },
     "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "Latest image tag for 'redis' resolved to 7.0.5",
+        "lastReconciled": "2025-11-18T12:00:00Z",
+        "managedBy": "Kustomization/flux-system/flux-system"
+      },
       "latestImage": "redis:7.0.5",
       "conditions": [
         {
@@ -4123,9 +4395,9 @@ export const getMockResource = (endpoint) => {
   const namespace = params.get('namespace')
 
   // Search for matching resource in the array
-  const resource = mockResourcesArray.find(r => 
-    r.kind === kind && 
-    r.metadata.name === name && 
+  const resource = mockResourcesArray.find(r =>
+    r.kind === kind &&
+    r.metadata.name === name &&
     r.metadata.namespace === namespace
   )
 

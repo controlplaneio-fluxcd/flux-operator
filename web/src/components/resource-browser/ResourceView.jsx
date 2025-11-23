@@ -139,6 +139,7 @@ function InventoryGroupByApiVersion({ apiVersion, items }) {
  * - Handles loading and error states
  */
 export function ResourceView({ kind, name, namespace, isExpanded }) {
+  const location = useLocation()
   const [resourceData, setResourceData] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -231,7 +232,7 @@ export function ResourceView({ kind, name, namespace, isExpanded }) {
     const cleanStatus = resourceData.status
       ? (() => {
         // eslint-disable-next-line no-unused-vars
-        const { inventory, sourceRef, ...rest } = resourceData.status
+        const { inventory, sourceRef, reconcilerRef, ...rest } = resourceData.status
         return rest
       })()
       : undefined
@@ -367,9 +368,12 @@ export function ResourceView({ kind, name, namespace, isExpanded }) {
                   {/* ID: kind/namespace/name */}
                   <div class="py-1 px-2">
                     <span class="text-gray-600 dark:text-gray-400">ID: </span>
-                    <span class="text-gray-900 dark:text-gray-100">
+                    <button
+                      onClick={() => location.route(`/resource/${encodeURIComponent(resourceData.status.sourceRef.kind)}/${encodeURIComponent(resourceData.status.sourceRef.namespace)}/${encodeURIComponent(resourceData.status.sourceRef.name)}`)}
+                      class="text-flux-blue dark:text-blue-400 hover:underline break-all"
+                    >
                       {resourceData.status.sourceRef.kind}/{resourceData.status.sourceRef.namespace}/{resourceData.status.sourceRef.name}
-                    </span>
+                    </button>
                   </div>
 
                   {/* URL */}

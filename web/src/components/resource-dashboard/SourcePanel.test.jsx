@@ -151,13 +151,12 @@ describe('SourcePanel component', () => {
 
     // Check overview content
     const textContent = document.body.textContent
-    expect(textContent).toContain('Status:')
+    expect(textContent).toContain('Status')
     expect(textContent).toContain('Ready')
-    expect(textContent).toContain('Reconciled by:')
+    expect(textContent).toContain('Reconciled by')
     expect(textContent).toContain('source-controller')
-    expect(textContent).toContain('ID:')
     expect(textContent).toContain('GitRepository/flux-system/flux-system')
-    expect(textContent).toContain('URL:')
+    expect(textContent).toContain('URL')
     expect(textContent).toContain('https://github.com/example/repo.git')
   })
 
@@ -173,7 +172,7 @@ describe('SourcePanel component', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('ID:')).toBeInTheDocument()
+      expect(screen.getByText('GitRepository/flux-system/flux-system')).toBeInTheDocument()
     })
 
     const idButton = screen.getByText('GitRepository/flux-system/flux-system').closest('button')
@@ -194,9 +193,9 @@ describe('SourcePanel component', () => {
 
     await waitFor(() => {
       const textContent = document.body.textContent
-      expect(textContent).toContain('Fetch every:')
+      expect(textContent).toContain('Fetch every')
       expect(textContent).toContain('1m')
-      expect(textContent).toContain('Fetched at:')
+      expect(textContent).toContain('Fetched at')
     })
   })
 
@@ -218,9 +217,9 @@ describe('SourcePanel component', () => {
 
     await waitFor(() => {
       const textContent = document.body.textContent
-      expect(textContent).toContain('Origin URL:')
+      expect(textContent).toContain('Origin URL')
       expect(textContent).toContain('https://github.com/original/repo.git')
-      expect(textContent).toContain('Origin Revision:')
+      expect(textContent).toContain('Origin Revision')
       expect(textContent).toContain('v1.2.3')
     })
   })
@@ -237,8 +236,8 @@ describe('SourcePanel component', () => {
 
     await waitFor(() => {
       const textContent = document.body.textContent
-      expect(textContent).not.toContain('Origin URL:')
-      expect(textContent).not.toContain('Origin Revision:')
+      expect(textContent).not.toContain('Origin URL')
+      expect(textContent).not.toContain('Origin Revision')
     })
   })
 
@@ -254,7 +253,7 @@ describe('SourcePanel component', () => {
 
     await waitFor(() => {
       const textContent = document.body.textContent
-      expect(textContent).toContain('Fetch result:')
+      expect(textContent).toContain('Fetch result')
       expect(textContent).toContain("stored artifact for revision 'refs/heads/main@sha1:abc123'")
     })
   })
@@ -399,11 +398,11 @@ describe('SourcePanel component', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('Status')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Status' })).toBeInTheDocument()
     })
 
     // Click on Status tab
-    const statusTab = screen.getByText('Status')
+    const statusTab = screen.getByRole('button', { name: 'Status' })
     await user.click(statusTab)
 
     // Check YAML content
@@ -515,7 +514,7 @@ describe('SourcePanel component', () => {
 
     // Specification and Status tabs should not be present
     expect(screen.queryByText('Specification')).not.toBeInTheDocument()
-    expect(screen.queryByText('Status')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Status' })).not.toBeInTheDocument()
 
     consoleErrorSpy.mockRestore()
   })

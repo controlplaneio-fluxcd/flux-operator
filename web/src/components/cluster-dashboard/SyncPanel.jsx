@@ -2,14 +2,20 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { useSignal } from '@preact/signals'
+import { useLocation } from 'preact-iso'
 
 /**
  * SyncPanel component - Displays cluster sync information
  *
  * @param {Object} props
  * @param {Object} props.sync - Cluster sync information
+ * @param {string} props.namespace - Report namespace
  */
-export function SyncPanel({ sync }) {
+export function SyncPanel({ sync, namespace }) {
+  const location = useLocation()
+
+  // Extract name from sync.id (e.g., "kustomization/flux-system" -> "flux-system")
+  const syncName = sync.id ? sync.id.split('/').pop() : ''
   const isExpanded = useSignal(true)
   const isSuspended = sync.status && sync.status.startsWith('Suspended')
 
@@ -59,7 +65,16 @@ export function SyncPanel({ sync }) {
           <div>
             <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Cluster Sync</h3>
             <div class="flex items-center space-x-4 mt-1">
-              <p class="text-sm text-gray-600 dark:text-gray-400">{sync.id}</p>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  location.route(`/resource/${encodeURIComponent('Kustomization')}/${encodeURIComponent(namespace)}/${encodeURIComponent(syncName)}`)
+                }}
+                class="text-sm text-flux-blue dark:text-blue-400 hover:underline break-words"
+              >
+                <span class="sm:hidden">{syncName}</span>
+                <span class="hidden sm:inline">Kustomization/{namespace}/{syncName}</span>
+              </button>
               {!sync.ready && !isSuspended && (
                 <span class="status-badge status-not-ready">
                   failing
