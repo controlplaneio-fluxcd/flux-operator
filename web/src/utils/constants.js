@@ -39,9 +39,7 @@ export const resourceStatuses = ['Ready', 'Failed', 'Progressing', 'Suspended', 
 export const workloadKinds = [
   'Deployment',
   'StatefulSet',
-  'DaemonSet',
-  'Job',
-  'CronJob'
+  'DaemonSet'
 ]
 
 // Map resource kind to controller name

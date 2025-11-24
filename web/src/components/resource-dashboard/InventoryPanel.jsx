@@ -5,6 +5,7 @@ import { useState, useMemo } from 'preact/hooks'
 import { useSignal } from '@preact/signals'
 import { fluxKinds, workloadKinds } from '../../utils/constants'
 import { TabButton } from './PanelComponents'
+import { WorkloadsTabContent } from './WorkloadsTabContent'
 
 /**
  * InventoryPanel - Displays managed objects inventory for a Flux resource
@@ -101,6 +102,11 @@ export function InventoryPanel({ resourceData, onNavigate }) {
     })
   }, [resourceData])
 
+  // Filter workload items
+  const workloadItems = useMemo(() => {
+    return resourceData.status.inventory.filter(item => workloadKinds.includes(item.kind))
+  }, [resourceData])
+
   // Handle navigation to a resource
   const handleNavigate = (item) => {
     if (onNavigate) {
@@ -140,6 +146,11 @@ export function InventoryPanel({ resourceData, onNavigate }) {
               <TabButton active={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')}>
                 Inventory
               </TabButton>
+              {workloadsCount > 0 && (
+                <TabButton active={activeTab === 'workloads'} onClick={() => setActiveTab('workloads')}>
+                  Workloads
+                </TabButton>
+              )}
             </nav>
           </div>
 
@@ -249,6 +260,13 @@ export function InventoryPanel({ resourceData, onNavigate }) {
                 </tbody>
               </table>
             </div>
+          )}
+
+          {activeTab === 'workloads' && (
+            <WorkloadsTabContent
+              workloadItems={workloadItems}
+              namespace={resourceData.metadata.namespace}
+            />
           )}
         </div>
       )}

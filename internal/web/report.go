@@ -188,7 +188,7 @@ func cleanObjectForExport(obj *unstructured.Unstructured, keepStatus bool) {
 	// Remove kubectl and Flux CLI annotations from clean metadata
 	if annotations, exists := cleanMetadata["annotations"]; exists {
 		if annotationMap, ok := annotations.(map[string]any); ok {
-			delete(annotationMap, "last-applied-configuration")
+			delete(annotationMap, "kubectl.kubernetes.io/last-applied-configuration")
 			delete(annotationMap, "reconcile.fluxcd.io/requestedAt")
 			delete(annotationMap, "reconcile.fluxcd.io/forceAt")
 			// Remove annotations map if empty after cleanup

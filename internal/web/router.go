@@ -62,6 +62,7 @@ func (r *Router) RegisterRoutes() {
 	r.mux.HandleFunc("GET /api/v1/resources", r.ResourcesHandler)
 	r.mux.HandleFunc("GET /api/v1/resource", r.ResourceHandler)
 	r.mux.HandleFunc("GET /api/v1/search", r.SearchHandler)
+	r.mux.HandleFunc("GET /api/v1/workload", r.WorkloadHandler)
 }
 
 // RegisterMiddleware wraps the mux with logging and gzip compression middleware.
