@@ -29,6 +29,8 @@ export function OverallStatusPanel({ report }) {
   const failedComponents = report.components?.filter(c => !c.ready).length ?? 0
   const totalReconcilers = report.reconcilers?.length ?? 0
   const failingReconcilers = report.reconcilers?.reduce((sum, r) => sum + (r.stats.failing || 0), 0) ?? 0
+  const allReconcilersFailing = totalReconcilers > 0 &&
+    report.reconcilers?.every(r => (r.stats.failing || 0) > 0 && (r.stats.running || 0) === 0)
   const failedClusterSync = report.sync && report.sync.ready !== true ? 1 : 0
   const maintenanceMode = report.sync && report.sync.status && report.sync.status.startsWith('Suspended')
   const totalFailures = failedComponents + failingReconcilers
@@ -59,7 +61,7 @@ export function OverallStatusPanel({ report }) {
     }
 
     // Major Outage
-    if (failedComponents === totalComponents || failingReconcilers === totalReconcilers) {
+    if (failedComponents === totalComponents || allReconcilersFailing) {
       return {
         status: 'major-outage',
         color: 'text-danger',

@@ -10,7 +10,7 @@ import { formatTimestamp } from '../../utils/time'
 import { reportData } from '../../app'
 import { FilterForm } from './FilterForm'
 import { useRestoreFiltersFromUrl, useSyncFiltersToUrl } from '../../utils/routing'
-import { TimelineChart } from './TimelineChart'
+import { StatusChart } from './StatusChart'
 import { useInfiniteScroll } from '../../utils/scroll'
 
 // Events data signals
@@ -224,8 +224,8 @@ export function EventList() {
           />
         </div>
 
-        {/* Timeline Chart */}
-        <TimelineChart items={eventsData.value} loading={eventsLoading.value} mode="events" />
+        {/* Status Chart */}
+        <StatusChart items={eventsData.value} loading={eventsLoading.value} mode="events" />
 
         {/* Error State */}
         {eventsError.value && (

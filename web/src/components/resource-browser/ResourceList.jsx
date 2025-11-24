@@ -10,7 +10,7 @@ import { reportData } from '../../app'
 import { FilterForm } from './FilterForm'
 import { ResourceView } from './ResourceView'
 import { useRestoreFiltersFromUrl, useSyncFiltersToUrl } from '../../utils/routing'
-import { TimelineChart } from './TimelineChart'
+import { StatusChart } from './StatusChart'
 import { useInfiniteScroll } from '../../utils/scroll'
 
 // Resources data signals
@@ -253,8 +253,8 @@ export function ResourceList() {
           />
         </div>
 
-        {/* Timeline Chart */}
-        <TimelineChart items={resourcesData.value} loading={resourcesLoading.value} mode="resources" />
+        {/* Status Chart */}
+        <StatusChart items={resourcesData.value} loading={resourcesLoading.value} mode="resources" />
 
         {/* Error State */}
         {resourcesError.value && (

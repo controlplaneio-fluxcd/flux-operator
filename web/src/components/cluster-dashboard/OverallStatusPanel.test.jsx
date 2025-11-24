@@ -135,7 +135,7 @@ describe('OverallStatusPanel', () => {
       expect(screen.getByText('Critical system failure detected')).toBeInTheDocument()
     })
 
-    it('should show major outage when all reconcilers failing', () => {
+    it('should show major outage when all reconcilers completely broken', () => {
       const report = {
         distribution: { version: 'v2.4.0' },
         components: [],
@@ -148,6 +148,65 @@ describe('OverallStatusPanel', () => {
       render(<OverallStatusPanel report={report} />)
 
       expect(screen.getByText('Major Outage')).toBeInTheDocument()
+    })
+
+    it('should show major outage when single reconciler completely broken', () => {
+      const report = {
+        distribution: { version: 'v2.4.0' },
+        components: [{ name: 'source-controller', ready: true }],
+        reconcilers: [
+          { kind: 'GitRepository', stats: { failing: 5, running: 0 } }
+        ]
+      }
+
+      render(<OverallStatusPanel report={report} />)
+
+      expect(screen.getByText('Major Outage')).toBeInTheDocument()
+    })
+
+    it('should NOT show major outage when reconcilers have some running resources', () => {
+      const report = {
+        distribution: { version: 'v2.4.0' },
+        components: [{ name: 'source-controller', ready: true }],
+        reconcilers: [
+          { kind: 'GitRepository', stats: { failing: 5, running: 1 } },
+          { kind: 'Kustomization', stats: { failing: 3, running: 0 } }
+        ]
+      }
+
+      render(<OverallStatusPanel report={report} />)
+
+      // Should be Degraded, not Major Outage
+      expect(screen.queryByText('Major Outage')).not.toBeInTheDocument()
+      expect(screen.getByText('Degraded Performance')).toBeInTheDocument()
+    })
+
+    it('should NOT trigger major outage when failingReconcilers count equals totalReconcilers (bug regression test)', () => {
+      // This tests the specific bug that was fixed:
+      // failingReconcilers (5) === totalReconcilers (5) should NOT trigger major outage
+      // if the reconcilers have running resources
+      const report = {
+        distribution: { version: 'v2.4.0' },
+        components: [{ name: 'source-controller', ready: true }],
+        sync: { ready: true },
+        reconcilers: [
+          { kind: 'GitRepository', stats: { failing: 2, running: 3 } },
+          { kind: 'Kustomization', stats: { failing: 3, running: 5 } },
+          { kind: 'HelmRelease', stats: { failing: 0, running: 8 } },
+          { kind: 'HelmRepository', stats: { failing: 0, running: 2 } },
+          { kind: 'OCIRepository', stats: { failing: 0, running: 1 } }
+        ]
+      }
+
+      // failingReconcilers = 2 + 3 = 5
+      // totalReconcilers = 5
+      // These are equal, but should NOT trigger Major Outage
+
+      render(<OverallStatusPanel report={report} />)
+
+      expect(screen.queryByText('Major Outage')).not.toBeInTheDocument()
+      expect(screen.getByText('Degraded Performance')).toBeInTheDocument()
+      expect(screen.getByText('5 reconcilers failing')).toBeInTheDocument()
     })
 
     it('should be clickable in major outage state', () => {
@@ -206,6 +265,26 @@ describe('OverallStatusPanel', () => {
       expect(screen.getByText(/cluster sync failed/)).toBeInTheDocument()
     })
 
+    it('should show partial outage with cluster sync failed message when sync fails with reconciler failures', () => {
+      const report = {
+        distribution: { version: 'v2.4.0' },
+        components: [
+          { name: 'source-controller', ready: true }
+        ],
+        sync: {
+          ready: false
+        },
+        reconcilers: [
+          { kind: 'GitRepository', stats: { failing: 3, running: 5 } }
+        ]
+      }
+
+      render(<OverallStatusPanel report={report} />)
+
+      expect(screen.getByText('Partial Outage')).toBeInTheDocument()
+      expect(screen.getByText(/cluster sync failed/)).toBeInTheDocument()
+    })
+
     it('should show correct plural for multiple failures', () => {
       const report = {
         distribution: { version: 'v2.4.0' },
@@ -222,6 +301,26 @@ describe('OverallStatusPanel', () => {
       render(<OverallStatusPanel report={report} />)
 
       expect(screen.getByText('2 failures detected')).toBeInTheDocument()
+    })
+
+    it('should include reconciler failures in total failure count', () => {
+      const report = {
+        distribution: { version: 'v2.4.0' },
+        components: [
+          { name: 'source-controller', ready: false },
+          { name: 'kustomize-controller', ready: true }
+        ],
+        reconcilers: [
+          { kind: 'GitRepository', stats: { failing: 3, running: 2 } },
+          { kind: 'Kustomization', stats: { failing: 2, running: 8 } }
+        ]
+      }
+
+      render(<OverallStatusPanel report={report} />)
+
+      // 1 failed component + 5 failing reconcilers = 6 failures
+      expect(screen.getByText('Partial Outage')).toBeInTheDocument()
+      expect(screen.getByText('6 failures detected')).toBeInTheDocument()
     })
 
     it('should be clickable in partial outage state', () => {
@@ -399,6 +498,82 @@ describe('OverallStatusPanel', () => {
     })
   })
 
+  describe('Status Priority Order', () => {
+    it('should prioritize initializing over all other statuses', () => {
+      const report = {
+        // No distribution - should show initializing despite other failures
+        components: [
+          { name: 'source-controller', ready: false }
+        ],
+        sync: { ready: false, status: 'Suspended' },
+        reconcilers: [
+          { kind: 'GitRepository', stats: { failing: 5, running: 0 } }
+        ]
+      }
+
+      render(<OverallStatusPanel report={report} />)
+
+      expect(screen.getByText('System Initializing')).toBeInTheDocument()
+    })
+
+    it('should prioritize maintenance over outages', () => {
+      const report = {
+        distribution: { version: 'v2.4.0' },
+        components: [
+          { name: 'source-controller', ready: false }
+        ],
+        sync: {
+          ready: false,
+          status: 'Suspended: manual intervention'
+        },
+        reconcilers: [
+          { kind: 'GitRepository', stats: { failing: 5, running: 0 } }
+        ]
+      }
+
+      render(<OverallStatusPanel report={report} />)
+
+      expect(screen.getByText('Under Maintenance')).toBeInTheDocument()
+      expect(screen.queryByText('Major Outage')).not.toBeInTheDocument()
+      expect(screen.queryByText('Partial Outage')).not.toBeInTheDocument()
+    })
+
+    it('should prioritize major outage over partial outage', () => {
+      const report = {
+        distribution: { version: 'v2.4.0' },
+        components: [
+          { name: 'source-controller', ready: false },
+          { name: 'kustomize-controller', ready: false }
+        ],
+        sync: { ready: false }, // This would trigger partial outage
+        reconcilers: []
+      }
+
+      render(<OverallStatusPanel report={report} />)
+
+      expect(screen.getByText('Major Outage')).toBeInTheDocument()
+      expect(screen.queryByText('Partial Outage')).not.toBeInTheDocument()
+    })
+
+    it('should prioritize partial outage over degraded', () => {
+      const report = {
+        distribution: { version: 'v2.4.0' },
+        components: [
+          { name: 'source-controller', ready: false },
+          { name: 'kustomize-controller', ready: true }
+        ],
+        reconcilers: [
+          { kind: 'GitRepository', stats: { failing: 3, running: 5 } }
+        ]
+      }
+
+      render(<OverallStatusPanel report={report} />)
+
+      expect(screen.getByText('Partial Outage')).toBeInTheDocument()
+      expect(screen.queryByText('Degraded Performance')).not.toBeInTheDocument()
+    })
+  })
+
   describe('Last Updated Display', () => {
     it('should display last updated timestamp', () => {
       const report = {
@@ -434,24 +609,74 @@ describe('OverallStatusPanel', () => {
       expect(screen.getByText('All Systems Operational')).toBeInTheDocument()
     })
 
-    it('should handle missing reconcilers array', () => {
+    it('should handle undefined reconcilers array', () => {
       const report = {
         distribution: { version: 'v2.4.0' },
         components: [
           { name: 'source-controller', ready: true }
+        ],
+        sync: { ready: true }
+        // reconcilers is undefined
+      }
+
+      render(<OverallStatusPanel report={report} />)
+
+      // Should show operational since components are ready
+      expect(screen.getByText('All Systems Operational')).toBeInTheDocument()
+    })
+
+    it('should handle empty reconcilers array', () => {
+      const report = {
+        distribution: { version: 'v2.4.0' },
+        components: [
+          { name: 'source-controller', ready: true }
+        ],
+        sync: { ready: true },
+        reconcilers: []
+      }
+
+      render(<OverallStatusPanel report={report} />)
+
+      expect(screen.getByText('All Systems Operational')).toBeInTheDocument()
+    })
+
+    it('should handle reconcilers with missing stats fields', () => {
+      const report = {
+        distribution: { version: 'v2.4.0' },
+        components: [
+          { name: 'source-controller', ready: true }
+        ],
+        sync: { ready: true },
+        reconcilers: [
+          { kind: 'GitRepository', stats: {} },
+          { kind: 'Kustomization', stats: { failing: 2, running: 5 } }
         ]
       }
 
-      // With no reconcilers, totalReconcilers = 0 and failingReconcilers = 0
-      // This triggers major outage condition, so we expect "All Systems Operational" won't show
-      // Instead, let's just verify it renders something
       render(<OverallStatusPanel report={report} />)
 
-      // When reconcilers array is missing and components are healthy, it should show operational
-      // But actually, without reconcilers, it can't determine if it's operational
-      // Let's just check that it doesn't crash
-      const title = document.querySelector('h2')
-      expect(title).toBeInTheDocument()
+      // Should count only the 2 from Kustomization
+      expect(screen.getByText('Degraded Performance')).toBeInTheDocument()
+      expect(screen.getByText('2 reconcilers failing')).toBeInTheDocument()
+    })
+
+    it('should handle reconcilers with null/undefined failing count', () => {
+      const report = {
+        distribution: { version: 'v2.4.0' },
+        components: [
+          { name: 'source-controller', ready: true }
+        ],
+        sync: { ready: true },
+        reconcilers: [
+          { kind: 'GitRepository', stats: { failing: null, running: 5 } },
+          { kind: 'Kustomization', stats: { running: 5 } }
+        ]
+      }
+
+      render(<OverallStatusPanel report={report} />)
+
+      // Should treat missing/null as 0 and show operational
+      expect(screen.getByText('All Systems Operational')).toBeInTheDocument()
     })
 
     it('should sum failing reconcilers across all types', () => {
@@ -469,6 +694,46 @@ describe('OverallStatusPanel', () => {
       render(<OverallStatusPanel report={report} />)
 
       expect(screen.getByText('5 reconcilers failing')).toBeInTheDocument()
+    })
+
+    it('should correctly calculate when all reconcilers are completely broken', () => {
+      const report = {
+        distribution: { version: 'v2.4.0' },
+        components: [
+          { name: 'source-controller', ready: true }
+        ],
+        reconcilers: [
+          { kind: 'GitRepository', stats: { failing: 10, running: 0 } },
+          { kind: 'Kustomization', stats: { failing: 5, running: 0 } },
+          { kind: 'HelmRelease', stats: { failing: 3, running: 0 } }
+        ]
+      }
+
+      render(<OverallStatusPanel report={report} />)
+
+      // All reconcilers have 0 running, so it's a major outage
+      expect(screen.getByText('Major Outage')).toBeInTheDocument()
+    })
+
+    it('should handle mix of reconcilers with and without failures', () => {
+      const report = {
+        distribution: { version: 'v2.4.0' },
+        components: [
+          { name: 'source-controller', ready: true }
+        ],
+        sync: { ready: true },
+        reconcilers: [
+          { kind: 'GitRepository', stats: { failing: 0, running: 10 } },
+          { kind: 'Kustomization', stats: { failing: 3, running: 5 } },
+          { kind: 'HelmRelease', stats: { failing: 0, running: 8 } }
+        ]
+      }
+
+      render(<OverallStatusPanel report={report} />)
+
+      // Should be degraded with 3 failing
+      expect(screen.getByText('Degraded Performance')).toBeInTheDocument()
+      expect(screen.getByText('3 reconcilers failing')).toBeInTheDocument()
     })
   })
 })
