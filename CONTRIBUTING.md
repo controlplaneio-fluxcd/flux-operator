@@ -162,7 +162,7 @@ To connect to the server from VS Code, use the following configuration:
 
 After rebuilding the MCP Server binary, you need to restart the server to test the new build.
 
-### Flux Status Web UI
+### Flux Status Page
 
 The Flux Status Web UI is a single-page application (SPA) built using [Preact](https://preactjs.com/),
 [Tailwind CSS](https://tailwindcss.com/), and [Vite](https://vite.dev/).
@@ -208,9 +208,6 @@ make web-dev
 ```
 
 The Vite dev server will proxy API requests to the Go backend running on port 35000.
-
-For more information on writing tests, component naming conventions, and signal patterns,
-refer to the [web/README.md](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/web/README.md) file.
 
 ## Project Documentation Structure
 

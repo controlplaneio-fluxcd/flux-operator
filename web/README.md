@@ -1,68 +1,55 @@
-# Flux Status - Frontend
+# Flux Status Page
 
-Single-page application built with [Preact](https://preactjs.com/) (lightweight React alternative),
-[Preact Signals](https://preactjs.com/guide/v10/signals/) for reactive state management,
-[Tailwind CSS](https://tailwindcss.com/) for styling,
-and [Vite](https://vite.dev/) as the build tool and dev server.
+**Mission control dashboard for Kubernetes app delivery powered by Flux CD**
 
-## Development
+The **Flux Status Page** is a lightweight, mobile-friendly web interface providing real-time
+visibility into your GitOps pipelines. Embedded directly within the **Flux Operator**,
+it requires no additional installation steps.
 
-Install dependencies:
+Designed for DevOps engineers and platform teams, the Status Page offers direct insight
+into your Kubernetes clusters. It allows you to track app deployments, monitor
+controller readiness, and troubleshoot issues instantly, without needing to access the CLI.
 
-```bash
-make web-install
-```
+Built with security in mind, the interface is strictly read-only, ensuring it never
+interferes with Flux controllers or compromises cluster security.
+Together with the **Flux MCP Server**, it provides a comprehensive solution for
+on-call monitoring and Agentic AI incident response in production environments.
 
-Start dev server with hot reload and mock data:
+## Features
 
-```bash
-make web-dev-mock
-```
+- **Operational Overview:** View the real-time status and readiness of all Flux controllers.
+- **Monitor Reconciliation:** Monitor the sync state of your cluster and infrastructure deployments.
+- **Pinpoint Issues:** Quickly identify and troubleshoot failures within your app delivery pipelines.
+- **Navigate Efficiently:** Use advanced search and filtering to find specific resources instantly.
+- **Deep Dive:** Access dedicated dashboards for ResourceSets, HelmReleases, Kustomizations and Flux sources.
+- **Mobile-Optimized:** Stay informed with a fully responsive interface designed for on-the-go checks.
+- **Adaptive Theming:** Toggle between dark and light modes to suit your environment and preference.
 
-To use a live backend connected to Kubernetes:
+## Accessing the Status Page
 
-```bash
-make web-run
-make web-dev
-```
+The Flux Status Page is exposed on port `9080` by the `flux-operator` Kubernetes service.
 
-Run unit tests:
-
-```bash
-make web-test
-```
-
-## Go Backend
-
-- **Server setup**: `internal/web/serve.go` (HTTP server with graceful shutdown)
-- **API routes**: `internal/web/router.go` registers HTTP handlers for `/api/v1/`
-- **Embedded frontend**: Embeds `web/dist` in `web/embed.go` and serves it in `internal/web/fs.go`
-
-## Mock Data
-
-Mock data for UI development is organized in `src/mock/`:
-
-- `report.js` - FluxReport mock data (`mockReport`)
-- `events.js` - Events API mock data (`mockEvents`)
-- `resources.js` - Resources API mock data (`mockResources`)
-
-When `VITE_USE_MOCK_DATA=true`, the app uses dynamic imports to load mock data only when needed,
-preventing mock data from being bundled in production builds.
-
-**Important**: Keep mock data in sync with the real API shape!
-
-## Testing
-
-The project uses [Vitest](https://vitest.dev/) as the test framework
-with [jsdom](https://github.com/jsdom/jsdom) for DOM simulation
-and [@testing-library/preact](https://testing-library.com/docs/preact-testing-library/intro/) for component testing.
-
-Run tests with coverage:
+To access the Status Page, you can port-forward the service to your local machine:
 
 ```bash
-cd web && npm test -- --coverage
+kubectl -n flux-system port-forward svc/flux-operator 9080:9080
 ```
 
-Test files and `vitest.setup.js` automatically have access
-to Vitest globals (`describe`, `it`, `expect`, `vi`, etc.) without needing to import them.
-This is configured in `eslint.config.js`.
+To expose the Status Page externally, you can create an Ingress or Gateway HTTPRoute resource
+pointing to the `flux-operator` service on port `9080`.
+
+> [!IMPORTANT]
+> Ensure you secure access to the Flux Status Page appropriately!
+> While the UI is read-only and doesn't show sensitive data from Kubernetes secrets,
+> it does expose details about your cluster's infrastructure and app deployments.
+
+## Contributing
+
+We welcome contributions to the Flux Status Page project via GitHub pull requests.
+Please see the [CONTRIBUTING](https://github.com/controlplaneio-fluxcd/flux-operator/blob/main/CONTRIBUTING.md)
+guide for details on how to set up your development environment and start contributing to the project.
+
+## License
+
+The Flux Status Page is open-source and part of the [Flux Operator](https://github.com/controlplaneio-fluxcd/flux-operator)
+project licensed under the [AGPL-3.0 license](https://github.com/controlplaneio-fluxcd/flux-operator/blob/main/LICENSE).
