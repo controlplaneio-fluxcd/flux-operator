@@ -24,21 +24,27 @@ func (r *Router) SearchHandler(w http.ResponseWriter, req *http.Request) {
 	queryParams := req.URL.Query()
 	name := queryParams.Get("name")
 	namespace := queryParams.Get("namespace")
+	kind := queryParams.Get("kind")
 
 	// if name does not contain wildcard, append * to perform partial match
 	if name != "" && !hasWildcard(name) {
 		name = "*" + name + "*"
 	}
-
-	// Limit search to applier kinds
-	kinds := []string{
-		fluxcdv1.FluxInstanceKind,
-		fluxcdv1.ResourceSetKind,
-		fluxcdv1.FluxKustomizationKind,
-		fluxcdv1.FluxHelmReleaseKind,
+	var kinds []string
+	if kind != "" {
+		kinds = []string{kind}
+	} else {
+		// Limit search to applier kinds
+		kinds = []string{
+			fluxcdv1.FluxInstanceKind,
+			fluxcdv1.ResourceSetKind,
+			fluxcdv1.FluxKustomizationKind,
+			fluxcdv1.FluxHelmReleaseKind,
+		}
 	}
-	if namespace != "" {
-		// If namespace is specified, add sources kinds as well
+
+	// If namespace is specified, add sources kinds as well
+	if namespace != "" && kind == "" {
 		kinds = append(kinds,
 			fluxcdv1.FluxGitRepositoryKind,
 			fluxcdv1.FluxOCIRepositoryKind,

@@ -17,44 +17,85 @@ export const quickSearchLoading = signal(false)
 let debounceTimer = null
 
 /**
- * Parse search query to extract namespace filter and search term
+ * Parse search query to extract namespace/kind filters and search term
+ * Supports: ns:<namespace>, kind:<kind>, or both
  * @param {string} query - Raw search query
- * @returns {{ namespace: string|null, name: string, isSelectingNamespace: boolean, namespacePartial: string }}
+ * @returns {{ namespace: string|null, kind: string|null, name: string, isSelectingNamespace: boolean, isSelectingKind: boolean, namespacePartial: string, kindPartial: string }}
  */
 export function parseSearchQuery(query) {
-  if (!query || !query.toLowerCase().startsWith('ns:')) {
-    return { namespace: null, name: query || '', isSelectingNamespace: false, namespacePartial: '' }
-  }
-
-  // Check if there's a space after ns: prefix (namespace selection complete)
-  const spaceIndex = query.indexOf(' ')
-  if (spaceIndex === -1) {
-    // Still selecting namespace (e.g., "ns:" or "ns:flux")
-    return {
-      namespace: null,
-      name: '',
-      isSelectingNamespace: true,
-      namespacePartial: query.slice(3) // Everything after "ns:"
-    }
-  }
-
-  // Namespace selected, extract namespace and search term
-  const namespace = query.slice(3, spaceIndex)
-  const name = query.slice(spaceIndex + 1)
-  return {
-    namespace: namespace || null,
-    name,
+  const result = {
+    namespace: null,
+    kind: null,
+    name: '',
     isSelectingNamespace: false,
-    namespacePartial: ''
+    isSelectingKind: false,
+    namespacePartial: '',
+    kindPartial: ''
   }
+
+  if (!query) {
+    return result
+  }
+
+  const lowerQuery = query.toLowerCase()
+
+  // Check if typing ns: prefix (no space after value = still selecting)
+  if (lowerQuery.startsWith('ns:') && !query.includes(' ')) {
+    result.isSelectingNamespace = true
+    result.namespacePartial = query.slice(3)
+    return result
+  }
+
+  // Check if typing kind: prefix (no space after value = still selecting)
+  if (lowerQuery.startsWith('kind:') && !query.includes(' ')) {
+    result.isSelectingKind = true
+    result.kindPartial = query.slice(5)
+    return result
+  }
+
+  // Extract completed filters (must have space after value)
+  let remaining = query
+
+  // Extract completed namespace filter
+  const nsRegex = /ns:([^\s]+)\s/gi
+  const nsMatch = nsRegex.exec(query)
+  if (nsMatch) {
+    result.namespace = nsMatch[1]
+    remaining = remaining.replace(nsMatch[0], '')
+  }
+
+  // Extract completed kind filter
+  const kindRegex = /kind:([^\s]+)\s/gi
+  const kindMatch = kindRegex.exec(query)
+  if (kindMatch) {
+    result.kind = kindMatch[1]
+    remaining = remaining.replace(kindMatch[0], '')
+  }
+
+  // Check if remaining text is a partial filter
+  const remainingTrimmed = remaining.trim()
+  const remainingLower = remainingTrimmed.toLowerCase()
+
+  if (remainingLower.startsWith('ns:')) {
+    result.isSelectingNamespace = true
+    result.namespacePartial = remainingTrimmed.slice(3)
+    return result
+  }
+
+  if (remainingLower.startsWith('kind:')) {
+    result.isSelectingKind = true
+    result.kindPartial = remainingTrimmed.slice(5)
+    return result
+  }
+
+  result.name = remainingTrimmed
+  return result
 }
 
 /**
- * Fetch search results from API with debouncing
- * @param {string} name - Search term
- * @param {string|null} namespace - Optional namespace filter
+ * Fetch search results from API
  */
-async function fetchSearchResults(name, namespace) {
+async function fetchSearchResults(name, namespace, kind) {
   if (!name || name.length < 2) {
     quickSearchResults.value = []
     quickSearchLoading.value = false
@@ -67,6 +108,9 @@ async function fetchSearchResults(name, namespace) {
     let endpoint = `/api/v1/search?name=${encodeURIComponent(name)}`
     if (namespace) {
       endpoint += `&namespace=${encodeURIComponent(namespace)}`
+    }
+    if (kind) {
+      endpoint += `&kind=${encodeURIComponent(kind)}`
     }
     const data = await fetchWithMock({
       endpoint,
@@ -84,10 +128,8 @@ async function fetchSearchResults(name, namespace) {
 
 /**
  * Debounced search function
- * @param {string} name - Search term
- * @param {string|null} namespace - Optional namespace filter
  */
-function debouncedSearch(name, namespace) {
+function debouncedSearch(name, namespace, kind) {
   if (debounceTimer) {
     window.clearTimeout(debounceTimer)
   }
@@ -100,14 +142,12 @@ function debouncedSearch(name, namespace) {
 
   quickSearchLoading.value = true
   debounceTimer = setTimeout(() => {
-    fetchSearchResults(name, namespace)
-  }, 300)
+    fetchSearchResults(name, namespace, kind)
+  }, 400)
 }
 
 /**
- * Get filtered namespace suggestions based on partial input
- * @param {string} partial - Partial namespace string to filter by
- * @returns {string[]} - Filtered and sorted namespace suggestions (max 10)
+ * Get filtered namespace suggestions
  */
 function getNamespaceSuggestions(partial) {
   const namespaces = reportData.value?.spec?.namespaces || []
@@ -118,9 +158,19 @@ function getNamespaceSuggestions(partial) {
 }
 
 /**
- * Get status dot color based on resource status
- * @param {string} status - Resource status
- * @returns {string} - Tailwind CSS classes for the dot
+ * Get filtered kind suggestions
+ */
+function getKindSuggestions(partial) {
+  const reconcilers = reportData.value?.spec?.reconcilers || []
+  const kinds = [...new Set(reconcilers.map(r => r.kind))].sort()
+  const filtered = partial
+    ? kinds.filter(k => k.toLowerCase().includes(partial.toLowerCase()))
+    : kinds
+  return filtered
+}
+
+/**
+ * Get status dot color
  */
 function getStatusDotClass(status) {
   switch (status) {
@@ -139,28 +189,53 @@ function getStatusDotClass(status) {
 }
 
 /**
- * QuickSearch component - Header search with animated input and dropdown results
+ * QuickSearch component with state management
  *
- * Features:
- * - Search button that toggles the search input
- * - Animated input field that slides in from the right
- * - Close button to clear and dismiss
- * - Escape key to close
- * - Debounced API search (300ms)
- * - Results dropdown with status dots
- * - Click result to navigate to resources page
+ * Architecture:
+ * - selectedNamespace/selectedKind: store the selected filters
+ * - inputValue: what's shown in the input field
+ * - mode: derived from inputValue (search, selectingNamespace, selectingKind)
  */
 export function QuickSearch() {
   const location = useLocation()
   const inputRef = useRef(null)
+
+  // Core state - separate from the query string
+  const [selectedNamespace, setSelectedNamespace] = useState(null)
+  const [selectedKind, setSelectedKind] = useState(null)
+  const [inputValue, setInputValue] = useState('')
+  // Track order of filter addition for backspace removal (LIFO)
+  const [filterOrder, setFilterOrder] = useState([]) // ['namespace'] or ['kind'] or ['namespace', 'kind'] etc.
+
+  // Selection indices for keyboard navigation
   const [selectedIndex, setSelectedIndex] = useState(-1)
   const [nsSelectedIndex, setNsSelectedIndex] = useState(-1)
+  const [kindSelectedIndex, setKindSelectedIndex] = useState(-1)
 
-  // Parse the current query
-  const parsed = parseSearchQuery(quickSearchQuery.value)
-  const namespaceSuggestions = parsed.isSelectingNamespace
-    ? getNamespaceSuggestions(parsed.namespacePartial)
-    : []
+  // Derive mode from input value
+  const lowerInput = inputValue.toLowerCase()
+  const isSelectingNamespace = lowerInput.startsWith('ns:')
+  const isSelectingKind = lowerInput.startsWith('kind:')
+  const namespacePartial = isSelectingNamespace ? inputValue.slice(3) : ''
+  const kindPartial = isSelectingKind ? inputValue.slice(5) : ''
+
+  // Check if user is typing a filter prefix (don't search yet)
+  const isTypingFilterPrefix = !selectedNamespace && !selectedKind &&
+    (lowerInput === 'ns' || lowerInput === 'kind' || lowerInput === 'ns:' || lowerInput === 'kind:' ||
+     lowerInput.startsWith('kind') && lowerInput.length < 5)
+
+  // Get suggestions
+  const namespaceSuggestions = isSelectingNamespace ? getNamespaceSuggestions(namespacePartial) : []
+  const kindSuggestions = isSelectingKind ? getKindSuggestions(kindPartial) : []
+
+  // Sync internal state to exported signal (used by tests)
+  useEffect(() => {
+    const parts = []
+    if (selectedNamespace) parts.push(`ns:${selectedNamespace} `)
+    if (selectedKind) parts.push(`kind:${selectedKind} `)
+    parts.push(inputValue)
+    quickSearchQuery.value = parts.join('')
+  }, [selectedNamespace, selectedKind, inputValue])
 
   // Focus input when search opens
   useEffect(() => {
@@ -169,88 +244,124 @@ export function QuickSearch() {
     }
   }, [quickSearchOpen.value])
 
-  // Reset selected index when results change
+  // Reset indices when suggestions/results change
   useEffect(() => {
     setSelectedIndex(-1)
   }, [quickSearchResults.value])
 
-  // Reset namespace selection index when suggestions change
   useEffect(() => {
     setNsSelectedIndex(-1)
-  }, [namespaceSuggestions.length, parsed.isSelectingNamespace])
+  }, [namespaceSuggestions.length, isSelectingNamespace])
 
-  // Handle search button click
+  useEffect(() => {
+    setKindSelectedIndex(-1)
+  }, [kindSuggestions.length, isSelectingKind])
+
+  // Trigger search when input changes (and not selecting filters)
+  useEffect(() => {
+    if (!isSelectingNamespace && !isSelectingKind && !isTypingFilterPrefix && inputValue.length >= 2) {
+      debouncedSearch(inputValue, selectedNamespace, selectedKind)
+    } else if (!isSelectingNamespace && !isSelectingKind && !isTypingFilterPrefix) {
+      quickSearchResults.value = []
+      quickSearchLoading.value = false
+    }
+  }, [inputValue, selectedNamespace, selectedKind, isSelectingNamespace, isSelectingKind, isTypingFilterPrefix])
+
   const handleSearchClick = () => {
     quickSearchOpen.value = true
   }
 
-  // Handle close button click
   const handleClose = () => {
     quickSearchOpen.value = false
     quickSearchQuery.value = ''
     quickSearchResults.value = []
     quickSearchLoading.value = false
+    setSelectedNamespace(null)
+    setSelectedKind(null)
+    setInputValue('')
+    setFilterOrder([])
     setSelectedIndex(-1)
     setNsSelectedIndex(-1)
+    setKindSelectedIndex(-1)
     if (debounceTimer) {
       window.clearTimeout(debounceTimer)
     }
   }
 
-  // Handle input change
-  const handleInputChange = (e) => {
-    const value = e.target.value
-    quickSearchQuery.value = value
-
-    // Parse the query and trigger search if we have a complete namespace + name
-    const { namespace, name, isSelectingNamespace } = parseSearchQuery(value)
-
-    // Don't search if user is typing "ns" - they're likely about to type "ns:"
-    const isTypingNsPrefix = !namespace && value.toLowerCase().startsWith('ns')
-
-    if (!isSelectingNamespace && name && !isTypingNsPrefix) {
-      debouncedSearch(name, namespace)
-    } else if (!isSelectingNamespace && !name) {
-      // Clear results when no name is entered yet
-      quickSearchResults.value = []
-      quickSearchLoading.value = false
-    } else if (isTypingNsPrefix && !isSelectingNamespace) {
-      // Clear results when typing "ns" prefix
-      quickSearchResults.value = []
-      quickSearchLoading.value = false
-    }
-  }
-
-  // Handle namespace selection
   const handleNamespaceSelect = (namespace) => {
-    quickSearchQuery.value = `ns:${namespace} `
-    quickSearchResults.value = []
+    setSelectedNamespace(namespace)
+    setInputValue('')
+    setFilterOrder(prev => [...prev.filter(f => f !== 'namespace'), 'namespace'])
     setNsSelectedIndex(-1)
-    // Focus input after selection
+    quickSearchResults.value = []
     if (inputRef.current) {
       inputRef.current.focus()
     }
   }
 
-  // Handle keyboard events
+  const handleKindSelect = (kind) => {
+    setSelectedKind(kind)
+    setInputValue('')
+    setFilterOrder(prev => [...prev.filter(f => f !== 'kind'), 'kind'])
+    setKindSelectedIndex(-1)
+    quickSearchResults.value = []
+    if (inputRef.current) {
+      inputRef.current.focus()
+    }
+  }
+
+  const handleInputChange = (e) => {
+    setInputValue(e.target.value)
+  }
+
   const handleKeyDown = (e) => {
     if (e.key === 'Escape') {
       handleClose()
       return
     }
 
+    // Handle backspace to remove badges when input is empty (LIFO order)
+    if (e.key === 'Backspace' && inputValue === '' && (selectedNamespace || selectedKind)) {
+      e.preventDefault()
+      // Remove the most recently added filter
+      const lastFilter = filterOrder[filterOrder.length - 1]
+      if (lastFilter === 'kind') {
+        setSelectedKind(null)
+        setFilterOrder(prev => prev.slice(0, -1))
+      } else if (lastFilter === 'namespace') {
+        setSelectedNamespace(null)
+        setFilterOrder(prev => prev.slice(0, -1))
+      }
+      quickSearchResults.value = []
+      return
+    }
+
     // Handle namespace suggestions navigation
-    if (parsed.isSelectingNamespace && namespaceSuggestions.length > 0) {
+    if (isSelectingNamespace && namespaceSuggestions.length > 0) {
       if (e.key === 'ArrowDown') {
         e.preventDefault()
-        const maxIndex = namespaceSuggestions.length - 1
-        setNsSelectedIndex(prev => prev < maxIndex ? prev + 1 : prev)
+        setNsSelectedIndex(prev => Math.min(prev + 1, namespaceSuggestions.length - 1))
       } else if (e.key === 'ArrowUp') {
         e.preventDefault()
-        setNsSelectedIndex(prev => prev > 0 ? prev - 1 : -1)
+        setNsSelectedIndex(prev => Math.max(prev - 1, -1))
       } else if (e.key === 'Enter' && nsSelectedIndex >= 0) {
         e.preventDefault()
         handleNamespaceSelect(namespaceSuggestions[nsSelectedIndex])
+      }
+      return
+    }
+
+    // Handle kind suggestions navigation
+    if (isSelectingKind && kindSuggestions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setKindSelectedIndex(prev => Math.min(prev + 1, kindSuggestions.length - 1))
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setKindSelectedIndex(prev => Math.max(prev - 1, -1))
+      } else if (e.key === 'Enter' && kindSelectedIndex >= 0) {
+        e.preventDefault()
+        handleKindSelect(kindSuggestions[kindSelectedIndex])
       }
       return
     }
@@ -260,11 +371,11 @@ export function QuickSearch() {
       e.preventDefault()
       const maxIndex = quickSearchResults.value.length - 1
       if (maxIndex >= 0) {
-        setSelectedIndex(prev => prev < maxIndex ? prev + 1 : prev)
+        setSelectedIndex(prev => Math.min(prev + 1, maxIndex))
       }
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
-      setSelectedIndex(prev => prev > 0 ? prev - 1 : -1)
+      setSelectedIndex(prev => Math.max(prev - 1, -1))
     } else if (e.key === 'Enter' && selectedIndex >= 0) {
       e.preventDefault()
       const resource = quickSearchResults.value[selectedIndex]
@@ -274,36 +385,32 @@ export function QuickSearch() {
     }
   }
 
-  // Handle result click - navigate to resource dashboard
   const handleResultClick = (resource) => {
     location.route(`/resource/${encodeURIComponent(resource.kind)}/${encodeURIComponent(resource.namespace)}/${encodeURIComponent(resource.name)}`)
     handleClose()
   }
 
-  // Check if namespace suggestions panel should be shown
-  const showNamespaceSuggestions = quickSearchOpen.value && parsed.isSelectingNamespace
+  // Determine what to show
+  const showNamespaceSuggestions = quickSearchOpen.value && isSelectingNamespace
+  const showKindSuggestions = quickSearchOpen.value && isSelectingKind
 
-  // Don't show results panel if user is typing "ns" prefix (likely about to type "ns:")
-  const isTypingNsPrefix = !parsed.namespace && quickSearchQuery.value.toLowerCase().startsWith('ns')
-
-  // Show hint when typing 1-2 chars (without namespace selected)
   const showSearchHint = quickSearchOpen.value &&
-    !parsed.namespace &&
-    !parsed.isSelectingNamespace &&
-    !isTypingNsPrefix &&
-    quickSearchQuery.value.length >= 1 &&
-    quickSearchQuery.value.length < 2
+    !selectedNamespace && !selectedKind &&
+    !isSelectingNamespace && !isSelectingKind &&
+    !isTypingFilterPrefix &&
+    inputValue.length >= 1 && inputValue.length < 2
 
-  // Check if results panel should be shown
-  const showResultsPanel = quickSearchOpen.value && !parsed.isSelectingNamespace && !isTypingNsPrefix && (
+  const showResultsPanel = quickSearchOpen.value &&
+    !isSelectingNamespace && !isSelectingKind &&
+    !isTypingFilterPrefix && (
     quickSearchResults.value.length > 0 ||
-    quickSearchLoading.value ||
-    (parsed.name.length >= 2 && !quickSearchLoading.value)
+      quickSearchLoading.value ||
+      (inputValue.length >= 2 && !quickSearchLoading.value)
   )
 
   return (
     <div class="relative">
-      {/* Search Button - shown when search is closed */}
+      {/* Search Button */}
       {!quickSearchOpen.value && (
         <button
           onClick={handleSearchClick}
@@ -317,52 +424,44 @@ export function QuickSearch() {
         </button>
       )}
 
-      {/* Search Panel - shown when search is open */}
+      {/* Search Panel */}
       {quickSearchOpen.value && (
         <div class="animate-slide-in-right">
-          {/* Search Input Row - matches button height */}
+          {/* Search Input Row */}
           <div class="flex items-center px-3 h-[38px] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg">
             <svg class="w-4 h-4 text-gray-400 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
-            {/* Namespace Badge - shown when namespace is selected */}
-            {parsed.namespace && (
-              <span class="inline-flex items-center px-2 py-0.5 mr-1.5 rounded text-xs font-medium bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200 flex-shrink-0">
-                ns:{parsed.namespace}
-              </span>
-            )}
+
+            {/* Filter Badges - rendered in order of addition */}
+            {filterOrder.map(filter => {
+              if (filter === 'namespace' && selectedNamespace) {
+                return (
+                  <span key="ns" class="inline-flex items-center px-2 py-0.5 mr-1.5 rounded text-xs font-medium bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200 flex-shrink-0">
+                    ns:{selectedNamespace}
+                  </span>
+                )
+              }
+              if (filter === 'kind' && selectedKind) {
+                return (
+                  <span key="kind" class="inline-flex items-center px-2 py-0.5 mr-1.5 rounded text-xs font-medium bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200 flex-shrink-0">
+                    kind:{selectedKind}
+                  </span>
+                )
+              }
+              return null
+            })}
+
             <input
               ref={inputRef}
               type="text"
-              value={parsed.namespace ? parsed.name : quickSearchQuery.value}
-              onInput={(e) => {
-                // When namespace is selected, prepend it to the input value
-                if (parsed.namespace) {
-                  quickSearchQuery.value = `ns:${parsed.namespace} ${e.target.value}`
-                  const { name, namespace } = parseSearchQuery(quickSearchQuery.value)
-                  if (name) {
-                    debouncedSearch(name, namespace)
-                  } else {
-                    quickSearchResults.value = []
-                    quickSearchLoading.value = false
-                  }
-                } else {
-                  handleInputChange(e)
-                }
-              }}
-              onKeyDown={(e) => {
-                // Handle backspace to remove namespace badge when input is empty
-                if (e.key === 'Backspace' && parsed.namespace && !parsed.name) {
-                  e.preventDefault()
-                  quickSearchQuery.value = ''
-                  quickSearchResults.value = []
-                  return
-                }
-                handleKeyDown(e)
-              }}
-              placeholder={parsed.namespace ? 'Search in namespace...' : 'Search appliers...'}
+              value={inputValue}
+              onInput={handleInputChange}
+              onKeyDown={handleKeyDown}
+              placeholder={(selectedNamespace || selectedKind) ? 'Search...' : 'Search appliers...'}
               class="flex-1 min-w-0 text-sm text-gray-900 dark:text-gray-100 bg-transparent placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none"
             />
+
             <button
               onClick={handleClose}
               class="ml-2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 focus:outline-none flex-shrink-0"
@@ -374,11 +473,11 @@ export function QuickSearch() {
             </button>
           </div>
 
-          {/* Namespace Suggestions - shown when typing ns: */}
+          {/* Namespace Suggestions */}
           {showNamespaceSuggestions && namespaceSuggestions.length > 0 && (
             <div class="absolute left-0 right-0 mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-80 overflow-y-auto z-50">
               <div class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
-                Select namespace
+                Type or select namespace
               </div>
               <ul>
                 {namespaceSuggestions.map((ns, index) => (
@@ -400,7 +499,7 @@ export function QuickSearch() {
           )}
 
           {/* Empty namespace suggestions */}
-          {showNamespaceSuggestions && namespaceSuggestions.length === 0 && parsed.namespacePartial && (
+          {showNamespaceSuggestions && namespaceSuggestions.length === 0 && namespacePartial && (
             <div class="absolute left-0 right-0 mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg z-50">
               <div class="p-3 text-sm text-gray-500 dark:text-gray-400 text-center">
                 No matching namespaces
@@ -408,16 +507,50 @@ export function QuickSearch() {
             </div>
           )}
 
-          {/* Search hint - shown when typing 1 char */}
+          {/* Kind Suggestions */}
+          {showKindSuggestions && kindSuggestions.length > 0 && (
+            <div class="absolute left-0 right-0 mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-80 overflow-y-auto z-50">
+              <div class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                Type or select kind
+              </div>
+              <ul>
+                {kindSuggestions.map((kind, index) => (
+                  <li key={kind}>
+                    <button
+                      onClick={() => handleKindSelect(kind)}
+                      class={`w-full text-left py-1.5 px-3 text-sm font-mono focus:outline-none transition-colors ${
+                        index === kindSelectedIndex
+                          ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
+                          : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                      }`}
+                    >
+                      {kind}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Empty kind suggestions */}
+          {showKindSuggestions && kindSuggestions.length === 0 && kindPartial && (
+            <div class="absolute left-0 right-0 mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg z-50">
+              <div class="p-3 text-sm text-gray-500 dark:text-gray-400 text-center">
+                No matching kinds
+              </div>
+            </div>
+          )}
+
+          {/* Search hint */}
           {showSearchHint && (
             <div class="absolute left-0 right-0 mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg z-50">
-              <div class="p-3 text-sm text-gray-500 dark:text-gray-400">
-                <p>Type at least 2 characters to search</p>
-                <p class="mt-1">
-                  <span class="text-gray-400 dark:text-gray-500">Tip:</span>{' '}
+              <div class="px-3 py-2 text-sm text-gray-500 dark:text-gray-400 space-y-1">
+                <div>Type 2+ chars to search or <span class="font-mono">**</span> for most recent</div>
+                <div>
+                  Apply filters with{' '}
                   <button
                     onClick={() => {
-                      quickSearchQuery.value = 'ns:'
+                      setInputValue('ns:')
                       if (inputRef.current) {
                         inputRef.current.focus()
                       }
@@ -426,13 +559,24 @@ export function QuickSearch() {
                   >
                     ns:
                   </button>
-                  {' '}to filter by namespace
-                </p>
+                  {' '}and{' '}
+                  <button
+                    onClick={() => {
+                      setInputValue('kind:')
+                      if (inputRef.current) {
+                        inputRef.current.focus()
+                      }
+                    }}
+                    class="text-flux-blue hover:underline focus:outline-none"
+                  >
+                    kind:
+                  </button>
+                </div>
               </div>
             </div>
           )}
 
-          {/* Results Area - positioned absolutely below input */}
+          {/* Results Panel */}
           {showResultsPanel && (
             <div class="absolute left-0 right-0 mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-80 overflow-y-auto z-50">
               {/* Loading State */}
@@ -468,7 +612,7 @@ export function QuickSearch() {
               )}
 
               {/* Empty State */}
-              {!quickSearchLoading.value && quickSearchResults.value.length === 0 && parsed.name.length >= 2 && (
+              {!quickSearchLoading.value && quickSearchResults.value.length === 0 && inputValue.length >= 2 && (
                 <div class="p-3 text-sm text-gray-500 dark:text-gray-400 text-center">
                   <p>No resources found</p>
                   <button
