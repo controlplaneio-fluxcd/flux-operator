@@ -3,7 +3,7 @@
 
 import { useState, useMemo } from 'preact/hooks'
 import { useSignal } from '@preact/signals'
-import { fluxKinds, workloadKinds } from '../../utils/constants'
+import { fluxKinds, workloadKinds, isKindWithInventory } from '../../utils/constants'
 import { TabButton } from './PanelComponents'
 import { WorkloadsTabContent } from './WorkloadsTabContent'
 
@@ -21,27 +21,30 @@ export function InventoryPanel({ resourceData, onNavigate }) {
   // Check if inventory exists
   const hasInventory = resourceData?.status?.inventory && resourceData.status.inventory.length > 0
 
-  // Don't render if no inventory
-  if (!hasInventory) {
+  // Check if this kind should have inventory panel
+  const shouldShowPanel = isKindWithInventory(resourceData?.kind)
+
+  // Don't render if this kind doesn't support inventory
+  if (!shouldShowPanel) {
     return null
   }
 
   // Calculate managed objects statistics
   const totalResourcesCount = useMemo(() => {
-    return resourceData.status.inventory.length
-  }, [resourceData])
+    return hasInventory ? resourceData.status.inventory.length : 0
+  }, [resourceData, hasInventory])
 
   const fluxResourcesCount = useMemo(() => {
-    return resourceData.status.inventory.filter(item => fluxKinds.includes(item.kind)).length
-  }, [resourceData])
+    return hasInventory ? resourceData.status.inventory.filter(item => fluxKinds.includes(item.kind)).length : 0
+  }, [resourceData, hasInventory])
 
   const workloadsCount = useMemo(() => {
-    return resourceData.status.inventory.filter(item => workloadKinds.includes(item.kind)).length
-  }, [resourceData])
+    return hasInventory ? resourceData.status.inventory.filter(item => workloadKinds.includes(item.kind)).length : 0
+  }, [resourceData, hasInventory])
 
   const secretsCount = useMemo(() => {
-    return resourceData.status.inventory.filter(item => item.kind === 'Secret').length
-  }, [resourceData])
+    return hasInventory ? resourceData.status.inventory.filter(item => item.kind === 'Secret').length : 0
+  }, [resourceData, hasInventory])
 
   // Calculate feature flags
   const pruningEnabled = useMemo(() => {
@@ -75,6 +78,7 @@ export function InventoryPanel({ resourceData, onNavigate }) {
 
   // Sort inventory items
   const sortedInventory = useMemo(() => {
+    if (!hasInventory) return []
     return [...resourceData.status.inventory].sort((a, b) => {
       // Non-namespaced items first
       const aHasNamespace = !!a.namespace
@@ -100,12 +104,13 @@ export function InventoryPanel({ resourceData, onNavigate }) {
       }
       return a.name.localeCompare(b.name)
     })
-  }, [resourceData])
+  }, [resourceData, hasInventory])
 
   // Filter workload items
   const workloadItems = useMemo(() => {
+    if (!hasInventory) return []
     return resourceData.status.inventory.filter(item => workloadKinds.includes(item.kind))
-  }, [resourceData])
+  }, [resourceData, hasInventory])
 
   // Handle navigation to a resource
   const handleNavigate = (item) => {
@@ -143,9 +148,11 @@ export function InventoryPanel({ resourceData, onNavigate }) {
                 <span class="sm:hidden">Info</span>
                 <span class="hidden sm:inline">Overview</span>
               </TabButton>
-              <TabButton active={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')}>
-                Inventory
-              </TabButton>
+              {hasInventory && (
+                <TabButton active={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')}>
+                  Inventory
+                </TabButton>
+              )}
               {workloadsCount > 0 && (
                 <TabButton active={activeTab === 'workloads'} onClick={() => setActiveTab('workloads')}>
                   Workloads

@@ -189,7 +189,7 @@ describe('Header', () => {
       expect(backIcon).toBeInTheDocument()
     })
 
-    it('should navigate to events view when clicked from dashboard', () => {
+    it('should navigate to resources view when clicked from dashboard', () => {
       useLocation.mockReturnValue({
         path: '/',
         query: {},
@@ -206,7 +206,7 @@ describe('Header', () => {
 
       fireEvent.click(navButton)
 
-      expect(mockRoute).toHaveBeenCalledWith('/events')
+      expect(mockRoute).toHaveBeenCalledWith('/resources')
     })
 
     it('should navigate to dashboard when clicked from events view', () => {

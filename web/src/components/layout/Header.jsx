@@ -36,8 +36,8 @@ export function Header() {
       // Return to dashboard from search view
       location.route('/')
     } else {
-      // Navigate to events page (default search view)
-      location.route('/events')
+      // Navigate to resources page (default search view)
+      location.route('/resources')
     }
   }
 

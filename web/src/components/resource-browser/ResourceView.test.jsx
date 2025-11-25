@@ -535,7 +535,7 @@ describe('ResourceView component', () => {
     expect(screen.getByText('Status')).toBeInTheDocument()
   })
 
-  it('should show Source tab as default when no inventory but sourceRef exists', async () => {
+  it('should show Inventory tab as default for Kustomization even when empty', async () => {
     const resourceWithSourceRef = {
       apiVersion: 'kustomize.toolkit.fluxcd.io/v1',
       kind: 'Kustomization',
@@ -575,12 +575,64 @@ describe('ResourceView component', () => {
       />
     )
 
-    // Wait for Source tab to appear and be active
+    // Wait for Inventory tab to appear and be active (even though empty)
     await waitFor(() => {
-      const sourceTab = screen.getByText('Source')
-      expect(sourceTab).toBeInTheDocument()
-      expect(sourceTab).toHaveClass('border-flux-blue')
+      const inventoryTab = screen.getByText('Inventory (0)')
+      expect(inventoryTab).toBeInTheDocument()
+      expect(inventoryTab).toHaveClass('border-flux-blue')
     })
+
+    // Should show empty inventory message
+    expect(screen.getByText('Empty inventory, no managed objects')).toBeInTheDocument()
+
+    // Source tab should also be visible
+    expect(screen.getByText('Source')).toBeInTheDocument()
+  })
+
+  it('should show Inventory tab as default for ResourceSet even when empty', async () => {
+    const resourceSet = {
+      apiVersion: 'fluxcd.controlplane.io/v1',
+      kind: 'ResourceSet',
+      metadata: {
+        name: 'preview-envs',
+        namespace: 'flux-system'
+      },
+      spec: {
+        interval: '1h'
+      },
+      status: {
+        conditions: [
+          {
+            type: 'Ready',
+            status: 'True',
+            lastTransitionTime: '2025-01-15T10:00:00Z',
+            reason: 'ReconciliationSucceeded',
+            message: 'Applied revision: main@sha1:abc123'
+          }
+        ]
+      }
+    }
+
+    fetchWithMock.mockResolvedValue(resourceSet)
+
+    render(
+      <ResourceView
+        kind="ResourceSet"
+        name="preview-envs"
+        namespace="flux-system"
+        isExpanded={true}
+      />
+    )
+
+    // Wait for Inventory tab to appear and be active (even though empty)
+    await waitFor(() => {
+      const inventoryTab = screen.getByText('Inventory (0)')
+      expect(inventoryTab).toBeInTheDocument()
+      expect(inventoryTab).toHaveClass('border-flux-blue')
+    })
+
+    // Should show empty inventory message
+    expect(screen.getByText('Empty inventory, no managed objects')).toBeInTheDocument()
   })
 
   it('should display sourceRef data correctly in Source tab', async () => {

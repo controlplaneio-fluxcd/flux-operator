@@ -8,7 +8,7 @@ import Prism from 'prismjs'
 import 'prismjs/components/prism-yaml'
 import { fetchWithMock } from '../../utils/fetch'
 import { appliedTheme } from '../../utils/theme'
-import { fluxKinds } from '../../utils/constants'
+import { fluxKinds, isKindWithInventory } from '../../utils/constants'
 
 // Import Prism themes as URLs for dynamic loading
 import prismLight from 'prismjs/themes/prism.css?url'
@@ -190,7 +190,8 @@ export function ResourceView({ kind, name, namespace, isExpanded }) {
         setResourceData(data)
 
         // Set default active tab: inventory > source > specification
-        if (data.status?.inventory && data.status.inventory.length > 0) {
+        const hasInventory = data.status?.inventory && data.status.inventory.length > 0
+        if (isKindWithInventory(data.kind) || hasInventory) {
           setActiveTab('inventory')
         } else if (data.status?.sourceRef) {
           setActiveTab('source')
@@ -269,6 +270,16 @@ export function ResourceView({ kind, name, namespace, isExpanded }) {
     })
   }, [groupedInventory])
 
+  // Check if inventory tab should be shown
+  const shouldShowInventoryTab = useMemo(() => {
+    if (!resourceData) return false
+    const hasInventory = resourceData.status?.inventory && resourceData.status.inventory.length > 0
+    return isKindWithInventory(resourceData.kind) || hasInventory
+  }, [resourceData])
+
+  // Get inventory count
+  const inventoryCount = resourceData?.status?.inventory?.length || 0
+
   if (!isExpanded) return null
 
   return (
@@ -298,7 +309,7 @@ export function ResourceView({ kind, name, namespace, isExpanded }) {
           {/* Tab Navigation */}
           <div class="border-b border-gray-200 dark:border-gray-700">
             <nav class="flex space-x-4" aria-label="Tabs">
-              {resourceData.status?.inventory && resourceData.status.inventory.length > 0 && (
+              {shouldShowInventoryTab && (
                 <button
                   onClick={() => setActiveTab('inventory')}
                   class={`py-2 px-1 text-sm font-medium border-b-2 transition-colors ${
@@ -307,7 +318,7 @@ export function ResourceView({ kind, name, namespace, isExpanded }) {
                       : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
                   }`}
                 >
-                  Inventory ({resourceData.status.inventory.length})
+                  Inventory ({inventoryCount})
                 </button>
               )}
               {resourceData.status?.sourceRef && (
@@ -349,15 +360,21 @@ export function ResourceView({ kind, name, namespace, isExpanded }) {
           {/* Tab Content */}
           <div class="py-2">
             {/* Inventory Tab */}
-            {activeTab === 'inventory' && resourceData.status?.inventory && (
+            {activeTab === 'inventory' && shouldShowInventoryTab && (
               <div class="space-y-3">
-                {sortedApiVersions.map(apiVersion => (
-                  <InventoryGroupByApiVersion
-                    key={apiVersion}
-                    apiVersion={apiVersion}
-                    items={groupedInventory[apiVersion]}
-                  />
-                ))}
+                {inventoryCount > 0 ? (
+                  sortedApiVersions.map(apiVersion => (
+                    <InventoryGroupByApiVersion
+                      key={apiVersion}
+                      apiVersion={apiVersion}
+                      items={groupedInventory[apiVersion]}
+                    />
+                  ))
+                ) : (
+                  <div class="py-4 px-2 text-sm text-gray-600 dark:text-gray-400">
+                    Empty inventory, no managed objects
+                  </div>
+                )}
               </div>
             )}
 
