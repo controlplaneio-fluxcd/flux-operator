@@ -435,8 +435,8 @@ export const getMockResources = (endpoint) => {
   return { resources: filteredResources }
 }
 
-// Export function that filters resources for quick search (GET /api/v1/search?name=<term>&namespace=<ns>)
-// Filters by name (contains, case-insensitive), optionally by namespace, and limits to applier kinds
+// Export function that filters resources for quick search (GET /api/v1/search?name=<term>&namespace=<ns>&kind=<kind>)
+// Filters by name (contains, case-insensitive), optionally by namespace/kind, and limits to applier kinds
 export const getMockSearchResults = (endpoint) => {
   // Parse query params from endpoint URL
   // eslint-disable-next-line no-undef
@@ -445,6 +445,7 @@ export const getMockSearchResults = (endpoint) => {
 
   const nameFilter = params.get('name')
   const namespaceFilter = params.get('namespace')
+  const kindFilter = params.get('kind')
 
   // If no name filter, return empty results
   if (!nameFilter) {
@@ -452,14 +453,18 @@ export const getMockSearchResults = (endpoint) => {
   }
 
   // Applier kinds that the search endpoint returns (matches search.go)
-  const searchKinds = ['FluxInstance', 'ResourceSet', 'Kustomization', 'HelmRelease']
+  const defaultSearchKinds = ['FluxInstance', 'ResourceSet', 'Kustomization', 'HelmRelease']
 
   const searchTerm = nameFilter.toLowerCase()
 
-  // Filter resources: match name (contains) and limit to applier kinds
+  // Filter resources: match name (contains) and limit to applier kinds (or specific kind)
   const filteredResources = mockResources.resources.filter(resource => {
-    // Only include applier kinds
-    if (!searchKinds.includes(resource.kind)) {
+    // If kind filter specified, use it; otherwise limit to default search kinds
+    if (kindFilter) {
+      if (resource.kind !== kindFilter) {
+        return false
+      }
+    } else if (!defaultSearchKinds.includes(resource.kind)) {
       return false
     }
 
@@ -468,8 +473,8 @@ export const getMockSearchResults = (endpoint) => {
       return false
     }
 
-    // Filter by name with case-insensitive contains
-    if (!resource.name.toLowerCase().includes(searchTerm)) {
+    // Filter by name with case-insensitive contains (** matches all)
+    if (searchTerm !== '**' && !resource.name.toLowerCase().includes(searchTerm)) {
       return false
     }
 

@@ -114,7 +114,7 @@ type ResourceStatus struct {
 // GetResourcesStatus returns the status for the specified resource kinds and optional name in the given namespace.
 // If name is empty, returns the status for all resources of the specified kinds are returned.
 // Filters by status (Ready, Failed, Progressing, Suspended, Unknown) if provided.
-func (r *Router) GetResourcesStatus(ctx context.Context, kinds []string, name, namespace string, status string, byKindLimit int) ([]ResourceStatus, error) {
+func (r *Router) GetResourcesStatus(ctx context.Context, kinds []string, name, namespace string, status string, matchLimit int) ([]ResourceStatus, error) {
 	var result []ResourceStatus
 
 	if len(kinds) == 0 {
@@ -186,8 +186,8 @@ func (r *Router) GetResourcesStatus(ctx context.Context, kinds []string, name, n
 
 			mu.Lock()
 			// cap the results to the specified limit
-			if byKindLimit > 0 && len(byKindResult) > byKindLimit {
-				byKindResult = byKindResult[:byKindLimit]
+			if matchLimit > 0 && len(byKindResult) > matchLimit {
+				byKindResult = byKindResult[:matchLimit]
 			}
 
 			// append to the main result

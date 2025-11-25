@@ -25,7 +25,13 @@ vi.mock('../../app', async () => {
   return {
     reportData: signal({
       spec: {
-        namespaces: ['automation', 'cert-manager', 'default', 'flux-system', 'monitoring', 'registry', 'tailscale']
+        namespaces: ['automation', 'cert-manager', 'default', 'flux-system', 'monitoring', 'registry', 'tailscale'],
+        reconcilers: [
+          { kind: 'FluxInstance' },
+          { kind: 'ResourceSet' },
+          { kind: 'Kustomization' },
+          { kind: 'HelmRelease' }
+        ]
       }
     })
   }
@@ -152,7 +158,7 @@ describe('QuickSearch', () => {
       expect(quickSearchLoading.value).toBe(true)
 
       // Advance past debounce delay
-      vi.advanceTimersByTime(300)
+      vi.advanceTimersByTime(400)
 
       expect(fetchWithMock).toHaveBeenCalledWith({
         endpoint: '/api/v1/search?name=flux',
@@ -176,7 +182,7 @@ describe('QuickSearch', () => {
       fireEvent.input(input, { target: { value: 'flux' } })
 
       // Advance past debounce delay
-      vi.advanceTimersByTime(300)
+      vi.advanceTimersByTime(400)
 
       // Should only call API once with final value
       expect(fetchWithMock).toHaveBeenCalledTimes(1)
@@ -191,24 +197,33 @@ describe('QuickSearch', () => {
   describe('Search Results', () => {
     beforeEach(() => {
       quickSearchOpen.value = true
-      quickSearchQuery.value = 'flux'
+      fetchWithMock.mockResolvedValue({ resources: [] })
     })
 
     it('should display loading state', () => {
-      quickSearchLoading.value = true
-
       render(<QuickSearch />)
+
+      const input = screen.getByPlaceholderText('Search appliers...')
+      fireEvent.input(input, { target: { value: 'flux' } })
 
       expect(screen.getByText('Searching...')).toBeInTheDocument()
     })
 
-    it('should display results with status dot and Kind/Namespace/Name', () => {
-      quickSearchResults.value = [
-        { kind: 'FluxInstance', namespace: 'flux-system', name: 'flux', status: 'Ready' },
-        { kind: 'Kustomization', namespace: 'flux-system', name: 'flux-system', status: 'Failed' }
-      ]
+    it('should display results with status dot and Kind/Namespace/Name', async () => {
+      fetchWithMock.mockResolvedValue({
+        resources: [
+          { kind: 'FluxInstance', namespace: 'flux-system', name: 'flux', status: 'Ready' },
+          { kind: 'Kustomization', namespace: 'flux-system', name: 'flux-system', status: 'Failed' }
+        ]
+      })
 
       render(<QuickSearch />)
+
+      const input = screen.getByPlaceholderText('Search appliers...')
+      fireEvent.input(input, { target: { value: 'flux' } })
+
+      vi.advanceTimersByTime(400)
+      await vi.runAllTimersAsync()
 
       // Kind is in a separate span, check for the parts
       expect(screen.getByText('FluxInstance/')).toBeInTheDocument()
@@ -217,53 +232,91 @@ describe('QuickSearch', () => {
       expect(screen.getByText('flux-system/flux-system')).toBeInTheDocument()
     })
 
-    it('should display empty state when no results found', () => {
-      quickSearchResults.value = []
+    it('should display empty state when no results found', async () => {
+      fetchWithMock.mockResolvedValue({ resources: [] })
 
       render(<QuickSearch />)
+
+      const input = screen.getByPlaceholderText('Search appliers...')
+      fireEvent.input(input, { target: { value: 'flux' } })
+
+      vi.advanceTimersByTime(400)
+      await vi.runAllTimersAsync()
 
       expect(screen.getByText('No resources found')).toBeInTheDocument()
     })
 
-    it('should show green dot for Ready status', () => {
-      quickSearchResults.value = [
-        { kind: 'FluxInstance', namespace: 'flux-system', name: 'flux', status: 'Ready' }
-      ]
+    it('should show green dot for Ready status', async () => {
+      fetchWithMock.mockResolvedValue({
+        resources: [
+          { kind: 'FluxInstance', namespace: 'flux-system', name: 'flux', status: 'Ready' }
+        ]
+      })
 
       render(<QuickSearch />)
+
+      const input = screen.getByPlaceholderText('Search appliers...')
+      fireEvent.input(input, { target: { value: 'flux' } })
+
+      vi.advanceTimersByTime(400)
+      await vi.runAllTimersAsync()
 
       const dot = document.querySelector('.bg-green-500')
       expect(dot).toBeInTheDocument()
     })
 
-    it('should show red dot for Failed status', () => {
-      quickSearchResults.value = [
-        { kind: 'Kustomization', namespace: 'flux-system', name: 'flux-system', status: 'Failed' }
-      ]
+    it('should show red dot for Failed status', async () => {
+      fetchWithMock.mockResolvedValue({
+        resources: [
+          { kind: 'Kustomization', namespace: 'flux-system', name: 'flux-system', status: 'Failed' }
+        ]
+      })
 
       render(<QuickSearch />)
+
+      const input = screen.getByPlaceholderText('Search appliers...')
+      fireEvent.input(input, { target: { value: 'flux' } })
+
+      vi.advanceTimersByTime(400)
+      await vi.runAllTimersAsync()
 
       const dot = document.querySelector('.bg-red-500')
       expect(dot).toBeInTheDocument()
     })
 
-    it('should show blue dot for Progressing status', () => {
-      quickSearchResults.value = [
-        { kind: 'ResourceSet', namespace: 'flux-system', name: 'test', status: 'Progressing' }
-      ]
+    it('should show blue dot for Progressing status', async () => {
+      fetchWithMock.mockResolvedValue({
+        resources: [
+          { kind: 'ResourceSet', namespace: 'flux-system', name: 'test', status: 'Progressing' }
+        ]
+      })
 
       render(<QuickSearch />)
+
+      const input = screen.getByPlaceholderText('Search appliers...')
+      fireEvent.input(input, { target: { value: 'test' } })
+
+      vi.advanceTimersByTime(400)
+      await vi.runAllTimersAsync()
 
       const dot = document.querySelector('.bg-blue-500')
       expect(dot).toBeInTheDocument()
     })
 
-    it('should show yellow dot for Suspended status', () => {
-      quickSearchResults.value = [
-        { kind: 'HelmRelease', namespace: 'flux-system', name: 'suspended', status: 'Suspended' }
-      ]
+    it('should show yellow dot for Suspended status', async () => {
+      fetchWithMock.mockResolvedValue({
+        resources: [
+          { kind: 'HelmRelease', namespace: 'flux-system', name: 'suspended', status: 'Suspended' }
+        ]
+      })
 
       render(<QuickSearch />)
+
+      const input = screen.getByPlaceholderText('Search appliers...')
+      fireEvent.input(input, { target: { value: 'suspended' } })
+
+      vi.advanceTimersByTime(400)
+      await vi.runAllTimersAsync()
 
       const dot = document.querySelector('.bg-yellow-500')
       expect(dot).toBeInTheDocument()
@@ -273,14 +326,21 @@ describe('QuickSearch', () => {
   describe('Result Navigation', () => {
     beforeEach(() => {
       quickSearchOpen.value = true
-      quickSearchQuery.value = 'flux'
-      quickSearchResults.value = [
-        { kind: 'FluxInstance', namespace: 'flux-system', name: 'flux', status: 'Ready' }
-      ]
+      fetchWithMock.mockResolvedValue({
+        resources: [
+          { kind: 'FluxInstance', namespace: 'flux-system', name: 'flux', status: 'Ready' }
+        ]
+      })
     })
 
-    it('should navigate to resource dashboard when result is clicked', () => {
+    it('should navigate to resource dashboard when result is clicked', async () => {
       render(<QuickSearch />)
+
+      const input = screen.getByPlaceholderText('Search appliers...')
+      fireEvent.input(input, { target: { value: 'flux' } })
+
+      vi.advanceTimersByTime(400)
+      await vi.runAllTimersAsync()
 
       const resultButton = screen.getByText('flux-system/flux').closest('button')
       fireEvent.click(resultButton)
@@ -288,8 +348,14 @@ describe('QuickSearch', () => {
       expect(mockRoute).toHaveBeenCalledWith('/resource/FluxInstance/flux-system/flux')
     })
 
-    it('should close search after navigating', () => {
+    it('should close search after navigating', async () => {
       render(<QuickSearch />)
+
+      const input = screen.getByPlaceholderText('Search appliers...')
+      fireEvent.input(input, { target: { value: 'flux' } })
+
+      vi.advanceTimersByTime(400)
+      await vi.runAllTimersAsync()
 
       const resultButton = screen.getByText('flux-system/flux').closest('button')
       fireEvent.click(resultButton)
@@ -305,9 +371,12 @@ describe('QuickSearch', () => {
       const result = parseSearchQuery('flux')
       expect(result).toEqual({
         namespace: null,
+        kind: null,
         name: 'flux',
         isSelectingNamespace: false,
-        namespacePartial: ''
+        isSelectingKind: false,
+        namespacePartial: '',
+        kindPartial: ''
       })
     })
 
@@ -315,9 +384,12 @@ describe('QuickSearch', () => {
       const result = parseSearchQuery('')
       expect(result).toEqual({
         namespace: null,
+        kind: null,
         name: '',
         isSelectingNamespace: false,
-        namespacePartial: ''
+        isSelectingKind: false,
+        namespacePartial: '',
+        kindPartial: ''
       })
     })
 
@@ -325,9 +397,12 @@ describe('QuickSearch', () => {
       const result = parseSearchQuery('ns:')
       expect(result).toEqual({
         namespace: null,
+        kind: null,
         name: '',
         isSelectingNamespace: true,
-        namespacePartial: ''
+        isSelectingKind: false,
+        namespacePartial: '',
+        kindPartial: ''
       })
     })
 
@@ -335,9 +410,12 @@ describe('QuickSearch', () => {
       const result = parseSearchQuery('ns:flux')
       expect(result).toEqual({
         namespace: null,
+        kind: null,
         name: '',
         isSelectingNamespace: true,
-        namespacePartial: 'flux'
+        isSelectingKind: false,
+        namespacePartial: 'flux',
+        kindPartial: ''
       })
     })
 
@@ -345,9 +423,12 @@ describe('QuickSearch', () => {
       const result = parseSearchQuery('ns:flux-system podinfo')
       expect(result).toEqual({
         namespace: 'flux-system',
+        kind: null,
         name: 'podinfo',
         isSelectingNamespace: false,
-        namespacePartial: ''
+        isSelectingKind: false,
+        namespacePartial: '',
+        kindPartial: ''
       })
     })
 
@@ -355,9 +436,12 @@ describe('QuickSearch', () => {
       const result = parseSearchQuery('ns:flux-system ')
       expect(result).toEqual({
         namespace: 'flux-system',
+        kind: null,
         name: '',
         isSelectingNamespace: false,
-        namespacePartial: ''
+        isSelectingKind: false,
+        namespacePartial: '',
+        kindPartial: ''
       })
     })
 
@@ -366,6 +450,38 @@ describe('QuickSearch', () => {
       expect(parseSearchQuery('Ns:').isSelectingNamespace).toBe(true)
       expect(parseSearchQuery('nS:').isSelectingNamespace).toBe(true)
       expect(parseSearchQuery('NS:flux-system ').namespace).toBe('flux-system')
+    })
+
+    it('should detect kind selection mode when typing kind:', () => {
+      const result = parseSearchQuery('kind:')
+      expect(result.isSelectingKind).toBe(true)
+      expect(result.kindPartial).toBe('')
+    })
+
+    it('should detect kind selection mode with partial kind', () => {
+      const result = parseSearchQuery('kind:Helm')
+      expect(result.isSelectingKind).toBe(true)
+      expect(result.kindPartial).toBe('Helm')
+    })
+
+    it('should extract kind and name when kind is complete', () => {
+      const result = parseSearchQuery('kind:HelmRelease podinfo')
+      expect(result.kind).toBe('HelmRelease')
+      expect(result.name).toBe('podinfo')
+      expect(result.isSelectingKind).toBe(false)
+    })
+
+    it('should handle case-insensitive kind: prefix', () => {
+      expect(parseSearchQuery('KIND:').isSelectingKind).toBe(true)
+      expect(parseSearchQuery('Kind:').isSelectingKind).toBe(true)
+      expect(parseSearchQuery('KIND:HelmRelease ').kind).toBe('HelmRelease')
+    })
+
+    it('should handle combined ns: and kind: filters', () => {
+      const result = parseSearchQuery('ns:flux-system kind:HelmRelease podinfo')
+      expect(result.namespace).toBe('flux-system')
+      expect(result.kind).toBe('HelmRelease')
+      expect(result.name).toBe('podinfo')
     })
   })
 
@@ -381,7 +497,7 @@ describe('QuickSearch', () => {
       const input = screen.getByPlaceholderText('Search appliers...')
       fireEvent.input(input, { target: { value: 'ns:' } })
 
-      expect(screen.getByText('Select namespace')).toBeInTheDocument()
+      expect(screen.getByText('Type or select namespace')).toBeInTheDocument()
       expect(screen.getByText('automation')).toBeInTheDocument()
       expect(screen.getByText('flux-system')).toBeInTheDocument()
     })
@@ -418,9 +534,13 @@ describe('QuickSearch', () => {
     })
 
     it('should show namespace badge when namespace is selected', () => {
-      quickSearchQuery.value = 'ns:flux-system '
-
       render(<QuickSearch />)
+
+      const input = screen.getByPlaceholderText('Search appliers...')
+      fireEvent.input(input, { target: { value: 'ns:' } })
+
+      const namespaceButton = screen.getByText('flux-system')
+      fireEvent.click(namespaceButton)
 
       expect(screen.getByText('ns:flux-system')).toBeInTheDocument()
       // Badge should have blue background
@@ -429,26 +549,32 @@ describe('QuickSearch', () => {
     })
 
     it('should show different placeholder when namespace is selected', () => {
-      quickSearchQuery.value = 'ns:flux-system '
-
       render(<QuickSearch />)
 
-      expect(screen.getByPlaceholderText('Search in namespace...')).toBeInTheDocument()
+      const input = screen.getByPlaceholderText('Search appliers...')
+      fireEvent.input(input, { target: { value: 'ns:' } })
+
+      const namespaceButton = screen.getByText('flux-system')
+      fireEvent.click(namespaceButton)
+
+      expect(screen.getByPlaceholderText('Search...')).toBeInTheDocument()
     })
 
     it('should call API with namespace parameter', async () => {
       render(<QuickSearch />)
 
       // First select a namespace
-      quickSearchQuery.value = 'ns:flux-system '
+      const input = screen.getByPlaceholderText('Search appliers...')
+      fireEvent.input(input, { target: { value: 'ns:' } })
 
-      // Re-render to reflect the namespace selection
-      render(<QuickSearch />)
+      const namespaceButton = screen.getByText('flux-system')
+      fireEvent.click(namespaceButton)
 
-      const input = screen.getByPlaceholderText('Search in namespace...')
-      fireEvent.input(input, { target: { value: 'podinfo' } })
+      // Now type a search term
+      const searchInput = screen.getByPlaceholderText('Search...')
+      fireEvent.input(searchInput, { target: { value: 'podinfo' } })
 
-      vi.advanceTimersByTime(300)
+      vi.advanceTimersByTime(400)
 
       expect(fetchWithMock).toHaveBeenCalledWith({
         endpoint: '/api/v1/search?name=podinfo&namespace=flux-system',
@@ -458,13 +584,21 @@ describe('QuickSearch', () => {
     })
 
     it('should remove namespace badge on backspace when input is empty', () => {
-      quickSearchQuery.value = 'ns:flux-system '
-
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search in namespace...')
-      fireEvent.keyDown(input, { key: 'Backspace' })
+      // First select a namespace
+      const input = screen.getByPlaceholderText('Search appliers...')
+      fireEvent.input(input, { target: { value: 'ns:' } })
 
+      const namespaceButton = screen.getByText('flux-system')
+      fireEvent.click(namespaceButton)
+
+      // Now press backspace on empty input
+      const searchInput = screen.getByPlaceholderText('Search...')
+      fireEvent.keyDown(searchInput, { key: 'Backspace' })
+
+      // Badge should be gone
+      expect(screen.queryByText('ns:flux-system')).not.toBeInTheDocument()
       expect(quickSearchQuery.value).toBe('')
     })
 
@@ -551,9 +685,9 @@ describe('QuickSearch', () => {
       const input = screen.getByPlaceholderText('Search appliers...')
       fireEvent.input(input, { target: { value: 'f' } })
 
-      expect(screen.getByText('Type at least 2 characters to search')).toBeInTheDocument()
+      expect(screen.getByText(/Type 2\+ chars/)).toBeInTheDocument()
       expect(screen.getByText('ns:')).toBeInTheDocument()
-      expect(screen.getByText(/to filter by namespace/)).toBeInTheDocument()
+      expect(screen.getByText('kind:')).toBeInTheDocument()
     })
 
     it('should not show hint when typing 2+ characters', () => {
@@ -562,7 +696,7 @@ describe('QuickSearch', () => {
       const input = screen.getByPlaceholderText('Search appliers...')
       fireEvent.input(input, { target: { value: 'fl' } })
 
-      expect(screen.queryByText('Type at least 2 characters to search')).not.toBeInTheDocument()
+      expect(screen.queryByText(/Type 2\+ chars/)).not.toBeInTheDocument()
     })
 
     it('should set ns: prefix when clicking hint link', () => {
@@ -584,11 +718,92 @@ describe('QuickSearch', () => {
       fireEvent.input(input, { target: { value: 'n' } })
 
       // Hint should appear for single char that's not 'n' leading to 'ns'
-      expect(screen.getByText('Type at least 2 characters to search')).toBeInTheDocument()
+      expect(screen.getByText(/Type 2\+ chars/)).toBeInTheDocument()
 
       // But when typing 'ns', no hint or results panel should show
       fireEvent.input(input, { target: { value: 'ns' } })
-      expect(screen.queryByText('Type at least 2 characters to search')).not.toBeInTheDocument()
+      expect(screen.queryByText(/Type 2\+ chars/)).not.toBeInTheDocument()
+    })
+  })
+
+  describe('Kind Filtering', () => {
+    beforeEach(() => {
+      quickSearchOpen.value = true
+      fetchWithMock.mockResolvedValue({ resources: [] })
+    })
+
+    it('should show kind suggestions when typing kind:', () => {
+      render(<QuickSearch />)
+
+      const input = screen.getByPlaceholderText('Search appliers...')
+      fireEvent.input(input, { target: { value: 'kind:' } })
+
+      expect(screen.getByText('Type or select kind')).toBeInTheDocument()
+      expect(screen.getByText('FluxInstance')).toBeInTheDocument()
+      expect(screen.getByText('HelmRelease')).toBeInTheDocument()
+    })
+
+    it('should select kind on click and show badge', () => {
+      render(<QuickSearch />)
+
+      const input = screen.getByPlaceholderText('Search appliers...')
+      fireEvent.input(input, { target: { value: 'kind:' } })
+
+      const kindButton = screen.getByText('HelmRelease')
+      fireEvent.click(kindButton)
+
+      expect(screen.getByText('kind:HelmRelease')).toBeInTheDocument()
+      const badge = screen.getByText('kind:HelmRelease')
+      expect(badge.className).toContain('bg-green-100')
+    })
+
+    it('should call API with kind parameter', async () => {
+      render(<QuickSearch />)
+
+      // First select a kind
+      const input = screen.getByPlaceholderText('Search appliers...')
+      fireEvent.input(input, { target: { value: 'kind:' } })
+
+      const kindButton = screen.getByText('HelmRelease')
+      fireEvent.click(kindButton)
+
+      // Now type a search term
+      const searchInput = screen.getByPlaceholderText('Search...')
+      fireEvent.input(searchInput, { target: { value: 'podinfo' } })
+
+      vi.advanceTimersByTime(400)
+
+      expect(fetchWithMock).toHaveBeenCalledWith({
+        endpoint: '/api/v1/search?name=podinfo&kind=HelmRelease',
+        mockPath: '../mock/resources',
+        mockExport: 'getMockSearchResults'
+      })
+    })
+
+    it('should call API with both namespace and kind parameters', async () => {
+      render(<QuickSearch />)
+
+      // First select a namespace
+      const input = screen.getByPlaceholderText('Search appliers...')
+      fireEvent.input(input, { target: { value: 'ns:' } })
+      fireEvent.click(screen.getByText('flux-system'))
+
+      // Then select a kind
+      const searchInput = screen.getByPlaceholderText('Search...')
+      fireEvent.input(searchInput, { target: { value: 'kind:' } })
+      fireEvent.click(screen.getByText('HelmRelease'))
+
+      // Now type a search term
+      const finalInput = screen.getByPlaceholderText('Search...')
+      fireEvent.input(finalInput, { target: { value: 'podinfo' } })
+
+      vi.advanceTimersByTime(400)
+
+      expect(fetchWithMock).toHaveBeenCalledWith({
+        endpoint: '/api/v1/search?name=podinfo&namespace=flux-system&kind=HelmRelease',
+        mockPath: '../mock/resources',
+        mockExport: 'getMockSearchResults'
+      })
     })
   })
 })
