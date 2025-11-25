@@ -78,7 +78,7 @@ export async function fetchFluxReport() {
 }
 
 /**
- * TabNavigation - Tab navigation for switching between Events and Resources views
+ * TabNavigation - Tab navigation for switching between Resources and Events views
  */
 function TabNavigation() {
   const location = useLocation()
@@ -89,16 +89,6 @@ function TabNavigation() {
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <nav class="-mb-px flex space-x-8">
           <button
-            onClick={() => location.route('/events')}
-            class={`${
-              currentPath === '/events'
-                ? 'border-flux-blue text-flux-blue dark:text-blue-400'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm focus:outline-none transition-colors`}
-          >
-            Events
-          </button>
-          <button
             onClick={() => location.route('/resources')}
             class={`${
               currentPath === '/resources'
@@ -107,6 +97,16 @@ function TabNavigation() {
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm focus:outline-none transition-colors`}
           >
             Resources
+          </button>
+          <button
+            onClick={() => location.route('/events')}
+            class={`${
+              currentPath === '/events'
+                ? 'border-flux-blue text-flux-blue dark:text-blue-400'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
+            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm focus:outline-none transition-colors`}
+          >
+            Events
           </button>
         </nav>
       </div>

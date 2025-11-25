@@ -79,31 +79,80 @@ describe('InventoryPanel component', () => {
     vi.clearAllMocks()
   })
 
-  it('should not render when resourceData has no inventory', () => {
+  it('should render with only Overview tab when Kustomization has no inventory', () => {
     const noInventoryData = {
       ...mockKustomizationData,
       status: {}
     }
 
-    const { container } = render(
+    render(
       <InventoryPanel
         resourceData={noInventoryData}
         onNavigate={mockOnNavigate}
       />
     )
 
-    expect(container.firstChild).toBeNull()
+    // Panel should render
+    expect(screen.getByTestId('inventory-view')).toBeInTheDocument()
+    expect(screen.getByText('Managed Objects')).toBeInTheDocument()
+
+    // Only Overview tab should be visible
+    expect(screen.getByText('Overview')).toBeInTheDocument()
+    expect(screen.queryByText('Inventory')).not.toBeInTheDocument()
+    expect(screen.queryByText('Workloads')).not.toBeInTheDocument()
+
+    // All counts should be zero
+    const textContent = document.body.textContent
+    expect(textContent).toContain('Total resources')
+    expect(textContent).toContain('0')
   })
 
-  it('should not render when resourceData has empty inventory', () => {
+  it('should render with only Overview tab when Kustomization has empty inventory', () => {
     const emptyInventoryData = {
       ...mockKustomizationData,
       status: { inventory: [] }
     }
 
-    const { container } = render(
+    render(
       <InventoryPanel
         resourceData={emptyInventoryData}
+        onNavigate={mockOnNavigate}
+      />
+    )
+
+    // Panel should render
+    expect(screen.getByTestId('inventory-view')).toBeInTheDocument()
+    expect(screen.getByText('Managed Objects')).toBeInTheDocument()
+
+    // Only Overview tab should be visible
+    expect(screen.getByText('Overview')).toBeInTheDocument()
+    expect(screen.queryByText('Inventory')).not.toBeInTheDocument()
+    expect(screen.queryByText('Workloads')).not.toBeInTheDocument()
+
+    // All counts should be zero
+    const textContent = document.body.textContent
+    expect(textContent).toContain('Total resources')
+    expect(textContent).toContain('0')
+  })
+
+  it('should not render for non-inventory kinds like GitRepository', () => {
+    const gitRepoData = {
+      apiVersion: 'source.toolkit.fluxcd.io/v1',
+      kind: 'GitRepository',
+      metadata: {
+        name: 'flux-system',
+        namespace: 'flux-system'
+      },
+      spec: {
+        interval: '1m',
+        url: 'https://github.com/example/repo'
+      },
+      status: {}
+    }
+
+    const { container } = render(
+      <InventoryPanel
+        resourceData={gitRepoData}
         onNavigate={mockOnNavigate}
       />
     )

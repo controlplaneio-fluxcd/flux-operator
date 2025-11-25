@@ -72,3 +72,12 @@ const kindToControllerMap = {
 export function getControllerName(kind) {
   return kindToControllerMap[kind] || 'unknown'
 }
+
+/**
+ * Check if a resource kind should have an inventory
+ * @param {string} kind - Resource kind
+ * @returns {boolean} True if kind has inventory
+ */
+export function isKindWithInventory(kind) {
+  return kind === 'Kustomization' || kind === 'HelmRelease' || kind === 'ResourceSet' || kind === 'FluxInstance'
+}
