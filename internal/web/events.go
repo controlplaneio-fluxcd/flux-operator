@@ -71,7 +71,6 @@ func (r *Router) EventsHandler(w http.ResponseWriter, req *http.Request) {
 
 	// Set response headers
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 
 	// Encode and send the response
 	response := map[string]any{"events": events}

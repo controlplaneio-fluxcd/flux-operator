@@ -57,17 +57,17 @@ func (r *Router) RegisterRoutes() {
 	r.mux.Handle("/", http.FileServer(http.FS(spaHandler)))
 
 	// API routes for the frontend to consume
-	r.mux.HandleFunc("GET /api/v1/report", r.ReportHandler)
 	r.mux.HandleFunc("GET /api/v1/events", r.EventsHandler)
-	r.mux.HandleFunc("GET /api/v1/resources", r.ResourcesHandler)
+	r.mux.HandleFunc("GET /api/v1/report", r.ReportHandler)
 	r.mux.HandleFunc("GET /api/v1/resource", r.ResourceHandler)
+	r.mux.HandleFunc("GET /api/v1/resources", r.ResourcesHandler)
 	r.mux.HandleFunc("GET /api/v1/search", r.SearchHandler)
 	r.mux.HandleFunc("GET /api/v1/workload", r.WorkloadHandler)
 }
 
-// RegisterMiddleware wraps the mux with logging and gzip compression middleware.
+// RegisterMiddleware wraps the mux with logging, gzip compression, and cache control middleware.
 func (r *Router) RegisterMiddleware() http.Handler {
-	return LoggingMiddleware(r.log, GzipMiddleware(r.mux))
+	return LoggingMiddleware(r.log, GzipMiddleware(CacheControlMiddleware(r.mux)))
 }
 
 // StartReportCache starts a background goroutine that periodically refreshes the report cache.

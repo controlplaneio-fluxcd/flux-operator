@@ -76,6 +76,11 @@ export const mockReport = {
     reconcilers: [
       {
         apiVersion: 'fluxcd.controlplane.io/v1',
+        kind: 'FluxInstance',
+        stats: { failing: 0, running: 8, suspended: 0 }
+      },
+      {
+        apiVersion: 'fluxcd.controlplane.io/v1',
         kind: 'ResourceSet',
         stats: { failing: 0, running: 8, suspended: 0 }
       },

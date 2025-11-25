@@ -100,6 +100,7 @@ func (r *FluxStatusReporter) getReconcilersStatus(ctx context.Context, crds []me
 func (r *FluxStatusReporter) getOperatorReconcilersStatus(ctx context.Context) ([]fluxcdv1.FluxReconcilerStatus, error) {
 	var multiErr error
 	crds := []schema.GroupVersionKind{
+		fluxcdv1.GroupVersion.WithKind(fluxcdv1.FluxInstanceKind),
 		fluxcdv1.GroupVersion.WithKind(fluxcdv1.ResourceSetKind),
 		fluxcdv1.GroupVersion.WithKind(fluxcdv1.ResourceSetInputProviderKind),
 	}

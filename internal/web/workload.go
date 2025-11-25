@@ -51,7 +51,6 @@ func (r *Router) WorkloadHandler(w http.ResponseWriter, req *http.Request) {
 		if errors.IsNotFound(err) {
 			// return empty response if resource not found
 			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte("{}"))
 			return
@@ -62,7 +61,6 @@ func (r *Router) WorkloadHandler(w http.ResponseWriter, req *http.Request) {
 
 	// Set response headers
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 
 	// Encode and send the response
 	if err := json.NewEncoder(w).Encode(resource); err != nil {
