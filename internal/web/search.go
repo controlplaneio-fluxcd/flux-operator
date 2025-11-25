@@ -23,6 +23,7 @@ func (r *Router) SearchHandler(w http.ResponseWriter, req *http.Request) {
 	// Parse query parameters
 	queryParams := req.URL.Query()
 	name := queryParams.Get("name")
+	namespace := queryParams.Get("namespace")
 
 	// if name does not contain wildcard, append * to perform partial match
 	if name != "" && !hasWildcard(name) {
@@ -36,11 +37,22 @@ func (r *Router) SearchHandler(w http.ResponseWriter, req *http.Request) {
 		fluxcdv1.FluxKustomizationKind,
 		fluxcdv1.FluxHelmReleaseKind,
 	}
+	if namespace != "" {
+		// If namespace is specified, add sources kinds as well
+		kinds = append(kinds,
+			fluxcdv1.FluxGitRepositoryKind,
+			fluxcdv1.FluxOCIRepositoryKind,
+			fluxcdv1.FluxHelmChartKind,
+			fluxcdv1.FluxHelmRepositoryKind,
+			fluxcdv1.FluxBucketKind,
+			fluxcdv1.FluxArtifactGeneratorKind,
+		)
+	}
 
 	// Get resource status from the cluster using the request context
-	resources, err := r.GetResourcesStatus(req.Context(), kinds, name, "", "", 10)
+	resources, err := r.GetResourcesStatus(req.Context(), kinds, name, namespace, "", 10)
 	if err != nil {
-		r.log.Error(err, "failed to get resources status", "url", req.URL.String(), "name", name)
+		r.log.Error(err, "failed to get resources status", "url", req.URL.String(), "name", name, "namespace", namespace)
 		resources = []ResourceStatus{}
 	}
 
