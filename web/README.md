@@ -17,7 +17,7 @@ on-call monitoring and Agentic AI incident response in production environments.
 
 ## Features
 
-- **Operational Overview:** View the real-time status and readiness of all Flux controllers.
+- **Operational Insight:** View the real-time status and readiness of all workloads managed by Flux.
 - **Monitor Reconciliation:** Monitor the sync state of your cluster and infrastructure deployments.
 - **Pinpoint Issues:** Quickly identify and troubleshoot failures within your app delivery pipelines.
 - **Navigate Efficiently:** Use advanced search and filtering to find specific resources instantly.

@@ -68,6 +68,26 @@ func (w *loggingResponseWriter) WriteHeader(code int) {
 	w.ResponseWriter.WriteHeader(code)
 }
 
+// CacheControlMiddleware sets appropriate cache headers for static assets.
+// It ensures index.html is never cached while hashed assets are cached forever.
+func CacheControlMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+
+		// For hashed assets in /assets/ directory, cache forever
+		// These files have content-based hashes in their names, so they're immutable
+		if strings.HasPrefix(path, "/assets/") {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else {
+			// For index.html and other files, always revalidate
+			// This ensures users get the latest asset references
+			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
 // LoggingMiddleware logs HTTP requests and responses.
 func LoggingMiddleware(logger logr.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

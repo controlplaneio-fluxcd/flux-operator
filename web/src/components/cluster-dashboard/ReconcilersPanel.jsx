@@ -155,7 +155,13 @@ export function ReconcilersPanel({ reconcilers }) {
       r.apiVersion.startsWith('helm')) &&
       r.kind !== 'ResourceSetInputProvider'
     )
-    .sort((a, b) => b.kind.localeCompare(a.kind))
+    .sort((a, b) => {
+      // FluxInstance always comes first
+      if (a.kind === 'FluxInstance') return -1
+      if (b.kind === 'FluxInstance') return 1
+      // For other kinds, sort in reverse alphabetical order
+      return b.kind.localeCompare(a.kind)
+    })
 
   const sources = reconcilers
     .filter(r => r.apiVersion.startsWith('source') || r.kind === 'ResourceSetInputProvider')
