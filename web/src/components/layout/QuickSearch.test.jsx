@@ -3,7 +3,6 @@
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/preact'
-import { QuickSearch, quickSearchOpen, quickSearchQuery, quickSearchResults, quickSearchLoading } from './QuickSearch'
 
 // Mock preact-iso
 const mockRoute = vi.fn()
@@ -20,6 +19,19 @@ vi.mock('../../utils/fetch', () => ({
   fetchWithMock: vi.fn()
 }))
 
+// Mock reportData from app.jsx with inline signal
+vi.mock('../../app', async () => {
+  const { signal } = await import('@preact/signals')
+  return {
+    reportData: signal({
+      spec: {
+        namespaces: ['automation', 'cert-manager', 'default', 'flux-system', 'monitoring', 'registry', 'tailscale']
+      }
+    })
+  }
+})
+
+import { QuickSearch, quickSearchOpen, quickSearchQuery, quickSearchResults, quickSearchLoading, parseSearchQuery } from './QuickSearch'
 import { fetchWithMock } from '../../utils/fetch'
 
 
@@ -285,6 +297,298 @@ describe('QuickSearch', () => {
       expect(quickSearchOpen.value).toBe(false)
       expect(quickSearchQuery.value).toBe('')
       expect(quickSearchResults.value).toEqual([])
+    })
+  })
+
+  describe('parseSearchQuery', () => {
+    it('should return empty namespace for regular queries', () => {
+      const result = parseSearchQuery('flux')
+      expect(result).toEqual({
+        namespace: null,
+        name: 'flux',
+        isSelectingNamespace: false,
+        namespacePartial: ''
+      })
+    })
+
+    it('should return empty values for empty query', () => {
+      const result = parseSearchQuery('')
+      expect(result).toEqual({
+        namespace: null,
+        name: '',
+        isSelectingNamespace: false,
+        namespacePartial: ''
+      })
+    })
+
+    it('should detect namespace selection mode when typing ns:', () => {
+      const result = parseSearchQuery('ns:')
+      expect(result).toEqual({
+        namespace: null,
+        name: '',
+        isSelectingNamespace: true,
+        namespacePartial: ''
+      })
+    })
+
+    it('should detect namespace selection mode with partial namespace', () => {
+      const result = parseSearchQuery('ns:flux')
+      expect(result).toEqual({
+        namespace: null,
+        name: '',
+        isSelectingNamespace: true,
+        namespacePartial: 'flux'
+      })
+    })
+
+    it('should extract namespace and name when namespace is complete', () => {
+      const result = parseSearchQuery('ns:flux-system podinfo')
+      expect(result).toEqual({
+        namespace: 'flux-system',
+        name: 'podinfo',
+        isSelectingNamespace: false,
+        namespacePartial: ''
+      })
+    })
+
+    it('should handle namespace with empty name', () => {
+      const result = parseSearchQuery('ns:flux-system ')
+      expect(result).toEqual({
+        namespace: 'flux-system',
+        name: '',
+        isSelectingNamespace: false,
+        namespacePartial: ''
+      })
+    })
+
+    it('should handle case-insensitive ns: prefix', () => {
+      expect(parseSearchQuery('NS:').isSelectingNamespace).toBe(true)
+      expect(parseSearchQuery('Ns:').isSelectingNamespace).toBe(true)
+      expect(parseSearchQuery('nS:').isSelectingNamespace).toBe(true)
+      expect(parseSearchQuery('NS:flux-system ').namespace).toBe('flux-system')
+    })
+  })
+
+  describe('Namespace Filtering', () => {
+    beforeEach(() => {
+      quickSearchOpen.value = true
+      fetchWithMock.mockResolvedValue({ resources: [] })
+    })
+
+    it('should show namespace suggestions when typing ns:', () => {
+      render(<QuickSearch />)
+
+      const input = screen.getByPlaceholderText('Search appliers...')
+      fireEvent.input(input, { target: { value: 'ns:' } })
+
+      expect(screen.getByText('Select namespace')).toBeInTheDocument()
+      expect(screen.getByText('automation')).toBeInTheDocument()
+      expect(screen.getByText('flux-system')).toBeInTheDocument()
+    })
+
+    it('should filter namespace suggestions based on partial input', () => {
+      render(<QuickSearch />)
+
+      const input = screen.getByPlaceholderText('Search appliers...')
+      fireEvent.input(input, { target: { value: 'ns:flux' } })
+
+      expect(screen.getByText('flux-system')).toBeInTheDocument()
+      expect(screen.queryByText('automation')).not.toBeInTheDocument()
+    })
+
+    it('should show no matching namespaces message', () => {
+      render(<QuickSearch />)
+
+      const input = screen.getByPlaceholderText('Search appliers...')
+      fireEvent.input(input, { target: { value: 'ns:nonexistent' } })
+
+      expect(screen.getByText('No matching namespaces')).toBeInTheDocument()
+    })
+
+    it('should select namespace on click', () => {
+      render(<QuickSearch />)
+
+      const input = screen.getByPlaceholderText('Search appliers...')
+      fireEvent.input(input, { target: { value: 'ns:' } })
+
+      const namespaceButton = screen.getByText('flux-system')
+      fireEvent.click(namespaceButton)
+
+      expect(quickSearchQuery.value).toBe('ns:flux-system ')
+    })
+
+    it('should show namespace badge when namespace is selected', () => {
+      quickSearchQuery.value = 'ns:flux-system '
+
+      render(<QuickSearch />)
+
+      expect(screen.getByText('ns:flux-system')).toBeInTheDocument()
+      // Badge should have blue background
+      const badge = screen.getByText('ns:flux-system')
+      expect(badge.className).toContain('bg-blue-100')
+    })
+
+    it('should show different placeholder when namespace is selected', () => {
+      quickSearchQuery.value = 'ns:flux-system '
+
+      render(<QuickSearch />)
+
+      expect(screen.getByPlaceholderText('Search in namespace...')).toBeInTheDocument()
+    })
+
+    it('should call API with namespace parameter', async () => {
+      render(<QuickSearch />)
+
+      // First select a namespace
+      quickSearchQuery.value = 'ns:flux-system '
+
+      // Re-render to reflect the namespace selection
+      render(<QuickSearch />)
+
+      const input = screen.getByPlaceholderText('Search in namespace...')
+      fireEvent.input(input, { target: { value: 'podinfo' } })
+
+      vi.advanceTimersByTime(300)
+
+      expect(fetchWithMock).toHaveBeenCalledWith({
+        endpoint: '/api/v1/search?name=podinfo&namespace=flux-system',
+        mockPath: '../mock/resources',
+        mockExport: 'getMockSearchResults'
+      })
+    })
+
+    it('should remove namespace badge on backspace when input is empty', () => {
+      quickSearchQuery.value = 'ns:flux-system '
+
+      render(<QuickSearch />)
+
+      const input = screen.getByPlaceholderText('Search in namespace...')
+      fireEvent.keyDown(input, { key: 'Backspace' })
+
+      expect(quickSearchQuery.value).toBe('')
+    })
+
+    it('should not call API when typing ns prefix', async () => {
+      render(<QuickSearch />)
+
+      const input = screen.getByPlaceholderText('Search appliers...')
+      fireEvent.input(input, { target: { value: 'ns' } })
+
+      vi.advanceTimersByTime(500)
+
+      expect(fetchWithMock).not.toHaveBeenCalled()
+    })
+
+    it('should not call API when typing ns: without completing namespace', async () => {
+      render(<QuickSearch />)
+
+      const input = screen.getByPlaceholderText('Search appliers...')
+      fireEvent.input(input, { target: { value: 'ns:flux' } })
+
+      vi.advanceTimersByTime(500)
+
+      expect(fetchWithMock).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('Namespace Keyboard Navigation', () => {
+    beforeEach(() => {
+      quickSearchOpen.value = true
+    })
+
+    it('should navigate namespace suggestions with arrow keys', () => {
+      render(<QuickSearch />)
+
+      const input = screen.getByPlaceholderText('Search appliers...')
+      fireEvent.input(input, { target: { value: 'ns:' } })
+
+      // Press ArrowDown to select first item
+      fireEvent.keyDown(input, { key: 'ArrowDown' })
+
+      // First namespace (automation) should be highlighted
+      const firstItem = screen.getByText('automation').closest('button')
+      expect(firstItem.className).toContain('bg-gray-100')
+    })
+
+    it('should select namespace on Enter key', () => {
+      render(<QuickSearch />)
+
+      const input = screen.getByPlaceholderText('Search appliers...')
+      fireEvent.input(input, { target: { value: 'ns:' } })
+
+      // Navigate to first item and select
+      fireEvent.keyDown(input, { key: 'ArrowDown' })
+      fireEvent.keyDown(input, { key: 'Enter' })
+
+      expect(quickSearchQuery.value).toBe('ns:automation ')
+    })
+
+    it('should navigate up with ArrowUp', () => {
+      render(<QuickSearch />)
+
+      const input = screen.getByPlaceholderText('Search appliers...')
+      fireEvent.input(input, { target: { value: 'ns:' } })
+
+      // Navigate down twice then up once
+      fireEvent.keyDown(input, { key: 'ArrowDown' })
+      fireEvent.keyDown(input, { key: 'ArrowDown' })
+      fireEvent.keyDown(input, { key: 'ArrowUp' })
+
+      // First namespace should be highlighted again
+      const firstItem = screen.getByText('automation').closest('button')
+      expect(firstItem.className).toContain('bg-gray-100')
+    })
+  })
+
+  describe('Search Hint', () => {
+    beforeEach(() => {
+      quickSearchOpen.value = true
+    })
+
+    it('should show hint when typing 1 character', () => {
+      render(<QuickSearch />)
+
+      const input = screen.getByPlaceholderText('Search appliers...')
+      fireEvent.input(input, { target: { value: 'f' } })
+
+      expect(screen.getByText('Type at least 2 characters to search')).toBeInTheDocument()
+      expect(screen.getByText('ns:')).toBeInTheDocument()
+      expect(screen.getByText(/to filter by namespace/)).toBeInTheDocument()
+    })
+
+    it('should not show hint when typing 2+ characters', () => {
+      render(<QuickSearch />)
+
+      const input = screen.getByPlaceholderText('Search appliers...')
+      fireEvent.input(input, { target: { value: 'fl' } })
+
+      expect(screen.queryByText('Type at least 2 characters to search')).not.toBeInTheDocument()
+    })
+
+    it('should set ns: prefix when clicking hint link', () => {
+      render(<QuickSearch />)
+
+      const input = screen.getByPlaceholderText('Search appliers...')
+      fireEvent.input(input, { target: { value: 'f' } })
+
+      const nsLink = screen.getByText('ns:')
+      fireEvent.click(nsLink)
+
+      expect(quickSearchQuery.value).toBe('ns:')
+    })
+
+    it('should not show hint when typing ns prefix', () => {
+      render(<QuickSearch />)
+
+      const input = screen.getByPlaceholderText('Search appliers...')
+      fireEvent.input(input, { target: { value: 'n' } })
+
+      // Hint should appear for single char that's not 'n' leading to 'ns'
+      expect(screen.getByText('Type at least 2 characters to search')).toBeInTheDocument()
+
+      // But when typing 'ns', no hint or results panel should show
+      fireEvent.input(input, { target: { value: 'ns' } })
+      expect(screen.queryByText('Type at least 2 characters to search')).not.toBeInTheDocument()
     })
   })
 })

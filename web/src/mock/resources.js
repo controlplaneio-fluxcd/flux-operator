@@ -435,8 +435,8 @@ export const getMockResources = (endpoint) => {
   return { resources: filteredResources }
 }
 
-// Export function that filters resources for quick search (GET /api/v1/search?name=<term>)
-// Filters by name (contains, case-insensitive) and limits to applier kinds
+// Export function that filters resources for quick search (GET /api/v1/search?name=<term>&namespace=<ns>)
+// Filters by name (contains, case-insensitive), optionally by namespace, and limits to applier kinds
 export const getMockSearchResults = (endpoint) => {
   // Parse query params from endpoint URL
   // eslint-disable-next-line no-undef
@@ -444,6 +444,7 @@ export const getMockSearchResults = (endpoint) => {
   const params = url.searchParams
 
   const nameFilter = params.get('name')
+  const namespaceFilter = params.get('namespace')
 
   // If no name filter, return empty results
   if (!nameFilter) {
@@ -459,6 +460,11 @@ export const getMockSearchResults = (endpoint) => {
   const filteredResources = mockResources.resources.filter(resource => {
     // Only include applier kinds
     if (!searchKinds.includes(resource.kind)) {
+      return false
+    }
+
+    // Filter by namespace if specified
+    if (namespaceFilter && resource.namespace !== namespaceFilter) {
       return false
     }
 
