@@ -7,6 +7,7 @@ import { useState } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
 import { fetchWithMock } from '../../utils/fetch'
 import { formatTimestamp } from '../../utils/time'
+import { getEventBadgeClass } from '../../utils/status'
 import { reportData } from '../../app'
 import { FilterForm } from './FilterForm'
 import { useRestoreFiltersFromUrl, useSyncFiltersToUrl } from '../../utils/routing'
@@ -19,10 +20,10 @@ export const eventsLoading = signal(false)
 export const eventsError = signal(null)
 
 // Filter signals
-export const selectedEventsKind = signal('')
-export const selectedEventsName = signal('')
-export const selectedEventsNamespace = signal('')
-export const selectedEventsSeverity = signal('')
+export const selectedEventKind = signal('')
+export const selectedEventName = signal('')
+export const selectedEventNamespace = signal('')
+export const selectedEventSeverity = signal('')
 
 // Fetch events from API
 export async function fetchEvents() {
@@ -30,10 +31,10 @@ export async function fetchEvents() {
   eventsError.value = null
 
   const params = new URLSearchParams()
-  if (selectedEventsKind.value) params.append('kind', selectedEventsKind.value)
-  if (selectedEventsName.value) params.append('name', selectedEventsName.value)
-  if (selectedEventsNamespace.value) params.append('namespace', selectedEventsNamespace.value)
-  if (selectedEventsSeverity.value) params.append('type', selectedEventsSeverity.value)
+  if (selectedEventKind.value) params.append('kind', selectedEventKind.value)
+  if (selectedEventName.value) params.append('name', selectedEventName.value)
+  if (selectedEventNamespace.value) params.append('namespace', selectedEventNamespace.value)
+  if (selectedEventSeverity.value) params.append('type', selectedEventSeverity.value)
 
   try {
     const data = await fetchWithMock({
@@ -51,16 +52,6 @@ export async function fetchEvents() {
   }
 }
 
-// Get status badge color and styling for events
-function getEventStatusBadgeClass(type) {
-  switch (type) {
-  case 'Normal':
-    return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-  case 'Warning':
-  default:
-    return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-  }
-}
 
 /**
  * EventCard - Individual card displaying a Kubernetes event
@@ -113,7 +104,7 @@ function EventCard({ event }) {
           <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
             {kind}
           </span>
-          <span class={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getEventStatusBadgeClass(event.type)}`}>
+          <span class={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getEventBadgeClass(event.type)}`}>
             {displayStatus}
           </span>
         </div>
@@ -162,40 +153,40 @@ function EventCard({ event }) {
 export function EventList() {
   // Restore filter signals from URL query params on mount
   useRestoreFiltersFromUrl({
-    kind: selectedEventsKind,
-    name: selectedEventsName,
-    namespace: selectedEventsNamespace,
-    type: selectedEventsSeverity
+    kind: selectedEventKind,
+    name: selectedEventName,
+    namespace: selectedEventNamespace,
+    type: selectedEventSeverity
   })
 
   // Sync filter signals to URL query params on change (debounced)
   useSyncFiltersToUrl({
-    kind: selectedEventsKind,
-    name: selectedEventsName,
-    namespace: selectedEventsNamespace,
-    type: selectedEventsSeverity
+    kind: selectedEventKind,
+    name: selectedEventName,
+    namespace: selectedEventNamespace,
+    type: selectedEventSeverity
   })
 
   // Fetch events on mount and when filters change
   useEffect(() => {
     fetchEvents()
-  }, [selectedEventsKind.value, selectedEventsName.value, selectedEventsNamespace.value, selectedEventsSeverity.value])
+  }, [selectedEventKind.value, selectedEventName.value, selectedEventNamespace.value, selectedEventSeverity.value])
 
   // Infinite scroll hook - reset when filters change or data refetches
   const { visibleCount, sentinelRef, hasMore, loadMore } = useInfiniteScroll({
     totalItems: eventsData.value.length,
     pageSize: 100,
-    deps: [selectedEventsKind.value, selectedEventsName.value, selectedEventsNamespace.value, selectedEventsSeverity.value, eventsData.value.length]
+    deps: [selectedEventKind.value, selectedEventName.value, selectedEventNamespace.value, selectedEventSeverity.value, eventsData.value.length]
   })
 
   // Get visible events (slice the array)
   const visibleEvents = eventsData.value.slice(0, visibleCount)
 
   const handleClearFilters = () => {
-    selectedEventsKind.value = ''
-    selectedEventsName.value = ''
-    selectedEventsNamespace.value = ''
-    selectedEventsSeverity.value = ''
+    selectedEventKind.value = ''
+    selectedEventName.value = ''
+    selectedEventNamespace.value = ''
+    selectedEventSeverity.value = ''
   }
 
   return (
@@ -215,10 +206,10 @@ export function EventList() {
         {/* Filters */}
         <div class="card p-4">
           <FilterForm
-            kindSignal={selectedEventsKind}
-            nameSignal={selectedEventsName}
-            namespaceSignal={selectedEventsNamespace}
-            severitySignal={selectedEventsSeverity}
+            kindSignal={selectedEventKind}
+            nameSignal={selectedEventName}
+            namespaceSignal={selectedEventNamespace}
+            severitySignal={selectedEventSeverity}
             namespaces={reportData.value?.spec?.namespaces || []}
             onClear={handleClearFilters}
           />

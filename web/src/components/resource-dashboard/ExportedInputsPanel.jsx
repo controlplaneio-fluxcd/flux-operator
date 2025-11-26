@@ -3,7 +3,8 @@
 
 import { useState } from 'preact/hooks'
 import { useSignal } from '@preact/signals'
-import { TabButton, YamlBlock } from './PanelComponents'
+import { TabButton } from './PanelComponents.jsx'
+import { YamlBlock } from '../../utils/yaml'
 
 /**
  * Format camelCase to sentence case with spaces

@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
 import { fetchWithMock } from '../../utils/fetch'
-import { appliedTheme } from '../../utils/theme'
+import { usePrismTheme } from '../../utils/yaml'
 import { formatTime } from '../../utils/time'
 import { ReconcilerPanel } from './ReconcilerPanel'
 import { SourcePanel } from './SourcePanel'
@@ -12,10 +12,6 @@ import { InventoryPanel } from './InventoryPanel'
 import { ArtifactPanel } from './ArtifactPanel'
 import { ExportedInputsPanel } from './ExportedInputsPanel'
 import { InputsPanel } from './InputsPanel'
-
-// Import Prism themes as URLs for dynamic loading
-import prismLight from 'prismjs/themes/prism.css?url'
-import prismDark from 'prismjs/themes/prism-tomorrow.css?url'
 
 /**
  * Get status styling info
@@ -92,23 +88,8 @@ export function ResourcePage({ kind, namespace, name }) {
   const [error, setError] = useState(null)
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null)
 
-  // Dynamically load Prism theme
-  useEffect(() => {
-    const linkId = 'prism-theme-link'
-    const existingLink = document.getElementById(linkId)
-    if (existingLink) existingLink.remove()
-
-    const link = document.createElement('link')
-    link.id = linkId
-    link.rel = 'stylesheet'
-    link.href = appliedTheme.value === 'dark' ? prismDark : prismLight
-    document.head.appendChild(link)
-
-    return () => {
-      const link = document.getElementById(linkId)
-      if (link) link.remove()
-    }
-  }, [appliedTheme.value])
+  // Load Prism theme based on current app theme
+  usePrismTheme()
 
   // Reset state when navigating to a different resource
   useEffect(() => {

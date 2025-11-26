@@ -4,7 +4,7 @@
 import { useState, useMemo } from 'preact/hooks'
 import { useSignal } from '@preact/signals'
 import { fluxKinds, workloadKinds, isKindWithInventory } from '../../utils/constants'
-import { TabButton } from './PanelComponents'
+import { TabButton } from './PanelComponents.jsx'
 import { WorkloadsTabContent } from './WorkloadsTabContent'
 
 /**

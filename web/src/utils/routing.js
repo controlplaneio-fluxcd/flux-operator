@@ -28,40 +28,18 @@ export function serializeFilters(filters) {
 }
 
 /**
- * Parses query object from URL into filter values
- * Returns empty string for missing parameters
- *
- * @param {Object} query - Query object from useLocation().query
- * @param {Array<string>} filterKeys - Array of expected filter keys
- * @returns {Object} Filter object with all keys (empty string if not present)
- *
- * @example
- * parseFilters({ kind: 'GitRepository' }, ['kind', 'namespace', 'name'])
- * // Returns: { kind: 'GitRepository', namespace: '', name: '' }
- */
-export function parseFilters(query, filterKeys) {
-  const filters = {}
-
-  for (const key of filterKeys) {
-    filters[key] = query[key] || ''
-  }
-
-  return filters
-}
-
-/**
  * Custom hook that restores filter signals from URL query params on mount
  * Runs once on component mount, reads URL and sets signal values
  *
  * @param {Object} filterSignals - Object mapping filter names to signals
- *   Example: { kind: selectedEventsKind, name: selectedEventsName }
+ *   Example: { kind: selectedEventKind, name: selectedEventName }
  *
  * @example
  * useRestoreFiltersFromUrl({
- *   kind: selectedEventsKind,
- *   name: selectedEventsName,
- *   namespace: selectedEventsNamespace,
- *   type: selectedEventsSeverity
+ *   kind: selectedEventKind,
+ *   name: selectedEventName,
+ *   namespace: selectedEventNamespace,
+ *   type: selectedEventSeverity
  * })
  */
 export function useRestoreFiltersFromUrl(filterSignals) {
@@ -92,10 +70,10 @@ export function useRestoreFiltersFromUrl(filterSignals) {
  *
  * @example
  * useSyncFiltersToUrl({
- *   kind: selectedEventsKind,
- *   name: selectedEventsName,
- *   namespace: selectedEventsNamespace,
- *   type: selectedEventsSeverity
+ *   kind: selectedEventKind,
+ *   name: selectedEventName,
+ *   namespace: selectedEventNamespace,
+ *   type: selectedEventSeverity
  * }, 300)
  */
 export function useSyncFiltersToUrl(filterSignals, debounceMs = 300) {

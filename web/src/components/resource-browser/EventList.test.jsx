@@ -8,10 +8,10 @@ import {
   eventsData,
   eventsLoading,
   eventsError,
-  selectedEventsKind,
-  selectedEventsName,
-  selectedEventsNamespace,
-  selectedEventsSeverity,
+  selectedEventKind,
+  selectedEventName,
+  selectedEventNamespace,
+  selectedEventSeverity,
   fetchEvents
 } from './EventList'
 import { reportData } from '../../app'
@@ -74,10 +74,10 @@ describe('EventList', () => {
     eventsData.value = []
     eventsLoading.value = false
     eventsError.value = null
-    selectedEventsKind.value = ''
-    selectedEventsName.value = ''
-    selectedEventsNamespace.value = ''
-    selectedEventsSeverity.value = ''
+    selectedEventKind.value = ''
+    selectedEventName.value = ''
+    selectedEventNamespace.value = ''
+    selectedEventSeverity.value = ''
 
     // Reset reportData
     reportData.value = {
@@ -108,7 +108,7 @@ describe('EventList', () => {
     })
 
     it('should pass correct query params for kind filter', async () => {
-      selectedEventsKind.value = 'GitRepository'
+      selectedEventKind.value = 'GitRepository'
       fetchWithMock.mockResolvedValue({ events: mockEvents })
 
       await fetchEvents()
@@ -121,7 +121,7 @@ describe('EventList', () => {
     })
 
     it('should pass correct query params for name filter', async () => {
-      selectedEventsName.value = 'flux-system'
+      selectedEventName.value = 'flux-system'
       fetchWithMock.mockResolvedValue({ events: mockEvents })
 
       await fetchEvents()
@@ -134,7 +134,7 @@ describe('EventList', () => {
     })
 
     it('should pass correct query params for namespace filter', async () => {
-      selectedEventsNamespace.value = 'flux-system'
+      selectedEventNamespace.value = 'flux-system'
       fetchWithMock.mockResolvedValue({ events: mockEvents })
 
       await fetchEvents()
@@ -147,7 +147,7 @@ describe('EventList', () => {
     })
 
     it('should pass severity as "type" query param', async () => {
-      selectedEventsSeverity.value = 'Warning'
+      selectedEventSeverity.value = 'Warning'
       fetchWithMock.mockResolvedValue({ events: mockEvents })
 
       await fetchEvents()
@@ -160,10 +160,10 @@ describe('EventList', () => {
     })
 
     it('should pass multiple query params when multiple filters set', async () => {
-      selectedEventsKind.value = 'GitRepository'
-      selectedEventsName.value = 'flux-system'
-      selectedEventsNamespace.value = 'flux-system'
-      selectedEventsSeverity.value = 'Normal'
+      selectedEventKind.value = 'GitRepository'
+      selectedEventName.value = 'flux-system'
+      selectedEventNamespace.value = 'flux-system'
+      selectedEventSeverity.value = 'Normal'
       fetchWithMock.mockResolvedValue({ events: mockEvents })
 
       await fetchEvents()
@@ -287,7 +287,7 @@ describe('EventList', () => {
       })
 
       // Change filter
-      selectedEventsKind.value = 'GitRepository'
+      selectedEventKind.value = 'GitRepository'
 
       await waitFor(() => {
         expect(fetchWithMock).toHaveBeenCalledTimes(2)
@@ -303,7 +303,7 @@ describe('EventList', () => {
         expect(fetchWithMock).toHaveBeenCalledTimes(1)
       })
 
-      selectedEventsName.value = 'test-name'
+      selectedEventName.value = 'test-name'
 
       await waitFor(() => {
         expect(fetchWithMock).toHaveBeenCalledTimes(2)
@@ -319,7 +319,7 @@ describe('EventList', () => {
         expect(fetchWithMock).toHaveBeenCalledTimes(1)
       })
 
-      selectedEventsNamespace.value = 'default'
+      selectedEventNamespace.value = 'default'
 
       await waitFor(() => {
         expect(fetchWithMock).toHaveBeenCalledTimes(2)
@@ -335,7 +335,7 @@ describe('EventList', () => {
         expect(fetchWithMock).toHaveBeenCalledTimes(1)
       })
 
-      selectedEventsSeverity.value = 'Warning'
+      selectedEventSeverity.value = 'Warning'
 
       await waitFor(() => {
         expect(fetchWithMock).toHaveBeenCalledTimes(2)
@@ -343,20 +343,20 @@ describe('EventList', () => {
     })
 
     it('should clear all filters when clear button clicked', async () => {
-      selectedEventsKind.value = 'GitRepository'
-      selectedEventsName.value = 'test'
-      selectedEventsNamespace.value = 'default'
-      selectedEventsSeverity.value = 'Warning'
+      selectedEventKind.value = 'GitRepository'
+      selectedEventName.value = 'test'
+      selectedEventNamespace.value = 'default'
+      selectedEventSeverity.value = 'Warning'
 
       render(<EventList />)
 
       const clearButton = screen.getByTestId('clear-filters')
       fireEvent.click(clearButton)
 
-      expect(selectedEventsKind.value).toBe('')
-      expect(selectedEventsName.value).toBe('')
-      expect(selectedEventsNamespace.value).toBe('')
-      expect(selectedEventsSeverity.value).toBe('')
+      expect(selectedEventKind.value).toBe('')
+      expect(selectedEventName.value).toBe('')
+      expect(selectedEventNamespace.value).toBe('')
+      expect(selectedEventSeverity.value).toBe('')
     })
   })
 

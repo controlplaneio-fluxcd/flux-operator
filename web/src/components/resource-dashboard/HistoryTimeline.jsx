@@ -2,42 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { formatTimestamp } from '../../utils/time'
-
-/**
- * Get the badge class for a status
- * @param {string} status - The status string
- * @returns {string} Tailwind CSS classes for the badge
- */
-const getStatusBadgeClass = (status) => {
-  const statusLower = status?.toLowerCase() || ''
-
-  if (statusLower.includes('succe') || status === 'deployed') {
-    return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-  }
-  if (statusLower.includes('failed')) {
-    return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-  }
-  // Yellow for any other status (superseded, progressing, etc.)
-  return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
-}
-
-/**
- * Get the dot color class for a status
- * @param {string} status - The status string
- * @returns {string} Tailwind CSS classes for the dot
- */
-const getDotColorClass = (status) => {
-  const statusLower = status?.toLowerCase() || ''
-
-  if (statusLower.includes('succe') || status === 'deployed') {
-    return 'bg-green-500 dark:bg-green-400'
-  }
-  if (statusLower.includes('failed')) {
-    return 'bg-red-500 dark:bg-red-400'
-  }
-  // Yellow for any other status (superseded, progressing, etc.)
-  return 'bg-yellow-500 dark:bg-yellow-400'
-}
+import { getHistoryStatusBadgeClass, getHistoryDotClass } from '../../utils/status'
 
 /**
  * Format status for display
@@ -140,10 +105,10 @@ export function HistoryTimeline({ history, kind }) {
             <div class="flex items-center gap-4 mb-2">
               <div class="relative flex flex-col items-center">
                 {/* Dot */}
-                <div class={`w-3 h-3 rounded-full flex-shrink-0 ${getDotColorClass(status)} ring-4 ring-white dark:ring-gray-800`} />
+                <div class={`w-3 h-3 rounded-full flex-shrink-0 ${getHistoryDotClass(status)} ring-4 ring-white dark:ring-gray-800`} />
               </div>
               {/* Status badge */}
-              <span class={`inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium ${getStatusBadgeClass(status)}`}>
+              <span class={`inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium ${getHistoryStatusBadgeClass(status)}`}>
                 {formatStatus(status)}
               </span>
             </div>
