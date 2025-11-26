@@ -147,6 +147,21 @@ func (r *Router) GetResource(ctx context.Context, kind, name, namespace string) 
 		}
 	}
 
+	// Get the input provider references for ResourceSet and inject into status
+	if inputProviderRefs, err := r.getInputProviderRefs(ctx, *obj); err == nil && len(inputProviderRefs) > 0 {
+		entries := make([]any, 0, len(inputProviderRefs))
+		for _, entry := range inputProviderRefs {
+			entries = append(entries, map[string]any{
+				"name":      entry.Name,
+				"namespace": entry.Namespace,
+				"type":      entry.Kind,
+			})
+		}
+		if err := unstructured.SetNestedSlice(obj.Object, entries, "status", "inputProviderRefs"); err != nil {
+			return nil, fmt.Errorf("unable to set inputProviderRefs in status: %w", err)
+		}
+	}
+
 	cleanObjectForExport(obj, true)
 	return obj, nil
 }
@@ -219,4 +234,99 @@ func getReconcilerRef(obj *unstructured.Unstructured) string {
 	}
 
 	return fmt.Sprintf("%s/%s/%s", kind, namespace, name)
+}
+
+// getInputProviderRefs retrieves the list of ResourceSetInputProvider referenced by the given ResourceSet.
+func (r *Router) getInputProviderRefs(ctx context.Context, obj unstructured.Unstructured) ([]InventoryEntry, error) {
+	if obj.GetKind() != fluxcdv1.ResourceSetKind {
+		return nil, nil
+	}
+
+	inputsFrom, found, err := unstructured.NestedSlice(obj.Object, "spec", "inputsFrom")
+	if err != nil || !found || len(inputsFrom) == 0 {
+		return nil, nil
+	}
+
+	rsipGVK := fluxcdv1.GroupVersion.WithKind(fluxcdv1.ResourceSetInputProviderKind)
+	providerMap := make(map[string]InventoryEntry)
+
+	for _, inputSource := range inputsFrom {
+		source, ok := inputSource.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		// Get provider by name.
+		if name, exists := source["name"].(string); exists && name != "" {
+			mapKey := fmt.Sprintf("%s/%s/%s", rsipGVK.Kind, obj.GetNamespace(), name)
+			if _, found := providerMap[mapKey]; found {
+				continue
+			}
+
+			objKey := client.ObjectKey{
+				Name:      name,
+				Namespace: obj.GetNamespace(),
+			}
+
+			var rsip fluxcdv1.ResourceSetInputProvider
+			if err := r.kubeClient.Get(ctx, objKey, &rsip); err != nil {
+				return nil, fmt.Errorf("failed to get provider %s/%s: %w", objKey.Namespace, objKey.Name, err)
+			}
+
+			providerMap[mapKey] = InventoryEntry{
+				Name:      rsip.Name,
+				Namespace: rsip.Namespace,
+				Kind:      rsip.Spec.Type,
+			}
+			continue
+		}
+
+		// List providers by selector.
+		if selector, exists := source["selector"].(map[string]any); exists && selector != nil {
+			matchLabels, _ := selector["matchLabels"].(map[string]any)
+			if matchLabels == nil {
+				continue
+			}
+
+			labels := make(map[string]string)
+			for k, v := range matchLabels {
+				if strVal, ok := v.(string); ok {
+					labels[k] = strVal
+				}
+			}
+
+			var rsipList fluxcdv1.ResourceSetInputProviderList
+			listOpts := []client.ListOption{
+				client.InNamespace(obj.GetNamespace()),
+				client.MatchingLabels(labels),
+			}
+
+			if err := r.kubeClient.List(ctx, &rsipList, listOpts...); err != nil {
+				return nil, fmt.Errorf("failed to list providers with selector: %w", err)
+			}
+
+			for _, rsip := range rsipList.Items {
+				mapKey := fmt.Sprintf("%s/%s/%s", rsipGVK.Kind, rsip.Namespace, rsip.Name)
+				if _, found := providerMap[mapKey]; found {
+					continue
+				}
+				providerMap[mapKey] = InventoryEntry{
+					Name:      rsip.Name,
+					Namespace: rsip.Namespace,
+					Kind:      rsip.Spec.Type,
+				}
+			}
+		}
+	}
+
+	// Convert map to slice and sort by name
+	result := make([]InventoryEntry, 0, len(providerMap))
+	for _, entry := range providerMap {
+		result = append(result, entry)
+	}
+	slices.SortFunc(result, func(a, b InventoryEntry) int {
+		return strings.Compare(a.Name, b.Name)
+	})
+
+	return result, nil
 }

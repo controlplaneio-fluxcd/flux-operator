@@ -2760,6 +2760,13 @@ export const mockResourcesArray =
         "lastReconciled": "2025-11-18T11:39:39Z",
         "managedBy": "Kustomization/flux-system/flux-system"
       },
+      "inputProviderRefs":[
+        {
+          "type":"OCIArtifactTag",
+          "name":"flux-status-server",
+          "namespace":"flux-system"
+        }
+      ],
       "conditions": [
         {
           "lastTransitionTime": "2025-11-18T11:39:39Z",
