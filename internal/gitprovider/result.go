@@ -17,6 +17,7 @@ type Result struct {
 	Tag    string   `json:"tag,omitempty"`
 	Author string   `json:"author,omitempty"`
 	Title  string   `json:"title,omitempty"`
+	Slug   string   `json:"slug,omitempty"`
 	Labels []string `json:"labels,omitempty"`
 }
 
@@ -41,6 +42,10 @@ func (r *Result) ToMap() map[string]any {
 
 	if r.Title != "" {
 		m["title"] = r.Title
+	}
+
+	if r.Slug != "" {
+		m["slug"] = r.Slug
 	}
 
 	if len(r.Labels) > 0 {

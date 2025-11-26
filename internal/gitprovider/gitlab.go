@@ -249,7 +249,8 @@ func (p *GitLabProvider) ListEnvironments(ctx context.Context, opts Options) ([]
 				ID:     fmt.Sprintf("%d", env.ID),
 				SHA:    lastDeployment.Deployable.Commit.ID,
 				Branch: lastDeployment.Deployable.Ref,
-				Title:  env.Slug,
+				Title:  env.Name,
+				Slug:   env.Slug,
 				Author: author,
 			})
 
