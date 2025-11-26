@@ -7,7 +7,9 @@ import { useLocation } from 'preact-iso'
 import { fetchWithMock } from '../../utils/fetch'
 import { getControllerName } from '../../utils/constants'
 import { formatTimestamp } from '../../utils/time'
-import { TabButton, YamlBlock, getEventBadgeClass } from './PanelComponents'
+import { TabButton } from './PanelComponents.jsx'
+import { YamlBlock } from '../../utils/yaml'
+import { getStatusBadgeClass, getEventBadgeClass } from '../../utils/status'
 
 /**
  * SourcePanel - Displays source information for a Flux resource
@@ -218,13 +220,7 @@ export function SourcePanel({ sourceRef, namespace }) {
                   {sourceRef.status && (
                     <div class="text-sm">
                       <span class="text-gray-500 dark:text-gray-400">Status</span>
-                      <span class={`ml-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        sourceRef.status === 'Ready' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
-                          sourceRef.status === 'Failed' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' :
-                            sourceRef.status === 'Progressing' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' :
-                              sourceRef.status === 'Suspended' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400' :
-                                'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400'
-                      }`}>
+                      <span class={`ml-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeClass(sourceRef.status)}`}>
                         {sourceRef.status}
                       </span>
                     </div>

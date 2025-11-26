@@ -7,14 +7,16 @@ import { useLocation } from 'preact-iso'
 import { fetchWithMock } from '../../utils/fetch'
 import { formatTimestamp } from '../../utils/time'
 import { getControllerName } from '../../utils/constants'
-import { TabButton, YamlBlock, getEventBadgeClass } from './PanelComponents'
+import { TabButton } from './PanelComponents.jsx'
+import { YamlBlock } from '../../utils/yaml'
+import { getStatusBadgeClass, getEventBadgeClass } from '../../utils/status'
 import { HistoryTimeline } from './HistoryTimeline'
 
 export function ReconcilerPanel({ kind, name, namespace, resourceData }) {
   const location = useLocation()
 
   // State
-  const [infoTab, setInfoTab] = useState('overview')
+  const [reconcilerTab, setReconcilerTab] = useState('overview')
   const [eventsData, setEventsData] = useState([])
   const [eventsLoading, setEventsLoading] = useState(false)
   const [eventsLoaded, setEventsLoaded] = useState(false)
@@ -23,7 +25,7 @@ export function ReconcilerPanel({ kind, name, namespace, resourceData }) {
   const isInitialMount = useRef(true)
 
   // Collapsible state
-  const isInfoExpanded = useSignal(true)
+  const isExpanded = useSignal(true)
 
   // Derived data
   const reconcilerRef = resourceData?.status?.reconcilerRef
@@ -117,7 +119,7 @@ export function ReconcilerPanel({ kind, name, namespace, resourceData }) {
 
   // Fetch events on demand when Events tab is clicked
   useEffect(() => {
-    if (infoTab === 'events' && !eventsLoaded && !eventsLoading) {
+    if (reconcilerTab === 'events' && !eventsLoaded && !eventsLoading) {
       const fetchEvents = async () => {
         setEventsLoading(true)
         const params = new URLSearchParams({ kind, name, namespace })
@@ -139,7 +141,7 @@ export function ReconcilerPanel({ kind, name, namespace, resourceData }) {
 
       fetchEvents()
     }
-  }, [infoTab, eventsLoaded, eventsLoading, kind, namespace, name])
+  }, [reconcilerTab, eventsLoaded, eventsLoading, kind, namespace, name])
 
   // Refetch events when resource data changes (auto-refresh) if Events tab is open
   useEffect(() => {
@@ -152,7 +154,7 @@ export function ReconcilerPanel({ kind, name, namespace, resourceData }) {
     }
 
     // Only refetch if Events tab is open and events were previously loaded
-    if (infoTab === 'events' && eventsLoaded && !eventsLoading) {
+    if (reconcilerTab === 'events' && eventsLoaded && !eventsLoading) {
       const refetchEvents = async () => {
         // Don't set loading state during auto-refresh to avoid showing spinner
         const params = new URLSearchParams({ kind, name, namespace })
@@ -176,16 +178,16 @@ export function ReconcilerPanel({ kind, name, namespace, resourceData }) {
   return (
     <div class="card p-0" data-testid="reconciler-panel">
       <button
-        onClick={() => isInfoExpanded.value = !isInfoExpanded.value}
+        onClick={() => isExpanded.value = !isExpanded.value}
         class="w-full px-6 py-4 text-left hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors"
-        aria-expanded={isInfoExpanded.value}
+        aria-expanded={isExpanded.value}
       >
         <div class="flex items-center justify-between">
           <div>
             <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Reconciler</h3>
           </div>
           <svg
-            class={`w-5 h-5 text-gray-400 dark:text-gray-500 transition-transform ${isInfoExpanded.value ? 'rotate-180' : ''}`}
+            class={`w-5 h-5 text-gray-400 dark:text-gray-500 transition-transform ${isExpanded.value ? 'rotate-180' : ''}`}
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -194,48 +196,42 @@ export function ReconcilerPanel({ kind, name, namespace, resourceData }) {
           </svg>
         </div>
       </button>
-      {isInfoExpanded.value && (
+      {isExpanded.value && (
         <div class="px-6 py-4">
           {/* Tab Navigation */}
           <div class="border-b border-gray-200 dark:border-gray-700 mb-4">
             <nav class="flex space-x-4">
-              <TabButton active={infoTab === 'overview'} onClick={() => setInfoTab('overview')}>
+              <TabButton active={reconcilerTab === 'overview'} onClick={() => setReconcilerTab('overview')}>
                 <span class="sm:hidden">Info</span>
                 <span class="hidden sm:inline">Overview</span>
               </TabButton>
               {resourceData?.status?.history && resourceData.status.history.length > 0 && (
-                <TabButton active={infoTab === 'history'} onClick={() => setInfoTab('history')}>
+                <TabButton active={reconcilerTab === 'history'} onClick={() => setReconcilerTab('history')}>
                       History
                 </TabButton>
               )}
-              <TabButton active={infoTab === 'events'} onClick={() => setInfoTab('events')}>
+              <TabButton active={reconcilerTab === 'events'} onClick={() => setReconcilerTab('events')}>
                     Events
               </TabButton>
-              <TabButton active={infoTab === 'spec'} onClick={() => setInfoTab('spec')}>
+              <TabButton active={reconcilerTab === 'spec'} onClick={() => setReconcilerTab('spec')}>
                 <span class="sm:hidden">Spec</span>
                 <span class="hidden sm:inline">Specification</span>
               </TabButton>
-              <TabButton active={infoTab === 'status'} onClick={() => setInfoTab('status')}>
+              <TabButton active={reconcilerTab === 'status'} onClick={() => setReconcilerTab('status')}>
                     Status
               </TabButton>
             </nav>
           </div>
 
           {/* Tab Content */}
-          {infoTab === 'overview' && (
+          {reconcilerTab === 'overview' && (
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Left column: Status and metadata */}
               <div class="space-y-4">
                 {/* Status Badge */}
                 <div class="text-sm">
                   <span class="text-gray-500 dark:text-gray-400">Status</span>
-                  <span class={`ml-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    status === 'Ready' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
-                      status === 'Failed' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' :
-                        status === 'Progressing' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' :
-                          status === 'Suspended' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400' :
-                            'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400'
-                  }`}>
+                  <span class={`ml-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeClass(status)}`}>
                     {status}
                   </span>
                 </div>
@@ -296,18 +292,18 @@ export function ReconcilerPanel({ kind, name, namespace, resourceData }) {
           )}
 
           {/* History Tab */}
-          {infoTab === 'history' && (
+          {reconcilerTab === 'history' && (
             <HistoryTimeline
               history={resourceData?.status?.history}
               kind={kind}
             />
           )}
 
-          {infoTab === 'spec' && <YamlBlock data={specYaml} />}
-          {infoTab === 'status' && <YamlBlock data={statusYaml} />}
+          {reconcilerTab === 'spec' && <YamlBlock data={specYaml} />}
+          {reconcilerTab === 'status' && <YamlBlock data={statusYaml} />}
 
           {/* Events Tab */}
-          {infoTab === 'events' && (
+          {reconcilerTab === 'events' && (
             <div>
               {eventsLoading ? (
                 <div class="flex items-center justify-center p-8">

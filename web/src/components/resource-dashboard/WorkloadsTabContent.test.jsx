@@ -161,10 +161,10 @@ describe('WorkloadsTabContent component', () => {
       const textContent = document.body.textContent
       expect(textContent).toContain('podinfo')
       expect(textContent).toContain('Deployment')
-      expect(textContent).toContain('Current')
+      expect(textContent).toContain('Ready')
       expect(textContent).toContain('redis')
       expect(textContent).toContain('StatefulSet')
-      expect(textContent).toContain('InProgress')
+      expect(textContent).toContain('Progressing')
     })
   })
 
@@ -245,13 +245,13 @@ describe('WorkloadsTabContent component', () => {
     )
 
     await waitFor(() => {
-      const currentBadge = screen.getAllByText('Current')[0]
-      expect(currentBadge).toBeInTheDocument()
-      expect(currentBadge.className).toContain('bg-green-100')
+      const readyBadge = screen.getAllByText('Ready')[0]
+      expect(readyBadge).toBeInTheDocument()
+      expect(readyBadge.className).toContain('bg-green-100')
 
-      const inProgressBadge = screen.getByText('InProgress')
-      expect(inProgressBadge).toBeInTheDocument()
-      expect(inProgressBadge.className).toContain('bg-blue-100')
+      const progressingBadge = screen.getByText('Progressing')
+      expect(progressingBadge).toBeInTheDocument()
+      expect(progressingBadge.className).toContain('bg-blue-100')
     })
   })
 
@@ -355,7 +355,7 @@ describe('WorkloadsTabContent component', () => {
       // Namespace/Name format
       expect(textContent).toContain('default/podinfo')
       // Status badge
-      expect(screen.getByText('Current')).toBeInTheDocument()
+      expect(screen.getByText('Ready')).toBeInTheDocument()
       // Status message in header
       expect(textContent).toContain('Deployment has minimum availability.')
     })

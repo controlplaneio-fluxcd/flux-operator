@@ -4,24 +4,7 @@
 import { useState, useEffect } from 'preact/hooks'
 import { fetchWithMock } from '../../utils/fetch'
 import { formatTimestamp } from '../../utils/time'
-
-/**
- * Get status badge class for workload/pod status
- */
-function getStatusBadgeClass(status) {
-  switch (status) {
-  case 'Current':
-    return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-  case 'Failed':
-    return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-  case 'InProgress':
-    return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
-  case 'Terminating':
-    return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
-  default:
-    return 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400'
-  }
-}
+import { getWorkloadStatusBadgeClass, formatWorkloadStatus } from '../../utils/status'
 
 /**
  * WorkloadsTabContent - Displays detailed Kubernetes workload information
@@ -127,8 +110,8 @@ export function WorkloadsTabContent({ workloadItems, namespace }) {
                         {item.kind}
                       </span>
                       {workload && (
-                        <span class={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeClass(workload.status)}`}>
-                          {workload.status}
+                        <span class={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getWorkloadStatusBadgeClass(workload.status)}`}>
+                          {formatWorkloadStatus(workload.status)}
                         </span>
                       )}
                     </div>
@@ -189,8 +172,8 @@ export function WorkloadsTabContent({ workloadItems, namespace }) {
                             <span class="text-xs font-mono text-gray-900 dark:text-white truncate flex-grow mr-2">
                               {pod.name}
                             </span>
-                            <span class={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${getStatusBadgeClass(pod.status)}`}>
-                              {pod.status}
+                            <span class={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${getWorkloadStatusBadgeClass(pod.status)}`}>
+                              {formatWorkloadStatus(pod.status)}
                             </span>
                           </div>
                           {pod.statusMessage && (

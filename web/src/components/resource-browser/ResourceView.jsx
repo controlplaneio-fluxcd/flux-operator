@@ -3,16 +3,9 @@
 
 import { useState, useMemo, useEffect } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
-import yaml from 'js-yaml'
-import Prism from 'prismjs'
-import 'prismjs/components/prism-yaml'
 import { fetchWithMock } from '../../utils/fetch'
-import { appliedTheme } from '../../utils/theme'
+import { usePrismTheme, YamlBlock } from '../../utils/yaml'
 import { fluxKinds, isKindWithInventory } from '../../utils/constants'
-
-// Import Prism themes as URLs for dynamic loading
-import prismLight from 'prismjs/themes/prism.css?url'
-import prismDark from 'prismjs/themes/prism-tomorrow.css?url'
 
 /**
  * Helper to group inventory items by apiVersion
@@ -145,31 +138,8 @@ export function ResourceView({ kind, name, namespace, isExpanded }) {
   const [error, setError] = useState(null)
   const [activeTab, setActiveTab] = useState('inventory')
 
-  // Dynamically load Prism theme based on current theme
-  useEffect(() => {
-    const linkId = 'prism-theme-link'
-
-    // Remove existing Prism theme link if present
-    const existingLink = document.getElementById(linkId)
-    if (existingLink) {
-      existingLink.remove()
-    }
-
-    // Add new theme link based on current theme
-    const link = document.createElement('link')
-    link.id = linkId
-    link.rel = 'stylesheet'
-    link.href = appliedTheme.value === 'dark' ? prismDark : prismLight
-    document.head.appendChild(link)
-
-    // Cleanup on unmount
-    return () => {
-      const link = document.getElementById(linkId)
-      if (link) {
-        link.remove()
-      }
-    }
-  }, [appliedTheme.value])
+  // Load Prism theme based on current app theme
+  usePrismTheme()
 
   // Fetch resource details when expanded
   useEffect(() => {
@@ -209,27 +179,21 @@ export function ResourceView({ kind, name, namespace, isExpanded }) {
     fetchResourceDetails()
   }, [isExpanded, kind, name, namespace, resourceData, loading, error])
 
-  // Convert resource definition to YAML with syntax highlighting (memoized)
-  const definitionYamlHighlighted = useMemo(() => {
-    if (!resourceData) return ''
-
-    // Build complete resource definition with apiVersion, kind, metadata, and spec
-    const definition = {
+  // Build resource definition object (memoized)
+  const definitionData = useMemo(() => {
+    if (!resourceData) return null
+    return {
       apiVersion: resourceData.apiVersion,
       kind: resourceData.kind,
       metadata: resourceData.metadata,
       spec: resourceData.spec
     }
-
-    const yamlStr = yaml.dump(definition, { indent: 2, lineWidth: -1 })
-    return Prism.highlight(yamlStr, Prism.languages.yaml, 'yaml')
   }, [resourceData])
 
-  // Convert status to YAML with syntax highlighting (memoized)
-  const statusYamlHighlighted = useMemo(() => {
-    if (!resourceData) return ''
+  // Build status object without inventory and sourceRef (memoized)
+  const statusData = useMemo(() => {
+    if (!resourceData) return null
 
-    // Build status object without inventory and sourceRef
     const cleanStatus = resourceData.status
       ? (() => {
         // eslint-disable-next-line no-unused-vars
@@ -238,7 +202,7 @@ export function ResourceView({ kind, name, namespace, isExpanded }) {
       })()
       : undefined
 
-    const statusObj = {
+    return {
       apiVersion: resourceData.apiVersion,
       kind: resourceData.kind,
       metadata: {
@@ -247,9 +211,6 @@ export function ResourceView({ kind, name, namespace, isExpanded }) {
       },
       status: cleanStatus
     }
-
-    const yamlStr = yaml.dump(statusObj, { indent: 2, lineWidth: -1 })
-    return Prism.highlight(yamlStr, Prism.languages.yaml, 'yaml')
   }, [resourceData])
 
   // Group inventory by apiVersion (memoized)
@@ -307,7 +268,7 @@ export function ResourceView({ kind, name, namespace, isExpanded }) {
       {!loading && !error && resourceData && (
         <>
           {/* Tab Navigation */}
-          <div class="border-b border-gray-200 dark:border-gray-700">
+          <div class="border-b border-gray-200 dark:border-gray-700 mb-4">
             <nav class="flex space-x-4" aria-label="Tabs">
               {shouldShowInventoryTab && (
                 <button
@@ -357,111 +318,92 @@ export function ResourceView({ kind, name, namespace, isExpanded }) {
             </nav>
           </div>
 
-          {/* Tab Content */}
-          <div class="py-2">
-            {/* Inventory Tab */}
-            {activeTab === 'inventory' && shouldShowInventoryTab && (
-              <div class="space-y-3">
-                {inventoryCount > 0 ? (
-                  sortedApiVersions.map(apiVersion => (
-                    <InventoryGroupByApiVersion
-                      key={apiVersion}
-                      apiVersion={apiVersion}
-                      items={groupedInventory[apiVersion]}
-                    />
-                  ))
-                ) : (
-                  <div class="py-4 px-2 text-sm text-gray-600 dark:text-gray-400">
-                    Empty inventory, no managed objects
+          {/* Inventory Tab */}
+          {activeTab === 'inventory' && shouldShowInventoryTab && (
+            <div class="space-y-3">
+              {inventoryCount > 0 ? (
+                sortedApiVersions.map(apiVersion => (
+                  <InventoryGroupByApiVersion
+                    key={apiVersion}
+                    apiVersion={apiVersion}
+                    items={groupedInventory[apiVersion]}
+                  />
+                ))
+              ) : (
+                <div class="py-4 px-2 text-sm text-gray-600 dark:text-gray-400">
+                  Empty inventory, no managed objects
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Source Tab */}
+          {activeTab === 'source' && resourceData.status?.sourceRef && (
+            <div class="space-y-2">
+              <div class="grid grid-cols-1 gap-1 text-xs">
+                {/* ID: kind/namespace/name */}
+                <div class="py-1 px-2">
+                  <span class="text-gray-600 dark:text-gray-400">ID: </span>
+                  <button
+                    onClick={() => location.route(`/resource/${encodeURIComponent(resourceData.status.sourceRef.kind)}/${encodeURIComponent(resourceData.status.sourceRef.namespace)}/${encodeURIComponent(resourceData.status.sourceRef.name)}`)}
+                    class="text-flux-blue dark:text-blue-400 hover:underline break-all"
+                  >
+                    {resourceData.status.sourceRef.kind}/{resourceData.status.sourceRef.namespace}/{resourceData.status.sourceRef.name}
+                  </button>
+                </div>
+
+                {/* URL */}
+                <div class="py-1 px-2">
+                  <span class="text-gray-600 dark:text-gray-400">URL: </span>
+                  <span class="text-gray-900 dark:text-gray-100 break-all">{resourceData.status.sourceRef.url}</span>
+                </div>
+
+                {/* Origin URL (if present) */}
+                {resourceData.status.sourceRef.originURL && (
+                  <div class="py-1 px-2">
+                    <span class="text-gray-600 dark:text-gray-400">Origin URL: </span>
+                    <span class="text-gray-900 dark:text-gray-100 break-all">{resourceData.status.sourceRef.originURL}</span>
                   </div>
                 )}
-              </div>
-            )}
 
-            {/* Source Tab */}
-            {activeTab === 'source' && resourceData.status?.sourceRef && (
-              <div class="space-y-2">
-                <div class="grid grid-cols-1 gap-1 text-xs">
-                  {/* ID: kind/namespace/name */}
+                {/* Origin Revision (if present) */}
+                {resourceData.status.sourceRef.originRevision && (
                   <div class="py-1 px-2">
-                    <span class="text-gray-600 dark:text-gray-400">ID: </span>
-                    <button
-                      onClick={() => location.route(`/resource/${encodeURIComponent(resourceData.status.sourceRef.kind)}/${encodeURIComponent(resourceData.status.sourceRef.namespace)}/${encodeURIComponent(resourceData.status.sourceRef.name)}`)}
-                      class="text-flux-blue dark:text-blue-400 hover:underline break-all"
-                    >
-                      {resourceData.status.sourceRef.kind}/{resourceData.status.sourceRef.namespace}/{resourceData.status.sourceRef.name}
-                    </button>
+                    <span class="text-gray-600 dark:text-gray-400">Origin Revision: </span>
+                    <span class="text-gray-900 dark:text-gray-100 break-all">{resourceData.status.sourceRef.originRevision}</span>
                   </div>
+                )}
 
-                  {/* URL */}
-                  <div class="py-1 px-2">
-                    <span class="text-gray-600 dark:text-gray-400">URL: </span>
-                    <span class="text-gray-900 dark:text-gray-100 break-all">{resourceData.status.sourceRef.url}</span>
-                  </div>
+                {/* Status */}
+                <div class="py-1 px-2">
+                  <span class="text-gray-600 dark:text-gray-400">Status: </span>
+                  <span class={`font-semibold ${
+                    resourceData.status.sourceRef.status === 'Ready'
+                      ? 'text-green-600 dark:text-green-400'
+                      : 'text-red-600 dark:text-red-400'
+                  }`}>
+                    {resourceData.status.sourceRef.status}
+                  </span>
+                </div>
 
-                  {/* Origin URL (if present) */}
-                  {resourceData.status.sourceRef.originURL && (
-                    <div class="py-1 px-2">
-                      <span class="text-gray-600 dark:text-gray-400">Origin URL: </span>
-                      <span class="text-gray-900 dark:text-gray-100 break-all">{resourceData.status.sourceRef.originURL}</span>
-                    </div>
-                  )}
-
-                  {/* Origin Revision (if present) */}
-                  {resourceData.status.sourceRef.originRevision && (
-                    <div class="py-1 px-2">
-                      <span class="text-gray-600 dark:text-gray-400">Origin Revision: </span>
-                      <span class="text-gray-900 dark:text-gray-100 break-all">{resourceData.status.sourceRef.originRevision}</span>
-                    </div>
-                  )}
-
-                  {/* Status */}
-                  <div class="py-1 px-2">
-                    <span class="text-gray-600 dark:text-gray-400">Status: </span>
-                    <span class={`font-semibold ${
-                      resourceData.status.sourceRef.status === 'Ready'
-                        ? 'text-green-600 dark:text-green-400'
-                        : 'text-red-600 dark:text-red-400'
-                    }`}>
-                      {resourceData.status.sourceRef.status}
-                    </span>
-                  </div>
-
-                  {/* Message */}
-                  <div class="py-1 px-2">
-                    <span class="text-gray-600 dark:text-gray-400">Message: </span>
-                    <span class="text-gray-900 dark:text-gray-100 break-all">{resourceData.status.sourceRef.message}</span>
-                  </div>
+                {/* Message */}
+                <div class="py-1 px-2">
+                  <span class="text-gray-600 dark:text-gray-400">Message: </span>
+                  <span class="text-gray-900 dark:text-gray-100 break-all">{resourceData.status.sourceRef.message}</span>
                 </div>
               </div>
-            )}
+            </div>
+          )}
 
-            {/* Specification Tab */}
-            {activeTab === 'specification' && (
-              <div>
-                <pre class="p-2 bg-gray-50 dark:bg-gray-900 rounded-md overflow-x-auto language-yaml" style="font-size: 12px; line-height: 1.5;">
-                  <code
-                    class="language-yaml"
-                    style="font-size: 12px;"
-                    dangerouslySetInnerHTML={{ __html: definitionYamlHighlighted }}
-                  />
-                </pre>
-              </div>
-            )}
+          {/* Specification Tab */}
+          {activeTab === 'specification' && (
+            <YamlBlock data={definitionData} />
+          )}
 
-            {/* Status Tab */}
-            {activeTab === 'status' && (
-              <div>
-                <pre class="p-2 bg-gray-50 dark:bg-gray-900 rounded-md overflow-x-auto language-yaml" style="font-size: 12px; line-height: 1.5;">
-                  <code
-                    class="language-yaml"
-                    style="font-size: 12px;"
-                    dangerouslySetInnerHTML={{ __html: statusYamlHighlighted }}
-                  />
-                </pre>
-              </div>
-            )}
-          </div>
+          {/* Status Tab */}
+          {activeTab === 'status' && (
+            <YamlBlock data={statusData} />
+          )}
         </>
       )}
     </div>

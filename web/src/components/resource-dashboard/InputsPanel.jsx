@@ -5,7 +5,8 @@ import { useState } from 'preact/hooks'
 import { useSignal } from '@preact/signals'
 import { fetchWithMock } from '../../utils/fetch'
 import { formatTimestamp } from '../../utils/time'
-import { TabButton, YamlBlock } from './PanelComponents'
+import { TabButton } from './PanelComponents.jsx'
+import { YamlBlock } from '../../utils/yaml'
 
 /**
  * Get badge class for provider type

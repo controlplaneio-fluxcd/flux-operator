@@ -3,7 +3,7 @@
 
 import { useState } from 'preact/hooks'
 import { useSignal } from '@preact/signals'
-import { TabButton } from './PanelComponents'
+import { TabButton } from './PanelComponents.jsx'
 
 /**
  * Get the source reference display string
