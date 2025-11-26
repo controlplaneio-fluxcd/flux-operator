@@ -106,7 +106,7 @@ export function ReconcilerPanel({ kind, name, namespace, resourceData }) {
   const statusYaml = useMemo(() => {
     if (!resourceData?.status) return null
     // eslint-disable-next-line no-unused-vars
-    const { inventory, sourceRef, reconcilerRef, ...rest } = resourceData.status
+    const { inventory, sourceRef, reconcilerRef, exportedInputs, ...rest } = resourceData.status
     return {
       apiVersion: resourceData.apiVersion,
       kind: resourceData.kind,

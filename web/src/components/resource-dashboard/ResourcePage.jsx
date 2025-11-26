@@ -10,6 +10,7 @@ import { ReconcilerPanel } from './ReconcilerPanel'
 import { SourcePanel } from './SourcePanel'
 import { InventoryPanel } from './InventoryPanel'
 import { ArtifactPanel } from './ArtifactPanel'
+import { ExportedInputsPanel } from './ExportedInputsPanel'
 
 // Import Prism themes as URLs for dynamic loading
 import prismLight from 'prismjs/themes/prism.css?url'
@@ -157,6 +158,7 @@ export function ResourcePage({ kind, namespace, name }) {
   const statusInfo = getStatusInfo(status)
   const hasSource = resourceData?.status?.sourceRef
   const isSourceResource = resourceData?.apiVersion?.startsWith('source.toolkit.fluxcd.io/') && resourceData?.kind !== 'HelmChart'
+  const isResourceSetInputProvider = resourceData?.kind === 'ResourceSetInputProvider'
 
   // Navigate to another resource
   const handleNavigate = (item) => {
@@ -251,6 +253,11 @@ export function ResourcePage({ kind, namespace, name }) {
         {/* Artifact Section - for source resources only */}
         {isSourceResource && (
           <ArtifactPanel resourceData={resourceData} />
+        )}
+
+        {/* Exported Inputs Section - for ResourceSetInputProvider only */}
+        {isResourceSetInputProvider && (
+          <ExportedInputsPanel resourceData={resourceData} />
         )}
 
         {/* Managed Objects Section */}
