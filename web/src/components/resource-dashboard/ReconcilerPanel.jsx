@@ -270,9 +270,10 @@ export function ReconcilerPanel({ kind, name, namespace, resourceData }) {
                       return (
                         <button
                           onClick={() => location.route(`/resource/${encodeURIComponent(refKind)}/${encodeURIComponent(refNamespace)}/${encodeURIComponent(refName)}`)}
-                          class="ml-1 text-flux-blue dark:text-blue-400 hover:underline break-words"
+                          class="ml-1 text-flux-blue dark:text-blue-400 hover:underline"
                         >
-                          {reconcilerRef.managedBy}
+                          <span class="hidden md:inline">{reconcilerRef.managedBy}</span>
+                          <span class="md:hidden">{refName}</span>
                         </button>
                       )
                     })()}

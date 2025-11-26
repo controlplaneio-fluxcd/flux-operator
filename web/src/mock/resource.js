@@ -2042,6 +2042,9 @@ export const mockResourcesArray =
       "ref": {
         "tag": "latest"
       },
+      "verify": {
+        "provider": "cosign"
+      },
       "timeout": "60s",
       "url": "oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests"
     },
@@ -4070,6 +4073,9 @@ export const mockResourcesArray =
       "interval": "1m0s",
       "ref": {
         "branch": "main"
+      },
+      "verify": {
+        "mode": "HEAD"
       },
       "url": "https://github.com/stefanprodan/podinfo"
     },
