@@ -5,6 +5,7 @@ package gitprovider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -20,11 +21,6 @@ type AzureDevOpsProvider struct {
 	Owner   string
 	Project string
 	Repo    string
-}
-
-func (p *AzureDevOpsProvider) ListEnvironments(_ context.Context, _ Options) ([]Result, error) {
-	// TODO implement me
-	panic("implement me")
 }
 
 func NewAzureDevOpsProvider(ctx context.Context, opts Options) (*AzureDevOpsProvider, error) {
@@ -195,6 +191,10 @@ func (p *AzureDevOpsProvider) ListRequests(ctx context.Context, opts Options) ([
 		}
 	}
 	return results, nil
+}
+
+func (p *AzureDevOpsProvider) ListEnvironments(ctx context.Context, opts Options) ([]Result, error) {
+	return nil, errors.New("Azure DevOps Provider does not support environments")
 }
 
 // parseAzureDevOpsURL parses a AzureDevOps URL and returns the host, owner, project and repo.

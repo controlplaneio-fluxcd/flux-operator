@@ -5,6 +5,7 @@ package gitprovider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -20,11 +21,6 @@ type GitHubProvider struct {
 	Client *github.Client
 	Owner  string
 	Repo   string
-}
-
-func (p *GitHubProvider) ListEnvironments(_ context.Context, _ Options) ([]Result, error) {
-	// TODO implement me
-	panic("implement me")
 }
 
 func NewGitHubProvider(ctx context.Context, opts Options) (*GitHubProvider, error) {
@@ -204,6 +200,10 @@ func (p *GitHubProvider) ListRequests(ctx context.Context, opts Options) ([]Resu
 	}
 
 	return results, nil
+}
+
+func (p *GitHubProvider) ListEnvironments(ctx context.Context, opts Options) ([]Result, error) {
+	return nil, errors.New("GitHub Provider does not support environments")
 }
 
 // parseGitHubURL parses a GitHub URL and returns the host, owner, and repo.
