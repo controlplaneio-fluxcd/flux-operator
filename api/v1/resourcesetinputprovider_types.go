@@ -132,6 +132,16 @@ type ResourceSetInputFilter struct {
 	// +optional
 	ExcludeTag string `json:"excludeTag,omitempty"`
 
+	// IncludeEnvironment specifies the regular expression to filter the environments
+	// that the input provider should include.
+	// +optional
+	IncludeEnvironment string `json:"includeEnvironment,omitempty"`
+
+	// ExcludeEnvironment specifies the regular expression to filter the environments
+	// that the input provider should exclude.
+	// +optional
+	ExcludeEnvironment string `json:"excludeEnvironment,omitempty"`
+
 	// Labels specifies the list of labels to filter the input provider response.
 	// +optional
 	Labels []string `json:"labels,omitempty"`

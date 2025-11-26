@@ -382,6 +382,13 @@ func (r *ResourceSetInputProviderReconciler) makeFilters(
 		}
 		filters.Include = inRx
 	}
+	if obj.Spec.Filter.IncludeEnvironment != "" {
+		inRx, err := regexp.Compile(obj.Spec.Filter.IncludeEnvironment)
+		if err != nil {
+			return nil, fmt.Errorf("invalid includeEnvironment regex: %w", err)
+		}
+		filters.Include = inRx
+	}
 	if obj.Spec.Filter.ExcludeBranch != "" {
 		exRx, err := regexp.Compile(obj.Spec.Filter.ExcludeBranch)
 		if err != nil {
@@ -393,6 +400,13 @@ func (r *ResourceSetInputProviderReconciler) makeFilters(
 		exRx, err := regexp.Compile(obj.Spec.Filter.ExcludeTag)
 		if err != nil {
 			return nil, fmt.Errorf("invalid excludeTag regex: %w", err)
+		}
+		filters.Exclude = exRx
+	}
+	if obj.Spec.Filter.ExcludeEnvironment != "" {
+		exRx, err := regexp.Compile(obj.Spec.Filter.ExcludeEnvironment)
+		if err != nil {
+			return nil, fmt.Errorf("invalid excludeEnvironment regex: %w", err)
 		}
 		filters.Exclude = exRx
 	}
