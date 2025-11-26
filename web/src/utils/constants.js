@@ -79,5 +79,6 @@ export function getControllerName(kind) {
  * @returns {boolean} True if kind has inventory
  */
 export function isKindWithInventory(kind) {
-  return kind === 'Kustomization' || kind === 'HelmRelease' || kind === 'ResourceSet' || kind === 'FluxInstance'
+  return kind === 'Kustomization' || kind === 'HelmRelease' || kind === 'ArtifactGenerator' ||
+      kind === 'FluxInstance' || kind === 'ResourceSet'
 }

@@ -9,6 +9,7 @@ import { formatTime } from '../../utils/time'
 import { ReconcilerPanel } from './ReconcilerPanel'
 import { SourcePanel } from './SourcePanel'
 import { InventoryPanel } from './InventoryPanel'
+import { ArtifactPanel } from './ArtifactPanel'
 
 // Import Prism themes as URLs for dynamic loading
 import prismLight from 'prismjs/themes/prism.css?url'
@@ -155,6 +156,7 @@ export function ResourcePage({ kind, namespace, name }) {
   const status = resourceData?.status?.reconcilerRef?.status || 'Unknown'
   const statusInfo = getStatusInfo(status)
   const hasSource = resourceData?.status?.sourceRef
+  const isSourceResource = resourceData?.apiVersion?.startsWith('source.toolkit.fluxcd.io/') && resourceData?.kind !== 'HelmChart'
 
   // Navigate to another resource
   const handleNavigate = (item) => {
@@ -245,6 +247,11 @@ export function ResourcePage({ kind, namespace, name }) {
           namespace={namespace}
           resourceData={resourceData}
         />
+
+        {/* Artifact Section - for source resources only */}
+        {isSourceResource && (
+          <ArtifactPanel resourceData={resourceData} />
+        )}
 
         {/* Managed Objects Section */}
         <InventoryPanel
