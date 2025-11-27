@@ -206,7 +206,7 @@ describe('Header', () => {
 
       fireEvent.click(navButton)
 
-      expect(mockRoute).toHaveBeenCalledWith('/resources')
+      expect(mockRoute).toHaveBeenCalledWith('/favorites')
     })
 
     it('should navigate to dashboard when clicked from events view', () => {

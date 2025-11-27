@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { useState, useEffect, useMemo } from 'preact/hooks'
+import { getStatusBarColor, getEventBarColor } from '../../utils/status'
 
 /**
  * Calculate status percentages across all items
@@ -43,34 +44,16 @@ function calculateStatusPercentages(items, mode = 'events') {
 }
 
 /**
- * Determines bar color based on status type
+ * Get bar color based on status and mode using shared utilities
  * @param {string} status - Status name ('Normal', 'Warning', 'Ready', 'Failed', etc.)
  * @param {string} mode - 'events' or 'resources'
  * @returns {string} Tailwind color classes
  */
-function getStatusBarColor(status, mode) {
+function getBarColor(status, mode) {
   if (mode === 'events') {
-    if (status === 'Normal') {
-      return 'bg-green-500 dark:bg-green-600'
-    } else if (status === 'Warning') {
-      return 'bg-red-500 dark:bg-red-600'
-    }
-  } else {
-    // resources mode
-    if (status === 'Ready') {
-      return 'bg-green-500 dark:bg-green-600'
-    } else if (status === 'Failed') {
-      return 'bg-red-500 dark:bg-red-600'
-    } else if (status === 'Progressing') {
-      return 'bg-blue-500 dark:bg-blue-600'
-    } else if (status === 'Suspended') {
-      return 'bg-yellow-500 dark:bg-yellow-600'
-    } else if (status === 'Unknown') {
-      return 'bg-gray-600 dark:bg-gray-500'
-    }
+    return getEventBarColor(status)
   }
-  // Default: gray
-  return 'bg-gray-200 dark:bg-gray-700'
+  return getStatusBarColor(status)
 }
 
 /**
@@ -234,7 +217,7 @@ export function StatusChart({ items, loading, mode = 'events' }) {
           <div class="w-full h-full bg-gray-200 dark:bg-gray-700" />
         ) : (
           statusBars.map((bar, index) => {
-            const colorClass = getStatusBarColor(bar.status, mode)
+            const colorClass = getBarColor(bar.status, mode)
             const grayClass = 'bg-gray-200 dark:bg-gray-700'
 
             return (
