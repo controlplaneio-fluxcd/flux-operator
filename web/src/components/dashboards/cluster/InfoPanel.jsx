@@ -104,11 +104,17 @@ export function InfoPanel({ cluster, distribution, operator, components, metrics
             {/* Left side: Version info grid */}
             <dl class="grid grid-cols-2 gap-x-6 gap-y-2 lg:flex-1">
               <div class="flex items-baseline space-x-2">
-                <dt class="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Flux Operator:</dt>
+                <dt class="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+                  <span class="sm:hidden">Operator:</span>
+                  <span class="hidden sm:inline">Flux Operator:</span>
+                </dt>
                 <dd class="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white">{operator?.version === '' ? 'Unknown' : (operator?.version ?? 'Unknown')}</dd>
               </div>
               <div class="flex items-baseline space-x-2">
-                <dt class="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Flux Distribution:</dt>
+                <dt class="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+                  <span class="sm:hidden">Flux Distro:</span>
+                  <span class="hidden sm:inline">Flux Distribution:</span>
+                </dt>
                 <dd class="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white">{distribution?.version === '' ? 'Unknown' : (distribution?.version ?? 'Unknown')}</dd>
               </div>
               <div class="flex items-baseline space-x-2">

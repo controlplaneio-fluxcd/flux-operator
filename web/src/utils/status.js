@@ -121,3 +121,62 @@ export function getEventBadgeClass(type) {
     ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
     : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
 }
+
+/**
+ * Get solid background color class for resource status bars/charts.
+ * @param {string} status - Status value (Ready, Failed, Progressing, Suspended, Unknown)
+ * @returns {string} Tailwind CSS classes for the background
+ */
+export function getStatusBarColor(status) {
+  switch (status) {
+  case 'Ready':
+    return 'bg-green-500 dark:bg-green-600'
+  case 'Failed':
+    return 'bg-red-500 dark:bg-red-600'
+  case 'Progressing':
+    return 'bg-blue-500 dark:bg-blue-600'
+  case 'Suspended':
+    return 'bg-yellow-500 dark:bg-yellow-600'
+  case 'Unknown':
+    return 'bg-gray-600 dark:bg-gray-500'
+  default:
+    return 'bg-gray-200 dark:bg-gray-700'
+  }
+}
+
+/**
+ * Get solid background color class for event type bars/charts.
+ * @param {string} type - Event type (Normal, Warning)
+ * @returns {string} Tailwind CSS classes for the background
+ */
+export function getEventBarColor(type) {
+  switch (type) {
+  case 'Normal':
+    return 'bg-green-500 dark:bg-green-600'
+  case 'Warning':
+    return 'bg-red-500 dark:bg-red-600'
+  default:
+    return 'bg-gray-200 dark:bg-gray-700'
+  }
+}
+
+/**
+ * Get border color class for resource status.
+ * Uses semantic color classes (border-success, border-danger, etc.) for consistency.
+ * @param {string} status - Status value (Ready, Failed, Progressing, Suspended, Unknown)
+ * @returns {string} Tailwind CSS classes for the border
+ */
+export function getStatusBorderClass(status) {
+  switch (status) {
+  case 'Ready':
+    return 'border-success'
+  case 'Failed':
+    return 'border-danger'
+  case 'Suspended':
+    return 'border-warning'
+  case 'Progressing':
+    return 'border-blue-400'
+  default:
+    return 'border-gray-300 dark:border-gray-600'
+  }
+}

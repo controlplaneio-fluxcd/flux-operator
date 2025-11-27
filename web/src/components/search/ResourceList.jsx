@@ -13,6 +13,7 @@ import { ResourceDetailsView } from './ResourceDetailsView'
 import { useRestoreFiltersFromUrl, useSyncFiltersToUrl } from '../../utils/routing'
 import { StatusChart } from './StatusChart'
 import { useInfiniteScroll } from '../../utils/scroll'
+import { isFavorite, toggleFavorite, favorites } from '../../utils/favorites'
 
 // Resources data signals
 export const resourcesData = signal([])
@@ -71,9 +72,19 @@ function ResourceCard({ resource }) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(false)
 
+  // Check if resource is a favorite (reactive via favorites signal)
+  // Access favorites.value to subscribe to changes and trigger re-renders
+  const isFavorited = favorites.value && isFavorite(resource.kind, resource.namespace, resource.name)
+
   // Handle resource name click - navigate to dashboard
   const handleResourceClick = () => {
     location.route(`/resource/${encodeURIComponent(resource.kind)}/${encodeURIComponent(resource.namespace)}/${encodeURIComponent(resource.name)}`)
+  }
+
+  // Handle favorite toggle
+  const handleFavoriteClick = (e) => {
+    e.stopPropagation()
+    toggleFavorite(resource.kind, resource.namespace, resource.name)
   }
 
   // Check if message is long or contains newlines
@@ -93,9 +104,23 @@ function ResourceCard({ resource }) {
 
   return (
     <div class="card p-4 hover:shadow-md transition-shadow">
-      {/* Header row: kind + status badge + timestamp */}
+      {/* Header row: star + kind + status badge + timestamp */}
       <div class="flex items-center justify-between mb-3">
         <div class="flex items-center gap-3">
+          {/* Favorite star button */}
+          <button
+            onClick={handleFavoriteClick}
+            class={`p-0.5 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-flux-blue focus:ring-offset-1 ${
+              isFavorited
+                ? 'text-yellow-500 hover:text-yellow-600'
+                : 'text-gray-400 hover:text-flux-blue dark:hover:text-blue-400'
+            }`}
+            title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
+          >
+            <svg class="w-4 h-4" fill={isFavorited ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+            </svg>
+          </button>
           <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
             {resource.kind}
           </span>

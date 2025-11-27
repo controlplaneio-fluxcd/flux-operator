@@ -8,7 +8,10 @@ import {
   formatWorkloadStatus,
   getHistoryStatusBadgeClass,
   getHistoryDotClass,
-  getEventBadgeClass
+  getEventBadgeClass,
+  getStatusBarColor,
+  getEventBarColor,
+  getStatusBorderClass
 } from './status'
 
 describe('status utilities', () => {
@@ -205,6 +208,78 @@ describe('status utilities', () => {
     it('should include dark mode classes', () => {
       expect(getEventBadgeClass('Normal')).toContain('dark:bg-green-900/30')
       expect(getEventBadgeClass('Warning')).toContain('dark:bg-red-900/30')
+    })
+  })
+
+  describe('getStatusBarColor', () => {
+    it('should return green for Ready status', () => {
+      expect(getStatusBarColor('Ready')).toBe('bg-green-500 dark:bg-green-600')
+    })
+
+    it('should return red for Failed status', () => {
+      expect(getStatusBarColor('Failed')).toBe('bg-red-500 dark:bg-red-600')
+    })
+
+    it('should return blue for Progressing status', () => {
+      expect(getStatusBarColor('Progressing')).toBe('bg-blue-500 dark:bg-blue-600')
+    })
+
+    it('should return yellow for Suspended status', () => {
+      expect(getStatusBarColor('Suspended')).toBe('bg-yellow-500 dark:bg-yellow-600')
+    })
+
+    it('should return gray for Unknown status', () => {
+      expect(getStatusBarColor('Unknown')).toBe('bg-gray-600 dark:bg-gray-500')
+    })
+
+    it('should return default gray for unrecognized status', () => {
+      expect(getStatusBarColor('SomethingElse')).toBe('bg-gray-200 dark:bg-gray-700')
+      expect(getStatusBarColor(null)).toBe('bg-gray-200 dark:bg-gray-700')
+      expect(getStatusBarColor(undefined)).toBe('bg-gray-200 dark:bg-gray-700')
+    })
+  })
+
+  describe('getEventBarColor', () => {
+    it('should return green for Normal events', () => {
+      expect(getEventBarColor('Normal')).toBe('bg-green-500 dark:bg-green-600')
+    })
+
+    it('should return red for Warning events', () => {
+      expect(getEventBarColor('Warning')).toBe('bg-red-500 dark:bg-red-600')
+    })
+
+    it('should return default gray for unrecognized event type', () => {
+      expect(getEventBarColor('SomethingElse')).toBe('bg-gray-200 dark:bg-gray-700')
+      expect(getEventBarColor(null)).toBe('bg-gray-200 dark:bg-gray-700')
+      expect(getEventBarColor(undefined)).toBe('bg-gray-200 dark:bg-gray-700')
+    })
+  })
+
+  describe('getStatusBorderClass', () => {
+    it('should return success border for Ready status', () => {
+      expect(getStatusBorderClass('Ready')).toBe('border-success')
+    })
+
+    it('should return danger border for Failed status', () => {
+      expect(getStatusBorderClass('Failed')).toBe('border-danger')
+    })
+
+    it('should return warning border for Suspended status', () => {
+      expect(getStatusBorderClass('Suspended')).toBe('border-warning')
+    })
+
+    it('should return blue border for Progressing status', () => {
+      expect(getStatusBorderClass('Progressing')).toBe('border-blue-400')
+    })
+
+    it('should return gray border for Unknown status', () => {
+      expect(getStatusBorderClass('Unknown')).toBe('border-gray-300 dark:border-gray-600')
+    })
+
+    it('should return gray border for unrecognized status', () => {
+      expect(getStatusBorderClass('SomethingElse')).toBe('border-gray-300 dark:border-gray-600')
+      expect(getStatusBorderClass(null)).toBe('border-gray-300 dark:border-gray-600')
+      expect(getStatusBorderClass(undefined)).toBe('border-gray-300 dark:border-gray-600')
     })
   })
 })

@@ -21,10 +21,10 @@ export function Header() {
   const location = useLocation()
   const currentPath = location.path
 
-  // Check if we're in a search view (events or resources) or resource dashboard
-  const isSearchView = currentPath === '/events' || currentPath === '/resources'
+  // Check if we're in a tab view (favorites, events, or resources) or resource dashboard
+  const isTabView = currentPath === '/favorites' || currentPath === '/events' || currentPath === '/resources'
   const isResourceDashboard = currentPath.startsWith('/resource/')
-  const isNotDashboard = isSearchView || isResourceDashboard
+  const isNotDashboard = isTabView || isResourceDashboard
 
   // Use appropriate icon based on theme
   const iconSrc = appliedTheme.value === themes.dark ? '/flux-icon-white.svg' : '/flux-icon-black.svg'
@@ -32,12 +32,12 @@ export function Header() {
   // Handle navigation button click
   const handleToggle = () => {
     quickSearchOpen.value = false
-    if (isSearchView) {
-      // Return to dashboard from search view
+    if (isTabView) {
+      // Return to dashboard from tab view
       location.route('/')
     } else {
-      // Navigate to resources page (default search view)
-      location.route('/resources')
+      // Navigate to favorites page (default tab view)
+      location.route('/favorites')
     }
   }
 
@@ -96,10 +96,10 @@ export function Header() {
             {/* Navigation Button */}
             <button
               onClick={handleToggle}
-              title={isSearchView ? 'Back to Dashboard' : 'Browse Events'}
+              title={isTabView ? 'Back to Dashboard' : 'Browse Resources'}
               class="inline-flex items-center justify-center p-2 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-flux-blue"
             >
-              {isSearchView ? (
+              {isTabView ? (
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>
