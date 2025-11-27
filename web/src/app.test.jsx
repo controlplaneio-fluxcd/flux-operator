@@ -13,15 +13,19 @@ import {
   connectionStatus
 } from './app'
 
+// Mock location state that can be modified in tests
+let mockLocationPath = '/'
+const mockRoute = vi.fn()
+
 // Mock preact-iso
 vi.mock('preact-iso', () => ({
   LocationProvider: ({ children }) => <div data-testid="location-provider">{children}</div>,
   Router: ({ children }) => <div data-testid="router">{children}</div>,
   Route: ({ component: Component, ...props }) => Component ? <Component {...props} /> : null,
   useLocation: () => ({
-    path: '/',
+    path: mockLocationPath,
     query: {},
-    route: vi.fn()
+    route: mockRoute
   })
 }))
 
@@ -34,19 +38,19 @@ vi.mock('./components/layout/Header', () => ({
   Header: () => <div data-testid="header">Header</div>
 }))
 
-vi.mock('./components/cluster-dashboard/ClusterPage', () => ({
+vi.mock('./components/dashboards/cluster/ClusterPage', () => ({
   ClusterPage: ({ spec }) => <div data-testid="dashboard-view">ClusterPage: {JSON.stringify(spec)}</div>
 }))
 
-vi.mock('./components/resource-browser/EventList', () => ({
+vi.mock('./components/search/EventList', () => ({
   EventList: () => <div data-testid="event-list">EventList</div>
 }))
 
-vi.mock('./components/resource-browser/ResourceList', () => ({
+vi.mock('./components/search/ResourceList', () => ({
   ResourceList: () => <div data-testid="resource-list">ResourceList</div>
 }))
 
-vi.mock('./components/resource-dashboard/ResourcePage', () => ({
+vi.mock('./components/dashboards/resource/ResourcePage', () => ({
   ResourcePage: () => <div data-testid="resource-page">ResourcePage</div>
 }))
 
@@ -72,6 +76,9 @@ describe('app.jsx', () => {
     reportLoading.value = true
     reportError.value = null
     connectionStatus.value = 'loading'
+
+    // Reset mock location path
+    mockLocationPath = '/'
 
     // Clear all mocks
     vi.clearAllMocks()
@@ -462,6 +469,184 @@ describe('app.jsx', () => {
       expect(container).toBeInTheDocument()
 
       await waitFor(() => expect(fetchWithMock).toHaveBeenCalled())
+    })
+
+    it('should handle reportData with null metadata', async () => {
+      reportLoading.value = false
+      reportData.value = {
+        spec: { distribution: { version: 'v2.4.0' } },
+        metadata: null
+      }
+      fetchWithMock.mockResolvedValue({ spec: {} })
+
+      const { container } = render(<App />)
+
+      expect(container).toBeInTheDocument()
+      expect(screen.getByTestId('dashboard-view')).toBeInTheDocument()
+
+      await waitFor(() => expect(fetchWithMock).toHaveBeenCalled())
+    })
+
+    it('should handle reportData with undefined metadata', async () => {
+      reportLoading.value = false
+      reportData.value = {
+        spec: { distribution: { version: 'v2.4.0' } }
+        // metadata is undefined
+      }
+      fetchWithMock.mockResolvedValue({ spec: {} })
+
+      const { container } = render(<App />)
+
+      expect(container).toBeInTheDocument()
+      expect(screen.getByTestId('dashboard-view')).toBeInTheDocument()
+
+      await waitFor(() => expect(fetchWithMock).toHaveBeenCalled())
+    })
+  })
+
+  describe('TabNavigation Component', () => {
+    const mockReport = {
+      spec: {
+        distribution: { version: 'v2.4.0' },
+        components: [],
+        reconcilers: []
+      },
+      metadata: { namespace: 'flux-system' }
+    }
+
+    it('should show tab navigation on /resources path', () => {
+      mockLocationPath = '/resources'
+      reportLoading.value = false
+      reportData.value = mockReport
+
+      render(<App />)
+
+      expect(screen.getByRole('button', { name: 'Resources' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Events' })).toBeInTheDocument()
+    })
+
+    it('should show tab navigation on /events path', () => {
+      mockLocationPath = '/events'
+      reportLoading.value = false
+      reportData.value = mockReport
+
+      render(<App />)
+
+      expect(screen.getByRole('button', { name: 'Resources' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Events' })).toBeInTheDocument()
+    })
+
+    it('should not show tab navigation on root path', () => {
+      mockLocationPath = '/'
+      reportLoading.value = false
+      reportData.value = mockReport
+
+      render(<App />)
+
+      expect(screen.queryByRole('button', { name: 'Resources' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Events' })).not.toBeInTheDocument()
+    })
+
+    it('should not show tab navigation on resource detail path', () => {
+      mockLocationPath = '/resource/HelmRelease/flux-system/podinfo'
+      reportLoading.value = false
+      reportData.value = mockReport
+
+      render(<App />)
+
+      expect(screen.queryByRole('button', { name: 'Resources' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Events' })).not.toBeInTheDocument()
+    })
+
+    it('should highlight Resources tab when on /resources path', () => {
+      mockLocationPath = '/resources'
+      reportLoading.value = false
+      reportData.value = mockReport
+
+      render(<App />)
+
+      const resourcesTab = screen.getByRole('button', { name: 'Resources' })
+      const eventsTab = screen.getByRole('button', { name: 'Events' })
+
+      expect(resourcesTab.className).toContain('border-flux-blue')
+      expect(resourcesTab.className).toContain('text-flux-blue')
+      expect(eventsTab.className).toContain('border-transparent')
+    })
+
+    it('should highlight Events tab when on /events path', () => {
+      mockLocationPath = '/events'
+      reportLoading.value = false
+      reportData.value = mockReport
+
+      render(<App />)
+
+      const resourcesTab = screen.getByRole('button', { name: 'Resources' })
+      const eventsTab = screen.getByRole('button', { name: 'Events' })
+
+      expect(eventsTab.className).toContain('border-flux-blue')
+      expect(eventsTab.className).toContain('text-flux-blue')
+      expect(resourcesTab.className).toContain('border-transparent')
+    })
+
+    it('should navigate to /resources when Resources tab is clicked', async () => {
+      mockLocationPath = '/events'
+      reportLoading.value = false
+      reportData.value = mockReport
+
+      render(<App />)
+
+      const resourcesTab = screen.getByRole('button', { name: 'Resources' })
+      resourcesTab.click()
+
+      expect(mockRoute).toHaveBeenCalledWith('/resources')
+    })
+
+    it('should navigate to /events when Events tab is clicked', async () => {
+      mockLocationPath = '/resources'
+      reportLoading.value = false
+      reportData.value = mockReport
+
+      render(<App />)
+
+      const eventsTab = screen.getByRole('button', { name: 'Events' })
+      eventsTab.click()
+
+      expect(mockRoute).toHaveBeenCalledWith('/events')
+    })
+  })
+
+  describe('App Component - Error State Display', () => {
+    it('should show error state when disconnected and no data', async () => {
+      // Mock fetchWithMock to reject immediately so the component goes to error state
+      fetchWithMock.mockRejectedValue(new Error('Network error'))
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      render(<App />)
+
+      // Wait for the fetch to complete and error state to be set
+      await waitFor(() => {
+        expect(screen.getByText('Failed to load Flux report')).toBeInTheDocument()
+      })
+
+      expect(screen.getByText('Unable to connect to the server. Retrying automatically...')).toBeInTheDocument()
+
+      consoleErrorSpy.mockRestore()
+    })
+
+    it('should show ConnectionStatus in error state', async () => {
+      fetchWithMock.mockRejectedValue(new Error('Network error'))
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      render(<App />)
+
+      // Wait for the fetch to complete and error state to be set
+      await waitFor(() => {
+        expect(connectionStatus.value).toBe('disconnected')
+      })
+
+      expect(screen.getByTestId('connection-status')).toBeInTheDocument()
+
+      consoleErrorSpy.mockRestore()
     })
   })
 })
