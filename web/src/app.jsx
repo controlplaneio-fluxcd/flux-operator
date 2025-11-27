@@ -5,6 +5,7 @@ import { useEffect } from 'preact/hooks'
 import { signal } from '@preact/signals'
 import { LocationProvider, Router, Route, useLocation } from 'preact-iso'
 import { fetchWithMock } from './utils/fetch'
+import { checkVersionChange } from './utils/version'
 import './utils/theme'
 import { ConnectionStatus } from './components/layout/ConnectionStatus'
 import { Header } from './components/layout/Header'
@@ -59,6 +60,10 @@ export async function fetchFluxReport() {
       mockPath: '../mock/report',
       mockExport: 'mockReport'
     })
+
+    // Check for operator version change and reload if needed
+    const operatorVersion = reportData.value?.spec?.operator?.version
+    checkVersionChange(operatorVersion)
 
     // Update connection status and timestamps on success
     connectionStatus.value = 'connected'
