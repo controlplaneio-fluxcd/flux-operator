@@ -13,7 +13,7 @@ vi.mock('./ThemeToggle', () => ({
 }))
 
 // Mock the QuickSearch component and signal
-vi.mock('./QuickSearch', () => ({
+vi.mock('../search/QuickSearch', () => ({
   QuickSearch: () => <div data-testid="quick-search">Quick Search</div>,
   quickSearchOpen: { value: false }
 }))

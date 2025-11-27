@@ -4,7 +4,7 @@
 import { useLocation } from 'preact-iso'
 import { fetchFluxReport } from '../../app'
 import { ThemeToggle } from './ThemeToggle'
-import { QuickSearch, quickSearchOpen } from './QuickSearch'
+import { QuickSearch, quickSearchOpen } from '../search/QuickSearch'
 import { appliedTheme, themes } from '../../utils/theme'
 
 /**

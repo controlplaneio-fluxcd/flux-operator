@@ -8,10 +8,10 @@ import { fetchWithMock } from './utils/fetch'
 import './utils/theme'
 import { ConnectionStatus } from './components/layout/ConnectionStatus'
 import { Header } from './components/layout/Header'
-import { ClusterPage } from './components/cluster-dashboard/ClusterPage'
-import { EventList } from './components/resource-browser/EventList'
-import { ResourceList } from './components/resource-browser/ResourceList'
-import { ResourcePage } from './components/resource-dashboard/ResourcePage'
+import { ClusterPage } from './components/dashboards/cluster/ClusterPage'
+import { EventList } from './components/search/EventList'
+import { ResourceList } from './components/search/ResourceList'
+import { ResourcePage } from './components/dashboards/resource/ResourcePage'
 
 // Global signals for FluxReport data and application state
 // These signals are exported and used by child components throughout the app
