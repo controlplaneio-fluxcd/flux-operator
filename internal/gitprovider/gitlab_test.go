@@ -506,14 +506,7 @@ func TestGitLabProvider_ListRequests(t *testing.T) {
 type gitlabEnvironmentResponse struct {
 	gitlab.Environment
 	deploymentListError error
-	deployments         []gitlabDeploymentResponse
-}
-
-type gitlabDeploymentResponse struct {
-	username     string
-	commitSHA    string
-	commitBranch string
-	status       string
+	deployments         []*gitlab.Deployment
 }
 
 func TestGitLabProvider_ListEnvironments(t *testing.T) {
@@ -531,20 +524,41 @@ func TestGitLabProvider_ListEnvironments(t *testing.T) {
 			environments: []*gitlabEnvironmentResponse{
 				{
 					Environment: gitlab.Environment{ID: 1, Name: "env1", Slug: "env1-slug", State: "available"},
-					deployments: []gitlabDeploymentResponse{
-						{username: "example-author", commitSHA: "sha1", commitBranch: "branch1", status: "success"},
+					deployments: []*gitlab.Deployment{
+						{
+							User: &gitlab.ProjectUser{Username: "example-author"},
+							Deployable: gitlab.DeploymentDeployable{
+								Commit: &gitlab.Commit{ID: "sha1"},
+								Ref:    "branch1",
+							},
+							Status: "success",
+						},
 					},
 				},
 				{
 					Environment: gitlab.Environment{ID: 2, Name: "env2", Slug: "env2-slug", State: "available"},
-					deployments: []gitlabDeploymentResponse{
-						{username: "example-author", commitSHA: "sha1", commitBranch: "branch1", status: "success"},
+					deployments: []*gitlab.Deployment{
+						{
+							User: &gitlab.ProjectUser{Username: "example-author"},
+							Deployable: gitlab.DeploymentDeployable{
+								Commit: &gitlab.Commit{ID: "sha1"},
+								Ref:    "branch1",
+							},
+							Status: "success",
+						},
 					},
 				},
 				{
 					Environment: gitlab.Environment{ID: 3, Name: "env3", Slug: "env3-slug", State: "available"},
-					deployments: []gitlabDeploymentResponse{
-						{username: "example-author", commitSHA: "sha1", commitBranch: "branch1", status: "success"},
+					deployments: []*gitlab.Deployment{
+						{
+							User: &gitlab.ProjectUser{Username: "example-author"},
+							Deployable: gitlab.DeploymentDeployable{
+								Commit: &gitlab.Commit{ID: "sha1"},
+								Ref:    "branch1",
+							},
+							Status: "success",
+						},
 					},
 				},
 			},
@@ -587,8 +601,15 @@ func TestGitLabProvider_ListEnvironments(t *testing.T) {
 			environments: []*gitlabEnvironmentResponse{
 				{
 					Environment: gitlab.Environment{ID: 1, Name: "review/env1", Slug: "env1-slug", State: "available"},
-					deployments: []gitlabDeploymentResponse{
-						{username: "example-author", commitSHA: "sha1", commitBranch: "branch1", status: "success"},
+					deployments: []*gitlab.Deployment{
+						{
+							User: &gitlab.ProjectUser{Username: "example-author"},
+							Deployable: gitlab.DeploymentDeployable{
+								Commit: &gitlab.Commit{ID: "sha1"},
+								Ref:    "branch1",
+							},
+							Status: "success",
+						},
 					},
 				},
 				{
@@ -599,8 +620,15 @@ func TestGitLabProvider_ListEnvironments(t *testing.T) {
 				},
 				{
 					Environment: gitlab.Environment{ID: 4, Name: "review/env4", Slug: "env4-slug", State: "available"},
-					deployments: []gitlabDeploymentResponse{
-						{username: "example-author", commitSHA: "sha1", commitBranch: "branch1", status: "success"},
+					deployments: []*gitlab.Deployment{
+						{
+							User: &gitlab.ProjectUser{Username: "example-author"},
+							Deployable: gitlab.DeploymentDeployable{
+								Commit: &gitlab.Commit{ID: "sha1"},
+								Ref:    "branch1",
+							},
+							Status: "success",
+						},
 					},
 				},
 				{
@@ -631,18 +659,60 @@ func TestGitLabProvider_ListEnvironments(t *testing.T) {
 			environments: []*gitlabEnvironmentResponse{
 				{
 					Environment: gitlab.Environment{ID: 1, Name: "env1", Slug: "env1-slug", State: "available"},
-					deployments: []gitlabDeploymentResponse{
-						{username: "example-author1", commitSHA: "sha1", commitBranch: "branch1", status: "failed"},
-						{username: "example-author2", commitSHA: "sha2", commitBranch: "branch1", status: "success"},
-						{username: "example-author3", commitSHA: "sha3", commitBranch: "branch1", status: "success"},
+					deployments: []*gitlab.Deployment{
+						{
+							User: &gitlab.ProjectUser{Username: "example-author1"},
+							Deployable: gitlab.DeploymentDeployable{
+								Commit: &gitlab.Commit{ID: "sha1"},
+								Ref:    "branch1",
+							},
+							Status: "failed",
+						},
+						{
+							User: &gitlab.ProjectUser{Username: "example-author2"},
+							Deployable: gitlab.DeploymentDeployable{
+								Commit: &gitlab.Commit{ID: "sha2"},
+								Ref:    "branch1",
+							},
+							Status: "success",
+						},
+						{
+							User: &gitlab.ProjectUser{Username: "example-author3"},
+							Deployable: gitlab.DeploymentDeployable{
+								Commit: &gitlab.Commit{ID: "sha3"},
+								Ref:    "branch1",
+							},
+							Status: "success",
+						},
 					},
 				},
 				{
 					Environment: gitlab.Environment{ID: 2, Name: "env2", Slug: "env2-slug", State: "available"},
-					deployments: []gitlabDeploymentResponse{
-						{username: "example-author1", commitSHA: "sha1", commitBranch: "branch1", status: "failed"},
-						{username: "example-author2", commitSHA: "sha2", commitBranch: "branch1", status: "running"},
-						{username: "example-author3", commitSHA: "sha3", commitBranch: "branch1", status: "success"},
+					deployments: []*gitlab.Deployment{
+						{
+							User: &gitlab.ProjectUser{Username: "example-author1"},
+							Deployable: gitlab.DeploymentDeployable{
+								Commit: &gitlab.Commit{ID: "sha1"},
+								Ref:    "branch1",
+							},
+							Status: "failed",
+						},
+						{
+							User: &gitlab.ProjectUser{Username: "example-author2"},
+							Deployable: gitlab.DeploymentDeployable{
+								Commit: &gitlab.Commit{ID: "sha2"},
+								Ref:    "branch1",
+							},
+							Status: "running",
+						},
+						{
+							User: &gitlab.ProjectUser{Username: "example-author3"},
+							Deployable: gitlab.DeploymentDeployable{
+								Commit: &gitlab.Commit{ID: "sha3"},
+								Ref:    "branch1",
+							},
+							Status: "success",
+						},
 					},
 				},
 			},
@@ -670,8 +740,15 @@ func TestGitLabProvider_ListEnvironments(t *testing.T) {
 			environments: []*gitlabEnvironmentResponse{
 				{
 					Environment: gitlab.Environment{ID: 1, Name: "env1", Slug: "env1-slug", State: "stopped"},
-					deployments: []gitlabDeploymentResponse{
-						{username: "example-author", commitSHA: "sha1", commitBranch: "branch1", status: "success"},
+					deployments: []*gitlab.Deployment{
+						{
+							User: &gitlab.ProjectUser{Username: "example-author"},
+							Deployable: gitlab.DeploymentDeployable{
+								Commit: &gitlab.Commit{ID: "sha1"},
+								Ref:    "branch1",
+							},
+							Status: "success",
+						},
 					},
 				},
 			},
@@ -682,13 +759,20 @@ func TestGitLabProvider_ListEnvironments(t *testing.T) {
 			environments: []*gitlabEnvironmentResponse{
 				{
 					Environment: gitlab.Environment{ID: 1, Name: "env1", Slug: "env1-slug", State: "available"},
-					deployments: []gitlabDeploymentResponse{
-						{username: "example-author", commitSHA: "sha1", commitBranch: "branch1", status: "failed"},
+					deployments: []*gitlab.Deployment{
+						{
+							User: &gitlab.ProjectUser{Username: "example-author"},
+							Deployable: gitlab.DeploymentDeployable{
+								Commit: &gitlab.Commit{ID: "sha1"},
+								Ref:    "branch1",
+							},
+							Status: "failed",
+						},
 					},
 				},
 				{
 					Environment: gitlab.Environment{ID: 1, Name: "env1", Slug: "env1-slug", State: "available"},
-					deployments: []gitlabDeploymentResponse{},
+					deployments: []*gitlab.Deployment{},
 				},
 			},
 			want: []Result{},
@@ -698,8 +782,15 @@ func TestGitLabProvider_ListEnvironments(t *testing.T) {
 			environments: []*gitlabEnvironmentResponse{
 				{
 					Environment: gitlab.Environment{ID: 1, Name: "env1", Slug: "env1-slug", State: "stopped"},
-					deployments: []gitlabDeploymentResponse{
-						{username: "example-author", commitSHA: "sha1", commitBranch: "branch1", status: "running"},
+					deployments: []*gitlab.Deployment{
+						{
+							User: &gitlab.ProjectUser{Username: "example-author"},
+							Deployable: gitlab.DeploymentDeployable{
+								Commit: &gitlab.Commit{ID: "sha1"},
+								Ref:    "branch1",
+							},
+							Status: "running",
+						},
 					},
 				},
 			},
@@ -747,16 +838,6 @@ func TestGitLabProvider_ListEnvironments(t *testing.T) {
 					continue
 				}
 
-				var deploymentResponses []*gitlab.Deployment
-				for _, deployment := range env.deployments {
-					response := &gitlab.Deployment{
-						User:   &gitlab.ProjectUser{Username: deployment.username},
-						Status: deployment.status,
-					}
-					response.Deployable.Commit = &gitlab.Commit{ID: deployment.commitSHA}
-					response.Deployable.Ref = deployment.commitBranch
-					deploymentResponses = append(deploymentResponses, response)
-				}
 				mockClient.MockDeployments.EXPECT().
 					ListProjectDeployments(project, &gitlab.ListProjectDeploymentsOptions{
 						ListOptions: gitlab.ListOptions{},
@@ -764,7 +845,7 @@ func TestGitLabProvider_ListEnvironments(t *testing.T) {
 						Sort:        gitlab.Ptr("desc"),
 						Environment: gitlab.Ptr(env.Name),
 					}).
-					Return(deploymentResponses, &gitlab.Response{}, env.deploymentListError)
+					Return(env.deployments, &gitlab.Response{}, env.deploymentListError)
 			}
 			mockClient.MockEnvironments.EXPECT().
 				ListEnvironments(project, &gitlab.ListEnvironmentsOptions{
