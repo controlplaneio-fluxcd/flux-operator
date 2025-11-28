@@ -85,7 +85,7 @@ export function InfoPanel({ cluster, distribution, operator, components, metrics
       >
         <div class="flex items-center justify-between">
           <div>
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Cluster Info</h3>
+            <h3 class="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">Cluster Info</h3>
             <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">Kubernetes {k8sVersion} · {nodesText}</p>
           </div>
           <svg

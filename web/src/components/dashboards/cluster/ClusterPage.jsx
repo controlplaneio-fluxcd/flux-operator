@@ -1,6 +1,7 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
+import { usePageTitle } from '../../../utils/title'
 import { OverallStatusPanel } from './OverallStatusPanel'
 import { InfoPanel } from './InfoPanel'
 import { SyncPanel } from './SyncPanel'
@@ -16,6 +17,8 @@ import { Footer } from '../../layout/Footer'
  * @param {string} props.namespace - FluxReport namespace
  */
 export function ClusterPage({ spec, namespace }) {
+  usePageTitle(null) // Home page uses default title
+
   return (
     <>
       <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">

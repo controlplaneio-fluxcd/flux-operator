@@ -6,6 +6,7 @@ import { useLocation } from 'preact-iso'
 import { fetchWithMock } from '../../../utils/fetch'
 import { usePrismTheme } from '../common/yaml'
 import { formatTime } from '../../../utils/time'
+import { usePageTitle } from '../../../utils/title'
 import { isFavorite, toggleFavorite, favorites } from '../../../utils/favorites'
 import { ReconcilerPanel } from './ReconcilerPanel'
 import { SourcePanel } from './SourcePanel'
@@ -82,6 +83,9 @@ function getStatusInfo(status) {
  */
 export function ResourcePage({ kind, namespace, name }) {
   const location = useLocation()
+
+  // Set page title to resource name
+  usePageTitle(name)
 
   // State
   const [resourceData, setResourceData] = useState(null)
@@ -224,7 +228,7 @@ export function ResourcePage({ kind, namespace, name }) {
             </div>
             <div class="flex-grow min-w-0">
               <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">{kind}</span>
-              <h1 class="text-2xl font-bold text-gray-900 dark:text-white font-mono break-all flex items-center gap-2">
+              <h1 class="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white font-mono break-all flex items-center gap-2">
                 {name}
                 <button
                   onClick={handleFavoriteClick}
@@ -235,12 +239,12 @@ export function ResourcePage({ kind, namespace, name }) {
                   }`}
                   title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
                 >
-                  <svg class="w-6 h-6" fill={isFavorited ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+                  <svg class="w-5 h-5 sm:w-6 sm:h-6" fill={isFavorited ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                   </svg>
                 </button>
               </h1>
-              <span class="text-sm text-gray-500 dark:text-gray-400">Namespace: {namespace}</span>
+              <span class="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Namespace: {namespace}</span>
             </div>
             <div class="hidden md:block text-right flex-shrink-0">
               <div class="text-sm text-gray-600 dark:text-gray-400">Last Updated</div>

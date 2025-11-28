@@ -19,10 +19,31 @@ export function Footer() {
   const fluxLogoSrc = appliedTheme.value === themes.dark ? '/flux-icon-white.svg' : '/flux-icon-black.svg'
 
   return (
-    <footer class="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 transition-colors mt-8">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div class="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6 text-sm">
+    <footer class="bg-white dark:bg-gray-800 sm:border-t border-gray-200 dark:border-gray-700 transition-colors mt-8">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4">
+        {/* Mobile: centered, minimal footer */}
+        <div class="flex sm:hidden items-center justify-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+          <a
+            href="https://github.com/controlplaneio-fluxcd/flux-operator"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="flex items-center gap-1.5 hover:text-gray-900 dark:hover:text-white transition-colors"
+          >
+            <img src={fluxLogoSrc} alt="Flux" class="w-3.5 h-3.5" />
+            <span>Flux Operator</span>
+          </a>
+          <span class="text-gray-300 dark:text-gray-600">•</span>
+          <a
+            href="mailto:flux-enterprise@control-plane.io"
+            class="hover:text-gray-900 dark:hover:text-white transition-colors"
+          >
+            Enterprise Support
+          </a>
+        </div>
+
+        {/* Desktop: full footer */}
+        <div class="hidden sm:flex flex-row items-center justify-between gap-4">
+          <div class="flex flex-row items-center gap-6 text-sm">
             <a
               href="https://github.com/controlplaneio-fluxcd/flux-operator"
               target="_blank"
@@ -32,9 +53,9 @@ export function Footer() {
               <img src={fluxLogoSrc} alt="Flux" class="w-4 h-4" />
               <span>Flux Operator</span>
             </a>
-            <span class="text-gray-300 dark:text-gray-600 hidden sm:inline">•</span>
+            <span class="text-gray-300 dark:text-gray-600">•</span>
             <a
-              href="https://fluxcd.control-plane.io"
+              href="https://fluxcd.control-plane.io/operator/"
               target="_blank"
               rel="noopener noreferrer"
               class="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
@@ -44,7 +65,7 @@ export function Footer() {
               </svg>
               <span>Documentation</span>
             </a>
-            <span class="text-gray-300 dark:text-gray-600 hidden sm:inline">•</span>
+            <span class="text-gray-300 dark:text-gray-600">•</span>
             <a
               href="mailto:flux-enterprise@control-plane.io"
               class="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
@@ -55,7 +76,7 @@ export function Footer() {
               <span>Enterprise Support</span>
             </a>
           </div>
-          <div class="text-xs sm:text-sm text-gray-600 dark:text-gray-400 text-center sm:text-right">
+          <div class="text-sm text-gray-600 dark:text-gray-400 text-right">
             <p>AGPL-3.0 Licensed</p>
           </div>
         </div>

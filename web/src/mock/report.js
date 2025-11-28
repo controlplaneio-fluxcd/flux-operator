@@ -141,11 +141,6 @@ export const mockReport = {
       },
       {
         apiVersion: 'source.toolkit.fluxcd.io/v1',
-        kind: 'ExternalArtifact',
-        stats: { failing: 0, running: 0, suspended: 0 }
-      },
-      {
-        apiVersion: 'source.toolkit.fluxcd.io/v1',
         kind: 'GitRepository',
         stats: { failing: 0, running: 2, suspended: 0, totalSize: '11.9 KiB' }
       },
