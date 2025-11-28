@@ -63,7 +63,7 @@ export function SyncPanel({ sync, namespace }) {
       >
         <div class="flex items-center justify-between">
           <div>
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Cluster Sync</h3>
+            <h3 class="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">Cluster Sync</h3>
             <div class="flex items-center space-x-4 mt-1">
               <button
                 onClick={(e) => {
@@ -76,7 +76,7 @@ export function SyncPanel({ sync, namespace }) {
                 <span class="hidden sm:inline">Kustomization/{namespace}/{syncName}</span>
               </button>
               {!sync.ready && !isSuspended && (
-                <span class="status-badge status-not-ready">
+                <span class="status-badge status-not-ready text-xs sm:text-sm">
                   failing
                 </span>
               )}

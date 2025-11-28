@@ -7,6 +7,7 @@ import { useLocation } from 'preact-iso'
 import { fetchWithMock } from '../../utils/fetch'
 import { formatTimestamp } from '../../utils/time'
 import { getStatusBadgeClass } from '../../utils/status'
+import { usePageTitle } from '../../utils/title'
 import { reportData } from '../../app'
 import { FilterForm } from './FilterForm'
 import { ResourceDetailsView } from './ResourceDetailsView'
@@ -128,19 +129,27 @@ function ResourceCard({ resource }) {
             {resource.status}
           </span>
         </div>
-        <span class="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap ml-4">
+        <span class="hidden sm:inline text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap ml-4">
           {formatTimestamp(resource.lastReconciled)}
         </span>
       </div>
 
       {/* Resource namespace/name - clickable link to dashboard */}
-      <div class="mb-2">
+      <div class="mb-1 sm:mb-2">
         <button
           onClick={handleResourceClick}
           class="font-mono text-sm text-left hover:opacity-80 transition-opacity focus:outline-none focus:ring-2 focus:ring-flux-blue focus:ring-offset-2 rounded inline-block group"
         >
           <span class="text-gray-500 dark:text-gray-400">{resource.namespace}/</span><span class="font-semibold text-gray-900 dark:text-gray-100 group-hover:text-flux-blue dark:group-hover:text-blue-400">{resource.name}</span><svg class="w-3.5 h-3.5 text-gray-400 group-hover:text-flux-blue dark:group-hover:text-blue-400 transition-colors ml-1 inline-block align-middle" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
         </button>
+      </div>
+
+      {/* Mobile timestamp - below namespace/name */}
+      <div class="flex sm:hidden items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 mb-2">
+        <svg class="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        </svg>
+        {formatTimestamp(resource.lastReconciled)}
       </div>
 
       {/* Message */}
@@ -198,6 +207,8 @@ function ResourceCard({ resource }) {
  * - Shows loading, error, and empty states
  */
 export function ResourceList() {
+  usePageTitle('Resources')
+
   // Restore filter signals from URL query params on mount
   useRestoreFiltersFromUrl({
     kind: selectedResourceKind,

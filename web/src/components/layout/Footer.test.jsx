@@ -27,7 +27,7 @@ describe('Footer', () => {
       const footer = document.querySelector('footer')
       expect(footer).toHaveClass('bg-white')
       expect(footer).toHaveClass('dark:bg-gray-800')
-      expect(footer).toHaveClass('border-t')
+      expect(footer).toHaveClass('sm:border-t')
       expect(footer).toHaveClass('border-gray-200')
       expect(footer).toHaveClass('dark:border-gray-700')
       expect(footer).toHaveClass('transition-colors')
@@ -43,41 +43,56 @@ describe('Footer', () => {
       expect(container).toHaveClass('px-4')
       expect(container).toHaveClass('sm:px-6')
       expect(container).toHaveClass('lg:px-8')
-      expect(container).toHaveClass('py-4')
+      expect(container).toHaveClass('py-3')
+      expect(container).toHaveClass('sm:py-4')
     })
 
-    it('should have flex layout', () => {
+    it('should have mobile and desktop layouts', () => {
       render(<Footer />)
 
-      const flexContainer = document.querySelector('.flex.flex-col')
-      expect(flexContainer).toBeInTheDocument()
+      // Mobile layout
+      const mobileContainer = document.querySelector('.flex.sm\\:hidden')
+      expect(mobileContainer).toBeInTheDocument()
+
+      // Desktop layout
+      const desktopContainer = document.querySelector('.hidden.sm\\:flex')
+      expect(desktopContainer).toBeInTheDocument()
     })
   })
 
   describe('Flux Operator Link', () => {
-    it('should render Flux Operator GitHub link', () => {
+    it('should render Flux Operator GitHub link in both layouts', () => {
       render(<Footer />)
 
-      const link = screen.getByText('Flux Operator').closest('a')
-      expect(link).toBeInTheDocument()
-      expect(link).toHaveAttribute('href', 'https://github.com/controlplaneio-fluxcd/flux-operator')
+      const links = screen.getAllByText('Flux Operator')
+      expect(links.length).toBe(2) // One for mobile, one for desktop
+      links.forEach(linkText => {
+        const link = linkText.closest('a')
+        expect(link).toHaveAttribute('href', 'https://github.com/controlplaneio-fluxcd/flux-operator')
+      })
     })
 
     it('should open in new tab with security attributes', () => {
       render(<Footer />)
 
-      const link = screen.getByText('Flux Operator').closest('a')
-      expect(link).toHaveAttribute('target', '_blank')
-      expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+      const links = screen.getAllByText('Flux Operator')
+      links.forEach(linkText => {
+        const link = linkText.closest('a')
+        expect(link).toHaveAttribute('target', '_blank')
+        expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+      })
     })
 
-    it('should have Flux logo icon', () => {
+    it('should have Flux logo icon in both layouts', () => {
       render(<Footer />)
 
-      const link = screen.getByText('Flux Operator').closest('a')
-      const img = link.querySelector('img')
-      expect(img).toBeInTheDocument()
-      expect(img).toHaveAttribute('alt', 'Flux')
+      const links = screen.getAllByText('Flux Operator')
+      links.forEach(linkText => {
+        const link = linkText.closest('a')
+        const img = link.querySelector('img')
+        expect(img).toBeInTheDocument()
+        expect(img).toHaveAttribute('alt', 'Flux')
+      })
     })
 
     it('should use black logo in light theme', () => {
@@ -86,9 +101,12 @@ describe('Footer', () => {
 
       render(<Footer />)
 
-      const link = screen.getByText('Flux Operator').closest('a')
-      const img = link.querySelector('img')
-      expect(img).toHaveAttribute('src', '/flux-icon-black.svg')
+      const links = screen.getAllByText('Flux Operator')
+      links.forEach(linkText => {
+        const link = linkText.closest('a')
+        const img = link.querySelector('img')
+        expect(img).toHaveAttribute('src', '/flux-icon-black.svg')
+      })
     })
 
     it('should use white logo in dark theme', () => {
@@ -97,24 +115,37 @@ describe('Footer', () => {
 
       render(<Footer />)
 
-      const link = screen.getByText('Flux Operator').closest('a')
-      const img = link.querySelector('img')
-      expect(img).toHaveAttribute('src', '/flux-icon-white.svg')
+      const links = screen.getAllByText('Flux Operator')
+      links.forEach(linkText => {
+        const link = linkText.closest('a')
+        const img = link.querySelector('img')
+        expect(img).toHaveAttribute('src', '/flux-icon-white.svg')
+      })
     })
 
-    it('should have proper logo size', () => {
+    it('should have proper logo size in desktop layout', () => {
       render(<Footer />)
 
-      const link = screen.getByText('Flux Operator').closest('a')
-      const img = link.querySelector('img')
+      const desktopContainer = document.querySelector('.hidden.sm\\:flex')
+      const img = desktopContainer.querySelector('img')
       expect(img).toHaveClass('w-4')
       expect(img).toHaveClass('h-4')
+    })
+
+    it('should have smaller logo size in mobile layout', () => {
+      render(<Footer />)
+
+      const mobileContainer = document.querySelector('.flex.sm\\:hidden')
+      const img = mobileContainer.querySelector('img')
+      expect(img).toHaveClass('w-3.5')
+      expect(img).toHaveClass('h-3.5')
     })
 
     it('should have hover styles', () => {
       render(<Footer />)
 
-      const link = screen.getByText('Flux Operator').closest('a')
+      const desktopContainer = document.querySelector('.hidden.sm\\:flex')
+      const link = desktopContainer.querySelector('a[href*="github"]')
       expect(link).toHaveClass('text-gray-600')
       expect(link).toHaveClass('dark:text-gray-400')
       expect(link).toHaveClass('hover:text-gray-900')
@@ -124,12 +155,12 @@ describe('Footer', () => {
   })
 
   describe('Documentation Link', () => {
-    it('should render documentation link', () => {
+    it('should render documentation link in desktop only', () => {
       render(<Footer />)
 
       const link = screen.getByText('Documentation').closest('a')
       expect(link).toBeInTheDocument()
-      expect(link).toHaveAttribute('href', 'https://fluxcd.control-plane.io')
+      expect(link).toHaveAttribute('href', 'https://fluxcd.control-plane.io/operator/')
     })
 
     it('should open in new tab with security attributes', () => {
@@ -160,28 +191,33 @@ describe('Footer', () => {
   })
 
   describe('Enterprise Support Link', () => {
-    it('should render enterprise support email link', () => {
+    it('should render enterprise support email link in both layouts', () => {
       render(<Footer />)
 
-      const link = screen.getByText('Enterprise Support').closest('a')
-      expect(link).toBeInTheDocument()
-      expect(link).toHaveAttribute('href', 'mailto:flux-enterprise@control-plane.io')
+      const links = screen.getAllByText('Enterprise Support')
+      expect(links.length).toBe(2) // One for mobile, one for desktop
+      links.forEach(linkText => {
+        const link = linkText.closest('a')
+        expect(link).toHaveAttribute('href', 'mailto:flux-enterprise@control-plane.io')
+      })
     })
 
-    it('should have email icon', () => {
+    it('should have email icon in desktop layout only', () => {
       render(<Footer />)
 
-      const link = screen.getByText('Enterprise Support').closest('a')
+      const desktopContainer = document.querySelector('.hidden.sm\\:flex')
+      const link = desktopContainer.querySelector('a[href*="mailto"]')
       const svg = link.querySelector('svg')
       expect(svg).toBeInTheDocument()
       expect(svg).toHaveClass('w-4')
       expect(svg).toHaveClass('h-4')
     })
 
-    it('should have proper icon path', () => {
+    it('should have proper icon path in desktop layout', () => {
       render(<Footer />)
 
-      const link = screen.getByText('Enterprise Support').closest('a')
+      const desktopContainer = document.querySelector('.hidden.sm\\:flex')
+      const link = desktopContainer.querySelector('a[href*="mailto"]')
       const path = link.querySelector('path')
       expect(path).toHaveAttribute('d', 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z')
     })
@@ -189,31 +225,34 @@ describe('Footer', () => {
     it('should not open in new tab (email link)', () => {
       render(<Footer />)
 
-      const link = screen.getByText('Enterprise Support').closest('a')
-      expect(link).not.toHaveAttribute('target')
+      const links = screen.getAllByText('Enterprise Support')
+      links.forEach(linkText => {
+        const link = linkText.closest('a')
+        expect(link).not.toHaveAttribute('target')
+      })
     })
   })
 
   describe('Separators', () => {
-    it('should render bullet separators between links', () => {
+    it('should render bullet separators in desktop layout', () => {
       render(<Footer />)
 
-      const separators = document.querySelectorAll('.text-gray-300.dark\\:text-gray-600.hidden.sm\\:inline')
+      const desktopContainer = document.querySelector('.hidden.sm\\:flex')
+      const separators = desktopContainer.querySelectorAll('.text-gray-300.dark\\:text-gray-600')
       expect(separators.length).toBeGreaterThan(0)
     })
 
-    it('should hide separators on mobile', () => {
+    it('should render bullet separator in mobile layout', () => {
       render(<Footer />)
 
-      const separator = document.querySelector('.hidden.sm\\:inline')
+      const mobileContainer = document.querySelector('.flex.sm\\:hidden')
+      const separator = mobileContainer.querySelector('.text-gray-300.dark\\:text-gray-600')
       expect(separator).toBeInTheDocument()
-      expect(separator).toHaveClass('hidden')
-      expect(separator).toHaveClass('sm:inline')
     })
   })
 
   describe('License Information', () => {
-    it('should display AGPL-3.0 license', () => {
+    it('should display AGPL-3.0 license in desktop only', () => {
       render(<Footer />)
 
       expect(screen.getByText('AGPL-3.0 Licensed')).toBeInTheDocument()
@@ -227,85 +266,86 @@ describe('Footer', () => {
       expect(licenseContainer).toHaveClass('dark:text-gray-400')
     })
 
-    it('should be right-aligned on desktop', () => {
+    it('should be right-aligned in desktop layout', () => {
       render(<Footer />)
 
       const licenseContainer = screen.getByText('AGPL-3.0 Licensed').closest('div')
-      expect(licenseContainer).toHaveClass('text-xs')
-      expect(licenseContainer).toHaveClass('sm:text-sm')
-      expect(licenseContainer).toHaveClass('text-center')
-      expect(licenseContainer).toHaveClass('sm:text-right')
+      expect(licenseContainer).toHaveClass('text-sm')
+      expect(licenseContainer).toHaveClass('text-right')
     })
   })
 
   describe('Responsive Layout', () => {
-    it('should have mobile-first column layout', () => {
+    it('should have centered mobile layout', () => {
       render(<Footer />)
 
-      const mainFlex = document.querySelector('.flex.flex-col.sm\\:flex-row')
-      expect(mainFlex).toBeInTheDocument()
-      expect(mainFlex).toHaveClass('flex-col')
-      expect(mainFlex).toHaveClass('sm:flex-row')
+      const mobileContainer = document.querySelector('.flex.sm\\:hidden')
+      expect(mobileContainer).toHaveClass('items-center')
+      expect(mobileContainer).toHaveClass('justify-center')
+      expect(mobileContainer).toHaveClass('gap-4')
+      expect(mobileContainer).toHaveClass('text-xs')
     })
 
-    it('should have proper spacing and alignment', () => {
+    it('should have proper desktop layout', () => {
       render(<Footer />)
 
-      const mainFlex = document.querySelector('.flex.flex-col.sm\\:flex-row')
-      expect(mainFlex).toHaveClass('items-start')
-      expect(mainFlex).toHaveClass('sm:items-center')
-      expect(mainFlex).toHaveClass('justify-between')
-      expect(mainFlex).toHaveClass('gap-4')
+      const desktopContainer = document.querySelector('.hidden.sm\\:flex')
+      expect(desktopContainer).toHaveClass('flex-row')
+      expect(desktopContainer).toHaveClass('items-center')
+      expect(desktopContainer).toHaveClass('justify-between')
+      expect(desktopContainer).toHaveClass('gap-4')
     })
 
-    it('should have responsive link container', () => {
+    it('should have responsive link container in desktop', () => {
       render(<Footer />)
 
-      const linksContainer = screen.getByText('Flux Operator').closest('div').parentElement
-      expect(linksContainer).toHaveClass('flex')
-      expect(linksContainer).toHaveClass('flex-col')
-      expect(linksContainer).toHaveClass('sm:flex-row')
-      expect(linksContainer).toHaveClass('sm:items-center')
+      const desktopContainer = document.querySelector('.hidden.sm\\:flex')
+      const linksContainer = desktopContainer.querySelector('.flex.flex-row.items-center.gap-6')
+      expect(linksContainer).toBeInTheDocument()
+      expect(linksContainer).toHaveClass('text-sm')
     })
   })
 
   describe('Link Styling', () => {
-    it('should have consistent link styles', () => {
+    it('should have consistent link styles in desktop layout', () => {
       render(<Footer />)
 
-      const links = [
-        screen.getByText('Flux Operator').closest('a'),
-        screen.getByText('Documentation').closest('a'),
-        screen.getByText('Enterprise Support').closest('a')
-      ]
+      const desktopContainer = document.querySelector('.hidden.sm\\:flex')
+      const links = desktopContainer.querySelectorAll('a')
 
       links.forEach(link => {
         expect(link).toHaveClass('flex')
         expect(link).toHaveClass('items-center')
-        expect(link).toHaveClass('gap-2')
-        expect(link).toHaveClass('text-gray-600')
-        expect(link).toHaveClass('dark:text-gray-400')
         expect(link).toHaveClass('hover:text-gray-900')
         expect(link).toHaveClass('dark:hover:text-white')
         expect(link).toHaveClass('transition-colors')
       })
     })
 
-    it('should have text-sm for all links', () => {
+    it('should have text-sm for desktop links', () => {
       render(<Footer />)
 
-      const linksContainer = screen.getByText('Flux Operator').closest('div')
+      const desktopContainer = document.querySelector('.hidden.sm\\:flex')
+      const linksContainer = desktopContainer.querySelector('.flex.flex-row.items-center.gap-6')
       expect(linksContainer).toHaveClass('text-sm')
+    })
+
+    it('should have text-xs for mobile links', () => {
+      render(<Footer />)
+
+      const mobileContainer = document.querySelector('.flex.sm\\:hidden')
+      expect(mobileContainer).toHaveClass('text-xs')
     })
   })
 
   describe('Icons', () => {
-    it('should render all SVG icons with proper attributes', () => {
+    it('should render SVG icons in desktop layout with proper attributes', () => {
       render(<Footer />)
 
-      const svgs = document.querySelectorAll('svg')
-      // Should have 2 SVGs (document icon and email icon) + 1 image for Flux logo
-      expect(svgs.length).toBeGreaterThanOrEqual(2)
+      const desktopContainer = document.querySelector('.hidden.sm\\:flex')
+      const svgs = desktopContainer.querySelectorAll('svg')
+      // Should have 2 SVGs (document icon and email icon)
+      expect(svgs.length).toBe(2)
 
       svgs.forEach(svg => {
         expect(svg).toHaveAttribute('fill', 'none')
@@ -324,7 +364,8 @@ describe('Footer', () => {
     it('should have proper stroke attributes on paths', () => {
       render(<Footer />)
 
-      const paths = document.querySelectorAll('path')
+      const desktopContainer = document.querySelector('.hidden.sm\\:flex')
+      const paths = desktopContainer.querySelectorAll('path')
       paths.forEach(path => {
         expect(path).toHaveAttribute('stroke-linecap', 'round')
         expect(path).toHaveAttribute('stroke-linejoin', 'round')
@@ -339,9 +380,10 @@ describe('Footer', () => {
       appliedTheme.value = themes.light
 
       render(<Footer />)
-      const link = screen.getByText('Flux Operator').closest('a')
-      const img = link.querySelector('img')
-      expect(img).toHaveAttribute('src', '/flux-icon-black.svg')
+      const imgs = document.querySelectorAll('img[alt="Flux"]')
+      imgs.forEach(img => {
+        expect(img).toHaveAttribute('src', '/flux-icon-black.svg')
+      })
     })
 
     it('should use correct logo for dark theme', () => {
@@ -349,9 +391,10 @@ describe('Footer', () => {
       appliedTheme.value = themes.dark
 
       render(<Footer />)
-      const link = screen.getByText('Flux Operator').closest('a')
-      const img = link.querySelector('img')
-      expect(img).toHaveAttribute('src', '/flux-icon-white.svg')
+      const imgs = document.querySelectorAll('img[alt="Flux"]')
+      imgs.forEach(img => {
+        expect(img).toHaveAttribute('src', '/flux-icon-white.svg')
+      })
     })
   })
 })

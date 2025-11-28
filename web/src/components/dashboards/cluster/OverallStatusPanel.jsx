@@ -173,13 +173,16 @@ export function OverallStatusPanel({ report }) {
           </div>
         </div>
         <div class="flex-grow">
-          <h2 class={`text-2xl font-bold ${statusInfo.color}`}>{statusInfo.title}</h2>
+          <h2 class={`text-lg sm:text-2xl font-bold ${statusInfo.color}`}>{statusInfo.title}</h2>
           <div class="flex items-center gap-2 text-gray-700 dark:text-gray-300 mt-1">
             <p class="hidden md:block">{statusInfo.message}</p>
             {hasFailures && (
-              <svg class="hidden md:block w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-              </svg>
+              <>
+                <p class="md:hidden text-sm">{totalFailures} failure{totalFailures !== 1 ? 's' : ''}</p>
+                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                </svg>
+              </>
             )}
           </div>
         </div>

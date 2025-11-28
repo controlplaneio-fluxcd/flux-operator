@@ -5,6 +5,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/preact'
 import { ReconcilersPanel } from './ReconcilersPanel'
 import { selectedResourceKind, selectedResourceStatus } from '../../search/ResourceList'
+import { fluxCRDs } from '../../../utils/constants'
 
 // Mock preact-iso
 const mockRoute = vi.fn()
@@ -69,6 +70,7 @@ describe('ReconcilersPanel', () => {
     it('should show total CRD count', () => {
       render(<ReconcilersPanel reconcilers={mockReconcilers} />)
 
+      // Shows count of installed CRDs (6 in mockReconcilers)
       expect(screen.getByText(/6 CRDs/)).toBeInTheDocument()
     })
 
@@ -222,9 +224,38 @@ describe('ReconcilersPanel', () => {
       render(<ReconcilersPanel reconcilers={mockReconcilers} />)
 
       const kustomizationCard = screen.getByText('Kustomization').closest('button')
-      const svg = kustomizationCard.querySelector('svg')
-      expect(svg).toBeInTheDocument()
-      expect(svg).toHaveClass('text-danger')
+      const errorIcon = kustomizationCard.querySelector('svg.text-danger')
+      expect(errorIcon).toBeInTheDocument()
+      expect(errorIcon).toHaveClass('w-6', 'h-6')
+    })
+
+    it('should render documentation link for known CRDs', () => {
+      render(<ReconcilersPanel reconcilers={mockReconcilers} />)
+
+      const kustomizationCard = screen.getByText('Kustomization').closest('button')
+      const docLink = kustomizationCard.querySelector('a[target="_blank"]')
+      expect(docLink).toBeInTheDocument()
+      expect(docLink).toHaveAttribute('href', 'https://toolkit.fluxcd.io/components/kustomize/kustomizations/')
+      expect(docLink).toHaveAttribute('title', 'Kustomization documentation')
+    })
+
+    it('should open documentation link in new tab', () => {
+      render(<ReconcilersPanel reconcilers={mockReconcilers} />)
+
+      const gitRepoCard = screen.getByText('GitRepository').closest('button')
+      const docLink = gitRepoCard.querySelector('a[target="_blank"]')
+      expect(docLink).toHaveAttribute('rel', 'noopener noreferrer')
+    })
+
+    it('should not navigate card when documentation link clicked', () => {
+      render(<ReconcilersPanel reconcilers={mockReconcilers} />)
+
+      const helmReleaseCard = screen.getByText('HelmRelease').closest('button')
+      const docLink = helmReleaseCard.querySelector('a[target="_blank"]')
+      fireEvent.click(docLink)
+
+      // Card navigation should not be triggered
+      expect(mockRoute).not.toHaveBeenCalled()
     })
   })
 
@@ -436,101 +467,46 @@ describe('ReconcilersPanel', () => {
       expect(cards[2]).toHaveTextContent('ImageUpdateAutomation')
     })
 
-    it('should sort sources alphabetically by kind', () => {
-      const reconcilers = [
-        {
-          kind: 'OCIRepository',
-          apiVersion: 'source.toolkit.fluxcd.io/v1beta2',
-          stats: { running: 1, failing: 0, suspended: 0 }
-        },
-        {
-          kind: 'Bucket',
-          apiVersion: 'source.toolkit.fluxcd.io/v1beta2',
-          stats: { running: 2, failing: 0, suspended: 0 }
-        },
-        {
-          kind: 'GitRepository',
-          apiVersion: 'source.toolkit.fluxcd.io/v1',
-          stats: { running: 3, failing: 0, suspended: 0 }
-        }
-      ]
+    it('should display sources in fluxCRDs array order', () => {
+      render(<ReconcilersPanel reconcilers={mockReconcilers} />)
 
-      render(<ReconcilersPanel reconcilers={reconcilers} />)
-
-      // Get all cards in the Sources group
+      // Get all cards in the Sources group (can be button or a elements)
       const sourcesGroup = screen.getByText('Sources').closest('div')
-      const cards = sourcesGroup.querySelectorAll('button')
+      const cards = sourcesGroup.querySelectorAll('button, a.card')
 
-      // Should be sorted alphabetically: Bucket, GitRepository, OCIRepository
-      expect(cards[0]).toHaveTextContent('Bucket')
-      expect(cards[1]).toHaveTextContent('GitRepository')
-      expect(cards[2]).toHaveTextContent('OCIRepository')
+      // Should follow fluxCRDs array order for Sources group
+      const sourceCrds = fluxCRDs.filter(crd => crd.group === 'Sources')
+      sourceCrds.forEach((crd, index) => {
+        expect(cards[index]).toHaveTextContent(crd.kind)
+      })
     })
 
-    it('should sort appliers with FluxInstance first then reverse alphabetical', () => {
-      const reconcilers = [
-        {
-          kind: 'HelmRelease',
-          apiVersion: 'helm.toolkit.fluxcd.io/v2',
-          stats: { running: 1, failing: 0, suspended: 0 }
-        },
-        {
-          kind: 'Kustomization',
-          apiVersion: 'kustomize.toolkit.fluxcd.io/v1',
-          stats: { running: 2, failing: 0, suspended: 0 }
-        },
-        {
-          kind: 'FluxInstance',
-          apiVersion: 'fluxcd.controlplane.io/v1',
-          stats: { running: 1, failing: 0, suspended: 0 }
-        },
-        {
-          kind: 'ResourceSet',
-          apiVersion: 'fluxcd.controlplane.io/v1',
-          stats: { running: 3, failing: 0, suspended: 0 }
-        }
-      ]
+    it('should display appliers in fluxCRDs array order', () => {
+      render(<ReconcilersPanel reconcilers={mockReconcilers} />)
 
-      render(<ReconcilersPanel reconcilers={reconcilers} />)
-
-      // Get all cards in the Appliers group
+      // Get all cards in the Appliers group (can be button or a elements)
       const appliersGroup = screen.getByText('Appliers').closest('div')
-      const cards = appliersGroup.querySelectorAll('button')
+      const cards = appliersGroup.querySelectorAll('button, a.card')
 
-      // FluxInstance should be first, then reverse alphabetical: ResourceSet, Kustomization, HelmRelease
-      expect(cards[0]).toHaveTextContent('FluxInstance')
-      expect(cards[1]).toHaveTextContent('ResourceSet')
-      expect(cards[2]).toHaveTextContent('Kustomization')
-      expect(cards[3]).toHaveTextContent('HelmRelease')
+      // Should follow fluxCRDs array order for Appliers group
+      const applierCrds = fluxCRDs.filter(crd => crd.group === 'Appliers')
+      applierCrds.forEach((crd, index) => {
+        expect(cards[index]).toHaveTextContent(crd.kind)
+      })
     })
 
     it('should place ResourceSetInputProvider in Sources group', () => {
-      const reconcilers = [
-        {
-          kind: 'ResourceSetInputProvider',
-          apiVersion: 'fluxcd.controlplane.io/v1',
-          stats: { running: 1, failing: 0, suspended: 0 }
-        },
-        {
-          kind: 'GitRepository',
-          apiVersion: 'source.toolkit.fluxcd.io/v1',
-          stats: { running: 2, failing: 0, suspended: 0 }
-        }
-      ]
+      render(<ReconcilersPanel reconcilers={mockReconcilers} />)
 
-      render(<ReconcilersPanel reconcilers={reconcilers} />)
-
-      // ResourceSetInputProvider should be in Sources, not Appliers
+      // ResourceSetInputProvider should be in Sources group based on fluxCRDs definition
       const sourcesGroup = screen.getByText('Sources').closest('div')
       expect(sourcesGroup).toHaveTextContent('ResourceSetInputProvider')
-
-      // Should not have Appliers group since all fluxcd.controlplane items are either FluxInstance or ResourceSetInputProvider
-      expect(screen.queryByText('Appliers')).not.toBeInTheDocument()
     })
   })
 
-  describe('Empty Groups', () => {
-    it('should not render empty groups', () => {
+  describe('All CRDs Always Shown', () => {
+    it('should always render all groups from fluxCRDs', () => {
+      // Even with only one reconciler with stats, all CRDs should be shown
       const reconcilers = [
         {
           kind: 'GitRepository',
@@ -541,13 +517,142 @@ describe('ReconcilersPanel', () => {
 
       render(<ReconcilersPanel reconcilers={reconcilers} />)
 
-      // Only Sources group should be rendered
+      // All groups should be rendered since all CRDs are always shown
       expect(screen.getByText('Sources')).toBeInTheDocument()
+      expect(screen.getByText('Appliers')).toBeInTheDocument()
+      expect(screen.getByText('Notifications')).toBeInTheDocument()
+      expect(screen.getByText('Image Automation')).toBeInTheDocument()
+    })
 
-      // Other groups should not be present
-      expect(screen.queryByText('Appliers')).not.toBeInTheDocument()
-      expect(screen.queryByText('Notifications')).not.toBeInTheDocument()
-      expect(screen.queryByText('Image Automation')).not.toBeInTheDocument()
+    it('should show CRDs with zero stats when no data from API', () => {
+      render(<ReconcilersPanel reconcilers={[]} />)
+
+      // All CRDs should still be shown with 0 counts
+      expect(screen.getByText('FluxInstance')).toBeInTheDocument()
+      expect(screen.getByText('Kustomization')).toBeInTheDocument()
+      expect(screen.getByText('GitRepository')).toBeInTheDocument()
+    })
+
+    it('should apply gray border for CRDs that are not installed', () => {
+      render(<ReconcilersPanel reconcilers={[]} />)
+
+      // CRDs not installed should have gray border (rendered as <a> links)
+      const fluxInstanceCard = screen.getByText('FluxInstance').closest('a')
+      expect(fluxInstanceCard).toHaveClass('border-gray-300')
+    })
+
+    it('should show "not installed" badge for CRDs that are not installed', () => {
+      render(<ReconcilersPanel reconcilers={[]} />)
+
+      // All CRDs should show "not installed" badge
+      const notInstalledBadges = screen.getAllByText('not installed')
+      expect(notInstalledBadges.length).toBe(fluxCRDs.length)
+    })
+
+    it('should render not installed CRDs as links to documentation', () => {
+      render(<ReconcilersPanel reconcilers={[]} />)
+
+      // Not installed CRDs should be rendered as <a> elements linking to docs
+      const fluxInstanceCard = screen.getByText('FluxInstance').closest('a')
+      expect(fluxInstanceCard).toHaveAttribute('href', 'https://fluxcd.control-plane.io/operator/fluxinstance/')
+      expect(fluxInstanceCard).toHaveAttribute('target', '_blank')
+      expect(fluxInstanceCard).toHaveAttribute('rel', 'noopener noreferrer')
+    })
+
+    it('should not show "not installed" badge for installed CRDs', () => {
+      const reconcilers = [
+        {
+          kind: 'Kustomization',
+          apiVersion: 'kustomize.toolkit.fluxcd.io/v1',
+          stats: { running: 5, failing: 0, suspended: 0 }
+        }
+      ]
+
+      render(<ReconcilersPanel reconcilers={reconcilers} />)
+
+      // Kustomization card should not have "not installed" badge (rendered as button)
+      const kustomizationCard = screen.getByText('Kustomization').closest('button')
+      expect(kustomizationCard).not.toHaveTextContent('not installed')
+
+      // But other cards should still have it (rendered as links)
+      const fluxInstanceCard = screen.getByText('FluxInstance').closest('a')
+      expect(fluxInstanceCard).toHaveTextContent('not installed')
+    })
+
+    it('should show docs icon for not installed CRDs', () => {
+      render(<ReconcilersPanel reconcilers={[]} />)
+
+      // Not installed CRDs should show docs icon (as a span, not clickable link since whole card is link)
+      const fluxInstanceCard = screen.getByText('FluxInstance').closest('a')
+      const docIcon = fluxInstanceCard.querySelector('span.text-blue-500 svg')
+      expect(docIcon).toBeInTheDocument()
+    })
+
+    it('should apply success border for installed CRDs with zero resources', () => {
+      // CRD is installed (in API response) but has 0 running/failing/suspended
+      const reconcilers = [
+        {
+          kind: 'FluxInstance',
+          apiVersion: 'fluxcd.controlplane.io/v1',
+          stats: { running: 0, failing: 0, suspended: 0 }
+        }
+      ]
+
+      render(<ReconcilersPanel reconcilers={reconcilers} />)
+
+      // Installed CRD with zero stats should have success border (rendered as link to docs)
+      const fluxInstanceCard = screen.getByText('FluxInstance').closest('a')
+      expect(fluxInstanceCard).toHaveClass('border-success')
+    })
+
+    it('should show "no resources" badge for installed CRDs with zero resources', () => {
+      const reconcilers = [
+        {
+          kind: 'FluxInstance',
+          apiVersion: 'fluxcd.controlplane.io/v1',
+          stats: { running: 0, failing: 0, suspended: 0 }
+        }
+      ]
+
+      render(<ReconcilersPanel reconcilers={reconcilers} />)
+
+      // Installed CRD with zero stats should show "no resources" badge (rendered as link)
+      const fluxInstanceCard = screen.getByText('FluxInstance').closest('a')
+      expect(fluxInstanceCard).toHaveTextContent('no resources')
+      expect(fluxInstanceCard).not.toHaveTextContent('not installed')
+    })
+
+    it('should render installed CRDs with no resources as links to documentation', () => {
+      const reconcilers = [
+        {
+          kind: 'FluxInstance',
+          apiVersion: 'fluxcd.controlplane.io/v1',
+          stats: { running: 0, failing: 0, suspended: 0 }
+        }
+      ]
+
+      render(<ReconcilersPanel reconcilers={reconcilers} />)
+
+      // Installed CRD with zero resources should be rendered as <a> linking to docs
+      const fluxInstanceCard = screen.getByText('FluxInstance').closest('a')
+      expect(fluxInstanceCard).toHaveAttribute('href', 'https://fluxcd.control-plane.io/operator/fluxinstance/')
+      expect(fluxInstanceCard).toHaveAttribute('target', '_blank')
+    })
+
+    it('should not show "no resources" badge for CRDs with resources', () => {
+      const reconcilers = [
+        {
+          kind: 'Kustomization',
+          apiVersion: 'kustomize.toolkit.fluxcd.io/v1',
+          stats: { running: 5, failing: 0, suspended: 0 }
+        }
+      ]
+
+      render(<ReconcilersPanel reconcilers={reconcilers} />)
+
+      const kustomizationCard = screen.getByText('Kustomization').closest('button')
+      expect(kustomizationCard).not.toHaveTextContent('no resources')
+      expect(kustomizationCard).toHaveTextContent('5 running')
     })
   })
 
@@ -563,8 +668,8 @@ describe('ReconcilersPanel', () => {
 
       render(<ReconcilersPanel reconcilers={reconcilers} />)
 
-      // Should render with total of 0
-      const card = screen.getByText('GitRepository').closest('button')
+      // Should render with total of 0 (as link since no resources)
+      const card = screen.getByText('GitRepository').closest('a')
       expect(card).toHaveTextContent('0')
     })
 
@@ -572,25 +677,19 @@ describe('ReconcilersPanel', () => {
       render(<ReconcilersPanel reconcilers={[]} />)
 
       expect(screen.getByText('Flux Reconcilers')).toBeInTheDocument()
+      // Shows 0 CRDs when none are installed, and 0 resources
       expect(screen.getByText(/0 CRDs/)).toBeInTheDocument()
       expect(screen.getByText(/0 resources/)).toBeInTheDocument()
     })
 
-    it('should URL encode kind with special characters', () => {
-      const reconcilers = [
-        {
-          kind: 'Some/Special:Kind',
-          apiVersion: 'source.toolkit.fluxcd.io/v1',
-          stats: { running: 1, failing: 0, suspended: 0 }
-        }
-      ]
+    it('should URL encode kind when navigating', () => {
+      render(<ReconcilersPanel reconcilers={mockReconcilers} />)
 
-      render(<ReconcilersPanel reconcilers={reconcilers} />)
-
-      const card = screen.getByText('Some/Special:Kind').closest('button')
+      // Click on a card (use a known CRD kind)
+      const card = screen.getByText('Kustomization').closest('button')
       fireEvent.click(card)
 
-      expect(mockRoute).toHaveBeenCalledWith('/resources?kind=Some%2FSpecial%3AKind')
+      expect(mockRoute).toHaveBeenCalledWith('/resources?kind=Kustomization')
     })
   })
 })

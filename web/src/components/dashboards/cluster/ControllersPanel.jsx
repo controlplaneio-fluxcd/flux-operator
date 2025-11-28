@@ -51,9 +51,9 @@ function ComponentRow({component, metrics, isRowExpanded, toggleComponent}) {
         </td>
         <td class="px-6 py-4">
           {component.ready ? (
-            <span class="status-badge status-ready">Ready</span>
+            <span class="status-badge status-ready text-xs sm:text-sm">Ready</span>
           ) : (
-            <span class="status-badge status-not-ready">Failing</span>
+            <span class="status-badge status-not-ready text-xs sm:text-sm">Failing</span>
           )}
         </td>
       </tr>
@@ -137,11 +137,11 @@ export function ControllersPanel({ components, metrics }) {
       >
         <div class="flex items-center justify-between">
           <div>
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Flux Components</h3>
+            <h3 class="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">Flux Components</h3>
             <div class="flex items-center space-x-4 mt-1">
               <p class="text-sm text-gray-600 dark:text-gray-400">{components.length} controllers deployed</p>
               {totalFailing > 0 && (
-                <span class="status-badge status-not-ready">
+                <span class="status-badge status-not-ready text-xs sm:text-sm">
                   {totalFailing} failing
                 </span>
               )}

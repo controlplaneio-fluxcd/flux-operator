@@ -18,7 +18,7 @@ export function DashboardPanel({ title, subtitle, id, defaultExpanded = true, ch
       >
         <div class="flex items-center justify-between">
           <div>
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
+            <h3 class="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
             {subtitle}
           </div>
           <svg
@@ -32,7 +32,7 @@ export function DashboardPanel({ title, subtitle, id, defaultExpanded = true, ch
         </div>
       </button>
       {isExpanded.value && (
-        <div class="px-6 py-4">
+        <div class="px-6 pt-2 pb-4">
           {children}
         </div>
       )}
