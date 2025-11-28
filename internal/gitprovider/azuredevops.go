@@ -194,7 +194,7 @@ func (p *AzureDevOpsProvider) ListRequests(ctx context.Context, opts Options) ([
 }
 
 func (p *AzureDevOpsProvider) ListEnvironments(ctx context.Context, opts Options) ([]Result, error) {
-	return nil, errors.New("Azure DevOps Provider does not support environments")
+	return nil, errors.New("environments not supported by Azure DevOps provider")
 }
 
 // parseAzureDevOpsURL parses a AzureDevOps URL and returns the host, owner, project and repo.

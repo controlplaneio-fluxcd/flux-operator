@@ -6,13 +6,14 @@ package gitprovider
 import (
 	"context"
 	"errors"
-	gitlab "gitlab.com/gitlab-org/api/client-go"
 	"regexp"
 	"testing"
 
+	gitlab "gitlab.com/gitlab-org/api/client-go"
+	gitlabtesting "gitlab.com/gitlab-org/api/client-go/testing"
+
 	"github.com/Masterminds/semver/v3"
 	. "github.com/onsi/gomega"
-	gitlabtesting "gitlab.com/gitlab-org/api/client-go/testing"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/filtering"
 )
