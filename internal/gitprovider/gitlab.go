@@ -222,7 +222,7 @@ func (p *GitLabProvider) ListEnvironments(ctx context.Context, opts Options) ([]
 				Environment: gitlab.Ptr(env.Name),
 			})
 			if err != nil {
-				return nil, fmt.Errorf("could not list deployments for environment: %v", err)
+				return nil, fmt.Errorf(`could not list deployments for environment "%s": %v`, env.Name, err)
 			}
 
 			var lastDeployment *gitlab.Deployment
