@@ -5,6 +5,7 @@ package gitprovider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -190,6 +191,10 @@ func (p *AzureDevOpsProvider) ListRequests(ctx context.Context, opts Options) ([
 		}
 	}
 	return results, nil
+}
+
+func (p *AzureDevOpsProvider) ListEnvironments(ctx context.Context, opts Options) ([]Result, error) {
+	return nil, errors.New("environments not supported by Azure DevOps provider")
 }
 
 // parseAzureDevOpsURL parses a AzureDevOps URL and returns the host, owner, project and repo.

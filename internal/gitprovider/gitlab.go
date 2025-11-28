@@ -194,6 +194,80 @@ func (p *GitLabProvider) ListRequests(ctx context.Context, opts Options) ([]Resu
 	return results, nil
 }
 
+func (p *GitLabProvider) ListEnvironments(ctx context.Context, opts Options) ([]Result, error) {
+	glOpts := &gitlab.ListEnvironmentsOptions{
+		ListOptions: gitlab.ListOptions{
+			PerPage: 100,
+		},
+	}
+
+	results := make([]Result, 0)
+	for {
+		envs, resp, err := p.Client.Environments.ListEnvironments(p.Project, glOpts)
+		if err != nil {
+			return nil, fmt.Errorf("could not list environments: %v", err)
+		}
+
+		for _, env := range envs {
+			if !opts.Filters.MatchString(env.Name) {
+				continue
+			}
+
+			// We need to also consider "running" deployments to allow users to `flux-operator reconcile rsip ...` in the deployment job itself.
+			// This is only available through the Deployments API.
+			deployments, _, err := p.Client.Deployments.ListProjectDeployments(p.Project, &gitlab.ListProjectDeploymentsOptions{
+				ListOptions: gitlab.ListOptions{},
+				OrderBy:     gitlab.Ptr("created_at"),
+				Sort:        gitlab.Ptr("desc"),
+				Environment: gitlab.Ptr(env.Name),
+			})
+			if err != nil {
+				return nil, fmt.Errorf(`could not list deployments for environment "%s": %v`, env.Name, err)
+			}
+
+			var lastDeployment *gitlab.Deployment
+			for _, deployment := range deployments {
+				// When an environment has been stopped, it will stay so until the next deployment job has finished successfully.
+				// There still will be a new running deployment during this time, however, so we can filter for that.
+				// When the environment is available (again), also consider the latest successful deployment.
+				if deployment.Status == "running" || (env.State == "available" && deployment.Status == "success") {
+					lastDeployment = deployment
+					break
+				}
+			}
+
+			if lastDeployment == nil {
+				continue
+			}
+
+			author := ""
+			if lastDeployment.User != nil {
+				author = lastDeployment.User.Username
+			}
+
+			results = append(results, Result{
+				ID:     fmt.Sprintf("%d", env.ID),
+				SHA:    lastDeployment.Deployable.Commit.ID,
+				Branch: lastDeployment.Deployable.Ref,
+				Title:  env.Name,
+				Slug:   env.Slug,
+				Author: author,
+			})
+
+			if opts.Filters.Limit > 0 && len(results) >= opts.Filters.Limit {
+				return results, nil
+			}
+		}
+
+		if resp.NextPage == 0 {
+			break
+		}
+		glOpts.Page = resp.NextPage
+	}
+
+	return results, nil
+}
+
 // parseGitHubURL parses a GitLab URL and returns the host and project.
 func parseGitLabURL(glURL string) (string, string, error) {
 	u, err := url.Parse(glURL)

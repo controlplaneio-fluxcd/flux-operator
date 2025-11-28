@@ -24,6 +24,7 @@ const (
 	InputProviderGitLabBranch           = "GitLabBranch"
 	InputProviderGitLabTag              = "GitLabTag"
 	InputProviderGitLabMergeRequest     = "GitLabMergeRequest"
+	InputProviderGitLabEnvironment      = "GitLabEnvironment"
 	InputProviderAzureDevOpsBranch      = "AzureDevOpsBranch"
 	InputProviderAzureDevOpsPullRequest = "AzureDevOpsPullRequest"
 	InputProviderAzureDevOpsTag         = "AzureDevOpsTag"
@@ -49,7 +50,7 @@ const (
 // +kubebuilder:validation:XValidation:rule="!has(self.secretRef) || !(self.url == 'Static' || (self.type.endsWith('ArtifactTag') && self.type != 'OCIArtifactTag'))", message="cannot specify spec.secretRef when spec.type is one of Static, ACRArtifactTag, ECRArtifactTag or GARArtifactTag"
 type ResourceSetInputProviderSpec struct {
 	// Type specifies the type of the input provider.
-	// +kubebuilder:validation:Enum=Static;GitHubBranch;GitHubTag;GitHubPullRequest;GitLabBranch;GitLabTag;GitLabMergeRequest;AzureDevOpsBranch;AzureDevOpsTag;AzureDevOpsPullRequest;OCIArtifactTag;ACRArtifactTag;ECRArtifactTag;GARArtifactTag
+	// +kubebuilder:validation:Enum=Static;GitHubBranch;GitHubTag;GitHubPullRequest;GitLabBranch;GitLabTag;GitLabMergeRequest;GitLabEnvironment;AzureDevOpsBranch;AzureDevOpsTag;AzureDevOpsPullRequest;OCIArtifactTag;ACRArtifactTag;ECRArtifactTag;GARArtifactTag
 	// +required
 	Type string `json:"type"`
 
@@ -130,6 +131,16 @@ type ResourceSetInputFilter struct {
 	// that the input provider should exclude.
 	// +optional
 	ExcludeTag string `json:"excludeTag,omitempty"`
+
+	// IncludeEnvironment specifies the regular expression to filter the environments
+	// that the input provider should include.
+	// +optional
+	IncludeEnvironment string `json:"includeEnvironment,omitempty"`
+
+	// ExcludeEnvironment specifies the regular expression to filter the environments
+	// that the input provider should exclude.
+	// +optional
+	ExcludeEnvironment string `json:"excludeEnvironment,omitempty"`
 
 	// Labels specifies the list of labels to filter the input provider response.
 	// +optional

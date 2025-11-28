@@ -98,6 +98,7 @@ The following types are supported:
 - `GitLabMergeRequest`: fetches input values from opened GitLab Merge Requests.
 - `GitLabBranch`: fetches input values from GitLab project branches.
 - `GitLabTag`: fetches input values from GitLab project tags.
+- `GitLabEnvironment`: fetches input values from deployed GitLab Environments.
 - `AzureDevOpsPullRequest`: fetches input values from opened Azure DevOps Pull Requests.
 - `AzureDevOpsBranch`: fetches input values from Azure DevOps repository branches.
 - `AzureDevOpsTag`: fetches input values from AzureDevOps project tags.
@@ -136,6 +137,15 @@ For Git Tags the [exported inputs](#exported-inputs-status) structure is:
 - `tag`: the tag name (type string).
 - `sha`: the commit SHA corresponding to the tag in the format `<hash>` (type string).
 
+For Deployment Environments the [exported inputs](#exported-inputs-status) structure is:
+
+- `id`: the ID number of the environment (type string).
+- `sha`: the commit SHA associated with the last deployment to the environment (type string).
+- `branch`: the branch name associated with the last deployment to the environment (type string).
+- `author`: the author username the commit associated with the last deployment to the environment (type string).
+- `title`: the name of the environment (type string).
+- `slug`: the slug ("normalized" name, without spaces and special characters) of the environment (type string).
+
 For OCI Artifact Tags the [exported inputs](#exported-inputs-status) structure is:
 
 - `id`: the Adler-32 checksum of the tag name (type string).
@@ -166,6 +176,8 @@ The following filters are supported:
 - `excludeBranch`: regular expression to exclude branches by name.
 - `includeTag`: regular expression to include tags by name.
 - `excludeTag`: regular expression to exclude tags by name.
+- `includeEnvironment`: regular expression to include environments by name.
+- `excludeEnvironment`: regular expression to exclude environments by name.
 - `semver`: sematic version range to filter and sort tags.
 
 Example of a filter configuration for GitLab Merge Requests:
