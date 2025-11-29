@@ -109,8 +109,10 @@ export function FavoritesPage() {
 
       setResourcesData(results)
     } catch (err) {
-      console.error('Failed to fetch favorites data:', err)
-      setError(err.message)
+      // Only show error panel on initial load, not on refresh
+      if (!initialLoadDone.current) {
+        setError(err.message)
+      }
       // Don't clear existing data on error - keep showing stale data
     } finally {
       setLoading(false)
