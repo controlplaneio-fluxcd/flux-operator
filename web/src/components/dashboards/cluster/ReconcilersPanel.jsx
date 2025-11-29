@@ -235,7 +235,7 @@ export function ReconcilersPanel({ reconcilers }) {
         <div class="flex items-center justify-between">
           <div>
             <h3 class="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">Flux Reconcilers</h3>
-            <div class="flex items-center space-x-4 mt-2">
+            <div class="flex items-center space-x-4 mt-1">
               <p class="text-sm text-gray-600 dark:text-gray-400">
                 {installedKinds.size} CRDs • {totalResources} resources
               </p>

@@ -119,7 +119,6 @@ describe('app.jsx', () => {
     })
 
     it('should handle fetch errors', async () => {
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
       fetchWithMock.mockRejectedValue(new Error('Network error'))
 
       await fetchFluxReport()
@@ -129,9 +128,6 @@ describe('app.jsx', () => {
       expect(reportUpdatedAt.value).toBeInstanceOf(Date)
       expect(reportData.value).toBeNull()
       expect(reportError.value).toBe('Network error')
-      expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to fetch report:', expect.any(Error))
-
-      consoleErrorSpy.mockRestore()
     })
 
     it('should set loading status before fetching', async () => {

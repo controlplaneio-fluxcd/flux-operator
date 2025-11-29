@@ -1,8 +1,8 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { describe, it, expect, beforeEach } from 'vitest'
-import { render } from '@testing-library/preact'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { render, act } from '@testing-library/preact'
 import { ConnectionStatus } from './ConnectionStatus'
 import { connectionStatus } from '../../app'
 
@@ -10,6 +10,11 @@ describe('ConnectionStatus', () => {
   beforeEach(() => {
     // Reset signal to default state
     connectionStatus.value = 'connected'
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   describe('Connected State', () => {
@@ -31,37 +36,63 @@ describe('ConnectionStatus', () => {
   })
 
   describe('Loading State', () => {
-    it('should render loading banner', () => {
+    it('should not render loading banner before 300ms delay', () => {
       connectionStatus.value = 'loading'
 
       const { container } = render(<ConnectionStatus />)
+
+      // Before 300ms, should not show
+      expect(container.firstChild).toBeNull()
+    })
+
+    it('should render loading banner after 300ms delay', async () => {
+      connectionStatus.value = 'loading'
+
+      const { container } = render(<ConnectionStatus />)
+
+      // Advance timers past the 300ms delay
+      await act(async () => {
+        vi.advanceTimersByTime(300)
+      })
 
       const banner = container.querySelector('div')
       expect(banner).toBeInTheDocument()
     })
 
-    it('should show gray/yellow bar in loading state', () => {
+    it('should show gray bar in loading state after delay', async () => {
       connectionStatus.value = 'loading'
 
       const { container } = render(<ConnectionStatus />)
+
+      await act(async () => {
+        vi.advanceTimersByTime(300)
+      })
 
       const bar = container.querySelector('.bg-gray-400')
       expect(bar).toBeInTheDocument()
     })
 
-    it('should show h-1 height in loading state', () => {
+    it('should show h-1 height in loading state after delay', async () => {
       connectionStatus.value = 'loading'
 
       const { container } = render(<ConnectionStatus />)
+
+      await act(async () => {
+        vi.advanceTimersByTime(300)
+      })
 
       const bar = container.querySelector('.h-1')
       expect(bar).toBeInTheDocument()
     })
 
-    it('should show animated pulse gradient in loading state', () => {
+    it('should show animated pulse gradient in loading state after delay', async () => {
       connectionStatus.value = 'loading'
 
       const { container } = render(<ConnectionStatus />)
+
+      await act(async () => {
+        vi.advanceTimersByTime(300)
+      })
 
       const gradient = container.querySelector('.animate-pulse')
       expect(gradient).toBeInTheDocument()
@@ -71,10 +102,14 @@ describe('ConnectionStatus', () => {
       expect(gradient).toHaveClass('to-transparent')
     })
 
-    it('should be positioned at top of viewport', () => {
+    it('should be positioned at top of viewport after delay', async () => {
       connectionStatus.value = 'loading'
 
       const { container } = render(<ConnectionStatus />)
+
+      await act(async () => {
+        vi.advanceTimersByTime(300)
+      })
 
       const wrapper = container.querySelector('.fixed')
       expect(wrapper).toBeInTheDocument()
@@ -84,27 +119,50 @@ describe('ConnectionStatus', () => {
       expect(wrapper).toHaveClass('z-50')
     })
 
-    it('should have transition-colors for smooth state changes', () => {
+    it('should have transition-colors for smooth state changes after delay', async () => {
       connectionStatus.value = 'loading'
 
       const { container } = render(<ConnectionStatus />)
 
+      await act(async () => {
+        vi.advanceTimersByTime(300)
+      })
+
       const bar = container.querySelector('.transition-colors')
       expect(bar).toBeInTheDocument()
+    })
+
+    it('should not show loading bar if fetch completes before 300ms', async () => {
+      connectionStatus.value = 'loading'
+
+      const { container, rerender } = render(<ConnectionStatus />)
+
+      // Advance only 200ms (less than 300ms threshold)
+      await act(async () => {
+        vi.advanceTimersByTime(200)
+      })
+
+      // Fetch completes - status changes to connected
+      connectionStatus.value = 'connected'
+      rerender(<ConnectionStatus />)
+
+      // Should not show any bar
+      expect(container.firstChild).toBeNull()
     })
   })
 
   describe('Disconnected State', () => {
-    it('should render disconnected banner', () => {
+    it('should render disconnected banner immediately (no delay)', () => {
       connectionStatus.value = 'disconnected'
 
       const { container } = render(<ConnectionStatus />)
 
+      // Should show immediately without waiting for timer
       const banner = container.querySelector('div')
       expect(banner).toBeInTheDocument()
     })
 
-    it('should show red bar in disconnected state', () => {
+    it('should show red bar in disconnected state immediately', () => {
       connectionStatus.value = 'disconnected'
 
       const { container } = render(<ConnectionStatus />)
@@ -120,6 +178,19 @@ describe('ConnectionStatus', () => {
 
       const bar = container.querySelector('.h-1\\.5')
       expect(bar).toBeInTheDocument()
+    })
+
+    it('should show "disconnected" label below the bar', () => {
+      connectionStatus.value = 'disconnected'
+
+      const { container } = render(<ConnectionStatus />)
+
+      const label = container.querySelector('span')
+      expect(label).toBeInTheDocument()
+      expect(label.textContent).toBe('disconnected')
+      expect(label).toHaveClass('bg-red-500')
+      expect(label).toHaveClass('text-white')
+      expect(label).toHaveClass('rounded-b')
     })
 
     it('should not show pulse animation in disconnected state', () => {
@@ -145,7 +216,7 @@ describe('ConnectionStatus', () => {
   })
 
   describe('State Transitions', () => {
-    it('should update when connectionStatus changes from connected to loading', () => {
+    it('should update when connectionStatus changes from connected to loading after delay', async () => {
       connectionStatus.value = 'connected'
 
       const { container, rerender } = render(<ConnectionStatus />)
@@ -154,14 +225,26 @@ describe('ConnectionStatus', () => {
       connectionStatus.value = 'loading'
       rerender(<ConnectionStatus />)
 
+      // Before delay, still null
+      expect(container.firstChild).toBeNull()
+
+      await act(async () => {
+        vi.advanceTimersByTime(300)
+      })
+
       const bar = container.querySelector('.bg-gray-400')
       expect(bar).toBeInTheDocument()
     })
 
-    it('should update when connectionStatus changes from loading to disconnected', () => {
+    it('should update when connectionStatus changes from loading to disconnected', async () => {
       connectionStatus.value = 'loading'
 
       const { container, rerender } = render(<ConnectionStatus />)
+
+      await act(async () => {
+        vi.advanceTimersByTime(300)
+      })
+
       expect(container.querySelector('.bg-gray-400')).toBeInTheDocument()
 
       connectionStatus.value = 'disconnected'
@@ -182,31 +265,62 @@ describe('ConnectionStatus', () => {
 
       expect(container.firstChild).toBeNull()
     })
+
+    it('should show disconnected immediately even if loading timer is pending', async () => {
+      connectionStatus.value = 'loading'
+
+      const { container, rerender } = render(<ConnectionStatus />)
+
+      // Advance only 100ms (timer still pending)
+      await act(async () => {
+        vi.advanceTimersByTime(100)
+      })
+
+      // Disconnected happens before loading delay completes
+      connectionStatus.value = 'disconnected'
+      rerender(<ConnectionStatus />)
+
+      // Should show red bar immediately
+      expect(container.querySelector('.bg-red-500')).toBeInTheDocument()
+    })
   })
 
   describe('Visual Styling', () => {
-    it('should have full width', () => {
+    it('should have full width', async () => {
       connectionStatus.value = 'loading'
 
       const { container } = render(<ConnectionStatus />)
+
+      await act(async () => {
+        vi.advanceTimersByTime(300)
+      })
 
       const bar = container.querySelector('.w-full')
       expect(bar).toBeInTheDocument()
     })
 
-    it('should have z-50 to appear above other content', () => {
+    it('should have z-50 to appear above other content', async () => {
       connectionStatus.value = 'loading'
 
       const { container } = render(<ConnectionStatus />)
+
+      await act(async () => {
+        vi.advanceTimersByTime(300)
+      })
 
       const wrapper = container.querySelector('.z-50')
       expect(wrapper).toBeInTheDocument()
     })
 
-    it('should maintain consistent structure between states', () => {
+    it('should maintain consistent structure between states', async () => {
       connectionStatus.value = 'loading'
 
       const { container, rerender } = render(<ConnectionStatus />)
+
+      await act(async () => {
+        vi.advanceTimersByTime(300)
+      })
+
       const loadingStructure = container.querySelector('.fixed > div')
       expect(loadingStructure).toBeInTheDocument()
 
@@ -235,6 +349,22 @@ describe('ConnectionStatus', () => {
 
       // Should not crash, should treat as neither loading nor disconnected
       expect(container.firstChild).toBeNull()
+    })
+
+    it('should cleanup timer on unmount', async () => {
+      connectionStatus.value = 'loading'
+
+      const { unmount } = render(<ConnectionStatus />)
+
+      // Unmount before timer fires
+      unmount()
+
+      // Advance timers - should not cause any errors
+      await act(async () => {
+        vi.advanceTimersByTime(500)
+      })
+
+      // No assertion needed - just verifying no errors occur
     })
   })
 })

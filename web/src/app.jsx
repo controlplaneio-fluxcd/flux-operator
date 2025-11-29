@@ -72,8 +72,6 @@ export async function fetchFluxReport() {
     reportLoading.value = false
     reportError.value = null // Clear error on success
   } catch (error) {
-    console.error('Failed to fetch report:', error)
-
     // Update connection status on failure
     // Auto-refresh will retry after 30 seconds
     connectionStatus.value = 'disconnected'

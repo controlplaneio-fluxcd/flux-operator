@@ -122,7 +122,6 @@ export function ResourcePage({ kind, namespace, name }) {
         setLastUpdatedAt(new Date())
         setError(null) // Clear error on success
       } catch (err) {
-        console.error('Failed to fetch resource data:', err)
         setError(err.message)
         // Don't clear existing data on error - keep showing stale data
       } finally {
