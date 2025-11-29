@@ -1,0 +1,190 @@
+// Copyright 2025 Stefan Prodan.
+// SPDX-License-Identifier: AGPL-3.0
+
+import { useRef, useEffect } from 'preact/hooks'
+import { signal } from '@preact/signals'
+import { themeMode, appliedTheme, cycleTheme, themes } from '../../utils/theme'
+import { clearFavorites } from '../../utils/favorites'
+
+// Exported signal to track menu open state
+export const userMenuOpen = signal(false)
+
+/**
+ * UserMenu component - User dropdown menu in the header
+ *
+ * Features:
+ * - User icon button that toggles a dropdown menu
+ * - Displays username and role information
+ * - Theme toggle control
+ * - Link to provide feedback
+ * - Clear favorites action
+ * - Click-outside handling to close dropdown
+ */
+export function UserMenu() {
+  const menuRef = useRef(null)
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        userMenuOpen.value = false
+      }
+    }
+
+    if (userMenuOpen.value) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [userMenuOpen.value])
+
+  // Close dropdown on escape key
+  useEffect(() => {
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        userMenuOpen.value = false
+      }
+    }
+
+    if (userMenuOpen.value) {
+      document.addEventListener('keydown', handleEscape)
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }, [userMenuOpen.value])
+
+  const getThemeIcon = () => {
+    if (themeMode.value === themes.auto) {
+      return (
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+        </svg>
+      )
+    } else if (appliedTheme.value === themes.dark) {
+      return (
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+        </svg>
+      )
+    } else {
+      return (
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+        </svg>
+      )
+    }
+  }
+
+  const getThemeLabel = () => {
+    if (themeMode.value === themes.auto) return 'Auto'
+    if (themeMode.value === themes.dark) return 'Dark'
+    return 'Light'
+  }
+
+  const handleThemeToggle = () => {
+    cycleTheme()
+  }
+
+  const handleClearFavorites = () => {
+    clearFavorites()
+    userMenuOpen.value = false
+  }
+
+  return (
+    <div class="relative" ref={menuRef}>
+      {/* User button */}
+      <button
+        onClick={() => userMenuOpen.value = !userMenuOpen.value}
+        title="User menu"
+        aria-label="User menu"
+        aria-expanded={userMenuOpen.value}
+        aria-haspopup="true"
+        class="inline-flex items-center justify-center p-1.5 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-flux-blue"
+      >
+        {/* User icon */}
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+        </svg>
+      </button>
+
+      {/* Dropdown menu */}
+      {userMenuOpen.value && (
+        <div class="fixed inset-0 sm:absolute sm:inset-auto sm:right-0 sm:mt-2 sm:w-56 sm:rounded-lg bg-white dark:bg-gray-800 shadow-lg sm:border border-gray-200 dark:border-gray-700 py-1 z-50">
+          {/* User info - Avatar, Username and Role, with close button on mobile */}
+          <div class="px-4 py-3 flex items-center gap-3">
+            {/* Flux Operator icon */}
+            <svg class="w-8 h-8 text-blue-500 dark:text-blue-400 flex-shrink-0" viewBox="0 0 1501 1298.84" fill="currentColor">
+              <path d="M874.85,532.48l-11.32-19.14c.42.42.62.62.83,1.03l10.49,18.11Z"/>
+              <path d="M1263.42,1209.44h-.06l-31.59-55.09-47.34-82.99-31.22-54.59-193.92-338.8.04-.02-.4-.6-83.19-144.83-11.28-19.14c-.81-1.41-1.81-2.62-3.02-3.63-2.22-2.22-4.83-3.42-7.65-4.23-1.01-.4-2.22-.6-3.63-.4-.6,0-1.01-.2-1.61-.2-12.29,0-26.19,9.27-27.8,22.76l-10.88,114.42-9.27,95.28c-1.41,15.51,16.52,22.76,32.23,13.5l48.89-28.62,278.79,487.4-71.53-.2-93.79-.2-440.2-.83-504.18,1.03L0,1297.07l1088.98.42h225.05l-50.6-88.05Z"/>
+              <path d="M991.07,1088.63l-93.19-67.24-77.59-56c-12.49-9-27.92,2.5-27.92,20.79v57.63H253.5l82.81-142.92,220.94-380.54,246.42-433.84L753.07-1.31,100.39,1132.93l88.98.18v.02h624.3v-.04l114.26.44h53.68c19.54,0,26.33-32.81,9.47-44.9"/>
+              <path d="M847.49,154.81l-45.32,77.98-.06-.02-312.03,540.66-5.64,9.67-88.83,152.89c-3.42,5.84-3.42,11.88-1.41,16.92,5.24,11.68,21.35,20.55,34.45,14.91l104.95-47.14,87.22-39.08c13.9-6.45,11.68-25.58-4.23-34.85l-49.15-28.6,280.6-486.21,82.35,143.14,219.29,381.79,249.93,443.09,101.4.2L847.49,154.81Z"/>
+            </svg>
+            <div class="flex flex-col min-w-0 flex-1">
+              <span class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">flux-operator</span>
+              <span class="text-xs text-gray-500 dark:text-gray-400 truncate">cluster:view</span>
+            </div>
+            {/* Mobile close button */}
+            <button
+              onClick={() => userMenuOpen.value = false}
+              class="sm:hidden p-1 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+              aria-label="Close menu"
+            >
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Separator */}
+          <div class="my-1 border-t border-gray-200 dark:border-gray-700" />
+
+          {/* Theme toggle */}
+          <button
+            onClick={handleThemeToggle}
+            class="w-full px-4 py-2 flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+          >
+            <span class="text-gray-500 dark:text-gray-400">
+              {getThemeIcon()}
+            </span>
+            <span>Theme: {getThemeLabel()}</span>
+          </button>
+
+          {/* Separator */}
+          <div class="my-1 border-t border-gray-200 dark:border-gray-700" />
+
+          {/* Provide feedback */}
+          <a
+            href="https://github.com/controlplaneio-fluxcd/flux-operator/issues/new"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="px-4 py-2 flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            onClick={() => userMenuOpen.value = false}
+          >
+            <svg class="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+            <span>Provide feedback</span>
+          </a>
+
+          {/* Separator */}
+          <div class="my-1 border-t border-gray-200 dark:border-gray-700" />
+
+          {/* Clear favorites */}
+          <button
+            onClick={handleClearFavorites}
+            class="w-full px-4 py-2 flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+          >
+            <svg class="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            <span>Clear favorites</span>
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}

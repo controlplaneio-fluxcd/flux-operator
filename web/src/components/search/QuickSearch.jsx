@@ -6,6 +6,8 @@ import { useEffect, useRef, useState } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
 import { fetchWithMock } from '../../utils/fetch'
 import { reportData } from '../../app'
+import { fluxKinds } from '../../utils/constants'
+import { userMenuOpen } from '../layout/UserMenu'
 
 // QuickSearch state signals
 export const quickSearchOpen = signal(false)
@@ -161,11 +163,9 @@ function getNamespaceSuggestions(partial) {
  * Get filtered kind suggestions
  */
 function getKindSuggestions(partial) {
-  const reconcilers = reportData.value?.spec?.reconcilers || []
-  const kinds = [...new Set(reconcilers.map(r => r.kind))].sort()
   const filtered = partial
-    ? kinds.filter(k => k.toLowerCase().includes(partial.toLowerCase()))
-    : kinds
+    ? fluxKinds.filter(k => k.toLowerCase().includes(partial.toLowerCase()))
+    : fluxKinds
   return filtered
 }
 
@@ -244,6 +244,41 @@ export function QuickSearch() {
     }
   }, [quickSearchOpen.value])
 
+  // Global "/" keyboard shortcut to open search
+  useEffect(() => {
+    const handleGlobalKeyDown = (e) => {
+      // Don't trigger if already in an input or textarea
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+        return
+      }
+      if (e.key === '/' && !quickSearchOpen.value) {
+        e.preventDefault()
+        quickSearchOpen.value = true
+      }
+    }
+
+    document.addEventListener('keydown', handleGlobalKeyDown)
+    return () => document.removeEventListener('keydown', handleGlobalKeyDown)
+  }, [])
+
+  // Close search when navigating to another page
+  const prevPathRef = useRef(location.path)
+  useEffect(() => {
+    if (prevPathRef.current !== location.path) {
+      prevPathRef.current = location.path
+      if (quickSearchOpen.value) {
+        handleClose()
+      }
+    }
+  }, [location.path])
+
+  // Close search when user menu opens
+  useEffect(() => {
+    if (userMenuOpen.value && quickSearchOpen.value) {
+      handleClose()
+    }
+  }, [userMenuOpen.value])
+
   // Reset indices when suggestions/results change
   useEffect(() => {
     setSelectedIndex(-1)
@@ -268,6 +303,7 @@ export function QuickSearch() {
   }, [inputValue, selectedNamespace, selectedKind, isSelectingNamespace, isSelectingKind, isTypingFilterPrefix])
 
   const handleSearchClick = () => {
+    userMenuOpen.value = false
     quickSearchOpen.value = true
   }
 
@@ -390,45 +426,56 @@ export function QuickSearch() {
     handleClose()
   }
 
-  // Determine what to show
-  const showNamespaceSuggestions = quickSearchOpen.value && isSelectingNamespace
-  const showKindSuggestions = quickSearchOpen.value && isSelectingKind
-
-  const showSearchHint = quickSearchOpen.value &&
-    !selectedNamespace && !selectedKind &&
-    !isSelectingNamespace && !isSelectingKind &&
-    !isTypingFilterPrefix &&
-    inputValue.length >= 1 && inputValue.length < 2
-
-  const showResultsPanel = quickSearchOpen.value &&
-    !isSelectingNamespace && !isSelectingKind &&
-    !isTypingFilterPrefix && (
-    quickSearchResults.value.length > 0 ||
-      quickSearchLoading.value ||
-      (inputValue.length >= 2 && !quickSearchLoading.value)
-  )
+  // Determine what to show in the panel - mutually exclusive states
+  // Priority: namespace suggestions > kind suggestions > loading > results > empty > hint
+  const panelState = (() => {
+    if (isSelectingNamespace) return 'namespace'
+    if (isSelectingKind) return 'kind'
+    if (quickSearchLoading.value) return 'loading'
+    if (quickSearchResults.value.length > 0) return 'results'
+    // Show empty only if we actually searched (2+ chars, not typing filter prefix)
+    if (inputValue.length >= 2 && !isTypingFilterPrefix) return 'empty'
+    // Default: show hint
+    return 'hint'
+  })()
 
   return (
     <div class="relative">
-      {/* Search Button */}
+      {/* Search Button - Icon only on mobile, textbox style on desktop */}
       {!quickSearchOpen.value && (
-        <button
-          onClick={handleSearchClick}
-          title="Search"
-          class="inline-flex items-center justify-center p-1.5 sm:p-2 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-flux-blue"
-          aria-label="Open search"
-        >
-          <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-        </button>
+        <>
+          {/* Mobile: Icon button */}
+          <button
+            onClick={handleSearchClick}
+            title="Search (press /)"
+            class="sm:hidden inline-flex items-center justify-center p-1.5 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-flux-blue"
+            aria-label="Open search"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </button>
+          {/* Desktop: Textbox style button */}
+          <button
+            onClick={handleSearchClick}
+            title="Search (press /)"
+            class="hidden sm:inline-flex items-center gap-2 px-2.5 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-400 dark:hover:border-gray-500 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-flux-blue"
+            aria-label="Open search"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <span class="text-sm">Search</span>
+            <kbd class="px-1.5 py-0.5 text-xs font-medium bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded">/</kbd>
+          </button>
+        </>
       )}
 
       {/* Search Panel */}
       {quickSearchOpen.value && (
         <div class="animate-slide-in-right">
-          {/* Search Input Row */}
-          <div class="flex items-center px-3 h-[38px] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg">
+          {/* Search Input Row - inline in header */}
+          <div class="flex items-center h-[30px] px-2 border border-gray-300 dark:border-gray-600 rounded-md">
             <svg class="w-4 h-4 text-gray-400 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
@@ -473,77 +520,120 @@ export function QuickSearch() {
             </button>
           </div>
 
-          {/* Namespace Suggestions */}
-          {showNamespaceSuggestions && namespaceSuggestions.length > 0 && (
-            <div class="absolute left-0 right-0 mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-80 overflow-y-auto z-50">
-              <div class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
-                Type or select namespace
+          {/* Dropdown Panel */}
+          <div class="absolute left-0 right-0 mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-80 overflow-y-auto z-50">
+            {/* Namespace Suggestions */}
+            {panelState === 'namespace' && (
+              namespaceSuggestions.length > 0 ? (
+                <>
+                  <div class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                    Type or select namespace
+                  </div>
+                  <ul>
+                    {namespaceSuggestions.map((ns, index) => (
+                      <li key={ns}>
+                        <button
+                          onClick={() => handleNamespaceSelect(ns)}
+                          class={`w-full text-left py-1.5 px-3 text-sm font-mono focus:outline-none transition-colors ${
+                            index === nsSelectedIndex
+                              ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
+                              : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                          }`}
+                        >
+                          {ns}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : (
+                <div class="p-3 text-sm text-gray-500 dark:text-gray-400">
+                  {namespacePartial ? 'No matching namespaces' : 'Type to filter namespaces'}
+                </div>
+              )
+            )}
+
+            {/* Kind Suggestions */}
+            {panelState === 'kind' && (
+              kindSuggestions.length > 0 ? (
+                <>
+                  <div class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                    Type or select kind
+                  </div>
+                  <ul>
+                    {kindSuggestions.map((kind, index) => (
+                      <li key={kind}>
+                        <button
+                          onClick={() => handleKindSelect(kind)}
+                          class={`w-full text-left py-1.5 px-3 text-sm font-mono focus:outline-none transition-colors ${
+                            index === kindSelectedIndex
+                              ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
+                              : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                          }`}
+                        >
+                          {kind}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : (
+                <div class="p-3 text-sm text-gray-500 dark:text-gray-400">
+                  {kindPartial ? 'No matching kinds' : 'Type to filter kinds'}
+                </div>
+              )
+            )}
+
+            {/* Loading State */}
+            {panelState === 'loading' && (
+              <div class="p-3 text-sm text-gray-500 dark:text-gray-400 text-center">
+                Searching...
               </div>
+            )}
+
+            {/* Results List */}
+            {panelState === 'results' && (
               <ul>
-                {namespaceSuggestions.map((ns, index) => (
-                  <li key={ns}>
+                {quickSearchResults.value.map((resource, index) => (
+                  <li key={`${resource.kind}-${resource.namespace}-${resource.name}-${index}`}>
                     <button
-                      onClick={() => handleNamespaceSelect(ns)}
-                      class={`w-full text-left py-1.5 px-3 text-sm font-mono focus:outline-none transition-colors ${
-                        index === nsSelectedIndex
-                          ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
-                          : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                      onClick={() => handleResultClick(resource)}
+                      class={`w-full text-left py-1 px-2 focus:outline-none transition-colors ${
+                        index === selectedIndex
+                          ? 'bg-gray-100 dark:bg-gray-700'
+                          : 'hover:bg-gray-50 dark:hover:bg-gray-700'
                       }`}
                     >
-                      {ns}
+                      <div class="flex items-center gap-1.5">
+                        <span class={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${getStatusDotClass(resource.status)}`} />
+                        <span class="text-sm font-mono text-gray-900 dark:text-gray-100 break-all">
+                          <span class="text-gray-500 dark:text-gray-400">{resource.kind}/</span>{resource.namespace}/{resource.name}
+                        </span>
+                      </div>
                     </button>
                   </li>
                 ))}
               </ul>
-            </div>
-          )}
+            )}
 
-          {/* Empty namespace suggestions */}
-          {showNamespaceSuggestions && namespaceSuggestions.length === 0 && namespacePartial && (
-            <div class="absolute left-0 right-0 mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg z-50">
-              <div class="p-3 text-sm text-gray-500 dark:text-gray-400 text-center">
-                No matching namespaces
+            {/* Empty State */}
+            {panelState === 'empty' && (
+              <div class="p-3 text-sm text-gray-500 dark:text-gray-400">
+                <p>No resources found</p>
+                <button
+                  onClick={() => {
+                    location.route('/resources')
+                    handleClose()
+                  }}
+                  class="mt-2 text-flux-blue hover:underline focus:outline-none"
+                >
+                  Browse all resources →
+                </button>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Kind Suggestions */}
-          {showKindSuggestions && kindSuggestions.length > 0 && (
-            <div class="absolute left-0 right-0 mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-80 overflow-y-auto z-50">
-              <div class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
-                Type or select kind
-              </div>
-              <ul>
-                {kindSuggestions.map((kind, index) => (
-                  <li key={kind}>
-                    <button
-                      onClick={() => handleKindSelect(kind)}
-                      class={`w-full text-left py-1.5 px-3 text-sm font-mono focus:outline-none transition-colors ${
-                        index === kindSelectedIndex
-                          ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
-                          : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
-                      }`}
-                    >
-                      {kind}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* Empty kind suggestions */}
-          {showKindSuggestions && kindSuggestions.length === 0 && kindPartial && (
-            <div class="absolute left-0 right-0 mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg z-50">
-              <div class="p-3 text-sm text-gray-500 dark:text-gray-400 text-center">
-                No matching kinds
-              </div>
-            </div>
-          )}
-
-          {/* Search hint */}
-          {showSearchHint && (
-            <div class="absolute left-0 right-0 mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg z-50">
+            {/* Search hint */}
+            {panelState === 'hint' && (
               <div class="px-3 py-2 text-sm text-gray-500 dark:text-gray-400 space-y-1">
                 <div>Type 2+ chars to search or <span class="font-mono">**</span> for most recent</div>
                 <div>
@@ -573,61 +663,8 @@ export function QuickSearch() {
                   </button>
                 </div>
               </div>
-            </div>
-          )}
-
-          {/* Results Panel */}
-          {showResultsPanel && (
-            <div class="absolute left-0 right-0 mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-80 overflow-y-auto z-50">
-              {/* Loading State */}
-              {quickSearchLoading.value && (
-                <div class="p-3 text-sm text-gray-500 dark:text-gray-400 text-center">
-                  Searching...
-                </div>
-              )}
-
-              {/* Results List */}
-              {!quickSearchLoading.value && quickSearchResults.value.length > 0 && (
-                <ul>
-                  {quickSearchResults.value.map((resource, index) => (
-                    <li key={`${resource.kind}-${resource.namespace}-${resource.name}-${index}`}>
-                      <button
-                        onClick={() => handleResultClick(resource)}
-                        class={`w-full text-left py-1 px-2 focus:outline-none transition-colors ${
-                          index === selectedIndex
-                            ? 'bg-gray-100 dark:bg-gray-700'
-                            : 'hover:bg-gray-50 dark:hover:bg-gray-700'
-                        }`}
-                      >
-                        <div class="flex items-center gap-1.5">
-                          <span class={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${getStatusDotClass(resource.status)}`} />
-                          <span class="text-xs sm:text-sm font-mono text-gray-900 dark:text-gray-100 break-all">
-                            <span class="text-gray-500 dark:text-gray-400">{resource.kind}/</span>{resource.namespace}/{resource.name}
-                          </span>
-                        </div>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              {/* Empty State */}
-              {!quickSearchLoading.value && quickSearchResults.value.length === 0 && inputValue.length >= 2 && (
-                <div class="p-3 text-sm text-gray-500 dark:text-gray-400 text-center">
-                  <p>No resources found</p>
-                  <button
-                    onClick={() => {
-                      location.route('/resources')
-                      handleClose()
-                    }}
-                    class="mt-2 text-flux-blue hover:underline focus:outline-none"
-                  >
-                    Browse all resources →
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
     </div>

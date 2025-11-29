@@ -60,11 +60,11 @@ describe('Footer', () => {
     })
   })
 
-  describe('Flux Operator Link', () => {
-    it('should render Flux Operator GitHub link in both layouts', () => {
+  describe('Source Code Link', () => {
+    it('should render source code GitHub link in both layouts', () => {
       render(<Footer />)
 
-      const links = screen.getAllByText('Flux Operator')
+      const links = screen.getAllByText('Source code')
       expect(links.length).toBe(2) // One for mobile, one for desktop
       links.forEach(linkText => {
         const link = linkText.closest('a')
@@ -75,70 +75,12 @@ describe('Footer', () => {
     it('should open in new tab with security attributes', () => {
       render(<Footer />)
 
-      const links = screen.getAllByText('Flux Operator')
+      const links = screen.getAllByText('Source code')
       links.forEach(linkText => {
         const link = linkText.closest('a')
         expect(link).toHaveAttribute('target', '_blank')
         expect(link).toHaveAttribute('rel', 'noopener noreferrer')
       })
-    })
-
-    it('should have Flux logo icon in both layouts', () => {
-      render(<Footer />)
-
-      const links = screen.getAllByText('Flux Operator')
-      links.forEach(linkText => {
-        const link = linkText.closest('a')
-        const img = link.querySelector('img')
-        expect(img).toBeInTheDocument()
-        expect(img).toHaveAttribute('alt', 'Flux')
-      })
-    })
-
-    it('should use black logo in light theme', () => {
-      themeMode.value = themes.light
-      appliedTheme.value = themes.light
-
-      render(<Footer />)
-
-      const links = screen.getAllByText('Flux Operator')
-      links.forEach(linkText => {
-        const link = linkText.closest('a')
-        const img = link.querySelector('img')
-        expect(img).toHaveAttribute('src', '/flux-icon-black.svg')
-      })
-    })
-
-    it('should use white logo in dark theme', () => {
-      themeMode.value = themes.dark
-      appliedTheme.value = themes.dark
-
-      render(<Footer />)
-
-      const links = screen.getAllByText('Flux Operator')
-      links.forEach(linkText => {
-        const link = linkText.closest('a')
-        const img = link.querySelector('img')
-        expect(img).toHaveAttribute('src', '/flux-icon-white.svg')
-      })
-    })
-
-    it('should have proper logo size in desktop layout', () => {
-      render(<Footer />)
-
-      const desktopContainer = document.querySelector('.hidden.sm\\:flex')
-      const img = desktopContainer.querySelector('img')
-      expect(img).toHaveClass('w-4')
-      expect(img).toHaveClass('h-4')
-    })
-
-    it('should have smaller logo size in mobile layout', () => {
-      render(<Footer />)
-
-      const mobileContainer = document.querySelector('.flex.sm\\:hidden')
-      const img = mobileContainer.querySelector('img')
-      expect(img).toHaveClass('w-3.5')
-      expect(img).toHaveClass('h-3.5')
     })
 
     it('should have hover styles', () => {
@@ -200,17 +142,6 @@ describe('Footer', () => {
         const link = linkText.closest('a')
         expect(link).toHaveAttribute('href', 'mailto:flux-enterprise@control-plane.io')
       })
-    })
-
-    it('should have email icon in desktop layout only', () => {
-      render(<Footer />)
-
-      const desktopContainer = document.querySelector('.hidden.sm\\:flex')
-      const link = desktopContainer.querySelector('a[href*="mailto"]')
-      const svg = link.querySelector('svg')
-      expect(svg).toBeInTheDocument()
-      expect(svg).toHaveClass('w-4')
-      expect(svg).toHaveClass('h-4')
     })
 
     it('should have proper icon path in desktop layout', () => {
@@ -344,8 +275,8 @@ describe('Footer', () => {
 
       const desktopContainer = document.querySelector('.hidden.sm\\:flex')
       const svgs = desktopContainer.querySelectorAll('svg')
-      // Should have 2 SVGs (document icon and email icon)
-      expect(svgs.length).toBe(2)
+      // Should have 3 SVGs (external link icon, document icon and email icon)
+      expect(svgs.length).toBe(3)
 
       svgs.forEach(svg => {
         expect(svg).toHaveAttribute('fill', 'none')
@@ -374,27 +305,4 @@ describe('Footer', () => {
     })
   })
 
-  describe('Theme Integration', () => {
-    it('should use correct logo for light theme', () => {
-      themeMode.value = themes.light
-      appliedTheme.value = themes.light
-
-      render(<Footer />)
-      const imgs = document.querySelectorAll('img[alt="Flux"]')
-      imgs.forEach(img => {
-        expect(img).toHaveAttribute('src', '/flux-icon-black.svg')
-      })
-    })
-
-    it('should use correct logo for dark theme', () => {
-      themeMode.value = themes.dark
-      appliedTheme.value = themes.dark
-
-      render(<Footer />)
-      const imgs = document.querySelectorAll('img[alt="Flux"]')
-      imgs.forEach(img => {
-        expect(img).toHaveAttribute('src', '/flux-icon-white.svg')
-      })
-    })
-  })
 })

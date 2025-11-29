@@ -62,8 +62,10 @@ describe('QuickSearch', () => {
     it('should render search button when closed', () => {
       render(<QuickSearch />)
 
-      const searchButton = screen.getByLabelText('Open search')
-      expect(searchButton).toBeInTheDocument()
+      // Two buttons exist: mobile (icon only) and desktop (textbox style)
+      const searchButtons = screen.getAllByLabelText('Open search')
+      expect(searchButtons.length).toBe(2)
+      expect(searchButtons[0]).toBeInTheDocument()
     })
 
     it('should show search icon', () => {
@@ -74,11 +76,20 @@ describe('QuickSearch', () => {
       expect(searchIcon).toBeInTheDocument()
     })
 
+    it('should show desktop textbox style with Search text and / shortcut', () => {
+      render(<QuickSearch />)
+
+      // Desktop button should have "Search" text and "/" keyboard shortcut
+      expect(screen.getByText('Search')).toBeInTheDocument()
+      expect(screen.getByText('/')).toBeInTheDocument()
+    })
+
     it('should open search input when button is clicked', async () => {
       render(<QuickSearch />)
 
-      const searchButton = screen.getByLabelText('Open search')
-      fireEvent.click(searchButton)
+      // Click the first search button (mobile version)
+      const searchButtons = screen.getAllByLabelText('Open search')
+      fireEvent.click(searchButtons[0])
 
       expect(quickSearchOpen.value).toBe(true)
       expect(screen.getByPlaceholderText('Search appliers...')).toBeInTheDocument()
@@ -742,12 +753,12 @@ describe('QuickSearch', () => {
       const input = screen.getByPlaceholderText('Search appliers...')
       fireEvent.input(input, { target: { value: 'n' } })
 
-      // Hint should appear for single char that's not 'n' leading to 'ns'
+      // Hint should appear for single char
       expect(screen.getByText(/Type 2\+ chars/)).toBeInTheDocument()
 
-      // But when typing 'ns', no hint or results panel should show
+      // When typing 'ns' (filter prefix), hint should still show to guide the user
       fireEvent.input(input, { target: { value: 'ns' } })
-      expect(screen.queryByText(/Type 2\+ chars/)).not.toBeInTheDocument()
+      expect(screen.getByText(/Type 2\+ chars/)).toBeInTheDocument()
     })
   })
 
