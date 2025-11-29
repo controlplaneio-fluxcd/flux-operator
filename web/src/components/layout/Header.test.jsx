@@ -5,11 +5,11 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/preact'
 import { Header } from './Header'
 import { fetchFluxReport } from '../../app'
-import { themeMode, themes } from '../../utils/theme'
 
-// Mock the ThemeToggle component
-vi.mock('./ThemeToggle', () => ({
-  ThemeToggle: () => <div data-testid="theme-toggle">Theme Toggle</div>
+// Mock the UserMenu component
+vi.mock('./UserMenu', () => ({
+  UserMenu: () => <div data-testid="user-menu">User Menu</div>,
+  userMenuOpen: { value: false }
 }))
 
 // Mock the QuickSearch component and signal
@@ -41,9 +41,6 @@ import { useLocation } from 'preact-iso'
 
 describe('Header', () => {
   beforeEach(() => {
-    // Reset theme
-    themeMode.value = themes.light
-
     // Reset mocks
     vi.clearAllMocks()
 
@@ -56,36 +53,19 @@ describe('Header', () => {
   })
 
   describe('Branding', () => {
-    it('should render Flux logo', () => {
+    it('should render Flux logo button', () => {
       render(<Header />)
 
-      const logo = screen.getByAltText('Flux CD')
-      expect(logo).toBeInTheDocument()
-      expect(logo).toHaveAttribute('src')
+      const logoButton = screen.getByRole('button', { name: 'Flux CD' })
+      expect(logoButton).toBeInTheDocument()
+      // Should contain an SVG (the FluxIcon)
+      expect(logoButton.querySelector('svg')).toBeInTheDocument()
     })
 
     it('should render "Flux Status" title', () => {
       render(<Header />)
 
       expect(screen.getByText('Flux Status')).toBeInTheDocument()
-    })
-
-    it('should use black icon for light theme', () => {
-      themeMode.value = themes.light
-
-      render(<Header />)
-
-      const logo = screen.getByAltText('Flux CD')
-      expect(logo).toHaveAttribute('src', '/flux-icon-black.svg')
-    })
-
-    it('should use white icon for dark theme', () => {
-      themeMode.value = themes.dark
-
-      render(<Header />)
-
-      const logo = screen.getByAltText('Flux CD')
-      expect(logo).toHaveAttribute('src', '/flux-icon-white.svg')
     })
   })
 
@@ -99,7 +79,7 @@ describe('Header', () => {
 
       render(<Header />)
 
-      const logoButton = screen.getByAltText('Flux CD').closest('button')
+      const logoButton = screen.getByRole('button', { name: 'Flux CD' })
       fireEvent.click(logoButton)
 
       expect(fetchFluxReport).toHaveBeenCalledTimes(1)
@@ -115,7 +95,7 @@ describe('Header', () => {
 
       render(<Header />)
 
-      const logoButton = screen.getByAltText('Flux CD').closest('button')
+      const logoButton = screen.getByRole('button', { name: 'Flux CD' })
       fireEvent.click(logoButton)
 
       expect(mockRoute).toHaveBeenCalledWith('/')
@@ -131,7 +111,7 @@ describe('Header', () => {
 
       render(<Header />)
 
-      const logoButton = screen.getByAltText('Flux CD').closest('button')
+      const logoButton = screen.getByRole('button', { name: 'Flux CD' })
       fireEvent.click(logoButton)
 
       expect(mockRoute).toHaveBeenCalledWith('/')
@@ -198,12 +178,8 @@ describe('Header', () => {
 
       render(<Header />)
 
-      // Find the navigation button (the one with SVG that's not the logo)
-      const buttons = document.querySelectorAll('button')
-      const navButton = Array.from(buttons).find(btn =>
-        btn.querySelector('svg') && !btn.querySelector('img')
-      )
-
+      // Find the navigation button by its title
+      const navButton = screen.getByTitle('Browse Resources')
       fireEvent.click(navButton)
 
       expect(mockRoute).toHaveBeenCalledWith('/favorites')
@@ -218,12 +194,7 @@ describe('Header', () => {
 
       render(<Header />)
 
-      // Find the navigation button
-      const buttons = document.querySelectorAll('button')
-      const navButton = Array.from(buttons).find(btn =>
-        btn.querySelector('svg') && !btn.querySelector('img')
-      )
-
+      const navButton = screen.getByTitle('Back to Dashboard')
       fireEvent.click(navButton)
 
       expect(mockRoute).toHaveBeenCalledWith('/')
@@ -238,22 +209,18 @@ describe('Header', () => {
 
       render(<Header />)
 
-      const buttons = document.querySelectorAll('button')
-      const navButton = Array.from(buttons).find(btn =>
-        btn.querySelector('svg') && !btn.querySelector('img')
-      )
-
+      const navButton = screen.getByTitle('Back to Dashboard')
       fireEvent.click(navButton)
 
       expect(mockRoute).toHaveBeenCalledWith('/')
     })
   })
 
-  describe('Theme Toggle', () => {
-    it('should render ThemeToggle component', () => {
+  describe('User Menu', () => {
+    it('should render UserMenu component', () => {
       render(<Header />)
 
-      expect(screen.getByTestId('theme-toggle')).toBeInTheDocument()
+      expect(screen.getByTestId('user-menu')).toBeInTheDocument()
     })
   })
 

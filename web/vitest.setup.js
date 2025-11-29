@@ -30,3 +30,34 @@ Object.defineProperty(global, 'matchMedia', {
 // Expose the mocks for individual test files to reset/inspect
 global.localStorageMock = localStorageMock
 global.matchMediaMock = matchMediaMock
+
+// Suppress expected console messages during tests
+// These are logged by the application code when testing error scenarios
+const suppressedErrorPatterns = [
+  /Failed to fetch/,
+  /Failed to parse URL/,
+  /Network error/,
+  /Network connection failed/,
+]
+
+const suppressedWarnPatterns = [
+  /getMockWorkload:/,
+]
+
+const originalConsoleError = console.error
+console.error = (...args) => {
+  const message = args.join(' ')
+  const shouldSuppress = suppressedErrorPatterns.some(pattern => pattern.test(message))
+  if (!shouldSuppress) {
+    originalConsoleError(...args)
+  }
+}
+
+const originalConsoleWarn = console.warn
+console.warn = (...args) => {
+  const message = args.join(' ')
+  const shouldSuppress = suppressedWarnPatterns.some(pattern => pattern.test(message))
+  if (!shouldSuppress) {
+    originalConsoleWarn(...args)
+  }
+}

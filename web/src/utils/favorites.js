@@ -96,3 +96,10 @@ export function toggleFavorite(kind, namespace, name) {
 export function reorderFavorites(newOrder) {
   favorites.value = newOrder
 }
+
+/**
+ * Clear all favorites
+ */
+export function clearFavorites() {
+  favorites.value = []
+}

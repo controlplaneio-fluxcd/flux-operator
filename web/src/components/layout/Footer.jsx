@@ -1,8 +1,6 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { appliedTheme, themes } from '../../utils/theme'
-
 /**
  * Footer component - Application footer with links and license information
  *
@@ -11,13 +9,9 @@ import { appliedTheme, themes } from '../../utils/theme'
  * - Link to documentation
  * - Link to enterprise support email
  * - License information (AGPL-3.0)
- * - Theme-aware Flux logo
  * - Responsive layout
  */
 export function Footer() {
-  // Use appropriate Flux logo based on theme
-  const fluxLogoSrc = appliedTheme.value === themes.dark ? '/flux-icon-white.svg' : '/flux-icon-black.svg'
-
   return (
     <footer class="bg-white dark:bg-gray-800 sm:border-t border-gray-200 dark:border-gray-700 transition-colors mt-8">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4">
@@ -29,15 +23,20 @@ export function Footer() {
             rel="noopener noreferrer"
             class="flex items-center gap-1.5 hover:text-gray-900 dark:hover:text-white transition-colors"
           >
-            <img src={fluxLogoSrc} alt="Flux" class="w-3.5 h-3.5" />
-            <span>Flux Operator</span>
+            <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+            <span>Source code</span>
           </a>
           <span class="text-gray-300 dark:text-gray-600">•</span>
           <a
             href="mailto:flux-enterprise@control-plane.io"
-            class="hover:text-gray-900 dark:hover:text-white transition-colors"
+            class="flex items-center gap-1.5 hover:text-gray-900 dark:hover:text-white transition-colors"
           >
-            Enterprise Support
+            <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+            <span>Enterprise Support</span>
           </a>
         </div>
 
@@ -50,8 +49,10 @@ export function Footer() {
               rel="noopener noreferrer"
               class="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
             >
-              <img src={fluxLogoSrc} alt="Flux" class="w-4 h-4" />
-              <span>Flux Operator</span>
+              <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+              <span>Source code</span>
             </a>
             <span class="text-gray-300 dark:text-gray-600">•</span>
             <a
