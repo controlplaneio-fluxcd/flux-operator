@@ -213,7 +213,7 @@ describe('UserMenu', () => {
       const button = screen.getByText('Clear local storage').closest('button')
       fireEvent.click(button)
 
-      expect(confirmSpy).toHaveBeenCalledWith('This will delete your favorites and search history from local storage. Continue?')
+      expect(confirmSpy).toHaveBeenCalledWith('This will delete your favorites and navigation history from local storage. Continue?')
       expect(clearFavorites).toHaveBeenCalledTimes(1)
       expect(userMenuOpen.value).toBe(false)
 

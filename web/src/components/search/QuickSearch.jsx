@@ -8,6 +8,7 @@ import { fetchWithMock } from '../../utils/fetch'
 import { reportData } from '../../app'
 import { fluxKinds } from '../../utils/constants'
 import { userMenuOpen } from '../layout/UserMenu'
+import { navHistory, isHomePage } from '../../utils/navHistory'
 
 // QuickSearch state signals
 export const quickSearchOpen = signal(false)
@@ -17,6 +18,16 @@ export const quickSearchLoading = signal(false)
 
 // Debounce timer reference
 let debounceTimer = null
+
+/**
+ * Cancel any pending debounced search
+ */
+function cancelPendingSearch() {
+  if (debounceTimer) {
+    window.clearTimeout(debounceTimer)
+    debounceTimer = null
+  }
+}
 
 /**
  * Parse search query to extract namespace/kind filters and search term
@@ -211,6 +222,7 @@ export function QuickSearch() {
   const [selectedIndex, setSelectedIndex] = useState(-1)
   const [nsSelectedIndex, setNsSelectedIndex] = useState(-1)
   const [kindSelectedIndex, setKindSelectedIndex] = useState(-1)
+  const [historySelectedIndex, setHistorySelectedIndex] = useState(-1)
 
   // Derive mode from input value
   const lowerInput = inputValue.toLowerCase()
@@ -292,11 +304,17 @@ export function QuickSearch() {
     setKindSelectedIndex(-1)
   }, [kindSuggestions.length, isSelectingKind])
 
+  useEffect(() => {
+    setHistorySelectedIndex(-1)
+  }, [navHistory.value])
+
   // Trigger search when input changes (and not selecting filters)
   useEffect(() => {
     if (!isSelectingNamespace && !isSelectingKind && !isTypingFilterPrefix && inputValue.length >= 2) {
       debouncedSearch(inputValue, selectedNamespace, selectedKind)
     } else if (!isSelectingNamespace && !isSelectingKind && !isTypingFilterPrefix) {
+      // Cancel any pending search to prevent stale results from appearing
+      cancelPendingSearch()
       quickSearchResults.value = []
       quickSearchLoading.value = false
     }
@@ -319,6 +337,7 @@ export function QuickSearch() {
     setSelectedIndex(-1)
     setNsSelectedIndex(-1)
     setKindSelectedIndex(-1)
+    setHistorySelectedIndex(-1)
     if (debounceTimer) {
       window.clearTimeout(debounceTimer)
     }
@@ -403,26 +422,52 @@ export function QuickSearch() {
     }
 
     // Handle search results navigation
-    if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      const maxIndex = quickSearchResults.value.length - 1
-      if (maxIndex >= 0) {
-        setSelectedIndex(prev => Math.min(prev + 1, maxIndex))
+    if (quickSearchResults.value.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setSelectedIndex(prev => Math.min(prev + 1, quickSearchResults.value.length - 1))
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setSelectedIndex(prev => Math.max(prev - 1, -1))
+      } else if (e.key === 'Enter' && selectedIndex >= 0) {
+        e.preventDefault()
+        const resource = quickSearchResults.value[selectedIndex]
+        if (resource) {
+          handleResultClick(resource)
+        }
       }
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      setSelectedIndex(prev => Math.max(prev - 1, -1))
-    } else if (e.key === 'Enter' && selectedIndex >= 0) {
-      e.preventDefault()
-      const resource = quickSearchResults.value[selectedIndex]
-      if (resource) {
-        handleResultClick(resource)
+      return
+    }
+
+    // Handle history navigation (when in hint mode with no results)
+    if (navHistory.value.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setHistorySelectedIndex(prev => Math.min(prev + 1, navHistory.value.length - 1))
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setHistorySelectedIndex(prev => Math.max(prev - 1, -1))
+      } else if (e.key === 'Enter' && historySelectedIndex >= 0) {
+        e.preventDefault()
+        const entry = navHistory.value[historySelectedIndex]
+        if (entry) {
+          handleHistoryClick(entry)
+        }
       }
     }
   }
 
   const handleResultClick = (resource) => {
     location.route(`/resource/${encodeURIComponent(resource.kind)}/${encodeURIComponent(resource.namespace)}/${encodeURIComponent(resource.name)}`)
+    handleClose()
+  }
+
+  const handleHistoryClick = (entry) => {
+    if (isHomePage(entry.kind)) {
+      location.route('/')
+    } else {
+      location.route(`/resource/${encodeURIComponent(entry.kind)}/${encodeURIComponent(entry.namespace)}/${encodeURIComponent(entry.name)}`)
+    }
     handleClose()
   }
 
@@ -534,7 +579,7 @@ export function QuickSearch() {
                       <li key={ns}>
                         <button
                           onClick={() => handleNamespaceSelect(ns)}
-                          class={`w-full text-left py-1.5 px-3 text-sm font-mono focus:outline-none transition-colors ${
+                          class={`w-full text-left py-1.5 px-3 text-sm focus:outline-none transition-colors ${
                             index === nsSelectedIndex
                               ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
                               : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
@@ -565,7 +610,7 @@ export function QuickSearch() {
                       <li key={kind}>
                         <button
                           onClick={() => handleKindSelect(kind)}
-                          class={`w-full text-left py-1.5 px-3 text-sm font-mono focus:outline-none transition-colors ${
+                          class={`w-full text-left py-1.5 px-3 text-sm focus:outline-none transition-colors ${
                             index === kindSelectedIndex
                               ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
                               : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
@@ -607,7 +652,7 @@ export function QuickSearch() {
                     >
                       <div class="flex items-center gap-1.5">
                         <span class={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${getStatusDotClass(resource.status)}`} />
-                        <span class="text-sm font-mono text-gray-900 dark:text-gray-100 break-all">
+                        <span class="text-sm text-gray-900 dark:text-gray-100 break-all">
                           <span class="text-gray-500 dark:text-gray-400">{resource.kind}/</span>{resource.namespace}/{resource.name}
                         </span>
                       </div>
@@ -635,34 +680,71 @@ export function QuickSearch() {
 
             {/* Search hint */}
             {panelState === 'hint' && (
-              <div class="px-3 py-2 text-sm text-gray-500 dark:text-gray-400 space-y-1">
-                <div>Type 2+ chars to search or <span class="font-mono">**</span> for most recent</div>
-                <div>
-                  Apply filters with{' '}
-                  <button
-                    onClick={() => {
-                      setInputValue('ns:')
-                      if (inputRef.current) {
-                        inputRef.current.focus()
-                      }
-                    }}
-                    class="text-flux-blue hover:underline focus:outline-none"
-                  >
-                    ns:
-                  </button>
-                  {' '}and{' '}
-                  <button
-                    onClick={() => {
-                      setInputValue('kind:')
-                      if (inputRef.current) {
-                        inputRef.current.focus()
-                      }
-                    }}
-                    class="text-flux-blue hover:underline focus:outline-none"
-                  >
-                    kind:
-                  </button>
+              <div class="px-3 py-2 text-sm text-gray-500 dark:text-gray-400 space-y-2">
+                <div class="space-y-1">
+                  <div>Type 2+ chars to search or <span class="font-mono">**</span> for most recent</div>
+                  <div>
+                    Apply filters with{' '}
+                    <button
+                      onClick={() => {
+                        setInputValue('ns:')
+                        if (inputRef.current) {
+                          inputRef.current.focus()
+                        }
+                      }}
+                      class="text-flux-blue hover:underline focus:outline-none"
+                    >
+                      ns:
+                    </button>
+                    {' '}and{' '}
+                    <button
+                      onClick={() => {
+                        setInputValue('kind:')
+                        if (inputRef.current) {
+                          inputRef.current.focus()
+                        }
+                      }}
+                      class="text-flux-blue hover:underline focus:outline-none"
+                    >
+                      kind:
+                    </button>
+                  </div>
                 </div>
+
+                {/* Recent navigation history */}
+                {navHistory.value.length > 0 && (
+                  <div class="border-t border-gray-200 dark:border-gray-700 pt-2">
+                    <div class="text-xs text-gray-400 dark:text-gray-500 mb-1">Recent</div>
+                    <ul class="space-y-0.5">
+                      {navHistory.value.map((entry, index) => (
+                        <li key={`${entry.kind}-${entry.namespace}-${entry.name}-${index}`}>
+                          <button
+                            onClick={() => handleHistoryClick(entry)}
+                            class={`w-full text-left py-1 px-1 -mx-1 rounded focus:outline-none transition-colors flex items-center gap-1.5 ${
+                              index === historySelectedIndex
+                                ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
+                                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                            }`}
+                          >
+                            {/* Home icon for FluxReport, cube icon for other resources */}
+                            {isHomePage(entry.kind) ? (
+                              <svg class="w-3.5 h-3.5 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                              </svg>
+                            ) : (
+                              <svg class="w-3.5 h-3.5 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                              </svg>
+                            )}
+                            <span class="truncate text-gray-900 dark:text-gray-100">
+                              <span class="text-gray-500 dark:text-gray-400">{entry.kind}/</span>{entry.namespace}/{entry.name}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
           </div>

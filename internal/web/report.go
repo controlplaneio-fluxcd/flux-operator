@@ -53,7 +53,7 @@ func (r *Router) ReportHandler(w http.ResponseWriter, req *http.Request) {
 // GetReport returns the cached FluxReport. If the cache is empty, it falls back to
 // building a fresh report (this should only happen during initial startup).
 func (r *Router) GetReport(ctx context.Context) (*unstructured.Unstructured, error) {
-	report := &unstructured.Unstructured{}
+	var report *unstructured.Unstructured
 	if cached := r.getCachedReport(); cached != nil {
 		report = cached
 	} else {

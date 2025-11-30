@@ -39,6 +39,7 @@ vi.mock('../../app', async () => {
 
 import { QuickSearch, quickSearchOpen, quickSearchQuery, quickSearchResults, quickSearchLoading, parseSearchQuery } from './QuickSearch'
 import { fetchWithMock } from '../../utils/fetch'
+import { navHistory, clearNavHistory } from '../../utils/navHistory'
 
 
 describe('QuickSearch', () => {
@@ -48,6 +49,7 @@ describe('QuickSearch', () => {
     quickSearchQuery.value = ''
     quickSearchResults.value = []
     quickSearchLoading.value = false
+    clearNavHistory()
 
     // Reset mocks
     vi.clearAllMocks()
@@ -1164,6 +1166,166 @@ describe('QuickSearch', () => {
       expect(result.namespace).toBe('flux-system')
       expect(result.isSelectingKind).toBe(true)
       expect(result.kindPartial).toBe('Helm')
+    })
+  })
+
+  describe('Navigation History', () => {
+    it('should not show Recent section when history is empty', () => {
+      quickSearchOpen.value = true
+      render(<QuickSearch />)
+
+      expect(screen.queryByText('Recent')).not.toBeInTheDocument()
+    })
+
+    it('should show Recent section when history has entries', () => {
+      navHistory.value = [
+        { kind: 'HelmRelease', namespace: 'flux-system', name: 'podinfo' }
+      ]
+      quickSearchOpen.value = true
+      render(<QuickSearch />)
+
+      expect(screen.getByText('Recent')).toBeInTheDocument()
+    })
+
+    it('should display resource entries with kind/namespace/name format', () => {
+      navHistory.value = [
+        { kind: 'HelmRelease', namespace: 'flux-system', name: 'podinfo' }
+      ]
+      quickSearchOpen.value = true
+      render(<QuickSearch />)
+
+      expect(screen.getByText('HelmRelease/')).toBeInTheDocument()
+      expect(screen.getByText('flux-system/podinfo')).toBeInTheDocument()
+    })
+
+    it('should display FluxReport entry with home icon', () => {
+      navHistory.value = [
+        { kind: 'FluxReport', namespace: 'flux-system', name: 'flux' }
+      ]
+      quickSearchOpen.value = true
+      render(<QuickSearch />)
+
+      // FluxReport should show with home icon path
+      const homeIcon = document.querySelector('path[d*="M3 12l2-2m0 0l7-7 7 7"]')
+      expect(homeIcon).toBeInTheDocument()
+      expect(screen.getByText('FluxReport/')).toBeInTheDocument()
+    })
+
+    it('should display regular resource with cube icon', () => {
+      navHistory.value = [
+        { kind: 'Kustomization', namespace: 'flux-system', name: 'infra' }
+      ]
+      quickSearchOpen.value = true
+      render(<QuickSearch />)
+
+      // Regular resource should show with cube icon path
+      const cubeIcon = document.querySelector('path[d*="M20 7l-8-4-8 4"]')
+      expect(cubeIcon).toBeInTheDocument()
+    })
+
+    it('should navigate to home page when clicking FluxReport entry', () => {
+      navHistory.value = [
+        { kind: 'FluxReport', namespace: 'flux-system', name: 'flux' }
+      ]
+      quickSearchOpen.value = true
+      render(<QuickSearch />)
+
+      const historyButton = screen.getByText('FluxReport/').closest('button')
+      fireEvent.click(historyButton)
+
+      expect(mockRoute).toHaveBeenCalledWith('/')
+      expect(quickSearchOpen.value).toBe(false)
+    })
+
+    it('should navigate to resource page when clicking resource entry', () => {
+      navHistory.value = [
+        { kind: 'HelmRelease', namespace: 'flux-system', name: 'podinfo' }
+      ]
+      quickSearchOpen.value = true
+      render(<QuickSearch />)
+
+      const historyButton = screen.getByText('HelmRelease/').closest('button')
+      fireEvent.click(historyButton)
+
+      expect(mockRoute).toHaveBeenCalledWith('/resource/HelmRelease/flux-system/podinfo')
+      expect(quickSearchOpen.value).toBe(false)
+    })
+
+    it('should display multiple history entries', () => {
+      navHistory.value = [
+        { kind: 'HelmRelease', namespace: 'flux-system', name: 'podinfo' },
+        { kind: 'Kustomization', namespace: 'default', name: 'apps' },
+        { kind: 'FluxReport', namespace: 'flux-system', name: 'flux' }
+      ]
+      quickSearchOpen.value = true
+      render(<QuickSearch />)
+
+      expect(screen.getByText('HelmRelease/')).toBeInTheDocument()
+      expect(screen.getByText('Kustomization/')).toBeInTheDocument()
+      expect(screen.getByText('FluxReport/')).toBeInTheDocument()
+    })
+
+    it('should highlight entry on arrow down navigation', () => {
+      navHistory.value = [
+        { kind: 'HelmRelease', namespace: 'flux-system', name: 'podinfo' },
+        { kind: 'Kustomization', namespace: 'default', name: 'apps' }
+      ]
+      quickSearchOpen.value = true
+      render(<QuickSearch />)
+
+      const input = screen.getByRole('textbox')
+      fireEvent.keyDown(input, { key: 'ArrowDown' })
+
+      // First entry should be highlighted (has bg-gray-100 class)
+      const firstButton = screen.getByText('HelmRelease/').closest('button')
+      expect(firstButton.className).toContain('bg-gray-100')
+    })
+
+    it('should navigate up through history entries', () => {
+      navHistory.value = [
+        { kind: 'HelmRelease', namespace: 'flux-system', name: 'podinfo' },
+        { kind: 'Kustomization', namespace: 'default', name: 'apps' }
+      ]
+      quickSearchOpen.value = true
+      render(<QuickSearch />)
+
+      const input = screen.getByRole('textbox')
+      // Navigate down twice then up once
+      fireEvent.keyDown(input, { key: 'ArrowDown' })
+      fireEvent.keyDown(input, { key: 'ArrowDown' })
+      fireEvent.keyDown(input, { key: 'ArrowUp' })
+
+      // First entry should be highlighted
+      const firstButton = screen.getByText('HelmRelease/').closest('button')
+      expect(firstButton.className).toContain('bg-gray-100')
+    })
+
+    it('should navigate to selected history entry on Enter', () => {
+      navHistory.value = [
+        { kind: 'HelmRelease', namespace: 'flux-system', name: 'podinfo' }
+      ]
+      quickSearchOpen.value = true
+      render(<QuickSearch />)
+
+      const input = screen.getByRole('textbox')
+      fireEvent.keyDown(input, { key: 'ArrowDown' })
+      fireEvent.keyDown(input, { key: 'Enter' })
+
+      expect(mockRoute).toHaveBeenCalledWith('/resource/HelmRelease/flux-system/podinfo')
+      expect(quickSearchOpen.value).toBe(false)
+    })
+
+    it('should not navigate on Enter when no history entry is selected', () => {
+      navHistory.value = [
+        { kind: 'HelmRelease', namespace: 'flux-system', name: 'podinfo' }
+      ]
+      quickSearchOpen.value = true
+      render(<QuickSearch />)
+
+      const input = screen.getByRole('textbox')
+      fireEvent.keyDown(input, { key: 'Enter' })
+
+      expect(mockRoute).not.toHaveBeenCalled()
     })
   })
 })
