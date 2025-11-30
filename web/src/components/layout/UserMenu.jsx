@@ -5,6 +5,7 @@ import { useRef, useEffect } from 'preact/hooks'
 import { signal } from '@preact/signals'
 import { themeMode, appliedTheme, cycleTheme, themes } from '../../utils/theme'
 import { clearFavorites } from '../../utils/favorites'
+import { clearNavHistory } from '../../utils/navHistory'
 import { reportData } from '../../app'
 
 // Exported signal to track menu open state
@@ -91,8 +92,9 @@ export function UserMenu() {
   }
 
   const handleClearLocalStorage = () => {
-    if (window.confirm('This will delete your favorites and search history from local storage. Continue?')) {
+    if (window.confirm('This will delete your favorites and navigation history from local storage. Continue?')) {
       clearFavorites()
+      clearNavHistory()
       userMenuOpen.value = false
     }
   }

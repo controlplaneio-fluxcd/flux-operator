@@ -209,9 +209,9 @@ export function InputsPanel({ resourceData, namespace }) {
                 return (
                   <div key={key} class="card p-0 overflow-hidden">
                     <div class="px-4 py-2 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-                      {/* Line 1: Name with badge, timestamp right */}
-                      <div class="flex items-center justify-between mb-1">
-                        <div class="flex items-center gap-2">
+                      {/* Header: Name, badge, timestamp (stacked on mobile, inline on sm+) */}
+                      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 mb-1">
+                        <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
                           <a
                             href={`/resource/ResourceSetInputProvider/${provider.namespace}/${provider.name}`}
                             class="text-sm font-medium text-flux-blue hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 inline-flex items-center gap-1"
@@ -222,7 +222,7 @@ export function InputsPanel({ resourceData, namespace }) {
                             {provider.name}
                           </a>
                           {provider.type && (
-                            <span class={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getProviderBadgeClass(provider.type)}`}>
+                            <span class={`self-start sm:self-auto inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getProviderBadgeClass(provider.type)}`}>
                               {provider.type}
                             </span>
                           )}

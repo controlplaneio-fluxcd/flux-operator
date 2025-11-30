@@ -8,6 +8,7 @@ import { usePrismTheme } from '../common/yaml'
 import { formatTime } from '../../../utils/time'
 import { usePageTitle } from '../../../utils/title'
 import { isFavorite, toggleFavorite, favorites } from '../../../utils/favorites'
+import { addToNavHistory } from '../../../utils/navHistory'
 import { ReconcilerPanel } from './ReconcilerPanel'
 import { SourcePanel } from './SourcePanel'
 import { InventoryPanel } from './InventoryPanel'
@@ -95,6 +96,11 @@ export function ResourcePage({ kind, namespace, name }) {
 
   // Load Prism theme based on current app theme
   usePrismTheme()
+
+  // Track this resource visit in navigation history
+  useEffect(() => {
+    addToNavHistory(kind, namespace, name)
+  }, [kind, namespace, name])
 
   // Reset state when navigating to a different resource
   useEffect(() => {

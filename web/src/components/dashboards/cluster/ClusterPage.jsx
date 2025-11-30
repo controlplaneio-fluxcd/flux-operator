@@ -1,7 +1,9 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
+import { useEffect } from 'preact/hooks'
 import { usePageTitle } from '../../../utils/title'
+import { addToNavHistory } from '../../../utils/navHistory'
 import { OverallStatusPanel } from './OverallStatusPanel'
 import { InfoPanel } from './InfoPanel'
 import { SyncPanel } from './SyncPanel'
@@ -18,6 +20,11 @@ import { Footer } from '../../layout/Footer'
  */
 export function ClusterPage({ spec, namespace }) {
   usePageTitle(null) // Home page uses default title
+
+  // Track home page visit in navigation history
+  useEffect(() => {
+    addToNavHistory('FluxReport', namespace, 'flux')
+  }, [namespace])
 
   return (
     <>

@@ -1,16 +1,26 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/preact'
 import { FavoritesPage } from './FavoritesPage'
-import { favorites } from '../../utils/favorites'
+import { favorites, reorderFavorites, removeFavorite } from '../../utils/favorites'
 import { fetchWithMock } from '../../utils/fetch'
 
 // Mock fetchWithMock
 vi.mock('../../utils/fetch', () => ({
   fetchWithMock: vi.fn()
 }))
+
+// Mock favorites utilities
+vi.mock('../../utils/favorites', async () => {
+  const actual = await vi.importActual('../../utils/favorites')
+  return {
+    ...actual,
+    reorderFavorites: vi.fn(),
+    removeFavorite: vi.fn()
+  }
+})
 
 // Mock preact-iso
 const mockRoute = vi.fn()
@@ -39,7 +49,11 @@ vi.mock('./FavoritesHeader', () => ({
       <button data-testid="toggle-edit" onClick={onEditModeToggle}>Toggle Edit</button>
       <button data-testid="save-order" onClick={onSaveOrder}>Save</button>
       <button data-testid="cancel-edit" onClick={onCancelEdit}>Cancel</button>
-      <button data-testid="filter-btn" onClick={() => onFilter({ namespace: 'flux-system', kind: null, name: '' })}>Filter NS</button>
+      <button data-testid="filter-ns" onClick={() => onFilter({ namespace: 'flux-system', kind: null, name: '' })}>Filter NS</button>
+      <button data-testid="filter-kind" onClick={() => onFilter({ namespace: null, kind: 'FluxInstance', name: '' })}>Filter Kind</button>
+      <button data-testid="filter-name" onClick={() => onFilter({ namespace: null, kind: null, name: 'flux' })}>Filter Name</button>
+      <button data-testid="filter-combined" onClick={() => onFilter({ namespace: 'flux-system', kind: 'FluxInstance', name: '' })}>Filter Combined</button>
+      <button data-testid="clear-filter" onClick={() => onFilter({ namespace: null, kind: null, name: '' })}>Clear Filter</button>
       <button data-testid="status-filter-btn" onClick={() => onStatusFilter('Ready')}>Filter Ready</button>
       <button data-testid="clear-status-filter" onClick={() => onStatusFilter(null)}>Clear Status</button>
     </div>
@@ -205,7 +219,7 @@ describe('FavoritesPage component', () => {
       })
 
       // Click filter button to filter by flux-system namespace
-      const filterBtn = screen.getByTestId('filter-btn')
+      const filterBtn = screen.getByTestId('filter-ns')
       fireEvent.click(filterBtn)
 
       await waitFor(() => {
@@ -384,6 +398,246 @@ describe('FavoritesPage component', () => {
       render(<FavoritesPage />)
 
       expect(screen.getByTestId('favorites-page')).toBeInTheDocument()
+    })
+  })
+
+  describe('edit mode - additional tests', () => {
+    it('should show draggable items with drag handles in edit mode', async () => {
+      favorites.value = mockFavorites
+
+      render(<FavoritesPage />)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('favorite-card-flux')).toBeInTheDocument()
+      })
+
+      // Enter edit mode
+      const toggleBtn = screen.getByTestId('toggle-edit')
+      fireEvent.click(toggleBtn)
+
+      await waitFor(() => {
+        // Edit mode items should have draggable attribute
+        const editItems = document.querySelectorAll('[draggable="true"]')
+        expect(editItems.length).toBe(3)
+
+        // Should show drag handle icons (horizontal lines)
+        const dragHandles = document.querySelectorAll('path[d="M4 8h16M4 16h16"]')
+        expect(dragHandles.length).toBe(3)
+      })
+    })
+
+    it('should call reorderFavorites when save is clicked', async () => {
+      favorites.value = mockFavorites
+
+      render(<FavoritesPage />)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('favorite-card-flux')).toBeInTheDocument()
+      })
+
+      // Enter edit mode
+      const toggleBtn = screen.getByTestId('toggle-edit')
+      fireEvent.click(toggleBtn)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('header-edit-mode')).toHaveTextContent('edit')
+      })
+
+      // Save order
+      const saveBtn = screen.getByTestId('save-order')
+      fireEvent.click(saveBtn)
+
+      expect(reorderFavorites).toHaveBeenCalled()
+    })
+
+    it('should exit edit mode when Escape key is pressed', async () => {
+      favorites.value = mockFavorites
+
+      render(<FavoritesPage />)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('favorite-card-flux')).toBeInTheDocument()
+      })
+
+      // Enter edit mode
+      const toggleBtn = screen.getByTestId('toggle-edit')
+      fireEvent.click(toggleBtn)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('header-edit-mode')).toHaveTextContent('edit')
+      })
+
+      // Press Escape
+      fireEvent.keyDown(window, { key: 'Escape' })
+
+      await waitFor(() => {
+        expect(screen.getByTestId('header-edit-mode')).toHaveTextContent('normal')
+      })
+    })
+
+    it('should show delete button for each item in edit mode', async () => {
+      favorites.value = mockFavorites
+
+      render(<FavoritesPage />)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('favorite-card-flux')).toBeInTheDocument()
+      })
+
+      // Enter edit mode
+      const toggleBtn = screen.getByTestId('toggle-edit')
+      fireEvent.click(toggleBtn)
+
+      await waitFor(() => {
+        // Delete buttons (trash icons) should be present
+        const deleteButtons = screen.getAllByTitle('Remove from favorites')
+        expect(deleteButtons.length).toBe(3)
+      })
+    })
+
+    it('should call removeFavorite when delete button is clicked', async () => {
+      favorites.value = mockFavorites
+
+      render(<FavoritesPage />)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('favorite-card-flux')).toBeInTheDocument()
+      })
+
+      // Enter edit mode
+      const toggleBtn = screen.getByTestId('toggle-edit')
+      fireEvent.click(toggleBtn)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('header-edit-mode')).toHaveTextContent('edit')
+      })
+
+      // Click first delete button
+      const deleteButtons = screen.getAllByTitle('Remove from favorites')
+      fireEvent.click(deleteButtons[0])
+
+      expect(removeFavorite).toHaveBeenCalledWith('FluxInstance', 'flux-system', 'flux')
+    })
+  })
+
+  describe('filtering - additional tests', () => {
+    it('should filter favorites by kind', async () => {
+      favorites.value = mockFavorites
+
+      render(<FavoritesPage />)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('favorite-card-flux')).toBeInTheDocument()
+      })
+
+      // Click filter button to filter by FluxInstance kind
+      const filterBtn = screen.getByTestId('filter-kind')
+      fireEvent.click(filterBtn)
+
+      await waitFor(() => {
+        // Should show only FluxInstance favorites
+        expect(screen.getByTestId('favorite-card-flux')).toBeInTheDocument()
+        expect(screen.queryByTestId('favorite-card-cluster')).not.toBeInTheDocument() // ResourceSet
+        expect(screen.queryByTestId('favorite-card-app')).not.toBeInTheDocument() // Kustomization
+      })
+    })
+
+    it('should filter favorites by name (text search)', async () => {
+      favorites.value = mockFavorites
+
+      render(<FavoritesPage />)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('favorite-card-flux')).toBeInTheDocument()
+      })
+
+      // Click filter button to search for "flux"
+      const filterBtn = screen.getByTestId('filter-name')
+      fireEvent.click(filterBtn)
+
+      await waitFor(() => {
+        // Should show favorites containing "flux" in name, namespace, or kind
+        expect(screen.getByTestId('favorite-card-flux')).toBeInTheDocument() // name matches
+        expect(screen.getByTestId('favorite-card-cluster')).toBeInTheDocument() // namespace flux-system matches
+        expect(screen.queryByTestId('favorite-card-app')).not.toBeInTheDocument() // no match
+      })
+    })
+
+    it('should filter favorites by combined namespace and kind', async () => {
+      favorites.value = mockFavorites
+
+      render(<FavoritesPage />)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('favorite-card-flux')).toBeInTheDocument()
+      })
+
+      // Click filter button to filter by flux-system namespace AND FluxInstance kind
+      const filterBtn = screen.getByTestId('filter-combined')
+      fireEvent.click(filterBtn)
+
+      await waitFor(() => {
+        // Should show only FluxInstance in flux-system
+        expect(screen.getByTestId('favorite-card-flux')).toBeInTheDocument()
+        expect(screen.queryByTestId('favorite-card-cluster')).not.toBeInTheDocument() // ResourceSet (wrong kind)
+        expect(screen.queryByTestId('favorite-card-app')).not.toBeInTheDocument() // default namespace
+      })
+    })
+  })
+
+  describe('auto-refresh', () => {
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('should set up 30-second refresh interval', async () => {
+      favorites.value = mockFavorites
+      const setIntervalSpy = vi.spyOn(global, 'setInterval')
+
+      render(<FavoritesPage />)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('header-loading')).toHaveTextContent('loaded')
+      })
+
+      expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 30000)
+    })
+
+    it('should call fetchWithMock on refresh interval', async () => {
+      favorites.value = mockFavorites
+
+      render(<FavoritesPage />)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('header-loading')).toHaveTextContent('loaded')
+      })
+
+      // Clear the initial call count
+      fetchWithMock.mockClear()
+
+      // Advance timer by 30 seconds
+      vi.advanceTimersByTime(30000)
+
+      expect(fetchWithMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('should clear interval on unmount', async () => {
+      favorites.value = mockFavorites
+      const clearIntervalSpy = vi.spyOn(global, 'clearInterval')
+
+      const { unmount } = render(<FavoritesPage />)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('header-loading')).toHaveTextContent('loaded')
+      })
+
+      unmount()
+
+      expect(clearIntervalSpy).toHaveBeenCalled()
     })
   })
 })

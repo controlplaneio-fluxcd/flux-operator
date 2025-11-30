@@ -63,10 +63,10 @@ describe('ControllersPanel', () => {
     const button = screen.getByText('source-controller').closest('button')
     await fireEvent.click(button)
 
-    // 0.100 / 2.0 cores
-    expect(screen.getByText(/0.100 \/ 2.0 cores/)).toBeInTheDocument()
-    // 512 / 1024 MiB
-    expect(screen.getByText(/512 \/ 1024 MiB/)).toBeInTheDocument()
+    // CPU: 0.100/2.0 cores (5%)
+    expect(screen.getByText(/0\.100\/2\.0 cores \(5%\)/)).toBeInTheDocument()
+    // Memory: 512/1024 MiB (50%)
+    expect(screen.getByText(/512\/1024 MiB \(50%\)/)).toBeInTheDocument()
   })
 
   it('should gracefully handle missing metrics', async () => {
@@ -78,8 +78,9 @@ describe('ControllersPanel', () => {
 
     // Should still render components
     expect(screen.getByText('source-controller')).toBeInTheDocument()
-    // Should not show metrics (or show "Not available")
-    expect(screen.getByText('Not available')).toBeInTheDocument()
+    // Metrics section should be hidden when no metrics available
+    expect(screen.queryByText('CPU')).not.toBeInTheDocument()
+    expect(screen.queryByText('Memory')).not.toBeInTheDocument()
   })
 
   it('should sort components by name', () => {
@@ -141,7 +142,7 @@ describe('ControllersPanel', () => {
     const button = screen.getByText('source-controller').closest('button')
     await fireEvent.click(button)
 
-    expect(screen.getByText(/0.100 \/ 0.2 cores/)).toBeInTheDocument()
+    expect(screen.getByText(/0\.100\/0\.2 cores \(50%\)/)).toBeInTheDocument()
   })
 
   it('should collapse and expand the panel', async () => {
@@ -171,14 +172,14 @@ describe('ControllersPanel', () => {
     const button = screen.getByText('source-controller').closest('button')
     await fireEvent.click(button)
 
-    // Should show expanded content
-    expect(screen.getByText('Status:')).toBeInTheDocument()
+    // Should show expanded content with status message (Running only appears in expanded row)
+    expect(screen.getByText('Running')).toBeInTheDocument()
 
     // Click again to collapse
     await fireEvent.click(button)
 
-    // Expanded content should be gone (Status: label only appears in expanded row)
-    expect(screen.queryByText('Status:')).not.toBeInTheDocument()
+    // Expanded content should be gone
+    expect(screen.queryByText('Running')).not.toBeInTheDocument()
   })
 
   it('should display version from image string with tag', async () => {
@@ -242,7 +243,7 @@ describe('ControllersPanel', () => {
     expect(screen.getByText('v1.2.3')).toBeInTheDocument()
   })
 
-  it('should display full image in expanded row', async () => {
+  it('should display image and digest separately in expanded row', async () => {
     const componentsWithImage = [
       {
         name: 'source-controller',
@@ -258,7 +259,10 @@ describe('ControllersPanel', () => {
     const button = screen.getByText('source-controller').closest('button')
     await fireEvent.click(button)
 
-    expect(screen.getByText('ghcr.io/fluxcd/source-controller:v1.2.3@sha256:abc123')).toBeInTheDocument()
+    // Image and digest should be split
+    expect(screen.getByText('ghcr.io/fluxcd/source-controller:v1.2.3')).toBeInTheDocument()
+    expect(screen.getByText('sha256:abc123')).toBeInTheDocument()
+    expect(screen.getByText('Digest')).toBeInTheDocument()
   })
 
   it('should show failing count badge when components are failing', () => {
@@ -305,10 +309,8 @@ describe('ControllersPanel', () => {
     await fireEvent.click(button)
 
     // Should show 0% when limit is 0 (avoid division by zero)
-    expect(screen.getByText(/0.100 \/ 0.0 cores/)).toBeInTheDocument()
-    // Both CPU and memory show (0%) - just verify the expanded content exists
-    const zeroPercentElements = screen.getAllByText(/\(0%\)/)
-    expect(zeroPercentElements.length).toBe(2) // CPU and Memory both show 0%
+    expect(screen.getByText(/0\.100\/0\.0 cores \(0%\)/)).toBeInTheDocument()
+    expect(screen.getByText(/128\/0 MiB \(0%\)/)).toBeInTheDocument()
   })
 
   it('should handle negative memory values gracefully', async () => {
@@ -331,7 +333,8 @@ describe('ControllersPanel', () => {
     await fireEvent.click(button)
 
     // Should show 0 for negative memory (formatMemory handles this)
-    expect(screen.getByText(/0 \/ 1024 MiB/)).toBeInTheDocument()
+    // Percentage is clamped to 0% for negative values
+    expect(screen.getByText(/0\/1024 MiB \(0%\)/)).toBeInTheDocument()
   })
 
   it('should handle metrics with no matching pod', async () => {
@@ -353,8 +356,8 @@ describe('ControllersPanel', () => {
     const button = screen.getByText('source-controller').closest('button')
     await fireEvent.click(button)
 
-    // Should show "Not available" since no matching metrics
-    expect(screen.getByText('Not available')).toBeInTheDocument()
+    // Metrics section should be hidden since no matching metrics
+    expect(screen.queryByText('CPU')).not.toBeInTheDocument()
   })
 
   it('should handle metrics with pod that does not start with component name', async () => {
@@ -377,7 +380,7 @@ describe('ControllersPanel', () => {
     await fireEvent.click(button)
 
     // Exact match without hyphen suffix should not match
-    expect(screen.getByText('Not available')).toBeInTheDocument()
+    expect(screen.queryByText('CPU')).not.toBeInTheDocument()
   })
 
   it('should handle metrics with undefined pod', async () => {
@@ -398,7 +401,7 @@ describe('ControllersPanel', () => {
     const button = screen.getByText('source-controller').closest('button')
     await fireEvent.click(button)
 
-    // Should show "Not available" since pod is undefined
-    expect(screen.getByText('Not available')).toBeInTheDocument()
+    // Metrics section should be hidden since pod is undefined
+    expect(screen.queryByText('CPU')).not.toBeInTheDocument()
   })
 })

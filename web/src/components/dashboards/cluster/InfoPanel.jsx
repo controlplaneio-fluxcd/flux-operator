@@ -44,7 +44,7 @@ function ResourceMetric({ label, value, limit, percent, unit }) {
       <div class="flex flex-col sm:flex-row sm:justify-between sm:items-baseline gap-1">
         <span class="text-xs sm:text-sm text-gray-600 dark:text-gray-400">{label}</span>
         <span class="text-xs sm:text-sm font-mono text-gray-900 dark:text-white">
-          {value}/{limit} {unit} ({percent.toFixed(0)}%)
+          {value}/{limit} {unit} ({Math.min(percent, 100).toFixed(0)}%)
         </span>
       </div>
       <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
@@ -134,14 +134,14 @@ export function InfoPanel({ cluster, distribution, operator, components, metrics
                   label="Flux CPU Usage"
                   value={resources.cpu.toFixed(2)}
                   limit={resources.cpuLimit.toFixed(2)}
-                  percent={resources.cpuPercent}
+                  percent={Math.max(0, resources.cpuPercent)}
                   unit="cores"
                 />
                 <ResourceMetric
                   label="Flux Memory Usage"
                   value={formatMemory(resources.memory)}
                   limit={formatMemory(resources.memoryLimit)}
-                  percent={resources.memoryPercent}
+                  percent={Math.max(0, resources.memoryPercent)}
                   unit="GiB"
                 />
               </div>

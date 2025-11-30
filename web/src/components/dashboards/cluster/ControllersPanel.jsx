@@ -4,6 +4,35 @@
 import { useSignal } from '@preact/signals'
 
 /**
+ * ResourceMetric - Progress bar component for CPU/Memory display
+ */
+function ResourceMetric({ label, value, limit, percent, unit }) {
+  let colorClass = 'bg-green-500'
+  if (percent >= 85) {
+    colorClass = 'bg-red-500'
+  } else if (percent >= 70) {
+    colorClass = 'bg-yellow-500'
+  }
+
+  return (
+    <div class="space-y-1">
+      <div class="flex flex-col sm:flex-row sm:justify-between sm:items-baseline gap-1">
+        <span class="text-xs sm:text-sm text-gray-600 dark:text-gray-400">{label}</span>
+        <span class="text-xs sm:text-sm font-mono text-gray-900 dark:text-white">
+          {value}/{limit} {unit} ({Math.min(percent, 100).toFixed(0)}%)
+        </span>
+      </div>
+      <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+        <div
+          class={`${colorClass} h-2 rounded-full transition-all`}
+          style={`width: ${Math.min(percent, 100)}%`}
+        />
+      </div>
+    </div>
+  )
+}
+
+/**
  * ComponentRow - Table row displaying a Flux controller component
  *
  * @param {Object} props
@@ -60,34 +89,51 @@ function ComponentRow({component, metrics, isRowExpanded, toggleComponent}) {
       {isRowExpanded && (
         <tr class="bg-gray-50 dark:bg-gray-700/50">
           <td colspan="3" class="px-6 py-4">
-            <div class="space-y-2 text-xs sm:text-sm">
-              {componentMetrics ? (
-                <>
-                  <div>
-                    <span class="text-gray-600 dark:text-gray-400">CPU:</span>
-                    <span class="ml-2 text-gray-900 dark:text-white">
-                      {componentMetrics.cpu.toFixed(3)} / {componentMetrics.cpuLimit.toFixed(1)} cores
-                      ({(componentMetrics.cpuLimit > 0 ? (componentMetrics.cpu / componentMetrics.cpuLimit) * 100 : 0).toFixed(0)}%)
-                    </span>
-                  </div>
-                  <div>
-                    <span class="text-gray-600 dark:text-gray-400">Memory:</span>
-                    <span class="ml-2 text-gray-900 dark:text-white">
-                      {formatMemory(componentMetrics.memory)} / {formatMemory(componentMetrics.memoryLimit)} MiB
-                      ({(componentMetrics.memoryLimit > 0 ? (componentMetrics.memory / componentMetrics.memoryLimit) * 100 : 0).toFixed(0)}%)
-                    </span>
-                  </div>
-                </>
-              ) : <div><span class="text-gray-600 dark:text-gray-400">Metrics:</span><span class="ml-2 text-gray-900 dark:text-white">Not available</span></div>
-              }
-              <div>
-                <span class="text-gray-600 dark:text-gray-400">Image:</span>
-                <span class="ml-2 text-gray-900 dark:text-white break-all">{component.image}</span>
+            <div class="flex flex-col md:flex-row md:gap-8">
+              {/* Left: Image, Digest, Status */}
+              <div class="flex-1 space-y-3">
+                {(() => {
+                  const [imagePart, digestPart] = (component.image || '').split('@')
+                  return (
+                    <>
+                      <div class="text-sm">
+                        <span class="text-gray-500 dark:text-gray-400">Image</span>
+                        <p class="mt-1 text-gray-900 dark:text-white break-all font-mono text-xs">{imagePart}</p>
+                      </div>
+                      {digestPart && (
+                        <div class="text-sm">
+                          <span class="text-gray-500 dark:text-gray-400">Digest</span>
+                          <p class="mt-1 text-gray-900 dark:text-white break-all font-mono text-xs">{digestPart}</p>
+                        </div>
+                      )}
+                    </>
+                  )
+                })()}
+                <div class="text-sm">
+                  <span class="text-gray-500 dark:text-gray-400">Status</span>
+                  <p class="mt-1 text-gray-900 dark:text-white break-all font-mono text-xs">{component.status}</p>
+                </div>
               </div>
-              <div>
-                <span class="text-gray-600 dark:text-gray-400">Status:</span>
-                <span class="ml-2 text-gray-900 dark:text-white">{component.status}</span>
-              </div>
+
+              {/* Right: CPU/Memory metrics with progress bars (hidden when no metrics) */}
+              {componentMetrics && (
+                <div class="flex-1 space-y-3 mt-4 md:mt-0 pt-4 md:pt-0 border-t md:border-t-0 md:border-l border-gray-200 dark:border-gray-600 md:pl-8">
+                  <ResourceMetric
+                    label="CPU"
+                    value={componentMetrics.cpu.toFixed(3)}
+                    limit={componentMetrics.cpuLimit.toFixed(1)}
+                    percent={componentMetrics.cpuLimit > 0 ? Math.max(0, (componentMetrics.cpu / componentMetrics.cpuLimit) * 100) : 0}
+                    unit="cores"
+                  />
+                  <ResourceMetric
+                    label="Memory"
+                    value={formatMemory(componentMetrics.memory)}
+                    limit={formatMemory(componentMetrics.memoryLimit)}
+                    percent={componentMetrics.memoryLimit > 0 ? Math.max(0, (componentMetrics.memory / componentMetrics.memoryLimit) * 100) : 0}
+                    unit="MiB"
+                  />
+                </div>
+              )}
             </div>
           </td>
         </tr>
