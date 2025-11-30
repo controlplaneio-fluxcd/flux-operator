@@ -5,7 +5,7 @@ import { useState, useMemo, useEffect, useRef } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
 import { fetchWithMock } from '../../../utils/fetch'
 import { formatTimestamp } from '../../../utils/time'
-import { getControllerName } from '../../../utils/constants'
+import { getControllerName, getKindAlias } from '../../../utils/constants'
 import { DashboardPanel, TabButton } from '../common/panel'
 import { YamlBlock } from '../common/yaml'
 import { getStatusBadgeClass, getEventBadgeClass } from '../../../utils/status'
@@ -243,8 +243,8 @@ export function ReconcilerPanel({ kind, name, namespace, resourceData }) {
                       onClick={() => location.route(`/resource/${encodeURIComponent(refKind)}/${encodeURIComponent(refNamespace)}/${encodeURIComponent(refName)}`)}
                       class="ml-1 text-flux-blue dark:text-blue-400 hover:underline"
                     >
-                      <span class="hidden md:inline">{reconcilerRef.managedBy}</span>
-                      <span class="md:hidden">{refName}</span>
+                      <span class="hidden md:inline break-all">{reconcilerRef.managedBy}</span>
+                      <span class="md:hidden break-all">{getKindAlias(refKind)}/{refName}</span>
                     </button>
                   )
                 })()}
@@ -259,7 +259,7 @@ export function ReconcilerPanel({ kind, name, namespace, resourceData }) {
                 Last action <span class="text-gray-900 dark:text-white">{lastReconciled ? new Date(lastReconciled).toLocaleString().replace(',', '') : '-'}</span>
               </div>
               <div class="text-sm text-gray-700 dark:text-gray-300">
-                <pre class="whitespace-pre-wrap break-words font-sans">{message}</pre>
+                <pre class="whitespace-pre-wrap break-all font-sans">{message}</pre>
               </div>
             </div>
           )}
@@ -304,7 +304,7 @@ export function ReconcilerPanel({ kind, name, namespace, resourceData }) {
 
                     {/* Message */}
                     <div class="text-sm text-gray-700 dark:text-gray-300">
-                      <pre class="whitespace-pre-wrap break-words font-sans">{event.message}</pre>
+                      <pre class="whitespace-pre-wrap break-all font-sans">{event.message}</pre>
                     </div>
                   </div>
                 )

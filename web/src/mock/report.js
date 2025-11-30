@@ -241,6 +241,10 @@ export const mockReport = {
       'monitoring',
       'tailscale',
       'registry'
-    ]
+    ],
+    userInfo: {
+      username: 'flux-user',
+      role: 'cluster:view'
+    }
   }
 }

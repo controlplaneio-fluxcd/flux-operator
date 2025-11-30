@@ -24,33 +24,33 @@ export function WorkloadsTabContent({ workloadItems, namespace }) {
         setLoading(true)
       }
 
-      const fetchPromises = workloadItems.map(async (item) => {
-        const workloadParams = new URLSearchParams({
+      try {
+        // Build workloads array with resolved namespaces
+        const workloads = workloadItems.map(item => ({
           kind: item.kind,
           name: item.name,
           namespace: item.namespace || namespace
+        }))
+
+        // Send all workloads in a single POST request
+        const response = await fetchWithMock({
+          endpoint: '/api/v1/workloads',
+          mockPath: '../mock/workload',
+          mockExport: 'getMockWorkloads',
+          method: 'POST',
+          body: { workloads }
         })
 
-        try {
-          const workloadResp = await fetchWithMock({
-            endpoint: `/api/v1/workload?${workloadParams.toString()}`,
-            mockPath: '../mock/workload',
-            mockExport: 'getMockWorkload'
-          })
-          return { key: `${item.kind}/${item.namespace || namespace}/${item.name}`, data: workloadResp }
-        } catch (err) {
-          console.error(`Failed to fetch workload ${item.kind}/${item.name}:`, err)
-          return { key: `${item.kind}/${item.namespace || namespace}/${item.name}`, data: null }
-        }
-      })
-
-      try {
-        const results = await Promise.all(fetchPromises)
+        // Build workloadsData map from response
         const newWorkloadsData = {}
-        results.forEach(({ key, data }) => {
-          newWorkloadsData[key] = data
+        const returnedWorkloads = response.workloads || []
+        returnedWorkloads.forEach(workload => {
+          const key = `${workload.kind}/${workload.namespace}/${workload.name}`
+          newWorkloadsData[key] = workload
         })
         setWorkloadsData(newWorkloadsData)
+      } catch (err) {
+        console.error('Failed to fetch workloads:', err)
       } finally {
         setLoading(false)
       }
@@ -128,7 +128,7 @@ export function WorkloadsTabContent({ workloadItems, namespace }) {
                   </div>
                   {/* Line 3: StatusMessage */}
                   {workload && workload.statusMessage && (
-                    <div class="text-sm text-gray-700 dark:text-gray-300 mt-1 break-words">
+                    <div class="text-sm text-gray-700 dark:text-gray-300 mt-1 break-all">
                       {workload.statusMessage}
                     </div>
                   )}
@@ -177,7 +177,7 @@ export function WorkloadsTabContent({ workloadItems, namespace }) {
                             </span>
                           </div>
                           {pod.statusMessage && (
-                            <p class="text-xs text-gray-600 dark:text-gray-400 mt-1 break-words">
+                            <p class="text-xs text-gray-600 dark:text-gray-400 mt-1 break-all">
                               {pod.statusMessage}
                             </p>
                           )}

@@ -5,7 +5,8 @@ import { useState, useMemo, useEffect } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
 import { fetchWithMock } from '../../utils/fetch'
 import { usePrismTheme, YamlBlock } from '../dashboards/common/yaml'
-import { fluxKinds, isKindWithInventory } from '../../utils/constants'
+import { fluxKinds, isKindWithInventory, getKindAlias } from '../../utils/constants'
+import { getStatusBadgeClass } from '../../utils/status'
 
 /**
  * Helper to group inventory items by apiVersion
@@ -339,59 +340,58 @@ export function ResourceDetailsView({ kind, name, namespace, isExpanded }) {
 
           {/* Source Tab */}
           {activeTab === 'source' && resourceData.status?.sourceRef && (
-            <div class="space-y-2">
-              <div class="grid grid-cols-1 gap-1 text-xs">
-                {/* ID: kind/namespace/name */}
-                <div class="py-1 px-2">
-                  <span class="text-gray-600 dark:text-gray-400">ID: </span>
-                  <button
-                    onClick={() => location.route(`/resource/${encodeURIComponent(resourceData.status.sourceRef.kind)}/${encodeURIComponent(resourceData.status.sourceRef.namespace)}/${encodeURIComponent(resourceData.status.sourceRef.name)}`)}
-                    class="text-flux-blue dark:text-blue-400 hover:underline break-all"
-                  >
-                    {resourceData.status.sourceRef.kind}/{resourceData.status.sourceRef.namespace}/{resourceData.status.sourceRef.name}
-                  </button>
-                </div>
+            <div class="space-y-4">
+              {/* Resource Link */}
+              <button
+                onClick={() => location.route(`/resource/${encodeURIComponent(resourceData.status.sourceRef.kind)}/${encodeURIComponent(resourceData.status.sourceRef.namespace)}/${encodeURIComponent(resourceData.status.sourceRef.name)}`)}
+                class="flex items-center gap-2 text-sm text-flux-blue dark:text-blue-400 hover:underline"
+              >
+                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+                <span class="hidden md:inline break-all">{resourceData.status.sourceRef.kind}/{resourceData.status.sourceRef.namespace}/{resourceData.status.sourceRef.name}</span>
+                <span class="md:hidden break-all">{getKindAlias(resourceData.status.sourceRef.kind)}/{resourceData.status.sourceRef.name}</span>
+              </button>
 
-                {/* URL */}
-                <div class="py-1 px-2">
-                  <span class="text-gray-600 dark:text-gray-400">URL: </span>
-                  <span class="text-gray-900 dark:text-gray-100 break-all">{resourceData.status.sourceRef.url}</span>
-                </div>
-
-                {/* Origin URL (if present) */}
-                {resourceData.status.sourceRef.originURL && (
-                  <div class="py-1 px-2">
-                    <span class="text-gray-600 dark:text-gray-400">Origin URL: </span>
-                    <span class="text-gray-900 dark:text-gray-100 break-all">{resourceData.status.sourceRef.originURL}</span>
-                  </div>
-                )}
-
-                {/* Origin Revision (if present) */}
-                {resourceData.status.sourceRef.originRevision && (
-                  <div class="py-1 px-2">
-                    <span class="text-gray-600 dark:text-gray-400">Origin Revision: </span>
-                    <span class="text-gray-900 dark:text-gray-100 break-all">{resourceData.status.sourceRef.originRevision}</span>
-                  </div>
-                )}
-
-                {/* Status */}
-                <div class="py-1 px-2">
-                  <span class="text-gray-600 dark:text-gray-400">Status: </span>
-                  <span class={`font-semibold ${
-                    resourceData.status.sourceRef.status === 'Ready'
-                      ? 'text-green-600 dark:text-green-400'
-                      : 'text-red-600 dark:text-red-400'
-                  }`}>
+              {/* Status Badge */}
+              {resourceData.status.sourceRef.status && (
+                <div class="text-sm">
+                  <span class="text-gray-500 dark:text-gray-400">Status</span>
+                  <span class={`ml-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeClass(resourceData.status.sourceRef.status)}`}>
                     {resourceData.status.sourceRef.status}
                   </span>
                 </div>
+              )}
 
-                {/* Message */}
-                <div class="py-1 px-2">
-                  <span class="text-gray-600 dark:text-gray-400">Message: </span>
-                  <span class="text-gray-900 dark:text-gray-100 break-all">{resourceData.status.sourceRef.message}</span>
-                </div>
+              {/* URL */}
+              <div class="text-sm">
+                <span class="text-gray-500 dark:text-gray-400">URL</span>
+                <span class="ml-1 text-gray-900 dark:text-white break-words">{resourceData.status.sourceRef.url}</span>
               </div>
+
+              {/* Origin URL (if present) */}
+              {resourceData.status.sourceRef.originURL && (
+                <div class="text-sm">
+                  <span class="text-gray-500 dark:text-gray-400">Origin URL</span>
+                  <span class="ml-1 text-gray-900 dark:text-white break-words">{resourceData.status.sourceRef.originURL}</span>
+                </div>
+              )}
+
+              {/* Origin Revision (if present) */}
+              {resourceData.status.sourceRef.originRevision && (
+                <div class="text-sm">
+                  <span class="text-gray-500 dark:text-gray-400">Origin Revision</span>
+                  <span class="ml-1 text-gray-900 dark:text-white break-words">{resourceData.status.sourceRef.originRevision}</span>
+                </div>
+              )}
+
+              {/* Fetch result */}
+              {resourceData.status.sourceRef.message && (
+                <div class="text-sm">
+                  <span class="text-gray-500 dark:text-gray-400">Fetch result</span>
+                  <span class="ml-1 text-gray-900 dark:text-white break-words">{resourceData.status.sourceRef.message}</span>
+                </div>
+              )}
             </div>
           )}
 

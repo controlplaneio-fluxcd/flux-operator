@@ -486,3 +486,25 @@ export const getMockSearchResults = (endpoint) => {
 
   return { resources: limitedResources }
 }
+
+// Export function that returns resources matching the favorites list (POST /api/v1/favorites)
+// The body parameter is { favorites: [{kind, namespace, name}, ...] }
+export const getMockFavorites = (body) => {
+  const favorites = body?.favorites
+  if (!favorites || !Array.isArray(favorites) || favorites.length === 0) {
+    return { resources: [] }
+  }
+
+  // Find matching resources for each favorite
+  const matchedResources = []
+  for (const fav of favorites) {
+    const match = mockResources.resources.find(
+      r => r.kind === fav.kind && r.namespace === fav.namespace && r.name === fav.name
+    )
+    if (match) {
+      matchedResources.push(match)
+    }
+  }
+
+  return { resources: matchedResources }
+}

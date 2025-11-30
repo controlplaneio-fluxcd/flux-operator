@@ -6,6 +6,7 @@ import { render, screen, fireEvent } from '@testing-library/preact'
 import { UserMenu, userMenuOpen } from './UserMenu'
 import { themeMode, appliedTheme, themes } from '../../utils/theme'
 import { clearFavorites } from '../../utils/favorites'
+import { reportData } from '../../app'
 
 // Mock the favorites module
 vi.mock('../../utils/favorites', () => ({
@@ -18,6 +19,16 @@ describe('UserMenu', () => {
     userMenuOpen.value = false
     themeMode.value = themes.light
     appliedTheme.value = themes.light
+
+    // Set mock user info in reportData
+    reportData.value = {
+      spec: {
+        userInfo: {
+          username: '@flux-user',
+          role: 'cluster:view'
+        }
+      }
+    }
 
     // Reset mocks
     vi.clearAllMocks()
@@ -67,21 +78,21 @@ describe('UserMenu', () => {
     it('should not render dropdown when closed', () => {
       render(<UserMenu />)
 
-      expect(screen.queryByText('flux-operator')).not.toBeInTheDocument()
+      expect(screen.queryByText('@flux-user')).not.toBeInTheDocument()
     })
 
     it('should render dropdown when open', () => {
       userMenuOpen.value = true
       render(<UserMenu />)
 
-      expect(screen.getByText('flux-operator')).toBeInTheDocument()
+      expect(screen.getByText('@flux-user')).toBeInTheDocument()
     })
 
     it('should display user info', () => {
       userMenuOpen.value = true
       render(<UserMenu />)
 
-      expect(screen.getByText('flux-operator')).toBeInTheDocument()
+      expect(screen.getByText('@flux-user')).toBeInTheDocument()
       expect(screen.getByText('cluster:view')).toBeInTheDocument()
     })
 
@@ -265,7 +276,7 @@ describe('UserMenu', () => {
       userMenuOpen.value = true
       render(<UserMenu />)
 
-      const username = screen.getByText('flux-operator')
+      const username = screen.getByText('@flux-user')
       fireEvent.mouseDown(username)
 
       expect(userMenuOpen.value).toBe(true)
@@ -317,7 +328,7 @@ describe('UserMenu', () => {
       userMenuOpen.value = true
       render(<UserMenu />)
 
-      expect(screen.getByText('flux-operator')).toBeInTheDocument()
+      expect(screen.getByText('@flux-user')).toBeInTheDocument()
     })
   })
 })

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	goruntime "runtime"
 	"sort"
 	"strings"
@@ -52,11 +53,31 @@ func (r *Router) ReportHandler(w http.ResponseWriter, req *http.Request) {
 // GetReport returns the cached FluxReport. If the cache is empty, it falls back to
 // building a fresh report (this should only happen during initial startup).
 func (r *Router) GetReport(ctx context.Context) (*unstructured.Unstructured, error) {
+	report := &unstructured.Unstructured{}
 	if cached := r.getCachedReport(); cached != nil {
-		return cached, nil
+		report = cached
+	} else {
+		if r, err := r.buildReport(ctx); err != nil {
+			return nil, err
+		} else {
+			report = r
+		}
 	}
-	// Fallback to building fresh report if cache is empty
-	return r.buildReport(ctx)
+
+	// Inject user info
+	// TODO: Replace with real user info from auth context when available
+	if spec, found := report.Object["spec"].(map[string]any); found {
+		username := os.Getenv("HOSTNAME")
+		if username == "" {
+			username = "flux-user"
+		}
+		spec["userInfo"] = map[string]any{
+			"username": username,
+			"role":     "cluster:view",
+		}
+	}
+
+	return report, nil
 }
 
 // buildReport builds the FluxReport directly using the reporter package

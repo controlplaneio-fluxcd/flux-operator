@@ -260,23 +260,24 @@ describe('SyncPanel', () => {
     })
   })
 
-  describe('Mobile Display', () => {
-    it('should render short sync name for mobile view', () => {
+  describe('Display Layout', () => {
+    it('should render sync name in subtitle', () => {
       render(<SyncPanel {...baseProps} />)
 
-      // The mobile version shows just the sync name
-      const mobileSpan = screen.getByText('flux-cluster')
-      expect(mobileSpan).toBeInTheDocument()
-      expect(mobileSpan.className).toContain('sm:hidden')
+      // The subtitle shows just the sync name
+      const subtitleSpan = screen.getByText('flux-cluster')
+      expect(subtitleSpan).toBeInTheDocument()
+      expect(subtitleSpan.tagName).toBe('SPAN')
     })
 
-    it('should render full path for desktop view', () => {
+    it('should render full Kustomization path in body as link', () => {
       render(<SyncPanel {...baseProps} />)
 
-      // The desktop version shows full path
-      const desktopSpan = screen.getByText('Kustomization/flux-system/flux-cluster')
-      expect(desktopSpan).toBeInTheDocument()
-      expect(desktopSpan.className).toContain('hidden sm:inline')
+      // The body shows the full Kustomization path with external link icon
+      const linkText = screen.getByText('Kustomization/flux-system/flux-cluster')
+      expect(linkText).toBeInTheDocument()
+      // The link text should be inside a button
+      expect(linkText.closest('button')).toBeInTheDocument()
     })
   })
 

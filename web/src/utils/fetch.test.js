@@ -110,7 +110,7 @@ describe('fetchWithMock', () => {
         env: { MODE: 'production', VITE_USE_MOCK_DATA: 'false' }
       })
 
-      expect(global.fetch).toHaveBeenCalledWith(endpoint)
+      expect(global.fetch).toHaveBeenCalledWith(endpoint, { method: 'GET' })
     })
 
     it('should throw error on non-200 response', async () => {

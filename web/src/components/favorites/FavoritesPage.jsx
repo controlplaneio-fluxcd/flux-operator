@@ -26,6 +26,7 @@ export function FavoritesPage() {
   // State
   const [resourcesData, setResourcesData] = useState({}) // Map of key -> resource data
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false) // Delayed refresh indicator
   const [error, setError] = useState(null)
   const [editMode, setEditMode] = useState(false)
   const [editOrder, setEditOrder] = useState([]) // Temporary order during edit
@@ -35,6 +36,7 @@ export function FavoritesPage() {
 
   // Track if initial load has completed (to avoid showing loading on refresh)
   const initialLoadDone = useRef(false)
+  const refreshTimeoutRef = useRef(null)
 
   // Get current favorites from signal
   const currentFavorites = favorites.value
@@ -60,52 +62,43 @@ export function FavoritesPage() {
     // Only show loading on initial load, not on refresh
     if (!initialLoadDone.current) {
       setLoading(true)
+    } else {
+      // For refreshes, show spinner after 300ms delay
+      refreshTimeoutRef.current = window.setTimeout(() => {
+        setRefreshing(true)
+      }, 300)
     }
     setError(null)
 
     try {
-      // Group favorites by kind/namespace for efficient fetching
-      const groups = {}
-      currentFavorites.forEach(fav => {
-        const groupKey = `${fav.kind}/${fav.namespace}`
-        if (!groups[groupKey]) {
-          groups[groupKey] = { kind: fav.kind, namespace: fav.namespace, names: [] }
-        }
-        groups[groupKey].names.push(fav.name)
+      // Send all favorites in a single POST request
+      const data = await fetchWithMock({
+        endpoint: '/api/v1/favorites',
+        mockPath: '../mock/resources',
+        mockExport: 'getMockFavorites',
+        method: 'POST',
+        body: { favorites: currentFavorites }
       })
 
-      // Fetch each group
+      // Build results map from returned resources
       const results = {}
-      await Promise.all(
-        Object.values(groups).map(async (group) => {
-          const params = new URLSearchParams()
-          params.append('kind', group.kind)
-          params.append('namespace', group.namespace)
+      const resources = data.resources || []
 
-          const data = await fetchWithMock({
-            endpoint: `/api/v1/resources?${params.toString()}`,
-            mockPath: '../mock/resources',
-            mockExport: 'getMockResources'
-          })
+      // First, mark all favorites as not found
+      currentFavorites.forEach(fav => {
+        const key = getFavoriteKey(fav.kind, fav.namespace, fav.name)
+        results[key] = null
+      })
 
-          // Match resources by name
-          const resources = data.resources || []
-          group.names.forEach(name => {
-            const resource = resources.find(r => r.name === name)
-            const key = getFavoriteKey(group.kind, group.namespace, name)
-            if (resource) {
-              results[key] = {
-                status: resource.status,
-                lastReconciled: resource.lastReconciled,
-                message: resource.message
-              }
-            } else {
-              // Resource not found in cluster
-              results[key] = null
-            }
-          })
-        })
-      )
+      // Then, update with found resources
+      resources.forEach(resource => {
+        const key = getFavoriteKey(resource.kind, resource.namespace, resource.name)
+        results[key] = {
+          status: resource.status,
+          lastReconciled: resource.lastReconciled,
+          message: resource.message
+        }
+      })
 
       setResourcesData(results)
     } catch (err) {
@@ -115,6 +108,12 @@ export function FavoritesPage() {
       }
       // Don't clear existing data on error - keep showing stale data
     } finally {
+      // Clear the delayed refresh timeout and hide spinner
+      if (refreshTimeoutRef.current) {
+        window.clearTimeout(refreshTimeoutRef.current)
+        refreshTimeoutRef.current = null
+      }
+      setRefreshing(false)
       setLoading(false)
       initialLoadDone.current = true
     }
@@ -322,9 +321,12 @@ export function FavoritesPage() {
         {/* Page Title */}
         <div class="flex items-center justify-between">
           <h2 class="text-lg font-bold text-gray-900 dark:text-white">Favorites</h2>
-          {/* Favorites count */}
+          {/* Favorites count with refresh indicator */}
           {!loading && filteredFavorites.length > 0 && (
-            <span class="text-sm text-gray-600 dark:text-gray-400">
+            <span class="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-2">
+              {refreshing && (
+                <div class="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-400"></div>
+              )}
               {filteredFavorites.length} resources
             </span>
           )}
