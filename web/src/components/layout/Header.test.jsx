@@ -119,30 +119,23 @@ describe('Header', () => {
     })
   })
 
-  describe('Navigation Button', () => {
-    it('should render navigation button', () => {
+  describe('Browse Resources Button', () => {
+    it('should render browse resources button', () => {
       render(<Header />)
 
-      // Look for the SVG icon
-      const button = document.querySelector('button svg').closest('button')
-      expect(button).toBeInTheDocument()
+      const navButton = screen.getByTitle('Browse Resources')
+      expect(navButton).toBeInTheDocument()
     })
 
-    it('should show inbox icon when in dashboard view', () => {
-      useLocation.mockReturnValue({
-        path: '/',
-        query: {},
-        route: mockRoute
-      })
-
+    it('should always show folder icon regardless of view', () => {
       render(<Header />)
 
-      // Inbox icon has path starting with d="M20 13V6a2 2 0 00-2-2H6..."
-      const inboxIcon = document.querySelector('path[d^="M20 13V6"]')
-      expect(inboxIcon).toBeInTheDocument()
+      // Folder icon has path starting with d="M3.75 9.776..."
+      const folderIcon = document.querySelector('path[d^="M3.75 9.776"]')
+      expect(folderIcon).toBeInTheDocument()
     })
 
-    it('should show back arrow icon when in events view', () => {
+    it('should show folder icon when in events view', () => {
       useLocation.mockReturnValue({
         path: '/events',
         query: {},
@@ -151,12 +144,11 @@ describe('Header', () => {
 
       render(<Header />)
 
-      // Back arrow has path d="M10 19l-7-7m0 0l7-7m-7 7h18"
-      const backIcon = document.querySelector('path[d="M10 19l-7-7m0 0l7-7m-7 7h18"]')
-      expect(backIcon).toBeInTheDocument()
+      const folderIcon = document.querySelector('path[d^="M3.75 9.776"]')
+      expect(folderIcon).toBeInTheDocument()
     })
 
-    it('should show back arrow icon when in resources view', () => {
+    it('should show folder icon when in resources view', () => {
       useLocation.mockReturnValue({
         path: '/resources',
         query: {},
@@ -165,11 +157,11 @@ describe('Header', () => {
 
       render(<Header />)
 
-      const backIcon = document.querySelector('path[d="M10 19l-7-7m0 0l7-7m-7 7h18"]')
-      expect(backIcon).toBeInTheDocument()
+      const folderIcon = document.querySelector('path[d^="M3.75 9.776"]')
+      expect(folderIcon).toBeInTheDocument()
     })
 
-    it('should navigate to resources view when clicked from dashboard', () => {
+    it('should navigate to favorites view when clicked from dashboard', () => {
       useLocation.mockReturnValue({
         path: '/',
         query: {},
@@ -178,14 +170,13 @@ describe('Header', () => {
 
       render(<Header />)
 
-      // Find the navigation button by its title
       const navButton = screen.getByTitle('Browse Resources')
       fireEvent.click(navButton)
 
       expect(mockRoute).toHaveBeenCalledWith('/favorites')
     })
 
-    it('should navigate to dashboard when clicked from events view', () => {
+    it('should navigate to favorites view when clicked from events view', () => {
       useLocation.mockReturnValue({
         path: '/events',
         query: {},
@@ -194,13 +185,13 @@ describe('Header', () => {
 
       render(<Header />)
 
-      const navButton = screen.getByTitle('Back to Dashboard')
+      const navButton = screen.getByTitle('Browse Resources')
       fireEvent.click(navButton)
 
-      expect(mockRoute).toHaveBeenCalledWith('/')
+      expect(mockRoute).toHaveBeenCalledWith('/favorites')
     })
 
-    it('should navigate to dashboard when clicked from resources view', () => {
+    it('should navigate to favorites view when clicked from resources view', () => {
       useLocation.mockReturnValue({
         path: '/resources',
         query: {},
@@ -209,10 +200,10 @@ describe('Header', () => {
 
       render(<Header />)
 
-      const navButton = screen.getByTitle('Back to Dashboard')
+      const navButton = screen.getByTitle('Browse Resources')
       fireEvent.click(navButton)
 
-      expect(mockRoute).toHaveBeenCalledWith('/')
+      expect(mockRoute).toHaveBeenCalledWith('/favorites')
     })
   })
 
