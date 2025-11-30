@@ -24,7 +24,7 @@ function FluxIcon({ className }) {
  *
  * Features:
  * - Flux branding with theme-aware icon
- * - Toggle button to switch between Dashboard and Search views
+ * - Browse resources button to navigate to resources view
  * - Refresh button to manually fetch latest data
  * - Theme toggle control
  * - Responsive design
@@ -38,16 +38,10 @@ export function Header() {
   const isResourceDashboard = currentPath.startsWith('/resource/')
   const isNotDashboard = isTabView || isResourceDashboard
 
-  // Handle navigation button click
-  const handleToggle = () => {
+  // Handle browse resources button click
+  const handleBrowseResources = () => {
     quickSearchOpen.value = false
-    if (isTabView) {
-      // Return to dashboard from tab view
-      location.route('/')
-    } else {
-      // Navigate to favorites page (default tab view)
-      location.route('/favorites')
-    }
+    location.route('/favorites')
   }
 
   // Handle logo/title click
@@ -109,21 +103,15 @@ export function Header() {
             )}
             {/* Navigation and User buttons - closer together on desktop */}
             <div class="flex items-center space-x-3 sm:space-x-2">
-              {/* Navigation Button */}
+              {/* Browse Resources Button */}
               <button
-                onClick={handleToggle}
-                title={isTabView ? 'Back to Dashboard' : 'Browse Resources'}
+                onClick={handleBrowseResources}
+                title="Browse Resources"
                 class="inline-flex items-center justify-center p-1.5 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-flux-blue"
               >
-                {isTabView ? (
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                  </svg>
-                ) : (
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-                  </svg>
-                )}
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 0 0-1.883 2.542l.857 6a2.25 2.25 0 0 0 2.227 1.932H19.05a2.25 2.25 0 0 0 2.227-1.932l.857-6a2.25 2.25 0 0 0-1.883-2.542m-16.5 0V6A2.25 2.25 0 0 1 6 3.75h3.879a1.5 1.5 0 0 1 1.06.44l2.122 2.12a1.5 1.5 0 0 0 1.06.44H18A2.25 2.25 0 0 1 20.25 9v.776" />
+                </svg>
               </button>
 
               <UserMenu />

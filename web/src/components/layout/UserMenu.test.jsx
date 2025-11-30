@@ -163,7 +163,7 @@ describe('UserMenu', () => {
       render(<UserMenu />)
 
       const link = screen.getByText('Provide feedback').closest('a')
-      expect(link).toHaveAttribute('href', 'https://github.com/controlplaneio-fluxcd/flux-operator/issues/new')
+      expect(link.getAttribute('href')).toMatch(/^https:\/\/github\.com\/controlplaneio-fluxcd\/flux-operator\/issues\/new/)
     })
 
     it('should open in new tab', () => {
@@ -186,23 +186,42 @@ describe('UserMenu', () => {
     })
   })
 
-  describe('Clear Favorites', () => {
-    it('should render clear favorites button', () => {
+  describe('Clear Local Storage', () => {
+    it('should render clear local storage button', () => {
       userMenuOpen.value = true
       render(<UserMenu />)
 
-      expect(screen.getByText('Clear favorites')).toBeInTheDocument()
+      expect(screen.getByText('Clear local storage')).toBeInTheDocument()
     })
 
-    it('should call clearFavorites and close menu when clicked', () => {
+    it('should show confirmation and call clearFavorites when confirmed', () => {
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
       userMenuOpen.value = true
       render(<UserMenu />)
 
-      const button = screen.getByText('Clear favorites').closest('button')
+      const button = screen.getByText('Clear local storage').closest('button')
       fireEvent.click(button)
 
+      expect(confirmSpy).toHaveBeenCalledWith('This will delete your favorites and search history from local storage. Continue?')
       expect(clearFavorites).toHaveBeenCalledTimes(1)
       expect(userMenuOpen.value).toBe(false)
+
+      confirmSpy.mockRestore()
+    })
+
+    it('should not call clearFavorites when confirmation is cancelled', () => {
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+      userMenuOpen.value = true
+      render(<UserMenu />)
+
+      const button = screen.getByText('Clear local storage').closest('button')
+      fireEvent.click(button)
+
+      expect(confirmSpy).toHaveBeenCalled()
+      expect(clearFavorites).not.toHaveBeenCalled()
+      expect(userMenuOpen.value).toBe(true)
+
+      confirmSpy.mockRestore()
     })
   })
 
