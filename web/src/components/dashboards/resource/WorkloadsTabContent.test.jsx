@@ -74,11 +74,19 @@ describe('WorkloadsTabContent component', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    // Default mock response for batch endpoint
+    fetchWithMock.mockImplementation(({ body }) => {
+      const workloads = body?.workloads || []
+      const results = workloads.map(w => {
+        if (w.kind === 'Deployment' && w.name === 'podinfo') return mockDeploymentWorkload
+        if (w.kind === 'StatefulSet' && w.name === 'redis') return mockStatefulSetWorkload
+        return { ...w, status: 'NotFound', statusMessage: 'Workload not found' }
+      })
+      return Promise.resolve({ workloads: results })
+    })
   })
 
-  it('should fetch workload data for each workload item', async () => {
-    fetchWithMock.mockResolvedValue(mockDeploymentWorkload)
-
+  it('should fetch workload data with single POST request', async () => {
     render(
       <WorkloadsTabContent
         workloadItems={mockWorkloadItems}
@@ -87,16 +95,18 @@ describe('WorkloadsTabContent component', () => {
     )
 
     await waitFor(() => {
-      expect(fetchWithMock).toHaveBeenCalledTimes(2)
+      expect(fetchWithMock).toHaveBeenCalledTimes(1)
       expect(fetchWithMock).toHaveBeenCalledWith({
-        endpoint: '/api/v1/workload?kind=Deployment&name=podinfo&namespace=default',
+        endpoint: '/api/v1/workloads',
         mockPath: '../mock/workload',
-        mockExport: 'getMockWorkload'
-      })
-      expect(fetchWithMock).toHaveBeenCalledWith({
-        endpoint: '/api/v1/workload?kind=StatefulSet&name=redis&namespace=default',
-        mockPath: '../mock/workload',
-        mockExport: 'getMockWorkload'
+        mockExport: 'getMockWorkloads',
+        method: 'POST',
+        body: {
+          workloads: [
+            { kind: 'Deployment', name: 'podinfo', namespace: 'default' },
+            { kind: 'StatefulSet', name: 'redis', namespace: 'default' }
+          ]
+        }
       })
     })
   })
@@ -118,7 +128,7 @@ describe('WorkloadsTabContent component', () => {
     expect(document.querySelector('.animate-spin')).toBeInTheDocument()
 
     // Resolve the promise
-    resolvePromise(mockDeploymentWorkload)
+    resolvePromise({ workloads: [mockDeploymentWorkload, mockStatefulSetWorkload] })
 
     // Wait for loading to complete
     await waitFor(() => {
@@ -127,10 +137,6 @@ describe('WorkloadsTabContent component', () => {
   })
 
   it('should display workload list after loading', async () => {
-    fetchWithMock
-      .mockResolvedValueOnce(mockDeploymentWorkload)
-      .mockResolvedValueOnce(mockStatefulSetWorkload)
-
     render(
       <WorkloadsTabContent
         workloadItems={mockWorkloadItems}
@@ -146,10 +152,6 @@ describe('WorkloadsTabContent component', () => {
   })
 
   it('should display workload details with status', async () => {
-    fetchWithMock
-      .mockResolvedValueOnce(mockDeploymentWorkload)
-      .mockResolvedValueOnce(mockStatefulSetWorkload)
-
     render(
       <WorkloadsTabContent
         workloadItems={mockWorkloadItems}
@@ -169,9 +171,6 @@ describe('WorkloadsTabContent component', () => {
   })
 
   it('should expand workload to show container images and pods', async () => {
-    fetchWithMock
-      .mockResolvedValueOnce(mockDeploymentWorkload)
-      .mockResolvedValueOnce(mockStatefulSetWorkload)
     const user = userEvent.setup()
 
     render(
@@ -203,9 +202,6 @@ describe('WorkloadsTabContent component', () => {
   })
 
   it('should display pod status and message', async () => {
-    fetchWithMock
-      .mockResolvedValueOnce(mockDeploymentWorkload)
-      .mockResolvedValueOnce(mockStatefulSetWorkload)
     const user = userEvent.setup()
 
     render(
@@ -233,10 +229,6 @@ describe('WorkloadsTabContent component', () => {
   })
 
   it('should display status badges with correct colors', async () => {
-    fetchWithMock
-      .mockResolvedValueOnce(mockDeploymentWorkload)
-      .mockResolvedValueOnce(mockStatefulSetWorkload)
-
     render(
       <WorkloadsTabContent
         workloadItems={mockWorkloadItems}
@@ -289,8 +281,6 @@ describe('WorkloadsTabContent component', () => {
       }
     ]
 
-    fetchWithMock.mockResolvedValue(mockDeploymentWorkload)
-
     render(
       <WorkloadsTabContent
         workloadItems={workloadItemsWithoutNamespace}
@@ -300,16 +290,20 @@ describe('WorkloadsTabContent component', () => {
 
     await waitFor(() => {
       expect(fetchWithMock).toHaveBeenCalledWith({
-        endpoint: '/api/v1/workload?kind=Deployment&name=podinfo&namespace=custom-namespace',
+        endpoint: '/api/v1/workloads',
         mockPath: '../mock/workload',
-        mockExport: 'getMockWorkload'
+        mockExport: 'getMockWorkloads',
+        method: 'POST',
+        body: {
+          workloads: [
+            { kind: 'Deployment', name: 'podinfo', namespace: 'custom-namespace' }
+          ]
+        }
       })
     })
   })
 
   it('should display status message in workload header', async () => {
-    fetchWithMock.mockResolvedValue(mockDeploymentWorkload)
-
     const singleWorkloadItem = [{
       kind: 'Deployment',
       name: 'podinfo',
@@ -333,8 +327,6 @@ describe('WorkloadsTabContent component', () => {
   })
 
   it('should display workload header with uppercase kind, namespace/name, and status badge', async () => {
-    fetchWithMock.mockResolvedValue(mockDeploymentWorkload)
-
     const singleWorkloadItem = [{
       kind: 'Deployment',
       name: 'podinfo',
@@ -367,7 +359,9 @@ describe('WorkloadsTabContent component', () => {
       pods: []
     }
 
-    fetchWithMock.mockResolvedValue(workloadWithNoPods)
+    fetchWithMock.mockImplementation(() =>
+      Promise.resolve({ workloads: [workloadWithNoPods] })
+    )
     const user = userEvent.setup()
 
     const singleWorkloadItem = [{
@@ -400,10 +394,6 @@ describe('WorkloadsTabContent component', () => {
   })
 
   it('should refetch workload data when workloadItems change', async () => {
-    fetchWithMock
-      .mockResolvedValueOnce(mockDeploymentWorkload)
-      .mockResolvedValueOnce(mockStatefulSetWorkload)
-
     const { rerender } = render(
       <WorkloadsTabContent
         workloadItems={mockWorkloadItems}
@@ -413,7 +403,7 @@ describe('WorkloadsTabContent component', () => {
 
     // Wait for initial load
     await waitFor(() => {
-      expect(fetchWithMock).toHaveBeenCalledTimes(2)
+      expect(fetchWithMock).toHaveBeenCalledTimes(1)
     })
 
     // Update with new workload
@@ -426,11 +416,6 @@ describe('WorkloadsTabContent component', () => {
       }
     ]
 
-    fetchWithMock
-      .mockResolvedValueOnce(mockDeploymentWorkload)
-      .mockResolvedValueOnce(mockStatefulSetWorkload)
-      .mockResolvedValueOnce({ kind: 'DaemonSet', name: 'logger', status: 'Current', pods: [] })
-
     rerender(
       <WorkloadsTabContent
         workloadItems={updatedWorkloadItems}
@@ -438,9 +423,9 @@ describe('WorkloadsTabContent component', () => {
       />
     )
 
-    // Should refetch all workloads
+    // Should refetch all workloads with single POST request
     await waitFor(() => {
-      expect(fetchWithMock).toHaveBeenCalledTimes(5) // 2 initial + 3 after rerender
+      expect(fetchWithMock).toHaveBeenCalledTimes(2) // 1 initial + 1 after rerender
     })
   })
 })

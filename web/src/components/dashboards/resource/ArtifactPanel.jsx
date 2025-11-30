@@ -125,7 +125,7 @@ export function ArtifactPanel({ resourceData }) {
             {sourceUrl && (
               <div class="text-sm">
                 <span class="text-gray-500 dark:text-gray-400">Source URL</span>
-                <span class="ml-1 text-gray-900 dark:text-white break-words">{sourceUrl}</span>
+                <span class="ml-1 text-gray-900 dark:text-white break-all">{sourceUrl}</span>
               </div>
             )}
 
@@ -167,7 +167,7 @@ export function ArtifactPanel({ resourceData }) {
             {/* Revision */}
             <div class="text-sm">
               <span class="text-gray-500 dark:text-gray-400">Revision</span>
-              <span class="ml-1 text-gray-900 dark:text-white break-words">{revision}</span>
+              <span class="ml-1 text-gray-900 dark:text-white break-all">{revision}</span>
             </div>
           </div>
         </div>
@@ -181,8 +181,8 @@ export function ArtifactPanel({ resourceData }) {
               <div class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
                 {key}
               </div>
-              <div class="text-sm text-gray-900 dark:text-white break-words">
-                <pre class="whitespace-pre-wrap break-words font-sans">{value}</pre>
+              <div class="text-sm text-gray-900 dark:text-white break-all">
+                <pre class="whitespace-pre-wrap break-all font-sans">{value}</pre>
               </div>
             </div>
           ))}

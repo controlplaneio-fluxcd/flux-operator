@@ -56,25 +56,16 @@ export function SyncPanel({ sync, namespace }) {
   const statusInfo = getStatusInfo()
 
   return (
-    <div class="card">
+    <div class="card p-0">
       <button
         onClick={() => isExpanded.value = !isExpanded.value}
-        class={`w-full text-left hover:opacity-80 transition-opacity ${isExpanded.value ? 'mb-4' : ''}`}
+        class="w-full px-6 py-4 border-b border-gray-200 dark:border-gray-700 text-left hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors"
       >
         <div class="flex items-center justify-between">
           <div>
             <h3 class="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">Cluster Sync</h3>
             <div class="flex items-center space-x-4 mt-1">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  location.route(`/resource/${encodeURIComponent('Kustomization')}/${encodeURIComponent(namespace)}/${encodeURIComponent(syncName)}`)
-                }}
-                class="text-sm text-flux-blue dark:text-blue-400 hover:underline break-words"
-              >
-                <span class="sm:hidden">{syncName}</span>
-                <span class="hidden sm:inline">Kustomization/{namespace}/{syncName}</span>
-              </button>
+              <span class="text-sm text-gray-600 dark:text-gray-400 break-words">{syncName}</span>
               {!sync.ready && !isSuspended && (
                 <span class="status-badge status-not-ready text-xs sm:text-sm">
                   failing
@@ -94,8 +85,17 @@ export function SyncPanel({ sync, namespace }) {
       </button>
 
       {isExpanded.value && (
-        <div class="space-y-2">
+        <div class="px-6 py-4 space-y-2">
           <div class="flex flex-col gap-2 text-sm text-gray-900 dark:text-white break-all">
+            <button
+              onClick={() => location.route(`/resource/${encodeURIComponent('Kustomization')}/${encodeURIComponent(namespace)}/${encodeURIComponent(syncName)}`)}
+              class="flex items-start gap-2 text-flux-blue dark:text-blue-400 hover:underline text-left"
+            >
+              <svg class="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+              <span class="break-all">Kustomization/{namespace}/{syncName}</span>
+            </button>
             <div class="flex items-start gap-2">
               {(sync.source?.startsWith('http') || sync.source?.startsWith('ssh')) ? (
                 <svg class="w-5 h-5 flex-shrink-0 mt-0.5 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 24 24">

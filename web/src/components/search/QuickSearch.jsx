@@ -586,7 +586,8 @@ export function QuickSearch() {
 
             {/* Loading State */}
             {panelState === 'loading' && (
-              <div class="p-3 text-sm text-gray-500 dark:text-gray-400 text-center">
+              <div class="p-3 text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2">
+                <div class="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-400"></div>
                 Searching...
               </div>
             )}

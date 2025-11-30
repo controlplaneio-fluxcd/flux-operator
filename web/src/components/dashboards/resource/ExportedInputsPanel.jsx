@@ -105,7 +105,7 @@ export function ExportedInputsPanel({ resourceData }) {
             {sourceUrl && (
               <div class="text-sm">
                 <span class="text-gray-500 dark:text-gray-400">Source</span>
-                <span class="ml-1 text-gray-900 dark:text-white break-words">{sourceUrl}</span>
+                <span class="ml-1 text-gray-900 dark:text-white break-all">{sourceUrl}</span>
               </div>
             )}
 

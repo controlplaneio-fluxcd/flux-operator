@@ -58,11 +58,13 @@ func (r *Router) RegisterRoutes() {
 
 	// API routes for the frontend to consume
 	r.mux.HandleFunc("GET /api/v1/events", r.EventsHandler)
+	r.mux.HandleFunc("POST /api/v1/favorites", r.FavoritesHandler)
 	r.mux.HandleFunc("GET /api/v1/report", r.ReportHandler)
 	r.mux.HandleFunc("GET /api/v1/resource", r.ResourceHandler)
 	r.mux.HandleFunc("GET /api/v1/resources", r.ResourcesHandler)
 	r.mux.HandleFunc("GET /api/v1/search", r.SearchHandler)
 	r.mux.HandleFunc("GET /api/v1/workload", r.WorkloadHandler)
+	r.mux.HandleFunc("POST /api/v1/workloads", r.WorkloadsHandler)
 }
 
 // RegisterMiddleware wraps the mux with logging, gzip compression, and cache control middleware.

@@ -64,33 +64,30 @@ describe('FavoritesPage component', () => {
     { kind: 'Kustomization', namespace: 'default', name: 'app' }
   ]
 
-  const mockResourcesResponse = {
-    resources: [
-      { kind: 'FluxInstance', namespace: 'flux-system', name: 'flux', status: 'Ready', lastReconciled: '2024-01-15T10:00:00Z' },
-      { kind: 'ResourceSet', namespace: 'flux-system', name: 'cluster', status: 'Failed', lastReconciled: '2024-01-15T09:00:00Z' }
-    ]
-  }
-
-  const mockDefaultResourcesResponse = {
-    resources: [
-      { kind: 'Kustomization', namespace: 'default', name: 'app', status: 'Progressing', lastReconciled: '2024-01-15T08:00:00Z' }
-    ]
-  }
+  // All mock resources for the favorites endpoint
+  const allMockResources = [
+    { kind: 'FluxInstance', namespace: 'flux-system', name: 'flux', status: 'Ready', lastReconciled: '2024-01-15T10:00:00Z' },
+    { kind: 'ResourceSet', namespace: 'flux-system', name: 'cluster', status: 'Failed', lastReconciled: '2024-01-15T09:00:00Z' },
+    { kind: 'Kustomization', namespace: 'default', name: 'app', status: 'Progressing', lastReconciled: '2024-01-15T08:00:00Z' }
+  ]
 
   beforeEach(() => {
     vi.clearAllMocks()
     // Clear favorites
     favorites.value = []
 
-    // Setup default mock responses
-    fetchWithMock.mockImplementation(({ endpoint }) => {
-      if (endpoint.includes('namespace=flux-system')) {
-        return Promise.resolve(mockResourcesResponse)
-      }
-      if (endpoint.includes('namespace=default')) {
-        return Promise.resolve(mockDefaultResourcesResponse)
-      }
-      return Promise.resolve({ resources: [] })
+    // Setup default mock response for POST /api/v1/favorites
+    // Returns only the resources that match the requested favorites
+    fetchWithMock.mockImplementation(({ body }) => {
+      const requestedFavorites = body?.favorites || []
+      const matchedResources = allMockResources.filter(resource =>
+        requestedFavorites.some(fav =>
+          fav.kind === resource.kind &&
+          fav.namespace === resource.namespace &&
+          fav.name === resource.name
+        )
+      )
+      return Promise.resolve({ resources: matchedResources })
     })
   })
 

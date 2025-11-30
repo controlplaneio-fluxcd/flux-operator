@@ -191,3 +191,13 @@ export function isKindWithInventory(kind) {
   return kind === 'Kustomization' || kind === 'HelmRelease' || kind === 'ArtifactGenerator' ||
         kind === 'FluxInstance' || kind === 'ResourceSet'
 }
+
+/**
+ * Get the short alias for a given resource kind
+ * @param {string} kind - The resource kind
+ * @returns {string} - The alias (e.g., 'gitrepo' for 'GitRepository')
+ */
+export function getKindAlias(kind) {
+  const crd = fluxCRDs.find(c => c.kind === kind)
+  return crd?.alias || kind.toLowerCase()
+}

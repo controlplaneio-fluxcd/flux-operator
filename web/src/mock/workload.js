@@ -307,3 +307,35 @@ export function getMockWorkload(endpoint) {
 
   return workload
 }
+
+/**
+ * Get mock workloads for batch request (POST /api/v1/workloads)
+ * @param {object} body - Request body with workloads array
+ * @returns {object} - Mock response with workloads array
+ */
+export function getMockWorkloads(body) {
+  const requestedWorkloads = body?.workloads || []
+  if (requestedWorkloads.length === 0) {
+    return { workloads: [] }
+  }
+
+  const results = []
+  for (const item of requestedWorkloads) {
+    const key = `${item.kind}/${item.namespace}/${item.name}`
+    const workload = mockWorkloads[key]
+    if (workload) {
+      results.push(workload)
+    } else {
+      // Return NotFound status for missing workloads
+      results.push({
+        kind: item.kind,
+        name: item.name,
+        namespace: item.namespace,
+        status: 'NotFound',
+        statusMessage: 'Workload not found in cluster'
+      })
+    }
+  }
+
+  return { workloads: results }
+}

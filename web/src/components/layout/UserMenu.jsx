@@ -5,6 +5,7 @@ import { useRef, useEffect } from 'preact/hooks'
 import { signal } from '@preact/signals'
 import { themeMode, appliedTheme, cycleTheme, themes } from '../../utils/theme'
 import { clearFavorites } from '../../utils/favorites'
+import { reportData } from '../../app'
 
 // Exported signal to track menu open state
 export const userMenuOpen = signal(false)
@@ -118,16 +119,15 @@ export function UserMenu() {
         <div class="fixed inset-0 sm:absolute sm:inset-auto sm:right-0 sm:mt-2 sm:w-56 sm:rounded-lg bg-white dark:bg-gray-800 shadow-lg sm:border border-gray-200 dark:border-gray-700 py-1 z-50">
           {/* User info - Avatar, Username and Role, with close button on mobile */}
           <div class="px-4 py-3 flex items-center gap-3">
-            {/* Flux Operator icon */}
-            <svg class="w-8 h-8 text-blue-500 dark:text-blue-400 flex-shrink-0" viewBox="0 0 1501 1298.84" fill="currentColor">
-              <path d="M874.85,532.48l-11.32-19.14c.42.42.62.62.83,1.03l10.49,18.11Z"/>
-              <path d="M1263.42,1209.44h-.06l-31.59-55.09-47.34-82.99-31.22-54.59-193.92-338.8.04-.02-.4-.6-83.19-144.83-11.28-19.14c-.81-1.41-1.81-2.62-3.02-3.63-2.22-2.22-4.83-3.42-7.65-4.23-1.01-.4-2.22-.6-3.63-.4-.6,0-1.01-.2-1.61-.2-12.29,0-26.19,9.27-27.8,22.76l-10.88,114.42-9.27,95.28c-1.41,15.51,16.52,22.76,32.23,13.5l48.89-28.62,278.79,487.4-71.53-.2-93.79-.2-440.2-.83-504.18,1.03L0,1297.07l1088.98.42h225.05l-50.6-88.05Z"/>
-              <path d="M991.07,1088.63l-93.19-67.24-77.59-56c-12.49-9-27.92,2.5-27.92,20.79v57.63H253.5l82.81-142.92,220.94-380.54,246.42-433.84L753.07-1.31,100.39,1132.93l88.98.18v.02h624.3v-.04l114.26.44h53.68c19.54,0,26.33-32.81,9.47-44.9"/>
-              <path d="M847.49,154.81l-45.32,77.98-.06-.02-312.03,540.66-5.64,9.67-88.83,152.89c-3.42,5.84-3.42,11.88-1.41,16.92,5.24,11.68,21.35,20.55,34.45,14.91l104.95-47.14,87.22-39.08c13.9-6.45,11.68-25.58-4.23-34.85l-49.15-28.6,280.6-486.21,82.35,143.14,219.29,381.79,249.93,443.09,101.4.2L847.49,154.81Z"/>
-            </svg>
+            {/* User avatar in circle */}
+            <div class="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-600 flex items-center justify-center flex-shrink-0">
+              <svg class="w-5 h-5 text-gray-500 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+            </div>
             <div class="flex flex-col min-w-0 flex-1">
-              <span class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">flux-operator</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400 truncate">cluster:view</span>
+              <span class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{reportData.value?.spec?.userInfo?.username || 'anonymous'}</span>
+              <span class="text-xs text-gray-500 dark:text-gray-400 truncate">{reportData.value?.spec?.userInfo?.role || 'unknown'}</span>
             </div>
             {/* Mobile close button */}
             <button

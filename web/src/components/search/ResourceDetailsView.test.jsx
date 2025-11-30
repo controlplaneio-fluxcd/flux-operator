@@ -684,24 +684,23 @@ describe('ResourceDetailsView component', () => {
     await waitFor(() => {
       const textContent = document.body.textContent
 
-      // Check ID format: kind/namespace/name
-      expect(textContent).toContain('ID:')
+      // Check resource link: kind/namespace/name (now as clickable link without ID: prefix)
       expect(textContent).toContain('OCIRepository/cert-manager/cert-manager')
 
       // Check URL
-      expect(textContent).toContain('URL:')
+      expect(textContent).toContain('URL')
       expect(textContent).toContain('oci://quay.io/jetstack/charts/cert-manager')
 
       // Check Origin URL
-      expect(textContent).toContain('Origin URL:')
+      expect(textContent).toContain('Origin URL')
       expect(textContent).toContain('https://github.com/cert-manager/cert-manager')
 
-      // Check Status
-      expect(textContent).toContain('Status:')
+      // Check Status (now displayed as badge)
+      expect(textContent).toContain('Status')
       expect(textContent).toContain('Ready')
 
-      // Check Message
-      expect(textContent).toContain('Message:')
+      // Check Fetch result
+      expect(textContent).toContain('Fetch result')
       expect(textContent).toContain("stored artifact for digest 'v1.19.1@sha256:abc123'")
     })
   })
@@ -750,13 +749,13 @@ describe('ResourceDetailsView component', () => {
     // Check that Origin URL is not displayed when empty
     await waitFor(() => {
       const textContent = document.body.textContent
-      expect(textContent).toContain('ID:')
-      expect(textContent).toContain('URL:')
-      expect(textContent).toContain('Status:')
-      expect(textContent).toContain('Message:')
+      expect(textContent).toContain('GitRepository/flux-system/flux-system')
+      expect(textContent).toContain('URL')
+      expect(textContent).toContain('Status')
+      expect(textContent).toContain('Fetch result')
 
       // Origin URL should not appear when empty
-      const hasOriginURL = textContent.includes('Origin URL:')
+      const hasOriginURL = textContent.includes('Origin URL')
       expect(hasOriginURL).toBe(false)
     })
   })

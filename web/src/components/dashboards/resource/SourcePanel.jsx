@@ -4,7 +4,7 @@
 import { useState, useMemo, useEffect, useRef } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
 import { fetchWithMock } from '../../../utils/fetch'
-import { getControllerName } from '../../../utils/constants'
+import { getControllerName, getKindAlias } from '../../../utils/constants'
 import { formatTimestamp } from '../../../utils/time'
 import { DashboardPanel, TabButton } from '../common/panel'
 import { YamlBlock } from '../common/yaml'
@@ -146,21 +146,8 @@ export function SourcePanel({ sourceRef, namespace }) {
     }
   }, [sourceData])
 
-  const subtitle = (
-    <button
-      onClick={(e) => {
-        e.stopPropagation()
-        location.route(`/resource/${encodeURIComponent(sourceRef.kind)}/${encodeURIComponent(sourceRef.namespace || namespace)}/${encodeURIComponent(sourceRef.name)}`)
-      }}
-      class="text-sm text-flux-blue dark:text-blue-400 hover:underline break-words mt-1"
-    >
-      <span class="sm:hidden">{sourceRef.name}</span>
-      <span class="hidden sm:inline">{sourceRef.kind}/{sourceRef.namespace || namespace}/{sourceRef.name}</span>
-    </button>
-  )
-
   return (
-    <DashboardPanel title="Source" subtitle={subtitle} id="source-panel">
+    <DashboardPanel title="Source" id="source-panel">
       {loading ? (
         <div class="flex items-center justify-center p-8">
           <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-flux-blue"></div>
@@ -195,6 +182,18 @@ export function SourcePanel({ sourceRef, namespace }) {
           {/* Tab Content */}
           {sourceTab === 'overview' && (
             <div class="space-y-4">
+              {/* Resource Link */}
+              <button
+                onClick={() => location.route(`/resource/${encodeURIComponent(sourceRef.kind)}/${encodeURIComponent(sourceRef.namespace || namespace)}/${encodeURIComponent(sourceRef.name)}`)}
+                class="flex items-center gap-2 text-sm text-flux-blue dark:text-blue-400 hover:underline"
+              >
+                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+                <span class="hidden md:inline break-all">{sourceRef.kind}/{sourceRef.namespace || namespace}/{sourceRef.name}</span>
+                <span class="md:hidden break-all">{getKindAlias(sourceRef.kind)}/{sourceRef.name}</span>
+              </button>
+
               {/* Status Badge */}
               {sourceRef.status && (
                 <div class="text-sm">
@@ -215,7 +214,7 @@ export function SourcePanel({ sourceRef, namespace }) {
               {sourceRef.url && (
                 <div class="text-sm">
                   <span class="text-gray-500 dark:text-gray-400">URL</span>
-                  <span class="ml-1 text-gray-900 dark:text-white break-words">{sourceRef.url}</span>
+                  <span class="ml-1 text-gray-900 dark:text-white break-all">{sourceRef.url}</span>
                 </div>
               )}
 
@@ -223,7 +222,7 @@ export function SourcePanel({ sourceRef, namespace }) {
               {sourceRef.originURL && (
                 <div class="text-sm">
                   <span class="text-gray-500 dark:text-gray-400">Origin URL</span>
-                  <span class="ml-1 text-gray-900 dark:text-white break-words">{sourceRef.originURL}</span>
+                  <span class="ml-1 text-gray-900 dark:text-white break-all">{sourceRef.originURL}</span>
                 </div>
               )}
 
@@ -231,7 +230,7 @@ export function SourcePanel({ sourceRef, namespace }) {
               {sourceRef.originRevision && (
                 <div class="text-sm">
                   <span class="text-gray-500 dark:text-gray-400">Origin Revision</span>
-                  <span class="ml-1 text-gray-900 dark:text-white break-words">{sourceRef.originRevision}</span>
+                  <span class="ml-1 text-gray-900 dark:text-white break-all">{sourceRef.originRevision}</span>
                 </div>
               )}
 
@@ -255,7 +254,7 @@ export function SourcePanel({ sourceRef, namespace }) {
               {sourceRef.message && (
                 <div class="text-sm">
                   <span class="text-gray-500 dark:text-gray-400">Fetch result</span>
-                  <span class="ml-1 text-gray-900 dark:text-white break-words">{sourceRef.message}</span>
+                  <span class="ml-1 text-gray-900 dark:text-white break-all">{sourceRef.message}</span>
                 </div>
               )}
             </div>
@@ -288,7 +287,7 @@ export function SourcePanel({ sourceRef, namespace }) {
 
                         {/* Message */}
                         <div class="text-sm text-gray-700 dark:text-gray-300">
-                          <pre class="whitespace-pre-wrap break-words font-sans">{event.message}</pre>
+                          <pre class="whitespace-pre-wrap break-all font-sans">{event.message}</pre>
                         </div>
                       </div>
                     )
