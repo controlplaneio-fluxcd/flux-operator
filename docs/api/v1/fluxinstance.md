@@ -222,7 +222,8 @@ The `.spec.distribution.variant` field is required, when specifying a third-part
 registry where the Flux distribution images are pulled from. This is useful for registry
 mirrors, for example in corporate environments.
 
-Valid values are `upstream-alpine`, `enterprise-alpine` and `enterprise-distroless`.
+Valid values are `upstream-alpine`, `enterprise-alpine`,
+`enterprise-distroless` and `enterprise-distroless-fips`.
 
 Example using a hypothetical `ghcr.io` mirror:
 
