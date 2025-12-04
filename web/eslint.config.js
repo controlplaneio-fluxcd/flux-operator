@@ -26,6 +26,7 @@ export default [
         fetch: 'readonly',
         localStorage: 'readonly',
         URLSearchParams: 'readonly',
+        crypto: 'readonly',
       },
     },
     rules: {

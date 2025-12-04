@@ -64,7 +64,8 @@ export async function fetchFluxReport() {
 
     // Check for operator version change and reload if needed
     const operatorVersion = reportData.value?.spec?.operator?.version
-    checkVersionChange(operatorVersion)
+    const fluxVersion = reportData.value?.spec?.distribution?.version
+    checkVersionChange(operatorVersion, fluxVersion)
 
     // Update connection status and timestamps on success
     connectionStatus.value = 'connected'

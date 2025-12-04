@@ -27,9 +27,20 @@ Object.defineProperty(global, 'matchMedia', {
   writable: true,
 })
 
+// Mock crypto.randomUUID globally
+const cryptoMock = {
+  randomUUID: vi.fn(() => 'test-uuid-1234'),
+}
+
+Object.defineProperty(global, 'crypto', {
+  value: cryptoMock,
+  writable: true,
+})
+
 // Expose the mocks for individual test files to reset/inspect
 global.localStorageMock = localStorageMock
 global.matchMediaMock = matchMediaMock
+global.cryptoMock = cryptoMock
 
 // Suppress expected console messages during tests
 // These are logged by the application code when testing error scenarios
