@@ -85,8 +85,19 @@ func (r *FluxStatusReporter) getSyncStatus(ctx context.Context, crds []metav1.Gr
 			Namespace: r.namespace,
 			Name:      syncName,
 		}, &sourceObj); err == nil {
-			if sourceURL, found, _ := unstructured.NestedString(sourceObj.Object, "spec", "url"); found {
-				syncStatus.Source = sourceURL
+			switch sourceKind {
+			case fluxcdv1.FluxBucketKind:
+				// For Bucket, the URL is in spec.endpoint
+				if endpoint, found, err := unstructured.NestedString(sourceObj.Object, "spec", "endpoint"); found && err == nil {
+					bucketName, _, _ := unstructured.NestedString(sourceObj.Object, "spec", "bucketName")
+					// Construct full URL including bucket name
+					syncStatus.Source = fmt.Sprintf("%s/%s", endpoint, bucketName)
+				}
+			default:
+				// For all other types, the URL is in spec.url
+				if sourceURL, found, err := unstructured.NestedString(sourceObj.Object, "spec", "url"); found && err == nil {
+					syncStatus.Source = sourceURL
+				}
 			}
 
 			if obj, err := status.GetObjectWithConditions(sourceObj.Object); err == nil {
@@ -94,12 +105,18 @@ func (r *FluxStatusReporter) getSyncStatus(ctx context.Context, crds []metav1.Gr
 					if cond.Type == meta.ReadyCondition && cond.Status == corev1.ConditionFalse {
 						syncStatus.Ready = false
 						// Append source error status to sync status.
-						syncStatus.Status += " " + cond.Message
+						syncStatus.Status += "\n" + cond.Message
 					}
 				}
 			}
 		}
 	}
+
+	// Check spec.suspend field and prepend "Suspended" to the status.
+	if suspend, found, err := unstructured.NestedBool(syncObj.Object, "spec", "suspend"); suspend && found && err == nil {
+		syncStatus.Status = "Suspended " + syncStatus.Status
+	}
+
 	return syncStatus, nil
 }
 
