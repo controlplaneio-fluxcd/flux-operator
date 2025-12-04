@@ -19,9 +19,10 @@ import (
 )
 
 const (
-	UpstreamAlpine       string = "upstream-alpine"
-	EnterpriseAlpine     string = "enterprise-alpine"
-	EnterpriseDistroless string = "enterprise-distroless"
+	UpstreamAlpine           string = "upstream-alpine"
+	EnterpriseAlpine         string = "enterprise-alpine"
+	EnterpriseDistroless     string = "enterprise-distroless"
+	EnterpriseDistrolessFIPS string = "enterprise-distroless-fips"
 )
 
 // ExtractComponentImagesFromObjects extracts the container images from the
@@ -143,12 +144,14 @@ func ExtractComponentImagesWithDigest(srcDir string, opts Options) (images []Com
 			variant = EnterpriseDistroless
 		case "709825985650.dkr.ecr.us-east-1.amazonaws.com/controlplane/fluxcd":
 			variant = EnterpriseDistroless
+		case "ghcr.io/controlplaneio-fluxcd/distroless-fips":
+			variant = EnterpriseDistrolessFIPS
 		default:
 			return nil, fmt.Errorf("unsupported registry. consider specifying the distribution variant for registry: %s", registry)
 		}
 	}
 
-	if variant != UpstreamAlpine && variant != EnterpriseAlpine && variant != EnterpriseDistroless {
+	if variant != UpstreamAlpine && variant != EnterpriseAlpine && variant != EnterpriseDistroless && variant != EnterpriseDistrolessFIPS {
 		return nil, fmt.Errorf("unsupported variant: %s", variant)
 	}
 

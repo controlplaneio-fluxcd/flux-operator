@@ -89,7 +89,7 @@ type Distribution struct {
 
 	// Variant specifies the Flux distribution flavor stored
 	// in the registry.
-	// +kubebuilder:validation:Enum=upstream-alpine;enterprise-alpine;enterprise-distroless
+	// +kubebuilder:validation:Enum=upstream-alpine;enterprise-alpine;enterprise-distroless;enterprise-distroless-fips
 	// +optional
 	Variant string `json:"variant,omitempty"`
 
