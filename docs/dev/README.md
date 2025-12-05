@@ -21,7 +21,7 @@
 
 ### OperatorHub Bundle
 
-1. Validate the new version by running the `e2e-olm` GitHub Workflow in the [`controlplaneio-fluxcd/flux-operator` repository](https://github.com/controlplaneio-fluxcd/flux-operator/actions/workflows/e2e-olm.yml).
+1. Validate the new version by running the `e2e-olm` GitHub Workflow in the [`controlplaneio-fluxcd/flux-operator` repository](https://github.com/controlplaneio-fluxcd/flux-operator/actions/workflows/e2e-olm.yaml).
 2. Generate the OLM manifests locally by running `make build-olm-manifests`.
 3. Fork the [OperatorHub.io repository](https://github.com/k8s-operatorhub/community-operators) and clone it locally.
 4. Create a new branch from `main`, e.g. `flux-operator-1.0.0`.
