@@ -235,7 +235,7 @@ describe('ReconcilersPanel', () => {
       const kustomizationCard = screen.getByText('Kustomization').closest('button')
       const docLink = kustomizationCard.querySelector('a[target="_blank"]')
       expect(docLink).toBeInTheDocument()
-      expect(docLink).toHaveAttribute('href', 'https://toolkit.fluxcd.io/components/kustomize/kustomizations/')
+      expect(docLink).toHaveAttribute('href', 'https://fluxoperator.dev/docs/crd/kustomization/')
       expect(docLink).toHaveAttribute('title', 'Kustomization documentation')
     })
 
@@ -554,7 +554,7 @@ describe('ReconcilersPanel', () => {
 
       // Not installed CRDs should be rendered as <a> elements linking to docs
       const fluxInstanceCard = screen.getByText('FluxInstance').closest('a')
-      expect(fluxInstanceCard).toHaveAttribute('href', 'https://fluxcd.control-plane.io/operator/fluxinstance/')
+      expect(fluxInstanceCard).toHaveAttribute('href', 'https://fluxoperator.dev/docs/crd/fluxinstance/')
       expect(fluxInstanceCard).toHaveAttribute('target', '_blank')
       expect(fluxInstanceCard).toHaveAttribute('rel', 'noopener noreferrer')
     })
@@ -635,7 +635,7 @@ describe('ReconcilersPanel', () => {
 
       // Installed CRD with zero resources should be rendered as <a> linking to docs
       const fluxInstanceCard = screen.getByText('FluxInstance').closest('a')
-      expect(fluxInstanceCard).toHaveAttribute('href', 'https://fluxcd.control-plane.io/operator/fluxinstance/')
+      expect(fluxInstanceCard).toHaveAttribute('href', 'https://fluxoperator.dev/docs/crd/fluxinstance/')
       expect(fluxInstanceCard).toHaveAttribute('target', '_blank')
     })
 
