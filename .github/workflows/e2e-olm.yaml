@@ -27,6 +27,14 @@ jobs:
           cache-dependency-path: |
             **/go.sum
             **/go.mod
+      - name: Setup Node
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version: 24
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+      - name: Build frontend
+        run: make web-ci-install web-build
       - name: Setup Kubernetes
         uses: helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab # v1.13.0
         with:

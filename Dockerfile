@@ -16,6 +16,10 @@ RUN go mod download
 COPY cmd/operator/main.go cmd/operator/main.go
 COPY api/ api/
 COPY internal/ internal/
+COPY web/embed.go web/embed.go
+
+# Copy web assets.
+COPY web/dist/ web/dist/
 
 # Build the operator binary.
 RUN CGO_ENABLED=0 GOFIPS140=latest GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \

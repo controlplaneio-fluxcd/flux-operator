@@ -21,6 +21,7 @@ The project is structured as a [Go module](https://go.dev/doc/modules/developing
 - [Flux Operator Kubernetes Controller](#flux-operator-kubernetes-controller)
 - [Flux Operator CLI](#flux-operator-cli)
 - [Flux Operator MCP Server](#flux-operator-mcp-server)
+- [Flux Status Web UI](#flux-status-web-ui)
 
 The documentation is structured as follows:
 
@@ -160,6 +161,53 @@ To connect to the server from VS Code, use the following configuration:
 ```
 
 After rebuilding the MCP Server binary, you need to restart the server to test the new build.
+
+### Flux Status Page
+
+The Flux Status Web UI is a single-page application (SPA) built using [Preact](https://preactjs.com/),
+[Tailwind CSS](https://tailwindcss.com/), and [Vite](https://vite.dev/).
+
+The test framework is based on [Vitest](https://vitest.dev/) with [jsdom](https://github.com/jsdom/jsdom)
+for DOM simulation and [@testing-library/preact](https://testing-library.com/docs/preact-testing-library/intro/)
+for component testing.
+
+Packages:
+
+- [web/src](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/web/src/) - contains the Preact components and utilities
+- [web/src/components](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/web/src/components/) - contains the UI components
+- [web/src/utils](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/web/src/utils/) - contains utility functions for theming, time formatting, etc.
+- [web/src/mock](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/web/src/mock/) - contains mock data for development
+- [web/dist](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/web/dist/) - build output embedded in the Go binary via `web/embed.go`
+- [internal/web](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/internal/web/) - contains the Go HTTP server, API routes, and embedded frontend serving
+
+To test and build the web UI, run:
+
+```shell
+make web-test web-build
+```
+
+The build command writes the production assets to the `web/dist/` directory, which is embedded
+into the Go binary and served by the status web server.
+
+To run the web UI locally with mock data:
+
+```shell
+make web-dev-mock
+```
+
+This starts a Vite dev server with hot module replacement at `http://localhost:5173`.
+
+To run the web UI with a live backend connected to Kubernetes:
+
+```shell
+# Terminal 1: Start the status web server
+make web-run
+
+# Terminal 2: Start the Vite dev server
+make web-dev
+```
+
+The Vite dev server will proxy API requests to the Go backend running on port 35000.
 
 ## Project Documentation Structure
 

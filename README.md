@@ -27,13 +27,13 @@ mechanism for the cluster desired state to OCI artifacts and S3-compatible stora
 including detailed reports and Prometheus metrics about the Flux controllers
 readiness status, reconcilers statistics, and cluster state synchronization.
 
-**Self-Service Environments** - The operator [ResourceSet API](https://fluxcd.control-plane.io/operator/resourcesets/introduction/)
+**Self-Service Environments** - The operator [ResourceSet API](https://fluxoperator.dev/docs/resourcesets/introduction/)
 enables platform teams to define their own application standard as a group of Flux and Kubernetes resources
 that can be templated, parameterized and deployed as a single unit on self-service environments.
 The ResourceSet API integrates with Git pull requests to create ephemeral environments
 for testing and validation.
 
-**AI-Assisted GitOps** - The [Flux MCP Server](https://fluxcd.control-plane.io/mcp/) connects
+**AI-Assisted GitOps** - The [Flux MCP Server](https://fluxoperator.dev/mcp-server/) connects
 AI assistants to Kubernetes clusters running the operator, enabling seamless interaction
 through natural language. It serves as a bridge between AI tools and GitOps pipelines,
 allowing you to analyze deployment across environments, troubleshoot issues,
@@ -59,11 +59,11 @@ helm install flux-operator oci://ghcr.io/controlplaneio-fluxcd/charts/flux-opera
 > [!NOTE]
 > The Flux Operator can be installed using Helm, Terraform, OperatorHub, kubectl and other methods.
 > For more information, refer to the
-> [installation guide](https://fluxcd.control-plane.io/operator/install/).
+> [installation guide](https://fluxoperator.dev/docs/guides/install/).
 
 ### Install the Flux Controllers
 
-Create a [FluxInstance](https://fluxcd.control-plane.io/operator/fluxinstance/) resource
+Create a [FluxInstance](https://fluxoperator.dev/docs/crd/fluxinstance/) resource
 named `flux` in the `flux-system` namespace to install the latest Flux stable version:
 
 ```yaml
@@ -113,7 +113,7 @@ spec:
 > [!NOTE]
 > The Flux instance can be customized in various ways.
 > For more information, refer to the
-> [configuration guide](https://fluxcd.control-plane.io/operator/flux-config/).
+> [configuration guide](https://fluxoperator.dev/docs/instance/controllers/).
 
 ### Sync from a Git Repository
 
@@ -148,7 +148,7 @@ flux create secret git flux-system \
 > [!NOTE]
 > For more information on how to configure syncing from Git repositories,
 > container registries and S3-compatible storage, refer to the
-> [cluster sync guide](https://fluxcd.control-plane.io/operator/flux-sync/).
+> [cluster sync guide](https://fluxoperator.dev/docs/instance/sync/).
 
 ### Monitor the Flux Installation
 
@@ -166,7 +166,7 @@ the cluster sync status and more.
 
 ## ResourceSet APIs
 
-The Flux Operator [ResourceSet APIs](https://fluxcd.control-plane.io/operator/resourcesets/introduction/)
+The Flux Operator [ResourceSet APIs](https://fluxoperator.dev/docs/resourcesets/introduction/)
 offer a high-level abstraction for defining and managing Flux resources and related Kubernetes
 objects as a single unit.
 The ResourceSet API is designed to reduce the complexity of GitOps workflows and to
@@ -174,29 +174,29 @@ enable self-service for developers and platform teams.
 
 Guides:
 
-- [Using ResourceSets for Application Definitions](https://fluxcd.control-plane.io/operator/resourcesets/app-definition/)
-- [Using ResourceSets for Time-Based Delivery](https://fluxcd.control-plane.io/operator/resourcesets/time-based-delivery/)
-- [Ephemeral Environments for GitHub Pull Requests](https://fluxcd.control-plane.io/operator/resourcesets/github-pull-requests/)
-- [Ephemeral Environments for GitLab Merge Requests](https://fluxcd.control-plane.io/operator/resourcesets/gitlab-merge-requests/)
+- [Using ResourceSets for Application Definitions](https://fluxoperator.dev/docs/resourcesets/app-definition/)
+- [Using ResourceSets for Time-Based Delivery](https://fluxoperator.dev/docs/resourcesets/time-based-delivery/)
+- [Ephemeral Environments for GitHub Pull Requests](https://fluxoperator.dev/docs/resourcesets/github-pull-requests/)
+- [Ephemeral Environments for GitLab Merge Requests](https://fluxoperator.dev/docs/resourcesets/gitlab-merge-requests/)
 
 ## Documentation
 
 - Installation
-  - [Flux Operator installation](https://fluxcd.control-plane.io/operator/install/)
+  - [Flux Operator installation](https://fluxoperator.dev/docs/guides/install/)
 - Flux Configuration
-  - [Flux controllers configuration](https://fluxcd.control-plane.io/operator/flux-config/)
-  - [Flux instance customization](https://fluxcd.control-plane.io/operator/flux-kustomize/)
-  - [Cluster sync configuration](https://fluxcd.control-plane.io/operator/flux-sync/)
-  - [Flux controllers sharding](https://fluxcd.control-plane.io/operator/flux-sharding/)
-  - [Flux monitoring and reporting](https://fluxcd.control-plane.io/operator/monitoring/)
-  - [Migration of bootstrapped clusters](https://fluxcd.control-plane.io/operator/flux-bootstrap-migration/)
+  - [Flux controllers configuration](https://fluxoperator.dev/docs/instance/controllers/)
+  - [Flux instance customization](https://fluxoperator.dev/docs/instance/customization/)
+  - [Cluster sync configuration](https://fluxoperator.dev/docs/instance/sync/)
+  - [Flux controllers sharding](https://fluxoperator.dev/docs/instance/sharding/)
+  - [Flux monitoring and reporting](https://fluxoperator.dev/docs/guides/monitoring/)
+  - [Migration of bootstrapped clusters](https://fluxoperator.dev/docs/guides/migration/)
 - CRD references
-  - [FluxInstance API reference](https://fluxcd.control-plane.io/operator/fluxinstance/)
-  - [FluxReport API reference](https://fluxcd.control-plane.io/operator/fluxreport/)
-  - [ResourceSet API reference](https://fluxcd.control-plane.io/operator/resourceset/)
-  - [ResourceSetInputProvider API reference](https://fluxcd.control-plane.io/operator/resourcesetinputprovider/)
+  - [FluxInstance API reference](https://fluxoperator.dev/docs/crd/fluxinstance/)
+  - [FluxReport API reference](https://fluxoperator.dev/docs/crd/fluxreport/)
+  - [ResourceSet API reference](https://fluxoperator.dev/docs/crd/resourceset/)
+  - [ResourceSetInputProvider API reference](https://fluxoperator.dev/docs/crd/resourcesetinputprovider/)
 - CLI reference
-  - [Flux Operator CLI](https://fluxcd.control-plane.io/operator/cli/)
+  - [Flux Operator CLI](https://fluxoperator.dev/docs/guides/cli/)
 
 ## Contributing
 

@@ -37,7 +37,7 @@ generate: controller-gen ## Generate deep copies and CRDs from API types.
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd paths="./..." output:crd:artifacts:config=config/crd/bases
 
 .PHONY: fmt
-fmt: ## Run go fmt against code.
+fmt: web-fmt ## Run go fmt and ESLint fix against code.
 	go fmt ./...
 
 .PHONY: vet
@@ -57,7 +57,7 @@ test-e2e: ## Run the e2e tests on the Kind cluster.
 	go test ./test/e2e/ -v -ginkgo.v
 
 .PHONY: lint
-lint: golangci-lint ## Run golangci linters.
+lint: web-lint golangci-lint ## Run golangci linters and ESLint.
 	$(GOLANGCI_LINT) run
 
 .PHONY: lint-fix
@@ -67,16 +67,23 @@ lint-fix: golangci-lint ## Run golangci linters and perform fixes.
 ##@ Build
 
 .PHONY: build
-build: generate fmt vet ## Build the flux-operator binary.
+build: generate fmt vet web-build ## Build the flux-operator binary.
 	CGO_ENABLED=0 GOFIPS140=latest go build -ldflags="-s -w -X main.VERSION=$(FLUX_OPERATOR_DEV_VERSION)" -o ./bin/flux-operator ./cmd/operator/
 
 .PHONY: run
-run: generate fmt vet ## Run the flux-operator locally.
+run: generate fmt vet web-build ## Run the flux-operator locally.
 	CGO_ENABLED=0 GOFIPS140=latest go run ./cmd/operator/main.go --enable-leader-election=false
 
 .PHONY: docker-build
-docker-build: ## Build flux-operator docker image.
+docker-build: web-build ## Build flux-operator docker image.
 	$(CONTAINER_TOOL) build -t ${IMG} --build-arg VERSION=$(FLUX_OPERATOR_DEV_VERSION) .
+
+.PHONY: docker-build-push
+docker-build-push: web-build ## Build flux-operator docker image and push.
+	$(CONTAINER_TOOL) buildx build -t ${IMG} \
+	--platform=linux/amd64,linux/arm64 \
+	--build-arg VERSION=$(FLUX_OPERATOR_DEV_VERSION) \
+	--push .
 
 .PHONY: docker-push
 docker-push: ## Push flux-operator docker image.
@@ -94,6 +101,44 @@ build-manifests: ## Generate release manifests with CRDs, RBAC and deployment.
 .PHONY: vendor-flux
 vendor-flux: ## Download Flux base manifests and image patches to config/flux dir.
 	hack/vendor-flux-manifests.sh $(FLUX_VERSION)
+
+##@ Frontend
+
+.PHONY: web-test
+web-test: web-lint ## Run frontend tests.
+	cd web && npm test
+
+.PHONY: web-lint
+web-lint: ## Run ESLint on frontend code.
+	cd web && npm run lint
+
+.PHONY: web-fmt
+web-fmt: ## Run ESLint fix on frontend code.
+	cd web && npm run lint:fix
+
+.PHONY: web-install
+web-install: ## Install frontend dependencies.
+	cd web && npm install
+
+.PHONY: web-ci-install
+web-ci-install: ## Install frontend dependencies in CI (uses npm ci).
+	cd web && npm ci
+
+.PHONY: web-dev
+web-dev: ## Start frontend dev server connected to backend.
+	cd web && npm run dev
+
+.PHONY: web-dev-mock
+web-dev-mock: ## Start frontend dev server with mock data enabled.
+	cd web && VITE_USE_MOCK_DATA=true npm run dev
+
+.PHONY: web-run
+web-run: build ## Start operator with frontend server only.
+	./bin/flux-operator --web-server-only --web-server-port=9080
+
+.PHONY: web-build
+web-build:  web-fmt ## Build frontend for production.
+	cd web && npm run build
 
 ##@ OLM
 
