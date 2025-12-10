@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -54,6 +55,10 @@ func (r *Router) FavoritesHandler(w http.ResponseWriter, req *http.Request) {
 	resources, err := r.GetFavoritesStatus(req.Context(), favReq.Favorites)
 	if err != nil {
 		r.log.Error(err, "failed to get favorites status")
+		if errors.IsForbidden(err) {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
 		resources = []ResourceStatus{}
 	}
 
@@ -84,7 +89,7 @@ func (r *Router) GetFavoritesStatus(ctx context.Context, favorites []FavoriteIte
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			gvk, err := r.preferredFluxGVK(fav.Kind)
+			gvk, err := r.preferredFluxGVK(ctx, fav.Kind)
 			if err != nil {
 				if strings.Contains(err.Error(), "no matches for kind") {
 					return
@@ -96,12 +101,15 @@ func (r *Router) GetFavoritesStatus(ctx context.Context, favorites []FavoriteIte
 			obj := unstructured.Unstructured{}
 			obj.SetGroupVersionKind(*gvk)
 
-			err = r.kubeClient.Get(ctx, client.ObjectKey{
+			err = r.kubeClient.GetClient(ctx).Get(ctx, client.ObjectKey{
 				Namespace: fav.Namespace,
 				Name:      fav.Name,
 			}, &obj)
 
 			if err != nil {
+				if errors.IsForbidden(err) {
+					errChan <- err
+				}
 				// Resource not found - skip it (deleted favorites are handled by frontend)
 				return
 			}

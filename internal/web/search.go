@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/api/errors"
+
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
@@ -59,6 +61,10 @@ func (r *Router) SearchHandler(w http.ResponseWriter, req *http.Request) {
 	resources, err := r.GetResourcesStatus(req.Context(), kinds, name, namespace, "", 10)
 	if err != nil {
 		r.log.Error(err, "failed to get resources status", "url", req.URL.String(), "name", name, "namespace", namespace)
+		if errors.IsForbidden(err) {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
 		resources = []ResourceStatus{}
 	}
 

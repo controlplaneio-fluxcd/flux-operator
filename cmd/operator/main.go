@@ -41,6 +41,7 @@ import (
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/entitlement"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web"
+	webconfig "github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -86,6 +87,7 @@ func main() {
 		watchOptions                          runtimeCtrl.WatchOptions
 		webServerPort                         int
 		webServerOnly                         bool
+		webConfigFile                         string
 	)
 
 	flag.IntVar(&concurrent, "concurrent", 10,
@@ -113,6 +115,8 @@ func main() {
 		"The port for the web server to listen on. If set to 0, the web server is disabled.")
 	flag.BoolVar(&webServerOnly, "web-server-only", false,
 		"Run only the web server without starting the controllers.")
+	flag.StringVar(&webConfigFile, "web-config", "",
+		"The path to the configuration file for the web server.")
 
 	tokenCacheOptions.BindFlags(flag.CommandLine, tokenCacheDefaultMaxSize)
 	logOptions.BindFlags(flag.CommandLine)
@@ -353,19 +357,45 @@ func main() {
 	}
 
 	if webServerPort > 0 {
+		// TODO: could be read from config
+		const reportInterval = 20 * time.Second
+		const namespaceCacheDuration = reportInterval
+
+		conf, err := webconfig.Load(webConfigFile)
+		if err != nil {
+			setupLog.Error(err, "unable to load web server configuration")
+			os.Exit(1)
+		}
+
+		userCacheSize := 1 // Single cache entry if authentication is disabled or anonymous.
+		if a := conf.Spec.Authentication; a != nil && a.Type != webconfig.AuthenticationTypeAnonymous {
+			userCacheSize = a.UserCacheSize
+		}
+
+		kubeClient, err := web.NewClient(mgr, userCacheSize, namespaceCacheDuration)
+		if err != nil {
+			setupLog.Error(err, "unable to create web server kube client")
+			os.Exit(1)
+		}
+
+		authMiddleware, err := web.NewAuthMiddleware(ctx, &conf.Spec, kubeClient)
+		if err != nil {
+			setupLog.Error(err, "unable to create auth middleware")
+			os.Exit(1)
+		}
+
 		go func() {
 			<-mgr.Elected()
 			if err := web.StartServer(ctx,
 				time.Minute,
 				webServerPort,
-				mgr.GetAPIReader(),
-				mgr.GetClient(),
-				mgr.GetConfig(),
+				kubeClient,
 				ctrl.Log.WithName("web-server"),
 				VERSION,
 				controllerName,
 				runtimeNamespace,
-				20*time.Second); err != nil {
+				reportInterval,
+				authMiddleware); err != nil {
 				setupLog.Error(err, "web server error")
 				os.Exit(1)
 			}

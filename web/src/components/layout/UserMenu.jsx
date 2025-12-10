@@ -128,8 +128,8 @@ export function UserMenu() {
               </svg>
             </div>
             <div class="flex flex-col min-w-0 flex-1">
-              <span class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{reportData.value?.spec?.userInfo?.username || 'anonymous'}</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400 truncate">{reportData.value?.spec?.userInfo?.role || 'unknown'}</span>
+              <span class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{reportData.value?.spec?.userInfo?.username || '<no username>'}</span>
+              <span class="text-xs text-gray-500 dark:text-gray-400 truncate">{reportData.value?.spec?.userInfo?.role || '<no role>'}</span>
             </div>
             {/* Mobile close button */}
             <button

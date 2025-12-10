@@ -52,6 +52,10 @@ func (r *Router) WorkloadsHandler(w http.ResponseWriter, req *http.Request) {
 	workloads, err := r.GetWorkloadsStatus(req.Context(), wReq.Workloads)
 	if err != nil {
 		r.log.Error(err, "failed to get workloads status")
+		if errors.IsForbidden(err) {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
 		workloads = []WorkloadStatus{}
 	}
 
