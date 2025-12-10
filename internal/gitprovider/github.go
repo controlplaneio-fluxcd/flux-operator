@@ -5,6 +5,7 @@ package gitprovider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -199,6 +200,10 @@ func (p *GitHubProvider) ListRequests(ctx context.Context, opts Options) ([]Resu
 	}
 
 	return results, nil
+}
+
+func (p *GitHubProvider) ListEnvironments(ctx context.Context, opts Options) ([]Result, error) {
+	return nil, errors.New("environments not supported by GitHub provider")
 }
 
 // parseGitHubURL parses a GitHub URL and returns the host, owner, and repo.

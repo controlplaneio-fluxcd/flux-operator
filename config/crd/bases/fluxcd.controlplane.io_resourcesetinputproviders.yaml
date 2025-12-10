@@ -88,6 +88,11 @@ spec:
                       ExcludeBranch specifies the regular expression to filter the branches
                       that the input provider should exclude.
                     type: string
+                  excludeEnvironment:
+                    description: |-
+                      ExcludeEnvironment specifies the regular expression to filter the environments
+                      that the input provider should exclude.
+                    type: string
                   excludeTag:
                     description: |-
                       ExcludeTag specifies the regular expression to filter the tags
@@ -96,6 +101,11 @@ spec:
                   includeBranch:
                     description: |-
                       IncludeBranch specifies the regular expression to filter the branches
+                      that the input provider should include.
+                    type: string
+                  includeEnvironment:
+                    description: |-
+                      IncludeEnvironment specifies the regular expression to filter the environments
                       that the input provider should include.
                     type: string
                   includeTag:
@@ -194,6 +204,7 @@ spec:
                 - GitLabBranch
                 - GitLabTag
                 - GitLabMergeRequest
+                - GitLabEnvironment
                 - AzureDevOpsBranch
                 - AzureDevOpsTag
                 - AzureDevOpsPullRequest
