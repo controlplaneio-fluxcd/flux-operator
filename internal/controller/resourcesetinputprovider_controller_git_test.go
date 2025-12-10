@@ -105,7 +105,7 @@ spec:
 
 	testutils.LogObjectStatus(t, result)
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
-	g.Expect(result.Status.LastExportedRevision).To(BeIdenticalTo("sha256:e3ac49c7196218482dc476d8d91d192fa3244cea4233f9a06b7154848d162f6e"))
+	g.Expect(result.Status.LastExportedRevision).To(BeIdenticalTo("sha256:8d17289b10914ff4cf5226d649a7266136d071de6ed9be1c2745eb24449f7cf4"))
 
 	// Create a ResourceSet referencing the ResourceSetInputProvider.
 	rset := &fluxcdv1.ResourceSet{}
@@ -294,7 +294,7 @@ spec:
 
 	testutils.LogObjectStatus(t, result)
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
-	g.Expect(result.Status.LastExportedRevision).To(BeIdenticalTo("sha256:be31afc5e49da21b12fdca6a2cad6916cad26f4bbde8c16e5822359f75c1d46a"))
+	g.Expect(result.Status.LastExportedRevision).To(BeIdenticalTo("sha256:79d6be458f58563bf06d5451d99faa000e017ca6a3d0f1a03d93e15842b91ee3"))
 
 	// Create a ResourceSet referencing the ResourceSetInputProvider.
 	rset := &fluxcdv1.ResourceSet{}
@@ -685,7 +685,7 @@ spec:
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(conditions.IsReady(resultFinal)).To(BeTrue())
 	g.Expect(resultFinal.Status.ExportedInputs).ToNot(BeEmpty())
-	g.Expect(resultFinal.Status.LastExportedRevision).To(BeIdenticalTo("sha256:be31afc5e49da21b12fdca6a2cad6916cad26f4bbde8c16e5822359f75c1d46a"))
+	g.Expect(resultFinal.Status.LastExportedRevision).To(BeIdenticalTo("sha256:79d6be458f58563bf06d5451d99faa000e017ca6a3d0f1a03d93e15842b91ee3"))
 
 	// Delete the ResourceSetInputProvider.
 	err = testClient.Delete(ctx, obj)
