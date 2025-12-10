@@ -17,6 +17,7 @@ import (
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -78,8 +79,9 @@ type HelmHistory struct {
 func (r *Router) getInventory(
 	ctx context.Context,
 	obj unstructured.Unstructured,
-) []InventoryEntry {
+) ([]InventoryEntry, error) {
 	inventory := make([]InventoryEntry, 0)
+	kubeClient := r.kubeClient.GetClient(ctx)
 
 	// If kind is ArtifactGenerator, extract ExternalArtifacts from status.inventory[]
 	if obj.GetKind() == fluxcdv1.FluxArtifactGeneratorKind {
@@ -102,7 +104,7 @@ func (r *Router) getInventory(
 					})
 				}
 			}
-			return inventory
+			return inventory, nil
 		}
 	}
 
@@ -123,21 +125,21 @@ func (r *Router) getInventory(
 				}
 			}
 		}
-		return inventory
+		return inventory, nil
 	}
 
 	// Special handling for HelmRelease to extract inventory from Helm storage
 	if obj.GetKind() == fluxcdv1.FluxHelmReleaseKind {
 		if _, found, _ := unstructured.NestedFieldCopy(obj.Object, "spec", "kubeConfig"); found {
 			// Skip release if it targets a remote cluster
-			return nil
+			return nil, nil
 		}
 
 		storageNamespace, _, _ := unstructured.NestedString(obj.Object, "status", "storageNamespace")
 		history, _, _ := unstructured.NestedSlice(obj.Object, "status", "history")
 		if storageNamespace == "" || len(history) == 0 {
 			// Skip release with no history
-			return nil
+			return nil, nil
 		}
 
 		// Get the latest release from the history
@@ -152,34 +154,41 @@ func (r *Router) getInventory(
 		}
 
 		storageSecret := &corev1.Secret{}
-		if err := r.kubeClient.Get(ctx, storageKey, storageSecret); err != nil {
+		if err := kubeClient.Get(ctx, storageKey, storageSecret); err != nil {
 			// Skip release if it has no storage
-			return nil
+			if errors.IsForbidden(err) {
+				return nil, err
+			}
+			return nil, nil
 		}
 
 		releaseData, releaseFound := storageSecret.Data["release"]
 		if !releaseFound {
 			// Skip release if the storage key is missing
-			return nil
+			return nil, nil
 		}
 
 		rls, err := decodeHelmStorage(releaseData)
 		if err != nil {
 			// Skip release if the storage cannot be decoded
-			return nil
+			return nil, nil
 		}
 
 		objects, err := ssautil.ReadObjects(strings.NewReader(rls.Manifest))
 		if err != nil {
 			// Skip release if the objects in storage cannot be read
-			return nil
+			return nil, nil
 		}
 
 		// Add the object to the inventory list
 		for _, o := range objects {
 			// Set the namespace on namespaced objects if missing
 			if o.GetNamespace() == "" {
-				if isNamespaced, _ := apiutil.IsObjectNamespaced(o, r.kubeClient.Scheme(), r.kubeClient.RESTMapper()); isNamespaced {
+				isNamespaced, err := apiutil.IsObjectNamespaced(o, kubeClient.Scheme(), kubeClient.RESTMapper())
+				if err != nil && errors.IsForbidden(err) {
+					return nil, err
+				}
+				if isNamespaced {
 					obj.SetNamespace(latest.Namespace)
 				}
 			}
@@ -199,7 +208,11 @@ func (r *Router) getInventory(
 			}
 			crdKind := "CustomResourceDefinition"
 			var list apiextensionsv1.CustomResourceDefinitionList
-			if err := r.kubeClient.List(ctx, &list, selector); err == nil {
+			if err := kubeClient.List(ctx, &list, selector); err != nil {
+				if errors.IsForbidden(err) {
+					return nil, err
+				}
+			} else {
 				for _, crd := range list.Items {
 					found := false
 					for _, obj := range objects {
@@ -221,7 +234,7 @@ func (r *Router) getInventory(
 		}
 	}
 
-	return inventory
+	return inventory, nil
 }
 
 // decodeHelmStorage decodes the Helm storage secret data into a HelmStorage struct.
@@ -255,13 +268,13 @@ func decodeHelmStorage(releaseData []byte) (*HelmStorage, error) {
 }
 
 // preferredFluxGVK returns the preferred GroupVersionKind for a given Flux kind.
-func (r *Router) preferredFluxGVK(kind string) (*schema.GroupVersionKind, error) {
+func (r *Router) preferredFluxGVK(ctx context.Context, kind string) (*schema.GroupVersionKind, error) {
 	gk, err := fluxcdv1.FluxGroupFor(kind)
 	if err != nil {
 		return nil, err
 	}
 
-	mapping, err := r.kubeClient.RESTMapper().RESTMapping(*gk)
+	mapping, err := r.kubeClient.GetClient(ctx).RESTMapper().RESTMapping(*gk)
 	if err != nil {
 		return nil, err
 	}

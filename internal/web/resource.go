@@ -45,14 +45,17 @@ func (r *Router) ResourceHandler(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		r.log.Error(err, "failed to get resource", "url", req.URL.String(),
 			"kind", kind, "name", name, "namespace", namespace)
-		if errors.IsNotFound(err) {
+		switch {
+		case errors.IsNotFound(err):
 			// return empty response if resource not found
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte("{}"))
-			return
+		case errors.IsForbidden(err):
+			http.Error(w, err.Error(), http.StatusForbidden)
+		default:
+			http.Error(w, fmt.Sprintf("Failed to get resource: %v", err), http.StatusInternalServerError)
 		}
-		http.Error(w, fmt.Sprintf("Failed to get resource: %v", err), http.StatusInternalServerError)
 		return
 	}
 
@@ -75,7 +78,7 @@ func (r *Router) GetResource(ctx context.Context, kind, name, namespace string) 
 	}
 
 	// Get the preferred GVK for the kind
-	gvk, err := r.preferredFluxGVK(exactKind)
+	gvk, err := r.preferredFluxGVK(ctx, exactKind)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get GVK for kind %s: %w", kind, err)
 	}
@@ -91,7 +94,7 @@ func (r *Router) GetResource(ctx context.Context, kind, name, namespace string) 
 	}
 
 	// Fetch the resource from the cluster
-	if err := r.kubeClient.Get(ctx, key, obj); err != nil {
+	if err := r.kubeClient.GetClient(ctx).Get(ctx, key, obj); err != nil {
 		return nil, fmt.Errorf("unable to get resource %s/%s in namespace %s: %w", kind, name, namespace, err)
 	}
 
@@ -109,7 +112,10 @@ func (r *Router) GetResource(ctx context.Context, kind, name, namespace string) 
 	}
 
 	// Get the inventory for this resource
-	inventory := r.getInventory(ctx, *obj)
+	inventory, err := r.getInventory(ctx, *obj)
+	if err != nil {
+		return nil, err
+	}
 
 	// Inject/override the .status.inventory field with the extracted inventory
 	if len(inventory) > 0 {
@@ -269,7 +275,7 @@ func (r *Router) getInputProviderRefs(ctx context.Context, obj unstructured.Unst
 			}
 
 			var rsip fluxcdv1.ResourceSetInputProvider
-			if err := r.kubeClient.Get(ctx, objKey, &rsip); err != nil {
+			if err := r.kubeClient.GetClient(ctx).Get(ctx, objKey, &rsip); err != nil {
 				return nil, fmt.Errorf("failed to get provider %s/%s: %w", objKey.Namespace, objKey.Name, err)
 			}
 
@@ -301,7 +307,7 @@ func (r *Router) getInputProviderRefs(ctx context.Context, obj unstructured.Unst
 				client.MatchingLabels(labels),
 			}
 
-			if err := r.kubeClient.List(ctx, &rsipList, listOpts...); err != nil {
+			if err := r.kubeClient.GetClient(ctx).List(ctx, &rsipList, listOpts...); err != nil {
 				return nil, fmt.Errorf("failed to list providers with selector: %w", err)
 			}
 

@@ -48,7 +48,22 @@ export async function fetchWithMock({ endpoint, mockPath, mockExport, env, metho
     }
     const response = await fetch(endpoint, fetchOptions)
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
+      let err
+      try {
+        err = await response.text()
+      } catch (e) {
+        err = `Unable to read response body: ${e.message}`
+      }
+
+      if (response.status === 401) {
+        // Authentication required, redirect to login.
+        const currentURL = new window.URL(window.location.href)
+        const searchParams = new URLSearchParams(currentURL.search)
+        searchParams.set('originalPath', currentURL.pathname)
+        window.location.href = `/login?${searchParams.toString()}`
+      }
+
+      throw new Error(`HTTP error! status: ${response.status}, error: ${err}`)
     }
     return await response.json()
   }

@@ -16,6 +16,7 @@ import (
 
 	"github.com/fluxcd/pkg/apis/meta"
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -67,6 +68,10 @@ func (r *Router) ResourcesHandler(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		r.log.Error(err, "failed to get resources status", "url", req.URL.String(),
 			"kind", kind, "name", name, "namespace", namespace, "status", status)
+		if apierrors.IsForbidden(err) {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
 		// Return empty array instead of error for better UX
 		resources = []ResourceStatus{}
 	}
@@ -137,7 +142,7 @@ func (r *Router) GetResourcesStatus(ctx context.Context, kinds []string, name, n
 		go func(kind string) {
 			defer wg.Done()
 
-			gvk, err := r.preferredFluxGVK(kind)
+			gvk, err := r.preferredFluxGVK(ctx, kind)
 			if err != nil {
 				if strings.Contains(err.Error(), "no matches for kind") {
 					return
@@ -165,7 +170,7 @@ func (r *Router) GetResourcesStatus(ctx context.Context, kinds []string, name, n
 				listOpts = append(listOpts, client.MatchingFields{"metadata.name": name})
 			}
 
-			if err := r.kubeClient.List(ctx, &list, listOpts...); err != nil {
+			if err := r.kubeClient.GetClient(ctx).List(ctx, &list, listOpts...); err != nil {
 				errChan <- fmt.Errorf("unable to list resources for kind %s : %w", kind, err)
 				return
 			}

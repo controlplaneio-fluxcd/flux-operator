@@ -14,6 +14,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -65,6 +66,10 @@ func (r *Router) EventsHandler(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		r.log.Error(err, "failed to get events", "url", req.URL.String(),
 			"kind", kind, "name", name, "namespace", namespace, "type", eventType)
+		if apierrors.IsForbidden(err) {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
 		// Return empty array instead of error for better UX
 		events = []Event{}
 	}
@@ -141,7 +146,7 @@ func (r *Router) GetEvents(ctx context.Context, kinds []string, name, namespace 
 				listOpts = append(listOpts, client.InNamespace(namespace))
 			}
 
-			if err := r.kubeReader.List(ctx, el, listOpts...); err != nil {
+			if err := r.kubeClient.GetAPIReader(ctx).List(ctx, el, listOpts...); err != nil {
 				errChan <- fmt.Errorf("unable to list events for kind %s: %w", kind, err)
 				return
 			}

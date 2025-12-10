@@ -72,7 +72,7 @@ func (r *Router) getReconcilerSource(ctx context.Context, obj unstructured.Unstr
 
 // extractSourceRef retrieves the source URL, origin URL, and origin revision for a given source reference.
 func (r *Router) extractSourceRef(ctx context.Context, kind, namespace, name string) (*ReconcilerSource, error) {
-	gvk, err := r.preferredFluxGVK(kind)
+	gvk, err := r.preferredFluxGVK(ctx, kind)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get gvk for kind %s: %w", kind, err)
 	}
@@ -85,7 +85,7 @@ func (r *Router) extractSourceRef(ctx context.Context, kind, namespace, name str
 		Name:      name,
 	}
 
-	err = r.kubeClient.Get(ctx, namespacedName, sourceObj)
+	err = r.kubeClient.GetClient(ctx).Get(ctx, namespacedName, sourceObj)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get %s %s: %w", kind, namespacedName, err)
 	}
