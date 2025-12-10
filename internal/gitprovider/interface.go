@@ -17,4 +17,7 @@ type Interface interface {
 
 	// ListRequests returns a list of pull/merge requests that match the filters.
 	ListRequests(ctx context.Context, opts Options) ([]Result, error)
+
+	// ListEnvironments returns a list of environments that match the filters.
+	ListEnvironments(ctx context.Context, opts Options) ([]Result, error)
 }
