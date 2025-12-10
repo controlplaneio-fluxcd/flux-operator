@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/hashicorp/go-retryablehttp"
@@ -90,9 +91,10 @@ func (p *GitLabProvider) ListTags(ctx context.Context, opts Options) ([]Result, 
 		}
 
 		results = append(results, Result{
-			ID:  inputs.ID(tag.Name),
-			SHA: tag.Commit.ID,
-			Tag: tag.Name,
+			ID:   inputs.ID(tag.Name),
+			SHA:  tag.Commit.ID,
+			Tag:  tag.Name,
+			Slug: gitlabSlugify(tag.Name),
 		})
 
 		if opts.Filters.Limit > 0 && len(results) >= opts.Filters.Limit {
@@ -128,6 +130,7 @@ func (p *GitLabProvider) ListBranches(ctx context.Context, opts Options) ([]Resu
 				ID:     inputs.ID(branch.Name),
 				SHA:    branch.Commit.ID,
 				Branch: branch.Name,
+				Slug:   gitlabSlugify(branch.Name),
 			})
 
 			if opts.Filters.Limit > 0 && len(results) >= opts.Filters.Limit {
@@ -175,6 +178,7 @@ func (p *GitLabProvider) ListRequests(ctx context.Context, opts Options) ([]Resu
 				ID:     fmt.Sprintf("%d", mr.IID),
 				SHA:    mr.SHA,
 				Branch: mr.SourceBranch,
+				Slug:   gitlabSlugify(mr.SourceBranch),
 				Title:  mr.Title,
 				Author: mr.Author.Username,
 				Labels: mr.Labels,
@@ -281,4 +285,18 @@ func parseGitLabURL(glURL string) (string, string, error) {
 	}
 
 	return fmt.Sprintf("%s://%s", u.Scheme, u.Host), project, nil
+}
+
+const gitLabSlugMaxLength = 63
+
+var nonGitLabSlugCharactersRegexp = regexp.MustCompile(`[^a-z0-9-]`)
+
+// gitlabSlugify matches GitLab's slugification scheme, cf. https://gitlab.com/gitlab-org/gitlab/-/blob/0fd5cad2e2a2dc8ccc4ba359c4fdcdcf7a38ace8/gems/gitlab-utils/lib/gitlab/utils.rb#L65
+func gitlabSlugify(value string) string {
+	value = strings.ToLower(value)
+	value = nonGitLabSlugCharactersRegexp.ReplaceAllString(value, "-")
+	if len(value) > gitLabSlugMaxLength {
+		value = value[:gitLabSlugMaxLength]
+	}
+	return strings.Trim(value, "-")
 }
