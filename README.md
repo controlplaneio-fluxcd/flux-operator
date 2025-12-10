@@ -153,7 +153,7 @@ flux create secret git flux-system \
 ### Monitor the Flux Installation
 
 To monitor the Flux deployment status, check the
-[FluxReport](https://fluxcd.control-plane.io/operator/fluxreport/)
+[FluxReport](https://fluxoperator.dev/docs/crd/fluxreport/)
 resource in the `flux-system` namespace:
 
 ```shell
@@ -183,20 +183,19 @@ Guides:
 
 - Installation
   - [Flux Operator installation](https://fluxoperator.dev/docs/guides/install/)
+  - [Migration of bootstrapped clusters](https://fluxoperator.dev/docs/guides/migration/)
+  - [Flux Operator CLI](https://fluxoperator.dev/docs/guides/cli/)
 - Flux Configuration
   - [Flux controllers configuration](https://fluxoperator.dev/docs/instance/controllers/)
   - [Flux instance customization](https://fluxoperator.dev/docs/instance/customization/)
   - [Cluster sync configuration](https://fluxoperator.dev/docs/instance/sync/)
   - [Flux controllers sharding](https://fluxoperator.dev/docs/instance/sharding/)
-  - [Flux monitoring and reporting](https://fluxoperator.dev/docs/guides/monitoring/)
-  - [Migration of bootstrapped clusters](https://fluxoperator.dev/docs/guides/migration/)
+  - [Flux monitoring and reporting](https://fluxoperator.dev/docs/instance/monitoring/)
 - CRD references
   - [FluxInstance API reference](https://fluxoperator.dev/docs/crd/fluxinstance/)
   - [FluxReport API reference](https://fluxoperator.dev/docs/crd/fluxreport/)
   - [ResourceSet API reference](https://fluxoperator.dev/docs/crd/resourceset/)
   - [ResourceSetInputProvider API reference](https://fluxoperator.dev/docs/crd/resourcesetinputprovider/)
-- CLI reference
-  - [Flux Operator CLI](https://fluxoperator.dev/docs/guides/cli/)
 
 ## Contributing
 
