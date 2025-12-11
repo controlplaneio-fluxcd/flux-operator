@@ -12,7 +12,15 @@ the lifecycle of CNCF [Flux CD](https://fluxcd.io) and the [ControlPlane enterpr
 The operator extends Flux with self-service capabilities, deployment windows,
 and preview environments for GitHub, GitLab and Azure DevOps pull requests testing.
 
-## Features
+---
+
+<p align="center">
+  <a href="https://fluxoperator.dev">
+    <img src="docs/logo/flux-operator-banner.png" width="100%">
+  </a>
+</p>
+
+---
 
 **Autopilot for Flux CD** - The operator offers an alternative to the Flux Bootstrap procedure, it
 removes the operational burden of managing Flux across fleets of clusters by fully automating the
