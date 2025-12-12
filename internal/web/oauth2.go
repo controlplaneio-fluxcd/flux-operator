@@ -129,11 +129,15 @@ func (o *oauth2Authenticator) ServeCallback(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if cookieState == "" {
-		respondAuthExpired(w, r, fmt.Errorf("OAuth login state cookie has expired"), state.URLQuery)
+		err := fmt.Errorf("OAuth login state cookie has expired")
+		setAuthErrorCookie(w, err, http.StatusUnauthorized)
+		http.Redirect(w, r, state.redirectURL(), http.StatusSeeOther)
 		return
 	}
 	if state.ExpiresAt.Before(time.Now()) {
-		respondAuthExpired(w, r, fmt.Errorf("OAuth login state has expired"), state.URLQuery)
+		err := fmt.Errorf("OAuth login state has expired")
+		setAuthErrorCookie(w, err, http.StatusUnauthorized)
+		http.Redirect(w, r, state.redirectURL(), http.StatusSeeOther)
 		return
 	}
 
@@ -146,7 +150,8 @@ func (o *oauth2Authenticator) ServeCallback(w http.ResponseWriter, r *http.Reque
 	token, err := oauth2Conf.Exchange(r.Context(), r.URL.Query().Get("code"),
 		oauth2.SetAuthURLParam("code_verifier", state.PKCEVerifier))
 	if err != nil {
-		respondAuthExpired(w, r, err, state.URLQuery)
+		setAuthErrorCookie(w, err, http.StatusUnauthorized)
+		http.Redirect(w, r, state.redirectURL(), http.StatusSeeOther)
 		return
 	}
 
@@ -173,13 +178,13 @@ func (o *oauth2Authenticator) ServeAPI(w http.ResponseWriter, r *http.Request, a
 	// Try to authenticate the request.
 	as, err := getAuthStorage(r)
 	if err != nil {
-		respondAuthExpired(w, r, err)
+		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
 	username, groups, err := o.provider.verifyAccessToken(r.Context(), as.AccessToken)
 	if err != nil {
 		if as.RefreshToken == "" {
-			respondAuthExpired(w, r, err)
+			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return
 		}
 		oauth2Conf, err := o.config(r.Context())
@@ -191,7 +196,7 @@ func (o *oauth2Authenticator) ServeAPI(w http.ResponseWriter, r *http.Request, a
 			TokenSource(r.Context(), &oauth2.Token{RefreshToken: as.RefreshToken}).
 			Token()
 		if err != nil {
-			respondAuthExpired(w, r, err)
+			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return
 		}
 		if username, groups, err = o.verifyTokenAndSetAuthStorage(w, r, token); err != nil {
@@ -313,7 +318,17 @@ type oauth2LoginState struct {
 
 // redirectURL builds the redirect URL for OAuth2 login.
 func (o *oauth2LoginState) redirectURL() string {
-	return originalURL(o.URLQuery)
+	q := o.URLQuery
+	redirectPath := "/"
+	if p := q.Get(authQueryParamOriginalPath); p != "" {
+		redirectPath = p
+		q.Del(authQueryParamOriginalPath)
+	}
+	redirectURL := redirectPath
+	if len(q) > 0 {
+		redirectURL += "?" + q.Encode()
+	}
+	return redirectURL
 }
 
 // encodeState encodes the OAuth2 login state.

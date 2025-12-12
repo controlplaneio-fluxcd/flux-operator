@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"net/url"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
 )
@@ -127,23 +126,6 @@ func newOAuth2Middleware(ctx context.Context, conf *config.ConfigSpec, kubeClien
 	}, nil
 }
 
-// respondAuthExpired responds to the client that authentication has expired.
-// For API requests, it responds with a 401 Unauthorized status code.
-// For page requests, it redirects to the /login page.
-func respondAuthExpired(w http.ResponseWriter, r *http.Request, err error, qs ...url.Values) {
-	if isAPIRequest(r) {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
-		return
-	}
-
-	// Build the redirect URL from the query.
-	redirectURL := "/"
-	if len(qs) > 0 {
-		redirectURL = originalURL(qs[0])
-	}
-	http.Redirect(w, r, redirectURL, http.StatusSeeOther)
-}
-
 // respondAuthError responds to the client with a terminal error message.
 // Useful for scenarios where retrying authentication automatically will not
 // help, and it's better to inform the user about the problem. For API requests,
@@ -158,18 +140,4 @@ func respondAuthError(w http.ResponseWriter, r *http.Request, err error, code in
 		setAuthErrorCookie(w, err, code)
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 	}
-}
-
-// originalURL builds the redirect URL based on the originalPath query parameter.
-func originalURL(q url.Values) string {
-	redirectPath := "/"
-	if p := q.Get(authQueryParamOriginalPath); p != "" {
-		redirectPath = p
-		q.Del(authQueryParamOriginalPath)
-	}
-	redirectURL := redirectPath
-	if len(q) > 0 {
-		redirectURL += "?" + q.Encode()
-	}
-	return redirectURL
 }
