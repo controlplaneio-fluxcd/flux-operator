@@ -11,7 +11,6 @@ import (
 
 // userSession holds the user session information during the life of a request.
 type userSession struct {
-	provider string
 	username string
 	groups   []string
 	client   *userClient
@@ -26,12 +25,11 @@ func (u *userSession) getUserKey() string {
 type userSessionContextKey struct{}
 
 // storeUserSession stores the userSession in the given context.
-func storeUserSession(ctx context.Context, provider, username string, groups []string, client *userClient) context.Context {
+func storeUserSession(ctx context.Context, username string, groups []string, client *userClient) context.Context {
 	if groups == nil {
 		groups = []string{}
 	}
 	return context.WithValue(ctx, userSessionContextKey{}, &userSession{
-		provider: provider,
 		username: username,
 		groups:   groups,
 		client:   client,
