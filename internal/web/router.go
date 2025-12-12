@@ -7,7 +7,6 @@ import (
 	"context"
 	"io/fs"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -109,9 +108,4 @@ func (r *Router) getCachedReport() *unstructured.Unstructured {
 	r.reportCacheMu.RLock()
 	defer r.reportCacheMu.RUnlock()
 	return r.reportCache
-}
-
-// isAPIRequest returns true if the request is for an API endpoint.
-func isAPIRequest(r *http.Request) bool {
-	return strings.HasPrefix(r.URL.Path, "/api/")
 }

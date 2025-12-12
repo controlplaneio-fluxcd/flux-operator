@@ -1,12 +1,13 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-package web
+package auth
 
 import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/kubeclient"
@@ -20,16 +21,16 @@ const (
 	authQueryParamOriginalPath = "originalPath"
 )
 
-// NewAuthMiddleware creates a new authentication middleware for HTTP handlers.
-func NewAuthMiddleware(ctx context.Context, conf *config.ConfigSpec, kubeClient *kubeclient.Client) (func(next http.Handler) http.Handler, error) {
+// NewMiddleware creates a new authentication middleware for HTTP handlers.
+func NewMiddleware(ctx context.Context, conf *config.ConfigSpec, kubeClient *kubeclient.Client) (func(next http.Handler) http.Handler, error) {
 	// Build middleware according to the authentication type.
 	var middleware func(next http.Handler) http.Handler
 	switch {
 	case conf.Authentication == nil:
-		middleware = newDefaultAuthMiddleware()
+		middleware = newDefaultMiddleware()
 	case conf.Authentication.Anonymous != nil:
 		var err error
-		middleware, err = newAnonymousAuthMiddleware(conf, kubeClient)
+		middleware, err = newAnonymousMiddleware(conf, kubeClient)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create anonymous authentication middleware: %w", err)
 		}
@@ -57,9 +58,9 @@ func NewAuthMiddleware(ctx context.Context, conf *config.ConfigSpec, kubeClient 
 	}, nil
 }
 
-// newDefaultAuthMiddleware creates a default authentication middleware
+// newDefaultMiddleware creates a default authentication middleware
 // that allows all requests without authentication.
-func newDefaultAuthMiddleware() func(next http.Handler) http.Handler {
+func newDefaultMiddleware() func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			setAnonymousAuthProviderCookie(w)
@@ -68,8 +69,8 @@ func newDefaultAuthMiddleware() func(next http.Handler) http.Handler {
 	}
 }
 
-// newAnonymousAuthMiddleware creates an anonymous authentication middleware.
-func newAnonymousAuthMiddleware(conf *config.ConfigSpec, kubeClient *kubeclient.Client) (func(next http.Handler) http.Handler, error) {
+// newAnonymousMiddleware creates an anonymous authentication middleware.
+func newAnonymousMiddleware(conf *config.ConfigSpec, kubeClient *kubeclient.Client) (func(next http.Handler) http.Handler, error) {
 	anonConf := conf.Authentication.Anonymous
 
 	username := anonConf.Username
@@ -115,13 +116,13 @@ func newOAuth2Middleware(ctx context.Context, conf *config.ConfigSpec, kubeClien
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch {
 			case r.URL.Path == oauth2PathAuthorize:
-				authenticator.ServeAuthorize(w, r)
+				authenticator.serveAuthorize(w, r)
 			case r.URL.Path == oauth2PathCallback:
-				authenticator.ServeCallback(w, r)
+				authenticator.serveCallback(w, r)
 			case isAPIRequest(r):
-				authenticator.ServeAPI(w, r, next)
+				authenticator.serveAPI(w, r, next)
 			default:
-				authenticator.ServeAssets(w, r, next)
+				authenticator.serveAssets(w, r, next)
 			}
 		})
 	}, nil
@@ -139,4 +140,9 @@ func respondAuthError(w http.ResponseWriter, r *http.Request, err error, code in
 		setAuthErrorCookie(w, err, code)
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 	}
+}
+
+// isAPIRequest returns true if the request is for an API endpoint.
+func isAPIRequest(r *http.Request) bool {
+	return strings.HasPrefix(r.URL.Path, "/api/")
 }

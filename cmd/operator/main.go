@@ -41,6 +41,7 @@ import (
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/entitlement"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web"
+	webauth "github.com/controlplaneio-fluxcd/flux-operator/internal/web/auth"
 	webconfig "github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
 	webkubeclient "github.com/controlplaneio-fluxcd/flux-operator/internal/web/kubeclient"
 	// +kubebuilder:scaffold:imports
@@ -373,13 +374,13 @@ func main() {
 			userCacheSize = a.UserCacheSize
 		}
 
-		kubeClient, err := webkubeclient.NewClient(mgr, userCacheSize, namespaceCacheDuration)
+		kubeClient, err := webkubeclient.New(mgr, userCacheSize, namespaceCacheDuration)
 		if err != nil {
 			setupLog.Error(err, "unable to create web server kube client")
 			os.Exit(1)
 		}
 
-		authMiddleware, err := web.NewAuthMiddleware(ctx, &conf.Spec, kubeClient)
+		authMiddleware, err := webauth.NewMiddleware(ctx, &conf.Spec, kubeClient)
 		if err != nil {
 			setupLog.Error(err, "unable to create auth middleware")
 			os.Exit(1)

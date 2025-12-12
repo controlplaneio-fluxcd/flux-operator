@@ -66,8 +66,8 @@ func WithPrivileges() Option {
 	}
 }
 
-// NewClient returns a new Client wrapping the given cluster.Cluster.
-func NewClient(c cluster.Cluster, userCacheSize int, namespaceCacheDuration time.Duration) (*Client, error) {
+// New returns a new Client wrapping the given cluster.Cluster.
+func New(c cluster.Cluster, userCacheSize int, namespaceCacheDuration time.Duration) (*Client, error) {
 	userClientCache, err := cache.NewLRU[*userClient](userCacheSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create user client cache: %w", err)
