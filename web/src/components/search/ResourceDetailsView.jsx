@@ -67,7 +67,7 @@ function InventoryItem({ item }) {
       <div class="py-1 px-2 text-xs break-all">
         <button
           onClick={handleClick}
-          class="font-mono text-left hover:opacity-80 transition-opacity focus:outline-none focus:ring-2 focus:ring-flux-blue focus:ring-offset-1 rounded inline-block group"
+          class="text-left hover:opacity-80 transition-opacity focus:outline-none focus:ring-2 focus:ring-flux-blue focus:ring-offset-1 rounded inline-block group"
         >
           <span class="text-gray-600 dark:text-gray-400">{item.kind}/</span>{item.namespace && <span class="text-gray-500 dark:text-gray-400">{item.namespace}/</span>}<span class="text-gray-900 dark:text-gray-100 group-hover:text-flux-blue dark:group-hover:text-blue-400">{item.name}</span><svg class="w-3 h-3 text-gray-400 group-hover:text-flux-blue dark:group-hover:text-blue-400 transition-colors ml-1 inline-block align-middle" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
         </button>
@@ -78,7 +78,7 @@ function InventoryItem({ item }) {
   // Non-Flux resource - render as plain text
   return (
     <div class="py-1 px-2 text-xs break-all">
-      <span class="font-mono text-gray-900 dark:text-gray-100">
+      <span class="text-gray-900 dark:text-gray-100">
         <span class="text-gray-600 dark:text-gray-400">{item.kind}/</span>
         {item.namespace && (
           <span class="text-gray-500 dark:text-gray-400">{item.namespace}/</span>
@@ -96,7 +96,7 @@ function InventoryGroupByApiVersion({ apiVersion, items }) {
   return (
     <div class="mb-3">
       <div class="flex items-center gap-2 py-1 flex-wrap">
-        <span class="text-xs font-bold text-gray-800 dark:text-gray-200 break-all">
+        <span class="text-xs font-semibold text-gray-800 dark:text-gray-200 break-all">
           {apiVersion}
         </span>
         <span class="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">

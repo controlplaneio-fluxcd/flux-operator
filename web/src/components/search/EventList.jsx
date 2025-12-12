@@ -118,7 +118,7 @@ function EventCard({ event }) {
       <div class="mb-1 sm:mb-2">
         <button
           onClick={handleResourceClick}
-          class="font-mono text-sm text-left hover:opacity-80 transition-opacity focus:outline-none focus:ring-2 focus:ring-flux-blue focus:ring-offset-2 rounded inline-block group"
+          class="text-sm text-left hover:opacity-80 transition-opacity focus:outline-none focus:ring-2 focus:ring-flux-blue focus:ring-offset-2 rounded inline-block group"
         >
           <span class="text-gray-500 dark:text-gray-400">{event.namespace}/</span><span class="font-semibold text-gray-900 dark:text-gray-100 group-hover:text-flux-blue dark:group-hover:text-blue-400">{name}</span><svg class="w-3.5 h-3.5 text-gray-400 group-hover:text-flux-blue dark:group-hover:text-blue-400 transition-colors ml-1 inline-block align-middle" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
         </button>
@@ -205,7 +205,7 @@ export function EventList() {
       <div class="space-y-6">
         {/* Page Title */}
         <div class="flex items-center justify-between">
-          <h2 class="text-lg font-bold text-gray-900 dark:text-white">Flux Events</h2>
+          <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Flux Events</h2>
           {/* Event count */}
           {!eventsLoading.value && eventsData.value.length > 0 && (
             <span class="text-sm text-gray-600 dark:text-gray-400">

@@ -286,7 +286,7 @@ export function FavoritesPage() {
     return (
       <main data-testid="favorites-page" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
         <div class="space-y-6">
-          <h2 class="text-lg font-bold text-gray-900 dark:text-white">Favorites</h2>
+          <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Favorites</h2>
 
           <div class="card py-12">
             <div class="text-center">
@@ -320,7 +320,7 @@ export function FavoritesPage() {
       <div class="space-y-6">
         {/* Page Title */}
         <div class="flex items-center justify-between">
-          <h2 class="text-lg font-bold text-gray-900 dark:text-white">Favorites</h2>
+          <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Favorites</h2>
           {/* Favorites count with refresh indicator */}
           {!loading && filteredFavorites.length > 0 && (
             <span class="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-2">
@@ -388,7 +388,7 @@ export function FavoritesPage() {
                 <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase flex-shrink-0">
                   {fav.kind}
                 </span>
-                <span class="font-mono text-sm text-gray-900 dark:text-gray-100 truncate flex-grow">
+                <span class="text-sm text-gray-900 dark:text-gray-100 truncate flex-grow">
                   {fav.namespace}/{fav.name}
                 </span>
                 {/* Delete button */}

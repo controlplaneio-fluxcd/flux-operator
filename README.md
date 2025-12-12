@@ -16,7 +16,7 @@ and preview environments for GitHub, GitLab and Azure DevOps pull requests testi
 
 <p align="center">
   <a href="https://fluxoperator.dev">
-    <img src="docs/logo/flux-operator-banner.png" width="100%">
+    <img src="https://raw.githubusercontent.com/controlplaneio-fluxcd/flux-operator/refs/heads/main/docs/logo/flux-operator-banner.png" width="100%">
   </a>
 </p>
 

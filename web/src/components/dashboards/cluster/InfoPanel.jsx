@@ -43,7 +43,7 @@ function ResourceMetric({ label, value, limit, percent, unit }) {
     <div class="space-y-1">
       <div class="flex flex-col sm:flex-row sm:justify-between sm:items-baseline gap-1">
         <span class="text-xs sm:text-sm text-gray-600 dark:text-gray-400">{label}</span>
-        <span class="text-xs sm:text-sm font-mono text-gray-900 dark:text-white">
+        <span class="text-xs sm:text-sm text-gray-900 dark:text-white">
           {value}/{limit} {unit} ({Math.min(percent, 100).toFixed(0)}%)
         </span>
       </div>

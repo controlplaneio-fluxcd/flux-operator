@@ -208,7 +208,7 @@ export function ResourcePage({ kind, namespace, name }) {
             </div>
             <div class="flex-grow min-w-0">
               <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">{kind}</span>
-              <h1 class="text-2xl font-bold text-gray-900 dark:text-white font-mono break-all">
+              <h1 class="text-2xl font-semibold text-gray-900 dark:text-white break-all">
                 {name} not found
               </h1>
               <span class="text-sm text-gray-500 dark:text-gray-400">Namespace: {namespace}</span>
@@ -233,7 +233,7 @@ export function ResourcePage({ kind, namespace, name }) {
             </div>
             <div class="flex-grow min-w-0">
               <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">{kind}</span>
-              <h1 class="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white font-mono break-all flex items-center gap-2">
+              <h1 class="text-lg sm:text-2xl font-semibold text-gray-900 dark:text-white break-all flex items-center gap-2">
                 {name}
                 <button
                   onClick={handleFavoriteClick}

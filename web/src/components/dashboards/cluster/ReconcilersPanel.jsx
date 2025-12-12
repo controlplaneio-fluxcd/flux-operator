@@ -87,7 +87,7 @@ function ReconcilerCard({ crd, stats, isInstalled }) {
         )}
       </div>
 
-      <div class="flex items-center gap-2 text-2xl font-bold text-gray-900 dark:text-white mb-2">
+      <div class="flex items-center gap-2 text-2xl font-semibold text-gray-900 dark:text-white mb-2">
         <span>{total}</span>
         {stats.failing > 0 && (
           <svg class="w-6 h-6 text-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -153,7 +153,7 @@ export function WorkloadsTabContent({ workloadItems, namespace }) {
                     <span class="text-xs font-medium text-gray-500 dark:text-gray-400">Images</span>
                     <div class="mt-1 space-y-1">
                       {workload.containerImages.map((image, idx) => (
-                        <div key={idx} class="text-xs text-gray-700 dark:text-gray-300 font-mono break-all bg-white dark:bg-gray-900 px-2 py-1 rounded">
+                        <div key={idx} class="text-xs text-gray-700 dark:text-gray-300 break-all bg-white dark:bg-gray-900 px-2 py-1 rounded">
                           {image}
                         </div>
                       ))}
@@ -169,7 +169,7 @@ export function WorkloadsTabContent({ workloadItems, namespace }) {
                       {workload.pods.map((pod, idx) => (
                         <div key={idx} class="bg-white dark:bg-gray-900 rounded px-3 py-2">
                           <div class="flex items-center justify-between">
-                            <span class="text-xs font-mono text-gray-900 dark:text-white truncate flex-grow mr-2">
+                            <span class="text-xs text-gray-900 dark:text-white truncate flex-grow mr-2">
                               {pod.name}
                             </span>
                             <span class={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${getWorkloadStatusBadgeClass(pod.status)}`}>
