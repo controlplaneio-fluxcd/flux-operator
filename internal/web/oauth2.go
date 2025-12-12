@@ -82,7 +82,8 @@ func (o *oauth2Authenticator) ServeAuthorize(w http.ResponseWriter, r *http.Requ
 	// Build OAuth2 config.
 	oauth2Conf, err := o.config(r.Context())
 	if err != nil {
-		respondAuthError(w, r, err, http.StatusInternalServerError)
+		setAuthErrorCookie(w, err, http.StatusInternalServerError)
+		http.Redirect(w, r, originalURL(r.URL.Query()), http.StatusSeeOther)
 		return
 	}
 	oauth2Conf.ClientSecret = "" // No need for client secret in this part of the flow.
@@ -98,7 +99,8 @@ func (o *oauth2Authenticator) ServeAuthorize(w http.ResponseWriter, r *http.Requ
 		ExpiresAt:    time.Now().Add(cookieDurationShortLived),
 	})
 	if err != nil {
-		respondAuthError(w, r, err, http.StatusInternalServerError)
+		setAuthErrorCookie(w, err, http.StatusInternalServerError)
+		http.Redirect(w, r, originalURL(r.URL.Query()), http.StatusSeeOther)
 		return
 	}
 	setSecureCookie(w, cookieNameOAuth2LoginState, cookiePathOAuth2LoginState,
@@ -144,7 +146,8 @@ func (o *oauth2Authenticator) ServeCallback(w http.ResponseWriter, r *http.Reque
 	// Exchange code for token.
 	oauth2Conf, err := o.config(r.Context())
 	if err != nil {
-		respondAuthError(w, r, err, http.StatusInternalServerError)
+		setAuthErrorCookie(w, err, http.StatusInternalServerError)
+		http.Redirect(w, r, state.redirectURL(), http.StatusSeeOther)
 		return
 	}
 	token, err := oauth2Conf.Exchange(r.Context(), r.URL.Query().Get("code"),
@@ -318,7 +321,11 @@ type oauth2LoginState struct {
 
 // redirectURL builds the redirect URL for OAuth2 login.
 func (o *oauth2LoginState) redirectURL() string {
-	q := o.URLQuery
+	return originalURL(o.URLQuery)
+}
+
+// originalURL builds the redirect URL from the original path query parameter.
+func originalURL(q url.Values) string {
 	redirectPath := "/"
 	if p := q.Get(authQueryParamOriginalPath); p != "" {
 		redirectPath = p
