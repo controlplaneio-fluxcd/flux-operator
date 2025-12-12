@@ -38,18 +38,23 @@ type oauth2Authenticator struct {
 
 // oauth2Provider has methods for implementing the OAuth2 protocol.
 type oauth2Provider interface {
+	init(ctx context.Context) (initializedOAuth2Provider, error)
+}
+
+// initializedOAuth2Provider has methods for implementing the OAuth2 protocol.
+type initializedOAuth2Provider interface {
 	verifyAccessToken(ctx context.Context, accessToken string) (string, []string, error)
 	verifyToken(ctx context.Context, token *oauth2.Token) (string, []string, *authStorage, error)
-	config(ctx context.Context) (*oauth2.Config, error)
+	config() *oauth2.Config
 }
 
 // newOAuth2Authenticator creates a new OAuth2 authenticator.
 func newOAuth2Authenticator(ctx context.Context, conf *config.ConfigSpec,
 	kubeClient *kubeclient.Client, provider oauth2Provider) (*oauth2Authenticator, error) {
 
-	// Validate that the provider can fetch a configuration.
-	if _, err := provider.config(ctx); err != nil {
-		return nil, fmt.Errorf("failed to fetch OAuth2 provider configuration: %w", err)
+	// Validate that the provider can be initialized.
+	if _, err := provider.init(ctx); err != nil {
+		return nil, fmt.Errorf("failed to initialize OAuth2 provider: %w", err)
 	}
 
 	// Build encryptor/decryptor for login state cookies.
@@ -81,12 +86,13 @@ func newOAuth2Authenticator(ctx context.Context, conf *config.ConfigSpec,
 // serveAuthorize serves the OAuth2 authorize endpoint.
 func (o *oauth2Authenticator) serveAuthorize(w http.ResponseWriter, r *http.Request) {
 	// Build OAuth2 config.
-	oauth2Conf, err := o.config(r.Context())
+	p, err := o.provider.init(r.Context())
 	if err != nil {
 		setAuthErrorCookie(w, err, http.StatusInternalServerError)
 		http.Redirect(w, r, originalURL(r.URL.Query()), http.StatusSeeOther)
 		return
 	}
+	oauth2Conf := o.config(p)
 	oauth2Conf.ClientSecret = "" // No need for client secret in this part of the flow.
 
 	// Build and set state.
@@ -145,13 +151,13 @@ func (o *oauth2Authenticator) serveCallback(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Exchange code for token.
-	oauth2Conf, err := o.config(r.Context())
+	p, err := o.provider.init(r.Context())
 	if err != nil {
 		setAuthErrorCookie(w, err, http.StatusInternalServerError)
 		http.Redirect(w, r, state.redirectURL(), http.StatusSeeOther)
 		return
 	}
-	token, err := oauth2Conf.Exchange(r.Context(), r.URL.Query().Get("code"),
+	token, err := o.config(p).Exchange(r.Context(), r.URL.Query().Get("code"),
 		oauth2.SetAuthURLParam("code_verifier", state.PKCEVerifier))
 	if err != nil {
 		setAuthErrorCookie(w, err, http.StatusUnauthorized)
@@ -185,17 +191,18 @@ func (o *oauth2Authenticator) serveAPI(w http.ResponseWriter, r *http.Request, a
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
-	username, groups, err := o.provider.verifyAccessToken(r.Context(), as.AccessToken)
+	p, err := o.provider.init(r.Context())
+	if err != nil {
+		respondAuthError(w, r, err, http.StatusInternalServerError)
+		return
+	}
+	username, groups, err := p.verifyAccessToken(r.Context(), as.AccessToken)
 	if err != nil {
 		if as.RefreshToken == "" {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return
 		}
-		oauth2Conf, err := o.config(r.Context())
-		if err != nil {
-			respondAuthError(w, r, err, http.StatusInternalServerError)
-			return
-		}
+		oauth2Conf := o.config(p)
 		token, err := oauth2Conf.
 			TokenSource(r.Context(), &oauth2.Token{RefreshToken: as.RefreshToken}).
 			Token()
@@ -239,21 +246,21 @@ func (o *oauth2Authenticator) serveAssets(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		return
 	}
-	if _, _, err := o.provider.verifyAccessToken(r.Context(), as.AccessToken); err != nil {
+	p, err := o.provider.init(r.Context())
+	if err != nil {
+		return
+	}
+	if _, _, err := p.verifyAccessToken(r.Context(), as.AccessToken); err != nil {
 		if as.RefreshToken == "" {
 			return
 		}
-		oauth2Conf, err := o.config(r.Context())
-		if err != nil {
-			return
-		}
-		token, err := oauth2Conf.
+		token, err := o.config(p).
 			TokenSource(r.Context(), &oauth2.Token{RefreshToken: as.RefreshToken}).
 			Token()
 		if err != nil {
 			return
 		}
-		if _, _, as, err = o.provider.verifyToken(r.Context(), token); err != nil {
+		if _, _, as, err = p.verifyToken(r.Context(), token); err != nil {
 			return
 		}
 		if err := setAuthStorage(o.conf, w, *as); err != nil {
@@ -269,25 +276,27 @@ func (o *oauth2Authenticator) serveAssets(w http.ResponseWriter, r *http.Request
 
 // config builds the OAuth2 configuration from the
 // provider base and from the web server configuration.
-func (o *oauth2Authenticator) config(ctx context.Context) (*oauth2.Config, error) {
-	cfg, err := o.provider.config(ctx)
-	if err != nil {
-		return nil, err
-	}
-	cfg.ClientID = o.conf.Authentication.OAuth2.ClientID
-	cfg.ClientSecret = o.conf.Authentication.OAuth2.ClientSecret
-	cfg.RedirectURL = o.conf.BaseURL + oauth2PathCallback
+func (o *oauth2Authenticator) config(p initializedOAuth2Provider) *oauth2.Config {
+	base := p.config()
+	base.ClientID = o.conf.Authentication.OAuth2.ClientID
+	base.ClientSecret = o.conf.Authentication.OAuth2.ClientSecret
+	base.RedirectURL = o.conf.BaseURL + oauth2PathCallback
 	if s := o.conf.Authentication.OAuth2.Scopes; len(s) > 0 {
-		cfg.Scopes = s
+		base.Scopes = s
 	}
-	return cfg, nil
+	return base
 }
 
 // verifyTokenAndSetAuthStorage verifies the OAuth2 token and sets
 // the authentication storage in a cookie, or responds on any errors.
 func (o *oauth2Authenticator) verifyTokenAndSetAuthStorage(
 	w http.ResponseWriter, r *http.Request, token *oauth2.Token) (string, []string, error) {
-	username, groups, as, err := o.provider.verifyToken(r.Context(), token)
+	p, err := o.provider.init(r.Context())
+	if err != nil {
+		respondAuthError(w, r, err, http.StatusInternalServerError)
+		return "", nil, err
+	}
+	username, groups, as, err := p.verifyToken(r.Context(), token)
 	if err != nil {
 		respondAuthError(w, r, err, http.StatusUnauthorized)
 		return "", nil, err
