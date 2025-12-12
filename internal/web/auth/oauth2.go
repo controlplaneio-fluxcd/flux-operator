@@ -1,7 +1,7 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-package web
+package auth
 
 import (
 	"context"
@@ -78,8 +78,8 @@ func newOAuth2Authenticator(ctx context.Context, conf *config.ConfigSpec, kubeCl
 	}, nil
 }
 
-// ServeAuthorize serves the OAuth2 authorize endpoint.
-func (o *oauth2Authenticator) ServeAuthorize(w http.ResponseWriter, r *http.Request) {
+// serveAuthorize serves the OAuth2 authorize endpoint.
+func (o *oauth2Authenticator) serveAuthorize(w http.ResponseWriter, r *http.Request) {
 	// Build OAuth2 config.
 	oauth2Conf, err := o.config(r.Context())
 	if err != nil {
@@ -114,8 +114,8 @@ func (o *oauth2Authenticator) ServeAuthorize(w http.ResponseWriter, r *http.Requ
 	http.Redirect(w, r, authCodeURL, http.StatusSeeOther)
 }
 
-// ServeCallback serves the OAuth2 callback endpoint.
-func (o *oauth2Authenticator) ServeCallback(w http.ResponseWriter, r *http.Request) {
+// serveCallback serves the OAuth2 callback endpoint.
+func (o *oauth2Authenticator) serveCallback(w http.ResponseWriter, r *http.Request) {
 	// Parse state.
 	queryState, cookieState := consumeOAuth2LoginStates(w, r)
 	if queryState == "" {
@@ -171,10 +171,10 @@ func (o *oauth2Authenticator) ServeCallback(w http.ResponseWriter, r *http.Reque
 	http.Redirect(w, r, state.redirectURL(), http.StatusSeeOther)
 }
 
-// ServeAPI serves API requests enforcing OAuth2 authentication.
+// serveAPI serves API requests enforcing OAuth2 authentication.
 // It retrieves the authentication storage from the request,
 // verifies the access token, and refreshes it if necessary.
-func (o *oauth2Authenticator) ServeAPI(w http.ResponseWriter, r *http.Request, api http.Handler) {
+func (o *oauth2Authenticator) serveAPI(w http.ResponseWriter, r *http.Request, api http.Handler) {
 	// Set the auth provider cookie to indicate OAuth2 is in use and not yet authenticated.
 	authenticated := false
 	setAuthProviderCookie(w, o.conf.Authentication.OAuth2.Provider, o.conf.BaseURL+oauth2PathAuthorize, authenticated)
@@ -226,8 +226,8 @@ func (o *oauth2Authenticator) ServeAPI(w http.ResponseWriter, r *http.Request, a
 	api.ServeHTTP(w, r)
 }
 
-// ServeAssets serves asset requests enhancing them with the auth provider cookie.
-func (o *oauth2Authenticator) ServeAssets(w http.ResponseWriter, r *http.Request, assets http.Handler) {
+// serveAssets serves asset requests enhancing them with the auth provider cookie.
+func (o *oauth2Authenticator) serveAssets(w http.ResponseWriter, r *http.Request, assets http.Handler) {
 	defer assets.ServeHTTP(w, r)
 
 	// Set the auth provider cookie to indicate OAuth2 is in use and not yet authenticated.
