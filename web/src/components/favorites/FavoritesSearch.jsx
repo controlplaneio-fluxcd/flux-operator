@@ -212,7 +212,7 @@ export function FavoritesSearch({ onFilter, onClose, namespaces = [], kinds = []
               <li key={ns}>
                 <button
                   onClick={() => handleNamespaceSelect(ns)}
-                  class={`w-full text-left py-1.5 px-3 text-sm font-mono focus:outline-none transition-colors ${
+                  class={`w-full text-left py-1.5 px-3 text-sm focus:outline-none transition-colors ${
                     index === nsSelectedIndex
                       ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
                       : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
@@ -246,7 +246,7 @@ export function FavoritesSearch({ onFilter, onClose, namespaces = [], kinds = []
               <li key={kind}>
                 <button
                   onClick={() => handleKindSelect(kind)}
-                  class={`w-full text-left py-1.5 px-3 text-sm font-mono focus:outline-none transition-colors ${
+                  class={`w-full text-left py-1.5 px-3 text-sm focus:outline-none transition-colors ${
                     index === kindSelectedIndex
                       ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
                       : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'

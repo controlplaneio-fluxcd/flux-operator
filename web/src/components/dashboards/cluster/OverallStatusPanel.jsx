@@ -173,7 +173,7 @@ export function OverallStatusPanel({ report }) {
           </div>
         </div>
         <div class="flex-grow">
-          <h2 class={`text-lg sm:text-2xl font-bold ${statusInfo.color}`}>{statusInfo.title}</h2>
+          <h2 class={`text-lg sm:text-2xl font-semibold ${statusInfo.color}`}>{statusInfo.title}</h2>
           <div class="flex items-center gap-2 text-gray-700 dark:text-gray-300 mt-1">
             <p class="hidden md:block">{statusInfo.message}</p>
             {hasFailures && (

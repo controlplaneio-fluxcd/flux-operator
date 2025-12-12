@@ -164,7 +164,7 @@ export function HistoryTimeline({ history, kind }) {
                   {/* Digest (not for HelmRelease) */}
                   {!isHelmRelease && digest && (
                     <div>
-                    Digest: <span class="font-mono text-gray-900 dark:text-white">{truncateDigest(digest)}</span>
+                    Digest: <span class="text-gray-900 dark:text-white">{truncateDigest(digest)}</span>
                     </div>
                   )}
                 </div>

@@ -79,7 +79,7 @@ export function Header() {
               <FluxIcon className="w-7 h-7 sm:w-8 sm:h-8 text-gray-900 dark:text-white" />
               {/* Title - hidden when search is expanded */}
               {!quickSearchOpen.value && (
-                <h1 class="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">Flux Status</h1>
+                <h1 class="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white">Flux Status</h1>
               )}
             </button>
 

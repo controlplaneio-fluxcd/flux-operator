@@ -7,6 +7,9 @@ export default {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['inter', 'system-ui', 'sans-serif'],
+      },
       colors: {
         'flux-blue': '#0066CC',
         'success': '#10B981',

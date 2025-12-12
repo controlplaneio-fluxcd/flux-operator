@@ -64,7 +64,7 @@ export function FavoriteCard({ favorite, resourceData }) {
       {/* Resource name */}
       <div class="mb-2">
         <div
-          class="font-mono text-sm text-left flex items-center gap-1.5 max-w-full"
+          class="text-sm text-left flex items-center gap-1.5 max-w-full"
           title={name}
         >
           <svg class="w-4 h-4 text-gray-400 dark:text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">

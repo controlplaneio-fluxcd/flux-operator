@@ -18,7 +18,7 @@ function ResourceMetric({ label, value, limit, percent, unit }) {
     <div class="space-y-1">
       <div class="flex flex-col sm:flex-row sm:justify-between sm:items-baseline gap-1">
         <span class="text-xs sm:text-sm text-gray-600 dark:text-gray-400">{label}</span>
-        <span class="text-xs sm:text-sm font-mono text-gray-900 dark:text-white">
+        <span class="text-xs sm:text-sm text-gray-900 dark:text-white">
           {value}/{limit} {unit} ({Math.min(percent, 100).toFixed(0)}%)
         </span>
       </div>
@@ -76,7 +76,7 @@ function ComponentRow({component, metrics, isRowExpanded, toggleComponent}) {
           </button>
         </td>
         <td class="px-6 py-4">
-          <span class="font-mono text-xs sm:text-sm text-gray-700 dark:text-gray-300">{imageInfo.version}</span>
+          <span class="text-xs sm:text-sm text-gray-700 dark:text-gray-300">{imageInfo.version}</span>
         </td>
         <td class="px-6 py-4">
           {component.ready ? (
@@ -98,12 +98,12 @@ function ComponentRow({component, metrics, isRowExpanded, toggleComponent}) {
                     <>
                       <div class="text-sm">
                         <span class="text-gray-500 dark:text-gray-400">Image</span>
-                        <p class="mt-1 text-gray-900 dark:text-white break-all font-mono text-xs">{imagePart}</p>
+                        <p class="mt-1 text-gray-900 dark:text-white break-all text-xs">{imagePart}</p>
                       </div>
                       {digestPart && (
                         <div class="text-sm">
                           <span class="text-gray-500 dark:text-gray-400">Digest</span>
-                          <p class="mt-1 text-gray-900 dark:text-white break-all font-mono text-xs">{digestPart}</p>
+                          <p class="mt-1 text-gray-900 dark:text-white break-all text-xs">{digestPart}</p>
                         </div>
                       )}
                     </>
@@ -111,7 +111,7 @@ function ComponentRow({component, metrics, isRowExpanded, toggleComponent}) {
                 })()}
                 <div class="text-sm">
                   <span class="text-gray-500 dark:text-gray-400">Status</span>
-                  <p class="mt-1 text-gray-900 dark:text-white break-all font-mono text-xs">{component.status}</p>
+                  <p class="mt-1 text-gray-900 dark:text-white break-all text-xs">{component.status}</p>
                 </div>
               </div>
 

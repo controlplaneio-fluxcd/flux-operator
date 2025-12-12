@@ -682,7 +682,7 @@ export function QuickSearch() {
             {panelState === 'hint' && (
               <div class="px-3 py-2 text-sm text-gray-500 dark:text-gray-400 space-y-2">
                 <div class="space-y-1">
-                  <div>Type 2+ chars to search or <span class="font-mono">**</span> for most recent</div>
+                  <div>Type 2+ chars to search or ** for most recent</div>
                   <div>
                     Apply filters with{' '}
                     <button
