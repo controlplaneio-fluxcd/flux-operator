@@ -77,11 +77,12 @@ func newOAuth2Authenticator(ctx context.Context, conf *config.ConfigSpec, kubeCl
 	}, nil
 }
 
-// ServeLogin serves the login endpoint.
-func (o *oauth2Authenticator) ServeLogin(w http.ResponseWriter, r *http.Request) {
+// ServeAuthorize serves the OAuth2 authorize endpoint.
+func (o *oauth2Authenticator) ServeAuthorize(w http.ResponseWriter, r *http.Request) {
 	// Build OAuth2 config.
-	oauth2Conf, err := o.config(w, r)
+	oauth2Conf, err := o.config(r.Context())
 	if err != nil {
+		respondAuthError(w, r, err, http.StatusInternalServerError)
 		return
 	}
 	oauth2Conf.ClientSecret = "" // No need for client secret in this part of the flow.
@@ -100,7 +101,7 @@ func (o *oauth2Authenticator) ServeLogin(w http.ResponseWriter, r *http.Request)
 		respondAuthError(w, r, err, http.StatusInternalServerError)
 		return
 	}
-	setAuthCookie(w, cookieNameOAuth2LoginState, cookiePathOAuth2LoginState,
+	setSecureCookie(w, cookieNameOAuth2LoginState, cookiePathOAuth2LoginState,
 		state, cookieDurationShortLived, !o.conf.Insecure)
 
 	// Redirect to authorization URL.
@@ -137,8 +138,9 @@ func (o *oauth2Authenticator) ServeCallback(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Exchange code for token.
-	oauth2Conf, err := o.config(w, r)
+	oauth2Conf, err := o.config(r.Context())
 	if err != nil {
+		respondAuthError(w, r, err, http.StatusInternalServerError)
 		return
 	}
 	token, err := oauth2Conf.Exchange(r.Context(), r.URL.Query().Get("code"),
@@ -148,17 +150,27 @@ func (o *oauth2Authenticator) ServeCallback(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if _, _, err := o.verifyTokenAndSetAuthStorageOrError(w, r, token); err != nil {
+	// Try to authenticate the token and set the auth storage.
+	if _, _, err := o.verifyTokenAndSetAuthStorage(w, r, token); err != nil {
 		return
 	}
+
+	// Authentication successful. Set the auth provider cookie.
+	const authenticated = true
+	setAuthProviderCookie(w, o.conf.Authentication.OAuth2.Provider, oauth2PathAuthorize, authenticated)
 
 	http.Redirect(w, r, state.redirectURL(), http.StatusSeeOther)
 }
 
-// ServeProtectedResource serves requests enforcing OAuth2 authentication.
-// It retrieves the authentication storage from the request, verifies the
-// access token, and refreshes it if necessary.
-func (o *oauth2Authenticator) ServeProtectedResource(w http.ResponseWriter, r *http.Request, next http.Handler) {
+// ServeAPI serves API requests enforcing OAuth2 authentication.
+// It retrieves the authentication storage from the request,
+// verifies the access token, and refreshes it if necessary.
+func (o *oauth2Authenticator) ServeAPI(w http.ResponseWriter, r *http.Request, api http.Handler) {
+	// Set the auth provider cookie to indicate OAuth2 is in use and not yet authenticated.
+	authenticated := false
+	setAuthProviderCookie(w, o.conf.Authentication.OAuth2.Provider, oauth2PathAuthorize, authenticated)
+
+	// Try to authenticate the request.
 	as, err := getAuthStorage(r)
 	if err != nil {
 		respondAuthExpired(w, r, err)
@@ -170,8 +182,9 @@ func (o *oauth2Authenticator) ServeProtectedResource(w http.ResponseWriter, r *h
 			respondAuthExpired(w, r, err)
 			return
 		}
-		oauth2Conf, err := o.config(w, r)
+		oauth2Conf, err := o.config(r.Context())
 		if err != nil {
+			respondAuthError(w, r, err, http.StatusInternalServerError)
 			return
 		}
 		token, err := oauth2Conf.
@@ -181,26 +194,75 @@ func (o *oauth2Authenticator) ServeProtectedResource(w http.ResponseWriter, r *h
 			respondAuthExpired(w, r, err)
 			return
 		}
-		if username, groups, err = o.verifyTokenAndSetAuthStorageOrError(w, r, token); err != nil {
+		if username, groups, err = o.verifyTokenAndSetAuthStorage(w, r, token); err != nil {
 			return
 		}
 	}
+
+	// Authentication successful. Set the auth provider cookie.
+	w.Header().Del("Set-Cookie")
+	authenticated = true
+	setAuthProviderCookie(w, o.conf.Authentication.OAuth2.Provider, oauth2PathAuthorize, authenticated)
+
+	// Build and store user session.
 	client, err := o.kubeClient.getUserClientFromCache(username, groups)
 	if err != nil {
 		respondAuthError(w, r, err, http.StatusInternalServerError)
 		return
 	}
-	ctx := storeUserSession(r.Context(), o.conf.Authentication.OAuth2.Provider, username, groups, client)
-	next.ServeHTTP(w, r.WithContext(ctx))
+	ctx := storeUserSession(r.Context(), username, groups, client)
+	r = r.WithContext(ctx)
+
+	// Serve the API request.
+	api.ServeHTTP(w, r)
+}
+
+// ServeAssets serves asset requests enhancing them with the auth provider cookie.
+func (o *oauth2Authenticator) ServeAssets(w http.ResponseWriter, r *http.Request, assets http.Handler) {
+	defer assets.ServeHTTP(w, r)
+
+	// Set the auth provider cookie to indicate OAuth2 is in use and not yet authenticated.
+	authenticated := false
+	setAuthProviderCookie(w, o.conf.Authentication.OAuth2.Provider, oauth2PathAuthorize, authenticated)
+
+	// Try to authenticate the request.
+	as, err := getAuthStorage(r)
+	if err != nil {
+		return
+	}
+	if _, _, err := o.provider.verifyAccessToken(r.Context(), as.AccessToken); err != nil {
+		if as.RefreshToken == "" {
+			return
+		}
+		oauth2Conf, err := o.config(r.Context())
+		if err != nil {
+			return
+		}
+		token, err := oauth2Conf.
+			TokenSource(r.Context(), &oauth2.Token{RefreshToken: as.RefreshToken}).
+			Token()
+		if err != nil {
+			return
+		}
+		if _, _, as, err = o.provider.verifyToken(r.Context(), token); err != nil {
+			return
+		}
+		if err := setAuthStorage(o.conf, w, *as); err != nil {
+			return
+		}
+	}
+
+	// Authentication successful. Set the auth provider cookie.
+	w.Header().Del("Set-Cookie")
+	authenticated = true
+	setAuthProviderCookie(w, o.conf.Authentication.OAuth2.Provider, oauth2PathAuthorize, authenticated)
 }
 
 // config builds the OAuth2 configuration from the
 // provider base and from the web server configuration.
-// It responds on any errors.
-func (o *oauth2Authenticator) config(w http.ResponseWriter, r *http.Request) (*oauth2.Config, error) {
-	cfg, err := o.provider.config(r.Context())
+func (o *oauth2Authenticator) config(ctx context.Context) (*oauth2.Config, error) {
+	cfg, err := o.provider.config(ctx)
 	if err != nil {
-		respondAuthError(w, r, err, http.StatusInternalServerError)
 		return nil, err
 	}
 	cfg.ClientID = o.conf.Authentication.OAuth2.ClientID
@@ -214,7 +276,7 @@ func (o *oauth2Authenticator) config(w http.ResponseWriter, r *http.Request) (*o
 
 // verifyTokenAndSetAuthStorage verifies the OAuth2 token and sets
 // the authentication storage in a cookie, or responds on any errors.
-func (o *oauth2Authenticator) verifyTokenAndSetAuthStorageOrError(
+func (o *oauth2Authenticator) verifyTokenAndSetAuthStorage(
 	w http.ResponseWriter, r *http.Request, token *oauth2.Token) (string, []string, error) {
 	username, groups, as, err := o.provider.verifyToken(r.Context(), token)
 	if err != nil {
@@ -251,16 +313,7 @@ type oauth2LoginState struct {
 
 // redirectURL builds the redirect URL for OAuth2 login.
 func (o *oauth2LoginState) redirectURL() string {
-	redirectPath := "/"
-	if p := o.URLQuery.Get(authQueryParamOriginalPath); p != "" {
-		redirectPath = p
-		o.URLQuery.Del(authQueryParamOriginalPath)
-	}
-	redirectURL := redirectPath
-	if len(o.URLQuery) > 0 {
-		redirectURL += "?" + o.URLQuery.Encode()
-	}
-	return redirectURL
+	return originalURL(o.URLQuery)
 }
 
 // encodeState encodes the OAuth2 login state.
@@ -301,7 +354,7 @@ func (o *oauth2Authenticator) decodeState(s string) (*oauth2LoginState, error) {
 // consumeOAuth2LoginStates retrieves the OAuth2 login state from the query
 // parameters and from the cookies and deletes the cookie.
 func consumeOAuth2LoginStates(w http.ResponseWriter, r *http.Request) (string, string) {
-	defer deleteAuthCookie(w, cookieNameOAuth2LoginState, cookiePathOAuth2LoginState)
+	defer deleteCookie(w, cookieNameOAuth2LoginState, cookiePathOAuth2LoginState)
 	queryState := r.URL.Query().Get("state")
 	var cookieState string
 	if c, err := r.Cookie(cookieNameOAuth2LoginState); err == nil {

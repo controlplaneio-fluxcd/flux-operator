@@ -14,50 +14,71 @@ import (
 )
 
 const (
-	cookieNameError            = "error"
-	cookieNameAuthStorage      = "auth"
-	cookieNameOAuth2LoginState = "state"
+	cookieNameAuthError        = "auth-error"
+	cookieNameAuthProvider     = "auth-provider"
+	cookieNameAuthStorage      = "auth-storage"
+	cookieNameOAuth2LoginState = "oauth2-state"
 
-	cookiePathError            = "/"
 	cookiePathAuthStorage      = "/"
 	cookiePathOAuth2LoginState = "/oauth2/"
 
 	cookieDurationShortLived = 5 * time.Minute
 )
 
-// setErrorCookie sets an error cookie in the response.
-func setErrorCookie(w http.ResponseWriter, err error, code int) {
+// setCookie sets a cookie in the response.
+func setCookie(w http.ResponseWriter, name string, obj any) {
+	b, _ := json.Marshal(obj)
+	value := base64.RawURLEncoding.EncodeToString(b)
 	http.SetCookie(w, &http.Cookie{
-		Name:     cookieNameError,
-		Path:     cookiePathError,
-		Value:    fmt.Sprintf("HTTP %d: %v", code, err),
-		Secure:   false,
-		HttpOnly: false, // JavaScript should consume the cookie and clean it up.
-		MaxAge:   int(cookieDurationShortLived.Seconds()),
+		Name:     name,
+		Path:     "/",
+		Value:    value,
 		SameSite: http.SameSiteLaxMode,
 	})
 }
 
-// setAuthCookie sets an authentication cookie in the response.
-func setAuthCookie(w http.ResponseWriter, name, path, value string, maxAge time.Duration, secure bool) {
+// setSecureCookie sets a secure cookie in the response.
+func setSecureCookie(w http.ResponseWriter, name, path, value string, maxAge time.Duration, secure bool) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     name,
 		Path:     path,
 		Value:    value,
 		Secure:   secure,
-		HttpOnly: true, // JavaScript should not touch auth cookies.
+		HttpOnly: true,
 		MaxAge:   int(maxAge.Seconds()),
 		SameSite: http.SameSiteLaxMode,
 	})
 }
 
-// deleteAuthCookie deletes an authentication cookie in the response.
-func deleteAuthCookie(w http.ResponseWriter, name, path string) {
+// deleteCookie deletes a cookie in the response.
+func deleteCookie(w http.ResponseWriter, name, path string) {
 	http.SetCookie(w, &http.Cookie{
 		Name:   name,
 		Path:   path,
 		MaxAge: -1,
 	})
+}
+
+// setAuthErrorCookie sets the auth error cookie in the response.
+func setAuthErrorCookie(w http.ResponseWriter, err error, code int) {
+	setCookie(w, cookieNameAuthError, map[string]any{
+		"code": code,
+		"msg":  err.Error(),
+	})
+}
+
+// setAuthProviderCookie sets the auth provider cookie in the response.
+func setAuthProviderCookie(w http.ResponseWriter, provider, loginURL string, authenticated bool) {
+	setCookie(w, cookieNameAuthProvider, map[string]any{
+		"provider":      provider,
+		"url":           loginURL,
+		"authenticated": authenticated,
+	})
+}
+
+// setAnonymousAuthProviderCookie sets the anonymous auth provider cookie in the response.
+func setAnonymousAuthProviderCookie(w http.ResponseWriter) {
+	setAuthProviderCookie(w, config.AuthenticationTypeAnonymous, "", true)
 }
 
 // authStorage holds the authentication information stored in cookies.
@@ -76,7 +97,7 @@ func setAuthStorage(conf *config.ConfigSpec, w http.ResponseWriter, storage auth
 		return fmt.Errorf("failed to marshal auth storage cookie: %w", err)
 	}
 	cValue := base64.RawURLEncoding.EncodeToString(b)
-	setAuthCookie(w, cookieNameAuthStorage, cookiePathAuthStorage, cValue,
+	setSecureCookie(w, cookieNameAuthStorage, cookiePathAuthStorage, cValue,
 		conf.Authentication.SessionDuration.Duration, !conf.Insecure)
 	return nil
 }
@@ -100,5 +121,5 @@ func getAuthStorage(r *http.Request) (*authStorage, error) {
 
 // deleteAuthStorage deletes the authStorage cookie in the response.
 func deleteAuthStorage(w http.ResponseWriter) {
-	deleteAuthCookie(w, cookieNameAuthStorage, cookiePathAuthStorage)
+	deleteCookie(w, cookieNameAuthStorage, cookiePathAuthStorage)
 }

@@ -13,10 +13,9 @@ import (
 )
 
 const (
-	authPathLogin      = "/login"
-	authPathLogout     = "/logout"
-	authPathError      = "/auth/error"
-	oauth2PathCallback = "/oauth2/callback"
+	authPathLogout      = "/logout"
+	oauth2PathAuthorize = "/oauth2/authorize"
+	oauth2PathCallback  = "/oauth2/callback"
 
 	authQueryParamOriginalPath = "originalPath"
 )
@@ -53,20 +52,17 @@ func NewAuthMiddleware(ctx context.Context, conf *config.ConfigSpec, kubeClient 
 				return
 			}
 			deleteAuthStorage(w)
-			http.Redirect(w, r, authPathLogin, http.StatusSeeOther)
+			http.Redirect(w, r, "/", http.StatusSeeOther)
 		})
 	}, nil
 }
 
-// newDefaultAuthMiddleware creates a default authentication middleware that
-// allows all requests without authentication.
+// newDefaultAuthMiddleware creates a default authentication middleware
+// that allows all requests without authentication.
 func newDefaultAuthMiddleware() func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == authPathLogin {
-				http.Redirect(w, r, "/", http.StatusSeeOther)
-				return
-			}
+			setAnonymousAuthProviderCookie(w)
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -86,11 +82,8 @@ func newAnonymousAuthMiddleware(conf *config.ConfigSpec, kubeClient *Client) (fu
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == authPathLogin {
-				http.Redirect(w, r, "/", http.StatusSeeOther)
-				return
-			}
-			ctx := storeUserSession(r.Context(), config.AuthenticationTypeAnonymous, username, groups, client)
+			setAnonymousAuthProviderCookie(w)
+			ctx := storeUserSession(r.Context(), username, groups, client)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}, nil
@@ -120,15 +113,15 @@ func newOAuth2Middleware(ctx context.Context, conf *config.ConfigSpec, kubeClien
 	// Return the middleware.
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			switch r.URL.Path {
-			case authPathLogin:
-				authenticator.ServeLogin(w, r)
-			case oauth2PathCallback:
+			switch {
+			case r.URL.Path == oauth2PathAuthorize:
+				authenticator.ServeAuthorize(w, r)
+			case r.URL.Path == oauth2PathCallback:
 				authenticator.ServeCallback(w, r)
-			case authPathError:
-				next.ServeHTTP(w, r)
+			case isAPIRequest(r):
+				authenticator.ServeAPI(w, r, next)
 			default:
-				authenticator.ServeProtectedResource(w, r, next)
+				authenticator.ServeAssets(w, r, next)
 			}
 		})
 	}, nil
@@ -143,14 +136,11 @@ func respondAuthExpired(w http.ResponseWriter, r *http.Request, err error, qs ..
 		return
 	}
 
-	// For page requests, build the redirect URL with query and original path
-	// and redirect to /login.
-	if len(qs) == 0 {
-		q := r.URL.Query()
-		q.Set(authQueryParamOriginalPath, r.URL.Path)
-		qs = append(qs, q)
+	// Build the redirect URL from the query.
+	redirectURL := "/"
+	if len(qs) > 0 {
+		redirectURL = originalURL(qs[0])
 	}
-	redirectURL := fmt.Sprintf("%s?%s", authPathLogin, qs[0].Encode())
 	http.Redirect(w, r, redirectURL, http.StatusSeeOther)
 }
 
@@ -165,7 +155,21 @@ func respondAuthError(w http.ResponseWriter, r *http.Request, err error, code in
 	case isAPIRequest(r):
 		http.Error(w, err.Error(), code)
 	default:
-		setErrorCookie(w, err, code)
-		http.Redirect(w, r, authPathError, http.StatusSeeOther)
+		setAuthErrorCookie(w, err, code)
+		http.Redirect(w, r, "/", http.StatusSeeOther)
 	}
+}
+
+// originalURL builds the redirect URL based on the originalPath query parameter.
+func originalURL(q url.Values) string {
+	redirectPath := "/"
+	if p := q.Get(authQueryParamOriginalPath); p != "" {
+		redirectPath = p
+		q.Del(authQueryParamOriginalPath)
+	}
+	redirectURL := redirectPath
+	if len(q) > 0 {
+		redirectURL += "?" + q.Encode()
+	}
+	return redirectURL
 }

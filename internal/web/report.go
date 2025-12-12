@@ -23,7 +23,6 @@ import (
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
-	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
 )
 
 // ReportHandler handles GET /api/v1/report requests and returns the FluxReport from the cluster.
@@ -66,15 +65,13 @@ func (r *Router) GetReport(ctx context.Context) (*unstructured.Unstructured, err
 
 	// Inject user info
 	if spec, found := report.Object["spec"].(map[string]any); found {
-		var provider, username, role string
+		var username, role string
 		if us := loadUserSession(ctx); us != nil {
-			provider, username, role = us.provider, us.username, strings.Join(us.groups, ", ")
+			username, role = us.username, strings.Join(us.groups, ", ")
 		} else {
-			provider, username, role = config.AuthenticationTypeAnonymous, os.Getenv("HOSTNAME"), "cluster:view"
+			username, role = os.Getenv("HOSTNAME"), "cluster:view"
 		}
-		userInfo := map[string]any{
-			"provider": provider,
-		}
+		userInfo := make(map[string]any)
 		if username != "" {
 			userInfo["username"] = username
 		}
