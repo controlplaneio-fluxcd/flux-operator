@@ -288,7 +288,7 @@ func (o *oauth2Authenticator) verifyTokenAndSetAuthStorage(
 	w http.ResponseWriter, r *http.Request, token *oauth2.Token) (string, []string, error) {
 	username, groups, as, err := o.provider.verifyToken(r.Context(), token)
 	if err != nil {
-		respondAuthError(w, r, err, http.StatusForbidden)
+		respondAuthError(w, r, err, http.StatusUnauthorized)
 		return "", nil, err
 	}
 	if err := setAuthStorage(o.conf, w, *as); err != nil {
