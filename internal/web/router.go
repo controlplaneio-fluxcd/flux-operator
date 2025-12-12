@@ -13,12 +13,14 @@ import (
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/kubeclient"
 )
 
 // Router provides HTTP handlers for the API endpoints and static files.
 type Router struct {
 	mux            *http.ServeMux
-	kubeClient     *Client
+	kubeClient     *kubeclient.Client
 	log            logr.Logger
 	webFS          fs.FS
 	version        string
@@ -33,7 +35,7 @@ type Router struct {
 }
 
 // NewRouter creates a new router with the given Kubernetes client and embedded filesystem.
-func NewRouter(mux *http.ServeMux, webFS fs.FS, kubeClient *Client, log logr.Logger, version, statusManager, namespace string, reportInterval time.Duration, authMiddleware func(http.Handler) http.Handler) *Router {
+func NewRouter(mux *http.ServeMux, webFS fs.FS, kubeClient *kubeclient.Client, log logr.Logger, version, statusManager, namespace string, reportInterval time.Duration, authMiddleware func(http.Handler) http.Handler) *Router {
 	return &Router{
 		mux:            mux,
 		kubeClient:     kubeClient,

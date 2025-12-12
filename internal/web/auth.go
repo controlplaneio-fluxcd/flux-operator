@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/kubeclient"
 )
 
 const (
@@ -20,7 +21,7 @@ const (
 )
 
 // NewAuthMiddleware creates a new authentication middleware for HTTP handlers.
-func NewAuthMiddleware(ctx context.Context, conf *config.ConfigSpec, kubeClient *Client) (func(next http.Handler) http.Handler, error) {
+func NewAuthMiddleware(ctx context.Context, conf *config.ConfigSpec, kubeClient *kubeclient.Client) (func(next http.Handler) http.Handler, error) {
 	// Build middleware according to the authentication type.
 	var middleware func(next http.Handler) http.Handler
 	switch {
@@ -68,13 +69,13 @@ func newDefaultAuthMiddleware() func(next http.Handler) http.Handler {
 }
 
 // newAnonymousAuthMiddleware creates an anonymous authentication middleware.
-func newAnonymousAuthMiddleware(conf *config.ConfigSpec, kubeClient *Client) (func(next http.Handler) http.Handler, error) {
+func newAnonymousAuthMiddleware(conf *config.ConfigSpec, kubeClient *kubeclient.Client) (func(next http.Handler) http.Handler, error) {
 	anonConf := conf.Authentication.Anonymous
 
 	username := anonConf.Username
 	groups := anonConf.Groups
 
-	client, err := kubeClient.getUserClientFromCache(username, groups)
+	client, err := kubeClient.GetUserClientFromCache(username, groups)
 	if err != nil {
 		return nil, err
 	}
@@ -82,14 +83,14 @@ func newAnonymousAuthMiddleware(conf *config.ConfigSpec, kubeClient *Client) (fu
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			setAnonymousAuthProviderCookie(w)
-			ctx := storeUserSession(r.Context(), username, groups, client)
+			ctx := kubeclient.StoreUserSession(r.Context(), username, groups, client)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}, nil
 }
 
 // newOAuth2Middleware creates an OAuth2 authentication middleware.
-func newOAuth2Middleware(ctx context.Context, conf *config.ConfigSpec, kubeClient *Client) (func(next http.Handler) http.Handler, error) {
+func newOAuth2Middleware(ctx context.Context, conf *config.ConfigSpec, kubeClient *kubeclient.Client) (func(next http.Handler) http.Handler, error) {
 	// Build the OAuth2 provider.
 	var provider *oauth2Provider
 	var err error

@@ -42,6 +42,7 @@ import (
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web"
 	webconfig "github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
+	webkubeclient "github.com/controlplaneio-fluxcd/flux-operator/internal/web/kubeclient"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -372,7 +373,7 @@ func main() {
 			userCacheSize = a.UserCacheSize
 		}
 
-		kubeClient, err := web.NewClient(mgr, userCacheSize, namespaceCacheDuration)
+		kubeClient, err := webkubeclient.NewClient(mgr, userCacheSize, namespaceCacheDuration)
 		if err != nil {
 			setupLog.Error(err, "unable to create web server kube client")
 			os.Exit(1)
