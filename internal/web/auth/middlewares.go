@@ -93,7 +93,7 @@ func newAnonymousMiddleware(conf *config.ConfigSpec, kubeClient *kubeclient.Clie
 // newOAuth2Middleware creates an OAuth2 authentication middleware.
 func newOAuth2Middleware(ctx context.Context, conf *config.ConfigSpec, kubeClient *kubeclient.Client) (func(next http.Handler) http.Handler, error) {
 	// Build the OAuth2 provider.
-	var provider *oauth2Provider
+	var provider oauth2Provider
 	var err error
 	switch conf.Authentication.OAuth2.Provider {
 	case config.OAuth2ProviderOIDC:
