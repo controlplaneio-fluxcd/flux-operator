@@ -32,20 +32,20 @@ const (
 type oauth2Authenticator struct {
 	conf       *config.ConfigSpec
 	kubeClient *kubeclient.Client
-	provider   *oauth2Provider
+	provider   oauth2Provider
 	gcm        cipher.AEAD
 }
 
 // oauth2Provider has methods for implementing the OAuth2 protocol.
-type oauth2Provider struct {
-	verifyAccessToken func(ctx context.Context, accessToken string) (string, []string, error)
-	verifyToken       func(ctx context.Context, token *oauth2.Token) (string, []string, *authStorage, error)
-	config            func(ctx context.Context) (*oauth2.Config, error)
+type oauth2Provider interface {
+	verifyAccessToken(ctx context.Context, accessToken string) (string, []string, error)
+	verifyToken(ctx context.Context, token *oauth2.Token) (string, []string, *authStorage, error)
+	config(ctx context.Context) (*oauth2.Config, error)
 }
 
 // newOAuth2Authenticator creates a new OAuth2 authenticator.
-func newOAuth2Authenticator(ctx context.Context, conf *config.ConfigSpec, kubeClient *kubeclient.Client,
-	provider *oauth2Provider) (*oauth2Authenticator, error) {
+func newOAuth2Authenticator(ctx context.Context, conf *config.ConfigSpec,
+	kubeClient *kubeclient.Client, provider oauth2Provider) (*oauth2Authenticator, error) {
 
 	// Validate that the provider can fetch a configuration.
 	if _, err := provider.config(ctx); err != nil {

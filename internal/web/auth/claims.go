@@ -1,0 +1,124 @@
+// Copyright 2025 Stefan Prodan.
+// SPDX-License-Identifier: AGPL-3.0
+
+package auth
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/fluxcd/pkg/runtime/cel"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
+)
+
+// claimsProcessorFunc defines a function type for processing claims.
+type claimsProcessorFunc func(ctx context.Context, claims map[string]any) (*claimsResult, error)
+
+// claimsResult represents the result of claims extraction from a token.
+type claimsResult struct {
+	username string
+	groups   []string
+}
+
+// newClaimsProcessor creates a new claims processor for validating and
+// extracting relevant information from tokens and userinfo responses.
+func newClaimsProcessor(conf *config.ConfigSpec) (claimsProcessorFunc, error) {
+	// Build variable CEL expressions.
+	type variable struct {
+		name string
+		expr *cel.Expression
+	}
+	variableExprs := make([]variable, 0, len(conf.Authentication.OAuth2.Variables))
+	for _, v := range conf.Authentication.OAuth2.Variables {
+		expr, err := cel.NewExpression(v.Expression)
+		if err != nil {
+			return nil, err
+		}
+		variableExprs = append(variableExprs, variable{name: v.Name, expr: expr})
+	}
+
+	// Build validation CEL expressions.
+	type validation struct {
+		expr *cel.Expression
+		msg  string
+	}
+	validationExprs := make([]validation, 0, len(conf.Authentication.OAuth2.Validations))
+	for _, v := range conf.Authentication.OAuth2.Validations {
+		expr, err := cel.NewExpression(v.Expression)
+		if err != nil {
+			return nil, err
+		}
+		validationExprs = append(validationExprs, validation{expr: expr, msg: v.Message})
+	}
+
+	// Build impersonation CEL expressions.
+	type impersonation struct {
+		username *cel.Expression
+		groups   *cel.Expression
+	}
+	var impersonationExprs impersonation
+	if s := conf.Authentication.OAuth2.Impersonation.Username; s != "" {
+		expr, err := cel.NewExpression(s)
+		if err != nil {
+			return nil, err
+		}
+		impersonationExprs.username = expr
+	}
+	if s := conf.Authentication.OAuth2.Impersonation.Groups; s != "" {
+		expr, err := cel.NewExpression(s)
+		if err != nil {
+			return nil, err
+		}
+		impersonationExprs.groups = expr
+	}
+
+	return func(ctx context.Context, claims map[string]any) (*claimsResult, error) {
+		// Extract variables from claims using CEL expressions.
+		variables := map[string]any{}
+		data := map[string]any{
+			"claims":    claims,
+			"variables": variables,
+		}
+		for _, x := range variableExprs {
+			value, err := x.expr.Evaluate(ctx, data)
+			if err != nil {
+				return nil, fmt.Errorf("failed to evaluate variable '%s': %w", x.name, err)
+			}
+			variables[x.name] = value
+		}
+
+		// Validate claims and variables using CEL expressions.
+		for _, v := range validationExprs {
+			result, err := v.expr.EvaluateBoolean(ctx, data)
+			if err != nil {
+				return nil, fmt.Errorf("failed to evaluate validation expression: %w", err)
+			}
+			if !result {
+				return nil, fmt.Errorf("validation failed: %s", v.msg)
+			}
+		}
+
+		// Extract impersonation info using CEL expressions.
+		var username string
+		var groups []string
+		var err error
+		if impersonationExprs.username != nil {
+			username, err = impersonationExprs.username.EvaluateString(ctx, data)
+			if err != nil {
+				return nil, fmt.Errorf("failed to evaluate impersonation username expression: %w", err)
+			}
+		}
+		if impersonationExprs.groups != nil {
+			groups, err = impersonationExprs.groups.EvaluateStringSlice(ctx, data)
+			if err != nil {
+				return nil, fmt.Errorf("failed to evaluate impersonation groups expression: %w", err)
+			}
+		}
+
+		return &claimsResult{
+			username: username,
+			groups:   groups,
+		}, nil
+	}, nil
+}

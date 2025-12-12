@@ -170,27 +170,10 @@ type OAuth2AuthenticationSpec struct {
 	// +optional
 	IssuerURL string `json:"issuerURL,omitempty"`
 
-	// Variables is a list of CEL expressions to extract information from the ID token claims
-	// into named variables that can be reused in other expressions, e.g. "variables.username".
+	// ClaimsProcessorSpec holds the configuration for processing claims with CEL expressions.
 	// Used only by the OIDC provider.
 	// +optional
-	Variables []VariableSpec `json:"variables,omitempty"`
-
-	// Validations is a list of CEL expressions that validate the ID token claims and extracted
-	// variables. Each expression must return the type bool. If the expression evaluates to false,
-	// the message is returned as an error.
-	// Used only by the OIDC provider.
-	// +optional
-	Validations []ValidationSpec `json:"validations,omitempty"`
-
-	// Impersonation is a pair of CEL expressions that extract the username and groups
-	// from the ID token claims and extracted variables for Kubernetes RBAC impersonation.
-	// The username expression must return the type string, while the groups expression
-	// must return the type []string.
-	// Defaults to ImpersonationSpec{Username: "claims.email", Groups: "claims.groups"}.
-	// Used only by the OIDC provider.
-	// +optional
-	Impersonation *ImpersonationSpec `json:"impersonation,omitempty"`
+	ClaimsProcessorSpec `json:",inline"`
 }
 
 // Configured checks if the OAuth2AuthenticationSpec is configured.
@@ -215,20 +198,8 @@ func (o *OAuth2AuthenticationSpec) Validate() error {
 			return fmt.Errorf("issuerURL is not a valid URL: %w", err)
 		}
 
-		for i, v := range o.Variables {
-			if err := v.Validate(); err != nil {
-				return fmt.Errorf("invalid OAuth2 variable[%d]: %w", i, err)
-			}
-		}
-
-		for i, v := range o.Validations {
-			if err := v.Validate(); err != nil {
-				return fmt.Errorf("invalid OAuth2 validation[%d]: %w", i, err)
-			}
-		}
-
-		if err := o.Impersonation.Validate(); err != nil {
-			return fmt.Errorf("invalid OAuth2 impersonation: %w", err)
+		if err := o.ClaimsProcessorSpec.Validate(); err != nil {
+			return err
 		}
 	default:
 		// TODO: when introducing more providers, validate that the OIDC-only fields are not set.
@@ -246,11 +217,59 @@ func (o *OAuth2AuthenticationSpec) ApplyDefaults() {
 
 	switch o.Provider {
 	case OAuth2ProviderOIDC:
-		if o.Impersonation == nil {
-			o.Impersonation = &ImpersonationSpec{}
-		}
-		o.Impersonation.ApplyDefaults()
+		o.ClaimsProcessorSpec.ApplyDefaults()
 	}
+}
+
+// ClaimsProcessorSpec holds the configuration for processing claims with CEL expressions.
+type ClaimsProcessorSpec struct {
+	// Variables is a list of CEL expressions to extract information from the ID token claims
+	// into named variables that can be reused in other expressions, e.g. "variables.username".
+	// +optional
+	Variables []VariableSpec `json:"variables,omitempty"`
+
+	// Validations is a list of CEL expressions that validate the ID token claims and extracted
+	// variables. Each expression must return the type bool. If the expression evaluates to false,
+	// the message is returned as an error.
+	// +optional
+	Validations []ValidationSpec `json:"validations,omitempty"`
+
+	// Impersonation is a pair of CEL expressions that extract the username and groups
+	// from the ID token claims and extracted variables for Kubernetes RBAC impersonation.
+	// The username expression must return the type string, while the groups expression
+	// must return the type []string.
+	// Defaults to ImpersonationSpec{Username: "claims.email", Groups: "claims.groups"}.
+	// +optional
+	Impersonation *ImpersonationSpec `json:"impersonation,omitempty"`
+}
+
+// Validate validates the ClaimsProcessorSpec configuration.
+func (c *ClaimsProcessorSpec) Validate() error {
+	for i, v := range c.Variables {
+		if err := v.Validate(); err != nil {
+			return fmt.Errorf("invalid variable[%d]: %w", i, err)
+		}
+	}
+	for i, v := range c.Validations {
+		if err := v.Validate(); err != nil {
+			return fmt.Errorf("invalid validation[%d]: %w", i, err)
+		}
+	}
+	if err := c.Impersonation.Validate(); err != nil {
+		return fmt.Errorf("invalid impersonation: %w", err)
+	}
+	return nil
+}
+
+// ApplyDefaults applies default values to the ClaimsProcessorSpec.
+func (c *ClaimsProcessorSpec) ApplyDefaults() {
+	if c == nil {
+		return
+	}
+	if c.Impersonation == nil {
+		c.Impersonation = &ImpersonationSpec{}
+	}
+	c.Impersonation.ApplyDefaults()
 }
 
 // VariableSpec holds the configuration for extracting a variable with a CEL expression.
