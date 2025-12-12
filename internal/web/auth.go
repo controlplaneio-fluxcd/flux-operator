@@ -126,12 +126,10 @@ func newOAuth2Middleware(ctx context.Context, conf *config.ConfigSpec, kubeClien
 	}, nil
 }
 
-// respondAuthError responds to the client with a terminal error message.
-// Useful for scenarios where retrying authentication automatically will not
-// help, and it's better to inform the user about the problem. For API requests,
-// it responds with a plain error message and the given HTTP status code.
-// For page requests, it stores an error cookie and redirects to the
-// /auth/error page.
+// respondAuthError responds to the client with an auth error message.
+// For API requests, it responds with a plain error message and the
+// given HTTP status code. For page requests, it stores an error cookie
+// and redirects to /.
 func respondAuthError(w http.ResponseWriter, r *http.Request, err error, code int) {
 	switch {
 	case isAPIRequest(r):
