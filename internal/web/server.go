@@ -13,13 +13,14 @@ import (
 
 	"github.com/go-logr/logr"
 
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/kubeclient"
 	"github.com/controlplaneio-fluxcd/flux-operator/web"
 )
 
 func StartServer(ctx context.Context,
 	timeout time.Duration,
 	port int,
-	kubeClient *Client,
+	kubeClient *kubeclient.Client,
 	log logr.Logger,
 	version, statusManager, namespace string,
 	reportInterval time.Duration,

@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	goruntime "runtime"
 	"strings"
 
@@ -23,6 +22,7 @@ import (
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/kubeclient"
 )
 
 // ReportHandler handles GET /api/v1/report requests and returns the FluxReport from the cluster.
@@ -65,12 +65,7 @@ func (r *Router) GetReport(ctx context.Context) (*unstructured.Unstructured, err
 
 	// Inject user info
 	if spec, found := report.Object["spec"].(map[string]any); found {
-		var username, role string
-		if us := loadUserSession(ctx); us != nil {
-			username, role = us.username, strings.Join(us.groups, ", ")
-		} else {
-			username, role = os.Getenv("HOSTNAME"), "cluster:view"
-		}
+		username, role := kubeclient.UsernameAndRole(ctx)
 		userInfo := make(map[string]any)
 		if username != "" {
 			userInfo["username"] = username
@@ -99,7 +94,7 @@ func (r *Router) buildReport(ctx context.Context) (*unstructured.Unstructured, e
 	// ensuring security boundaries are respected.
 	// Note: The report is built on a background goroutine periodically anyway,
 	// so there's no user session available to use for impersonation.
-	repClient := r.kubeClient.GetClient(ctx, WithPrivileges())
+	repClient := r.kubeClient.GetClient(ctx, kubeclient.WithPrivileges())
 	rep := reporter.NewFluxStatusReporter(repClient, fluxcdv1.DefaultInstanceName, r.statusManager, r.namespace)
 	reportSpec, err := rep.Compute(ctx)
 	if err != nil {
@@ -137,7 +132,7 @@ func (r *Router) buildReport(ctx context.Context) (*unstructured.Unstructured, e
 	// We pass WithPrivileges() here to ensure we can read metrics from all Flux controllers,
 	// even if the user querying the report has limited RBAC permissions. Our decision here
 	// is based on the same reasoning explained above for building the report.
-	if metrics, err := r.GetMetrics(ctx, "", r.namespace, "app.kubernetes.io/part-of=flux", 100, WithPrivileges()); err == nil {
+	if metrics, err := r.GetMetrics(ctx, "", r.namespace, "app.kubernetes.io/part-of=flux", 100, kubeclient.WithPrivileges()); err == nil {
 		// Extract the items array from metrics
 		if items, found := metrics.Object["items"]; found {
 			// Add metrics to the result under spec.metrics
@@ -232,7 +227,7 @@ func cleanObjectForExport(obj *unstructured.Unstructured, keepStatus bool) {
 }
 
 // GetMetrics retrieves the CPU and Memory metrics for a list of pods in the given namespace.
-func (r *Router) GetMetrics(ctx context.Context, pod, namespace, labelSelector string, limit int, opts ...ClientOption) (*unstructured.Unstructured, error) {
+func (r *Router) GetMetrics(ctx context.Context, pod, namespace, labelSelector string, limit int, opts ...kubeclient.Option) (*unstructured.Unstructured, error) {
 	clientset, err := metricsclientset.NewForConfig(r.kubeClient.GetConfig(ctx, opts...))
 	if err != nil {
 		return nil, err

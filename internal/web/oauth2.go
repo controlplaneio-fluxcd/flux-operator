@@ -20,6 +20,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/kubeclient"
 )
 
 const (
@@ -30,7 +31,7 @@ const (
 // oauth2Authenticator implements OAuth2 authentication.
 type oauth2Authenticator struct {
 	conf       *config.ConfigSpec
-	kubeClient *Client
+	kubeClient *kubeclient.Client
 	provider   *oauth2Provider
 	gcm        cipher.AEAD
 }
@@ -43,7 +44,7 @@ type oauth2Provider struct {
 }
 
 // newOAuth2Authenticator creates a new OAuth2 authenticator.
-func newOAuth2Authenticator(ctx context.Context, conf *config.ConfigSpec, kubeClient *Client,
+func newOAuth2Authenticator(ctx context.Context, conf *config.ConfigSpec, kubeClient *kubeclient.Client,
 	provider *oauth2Provider) (*oauth2Authenticator, error) {
 
 	// Validate that the provider can fetch a configuration.
@@ -213,12 +214,12 @@ func (o *oauth2Authenticator) ServeAPI(w http.ResponseWriter, r *http.Request, a
 	setAuthProviderCookie(w, o.conf.Authentication.OAuth2.Provider, o.conf.BaseURL+oauth2PathAuthorize, authenticated)
 
 	// Build and store user session.
-	client, err := o.kubeClient.getUserClientFromCache(username, groups)
+	client, err := o.kubeClient.GetUserClientFromCache(username, groups)
 	if err != nil {
 		respondAuthError(w, r, err, http.StatusInternalServerError)
 		return
 	}
-	ctx := storeUserSession(r.Context(), username, groups, client)
+	ctx := kubeclient.StoreUserSession(r.Context(), username, groups, client)
 	r = r.WithContext(ctx)
 
 	// Serve the API request.

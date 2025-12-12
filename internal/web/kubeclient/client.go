@@ -1,7 +1,7 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-package web
+package kubeclient
 
 import (
 	"context"
@@ -49,19 +49,19 @@ type userNamespaces struct {
 	timestamp  time.Time
 }
 
-// ClientOption defines a functional option for calling the
+// Option defines a functional option for calling the
 // Client methods.
-type ClientOption func(*clientOptions)
+type Option func(*options)
 
-type clientOptions struct {
+type options struct {
 	withPrivileges bool
 }
 
 // WithPrivileges is a ClientOption that indicates
 // the Client method should use a privileged client
 // to talk to the Kubernetes API server.
-func WithPrivileges() ClientOption {
-	return func(o *clientOptions) {
+func WithPrivileges() Option {
+	return func(o *options) {
 		o.withPrivileges = true
 	}
 }
@@ -90,23 +90,23 @@ func NewClient(c cluster.Cluster, userCacheSize int, namespaceCacheDuration time
 }
 
 // GetAPIReader returns a client.Reader that will be configured to hit the API server directly.
-func (c *Client) GetAPIReader(ctx context.Context, opts ...ClientOption) client.Reader {
+func (c *Client) GetAPIReader(ctx context.Context, opts ...Option) client.Reader {
 	return c.getUserClientFromContext(ctx, opts...).reader
 }
 
 // GetClient returns a client.Client that will be configured with a cache for reads.
-func (c *Client) GetClient(ctx context.Context, opts ...ClientOption) client.Client {
+func (c *Client) GetClient(ctx context.Context, opts ...Option) client.Client {
 	return c.getUserClientFromContext(ctx, opts...).client
 }
 
 // GetConfig returns a *rest.Config for creating specialized clients like *metricsclientset.Clientset.
-func (c *Client) GetConfig(ctx context.Context, opts ...ClientOption) *rest.Config {
+func (c *Client) GetConfig(ctx context.Context, opts ...Option) *rest.Config {
 	return c.getUserClientFromContext(ctx, opts...).config
 }
 
 // getUserClientFromContext returns a userClient based on the context and options.
-func (c *Client) getUserClientFromContext(ctx context.Context, opts ...ClientOption) *userClient {
-	var o clientOptions
+func (c *Client) getUserClientFromContext(ctx context.Context, opts ...Option) *userClient {
+	var o options
 	for _, opt := range opts {
 		opt(&o)
 	}
@@ -124,8 +124,8 @@ func (c *Client) getUserClientFromContext(ctx context.Context, opts ...ClientOpt
 	return us.client
 }
 
-// getUserClientFromCache retrieves a userClient from the cache or creates and caches a new one.
-func (c *Client) getUserClientFromCache(username string, groups []string) (*userClient, error) {
+// GetUserClientFromCache retrieves a userClient from the cache or creates and caches a new one.
+func (c *Client) GetUserClientFromCache(username string, groups []string) (*userClient, error) {
 	ctx := context.Background() // fetch does not use the context
 	key := getUserKey(username, groups)
 	condition := func(*userClient) bool { return true } // always valid
@@ -188,13 +188,7 @@ func (c *Client) newUserClient(username string, groups []string) (*userClient, e
 // ListNamespaces lists the namespaces the user has access to and returns their names sorted
 // in alphabetical order. Since this operation is expensive, it has a cache per user.
 func (c *Client) ListNamespaces(ctx context.Context) ([]string, error) {
-	var key string
-	if us := loadUserSession(ctx); us != nil {
-		key = us.getUserKey()
-	} else {
-		// There's a single cache key when auth is not enabled.
-		key = "privileged-client"
-	}
+	key := loadUserSession(ctx).getUserKey()
 
 	fetch := func(ctx context.Context) (*userNamespaces, error) {
 		// List and sort all namespaces.
