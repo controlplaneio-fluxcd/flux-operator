@@ -52,12 +52,33 @@ type initializedOIDCProvider struct {
 	provider      *oidc.Provider
 }
 
-// verifyAccessToken implements initializedOAuth2Provider.
-func (i *initializedOIDCProvider) verifyAccessToken(ctx context.Context,
+// config implements initializedOAuth2Provider.
+func (i *initializedOIDCProvider) config() *oauth2.Config {
+	return &oauth2.Config{
+		Endpoint: i.provider.Endpoint(),
+		Scopes:   []string{oidc.ScopeOpenID, oidc.ScopeOfflineAccess, "profile", "email", "groups"},
+	}
+}
+
+// newVerifier implements initializedOAuth2Provider.
+func (i *initializedOIDCProvider) newVerifier(ctx context.Context) (oauth2Verifier, error) {
+	return &oidcVerifier{
+		verifier:      i.provider.VerifierContext(ctx, &oidc.Config{ClientID: i.conf.Authentication.OAuth2.ClientID}),
+		processClaims: i.processClaims,
+	}, nil
+}
+
+// oidcVerifier implements oauth2Verifier.
+type oidcVerifier struct {
+	verifier      *oidc.IDTokenVerifier
+	processClaims claimsProcessorFunc
+}
+
+// verifyAccessToken implements oauth2Verifier.
+func (o *oidcVerifier) verifyAccessToken(ctx context.Context,
 	accessToken string, nonce ...string) (string, []string, error) {
 
-	v := i.provider.VerifierContext(ctx, &oidc.Config{ClientID: i.conf.Authentication.OAuth2.ClientID})
-	idToken, err := v.Verify(ctx, accessToken)
+	idToken, err := o.verifier.Verify(ctx, accessToken)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to verify OIDC ID token: %w", err)
 	}
@@ -81,7 +102,7 @@ func (i *initializedOIDCProvider) verifyAccessToken(ctx context.Context,
 		}
 	}
 
-	cr, err := i.processClaims(ctx, claims)
+	cr, err := o.processClaims(ctx, claims)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to process claims from OIDC ID token: %w", err)
 	}
@@ -89,8 +110,8 @@ func (i *initializedOIDCProvider) verifyAccessToken(ctx context.Context,
 	return cr.username, cr.groups, nil
 }
 
-// verifyToken implements initializedOAuth2Provider.
-func (i *initializedOIDCProvider) verifyToken(ctx context.Context,
+// verifyToken implements oauth2Verifier.
+func (o *oidcVerifier) verifyToken(ctx context.Context,
 	token *oauth2.Token, nonce ...string) (string, []string, *authStorage, error) {
 
 	idToken, ok := token.Extra("id_token").(string)
@@ -98,7 +119,7 @@ func (i *initializedOIDCProvider) verifyToken(ctx context.Context,
 		return "", nil, nil, fmt.Errorf("no id_token found in token response")
 	}
 
-	username, groups, err := i.verifyAccessToken(ctx, idToken, nonce...)
+	username, groups, err := o.verifyAccessToken(ctx, idToken, nonce...)
 	if err != nil {
 		return "", nil, nil, err
 	}
@@ -115,12 +136,4 @@ func (i *initializedOIDCProvider) verifyToken(ctx context.Context,
 	}
 
 	return username, groups, as, nil
-}
-
-// config implements initializedOAuth2Provider.
-func (i *initializedOIDCProvider) config() *oauth2.Config {
-	return &oauth2.Config{
-		Endpoint: i.provider.Endpoint(),
-		Scopes:   []string{oidc.ScopeOpenID, oidc.ScopeOfflineAccess, "profile", "email", "groups"},
-	}
 }
