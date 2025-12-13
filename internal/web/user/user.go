@@ -95,21 +95,25 @@ func KubeClient(ctx context.Context) any {
 // UsernameAndRole returns the username and role for display purposes.
 func UsernameAndRole(ctx context.Context) (string, string) {
 	s := LoadSession(ctx)
+	hn := os.Getenv("HOSTNAME")
 
-	// Session is nil, then no authentication is configured.
-	// We are using the pod's service account.
-	if s == nil {
-		return os.Getenv("HOSTNAME"), ""
-	}
-
-	// If the session has a name, we are using an identity provider.
-	// Then only name is relevant for display.
-	if s.Name != "" {
+	switch {
+	case s == nil && hn == "":
+		// Authentication is not configured, and no pod hostname is set.
+		// We are using a local kubeconfig in development mode.
+		return "kubeconfig (dev)", ""
+	case s == nil && hn != "":
+		// Authentication is not configured, but pod hostname is set.
+		// We are using the pod's service account.
+		return hn, ""
+	case s != nil && s.Name != "":
+		// We are using an identity provider.
+		// Then only name is relevant for display.
 		return s.Name, ""
+	default:
+		// We are using an identity provider that does not provide
+		// a name, or we are using Anonymous authentication.
+		// Return username and role (groups).
+		return s.Username, strings.Join(s.Groups, ", ")
 	}
-
-	// At this point, we may be using an identity provider that does
-	// not provide a name, or we are using Anonymous authentication.
-	// Return username and role (groups).
-	return s.Username, strings.Join(s.Groups, ", ")
 }
