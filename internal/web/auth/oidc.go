@@ -53,7 +53,9 @@ type initializedOIDCProvider struct {
 }
 
 // verifyAccessToken implements initializedOAuth2Provider.
-func (i *initializedOIDCProvider) verifyAccessToken(ctx context.Context, accessToken string) (string, []string, error) {
+func (i *initializedOIDCProvider) verifyAccessToken(ctx context.Context,
+	accessToken string, nonce ...string) (string, []string, error) {
+
 	v := i.provider.VerifierContext(ctx, &oidc.Config{ClientID: i.conf.Authentication.OAuth2.ClientID})
 	idToken, err := v.Verify(ctx, accessToken)
 	if err != nil {
@@ -65,6 +67,20 @@ func (i *initializedOIDCProvider) verifyAccessToken(ctx context.Context, accessT
 		return "", nil, fmt.Errorf("failed to extract claims from OIDC ID token: %w", err)
 	}
 
+	if len(nonce) > 0 {
+		tokenNonce, ok := claims["nonce"]
+		if !ok {
+			return "", nil, fmt.Errorf("nonce claim not found in OIDC ID token")
+		}
+		tokenNonceStr, ok := tokenNonce.(string)
+		if !ok {
+			return "", nil, fmt.Errorf("nonce claim in OIDC ID token is not a string")
+		}
+		if tokenNonceStr != nonce[0] {
+			return "", nil, fmt.Errorf("nonce claim mismatch in OIDC ID token")
+		}
+	}
+
 	cr, err := i.processClaims(ctx, claims)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to process claims from OIDC ID token: %w", err)
@@ -74,15 +90,19 @@ func (i *initializedOIDCProvider) verifyAccessToken(ctx context.Context, accessT
 }
 
 // verifyToken implements initializedOAuth2Provider.
-func (i *initializedOIDCProvider) verifyToken(ctx context.Context, token *oauth2.Token) (string, []string, *authStorage, error) {
+func (i *initializedOIDCProvider) verifyToken(ctx context.Context,
+	token *oauth2.Token, nonce ...string) (string, []string, *authStorage, error) {
+
 	idToken, ok := token.Extra("id_token").(string)
 	if !ok {
 		return "", nil, nil, fmt.Errorf("no id_token found in token response")
 	}
-	username, groups, err := i.verifyAccessToken(ctx, idToken)
+
+	username, groups, err := i.verifyAccessToken(ctx, idToken, nonce...)
 	if err != nil {
 		return "", nil, nil, err
 	}
+
 	as := &authStorage{
 		// If in the future we implement profile pictures, we will need to store the real
 		// access token as well (and not replace it with the ID token, like we do here),
@@ -93,6 +113,7 @@ func (i *initializedOIDCProvider) verifyToken(ctx context.Context, token *oauth2
 		AccessToken:  idToken,
 		RefreshToken: token.RefreshToken,
 	}
+
 	return username, groups, as, nil
 }
 
