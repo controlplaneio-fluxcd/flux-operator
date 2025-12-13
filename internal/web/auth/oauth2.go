@@ -54,17 +54,8 @@ type oauth2Verifier interface {
 }
 
 // newOAuth2Authenticator creates a new OAuth2 authenticator.
-func newOAuth2Authenticator(ctx context.Context, conf *webconfig.ConfigSpec,
+func newOAuth2Authenticator(conf *webconfig.ConfigSpec,
 	kubeClient *kubeclient.Client, provider oauth2Provider) (*oauth2Authenticator, error) {
-
-	// Validate that the provider can be initialized and create verifiers.
-	p, err := provider.init(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize OAuth2 provider: %w", err)
-	}
-	if _, err := p.newVerifier(ctx); err != nil {
-		return nil, fmt.Errorf("failed to create OAuth2 token verifier: %w", err)
-	}
 
 	// Build encryptor/decryptor for login state cookies.
 	hash := sha256.New

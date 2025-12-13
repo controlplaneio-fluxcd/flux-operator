@@ -380,7 +380,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		authMiddleware, err := webauth.NewMiddleware(ctx, &conf.Spec, kubeClient)
+		authMiddleware, err := webauth.NewMiddleware(&conf.Spec, kubeClient)
 		if err != nil {
 			setupLog.Error(err, "unable to create auth middleware")
 			os.Exit(1)

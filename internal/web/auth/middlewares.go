@@ -4,7 +4,6 @@
 package auth
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -22,7 +21,7 @@ const (
 )
 
 // NewMiddleware creates a new authentication middleware for HTTP handlers.
-func NewMiddleware(ctx context.Context, conf *config.ConfigSpec, kubeClient *kubeclient.Client) (func(next http.Handler) http.Handler, error) {
+func NewMiddleware(conf *config.ConfigSpec, kubeClient *kubeclient.Client) (func(next http.Handler) http.Handler, error) {
 	// Build middleware according to the authentication type.
 	var middleware func(next http.Handler) http.Handler
 	switch {
@@ -36,7 +35,7 @@ func NewMiddleware(ctx context.Context, conf *config.ConfigSpec, kubeClient *kub
 		}
 	case conf.Authentication.OAuth2 != nil:
 		var err error
-		middleware, err = newOAuth2Middleware(ctx, conf, kubeClient)
+		middleware, err = newOAuth2Middleware(conf, kubeClient)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create OAuth2 authentication middleware: %w", err)
 		}
@@ -91,7 +90,7 @@ func newAnonymousMiddleware(conf *config.ConfigSpec, kubeClient *kubeclient.Clie
 }
 
 // newOAuth2Middleware creates an OAuth2 authentication middleware.
-func newOAuth2Middleware(ctx context.Context, conf *config.ConfigSpec, kubeClient *kubeclient.Client) (func(next http.Handler) http.Handler, error) {
+func newOAuth2Middleware(conf *config.ConfigSpec, kubeClient *kubeclient.Client) (func(next http.Handler) http.Handler, error) {
 	// Build the OAuth2 provider.
 	var provider oauth2Provider
 	var err error
@@ -106,7 +105,7 @@ func newOAuth2Middleware(ctx context.Context, conf *config.ConfigSpec, kubeClien
 	}
 
 	// Build the OAuth2 authenticator.
-	authenticator, err := newOAuth2Authenticator(ctx, conf, kubeClient, provider)
+	authenticator, err := newOAuth2Authenticator(conf, kubeClient, provider)
 	if err != nil {
 		return nil, err
 	}
