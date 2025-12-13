@@ -29,24 +29,29 @@ func NewMiddleware(conf *config.ConfigSpec, kubeClient *kubeclient.Client,
 
 	// Build middleware according to the authentication type.
 	var middleware func(next http.Handler) http.Handler
+	var provider string
 	switch {
 	case conf.Authentication == nil:
 		middleware = newDefaultMiddleware()
+		provider = "None"
 	case conf.Authentication.Anonymous != nil:
 		var err error
 		middleware, err = newAnonymousMiddleware(conf, kubeClient)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create anonymous authentication middleware: %w", err)
 		}
+		provider = config.AuthenticationTypeAnonymous
 	case conf.Authentication.OAuth2 != nil:
 		var err error
 		middleware, err = newOAuth2Middleware(conf, kubeClient)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create OAuth2 authentication middleware: %w", err)
 		}
+		provider = fmt.Sprintf("%s/%s", config.AuthenticationTypeOAuth2, conf.Authentication.OAuth2.Provider)
 	default:
 		return nil, fmt.Errorf("unsupported authentication method")
 	}
+	l.WithValues("authProvider", provider).Info("authentication initialized successfully")
 
 	// Enhance middleware with logout handling and logger.
 	return func(next http.Handler) http.Handler {
