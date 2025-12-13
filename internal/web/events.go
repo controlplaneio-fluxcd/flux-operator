@@ -61,8 +61,42 @@ func (r *Router) EventsHandler(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
+	// Prepare list of namespaces to search in
+	var namespaces []string
+	if namespace != "" {
+		namespaces = []string{namespace}
+	} else {
+		// Check if the user has access to all namespaces
+		userNamespaces, all, err := r.kubeClient.ListUserNamespaces(req.Context())
+		if err != nil {
+			r.log.Error(err, "failed to list user namespaces", "url", req.URL.String())
+			if apierrors.IsForbidden(err) {
+				http.Error(w, err.Error(), http.StatusForbidden)
+			} else {
+				http.Error(w, "failed to list user namespaces", http.StatusInternalServerError)
+			}
+			return
+		}
+
+		// If the user has no access to any namespaces, return empty result
+		if len(userNamespaces) == 0 {
+			w.Header().Set("Content-Type", "application/json")
+			response := map[string]any{"events": []Event{}}
+			if err := json.NewEncoder(w).Encode(response); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			return
+		}
+
+		// If the user does not have access to all namespaces, limit search to their namespaces
+		if !all {
+			namespaces = userNamespaces
+		}
+	}
+
 	// Get events from the cluster using the request context
-	events, err := r.GetEvents(req.Context(), kinds, name, namespace, "", eventType)
+	events, err := r.GetEvents(req.Context(), kinds, name, namespaces, "", eventType)
 	if err != nil {
 		r.log.Error(err, "failed to get events", "url", req.URL.String(),
 			"kind", kind, "name", name, "namespace", namespace, "type", eventType)
@@ -97,7 +131,7 @@ type Event struct {
 // GetEvents retrieves events for the specified resource kinds.
 // Returns at most 500 events per kind (100 if multiple kinds are specified), sorted by timestamp descending.
 // Filters by eventType (Normal, Warning) if provided.
-func (r *Router) GetEvents(ctx context.Context, kinds []string, name, namespace string, excludeReason string, eventType string) ([]Event, error) {
+func (r *Router) GetEvents(ctx context.Context, kinds []string, name string, namespaces []string, excludeReason string, eventType string) ([]Event, error) {
 	var allEvents []corev1.Event
 
 	if len(kinds) == 0 {
@@ -120,8 +154,6 @@ func (r *Router) GetEvents(ctx context.Context, kinds []string, name, namespace 
 		go func(kind string) {
 			defer wg.Done()
 
-			el := &corev1.EventList{}
-
 			selectors := []fields.Selector{
 				fields.OneTermEqualSelector("involvedObject.kind", kind),
 			}
@@ -137,33 +169,48 @@ func (r *Router) GetEvents(ctx context.Context, kinds []string, name, namespace 
 				selectors = append(selectors, fields.OneTermNotEqualSelector("reason", excludeReason))
 			}
 
-			listOpts := []client.ListOption{
-				client.Limit(limit),
-				client.MatchingFieldsSelector{
-					Selector: fields.AndSelectors(selectors...),
-				}}
-			if namespace != "" {
-				listOpts = append(listOpts, client.InNamespace(namespace))
+			// Determine which namespaces to query.
+			// If namespaces is empty, query all namespaces (cluster-wide access).
+			// Otherwise, query each namespace in the list.
+			namespacesToQuery := namespaces
+			if len(namespacesToQuery) == 0 {
+				namespacesToQuery = []string{""}
 			}
 
-			if err := r.kubeClient.GetAPIReader(ctx).List(ctx, el, listOpts...); err != nil {
-				errChan <- fmt.Errorf("unable to list events for kind %s: %w", kind, err)
-				return
-			}
+			var byKindEvents []corev1.Event
+			for _, ns := range namespacesToQuery {
+				el := &corev1.EventList{}
 
-			// Filter by name using wildcard matching if needed
-			filteredEvents := el.Items
-			if hasWildcard(name) {
-				filteredEvents = []corev1.Event{}
-				for _, event := range el.Items {
-					if matchesWildcard(event.InvolvedObject.Name, name) {
-						filteredEvents = append(filteredEvents, event)
+				listOpts := []client.ListOption{
+					client.Limit(limit),
+					client.MatchingFieldsSelector{
+						Selector: fields.AndSelectors(selectors...),
+					}}
+				if ns != "" {
+					listOpts = append(listOpts, client.InNamespace(ns))
+				}
+
+				if err := r.kubeClient.GetAPIReader(ctx).List(ctx, el, listOpts...); err != nil {
+					errChan <- fmt.Errorf("unable to list events for kind %s in namespace %s: %w", kind, ns, err)
+					return
+				}
+
+				// Filter by name using wildcard matching if needed
+				filteredEvents := el.Items
+				if hasWildcard(name) {
+					filteredEvents = []corev1.Event{}
+					for _, event := range el.Items {
+						if matchesWildcard(event.InvolvedObject.Name, name) {
+							filteredEvents = append(filteredEvents, event)
+						}
 					}
 				}
+
+				byKindEvents = append(byKindEvents, filteredEvents...)
 			}
 
 			mu.Lock()
-			allEvents = append(allEvents, filteredEvents...)
+			allEvents = append(allEvents, byKindEvents...)
 			mu.Unlock()
 		}(kind)
 	}

@@ -57,8 +57,42 @@ func (r *Router) SearchHandler(w http.ResponseWriter, req *http.Request) {
 		)
 	}
 
+	// Prepare list of namespaces to search in
+	var namespaces []string
+	if namespace != "" {
+		namespaces = []string{namespace}
+	} else {
+		// Check if the user has access to all namespaces
+		userNamespaces, all, err := r.kubeClient.ListUserNamespaces(req.Context())
+		if err != nil {
+			r.log.Error(err, "failed to list user namespaces", "url", req.URL.String())
+			if errors.IsForbidden(err) {
+				http.Error(w, err.Error(), http.StatusForbidden)
+			} else {
+				http.Error(w, "failed to list user namespaces", http.StatusInternalServerError)
+			}
+			return
+		}
+
+		// If the user has no access to any namespaces, return empty result
+		if len(userNamespaces) == 0 {
+			w.Header().Set("Content-Type", "application/json")
+			response := map[string]any{"resources": []ResourceStatus{}}
+			if err := json.NewEncoder(w).Encode(response); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			return
+		}
+
+		// If the user does not have access to all namespaces, limit search to their namespaces
+		if !all {
+			namespaces = userNamespaces
+		}
+	}
+
 	// Get resource status from the cluster using the request context
-	resources, err := r.GetResourcesStatus(req.Context(), kinds, name, namespace, "", 10)
+	resources, err := r.GetResourcesStatus(req.Context(), kinds, name, namespaces, "", 10)
 	if err != nil {
 		r.log.Error(err, "failed to get resources status", "url", req.URL.String(), "name", name, "namespace", namespace)
 		if errors.IsForbidden(err) {

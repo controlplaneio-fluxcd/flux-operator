@@ -48,7 +48,6 @@ func (r *Router) ResourcesHandler(w http.ResponseWriter, req *http.Request) {
 		// Default kinds
 		kinds = []string{
 			// Appliers
-			fluxcdv1.FluxInstanceKind,
 			fluxcdv1.ResourceSetKind,
 			fluxcdv1.ResourceSetInputProviderKind,
 			fluxcdv1.FluxKustomizationKind,
@@ -63,8 +62,49 @@ func (r *Router) ResourcesHandler(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
+	// Prepare list of namespaces to search in
+	var namespaces []string
+
+	// If namespace is specified, use it directly
+	if namespace != "" {
+		namespaces = []string{namespace}
+	} else {
+		// Check if the user has access to all namespaces
+		userNamespaces, all, err := r.kubeClient.ListUserNamespaces(req.Context())
+		if err != nil {
+			r.log.Error(err, "failed to list user namespaces", "url", req.URL.String())
+			if apierrors.IsForbidden(err) {
+				http.Error(w, err.Error(), http.StatusForbidden)
+			} else {
+				http.Error(w, "failed to list user namespaces", http.StatusInternalServerError)
+			}
+			return
+		}
+
+		// If the user has no access to any namespaces, return empty result
+		if len(userNamespaces) == 0 {
+			w.Header().Set("Content-Type", "application/json")
+			response := map[string]any{"resources": []ResourceStatus{}}
+			if err := json.NewEncoder(w).Encode(response); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			return
+		}
+
+		// If the user has cluster-wide access, we can add FluxInstance to kinds
+		if all && kind == "" {
+			kinds = append(kinds, fluxcdv1.FluxInstanceKind)
+		}
+
+		// If the user does not have access to all namespaces, limit search to their namespaces
+		if !all {
+			namespaces = userNamespaces
+		}
+	}
+
 	// Get resource status from the cluster using the request context
-	resources, err := r.GetResourcesStatus(req.Context(), kinds, name, namespace, status, 2500)
+	resources, err := r.GetResourcesStatus(req.Context(), kinds, name, namespaces, status, 2500)
 	if err != nil {
 		r.log.Error(err, "failed to get resources status", "url", req.URL.String(),
 			"kind", kind, "name", name, "namespace", namespace, "status", status)
@@ -119,7 +159,7 @@ type ResourceStatus struct {
 // GetResourcesStatus returns the status for the specified resource kinds and optional name in the given namespace.
 // If name is empty, returns the status for all resources of the specified kinds are returned.
 // Filters by status (Ready, Failed, Progressing, Suspended, Unknown) if provided.
-func (r *Router) GetResourcesStatus(ctx context.Context, kinds []string, name, namespace string, status string, matchLimit int) ([]ResourceStatus, error) {
+func (r *Router) GetResourcesStatus(ctx context.Context, kinds []string, name string, namespaces []string, status string, matchLimit int) ([]ResourceStatus, error) {
 	var result []ResourceStatus
 
 	if len(kinds) == 0 {
@@ -151,42 +191,52 @@ func (r *Router) GetResourcesStatus(ctx context.Context, kinds []string, name, n
 				return
 			}
 
-			list := unstructured.UnstructuredList{
-				Object: map[string]any{
-					"apiVersion": gvk.Group + "/" + gvk.Version,
-					"kind":       gvk.Kind,
-				},
-			}
-
-			listOpts := []client.ListOption{
-				client.Limit(queryLimit),
-			}
-			if namespace != "" {
-				listOpts = append(listOpts, client.InNamespace(namespace))
-			}
-
-			// Add name filter if provided and doesn't contain wildcards
-			if name != "" && !hasWildcard(name) {
-				listOpts = append(listOpts, client.MatchingFields{"metadata.name": name})
-			}
-
-			if err := r.kubeClient.GetClient(ctx).List(ctx, &list, listOpts...); err != nil {
-				errChan <- fmt.Errorf("unable to list resources for kind %s : %w", kind, err)
-				return
+			// Determine which namespaces to query.
+			// If namespaces is empty, query all namespaces (cluster-wide access).
+			// Otherwise, query each namespace in the list.
+			namespacesToQuery := namespaces
+			if len(namespacesToQuery) == 0 {
+				namespacesToQuery = []string{""}
 			}
 
 			var byKindResult []ResourceStatus
-			for _, obj := range list.Items {
-				// Filter by name using wildcard matching if needed
-				if hasWildcard(name) {
-					objName, _, _ := unstructured.NestedString(obj.Object, "metadata", "name")
-					if !matchesWildcard(objName, name) {
-						continue
-					}
+			for _, ns := range namespacesToQuery {
+				list := unstructured.UnstructuredList{
+					Object: map[string]any{
+						"apiVersion": gvk.Group + "/" + gvk.Version,
+						"kind":       gvk.Kind,
+					},
 				}
 
-				rs := r.resourceStatusFromUnstructured(obj)
-				byKindResult = append(byKindResult, rs)
+				listOpts := []client.ListOption{
+					client.Limit(queryLimit),
+				}
+				if ns != "" {
+					listOpts = append(listOpts, client.InNamespace(ns))
+				}
+
+				// Add name filter if provided and doesn't contain wildcards
+				if name != "" && !hasWildcard(name) {
+					listOpts = append(listOpts, client.MatchingFields{"metadata.name": name})
+				}
+
+				if err := r.kubeClient.GetClient(ctx).List(ctx, &list, listOpts...); err != nil {
+					errChan <- fmt.Errorf("unable to list resources for kind %s in namespace %s: %w", kind, ns, err)
+					return
+				}
+
+				for _, obj := range list.Items {
+					// Filter by name using wildcard matching if needed
+					if hasWildcard(name) {
+						objName, _, _ := unstructured.NestedString(obj.Object, "metadata", "name")
+						if !matchesWildcard(objName, name) {
+							continue
+						}
+					}
+
+					rs := r.resourceStatusFromUnstructured(obj)
+					byKindResult = append(byKindResult, rs)
+				}
 			}
 
 			mu.Lock()
