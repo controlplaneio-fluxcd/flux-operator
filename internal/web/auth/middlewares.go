@@ -121,8 +121,10 @@ func newOAuth2Middleware(ctx context.Context, conf *config.ConfigSpec, kubeClien
 				authenticator.serveCallback(w, r)
 			case isAPIRequest(r):
 				authenticator.serveAPI(w, r, next)
+			case r.URL.Path == "/":
+				authenticator.serveIndex(w, r, next)
 			default:
-				authenticator.serveAssets(w, r, next)
+				next.ServeHTTP(w, r)
 			}
 		})
 	}, nil

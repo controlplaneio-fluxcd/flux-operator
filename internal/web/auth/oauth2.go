@@ -253,8 +253,8 @@ func (o *oauth2Authenticator) serveAPI(w http.ResponseWriter, r *http.Request, a
 	api.ServeHTTP(w, r)
 }
 
-// serveAssets serves asset requests enhancing them with the auth provider cookie.
-func (o *oauth2Authenticator) serveAssets(w http.ResponseWriter, r *http.Request, assets http.Handler) {
+// serveIndex serves the index.html page enhancing it with the auth provider cookie.
+func (o *oauth2Authenticator) serveIndex(w http.ResponseWriter, r *http.Request, assets http.Handler) {
 	defer assets.ServeHTTP(w, r)
 
 	// Set the auth provider cookie to indicate OAuth2 is in use and not yet authenticated.
