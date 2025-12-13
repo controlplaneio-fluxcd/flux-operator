@@ -80,8 +80,8 @@ export function LoginPage() {
     <div class="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors flex flex-col items-center justify-center px-4 py-12 sm:py-0">
       <div class="w-full max-w-md">
         {/* Logo and Title */}
-        <div class="text-center mb-8">
-          <FluxIcon className="w-16 h-16 mx-auto text-gray-900 dark:text-white mb-4" />
+        <div class="flex items-center justify-center gap-3 mb-8">
+          <FluxIcon className="w-12 h-12 text-gray-900 dark:text-white" />
           <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">
             Flux Status
           </h1>
@@ -104,7 +104,7 @@ export function LoginPage() {
               Authentication Required
             </h2>
             <p class="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
-              Sign in with your organization account to access the Flux Status Page and monitor your GitOps pipelines.
+              Sign in with your organization account to monitor your GitOps pipelines.
             </p>
           </div>
 
@@ -162,7 +162,7 @@ export function LoginPage() {
         {/* Documentation Link */}
         <div class="mt-6 text-center">
           <a
-            href="https://fluxoperator.dev"
+            href="https://fluxoperator.dev/docs/"
             target="_blank"
             rel="noopener noreferrer"
             class="text-sm text-gray-500 dark:text-gray-400 hover:text-flux-blue dark:hover:text-blue-400 transition-colors inline-flex items-center gap-1"

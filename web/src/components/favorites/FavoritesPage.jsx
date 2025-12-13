@@ -8,6 +8,7 @@ import { favorites, reorderFavorites, getFavoriteKey, removeFavorite } from '../
 import { usePageTitle } from '../../utils/title'
 import { FavoritesHeader } from './FavoritesHeader'
 import { FavoriteCard } from './FavoriteCard'
+import { FluxIcon } from '../common/icons'
 
 /**
  * FavoritesPage - Main page displaying favorite resources
@@ -437,7 +438,7 @@ export function FavoritesPage() {
         {/* Loading state */}
         {loading && (
           <div class="flex items-center justify-center p-8">
-            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-flux-blue"></div>
+            <FluxIcon className="animate-spin h-8 w-8 text-flux-blue" />
             <span class="ml-3 text-gray-600 dark:text-gray-400">Loading favorites...</span>
           </div>
         )}

@@ -96,7 +96,7 @@ describe('LoginPage', () => {
 
       const link = screen.getByRole('link', { name: /Documentation/ })
       expect(link).toBeInTheDocument()
-      expect(link).toHaveAttribute('href', 'https://fluxoperator.dev')
+      expect(link).toHaveAttribute('href', 'https://fluxoperator.dev/docs/')
       expect(link).toHaveAttribute('target', '_blank')
       expect(link).toHaveAttribute('rel', 'noopener noreferrer')
     })

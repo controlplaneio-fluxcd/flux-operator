@@ -56,7 +56,7 @@ export function Footer() {
             </a>
             <span class="text-gray-300 dark:text-gray-600">•</span>
             <a
-              href="https://fluxoperator.dev"
+              href="https://fluxoperator.dev/docs/"
               target="_blank"
               rel="noopener noreferrer"
               class="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"

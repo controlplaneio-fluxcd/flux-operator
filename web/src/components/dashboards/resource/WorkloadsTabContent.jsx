@@ -5,6 +5,7 @@ import { useState, useEffect } from 'preact/hooks'
 import { fetchWithMock } from '../../../utils/fetch'
 import { formatTimestamp } from '../../../utils/time'
 import { getWorkloadStatusBadgeClass, formatWorkloadStatus } from '../../../utils/status'
+import { FluxIcon } from '../../common/icons'
 
 /**
  * WorkloadsTabContent - Displays detailed Kubernetes workload information
@@ -71,7 +72,7 @@ export function WorkloadsTabContent({ workloadItems, namespace }) {
   if (loading) {
     return (
       <div class="flex items-center justify-center p-8">
-        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-flux-blue"></div>
+        <FluxIcon className="animate-spin h-8 w-8 text-flux-blue" />
         <span class="ml-3 text-gray-600 dark:text-gray-400">Loading workloads...</span>
       </div>
     )
