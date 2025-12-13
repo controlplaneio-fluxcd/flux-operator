@@ -13,7 +13,7 @@ import { ReconcilerPanel } from './ReconcilerPanel'
 import { SourcePanel } from './SourcePanel'
 import { InventoryPanel } from './InventoryPanel'
 import { ArtifactPanel } from './ArtifactPanel'
-import { FluxIcon } from '../../common/icons'
+import { FluxOperatorIcon } from '../../common/icons'
 import { ExportedInputsPanel } from './ExportedInputsPanel'
 import { InputsPanel } from './InputsPanel'
 
@@ -175,7 +175,7 @@ export function ResourcePage({ kind, namespace, name }) {
     return (
       <main data-testid="resource-dashboard-view" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
         <div class="flex items-center justify-center p-8">
-          <FluxIcon className="animate-spin h-8 w-8 text-flux-blue" />
+          <FluxOperatorIcon className="animate-spin h-8 w-8 text-flux-blue" />
           <span class="ml-3 text-gray-600 dark:text-gray-400">Loading resource...</span>
         </div>
       </main>

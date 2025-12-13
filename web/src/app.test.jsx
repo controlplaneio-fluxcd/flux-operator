@@ -59,7 +59,8 @@ vi.mock('./utils/fetch', async () => {
   const { signal } = await import('@preact/signals')
   return {
     fetchWithMock: vi.fn(),
-    authRequired: signal(false)
+    authRequired: signal(false),
+    shouldUseMockData: vi.fn(() => false)
   }
 })
 

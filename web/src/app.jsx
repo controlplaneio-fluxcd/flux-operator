@@ -4,7 +4,7 @@
 import { useEffect } from 'preact/hooks'
 import { signal } from '@preact/signals'
 import { LocationProvider, Router, Route, useLocation } from 'preact-iso'
-import { fetchWithMock, authRequired } from './utils/fetch'
+import { fetchWithMock, authRequired, shouldUseMockData } from './utils/fetch'
 import { parseAuthProviderCookie } from './utils/cookies'
 import { checkVersionChange } from './utils/version'
 import './utils/theme'
@@ -16,7 +16,7 @@ import { EventList } from './components/search/EventList'
 import { ResourceList } from './components/search/ResourceList'
 import { ResourcePage } from './components/dashboards/resource/ResourcePage'
 import { FavoritesPage } from './components/favorites/FavoritesPage'
-import { FluxIcon } from './components/common/icons'
+import { FluxOperatorIcon } from './components/common/icons'
 
 // Global signals for FluxReport data and application state
 // These signals are exported and used by child components throughout the app
@@ -150,13 +150,16 @@ function TabNavigation() {
 export function App() {
   // Setup data fetching on component mount
   useEffect(() => {
-    // Check auth-provider cookie first
-    // If user is not authenticated, show login page immediately (skip API call)
-    const authProvider = parseAuthProviderCookie()
-    if (authProvider && authProvider.authenticated === false) {
-      authRequired.value = true
-      reportLoading.value = false
-      return // Don't fetch or set up interval
+    // Skip auth check in mock mode (dev with VITE_USE_MOCK_DATA=true)
+    if (!shouldUseMockData()) {
+      // Check auth-provider cookie first
+      // If user is not authenticated, show login page immediately (skip API call)
+      const authProvider = parseAuthProviderCookie()
+      if (authProvider && authProvider.authenticated === false) {
+        authRequired.value = true
+        reportLoading.value = false
+        return // Don't fetch or set up interval
+      }
     }
 
     // Fetch data immediately on mount
@@ -185,7 +188,7 @@ export function App() {
         <ConnectionStatus />
         <div class="flex items-center justify-center flex-1">
           <div class="text-center">
-            <FluxIcon className="animate-spin h-12 w-12 text-flux-blue mx-auto" />
+            <FluxOperatorIcon className="animate-spin h-12 w-12 text-flux-blue mx-auto" />
             <p class="mt-4 text-gray-600 dark:text-gray-400">Loading Flux status...</p>
           </div>
         </div>
