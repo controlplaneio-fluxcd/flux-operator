@@ -47,18 +47,19 @@ func NewMiddleware(conf *config.ConfigSpec, kubeClient *kubeclient.Client) (func
 	return func(next http.Handler) http.Handler {
 		next = middleware(next)
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path != authPathLogout {
-				next.ServeHTTP(w, r)
+			if r.URL.Path == authPathLogout {
+				// Only allow POST for logout to prevent CSRF attacks.
+				// GET requests to /logout could be triggered by malicious links.
+				if r.Method != http.MethodPost {
+					http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+					return
+				}
+				deleteAuthStorage(w)
+				http.Redirect(w, r, "/", http.StatusSeeOther)
 				return
 			}
-			// Only allow POST for logout to prevent CSRF attacks.
-			// GET requests to /logout could be triggered by malicious links.
-			if r.Method != http.MethodPost {
-				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-				return
-			}
-			deleteAuthStorage(w)
-			http.Redirect(w, r, "/", http.StatusSeeOther)
+
+			next.ServeHTTP(w, r)
 		})
 	}, nil
 }
