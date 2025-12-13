@@ -407,3 +407,77 @@ func (t *testLogSink) WithName(name string) logr.LogSink {
 func formatValue(v any) string {
 	return fmt.Sprintf("%v", v)
 }
+
+func TestSecurityHeadersMiddleware(t *testing.T) {
+	// Test handler that returns a simple response
+	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("content"))
+	})
+
+	for _, tt := range []struct {
+		name          string
+		path          string
+		expectedValue map[string]string
+	}{
+		{
+			name: "sets all security headers for root",
+			path: "/",
+			expectedValue: map[string]string{
+				"X-Frame-Options":        "DENY",
+				"X-Content-Type-Options": "nosniff",
+				"X-XSS-Protection":       "1; mode=block",
+				"Referrer-Policy":        "strict-origin-when-cross-origin",
+				"Permissions-Policy":     "geolocation=(), microphone=(), camera=()",
+			},
+		},
+		{
+			name: "sets all security headers for API",
+			path: "/api/v1/report",
+			expectedValue: map[string]string{
+				"X-Frame-Options":        "DENY",
+				"X-Content-Type-Options": "nosniff",
+				"X-XSS-Protection":       "1; mode=block",
+				"Referrer-Policy":        "strict-origin-when-cross-origin",
+				"Permissions-Policy":     "geolocation=(), microphone=(), camera=()",
+			},
+		},
+		{
+			name: "sets all security headers for static assets",
+			path: "/assets/app-abc123.js",
+			expectedValue: map[string]string{
+				"X-Frame-Options":        "DENY",
+				"X-Content-Type-Options": "nosniff",
+				"X-XSS-Protection":       "1; mode=block",
+				"Referrer-Policy":        "strict-origin-when-cross-origin",
+				"Permissions-Policy":     "geolocation=(), microphone=(), camera=()",
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			// Create request
+			req := httptest.NewRequest(http.MethodGet, tt.path, nil)
+
+			// Create response recorder
+			rec := httptest.NewRecorder()
+
+			// Apply middleware
+			middleware := SecurityHeadersMiddleware(testHandler)
+			middleware.ServeHTTP(rec, req)
+
+			// Check all security headers
+			for header, expected := range tt.expectedValue {
+				g.Expect(rec.Header().Get(header)).To(Equal(expected),
+					"Header %s should be %s", header, expected)
+			}
+
+			// Check status code
+			g.Expect(rec.Code).To(Equal(http.StatusOK))
+
+			// Check body
+			g.Expect(rec.Body.String()).To(Equal("content"))
+		})
+	}
+}

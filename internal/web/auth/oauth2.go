@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -362,17 +363,46 @@ func (o *oauth2LoginState) redirectURL() string {
 }
 
 // originalURL builds the redirect URL from the original path query parameter.
+// It validates that the path is a safe relative path to prevent open redirects.
 func originalURL(q url.Values) string {
 	redirectPath := "/"
-	if p := q.Get(authQueryParamOriginalPath); p != "" {
+	if p := q.Get(authQueryParamOriginalPath); p != "" && isSafeRedirectPath(p) {
 		redirectPath = p
-		q.Del(authQueryParamOriginalPath)
 	}
+	// Always delete originalPath from query params to avoid it appearing in the final URL
+	q.Del(authQueryParamOriginalPath)
 	redirectURL := redirectPath
 	if len(q) > 0 {
 		redirectURL += "?" + q.Encode()
 	}
 	return redirectURL
+}
+
+// isSafeRedirectPath validates that the path is a safe relative path.
+// It prevents open redirect attacks by ensuring the path:
+// - Starts with a single forward slash
+// - Does not start with // (protocol-relative URL)
+// - Does not have a scheme before the first slash (e.g., http://...)
+func isSafeRedirectPath(path string) bool {
+	// Must start with /
+	if !strings.HasPrefix(path, "/") {
+		return false
+	}
+	// Must not be a protocol-relative URL (//example.com)
+	if strings.HasPrefix(path, "//") {
+		return false
+	}
+	// Check for scheme at the beginning (before any path component)
+	// We only check up to the first path segment to allow query params containing URLs
+	firstSlash := strings.Index(path[1:], "/")
+	pathToCheck := path
+	if firstSlash > 0 {
+		pathToCheck = path[:firstSlash+1]
+	}
+	if strings.Contains(pathToCheck, "://") {
+		return false
+	}
+	return true
 }
 
 // encodeState encodes the OAuth2 login state.
