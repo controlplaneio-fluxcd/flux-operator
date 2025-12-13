@@ -19,7 +19,7 @@ import (
 
 	"golang.org/x/oauth2"
 
-	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
+	webconfig "github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/kubeclient"
 )
 
@@ -30,7 +30,7 @@ const (
 
 // oauth2Authenticator implements OAuth2 authentication.
 type oauth2Authenticator struct {
-	conf       *config.ConfigSpec
+	conf       *webconfig.ConfigSpec
 	kubeClient *kubeclient.Client
 	provider   oauth2Provider
 	gcm        cipher.AEAD
@@ -54,7 +54,7 @@ type oauth2Verifier interface {
 }
 
 // newOAuth2Authenticator creates a new OAuth2 authenticator.
-func newOAuth2Authenticator(ctx context.Context, conf *config.ConfigSpec,
+func newOAuth2Authenticator(ctx context.Context, conf *webconfig.ConfigSpec,
 	kubeClient *kubeclient.Client, provider oauth2Provider) (*oauth2Authenticator, error) {
 
 	// Validate that the provider can be initialized and create verifiers.
