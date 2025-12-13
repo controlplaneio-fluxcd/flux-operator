@@ -46,8 +46,9 @@ type userClient struct {
 // userNamespaces holds a list of namespaces along
 // with the timestamp they were cached at.
 type userNamespaces struct {
-	namespaces []string
-	timestamp  time.Time
+	namespaces    []string
+	timestamp     time.Time
+	allNamespaces bool
 }
 
 // Option defines a functional option for calling the
@@ -184,9 +185,10 @@ func (c *Client) newUserClient(imp user.Impersonation) (*userClient, error) {
 	}, nil
 }
 
-// ListNamespaces lists the namespaces the user has access to and returns their names sorted
+// ListUserNamespaces lists the namespaces the user has access to and returns their names sorted
 // in alphabetical order. Since this operation is expensive, it has a cache per user.
-func (c *Client) ListNamespaces(ctx context.Context) ([]string, error) {
+// The boolean return value indicates whether the user has access to all namespaces in the cluster.
+func (c *Client) ListUserNamespaces(ctx context.Context) ([]string, bool, error) {
 	key := user.LoadSession(ctx).Key()
 
 	fetch := func(ctx context.Context) (*userNamespaces, error) {
@@ -202,14 +204,15 @@ func (c *Client) ListNamespaces(ctx context.Context) ([]string, error) {
 		slices.Sort(namespaces)
 
 		// Filter namespaces by access.
-		namespaces, err := c.filterNamespacesByAccess(ctx, namespaces)
+		namespaces, allNamespaces, err := c.filterNamespacesByAccess(ctx, namespaces)
 		if err != nil {
 			return nil, err
 		}
 
 		return &userNamespaces{
-			namespaces: namespaces,
-			timestamp:  time.Now(),
+			namespaces:    namespaces,
+			allNamespaces: allNamespaces,
+			timestamp:     time.Now(),
 		}, nil
 	}
 
@@ -218,45 +221,63 @@ func (c *Client) ListNamespaces(ctx context.Context) ([]string, error) {
 	// expensive so we need to allow concurrent fetches.
 	un, err := c.userNamespacesCache.Get(key)
 	if err == nil && time.Since(un.timestamp) < c.namespaceCacheDuration {
-		return un.namespaces, nil
+		return un.namespaces, un.allNamespaces, nil
 	}
 	un, err = fetch(ctx)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	_ = c.userNamespacesCache.Set(key, un) // Set() does not return errors.
 
-	return un.namespaces, nil
+	return un.namespaces, un.allNamespaces, nil
 }
 
 // filterNamespacesByAccess filters the given list of namespaces
-// and returns only those the user has access to. It determines
-// access by performing a SelfSubjectAccessReview for each
-// namespace checking the "get" verb on the
-// "resourcesets.fluxcd.controlplane.io" resource.
-func (c *Client) filterNamespacesByAccess(ctx context.Context, namespaces []string) ([]string, error) {
+// and returns only those the user has access to. It first checks
+// for cluster-wide access to avoid per-namespace checks when possible.
+// Access is determined by performing a SelfSubjectAccessReview
+// checking the "get" verb on the "resourcesets.fluxcd.controlplane.io" resource.
+// The boolean return value indicates whether the user has access to all namespaces.
+func (c *Client) filterNamespacesByAccess(ctx context.Context, namespaces []string) ([]string, bool, error) {
 	kubeClient := c.GetClient(ctx)
 	if kubeClient == c.client {
 		// Privileged client has access to all namespaces.
-		return namespaces, nil
+		return namespaces, true, nil
 	}
 
-	filteredNamespaces := make([]string, 0)
+	// Check for cluster-wide access first in case the user has a ClusterRoleBinding.
+	clusterSSAR := &authzv1.SelfSubjectAccessReview{
+		Spec: authzv1.SelfSubjectAccessReviewSpec{
+			ResourceAttributes: &authzv1.ResourceAttributes{
+				Verb:     "get",
+				Group:    fluxcdv1.GroupVersion.Group,
+				Resource: "resourcesets",
+			},
+		},
+	}
+	if err := kubeClient.Create(ctx, clusterSSAR); err != nil {
+		return nil, false, fmt.Errorf("failed to create cluster-wide SelfSubjectAccessReview: %w", err)
+	}
+	if clusterSSAR.Status.Allowed {
+		return namespaces, true, nil
+	}
 
+	// Check access per namespace, the user probably has at least one RoleBinding.
+	filteredNamespaces := make([]string, 0)
 	for _, ns := range namespaces {
 		ssar := &authzv1.SelfSubjectAccessReview{
 			Spec: authzv1.SelfSubjectAccessReviewSpec{
 				ResourceAttributes: &authzv1.ResourceAttributes{
 					Verb:      "get",
 					Group:     fluxcdv1.GroupVersion.Group,
-					Resource:  fluxcdv1.ResourceSetKind,
+					Resource:  "resourcesets",
 					Namespace: ns,
 				},
 			},
 		}
 
 		if err := kubeClient.Create(ctx, ssar); err != nil {
-			return nil, fmt.Errorf("failed to create SelfSubjectAccessReview for namespace %s: %w", ns, err)
+			return nil, false, fmt.Errorf("failed to create SelfSubjectAccessReview for namespace %s: %w", ns, err)
 		}
 
 		if ssar.Status.Allowed {
@@ -264,5 +285,5 @@ func (c *Client) filterNamespacesByAccess(ctx context.Context, namespaces []stri
 		}
 	}
 
-	return filteredNamespaces, nil
+	return filteredNamespaces, false, nil
 }

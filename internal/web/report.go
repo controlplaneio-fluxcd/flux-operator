@@ -77,7 +77,7 @@ func (r *Router) GetReport(ctx context.Context) (*unstructured.Unstructured, err
 		spec["userInfo"] = userInfo
 
 		// Inject user-visible namespaces (non-fatal if it fails)
-		if namespaces, _ := r.kubeClient.ListNamespaces(ctx); len(namespaces) > 0 {
+		if namespaces, _, err := r.kubeClient.ListUserNamespaces(ctx); err == nil && len(namespaces) > 0 {
 			spec["namespaces"] = namespaces
 		}
 	}
