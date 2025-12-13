@@ -16,12 +16,6 @@ import (
 // claimsProcessorFunc defines a function type for processing claims.
 type claimsProcessorFunc func(ctx context.Context, claims map[string]any) (*user.Details, error)
 
-// claimsResult represents the result of claims extraction from a token.
-type claimsResult struct {
-	username string
-	groups   []string
-}
-
 // newClaimsProcessor creates a new claims processor for validating and
 // extracting relevant information from tokens and userinfo responses.
 func newClaimsProcessor(conf *config.ConfigSpec) (claimsProcessorFunc, error) {
