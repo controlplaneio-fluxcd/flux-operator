@@ -10,7 +10,7 @@ import { DashboardPanel, TabButton } from '../common/panel'
 import { YamlBlock } from '../common/yaml'
 import { getStatusBadgeClass, getEventBadgeClass } from '../../../utils/status'
 import { HistoryTimeline } from './HistoryTimeline'
-import { FluxIcon } from '../../common/icons'
+import { FluxOperatorIcon } from '../../common/icons'
 
 export function ReconcilerPanel({ kind, name, namespace, resourceData }) {
   const location = useLocation()
@@ -283,7 +283,7 @@ export function ReconcilerPanel({ kind, name, namespace, resourceData }) {
         <div>
           {eventsLoading ? (
             <div class="flex items-center justify-center p-8">
-              <FluxIcon className="animate-spin h-8 w-8 text-flux-blue" />
+              <FluxOperatorIcon className="animate-spin h-8 w-8 text-flux-blue" />
               <span class="ml-3 text-gray-600 dark:text-gray-400">Loading events...</span>
             </div>
           ) : eventsData.length === 0 ? (

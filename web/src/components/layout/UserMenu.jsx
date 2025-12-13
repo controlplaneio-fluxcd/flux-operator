@@ -8,7 +8,7 @@ import { clearFavorites } from '../../utils/favorites'
 import { clearNavHistory } from '../../utils/navHistory'
 import { reportData } from '../../app'
 import { parseAuthProviderCookie } from '../../utils/cookies'
-import { OpenIDIcon } from '../common/icons'
+import { OpenIDIcon, KubernetesIcon } from '../common/icons'
 
 // Exported signal to track menu open state
 export const userMenuOpen = signal(false)
@@ -141,18 +141,12 @@ export function UserMenu() {
         <div class="fixed inset-0 sm:absolute sm:inset-auto sm:right-0 sm:mt-2 sm:w-[262px] sm:rounded-lg bg-white dark:bg-gray-800 shadow-lg sm:border border-gray-200 dark:border-gray-700 py-1 z-50">
           {/* User info - Avatar, Username and Role, with close button on mobile */}
           <div class="px-4 py-3 flex items-center gap-3">
-            {/* User avatar in circle - OpenID logo when authenticated, outline user when not */}
-            <div class={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-              isOIDCAuthenticated
-                ? 'bg-flux-blue/10 dark:bg-flux-blue/20'
-                : 'bg-gray-200 dark:bg-gray-600'
-            }`}>
+            {/* User avatar in circle - OpenID logo when authenticated, Kubernetes logo when not */}
+            <div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-flux-blue/10 dark:bg-flux-blue/20">
               {isOIDCAuthenticated ? (
                 <OpenIDIcon className="w-5 h-5 text-flux-blue dark:text-blue-400" />
               ) : (
-                <svg class="w-5 h-5 text-gray-500 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
+                <KubernetesIcon className="w-5 h-5 text-flux-blue dark:text-blue-400" />
               )}
             </div>
             <div class="flex flex-col min-w-0 flex-1">

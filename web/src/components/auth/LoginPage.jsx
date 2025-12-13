@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'preact/hooks'
 import { parseAuthProviderCookie, parseAuthErrorCookie, deleteCookie } from '../../utils/cookies'
-import { FluxIcon, OpenIDIcon } from '../common/icons'
+import { FluxOperatorIcon, OpenIDIcon } from '../common/icons'
 
 /**
  * LoginPage component - Authentication required page
@@ -84,7 +84,7 @@ export function LoginPage() {
       <div class="w-full max-w-md">
         {/* Logo and Title */}
         <div class="flex items-center justify-center gap-3 mb-8">
-          <FluxIcon className="w-12 h-12 text-gray-900 dark:text-white" />
+          <FluxOperatorIcon className="w-12 h-12 text-gray-900 dark:text-white" />
           <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">
             Flux Status
           </h1>
