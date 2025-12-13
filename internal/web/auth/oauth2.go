@@ -43,8 +43,8 @@ type oauth2Provider interface {
 
 // initializedOAuth2Provider has methods for implementing the OAuth2 protocol.
 type initializedOAuth2Provider interface {
-	verifyAccessToken(ctx context.Context, accessToken string) (string, []string, error)
-	verifyToken(ctx context.Context, token *oauth2.Token) (string, []string, *authStorage, error)
+	verifyAccessToken(ctx context.Context, accessToken string, nonce ...string) (string, []string, error)
+	verifyToken(ctx context.Context, token *oauth2.Token, nonce ...string) (string, []string, *authStorage, error)
 	config() *oauth2.Config
 }
 
@@ -98,10 +98,12 @@ func (o *oauth2Authenticator) serveAuthorize(w http.ResponseWriter, r *http.Requ
 	// Build and set state.
 	pkceVerifier := oauth2.GenerateVerifier()
 	pkceChallenge := oauth2.S256ChallengeFromVerifier(pkceVerifier)
-	csrfToken := oauth2.GenerateVerifier() // Can also be used to generate CSRF tokens.
+	csrfToken := oauth2.GenerateVerifier()
+	nonce := oauth2.GenerateVerifier()
 	state, err := o.encodeState(oauth2LoginState{
 		PKCEVerifier: pkceVerifier,
 		CSRFToken:    csrfToken,
+		Nonce:        nonce,
 		URLQuery:     r.URL.Query(),
 		ExpiresAt:    time.Now().Add(cookieDurationShortLived),
 	})
@@ -116,7 +118,8 @@ func (o *oauth2Authenticator) serveAuthorize(w http.ResponseWriter, r *http.Requ
 	// Redirect to authorization URL.
 	authCodeURL := oauth2Conf.AuthCodeURL(state,
 		oauth2.SetAuthURLParam("code_challenge", pkceChallenge),
-		oauth2.SetAuthURLParam("code_challenge_method", "S256"))
+		oauth2.SetAuthURLParam("code_challenge_method", "S256"),
+		oauth2.SetAuthURLParam("nonce", nonce))
 	http.Redirect(w, r, authCodeURL, http.StatusSeeOther)
 }
 
@@ -166,7 +169,7 @@ func (o *oauth2Authenticator) serveCallback(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Try to authenticate the token and set the auth storage.
-	if _, _, err := o.verifyTokenAndSetAuthStorage(w, r, token); err != nil {
+	if _, _, err := o.verifyTokenAndSetAuthStorage(w, r, token, state.Nonce); err != nil {
 		return
 	}
 
@@ -289,14 +292,14 @@ func (o *oauth2Authenticator) config(p initializedOAuth2Provider) *oauth2.Config
 
 // verifyTokenAndSetAuthStorage verifies the OAuth2 token and sets
 // the authentication storage in a cookie, or responds on any errors.
-func (o *oauth2Authenticator) verifyTokenAndSetAuthStorage(
-	w http.ResponseWriter, r *http.Request, token *oauth2.Token) (string, []string, error) {
+func (o *oauth2Authenticator) verifyTokenAndSetAuthStorage(w http.ResponseWriter, r *http.Request,
+	token *oauth2.Token, nonce ...string) (string, []string, error) {
 	p, err := o.provider.init(r.Context())
 	if err != nil {
 		respondAuthError(w, r, err, http.StatusInternalServerError)
 		return "", nil, err
 	}
-	username, groups, as, err := p.verifyToken(r.Context(), token)
+	username, groups, as, err := p.verifyToken(r.Context(), token, nonce...)
 	if err != nil {
 		respondAuthError(w, r, err, http.StatusUnauthorized)
 		return "", nil, err
@@ -325,6 +328,7 @@ func (o *oauth2Authenticator) verifyTokenAndSetAuthStorage(
 type oauth2LoginState struct {
 	PKCEVerifier string     `json:"pkceVerifier"`
 	CSRFToken    string     `json:"csrfToken"`
+	Nonce        string     `json:"nonce"`
 	URLQuery     url.Values `json:"urlQuery"`
 	ExpiresAt    time.Time  `json:"expiresAt"`
 }
