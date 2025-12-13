@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'preact/hooks'
 import { parseAuthProviderCookie, parseAuthErrorCookie, deleteCookie } from '../../utils/cookies'
-import { FluxIcon } from '../common/icons'
+import { FluxIcon, OpenIDIcon } from '../common/icons'
 
 /**
  * LoginPage component - Authentication required page
@@ -72,9 +72,12 @@ export function LoginPage() {
     }
   }
 
+  // Display "SSO" for OIDC provider, otherwise use the provider name
   const providerName = authProvider?.provider || 'OIDC'
-  // Capitalize first letter of provider name
-  const displayProviderName = providerName.charAt(0).toUpperCase() + providerName.slice(1).toUpperCase()
+  const isOIDC = providerName.toLowerCase() === 'oidc'
+  const displayProviderName = isOIDC
+    ? 'SSO'
+    : providerName.charAt(0).toUpperCase() + providerName.slice(1)
 
   return (
     <div class="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors flex flex-col items-center justify-center px-4 py-12 sm:py-0">
@@ -89,12 +92,10 @@ export function LoginPage() {
 
         {/* Card */}
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md border border-gray-200 dark:border-gray-700 p-8">
-          {/* Shield Icon */}
+          {/* OpenID Icon */}
           <div class="flex justify-center mb-6">
             <div class="w-16 h-16 rounded-full bg-flux-blue/10 dark:bg-flux-blue/20 flex items-center justify-center">
-              <svg class="w-8 h-8 text-flux-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-              </svg>
+              <OpenIDIcon className="w-8 h-8 text-flux-blue dark:text-blue-400" />
             </div>
           </div>
 
@@ -151,7 +152,7 @@ export function LoginPage() {
               </>
             ) : (
               <>
-                Login with {displayProviderName}
+                {isOIDC ? 'Continue' : 'Sign in'} with {displayProviderName}
                 <svg class="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
                   <path d="M9.76 0C15.417 0 20 4.477 20 10S15.416 20 9.76 20c-3.191 0-6.142-1.437-8.07-3.846a.644.644 0 0 1 .115-.918a.68.68 0 0 1 .94.113a8.96 8.96 0 0 0 7.016 3.343c4.915 0 8.9-3.892 8.9-8.692s-3.985-8.692-8.9-8.692a8.96 8.96 0 0 0-6.944 3.255a.68.68 0 0 1-.942.101a.644.644 0 0 1-.103-.92C3.703 1.394 6.615 0 9.761 0m.545 6.862l2.707 2.707c.262.262.267.68.011.936L10.38 13.15a.66.66 0 0 1-.937-.011a.66.66 0 0 1-.01-.937l1.547-1.548l-10.31.001A.66.66 0 0 1 0 10c0-.361.3-.654.67-.654h10.268L9.38 7.787a.66.66 0 0 1-.01-.937a.66.66 0 0 1 .935.011"/></svg>
               </>

@@ -51,6 +51,12 @@ func NewMiddleware(conf *config.ConfigSpec, kubeClient *kubeclient.Client) (func
 				next.ServeHTTP(w, r)
 				return
 			}
+			// Only allow POST for logout to prevent CSRF attacks.
+			// GET requests to /logout could be triggered by malicious links.
+			if r.Method != http.MethodPost {
+				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
 			deleteAuthStorage(w)
 			http.Redirect(w, r, "/", http.StatusSeeOther)
 		})

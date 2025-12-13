@@ -8,6 +8,7 @@ import { clearFavorites } from '../../utils/favorites'
 import { clearNavHistory } from '../../utils/navHistory'
 import { reportData } from '../../app'
 import { parseAuthProviderCookie } from '../../utils/cookies'
+import { OpenIDIcon } from '../common/icons'
 
 // Exported signal to track menu open state
 export const userMenuOpen = signal(false)
@@ -111,7 +112,11 @@ export function UserMenu() {
     if (currentPath && currentPath !== '/') {
       window.sessionStorage.setItem('flux-originalPath', currentPath)
     }
-    window.location.href = '/logout'
+    // Use POST to prevent CSRF attacks
+    fetch('/logout', { method: 'POST' })
+      .finally(() => {
+        window.location.href = '/'
+      })
   }
 
   return (
@@ -136,16 +141,14 @@ export function UserMenu() {
         <div class="fixed inset-0 sm:absolute sm:inset-auto sm:right-0 sm:mt-2 sm:w-[262px] sm:rounded-lg bg-white dark:bg-gray-800 shadow-lg sm:border border-gray-200 dark:border-gray-700 py-1 z-50">
           {/* User info - Avatar, Username and Role, with close button on mobile */}
           <div class="px-4 py-3 flex items-center gap-3">
-            {/* User avatar in circle - filled when authenticated, outline when not */}
+            {/* User avatar in circle - OpenID logo when authenticated, outline user when not */}
             <div class={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
               isOIDCAuthenticated
                 ? 'bg-flux-blue/10 dark:bg-flux-blue/20'
                 : 'bg-gray-200 dark:bg-gray-600'
             }`}>
               {isOIDCAuthenticated ? (
-                <svg class="w-5 h-5 text-flux-blue" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
-                </svg>
+                <OpenIDIcon className="w-5 h-5 text-flux-blue dark:text-blue-400" />
               ) : (
                 <svg class="w-5 h-5 text-gray-500 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -159,12 +162,14 @@ export function UserMenu() {
               >
                 {reportData.value?.spec?.userInfo?.username || '<no username>'}
               </span>
-              <span
-                class="text-xs text-gray-500 dark:text-gray-400 truncate"
-                title={reportData.value?.spec?.userInfo?.role || ''}
-              >
-                {reportData.value?.spec?.userInfo?.role || '<no role>'}
-              </span>
+              {reportData.value?.spec?.userInfo?.role && (
+                <span
+                  class="text-xs text-gray-500 dark:text-gray-400 truncate"
+                  title={reportData.value?.spec?.userInfo?.role}
+                >
+                  {reportData.value?.spec?.userInfo?.role}
+                </span>
+              )}
             </div>
             {/* Mobile close button */}
             <button

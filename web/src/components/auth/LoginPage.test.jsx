@@ -83,12 +83,12 @@ describe('LoginPage', () => {
       expect(screen.getByText(/Sign in with your organization account/)).toBeInTheDocument()
     })
 
-    it('should render shield icon', () => {
+    it('should render OpenID icon', () => {
       render(<LoginPage />)
 
-      // Shield icon has a specific path
-      const shieldIcon = document.querySelector('path[d*="M9 12l2 2 4-4m5.618"]')
-      expect(shieldIcon).toBeInTheDocument()
+      // OpenID icon has a specific path starting with "m14.54"
+      const openIdIcon = document.querySelector('path[d*="m14.54"]')
+      expect(openIdIcon).toBeInTheDocument()
     })
 
     it('should render documentation link', () => {
@@ -103,10 +103,10 @@ describe('LoginPage', () => {
   })
 
   describe('Auth Provider Cookie', () => {
-    it('should display login button with OIDC provider', () => {
+    it('should display SSO for OIDC provider', () => {
       render(<LoginPage />)
 
-      expect(screen.getByRole('button', { name: /Login with OIDC/ })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Continue with SSO/ })).toBeInTheDocument()
     })
 
     it('should display login button with custom provider name', () => {
@@ -118,10 +118,10 @@ describe('LoginPage', () => {
 
       render(<LoginPage />)
 
-      expect(screen.getByRole('button', { name: /Login with GITHUB/ })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Sign in with Github/ })).toBeInTheDocument()
     })
 
-    it('should capitalize provider name', () => {
+    it('should capitalize first letter of provider name', () => {
       cookies.parseAuthProviderCookie.mockReturnValue({
         provider: 'azure',
         url: 'http://localhost:9080/oauth2/authorize',
@@ -130,7 +130,7 @@ describe('LoginPage', () => {
 
       render(<LoginPage />)
 
-      expect(screen.getByRole('button', { name: /Login with AZURE/ })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Sign in with Azure/ })).toBeInTheDocument()
     })
 
     it('should show error when no auth provider cookie', async () => {
@@ -149,7 +149,7 @@ describe('LoginPage', () => {
       render(<LoginPage />)
 
       await waitFor(() => {
-        const button = screen.getByRole('button', { name: /Login with OIDC/ })
+        const button = screen.getByRole('button', { name: /Continue with SSO/ })
         expect(button).toBeDisabled()
       })
     })
@@ -210,7 +210,7 @@ describe('LoginPage', () => {
 
       render(<LoginPage />)
 
-      const button = screen.getByRole('button', { name: /Login with OIDC/ })
+      const button = screen.getByRole('button', { name: /Continue with SSO/ })
       fireEvent.click(button)
 
       await waitFor(() => {
@@ -224,7 +224,7 @@ describe('LoginPage', () => {
 
       render(<LoginPage />)
 
-      const button = screen.getByRole('button', { name: /Login with OIDC/ })
+      const button = screen.getByRole('button', { name: /Continue with SSO/ })
       fireEvent.click(button)
 
       await waitFor(() => {
@@ -242,7 +242,7 @@ describe('LoginPage', () => {
 
       render(<LoginPage />)
 
-      const button = screen.getByRole('button', { name: /Login with OIDC/ })
+      const button = screen.getByRole('button', { name: /Continue with SSO/ })
       fireEvent.click(button)
 
       await waitFor(() => {
@@ -259,7 +259,7 @@ describe('LoginPage', () => {
 
       render(<LoginPage />)
 
-      const button = screen.getByRole('button', { name: /Login with OIDC/ })
+      const button = screen.getByRole('button', { name: /Continue with SSO/ })
       fireEvent.click(button)
 
       await waitFor(() => {
@@ -273,7 +273,7 @@ describe('LoginPage', () => {
       render(<LoginPage />)
 
       await waitFor(() => {
-        const button = screen.getByRole('button', { name: /Login with OIDC/ })
+        const button = screen.getByRole('button', { name: /Continue with SSO/ })
         expect(button).not.toBeDisabled()
       })
     })
@@ -288,7 +288,7 @@ describe('LoginPage', () => {
       render(<LoginPage />)
 
       await waitFor(() => {
-        const button = screen.getByRole('button', { name: /Login with OIDC/ })
+        const button = screen.getByRole('button', { name: /Continue with SSO/ })
         expect(button).toBeDisabled()
       })
     })
@@ -296,7 +296,7 @@ describe('LoginPage', () => {
     it('should show loading state when clicked', async () => {
       render(<LoginPage />)
 
-      const button = screen.getByRole('button', { name: /Login with OIDC/ })
+      const button = screen.getByRole('button', { name: /Continue with SSO/ })
       fireEvent.click(button)
 
       await waitFor(() => {
@@ -307,7 +307,7 @@ describe('LoginPage', () => {
     it('should show spinner when loading', async () => {
       render(<LoginPage />)
 
-      const button = screen.getByRole('button', { name: /Login with OIDC/ })
+      const button = screen.getByRole('button', { name: /Continue with SSO/ })
       fireEvent.click(button)
 
       await waitFor(() => {
@@ -319,7 +319,7 @@ describe('LoginPage', () => {
     it('should be disabled when loading', async () => {
       render(<LoginPage />)
 
-      const button = screen.getByRole('button', { name: /Login with OIDC/ })
+      const button = screen.getByRole('button', { name: /Continue with SSO/ })
       fireEvent.click(button)
 
       await waitFor(() => {
@@ -330,7 +330,7 @@ describe('LoginPage', () => {
     it('should redirect to login URL when clicked', async () => {
       render(<LoginPage />)
 
-      const button = screen.getByRole('button', { name: /Login with OIDC/ })
+      const button = screen.getByRole('button', { name: /Continue with SSO/ })
       fireEvent.click(button)
 
       await waitFor(() => {
@@ -342,7 +342,7 @@ describe('LoginPage', () => {
       render(<LoginPage />)
 
       await waitFor(() => {
-        const button = screen.getByRole('button', { name: /Login with OIDC/ })
+        const button = screen.getByRole('button', { name: /Continue with SSO/ })
         expect(button).toHaveClass('bg-flux-blue')
       })
     })
@@ -353,7 +353,7 @@ describe('LoginPage', () => {
       render(<LoginPage />)
 
       await waitFor(() => {
-        const button = screen.getByRole('button', { name: /Login with OIDC/ })
+        const button = screen.getByRole('button', { name: /Continue with SSO/ })
         expect(button).toHaveClass('bg-gray-300')
         expect(button).toHaveClass('cursor-not-allowed')
       })
@@ -361,7 +361,7 @@ describe('LoginPage', () => {
   })
 
   describe('Default Provider Name', () => {
-    it('should default to OIDC when provider is missing', async () => {
+    it('should default to SSO when provider is missing', async () => {
       cookies.parseAuthProviderCookie.mockReturnValue({
         url: 'http://localhost:9080/oauth2/authorize',
         authenticated: false
@@ -370,7 +370,7 @@ describe('LoginPage', () => {
       render(<LoginPage />)
 
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: /Login with OIDC/ })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /Continue with SSO/ })).toBeInTheDocument()
       })
     })
   })
