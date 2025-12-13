@@ -257,25 +257,27 @@ func (o *oauth2Authenticator) serveIndex(w http.ResponseWriter, r *http.Request,
 	if err != nil {
 		return
 	}
-	p, err := o.provider.init(r.Context())
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	p, err := o.provider.init(ctx)
 	if err != nil {
 		return
 	}
-	v, err := p.newVerifier(r.Context())
+	v, err := p.newVerifier(ctx)
 	if err != nil {
 		return
 	}
-	if _, _, err := v.verifyAccessToken(r.Context(), as.AccessToken); err != nil {
+	if _, _, err := v.verifyAccessToken(ctx, as.AccessToken); err != nil {
 		if as.RefreshToken == "" {
 			return
 		}
 		token, err := o.config(p).
-			TokenSource(r.Context(), &oauth2.Token{RefreshToken: as.RefreshToken}).
+			TokenSource(ctx, &oauth2.Token{RefreshToken: as.RefreshToken}).
 			Token()
 		if err != nil {
 			return
 		}
-		if _, _, as, err = v.verifyToken(r.Context(), token); err != nil {
+		if _, _, as, err = v.verifyToken(ctx, token); err != nil {
 			return
 		}
 		if err := setAuthStorage(o.conf, w, *as); err != nil {
