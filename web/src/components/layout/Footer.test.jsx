@@ -102,7 +102,7 @@ describe('Footer', () => {
 
       const link = screen.getByText('Documentation').closest('a')
       expect(link).toBeInTheDocument()
-      expect(link).toHaveAttribute('href', 'https://fluxcd.control-plane.io/operator/')
+      expect(link).toHaveAttribute('href', 'https://fluxoperator.dev')
     })
 
     it('should open in new tab with security attributes', () => {
