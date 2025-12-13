@@ -1,6 +1,15 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
+import { signal } from '@preact/signals'
+
+/**
+ * Signal to indicate authentication is required
+ * Set to true when any API call returns 401 Unauthorized
+ * The App component reacts to this and shows the LoginPage
+ */
+export const authRequired = signal(false)
+
 /**
  * Check if mock data should be used based on environment
  * @param {Object} env - Environment object (defaults to import.meta.env)
@@ -56,11 +65,8 @@ export async function fetchWithMock({ endpoint, mockPath, mockExport, env, metho
       }
 
       if (response.status === 401) {
-        // Authentication required, redirect to login.
-        const currentURL = new window.URL(window.location.href)
-        const searchParams = new URLSearchParams(currentURL.search)
-        searchParams.set('originalPath', currentURL.pathname)
-        window.location.href = `/login?${searchParams.toString()}`
+        // Authentication required - set signal to trigger LoginPage
+        authRequired.value = true
       }
 
       throw new Error(`HTTP error! status: ${response.status}, error: ${err}`)

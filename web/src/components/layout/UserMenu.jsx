@@ -7,6 +7,7 @@ import { themeMode, appliedTheme, cycleTheme, themes } from '../../utils/theme'
 import { clearFavorites } from '../../utils/favorites'
 import { clearNavHistory } from '../../utils/navHistory'
 import { reportData } from '../../app'
+import { parseAuthProviderCookie } from '../../utils/cookies'
 
 // Exported signal to track menu open state
 export const userMenuOpen = signal(false)
@@ -24,6 +25,10 @@ export const userMenuOpen = signal(false)
  */
 export function UserMenu() {
   const menuRef = useRef(null)
+
+  // Check if user is authenticated via OIDC
+  const authProvider = parseAuthProviderCookie()
+  const isOIDCAuthenticated = authProvider?.provider?.toLowerCase() === 'oidc' && authProvider?.authenticated === true
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -99,6 +104,16 @@ export function UserMenu() {
     }
   }
 
+  const handleLogout = () => {
+    userMenuOpen.value = false
+    // Store current path so LoginPage can redirect back after re-authentication
+    const currentPath = window.location.pathname + window.location.search
+    if (currentPath && currentPath !== '/') {
+      window.sessionStorage.setItem('flux-originalPath', currentPath)
+    }
+    window.location.href = '/logout'
+  }
+
   return (
     <div class="relative" ref={menuRef}>
       {/* User button */}
@@ -108,7 +123,7 @@ export function UserMenu() {
         aria-label="User menu"
         aria-expanded={userMenuOpen.value}
         aria-haspopup="true"
-        class="inline-flex items-center justify-center p-1.5 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-flux-blue"
+        class="inline-flex items-center justify-center p-1.5 border rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-flux-blue border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
       >
         {/* User icon */}
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -121,15 +136,35 @@ export function UserMenu() {
         <div class="fixed inset-0 sm:absolute sm:inset-auto sm:right-0 sm:mt-2 sm:w-56 sm:rounded-lg bg-white dark:bg-gray-800 shadow-lg sm:border border-gray-200 dark:border-gray-700 py-1 z-50">
           {/* User info - Avatar, Username and Role, with close button on mobile */}
           <div class="px-4 py-3 flex items-center gap-3">
-            {/* User avatar in circle */}
-            <div class="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-600 flex items-center justify-center flex-shrink-0">
-              <svg class="w-5 h-5 text-gray-500 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
+            {/* User avatar in circle - filled when authenticated, outline when not */}
+            <div class={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+              isOIDCAuthenticated
+                ? 'bg-flux-blue/10 dark:bg-flux-blue/20'
+                : 'bg-gray-200 dark:bg-gray-600'
+            }`}>
+              {isOIDCAuthenticated ? (
+                <svg class="w-5 h-5 text-flux-blue" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+                </svg>
+              ) : (
+                <svg class="w-5 h-5 text-gray-500 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+              )}
             </div>
             <div class="flex flex-col min-w-0 flex-1">
-              <span class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{reportData.value?.spec?.userInfo?.username || '<no username>'}</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400 truncate">{reportData.value?.spec?.userInfo?.role || '<no role>'}</span>
+              <span
+                class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate"
+                title={reportData.value?.spec?.userInfo?.username || ''}
+              >
+                {reportData.value?.spec?.userInfo?.username || '<no username>'}
+              </span>
+              <span
+                class="text-xs text-gray-500 dark:text-gray-400 truncate"
+                title={reportData.value?.spec?.userInfo?.role || ''}
+              >
+                {reportData.value?.spec?.userInfo?.role || '<no role>'}
+              </span>
             </div>
             {/* Mobile close button */}
             <button
@@ -199,6 +234,23 @@ export function UserMenu() {
             </svg>
             <span>Clear local storage</span>
           </button>
+
+          {/* Logout button - only shown when authenticated via OIDC */}
+          {isOIDCAuthenticated && (
+            <>
+              <div class="my-1 border-t border-gray-200 dark:border-gray-700" />
+              <button
+                onClick={handleLogout}
+                class="w-full px-4 py-2 flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              >
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15M12 9l-3 3m0 0 3 3m-3-3h12.75" />
+                </svg>
+                <span>Sign out</span>
+              </button>
+            </>
+          )}
+
         </div>
       )}
     </div>
