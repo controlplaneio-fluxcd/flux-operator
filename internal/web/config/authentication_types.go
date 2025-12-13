@@ -234,11 +234,22 @@ type ClaimsProcessorSpec struct {
 	// +optional
 	Validations []ValidationSpec `json:"validations,omitempty"`
 
+	// Profile contains CEL expressions to extract user profile information from the ID token
+	// claims and extracted variables for populating the user profile.
+	// Defaults to ProfileSpec{
+	//   Name:  "has(claims.name) ? claims.name : (has(claims.email) ? claims.email : '')",
+	// }
+	// +optional
+	Profile *ProfileSpec `json:"profile,omitempty"`
+
 	// Impersonation is a pair of CEL expressions that extract the username and groups
 	// from the ID token claims and extracted variables for Kubernetes RBAC impersonation.
 	// The username expression must return the type string, while the groups expression
 	// must return the type []string.
-	// Defaults to ImpersonationSpec{Username: "claims.email", Groups: "claims.groups"}.
+	// Defaults to ImpersonationSpec{
+	//   Username: "has(claims.email) ? claims.email : ''",
+	//   Groups:   "has(claims.groups) ? claims.groups : []",
+	// }
 	// +optional
 	Impersonation *ImpersonationSpec `json:"impersonation,omitempty"`
 }
@@ -255,6 +266,9 @@ func (c *ClaimsProcessorSpec) Validate() error {
 			return fmt.Errorf("invalid validation[%d]: %w", i, err)
 		}
 	}
+	if err := c.Profile.Validate(); err != nil {
+		return fmt.Errorf("invalid profile: %w", err)
+	}
 	if err := c.Impersonation.Validate(); err != nil {
 		return fmt.Errorf("invalid impersonation: %w", err)
 	}
@@ -266,6 +280,10 @@ func (c *ClaimsProcessorSpec) ApplyDefaults() {
 	if c == nil {
 		return
 	}
+	if c.Profile == nil {
+		c.Profile = &ProfileSpec{}
+	}
+	c.Profile.ApplyDefaults()
 	if c.Impersonation == nil {
 		c.Impersonation = &ImpersonationSpec{}
 	}
@@ -323,6 +341,39 @@ func (v *ValidationSpec) Validate() error {
 			v.Expression, err)
 	}
 	return nil
+}
+
+// ProfileSpec holds CEL expressions for extracting user profile information.
+type ProfileSpec struct {
+	// Name is a CEL expression that extracts the user's full name from the ID token claims
+	// and extracted variables. This expression must return the type string.
+	// Defaults to "has(claims.name) ? claims.name : (has(claims.email) ? claims.email : '')".
+	// +optional
+	Name string `json:"name,omitempty"`
+}
+
+// Validate validates the ProfileSpec configuration.
+func (u *ProfileSpec) Validate() error {
+	if u == nil {
+		return nil
+	}
+	if u.Name != "" {
+		if _, err := cel.NewExpression(u.Name); err != nil {
+			return fmt.Errorf("failed to parse name expression '%s' for user profile: %w",
+				u.Name, err)
+		}
+	}
+	return nil
+}
+
+// ApplyDefaults applies default values to the ProfileSpec.
+func (u *ProfileSpec) ApplyDefaults() {
+	if u == nil {
+		return
+	}
+	if u.Name == "" {
+		u.Name = "has(claims.name) ? claims.name : (has(claims.email) ? claims.email : '')"
+	}
 }
 
 // ImpersonationSpec holds CEL expressions for extracting Kubernetes RBAC impersonation information.

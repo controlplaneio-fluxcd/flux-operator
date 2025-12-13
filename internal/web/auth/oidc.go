@@ -11,6 +11,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
 
 // oidcProvider implements oauth2Provider for OIDC.
@@ -76,52 +77,52 @@ type oidcVerifier struct {
 
 // verifyAccessToken implements oauth2Verifier.
 func (o *oidcVerifier) verifyAccessToken(ctx context.Context,
-	accessToken string, nonce ...string) (string, []string, error) {
+	accessToken string, nonce ...string) (*user.Details, error) {
 
 	idToken, err := o.verifier.Verify(ctx, accessToken)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to verify OIDC ID token: %w", err)
+		return nil, fmt.Errorf("failed to verify OIDC ID token: %w", err)
 	}
 
 	var claims map[string]any
 	if err := idToken.Claims(&claims); err != nil {
-		return "", nil, fmt.Errorf("failed to extract claims from OIDC ID token: %w", err)
+		return nil, fmt.Errorf("failed to extract claims from OIDC ID token: %w", err)
 	}
 
 	if len(nonce) > 0 {
 		tokenNonce, ok := claims["nonce"]
 		if !ok {
-			return "", nil, fmt.Errorf("nonce claim not found in OIDC ID token")
+			return nil, fmt.Errorf("nonce claim not found in OIDC ID token")
 		}
 		tokenNonceStr, ok := tokenNonce.(string)
 		if !ok {
-			return "", nil, fmt.Errorf("nonce claim in OIDC ID token is not a string")
+			return nil, fmt.Errorf("nonce claim in OIDC ID token is not a string")
 		}
 		if tokenNonceStr != nonce[0] {
-			return "", nil, fmt.Errorf("nonce claim mismatch in OIDC ID token")
+			return nil, fmt.Errorf("nonce claim mismatch in OIDC ID token")
 		}
 	}
 
-	cr, err := o.processClaims(ctx, claims)
+	details, err := o.processClaims(ctx, claims)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to process claims from OIDC ID token: %w", err)
+		return nil, fmt.Errorf("failed to process claims from OIDC ID token: %w", err)
 	}
 
-	return cr.username, cr.groups, nil
+	return details, nil
 }
 
 // verifyToken implements oauth2Verifier.
 func (o *oidcVerifier) verifyToken(ctx context.Context,
-	token *oauth2.Token, nonce ...string) (string, []string, *authStorage, error) {
+	token *oauth2.Token, nonce ...string) (*user.Details, *authStorage, error) {
 
 	idToken, ok := token.Extra("id_token").(string)
 	if !ok {
-		return "", nil, nil, fmt.Errorf("no id_token found in token response")
+		return nil, nil, fmt.Errorf("no id_token found in token response")
 	}
 
-	username, groups, err := o.verifyAccessToken(ctx, idToken, nonce...)
+	details, err := o.verifyAccessToken(ctx, idToken, nonce...)
 	if err != nil {
-		return "", nil, nil, err
+		return nil, nil, err
 	}
 
 	as := &authStorage{
@@ -135,5 +136,5 @@ func (o *oidcVerifier) verifyToken(ctx context.Context,
 		RefreshToken: token.RefreshToken,
 	}
 
-	return username, groups, as, nil
+	return details, as, nil
 }

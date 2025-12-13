@@ -23,6 +23,7 @@ import (
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/kubeclient"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
 
 // ReportHandler handles GET /api/v1/report requests and returns the FluxReport from the cluster.
@@ -65,7 +66,7 @@ func (r *Router) GetReport(ctx context.Context) (*unstructured.Unstructured, err
 
 	// Inject user info
 	if spec, found := report.Object["spec"].(map[string]any); found {
-		username, role := kubeclient.UsernameAndRole(ctx)
+		username, role := user.UsernameAndRole(ctx)
 		userInfo := make(map[string]any)
 		if username != "" {
 			userInfo["username"] = username

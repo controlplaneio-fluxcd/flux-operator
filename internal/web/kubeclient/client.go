@@ -20,6 +20,7 @@ import (
 	"github.com/fluxcd/pkg/cache"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
 
 // Client exposes RBAC-aware methods to
@@ -111,36 +112,34 @@ func (c *Client) getUserClientFromContext(ctx context.Context, opts ...Option) *
 		opt(&o)
 	}
 
-	us := loadUserSession(ctx)
-
-	if o.withPrivileges || us == nil {
-		return &userClient{
-			reader: c.reader,
-			client: c.client,
-			config: c.config,
-		}
+	if uc := user.KubeClient(ctx); uc != nil && !o.withPrivileges {
+		return uc.(*userClient)
 	}
 
-	return us.client
+	return &userClient{
+		reader: c.reader,
+		client: c.client,
+		config: c.config,
+	}
 }
 
 // GetUserClientFromCache retrieves a userClient from the cache or creates and caches a new one.
-func (c *Client) GetUserClientFromCache(username string, groups []string) (*userClient, error) {
+func (c *Client) GetUserClientFromCache(imp user.Impersonation) (*userClient, error) {
 	ctx := context.Background() // fetch does not use the context
-	key := getUserKey(username, groups)
+	key := user.Key(imp)
 	condition := func(*userClient) bool { return true } // always valid
-	fetch := func(context.Context) (*userClient, error) { return c.newUserClient(username, groups) }
+	fetch := func(context.Context) (*userClient, error) { return c.newUserClient(imp) }
 	uc, _, err := c.userClientCache.GetIfOrSet(ctx, key, condition, fetch)
 	return uc, err
 }
 
 // newUserClient creates a new userClient for the given username and groups.
-func (c *Client) newUserClient(username string, groups []string) (*userClient, error) {
+func (c *Client) newUserClient(imp user.Impersonation) (*userClient, error) {
 	// Create user impersonated REST kubeConfig.
 	kubeConfig := rest.CopyConfig(c.config)
 	kubeConfig.Impersonate = rest.ImpersonationConfig{
-		UserName: username,
-		Groups:   groups,
+		UserName: imp.Username,
+		Groups:   imp.Groups,
 	}
 
 	// Create user HTTP client.
@@ -188,7 +187,7 @@ func (c *Client) newUserClient(username string, groups []string) (*userClient, e
 // ListNamespaces lists the namespaces the user has access to and returns their names sorted
 // in alphabetical order. Since this operation is expensive, it has a cache per user.
 func (c *Client) ListNamespaces(ctx context.Context) ([]string, error) {
-	key := loadUserSession(ctx).getUserKey()
+	key := user.LoadSession(ctx).Key()
 
 	fetch := func(ctx context.Context) (*userNamespaces, error) {
 		// List and sort all namespaces.

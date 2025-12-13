@@ -10,10 +10,11 @@ import (
 	"github.com/fluxcd/pkg/runtime/cel"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
 
 // claimsProcessorFunc defines a function type for processing claims.
-type claimsProcessorFunc func(ctx context.Context, claims map[string]any) (*claimsResult, error)
+type claimsProcessorFunc func(ctx context.Context, claims map[string]any) (*user.Details, error)
 
 // claimsResult represents the result of claims extraction from a token.
 type claimsResult struct {
@@ -52,6 +53,19 @@ func newClaimsProcessor(conf *config.ConfigSpec) (claimsProcessorFunc, error) {
 		validationExprs = append(validationExprs, validation{expr: expr, msg: v.Message})
 	}
 
+	// Build user info CEL expressions.
+	type profile struct {
+		name *cel.Expression
+	}
+	var profileExprs profile
+	if s := conf.Authentication.OAuth2.Profile.Name; s != "" {
+		expr, err := cel.NewExpression(s)
+		if err != nil {
+			return nil, err
+		}
+		profileExprs.name = expr
+	}
+
 	// Build impersonation CEL expressions.
 	type impersonation struct {
 		username *cel.Expression
@@ -73,7 +87,7 @@ func newClaimsProcessor(conf *config.ConfigSpec) (claimsProcessorFunc, error) {
 		impersonationExprs.groups = expr
 	}
 
-	return func(ctx context.Context, claims map[string]any) (*claimsResult, error) {
+	return func(ctx context.Context, claims map[string]any) (*user.Details, error) {
 		// Extract variables from claims using CEL expressions.
 		variables := map[string]any{}
 		data := map[string]any{
@@ -99,26 +113,34 @@ func newClaimsProcessor(conf *config.ConfigSpec) (claimsProcessorFunc, error) {
 			}
 		}
 
-		// Extract impersonation info using CEL expressions.
-		var username string
-		var groups []string
+		// Extract user info using CEL expressions.
+		var profile user.Profile
 		var err error
+		if profileExprs.name != nil {
+			profile.Name, err = profileExprs.name.EvaluateString(ctx, data)
+			if err != nil {
+				return nil, fmt.Errorf("failed to evaluate profile name expression: %w", err)
+			}
+		}
+
+		// Extract impersonation info using CEL expressions.
+		var imp user.Impersonation
 		if impersonationExprs.username != nil {
-			username, err = impersonationExprs.username.EvaluateString(ctx, data)
+			imp.Username, err = impersonationExprs.username.EvaluateString(ctx, data)
 			if err != nil {
 				return nil, fmt.Errorf("failed to evaluate impersonation username expression: %w", err)
 			}
 		}
 		if impersonationExprs.groups != nil {
-			groups, err = impersonationExprs.groups.EvaluateStringSlice(ctx, data)
+			imp.Groups, err = impersonationExprs.groups.EvaluateStringSlice(ctx, data)
 			if err != nil {
 				return nil, fmt.Errorf("failed to evaluate impersonation groups expression: %w", err)
 			}
 		}
 
-		return &claimsResult{
-			username: username,
-			groups:   groups,
+		return &user.Details{
+			Profile:       profile,
+			Impersonation: imp,
 		}, nil
 	}, nil
 }
