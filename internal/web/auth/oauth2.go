@@ -22,6 +22,7 @@ import (
 
 	webconfig "github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/kubeclient"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
 
 const (
@@ -50,8 +51,8 @@ type initializedOAuth2Provider interface {
 
 // oauth2Verifier has methods for verifying OAuth2 tokens.
 type oauth2Verifier interface {
-	verifyAccessToken(ctx context.Context, accessToken string, nonce ...string) (string, []string, error)
-	verifyToken(ctx context.Context, token *oauth2.Token, nonce ...string) (string, []string, *authStorage, error)
+	verifyAccessToken(ctx context.Context, accessToken string, nonce ...string) (*user.Details, error)
+	verifyToken(ctx context.Context, token *oauth2.Token, nonce ...string) (*user.Details, *authStorage, error)
 }
 
 // newOAuth2Authenticator creates a new OAuth2 authenticator.
@@ -176,7 +177,7 @@ func (o *oauth2Authenticator) serveCallback(w http.ResponseWriter, r *http.Reque
 		http.Redirect(w, r, state.redirectURL(), http.StatusSeeOther)
 		return
 	}
-	if _, _, err := o.verifyTokenAndSetAuthStorage(w, r, v, token, state.Nonce); err != nil {
+	if _, err := o.verifyTokenAndSetAuthStorage(w, r, v, token, state.Nonce); err != nil {
 		return
 	}
 
@@ -209,7 +210,7 @@ func (o *oauth2Authenticator) serveAPI(w http.ResponseWriter, r *http.Request, a
 		respondAuthError(w, r, err, http.StatusInternalServerError)
 		return
 	}
-	username, groups, err := v.verifyAccessToken(r.Context(), as.AccessToken)
+	details, err := v.verifyAccessToken(r.Context(), as.AccessToken)
 	if err != nil {
 		if as.RefreshToken == "" {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
@@ -223,7 +224,7 @@ func (o *oauth2Authenticator) serveAPI(w http.ResponseWriter, r *http.Request, a
 			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return
 		}
-		if username, groups, err = o.verifyTokenAndSetAuthStorage(w, r, v, token); err != nil {
+		if details, err = o.verifyTokenAndSetAuthStorage(w, r, v, token); err != nil {
 			return
 		}
 	}
@@ -233,12 +234,12 @@ func (o *oauth2Authenticator) serveAPI(w http.ResponseWriter, r *http.Request, a
 	o.setAuthenticated(w)
 
 	// Build and store user session.
-	client, err := o.kubeClient.GetUserClientFromCache(username, groups)
+	client, err := o.kubeClient.GetUserClientFromCache(details.Impersonation)
 	if err != nil {
 		respondAuthError(w, r, err, http.StatusInternalServerError)
 		return
 	}
-	ctx := kubeclient.StoreUserSession(r.Context(), username, groups, client)
+	ctx := user.StoreSession(r.Context(), *details, client)
 	r = r.WithContext(ctx)
 
 	// Serve the API request.
@@ -267,7 +268,7 @@ func (o *oauth2Authenticator) serveIndex(w http.ResponseWriter, r *http.Request,
 	if err != nil {
 		return
 	}
-	if _, _, err := v.verifyAccessToken(ctx, as.AccessToken); err != nil {
+	if _, err := v.verifyAccessToken(ctx, as.AccessToken); err != nil {
 		if as.RefreshToken == "" {
 			return
 		}
@@ -277,7 +278,7 @@ func (o *oauth2Authenticator) serveIndex(w http.ResponseWriter, r *http.Request,
 		if err != nil {
 			return
 		}
-		if _, _, as, err = v.verifyToken(ctx, token); err != nil {
+		if _, as, err = v.verifyToken(ctx, token); err != nil {
 			return
 		}
 		if err := setAuthStorage(o.conf, w, *as); err != nil {
@@ -306,17 +307,17 @@ func (o *oauth2Authenticator) config(p initializedOAuth2Provider) *oauth2.Config
 // verifyTokenAndSetAuthStorage verifies the OAuth2 token and sets
 // the authentication storage in a cookie, or responds on any errors.
 func (o *oauth2Authenticator) verifyTokenAndSetAuthStorage(w http.ResponseWriter, r *http.Request,
-	verifier oauth2Verifier, token *oauth2.Token, nonce ...string) (string, []string, error) {
-	username, groups, as, err := verifier.verifyToken(r.Context(), token, nonce...)
+	verifier oauth2Verifier, token *oauth2.Token, nonce ...string) (*user.Details, error) {
+	details, as, err := verifier.verifyToken(r.Context(), token, nonce...)
 	if err != nil {
 		respondAuthError(w, r, err, http.StatusUnauthorized)
-		return "", nil, err
+		return nil, err
 	}
 	if err := setAuthStorage(o.conf, w, *as); err != nil {
 		respondAuthError(w, r, err, http.StatusInternalServerError)
-		return "", nil, err
+		return nil, err
 	}
-	return username, groups, nil
+	return details, nil
 }
 
 // setAuthenticated sets the authentication provider cookie

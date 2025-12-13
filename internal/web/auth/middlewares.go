@@ -13,6 +13,7 @@ import (
 
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/kubeclient"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
 
 const (
@@ -94,7 +95,14 @@ func newAnonymousMiddleware(conf *config.ConfigSpec, kubeClient *kubeclient.Clie
 	username := anonConf.Username
 	groups := anonConf.Groups
 
-	client, err := kubeClient.GetUserClientFromCache(username, groups)
+	details := user.Details{
+		Impersonation: user.Impersonation{
+			Username: username,
+			Groups:   groups,
+		},
+	}
+
+	client, err := kubeClient.GetUserClientFromCache(details.Impersonation)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +110,7 @@ func newAnonymousMiddleware(conf *config.ConfigSpec, kubeClient *kubeclient.Clie
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			setAnonymousAuthProviderCookie(w)
-			ctx := kubeclient.StoreUserSession(r.Context(), username, groups, client)
+			ctx := user.StoreSession(r.Context(), details, client)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}, nil
