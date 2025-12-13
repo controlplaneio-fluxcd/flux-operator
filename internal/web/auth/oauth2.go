@@ -381,16 +381,22 @@ func originalURL(q url.Values) string {
 // isSafeRedirectPath validates that the path is a safe relative path.
 // It prevents open redirect attacks by ensuring the path:
 // - Starts with a single forward slash
-// - Does not start with // (protocol-relative URL)
+// - Second character is safe (not /, \, or whitespace/control chars)
 // - Does not have a scheme before the first slash (e.g., http://...)
 func isSafeRedirectPath(path string) bool {
 	// Must start with /
 	if !strings.HasPrefix(path, "/") {
 		return false
 	}
-	// Must not be a protocol-relative URL (//example.com)
-	if strings.HasPrefix(path, "//") {
-		return false
+	// Check second character if present - must be a safe path character.
+	// Browsers interpret //host, /\host, /\thost, etc. as absolute URLs.
+	if len(path) > 1 {
+		c := path[1]
+		// Block: / \ and any control/whitespace characters (ASCII < 33)
+		// Safe characters start at '!' (33) - allows letters, numbers, punctuation
+		if c == '/' || c == '\\' || c < '!' {
+			return false
+		}
 	}
 	// Check for scheme at the beginning (before any path component)
 	// We only check up to the first path segment to allow query params containing URLs

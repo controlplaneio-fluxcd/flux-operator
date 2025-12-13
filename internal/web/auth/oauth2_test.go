@@ -45,6 +45,46 @@ func TestIsSafeRedirectPath(t *testing.T) {
 			want: false,
 		},
 		{
+			name: "backslash protocol-relative URL blocked",
+			path: "/\\evil.com",
+			want: false,
+		},
+		{
+			name: "backslash protocol-relative URL with path blocked",
+			path: "/\\evil.com/phishing",
+			want: false,
+		},
+		{
+			name: "tab after slash blocked",
+			path: "/\tevil.com",
+			want: false,
+		},
+		{
+			name: "newline after slash blocked",
+			path: "/\nevil.com",
+			want: false,
+		},
+		{
+			name: "carriage return after slash blocked",
+			path: "/\revil.com",
+			want: false,
+		},
+		{
+			name: "triple slash blocked",
+			path: "///evil.com",
+			want: false,
+		},
+		{
+			name: "null byte after slash blocked",
+			path: "/\x00evil.com",
+			want: false,
+		},
+		{
+			name: "space after slash blocked",
+			path: "/ evil.com",
+			want: false,
+		},
+		{
 			name: "absolute URL with http blocked",
 			path: "http://evil.com",
 			want: false,
@@ -119,6 +159,11 @@ func TestOriginalURL(t *testing.T) {
 		{
 			name:     "malicious protocol-relative URL blocked",
 			query:    url.Values{authQueryParamOriginalPath: []string{"//evil.com"}},
+			expected: "/",
+		},
+		{
+			name:     "malicious backslash protocol-relative URL blocked",
+			query:    url.Values{authQueryParamOriginalPath: []string{"/\\evil.com"}},
 			expected: "/",
 		},
 		{
