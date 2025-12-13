@@ -133,7 +133,7 @@ export function UserMenu() {
 
       {/* Dropdown menu */}
       {userMenuOpen.value && (
-        <div class="fixed inset-0 sm:absolute sm:inset-auto sm:right-0 sm:mt-2 sm:w-56 sm:rounded-lg bg-white dark:bg-gray-800 shadow-lg sm:border border-gray-200 dark:border-gray-700 py-1 z-50">
+        <div class="fixed inset-0 sm:absolute sm:inset-auto sm:right-0 sm:mt-2 sm:w-[262px] sm:rounded-lg bg-white dark:bg-gray-800 shadow-lg sm:border border-gray-200 dark:border-gray-700 py-1 z-50">
           {/* User info - Avatar, Username and Role, with close button on mobile */}
           <div class="px-4 py-3 flex items-center gap-3">
             {/* User avatar in circle - filled when authenticated, outline when not */}
@@ -197,7 +197,7 @@ export function UserMenu() {
 
           {/* Provide feedback */}
           <a
-            href="https://github.com/controlplaneio-fluxcd/flux-operator/issues/new?title=[status-page]"
+            href="https://github.com/controlplaneio-fluxcd/flux-operator/issues/new?title=[web-ui]"
             target="_blank"
             rel="noopener noreferrer"
             class="px-4 py-2 flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"

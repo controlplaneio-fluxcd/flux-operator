@@ -9,6 +9,7 @@ import { formatTimestamp } from '../../../utils/time'
 import { DashboardPanel, TabButton } from '../common/panel'
 import { YamlBlock } from '../common/yaml'
 import { getStatusBadgeClass, getEventBadgeClass } from '../../../utils/status'
+import { FluxIcon } from '../../common/icons'
 
 /**
  * SourcePanel - Displays source information for a Flux resource
@@ -150,7 +151,7 @@ export function SourcePanel({ sourceRef, namespace }) {
     <DashboardPanel title="Source" id="source-panel">
       {loading ? (
         <div class="flex items-center justify-center p-8">
-          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-flux-blue"></div>
+          <FluxIcon className="animate-spin h-8 w-8 text-flux-blue" />
           <span class="ml-3 text-gray-600 dark:text-gray-400">Loading source...</span>
         </div>
       ) : (
@@ -265,7 +266,7 @@ export function SourcePanel({ sourceRef, namespace }) {
             <div>
               {sourceEventsLoading ? (
                 <div class="flex items-center justify-center p-8">
-                  <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-flux-blue"></div>
+                  <FluxIcon className="animate-spin h-8 w-8 text-flux-blue" />
                   <span class="ml-3 text-gray-600 dark:text-gray-400">Loading events...</span>
                 </div>
               ) : sourceEventsData.length === 0 ? (

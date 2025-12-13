@@ -7,6 +7,7 @@ import { fetchWithMock } from '../../utils/fetch'
 import { usePrismTheme, YamlBlock } from '../dashboards/common/yaml'
 import { fluxKinds, isKindWithInventory, getKindAlias } from '../../utils/constants'
 import { getStatusBadgeClass } from '../../utils/status'
+import { FluxIcon } from '../common/icons'
 
 /**
  * Helper to group inventory items by apiVersion
@@ -249,7 +250,7 @@ export function ResourceDetailsView({ kind, name, namespace, isExpanded }) {
       {/* Loading State */}
       {loading && (
         <div class="flex items-center justify-center p-4">
-          <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-flux-blue"></div>
+          <FluxIcon className="animate-spin h-6 w-6 text-flux-blue" />
           <span class="ml-2 text-sm text-gray-600 dark:text-gray-400">
             Loading details...
           </span>

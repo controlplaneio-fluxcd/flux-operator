@@ -233,11 +233,10 @@ describe('app.jsx', () => {
       render(<App />)
 
       const spinner = document.querySelector('.animate-spin')
-      expect(spinner).toHaveClass('rounded-full')
       expect(spinner).toHaveClass('h-12')
       expect(spinner).toHaveClass('w-12')
-      expect(spinner).toHaveClass('border-b-2')
-      expect(spinner).toHaveClass('border-flux-blue')
+      expect(spinner).toHaveClass('text-flux-blue')
+      expect(spinner.tagName.toLowerCase()).toBe('svg')
 
       await waitFor(() => expect(fetchWithMock).toHaveBeenCalled())
     })

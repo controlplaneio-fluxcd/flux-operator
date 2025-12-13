@@ -16,6 +16,7 @@ import { EventList } from './components/search/EventList'
 import { ResourceList } from './components/search/ResourceList'
 import { ResourcePage } from './components/dashboards/resource/ResourcePage'
 import { FavoritesPage } from './components/favorites/FavoritesPage'
+import { FluxIcon } from './components/common/icons'
 
 // Global signals for FluxReport data and application state
 // These signals are exported and used by child components throughout the app
@@ -184,7 +185,7 @@ export function App() {
         <ConnectionStatus />
         <div class="flex items-center justify-center flex-1">
           <div class="text-center">
-            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-flux-blue mx-auto"></div>
+            <FluxIcon className="animate-spin h-12 w-12 text-flux-blue mx-auto" />
             <p class="mt-4 text-gray-600 dark:text-gray-400">Loading Flux status...</p>
           </div>
         </div>
