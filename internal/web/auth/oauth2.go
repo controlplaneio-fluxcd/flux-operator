@@ -89,7 +89,7 @@ func (o *oauth2Authenticator) serveAuthorize(w http.ResponseWriter, r *http.Requ
 	// Build OAuth2 config.
 	p, err := o.provider.init(r.Context())
 	if err != nil {
-		setAuthErrorCookie(w, err, http.StatusInternalServerError)
+		setAuthErrorCookie(w, r, err, http.StatusInternalServerError)
 		http.Redirect(w, r, originalURL(r.URL.Query()), http.StatusSeeOther)
 		return
 	}
@@ -109,7 +109,7 @@ func (o *oauth2Authenticator) serveAuthorize(w http.ResponseWriter, r *http.Requ
 		ExpiresAt:    time.Now().Add(cookieDurationShortLived),
 	})
 	if err != nil {
-		setAuthErrorCookie(w, err, http.StatusInternalServerError)
+		setAuthErrorCookie(w, r, err, http.StatusInternalServerError)
 		http.Redirect(w, r, originalURL(r.URL.Query()), http.StatusSeeOther)
 		return
 	}
@@ -143,13 +143,13 @@ func (o *oauth2Authenticator) serveCallback(w http.ResponseWriter, r *http.Reque
 	}
 	if cookieState == "" {
 		err := fmt.Errorf("OAuth login state cookie has expired")
-		setAuthErrorCookie(w, err, http.StatusUnauthorized)
+		setAuthErrorCookie(w, r, err, http.StatusUnauthorized)
 		http.Redirect(w, r, state.redirectURL(), http.StatusSeeOther)
 		return
 	}
 	if state.ExpiresAt.Before(time.Now()) {
 		err := fmt.Errorf("OAuth login state has expired")
-		setAuthErrorCookie(w, err, http.StatusUnauthorized)
+		setAuthErrorCookie(w, r, err, http.StatusUnauthorized)
 		http.Redirect(w, r, state.redirectURL(), http.StatusSeeOther)
 		return
 	}
@@ -157,14 +157,14 @@ func (o *oauth2Authenticator) serveCallback(w http.ResponseWriter, r *http.Reque
 	// Exchange code for token.
 	p, err := o.provider.init(r.Context())
 	if err != nil {
-		setAuthErrorCookie(w, err, http.StatusInternalServerError)
+		setAuthErrorCookie(w, r, err, http.StatusInternalServerError)
 		http.Redirect(w, r, state.redirectURL(), http.StatusSeeOther)
 		return
 	}
 	token, err := o.config(p).Exchange(r.Context(), r.URL.Query().Get("code"),
 		oauth2.SetAuthURLParam("code_verifier", state.PKCEVerifier))
 	if err != nil {
-		setAuthErrorCookie(w, err, http.StatusUnauthorized)
+		setAuthErrorCookie(w, r, err, http.StatusUnauthorized)
 		http.Redirect(w, r, state.redirectURL(), http.StatusSeeOther)
 		return
 	}
@@ -172,7 +172,7 @@ func (o *oauth2Authenticator) serveCallback(w http.ResponseWriter, r *http.Reque
 	// Try to authenticate the token and set the auth storage.
 	v, err := p.newVerifier(r.Context())
 	if err != nil {
-		setAuthErrorCookie(w, err, http.StatusInternalServerError)
+		setAuthErrorCookie(w, r, err, http.StatusInternalServerError)
 		http.Redirect(w, r, state.redirectURL(), http.StatusSeeOther)
 		return
 	}

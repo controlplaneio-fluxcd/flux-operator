@@ -62,7 +62,9 @@ func deleteCookie(w http.ResponseWriter, name, path string) {
 
 // setAuthErrorCookie sets the auth error cookie in the response.
 // Error messages are sanitized to avoid leaking internal details.
-func setAuthErrorCookie(w http.ResponseWriter, err error, code int) {
+// The original error is logged for debugging purposes.
+func setAuthErrorCookie(w http.ResponseWriter, r *http.Request, err error, code int) {
+	logAuthError(r, err, code)
 	setCookie(w, cookieNameAuthError, map[string]any{
 		"code": code,
 		"msg":  sanitizeErrorMessage(err, code),

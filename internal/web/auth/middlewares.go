@@ -8,6 +8,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/go-logr/logr"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/kubeclient"
 )
@@ -21,7 +24,9 @@ const (
 )
 
 // NewMiddleware creates a new authentication middleware for HTTP handlers.
-func NewMiddleware(conf *config.ConfigSpec, kubeClient *kubeclient.Client) (func(next http.Handler) http.Handler, error) {
+func NewMiddleware(conf *config.ConfigSpec, kubeClient *kubeclient.Client,
+	l logr.Logger) (func(next http.Handler) http.Handler, error) {
+
 	// Build middleware according to the authentication type.
 	var middleware func(next http.Handler) http.Handler
 	switch {
@@ -43,11 +48,12 @@ func NewMiddleware(conf *config.ConfigSpec, kubeClient *kubeclient.Client) (func
 		return nil, fmt.Errorf("unsupported authentication method")
 	}
 
-	// Enhance middleware with logout handling.
+	// Enhance middleware with logout handling and logger.
 	return func(next http.Handler) http.Handler {
 		next = middleware(next)
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == authPathLogout {
+			switch r.URL.Path {
+			case authPathLogout:
 				// Only allow POST for logout to prevent CSRF attacks.
 				// GET requests to /logout could be triggered by malicious links.
 				if r.Method != http.MethodPost {
@@ -56,10 +62,11 @@ func NewMiddleware(conf *config.ConfigSpec, kubeClient *kubeclient.Client) (func
 				}
 				deleteAuthStorage(w)
 				http.Redirect(w, r, "/", http.StatusSeeOther)
-				return
+			default:
+				// Inject logger into context.
+				ctx := log.IntoContext(r.Context(), l)
+				next.ServeHTTP(w, r.WithContext(ctx))
 			}
-
-			next.ServeHTTP(w, r)
 		})
 	}, nil
 }
@@ -140,12 +147,14 @@ func newOAuth2Middleware(conf *config.ConfigSpec, kubeClient *kubeclient.Client)
 // For API requests, it responds with a plain error message and the
 // given HTTP status code. For page requests, it stores an error cookie
 // and redirects to /.
+// The original error is logged for debugging purposes.
 func respondAuthError(w http.ResponseWriter, r *http.Request, err error, code int) {
 	switch {
 	case isAPIRequest(r):
+		logAuthError(r, err, code)
 		http.Error(w, err.Error(), code)
 	default:
-		setAuthErrorCookie(w, err, code)
+		setAuthErrorCookie(w, r, err, code)
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 	}
 }
@@ -153,4 +162,12 @@ func respondAuthError(w http.ResponseWriter, r *http.Request, err error, code in
 // isAPIRequest returns true if the request is for an API endpoint.
 func isAPIRequest(r *http.Request) bool {
 	return strings.HasPrefix(r.URL.Path, "/api/")
+}
+
+// logAuthError logs the authentication error.
+func logAuthError(r *http.Request, err error, code int) {
+	log.FromContext(r.Context()).WithValues("error", map[string]any{
+		"code": code,
+		"msg":  err.Error(),
+	}).V(1).Info("auth error")
 }
