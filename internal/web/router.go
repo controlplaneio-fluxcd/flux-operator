@@ -65,9 +65,9 @@ func (r *Router) RegisterRoutes() {
 	r.mux.HandleFunc("POST /api/v1/workloads", r.WorkloadsHandler)
 }
 
-// RegisterMiddleware wraps the mux with logging, gzip compression, and cache control middleware.
+// RegisterMiddleware wraps the mux with security headers, logging, gzip compression, and cache control middleware.
 func (r *Router) RegisterMiddleware() http.Handler {
-	return LoggingMiddleware(r.log, GzipMiddleware(CacheControlMiddleware(r.authMiddleware(r.mux))))
+	return LoggingMiddleware(r.log, SecurityHeadersMiddleware(GzipMiddleware(CacheControlMiddleware(r.authMiddleware(r.mux)))))
 }
 
 // StartReportCache starts a background goroutine that periodically refreshes the report cache.

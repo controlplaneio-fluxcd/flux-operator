@@ -22,7 +22,7 @@ type userSession struct {
 func (u *userSession) getUserKey() string {
 	if u == nil {
 		// There's a single user key when auth is not configured.
-		return "priviledged-user"
+		return "privileged-user"
 	}
 	return getUserKey(u.username, u.groups)
 }

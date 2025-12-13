@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
@@ -60,11 +61,34 @@ func deleteCookie(w http.ResponseWriter, name, path string) {
 }
 
 // setAuthErrorCookie sets the auth error cookie in the response.
+// Error messages are sanitized to avoid leaking internal details.
 func setAuthErrorCookie(w http.ResponseWriter, err error, code int) {
 	setCookie(w, cookieNameAuthError, map[string]any{
 		"code": code,
-		"msg":  err.Error(),
+		"msg":  sanitizeErrorMessage(err, code),
 	})
+}
+
+// sanitizeErrorMessage returns a user-friendly error message.
+// It avoids exposing internal error details that could aid attackers.
+func sanitizeErrorMessage(err error, code int) string {
+	switch code {
+	case http.StatusUnauthorized:
+		return "Authentication failed. Please try again."
+	case http.StatusBadRequest:
+		// For bad request, we can be slightly more specific
+		errMsg := err.Error()
+		switch {
+		case strings.Contains(errMsg, "state"):
+			return "Invalid or expired login session. Please try again."
+		case strings.Contains(errMsg, "expired"):
+			return "Login session expired. Please try again."
+		default:
+			return "Invalid request. Please try again."
+		}
+	default:
+		return "An error occurred during authentication. Please try again."
+	}
 }
 
 // setAuthProviderCookie sets the auth provider cookie in the response.
