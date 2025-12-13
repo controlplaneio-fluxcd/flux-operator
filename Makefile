@@ -137,7 +137,7 @@ web-dev-mock: ## Start frontend dev server with mock data enabled.
 
 .PHONY: web-run
 web-run: build ## Start operator with frontend server only.
-	./bin/flux-operator --web-server-only --web-server-port=9080
+	./bin/flux-operator --log-level=debug --web-server-only --web-server-port=9080
 
 .PHONY: web-build
 web-build:  web-fmt ## Build frontend for production.

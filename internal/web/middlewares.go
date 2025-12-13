@@ -118,7 +118,7 @@ func LoggingMiddleware(logger logr.Logger, next http.Handler) http.Handler {
 
 		// Log request details
 		duration := time.Since(start)
-		logger.Info("HTTP request completed",
+		logger.V(1).Info("HTTP request completed",
 			"uri", r.RequestURI,
 			"method", r.Method,
 			"status", wrapped.statusCode,
