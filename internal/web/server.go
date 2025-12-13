@@ -12,27 +12,25 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"k8s.io/client-go/rest"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/kubeclient"
 	"github.com/controlplaneio-fluxcd/flux-operator/web"
 )
 
 func StartServer(ctx context.Context,
 	timeout time.Duration,
 	port int,
-	kubeReader client.Reader,
-	kubeClient client.Client,
-	kubeConfig *rest.Config,
+	kubeClient *kubeclient.Client,
 	log logr.Logger,
 	version, statusManager, namespace string,
-	reportInterval time.Duration) error {
+	reportInterval time.Duration,
+	authMiddleware func(http.Handler) http.Handler) error {
 
 	// Create HTTP request multiplexer
 	mux := http.NewServeMux()
 
 	// Create router with embedded filesystem and register routes
-	router := NewRouter(mux, web.GetFS(), kubeReader, kubeClient, kubeConfig, log, version, statusManager, namespace, reportInterval)
+	router := NewRouter(mux, web.GetFS(), kubeClient, log, version, statusManager, namespace, reportInterval, authMiddleware)
 	router.RegisterRoutes()
 
 	// Start background report cache refresh

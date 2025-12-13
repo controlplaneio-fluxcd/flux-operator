@@ -54,9 +54,24 @@ vi.mock('./components/dashboards/resource/ResourcePage', () => ({
   ResourcePage: () => <div data-testid="resource-page">ResourcePage</div>
 }))
 
-// Mock fetchWithMock utility
-vi.mock('./utils/fetch', () => ({
-  fetchWithMock: vi.fn()
+// Mock fetchWithMock utility and authRequired signal
+vi.mock('./utils/fetch', async () => {
+  const { signal } = await import('@preact/signals')
+  return {
+    fetchWithMock: vi.fn(),
+    authRequired: signal(false),
+    shouldUseMockData: vi.fn(() => false)
+  }
+})
+
+// Mock cookies utility
+vi.mock('./utils/cookies', () => ({
+  parseAuthProviderCookie: vi.fn(() => null)
+}))
+
+// Mock LoginPage component
+vi.mock('./components/auth/LoginPage', () => ({
+  LoginPage: () => <div data-testid="login-page">LoginPage</div>
 }))
 
 // Mock theme utilities
@@ -66,7 +81,8 @@ vi.mock('./utils/theme', () => ({
   themes: { light: 'light', dark: 'dark', auto: 'auto' }
 }))
 
-import { fetchWithMock } from './utils/fetch'
+import { fetchWithMock, authRequired } from './utils/fetch'
+import { parseAuthProviderCookie } from './utils/cookies'
 
 describe('app.jsx', () => {
   beforeEach(() => {
@@ -76,9 +92,13 @@ describe('app.jsx', () => {
     reportLoading.value = true
     reportError.value = null
     connectionStatus.value = 'loading'
+    authRequired.value = false
 
     // Reset mock location path
     mockLocationPath = '/'
+
+    // Reset mock returns
+    parseAuthProviderCookie.mockReturnValue(null)
 
     // Clear all mocks
     vi.clearAllMocks()
@@ -214,11 +234,10 @@ describe('app.jsx', () => {
       render(<App />)
 
       const spinner = document.querySelector('.animate-spin')
-      expect(spinner).toHaveClass('rounded-full')
       expect(spinner).toHaveClass('h-12')
       expect(spinner).toHaveClass('w-12')
-      expect(spinner).toHaveClass('border-b-2')
-      expect(spinner).toHaveClass('border-flux-blue')
+      expect(spinner).toHaveClass('text-flux-blue')
+      expect(spinner.tagName.toLowerCase()).toBe('svg')
 
       await waitFor(() => expect(fetchWithMock).toHaveBeenCalled())
     })

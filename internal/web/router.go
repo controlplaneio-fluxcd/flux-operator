@@ -12,21 +12,20 @@ import (
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/client-go/rest"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/kubeclient"
 )
 
 // Router provides HTTP handlers for the API endpoints and static files.
 type Router struct {
-	mux           *http.ServeMux
-	kubeReader    client.Reader
-	kubeClient    client.Client
-	kubeConfig    *rest.Config
-	log           logr.Logger
-	webFS         fs.FS
-	version       string
-	statusManager string
-	namespace     string
+	mux            *http.ServeMux
+	kubeClient     *kubeclient.Client
+	log            logr.Logger
+	webFS          fs.FS
+	version        string
+	statusManager  string
+	namespace      string
+	authMiddleware func(http.Handler) http.Handler
 
 	// Report cache
 	reportCache    *unstructured.Unstructured
@@ -35,17 +34,16 @@ type Router struct {
 }
 
 // NewRouter creates a new router with the given Kubernetes client and embedded filesystem.
-func NewRouter(mux *http.ServeMux, webFS fs.FS, kubeReader client.Reader, kubeClient client.Client, kubeConfig *rest.Config, log logr.Logger, version, statusManager, namespace string, reportInterval time.Duration) *Router {
+func NewRouter(mux *http.ServeMux, webFS fs.FS, kubeClient *kubeclient.Client, log logr.Logger, version, statusManager, namespace string, reportInterval time.Duration, authMiddleware func(http.Handler) http.Handler) *Router {
 	return &Router{
 		mux:            mux,
-		kubeReader:     kubeReader,
 		kubeClient:     kubeClient,
-		kubeConfig:     kubeConfig,
 		log:            log,
 		webFS:          webFS,
 		version:        version,
 		statusManager:  statusManager,
 		namespace:      namespace,
+		authMiddleware: authMiddleware,
 		reportInterval: reportInterval,
 	}
 }
@@ -67,9 +65,9 @@ func (r *Router) RegisterRoutes() {
 	r.mux.HandleFunc("POST /api/v1/workloads", r.WorkloadsHandler)
 }
 
-// RegisterMiddleware wraps the mux with logging, gzip compression, and cache control middleware.
+// RegisterMiddleware wraps the mux with security headers, logging, gzip compression, and cache control middleware.
 func (r *Router) RegisterMiddleware() http.Handler {
-	return LoggingMiddleware(r.log, GzipMiddleware(CacheControlMiddleware(r.mux)))
+	return LoggingMiddleware(r.log, SecurityHeadersMiddleware(GzipMiddleware(CacheControlMiddleware(r.authMiddleware(r.mux)))))
 }
 
 // StartReportCache starts a background goroutine that periodically refreshes the report cache.
