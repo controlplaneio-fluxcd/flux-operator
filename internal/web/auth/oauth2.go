@@ -43,18 +43,27 @@ type oauth2Provider interface {
 
 // initializedOAuth2Provider has methods for implementing the OAuth2 protocol.
 type initializedOAuth2Provider interface {
+	config() *oauth2.Config
+	newVerifier(ctx context.Context) (oauth2Verifier, error)
+}
+
+// oauth2Verifier has methods for verifying OAuth2 tokens.
+type oauth2Verifier interface {
 	verifyAccessToken(ctx context.Context, accessToken string, nonce ...string) (string, []string, error)
 	verifyToken(ctx context.Context, token *oauth2.Token, nonce ...string) (string, []string, *authStorage, error)
-	config() *oauth2.Config
 }
 
 // newOAuth2Authenticator creates a new OAuth2 authenticator.
 func newOAuth2Authenticator(ctx context.Context, conf *config.ConfigSpec,
 	kubeClient *kubeclient.Client, provider oauth2Provider) (*oauth2Authenticator, error) {
 
-	// Validate that the provider can be initialized.
-	if _, err := provider.init(ctx); err != nil {
+	// Validate that the provider can be initialized and create verifiers.
+	p, err := provider.init(ctx)
+	if err != nil {
 		return nil, fmt.Errorf("failed to initialize OAuth2 provider: %w", err)
+	}
+	if _, err := p.newVerifier(ctx); err != nil {
+		return nil, fmt.Errorf("failed to create OAuth2 token verifier: %w", err)
 	}
 
 	// Build encryptor/decryptor for login state cookies.
@@ -169,7 +178,13 @@ func (o *oauth2Authenticator) serveCallback(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Try to authenticate the token and set the auth storage.
-	if _, _, err := o.verifyTokenAndSetAuthStorage(w, r, token, state.Nonce); err != nil {
+	v, err := p.newVerifier(r.Context())
+	if err != nil {
+		setAuthErrorCookie(w, err, http.StatusInternalServerError)
+		http.Redirect(w, r, state.redirectURL(), http.StatusSeeOther)
+		return
+	}
+	if _, _, err := o.verifyTokenAndSetAuthStorage(w, r, v, token, state.Nonce); err != nil {
 		return
 	}
 
@@ -199,7 +214,12 @@ func (o *oauth2Authenticator) serveAPI(w http.ResponseWriter, r *http.Request, a
 		respondAuthError(w, r, err, http.StatusInternalServerError)
 		return
 	}
-	username, groups, err := p.verifyAccessToken(r.Context(), as.AccessToken)
+	v, err := p.newVerifier(r.Context())
+	if err != nil {
+		respondAuthError(w, r, err, http.StatusInternalServerError)
+		return
+	}
+	username, groups, err := v.verifyAccessToken(r.Context(), as.AccessToken)
 	if err != nil {
 		if as.RefreshToken == "" {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
@@ -213,7 +233,7 @@ func (o *oauth2Authenticator) serveAPI(w http.ResponseWriter, r *http.Request, a
 			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return
 		}
-		if username, groups, err = o.verifyTokenAndSetAuthStorage(w, r, token); err != nil {
+		if username, groups, err = o.verifyTokenAndSetAuthStorage(w, r, v, token); err != nil {
 			return
 		}
 	}
@@ -253,7 +273,11 @@ func (o *oauth2Authenticator) serveAssets(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		return
 	}
-	if _, _, err := p.verifyAccessToken(r.Context(), as.AccessToken); err != nil {
+	v, err := p.newVerifier(r.Context())
+	if err != nil {
+		return
+	}
+	if _, _, err := v.verifyAccessToken(r.Context(), as.AccessToken); err != nil {
 		if as.RefreshToken == "" {
 			return
 		}
@@ -263,7 +287,7 @@ func (o *oauth2Authenticator) serveAssets(w http.ResponseWriter, r *http.Request
 		if err != nil {
 			return
 		}
-		if _, _, as, err = p.verifyToken(r.Context(), token); err != nil {
+		if _, _, as, err = v.verifyToken(r.Context(), token); err != nil {
 			return
 		}
 		if err := setAuthStorage(o.conf, w, *as); err != nil {
@@ -293,13 +317,8 @@ func (o *oauth2Authenticator) config(p initializedOAuth2Provider) *oauth2.Config
 // verifyTokenAndSetAuthStorage verifies the OAuth2 token and sets
 // the authentication storage in a cookie, or responds on any errors.
 func (o *oauth2Authenticator) verifyTokenAndSetAuthStorage(w http.ResponseWriter, r *http.Request,
-	token *oauth2.Token, nonce ...string) (string, []string, error) {
-	p, err := o.provider.init(r.Context())
-	if err != nil {
-		respondAuthError(w, r, err, http.StatusInternalServerError)
-		return "", nil, err
-	}
-	username, groups, as, err := p.verifyToken(r.Context(), token, nonce...)
+	verifier oauth2Verifier, token *oauth2.Token, nonce ...string) (string, []string, error) {
+	username, groups, as, err := verifier.verifyToken(r.Context(), token, nonce...)
 	if err != nil {
 		respondAuthError(w, r, err, http.StatusUnauthorized)
 		return "", nil, err
