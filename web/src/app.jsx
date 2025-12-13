@@ -4,11 +4,13 @@
 import { useEffect } from 'preact/hooks'
 import { signal } from '@preact/signals'
 import { LocationProvider, Router, Route, useLocation } from 'preact-iso'
-import { fetchWithMock } from './utils/fetch'
+import { fetchWithMock, authRequired } from './utils/fetch'
+import { parseAuthProviderCookie } from './utils/cookies'
 import { checkVersionChange } from './utils/version'
 import './utils/theme'
 import { ConnectionStatus } from './components/layout/ConnectionStatus'
 import { Header } from './components/layout/Header'
+import { LoginPage } from './components/auth/LoginPage'
 import { ClusterPage } from './components/dashboards/cluster/ClusterPage'
 import { EventList } from './components/search/EventList'
 import { ResourceList } from './components/search/ResourceList'
@@ -35,6 +37,7 @@ export const reportError = signal(null)
 // - 'connected': Successfully connected and fetched data
 // - 'disconnected': Failed to fetch data (shows reconnection banner)
 export const connectionStatus = signal('loading')
+
 
 /**
  * Fetches FluxReport data from the API or mock data
@@ -146,6 +149,15 @@ function TabNavigation() {
 export function App() {
   // Setup data fetching on component mount
   useEffect(() => {
+    // Check auth-provider cookie first
+    // If user is not authenticated, show login page immediately (skip API call)
+    const authProvider = parseAuthProviderCookie()
+    if (authProvider && authProvider.authenticated === false) {
+      authRequired.value = true
+      reportLoading.value = false
+      return // Don't fetch or set up interval
+    }
+
     // Fetch data immediately on mount
     fetchFluxReport()
 
@@ -155,6 +167,14 @@ export function App() {
     // Cleanup interval on unmount
     return () => clearInterval(interval)
   }, [])
+
+  // AUTH REQUIRED STATE: Show login page when authentication is needed
+  // This can be triggered by:
+  // 1. Cookie check on mount (authenticated === false)
+  // 2. Any API call returning 401 (auth expired)
+  if (authRequired.value) {
+    return <LoginPage />
+  }
 
   // LOADING STATE: Show spinner while waiting for initial data
   // Only show loading if we don't have any data yet

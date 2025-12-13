@@ -165,7 +165,7 @@ func (o *oauth2Authenticator) ServeCallback(w http.ResponseWriter, r *http.Reque
 
 	// Authentication successful. Set the auth provider cookie.
 	const authenticated = true
-	setAuthProviderCookie(w, o.conf.Authentication.OAuth2.Provider, oauth2PathAuthorize, authenticated)
+	setAuthProviderCookie(w, o.conf.Authentication.OAuth2.Provider, o.conf.BaseURL+oauth2PathAuthorize, authenticated)
 
 	http.Redirect(w, r, state.redirectURL(), http.StatusSeeOther)
 }
@@ -176,7 +176,7 @@ func (o *oauth2Authenticator) ServeCallback(w http.ResponseWriter, r *http.Reque
 func (o *oauth2Authenticator) ServeAPI(w http.ResponseWriter, r *http.Request, api http.Handler) {
 	// Set the auth provider cookie to indicate OAuth2 is in use and not yet authenticated.
 	authenticated := false
-	setAuthProviderCookie(w, o.conf.Authentication.OAuth2.Provider, oauth2PathAuthorize, authenticated)
+	setAuthProviderCookie(w, o.conf.Authentication.OAuth2.Provider, o.conf.BaseURL+oauth2PathAuthorize, authenticated)
 
 	// Try to authenticate the request.
 	as, err := getAuthStorage(r)
@@ -210,7 +210,7 @@ func (o *oauth2Authenticator) ServeAPI(w http.ResponseWriter, r *http.Request, a
 	// Authentication successful. Set the auth provider cookie.
 	w.Header().Del("Set-Cookie")
 	authenticated = true
-	setAuthProviderCookie(w, o.conf.Authentication.OAuth2.Provider, oauth2PathAuthorize, authenticated)
+	setAuthProviderCookie(w, o.conf.Authentication.OAuth2.Provider, o.conf.BaseURL+oauth2PathAuthorize, authenticated)
 
 	// Build and store user session.
 	client, err := o.kubeClient.getUserClientFromCache(username, groups)
@@ -231,7 +231,7 @@ func (o *oauth2Authenticator) ServeAssets(w http.ResponseWriter, r *http.Request
 
 	// Set the auth provider cookie to indicate OAuth2 is in use and not yet authenticated.
 	authenticated := false
-	setAuthProviderCookie(w, o.conf.Authentication.OAuth2.Provider, oauth2PathAuthorize, authenticated)
+	setAuthProviderCookie(w, o.conf.Authentication.OAuth2.Provider, o.conf.BaseURL+oauth2PathAuthorize, authenticated)
 
 	// Try to authenticate the request.
 	as, err := getAuthStorage(r)
@@ -263,7 +263,7 @@ func (o *oauth2Authenticator) ServeAssets(w http.ResponseWriter, r *http.Request
 	// Authentication successful. Set the auth provider cookie.
 	w.Header().Del("Set-Cookie")
 	authenticated = true
-	setAuthProviderCookie(w, o.conf.Authentication.OAuth2.Provider, oauth2PathAuthorize, authenticated)
+	setAuthProviderCookie(w, o.conf.Authentication.OAuth2.Provider, o.conf.BaseURL+oauth2PathAuthorize, authenticated)
 }
 
 // config builds the OAuth2 configuration from the
