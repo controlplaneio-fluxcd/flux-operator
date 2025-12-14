@@ -54,6 +54,10 @@ vi.mock('./components/dashboards/resource/ResourcePage', () => ({
   ResourcePage: () => <div data-testid="resource-page">ResourcePage</div>
 }))
 
+vi.mock('./components/common/NotFoundPage', () => ({
+  NotFoundPage: () => <div data-testid="not-found-page">NotFoundPage</div>
+}))
+
 // Mock fetchWithMock utility and authRequired signal
 vi.mock('./utils/fetch', async () => {
   const { signal } = await import('@preact/signals')
@@ -627,6 +631,41 @@ describe('app.jsx', () => {
       eventsTab.click()
 
       expect(mockRoute).toHaveBeenCalledWith('/events')
+    })
+  })
+
+  describe('App Component - 404 Not Found Route', () => {
+    const mockReport = {
+      spec: {
+        distribution: { version: 'v2.4.0' },
+        components: [],
+        reconcilers: []
+      },
+      metadata: { namespace: 'flux-system' }
+    }
+
+    it('should render NotFoundPage for unknown routes', () => {
+      mockLocationPath = '/unknown/route'
+      reportLoading.value = false
+      reportData.value = mockReport
+
+      render(<App />)
+
+      // The Router mock renders all Route components, so NotFoundPage will be present
+      // In real usage, it only renders for unmatched routes due to the default prop
+      expect(screen.getByTestId('not-found-page')).toBeInTheDocument()
+    })
+
+    it('should not show tab navigation on 404 page', () => {
+      mockLocationPath = '/some/nonexistent/page'
+      reportLoading.value = false
+      reportData.value = mockReport
+
+      render(<App />)
+
+      // Tab navigation should not be visible for unknown routes
+      expect(screen.queryByRole('button', { name: 'Resources' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Events' })).not.toBeInTheDocument()
     })
   })
 

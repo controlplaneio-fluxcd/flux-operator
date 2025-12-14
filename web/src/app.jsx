@@ -16,6 +16,7 @@ import { EventList } from './components/search/EventList'
 import { ResourceList } from './components/search/ResourceList'
 import { ResourcePage } from './components/dashboards/resource/ResourcePage'
 import { FavoritesPage } from './components/favorites/FavoritesPage'
+import { NotFoundPage } from './components/common/NotFoundPage'
 import { FluxOperatorIcon } from './components/common/icons'
 
 // Global signals for FluxReport data and application state
@@ -252,6 +253,7 @@ function AppContent({ spec, namespace }) {
         <Route path="/events" component={EventList} />
         <Route path="/resources" component={ResourceList} />
         <Route path="/resource/:kind/:namespace/:name" component={ResourcePage} />
+        <Route default component={NotFoundPage} />
       </Router>
     </div>
   )

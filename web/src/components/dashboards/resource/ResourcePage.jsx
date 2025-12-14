@@ -13,9 +13,56 @@ import { ReconcilerPanel } from './ReconcilerPanel'
 import { SourcePanel } from './SourcePanel'
 import { InventoryPanel } from './InventoryPanel'
 import { ArtifactPanel } from './ArtifactPanel'
-import { FluxOperatorIcon } from '../../common/icons'
 import { ExportedInputsPanel } from './ExportedInputsPanel'
 import { InputsPanel } from './InputsPanel'
+
+/**
+ * Get loading status styling info with spinning refresh icon
+ */
+function getLoadingStatusInfo() {
+  return {
+    color: 'text-blue-600 dark:text-blue-400',
+    bgColor: 'bg-blue-50',
+    borderColor: 'border-blue-500',
+    icon: (
+      <svg class="w-10 h-10 text-blue-600 dark:text-blue-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+      </svg>
+    )
+  }
+}
+
+/**
+ * Get error status styling info
+ */
+function getErrorStatusInfo() {
+  return {
+    color: 'text-danger',
+    bgColor: 'bg-red-50',
+    borderColor: 'border-danger',
+    icon: (
+      <svg class="w-10 h-10 text-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+      </svg>
+    )
+  }
+}
+
+/**
+ * Get not found status styling info
+ */
+function getNotFoundStatusInfo() {
+  return {
+    color: 'text-gray-600 dark:text-gray-400',
+    bgColor: 'bg-gray-50',
+    borderColor: 'border-gray-400',
+    icon: (
+      <svg class="w-10 h-10 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    )
+  }
+}
 
 /**
  * Get status styling info
@@ -146,13 +193,28 @@ export function ResourcePage({ kind, namespace, name }) {
     return () => clearInterval(interval)
   }, [kind, namespace, name])
 
-  // Derived data
+  // Determine display state
+  const isInitialLoading = loading && !resourceData
+  const isInitialError = error && !resourceData
+  const isNotFound = !isInitialLoading && !isInitialError && (!resourceData || !resourceData.metadata || !resourceData.metadata.name)
+  const isSuccess = !isInitialLoading && !isInitialError && !isNotFound
+
+  // Derived data (only valid when we have resourceData)
   const status = resourceData?.status?.reconcilerRef?.status || 'Unknown'
-  const statusInfo = getStatusInfo(status)
   const hasSource = resourceData?.status?.sourceRef
   const isSourceResource = resourceData?.apiVersion?.startsWith('source.toolkit.fluxcd.io/') && resourceData?.kind !== 'HelmChart'
   const isResourceSetInputProvider = resourceData?.kind === 'ResourceSetInputProvider'
   const isResourceSet = resourceData?.kind === 'ResourceSet'
+
+  // Compute statusInfo based on display state
+  let statusInfo
+  if (isInitialLoading) {
+    statusInfo = getLoadingStatusInfo()
+  } else if (isInitialError || isNotFound) {
+    statusInfo = isNotFound ? getNotFoundStatusInfo() : getErrorStatusInfo()
+  } else {
+    statusInfo = getStatusInfo(status)
+  }
 
   // Check if resource is a favorite (reactive via favorites signal)
   // Access favorites.value to subscribe to changes and trigger re-renders
@@ -168,56 +230,6 @@ export function ResourcePage({ kind, namespace, name }) {
   const handleNavigate = (item) => {
     const ns = item.namespace || namespace
     location.route(`/resource/${encodeURIComponent(item.kind)}/${encodeURIComponent(ns)}/${encodeURIComponent(item.name)}`)
-  }
-
-  // Loading state - only show spinner on initial load when no data exists
-  if (loading && !resourceData) {
-    return (
-      <main data-testid="resource-dashboard-view" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
-        <div class="flex items-center justify-center p-8">
-          <FluxOperatorIcon className="animate-spin h-8 w-8 text-flux-blue" />
-          <span class="ml-3 text-gray-600 dark:text-gray-400">Loading resource...</span>
-        </div>
-      </main>
-    )
-  }
-
-  // Error state - only show error screen when no data exists (initial load failure)
-  // On auto-refresh failure, keep showing stale data
-  if (error && !resourceData) {
-    return (
-      <main data-testid="resource-dashboard-view" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
-        <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-4">
-          <p class="text-sm text-red-800 dark:text-red-200">Failed to load resource: {error}</p>
-        </div>
-      </main>
-    )
-  }
-
-  // Not found state - check if resourceData is empty or missing required fields
-  if (!resourceData || !resourceData.metadata || !resourceData.metadata.name) {
-    return (
-      <main data-testid="resource-dashboard-view" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
-        <div class="card bg-red-50 dark:bg-opacity-20 border-2 border-danger">
-          <div class="flex items-center space-x-4">
-            <div class="flex-shrink-0">
-              <div class="w-16 h-16 rounded-full bg-red-50 dark:bg-opacity-30 flex items-center justify-center">
-                <svg class="w-10 h-10 text-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-              </div>
-            </div>
-            <div class="flex-grow min-w-0">
-              <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">{kind}</span>
-              <h1 class="text-2xl font-semibold text-gray-900 dark:text-white break-all">
-                {name} not found
-              </h1>
-              <span class="text-sm text-gray-500 dark:text-gray-400">Namespace: {namespace}</span>
-            </div>
-          </div>
-        </div>
-      </main>
-    )
   }
 
   return (
@@ -252,48 +264,77 @@ export function ResourcePage({ kind, namespace, name }) {
               </h1>
               <span class="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Namespace: {namespace}</span>
             </div>
-            <div class="hidden md:block text-right flex-shrink-0">
-              <div class="text-sm text-gray-600 dark:text-gray-400">Last Updated</div>
-              <div class="text-lg font-semibold text-gray-900 dark:text-white">{formatTime(lastUpdatedAt)}</div>
-            </div>
+            {/* Last Updated - only show when we have data */}
+            {isSuccess && (
+              <div class="hidden md:block text-right flex-shrink-0">
+                <div class="text-sm text-gray-600 dark:text-gray-400">Last Updated</div>
+                <div class="text-lg font-semibold text-gray-900 dark:text-white">{formatTime(lastUpdatedAt)}</div>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Reconciler Section */}
-        <ReconcilerPanel
-          kind={kind}
-          name={name}
-          namespace={namespace}
-          resourceData={resourceData}
-        />
-
-        {/* Artifact Section - for source resources only */}
-        {isSourceResource && (
-          <ArtifactPanel resourceData={resourceData} />
+        {/* Loading message */}
+        {isInitialLoading && (
+          <div data-testid="loading-message" class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md p-4">
+            <p class="text-sm text-blue-800 dark:text-blue-200">Loading resource data...</p>
+          </div>
         )}
 
-        {/* Exported Inputs Section - for ResourceSetInputProvider only */}
-        {isResourceSetInputProvider && (
-          <ExportedInputsPanel resourceData={resourceData} />
+        {/* Error message */}
+        {isInitialError && (
+          <div data-testid="error-message" class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-4">
+            <p class="text-sm text-red-800 dark:text-red-200">Failed to load resource: {error}</p>
+          </div>
         )}
 
-        {/* Inputs Section - for ResourceSet only */}
-        {isResourceSet && (
-          <InputsPanel resourceData={resourceData} namespace={namespace} />
+        {/* Not found message */}
+        {isNotFound && (
+          <div data-testid="not-found-message" class="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-md p-4">
+            <p class="text-sm text-gray-600 dark:text-gray-400">Resource not found in the cluster.</p>
+          </div>
         )}
 
-        {/* Managed Objects Section */}
-        <InventoryPanel
-          resourceData={resourceData}
-          onNavigate={handleNavigate}
-        />
+        {/* Success content - only show panels when we have valid data */}
+        {isSuccess && (
+          <>
+            {/* Reconciler Section */}
+            <ReconcilerPanel
+              kind={kind}
+              name={name}
+              namespace={namespace}
+              resourceData={resourceData}
+            />
 
-        {/* Source Section */}
-        {hasSource && (
-          <SourcePanel
-            sourceRef={resourceData.status.sourceRef}
-            namespace={namespace}
-          />
+            {/* Artifact Section - for source resources only */}
+            {isSourceResource && (
+              <ArtifactPanel resourceData={resourceData} />
+            )}
+
+            {/* Exported Inputs Section - for ResourceSetInputProvider only */}
+            {isResourceSetInputProvider && (
+              <ExportedInputsPanel resourceData={resourceData} />
+            )}
+
+            {/* Inputs Section - for ResourceSet only */}
+            {isResourceSet && (
+              <InputsPanel resourceData={resourceData} namespace={namespace} />
+            )}
+
+            {/* Managed Objects Section */}
+            <InventoryPanel
+              resourceData={resourceData}
+              onNavigate={handleNavigate}
+            />
+
+            {/* Source Section */}
+            {hasSource && (
+              <SourcePanel
+                sourceRef={resourceData.status.sourceRef}
+                namespace={namespace}
+              />
+            )}
+          </>
         )}
 
       </div>

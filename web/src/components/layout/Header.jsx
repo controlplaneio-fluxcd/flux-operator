@@ -21,11 +21,6 @@ export function Header() {
   const location = useLocation()
   const currentPath = location.path
 
-  // Check if we're in a tab view (favorites, events, or resources) or resource dashboard
-  const isTabView = currentPath === '/favorites' || currentPath === '/events' || currentPath === '/resources'
-  const isResourceDashboard = currentPath.startsWith('/resource/')
-  const isNotDashboard = isTabView || isResourceDashboard
-
   // Handle browse resources button click
   const handleBrowseResources = () => {
     quickSearchOpen.value = false
@@ -35,12 +30,12 @@ export function Header() {
   // Handle logo/title click
   const handleLogoClick = () => {
     quickSearchOpen.value = false
-    if (isNotDashboard) {
-      // Return to dashboard if not on main dashboard
-      location.route('/')
-    } else {
-      // Trigger report fetch if in dashboard view
+    if (currentPath === '/') {
+      // Refresh data if already on home page
       fetchFluxReport()
+    } else {
+      // Navigate to home page from any other route
+      location.route('/')
     }
   }
 

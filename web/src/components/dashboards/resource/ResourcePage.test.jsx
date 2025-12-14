@@ -82,59 +82,89 @@ describe('ResourcePage component', () => {
     vi.clearAllMocks()
   })
 
-  it('should render loading state initially', () => {
+  it('should render loading state with hero section', () => {
     // Return a promise that never resolves immediately to check loading state
     fetchWithMock.mockReturnValue(new Promise(() => {}))
 
     render(<ResourcePage kind="FluxInstance" namespace="flux-system" name="flux" />)
 
-    expect(screen.getByText('Loading resource...')).toBeInTheDocument()
+    // Hero section should be visible with kind, name, namespace
+    expect(screen.getByText('FluxInstance')).toBeInTheDocument()
+    expect(screen.getByText('flux')).toBeInTheDocument()
+    expect(screen.getByText('Namespace: flux-system')).toBeInTheDocument()
+
+    // Loading message should appear below hero
+    expect(screen.getByTestId('loading-message')).toBeInTheDocument()
+    expect(screen.getByText('Loading resource data...')).toBeInTheDocument()
+
+    // Hero should have blue border for loading state (same as Progressing)
+    const headerCard = screen.getByText('flux').closest('.card')
+    expect(headerCard).toHaveClass('border-blue-500')
   })
 
-  it('should render error state when fetch fails', async () => {
+  it('should render error state with hero section when fetch fails', async () => {
     fetchWithMock.mockRejectedValue(new Error('API Error'))
 
     render(<ResourcePage kind="FluxInstance" namespace="flux-system" name="flux" />)
 
     await waitFor(() => {
+      // Hero section should be visible with kind, name, namespace
+      expect(screen.getByText('FluxInstance')).toBeInTheDocument()
+      expect(screen.getByText('flux')).toBeInTheDocument()
+      expect(screen.getByText('Namespace: flux-system')).toBeInTheDocument()
+
+      // Error message should appear below hero
+      expect(screen.getByTestId('error-message')).toBeInTheDocument()
       expect(screen.getByText('Failed to load resource: API Error')).toBeInTheDocument()
+
+      // Hero should have danger border for error state
+      const headerCard = screen.getByText('flux').closest('.card')
+      expect(headerCard).toHaveClass('border-danger')
     })
   })
 
-  it('should render not found state when no data returned', async () => {
+  it('should render not found state with hero section when no data returned', async () => {
     // Mock resource fetch returning null (not found)
     fetchWithMock.mockResolvedValueOnce(null)
 
     render(<ResourcePage kind="FluxInstance" namespace="flux-system" name="flux" />)
 
     await waitFor(() => {
-      expect(screen.getByText('flux not found')).toBeInTheDocument()
+      // Hero section should be visible with kind, name, namespace
       expect(screen.getByText('FluxInstance')).toBeInTheDocument()
+      expect(screen.getByText('flux')).toBeInTheDocument()
       expect(screen.getByText('Namespace: flux-system')).toBeInTheDocument()
-    })
 
-    // Check for error styling
-    const card = screen.getByText('flux not found').closest('.card')
-    expect(card).toHaveClass('bg-red-50')
-    expect(card).toHaveClass('border-danger')
+      // Not found message should appear below hero
+      expect(screen.getByTestId('not-found-message')).toBeInTheDocument()
+      expect(screen.getByText('Resource not found in the cluster.')).toBeInTheDocument()
+
+      // Hero should have gray border for not found state (different from error)
+      const headerCard = screen.getByText('flux').closest('.card')
+      expect(headerCard).toHaveClass('border-gray-400')
+    })
   })
 
-  it('should render not found state when empty object returned', async () => {
+  it('should render not found state with hero section when empty object returned', async () => {
     // Mock resource fetch returning empty object (server returns {} for not found)
     fetchWithMock.mockResolvedValueOnce({})
 
     render(<ResourcePage kind="FluxInstance" namespace="flux-system" name="flux" />)
 
     await waitFor(() => {
-      expect(screen.getByText('flux not found')).toBeInTheDocument()
+      // Hero section should be visible with kind, name, namespace
       expect(screen.getByText('FluxInstance')).toBeInTheDocument()
+      expect(screen.getByText('flux')).toBeInTheDocument()
       expect(screen.getByText('Namespace: flux-system')).toBeInTheDocument()
-    })
 
-    // Check for error styling
-    const card = screen.getByText('flux not found').closest('.card')
-    expect(card).toHaveClass('bg-red-50')
-    expect(card).toHaveClass('border-danger')
+      // Not found message should appear below hero
+      expect(screen.getByTestId('not-found-message')).toBeInTheDocument()
+      expect(screen.getByText('Resource not found in the cluster.')).toBeInTheDocument()
+
+      // Hero should have gray border for not found state (different from error)
+      const headerCard = screen.getByText('flux').closest('.card')
+      expect(headerCard).toHaveClass('border-gray-400')
+    })
   })
 
   it('should render resource header and panels on success', async () => {
@@ -354,24 +384,25 @@ describe('ResourcePage component', () => {
       expect(screen.queryByText('Failed to load resource: Network error')).not.toBeInTheDocument()
     })
 
-    it('should only show loading spinner on initial load, not on auto-refresh', async () => {
+    it('should only show loading message on initial load, not on auto-refresh', async () => {
       fetchWithMock.mockResolvedValue(mockResourceData)
 
       render(<ResourcePage kind="FluxInstance" namespace="flux-system" name="flux" />)
 
-      // Initial load should show spinner
-      expect(screen.getByText('Loading resource...')).toBeInTheDocument()
+      // Initial load should show loading message below hero
+      expect(screen.getByTestId('loading-message')).toBeInTheDocument()
+      expect(screen.getByText('Loading resource data...')).toBeInTheDocument()
 
       // Wait for initial load to complete
       await waitFor(() => {
-        expect(screen.getByText('flux')).toBeInTheDocument()
+        expect(screen.queryByTestId('loading-message')).not.toBeInTheDocument()
       })
 
       // Fast-forward to trigger auto-refresh
       vi.advanceTimersByTime(30000)
 
-      // Content should remain visible during refresh (no spinner)
-      expect(screen.queryByText('Loading resource...')).not.toBeInTheDocument()
+      // Content should remain visible during refresh (no loading message)
+      expect(screen.queryByTestId('loading-message')).not.toBeInTheDocument()
       expect(screen.getByText('flux')).toBeInTheDocument()
     })
 
