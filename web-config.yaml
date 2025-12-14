@@ -1,0 +1,12 @@
+apiVersion: web.fluxcd.controlplane.io/v1
+kind: Config
+spec:
+  baseURL: http://localhost:9080
+  insecure: true
+  authentication:
+    type: OAuth2
+    oauth2:
+      provider: OIDC
+      clientID: flux-ui
+      clientSecret: flux-ui-secret
+      issuerURL: https://dex.staging.flux-d2.control-plane-demos.com
