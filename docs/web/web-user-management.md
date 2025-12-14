@@ -20,13 +20,13 @@ By default, the Web UI runs under the `flux-operator` Kubernetes service account
 Cluster admins can assign a different identity to the Web UI by creating a
 Kubernetes `ClusterRoleBinding` that binds a specific user to a set of permissions.
 
-For example, to grant read-only access to all resources in the cluster to the `flux-web-ui` user:
+For example, to grant read-only access to all resources in the cluster to the `flux-web` user:
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: flux-web-ui-read-only
+  name: flux-web-view
 rules:
   - apiGroups: ["*"]
     resources: ["*"]
@@ -35,18 +35,18 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: flux-web-ui-readonly
+  name: flux-web-global-view
 subjects:
   - kind: User
-    name: flux-web-ui
+    name: flux-web
     apiGroup: rbac.authorization.k8s.io
 roleRef:
   kind: ClusterRole
-  name: flux-web-ui-read-only
+  name: flux-web-view
   apiGroup: rbac.authorization.k8s.io
 ```
 
-To assign the `flux-web-ui` identity to the Web UI, set the following values in the Flux Operator
+To assign the `flux-web` identity to the Web UI, set the following values in the Flux Operator
 [Helm chart](https://github.com/controlplaneio-fluxcd/charts/tree/main/charts/flux-operator):
 
 ```yaml
@@ -55,7 +55,7 @@ web:
     authentication:
       type: Anonymous
       anonymous:
-        username: flux-web-ui
+        username: flux-web
 ```
 
 For more information about configuring the Web UI, see the [Web Config API](web-config-api.md) documentation.
@@ -63,7 +63,7 @@ For more information about configuring the Web UI, see the [Web Config API](web-
 ## Single Sign-On
 
 To restrict access to the Web UI, you can enable authentication using SSO with
-OpenID Connect (OIDC) providers, LDAP, or SAML v2.
+OAuth 2.0 providers, like OpenID Connect (OIDC).
 
 Assuming you have a federated OIDC provider, such as Dex or Keycloak,
 you can configure the Web UI to use OAuth2 authentication by setting the following values in the Flux Operator
@@ -81,6 +81,8 @@ web:
         clientSecret: <DEX-CLIENT-SECRET>
         issuerURL: https://dex.example.com
 ```
+
+For a complete guide on configuring SSO with Dex, see the [Dex SSO](web-sso-dex.md) documentation.
 
 ### Claims Mapping to RBAC
 
@@ -103,7 +105,7 @@ a `ClusterRoleBinding` to grant read-only access to members of the `platform-tea
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: flux-web-ui-view
+  name: flux-web-view
 rules:
   - apiGroups: ["*"]
     resources: ["*"]
@@ -112,14 +114,14 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: platform-team-read-only
+  name: flux-web-platform-team
 subjects:
   - kind: Group
     name: platform-team
     apiGroup: rbac.authorization.k8s.io
 roleRef:
   kind: ClusterRole
-  name: flux-web-ui-view
+  name: flux-web-view
   apiGroup: rbac.authorization.k8s.io
 ```
 
@@ -130,7 +132,7 @@ to resources in the `apps` namespace:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: dev-team-read-only
+  name: flux-web-dev-team
   namespace: apps
 subjects:
   - kind: Group
@@ -138,7 +140,7 @@ subjects:
     apiGroup: rbac.authorization.k8s.io
 roleRef:
   kind: ClusterRole
-  name: flux-web-ui-view
+  name: flux-web-view
   apiGroup: rbac.authorization.k8s.io
 ```
 

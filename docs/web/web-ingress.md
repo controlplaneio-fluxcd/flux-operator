@@ -9,29 +9,29 @@ Flux Operator serves the Web UI on port `9080` with the name `http-web`.
 This port is exposed inside the cluster by the `flux-operator` Kubernetes Service of type `ClusterIP`.
 
 To access the Web UI from outside the cluster, you can use Ingress or Gateway API configurations.
-It is recommended to secure the Web UI with TLS and Single Sign-On (SSO).
+It is recommended to secure the Web UI with TLS and [Single Sign-On](web-user-management.md#single-sign-on).
 
 ## Ingress Configuration
 
-The Flux Operator [Helm chart](https://github.com/controlplaneio-fluxcd/charts/tree/main/charts/flux-operator)
-can create an Ingress resource for the Web UI.
-
-To enable the Ingress, set the following values:
+If the Flux Operator is deployed using its [Helm chart](https://github.com/controlplaneio-fluxcd/charts/tree/main/charts/flux-operator),
+you can create an Ingress resource by setting the following values:
 
 ```yaml
 web:
   ingress:
     enabled: true
     className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
     hosts:
-      - host: flux-operator.example.com
+      - host: flux.example.com
         paths:
           - path: /
             pathType: Prefix
     tls:
-      - secretName: flux-operator-tls
-        hosts:
-          - flux-operator.example.com
+      - hosts:
+          - flux.example.com
+        secretName: flux-web-tls
 ```
 
 When using other deployment methods, you can create an Ingress resource like this:
@@ -40,28 +40,31 @@ When using other deployment methods, you can create an Ingress resource like thi
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: flux-operator
+  name: flux-web
   namespace: flux-system
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
 spec:
-  ingressClassName: nginx
+  ingressClassName: "nginx"
   rules:
-  - host: "flux-operator.example.com"
-    http:
-      paths:
-      - backend:
-          service:
-            name: flux-operator
-            port:
-              name: http-web
-        path: /
-        pathType: Prefix
+    - host: "flux.example.com"
+      http:
+        paths:
+          - backend:
+              service:
+                name: flux-operator
+                port:
+                  name: http-web
+            path: /
+            pathType: Prefix
   tls:
-  - hosts:
-    - "flux-operator.example.com"
+    - hosts:
+        - "flux.example.com"
+      secretName: flux-web-tls
 ```
 
 Make sure to replace `nginx` with your Ingress class name
-and `flux-operator.example.com` with your actual domain name.
+and `flux.example.com` with your actual domain name.
 It is recommended to configure redirection from HTTP to HTTPS.
 
 ## Gateway API Configuration
@@ -73,7 +76,7 @@ with TLS termination and a corresponding `HTTPRoute`:
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: flux-operator
+  name: flux-web
   namespace: flux-system
 spec:
   parentRefs:
@@ -82,12 +85,12 @@ spec:
       name: internet-gateway
       namespace: gateway-namespace
   hostnames:
-    - "flux-operator.example.com"
+    - "flux.example.com"
   rules:
     - matches:
-      - path:
-          type: PathPrefix
-          value: /
+        - path:
+            type: PathPrefix
+            value: /
       backendRefs:
         - name: flux-operator
           namespace: flux-system
