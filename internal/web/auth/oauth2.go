@@ -230,7 +230,6 @@ func (o *oauth2Authenticator) serveAPI(w http.ResponseWriter, r *http.Request, a
 	}
 
 	// Authentication successful. Set the auth provider cookie.
-	w.Header().Del("Set-Cookie")
 	o.setAuthenticated(w)
 
 	// Build and store user session.
@@ -287,7 +286,6 @@ func (o *oauth2Authenticator) serveIndex(w http.ResponseWriter, r *http.Request,
 	}
 
 	// Authentication successful. Set the auth provider cookie.
-	w.Header().Del("Set-Cookie")
 	o.setAuthenticated(w)
 }
 

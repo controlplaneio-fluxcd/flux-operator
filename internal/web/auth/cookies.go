@@ -94,7 +94,15 @@ func sanitizeErrorMessage(err error, code int) string {
 }
 
 // setAuthProviderCookie sets the auth provider cookie in the response.
+// It removes any previous auth provider cookies to avoid mistakes.
 func setAuthProviderCookie(w http.ResponseWriter, provider, loginURL string, authenticated bool) {
+	cookies := w.Header().Values("Set-Cookie")
+	w.Header().Del("Set-Cookie")
+	for _, c := range cookies {
+		if !strings.HasPrefix(c, cookieNameAuthProvider+"=") {
+			w.Header().Add("Set-Cookie", c)
+		}
+	}
 	setCookie(w, cookieNameAuthProvider, map[string]any{
 		"provider":      provider,
 		"url":           loginURL,
