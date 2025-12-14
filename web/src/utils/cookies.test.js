@@ -195,24 +195,8 @@ describe('cookies utilities', () => {
       expect(parseAuthErrorCookie()).toBeNull()
     })
 
-    it('should return null when code is not a number', () => {
-      const payload = { code: '401', msg: 'Error' }
-      const encoded = encodeBase64Url(JSON.stringify(payload))
-      document.cookie = `auth-error=${encoded}`
-
-      expect(parseAuthErrorCookie()).toBeNull()
-    })
-
     it('should return null when msg is not a string', () => {
-      const payload = { code: 401, msg: 123 }
-      const encoded = encodeBase64Url(JSON.stringify(payload))
-      document.cookie = `auth-error=${encoded}`
-
-      expect(parseAuthErrorCookie()).toBeNull()
-    })
-
-    it('should return null when code field is missing', () => {
-      const payload = { msg: 'Error message' }
+      const payload = { msg: 123 }
       const encoded = encodeBase64Url(JSON.stringify(payload))
       document.cookie = `auth-error=${encoded}`
 
@@ -220,7 +204,7 @@ describe('cookies utilities', () => {
     })
 
     it('should return null when msg field is missing', () => {
-      const payload = { code: 401 }
+      const payload = {}
       const encoded = encodeBase64Url(JSON.stringify(payload))
       document.cookie = `auth-error=${encoded}`
 

@@ -62,35 +62,10 @@ func deleteCookie(w http.ResponseWriter, name, path string) {
 
 // setAuthErrorCookie sets the auth error cookie in the response.
 // Error messages are sanitized to avoid leaking internal details.
-// The original error is logged for debugging purposes.
-func setAuthErrorCookie(w http.ResponseWriter, r *http.Request, err error, code int) {
-	logAuthError(r, err, code)
+func setAuthErrorCookie(w http.ResponseWriter, err error) {
 	setCookie(w, cookieNameAuthError, map[string]any{
-		"code": code,
-		"msg":  sanitizeErrorMessage(err, code),
+		"msg": sanitizeErrorMessage(err),
 	})
-}
-
-// sanitizeErrorMessage returns a user-friendly error message.
-// It avoids exposing internal error details that could aid attackers.
-func sanitizeErrorMessage(err error, code int) string {
-	switch code {
-	case http.StatusUnauthorized:
-		return "Authentication failed. Please try again."
-	case http.StatusBadRequest:
-		// For bad request, we can be slightly more specific
-		errMsg := err.Error()
-		switch {
-		case strings.Contains(errMsg, "state"):
-			return "Invalid or expired login session. Please try again."
-		case strings.Contains(errMsg, "expired"):
-			return "Login session expired. Please try again."
-		default:
-			return "Invalid request. Please try again."
-		}
-	default:
-		return "An error occurred during authentication. Please try again."
-	}
 }
 
 // setAuthProviderCookie sets the auth provider cookie in the response.
@@ -125,15 +100,11 @@ type authStorage struct {
 }
 
 // setAuthStorage sets the authStorage in the response cookies.
-func setAuthStorage(conf *config.ConfigSpec, w http.ResponseWriter, storage authStorage) error {
-	b, err := json.Marshal(storage)
-	if err != nil {
-		return fmt.Errorf("failed to marshal auth storage cookie: %w", err)
-	}
+func setAuthStorage(conf *config.ConfigSpec, w http.ResponseWriter, storage authStorage) {
+	b, _ := json.Marshal(storage)
 	cValue := base64.RawURLEncoding.EncodeToString(b)
 	setSecureCookie(w, cookieNameAuthStorage, cookiePathAuthStorage, cValue,
 		conf.Authentication.SessionDuration.Duration, !conf.Insecure)
-	return nil
 }
 
 // getAuthStorage retrieves the authStorage from the request cookies.

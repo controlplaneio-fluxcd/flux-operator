@@ -68,7 +68,7 @@ export function parseAuthProviderCookie() {
 /**
  * Parse the auth-error cookie
  * @returns {Object|null} - Parsed error object or null if invalid
- * Expected format: { code: number, msg: string }
+ * Expected format: { msg: string }
  */
 export function parseAuthErrorCookie() {
   const value = getCookie('auth-error')
@@ -80,7 +80,7 @@ export function parseAuthErrorCookie() {
     const decoded = decodeBase64Url(value)
     const parsed = JSON.parse(decoded)
     // Validate required fields
-    if (typeof parsed.code !== 'number' || typeof parsed.msg !== 'string') {
+    if (typeof parsed.msg !== 'string') {
       return null
     }
     return parsed

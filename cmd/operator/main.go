@@ -359,8 +359,6 @@ func main() {
 	}
 
 	if webServerPort > 0 {
-		webLog := ctrl.Log.WithName("web-server")
-
 		// TODO: could be read from config
 		const reportInterval = 20 * time.Second
 		const namespaceCacheDuration = reportInterval
@@ -382,7 +380,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		authMiddleware, err := webauth.NewMiddleware(&conf.Spec, kubeClient, webLog)
+		authMiddleware, err := webauth.NewMiddleware(&conf.Spec, kubeClient, ctrl.Log.WithName("web-auth"))
 		if err != nil {
 			setupLog.Error(err, "unable to create auth middleware")
 			os.Exit(1)
@@ -394,7 +392,7 @@ func main() {
 				time.Minute,
 				webServerPort,
 				kubeClient,
-				webLog,
+				ctrl.Log.WithName("web-server"),
 				VERSION,
 				controllerName,
 				runtimeNamespace,

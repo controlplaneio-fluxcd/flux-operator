@@ -52,7 +52,8 @@ func NewMiddleware(conf *config.ConfigSpec, kubeClient *kubeclient.Client,
 	default:
 		return nil, fmt.Errorf("unsupported authentication method")
 	}
-	l.WithValues("authProvider", provider).Info("authentication initialized successfully")
+	l = l.WithValues("authProvider", provider)
+	l.Info("authentication initialized successfully")
 
 	// Enhance middleware with logout handling and logger.
 	return func(next http.Handler) http.Handler {
@@ -70,6 +71,10 @@ func NewMiddleware(conf *config.ConfigSpec, kubeClient *kubeclient.Client,
 				http.Redirect(w, r, "/", http.StatusSeeOther)
 			default:
 				// Inject logger into context.
+				l := l.WithValues("http", map[string]any{
+					"method": r.Method,
+					"path":   r.URL.Path,
+				})
 				ctx := log.IntoContext(r.Context(), l)
 				next.ServeHTTP(w, r.WithContext(ctx))
 			}
@@ -145,7 +150,7 @@ func newOAuth2Middleware(conf *config.ConfigSpec, kubeClient *kubeclient.Client)
 				authenticator.serveAuthorize(w, r)
 			case r.URL.Path == oauth2PathCallback:
 				authenticator.serveCallback(w, r)
-			case isAPIRequest(r):
+			case strings.HasPrefix(r.URL.Path, "/api/"):
 				authenticator.serveAPI(w, r, next)
 			case r.URL.Path == "/":
 				authenticator.serveIndex(w, r, next)
@@ -154,33 +159,4 @@ func newOAuth2Middleware(conf *config.ConfigSpec, kubeClient *kubeclient.Client)
 			}
 		})
 	}, nil
-}
-
-// respondAuthError responds to the client with an auth error message.
-// For API requests, it responds with a plain error message and the
-// given HTTP status code. For page requests, it stores an error cookie
-// and redirects to /.
-// The original error is logged for debugging purposes.
-func respondAuthError(w http.ResponseWriter, r *http.Request, err error, code int) {
-	switch {
-	case isAPIRequest(r):
-		logAuthError(r, err, code)
-		http.Error(w, err.Error(), code)
-	default:
-		setAuthErrorCookie(w, r, err, code)
-		http.Redirect(w, r, "/", http.StatusSeeOther)
-	}
-}
-
-// isAPIRequest returns true if the request is for an API endpoint.
-func isAPIRequest(r *http.Request) bool {
-	return strings.HasPrefix(r.URL.Path, "/api/")
-}
-
-// logAuthError logs the authentication error.
-func logAuthError(r *http.Request, err error, code int) {
-	log.FromContext(r.Context()).WithValues("error", map[string]any{
-		"code": code,
-		"msg":  err.Error(),
-	}).V(1).Info("auth error")
 }

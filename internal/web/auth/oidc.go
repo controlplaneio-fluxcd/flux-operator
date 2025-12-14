@@ -126,12 +126,6 @@ func (o *oidcVerifier) verifyToken(ctx context.Context,
 	}
 
 	as := &authStorage{
-		// If in the future we implement profile pictures, we will need to store the real
-		// access token as well (and not replace it with the ID token, like we do here),
-		// because the OIDC /userinfo endpoint only accepts the real access token in some
-		// OIDC providers (e.g. Dex). Some OIDC providers return the 'picture' claim in the
-		// ID token (e.g. Dex https://github.com/dexidp/dex/issues/4447), so we need to try
-		// it first and only fall back to the /userinfo endpoint if it's not present.
 		AccessToken:  idToken,
 		RefreshToken: token.RefreshToken,
 	}
