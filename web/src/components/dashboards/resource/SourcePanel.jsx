@@ -9,7 +9,7 @@ import { formatTimestamp } from '../../../utils/time'
 import { DashboardPanel, TabButton } from '../common/panel'
 import { YamlBlock } from '../common/yaml'
 import { getStatusBadgeClass, getEventBadgeClass } from '../../../utils/status'
-import { FluxOperatorIcon } from '../../common/icons'
+import { FluxOperatorIcon } from '../../layout/Icons'
 
 /**
  * SourcePanel - Displays source information for a Flux resource

@@ -16,8 +16,8 @@ import { EventList } from './components/search/EventList'
 import { ResourceList } from './components/search/ResourceList'
 import { ResourcePage } from './components/dashboards/resource/ResourcePage'
 import { FavoritesPage } from './components/favorites/FavoritesPage'
-import { NotFoundPage } from './components/common/NotFoundPage'
-import { FluxOperatorIcon } from './components/common/icons'
+import { NotFoundPage } from './components/layout/NotFoundPage'
+import { FluxOperatorIcon } from './components/layout/Icons'
 
 // Global signals for FluxReport data and application state
 // These signals are exported and used by child components throughout the app

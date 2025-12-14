@@ -5,10 +5,10 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
 import { fetchWithMock } from '../../utils/fetch'
 import { favorites, reorderFavorites, getFavoriteKey, removeFavorite } from '../../utils/favorites'
-import { usePageTitle } from '../../utils/title'
+import { usePageMeta } from '../../utils/meta'
 import { FavoritesHeader } from './FavoritesHeader'
 import { FavoriteCard } from './FavoriteCard'
-import { FluxOperatorIcon } from '../common/icons'
+import { FluxOperatorIcon } from '../layout/Icons'
 
 /**
  * FavoritesPage - Main page displaying favorite resources
@@ -21,7 +21,7 @@ import { FluxOperatorIcon } from '../common/icons'
  * - Supports drag-and-drop reordering in edit mode
  */
 export function FavoritesPage() {
-  usePageTitle('Favorites')
+  usePageMeta('Favorites', 'Favorites dashboard')
   const location = useLocation()
 
   // State

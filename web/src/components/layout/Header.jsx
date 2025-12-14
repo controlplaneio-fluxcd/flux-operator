@@ -5,7 +5,7 @@ import { useLocation } from 'preact-iso'
 import { fetchFluxReport } from '../../app'
 import { UserMenu } from './UserMenu'
 import { QuickSearch, quickSearchOpen } from '../search/QuickSearch'
-import { FluxOperatorIcon } from '../common/icons'
+import { FluxOperatorIcon } from './Icons'
 
 /**
  * Header component - Main application header with navigation and controls

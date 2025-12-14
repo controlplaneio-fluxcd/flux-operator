@@ -6,7 +6,7 @@ import { fetchWithMock } from '../../../utils/fetch'
 import { formatTimestamp } from '../../../utils/time'
 import { DashboardPanel, TabButton } from '../common/panel'
 import { YamlBlock } from '../common/yaml'
-import { FluxOperatorIcon } from '../../common/icons'
+import { FluxOperatorIcon } from '../../layout/Icons'
 
 /**
  * Get badge class for provider type

@@ -6,7 +6,7 @@ import { useLocation } from 'preact-iso'
 import { fetchWithMock } from '../../../utils/fetch'
 import { usePrismTheme } from '../common/yaml'
 import { formatTime } from '../../../utils/time'
-import { usePageTitle } from '../../../utils/title'
+import { usePageMeta } from '../../../utils/meta'
 import { isFavorite, toggleFavorite, favorites } from '../../../utils/favorites'
 import { addToNavHistory } from '../../../utils/navHistory'
 import { ReconcilerPanel } from './ReconcilerPanel'
@@ -133,8 +133,8 @@ function getStatusInfo(status) {
 export function ResourcePage({ kind, namespace, name }) {
   const location = useLocation()
 
-  // Set page title to resource name
-  usePageTitle(name)
+  // Set page title and description
+  usePageMeta(name, `${kind}/${namespace}/${name} dashboard`)
 
   // State
   const [resourceData, setResourceData] = useState(null)
@@ -202,7 +202,7 @@ export function ResourcePage({ kind, namespace, name }) {
   // Derived data (only valid when we have resourceData)
   const status = resourceData?.status?.reconcilerRef?.status || 'Unknown'
   const hasSource = resourceData?.status?.sourceRef
-  const isSourceResource = resourceData?.apiVersion?.startsWith('source.toolkit.fluxcd.io/') && resourceData?.kind !== 'HelmChart'
+  const isSourceResource = resourceData?.apiVersion?.startsWith('source.toolkit.fluxcd.io/')
   const isResourceSetInputProvider = resourceData?.kind === 'ResourceSetInputProvider'
   const isResourceSet = resourceData?.kind === 'ResourceSet'
 

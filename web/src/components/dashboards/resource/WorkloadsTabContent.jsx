@@ -5,7 +5,7 @@ import { useState, useEffect } from 'preact/hooks'
 import { fetchWithMock } from '../../../utils/fetch'
 import { formatTimestamp } from '../../../utils/time'
 import { getWorkloadStatusBadgeClass, formatWorkloadStatus } from '../../../utils/status'
-import { FluxOperatorIcon } from '../../common/icons'
+import { FluxOperatorIcon } from '../../layout/Icons'
 
 /**
  * WorkloadsTabContent - Displays detailed Kubernetes workload information

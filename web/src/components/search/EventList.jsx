@@ -8,7 +8,7 @@ import { useLocation } from 'preact-iso'
 import { fetchWithMock } from '../../utils/fetch'
 import { formatTimestamp } from '../../utils/time'
 import { getEventBadgeClass } from '../../utils/status'
-import { usePageTitle } from '../../utils/title'
+import { usePageMeta } from '../../utils/meta'
 import { reportData } from '../../app'
 import { FilterForm } from './FilterForm'
 import { useRestoreFiltersFromUrl, useSyncFiltersToUrl } from '../../utils/routing'
@@ -160,7 +160,7 @@ function EventCard({ event }) {
  * - Shows loading, error, and empty states
  */
 export function EventList() {
-  usePageTitle('Events')
+  usePageMeta('Events', 'Events dashboard')
 
   // Restore filter signals from URL query params on mount
   useRestoreFiltersFromUrl({

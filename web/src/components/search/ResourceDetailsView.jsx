@@ -7,7 +7,7 @@ import { fetchWithMock } from '../../utils/fetch'
 import { usePrismTheme, YamlBlock } from '../dashboards/common/yaml'
 import { fluxKinds, isKindWithInventory, getKindAlias } from '../../utils/constants'
 import { getStatusBadgeClass } from '../../utils/status'
-import { FluxOperatorIcon } from '../common/icons'
+import { FluxOperatorIcon } from '../layout/Icons'
 
 /**
  * Helper to group inventory items by apiVersion

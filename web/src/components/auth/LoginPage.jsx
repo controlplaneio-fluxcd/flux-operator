@@ -3,7 +3,8 @@
 
 import { useEffect, useState } from 'preact/hooks'
 import { parseAuthProviderCookie, parseAuthErrorCookie, deleteCookie } from '../../utils/cookies'
-import { FluxOperatorIcon, OpenIDIcon } from '../common/icons'
+import { usePageMeta } from '../../utils/meta'
+import { FluxOperatorIcon, OpenIDIcon } from '../layout/Icons'
 
 /**
  * LoginPage component - Authentication required page
@@ -17,6 +18,8 @@ import { FluxOperatorIcon, OpenIDIcon } from '../common/icons'
  * - Link to documentation
  */
 export function LoginPage() {
+  usePageMeta('Login', 'Sign in to monitor your GitOps pipelines')
+
   const [authProvider, setAuthProvider] = useState(null)
   const [authError, setAuthError] = useState(null)
   const [cookieError, setCookieError] = useState(null)

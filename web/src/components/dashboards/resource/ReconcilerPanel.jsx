@@ -10,7 +10,7 @@ import { DashboardPanel, TabButton } from '../common/panel'
 import { YamlBlock } from '../common/yaml'
 import { getStatusBadgeClass, getEventBadgeClass } from '../../../utils/status'
 import { HistoryTimeline } from './HistoryTimeline'
-import { FluxOperatorIcon } from '../../common/icons'
+import { FluxOperatorIcon } from '../../layout/Icons'
 
 export function ReconcilerPanel({ kind, name, namespace, resourceData }) {
   const location = useLocation()

@@ -8,7 +8,7 @@ import { clearFavorites } from '../../utils/favorites'
 import { clearNavHistory } from '../../utils/navHistory'
 import { reportData } from '../../app'
 import { parseAuthProviderCookie } from '../../utils/cookies'
-import { OpenIDIcon, KubernetesIcon } from '../common/icons'
+import { OpenIDIcon, KubernetesIcon } from './Icons'
 
 // Exported signal to track menu open state
 export const userMenuOpen = signal(false)
