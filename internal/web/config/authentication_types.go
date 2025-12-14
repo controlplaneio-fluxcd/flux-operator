@@ -41,7 +41,7 @@ type AuthenticationSpec struct {
 	OAuth2 *OAuth2AuthenticationSpec `json:"oauth2,omitempty"`
 
 	// SessionDuration is the duration of the user session.
-	// Defaults to 1 hour.
+	// Defaults to one week.
 	// +kubebuilder:validation:Type=string
 	// +kubebuilder:validation:Pattern="^([0-9]+(\\.[0-9]+)?(ms|s|m|h))+$"
 	// +optional
@@ -110,7 +110,7 @@ func (a *AuthenticationSpec) ApplyDefaults() {
 	a.OAuth2.ApplyDefaults()
 
 	if a.SessionDuration == nil || a.SessionDuration.Duration <= 0 {
-		a.SessionDuration = &metav1.Duration{Duration: time.Hour}
+		a.SessionDuration = &metav1.Duration{Duration: 7 * 24 * time.Hour}
 	}
 
 	if a.UserCacheSize <= 0 {
