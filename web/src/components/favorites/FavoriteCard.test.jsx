@@ -32,6 +32,12 @@ describe('FavoriteCard component', () => {
     message: 'Applied revision: main/abc1234'
   }
 
+  const mockNotFoundResourceData = {
+    status: 'NotFound',
+    lastReconciled: '2024-01-15T10:30:00Z',
+    message: 'Not found in namespace flux-system'
+  }
+
   beforeEach(() => {
     vi.clearAllMocks()
   })
@@ -100,22 +106,22 @@ describe('FavoriteCard component', () => {
   })
 
   describe('not found state', () => {
-    it('should show "Not Found" status when resourceData is null', () => {
+    it('should show "Not Found" status when resourceData is NotFound', () => {
       render(
         <FavoriteCard
           favorite={mockFavorite}
-          resourceData={null}
+          resourceData={mockNotFoundResourceData}
         />
       )
 
       expect(screen.getByText('Not Found')).toBeInTheDocument()
     })
 
-    it('should show "Not found in namespace" message', () => {
+    it('should show the message when not found', () => {
       render(
         <FavoriteCard
           favorite={mockFavorite}
-          resourceData={null}
+          resourceData={mockNotFoundResourceData}
         />
       )
 
@@ -126,7 +132,7 @@ describe('FavoriteCard component', () => {
       const { container } = render(
         <FavoriteCard
           favorite={mockFavorite}
-          resourceData={null}
+          resourceData={mockNotFoundResourceData}
         />
       )
 

@@ -52,15 +52,7 @@ func (r *Router) FavoritesHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// Fetch status for all favorites
-	resources, err := r.GetFavoritesStatus(req.Context(), favReq.Favorites)
-	if err != nil {
-		r.log.Error(err, "failed to get favorites status")
-		if errors.IsForbidden(err) {
-			http.Error(w, err.Error(), http.StatusForbidden)
-			return
-		}
-		resources = []ResourceStatus{}
-	}
+	resources := r.GetFavoritesStatus(req.Context(), favReq.Favorites)
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(map[string]any{"resources": resources}); err != nil {
@@ -71,30 +63,53 @@ func (r *Router) FavoritesHandler(w http.ResponseWriter, req *http.Request) {
 
 // GetFavoritesStatus fetches the status for the specified favorite resources.
 // Resources are queried in parallel with a concurrency limit of 4.
-func (r *Router) GetFavoritesStatus(ctx context.Context, favorites []FavoriteItem) ([]ResourceStatus, error) {
-	var result []ResourceStatus
+func (r *Router) GetFavoritesStatus(ctx context.Context, favorites []FavoriteItem) []ResourceStatus {
+	result := make([]ResourceStatus, len(favorites))
+
 	var wg sync.WaitGroup
 	var mu sync.Mutex
-	errChan := make(chan error, len(favorites))
 
 	// Semaphore to limit concurrent requests to 4
 	sem := make(chan struct{}, 4)
 
-	for _, fav := range favorites {
+	for i, fav := range favorites {
 		wg.Add(1)
-		go func(fav FavoriteItem) {
+		go func(i int, fav FavoriteItem) {
 			defer wg.Done()
 
 			// Acquire semaphore
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
+			storeNotFound := func(message string) {
+				mu.Lock()
+				result[i] = ResourceStatus{
+					Kind:      fav.Kind,
+					Name:      fav.Name,
+					Namespace: fav.Namespace,
+					Status:    "NotFound",
+					Message:   message,
+				}
+				mu.Unlock()
+			}
+
 			gvk, err := r.preferredFluxGVK(ctx, fav.Kind)
 			if err != nil {
-				if strings.Contains(err.Error(), "no matches for kind") {
-					return
+				var message string
+				switch {
+				case errors.IsNotFound(err), strings.Contains(err.Error(), "no matches for kind"):
+					message = "Resource kind not found in the cluster"
+				case errors.IsForbidden(err):
+					message = "User does not have access to the resource kind"
+				default:
+					message = "Internal error while fetching resource kind"
+					r.log.Error(err, "failed to get favorite resource kind",
+						"kind", fav.Kind,
+						"name", fav.Name,
+						"namespace", fav.Namespace)
 				}
-				errChan <- err
+
+				storeNotFound(message)
 				return
 			}
 
@@ -107,27 +122,32 @@ func (r *Router) GetFavoritesStatus(ctx context.Context, favorites []FavoriteIte
 			}, &obj)
 
 			if err != nil {
-				if errors.IsForbidden(err) {
-					errChan <- err
+				var message string
+				switch {
+				case errors.IsNotFound(err):
+					message = "Resource not found in the cluster"
+				case errors.IsForbidden(err):
+					message = "User does not have access to the resource"
+				default:
+					message = "Internal error while fetching resource"
+					r.log.Error(err, "failed to get favorite resource",
+						"kind", fav.Kind,
+						"name", fav.Name,
+						"namespace", fav.Namespace)
 				}
-				// Resource not found - skip it (deleted favorites are handled by frontend)
+
+				storeNotFound(message)
 				return
 			}
 
 			rs := r.resourceStatusFromUnstructured(obj)
 			mu.Lock()
-			result = append(result, rs)
+			result[i] = rs
 			mu.Unlock()
-		}(fav)
+		}(i, fav)
 	}
 
 	wg.Wait()
-	close(errChan)
 
-	// Check for errors
-	if len(errChan) > 0 {
-		return nil, <-errChan
-	}
-
-	return result, nil
+	return result
 }

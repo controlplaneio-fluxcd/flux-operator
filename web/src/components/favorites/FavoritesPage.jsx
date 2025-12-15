@@ -85,12 +85,6 @@ export function FavoritesPage() {
       const results = {}
       const resources = data.resources || []
 
-      // First, mark all favorites as not found
-      currentFavorites.forEach(fav => {
-        const key = getFavoriteKey(fav.kind, fav.namespace, fav.name)
-        results[key] = null
-      })
-
       // Then, update with found resources
       resources.forEach(resource => {
         const key = getFavoriteKey(resource.kind, resource.namespace, resource.name)
