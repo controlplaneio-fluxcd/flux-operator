@@ -8,6 +8,10 @@ description: Flux Operator preview environments integration with GitLab
 This guide demonstrates how to use the Flux Operator ResourceSet API to automate the deployment of
 applications changes made in GitLab Merge Requests to ephemeral environments for testing and validation.
 
+If you need more precise control over when an ephemeral environment gets created or torn down for a merge request,
+consider using the [GitLab Environment integration](rset-gitlab-environments.md) instead. That integration is also an
+option if you need to create dynamic environments that are not linked to merge requests.
+
 ## Development workflow
 
 - A developer opens a Merge Requests with changes to the app code and Helm chart.
