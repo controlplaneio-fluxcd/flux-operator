@@ -38,65 +38,8 @@ func (r *Router) EventsHandler(w http.ResponseWriter, req *http.Request) {
 	namespace := queryParams.Get("namespace")
 	eventType := queryParams.Get("type")
 
-	// Build kinds array based on query parameter
-	var kinds []string
-	if kind != "" {
-		kinds = []string{kind}
-	} else {
-		// Default kinds
-		kinds = []string{
-			// Appliers
-			fluxcdv1.FluxInstanceKind,
-			fluxcdv1.ResourceSetKind,
-			fluxcdv1.ResourceSetInputProviderKind,
-			fluxcdv1.FluxKustomizationKind,
-			fluxcdv1.FluxHelmReleaseKind,
-			// Sources
-			fluxcdv1.FluxGitRepositoryKind,
-			fluxcdv1.FluxOCIRepositoryKind,
-			fluxcdv1.FluxHelmChartKind,
-			fluxcdv1.FluxHelmRepositoryKind,
-			fluxcdv1.FluxBucketKind,
-			fluxcdv1.FluxArtifactGeneratorKind,
-		}
-	}
-
-	// Prepare list of namespaces to search in
-	var namespaces []string
-	if namespace != "" {
-		namespaces = []string{namespace}
-	} else {
-		// Check if the user has access to all namespaces
-		userNamespaces, all, err := r.kubeClient.ListUserNamespaces(req.Context())
-		if err != nil {
-			r.log.Error(err, "failed to list user namespaces", "url", req.URL.String())
-			if apierrors.IsForbidden(err) {
-				http.Error(w, err.Error(), http.StatusForbidden)
-			} else {
-				http.Error(w, "failed to list user namespaces", http.StatusInternalServerError)
-			}
-			return
-		}
-
-		// If the user has no access to any namespaces, return empty result
-		if len(userNamespaces) == 0 {
-			w.Header().Set("Content-Type", "application/json")
-			response := map[string]any{"events": []Event{}}
-			if err := json.NewEncoder(w).Encode(response); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			return
-		}
-
-		// If the user does not have access to all namespaces, limit search to their namespaces
-		if !all {
-			namespaces = userNamespaces
-		}
-	}
-
 	// Get events from the cluster using the request context
-	events, err := r.GetEvents(req.Context(), kinds, name, namespaces, "", eventType)
+	events, err := r.GetEvents(req.Context(), kind, name, namespace, "", eventType)
 	if err != nil {
 		r.log.Error(err, "failed to get events", "url", req.URL.String(),
 			"kind", kind, "name", name, "namespace", namespace, "type", eventType)
@@ -131,7 +74,57 @@ type Event struct {
 // GetEvents retrieves events for the specified resource kinds.
 // Returns at most 500 events per kind (100 if multiple kinds are specified), sorted by timestamp descending.
 // Filters by eventType (Normal, Warning) if provided.
-func (r *Router) GetEvents(ctx context.Context, kinds []string, name string, namespaces []string, excludeReason string, eventType string) ([]Event, error) {
+func (r *Router) GetEvents(ctx context.Context, kind, name, namespace, excludeReason, eventType string) ([]Event, error) {
+	// Build kinds array based on query parameter
+	var kinds []string
+	if kind != "" {
+		kinds = []string{kind}
+	} else {
+		// Default kinds
+		kinds = []string{
+			// Appliers
+			fluxcdv1.ResourceSetKind,
+			fluxcdv1.FluxKustomizationKind,
+			fluxcdv1.FluxHelmReleaseKind,
+			// Sources
+			fluxcdv1.FluxGitRepositoryKind,
+			fluxcdv1.FluxOCIRepositoryKind,
+			fluxcdv1.FluxHelmChartKind,
+			fluxcdv1.FluxHelmRepositoryKind,
+			fluxcdv1.FluxBucketKind,
+			fluxcdv1.FluxArtifactGeneratorKind,
+			fluxcdv1.ResourceSetInputProviderKind,
+		}
+	}
+
+	// Prepare list of namespaces to search in
+	var namespaces []string
+	if namespace != "" {
+		namespaces = []string{namespace}
+	} else {
+		// Check if the user has access to all namespaces
+		userNamespaces, all, err := r.kubeClient.ListUserNamespaces(ctx)
+		if err != nil {
+			r.log.Error(err, "failed to list user namespaces")
+			return nil, err
+		}
+
+		// If the user has no access to any namespaces, return empty result
+		if len(userNamespaces) == 0 {
+			return []Event{}, nil
+		}
+
+		// If the user has cluster-wide access, we can add FluxInstance to kinds
+		if all && kind == "" {
+			kinds = append(kinds, fluxcdv1.FluxInstanceKind)
+		}
+
+		// If the user does not have access to all namespaces, limit search to their namespaces
+		if !all {
+			namespaces = userNamespaces
+		}
+	}
+
 	var allEvents []corev1.Event
 
 	if len(kinds) == 0 {
