@@ -157,18 +157,19 @@ func (o *oauth2Authenticator) serveCallback(w http.ResponseWriter, r *http.Reque
 			log.FromContext(r.Context()).Error(callbackErr, logMsg)
 		default:
 			callbackErr = errInternalError
-			l := log.FromContext(r.Context())
+			errFields := map[string]any{
+				errorCodeKey: errCode,
+				errorDescKey: errDesc,
+				errorURIKey:  errURI,
+			}
 			// For user errors, log at V(1) to reduce log noise.
 			noise := errCode == "access_denied" || strings.HasSuffix(errCode, "_required")
 			if noise {
 				callbackErr = errUserError
-				l = l.V(1)
+				log.FromContext(r.Context()).V(1).Info(logMsg, "oauth2Error", errFields)
+			} else {
+				log.FromContext(r.Context()).Error(callbackErr, logMsg, "oauth2Error", errFields)
 			}
-			l.Error(callbackErr, logMsg, "oauth2Error", map[string]any{
-				errorCodeKey: errCode,
-				errorDescKey: errDesc,
-				errorURIKey:  errURI,
-			})
 		}
 		setAuthErrorCookie(w, callbackErr)
 	}
@@ -261,7 +262,7 @@ func (o *oauth2Authenticator) serveAPI(w http.ResponseWriter, r *http.Request, a
 	// Try to authenticate the request refreshing the access token if needed.
 	as, err := getAuthStorage(r)
 	if err != nil {
-		log.FromContext(r.Context()).V(1).Error(err, "failed to get auth storage from request")
+		log.FromContext(r.Context()).V(1).Info("failed to get auth storage from request", "error", err.Error())
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -318,7 +319,7 @@ func (o *oauth2Authenticator) serveIndex(w http.ResponseWriter, r *http.Request,
 	// Try to authenticate the request refreshing the access token if needed.
 	as, err := getAuthStorage(r)
 	if err != nil {
-		log.FromContext(ctx).V(1).Error(err, "failed to get auth storage from request")
+		log.FromContext(ctx).V(1).Info("failed to get auth storage from request", "error", err.Error())
 		return
 	}
 	p, v, err := o.providerAndVerifierOrLogError(ctx)
@@ -421,7 +422,7 @@ func (o *oauth2Authenticator) refreshTokenOrLogError(
 		TokenSource(ctx, &oauth2.Token{RefreshToken: refreshToken}).
 		Token()
 	if err != nil {
-		log.FromContext(ctx).V(1).Error(err, "failed to refresh access token")
+		log.FromContext(ctx).V(1).Info("failed to refresh access token", "error", err.Error())
 		return nil
 	}
 	return token
