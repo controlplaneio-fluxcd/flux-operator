@@ -40,71 +40,8 @@ func (r *Router) ResourcesHandler(w http.ResponseWriter, req *http.Request) {
 	namespace := queryParams.Get("namespace")
 	status := queryParams.Get("status")
 
-	// Build kinds array based on query parameter
-	var kinds []string
-	if kind != "" {
-		kinds = []string{kind}
-	} else {
-		// Default kinds
-		kinds = []string{
-			// Appliers
-			fluxcdv1.ResourceSetKind,
-			fluxcdv1.ResourceSetInputProviderKind,
-			fluxcdv1.FluxKustomizationKind,
-			fluxcdv1.FluxHelmReleaseKind,
-			// Sources
-			fluxcdv1.FluxGitRepositoryKind,
-			fluxcdv1.FluxOCIRepositoryKind,
-			fluxcdv1.FluxHelmChartKind,
-			fluxcdv1.FluxHelmRepositoryKind,
-			fluxcdv1.FluxBucketKind,
-			fluxcdv1.FluxArtifactGeneratorKind,
-		}
-	}
-
-	// Prepare list of namespaces to search in
-	var namespaces []string
-
-	// If namespace is specified, use it directly
-	if namespace != "" {
-		namespaces = []string{namespace}
-	} else {
-		// Check if the user has access to all namespaces
-		userNamespaces, all, err := r.kubeClient.ListUserNamespaces(req.Context())
-		if err != nil {
-			r.log.Error(err, "failed to list user namespaces", "url", req.URL.String())
-			if apierrors.IsForbidden(err) {
-				http.Error(w, err.Error(), http.StatusForbidden)
-			} else {
-				http.Error(w, "failed to list user namespaces", http.StatusInternalServerError)
-			}
-			return
-		}
-
-		// If the user has no access to any namespaces, return empty result
-		if len(userNamespaces) == 0 {
-			w.Header().Set("Content-Type", "application/json")
-			response := map[string]any{"resources": []ResourceStatus{}}
-			if err := json.NewEncoder(w).Encode(response); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			return
-		}
-
-		// If the user has cluster-wide access, we can add FluxInstance to kinds
-		if all && kind == "" {
-			kinds = append(kinds, fluxcdv1.FluxInstanceKind)
-		}
-
-		// If the user does not have access to all namespaces, limit search to their namespaces
-		if !all {
-			namespaces = userNamespaces
-		}
-	}
-
 	// Get resource status from the cluster using the request context
-	resources, err := r.GetResourcesStatus(req.Context(), kinds, name, namespaces, status, 2500)
+	resources, err := r.GetResourcesStatus(req.Context(), kind, name, namespace, status, 2500)
 	if err != nil {
 		r.log.Error(err, "failed to get resources status", "url", req.URL.String(),
 			"kind", kind, "name", name, "namespace", namespace, "status", status)
@@ -156,10 +93,86 @@ type ResourceStatus struct {
 	LastReconciled metav1.Time `json:"lastReconciled"`
 }
 
+// GetResourcesStatusOption defines a functional option for GetResourcesStatus.
+type GetResourcesStatusOption func(*getResourcesStatusOptions)
+
+// WithSourcesIfNamespace is a functional option to include source kinds when a specific namespace is provided.
+func WithSourcesIfNamespace() GetResourcesStatusOption {
+	return func(opts *getResourcesStatusOptions) {
+		opts.sourcesIfNamespace = true
+	}
+}
+
+type getResourcesStatusOptions struct {
+	sourcesIfNamespace bool
+}
+
 // GetResourcesStatus returns the status for the specified resource kinds and optional name in the given namespace.
 // If name is empty, returns the status for all resources of the specified kinds are returned.
 // Filters by status (Ready, Failed, Progressing, Suspended, Unknown) if provided.
-func (r *Router) GetResourcesStatus(ctx context.Context, kinds []string, name string, namespaces []string, status string, matchLimit int) ([]ResourceStatus, error) {
+func (r *Router) GetResourcesStatus(ctx context.Context, kind, name, namespace, status string,
+	matchLimit int, opts ...GetResourcesStatusOption) ([]ResourceStatus, error) {
+
+	var o getResourcesStatusOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
+
+	// Build kinds array based on query parameter
+	var kinds []string
+	if kind != "" {
+		kinds = []string{kind}
+	} else {
+		// Default kinds
+		kinds = []string{
+			// Appliers
+			fluxcdv1.ResourceSetKind,
+			fluxcdv1.FluxKustomizationKind,
+			fluxcdv1.FluxHelmReleaseKind,
+		}
+
+		// If option is not set or namespace is specified, add source kinds as well
+		if !o.sourcesIfNamespace || namespace != "" {
+			kinds = append(kinds,
+				fluxcdv1.FluxGitRepositoryKind,
+				fluxcdv1.FluxOCIRepositoryKind,
+				fluxcdv1.FluxHelmChartKind,
+				fluxcdv1.FluxHelmRepositoryKind,
+				fluxcdv1.FluxBucketKind,
+				fluxcdv1.FluxArtifactGeneratorKind,
+				fluxcdv1.ResourceSetInputProviderKind,
+			)
+		}
+	}
+
+	// Prepare list of namespaces to search in
+	var namespaces []string
+	if namespace != "" {
+		namespaces = []string{namespace}
+	} else {
+		// Check if the user has access to all namespaces
+		userNamespaces, all, err := r.kubeClient.ListUserNamespaces(ctx)
+		if err != nil {
+			r.log.Error(err, "failed to list user namespaces")
+			return nil, err
+		}
+
+		// If the user has no access to any namespaces, return empty result
+		if len(userNamespaces) == 0 {
+			return []ResourceStatus{}, nil
+		}
+
+		// If the user has cluster-wide access, we can add FluxInstance to kinds
+		if all && kind == "" {
+			kinds = append(kinds, fluxcdv1.FluxInstanceKind)
+		}
+
+		// If the user does not have access to all namespaces, limit search to their namespaces
+		if !all {
+			namespaces = userNamespaces
+		}
+	}
+
 	var result []ResourceStatus
 
 	if len(kinds) == 0 {
