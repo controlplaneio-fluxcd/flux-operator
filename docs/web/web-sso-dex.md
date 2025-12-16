@@ -384,6 +384,11 @@ spec:
 
 Make sure to set the inputs to your actual domain name, Ingress class, and GitHub organization.
 
+It is recommended to configure Dex with [persistent storage](https://dexidp.io/docs/configuration/storage/) 
+to avoid losing user sessions on restarts. On production systems, consider decreasing
+the [tokens expiry](https://dexidp.io/docs/configuration/tokens/) which defaults to 24 hours,
+as the ID token holds the session RBAC permissions.
+
 ### Group RBAC Configuration
 
 Assuming that your GitHub organization has a team named `admins`, you can create a ClusterRoleBinding
@@ -398,15 +403,15 @@ metadata:
 spec:
   inputs:
     - org: "<your-github-org>"
-      group: "admin"
+      team: "admin"
   resources:
     - apiVersion: rbac.authorization.k8s.io/v1
       kind: ClusterRoleBinding
       metadata:
-        name: flux-web-<< inputs.group >>
+        name: flux-web-<< inputs.team >>
       subjects:
         - kind: Group
-          name: "<< inputs.org >>:<< inputs.group >>"
+          name: "<< inputs.org >>:<< inputs.team >>"
           apiGroup: rbac.authorization.k8s.io
       roleRef:
         kind: ClusterRole
@@ -426,20 +431,20 @@ metadata:
 spec:
   inputs:
     - org: "<your-github-org>"
-      group: "dev-team-1"
+      team: "dev-team-1"
       namespace: "apps-1"
     - org: "<your-github-org>"
-      group: "dev-team-2"
+      team: "dev-team-2"
       namespace: "apps-2"
   resources:
     - apiVersion: rbac.authorization.k8s.io/v1
       kind: RoleBinding
       metadata:
-        name: flux-web-<< inputs.group >>
+        name: flux-web-<< inputs.team >>
         namespace: "<< inputs.namespace >>"
       subjects:
         - kind: Group
-          name: "<< inputs.org >>:<< inputs.group >>"
+          name: "<< inputs.org >>:<< inputs.team >>"
           apiGroup: rbac.authorization.k8s.io
       roleRef:
         kind: ClusterRole

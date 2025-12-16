@@ -34,6 +34,8 @@ mechanism for the cluster desired state to OCI artifacts and S3-compatible stora
 **Deep Insights** - The operator provides deep insights into the delivery pipelines managed by Flux,
 including detailed reports and Prometheus metrics about the Flux controllers
 readiness status, reconcilers statistics, and cluster state synchronization.
+The [Flux Web UI](https://fluxoperator.dev/web-ui/) offers a real-time view of the GitOps pipelines,
+allowing you to monitor deployments, track reconciliation status, and troubleshoot issues.
 
 **Self-Service Environments** - The operator [ResourceSet API](https://fluxoperator.dev/docs/resourcesets/introduction/)
 enables platform teams to define their own application standard as a group of Flux and Kubernetes resources
@@ -171,6 +173,18 @@ kubectl get fluxreport/flux -n flux-system -o yaml
 The report is update at regular intervals and contains information about the deployment
 readiness status, the distribution details, reconcilers statistics, Flux CRDs versions,
 the cluster sync status and more.
+
+### Access the Flux Web UI
+
+To access the [Flux Web UI](https://fluxoperator.dev/web-ui/),
+you can port-forward the operator service:
+
+```shell
+kubectl -n flux-system port-forward svc/flux-operator 9080:9080
+```
+
+Note that the Flux Web UI can be configured with [Ingress](https://fluxoperator.dev/docs/web-ui/ingress/)
+and [Single Sign-On](https://fluxoperator.dev/docs/web-ui/user-management/) for secure external access.
 
 ## ResourceSet APIs
 

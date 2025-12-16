@@ -82,17 +82,18 @@ web:
         issuerURL: https://dex.example.com
 ```
 
-For a complete guide on configuring SSO with Dex, see the [Dex SSO](web-sso-dex.md) documentation.
+For a complete guide on configuring SSO with Dex, see the [Flux Web UI SSO with Dex](web-sso-dex.md) documentation.
 
 ### Claims Mapping to RBAC
 
 By default, the Flux Operator uses the `email` and `groups` claims from the identity provider
 to impersonate Kubernetes users and groups, enforcing Role-Based Access Control (RBAC) policies.
 
-!!! note "Custom mapping"
+!!! note "Custom claims mapping"
 
     The operator supports custom claims mapping to adapt to different identity providers.
-    See the [Web Config API](web-config-api.md) documentation for using CEL expressions to parse claims.
+    See the [Web Config API](web-config-api.md) documentation for using CEL expressions
+    to parse and map claims to Kubernetes users and groups.
 
 Cluster admins can create Kubernetes RBAC resources to grant specific permissions to users or groups.
 The Flux Operator enforces these permissions when users access the Web UI, ensuring they can only view
