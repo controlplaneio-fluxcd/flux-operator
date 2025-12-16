@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"sort"
 	"strings"
@@ -188,7 +187,6 @@ func (r *Router) GetResourcesStatus(ctx context.Context, kind, name, namespace, 
 	// Query resources for each kind in parallel
 	var wg sync.WaitGroup
 	var mu sync.Mutex
-	errChan := make(chan error, len(kinds))
 
 	for _, kind := range kinds {
 		wg.Add(1)
@@ -200,7 +198,7 @@ func (r *Router) GetResourcesStatus(ctx context.Context, kind, name, namespace, 
 				if strings.Contains(err.Error(), "no matches for kind") {
 					return
 				}
-				errChan <- fmt.Errorf("unable to get gvk for kind %s : %w", kind, err)
+				r.log.Error(err, "failed to get gvk for kind", "kind", kind)
 				return
 			}
 
@@ -234,7 +232,9 @@ func (r *Router) GetResourcesStatus(ctx context.Context, kind, name, namespace, 
 				}
 
 				if err := r.kubeClient.GetClient(ctx).List(ctx, &list, listOpts...); err != nil {
-					errChan <- fmt.Errorf("unable to list resources for kind %s in namespace %s: %w", kind, ns, err)
+					r.log.Error(err, "failed to list resources",
+						"kind", kind,
+						"namespace", ns)
 					return
 				}
 
@@ -266,12 +266,6 @@ func (r *Router) GetResourcesStatus(ctx context.Context, kind, name, namespace, 
 	}
 
 	wg.Wait()
-	close(errChan)
-
-	// Check for errors
-	if len(errChan) > 0 {
-		return nil, <-errChan
-	}
 
 	// Filter by status if specified
 	if status != "" {
