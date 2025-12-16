@@ -7,8 +7,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
-
-	"k8s.io/apimachinery/pkg/api/errors"
 )
 
 // SearchHandler handles GET /api/v1/search requests and returns the status of Flux resources.
@@ -34,11 +32,9 @@ func (r *Router) SearchHandler(w http.ResponseWriter, req *http.Request) {
 	// Get resource status from the cluster using the request context
 	resources, err := r.GetResourcesStatus(req.Context(), kind, name, namespace, "", 10, WithSourcesIfNamespace())
 	if err != nil {
-		r.log.Error(err, "failed to get resources status", "url", req.URL.String(), "name", name, "namespace", namespace)
-		if errors.IsForbidden(err) {
-			http.Error(w, err.Error(), http.StatusForbidden)
-			return
-		}
+		r.log.Error(err, "failed to get resources status for quick search",
+			"url", req.URL.String(), "name", name, "namespace", namespace)
+		// Return empty array instead of error for better UX
 		resources = []ResourceStatus{}
 	}
 

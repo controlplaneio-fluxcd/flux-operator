@@ -19,6 +19,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
 
 // WorkloadHandler handles GET /api/v1/workload requests and returns a Kubernetes workload by kind, name and namespace.
@@ -55,7 +57,12 @@ func (r *Router) WorkloadHandler(w http.ResponseWriter, req *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte("{}"))
 		case errors.IsForbidden(err):
-			http.Error(w, err.Error(), http.StatusForbidden)
+			perms := user.Permissions(req.Context())
+			msg := fmt.Sprintf("You do not have access to this workload or for listing its pods. "+
+				"Contact your administrator if you believe this is an error. "+
+				"User: %s, Groups: [%s]",
+				perms.Username, strings.Join(perms.Groups, ", "))
+			http.Error(w, msg, http.StatusForbidden)
 		default:
 			http.Error(w, fmt.Sprintf("Failed to get workload: %v", err), http.StatusInternalServerError)
 		}

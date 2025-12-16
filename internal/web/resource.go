@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
 
 // ResourceHandler handles GET /api/v1/resource requests and returns a single Flux resource by kind, name and namespace.
@@ -52,7 +53,12 @@ func (r *Router) ResourceHandler(w http.ResponseWriter, req *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte("{}"))
 		case errors.IsForbidden(err):
-			http.Error(w, err.Error(), http.StatusForbidden)
+			perms := user.Permissions(req.Context())
+			msg := fmt.Sprintf("You do not have access to this resource. "+
+				"Contact your administrator if you believe this is an error. "+
+				"User: %s, Groups: [%s]",
+				perms.Username, strings.Join(perms.Groups, ", "))
+			http.Error(w, msg, http.StatusForbidden)
 		default:
 			http.Error(w, fmt.Sprintf("Failed to get resource: %v", err), http.StatusInternalServerError)
 		}
@@ -112,9 +118,18 @@ func (r *Router) GetResource(ctx context.Context, kind, name, namespace string) 
 	}
 
 	// Get the inventory for this resource
+	var inventoryError string
 	inventory, err := r.getInventory(ctx, *obj)
 	if err != nil {
-		return nil, err
+		if !errors.IsForbidden(err) {
+			return nil, err
+		}
+		log.FromContext(ctx).Error(err, "user does not have access to resource inventory")
+		perms := user.Permissions(ctx)
+		inventoryError = fmt.Sprintf("You do not have access to the inventory of this resource. "+
+			"Contact your administrator if you believe this is an error. "+
+			"User: %s, Groups: [%s]",
+			perms.Username, strings.Join(perms.Groups, ", "))
 	}
 
 	// Inject/override the .status.inventory field with the extracted inventory
@@ -133,6 +148,13 @@ func (r *Router) GetResource(ctx context.Context, kind, name, namespace string) 
 		// Set the inventory in the status field
 		if err := unstructured.SetNestedSlice(obj.Object, entries, "status", "inventory"); err != nil {
 			return nil, fmt.Errorf("unable to set inventory in status: %w", err)
+		}
+	}
+
+	// Inject inventory error if any.
+	if inventoryError != "" {
+		if err := unstructured.SetNestedField(obj.Object, inventoryError, "status", "inventoryError"); err != nil {
+			return nil, fmt.Errorf("unable to set inventoryError in status: %w", err)
 		}
 	}
 

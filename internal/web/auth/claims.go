@@ -131,6 +131,9 @@ func newClaimsProcessor(conf *config.ConfigSpec) (claimsProcessorFunc, error) {
 				return nil, fmt.Errorf("failed to evaluate impersonation groups expression: %w", err)
 			}
 		}
+		if imp.Groups == nil {
+			imp.Groups = []string{}
+		}
 
 		return &user.Details{
 			Profile:       profile,

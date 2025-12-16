@@ -142,7 +142,14 @@ func (a *AnonymousAuthenticationSpec) Validate() error {
 }
 
 // ApplyDefaults applies default values to the AnonymousAuthenticationSpec.
-func (a *AnonymousAuthenticationSpec) ApplyDefaults() {}
+func (a *AnonymousAuthenticationSpec) ApplyDefaults() {
+	if a == nil {
+		return
+	}
+	if a.Groups == nil {
+		a.Groups = []string{}
+	}
+}
 
 // OAuth2AuthenticationSpec holds the OAuth2 authentication configuration.
 type OAuth2AuthenticationSpec struct {
