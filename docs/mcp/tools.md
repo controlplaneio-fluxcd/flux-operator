@@ -299,9 +299,9 @@ Relevant documentation from the Flux project that matches the search query.
 ## Scopes and the `tools/list` request
 
 **Note:** The feature described in this section is available only with the Streamable HTTP
-transport mode and when [authentication](config-api.md#authentication) is configured.
+transport mode and when authentication is configured.
 
-[Scopes](config-api.md#scopes) are a part of the Flux MCP Server authentication and
+Scopes are a part of the Flux MCP Server authentication and
 authorization system. Credentials can have a set of scopes on them to indicate to
 the Flux MCP Server which operations are allowed for that credential. For responding
 to the `tools/list` request, the server checks the scopes of the credential to
