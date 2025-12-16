@@ -105,8 +105,7 @@ func (r *Router) GetEvents(ctx context.Context, kind, name, namespace, excludeRe
 		// Check if the user has access to all namespaces
 		userNamespaces, all, err := r.kubeClient.ListUserNamespaces(ctx)
 		if err != nil {
-			r.log.Error(err, "failed to list user namespaces")
-			return nil, err
+			return nil, fmt.Errorf("failed to list user namespaces: %w", err)
 		}
 
 		// If the user has no access to any namespaces, return empty result
