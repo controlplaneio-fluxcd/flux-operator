@@ -140,7 +140,6 @@ func (r *Router) GetEvents(ctx context.Context, kind, name, namespace, excludeRe
 	// Query events for each kind in parallel
 	var wg sync.WaitGroup
 	var mu sync.Mutex
-	errChan := make(chan error, len(kinds))
 
 	for _, kind := range kinds {
 		wg.Add(1)
@@ -184,8 +183,10 @@ func (r *Router) GetEvents(ctx context.Context, kind, name, namespace, excludeRe
 				}
 
 				if err := r.kubeClient.GetAPIReader(ctx).List(ctx, el, listOpts...); err != nil {
-					errChan <- fmt.Errorf("unable to list events for kind %s in namespace %s: %w", kind, ns, err)
-					return
+					r.log.Error(err, "failed to list events for user",
+						"kind", kind,
+						"namespace", ns)
+					continue
 				}
 
 				// Filter by name using wildcard matching if needed
@@ -209,12 +210,6 @@ func (r *Router) GetEvents(ctx context.Context, kind, name, namespace, excludeRe
 	}
 
 	wg.Wait()
-	close(errChan)
-
-	// Check for errors
-	if len(errChan) > 0 {
-		return nil, <-errChan
-	}
 
 	// Sort all events by timestamp
 	sort.Sort(SortableEvents(allEvents))
