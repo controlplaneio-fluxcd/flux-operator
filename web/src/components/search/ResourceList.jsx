@@ -7,7 +7,7 @@ import { useLocation } from 'preact-iso'
 import { fetchWithMock } from '../../utils/fetch'
 import { formatTimestamp } from '../../utils/time'
 import { getStatusBadgeClass } from '../../utils/status'
-import { usePageTitle } from '../../utils/title'
+import { usePageMeta } from '../../utils/meta'
 import { reportData } from '../../app'
 import { FilterForm } from './FilterForm'
 import { ResourceDetailsView } from './ResourceDetailsView'
@@ -207,7 +207,7 @@ function ResourceCard({ resource }) {
  * - Shows loading, error, and empty states
  */
 export function ResourceList() {
-  usePageTitle('Resources')
+  usePageMeta('Resources', 'Resources dashboard')
 
   // Restore filter signals from URL query params on mount
   useRestoreFiltersFromUrl({

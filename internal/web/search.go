@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 )
 
 // SearchHandler handles GET /api/v1/search requests and returns the status of Flux resources.
@@ -30,35 +30,15 @@ func (r *Router) SearchHandler(w http.ResponseWriter, req *http.Request) {
 	if name != "" && !hasWildcard(name) {
 		name = "*" + name + "*"
 	}
-	var kinds []string
-	if kind != "" {
-		kinds = []string{kind}
-	} else {
-		// Limit search to applier kinds
-		kinds = []string{
-			fluxcdv1.FluxInstanceKind,
-			fluxcdv1.ResourceSetKind,
-			fluxcdv1.FluxKustomizationKind,
-			fluxcdv1.FluxHelmReleaseKind,
-		}
-	}
-
-	// If namespace is specified, add sources kinds as well
-	if namespace != "" && kind == "" {
-		kinds = append(kinds,
-			fluxcdv1.FluxGitRepositoryKind,
-			fluxcdv1.FluxOCIRepositoryKind,
-			fluxcdv1.FluxHelmChartKind,
-			fluxcdv1.FluxHelmRepositoryKind,
-			fluxcdv1.FluxBucketKind,
-			fluxcdv1.FluxArtifactGeneratorKind,
-		)
-	}
 
 	// Get resource status from the cluster using the request context
-	resources, err := r.GetResourcesStatus(req.Context(), kinds, name, namespace, "", 10)
+	resources, err := r.GetResourcesStatus(req.Context(), kind, name, namespace, "", 10, WithSourcesIfNamespace())
 	if err != nil {
 		r.log.Error(err, "failed to get resources status", "url", req.URL.String(), "name", name, "namespace", namespace)
+		if errors.IsForbidden(err) {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
 		resources = []ResourceStatus{}
 	}
 

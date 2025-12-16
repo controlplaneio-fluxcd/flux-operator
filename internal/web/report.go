@@ -8,9 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	goruntime "runtime"
-	"sort"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -24,6 +22,8 @@ import (
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/kubeclient"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
 
 // ReportHandler handles GET /api/v1/report requests and returns the FluxReport from the cluster.
@@ -65,15 +65,24 @@ func (r *Router) GetReport(ctx context.Context) (*unstructured.Unstructured, err
 	}
 
 	// Inject user info
-	// TODO: Replace with real user info from auth context when available
 	if spec, found := report.Object["spec"].(map[string]any); found {
-		username := os.Getenv("HOSTNAME")
-		if username == "" {
-			username = "flux-user"
+		username, role := user.UsernameAndRole(ctx)
+		userInfo := make(map[string]any)
+		if username != "" {
+			userInfo["username"] = username
 		}
-		spec["userInfo"] = map[string]any{
-			"username": username,
-			"role":     "cluster:view",
+		if role != "" {
+			userInfo["role"] = role
+		}
+		spec["userInfo"] = userInfo
+
+		// Inject user-visible namespaces (non-fatal if it fails)
+		namespaces, _, err := r.kubeClient.ListUserNamespaces(ctx)
+		switch {
+		case err != nil:
+			r.log.Error(err, "failed to list user namespaces for report injection")
+		case len(namespaces) > 0:
+			spec["namespaces"] = namespaces
 		}
 	}
 
@@ -83,7 +92,15 @@ func (r *Router) GetReport(ctx context.Context) (*unstructured.Unstructured, err
 // buildReport builds the FluxReport directly using the reporter package
 // and injects pod metrics into the report spec.
 func (r *Router) buildReport(ctx context.Context) (*unstructured.Unstructured, error) {
-	rep := reporter.NewFluxStatusReporter(r.kubeClient, fluxcdv1.DefaultInstanceName, r.statusManager, r.namespace)
+	// The report client needs privileged access as it needs to access all
+	// resources in the cluster to build the report. The report information,
+	// however, is crunched in a way that does not expose sensitive information.
+	// This allows us to keep a good UX for unprivileged users while
+	// ensuring security boundaries are respected.
+	// Note: The report is built on a background goroutine periodically anyway,
+	// so there's no user session available to use for impersonation.
+	repClient := r.kubeClient.GetClient(ctx, kubeclient.WithPrivileges())
+	rep := reporter.NewFluxStatusReporter(repClient, fluxcdv1.DefaultInstanceName, r.statusManager, r.namespace)
 	reportSpec, err := rep.Compute(ctx)
 	if err != nil {
 		r.log.Error(err, "report computed with errors")
@@ -117,23 +134,15 @@ func (r *Router) buildReport(ctx context.Context) (*unstructured.Unstructured, e
 	result := &unstructured.Unstructured{Object: rawMap}
 
 	// Fetch metrics for Flux components (non-fatal if it fails)
-	if metrics, err := r.GetMetrics(ctx, "", r.namespace, "app.kubernetes.io/part-of=flux", 100); err == nil {
+	// We pass WithPrivileges() here to ensure we can read metrics from all Flux controllers,
+	// even if the user querying the report has limited RBAC permissions. Our decision here
+	// is based on the same reasoning explained above for building the report.
+	if metrics, err := r.GetMetrics(ctx, "", r.namespace, "app.kubernetes.io/part-of=flux", 100, kubeclient.WithPrivileges()); err == nil {
 		// Extract the items array from metrics
 		if items, found := metrics.Object["items"]; found {
 			// Add metrics to the result under spec.metrics
 			if spec, found := result.Object["spec"].(map[string]any); found {
 				spec["metrics"] = items
-			}
-		}
-	}
-
-	// Fetch namespaces from the cluster (non-fatal if it fails)
-	if namespaces, err := r.GetNamespaces(ctx); err == nil {
-		// Extract the items array from namespaces
-		if items, found := namespaces.Object["items"]; found {
-			// Add namespaces to the result under spec.namespaces
-			if spec, found := result.Object["spec"].(map[string]any); found {
-				spec["namespaces"] = items
 			}
 		}
 	}
@@ -222,34 +231,9 @@ func cleanObjectForExport(obj *unstructured.Unstructured, keepStatus bool) {
 	obj.Object["metadata"] = cleanMetadata
 }
 
-// GetNamespaces retrieves all namespace names from the cluster sorted alphabetically.
-func (r *Router) GetNamespaces(ctx context.Context) (*unstructured.Unstructured, error) {
-	var namespaceList corev1.NamespaceList
-	if err := r.kubeClient.List(ctx, &namespaceList); err != nil {
-		return nil, err
-	}
-
-	if len(namespaceList.Items) == 0 {
-		return nil, fmt.Errorf("no namespaces found")
-	}
-
-	names := make([]string, 0, len(namespaceList.Items))
-	for _, ns := range namespaceList.Items {
-		names = append(names, ns.Name)
-	}
-
-	sort.Strings(names)
-
-	return &unstructured.Unstructured{
-		Object: map[string]any{
-			"items": names,
-		},
-	}, nil
-}
-
 // GetMetrics retrieves the CPU and Memory metrics for a list of pods in the given namespace.
-func (r *Router) GetMetrics(ctx context.Context, pod, namespace, labelSelector string, limit int) (*unstructured.Unstructured, error) {
-	clientset, err := metricsclientset.NewForConfig(r.kubeConfig)
+func (r *Router) GetMetrics(ctx context.Context, pod, namespace, labelSelector string, limit int, opts ...kubeclient.Option) (*unstructured.Unstructured, error) {
+	clientset, err := metricsclientset.NewForConfig(r.kubeClient.GetConfig(ctx, opts...))
 	if err != nil {
 		return nil, err
 	}
@@ -285,10 +269,11 @@ func (r *Router) GetMetrics(ctx context.Context, pod, namespace, labelSelector s
 	}
 
 	// Fetch pod specs to get resource limits
+	kubeClient := r.kubeClient.GetClient(ctx, opts...)
 	var podList corev1.PodList
 	if pod != "" {
 		p := &corev1.Pod{}
-		if err := r.kubeClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: pod}, p); err == nil {
+		if err := kubeClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: pod}, p); err == nil {
 			podList.Items = []corev1.Pod{*p}
 		}
 	} else {
@@ -297,7 +282,7 @@ func (r *Router) GetMetrics(ctx context.Context, pod, namespace, labelSelector s
 			client.MatchingLabelsSelector{Selector: ls},
 			client.Limit(int64(limit)),
 		}
-		if err := r.kubeClient.List(ctx, &podList, listOpts...); err != nil {
+		if err := kubeClient.List(ctx, &podList, listOpts...); err != nil {
 			// Non-fatal: continue without limits if pod list fails
 			podList.Items = nil
 		}

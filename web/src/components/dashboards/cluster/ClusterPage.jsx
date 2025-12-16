@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { useEffect } from 'preact/hooks'
-import { usePageTitle } from '../../../utils/title'
+import { usePageMeta } from '../../../utils/meta'
 import { addToNavHistory } from '../../../utils/navHistory'
 import { OverallStatusPanel } from './OverallStatusPanel'
 import { InfoPanel } from './InfoPanel'
@@ -19,7 +19,7 @@ import { Footer } from '../../layout/Footer'
  * @param {string} props.namespace - FluxReport namespace
  */
 export function ClusterPage({ spec, namespace }) {
-  usePageTitle(null) // Home page uses default title
+  usePageMeta(null, null) // Home page uses default title and description
 
   // Track home page visit in navigation history
   useEffect(() => {

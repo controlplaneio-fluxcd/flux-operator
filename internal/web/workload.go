@@ -48,14 +48,17 @@ func (r *Router) WorkloadHandler(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		r.log.Error(err, "failed to get workload", "url", req.URL.String(),
 			"kind", kind, "name", name, "namespace", namespace)
-		if errors.IsNotFound(err) {
+		switch {
+		case errors.IsNotFound(err):
 			// return empty response if resource not found
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte("{}"))
-			return
+		case errors.IsForbidden(err):
+			http.Error(w, err.Error(), http.StatusForbidden)
+		default:
+			http.Error(w, fmt.Sprintf("Failed to get workload: %v", err), http.StatusInternalServerError)
 		}
-		http.Error(w, fmt.Sprintf("Failed to get workload: %v", err), http.StatusInternalServerError)
 		return
 	}
 
@@ -129,7 +132,7 @@ func (r *Router) GetWorkloadStatus(ctx context.Context, kind, name, namespace st
 	}
 
 	// Fetch the resource from the cluster
-	if err := r.kubeClient.Get(ctx, key, obj); err != nil {
+	if err := r.kubeClient.GetClient(ctx).Get(ctx, key, obj); err != nil {
 		return nil, fmt.Errorf("unable to get resource %s/%s in namespace %s: %w", kind, name, namespace, err)
 	}
 
@@ -175,7 +178,7 @@ func (r *Router) GetWorkloadPods(ctx context.Context, obj *unstructured.Unstruct
 		client.MatchingLabels(selector),
 	}
 
-	if err := r.kubeClient.List(ctx, podList, listOpts...); err != nil {
+	if err := r.kubeClient.GetClient(ctx).List(ctx, podList, listOpts...); err != nil {
 		return nil, fmt.Errorf("failed to list pods for workload %s/%s: %w", obj.GetNamespace(), obj.GetName(), err)
 	}
 

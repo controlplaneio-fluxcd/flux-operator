@@ -6,6 +6,7 @@ import { fetchWithMock } from '../../../utils/fetch'
 import { formatTimestamp } from '../../../utils/time'
 import { DashboardPanel, TabButton } from '../common/panel'
 import { YamlBlock } from '../common/yaml'
+import { FluxOperatorIcon } from '../../layout/Icons'
 
 /**
  * Get badge class for provider type
@@ -177,7 +178,7 @@ export function InputsPanel({ resourceData, namespace }) {
         <div class="space-y-4">
           {valuesLoading ? (
             <div class="flex items-center justify-center p-8">
-              <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-flux-blue"></div>
+              <FluxOperatorIcon className="animate-spin h-8 w-8 text-flux-blue" />
               <span class="ml-3 text-gray-600 dark:text-gray-400">Loading inputs...</span>
             </div>
           ) : hasInputs ? (

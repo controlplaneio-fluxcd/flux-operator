@@ -5,9 +5,10 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
 import { fetchWithMock } from '../../utils/fetch'
 import { favorites, reorderFavorites, getFavoriteKey, removeFavorite } from '../../utils/favorites'
-import { usePageTitle } from '../../utils/title'
+import { usePageMeta } from '../../utils/meta'
 import { FavoritesHeader } from './FavoritesHeader'
 import { FavoriteCard } from './FavoriteCard'
+import { FluxOperatorIcon } from '../layout/Icons'
 
 /**
  * FavoritesPage - Main page displaying favorite resources
@@ -20,7 +21,7 @@ import { FavoriteCard } from './FavoriteCard'
  * - Supports drag-and-drop reordering in edit mode
  */
 export function FavoritesPage() {
-  usePageTitle('Favorites')
+  usePageMeta('Favorites', 'Favorites dashboard')
   const location = useLocation()
 
   // State
@@ -83,12 +84,6 @@ export function FavoritesPage() {
       // Build results map from returned resources
       const results = {}
       const resources = data.resources || []
-
-      // First, mark all favorites as not found
-      currentFavorites.forEach(fav => {
-        const key = getFavoriteKey(fav.kind, fav.namespace, fav.name)
-        results[key] = null
-      })
 
       // Then, update with found resources
       resources.forEach(resource => {
@@ -437,7 +432,7 @@ export function FavoritesPage() {
         {/* Loading state */}
         {loading && (
           <div class="flex items-center justify-center p-8">
-            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-flux-blue"></div>
+            <FluxOperatorIcon className="animate-spin h-8 w-8 text-flux-blue" />
             <span class="ml-3 text-gray-600 dark:text-gray-400">Loading favorites...</span>
           </div>
         )}

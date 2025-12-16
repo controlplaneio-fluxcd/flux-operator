@@ -117,6 +117,22 @@ describe('Header', () => {
       expect(mockRoute).toHaveBeenCalledWith('/')
       expect(fetchFluxReport).not.toHaveBeenCalled()
     })
+
+    it('should return to dashboard when logo clicked on unknown route (404)', () => {
+      useLocation.mockReturnValue({
+        path: '/unknown/route',
+        query: {},
+        route: mockRoute
+      })
+
+      render(<Header />)
+
+      const logoButton = screen.getByRole('button', { name: 'Flux CD' })
+      fireEvent.click(logoButton)
+
+      expect(mockRoute).toHaveBeenCalledWith('/')
+      expect(fetchFluxReport).not.toHaveBeenCalled()
+    })
   })
 
   describe('Browse Resources Button', () => {

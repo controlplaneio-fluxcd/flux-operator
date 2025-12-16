@@ -49,11 +49,7 @@ func (r *Router) WorkloadsHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// Fetch status for all workloads
-	workloads, err := r.GetWorkloadsStatus(req.Context(), wReq.Workloads)
-	if err != nil {
-		r.log.Error(err, "failed to get workloads status")
-		workloads = []WorkloadStatus{}
-	}
+	workloads := r.GetWorkloadsStatus(req.Context(), wReq.Workloads)
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(map[string]any{"workloads": workloads}); err != nil {
@@ -64,18 +60,18 @@ func (r *Router) WorkloadsHandler(w http.ResponseWriter, req *http.Request) {
 
 // GetWorkloadsStatus fetches the status for the specified workloads.
 // Workloads are queried in parallel with a concurrency limit of 4.
-func (r *Router) GetWorkloadsStatus(ctx context.Context, workloads []WorkloadItem) ([]WorkloadStatus, error) {
-	var result []WorkloadStatus
+func (r *Router) GetWorkloadsStatus(ctx context.Context, workloads []WorkloadItem) []WorkloadStatus {
+	result := make([]WorkloadStatus, len(workloads))
+
 	var wg sync.WaitGroup
 	var mu sync.Mutex
-	errChan := make(chan error, len(workloads))
 
 	// Semaphore to limit concurrent requests to 4
 	sem := make(chan struct{}, 4)
 
-	for _, item := range workloads {
+	for i, item := range workloads {
 		wg.Add(1)
-		go func(item WorkloadItem) {
+		go func(i int, item WorkloadItem) {
 			defer wg.Done()
 
 			// Acquire semaphore
@@ -84,36 +80,39 @@ func (r *Router) GetWorkloadsStatus(ctx context.Context, workloads []WorkloadIte
 
 			ws, err := r.GetWorkloadStatus(ctx, item.Kind, item.Name, item.Namespace)
 			if err != nil {
-				if errors.IsNotFound(err) {
-					// Workload not found - include with NotFound status
-					mu.Lock()
-					result = append(result, WorkloadStatus{
-						Kind:          item.Kind,
-						Name:          item.Name,
-						Namespace:     item.Namespace,
-						Status:        "NotFound",
-						StatusMessage: "Workload not found in cluster",
-					})
-					mu.Unlock()
-					return
+				var statusMessage string
+				switch {
+				case errors.IsNotFound(err):
+					statusMessage = "Workload not found in the cluster"
+				case errors.IsForbidden(err):
+					statusMessage = "User does not have access to the workload or for listing its pods"
+				default:
+					statusMessage = "Internal error while fetching workload"
+					r.log.Error(err, "failed to get workload status",
+						"kind", item.Kind,
+						"name", item.Name,
+						"namespace", item.Namespace)
 				}
-				errChan <- err
+
+				mu.Lock()
+				result[i] = WorkloadStatus{
+					Kind:          item.Kind,
+					Name:          item.Name,
+					Namespace:     item.Namespace,
+					Status:        "NotFound",
+					StatusMessage: statusMessage,
+				}
+				mu.Unlock()
 				return
 			}
 
 			mu.Lock()
-			result = append(result, *ws)
+			result[i] = *ws
 			mu.Unlock()
-		}(item)
+		}(i, item)
 	}
 
 	wg.Wait()
-	close(errChan)
 
-	// Check for errors
-	if len(errChan) > 0 {
-		return nil, <-errChan
-	}
-
-	return result, nil
+	return result
 }

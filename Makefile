@@ -67,7 +67,10 @@ lint-fix: golangci-lint ## Run golangci linters and perform fixes.
 ##@ Build
 
 .PHONY: build
-build: generate fmt vet web-build ## Build the flux-operator binary.
+build: generate fmt vet web-build build-only ## Build the flux-operator binary with frontend assets.
+
+.PHONY: build-only ## Build the flux-operator binary.
+build-only:
 	CGO_ENABLED=0 GOFIPS140=latest go build -ldflags="-s -w -X main.VERSION=$(FLUX_OPERATOR_DEV_VERSION)" -o ./bin/flux-operator ./cmd/operator/
 
 .PHONY: run
@@ -134,7 +137,7 @@ web-dev-mock: ## Start frontend dev server with mock data enabled.
 
 .PHONY: web-run
 web-run: build ## Start operator with frontend server only.
-	./bin/flux-operator --web-server-only --web-server-port=9080
+	./bin/flux-operator --log-level=debug --web-server-only --web-server-port=9080
 
 .PHONY: web-build
 web-build:  web-fmt ## Build frontend for production.

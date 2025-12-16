@@ -4,10 +4,18 @@
 package web
 
 import (
+	"net/http"
 	"testing"
+	"time"
 
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
 
 func TestCleanObjectForExport(t *testing.T) {
@@ -372,4 +380,308 @@ func TestCleanObjectForExport(t *testing.T) {
 			g.Expect(obj.Object).To(Equal(tt.expected))
 		})
 	}
+}
+
+func TestGetReport_Privileged(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create the router with the test kubeclient
+	mux := http.NewServeMux()
+	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+
+	// Call GetReport without any user session (privileged)
+	report, err := router.GetReport(ctx)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(report).NotTo(BeNil())
+
+	// Verify basic report structure
+	g.Expect(report.GetKind()).To(Equal(fluxcdv1.FluxReportKind))
+	g.Expect(report.GetAPIVersion()).To(Equal(fluxcdv1.GroupVersion.String()))
+}
+
+func TestGetReport_WithUnprivilegedUser_ReportStillBuilt(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create the router
+	mux := http.NewServeMux()
+	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+
+	// Create an unprivileged user session (no RBAC permissions)
+	imp := user.Impersonation{
+		Username: "unprivileged-report-user",
+		Groups:   []string{"unprivileged-group"},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile:       user.Profile{Name: "Unprivileged User"},
+		Impersonation: imp,
+	}, userClient)
+
+	// Call GetReport with the unprivileged user context
+	// The report should still be built successfully because it uses privileged access internally
+	report, err := router.GetReport(userCtx)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(report).NotTo(BeNil())
+
+	// Verify basic report structure
+	g.Expect(report.GetKind()).To(Equal(fluxcdv1.FluxReportKind))
+	g.Expect(report.GetAPIVersion()).To(Equal(fluxcdv1.GroupVersion.String()))
+
+	// Verify user info is injected into the report
+	spec, found := report.Object["spec"].(map[string]any)
+	g.Expect(found).To(BeTrue())
+	userInfo, found := spec["userInfo"].(map[string]any)
+	g.Expect(found).To(BeTrue())
+	g.Expect(userInfo["username"]).To(Equal("Unprivileged User"))
+
+	// Verify namespaces is empty since the user has no access
+	_, found = spec["namespaces"]
+	g.Expect(found).To(BeFalse())
+}
+
+func TestGetReport_WithUserRBAC_NamespacesPopulated(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a test namespace for this test
+	testNS := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-report-ns",
+		},
+	}
+	g.Expect(testClient.Create(ctx, testNS)).To(Succeed())
+	defer testClient.Delete(ctx, testNS)
+
+	// Create RBAC for the test user to access resourcesets (which is used for namespace filtering)
+	// ListUserNamespaces checks access to resourcesets.fluxcd.controlplane.io to determine
+	// which namespaces the user can see
+	clusterRole := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-report-resourcesets-reader",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{fluxcdv1.GroupVersion.Group},
+				Resources: []string{"resourcesets"},
+				Verbs:     []string{"get", "list"},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, clusterRole)).To(Succeed())
+	defer testClient.Delete(ctx, clusterRole)
+
+	clusterRoleBinding := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-report-resourcesets-reader-binding",
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     clusterRole.Name,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind: "User",
+				Name: "report-user-with-ns-access",
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, clusterRoleBinding)).To(Succeed())
+	defer testClient.Delete(ctx, clusterRoleBinding)
+
+	// Create the router
+	mux := http.NewServeMux()
+	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+
+	// Create a user session with resourcesets access (which grants namespace visibility)
+	imp := user.Impersonation{
+		Username: "report-user-with-ns-access",
+		Groups:   []string{"system:authenticated"},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile:       user.Profile{Name: "Report User"},
+		Impersonation: imp,
+	}, userClient)
+
+	// Call GetReport with the user context
+	report, err := router.GetReport(userCtx)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(report).NotTo(BeNil())
+
+	// Verify namespaces are populated in the spec
+	spec, found := report.Object["spec"].(map[string]any)
+	g.Expect(found).To(BeTrue())
+	// namespaces can be []string or []any depending on how they were serialized
+	namespaces, found := spec["namespaces"]
+	g.Expect(found).To(BeTrue(), "namespaces should be present in spec")
+	switch ns := namespaces.(type) {
+	case []string:
+		g.Expect(ns).NotTo(BeEmpty())
+	case []any:
+		g.Expect(ns).NotTo(BeEmpty())
+	default:
+		t.Fatalf("unexpected namespaces type: %T", namespaces)
+	}
+}
+
+func TestGetReport_WithUserRBAC_SingleNamespaceAccess(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create RBAC for the test user with access only in the default namespace
+	// Using a Role and RoleBinding (namespace-scoped) instead of ClusterRole/ClusterRoleBinding
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-report-single-ns-resourcesets-reader",
+			Namespace: "default",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{fluxcdv1.GroupVersion.Group},
+				Resources: []string{"resourcesets"},
+				Verbs:     []string{"get", "list"},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, role)).To(Succeed())
+	defer testClient.Delete(ctx, role)
+
+	roleBinding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-report-single-ns-resourcesets-reader-binding",
+			Namespace: "default",
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     role.Name,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind: "User",
+				Name: "report-user-single-ns-access",
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, roleBinding)).To(Succeed())
+	defer testClient.Delete(ctx, roleBinding)
+
+	// Create the router
+	mux := http.NewServeMux()
+	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+
+	// Create a user session with access only in the default namespace
+	imp := user.Impersonation{
+		Username: "report-user-single-ns-access",
+		Groups:   []string{"system:authenticated"},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile:       user.Profile{Name: "Single NS User"},
+		Impersonation: imp,
+	}, userClient)
+
+	// Call GetReport with the user context
+	report, err := router.GetReport(userCtx)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(report).NotTo(BeNil())
+
+	// Verify the report is built successfully (uses privileged access)
+	g.Expect(report.GetKind()).To(Equal(fluxcdv1.FluxReportKind))
+	g.Expect(report.GetAPIVersion()).To(Equal(fluxcdv1.GroupVersion.String()))
+
+	// Verify namespaces are populated with only the default namespace
+	spec, found := report.Object["spec"].(map[string]any)
+	g.Expect(found).To(BeTrue())
+	namespaces, found := spec["namespaces"]
+	g.Expect(found).To(BeTrue(), "namespaces should be present in spec")
+
+	// User should only see the default namespace
+	switch ns := namespaces.(type) {
+	case []string:
+		g.Expect(ns).To(ConsistOf("default"))
+	case []any:
+		g.Expect(ns).To(ConsistOf("default"))
+	default:
+		t.Fatalf("unexpected namespaces type: %T", namespaces)
+	}
+
+	// Verify user info is injected
+	userInfo, found := spec["userInfo"].(map[string]any)
+	g.Expect(found).To(BeTrue())
+	g.Expect(userInfo["username"]).To(Equal("Single NS User"))
+}
+
+func TestGetReport_InjectsUserInfo(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create the router
+	mux := http.NewServeMux()
+	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+
+	// Create a user session with name set (this tests the case where Name is displayed)
+	imp := user.Impersonation{
+		Username: "info-test-user",
+		Groups:   []string{"system:authenticated"},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile: user.Profile{
+			Name: "Info Test User",
+		},
+		Impersonation: imp,
+	}, userClient)
+
+	// Call GetReport
+	report, err := router.GetReport(userCtx)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(report).NotTo(BeNil())
+
+	// Verify user info is injected
+	spec, found := report.Object["spec"].(map[string]any)
+	g.Expect(found).To(BeTrue())
+	userInfo, found := spec["userInfo"].(map[string]any)
+	g.Expect(found).To(BeTrue())
+	g.Expect(userInfo["username"]).To(Equal("Info Test User"))
+}
+
+func TestGetReport_InjectsUserInfoWithRole(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create the router
+	mux := http.NewServeMux()
+	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+
+	// Create a user session without name but with groups (role comes from groups when name is empty)
+	imp := user.Impersonation{
+		Username: "info-test-user",
+		Groups:   []string{"admin", "developers"},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile:       user.Profile{}, // No name set - role will be returned from groups
+		Impersonation: imp,
+	}, userClient)
+
+	// Call GetReport
+	report, err := router.GetReport(userCtx)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(report).NotTo(BeNil())
+
+	// Verify user info is injected - when name is empty, role is derived from groups
+	spec, found := report.Object["spec"].(map[string]any)
+	g.Expect(found).To(BeTrue())
+	userInfo, found := spec["userInfo"].(map[string]any)
+	g.Expect(found).To(BeTrue())
+	g.Expect(userInfo["username"]).To(Equal("info-test-user"))
+	g.Expect(userInfo["role"]).To(Equal("admin, developers"))
 }

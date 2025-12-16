@@ -30,3 +30,6 @@ disto/
 .terraformrc
 /internal/builder/testdata/output/
 /cmd/cli/testdata/distro/
+
+# Status Page config.
+web-config.yaml
