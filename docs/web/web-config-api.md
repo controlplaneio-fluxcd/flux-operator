@@ -27,18 +27,14 @@ Example:
 apiVersion: web.fluxcd.controlplane.io/v1
 kind: Config
 spec:
-  baseURL: https://flux-ui.example.com
+  baseURL: https://flux-web.example.com
   authentication:
     type: OAuth2
     oauth2:
       provider: OIDC
-      clientID: flux-ui
-      clientSecret: my-secret
-      issuerURL: https://auth.example.com
-```
-
-```bash
-flux-operator --web-config=/etc/flux-status-page/config.yaml
+      clientID: <OIDC-CLIENT-ID>
+      clientSecret: <OIDC-CLIENT-SECRET>
+      issuerURL: https://dex.example.com
 ```
 
 ## Config API
@@ -49,7 +45,7 @@ kind: Config
 spec:
 
   # Base URL for constructing URLs for the web UI. Required when using OAuth2 authentication.
-  baseURL: https://flux-ui.example.com
+  baseURL: https://flux-web.example.com
 
   # If true, sets insecure behaviors such as HTTP cookie 'secure' field to false.
   # Use only for local development or testing.
@@ -74,9 +70,9 @@ spec:
     # OAuth2 authentication settings (when type=OAuth2 and oauth2.provider=OIDC)
     oauth2:
       provider: OIDC
-      clientID: flux-ui
-      clientSecret: flux-ui-secret
-      issuerURL: https://auth.example.com
+      clientID: flux-web-client-id
+      clientSecret: flux-web-client-secret
+      issuerURL: https://dex.example.com
 ```
 
 ## Authentication
@@ -84,9 +80,9 @@ spec:
 Authentication controls how users are identified and what Kubernetes RBAC permissions
 they have when accessing Flux resources through the web UI.
 
-### Anonymous Authentication
+### Anonymous
 
-Anonymous authentication assigns a fixed identity to all users accessing the web UI.
+Setting the authentication to `Anonymous` assigns a fixed identity to all users accessing the web UI.
 All users share the same Kubernetes RBAC permissions based on the configured
 username and/or groups.
 
@@ -102,10 +98,9 @@ spec:
         - flux-viewers
 ```
 
-This is useful for:
-- Public dashboards with read-only access
-- Internal environments where individual user tracking is not required
-- Development and testing scenarios
+Note that anyone who can access the web UI will have the same permissions, so this
+mode is only suitable for environments where the UI is accessible to trusted users
+in a secure network.
 
 ### OAuth2 Authentication
 
@@ -118,7 +113,7 @@ handling during the OAuth2 flow.
 #### OIDC Provider
 
 The OIDC provider authenticates users via an OpenID Connect identity provider
-(such as Dex, Keycloak, Okta, Auth0, or any OIDC-compliant provider). In this
+(such as Dex, Keycloak, Okta, Auth0, or any OIDC-compliant provider). For this
 provider, RBAC permissions are derived from claims in the ID token issued by
 the identity provider. This means that even if groups/roles are revoked from
 the user, their access to the web UI will persist until the ID token expires.
@@ -128,13 +123,13 @@ for example, allows configuring the ID token lifetime.
 
 ```yaml
 spec:
-  baseURL: https://flux-ui.example.com
+  baseURL: https://flux-web.example.com
   authentication:
     type: OAuth2
     oauth2:
       provider: OIDC
-      clientID: flux-ui                          # Required: OAuth2 client ID
-      clientSecret: flux-ui-secret               # Required: OAuth2 client secret
+      clientID: flux-web                          # Required: OAuth2 client ID
+      clientSecret: flux-web-secret               # Required: OAuth2 client secret
       issuerURL: https://auth.example.com        # Required: OIDC issuer URL
       scopes:                                    # Optional: custom scopes to request instead of defaults
         - groups
@@ -171,7 +166,7 @@ spec:
     type: OAuth2
     oauth2:
       provider: OIDC
-      # ... required fields ...
+      # ... omitted for brevity ...
       variables:
         - name: username
           expression: "claims.sub"
@@ -193,7 +188,7 @@ spec:
     type: OAuth2
     oauth2:
       provider: OIDC
-      # ... required fields ...
+      # ... omitted for brevity ...
       variables:
         - name: domain
           expression: "claims.email.split('@')[1]"
@@ -214,7 +209,7 @@ spec:
     type: OAuth2
     oauth2:
       provider: OIDC
-      # ... required fields ...
+      # ... omitted for brevity ...
       profile:
         name: "claims.name"
 ```
@@ -233,7 +228,7 @@ spec:
     type: OAuth2
     oauth2:
       provider: OIDC
-      # ... required fields ...
+      # ... omitted for brevity ...
       impersonation:
         username: "claims.email"
         groups: "claims.groups"
@@ -267,12 +262,12 @@ spec:
 apiVersion: web.fluxcd.controlplane.io/v1
 kind: Config
 spec:
-  baseURL: https://flux-ui.example.com
+  baseURL: https://flux-web.example.com
   authentication:
     type: OAuth2
     oauth2:
       provider: OIDC
-      clientID: flux-ui
+      clientID: flux-web
       clientSecret: my-client-secret
       issuerURL: https://dex.example.com
 ```
@@ -283,14 +278,14 @@ spec:
 apiVersion: web.fluxcd.controlplane.io/v1
 kind: Config
 spec:
-  baseURL: https://flux-ui.example.com
+  baseURL: https://flux-web.example.com
   authentication:
     type: OAuth2
     sessionDuration: 8h
     userCacheSize: 500
     oauth2:
       provider: OIDC
-      clientID: flux-ui
+      clientID: flux-web
       clientSecret: my-client-secret
       issuerURL: https://dex.example.com
 ```
@@ -303,12 +298,12 @@ This example restricts access to users with emails from a specific domain:
 apiVersion: web.fluxcd.controlplane.io/v1
 kind: Config
 spec:
-  baseURL: https://flux-ui.example.com
+  baseURL: https://flux-web.example.com
   authentication:
     type: OAuth2
     oauth2:
       provider: OIDC
-      clientID: flux-ui
+      clientID: flux-web
       clientSecret: my-client-secret
       issuerURL: https://dex.example.com
       variables:
@@ -328,12 +323,12 @@ them for Kubernetes RBAC:
 apiVersion: web.fluxcd.controlplane.io/v1
 kind: Config
 spec:
-  baseURL: https://flux-ui.example.com
+  baseURL: https://flux-web.example.com
   authentication:
     type: OAuth2
     oauth2:
       provider: OIDC
-      clientID: flux-ui
+      clientID: flux-web
       clientSecret: my-client-secret
       issuerURL: https://dex.example.com
       scopes:
@@ -355,12 +350,12 @@ spec:
 apiVersion: web.fluxcd.controlplane.io/v1
 kind: Config
 spec:
-  baseURL: https://flux-ui.example.com
+  baseURL: https://flux-web.example.com
   authentication:
     type: OAuth2
     oauth2:
       provider: OIDC
-      clientID: flux-ui
+      clientID: flux-web
       clientSecret: my-client-secret
       issuerURL: https://dex.example.com
       variables:
