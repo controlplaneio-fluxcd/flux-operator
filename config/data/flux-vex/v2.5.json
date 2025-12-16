@@ -9,6 +9,62 @@
   "statements": [
     {
       "vulnerability": {
+        "name": "CVE-2025-66506"
+      },
+      "timestamp": "2025-12-08T09:40:00Z",
+      "products": [
+        {
+          "@id": "pkg:golang/github.com/sigstore/fulcio@1.7.1"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The affected code is not executed by Flux."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-66506"
+      },
+      "timestamp": "2025-12-08T09:40:00Z",
+      "products": [
+        {
+          "@id": "pkg:oci/source-controller"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The source-controller does not run the Fulcio server itself."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-66564"
+      },
+      "timestamp": "2025-12-08T09:40:00Z",
+      "products": [
+        {
+          "@id": "pkg:golang/github.com/sigstore/timestamp-authority@1.2.8"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The affected code is not executed by Flux."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-66564"
+      },
+      "timestamp": "2025-12-08T09:40:00Z",
+      "products": [
+        {
+          "@id": "pkg:oci/source-controller"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The source-controller does not run the Timestamp Authority server itself."
+    },
+    {
+      "vulnerability": {
         "name": "CVE-2025-29087"
       },
       "timestamp": "2025-04-16T12:20:00.000000+01:00",
