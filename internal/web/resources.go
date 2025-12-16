@@ -45,10 +45,6 @@ func (r *Router) ResourcesHandler(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		r.log.Error(err, "failed to get resources status", "url", req.URL.String(),
 			"kind", kind, "name", name, "namespace", namespace, "status", status)
-		if apierrors.IsForbidden(err) {
-			http.Error(w, err.Error(), http.StatusForbidden)
-			return
-		}
 		// Return empty array instead of error for better UX
 		resources = []ResourceStatus{}
 	}
@@ -232,9 +228,11 @@ func (r *Router) GetResourcesStatus(ctx context.Context, kind, name, namespace, 
 				}
 
 				if err := r.kubeClient.GetClient(ctx).List(ctx, &list, listOpts...); err != nil {
-					r.log.Error(err, "failed to list resources",
-						"kind", kind,
-						"namespace", ns)
+					if !apierrors.IsForbidden(err) {
+						r.log.Error(err, "failed to list resources",
+							"kind", kind,
+							"namespace", ns)
+					}
 					return
 				}
 

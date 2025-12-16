@@ -43,10 +43,6 @@ func (r *Router) EventsHandler(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		r.log.Error(err, "failed to get events", "url", req.URL.String(),
 			"kind", kind, "name", name, "namespace", namespace, "type", eventType)
-		if apierrors.IsForbidden(err) {
-			http.Error(w, err.Error(), http.StatusForbidden)
-			return
-		}
 		// Return empty array instead of error for better UX
 		events = []Event{}
 	}
@@ -182,9 +178,11 @@ func (r *Router) GetEvents(ctx context.Context, kind, name, namespace, excludeRe
 				}
 
 				if err := r.kubeClient.GetAPIReader(ctx).List(ctx, el, listOpts...); err != nil {
-					r.log.Error(err, "failed to list events for user",
-						"kind", kind,
-						"namespace", ns)
+					if !apierrors.IsForbidden(err) {
+						r.log.Error(err, "failed to list events for user",
+							"kind", kind,
+							"namespace", ns)
+					}
 					continue
 				}
 
