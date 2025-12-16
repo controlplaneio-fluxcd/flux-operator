@@ -97,10 +97,8 @@ func (r *Router) GetFavoritesStatus(ctx context.Context, favorites []FavoriteIte
 			if err != nil {
 				var message string
 				switch {
-				case errors.IsNotFound(err), strings.Contains(err.Error(), "no matches for kind"):
+				case strings.Contains(err.Error(), "no matches for kind"):
 					message = "Resource kind not found in the cluster"
-				case errors.IsForbidden(err):
-					message = "User does not have access to the resource kind"
 				default:
 					message = "Internal error while fetching resource kind"
 					r.log.Error(err, "failed to get favorite resource kind",

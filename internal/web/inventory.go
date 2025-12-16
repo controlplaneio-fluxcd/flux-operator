@@ -24,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/kubeclient"
 )
 
 // InventoryEntry represents a Kubernetes object entry in the Flux inventory.
@@ -274,7 +275,15 @@ func (r *Router) preferredFluxGVK(ctx context.Context, kind string) (*schema.Gro
 		return nil, err
 	}
 
-	mapping, err := r.kubeClient.GetClient(ctx).RESTMapper().RESTMapping(*gk)
+	// This is a core operation on the UI backend that is required for getting
+	// or listing Flux resources according to their preferred GVK. If the user
+	// has access to the get/list the resource, for a better UX we should not
+	// error out if the user does not have permission to get the preferred GVK
+	// of the resource. In all the calls to this function, the main operation
+	// only succeeds if the user has get/list permissions on the resource itself,
+	// so there's no point in enforcing RBAC for this "meta" operation. Thus,
+	// we use a privileged client here.
+	mapping, err := r.kubeClient.GetClient(ctx, kubeclient.WithPrivileges()).RESTMapper().RESTMapping(*gk)
 	if err != nil {
 		return nil, err
 	}
