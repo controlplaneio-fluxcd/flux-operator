@@ -6,6 +6,8 @@ package auth
 import (
 	"context"
 	"fmt"
+	"sync"
+	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
@@ -14,10 +16,18 @@ import (
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
 
+const (
+	oidcProviderRefreshInterval = time.Minute
+)
+
 // oidcProvider implements oauth2Provider for OIDC.
 type oidcProvider struct {
 	conf          *config.ConfigSpec
 	processClaims claimsProcessorFunc
+
+	mu        sync.RWMutex
+	p         *oidc.Provider
+	nextFetch time.Time
 }
 
 // newOIDCProvider creates a new OIDC OAuth2 provider.
@@ -35,10 +45,28 @@ func newOIDCProvider(conf *config.ConfigSpec) (oauth2Provider, error) {
 
 // init implements oauth2Provider.
 func (o *oidcProvider) init(ctx context.Context) (initializedOAuth2Provider, error) {
-	p, err := oidc.NewProvider(ctx, o.conf.Authentication.OAuth2.IssuerURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to discover OIDC configuration: %w", err)
+	var p *oidc.Provider
+
+	o.mu.RLock()
+	if time.Now().Before(o.nextFetch) {
+		p = o.p
 	}
+	o.mu.RUnlock()
+
+	if p == nil {
+		// Fetch without locking to avoid contention.
+		var err error
+		p, err = oidc.NewProvider(ctx, o.conf.Authentication.OAuth2.IssuerURL)
+		if err != nil {
+			return nil, fmt.Errorf("failed to discover OIDC configuration: %w", err)
+		}
+
+		o.mu.Lock()
+		o.p = p
+		o.nextFetch = time.Now().Add(oidcProviderRefreshInterval)
+		o.mu.Unlock()
+	}
+
 	return &initializedOIDCProvider{
 		conf:          o.conf,
 		processClaims: o.processClaims,
