@@ -17,6 +17,9 @@ export function InventoryPanel({ resourceData, onNavigate }) {
   // Check if inventory exists
   const hasInventory = resourceData?.status?.inventory && resourceData.status.inventory.length > 0
 
+  // Check for inventory error
+  const inventoryError = resourceData?.status?.inventoryError
+
   // Check if this kind should have inventory panel
   const shouldShowPanel = isKindWithInventory(resourceData?.kind)
 
@@ -137,8 +140,20 @@ export function InventoryPanel({ resourceData, onNavigate }) {
         </nav>
       </div>
 
+      {/* Inventory Error */}
+      {inventoryError && (
+        <div data-testid="inventory-error" class="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-3">
+          <div class="flex items-start gap-2">
+            <svg class="w-5 h-5 text-red-500 dark:text-red-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <p class="text-sm text-red-800 dark:text-red-200">{inventoryError}</p>
+          </div>
+        </div>
+      )}
+
       {/* Tab Content */}
-      {activeTab === 'overview' && (
+      {activeTab === 'overview' && !inventoryError && (
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Left column: Feature toggles */}
           <div class="space-y-4">

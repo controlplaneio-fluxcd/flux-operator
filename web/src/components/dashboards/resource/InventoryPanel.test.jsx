@@ -908,4 +908,98 @@ describe('InventoryPanel component', () => {
     expect(textContent).toContain('Garbage collection')
     expect(textContent).toContain('Disabled')
   })
+
+  describe('inventoryError', () => {
+    it('should not display error when inventoryError is not present', () => {
+      render(
+        <InventoryPanel
+          resourceData={mockKustomizationData}
+          onNavigate={mockOnNavigate}
+        />
+      )
+
+      expect(screen.queryByTestId('inventory-error')).not.toBeInTheDocument()
+    })
+
+    it('should display error banner when inventoryError is present and hide overview content', () => {
+      const dataWithError = {
+        ...mockKustomizationData,
+        status: {
+          ...mockKustomizationData.status,
+          inventoryError: 'Forbidden: User does not have permission to list resources'
+        }
+      }
+
+      render(
+        <InventoryPanel
+          resourceData={dataWithError}
+          onNavigate={mockOnNavigate}
+        />
+      )
+
+      const errorBanner = screen.getByTestId('inventory-error')
+      expect(errorBanner).toBeInTheDocument()
+      expect(errorBanner).toHaveTextContent('Forbidden: User does not have permission to list resources')
+
+      // Overview content should be hidden when there's an error
+      expect(screen.queryByText('Garbage collection')).not.toBeInTheDocument()
+      expect(screen.queryByText('Total resources')).not.toBeInTheDocument()
+    })
+
+    it('should display error banner alongside inventory data in inventory tab', async () => {
+      const user = userEvent.setup()
+      const dataWithErrorAndInventory = {
+        ...mockKustomizationData,
+        status: {
+          ...mockKustomizationData.status,
+          inventoryError: 'Partial inventory: some resources could not be listed'
+        }
+      }
+
+      render(
+        <InventoryPanel
+          resourceData={dataWithErrorAndInventory}
+          onNavigate={mockOnNavigate}
+        />
+      )
+
+      // Error should be visible
+      expect(screen.getByTestId('inventory-error')).toBeInTheDocument()
+
+      // Overview content should be hidden
+      expect(screen.queryByText('Garbage collection')).not.toBeInTheDocument()
+
+      // Switch to inventory tab
+      const inventoryTab = screen.getByText('Inventory')
+      await user.click(inventoryTab)
+
+      // Error should still be visible
+      expect(screen.getByTestId('inventory-error')).toBeInTheDocument()
+
+      // Inventory data should also be visible
+      expect(screen.getByText('app-config')).toBeInTheDocument()
+    })
+
+    it('should display error when there is no inventory data', () => {
+      const dataWithErrorNoInventory = {
+        ...mockKustomizationData,
+        status: {
+          inventoryError: 'Failed to list resources: connection refused'
+        }
+      }
+
+      render(
+        <InventoryPanel
+          resourceData={dataWithErrorNoInventory}
+          onNavigate={mockOnNavigate}
+        />
+      )
+
+      expect(screen.getByTestId('inventory-error')).toBeInTheDocument()
+      expect(screen.getByText('Failed to list resources: connection refused')).toBeInTheDocument()
+
+      // Inventory tab should not be visible
+      expect(screen.queryByText('Inventory')).not.toBeInTheDocument()
+    })
+  })
 })
