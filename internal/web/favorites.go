@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // FavoriteItem represents a single favorite resource request.
@@ -101,7 +102,7 @@ func (r *Router) GetFavoritesStatus(ctx context.Context, favorites []FavoriteIte
 					message = "Resource kind not found in the cluster"
 				default:
 					message = "Internal error while fetching resource kind"
-					r.log.Error(err, "failed to get favorite resource kind",
+					log.FromContext(ctx).Error(err, "failed to get favorite resource kind",
 						"kind", fav.Kind,
 						"name", fav.Name,
 						"namespace", fav.Namespace)
@@ -128,7 +129,7 @@ func (r *Router) GetFavoritesStatus(ctx context.Context, favorites []FavoriteIte
 					message = "User does not have access to the resource"
 				default:
 					message = "Internal error while fetching resource"
-					r.log.Error(err, "failed to get favorite resource",
+					log.FromContext(ctx).Error(err, "failed to get favorite resource",
 						"kind", fav.Kind,
 						"name", fav.Name,
 						"namespace", fav.Namespace)

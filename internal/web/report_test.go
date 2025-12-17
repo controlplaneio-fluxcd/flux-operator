@@ -387,7 +387,7 @@ func TestGetReport_Privileged(t *testing.T) {
 
 	// Create the router with the test kubeclient
 	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
 
 	// Call GetReport without any user session (privileged)
 	report, err := router.GetReport(ctx)
@@ -404,7 +404,7 @@ func TestGetReport_WithUnprivilegedUser_ReportStillBuilt(t *testing.T) {
 
 	// Create the router
 	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
 
 	// Create an unprivileged user session (no RBAC permissions)
 	imp := user.Impersonation{
@@ -492,7 +492,7 @@ func TestGetReport_WithUserRBAC_NamespacesPopulated(t *testing.T) {
 
 	// Create the router
 	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
 
 	// Create a user session with resourcesets access (which grants namespace visibility)
 	imp := user.Impersonation{
@@ -571,7 +571,7 @@ func TestGetReport_WithUserRBAC_SingleNamespaceAccess(t *testing.T) {
 
 	// Create the router
 	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
 
 	// Create a user session with access only in the default namespace
 	imp := user.Impersonation{
@@ -622,7 +622,7 @@ func TestGetReport_InjectsUserInfo(t *testing.T) {
 
 	// Create the router
 	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
 
 	// Create a user session with name set (this tests the case where Name is displayed)
 	imp := user.Impersonation{
@@ -657,7 +657,7 @@ func TestGetReport_InjectsUserInfoWithRole(t *testing.T) {
 
 	// Create the router
 	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
 
 	// Create a user session without name but with groups (role comes from groups when name is empty)
 	imp := user.Impersonation{

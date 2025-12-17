@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	authzv1 "k8s.io/api/authorization/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -36,7 +35,6 @@ var (
 	testClient  client.Client
 	testCluster cluster.Cluster
 	kubeClient  *kubeclient.Client
-	testLog     = logr.Discard()
 )
 
 func NewTestScheme() *runtime.Scheme {

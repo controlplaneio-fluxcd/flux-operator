@@ -33,7 +33,7 @@ func TestGetFavoritesStatus_Privileged_Success(t *testing.T) {
 
 	// Create the router
 	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
 
 	// Call GetFavoritesStatus without any user session (privileged)
 	favorites := []FavoriteItem{
@@ -53,7 +53,7 @@ func TestGetFavoritesStatus_Privileged_NotFound(t *testing.T) {
 
 	// Create the router
 	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
 
 	// Call GetFavoritesStatus with a non-existent resource
 	favorites := []FavoriteItem{
@@ -75,7 +75,7 @@ func TestGetFavoritesStatus_Privileged_InvalidKind(t *testing.T) {
 
 	// Create the router
 	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
 
 	// Call GetFavoritesStatus with an invalid kind (unknown to Flux API)
 	favorites := []FavoriteItem{
@@ -109,7 +109,7 @@ func TestGetFavoritesStatus_UnprivilegedUser_Forbidden(t *testing.T) {
 
 	// Create the router
 	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
 
 	// Create an unprivileged user session (no RBAC permissions)
 	imp := user.Impersonation{
@@ -190,7 +190,7 @@ func TestGetFavoritesStatus_WithUserRBAC_Success(t *testing.T) {
 
 	// Create the router
 	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
 
 	// Create a user session with RBAC access
 	imp := user.Impersonation{
@@ -279,7 +279,7 @@ func TestGetFavoritesStatus_WithNamespaceScopedRBAC_ForbiddenInOtherNamespace(t 
 
 	// Create the router
 	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
 
 	// Create a user session with namespace-scoped access
 	imp := user.Impersonation{
@@ -360,7 +360,7 @@ func TestGetFavoritesStatus_MixedResults(t *testing.T) {
 
 	// Create the router
 	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
 
 	// Create a user session
 	imp := user.Impersonation{
@@ -410,7 +410,7 @@ func TestGetFavoritesStatus_EmptyList(t *testing.T) {
 
 	// Create the router
 	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
 
 	// Call GetFavoritesStatus with empty list
 	favorites := []FavoriteItem{}

@@ -52,7 +52,7 @@ func TestGetEvents_Privileged(t *testing.T) {
 
 	// Create the router
 	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
 
 	// Call GetEvents without any user session (privileged)
 	events, err := router.GetEvents(ctx, "ResourceSet", "test-events-resourceset", "default", "", "")
@@ -105,7 +105,7 @@ func TestGetEvents_UnprivilegedUser_EmptyResult(t *testing.T) {
 
 	// Create the router
 	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
 
 	// Create an unprivileged user session (no RBAC permissions)
 	imp := user.Impersonation{
@@ -204,7 +204,7 @@ func TestGetEvents_WithUserRBAC_OnlyAccessibleEvents(t *testing.T) {
 
 	// Create the router
 	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
 
 	// Create a user session with namespace-scoped access
 	imp := user.Impersonation{
@@ -311,7 +311,7 @@ func TestGetEvents_WithSpecificNamespace(t *testing.T) {
 
 	// Create the router
 	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
 
 	// Create a user session
 	imp := user.Impersonation{
@@ -388,7 +388,7 @@ func TestGetEvents_IgnoresForbiddenErrors(t *testing.T) {
 
 	// Create the router
 	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
 
 	// Create a user session
 	imp := user.Impersonation{
@@ -464,7 +464,7 @@ func TestGetEvents_FilterByEventType(t *testing.T) {
 
 	// Create the router
 	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
 
 	// Call GetEvents filtering by Warning type only
 	events, err := router.GetEvents(ctx, "ResourceSet", "test-events-filter-type", "default", "", "Warning")

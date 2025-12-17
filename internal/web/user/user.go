@@ -24,8 +24,8 @@ type Profile struct {
 
 // Impersonation holds the user details for Kubernetes RBAC impersonation.
 type Impersonation struct {
-	Username string
-	Groups   []string
+	Username string   `json:"username"`
+	Groups   []string `json:"groups"`
 }
 
 // session holds the user session information during the life of a request.
@@ -90,6 +90,15 @@ func KubeClient(ctx context.Context) any {
 		return s.kubeClient
 	}
 	return nil
+}
+
+// Permissions returns the user's impersonation details from the session in the context.
+func Permissions(ctx context.Context) Impersonation {
+	var imp Impersonation
+	if s := LoadSession(ctx); s != nil {
+		imp = s.Impersonation
+	}
+	return imp
 }
 
 // UsernameAndRole returns the username and role for display purposes.

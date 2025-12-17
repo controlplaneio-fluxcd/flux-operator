@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"k8s.io/apimachinery/pkg/api/errors"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // WorkloadItem represents a single workload request.
@@ -88,7 +89,7 @@ func (r *Router) GetWorkloadsStatus(ctx context.Context, workloads []WorkloadIte
 					statusMessage = "User does not have access to the workload or for listing its pods"
 				default:
 					statusMessage = "Internal error while fetching workload"
-					r.log.Error(err, "failed to get workload status",
+					log.FromContext(ctx).Error(err, "failed to get workload status",
 						"kind", item.Kind,
 						"name", item.Name,
 						"namespace", item.Namespace)

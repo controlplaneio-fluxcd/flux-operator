@@ -299,6 +299,8 @@ func (o *oauth2Authenticator) serveAPI(w http.ResponseWriter, r *http.Request, a
 		return
 	}
 	ctx := user.StoreSession(r.Context(), *details, client)
+	l := log.FromContext(ctx).WithValues("permissions", details.Impersonation)
+	ctx = log.IntoContext(ctx, l)
 	r = r.WithContext(ctx)
 
 	// Serve the API request.

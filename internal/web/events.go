@@ -18,6 +18,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
@@ -41,8 +42,7 @@ func (r *Router) EventsHandler(w http.ResponseWriter, req *http.Request) {
 	// Get events from the cluster using the request context
 	events, err := r.GetEvents(req.Context(), kind, name, namespace, "", eventType)
 	if err != nil {
-		r.log.Error(err, "failed to get events", "url", req.URL.String(),
-			"kind", kind, "name", name, "namespace", namespace, "type", eventType)
+		log.FromContext(req.Context()).Error(err, "failed to get events")
 		// Return empty array instead of error for better UX
 		events = []Event{}
 	}
@@ -179,7 +179,7 @@ func (r *Router) GetEvents(ctx context.Context, kind, name, namespace, excludeRe
 
 				if err := r.kubeClient.GetAPIReader(ctx).List(ctx, el, listOpts...); err != nil {
 					if !apierrors.IsForbidden(err) {
-						r.log.Error(err, "failed to list events for user",
+						log.FromContext(ctx).Error(err, "failed to list events for user",
 							"kind", kind,
 							"namespace", ns)
 					}
