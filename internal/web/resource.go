@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
@@ -44,8 +45,7 @@ func (r *Router) ResourceHandler(w http.ResponseWriter, req *http.Request) {
 	// Get the resource from the cluster
 	resource, err := r.GetResource(req.Context(), kind, name, namespace)
 	if err != nil {
-		r.log.Error(err, "failed to get resource", "url", req.URL.String(),
-			"kind", kind, "name", name, "namespace", namespace)
+		log.FromContext(req.Context()).Error(err, "failed to get resource")
 		switch {
 		case errors.IsNotFound(err):
 			// return empty response if resource not found

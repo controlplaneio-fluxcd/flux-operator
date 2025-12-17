@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // gzipResponseWriter wraps http.ResponseWriter to compress responses with gzip.
@@ -114,17 +115,20 @@ func LoggingMiddleware(logger logr.Logger, next http.Handler) http.Handler {
 		wrapped := &loggingResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
 
 		// Call the next handler
-		next.ServeHTTP(wrapped, r)
+		reqFields := map[string]any{
+			"method":     r.Method,
+			"path":       r.URL.RequestURI(),
+			"remote":     r.RemoteAddr,
+			"user_agent": r.UserAgent(),
+		}
+		ctx := log.IntoContext(r.Context(), logger.WithValues("httpRequest", reqFields))
+		next.ServeHTTP(wrapped, r.WithContext(ctx))
 
 		// Log request details
 		duration := time.Since(start)
-		logger.V(1).Info("HTTP request completed",
-			"uri", r.RequestURI,
-			"method", r.Method,
-			"status", wrapped.statusCode,
-			"remote", r.RemoteAddr,
-			"user_agent", r.UserAgent(),
-			"latency_ms", duration.Round(time.Millisecond).Milliseconds(),
-		)
+		logger.V(1).Info("HTTP request completed", "httpRequest", reqFields, "httpResponse", map[string]any{
+			"status":     wrapped.statusCode,
+			"latency_ms": duration.Round(time.Millisecond).Milliseconds(),
+		})
 	})
 }

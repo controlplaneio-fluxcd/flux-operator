@@ -52,8 +52,7 @@ func NewMiddleware(conf *config.ConfigSpec, kubeClient *kubeclient.Client,
 	default:
 		return nil, fmt.Errorf("unsupported authentication method")
 	}
-	l = l.WithValues("authProvider", provider)
-	l.Info("authentication initialized successfully")
+	l.Info("authentication initialized successfully", "authProvider", provider)
 
 	// Enhance middleware with logout handling and logger.
 	return func(next http.Handler) http.Handler {
@@ -71,12 +70,10 @@ func NewMiddleware(conf *config.ConfigSpec, kubeClient *kubeclient.Client,
 				http.Redirect(w, r, "/", http.StatusSeeOther)
 			default:
 				// Inject logger into context.
-				l := l.WithValues("http", map[string]any{
-					"method": r.Method,
-					"path":   r.URL.Path,
-				})
+				l := log.FromContext(r.Context()).WithValues("authProvider", provider)
 				ctx := log.IntoContext(r.Context(), l)
-				next.ServeHTTP(w, r.WithContext(ctx))
+				r = r.WithContext(ctx)
+				next.ServeHTTP(w, r)
 			}
 		})
 	}, nil

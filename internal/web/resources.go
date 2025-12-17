@@ -20,6 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
@@ -43,8 +44,7 @@ func (r *Router) ResourcesHandler(w http.ResponseWriter, req *http.Request) {
 	// Get resource status from the cluster using the request context
 	resources, err := r.GetResourcesStatus(req.Context(), kind, name, namespace, status, 2500)
 	if err != nil {
-		r.log.Error(err, "failed to get resources status", "url", req.URL.String(),
-			"kind", kind, "name", name, "namespace", namespace, "status", status)
+		log.FromContext(req.Context()).Error(err, "failed to get resources status")
 		// Return empty array instead of error for better UX
 		resources = []ResourceStatus{}
 	}
@@ -194,7 +194,7 @@ func (r *Router) GetResourcesStatus(ctx context.Context, kind, name, namespace, 
 				if strings.Contains(err.Error(), "no matches for kind") {
 					return
 				}
-				r.log.Error(err, "failed to get gvk for kind", "kind", kind)
+				log.FromContext(ctx).Error(err, "failed to get gvk for kind", "kind", kind)
 				return
 			}
 
@@ -229,7 +229,7 @@ func (r *Router) GetResourcesStatus(ctx context.Context, kind, name, namespace, 
 
 				if err := r.kubeClient.GetClient(ctx).List(ctx, &list, listOpts...); err != nil {
 					if !apierrors.IsForbidden(err) {
-						r.log.Error(err, "failed to list resources",
+						log.FromContext(ctx).Error(err, "failed to list resources",
 							"kind", kind,
 							"namespace", ns)
 					}

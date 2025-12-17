@@ -19,6 +19,7 @@ import (
 	metricsv1beta1api "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	metricsclientset "k8s.io/metrics/pkg/client/clientset/versioned"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
@@ -36,7 +37,7 @@ func (r *Router) ReportHandler(w http.ResponseWriter, req *http.Request) {
 	// Get the FluxReport from the cluster using the request context
 	report, err := r.GetReport(req.Context())
 	if err != nil {
-		r.log.Error(err, "cluster query failed", "url", req.URL.String())
+		log.FromContext(req.Context()).Error(err, "cluster query failed")
 		report = uninitialisedReport()
 	}
 
@@ -80,7 +81,7 @@ func (r *Router) GetReport(ctx context.Context) (*unstructured.Unstructured, err
 		namespaces, _, err := r.kubeClient.ListUserNamespaces(ctx)
 		switch {
 		case err != nil:
-			r.log.Error(err, "failed to list user namespaces for report injection")
+			log.FromContext(ctx).Error(err, "failed to list user namespaces for report injection")
 		case len(namespaces) > 0:
 			spec["namespaces"] = namespaces
 		}
@@ -103,7 +104,7 @@ func (r *Router) buildReport(ctx context.Context) (*unstructured.Unstructured, e
 	rep := reporter.NewFluxStatusReporter(repClient, fluxcdv1.DefaultInstanceName, r.statusManager, r.namespace)
 	reportSpec, err := rep.Compute(ctx)
 	if err != nil {
-		r.log.Error(err, "report computed with errors")
+		log.FromContext(ctx).Error(err, "report computed with errors")
 	}
 
 	// Set the operator info

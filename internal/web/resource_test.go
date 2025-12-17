@@ -34,7 +34,7 @@ func TestGetResource_Privileged(t *testing.T) {
 
 	// Create the router
 	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
 
 	// Call GetResource without any user session (privileged)
 	resource, err := router.GetResource(ctx, "ResourceSet", "test-resourceset", "default")
@@ -61,7 +61,7 @@ func TestGetResource_UnprivilegedUser_Forbidden(t *testing.T) {
 
 	// Create the router
 	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
 
 	// Create an unprivileged user session (no RBAC permissions)
 	imp := user.Impersonation{
@@ -134,7 +134,7 @@ func TestGetResource_WithUserRBAC_Success(t *testing.T) {
 
 	// Create the router
 	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
 
 	// Create a user session with resourcesets access
 	imp := user.Impersonation{
@@ -208,7 +208,7 @@ func TestGetResource_WithGroupRBAC_Success(t *testing.T) {
 
 	// Create the router
 	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
 
 	// Create a user session with group membership
 	imp := user.Impersonation{
@@ -284,7 +284,7 @@ func TestGetResource_WithNamespaceScopedRBAC_Success(t *testing.T) {
 
 	// Create the router
 	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
 
 	// Create a user session with namespace-scoped access
 	imp := user.Impersonation{
@@ -369,7 +369,7 @@ func TestGetResource_WithNamespaceScopedRBAC_ForbiddenInOtherNamespace(t *testin
 
 	// Create the router
 	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
 
 	// Create a user session with access only in default namespace
 	imp := user.Impersonation{
@@ -395,7 +395,7 @@ func TestGetResource_NotFound(t *testing.T) {
 
 	// Create the router
 	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
 
 	// Call GetResource for a non-existent resource
 	_, err := router.GetResource(ctx, "ResourceSet", "non-existent-resourceset", "default")
@@ -408,7 +408,7 @@ func TestGetResource_InvalidKind(t *testing.T) {
 
 	// Create the router
 	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
 
 	// Call GetResource with an invalid kind
 	_, err := router.GetResource(ctx, "InvalidKind", "test", "default")

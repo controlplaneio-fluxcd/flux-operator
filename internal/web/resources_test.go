@@ -32,7 +32,7 @@ func TestGetResourcesStatus_Privileged(t *testing.T) {
 
 	// Create the router
 	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
 
 	// Call GetResourcesStatus without any user session (privileged)
 	resources, err := router.GetResourcesStatus(ctx, "ResourceSet", "", "", "", 100)
@@ -66,7 +66,7 @@ func TestGetResourcesStatus_UnprivilegedUser_EmptyResult(t *testing.T) {
 
 	// Create the router
 	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
 
 	// Create an unprivileged user session (no RBAC permissions)
 	imp := user.Impersonation{
@@ -141,7 +141,7 @@ func TestGetResourcesStatus_WithUserRBAC_OnlyAccessibleResources(t *testing.T) {
 
 	// Create the router
 	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
 
 	// Create a user session with namespace-scoped access
 	imp := user.Impersonation{
@@ -224,7 +224,7 @@ func TestGetResourcesStatus_WithSpecificNamespace(t *testing.T) {
 
 	// Create the router
 	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
 
 	// Create a user session
 	imp := user.Impersonation{
@@ -296,7 +296,7 @@ func TestGetResourcesStatus_IgnoresForbiddenErrors(t *testing.T) {
 
 	// Create the router
 	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, testLog, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
 
 	// Create a user session
 	imp := user.Impersonation{

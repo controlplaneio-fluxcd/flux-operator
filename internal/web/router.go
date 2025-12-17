@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/kubeclient"
 )
@@ -20,7 +21,6 @@ import (
 type Router struct {
 	mux            *http.ServeMux
 	kubeClient     *kubeclient.Client
-	log            logr.Logger
 	webFS          fs.FS
 	version        string
 	statusManager  string
@@ -34,11 +34,10 @@ type Router struct {
 }
 
 // NewRouter creates a new router with the given Kubernetes client and embedded filesystem.
-func NewRouter(mux *http.ServeMux, webFS fs.FS, kubeClient *kubeclient.Client, log logr.Logger, version, statusManager, namespace string, reportInterval time.Duration, authMiddleware func(http.Handler) http.Handler) *Router {
+func NewRouter(mux *http.ServeMux, webFS fs.FS, kubeClient *kubeclient.Client, version, statusManager, namespace string, reportInterval time.Duration, authMiddleware func(http.Handler) http.Handler) *Router {
 	return &Router{
 		mux:            mux,
 		kubeClient:     kubeClient,
-		log:            log,
 		webFS:          webFS,
 		version:        version,
 		statusManager:  statusManager,
@@ -66,8 +65,8 @@ func (r *Router) RegisterRoutes() {
 }
 
 // RegisterMiddleware wraps the mux with security headers, logging, gzip compression, and cache control middleware.
-func (r *Router) RegisterMiddleware() http.Handler {
-	return LoggingMiddleware(r.log, SecurityHeadersMiddleware(GzipMiddleware(CacheControlMiddleware(r.authMiddleware(r.mux)))))
+func (r *Router) RegisterMiddleware(l logr.Logger) http.Handler {
+	return LoggingMiddleware(l, SecurityHeadersMiddleware(GzipMiddleware(CacheControlMiddleware(r.authMiddleware(r.mux)))))
 }
 
 // StartReportCache starts a background goroutine that periodically refreshes the report cache.
@@ -94,7 +93,7 @@ func (r *Router) StartReportCache(ctx context.Context) {
 func (r *Router) refreshReportCache(ctx context.Context) {
 	report, err := r.buildReport(ctx)
 	if err != nil {
-		r.log.Error(err, "failed to refresh report cache")
+		log.FromContext(ctx).Error(err, "failed to refresh report cache")
 		return
 	}
 

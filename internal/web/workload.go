@@ -19,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
@@ -48,8 +49,7 @@ func (r *Router) WorkloadHandler(w http.ResponseWriter, req *http.Request) {
 	// Get the resource from the cluster
 	resource, err := r.GetWorkloadStatus(req.Context(), kind, name, namespace)
 	if err != nil {
-		r.log.Error(err, "failed to get workload", "url", req.URL.String(),
-			"kind", kind, "name", name, "namespace", namespace)
+		log.FromContext(req.Context()).Error(err, "failed to get workload")
 		switch {
 		case errors.IsNotFound(err):
 			// return empty response if resource not found

@@ -298,8 +298,8 @@ func (o *oauth2Authenticator) serveAPI(w http.ResponseWriter, r *http.Request, a
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
-	l := log.FromContext(r.Context()).WithValues("permissions", details.Impersonation)
 	ctx := user.StoreSession(r.Context(), *details, client)
+	l := log.FromContext(ctx).WithValues("permissions", details.Impersonation)
 	ctx = log.IntoContext(ctx, l)
 	r = r.WithContext(ctx)
 
