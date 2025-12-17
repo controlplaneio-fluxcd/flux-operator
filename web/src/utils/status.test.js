@@ -268,8 +268,8 @@ describe('status utilities', () => {
       expect(getStatusBorderClass('Suspended')).toBe('border-warning')
     })
 
-    it('should return blue border for Progressing status', () => {
-      expect(getStatusBorderClass('Progressing')).toBe('border-blue-400')
+    it('should return info border for Progressing status', () => {
+      expect(getStatusBorderClass('Progressing')).toBe('border-info')
     })
 
     it('should return gray border for Unknown status', () => {

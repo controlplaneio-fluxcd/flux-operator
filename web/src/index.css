@@ -69,6 +69,10 @@
     @apply border-yellow-500 dark:border-yellow-400;
   }
 
+  .border-info {
+    @apply border-blue-500 dark:border-blue-400;
+  }
+
   /* Animation for QuickSearch slide-in */
   .animate-slide-in-right {
     animation: slideInRight 0.2s ease-out;

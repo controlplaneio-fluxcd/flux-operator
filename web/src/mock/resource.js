@@ -1219,30 +1219,30 @@ export const mockResourcesArray =
       "helmChart": "tailscale/tailscale-tailscale-operator",
       "history": [
         {
+          "appVersion": "v1.90.9",
+          "chartName": "tailscale-operator",
+          "chartVersion": "1.90.9",
+          "configDigest": "sha256:ec864259c2bedeada53e194919f2416a1d6e742b4d5beb3555037ecce7c634d1",
+          "digest": "sha256:f00bb59fbdb28284e525bd4d85aea707e728b89653f2acfa6d98cef3b93e28d5",
+          "firstDeployed": "2025-11-01T23:31:01Z",
+          "lastDeployed": "2025-11-26T19:26:23Z",
+          "name": "tailscale-operator",
+          "namespace": "tailscale",
+          "status": "deployed",
+          "version": 3
+        },
+        {
           "appVersion": "v1.90.8",
           "chartName": "tailscale-operator",
           "chartVersion": "1.90.8",
           "configDigest": "sha256:ec864259c2bedeada53e194919f2416a1d6e742b4d5beb3555037ecce7c634d1",
-          "digest": "sha256:9128e74ac49c4c450bb56eafcd84fae9ba4521beaa5856d6f5473e78fc26dd4c",
+          "digest": "sha256:0d1e61ba399cbc6b8df9e625cb70009ec90a444d2293c280616884cee2dac132",
           "firstDeployed": "2025-11-01T23:31:01Z",
           "lastDeployed": "2025-11-19T22:22:04Z",
           "name": "tailscale-operator",
           "namespace": "tailscale",
-          "status": "deployed",
-          "version": 2
-        },
-        {
-          "appVersion": "v1.90.6",
-          "chartName": "tailscale-operator",
-          "chartVersion": "1.90.6",
-          "configDigest": "sha256:ec864259c2bedeada53e194919f2416a1d6e742b4d5beb3555037ecce7c634d1",
-          "digest": "sha256:d9bf7abea58d7ace88bc7f5f548d4465026ee5468ae2c5a5e05b7632f0c5e9cc",
-          "firstDeployed": "2025-11-01T23:31:01Z",
-          "lastDeployed": "2025-11-01T23:31:01Z",
-          "name": "tailscale-operator",
-          "namespace": "tailscale",
           "status": "superseded",
-          "version": 1
+          "version": 2
         }
       ],
       "inventory": [
