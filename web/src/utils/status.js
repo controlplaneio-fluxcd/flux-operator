@@ -175,7 +175,7 @@ export function getStatusBorderClass(status) {
   case 'Suspended':
     return 'border-warning'
   case 'Progressing':
-    return 'border-blue-400'
+    return 'border-info'
   default:
     return 'border-gray-300 dark:border-gray-600'
   }

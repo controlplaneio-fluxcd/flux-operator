@@ -194,8 +194,11 @@ export function ResourcePage({ kind, namespace, name }) {
   }, [kind, namespace, name])
 
   // Determine display state
-  const isInitialLoading = loading && !resourceData
-  const isInitialError = error && !resourceData
+  // Check that resourceData matches the requested resource to avoid rendering stale data during navigation
+  // Only consider data stale if it has a valid kind that differs from the requested kind
+  const isStaleData = resourceData?.kind && resourceData.kind !== kind
+  const isInitialLoading = (loading && !resourceData) || isStaleData
+  const isInitialError = error && !resourceData && !isStaleData
   const isNotFound = !isInitialLoading && !isInitialError && (!resourceData || !resourceData.metadata || !resourceData.metadata.name)
   const isSuccess = !isInitialLoading && !isInitialError && !isNotFound
 

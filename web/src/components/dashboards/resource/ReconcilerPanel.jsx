@@ -24,6 +24,13 @@ export function ReconcilerPanel({ kind, name, namespace, resourceData }) {
   // Track initial mount to avoid refetching on first render
   const isInitialMount = useRef(true)
 
+  // Reset tab when navigating to a different resource
+  useEffect(() => {
+    setReconcilerTab('overview')
+    setEventsLoaded(false)
+    setEventsData([])
+  }, [kind, namespace, name])
+
   // Derived data
   const reconcilerRef = resourceData?.status?.reconcilerRef
   const status = reconcilerRef?.status || 'Unknown'
