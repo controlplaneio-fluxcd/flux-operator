@@ -201,8 +201,10 @@ func (r *Router) getInventory(
 			})
 		}
 
-		// If the HelmRelease has CRDs to upgrade, we need to add them to the inventory
-		if _, found, _ := unstructured.NestedFieldCopy(obj.Object, "spec", "upgrade", "crds"); found {
+		// If the HelmRelease has CRDs to install or upgrade, we need to add them to the inventory
+		_, installCRDs, _ := unstructured.NestedBool(obj.Object, "spec", "install", "crds")
+		_, upgradeCRDs, _ := unstructured.NestedBool(obj.Object, "spec", "upgrade", "crds")
+		if installCRDs || upgradeCRDs {
 			selector := client.MatchingLabels{
 				"helm.toolkit.fluxcd.io/name":      obj.GetName(),
 				"helm.toolkit.fluxcd.io/namespace": obj.GetNamespace(),
