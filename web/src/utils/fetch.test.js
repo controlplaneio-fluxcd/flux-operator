@@ -113,6 +113,24 @@ describe('fetchWithMock', () => {
       expect(global.fetch).toHaveBeenCalledWith(endpoint, { method: 'GET' })
     })
 
+    it('should throw error without http status on 403 response', async () => {
+      const mockResponse = {
+        ok: false,
+        status: 403,
+        text: () => Promise.resolve('Forbidden access')
+      }
+      global.fetch.mockResolvedValue(mockResponse)
+
+      await expect(
+        fetchWithMock({
+          endpoint: '/api/v1/forbidden',
+          mockPath: '../mock/report.js',
+          mockExport: 'mockReport',
+          env: { MODE: 'production', VITE_USE_MOCK_DATA: 'false' }
+        })
+      ).rejects.toThrow('Forbidden access')
+    })
+
     it('should throw error on non-200 response', async () => {
       const mockResponse = {
         ok: false,

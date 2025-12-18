@@ -69,6 +69,10 @@ export async function fetchWithMock({ endpoint, mockPath, mockExport, env, metho
         authRequired.value = true
       }
 
+      if (response.status === 403) {
+        throw new Error(err)
+      }
+
       throw new Error(`HTTP error! status: ${response.status}, error: ${err}`)
     }
     return await response.json()
