@@ -82,7 +82,8 @@ web:
         issuerURL: https://dex.example.com
 ```
 
-For a complete guide on configuring SSO with Dex, see the [Flux Web UI SSO with Dex](web-sso-dex.md) documentation.
+For a complete guide on configuring SSO, see the [Flux SSO with Dex](web-sso-dex.md)
+or the [SSO with Keycloak](web-sso-keycloak.md) documentation.
 
 ### Claims Mapping to RBAC
 

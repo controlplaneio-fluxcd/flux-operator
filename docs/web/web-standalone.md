@@ -64,6 +64,12 @@ spec:
           serverOnly: true
 ```
 
+!!! warning "Deploy on cluster not managed by Flux Operator"
+
+    If you want to install the Web UI on clusters bootstrapped with the Flux CLI,
+    you must set `installCRDs: true` as the Flux Operator CRDs are required for the Web UI to function.
+    Note that we officially support installing the Web UI only on clusters managed by Flux Operator.
+
 ## Access the Web UI
 
 Once the Helm release is applied, the Flux Web UI will be deployed in the `flux-system` namespace.
