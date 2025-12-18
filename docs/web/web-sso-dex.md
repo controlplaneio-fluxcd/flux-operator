@@ -403,7 +403,7 @@ metadata:
 spec:
   inputs:
     - org: "<your-github-org>"
-      team: "admin"
+      team: "admins"
   resources:
     - apiVersion: rbac.authorization.k8s.io/v1
       kind: ClusterRoleBinding
