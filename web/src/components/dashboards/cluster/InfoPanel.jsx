@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { useSignal } from '@preact/signals'
+import { updateInfo } from '../../../utils/version'
 
 // Calculate aggregate resource usage from metrics
 function calculateTotalResources(metrics) {
@@ -108,7 +109,23 @@ export function InfoPanel({ cluster, distribution, operator, components, metrics
                   <span class="sm:hidden">Operator:</span>
                   <span class="hidden sm:inline">Flux Operator:</span>
                 </dt>
-                <dd class="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white">{operator?.version === '' ? 'Unknown' : (operator?.version ?? 'Unknown')}</dd>
+                <dd class="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-1.5">
+                  {operator?.version === '' ? 'Unknown' : (operator?.version ?? 'Unknown')}
+                  {updateInfo.value?.isOutdated && (
+                    <a
+                      href="https://github.com/controlplaneio-fluxcd/flux-operator/releases"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={`Update available: ${updateInfo.value.latest}`}
+                      class="text-amber-500 hover:text-amber-600 dark:text-amber-400 dark:hover:text-amber-300"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"/>
+                      </svg>
+                    </a>
+                  )}
+                </dd>
               </div>
               <div class="flex items-baseline space-x-2">
                 <dt class="text-xs sm:text-sm text-gray-500 dark:text-gray-400">

@@ -1,11 +1,17 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/preact'
 import { InfoPanel } from './InfoPanel'
+import { updateInfo } from '../../../utils/version'
 
 describe('InfoPanel', () => {
+  beforeEach(() => {
+    // Reset updateInfo signal before each test
+    updateInfo.value = null
+  })
+
   const baseProps = {
     cluster: {
       serverVersion: 'v1.28.0',
@@ -90,6 +96,58 @@ describe('InfoPanel', () => {
 
       expect(screen.getByText('Controller Pods:')).toBeInTheDocument()
       expect(screen.getByText('2')).toBeInTheDocument()
+    })
+  })
+
+  describe('Update Available Indicator', () => {
+    it('should show update icon when version is outdated', () => {
+      updateInfo.value = { latest: 'v0.38.0', current: 'v0.37.0', isOutdated: true }
+
+      render(<InfoPanel {...baseProps} />)
+
+      const updateLink = screen.getByTitle('Update available: v0.38.0')
+      expect(updateLink).toBeInTheDocument()
+      expect(updateLink).toHaveAttribute('href', 'https://github.com/controlplaneio-fluxcd/flux-operator/releases')
+      expect(updateLink).toHaveAttribute('target', '_blank')
+    })
+
+    it('should not show update icon when version is current', () => {
+      updateInfo.value = { latest: 'v0.37.0', current: 'v0.37.0', isOutdated: false }
+
+      render(<InfoPanel {...baseProps} />)
+
+      expect(screen.queryByTitle(/Update available/)).not.toBeInTheDocument()
+    })
+
+    it('should not show update icon when updateInfo is null', () => {
+      updateInfo.value = null
+
+      render(<InfoPanel {...baseProps} />)
+
+      expect(screen.queryByTitle(/Update available/)).not.toBeInTheDocument()
+    })
+
+    it('should render update icon with correct styling', () => {
+      updateInfo.value = { latest: 'v0.38.0', current: 'v0.37.0', isOutdated: true }
+
+      render(<InfoPanel {...baseProps} />)
+
+      const updateLink = screen.getByTitle('Update available: v0.38.0')
+      expect(updateLink).toHaveClass('text-amber-500')
+    })
+
+    it('should stop event propagation when clicking update link', async () => {
+      updateInfo.value = { latest: 'v0.38.0', current: 'v0.37.0', isOutdated: true }
+
+      render(<InfoPanel {...baseProps} />)
+
+      const updateLink = screen.getByTitle('Update available: v0.38.0')
+      const clickEvent = new window.MouseEvent('click', { bubbles: true })
+      const stopPropagationSpy = vi.spyOn(clickEvent, 'stopPropagation')
+
+      updateLink.dispatchEvent(clickEvent)
+
+      expect(stopPropagationSpy).toHaveBeenCalled()
     })
   })
 
