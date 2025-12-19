@@ -34,6 +34,12 @@ func (c Config) Validate() error {
 
 // ConfigSpec holds the Flux Status Page configuration.
 type ConfigSpec struct {
+	// Version is a unique identifier for the configuration.
+	// This field is set internally when the configuration
+	// is loaded and is not part of the API.
+	// +required
+	Version string `json:"-"`
+
 	// BaseURL is the base URL for constructing the Flux Status Page URLs.
 	// Some features may require this to be set.
 	// +optional

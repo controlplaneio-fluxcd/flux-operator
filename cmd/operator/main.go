@@ -6,6 +6,8 @@ package main
 import (
 	"crypto/fips140"
 	"errors"
+	"fmt"
+	"net"
 	"os"
 	"strconv"
 	"time"
@@ -41,9 +43,7 @@ import (
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/entitlement"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web"
-	webauth "github.com/controlplaneio-fluxcd/flux-operator/internal/web/auth"
 	webconfig "github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
-	webkubeclient "github.com/controlplaneio-fluxcd/flux-operator/internal/web/kubeclient"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -61,6 +61,7 @@ func init() {
 	// +kubebuilder:scaffold:scheme
 }
 
+// nolint: gocyclo
 func main() {
 	const (
 		controllerName                              = "flux-operator"
@@ -69,6 +70,7 @@ func main() {
 		reportingIntervalEnvKey                     = "REPORTING_INTERVAL"
 		runtimeNamespaceEnvKey                      = "RUNTIME_NAMESPACE"
 		webServerPortEnvKey                         = "WEB_SERVER_PORT"
+		webConfigSecretNameEnvKey                   = "WEB_CONFIG_SECRET_NAME"
 		tokenCacheDefaultMaxSize                    = 100
 	)
 
@@ -90,6 +92,7 @@ func main() {
 		webServerPort                         int
 		webServerOnly                         bool
 		webConfigFile                         string
+		webConfigSecretName                   string
 	)
 
 	flag.IntVar(&concurrent, "concurrent", 10,
@@ -119,6 +122,8 @@ func main() {
 		"Run only the web server without starting the controllers.")
 	flag.StringVar(&webConfigFile, "web-config", "",
 		"The path to the configuration file for the web server.")
+	flag.StringVar(&webConfigSecretName, "web-config-secret-name", "",
+		"The name of the Kubernetes Secret containing the web server configuration.")
 
 	tokenCacheOptions.BindFlags(flag.CommandLine, tokenCacheDefaultMaxSize)
 	logOptions.BindFlags(flag.CommandLine)
@@ -358,56 +363,111 @@ func main() {
 		webServerPort = port
 	}
 
-	if webServerPort > 0 {
-		// TODO: could be read from config
-		const reportInterval = 20 * time.Second
-		const namespaceCacheDuration = reportInterval
-		webLog := ctrl.Log.WithName("web-server")
-
-		conf, err := webconfig.Load(webConfigFile)
-		if err != nil {
-			setupLog.Error(err, "unable to load web server configuration")
+	webError := make(chan error, 1)
+	var confWatcherStopped <-chan struct{}
+	if webServerPort <= 0 {
+		close(webError)
+	} else {
+		// Check web server configuration flags.
+		if webConfigSecretName == "" {
+			webConfigSecretName = os.Getenv(webConfigSecretNameEnvKey)
+		}
+		if webConfigSecretName != "" && webConfigFile != "" {
+			err := errors.New("both web-config and web-config-secret-name are set, " +
+				"only one of the two options can be used to configure the web server")
+			setupLog.Error(err, "invalid web server configuration flags")
 			os.Exit(1)
 		}
 
-		userCacheSize := 1 // Single cache entry if authentication is disabled or anonymous.
-		if a := conf.Spec.Authentication; a != nil && a.Type != webconfig.AuthenticationTypeAnonymous {
-			userCacheSize = a.UserCacheSize
+		// Open configuration channel and load first configuration.
+		var confChannel <-chan *webconfig.ConfigSpec
+		var firstConf *webconfig.ConfigSpec
+		if webConfigSecretName != "" {
+			confChannel, confWatcherStopped, firstConf, err = webconfig.WatchSecret(
+				ctx, webConfigSecretName, runtimeNamespace, mgr.GetConfig())
+			if err != nil {
+				setupLog.Error(err, "unable to watch web server configuration secret")
+				os.Exit(1)
+			}
+			setupLog.Info("loaded web configuration from secret", "secretRef", map[string]any{
+				"name":      webConfigSecretName,
+				"namespace": runtimeNamespace,
+			})
+		} else {
+			stopped := make(chan struct{})
+			close(stopped)
+			confChannel = make(chan *webconfig.ConfigSpec) // never receives updates
+			confWatcherStopped = stopped
+			firstConf, err = webconfig.Load(webConfigFile)
+			if err != nil {
+				setupLog.Error(err, "unable to load web server configuration file")
+				os.Exit(1)
+			}
+
+			if webConfigFile != "" {
+				setupLog.Info("loaded web configuration from file", "filePath", webConfigFile)
+			} else {
+				setupLog.Info("no web configuration file provided, using default configuration")
+			}
 		}
 
-		kubeClient, err := webkubeclient.New(mgr, userCacheSize, namespaceCacheDuration)
+		// Initialize components with the first configuration.
+		webLog := ctrl.Log.WithName("web-server").WithValues("port", webServerPort)
+		firstComponents, err := web.InitializeServerComponents(firstConf, mgr,
+			webLog.WithValues("configVersion", firstConf.Version))
 		if err != nil {
-			setupLog.Error(err, "unable to create web server kube client")
+			setupLog.Error(err, "unable to initialize web server components")
 			os.Exit(1)
 		}
 
-		authMiddleware, err := webauth.NewMiddleware(&conf.Spec, kubeClient, webLog)
+		// Start listening on the specified port. This is the only
+		// listener used in the life of the process, which ensures
+		// the server configuration is updated without downtime.
+		listener, err := net.Listen("tcp", fmt.Sprintf(":%d", webServerPort))
 		if err != nil {
-			setupLog.Error(err, "unable to create auth middleware")
+			setupLog.Error(err, "unable to listen on web server port", "port", webServerPort)
 			os.Exit(1)
 		}
 
+		// Fire off web server goroutine.
 		go func() {
 			<-mgr.Elected()
-			if err := web.StartServer(ctx,
-				time.Minute,
-				webServerPort,
-				kubeClient,
-				webLog,
+			webError <- web.RunServer(ctx,
+				mgr,
+				confChannel,
 				VERSION,
 				controllerName,
 				runtimeNamespace,
-				reportInterval,
-				authMiddleware); err != nil {
-				setupLog.Error(err, "web server error")
-				os.Exit(1)
-			}
+				firstComponents,
+				listener,
+				webLog)
 		}()
 	}
 
+	// Start the manager. This will block until the manager stops,
+	// which happens when ctx is done.
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctx); err != nil {
-		setupLog.Error(err, "problem running manager")
+		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
+	}
+
+	// Manager has stopped. Wait for web server to stop. It also
+	// shuts down when the context is done.
+	shutdownLog := setupLog.WithName("shutdown")
+	gracefulShutdownDeadline := time.After(10 * time.Second)
+	select {
+	case <-confWatcherStopped:
+		select {
+		case err := <-webError:
+			if err != nil {
+				shutdownLog.Error(err, "web server stopped with error")
+				os.Exit(1)
+			}
+		case <-gracefulShutdownDeadline:
+			shutdownLog.Info("timed out waiting for web server to stop")
+		}
+	case <-gracefulShutdownDeadline:
+		shutdownLog.Info("timed out waiting for web server configuration watcher to stop")
 	}
 }

@@ -26,7 +26,7 @@ const (
 
 // NewMiddleware creates a new authentication middleware for HTTP handlers.
 func NewMiddleware(conf *config.ConfigSpec, kubeClient *kubeclient.Client,
-	l logr.Logger) (func(next http.Handler) http.Handler, error) {
+	initLog logr.Logger) (func(next http.Handler) http.Handler, error) {
 
 	// Build middleware according to the authentication type.
 	var middleware func(next http.Handler) http.Handler
@@ -52,7 +52,7 @@ func NewMiddleware(conf *config.ConfigSpec, kubeClient *kubeclient.Client,
 	default:
 		return nil, fmt.Errorf("unsupported authentication method")
 	}
-	l.Info("authentication initialized successfully", "authProvider", provider)
+	initLog.Info("authentication initialized successfully", "authProvider", provider)
 
 	// Enhance middleware with logout handling and logger.
 	return func(next http.Handler) http.Handler {

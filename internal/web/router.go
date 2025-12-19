@@ -6,6 +6,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io/fs"
 	"net/http"
 	"sync"
@@ -70,12 +71,16 @@ func (r *Router) RegisterMiddleware(l logr.Logger) http.Handler {
 	return LoggingMiddleware(l, SecurityHeadersMiddleware(GzipMiddleware(CacheControlMiddleware(r.authMiddleware(r.mux)))))
 }
 
-// StartReportCache starts a background goroutine that periodically refreshes the report cache.
-func (r *Router) StartReportCache(ctx context.Context) {
+// StartReportCache starts a background goroutine that periodically refreshes the
+// report cache. It returns a channel that is closed when the goroutine stops.
+func (r *Router) StartReportCache(ctx context.Context) <-chan struct{} {
 	// Build initial report synchronously
 	r.refreshReportCache(ctx)
 
+	stopped := make(chan struct{})
 	go func() {
+		defer close(stopped)
+
 		ticker := time.NewTicker(r.reportInterval)
 		defer ticker.Stop()
 
@@ -88,13 +93,17 @@ func (r *Router) StartReportCache(ctx context.Context) {
 			}
 		}
 	}()
+
+	return stopped
 }
 
 // refreshReportCache builds a fresh report and updates the cache.
 func (r *Router) refreshReportCache(ctx context.Context) {
 	report, err := r.buildReport(ctx)
 	if err != nil {
-		log.FromContext(ctx).Error(err, "failed to refresh report cache")
+		if !errors.Is(err, context.Canceled) || ctx.Err() == nil {
+			log.FromContext(ctx).Error(err, "failed to refresh report cache")
+		}
 		return
 	}
 
