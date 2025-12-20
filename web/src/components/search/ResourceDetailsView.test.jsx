@@ -207,9 +207,8 @@ describe('ResourceDetailsView component', () => {
     expect(textContent).not.toContain('inventory:')
   })
 
-  it('should display inventory tab grouped by API version when present', async () => {
+  it('should display graph tab with visual dependency graph when inventory present', async () => {
     fetchWithMock.mockResolvedValue(mockResourceData)
-    const user = userEvent.setup()
 
     render(
       <ResourceDetailsView
@@ -220,27 +219,20 @@ describe('ResourceDetailsView component', () => {
       />
     )
 
-    // Wait for inventory tab to appear
-    const inventoryTab = await screen.findByText(/Inventory \(3\)/)
-    expect(inventoryTab).toBeInTheDocument()
+    // Wait for graph tab to appear (default tab when inventory exists)
+    const graphTab = await screen.findByText('Graph')
+    expect(graphTab).toBeInTheDocument()
 
-    // Click on Inventory tab
-    await user.click(inventoryTab)
+    // Graph tab should be active by default
+    expect(graphTab).toHaveClass('border-flux-blue')
 
-    // Wait for inventory content to appear and check for API version groups
+    // Should show graph content with reconciler info
     await waitFor(() => {
-      const textContent = document.body.textContent
-      expect(textContent).toContain('v1')
-      expect(textContent).toContain('apps/v1')
-      expect(textContent).toContain('production')
-      expect(textContent).toContain('app-config')
-      expect(textContent).toContain('Namespace')
-      expect(textContent).toContain('ConfigMap')
-      expect(textContent).toContain('Deployment')
+      expect(screen.getByTestId('graph-tab-content')).toBeInTheDocument()
     })
   })
 
-  it('should not show inventory tab if resource has no inventory', async () => {
+  it('should not show graph tab if resource has no inventory', async () => {
     fetchWithMock.mockResolvedValue(mockResourceDataNoInventory)
 
     render(
@@ -256,8 +248,8 @@ describe('ResourceDetailsView component', () => {
       expect(screen.getByText('Specification')).toBeInTheDocument()
     })
 
-    // Inventory tab should not be present
-    expect(screen.queryByText(/Inventory/)).not.toBeInTheDocument()
+    // Graph tab should not be present
+    expect(screen.queryByText('Graph')).not.toBeInTheDocument()
 
     // Only Specification and Status tabs should be visible
     expect(screen.getByText('Specification')).toBeInTheDocument()
@@ -365,8 +357,8 @@ describe('ResourceDetailsView component', () => {
     expect(codeElement).toBeInTheDocument()
   })
 
-  it('should sort inventory by apiVersion with priorities', async () => {
-    const resourceWithMixedApiVersions = {
+  it('should display graph with inventory groups', async () => {
+    const resourceWithMixedInventory = {
       apiVersion: 'kustomize.toolkit.fluxcd.io/v1',
       kind: 'Kustomization',
       metadata: {
@@ -376,17 +368,14 @@ describe('ResourceDetailsView component', () => {
       spec: { interval: '10m' },
       status: {
         inventory: [
-          { apiVersion: 'custom.io/v1', kind: 'Custom', name: 'custom1' },
-          { apiVersion: 'apiextensions.k8s.io/v1', kind: 'CustomResourceDefinition', name: 'crd1' },
           { apiVersion: 'apps/v1', kind: 'Deployment', namespace: 'default', name: 'app' },
           { apiVersion: 'v1', kind: 'Namespace', name: 'test' },
-          { apiVersion: 'another.io/v1', kind: 'Another', name: 'another1' }
+          { apiVersion: 'v1', kind: 'ConfigMap', namespace: 'default', name: 'config' }
         ]
       }
     }
 
-    fetchWithMock.mockResolvedValue(resourceWithMixedApiVersions)
-    const user = userEvent.setup()
+    fetchWithMock.mockResolvedValue(resourceWithMixedInventory)
 
     render(
       <ResourceDetailsView
@@ -397,26 +386,18 @@ describe('ResourceDetailsView component', () => {
       />
     )
 
-    // Wait for inventory tab to appear
-    const inventoryTab = await screen.findByText(/Inventory \(5\)/)
-    expect(inventoryTab).toBeInTheDocument()
+    // Wait for graph tab to be active
+    const graphTab = await screen.findByText('Graph')
+    expect(graphTab).toHaveClass('border-flux-blue')
 
-    // Click on Inventory tab
-    await user.click(inventoryTab)
-
-    // Get all API version headers in order after clicking
+    // Check for graph content
     await waitFor(() => {
-      const apiVersionElements = screen.getAllByText(/^(apiextensions\.k8s\.io\/v1|v1|apps\/v1|custom\.io\/v1|another\.io\/v1)$/)
-
-      // apiextensions.k8s.io/v1 should come first, then v1, then others alphabetically
-      expect(apiVersionElements[0].textContent).toBe('apiextensions.k8s.io/v1')
-      expect(apiVersionElements[1].textContent).toBe('v1')
-      // The rest should be alphabetically sorted (another.io/v1 before apps/v1 before custom.io/v1)
+      expect(screen.getByTestId('graph-tab-content')).toBeInTheDocument()
     })
   })
 
-  it('should handle inventory items without namespace (cluster-scoped)', async () => {
-    const resourceWithClusterScoped = {
+  it('should display graph with workloads grouped', async () => {
+    const resourceWithWorkloads = {
       apiVersion: 'kustomize.toolkit.fluxcd.io/v1',
       kind: 'Kustomization',
       metadata: {
@@ -426,14 +407,14 @@ describe('ResourceDetailsView component', () => {
       spec: { interval: '10m' },
       status: {
         inventory: [
-          { apiVersion: 'v1', kind: 'Namespace', name: 'test-namespace' },
+          { apiVersion: 'apps/v1', kind: 'Deployment', namespace: 'default', name: 'app1' },
+          { apiVersion: 'apps/v1', kind: 'Deployment', namespace: 'default', name: 'app2' },
           { apiVersion: 'v1', kind: 'ConfigMap', namespace: 'default', name: 'config' }
         ]
       }
     }
 
-    fetchWithMock.mockResolvedValue(resourceWithClusterScoped)
-    const user = userEvent.setup()
+    fetchWithMock.mockResolvedValue(resourceWithWorkloads)
 
     render(
       <ResourceDetailsView
@@ -444,28 +425,13 @@ describe('ResourceDetailsView component', () => {
       />
     )
 
-    // Wait for inventory tab to appear
-    const inventoryTab = await screen.findByText(/Inventory \(2\)/)
-    expect(inventoryTab).toBeInTheDocument()
-
-    // Click on Inventory tab
-    await user.click(inventoryTab)
-
-    // Wait for inventory content to appear
+    // Wait for graph tab content
     await waitFor(() => {
-      expect(screen.getByText('test-namespace')).toBeInTheDocument()
+      expect(screen.getByTestId('graph-tab-content')).toBeInTheDocument()
     })
 
-    // Cluster-scoped resource should not show namespace
-    const namespaceItem = screen.getByText('test-namespace').closest('div')
-    expect(namespaceItem.textContent).toContain('Namespace/')
-    expect(namespaceItem.textContent).toContain('test-namespace')
-
-    // Namespaced resource should show namespace
-    const configItem = screen.getByText('config').closest('div')
-    expect(configItem.textContent).toContain('ConfigMap/')
-    expect(configItem.textContent).toContain('default/')
-    expect(configItem.textContent).toContain('config')
+    // Should show Workloads group (2 deployments)
+    expect(screen.getByText(/Workloads \(2\)/)).toBeInTheDocument()
   })
 
   it('should not fetch when expanded is false initially', () => {
@@ -535,7 +501,7 @@ describe('ResourceDetailsView component', () => {
     expect(screen.getByText('Status')).toBeInTheDocument()
   })
 
-  it('should show Inventory tab as default for Kustomization even when empty', async () => {
+  it('should show Graph tab as default for Kustomization even when empty', async () => {
     const resourceWithSourceRef = {
       apiVersion: 'kustomize.toolkit.fluxcd.io/v1',
       kind: 'Kustomization',
@@ -575,21 +541,21 @@ describe('ResourceDetailsView component', () => {
       />
     )
 
-    // Wait for Inventory tab to appear and be active (even though empty)
+    // Wait for Graph tab to appear and be active (even though empty inventory)
     await waitFor(() => {
-      const inventoryTab = screen.getByText('Inventory (0)')
-      expect(inventoryTab).toBeInTheDocument()
-      expect(inventoryTab).toHaveClass('border-flux-blue')
+      const graphTab = screen.getByText('Graph')
+      expect(graphTab).toBeInTheDocument()
+      expect(graphTab).toHaveClass('border-flux-blue')
     })
 
-    // Should show empty inventory message
-    expect(screen.getByText('Empty inventory, no managed objects')).toBeInTheDocument()
+    // Should show graph content
+    expect(screen.getByTestId('graph-tab-content')).toBeInTheDocument()
 
     // Source tab should also be visible
     expect(screen.getByText('Source')).toBeInTheDocument()
   })
 
-  it('should show Inventory tab as default for ResourceSet even when empty', async () => {
+  it('should show Graph tab as default for ResourceSet even when empty', async () => {
     const resourceSet = {
       apiVersion: 'fluxcd.controlplane.io/v1',
       kind: 'ResourceSet',
@@ -624,15 +590,15 @@ describe('ResourceDetailsView component', () => {
       />
     )
 
-    // Wait for Inventory tab to appear and be active (even though empty)
+    // Wait for Graph tab to appear and be active (even though empty inventory)
     await waitFor(() => {
-      const inventoryTab = screen.getByText('Inventory (0)')
-      expect(inventoryTab).toBeInTheDocument()
-      expect(inventoryTab).toHaveClass('border-flux-blue')
+      const graphTab = screen.getByText('Graph')
+      expect(graphTab).toBeInTheDocument()
+      expect(graphTab).toHaveClass('border-flux-blue')
     })
 
-    // Should show empty inventory message
-    expect(screen.getByText('Empty inventory, no managed objects')).toBeInTheDocument()
+    // Should show graph content
+    expect(screen.getByTestId('graph-tab-content')).toBeInTheDocument()
   })
 
   it('should display sourceRef data correctly in Source tab', async () => {
@@ -780,8 +746,8 @@ describe('ResourceDetailsView component', () => {
     expect(screen.queryByText('Source')).not.toBeInTheDocument()
   })
 
-  describe('Inventory navigation', () => {
-    it('should make Flux resource inventory items clickable', async () => {
+  describe('Graph navigation', () => {
+    it('should display Flux resources group in graph', async () => {
       const resourceWithFluxInventory = {
         apiVersion: 'kustomize.toolkit.fluxcd.io/v1',
         kind: 'Kustomization',
@@ -799,7 +765,6 @@ describe('ResourceDetailsView component', () => {
       }
 
       fetchWithMock.mockResolvedValue(resourceWithFluxInventory)
-      const user = userEvent.setup()
 
       render(
         <ResourceDetailsView
@@ -810,23 +775,15 @@ describe('ResourceDetailsView component', () => {
         />
       )
 
-      // Wait for inventory tab to appear and click it
-      const inventoryTab = await screen.findByText(/Inventory \(2\)/)
-      await user.click(inventoryTab)
-
-      // Find the GitRepository button
-      const gitRepoButton = await screen.findByRole('button', { name: /GitRepository\/flux-system\/podinfo/ })
-      expect(gitRepoButton).toBeInTheDocument()
-
-      // Click the GitRepository inventory item
-      await user.click(gitRepoButton)
-
-      // Verify navigation to resource dashboard
-      expect(mockRoute).toHaveBeenCalledWith('/resource/GitRepository/flux-system/podinfo')
+      // Wait for graph content with Flux Resources group
+      await waitFor(() => {
+        expect(screen.getByTestId('graph-tab-content')).toBeInTheDocument()
+        expect(screen.getByText(/Flux Resources \(2\)/)).toBeInTheDocument()
+      })
     })
 
-    it('should not make non-Flux resource inventory items clickable', async () => {
-      const resourceWithMixedInventory = {
+    it('should display source node in graph when sourceRef exists', async () => {
+      const resourceWithSource = {
         apiVersion: 'kustomize.toolkit.fluxcd.io/v1',
         kind: 'Kustomization',
         metadata: {
@@ -835,15 +792,18 @@ describe('ResourceDetailsView component', () => {
         },
         spec: { interval: '10m' },
         status: {
-          inventory: [
-            { apiVersion: 'v1', kind: 'ConfigMap', namespace: 'default', name: 'app-config' },
-            { apiVersion: 'apps/v1', kind: 'Deployment', namespace: 'default', name: 'app' }
-          ]
+          sourceRef: {
+            kind: 'GitRepository',
+            name: 'my-repo',
+            namespace: 'flux-system',
+            status: 'Ready',
+            url: 'https://github.com/example/repo.git'
+          },
+          inventory: []
         }
       }
 
-      fetchWithMock.mockResolvedValue(resourceWithMixedInventory)
-      const user = userEvent.setup()
+      fetchWithMock.mockResolvedValue(resourceWithSource)
 
       render(
         <ResourceDetailsView
@@ -854,42 +814,17 @@ describe('ResourceDetailsView component', () => {
         />
       )
 
-      // Wait for inventory tab and click it
-      const inventoryTab = await screen.findByText(/Inventory \(2\)/)
-      await user.click(inventoryTab)
-
-      // ConfigMap and Deployment should not be buttons
+      // Wait for graph content
       await waitFor(() => {
-        expect(screen.getByText('app-config')).toBeInTheDocument()
+        expect(screen.getByTestId('graph-tab-content')).toBeInTheDocument()
       })
 
-      // Verify there are no clickable buttons for non-Flux resources
-      const buttons = screen.queryAllByRole('button')
-      // Should only have the tab buttons, not inventory item buttons
-      const inventoryButtons = buttons.filter(btn =>
-        btn.textContent.includes('ConfigMap') || btn.textContent.includes('Deployment')
-      )
-      expect(inventoryButtons).toHaveLength(0)
+      // Should show source node
+      expect(screen.getByText('flux-system/my-repo')).toBeInTheDocument()
     })
 
-    it('should handle inventory items without namespace', async () => {
-      const resourceWithClusterScopedFlux = {
-        apiVersion: 'kustomize.toolkit.fluxcd.io/v1',
-        kind: 'Kustomization',
-        metadata: {
-          name: 'apps',
-          namespace: 'flux-system'
-        },
-        spec: { interval: '10m' },
-        status: {
-          inventory: [
-            { apiVersion: 'fluxcd.controlplane.io/v1', kind: 'FluxInstance', name: 'flux' }
-          ]
-        }
-      }
-
-      fetchWithMock.mockResolvedValue(resourceWithClusterScopedFlux)
-      const user = userEvent.setup()
+    it('should display reconciler node in graph', async () => {
+      fetchWithMock.mockResolvedValue(mockResourceData)
 
       render(
         <ResourceDetailsView
@@ -900,56 +835,13 @@ describe('ResourceDetailsView component', () => {
         />
       )
 
-      // Wait for inventory tab and click it
-      const inventoryTab = await screen.findByText(/Inventory \(1\)/)
-      await user.click(inventoryTab)
+      // Wait for graph content
+      await waitFor(() => {
+        expect(screen.getByTestId('graph-tab-content')).toBeInTheDocument()
+      })
 
-      // Find and click the FluxInstance button
-      const fluxButton = await screen.findByRole('button', { name: /FluxInstance\/flux/ })
-      await user.click(fluxButton)
-
-      // Verify navigation to resource dashboard (with empty namespace)
-      expect(mockRoute).toHaveBeenCalledWith('/resource/FluxInstance//flux')
-    })
-
-    it('should display navigation icon for clickable Flux resources', async () => {
-      const resourceWithFluxInventory = {
-        apiVersion: 'kustomize.toolkit.fluxcd.io/v1',
-        kind: 'Kustomization',
-        metadata: {
-          name: 'apps',
-          namespace: 'flux-system'
-        },
-        spec: { interval: '10m' },
-        status: {
-          inventory: [
-            { apiVersion: 'kustomize.toolkit.fluxcd.io/v1', kind: 'Kustomization', namespace: 'apps', name: 'backend' }
-          ]
-        }
-      }
-
-      fetchWithMock.mockResolvedValue(resourceWithFluxInventory)
-      const user = userEvent.setup()
-
-      render(
-        <ResourceDetailsView
-          kind="Kustomization"
-          name="apps"
-          namespace="flux-system"
-          isExpanded={true}
-        />
-      )
-
-      // Wait for inventory tab and click it
-      const inventoryTab = await screen.findByText(/Inventory \(1\)/)
-      await user.click(inventoryTab)
-
-      // Find the button and check for icon
-      const kustomizationButton = await screen.findByRole('button', { name: /Kustomization\/apps\/backend/ })
-      const svg = kustomizationButton.querySelector('svg')
-
-      expect(svg).toBeInTheDocument()
-      expect(svg).toHaveAttribute('viewBox', '0 0 24 24')
+      // Should show reconciler node with resource name
+      expect(screen.getByText('flux-system/apps')).toBeInTheDocument()
     })
   })
 })

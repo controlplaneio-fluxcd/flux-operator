@@ -909,6 +909,97 @@ describe('InventoryPanel component', () => {
     expect(textContent).toContain('Disabled')
   })
 
+  describe('Graph tab', () => {
+    it('should show Graph tab when inventory exists', () => {
+      render(
+        <InventoryPanel
+          resourceData={mockKustomizationData}
+          onNavigate={mockOnNavigate}
+        />
+      )
+
+      expect(screen.getByText('Graph')).toBeInTheDocument()
+    })
+
+    it('should not show Graph tab when inventory is empty', () => {
+      const noInventoryData = {
+        ...mockKustomizationData,
+        status: {}
+      }
+
+      render(
+        <InventoryPanel
+          resourceData={noInventoryData}
+          onNavigate={mockOnNavigate}
+        />
+      )
+
+      expect(screen.queryByText('Graph')).not.toBeInTheDocument()
+    })
+
+    it('should switch to Graph tab when clicked', async () => {
+      const user = userEvent.setup()
+
+      render(
+        <InventoryPanel
+          resourceData={mockKustomizationData}
+          onNavigate={mockOnNavigate}
+        />
+      )
+
+      // Click on Graph tab
+      const graphTab = screen.getByText('Graph')
+      await user.click(graphTab)
+
+      // Check that graph tab is active
+      expect(graphTab).toHaveClass('border-flux-blue')
+
+      // Check that graph content is displayed (wait for lazy load)
+      expect(await screen.findByTestId('graph-tab-content')).toBeInTheDocument()
+    })
+
+    it('should display graph with reconciler information', async () => {
+      const user = userEvent.setup()
+
+      render(
+        <InventoryPanel
+          resourceData={mockKustomizationData}
+          onNavigate={mockOnNavigate}
+        />
+      )
+
+      // Switch to Graph tab
+      const graphTab = screen.getByText('Graph')
+      await user.click(graphTab)
+
+      // Check that current reconciler is shown (wait for lazy load, Kustomization may appear multiple times)
+      const kustomizations = await screen.findAllByText('Kustomization')
+      expect(kustomizations.length).toBeGreaterThanOrEqual(1)
+    })
+
+    it('should display inventory groups in graph', async () => {
+      const user = userEvent.setup()
+
+      render(
+        <InventoryPanel
+          resourceData={mockKustomizationData}
+          onNavigate={mockOnNavigate}
+        />
+      )
+
+      // Switch to Graph tab
+      const graphTab = screen.getByText('Graph')
+      await user.click(graphTab)
+
+      // Check inventory groups are shown (wait for lazy load)
+      // mockKustomizationData has 1 Flux resource (Kustomization), 1 workload (Deployment), and 3 other resources
+      // Text is split across nodes so use regex
+      expect(await screen.findByText(/Flux Resources \(1\)/)).toBeInTheDocument()
+      expect(await screen.findByText(/Workloads \(1\)/)).toBeInTheDocument()
+      expect(await screen.findByText(/Resources \(3\)/)).toBeInTheDocument()
+    })
+  })
+
   describe('inventoryError', () => {
     it('should not display error when inventoryError is not present', () => {
       render(

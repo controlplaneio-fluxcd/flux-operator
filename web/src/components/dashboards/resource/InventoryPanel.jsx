@@ -1,10 +1,11 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { useState, useMemo } from 'preact/hooks'
+import { useState, useMemo } from 'preact/compat'
 import { fluxKinds, workloadKinds, isKindWithInventory } from '../../../utils/constants'
 import { DashboardPanel, TabButton } from '../common/panel'
 import { WorkloadsTabContent } from './WorkloadsTabContent'
+import { GraphTabContent } from './GraphTabContent'
 
 /**
  * InventoryPanel - Displays managed objects inventory for a Flux resource
@@ -128,6 +129,11 @@ export function InventoryPanel({ resourceData, onNavigate }) {
             <span class="hidden sm:inline">Overview</span>
           </TabButton>
           {hasInventory && (
+            <TabButton active={activeTab === 'graph'} onClick={() => setActiveTab('graph')}>
+              Graph
+            </TabButton>
+          )}
+          {hasInventory && (
             <TabButton active={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')}>
               Inventory
             </TabButton>
@@ -221,6 +227,15 @@ export function InventoryPanel({ resourceData, onNavigate }) {
             </div>
           </div>
         </div>
+      )}
+
+      {activeTab === 'graph' && (
+        <GraphTabContent
+          resourceData={resourceData}
+          namespace={resourceData.metadata.namespace}
+          onNavigate={onNavigate}
+          setActiveTab={setActiveTab}
+        />
       )}
 
       {activeTab === 'inventory' && (
