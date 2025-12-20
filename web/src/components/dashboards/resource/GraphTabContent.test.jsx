@@ -34,7 +34,7 @@ describe('buildGraphData function', () => {
       status: 'Ready',
       isClickable: true,
       url: 'https://github.com/example/repo',
-      forceBlue: false
+      accentBorder: false
     })
   })
 
@@ -218,7 +218,7 @@ describe('buildGraphData function', () => {
       status: 'Ready',
       isClickable: false,
       url: 'ghcr.io/fluxcd',
-      forceBlue: true
+      accentBorder: true
     })
   })
 
@@ -270,7 +270,7 @@ describe('buildGraphData function', () => {
       status: 'Unknown',
       isClickable: true,
       url: null,
-      forceBlue: true
+      accentBorder: true
     })
     expect(result.sources[1]).toEqual({
       kind: 'OCIRepository',
@@ -279,7 +279,7 @@ describe('buildGraphData function', () => {
       status: 'Unknown',
       isClickable: true,
       url: null,
-      forceBlue: true
+      accentBorder: true
     })
   })
 
@@ -326,7 +326,7 @@ describe('buildGraphData function', () => {
       name: 'my-repo',
       url: 'https://github.com/org/my-repo.git',
       isClickable: true,
-      forceBlue: true
+      accentBorder: true
     })
   })
 
@@ -396,6 +396,93 @@ describe('buildGraphData function', () => {
     const result = buildGraphData(resourceData)
 
     expect(result.upstream.isClickable).toBe(false)
+  })
+
+  it('should extract HelmChart when source is HelmRepository', () => {
+    const resourceData = {
+      kind: 'HelmRelease',
+      metadata: { name: 'nginx', namespace: 'default' },
+      spec: {
+        chart: {
+          spec: {
+            chart: 'nginx',
+            version: '>=1.0.0'
+          }
+        }
+      },
+      status: {
+        reconcilerRef: { status: 'Ready' },
+        sourceRef: {
+          kind: 'HelmRepository',
+          name: 'bitnami',
+          namespace: 'flux-system',
+          status: 'Ready',
+          url: 'https://charts.bitnami.com/bitnami'
+        },
+        helmChart: 'default/default-nginx',
+        inventory: []
+      }
+    }
+
+    const result = buildGraphData(resourceData)
+
+    expect(result.helmChart).toEqual({
+      kind: 'HelmChart',
+      name: 'default-nginx',
+      namespace: 'default',
+      version: 'semver >=1.0.0',
+      isClickable: true
+    })
+  })
+
+  it('should not extract HelmChart when source is not HelmRepository', () => {
+    const resourceData = {
+      kind: 'HelmRelease',
+      metadata: { name: 'cert-manager', namespace: 'cert-manager' },
+      status: {
+        reconcilerRef: { status: 'Ready' },
+        sourceRef: {
+          kind: 'OCIRepository',
+          name: 'cert-manager',
+          namespace: 'cert-manager',
+          status: 'Ready'
+        },
+        inventory: []
+      }
+    }
+
+    const result = buildGraphData(resourceData)
+
+    expect(result.helmChart).toBeNull()
+  })
+
+  it('should handle HelmChart without version in spec', () => {
+    const resourceData = {
+      kind: 'HelmRelease',
+      metadata: { name: 'nginx', namespace: 'default' },
+      spec: {
+        chart: {
+          spec: {
+            chart: 'nginx'
+          }
+        }
+      },
+      status: {
+        reconcilerRef: { status: 'Ready' },
+        sourceRef: {
+          kind: 'HelmRepository',
+          name: 'bitnami',
+          namespace: 'flux-system',
+          status: 'Ready'
+        },
+        helmChart: 'default/default-nginx',
+        inventory: []
+      }
+    }
+
+    const result = buildGraphData(resourceData)
+
+    expect(result.helmChart.version).toBe('semver *')
   })
 })
 
@@ -863,5 +950,126 @@ describe('GraphTabContent component', () => {
     const fluxResourcesPanel = screen.getByText('Flux Resources (2)').closest('div')
     // Within the Flux Resources panel, there should be no standalone namespace text
     expect(fluxResourcesPanel.querySelector('.text-gray-400')).toBeNull()
+  })
+
+  it('should render HelmChart node between source and reconciler', () => {
+    const helmReleaseData = {
+      kind: 'HelmRelease',
+      metadata: { name: 'nginx', namespace: 'default' },
+      spec: {
+        chart: {
+          spec: {
+            chart: 'nginx',
+            version: '>=1.0.0'
+          }
+        }
+      },
+      status: {
+        reconcilerRef: { status: 'Ready' },
+        sourceRef: {
+          kind: 'HelmRepository',
+          name: 'bitnami',
+          namespace: 'flux-system',
+          status: 'Ready',
+          url: 'https://charts.bitnami.com/bitnami'
+        },
+        helmChart: 'default/default-nginx',
+        inventory: []
+      }
+    }
+
+    render(
+      <GraphTabContent
+        resourceData={helmReleaseData}
+        namespace="default"
+      />
+    )
+
+    // Check HelmChart node is rendered
+    expect(screen.getByText('HelmChart')).toBeInTheDocument()
+    expect(screen.getByText('default/default-nginx')).toBeInTheDocument()
+    expect(screen.getByText('semver >=1.0.0')).toBeInTheDocument()
+
+    // Check source and reconciler are also rendered
+    expect(screen.getByText('HelmRepository')).toBeInTheDocument()
+    expect(screen.getByText('HelmRelease')).toBeInTheDocument()
+  })
+
+  it('should call onNavigate when clicking HelmChart node', async () => {
+    const user = userEvent.setup()
+    const onNavigate = vi.fn()
+
+    const helmReleaseData = {
+      kind: 'HelmRelease',
+      metadata: { name: 'nginx', namespace: 'default' },
+      spec: {
+        chart: {
+          spec: {
+            chart: 'nginx',
+            version: '*'
+          }
+        }
+      },
+      status: {
+        reconcilerRef: { status: 'Ready' },
+        sourceRef: {
+          kind: 'HelmRepository',
+          name: 'bitnami',
+          namespace: 'flux-system',
+          status: 'Ready'
+        },
+        helmChart: 'default/default-nginx',
+        inventory: []
+      }
+    }
+
+    render(
+      <GraphTabContent
+        resourceData={helmReleaseData}
+        namespace="default"
+        onNavigate={onNavigate}
+      />
+    )
+
+    // Find and click the HelmChart card
+    const helmChartCard = screen.getByText('default/default-nginx').closest('[role="button"]')
+    await user.click(helmChartCard)
+
+    expect(onNavigate).toHaveBeenCalledWith({
+      kind: 'HelmChart',
+      name: 'default-nginx',
+      namespace: 'default'
+    })
+  })
+
+  it('should not render HelmChart when source is not HelmRepository', () => {
+    const helmReleaseWithOCI = {
+      kind: 'HelmRelease',
+      metadata: { name: 'cert-manager', namespace: 'cert-manager' },
+      status: {
+        reconcilerRef: { status: 'Ready' },
+        sourceRef: {
+          kind: 'OCIRepository',
+          name: 'cert-manager',
+          namespace: 'cert-manager',
+          status: 'Ready'
+        },
+        inventory: []
+      }
+    }
+
+    render(
+      <GraphTabContent
+        resourceData={helmReleaseWithOCI}
+        namespace="cert-manager"
+      />
+    )
+
+    // HelmChart should not be rendered
+    expect(screen.queryByText('HelmChart')).not.toBeInTheDocument()
+
+    // Source and reconciler should be rendered
+    expect(screen.getByText('OCIRepository')).toBeInTheDocument()
+    expect(screen.getByText('HelmRelease')).toBeInTheDocument()
   })
 })

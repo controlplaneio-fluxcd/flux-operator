@@ -12,6 +12,7 @@ import { fluxKinds, workloadKinds } from '../../../utils/constants'
 export function buildGraphData(resourceData) {
   const sources = []
   let upstream = null
+  let helmChart = null
 
   if (resourceData?.status?.sourceRef) {
     // Check for upstream origin URL
@@ -26,7 +27,7 @@ export function buildGraphData(resourceData) {
         name: upstreamName,
         url: originURL,
         isClickable: originURL.startsWith('https://'),
-        forceBlue: true
+        accentBorder: true
       }
     }
 
@@ -38,8 +39,23 @@ export function buildGraphData(resourceData) {
       status: resourceData.status.sourceRef.status || 'Unknown',
       isClickable: true,
       url: resourceData.status.sourceRef.url || null,
-      forceBlue: false
+      accentBorder: false
     })
+
+    // Check for HelmChart when source is HelmRepository
+    if (resourceData.status.sourceRef.kind === 'HelmRepository' && resourceData.status?.helmChart) {
+      // helmChart is in format "namespace/name"
+      const [chartNamespace, chartName] = resourceData.status.helmChart.split('/')
+      const chartVersion = resourceData.spec?.chart?.spec?.version
+
+      helmChart = {
+        kind: 'HelmChart',
+        name: chartName,
+        namespace: chartNamespace,
+        version: `semver ${chartVersion || '*'}`,
+        isClickable: true
+      }
+    }
   } else if (resourceData?.kind === 'FluxInstance' && resourceData?.spec?.distribution?.registry) {
     // FluxInstance uses distribution as source
     const distroVersion = resourceData.spec.distribution.version
@@ -50,7 +66,7 @@ export function buildGraphData(resourceData) {
       status: 'Ready',
       isClickable: false,
       url: resourceData.spec.distribution.registry,
-      forceBlue: true
+      accentBorder: true
     })
   } else if (resourceData?.kind === 'ArtifactGenerator' && resourceData?.spec?.sources?.length > 0) {
     // ArtifactGenerator uses spec.sources array
@@ -63,7 +79,7 @@ export function buildGraphData(resourceData) {
         status: 'Unknown',
         isClickable: true,
         url: null,
-        forceBlue: true
+        accentBorder: true
       })
     })
   }
@@ -104,6 +120,7 @@ export function buildGraphData(resourceData) {
   return {
     upstream,
     sources,
+    helmChart,
     reconciler,
     inventory: { flux, workloads, resources }
   }
@@ -130,11 +147,11 @@ function getStatusBorderClass(status) {
 /**
  * Node card component for source and reconciler
  */
-function NodeCard({ kind, name, namespace, status, revision, version, url, onClick, isClickable: clickableProp, forceBlue }) {
+function NodeCard({ kind, name, namespace, status, revision, version, url, onClick, isClickable: clickableProp, accentBorder }) {
   // Use explicit isClickable prop if provided, otherwise check if onClick and kind is a Flux kind
   const isClickable = clickableProp !== undefined ? (clickableProp && onClick) : (onClick && fluxKinds.includes(kind))
-  const borderClass = forceBlue
-    ? 'border border-blue-500 dark:border-blue-400'
+  const borderClass = accentBorder
+    ? 'border border-purple-500 dark:border-purple-400'
     : getStatusBorderClass(status)
 
   const displayName = namespace ? `${namespace}/${name}` : name
@@ -392,7 +409,7 @@ function SourcesConnector({ sourceCount }) {
 export function GraphTabContent({ resourceData, namespace, onNavigate, setActiveTab }) {
   const graphData = useMemo(() => buildGraphData(resourceData), [resourceData])
 
-  const { upstream, sources, reconciler, inventory } = graphData
+  const { upstream, sources, helmChart, reconciler, inventory } = graphData
   const { flux, workloads, resources } = inventory
 
   // Calculate counts
@@ -427,6 +444,17 @@ export function GraphTabContent({ resourceData, namespace, onNavigate, setActive
     }
   }
 
+  // Handle HelmChart click
+  const handleHelmChartClick = () => {
+    if (helmChart?.isClickable) {
+      onNavigate?.({
+        kind: helmChart.kind,
+        name: helmChart.name,
+        namespace: helmChart.namespace || namespace
+      })
+    }
+  }
+
   return (
     <div class="flex flex-col items-center py-4" data-testid="graph-tab-content">
       {/* Upstream Node */}
@@ -439,7 +467,7 @@ export function GraphTabContent({ resourceData, namespace, onNavigate, setActive
               url={upstream.url}
               isClickable={upstream.isClickable}
               onClick={upstream.isClickable ? () => window.open(upstream.url, '_blank', 'noopener,noreferrer') : undefined}
-              forceBlue={true}
+              accentBorder={true}
             />
           </div>
           <ConnectorLine />
@@ -460,7 +488,7 @@ export function GraphTabContent({ resourceData, namespace, onNavigate, setActive
                 url={sources[0].url}
                 onClick={() => handleSourceClick(sources[0])}
                 isClickable={sources[0].isClickable}
-                forceBlue={sources[0].forceBlue}
+                accentBorder={sources[0].accentBorder}
               />
             </div>
           ) : (
@@ -481,7 +509,7 @@ export function GraphTabContent({ resourceData, namespace, onNavigate, setActive
                         url={source.url}
                         onClick={() => handleSourceClick(source)}
                         isClickable={source.isClickable}
-                        forceBlue={source.forceBlue}
+                        accentBorder={source.accentBorder}
                       />
                     </div>
                   ))}
@@ -499,7 +527,7 @@ export function GraphTabContent({ resourceData, namespace, onNavigate, setActive
                       url={source.url}
                       onClick={() => handleSourceClick(source)}
                       isClickable={source.isClickable}
-                      forceBlue={source.forceBlue}
+                      accentBorder={source.accentBorder}
                     />
                   </div>
                 ))}
@@ -514,6 +542,24 @@ export function GraphTabContent({ resourceData, namespace, onNavigate, setActive
           <div class="sm:hidden">
             <ConnectorLine />
           </div>
+        </>
+      )}
+
+      {/* HelmChart Node (between source and reconciler) */}
+      {helmChart && (
+        <>
+          <div class="w-full max-w-full sm:max-w-[280px]">
+            <NodeCard
+              kind={helmChart.kind}
+              name={helmChart.name}
+              namespace={helmChart.namespace}
+              version={helmChart.version}
+              onClick={handleHelmChartClick}
+              isClickable={helmChart.isClickable}
+              accentBorder={true}
+            />
+          </div>
+          <ConnectorLine />
         </>
       )}
 
