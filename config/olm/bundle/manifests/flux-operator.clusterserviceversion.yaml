@@ -364,6 +364,9 @@ spec:
                       seccompProfile:
                         type: RuntimeDefault
                     ports:
+                      - containerPort: 9080
+                        name: http-web
+                        protocol: TCP
                       - containerPort: 8080
                         name: http-metrics
                         protocol: TCP
