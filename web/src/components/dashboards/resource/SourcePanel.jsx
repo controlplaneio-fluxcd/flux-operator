@@ -15,8 +15,12 @@ import { FluxOperatorIcon } from '../../layout/Icons'
  * SourcePanel - Displays source information for a Flux resource
  * Handles its own data fetching and state management
  */
-export function SourcePanel({ sourceRef, namespace }) {
+export function SourcePanel({ resourceData }) {
   const location = useLocation()
+
+  // Derive sourceRef from resourceData
+  const sourceRef = resourceData?.status?.sourceRef
+  const namespace = sourceRef?.namespace
 
   // State
   const [sourceData, setSourceData] = useState(null)
@@ -24,6 +28,11 @@ export function SourcePanel({ sourceRef, namespace }) {
   const [sourceEventsLoading, setSourceEventsLoading] = useState(false)
   const [sourceEventsLoaded, setSourceEventsLoaded] = useState(false)
   const [loading, setLoading] = useState(true)
+
+  // HelmChart state
+  const [chartData, setChartData] = useState(null)
+  const [chartLoading, setChartLoading] = useState(false)
+  const [chartLoaded, setChartLoaded] = useState(false)
 
   // Track initial mount to avoid refetching on first render
   const isInitialMount = useRef(true)
@@ -124,7 +133,106 @@ export function SourcePanel({ sourceRef, namespace }) {
 
       refetchSourceEvents()
     }
-  }, [sourceRef, namespace])
+  }, [resourceData])
+
+  // Refetch source data when resourceData changes (auto-refresh from parent every 30s)
+  useEffect(() => {
+    // Skip if no resourceData or source data hasn't been loaded yet
+    if (!resourceData || !sourceData) return
+
+    const refetchSourceData = async () => {
+      // Don't set loading state during auto-refresh to avoid showing spinner
+      const sourceParams = new URLSearchParams({
+        kind: sourceRef.kind,
+        name: sourceRef.name,
+        namespace: sourceRef.namespace || namespace
+      })
+
+      try {
+        const sourceResp = await fetchWithMock({
+          endpoint: `/api/v1/resource?${sourceParams.toString()}`,
+          mockPath: '../mock/resource',
+          mockExport: 'getMockResource'
+        })
+        setSourceData(sourceResp)
+      } catch (err) {
+        console.error('Failed to refetch source data:', err)
+      }
+    }
+
+    refetchSourceData()
+  }, [resourceData])
+
+  // Determine if HelmChart info is available
+  const hasHelmChart = resourceData?.kind === 'HelmRelease' && resourceData?.status?.helmChart
+
+  // Parse HelmChart reference (format: "namespace/name")
+  const helmChartRef = useMemo(() => {
+    if (!hasHelmChart) return null
+    const [chartNamespace, chartName] = resourceData.status.helmChart.split('/')
+    return { namespace: chartNamespace, name: chartName }
+  }, [hasHelmChart, resourceData?.status?.helmChart])
+
+  // Fetch HelmChart data on demand when Chart tab is clicked
+  useEffect(() => {
+    if (sourceTab === 'chart' && helmChartRef && !chartLoaded && !chartLoading) {
+      const fetchChartData = async () => {
+        setChartLoading(true)
+        const params = new URLSearchParams({
+          kind: 'HelmChart',
+          name: helmChartRef.name,
+          namespace: helmChartRef.namespace
+        })
+
+        try {
+          const chartResp = await fetchWithMock({
+            endpoint: `/api/v1/resource?${params.toString()}`,
+            mockPath: '../mock/resource',
+            mockExport: 'getMockResource'
+          })
+          setChartData(chartResp)
+          setChartLoaded(true)
+        } catch (err) {
+          console.error('Failed to fetch chart data:', err)
+        } finally {
+          setChartLoading(false)
+        }
+      }
+
+      fetchChartData()
+    }
+  }, [sourceTab, helmChartRef, chartLoaded, chartLoading])
+
+  // Refetch HelmChart data when resourceData changes (auto-refresh from parent) if Chart tab is open
+  useEffect(() => {
+    // Skip if no HelmChart or chart data hasn't been loaded yet
+    if (!helmChartRef || !chartLoaded || chartLoading) return
+
+    // Only refetch if Chart tab is open
+    if (sourceTab === 'chart') {
+      const refetchChartData = async () => {
+        // Don't set loading state during auto-refresh to avoid showing spinner
+        const params = new URLSearchParams({
+          kind: 'HelmChart',
+          name: helmChartRef.name,
+          namespace: helmChartRef.namespace
+        })
+
+        try {
+          const chartResp = await fetchWithMock({
+            endpoint: `/api/v1/resource?${params.toString()}`,
+            mockPath: '../mock/resource',
+            mockExport: 'getMockResource'
+          })
+          setChartData(chartResp)
+        } catch (err) {
+          console.error('Failed to refetch chart data:', err)
+        }
+      }
+
+      refetchChartData()
+    }
+  }, [resourceData])
 
   // Memoized YAML data
   const sourceSpecYaml = useMemo(() => {
@@ -163,6 +271,11 @@ export function SourcePanel({ sourceRef, namespace }) {
                 <span class="sm:hidden">Info</span>
                 <span class="hidden sm:inline">Overview</span>
               </TabButton>
+              {hasHelmChart && (
+                <TabButton active={sourceTab === 'chart'} onClick={() => setSourceTab('chart')}>
+                  Chart
+                </TabButton>
+              )}
               <TabButton active={sourceTab === 'events'} onClick={() => setSourceTab('events')}>
                 Events
               </TabButton>
@@ -293,6 +406,72 @@ export function SourcePanel({ sourceRef, namespace }) {
                       </div>
                     )
                   })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Chart Tab */}
+          {sourceTab === 'chart' && hasHelmChart && (
+            <div>
+              {chartLoading ? (
+                <div class="flex items-center justify-center p-8">
+                  <FluxOperatorIcon className="animate-spin h-8 w-8 text-flux-blue" />
+                  <span class="ml-3 text-gray-600 dark:text-gray-400">Loading chart...</span>
+                </div>
+              ) : (
+                <div class="space-y-4">
+                  {/* Resource Link */}
+                  <button
+                    onClick={() => location.route(`/resource/HelmChart/${encodeURIComponent(helmChartRef.namespace)}/${encodeURIComponent(helmChartRef.name)}`)}
+                    class="flex items-center gap-2 text-sm text-flux-blue dark:text-blue-400 hover:underline"
+                  >
+                    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                    <span class="hidden md:inline break-all">HelmChart/{helmChartRef.namespace}/{helmChartRef.name}</span>
+                    <span class="md:hidden break-all">{getKindAlias('HelmChart')}/{helmChartRef.name}</span>
+                  </button>
+
+                  {/* Status Badge */}
+                  {chartData?.status?.reconcilerRef?.status && (
+                    <div class="text-sm">
+                      <span class="text-gray-500 dark:text-gray-400">Status</span>
+                      <span class={`ml-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeClass(chartData.status.reconcilerRef.status)}`}>
+                        {chartData.status.reconcilerRef.status}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Semver */}
+                  <div class="text-sm">
+                    <span class="text-gray-500 dark:text-gray-400">Semver</span>
+                    <span class="ml-1 text-gray-900 dark:text-white">{resourceData?.spec?.chart?.spec?.version || '*'}</span>
+                  </div>
+
+                  {/* Fetch every */}
+                  {chartData?.spec?.interval && (
+                    <div class="text-sm">
+                      <span class="text-gray-500 dark:text-gray-400">Fetch every</span>
+                      <span class="ml-1 text-gray-900 dark:text-white">{chartData.spec.interval}</span>
+                    </div>
+                  )}
+
+                  {/* Fetched at */}
+                  {chartData?.status?.conditions?.[0]?.lastTransitionTime && (
+                    <div class="text-sm">
+                      <span class="text-gray-500 dark:text-gray-400">Fetched at</span>
+                      <span class="ml-1 text-gray-900 dark:text-white">{new Date(chartData.status.conditions[0].lastTransitionTime).toLocaleString().replace(',', '')}</span>
+                    </div>
+                  )}
+
+                  {/* Fetch result */}
+                  {chartData?.status?.conditions?.[0]?.message && (
+                    <div class="text-sm">
+                      <span class="text-gray-500 dark:text-gray-400">Fetch result</span>
+                      <span class="ml-1 text-gray-900 dark:text-white break-all">{chartData.status.conditions[0].message}</span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

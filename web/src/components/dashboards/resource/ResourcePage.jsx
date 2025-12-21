@@ -332,10 +332,7 @@ export function ResourcePage({ kind, namespace, name }) {
 
             {/* Source Section */}
             {hasSource && (
-              <SourcePanel
-                sourceRef={resourceData.status.sourceRef}
-                namespace={namespace}
-              />
+              <SourcePanel resourceData={resourceData} />
             )}
           </>
         )}
