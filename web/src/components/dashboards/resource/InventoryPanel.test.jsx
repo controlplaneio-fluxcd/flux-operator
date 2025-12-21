@@ -921,7 +921,7 @@ describe('InventoryPanel component', () => {
       expect(screen.getByText('Graph')).toBeInTheDocument()
     })
 
-    it('should not show Graph tab when inventory is empty', () => {
+    it('should show Graph tab even when inventory is empty', () => {
       const noInventoryData = {
         ...mockKustomizationData,
         status: {}
@@ -934,7 +934,8 @@ describe('InventoryPanel component', () => {
         />
       )
 
-      expect(screen.queryByText('Graph')).not.toBeInTheDocument()
+      // Graph tab should always be visible for reconciler kinds
+      expect(screen.getByText('Graph')).toBeInTheDocument()
     })
 
     it('should switch to Graph tab when clicked', async () => {

@@ -92,14 +92,18 @@ export function buildGraphData(resourceData) {
     revision: resourceData?.status?.lastAttemptedRevision || resourceData?.status?.lastAppliedRevision || null
   }
 
-  const inventory = resourceData?.status?.inventory || []
+  // Handle inventory as array or object with entries
+  const rawInventory = resourceData?.status?.inventory
+  const inventoryItems = Array.isArray(rawInventory)
+    ? rawInventory
+    : (rawInventory?.entries || [])
 
   // Group inventory items
   const flux = []
   const workloads = []
   const resources = {}
 
-  inventory.forEach(item => {
+  inventoryItems.forEach(item => {
     if (fluxKinds.includes(item.kind)) {
       flux.push({
         kind: item.kind,
@@ -417,11 +421,15 @@ export function GraphTabContent({ resourceData, namespace, onNavigate, setActive
   const workloadsCount = workloads.length
   const resourcesCount = Object.values(resources).reduce((sum, count) => sum + count, 0)
 
+  // Check if inventory is completely empty
+  const inventoryEmpty = fluxCount === 0 && workloadsCount === 0 && resourcesCount === 0
+
   // Count how many inventory groups to show
+  // Resources group shows if it has items OR if entire inventory is empty
   const activeGroups = [
     fluxCount > 0,
     workloadsCount > 0,
-    resourcesCount > 0
+    resourcesCount > 0 || inventoryEmpty
   ].filter(Boolean).length
 
   // Handle Flux item click
@@ -614,13 +622,14 @@ export function GraphTabContent({ resourceData, namespace, onNavigate, setActive
                 onTitleClick={setActiveTab ? () => setActiveTab('workloads') : undefined}
               />
             )}
-            {resourcesCount > 0 && (
+            {(resourcesCount > 0 || inventoryEmpty) && (
               <GroupCard
                 title="Resources"
                 count={resourcesCount}
                 items={resources}
                 isItemList={false}
-                onTitleClick={setActiveTab ? () => setActiveTab('inventory') : undefined}
+                onTitleClick={resourcesCount > 0 && setActiveTab ? () => setActiveTab('inventory') : undefined}
+                alwaysShow={inventoryEmpty}
               />
             )}
           </div>

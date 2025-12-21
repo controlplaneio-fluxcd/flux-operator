@@ -128,11 +128,9 @@ export function InventoryPanel({ resourceData, onNavigate }) {
             <span class="sm:hidden">Info</span>
             <span class="hidden sm:inline">Overview</span>
           </TabButton>
-          {hasInventory && (
-            <TabButton active={activeTab === 'graph'} onClick={() => setActiveTab('graph')}>
-              Graph
-            </TabButton>
-          )}
+          <TabButton active={activeTab === 'graph'} onClick={() => setActiveTab('graph')}>
+            Graph
+          </TabButton>
           {hasInventory && (
             <TabButton active={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')}>
               Inventory

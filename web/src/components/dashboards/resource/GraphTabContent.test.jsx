@@ -192,6 +192,28 @@ describe('buildGraphData function', () => {
     expect(result.inventory.resources).toEqual({})
   })
 
+  it('should handle inventory as object with entries', () => {
+    const resourceData = {
+      kind: 'Kustomization',
+      metadata: { name: 'test-ks', namespace: 'flux-system' },
+      status: {
+        reconcilerRef: { status: 'Ready' },
+        inventory: {
+          entries: [
+            { kind: 'ConfigMap', name: 'cm1', namespace: 'default' },
+            { kind: 'Deployment', name: 'app1', namespace: 'default' }
+          ]
+        }
+      }
+    }
+
+    const result = buildGraphData(resourceData)
+
+    expect(result.inventory.workloads).toHaveLength(1)
+    expect(result.inventory.workloads[0]).toEqual({ kind: 'Deployment', name: 'app1', namespace: 'default' })
+    expect(result.inventory.resources).toEqual({ ConfigMap: 1 })
+  })
+
   it('should create Distro source for FluxInstance', () => {
     const resourceData = {
       kind: 'FluxInstance',
@@ -689,7 +711,33 @@ describe('GraphTabContent component', () => {
     expect(screen.getByText(/Resources \(1\)/)).toBeInTheDocument()
   })
 
-  it('should not render Resources group when no resources exist', () => {
+  it('should not render Resources group when only workloads exist', () => {
+    const resourceDataOnlyWorkloads = {
+      kind: 'Kustomization',
+      metadata: { name: 'test-ks', namespace: 'flux-system' },
+      status: {
+        reconcilerRef: { status: 'Ready' },
+        inventory: [
+          { kind: 'Deployment', name: 'app1', namespace: 'default' }
+        ]
+      }
+    }
+
+    render(
+      <GraphTabContent
+        resourceData={resourceDataOnlyWorkloads}
+        namespace="flux-system"
+      />
+    )
+
+    // Workloads group should be rendered
+    expect(screen.getByText(/Workloads \(1\)/)).toBeInTheDocument()
+
+    // Resources group should NOT be rendered when inventory has items but no resources
+    expect(screen.queryByText(/Resources \(/)).not.toBeInTheDocument()
+  })
+
+  it('should render Resources group with "No resources" when inventory is empty', () => {
     const resourceDataEmpty = {
       kind: 'Kustomization',
       metadata: { name: 'test-ks', namespace: 'flux-system' },
@@ -706,9 +754,35 @@ describe('GraphTabContent component', () => {
       />
     )
 
-    // Resources group should not be rendered when empty
-    expect(screen.queryByText(/Resources \(/)).not.toBeInTheDocument()
-    expect(screen.queryByText('No resources')).not.toBeInTheDocument()
+    // Resources group should render with "No resources" text
+    expect(screen.getByText(/Resources \(0\)/)).toBeInTheDocument()
+    expect(screen.getByText('No resources')).toBeInTheDocument()
+  })
+
+  it('should handle inventory as object with entries', () => {
+    const resourceDataWithEntries = {
+      kind: 'Kustomization',
+      metadata: { name: 'test-ks', namespace: 'flux-system' },
+      status: {
+        reconcilerRef: { status: 'Ready' },
+        inventory: {
+          entries: [
+            { kind: 'ConfigMap', name: 'config', namespace: 'default' }
+          ]
+        }
+      }
+    }
+
+    render(
+      <GraphTabContent
+        resourceData={resourceDataWithEntries}
+        namespace="flux-system"
+      />
+    )
+
+    // Resources group should render with the ConfigMap count
+    expect(screen.getByText(/Resources \(1\)/)).toBeInTheDocument()
+    expect(screen.getByText('ConfigMap')).toBeInTheDocument()
   })
 
   it('should render FluxInstance with Distro source', () => {
