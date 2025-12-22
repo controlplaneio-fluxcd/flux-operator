@@ -411,7 +411,7 @@ func (o *oauth2Authenticator) verifyAccessTokenOrLogError(
 	case strings.Contains(msg, "expired"), strings.Contains(msg, "before the nbf"):
 		log.FromContext(ctx).V(1).Info("access token expired or not yet valid according to the nbf claim")
 	default:
-		log.FromContext(ctx).Error(err, "failed to verify access token")
+		log.FromContext(ctx).V(1).Info("failed to verify access token", "error", err.Error())
 	}
 	return nil
 }

@@ -6,8 +6,6 @@ package main
 import (
 	"crypto/fips140"
 	"errors"
-	"fmt"
-	"net"
 	"os"
 	"strconv"
 	"time"
@@ -46,6 +44,8 @@ import (
 	webconfig "github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
 	// +kubebuilder:scaffold:imports
 )
+
+const gracefulShutdownTimeout = 10 * time.Second
 
 var (
 	VERSION  = "0.0.0-dev.0"
@@ -363,11 +363,8 @@ func main() {
 		webServerPort = port
 	}
 
-	webError := make(chan error, 1)
-	var confWatcherStopped <-chan struct{}
-	if webServerPort <= 0 {
-		close(webError)
-	} else {
+	// Start web server.
+	if webServerPort > 0 {
 		// Check web server configuration flags.
 		if webConfigSecretName == "" {
 			webConfigSecretName = os.Getenv(webConfigSecretNameEnvKey)
@@ -379,68 +376,77 @@ func main() {
 			os.Exit(1)
 		}
 
-		// Open configuration channel and load first configuration.
+		// Open configuration channel.
 		var confChannel <-chan *webconfig.ConfigSpec
-		var firstConf *webconfig.ConfigSpec
+		var confWatcherStopped <-chan struct{}
 		if webConfigSecretName != "" {
-			confChannel, confWatcherStopped, firstConf, err = webconfig.WatchSecret(
+			confChannel, confWatcherStopped, err = webconfig.WatchSecret(
 				ctx, webConfigSecretName, runtimeNamespace, mgr.GetConfig())
 			if err != nil {
 				setupLog.Error(err, "unable to watch web server configuration secret")
 				os.Exit(1)
 			}
-			setupLog.Info("loaded web configuration from secret", "secretRef", map[string]any{
-				"name":      webConfigSecretName,
-				"namespace": runtimeNamespace,
-			})
 		} else {
-			stopped := make(chan struct{})
-			close(stopped)
-			confChannel = make(chan *webconfig.ConfigSpec) // never receives updates
-			confWatcherStopped = stopped
-			firstConf, err = webconfig.Load(webConfigFile)
+			conf, err := webconfig.Load(webConfigFile)
 			if err != nil {
 				setupLog.Error(err, "unable to load web server configuration file")
 				os.Exit(1)
 			}
+			cch := make(chan *webconfig.ConfigSpec, 1)
+			cch <- conf
+			confChannel = cch
 
 			if webConfigFile != "" {
-				setupLog.Info("loaded web configuration from file", "filePath", webConfigFile)
+				setupLog.Info("loaded web configuration from file", "file", webConfigFile)
 			} else {
-				setupLog.Info("no web configuration file provided, using default configuration")
+				setupLog.Info("no web configuration provided, will use defaults")
 			}
 		}
 
-		// Initialize components with the first configuration.
-		webLog := ctrl.Log.WithName("web-server").WithValues("port", webServerPort)
-		firstComponents, err := web.InitializeServerComponents(firstConf, mgr,
-			webLog.WithValues("configVersion", firstConf.Version))
-		if err != nil {
-			setupLog.Error(err, "unable to initialize web server components")
-			os.Exit(1)
-		}
-
-		// Start listening on the specified port. This is the only
-		// listener used in the life of the process, which ensures
-		// the server configuration is updated without downtime.
-		listener, err := net.Listen("tcp", fmt.Sprintf(":%d", webServerPort))
-		if err != nil {
-			setupLog.Error(err, "unable to listen on web server port", "port", webServerPort)
-			os.Exit(1)
-		}
-
 		// Fire off web server goroutine.
+		webErr := make(chan error, 1)
 		go func() {
 			<-mgr.Elected()
-			webError <- web.RunServer(ctx,
+			webErr <- web.RunServer(ctx,
 				mgr,
 				confChannel,
 				VERSION,
 				controllerName,
 				runtimeNamespace,
-				firstComponents,
-				listener,
-				webLog)
+				gracefulShutdownTimeout,
+				webServerPort)
+		}()
+
+		// Defer graceful shutdown. Will run after the manager stops.
+		defer func() {
+			shutdownLog := ctrl.Log.WithName("shutdown")
+			shutdownLog.Info("manager stopped, waiting for web server to stop")
+			gracefulShutdownDeadline := time.After(gracefulShutdownTimeout)
+
+			// Wait for the config watcher to stop.
+			if confWatcherStopped != nil {
+				select {
+				case <-confWatcherStopped:
+					shutdownLog.Info("web server configuration watcher gracefully stopped")
+				case <-gracefulShutdownDeadline:
+					shutdownLog.Info("timed out waiting for web server configuration watcher to stop")
+					os.Exit(1)
+				}
+			}
+
+			// Wait for the web server to stop.
+			select {
+			case err := <-webErr:
+				if err != nil {
+					shutdownLog.Error(err, "web server returned error")
+					os.Exit(1)
+				}
+			case <-gracefulShutdownDeadline:
+				shutdownLog.Info("timed out waiting for web server to stop")
+				os.Exit(1)
+			}
+
+			shutdownLog.Info("web server gracefully stopped")
 		}()
 	}
 
@@ -450,24 +456,5 @@ func main() {
 	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
-	}
-
-	// Manager has stopped. Wait for web server to stop. It also
-	// shuts down when the context is done.
-	shutdownLog := setupLog.WithName("shutdown")
-	gracefulShutdownDeadline := time.After(10 * time.Second)
-	select {
-	case <-confWatcherStopped:
-		select {
-		case err := <-webError:
-			if err != nil {
-				shutdownLog.Error(err, "web server stopped with error")
-				os.Exit(1)
-			}
-		case <-gracefulShutdownDeadline:
-			shutdownLog.Info("timed out waiting for web server to stop")
-		}
-	case <-gracefulShutdownDeadline:
-		shutdownLog.Info("timed out waiting for web server configuration watcher to stop")
 	}
 }

@@ -6,10 +6,12 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	goruntime "runtime"
 	"strings"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,14 +30,14 @@ import (
 )
 
 // ReportHandler handles GET /api/v1/report requests and returns the FluxReport from the cluster.
-func (r *Router) ReportHandler(w http.ResponseWriter, req *http.Request) {
+func (h *Handler) ReportHandler(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	// Get the FluxReport from the cluster using the request context
-	report, err := r.GetReport(req.Context())
+	report, err := h.GetReport(req.Context())
 	if err != nil {
 		log.FromContext(req.Context()).Error(err, "cluster query failed")
 		report = uninitialisedReport()
@@ -53,12 +55,12 @@ func (r *Router) ReportHandler(w http.ResponseWriter, req *http.Request) {
 
 // GetReport returns the cached FluxReport. If the cache is empty, it falls back to
 // building a fresh report (this should only happen during initial startup).
-func (r *Router) GetReport(ctx context.Context) (*unstructured.Unstructured, error) {
+func (h *Handler) GetReport(ctx context.Context) (*unstructured.Unstructured, error) {
 	var report *unstructured.Unstructured
-	if cached := r.getCachedReport(); cached != nil {
+	if cached := h.getCachedReport(); cached != nil {
 		report = cached
 	} else {
-		if r, err := r.buildReport(ctx); err != nil {
+		if r, err := h.buildReport(ctx); err != nil {
 			return nil, err
 		} else {
 			report = r
@@ -78,7 +80,7 @@ func (r *Router) GetReport(ctx context.Context) (*unstructured.Unstructured, err
 		spec["userInfo"] = userInfo
 
 		// Inject user-visible namespaces (non-fatal if it fails)
-		namespaces, _, err := r.kubeClient.ListUserNamespaces(ctx)
+		namespaces, _, err := h.kubeClient.ListUserNamespaces(ctx)
 		switch {
 		case err != nil:
 			log.FromContext(ctx).Error(err, "failed to list user namespaces for report injection")
@@ -90,9 +92,66 @@ func (r *Router) GetReport(ctx context.Context) (*unstructured.Unstructured, err
 	return report, nil
 }
 
+// startReportCache starts a background goroutine that periodically refreshes the
+// report cache. It returns a channel that is closed when the goroutine stops,
+// which happens when the provided context is done.
+func (h *Handler) startReportCache(ctx context.Context, reportInterval time.Duration) <-chan struct{} {
+	// Build initial report synchronously
+	h.refreshReportCache(ctx)
+
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+
+		ticker := time.NewTicker(reportInterval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				h.refreshReportCache(ctx)
+			}
+		}
+	}()
+
+	return stopped
+}
+
+// refreshReportCache builds a fresh report and updates the cache.
+func (h *Handler) refreshReportCache(ctx context.Context) {
+	report, err := h.buildReport(ctx)
+	if err != nil {
+		if !errors.Is(err, context.Canceled) || ctx.Err() == nil {
+			log.FromContext(ctx).Error(err, "failed to refresh report cache")
+		}
+		return
+	}
+
+	h.reportCacheMu.Lock()
+	h.reportCache = report
+	h.reportCacheMu.Unlock()
+}
+
+// getCachedReport returns the cached report if available.
+func (h *Handler) getCachedReport() *unstructured.Unstructured {
+	h.reportCacheMu.RLock()
+	if h.reportCache == nil {
+		h.reportCacheMu.RUnlock()
+		return nil
+	}
+	b, _ := json.Marshal(h.reportCache)
+	h.reportCacheMu.RUnlock()
+
+	var obj unstructured.Unstructured
+	_ = json.Unmarshal(b, &obj)
+	return &obj
+}
+
 // buildReport builds the FluxReport directly using the reporter package
 // and injects pod metrics into the report spec.
-func (r *Router) buildReport(ctx context.Context) (*unstructured.Unstructured, error) {
+func (h *Handler) buildReport(ctx context.Context) (*unstructured.Unstructured, error) {
 	// The report client needs privileged access as it needs to access all
 	// resources in the cluster to build the report. The report information,
 	// however, is crunched in a way that does not expose sensitive information.
@@ -100,8 +159,8 @@ func (r *Router) buildReport(ctx context.Context) (*unstructured.Unstructured, e
 	// ensuring security boundaries are respected.
 	// Note: The report is built on a background goroutine periodically anyway,
 	// so there's no user session available to use for impersonation.
-	repClient := r.kubeClient.GetClient(ctx, kubeclient.WithPrivileges())
-	rep := reporter.NewFluxStatusReporter(repClient, fluxcdv1.DefaultInstanceName, r.statusManager, r.namespace)
+	repClient := h.kubeClient.GetClient(ctx, kubeclient.WithPrivileges())
+	rep := reporter.NewFluxStatusReporter(repClient, fluxcdv1.DefaultInstanceName, h.statusManager, h.namespace)
 	reportSpec, err := rep.Compute(ctx)
 	if err != nil {
 		log.FromContext(ctx).Error(err, "report computed with errors")
@@ -110,7 +169,7 @@ func (r *Router) buildReport(ctx context.Context) (*unstructured.Unstructured, e
 	// Set the operator info
 	reportSpec.Operator = &fluxcdv1.OperatorInfo{
 		APIVersion: fluxcdv1.GroupVersion.String(),
-		Version:    r.version,
+		Version:    h.version,
 		Platform:   fmt.Sprintf("%s/%s", goruntime.GOOS, goruntime.GOARCH),
 	}
 
@@ -122,7 +181,7 @@ func (r *Router) buildReport(ctx context.Context) (*unstructured.Unstructured, e
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fluxcdv1.DefaultInstanceName,
-			Namespace: r.namespace,
+			Namespace: h.namespace,
 		},
 		Spec: reportSpec,
 	}
@@ -138,7 +197,7 @@ func (r *Router) buildReport(ctx context.Context) (*unstructured.Unstructured, e
 	// We pass WithPrivileges() here to ensure we can read metrics from all Flux controllers,
 	// even if the user querying the report has limited RBAC permissions. Our decision here
 	// is based on the same reasoning explained above for building the report.
-	if metrics, err := r.GetMetrics(ctx, "", r.namespace, "app.kubernetes.io/part-of=flux", 100, kubeclient.WithPrivileges()); err == nil {
+	if metrics, err := h.GetMetrics(ctx, "", h.namespace, "app.kubernetes.io/part-of=flux", 100, kubeclient.WithPrivileges()); err == nil {
 		// Extract the items array from metrics
 		if items, found := metrics.Object["items"]; found {
 			// Add metrics to the result under spec.metrics
@@ -233,8 +292,8 @@ func cleanObjectForExport(obj *unstructured.Unstructured, keepStatus bool) {
 }
 
 // GetMetrics retrieves the CPU and Memory metrics for a list of pods in the given namespace.
-func (r *Router) GetMetrics(ctx context.Context, pod, namespace, labelSelector string, limit int, opts ...kubeclient.Option) (*unstructured.Unstructured, error) {
-	clientset, err := metricsclientset.NewForConfig(r.kubeClient.GetConfig(ctx, opts...))
+func (h *Handler) GetMetrics(ctx context.Context, pod, namespace, labelSelector string, limit int, opts ...kubeclient.Option) (*unstructured.Unstructured, error) {
+	clientset, err := metricsclientset.NewForConfig(h.kubeClient.GetConfig(ctx, opts...))
 	if err != nil {
 		return nil, err
 	}
@@ -270,7 +329,7 @@ func (r *Router) GetMetrics(ctx context.Context, pod, namespace, labelSelector s
 	}
 
 	// Fetch pod specs to get resource limits
-	kubeClient := r.kubeClient.GetClient(ctx, opts...)
+	kubeClient := h.kubeClient.GetClient(ctx, opts...)
 	var podList corev1.PodList
 	if pod != "" {
 		p := &corev1.Pod{}

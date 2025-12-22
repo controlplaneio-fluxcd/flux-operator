@@ -4,9 +4,7 @@
 package web
 
 import (
-	"net/http"
 	"testing"
-	"time"
 
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -32,12 +30,16 @@ func TestGetResource_Privileged(t *testing.T) {
 	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
 	defer testClient.Delete(ctx, resourceSet)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Call GetResource without any user session (privileged)
-	resource, err := router.GetResource(ctx, "ResourceSet", "test-resourceset", "default")
+	resource, err := handler.GetResource(ctx, "ResourceSet", "test-resourceset", "default")
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(resource).NotTo(BeNil())
 	g.Expect(resource.GetKind()).To(Equal(fluxcdv1.ResourceSetKind))
@@ -59,9 +61,13 @@ func TestGetResource_UnprivilegedUser_Forbidden(t *testing.T) {
 	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
 	defer testClient.Delete(ctx, resourceSet)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Create an unprivileged user session (no RBAC permissions)
 	imp := user.Impersonation{
@@ -78,7 +84,7 @@ func TestGetResource_UnprivilegedUser_Forbidden(t *testing.T) {
 
 	// Call GetResource with the unprivileged user context
 	// Should fail with forbidden error because GetResource respects RBAC
-	_, err = router.GetResource(userCtx, "ResourceSet", "test-resourceset-forbidden", "default")
+	_, err = handler.GetResource(userCtx, "ResourceSet", "test-resourceset-forbidden", "default")
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(apierrors.IsForbidden(err)).To(BeTrue(), "expected forbidden error, got: %v", err)
 }
@@ -132,9 +138,13 @@ func TestGetResource_WithUserRBAC_Success(t *testing.T) {
 	g.Expect(testClient.Create(ctx, clusterRoleBinding)).To(Succeed())
 	defer testClient.Delete(ctx, clusterRoleBinding)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Create a user session with resourcesets access
 	imp := user.Impersonation{
@@ -150,7 +160,7 @@ func TestGetResource_WithUserRBAC_Success(t *testing.T) {
 	}, userClient)
 
 	// Call GetResource with the user context - should succeed
-	resource, err := router.GetResource(userCtx, "ResourceSet", "test-resourceset-rbac", "default")
+	resource, err := handler.GetResource(userCtx, "ResourceSet", "test-resourceset-rbac", "default")
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(resource).NotTo(BeNil())
 	g.Expect(resource.GetKind()).To(Equal(fluxcdv1.ResourceSetKind))
@@ -206,9 +216,13 @@ func TestGetResource_WithGroupRBAC_Success(t *testing.T) {
 	g.Expect(testClient.Create(ctx, clusterRoleBinding)).To(Succeed())
 	defer testClient.Delete(ctx, clusterRoleBinding)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Create a user session with group membership
 	imp := user.Impersonation{
@@ -224,7 +238,7 @@ func TestGetResource_WithGroupRBAC_Success(t *testing.T) {
 	}, userClient)
 
 	// Call GetResource with the user context - should succeed via group RBAC
-	resource, err := router.GetResource(userCtx, "ResourceSet", "test-resourceset-group-rbac", "default")
+	resource, err := handler.GetResource(userCtx, "ResourceSet", "test-resourceset-group-rbac", "default")
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(resource).NotTo(BeNil())
 	g.Expect(resource.GetKind()).To(Equal(fluxcdv1.ResourceSetKind))
@@ -282,9 +296,13 @@ func TestGetResource_WithNamespaceScopedRBAC_Success(t *testing.T) {
 	g.Expect(testClient.Create(ctx, roleBinding)).To(Succeed())
 	defer testClient.Delete(ctx, roleBinding)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Create a user session with namespace-scoped access
 	imp := user.Impersonation{
@@ -300,7 +318,7 @@ func TestGetResource_WithNamespaceScopedRBAC_Success(t *testing.T) {
 	}, userClient)
 
 	// Call GetResource in default namespace - should succeed
-	resource, err := router.GetResource(userCtx, "ResourceSet", "test-resourceset-ns-scoped", "default")
+	resource, err := handler.GetResource(userCtx, "ResourceSet", "test-resourceset-ns-scoped", "default")
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(resource).NotTo(BeNil())
 	g.Expect(resource.GetKind()).To(Equal(fluxcdv1.ResourceSetKind))
@@ -367,9 +385,13 @@ func TestGetResource_WithNamespaceScopedRBAC_ForbiddenInOtherNamespace(t *testin
 	g.Expect(testClient.Create(ctx, roleBinding)).To(Succeed())
 	defer testClient.Delete(ctx, roleBinding)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Create a user session with access only in default namespace
 	imp := user.Impersonation{
@@ -385,7 +407,7 @@ func TestGetResource_WithNamespaceScopedRBAC_ForbiddenInOtherNamespace(t *testin
 	}, userClient)
 
 	// Call GetResource in flux-system namespace - should be forbidden
-	_, err = router.GetResource(userCtx, "ResourceSet", "test-resourceset-other-ns", "flux-system")
+	_, err = handler.GetResource(userCtx, "ResourceSet", "test-resourceset-other-ns", "flux-system")
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(apierrors.IsForbidden(err)).To(BeTrue(), "expected forbidden error when accessing resource in unauthorized namespace, got: %v", err)
 }
@@ -393,12 +415,16 @@ func TestGetResource_WithNamespaceScopedRBAC_ForbiddenInOtherNamespace(t *testin
 func TestGetResource_NotFound(t *testing.T) {
 	g := NewWithT(t)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Call GetResource for a non-existent resource
-	_, err := router.GetResource(ctx, "ResourceSet", "non-existent-resourceset", "default")
+	_, err := handler.GetResource(ctx, "ResourceSet", "non-existent-resourceset", "default")
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(apierrors.IsNotFound(err)).To(BeTrue(), "expected not found error, got: %v", err)
 }
@@ -406,12 +432,16 @@ func TestGetResource_NotFound(t *testing.T) {
 func TestGetResource_InvalidKind(t *testing.T) {
 	g := NewWithT(t)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Call GetResource with an invalid kind
-	_, err := router.GetResource(ctx, "InvalidKind", "test", "default")
+	_, err := handler.GetResource(ctx, "InvalidKind", "test", "default")
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("unable to find Flux kind"))
 }

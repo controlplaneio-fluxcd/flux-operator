@@ -28,7 +28,7 @@ import (
 // Query parameters: kind, name, namespace (all required).
 // Supported workload kinds: Deployment, StatefulSet, DaemonSet.
 // Example: /api/v1/workload?kind=Deployment&name=flux-operator&namespace=flux-system
-func (r *Router) WorkloadHandler(w http.ResponseWriter, req *http.Request) {
+func (h *Handler) WorkloadHandler(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodGet && req.Method != http.MethodHead {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -47,7 +47,7 @@ func (r *Router) WorkloadHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// Get the resource from the cluster
-	resource, err := r.GetWorkloadStatus(req.Context(), kind, name, namespace)
+	resource, err := h.GetWorkloadStatus(req.Context(), kind, name, namespace)
 	if err != nil {
 		log.FromContext(req.Context()).Error(err, "failed to get workload")
 		switch {
@@ -123,7 +123,7 @@ type WorkloadPodStatus struct {
 }
 
 // GetWorkloadStatus should fetch the Deployment/StatefulSet/DaemonSet and return the WorkloadStatus.
-func (r *Router) GetWorkloadStatus(ctx context.Context, kind, name, namespace string) (*WorkloadStatus, error) {
+func (h *Handler) GetWorkloadStatus(ctx context.Context, kind, name, namespace string) (*WorkloadStatus, error) {
 	// Create an unstructured object to fetch the resource
 	obj := &unstructured.Unstructured{}
 	obj.SetGroupVersionKind(schema.GroupVersionKind{
@@ -139,7 +139,7 @@ func (r *Router) GetWorkloadStatus(ctx context.Context, kind, name, namespace st
 	}
 
 	// Fetch the resource from the cluster
-	if err := r.kubeClient.GetClient(ctx).Get(ctx, key, obj); err != nil {
+	if err := h.kubeClient.GetClient(ctx).Get(ctx, key, obj); err != nil {
 		return nil, fmt.Errorf("unable to get resource %s/%s in namespace %s: %w", kind, name, namespace, err)
 	}
 
@@ -163,7 +163,7 @@ func (r *Router) GetWorkloadStatus(ctx context.Context, kind, name, namespace st
 	workload.StatusMessage = res.Message
 
 	// Get the pods managed by the workload
-	podsStatus, err := r.GetWorkloadPods(ctx, obj)
+	podsStatus, err := h.GetWorkloadPods(ctx, obj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get pods for workload %s/%s: %w", namespace, name, err)
 	}
@@ -172,7 +172,7 @@ func (r *Router) GetWorkloadStatus(ctx context.Context, kind, name, namespace st
 	return workload, nil
 }
 
-func (r *Router) GetWorkloadPods(ctx context.Context, obj *unstructured.Unstructured) ([]WorkloadPodStatus, error) {
+func (h *Handler) GetWorkloadPods(ctx context.Context, obj *unstructured.Unstructured) ([]WorkloadPodStatus, error) {
 	podList := &corev1.PodList{}
 
 	selector, found, err := unstructured.NestedStringMap(obj.Object, "spec", "selector", "matchLabels")
@@ -185,7 +185,7 @@ func (r *Router) GetWorkloadPods(ctx context.Context, obj *unstructured.Unstruct
 		client.MatchingLabels(selector),
 	}
 
-	if err := r.kubeClient.GetClient(ctx).List(ctx, podList, listOpts...); err != nil {
+	if err := h.kubeClient.GetClient(ctx).List(ctx, podList, listOpts...); err != nil {
 		return nil, fmt.Errorf("failed to list pods for workload %s/%s: %w", obj.GetNamespace(), obj.GetName(), err)
 	}
 

@@ -85,8 +85,8 @@ func setAuthProviderCookie(w http.ResponseWriter, provider, loginURL string, aut
 	})
 }
 
-// setAnonymousAuthProviderCookie sets the anonymous auth provider cookie in the response.
-func setAnonymousAuthProviderCookie(w http.ResponseWriter) {
+// SetAnonymousAuthProviderCookie sets the anonymous auth provider cookie in the response.
+func SetAnonymousAuthProviderCookie(w http.ResponseWriter) {
 	setAuthProviderCookie(w, config.AuthenticationTypeAnonymous, "", true)
 }
 

@@ -14,9 +14,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
 	toolscache "k8s.io/client-go/tools/cache"
+	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlcache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const (
@@ -33,15 +33,15 @@ const (
 )
 
 // WatchSecret monitors the given secret in the specified namespace for changes
-// and sends the updated configuration on the returned channel. If the secret
-// cannot be fetched for loading the first configuration, an error is returned.
-// It also returns a channel that is closed when the watcher stops.
+// and sends the updated configuration on the returned channel. It also returns
+// a channel that is closed when the watcher stops.
 func WatchSecret(ctx context.Context, name, namespace string,
-	restConfig *rest.Config) (<-chan *ConfigSpec, <-chan struct{}, *ConfigSpec, error) {
+	restConfig *rest.Config) (<-chan *ConfigSpec, <-chan struct{}, error) {
 
-	cacheSyncCtx, cancelCacheSyncCtx := context.WithTimeout(ctx, 10*time.Second)
-	defer cancelCacheSyncCtx()
-	l := log.FromContext(ctx).WithValues("secretRef", map[string]any{"name": name, "namespace": namespace})
+	l := ctrl.Log.WithName("web-config-watcher").WithValues("secretRef", map[string]any{
+		"name":      name,
+		"namespace": namespace,
+	})
 
 	// Build a cache to watch the secret.
 	sp := syncPeriod
@@ -57,7 +57,7 @@ func WatchSecret(ctx context.Context, name, namespace string,
 		},
 	})
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	// Register event handlers to watch for secret changes.
@@ -78,10 +78,12 @@ func WatchSecret(ctx context.Context, name, namespace string,
 		}
 		return b, secret.ResourceVersion
 	}
+	setupCtx, cancelSetupCtx := context.WithTimeout(ctx, 10*time.Second)
+	defer cancelSetupCtx()
 	secretKind := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Secret"}
-	informer, err := cache.GetInformerForKind(cacheSyncCtx, secretKind)
+	informer, err := cache.GetInformerForKind(setupCtx, secretKind)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	confChannel := make(chan *ConfigSpec, 10)
 	_, err = informer.AddEventHandler(toolscache.ResourceEventHandlerFuncs{
@@ -114,24 +116,19 @@ func WatchSecret(ctx context.Context, name, namespace string,
 		},
 	})
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	// Start the cache on a separate goroutine.
 	stopped := make(chan struct{})
 	go func() {
 		defer close(stopped)
+		l.Info("starting watcher for web configuration secret")
 		if err := cache.Start(ctx); err != nil {
-			l.Error(err, "web configuration cache stopped with error")
+			l.Error(err, "unable to start watcher for web configuration secret")
 			os.Exit(1)
 		}
 	}()
 
-	// Wait for first configuration to be available.
-	select {
-	case <-cacheSyncCtx.Done():
-		return nil, nil, nil, cacheSyncCtx.Err()
-	case firstConf := <-confChannel:
-		return confChannel, stopped, firstConf, nil
-	}
+	return confChannel, stopped, nil
 }

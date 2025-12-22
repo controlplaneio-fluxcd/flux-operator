@@ -27,7 +27,7 @@ type WorkloadsRequest struct {
 
 // WorkloadsHandler handles POST /api/v1/workloads requests and returns the status
 // of the specified workloads.
-func (r *Router) WorkloadsHandler(w http.ResponseWriter, req *http.Request) {
+func (h *Handler) WorkloadsHandler(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -50,7 +50,7 @@ func (r *Router) WorkloadsHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// Fetch status for all workloads
-	workloads := r.GetWorkloadsStatus(req.Context(), wReq.Workloads)
+	workloads := h.GetWorkloadsStatus(req.Context(), wReq.Workloads)
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(map[string]any{"workloads": workloads}); err != nil {
@@ -61,7 +61,7 @@ func (r *Router) WorkloadsHandler(w http.ResponseWriter, req *http.Request) {
 
 // GetWorkloadsStatus fetches the status for the specified workloads.
 // Workloads are queried in parallel with a concurrency limit of 4.
-func (r *Router) GetWorkloadsStatus(ctx context.Context, workloads []WorkloadItem) []WorkloadStatus {
+func (h *Handler) GetWorkloadsStatus(ctx context.Context, workloads []WorkloadItem) []WorkloadStatus {
 	result := make([]WorkloadStatus, len(workloads))
 
 	var wg sync.WaitGroup
@@ -79,7 +79,7 @@ func (r *Router) GetWorkloadsStatus(ctx context.Context, workloads []WorkloadIte
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			ws, err := r.GetWorkloadStatus(ctx, item.Kind, item.Name, item.Namespace)
+			ws, err := h.GetWorkloadStatus(ctx, item.Kind, item.Name, item.Namespace)
 			if err != nil {
 				var statusMessage string
 				switch {

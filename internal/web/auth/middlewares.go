@@ -84,7 +84,7 @@ func NewMiddleware(conf *config.ConfigSpec, kubeClient *kubeclient.Client,
 func newDefaultMiddleware() func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			setAnonymousAuthProviderCookie(w)
+			SetAnonymousAuthProviderCookie(w)
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -111,7 +111,7 @@ func newAnonymousMiddleware(conf *config.ConfigSpec, kubeClient *kubeclient.Clie
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			setAnonymousAuthProviderCookie(w)
+			SetAnonymousAuthProviderCookie(w)
 			ctx := user.StoreSession(r.Context(), details, client)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})

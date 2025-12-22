@@ -77,12 +77,12 @@ type HelmHistory struct {
 // In the case of a HelmRelease, it extracts the metadata from the Helm storage secret belonging
 // to the latest release version.
 // nolint: gocyclo
-func (r *Router) getInventory(
+func (h *Handler) getInventory(
 	ctx context.Context,
 	obj unstructured.Unstructured,
 ) ([]InventoryEntry, error) {
 	inventory := make([]InventoryEntry, 0)
-	kubeClient := r.kubeClient.GetClient(ctx)
+	kubeClient := h.kubeClient.GetClient(ctx)
 
 	// If kind is ArtifactGenerator, extract ExternalArtifacts from status.inventory[]
 	if obj.GetKind() == fluxcdv1.FluxArtifactGeneratorKind {
@@ -271,7 +271,7 @@ func decodeHelmStorage(releaseData []byte) (*HelmStorage, error) {
 }
 
 // preferredFluxGVK returns the preferred GroupVersionKind for a given Flux kind.
-func (r *Router) preferredFluxGVK(ctx context.Context, kind string) (*schema.GroupVersionKind, error) {
+func (h *Handler) preferredFluxGVK(ctx context.Context, kind string) (*schema.GroupVersionKind, error) {
 	gk, err := fluxcdv1.FluxGroupFor(kind)
 	if err != nil {
 		return nil, err
@@ -285,7 +285,7 @@ func (r *Router) preferredFluxGVK(ctx context.Context, kind string) (*schema.Gro
 	// only succeeds if the user has get/list permissions on the resource itself,
 	// so there's no point in enforcing RBAC for this "meta" operation. Thus,
 	// we use a privileged client here.
-	mapping, err := r.kubeClient.GetClient(ctx, kubeclient.WithPrivileges()).RESTMapper().RESTMapping(*gk)
+	mapping, err := h.kubeClient.GetClient(ctx, kubeclient.WithPrivileges()).RESTMapper().RESTMapping(*gk)
 	if err != nil {
 		return nil, err
 	}

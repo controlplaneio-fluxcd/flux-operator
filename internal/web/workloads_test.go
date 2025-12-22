@@ -4,9 +4,7 @@
 package web
 
 import (
-	"net/http"
 	"testing"
-	"time"
 
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
@@ -50,15 +48,19 @@ func TestGetWorkloadsStatus_Privileged_Success(t *testing.T) {
 	g.Expect(testClient.Create(ctx, deployment)).To(Succeed())
 	defer testClient.Delete(ctx, deployment)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Call GetWorkloadsStatus without any user session (privileged)
 	workloads := []WorkloadItem{
 		{Kind: "Deployment", Namespace: "default", Name: "test-workload-success"},
 	}
-	results := router.GetWorkloadsStatus(ctx, workloads)
+	results := handler.GetWorkloadsStatus(ctx, workloads)
 
 	g.Expect(results).To(HaveLen(1))
 	g.Expect(results[0].Name).To(Equal("test-workload-success"))
@@ -70,15 +72,19 @@ func TestGetWorkloadsStatus_Privileged_Success(t *testing.T) {
 func TestGetWorkloadsStatus_Privileged_NotFound(t *testing.T) {
 	g := NewWithT(t)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Call GetWorkloadsStatus with a non-existent workload
 	workloads := []WorkloadItem{
 		{Kind: "Deployment", Namespace: "default", Name: "nonexistent-deployment"},
 	}
-	results := router.GetWorkloadsStatus(ctx, workloads)
+	results := handler.GetWorkloadsStatus(ctx, workloads)
 
 	// Should return result with NotFound status and user-friendly message
 	g.Expect(results).To(HaveLen(1))
@@ -122,9 +128,13 @@ func TestGetWorkloadsStatus_UnprivilegedUser_Forbidden(t *testing.T) {
 	g.Expect(testClient.Create(ctx, deployment)).To(Succeed())
 	defer testClient.Delete(ctx, deployment)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Create an unprivileged user session (no RBAC permissions)
 	imp := user.Impersonation{
@@ -143,7 +153,7 @@ func TestGetWorkloadsStatus_UnprivilegedUser_Forbidden(t *testing.T) {
 	workloads := []WorkloadItem{
 		{Kind: "Deployment", Namespace: "default", Name: "test-workload-forbidden"},
 	}
-	results := router.GetWorkloadsStatus(userCtx, workloads)
+	results := handler.GetWorkloadsStatus(userCtx, workloads)
 
 	// Should return result with NotFound status and forbidden message
 	g.Expect(results).To(HaveLen(1))
@@ -227,9 +237,13 @@ func TestGetWorkloadsStatus_WithUserRBAC_Success(t *testing.T) {
 	g.Expect(testClient.Create(ctx, roleBinding)).To(Succeed())
 	defer testClient.Delete(ctx, roleBinding)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Create a user session with RBAC access
 	imp := user.Impersonation{
@@ -248,7 +262,7 @@ func TestGetWorkloadsStatus_WithUserRBAC_Success(t *testing.T) {
 	workloads := []WorkloadItem{
 		{Kind: "Deployment", Namespace: "default", Name: "test-workload-rbac-success"},
 	}
-	results := router.GetWorkloadsStatus(userCtx, workloads)
+	results := handler.GetWorkloadsStatus(userCtx, workloads)
 
 	// Should return the workload successfully
 	g.Expect(results).To(HaveLen(1))
@@ -340,9 +354,13 @@ func TestGetWorkloadsStatus_WithNamespaceScopedRBAC_ForbiddenInOtherNamespace(t 
 	g.Expect(testClient.Create(ctx, roleBinding)).To(Succeed())
 	defer testClient.Delete(ctx, roleBinding)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Create a user session with namespace-scoped access
 	imp := user.Impersonation{
@@ -361,7 +379,7 @@ func TestGetWorkloadsStatus_WithNamespaceScopedRBAC_ForbiddenInOtherNamespace(t 
 	workloads := []WorkloadItem{
 		{Kind: "Deployment", Namespace: "workloads-ns-test", Name: "test-workload-other-ns"},
 	}
-	results := router.GetWorkloadsStatus(userCtx, workloads)
+	results := handler.GetWorkloadsStatus(userCtx, workloads)
 
 	// Should return forbidden message
 	g.Expect(results).To(HaveLen(1))
@@ -441,9 +459,13 @@ func TestGetWorkloadsStatus_WithDeploymentAccessButNoPodAccess_Forbidden(t *test
 	g.Expect(testClient.Create(ctx, roleBinding)).To(Succeed())
 	defer testClient.Delete(ctx, roleBinding)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Create a user session with deployment access but no pod access
 	imp := user.Impersonation{
@@ -462,7 +484,7 @@ func TestGetWorkloadsStatus_WithDeploymentAccessButNoPodAccess_Forbidden(t *test
 	workloads := []WorkloadItem{
 		{Kind: "Deployment", Namespace: "default", Name: "test-workload-no-pod-access"},
 	}
-	results := router.GetWorkloadsStatus(userCtx, workloads)
+	results := handler.GetWorkloadsStatus(userCtx, workloads)
 
 	// Should return forbidden message since pod listing fails
 	g.Expect(results).To(HaveLen(1))
@@ -546,9 +568,13 @@ func TestGetWorkloadsStatus_MixedResults(t *testing.T) {
 	g.Expect(testClient.Create(ctx, roleBinding)).To(Succeed())
 	defer testClient.Delete(ctx, roleBinding)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Create a user session
 	imp := user.Impersonation{
@@ -570,7 +596,7 @@ func TestGetWorkloadsStatus_MixedResults(t *testing.T) {
 		{Kind: "Deployment", Namespace: "default", Name: "test-workload-mixed-exists"},
 		{Kind: "Deployment", Namespace: "default", Name: "nonexistent"},
 	}
-	results := router.GetWorkloadsStatus(userCtx, workloads)
+	results := handler.GetWorkloadsStatus(userCtx, workloads)
 
 	// Should return results for all 2 items with appropriate messages
 	g.Expect(results).To(HaveLen(2))
@@ -588,13 +614,17 @@ func TestGetWorkloadsStatus_MixedResults(t *testing.T) {
 func TestGetWorkloadsStatus_EmptyList(t *testing.T) {
 	g := NewWithT(t)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Call GetWorkloadsStatus with empty list
 	workloads := []WorkloadItem{}
-	results := router.GetWorkloadsStatus(ctx, workloads)
+	results := handler.GetWorkloadsStatus(ctx, workloads)
 
 	// Should return empty result
 	g.Expect(results).To(BeEmpty())
@@ -634,15 +664,19 @@ func TestGetWorkloadsStatus_StatefulSet(t *testing.T) {
 	g.Expect(testClient.Create(ctx, statefulSet)).To(Succeed())
 	defer testClient.Delete(ctx, statefulSet)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Call GetWorkloadsStatus for StatefulSet
 	workloads := []WorkloadItem{
 		{Kind: "StatefulSet", Namespace: "default", Name: "test-statefulset"},
 	}
-	results := router.GetWorkloadsStatus(ctx, workloads)
+	results := handler.GetWorkloadsStatus(ctx, workloads)
 
 	g.Expect(results).To(HaveLen(1))
 	g.Expect(results[0].Name).To(Equal("test-statefulset"))
@@ -681,15 +715,19 @@ func TestGetWorkloadsStatus_DaemonSet(t *testing.T) {
 	g.Expect(testClient.Create(ctx, daemonSet)).To(Succeed())
 	defer testClient.Delete(ctx, daemonSet)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Call GetWorkloadsStatus for DaemonSet
 	workloads := []WorkloadItem{
 		{Kind: "DaemonSet", Namespace: "default", Name: "test-daemonset"},
 	}
-	results := router.GetWorkloadsStatus(ctx, workloads)
+	results := handler.GetWorkloadsStatus(ctx, workloads)
 
 	g.Expect(results).To(HaveLen(1))
 	g.Expect(results[0].Name).To(Equal("test-daemonset"))

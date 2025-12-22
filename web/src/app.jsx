@@ -200,15 +200,17 @@ export function App() {
   // ERROR STATE: Failed to load data and no cached data available
   // Shows error message and "retrying" notice (auto-refresh continues)
   if (!reportData.value && connectionStatus.value === 'disconnected') {
+    // If reportError.value has the substring 'server not initialized', show a specific message
+    const msg = reportError.value?.includes('server not initialized')
+      ? 'Server configuration is not initialized. Retrying automatically...'
+      : 'Unable to connect to the server. Retrying automatically...'
     return (
       <div class="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors flex flex-col">
         <ConnectionStatus />
         <div class="flex items-center justify-center flex-1">
           <div class="text-center">
             <p class="text-red-600 dark:text-red-400 text-lg font-semibold">Failed to load Flux report</p>
-            <p class="mt-2 text-gray-600 dark:text-gray-400 text-sm">
-              Unable to connect to the server. Retrying automatically...
-            </p>
+            <p class="mt-2 text-gray-600 dark:text-gray-400 text-sm">{msg}</p>
           </div>
         </div>
       </div>

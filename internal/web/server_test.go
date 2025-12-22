@@ -60,25 +60,17 @@ spec: {}
 	watcherCtx := log.IntoContext(serverCtx, l)
 
 	// Start watching the config secret.
-	confChannel, confWatcherStopped, firstConf, err := config.WatchSecret(
+	confChannel, confWatcherStopped, err := config.WatchSecret(
 		watcherCtx, secretName, testNamespace, testEnv.Config)
 	g.Expect(err).NotTo(HaveOccurred())
-	g.Expect(firstConf).NotTo(BeNil())
-	g.Expect(firstConf.Authentication).To(BeNil(), "initial config should not have authentication")
 
-	// Initialize server components with the first configuration.
-	firstComponents, err := InitializeServerComponents(firstConf, testCluster, l)
-	g.Expect(err).NotTo(HaveOccurred())
-	g.Expect(firstComponents).NotTo(BeNil())
-
-	// Create a listener on a random port.
+	// Create a listener on a random port to get an available port.
 	lis, err := net.Listen("tcp", ":0")
 	g.Expect(err).NotTo(HaveOccurred())
-	defer lis.Close()
-
-	// Get the random port.
 	addr := lis.Addr().(*net.TCPAddr)
 	port := fmt.Sprintf("%d", addr.Port)
+	// Close the listener so the server can bind to this port.
+	g.Expect(lis.Close()).To(Succeed())
 
 	// Start the server in a goroutine.
 	serverErrCh := make(chan error, 1)
@@ -89,9 +81,8 @@ spec: {}
 			"test-version",
 			"test-status-manager",
 			testNamespace,
-			firstComponents,
-			lis,
-			l)
+			10*time.Second,
+			addr.Port)
 	}()
 
 	// Wait for the server to start.

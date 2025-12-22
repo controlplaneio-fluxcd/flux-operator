@@ -4,9 +4,7 @@
 package web
 
 import (
-	"net/http"
 	"testing"
-	"time"
 
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -50,12 +48,16 @@ func TestGetEvents_Privileged(t *testing.T) {
 	g.Expect(testClient.Create(ctx, event)).To(Succeed())
 	defer testClient.Delete(ctx, event)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Call GetEvents without any user session (privileged)
-	events, err := router.GetEvents(ctx, "ResourceSet", "test-events-resourceset", "default", "", "")
+	events, err := handler.GetEvents(ctx, "ResourceSet", "test-events-resourceset", "default", "", "")
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(events).NotTo(BeNil())
 
@@ -103,9 +105,13 @@ func TestGetEvents_UnprivilegedUser_EmptyResult(t *testing.T) {
 	g.Expect(testClient.Create(ctx, event)).To(Succeed())
 	defer testClient.Delete(ctx, event)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Create an unprivileged user session (no RBAC permissions)
 	imp := user.Impersonation{
@@ -122,7 +128,7 @@ func TestGetEvents_UnprivilegedUser_EmptyResult(t *testing.T) {
 
 	// Call GetEvents with the unprivileged user context
 	// Should return empty result (not error) because user has no namespace access
-	events, err := router.GetEvents(userCtx, "ResourceSet", "", "", "", "")
+	events, err := handler.GetEvents(userCtx, "ResourceSet", "", "", "", "")
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(events).To(BeEmpty(), "unprivileged user should get empty result, not error")
 }
@@ -202,9 +208,13 @@ func TestGetEvents_WithUserRBAC_OnlyAccessibleEvents(t *testing.T) {
 	g.Expect(testClient.Create(ctx, roleBinding)).To(Succeed())
 	defer testClient.Delete(ctx, roleBinding)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Create a user session with namespace-scoped access
 	imp := user.Impersonation{
@@ -220,7 +230,7 @@ func TestGetEvents_WithUserRBAC_OnlyAccessibleEvents(t *testing.T) {
 	}, userClient)
 
 	// Call GetEvents with the user context
-	events, err := router.GetEvents(userCtx, "ResourceSet", "test-events-rbac", "default", "", "")
+	events, err := handler.GetEvents(userCtx, "ResourceSet", "test-events-rbac", "default", "", "")
 	g.Expect(err).NotTo(HaveOccurred())
 
 	// Should find our test event
@@ -309,9 +319,13 @@ func TestGetEvents_WithSpecificNamespace(t *testing.T) {
 	g.Expect(testClient.Create(ctx, roleBinding)).To(Succeed())
 	defer testClient.Delete(ctx, roleBinding)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Create a user session
 	imp := user.Impersonation{
@@ -327,7 +341,7 @@ func TestGetEvents_WithSpecificNamespace(t *testing.T) {
 	}, userClient)
 
 	// Call GetEvents with specific namespace - should work
-	events, err := router.GetEvents(userCtx, "ResourceSet", "test-events-specific-ns", "default", "", "")
+	events, err := handler.GetEvents(userCtx, "ResourceSet", "test-events-specific-ns", "default", "", "")
 	g.Expect(err).NotTo(HaveOccurred())
 
 	// Should find our test event
@@ -386,9 +400,13 @@ func TestGetEvents_IgnoresForbiddenErrors(t *testing.T) {
 	g.Expect(testClient.Create(ctx, roleBinding)).To(Succeed())
 	defer testClient.Delete(ctx, roleBinding)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Create a user session
 	imp := user.Impersonation{
@@ -405,7 +423,7 @@ func TestGetEvents_IgnoresForbiddenErrors(t *testing.T) {
 
 	// Call GetEvents without specifying kind - will query multiple kinds
 	// Even if some queries fail with forbidden, the function should NOT return an error
-	events, err := router.GetEvents(userCtx, "", "", "default", "", "")
+	events, err := handler.GetEvents(userCtx, "", "", "default", "", "")
 	g.Expect(err).NotTo(HaveOccurred(), "should not return error even when some kinds are forbidden")
 	g.Expect(events).NotTo(BeNil())
 }
@@ -462,12 +480,16 @@ func TestGetEvents_FilterByEventType(t *testing.T) {
 	g.Expect(testClient.Create(ctx, warningEvent)).To(Succeed())
 	defer testClient.Delete(ctx, warningEvent)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Call GetEvents filtering by Warning type only
-	events, err := router.GetEvents(ctx, "ResourceSet", "test-events-filter-type", "default", "", "Warning")
+	events, err := handler.GetEvents(ctx, "ResourceSet", "test-events-filter-type", "default", "", "Warning")
 	g.Expect(err).NotTo(HaveOccurred())
 
 	// Should only find Warning events
