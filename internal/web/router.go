@@ -106,5 +106,5 @@ func (r *Router) refreshReportCache(ctx context.Context) {
 func (r *Router) getCachedReport() *unstructured.Unstructured {
 	r.reportCacheMu.RLock()
 	defer r.reportCacheMu.RUnlock()
-	return r.reportCache
+	return r.reportCache.DeepCopy()
 }
