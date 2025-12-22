@@ -4,6 +4,7 @@
 package web
 
 import (
+	"context"
 	"net/http"
 	"testing"
 	"time"
@@ -380,6 +381,31 @@ func TestCleanObjectForExport(t *testing.T) {
 			g.Expect(obj.Object).To(Equal(tt.expected))
 		})
 	}
+}
+
+func TestGetReport_CachedAndPrivileged(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create the router with the test kubeclient
+	mux := http.NewServeMux()
+	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+
+	// Start report cache.
+	ctx, cancel := context.WithCancel(ctx)
+	stopped := router.StartReportCache(ctx)
+	defer func() {
+		cancel()
+		<-stopped
+	}()
+
+	// Call GetReport without any user session (privileged)
+	report, err := router.GetReport(ctx)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(report).NotTo(BeNil())
+
+	// Verify basic report structure
+	g.Expect(report.GetKind()).To(Equal(fluxcdv1.FluxReportKind))
+	g.Expect(report.GetAPIVersion()).To(Equal(fluxcdv1.GroupVersion.String()))
 }
 
 func TestGetReport_Privileged(t *testing.T) {
