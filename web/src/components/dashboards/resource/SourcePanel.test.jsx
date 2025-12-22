@@ -31,6 +31,18 @@ describe('SourcePanel component', () => {
     message: "stored artifact for revision 'refs/heads/main@sha1:abc123'"
   }
 
+  // Mock resourceData that contains sourceRef in status and namespace in metadata
+  const mockResourceData = {
+    kind: 'Kustomization',
+    metadata: {
+      name: 'test-kustomization',
+      namespace: 'flux-system'
+    },
+    status: {
+      sourceRef: mockSourceRef
+    }
+  }
+
   const mockSourceData = {
     apiVersion: 'source.toolkit.fluxcd.io/v1',
     kind: 'GitRepository',
@@ -83,8 +95,7 @@ describe('SourcePanel component', () => {
   it('should render the source section initially', () => {
     const { container } = render(
       <SourcePanel
-        sourceRef={mockSourceRef}
-        namespace="flux-system"
+        resourceData={mockResourceData}
       />
     )
 
@@ -97,8 +108,7 @@ describe('SourcePanel component', () => {
 
     render(
       <SourcePanel
-        sourceRef={mockSourceRef}
-        namespace="flux-system"
+        resourceData={mockResourceData}
       />
     )
 
@@ -118,8 +128,7 @@ describe('SourcePanel component', () => {
 
     render(
       <SourcePanel
-        sourceRef={mockSourceRef}
-        namespace="flux-system"
+        resourceData={mockResourceData}
       />
     )
 
@@ -141,8 +150,7 @@ describe('SourcePanel component', () => {
 
     render(
       <SourcePanel
-        sourceRef={mockSourceRef}
-        namespace="flux-system"
+        resourceData={mockResourceData}
       />
     )
 
@@ -167,8 +175,7 @@ describe('SourcePanel component', () => {
 
     render(
       <SourcePanel
-        sourceRef={mockSourceRef}
-        namespace="flux-system"
+        resourceData={mockResourceData}
       />
     )
 
@@ -187,8 +194,7 @@ describe('SourcePanel component', () => {
 
     render(
       <SourcePanel
-        sourceRef={mockSourceRef}
-        namespace="flux-system"
+        resourceData={mockResourceData}
       />
     )
 
@@ -207,13 +213,17 @@ describe('SourcePanel component', () => {
       originRevision: 'v1.2.3'
     }
 
+    const resourceDataWithOrigin = {
+      ...mockResourceData,
+      status: {
+        sourceRef: sourceRefWithOrigin
+      }
+    }
+
     fetchWithMock.mockResolvedValue(mockSourceData)
 
     render(
-      <SourcePanel
-        sourceRef={sourceRefWithOrigin}
-        namespace="flux-system"
-      />
+      <SourcePanel resourceData={resourceDataWithOrigin} />
     )
 
     await waitFor(() => {
@@ -230,8 +240,7 @@ describe('SourcePanel component', () => {
 
     render(
       <SourcePanel
-        sourceRef={mockSourceRef}
-        namespace="flux-system"
+        resourceData={mockResourceData}
       />
     )
 
@@ -247,8 +256,7 @@ describe('SourcePanel component', () => {
 
     render(
       <SourcePanel
-        sourceRef={mockSourceRef}
-        namespace="flux-system"
+        resourceData={mockResourceData}
       />
     )
 
@@ -265,8 +273,7 @@ describe('SourcePanel component', () => {
 
     render(
       <SourcePanel
-        sourceRef={mockSourceRef}
-        namespace="flux-system"
+        resourceData={mockResourceData}
       />
     )
 
@@ -300,8 +307,7 @@ describe('SourcePanel component', () => {
 
     render(
       <SourcePanel
-        sourceRef={mockSourceRef}
-        namespace="flux-system"
+        resourceData={mockResourceData}
       />
     )
 
@@ -335,8 +341,7 @@ describe('SourcePanel component', () => {
 
     render(
       <SourcePanel
-        sourceRef={mockSourceRef}
-        namespace="flux-system"
+        resourceData={mockResourceData}
       />
     )
 
@@ -362,8 +367,7 @@ describe('SourcePanel component', () => {
 
     render(
       <SourcePanel
-        sourceRef={mockSourceRef}
-        namespace="flux-system"
+        resourceData={mockResourceData}
       />
     )
 
@@ -393,8 +397,7 @@ describe('SourcePanel component', () => {
 
     render(
       <SourcePanel
-        sourceRef={mockSourceRef}
-        namespace="flux-system"
+        resourceData={mockResourceData}
       />
     )
 
@@ -420,8 +423,7 @@ describe('SourcePanel component', () => {
 
     render(
       <SourcePanel
-        sourceRef={mockSourceRef}
-        namespace="flux-system"
+        resourceData={mockResourceData}
       />
     )
 
@@ -454,8 +456,7 @@ describe('SourcePanel component', () => {
 
     render(
       <SourcePanel
-        sourceRef={mockSourceRef}
-        namespace="flux-system"
+        resourceData={mockResourceData}
       />
     )
 
@@ -472,39 +473,13 @@ describe('SourcePanel component', () => {
     consoleErrorSpy.mockRestore()
   })
 
-  it('should use fallback namespace when sourceRef namespace is missing', async () => {
-    const sourceRefWithoutNamespace = {
-      kind: 'GitRepository',
-      name: 'flux-system',
-      status: 'Ready'
-    }
-
-    fetchWithMock.mockResolvedValue(mockSourceData)
-
-    render(
-      <SourcePanel
-        sourceRef={sourceRefWithoutNamespace}
-        namespace="default"
-      />
-    )
-
-    await waitFor(() => {
-      expect(fetchWithMock).toHaveBeenCalledWith({
-        endpoint: '/api/v1/resource?kind=GitRepository&name=flux-system&namespace=default',
-        mockPath: '../mock/resource',
-        mockExport: 'getMockResource'
-      })
-    })
-  })
-
   it('should only show Overview and Events tabs when source data fails to load', async () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     fetchWithMock.mockRejectedValue(new Error('Network error'))
 
     render(
       <SourcePanel
-        sourceRef={mockSourceRef}
-        namespace="flux-system"
+        resourceData={mockResourceData}
       />
     )
 
@@ -526,8 +501,7 @@ describe('SourcePanel component', () => {
 
     render(
       <SourcePanel
-        sourceRef={mockSourceRef}
-        namespace="flux-system"
+        resourceData={mockResourceData}
       />
     )
 
@@ -563,8 +537,7 @@ describe('SourcePanel component', () => {
 
       render(
         <SourcePanel
-          sourceRef={mockSourceRef}
-          namespace="flux-system"
+          resourceData={mockResourceData}
         />
       )
 
@@ -586,8 +559,7 @@ describe('SourcePanel component', () => {
       fetchWithMock.mockResolvedValueOnce(mockSourceData)
       const { rerender } = render(
         <SourcePanel
-          sourceRef={mockSourceRef}
-          namespace="flux-system"
+          resourceData={mockResourceData}
         />
       )
 
@@ -597,18 +569,20 @@ describe('SourcePanel component', () => {
         expect(screen.queryByText('Loading source...')).not.toBeInTheDocument()
       })
 
-      // Simulate parent auto-refresh by changing sourceRef
-      const updatedSourceRef = {
-        ...mockSourceRef,
-        message: 'New artifact fetched'
+      // Simulate parent auto-refresh by changing resourceData
+      const updatedResourceData = {
+        ...mockResourceData,
+        status: {
+          ...mockResourceData.status,
+          reconcilerRef: { status: 'Progressing' }
+        }
       }
 
       fetchWithMock.mockResolvedValueOnce(mockSourceData)
 
       rerender(
         <SourcePanel
-          sourceRef={updatedSourceRef}
-          namespace="flux-system"
+          resourceData={updatedResourceData}
         />
       )
 
@@ -629,8 +603,7 @@ describe('SourcePanel component', () => {
       fetchWithMock.mockResolvedValueOnce(mockSourceData)
       const { rerender } = render(
         <SourcePanel
-          sourceRef={mockSourceRef}
-          namespace="flux-system"
+          resourceData={mockResourceData}
         />
       )
 
@@ -642,17 +615,19 @@ describe('SourcePanel component', () => {
       })
 
       // Simulate parent auto-refresh with fetch error
-      const updatedSourceRef = {
-        ...mockSourceRef,
-        message: 'New artifact fetched'
+      const updatedResourceData = {
+        ...mockResourceData,
+        status: {
+          ...mockResourceData.status,
+          reconcilerRef: { status: 'Progressing' }
+        }
       }
 
       fetchWithMock.mockRejectedValueOnce(new Error('Network error'))
 
       rerender(
         <SourcePanel
-          sourceRef={updatedSourceRef}
-          namespace="flux-system"
+          resourceData={updatedResourceData}
         />
       )
 
@@ -670,15 +645,39 @@ describe('SourcePanel component', () => {
   })
 
   describe('Events auto-refresh', () => {
-    it('should refetch events when sourceRef changes if Events tab is open', async () => {
+    it('should refetch events when resourceData changes if Events tab is open', async () => {
       const user = userEvent.setup()
 
-      // Initial render
-      fetchWithMock.mockResolvedValueOnce(mockSourceData)
+      // Track call count to return different values for refresh
+      let eventsCallCount = 0
+
+      // Use implementation to handle race conditions between source and events refetch
+      fetchWithMock.mockImplementation(({ endpoint }) => {
+        if (endpoint.includes('/api/v1/resource?')) {
+          return Promise.resolve(mockSourceData)
+        }
+        if (endpoint.includes('/api/v1/events?')) {
+          eventsCallCount++
+          if (eventsCallCount === 1) {
+            return Promise.resolve(mockEvents)
+          }
+          // Second events call (refetch)
+          return Promise.resolve({
+            events: [
+              {
+                type: 'Normal',
+                message: 'New event after refresh',
+                lastTimestamp: '2025-01-15T10:05:00Z'
+              }
+            ]
+          })
+        }
+        return Promise.resolve({})
+      })
+
       const { rerender } = render(
         <SourcePanel
-          sourceRef={mockSourceRef}
-          namespace="flux-system"
+          resourceData={mockResourceData}
         />
       )
 
@@ -688,54 +687,41 @@ describe('SourcePanel component', () => {
       })
 
       // Click on Events tab
-      fetchWithMock.mockResolvedValueOnce(mockEvents)
       const eventsTab = screen.getByText('Events')
       await user.click(eventsTab)
 
       // Wait for events to load
       await waitFor(() => {
-        expect(fetchWithMock).toHaveBeenCalledTimes(2)
         expect(screen.getByText('Artifact up to date with remote revision')).toBeInTheDocument()
       })
 
-      // Simulate parent auto-refresh by changing sourceRef
-      const updatedSourceRef = {
-        ...mockSourceRef,
-        message: 'New artifact fetched'
+      // Simulate parent auto-refresh by changing resourceData
+      const updatedResourceData = {
+        ...mockResourceData,
+        status: {
+          ...mockResourceData.status,
+          reconcilerRef: { status: 'Progressing' }
+        }
       }
-
-      fetchWithMock.mockResolvedValueOnce(mockSourceData)
-      fetchWithMock.mockResolvedValueOnce({
-        events: [
-          {
-            type: 'Normal',
-            message: 'New event after refresh',
-            lastTimestamp: '2025-01-15T10:05:00Z'
-          }
-        ]
-      })
 
       rerender(
         <SourcePanel
-          sourceRef={updatedSourceRef}
-          namespace="flux-system"
+          resourceData={updatedResourceData}
         />
       )
 
-      // Should refetch source data and events
+      // Should refetch events and show new content
       await waitFor(() => {
-        expect(fetchWithMock).toHaveBeenCalledTimes(4) // source, events, source (refresh), events (refresh)
         expect(screen.getByText('New event after refresh')).toBeInTheDocument()
       })
     })
 
-    it('should NOT refetch events when sourceRef changes if Events tab is not open', async () => {
+    it('should NOT refetch events when resourceData changes if Events tab is not open', async () => {
       // Initial render
       fetchWithMock.mockResolvedValueOnce(mockSourceData)
       const { rerender } = render(
         <SourcePanel
-          sourceRef={mockSourceRef}
-          namespace="flux-system"
+          resourceData={mockResourceData}
         />
       )
 
@@ -747,18 +733,20 @@ describe('SourcePanel component', () => {
       // Only source data should be fetched
       expect(fetchWithMock).toHaveBeenCalledTimes(1)
 
-      // Simulate parent auto-refresh by changing sourceRef
-      const updatedSourceRef = {
-        ...mockSourceRef,
-        message: 'New artifact fetched'
+      // Simulate parent auto-refresh by changing resourceData
+      const updatedResourceData = {
+        ...mockResourceData,
+        status: {
+          ...mockResourceData.status,
+          reconcilerRef: { status: 'Progressing' }
+        }
       }
 
       fetchWithMock.mockResolvedValueOnce(mockSourceData)
 
       rerender(
         <SourcePanel
-          sourceRef={updatedSourceRef}
-          namespace="flux-system"
+          resourceData={updatedResourceData}
         />
       )
 
@@ -774,8 +762,7 @@ describe('SourcePanel component', () => {
       fetchWithMock.mockResolvedValueOnce(mockSourceData)
       render(
         <SourcePanel
-          sourceRef={mockSourceRef}
-          namespace="flux-system"
+          resourceData={mockResourceData}
         />
       )
 
@@ -803,8 +790,7 @@ describe('SourcePanel component', () => {
       fetchWithMock.mockResolvedValueOnce(mockSourceData)
       const { rerender } = render(
         <SourcePanel
-          sourceRef={mockSourceRef}
-          namespace="flux-system"
+          resourceData={mockResourceData}
         />
       )
 
@@ -824,9 +810,12 @@ describe('SourcePanel component', () => {
       })
 
       // Simulate parent auto-refresh with events fetch error
-      const updatedSourceRef = {
-        ...mockSourceRef,
-        message: 'New artifact fetched'
+      const updatedResourceData = {
+        ...mockResourceData,
+        status: {
+          ...mockResourceData.status,
+          reconcilerRef: { status: 'Progressing' }
+        }
       }
 
       fetchWithMock.mockResolvedValueOnce(mockSourceData)
@@ -834,8 +823,7 @@ describe('SourcePanel component', () => {
 
       rerender(
         <SourcePanel
-          sourceRef={updatedSourceRef}
-          namespace="flux-system"
+          resourceData={updatedResourceData}
         />
       )
 
@@ -845,6 +833,465 @@ describe('SourcePanel component', () => {
       })
 
       consoleSpy.mockRestore()
+    })
+  })
+
+  describe('Chart tab for HelmRelease', () => {
+    const mockHelmRepoSourceRef = {
+      kind: 'HelmRepository',
+      name: 'tailscale-operator',
+      namespace: 'tailscale',
+      status: 'Ready',
+      url: 'https://pkgs.tailscale.com/helmcharts',
+      message: "stored artifact for digest 'sha256:abc123'"
+    }
+
+    const mockHelmRepoSourceData = {
+      apiVersion: 'source.toolkit.fluxcd.io/v1',
+      kind: 'HelmRepository',
+      metadata: {
+        name: 'tailscale-operator',
+        namespace: 'tailscale'
+      },
+      spec: {
+        interval: '1h',
+        url: 'https://pkgs.tailscale.com/helmcharts'
+      },
+      status: {
+        conditions: [
+          {
+            type: 'Ready',
+            status: 'True',
+            lastTransitionTime: '2025-01-15T10:00:00Z',
+            message: "stored artifact for digest 'sha256:abc123'"
+          }
+        ]
+      }
+    }
+
+    const mockHelmReleaseResourceData = {
+      apiVersion: 'helm.toolkit.fluxcd.io/v2',
+      kind: 'HelmRelease',
+      metadata: {
+        name: 'tailscale-operator',
+        namespace: 'tailscale'
+      },
+      spec: {
+        chart: {
+          spec: {
+            chart: 'tailscale-operator',
+            version: '>=1.0.0',
+            sourceRef: {
+              kind: 'HelmRepository',
+              name: 'tailscale-operator'
+            }
+          }
+        },
+        interval: '5m'
+      },
+      status: {
+        helmChart: 'tailscale/tailscale-tailscale-operator',
+        sourceRef: mockHelmRepoSourceRef,
+        reconcilerRef: {
+          status: 'Ready'
+        }
+      }
+    }
+
+    const mockHelmChartData = {
+      apiVersion: 'source.toolkit.fluxcd.io/v1',
+      kind: 'HelmChart',
+      metadata: {
+        name: 'tailscale-tailscale-operator',
+        namespace: 'tailscale'
+      },
+      spec: {
+        chart: 'tailscale-operator',
+        interval: '24h0m0s',
+        version: '*'
+      },
+      status: {
+        reconcilerRef: {
+          status: 'Ready',
+          message: "pulled 'tailscale-operator' chart with version '1.90.6'"
+        },
+        conditions: [
+          {
+            type: 'Ready',
+            status: 'True',
+            lastTransitionTime: '2025-01-15T10:00:00Z',
+            message: "pulled 'tailscale-operator' chart with version '1.90.6'"
+          }
+        ]
+      }
+    }
+
+    it('should NOT show Chart tab when resourceData is not a HelmRelease', async () => {
+      fetchWithMock.mockResolvedValue(mockSourceData)
+
+      render(
+        <SourcePanel
+          resourceData={mockResourceData}
+        />
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText('Overview')).toBeInTheDocument()
+      })
+
+      expect(screen.queryByText('Chart')).not.toBeInTheDocument()
+    })
+
+    it('should NOT show Chart tab when HelmRelease has no helmChart status', async () => {
+      fetchWithMock.mockResolvedValue(mockHelmRepoSourceData)
+
+      render(
+        <SourcePanel
+          resourceData={{
+            kind: 'HelmRelease',
+            status: {
+              sourceRef: mockHelmRepoSourceRef
+              // No helmChart field
+            }
+          }}
+        />
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText('Overview')).toBeInTheDocument()
+      })
+
+      expect(screen.queryByText('Chart')).not.toBeInTheDocument()
+    })
+
+    it('should show Chart tab when resourceData is HelmRelease with helmChart status', async () => {
+      fetchWithMock.mockResolvedValue(mockHelmRepoSourceData)
+
+      render(
+        <SourcePanel
+          resourceData={mockHelmReleaseResourceData}
+        />
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText('Overview')).toBeInTheDocument()
+        expect(screen.getByText('Chart')).toBeInTheDocument()
+      })
+    })
+
+    it('should fetch HelmChart data when Chart tab is clicked', async () => {
+      fetchWithMock.mockResolvedValueOnce(mockHelmRepoSourceData)
+      const user = userEvent.setup()
+
+      render(
+        <SourcePanel
+          resourceData={mockHelmReleaseResourceData}
+        />
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText('Chart')).toBeInTheDocument()
+      })
+
+      // HelmChart should not be fetched yet
+      expect(fetchWithMock).toHaveBeenCalledTimes(1)
+
+      // Click on Chart tab
+      fetchWithMock.mockResolvedValueOnce(mockHelmChartData)
+      const chartTab = screen.getByText('Chart')
+      await user.click(chartTab)
+
+      // Now HelmChart should be fetched
+      await waitFor(() => {
+        expect(fetchWithMock).toHaveBeenCalledTimes(2)
+        expect(fetchWithMock).toHaveBeenCalledWith({
+          endpoint: '/api/v1/resource?kind=HelmChart&name=tailscale-tailscale-operator&namespace=tailscale',
+          mockPath: '../mock/resource',
+          mockExport: 'getMockResource'
+        })
+      })
+    })
+
+    it('should display Chart tab content correctly', async () => {
+      fetchWithMock.mockResolvedValueOnce(mockHelmRepoSourceData)
+      const user = userEvent.setup()
+
+      render(
+        <SourcePanel
+          resourceData={mockHelmReleaseResourceData}
+        />
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText('Chart')).toBeInTheDocument()
+      })
+
+      // Click on Chart tab
+      fetchWithMock.mockResolvedValueOnce(mockHelmChartData)
+      const chartTab = screen.getByText('Chart')
+      await user.click(chartTab)
+
+      // Check chart content is displayed
+      await waitFor(() => {
+        const textContent = document.body.textContent
+        expect(textContent).toContain('HelmChart/tailscale/tailscale-tailscale-operator')
+        expect(textContent).toContain('Status')
+        expect(textContent).toContain('Ready')
+        expect(textContent).toContain('Semver')
+        expect(textContent).toContain('>=1.0.0')
+        expect(textContent).toContain('Fetch every')
+        expect(textContent).toContain('24h0m0s')
+        expect(textContent).toContain('Fetched at')
+        expect(textContent).toContain('Fetch result')
+        expect(textContent).toContain("pulled 'tailscale-operator' chart with version '1.90.6'")
+      })
+    })
+
+    it('should show loading state while fetching HelmChart data', async () => {
+      fetchWithMock.mockResolvedValueOnce(mockHelmRepoSourceData)
+      const user = userEvent.setup()
+
+      render(
+        <SourcePanel
+          resourceData={mockHelmReleaseResourceData}
+        />
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText('Chart')).toBeInTheDocument()
+      })
+
+      // Setup pending promise
+      let resolvePromise
+      const promise = new Promise((resolve) => { resolvePromise = resolve })
+      fetchWithMock.mockReturnValueOnce(promise)
+
+      // Click on Chart tab
+      const chartTab = screen.getByText('Chart')
+      await user.click(chartTab)
+
+      // Should show loading spinner
+      expect(screen.getByText('Loading chart...')).toBeInTheDocument()
+
+      // Resolve the promise
+      resolvePromise(mockHelmChartData)
+
+      // Wait for loading to complete
+      await waitFor(() => {
+        expect(screen.queryByText('Loading chart...')).not.toBeInTheDocument()
+      })
+    })
+
+    it('should navigate to HelmChart resource when link is clicked', async () => {
+      fetchWithMock.mockResolvedValueOnce(mockHelmRepoSourceData)
+      const user = userEvent.setup()
+
+      render(
+        <SourcePanel
+          resourceData={mockHelmReleaseResourceData}
+        />
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText('Chart')).toBeInTheDocument()
+      })
+
+      // Click on Chart tab
+      fetchWithMock.mockResolvedValueOnce(mockHelmChartData)
+      const chartTab = screen.getByText('Chart')
+      await user.click(chartTab)
+
+      // Wait for chart content to load
+      await waitFor(() => {
+        expect(screen.getByText('HelmChart/tailscale/tailscale-tailscale-operator')).toBeInTheDocument()
+      })
+
+      // Click on the HelmChart link
+      const chartLink = screen.getByText('HelmChart/tailscale/tailscale-tailscale-operator').closest('button')
+      await user.click(chartLink)
+
+      expect(mockRoute).toHaveBeenCalledWith('/resource/HelmChart/tailscale/tailscale-tailscale-operator')
+    })
+
+    it('should show "*" for semver when version is not specified', async () => {
+      fetchWithMock.mockResolvedValueOnce(mockHelmRepoSourceData)
+      const user = userEvent.setup()
+
+      const resourceDataWithoutVersion = {
+        ...mockHelmReleaseResourceData,
+        spec: {
+          ...mockHelmReleaseResourceData.spec,
+          chart: {
+            spec: {
+              chart: 'tailscale-operator',
+              // No version specified
+              sourceRef: {
+                kind: 'HelmRepository',
+                name: 'tailscale-operator'
+              }
+            }
+          }
+        }
+      }
+
+      render(
+        <SourcePanel
+          resourceData={resourceDataWithoutVersion}
+        />
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText('Chart')).toBeInTheDocument()
+      })
+
+      // Click on Chart tab
+      fetchWithMock.mockResolvedValueOnce(mockHelmChartData)
+      const chartTab = screen.getByText('Chart')
+      await user.click(chartTab)
+
+      // Check semver shows "*"
+      await waitFor(() => {
+        const textContent = document.body.textContent
+        expect(textContent).toContain('Semver')
+        expect(textContent).toContain('*')
+      })
+    })
+
+    it('should handle HelmChart fetch error gracefully', async () => {
+      const user = userEvent.setup()
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      // Use implementation to handle all calls
+      fetchWithMock.mockImplementation(({ endpoint }) => {
+        if (endpoint.includes('/api/v1/resource?') && endpoint.includes('kind=HelmRepository')) {
+          return Promise.resolve(mockHelmRepoSourceData)
+        }
+        if (endpoint.includes('/api/v1/resource?') && endpoint.includes('kind=HelmChart')) {
+          return Promise.reject(new Error('Network error'))
+        }
+        return Promise.resolve({})
+      })
+
+      render(
+        <SourcePanel
+          resourceData={mockHelmReleaseResourceData}
+        />
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText('Chart')).toBeInTheDocument()
+      })
+
+      // Click on Chart tab
+      const chartTab = screen.getByText('Chart')
+      await user.click(chartTab)
+
+      // Should not crash, chart tab should still be visible after error
+      await waitFor(() => {
+        expect(consoleSpy).toHaveBeenCalled()
+      })
+
+      // Chart tab should still be visible
+      expect(screen.getByText('Chart')).toBeInTheDocument()
+
+      consoleSpy.mockRestore()
+    })
+
+    it('should fetch HelmChart data only once when switching tabs multiple times', async () => {
+      fetchWithMock.mockResolvedValueOnce(mockHelmRepoSourceData)
+      const user = userEvent.setup()
+
+      render(
+        <SourcePanel
+          resourceData={mockHelmReleaseResourceData}
+        />
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText('Chart')).toBeInTheDocument()
+      })
+
+      // Click on Chart tab
+      fetchWithMock.mockResolvedValueOnce(mockHelmChartData)
+      const chartTab = screen.getByText('Chart')
+      await user.click(chartTab)
+
+      await waitFor(() => {
+        expect(fetchWithMock).toHaveBeenCalledTimes(2)
+      })
+
+      // Switch to Overview
+      const overviewTab = screen.getByText('Overview')
+      await user.click(overviewTab)
+
+      // Switch back to Chart
+      await user.click(chartTab)
+
+      // Should still only have been called twice (not fetched again)
+      expect(fetchWithMock).toHaveBeenCalledTimes(2)
+    })
+
+    it('should refetch HelmChart data when resourceData changes and Chart tab is open', async () => {
+      fetchWithMock.mockResolvedValueOnce(mockHelmRepoSourceData)
+      const user = userEvent.setup()
+
+      const { rerender } = render(
+        <SourcePanel
+          resourceData={mockHelmReleaseResourceData}
+        />
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText('Chart')).toBeInTheDocument()
+      })
+
+      // Click on Chart tab
+      fetchWithMock.mockResolvedValueOnce(mockHelmChartData)
+      const chartTab = screen.getByText('Chart')
+      await user.click(chartTab)
+
+      // Wait for chart to load
+      await waitFor(() => {
+        expect(screen.getByText("pulled 'tailscale-operator' chart with version '1.90.6'")).toBeInTheDocument()
+      })
+
+      // Simulate parent auto-refresh
+      const updatedResourceData = {
+        ...mockHelmReleaseResourceData,
+        status: {
+          ...mockHelmReleaseResourceData.status,
+          reconcilerRef: {
+            status: 'Progressing'
+          }
+        }
+      }
+
+      fetchWithMock.mockResolvedValueOnce(mockHelmRepoSourceData)
+      fetchWithMock.mockResolvedValueOnce({
+        ...mockHelmChartData,
+        status: {
+          ...mockHelmChartData.status,
+          conditions: [
+            {
+              type: 'Ready',
+              status: 'True',
+              lastTransitionTime: '2025-01-15T10:05:00Z',
+              message: "pulled 'tailscale-operator' chart with version '1.91.0'"
+            }
+          ]
+        }
+      })
+
+      rerender(
+        <SourcePanel
+          resourceData={updatedResourceData}
+        />
+      )
+
+      // Should refetch chart data
+      await waitFor(() => {
+        expect(screen.getByText("pulled 'tailscale-operator' chart with version '1.91.0'")).toBeInTheDocument()
+      })
     })
   })
 })

@@ -36,9 +36,9 @@ vi.mock('./InventoryPanel', () => ({
 }))
 
 vi.mock('./SourcePanel', () => ({
-  SourcePanel: ({ sourceRef }) => (
+  SourcePanel: ({ resourceData }) => (
     <div data-testid="source-panel">
-      SourcePanel: {sourceRef?.name}
+      SourcePanel: {resourceData?.status?.sourceRef?.namespace}/{resourceData?.status?.sourceRef?.name}
     </div>
   )
 }))
@@ -188,7 +188,7 @@ describe('ResourcePage component', () => {
     // Check Child Panels using mocked components
     expect(screen.getByTestId('reconciler-panel')).toHaveTextContent('ReconcilerPanel: FluxInstance/flux-system/flux')
     expect(screen.getByTestId('inventory-panel')).toHaveTextContent('InventoryPanel: flux')
-    expect(screen.getByTestId('source-panel')).toHaveTextContent('SourcePanel: flux-system')
+    expect(screen.getByTestId('source-panel')).toHaveTextContent('SourcePanel: flux-system/flux-system')
   })
 
   it('should render correct status style for Failed status', async () => {
