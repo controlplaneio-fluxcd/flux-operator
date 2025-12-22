@@ -71,8 +71,61 @@ describe('buildGraphData function', () => {
       name: 'test-ks',
       namespace: 'flux-system',
       status: 'Ready',
-      revision: 'main@sha1:abc123'
+      revision: 'main@sha1:abc123',
+      message: null
     })
+  })
+
+  it('should use "waiting for initialisation" when no revision is present', () => {
+    const resourceData = {
+      kind: 'Kustomization',
+      metadata: { name: 'test-ks', namespace: 'flux-system' },
+      status: {
+        reconcilerRef: { status: 'Unknown' },
+        inventory: []
+      }
+    }
+
+    const result = buildGraphData(resourceData)
+
+    expect(result.reconciler.revision).toBe('waiting for initialisation')
+  })
+
+  it('should extract Ready condition message', () => {
+    const resourceData = {
+      kind: 'Kustomization',
+      metadata: { name: 'test-ks', namespace: 'flux-system' },
+      status: {
+        reconcilerRef: { status: 'Progressing' },
+        conditions: [
+          { type: 'Reconciling', status: 'True', message: 'Running reconciliation' },
+          { type: 'Ready', status: 'Unknown', message: 'Reconciliation in progress' }
+        ],
+        inventory: []
+      }
+    }
+
+    const result = buildGraphData(resourceData)
+
+    expect(result.reconciler.message).toBe('Reconciliation in progress')
+  })
+
+  it('should return null message when no Ready condition exists', () => {
+    const resourceData = {
+      kind: 'Kustomization',
+      metadata: { name: 'test-ks', namespace: 'flux-system' },
+      status: {
+        reconcilerRef: { status: 'Unknown' },
+        conditions: [
+          { type: 'Reconciling', status: 'True', message: 'Running reconciliation' }
+        ],
+        inventory: []
+      }
+    }
+
+    const result = buildGraphData(resourceData)
+
+    expect(result.reconciler.message).toBeNull()
   })
 
   it('should use lastAppliedRevision when lastAttemptedRevision is not present', () => {
@@ -1145,5 +1198,155 @@ describe('GraphTabContent component', () => {
     // Source and reconciler should be rendered
     expect(screen.getByText('OCIRepository')).toBeInTheDocument()
     expect(screen.getByText('HelmRelease')).toBeInTheDocument()
+  })
+
+  it('should apply animate-progressing class when reconciler status is Progressing', () => {
+    const progressingData = {
+      kind: 'Kustomization',
+      metadata: { name: 'test-ks', namespace: 'flux-system' },
+      status: {
+        reconcilerRef: { status: 'Progressing' },
+        inventory: [
+          { kind: 'ConfigMap', name: 'config', namespace: 'default' }
+        ]
+      }
+    }
+
+    render(
+      <GraphTabContent
+        resourceData={progressingData}
+        namespace="flux-system"
+      />
+    )
+
+    // Find the reconciler node card (contains the Kustomization kind label)
+    const reconcilerCard = screen.getByText('flux-system/test-ks').closest('div.rounded-lg')
+    expect(reconcilerCard).toHaveClass('animate-progressing')
+  })
+
+  it('should NOT apply animate-progressing class when reconciler status is Ready', () => {
+    const readyData = {
+      kind: 'Kustomization',
+      metadata: { name: 'test-ks', namespace: 'flux-system' },
+      status: {
+        reconcilerRef: { status: 'Ready' },
+        inventory: [
+          { kind: 'ConfigMap', name: 'config', namespace: 'default' }
+        ]
+      }
+    }
+
+    render(
+      <GraphTabContent
+        resourceData={readyData}
+        namespace="flux-system"
+      />
+    )
+
+    // Find the reconciler node card
+    const reconcilerCard = screen.getByText('flux-system/test-ks').closest('div.rounded-lg')
+    expect(reconcilerCard).not.toHaveClass('animate-progressing')
+  })
+
+  it('should NOT apply animate-progressing class when reconciler status is Failed', () => {
+    const failedData = {
+      kind: 'Kustomization',
+      metadata: { name: 'test-ks', namespace: 'flux-system' },
+      status: {
+        reconcilerRef: { status: 'Failed' },
+        inventory: [
+          { kind: 'ConfigMap', name: 'config', namespace: 'default' }
+        ]
+      }
+    }
+
+    render(
+      <GraphTabContent
+        resourceData={failedData}
+        namespace="flux-system"
+      />
+    )
+
+    // Find the reconciler node card
+    const reconcilerCard = screen.getByText('flux-system/test-ks').closest('div.rounded-lg')
+    expect(reconcilerCard).not.toHaveClass('animate-progressing')
+  })
+
+  it('should display Ready condition message when status is Progressing', () => {
+    const progressingData = {
+      kind: 'Kustomization',
+      metadata: { name: 'test-ks', namespace: 'flux-system' },
+      status: {
+        reconcilerRef: { status: 'Progressing' },
+        lastAttemptedRevision: 'main@sha1:abc123',
+        conditions: [
+          { type: 'Ready', status: 'Unknown', message: 'Reconciliation in progress' }
+        ],
+        inventory: [
+          { kind: 'ConfigMap', name: 'config', namespace: 'default' }
+        ]
+      }
+    }
+
+    render(
+      <GraphTabContent
+        resourceData={progressingData}
+        namespace="flux-system"
+      />
+    )
+
+    // Check that condition message is displayed (with lowercase first char) instead of revision
+    expect(screen.getByText('reconciliation in progress')).toBeInTheDocument()
+    expect(screen.queryByText('main@sha1:abc123')).not.toBeInTheDocument()
+  })
+
+  it('should fallback to "reconciling..." when no Ready condition message', () => {
+    const progressingData = {
+      kind: 'Kustomization',
+      metadata: { name: 'test-ks', namespace: 'flux-system' },
+      status: {
+        reconcilerRef: { status: 'Progressing' },
+        lastAttemptedRevision: 'main@sha1:abc123',
+        inventory: [
+          { kind: 'ConfigMap', name: 'config', namespace: 'default' }
+        ]
+      }
+    }
+
+    render(
+      <GraphTabContent
+        resourceData={progressingData}
+        namespace="flux-system"
+      />
+    )
+
+    // Check that fallback text is displayed
+    expect(screen.getByText('reconciling...')).toBeInTheDocument()
+    expect(screen.queryByText('main@sha1:abc123')).not.toBeInTheDocument()
+  })
+
+  it('should display revision instead of "reconciling..." when status is Ready', () => {
+    const readyData = {
+      kind: 'Kustomization',
+      metadata: { name: 'test-ks', namespace: 'flux-system' },
+      status: {
+        reconcilerRef: { status: 'Ready' },
+        lastAttemptedRevision: 'main@sha1:abc123',
+        inventory: [
+          { kind: 'ConfigMap', name: 'config', namespace: 'default' }
+        ]
+      }
+    }
+
+    render(
+      <GraphTabContent
+        resourceData={readyData}
+        namespace="flux-system"
+      />
+    )
+
+    // Check that revision is displayed instead of "reconciling..."
+    expect(screen.getByText('main@sha1:abc123')).toBeInTheDocument()
+    expect(screen.queryByText('reconciling...')).not.toBeInTheDocument()
   })
 })

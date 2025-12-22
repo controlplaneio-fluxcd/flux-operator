@@ -84,12 +84,18 @@ export function buildGraphData(resourceData) {
     })
   }
 
+  // Extract Ready condition message
+  const conditions = resourceData?.status?.conditions || []
+  const readyCondition = conditions.find(c => c.type === 'Ready')
+  const conditionMessage = readyCondition?.message || null
+
   const reconciler = {
     kind: resourceData?.kind,
     name: resourceData?.metadata?.name,
     namespace: resourceData?.metadata?.namespace,
     status: resourceData?.status?.reconcilerRef?.status || 'Unknown',
-    revision: resourceData?.status?.lastAttemptedRevision || resourceData?.status?.lastAppliedRevision || null
+    revision: resourceData?.status?.lastAttemptedRevision || resourceData?.status?.lastAppliedRevision || 'waiting for initialisation',
+    message: conditionMessage
   }
 
   // Handle inventory as array or object with entries
@@ -151,7 +157,7 @@ function getStatusBorderClass(status) {
 /**
  * Node card component for source and reconciler
  */
-function NodeCard({ kind, name, namespace, status, revision, version, url, onClick, isClickable: clickableProp, accentBorder }) {
+function NodeCard({ kind, name, namespace, status, revision, version, url, message, onClick, isClickable: clickableProp, accentBorder }) {
   // Use explicit isClickable prop if provided, otherwise check if onClick and kind is a Flux kind
   const isClickable = clickableProp !== undefined ? (clickableProp && onClick) : (onClick && fluxKinds.includes(kind))
   const borderClass = accentBorder
@@ -160,11 +166,15 @@ function NodeCard({ kind, name, namespace, status, revision, version, url, onCli
 
   const displayName = namespace ? `${namespace}/${name}` : name
   const subtext = revision || version || url
+  const isProgressing = status === 'Progressing'
+
+  // Apply pulse animation for Progressing status
+  const animationClass = isProgressing ? 'animate-progressing' : ''
 
   return (
     <div
-      class={`bg-white dark:bg-gray-800 rounded-lg p-3 shadow-sm ${borderClass} ${
-        isClickable ? 'cursor-pointer hover:shadow-md transition-shadow' : ''
+      class={`bg-white dark:bg-gray-800 rounded-lg p-3 shadow-sm ${borderClass} ${animationClass} transition-all duration-300 ${
+        isClickable ? 'cursor-pointer hover:shadow-md' : ''
       }`}
       onClick={isClickable ? onClick : undefined}
       role={isClickable ? 'button' : undefined}
@@ -176,7 +186,11 @@ function NodeCard({ kind, name, namespace, status, revision, version, url, onCli
       <div class="text-sm font-medium text-gray-900 dark:text-white truncate" title={displayName}>
         {displayName}
       </div>
-      {subtext && (
+      {isProgressing ? (
+        <div class="text-xs text-gray-500 dark:text-gray-400 truncate mt-1" title={message || 'reconciling...'}>
+          {message ? message.charAt(0).toLowerCase() + message.slice(1) : 'reconciling...'}
+        </div>
+      ) : subtext && (
         <div class="text-xs text-gray-500 dark:text-gray-400 truncate mt-1" title={subtext}>
           {subtext}
         </div>
@@ -194,8 +208,9 @@ function NodeCard({ kind, name, namespace, status, revision, version, url, onCli
  * @param {function} onItemClick - Click handler for individual items
  * @param {function} onTitleClick - Click handler for the title
  * @param {boolean} alwaysShow - If true, always render even with no items
+ * @param {boolean} isProgressing - If true, applies blue border styling
  */
-function GroupCard({ title, count, items, isItemList, onItemClick, onTitleClick, alwaysShow }) {
+function GroupCard({ title, count, items, isItemList, onItemClick, onTitleClick, alwaysShow, isProgressing }) {
   const hasItems = isItemList ? items.length > 0 : Object.keys(items).length > 0
 
   if (!hasItems && !alwaysShow) return null
@@ -204,8 +219,12 @@ function GroupCard({ title, count, items, isItemList, onItemClick, onTitleClick,
   const showNamespace = isItemList && items.length > 0 &&
     !items.every(item => item.namespace === items[0].namespace)
 
+  const borderClass = isProgressing
+    ? 'border-blue-500 dark:border-blue-400'
+    : 'border-gray-200 dark:border-gray-600'
+
   return (
-    <div class="bg-gray-50 dark:bg-transparent rounded-lg p-3 border border-gray-200 dark:border-gray-600 w-full max-w-full sm:max-w-[280px] justify-self-center">
+    <div class={`bg-gray-50 dark:bg-transparent rounded-lg p-3 border ${borderClass} w-full max-w-full sm:max-w-[280px] justify-self-center`}>
       <div
         class={`text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 pb-2 border-b border-gray-200 dark:border-gray-600 ${onTitleClick ? 'cursor-pointer hover:text-flux-blue dark:hover:text-blue-400' : ''}`}
         onClick={onTitleClick}
@@ -279,7 +298,7 @@ function ConnectorLine() {
 /**
  * Fan-out connector to inventory groups using CSS with rounded corners
  */
-function InventoryConnector({ targetCount }) {
+function InventoryConnector({ targetCount, isProgressing }) {
   if (targetCount === 0) return null
 
   // Grid column centers: 1 col = 50%, 2 cols = 25%/75%, 3 cols = 16.67%/50%/83.33%
@@ -290,24 +309,32 @@ function InventoryConnector({ targetCount }) {
   }
 
   const targets = getTargetPositions(targetCount)
-  const lineColor = 'border-gray-300 dark:border-gray-600'
+  const lineColor = isProgressing
+    ? 'border-blue-500 dark:border-blue-400'
+    : 'border-gray-300 dark:border-gray-600'
+  const lineBg = isProgressing
+    ? 'bg-blue-500 dark:bg-blue-400'
+    : 'bg-gray-300 dark:bg-gray-600'
+  const arrowColor = isProgressing
+    ? 'border-t-blue-500 dark:border-t-blue-400'
+    : 'border-t-gray-300 dark:border-t-gray-600'
 
   // Single target - just a straight line
   if (targetCount === 1) {
     return (
-      <div class="relative w-full h-8">
+      <div class="relative w-full h-8" data-testid="inventory-connector">
         <div class="absolute left-1/2 top-0 flex flex-col items-center -translate-x-1/2">
-          <div class="w-px h-6 bg-gray-300 dark:bg-gray-600" />
-          <div class="w-0 h-0 border-l-[4px] border-r-[4px] border-t-[5px] border-l-transparent border-r-transparent border-t-gray-300 dark:border-t-gray-600" />
+          <div class={`w-px h-6 ${lineBg}`} />
+          <div class={`w-0 h-0 border-l-[4px] border-r-[4px] border-t-[5px] border-l-transparent border-r-transparent ${arrowColor}`} />
         </div>
       </div>
     )
   }
 
   return (
-    <div class="relative w-full h-8">
+    <div class="relative w-full h-8" data-testid="inventory-connector">
       {/* Vertical line from center */}
-      <div class="absolute left-1/2 top-0 w-px h-3 bg-gray-300 dark:bg-gray-600 -translate-x-1/2" />
+      <div class={`absolute left-1/2 top-0 w-px h-3 -translate-x-1/2 ${lineBg}`} />
 
       {/* Left corner with rounded edge */}
       <div
@@ -324,19 +351,19 @@ function InventoryConnector({ targetCount }) {
       {/* Center vertical line (if 3 targets) */}
       {targetCount === 3 && (
         <div class="absolute left-1/2 top-3 flex flex-col items-center -translate-x-1/2">
-          <div class="w-px h-3 bg-gray-300 dark:bg-gray-600" />
-          <div class="w-0 h-0 border-l-[4px] border-r-[4px] border-t-[5px] border-l-transparent border-r-transparent border-t-gray-300 dark:border-t-gray-600" />
+          <div class={`w-px h-3 ${lineBg}`} />
+          <div class={`w-0 h-0 border-l-[4px] border-r-[4px] border-t-[5px] border-l-transparent border-r-transparent ${arrowColor}`} />
         </div>
       )}
 
       {/* Left arrow */}
       <div class="absolute flex flex-col items-center" style={{ left: targets[0], top: '23px', transform: 'translateX(-50%)' }}>
-        <div class="w-0 h-0 border-l-[4px] border-r-[4px] border-t-[5px] border-l-transparent border-r-transparent border-t-gray-300 dark:border-t-gray-600" />
+        <div class={`w-0 h-0 border-l-[4px] border-r-[4px] border-t-[5px] border-l-transparent border-r-transparent ${arrowColor}`} />
       </div>
 
       {/* Right arrow */}
       <div class="absolute flex flex-col items-center" style={{ left: targets[targets.length - 1], top: '23px', transform: 'translateX(-50%)' }}>
-        <div class="w-0 h-0 border-l-[4px] border-r-[4px] border-t-[5px] border-l-transparent border-r-transparent border-t-gray-300 dark:border-t-gray-600" />
+        <div class={`w-0 h-0 border-l-[4px] border-r-[4px] border-t-[5px] border-l-transparent border-r-transparent ${arrowColor}`} />
       </div>
     </div>
   )
@@ -579,6 +606,7 @@ export function GraphTabContent({ resourceData, namespace, onNavigate, setActive
           namespace={reconciler.namespace}
           status={reconciler.status}
           revision={reconciler.revision}
+          message={reconciler.message}
           onClick={onNavigate ? () => onNavigate({
             kind: reconciler.kind,
             name: reconciler.name,
@@ -593,7 +621,7 @@ export function GraphTabContent({ resourceData, namespace, onNavigate, setActive
         <>
           {/* Desktop: fan-out connector */}
           <div class="hidden sm:block w-full">
-            <InventoryConnector targetCount={activeGroups} />
+            <InventoryConnector targetCount={activeGroups} isProgressing={reconciler.status === 'Progressing'} />
           </div>
           {/* Mobile: simple vertical connector */}
           <div class="sm:hidden">
@@ -611,6 +639,7 @@ export function GraphTabContent({ resourceData, namespace, onNavigate, setActive
                 items={flux}
                 isItemList={true}
                 onItemClick={handleFluxItemClick}
+                isProgressing={reconciler.status === 'Progressing'}
               />
             )}
             {workloadsCount > 0 && (
@@ -620,6 +649,7 @@ export function GraphTabContent({ resourceData, namespace, onNavigate, setActive
                 items={workloads}
                 isItemList={true}
                 onTitleClick={setActiveTab ? () => setActiveTab('workloads') : undefined}
+                isProgressing={reconciler.status === 'Progressing'}
               />
             )}
             {(resourcesCount > 0 || inventoryEmpty) && (
@@ -630,6 +660,7 @@ export function GraphTabContent({ resourceData, namespace, onNavigate, setActive
                 isItemList={false}
                 onTitleClick={resourcesCount > 0 && setActiveTab ? () => setActiveTab('inventory') : undefined}
                 alwaysShow={inventoryEmpty}
+                isProgressing={reconciler.status === 'Progressing'}
               />
             )}
           </div>
