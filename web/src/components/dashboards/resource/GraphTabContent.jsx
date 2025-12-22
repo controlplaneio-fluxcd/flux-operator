@@ -1,8 +1,9 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { useMemo } from 'preact/hooks'
+import { useMemo, useState, useEffect } from 'preact/hooks'
 import { fluxKinds, workloadKinds } from '../../../utils/constants'
+import { fetchWithMock } from '../../../utils/fetch'
 
 /**
  * Build graph data from resource data
@@ -155,6 +156,50 @@ function getStatusBorderClass(status) {
 }
 
 /**
+ * Format workload status message for display in the graph
+ * For ready workloads, extracts just the "Replicas: X" part if present
+ * @param {string} status - Workload status
+ * @param {string} message - Full status message
+ * @returns {string|null} Formatted message or null
+ */
+export function formatWorkloadGraphMessage(status, message) {
+  if (!message) return null
+
+  // For ready workloads, extract just the replicas part
+  if (status === 'Current' || status === 'Ready') {
+    const replicasMatch = message.match(/Replicas:\s*.+/)
+    if (replicasMatch) {
+      return replicasMatch[0]
+    }
+  }
+
+  return message
+}
+
+/**
+ * Get dot color class for workload status
+ * Uses same color scheme as getWorkloadStatusBadgeClass from utils/status
+ * @param {string} status - Workload status (Current, Ready, Failed, InProgress, Progressing, Terminating)
+ * @returns {string} Tailwind CSS classes for the dot
+ */
+export function getWorkloadDotClass(status) {
+  switch (status) {
+  case 'Current':
+  case 'Ready':
+    return 'bg-green-500 dark:bg-green-400'
+  case 'Failed':
+    return 'bg-red-500 dark:bg-red-400'
+  case 'InProgress':
+  case 'Progressing':
+    return 'bg-blue-500 dark:bg-blue-400'
+  case 'Terminating':
+    return 'bg-yellow-500 dark:bg-yellow-400'
+  default:
+    return 'bg-gray-400 dark:bg-gray-500'
+  }
+}
+
+/**
  * Node card component for source and reconciler
  */
 function NodeCard({ kind, name, namespace, status, revision, version, url, message, onClick, isClickable: clickableProp, accentBorder }) {
@@ -209,15 +254,20 @@ function NodeCard({ kind, name, namespace, status, revision, version, url, messa
  * @param {function} onTitleClick - Click handler for the title
  * @param {boolean} alwaysShow - If true, always render even with no items
  * @param {boolean} isProgressing - If true, applies blue border styling
+ * @param {object} itemStatuses - Optional map of item key to status for displaying status dots
+ * @param {string} defaultNamespace - Default namespace for items without explicit namespace
  */
-function GroupCard({ title, count, items, isItemList, onItemClick, onTitleClick, alwaysShow, isProgressing }) {
+function GroupCard({ title, count, items, isItemList, onItemClick, onTitleClick, alwaysShow, isProgressing, itemStatuses, defaultNamespace }) {
   const hasItems = isItemList ? items.length > 0 : Object.keys(items).length > 0
 
   if (!hasItems && !alwaysShow) return null
 
   // Check if all items share the same namespace (for item lists)
-  const showNamespace = isItemList && items.length > 0 &&
-    !items.every(item => item.namespace === items[0].namespace)
+  // Use resolved namespaces to account for items without explicit namespace
+  const showNamespace = isItemList && items.length > 0 && (() => {
+    const firstResolved = items[0].namespace || defaultNamespace
+    return !items.every(item => (item.namespace || defaultNamespace) === firstResolved)
+  })()
 
   const borderClass = isProgressing
     ? 'border-blue-500 dark:border-blue-400'
@@ -237,6 +287,11 @@ function GroupCard({ title, count, items, isItemList, onItemClick, onTitleClick,
           // Items shown individually with kind and name
           items.map((item, idx) => {
             const isClickable = onItemClick && fluxKinds.includes(item.kind)
+            const resolvedNamespace = item.namespace || defaultNamespace
+            const itemKey = `${item.kind}/${resolvedNamespace}/${item.name}`
+            const itemData = itemStatuses?.[itemKey]
+            const itemStatus = itemData?.status
+            const itemStatusMessage = formatWorkloadGraphMessage(itemStatus, itemData?.statusMessage)
             return (
               <div
                 key={idx}
@@ -255,8 +310,20 @@ function GroupCard({ title, count, items, isItemList, onItemClick, onTitleClick,
                 >
                   {item.name}{isClickable && ' →'}
                 </div>
+                {itemStatusMessage && (
+                  <div class="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5 flex items-center gap-1.5" title={itemStatusMessage} data-testid="workload-status-message">
+                    {itemStatus !== undefined && (
+                      <span
+                        class={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${getWorkloadDotClass(itemStatus)}`}
+                        title={itemStatus}
+                        data-testid="workload-status-dot"
+                      />
+                    )}
+                    {itemStatusMessage}
+                  </div>
+                )}
                 {showNamespace && (
-                  <div class="text-xs text-gray-400 dark:text-gray-500 truncate">{item.namespace}</div>
+                  <div class="text-xs text-gray-400 dark:text-gray-500 truncate">{resolvedNamespace}</div>
                 )}
               </div>
             )
@@ -436,9 +503,59 @@ function SourcesConnector({ sourceCount }) {
 
 /**
  * GraphTabContent - Visual dependency graph for the resource
+ * @param {object} resourceData - The resource data to display
+ * @param {string} namespace - Default namespace for items without explicit namespace
+ * @param {function} onNavigate - Callback for navigation to other resources
+ * @param {function} setActiveTab - Callback to switch tabs
+ * @param {boolean} isActive - Whether this tab is currently active (controls workload fetching)
  */
-export function GraphTabContent({ resourceData, namespace, onNavigate, setActiveTab }) {
+export function GraphTabContent({ resourceData, namespace, onNavigate, setActiveTab, isActive = true }) {
   const graphData = useMemo(() => buildGraphData(resourceData), [resourceData])
+  const [workloadStatuses, setWorkloadStatuses] = useState({})
+
+  // Fetch workload statuses when tab is active and resourceData changes
+  useEffect(() => {
+    // Skip if tab is not active or no workloads
+    if (!isActive || graphData.inventory.workloads.length === 0) {
+      return
+    }
+
+    const fetchWorkloadStatuses = async () => {
+      try {
+        // Build workloads array with resolved namespaces
+        const workloads = graphData.inventory.workloads.map(item => ({
+          kind: item.kind,
+          name: item.name,
+          namespace: item.namespace || namespace
+        }))
+
+        // Send all workloads in a single POST request
+        const response = await fetchWithMock({
+          endpoint: '/api/v1/workloads',
+          mockPath: '../mock/workload',
+          mockExport: 'getMockWorkloads',
+          method: 'POST',
+          body: { workloads }
+        })
+
+        // Build workloadStatuses map from response (includes status and statusMessage)
+        const newStatuses = {}
+        const returnedWorkloads = response.workloads || []
+        returnedWorkloads.forEach(workload => {
+          const key = `${workload.kind}/${workload.namespace}/${workload.name}`
+          newStatuses[key] = {
+            status: workload.status,
+            statusMessage: workload.statusMessage
+          }
+        })
+        setWorkloadStatuses(newStatuses)
+      } catch (err) {
+        console.error('Failed to fetch workload statuses:', err)
+      }
+    }
+
+    fetchWorkloadStatuses()
+  }, [isActive, resourceData, namespace, graphData.inventory.workloads])
 
   const { upstream, sources, helmChart, reconciler, inventory } = graphData
   const { flux, workloads, resources } = inventory
@@ -650,6 +767,8 @@ export function GraphTabContent({ resourceData, namespace, onNavigate, setActive
                 isItemList={true}
                 onTitleClick={setActiveTab ? () => setActiveTab('workloads') : undefined}
                 isProgressing={reconciler.status === 'Progressing'}
+                itemStatuses={workloadStatuses}
+                defaultNamespace={namespace}
               />
             )}
             {(resourcesCount > 0 || inventoryEmpty) && (

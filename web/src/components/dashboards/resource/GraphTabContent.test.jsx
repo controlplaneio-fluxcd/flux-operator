@@ -4,7 +4,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/preact'
 import userEvent from '@testing-library/user-event'
-import { GraphTabContent, buildGraphData } from './GraphTabContent'
+import { GraphTabContent, buildGraphData, getWorkloadDotClass, formatWorkloadGraphMessage } from './GraphTabContent'
 
 describe('buildGraphData function', () => {
   it('should extract source from resourceData with all fields', () => {
@@ -1348,5 +1348,165 @@ describe('GraphTabContent component', () => {
     // Check that revision is displayed instead of "reconciling..."
     expect(screen.getByText('main@sha1:abc123')).toBeInTheDocument()
     expect(screen.queryByText('reconciling...')).not.toBeInTheDocument()
+  })
+})
+
+describe('getWorkloadDotClass function', () => {
+  it('should return green class for Current status', () => {
+    expect(getWorkloadDotClass('Current')).toBe('bg-green-500 dark:bg-green-400')
+  })
+
+  it('should return green class for Ready status', () => {
+    expect(getWorkloadDotClass('Ready')).toBe('bg-green-500 dark:bg-green-400')
+  })
+
+  it('should return red class for Failed status', () => {
+    expect(getWorkloadDotClass('Failed')).toBe('bg-red-500 dark:bg-red-400')
+  })
+
+  it('should return blue class for InProgress status', () => {
+    expect(getWorkloadDotClass('InProgress')).toBe('bg-blue-500 dark:bg-blue-400')
+  })
+
+  it('should return blue class for Progressing status', () => {
+    expect(getWorkloadDotClass('Progressing')).toBe('bg-blue-500 dark:bg-blue-400')
+  })
+
+  it('should return yellow class for Terminating status', () => {
+    expect(getWorkloadDotClass('Terminating')).toBe('bg-yellow-500 dark:bg-yellow-400')
+  })
+
+  it('should return gray class for unknown status', () => {
+    expect(getWorkloadDotClass('Unknown')).toBe('bg-gray-400 dark:bg-gray-500')
+  })
+
+  it('should return gray class for undefined status', () => {
+    expect(getWorkloadDotClass(undefined)).toBe('bg-gray-400 dark:bg-gray-500')
+  })
+})
+
+describe('formatWorkloadGraphMessage function', () => {
+  it('should return null for null message', () => {
+    expect(formatWorkloadGraphMessage('Current', null)).toBeNull()
+  })
+
+  it('should return null for undefined message', () => {
+    expect(formatWorkloadGraphMessage('Current', undefined)).toBeNull()
+  })
+
+  it('should extract Replicas part for Current status', () => {
+    const message = 'Deployment is available. Replicas: 3/3'
+    expect(formatWorkloadGraphMessage('Current', message)).toBe('Replicas: 3/3')
+  })
+
+  it('should extract Replicas part for Ready status', () => {
+    const message = 'StatefulSet is ready. Replicas: 2/2'
+    expect(formatWorkloadGraphMessage('Ready', message)).toBe('Replicas: 2/2')
+  })
+
+  it('should extract Replicas with different formats', () => {
+    const message = 'Some text. Replicas: 2 of 3 ready'
+    expect(formatWorkloadGraphMessage('Current', message)).toBe('Replicas: 2 of 3 ready')
+  })
+
+  it('should return full message when no Replicas part for ready status', () => {
+    const message = 'Deployment is available'
+    expect(formatWorkloadGraphMessage('Current', message)).toBe('Deployment is available')
+  })
+
+  it('should return full message for Failed status even with Replicas', () => {
+    const message = 'Deployment failed. Replicas: 1/3'
+    expect(formatWorkloadGraphMessage('Failed', message)).toBe('Deployment failed. Replicas: 1/3')
+  })
+
+  it('should return full message for InProgress status', () => {
+    const message = 'Deployment progressing. Replicas: 2/3'
+    expect(formatWorkloadGraphMessage('InProgress', message)).toBe('Deployment progressing. Replicas: 2/3')
+  })
+
+  it('should return full message for Terminating status', () => {
+    const message = 'Pod is terminating'
+    expect(formatWorkloadGraphMessage('Terminating', message)).toBe('Pod is terminating')
+  })
+})
+
+describe('GraphTabContent workload status fetching', () => {
+  it('should not fetch workloads when isActive is false', () => {
+    const fetchSpy = vi.spyOn(global, 'fetch')
+
+    const resourceData = {
+      kind: 'Kustomization',
+      metadata: { name: 'test-ks', namespace: 'flux-system' },
+      status: {
+        reconcilerRef: { status: 'Ready' },
+        inventory: [
+          { kind: 'Deployment', name: 'app1', namespace: 'default' }
+        ]
+      }
+    }
+
+    render(
+      <GraphTabContent
+        resourceData={resourceData}
+        namespace="flux-system"
+        isActive={false}
+      />
+    )
+
+    // Workloads group should still render
+    expect(screen.getByText(/Workloads \(1\)/)).toBeInTheDocument()
+
+    // But fetch should not have been called for workloads
+    expect(fetchSpy).not.toHaveBeenCalledWith('/api/v1/workloads', expect.anything())
+
+    fetchSpy.mockRestore()
+  })
+
+  it('should render workloads without status dots when no data fetched', () => {
+    const resourceData = {
+      kind: 'Kustomization',
+      metadata: { name: 'test-ks', namespace: 'flux-system' },
+      status: {
+        reconcilerRef: { status: 'Ready' },
+        inventory: [
+          { kind: 'Deployment', name: 'app1', namespace: 'default' }
+        ]
+      }
+    }
+
+    render(
+      <GraphTabContent
+        resourceData={resourceData}
+        namespace="flux-system"
+        isActive={false}
+      />
+    )
+
+    // Workload name should be visible
+    expect(screen.getByText('app1')).toBeInTheDocument()
+
+    // But no status dots should be rendered
+    expect(screen.queryByTestId('workload-status-dot')).not.toBeInTheDocument()
+  })
+
+  it('should default isActive to true', () => {
+    const resourceData = {
+      kind: 'Kustomization',
+      metadata: { name: 'test-ks', namespace: 'flux-system' },
+      status: {
+        reconcilerRef: { status: 'Ready' },
+        inventory: []
+      }
+    }
+
+    // Should render without error when isActive is not provided
+    render(
+      <GraphTabContent
+        resourceData={resourceData}
+        namespace="flux-system"
+      />
+    )
+
+    expect(screen.getByTestId('graph-tab-content')).toBeInTheDocument()
   })
 })

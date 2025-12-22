@@ -40,13 +40,13 @@ export function SourcePanel({ resourceData }) {
   // Tab state
   const [sourceTab, setSourceTab] = useState('overview')
 
-  // Fetch source data when component mounts
+  // Fetch source data when component mounts (initial fetch only)
   useEffect(() => {
+    // Skip if we already have source data (refetch is handled by the resourceData effect)
+    if (sourceData) return
+
     const fetchSourceData = async () => {
-      // Only show loading spinner on initial load (when no data exists)
-      if (!sourceData) {
-        setLoading(true)
-      }
+      setLoading(true)
 
       const sourceParams = new URLSearchParams({
         kind: sourceRef.kind,
