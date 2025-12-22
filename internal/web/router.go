@@ -5,6 +5,7 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"io/fs"
 	"net/http"
 	"sync"
@@ -105,6 +106,14 @@ func (r *Router) refreshReportCache(ctx context.Context) {
 // getCachedReport returns the cached report if available.
 func (r *Router) getCachedReport() *unstructured.Unstructured {
 	r.reportCacheMu.RLock()
-	defer r.reportCacheMu.RUnlock()
-	return r.reportCache.DeepCopy()
+	if r.reportCache == nil {
+		r.reportCacheMu.RUnlock()
+		return nil
+	}
+	b, _ := json.Marshal(r.reportCache)
+	r.reportCacheMu.RUnlock()
+
+	var obj unstructured.Unstructured
+	_ = json.Unmarshal(b, &obj)
+	return &obj
 }
