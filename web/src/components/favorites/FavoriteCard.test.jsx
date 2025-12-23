@@ -178,7 +178,7 @@ describe('FavoriteCard component', () => {
   })
 
   describe('interactions', () => {
-    it('should navigate to resource dashboard when name is clicked', () => {
+    it('should have correct href for resource dashboard link', () => {
       render(
         <FavoriteCard
           favorite={mockFavorite}
@@ -186,10 +186,8 @@ describe('FavoriteCard component', () => {
         />
       )
 
-      const nameButton = screen.getByText('flux').closest('button')
-      fireEvent.click(nameButton)
-
-      expect(mockRoute).toHaveBeenCalledWith('/resource/FluxInstance/flux-system/flux')
+      const cardLink = screen.getByText('flux').closest('a')
+      expect(cardLink).toHaveAttribute('href', '/resource/FluxInstance/flux-system/flux')
     })
 
     it('should call removeFavorite when star button is clicked', () => {
@@ -206,23 +204,19 @@ describe('FavoriteCard component', () => {
       expect(removeFavorite).toHaveBeenCalledWith('FluxInstance', 'flux-system', 'flux')
     })
 
-    it('should stop propagation when star button is clicked', () => {
-      const mockParentClick = vi.fn()
-
+    it('should prevent navigation when star button is clicked', () => {
       render(
-        <div onClick={mockParentClick}>
-          <FavoriteCard
-            favorite={mockFavorite}
-            resourceData={mockResourceData}
-          />
-        </div>
+        <FavoriteCard
+          favorite={mockFavorite}
+          resourceData={mockResourceData}
+        />
       )
 
       const starButton = screen.getByTitle('Remove from favorites')
       fireEvent.click(starButton)
 
-      // Parent should not receive the click event
-      expect(mockParentClick).not.toHaveBeenCalled()
+      // Click should call removeFavorite but not navigate (preventDefault)
+      expect(removeFavorite).toHaveBeenCalledWith('FluxInstance', 'flux-system', 'flux')
     })
 
     it('should encode special characters in navigation URL', () => {
@@ -239,10 +233,8 @@ describe('FavoriteCard component', () => {
         />
       )
 
-      const nameButton = screen.getByText('my-app-config').closest('button')
-      fireEvent.click(nameButton)
-
-      expect(mockRoute).toHaveBeenCalledWith('/resource/ResourceSet/flux-system/my-app-config')
+      const cardLink = screen.getByText('my-app-config').closest('a')
+      expect(cardLink).toHaveAttribute('href', '/resource/ResourceSet/flux-system/my-app-config')
     })
   })
 

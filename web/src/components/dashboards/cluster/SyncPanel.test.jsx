@@ -165,14 +165,12 @@ describe('SyncPanel', () => {
   })
 
   describe('Navigation', () => {
-    it('should navigate to resource page when clicking Kustomization link', async () => {
+    it('should have correct href on Kustomization link', () => {
       render(<SyncPanel {...baseProps} />)
 
-      // Click the Kustomization link (the one with the full path)
-      const link = screen.getByText('Kustomization/flux-system/flux-cluster')
-      await fireEvent.click(link)
-
-      expect(mockRoute).toHaveBeenCalledWith('/resource/Kustomization/flux-system/flux-cluster')
+      // Find the Kustomization link (the one with the full path)
+      const link = screen.getByText('Kustomization/flux-system/flux-cluster').closest('a')
+      expect(link).toHaveAttribute('href', '/resource/Kustomization/flux-system/flux-cluster')
     })
 
     it('should not toggle panel when clicking Kustomization link', async () => {
@@ -189,7 +187,7 @@ describe('SyncPanel', () => {
       expect(screen.getByText(baseProps.sync.source)).toBeInTheDocument()
     })
 
-    it('should handle special characters in sync id when navigating', async () => {
+    it('should handle special characters in sync id with correct href encoding', () => {
       const props = {
         ...baseProps,
         sync: {
@@ -200,10 +198,8 @@ describe('SyncPanel', () => {
 
       render(<SyncPanel {...props} />)
 
-      const link = screen.getByText('Kustomization/flux-system/my-app@v1.0')
-      await fireEvent.click(link)
-
-      expect(mockRoute).toHaveBeenCalledWith('/resource/Kustomization/flux-system/my-app%40v1.0')
+      const link = screen.getByText('Kustomization/flux-system/my-app@v1.0').closest('a')
+      expect(link).toHaveAttribute('href', '/resource/Kustomization/flux-system/my-app%40v1.0')
     })
   })
 
@@ -276,8 +272,8 @@ describe('SyncPanel', () => {
       // The body shows the full Kustomization path with external link icon
       const linkText = screen.getByText('Kustomization/flux-system/flux-cluster')
       expect(linkText).toBeInTheDocument()
-      // The link text should be inside a button
-      expect(linkText.closest('button')).toBeInTheDocument()
+      // The link text should be inside an anchor
+      expect(linkText.closest('a')).toBeInTheDocument()
     })
   })
 

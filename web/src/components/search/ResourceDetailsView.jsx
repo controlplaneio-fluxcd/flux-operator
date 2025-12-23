@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { useState, useMemo, useEffect } from 'preact/hooks'
-import { useLocation } from 'preact-iso'
 import { fetchWithMock } from '../../utils/fetch'
 import { usePrismTheme, YamlBlock } from '../dashboards/common/yaml'
 import { fluxKinds, isKindWithInventory, getKindAlias } from '../../utils/constants'
@@ -54,24 +53,21 @@ function groupInventoryByApiVersion(inventory) {
  * - Includes navigation icon for clickable items
  */
 function InventoryItem({ item }) {
-  const location = useLocation()
   const isFluxResource = fluxKinds.includes(item.kind)
 
-  // Handle click - navigate to resource dashboard
-  const handleClick = () => {
-    const ns = item.namespace || ''
-    location.route(`/resource/${encodeURIComponent(item.kind)}/${encodeURIComponent(ns)}/${encodeURIComponent(item.name)}`)
-  }
+  // Build resource URL
+  const ns = item.namespace || ''
+  const resourceUrl = `/resource/${encodeURIComponent(item.kind)}/${encodeURIComponent(ns)}/${encodeURIComponent(item.name)}`
 
   if (isFluxResource) {
     return (
       <div class="py-1 px-2 text-xs break-all">
-        <button
-          onClick={handleClick}
-          class="text-left hover:opacity-80 transition-opacity focus:outline-none focus:ring-2 focus:ring-flux-blue focus:ring-offset-1 rounded inline-block group"
+        <a
+          href={resourceUrl}
+          class="text-left hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flux-blue rounded inline-block group"
         >
           <span class="text-gray-600 dark:text-gray-400">{item.kind}/</span>{item.namespace && <span class="text-gray-500 dark:text-gray-400">{item.namespace}/</span>}<span class="text-gray-900 dark:text-gray-100 group-hover:text-flux-blue dark:group-hover:text-blue-400">{item.name}</span><svg class="w-3 h-3 text-gray-400 group-hover:text-flux-blue dark:group-hover:text-blue-400 transition-colors ml-1 inline-block align-middle" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
-        </button>
+        </a>
       </div>
     )
   }
@@ -134,7 +130,6 @@ function InventoryGroupByApiVersion({ apiVersion, items }) {
  * - Handles loading and error states
  */
 export function ResourceDetailsView({ kind, name, namespace, isExpanded }) {
-  const location = useLocation()
   const [resourceData, setResourceData] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -343,8 +338,8 @@ export function ResourceDetailsView({ kind, name, namespace, isExpanded }) {
           {activeTab === 'source' && resourceData.status?.sourceRef && (
             <div class="space-y-4">
               {/* Resource Link */}
-              <button
-                onClick={() => location.route(`/resource/${encodeURIComponent(resourceData.status.sourceRef.kind)}/${encodeURIComponent(resourceData.status.sourceRef.namespace)}/${encodeURIComponent(resourceData.status.sourceRef.name)}`)}
+              <a
+                href={`/resource/${encodeURIComponent(resourceData.status.sourceRef.kind)}/${encodeURIComponent(resourceData.status.sourceRef.namespace)}/${encodeURIComponent(resourceData.status.sourceRef.name)}`}
                 class="flex items-center gap-2 text-sm text-flux-blue dark:text-blue-400 hover:underline"
               >
                 <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -352,7 +347,7 @@ export function ResourceDetailsView({ kind, name, namespace, isExpanded }) {
                 </svg>
                 <span class="hidden md:inline break-all">{resourceData.status.sourceRef.kind}/{resourceData.status.sourceRef.namespace}/{resourceData.status.sourceRef.name}</span>
                 <span class="md:hidden break-all">{getKindAlias(resourceData.status.sourceRef.kind)}/{resourceData.status.sourceRef.name}</span>
-              </button>
+              </a>
 
               {/* Status Badge */}
               {resourceData.status.sourceRef.status && (

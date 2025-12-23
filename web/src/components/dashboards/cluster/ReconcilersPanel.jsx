@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { useSignal } from '@preact/signals'
-import { useLocation } from 'preact-iso'
-import { selectedResourceKind, selectedResourceName, selectedResourceNamespace, selectedResourceStatus } from '../../search/ResourceList'
 import { fluxCRDs } from '../../../utils/constants'
 
 /**
@@ -24,7 +22,6 @@ import { fluxCRDs } from '../../../utils/constants'
  * - Docs icon link opens documentation in new tab
  */
 function ReconcilerCard({ crd, stats, isInstalled }) {
-  const location = useLocation()
   const total = (stats.failing || 0) + (stats.running || 0) + (stats.suspended || 0)
 
   // Determine status color - gray for not installed CRDs
@@ -35,24 +32,11 @@ function ReconcilerCard({ crd, stats, isInstalled }) {
     return 'border-success'
   }
 
-  // Handle card click - navigate to resources page with kind filter
-  const handleClick = () => {
-    selectedResourceKind.value = crd.kind
-    selectedResourceName.value = ''
-    selectedResourceNamespace.value = ''
-    selectedResourceStatus.value = ''
-    location.route(`/resources?kind=${encodeURIComponent(crd.kind)}`)
-  }
+  // Build card URL - navigate to resources page with kind filter
+  const cardUrl = `/resources?kind=${encodeURIComponent(crd.kind)}`
 
-  // Handle status badge click - navigate to resources page with kind and status filters
-  const handleStatusClick = (e, status) => {
-    e.stopPropagation()
-    selectedResourceKind.value = crd.kind
-    selectedResourceName.value = ''
-    selectedResourceNamespace.value = ''
-    selectedResourceStatus.value = status
-    location.route(`/resources?kind=${encodeURIComponent(crd.kind)}&status=${encodeURIComponent(status)}`)
-  }
+  // Build status badge URL - navigate to resources page with kind and status filters
+  const getStatusUrl = (status) => `/resources?kind=${encodeURIComponent(crd.kind)}&status=${encodeURIComponent(status)}`
 
   const cardClass = `card border-l-4 px-4 ${getStatusColor()} hover:shadow-lg transition-all cursor-pointer text-left w-full`
 
@@ -108,28 +92,31 @@ function ReconcilerCard({ crd, stats, isInstalled }) {
           </span>
         )}
         {stats.running > 0 && (
-          <span
-            onClick={(e) => handleStatusClick(e, 'Ready')}
+          <a
+            href={getStatusUrl('Ready')}
+            onClick={(e) => e.stopPropagation()}
             class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-green-200 text-green-800 hover:bg-green-300 cursor-pointer transition-colors"
           >
             {stats.running} running
-          </span>
+          </a>
         )}
         {stats.failing > 0 && (
-          <span
-            onClick={(e) => handleStatusClick(e, 'Failed')}
+          <a
+            href={getStatusUrl('Failed')}
+            onClick={(e) => e.stopPropagation()}
             class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-800 hover:bg-red-200 cursor-pointer transition-colors"
           >
             {stats.failing} failing
-          </span>
+          </a>
         )}
         {stats.suspended > 0 && (
-          <span
-            onClick={(e) => handleStatusClick(e, 'Suspended')}
+          <a
+            href={getStatusUrl('Suspended')}
+            onClick={(e) => e.stopPropagation()}
             class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-yellow-100 text-yellow-800 hover:bg-yellow-200 cursor-pointer transition-colors"
           >
             {stats.suspended} suspended
-          </span>
+          </a>
         )}
       </div>
     </>
@@ -152,9 +139,9 @@ function ReconcilerCard({ crd, stats, isInstalled }) {
 
   // Installed with resources: card navigates to resources page
   return (
-    <button onClick={handleClick} class={cardClass}>
+    <a href={cardUrl} class={cardClass}>
       {cardContent}
-    </button>
+    </a>
   )
 }
 

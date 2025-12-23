@@ -112,11 +112,10 @@ export function InventoryPanel({ resourceData, onNavigate }) {
     return resourceData.status.inventory.filter(item => workloadKinds.includes(item.kind))
   }, [resourceData, hasInventory])
 
-  // Handle navigation to a resource
-  const handleNavigate = (item) => {
-    if (onNavigate) {
-      onNavigate(item)
-    }
+  // Build URL for a resource
+  const getResourceUrl = (item) => {
+    const ns = item.namespace || resourceData.metadata.namespace
+    return `/resource/${encodeURIComponent(item.kind)}/${encodeURIComponent(ns)}/${encodeURIComponent(item.name)}`
   }
 
   return (
@@ -253,12 +252,12 @@ export function InventoryPanel({ resourceData, onNavigate }) {
                   <tr key={idx} class="hover:bg-gray-50 dark:hover:bg-gray-800">
                     <td class="px-3 py-2 text-sm">
                       {isFluxResource ? (
-                        <button
-                          onClick={() => handleNavigate(item)}
+                        <a
+                          href={getResourceUrl(item)}
                           class="text-flux-blue dark:text-blue-400 hover:underline"
                         >
                           {item.name}
-                        </button>
+                        </a>
                       ) : (
                         <span class="text-gray-900 dark:text-gray-100">{item.name}</span>
                       )}

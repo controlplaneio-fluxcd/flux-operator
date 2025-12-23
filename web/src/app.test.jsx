@@ -540,8 +540,8 @@ describe('app.jsx', () => {
 
       render(<App />)
 
-      expect(screen.getByRole('button', { name: 'Resources' })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Events' })).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: 'Resources' })).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: 'Events' })).toBeInTheDocument()
     })
 
     it('should show tab navigation on /events path', () => {
@@ -551,8 +551,8 @@ describe('app.jsx', () => {
 
       render(<App />)
 
-      expect(screen.getByRole('button', { name: 'Resources' })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Events' })).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: 'Resources' })).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: 'Events' })).toBeInTheDocument()
     })
 
     it('should not show tab navigation on root path', () => {
@@ -562,8 +562,8 @@ describe('app.jsx', () => {
 
       render(<App />)
 
-      expect(screen.queryByRole('button', { name: 'Resources' })).not.toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: 'Events' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: 'Resources' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: 'Events' })).not.toBeInTheDocument()
     })
 
     it('should not show tab navigation on resource detail path', () => {
@@ -573,8 +573,8 @@ describe('app.jsx', () => {
 
       render(<App />)
 
-      expect(screen.queryByRole('button', { name: 'Resources' })).not.toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: 'Events' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: 'Resources' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: 'Events' })).not.toBeInTheDocument()
     })
 
     it('should highlight Resources tab when on /resources path', () => {
@@ -584,8 +584,8 @@ describe('app.jsx', () => {
 
       render(<App />)
 
-      const resourcesTab = screen.getByRole('button', { name: 'Resources' })
-      const eventsTab = screen.getByRole('button', { name: 'Events' })
+      const resourcesTab = screen.getByRole('link', { name: 'Resources' })
+      const eventsTab = screen.getByRole('link', { name: 'Events' })
 
       expect(resourcesTab.className).toContain('border-flux-blue')
       expect(resourcesTab.className).toContain('text-flux-blue')
@@ -599,38 +599,34 @@ describe('app.jsx', () => {
 
       render(<App />)
 
-      const resourcesTab = screen.getByRole('button', { name: 'Resources' })
-      const eventsTab = screen.getByRole('button', { name: 'Events' })
+      const resourcesTab = screen.getByRole('link', { name: 'Resources' })
+      const eventsTab = screen.getByRole('link', { name: 'Events' })
 
       expect(eventsTab.className).toContain('border-flux-blue')
       expect(eventsTab.className).toContain('text-flux-blue')
       expect(resourcesTab.className).toContain('border-transparent')
     })
 
-    it('should navigate to /resources when Resources tab is clicked', async () => {
+    it('should have correct href on Resources tab', async () => {
       mockLocationPath = '/events'
       reportLoading.value = false
       reportData.value = mockReport
 
       render(<App />)
 
-      const resourcesTab = screen.getByRole('button', { name: 'Resources' })
-      resourcesTab.click()
-
-      expect(mockRoute).toHaveBeenCalledWith('/resources')
+      const resourcesTab = screen.getByRole('link', { name: 'Resources' })
+      expect(resourcesTab).toHaveAttribute('href', '/resources')
     })
 
-    it('should navigate to /events when Events tab is clicked', async () => {
+    it('should have correct href on Events tab', async () => {
       mockLocationPath = '/resources'
       reportLoading.value = false
       reportData.value = mockReport
 
       render(<App />)
 
-      const eventsTab = screen.getByRole('button', { name: 'Events' })
-      eventsTab.click()
-
-      expect(mockRoute).toHaveBeenCalledWith('/events')
+      const eventsTab = screen.getByRole('link', { name: 'Events' })
+      expect(eventsTab).toHaveAttribute('href', '/events')
     })
   })
 

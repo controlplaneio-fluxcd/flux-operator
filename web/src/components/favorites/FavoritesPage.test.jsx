@@ -126,15 +126,14 @@ describe('FavoritesPage component', () => {
       })
     })
 
-    it('should navigate to /resources when browse button is clicked', async () => {
+    it('should have correct href on browse resources link', async () => {
       favorites.value = []
 
       render(<FavoritesPage />)
 
       await waitFor(() => {
-        const browseButton = screen.getByText('Browse resources')
-        fireEvent.click(browseButton)
-        expect(mockRoute).toHaveBeenCalledWith('/resources')
+        const browseLink = screen.getByText('Browse resources')
+        expect(browseLink).toHaveAttribute('href', '/resources')
       })
     })
 

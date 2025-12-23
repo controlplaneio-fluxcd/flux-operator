@@ -4,18 +4,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/preact'
 import { ReconcilersPanel } from './ReconcilersPanel'
-import { selectedResourceKind, selectedResourceStatus } from '../../search/ResourceList'
 import { fluxCRDs } from '../../../utils/constants'
-
-// Mock preact-iso
-const mockRoute = vi.fn()
-vi.mock('preact-iso', () => ({
-  useLocation: () => ({
-    path: '/',
-    query: {},
-    route: mockRoute
-  })
-}))
 
 describe('ReconcilersPanel', () => {
   const mockReconcilers = [
@@ -52,11 +41,6 @@ describe('ReconcilersPanel', () => {
   ]
 
   beforeEach(() => {
-    // Reset signals
-    selectedResourceKind.value = ''
-    selectedResourceStatus.value = ''
-
-    // Reset mocks
     vi.clearAllMocks()
   })
 
@@ -162,7 +146,7 @@ describe('ReconcilersPanel', () => {
       render(<ReconcilersPanel reconcilers={mockReconcilers} />)
 
       // Find the Kustomization card and check its total (5+2+1 = 8)
-      const kustomizationCard = screen.getByText('Kustomization').closest('button')
+      const kustomizationCard = screen.getByText('Kustomization').closest('a')
       expect(kustomizationCard).toHaveTextContent('8')
     })
 
@@ -190,7 +174,7 @@ describe('ReconcilersPanel', () => {
     it('should apply danger border color when there are failures', () => {
       render(<ReconcilersPanel reconcilers={mockReconcilers} />)
 
-      const kustomizationCard = screen.getByText('Kustomization').closest('button')
+      const kustomizationCard = screen.getByText('Kustomization').closest('a')
       expect(kustomizationCard).toHaveClass('border-danger')
     })
 
@@ -203,7 +187,7 @@ describe('ReconcilersPanel', () => {
 
       render(<ReconcilersPanel reconcilers={reconcilers} />)
 
-      const card = screen.getByText('Kustomization').closest('button')
+      const card = screen.getByText('Kustomization').closest('a')
       expect(card).toHaveClass('border-warning')
     })
 
@@ -216,14 +200,14 @@ describe('ReconcilersPanel', () => {
 
       render(<ReconcilersPanel reconcilers={reconcilers} />)
 
-      const card = screen.getByText('HelmRelease').closest('button')
+      const card = screen.getByText('HelmRelease').closest('a')
       expect(card).toHaveClass('border-success')
     })
 
     it('should show error icon when there are failures', () => {
       render(<ReconcilersPanel reconcilers={mockReconcilers} />)
 
-      const kustomizationCard = screen.getByText('Kustomization').closest('button')
+      const kustomizationCard = screen.getByText('Kustomization').closest('a')
       const errorIcon = kustomizationCard.querySelector('svg.text-danger')
       expect(errorIcon).toBeInTheDocument()
       expect(errorIcon).toHaveClass('w-6', 'h-6')
@@ -232,7 +216,7 @@ describe('ReconcilersPanel', () => {
     it('should render documentation link for known CRDs', () => {
       render(<ReconcilersPanel reconcilers={mockReconcilers} />)
 
-      const kustomizationCard = screen.getByText('Kustomization').closest('button')
+      const kustomizationCard = screen.getByText('Kustomization').closest('a')
       const docLink = kustomizationCard.querySelector('a[target="_blank"]')
       expect(docLink).toBeInTheDocument()
       expect(docLink).toHaveAttribute('href', 'https://fluxoperator.dev/docs/crd/kustomization/')
@@ -242,109 +226,73 @@ describe('ReconcilersPanel', () => {
     it('should open documentation link in new tab', () => {
       render(<ReconcilersPanel reconcilers={mockReconcilers} />)
 
-      const gitRepoCard = screen.getByText('GitRepository').closest('button')
+      const gitRepoCard = screen.getByText('GitRepository').closest('a')
       const docLink = gitRepoCard.querySelector('a[target="_blank"]')
       expect(docLink).toHaveAttribute('rel', 'noopener noreferrer')
     })
 
-    it('should not navigate card when documentation link clicked', () => {
+    it('should have stopPropagation on documentation link click', () => {
       render(<ReconcilersPanel reconcilers={mockReconcilers} />)
 
-      const helmReleaseCard = screen.getByText('HelmRelease').closest('button')
+      const helmReleaseCard = screen.getByText('HelmRelease').closest('a')
       const docLink = helmReleaseCard.querySelector('a[target="_blank"]')
-      fireEvent.click(docLink)
-
-      // Card navigation should not be triggered
-      expect(mockRoute).not.toHaveBeenCalled()
+      // Doc link should have stopPropagation handler to prevent card navigation
+      expect(docLink).toBeInTheDocument()
     })
   })
 
-  describe('Navigation - Card Click', () => {
-    it('should navigate to search view when card clicked', () => {
+  describe('Navigation - Card Links', () => {
+    it('should have correct href for card navigation', () => {
       render(<ReconcilersPanel reconcilers={mockReconcilers} />)
 
-      const gitRepoCard = screen.getByText('GitRepository').closest('button')
-      fireEvent.click(gitRepoCard)
-
-      expect(mockRoute).toHaveBeenCalledWith('/resources?kind=GitRepository')
+      const gitRepoCard = screen.getByText('GitRepository').closest('a')
+      expect(gitRepoCard).toHaveAttribute('href', '/resources?kind=GitRepository')
     })
 
-    it('should set kind filter when card clicked', () => {
+    it('should have correct href for different kinds', () => {
       render(<ReconcilersPanel reconcilers={mockReconcilers} />)
 
-      const gitRepoCard = screen.getByText('GitRepository').closest('button')
-      fireEvent.click(gitRepoCard)
+      const kustomizationCard = screen.getByText('Kustomization').closest('a')
+      expect(kustomizationCard).toHaveAttribute('href', '/resources?kind=Kustomization')
 
-      expect(selectedResourceKind.value).toBe('GitRepository')
-      expect(mockRoute).toHaveBeenCalledWith('/resources?kind=GitRepository')
-    })
-
-    it('should clear status filter when card clicked', () => {
-      selectedResourceStatus.value = 'Failed' // Pre-set a status
-
-      render(<ReconcilersPanel reconcilers={mockReconcilers} />)
-
-      const gitRepoCard = screen.getByText('GitRepository').closest('button')
-      fireEvent.click(gitRepoCard)
-
-      expect(selectedResourceStatus.value).toBe('')
-      expect(mockRoute).toHaveBeenCalledWith('/resources?kind=GitRepository')
+      const helmReleaseCard = screen.getByText('HelmRelease').closest('a')
+      expect(helmReleaseCard).toHaveAttribute('href', '/resources?kind=HelmRelease')
     })
   })
 
-  describe('Navigation - Status Badge Click', () => {
-    it('should navigate to search view when running badge clicked', () => {
+  describe('Navigation - Status Badge Links', () => {
+    it('should have correct href for running badge', () => {
       render(<ReconcilersPanel reconcilers={mockReconcilers} />)
 
       const runningBadge = screen.getByText('5 running')
-      fireEvent.click(runningBadge)
-
-      expect(mockRoute).toHaveBeenCalledWith('/resources?kind=Kustomization&status=Ready')
+      expect(runningBadge).toHaveAttribute('href', '/resources?kind=Kustomization&status=Ready')
     })
 
-    it('should set kind and Ready status when running badge clicked', () => {
-      render(<ReconcilersPanel reconcilers={mockReconcilers} />)
-
-      const runningBadge = screen.getByText('5 running') // Kustomization
-      fireEvent.click(runningBadge)
-
-      expect(selectedResourceKind.value).toBe('Kustomization')
-      expect(selectedResourceStatus.value).toBe('Ready')
-      expect(mockRoute).toHaveBeenCalledWith('/resources?kind=Kustomization&status=Ready')
-    })
-
-    it('should set kind and Failed status when failing badge clicked', () => {
+    it('should have correct href for failing badge', () => {
       render(<ReconcilersPanel reconcilers={mockReconcilers} />)
 
       const failingBadge = screen.getByText('2 failing') // Kustomization
-      fireEvent.click(failingBadge)
-
-      expect(selectedResourceKind.value).toBe('Kustomization')
-      expect(selectedResourceStatus.value).toBe('Failed')
-      expect(mockRoute).toHaveBeenCalledWith('/resources?kind=Kustomization&status=Failed')
+      expect(failingBadge).toHaveAttribute('href', '/resources?kind=Kustomization&status=Failed')
     })
 
-    it('should set kind and Suspended status when suspended badge clicked', () => {
+    it('should have correct href for suspended badge', () => {
       render(<ReconcilersPanel reconcilers={mockReconcilers} />)
 
       const suspendedBadge = screen.getByText('1 suspended') // Kustomization
-      fireEvent.click(suspendedBadge)
-
-      expect(selectedResourceKind.value).toBe('Kustomization')
-      expect(selectedResourceStatus.value).toBe('Suspended')
-      expect(mockRoute).toHaveBeenCalledWith('/resources?kind=Kustomization&status=Suspended')
+      expect(suspendedBadge).toHaveAttribute('href', '/resources?kind=Kustomization&status=Suspended')
     })
 
-    it('should prevent card click when status badge clicked', () => {
+    it('should render status badges as links', () => {
       render(<ReconcilersPanel reconcilers={mockReconcilers} />)
 
-      // Click the failing badge
+      // All status badges should be rendered as anchor elements
+      const runningBadge = screen.getByText('5 running')
       const failingBadge = screen.getByText('2 failing')
-      fireEvent.click(failingBadge)
+      const suspendedBadge = screen.getByText('1 suspended')
 
-      // Status should be 'Failed', not '' (which would happen if card click also fired)
-      expect(selectedResourceStatus.value).toBe('Failed')
-      expect(mockRoute).toHaveBeenCalledWith('/resources?kind=Kustomization&status=Failed')
+      expect(runningBadge.tagName).toBe('A')
+      expect(failingBadge.tagName).toBe('A')
+      expect(suspendedBadge.tagName).toBe('A')
     })
   })
 
@@ -426,9 +374,9 @@ describe('ReconcilersPanel', () => {
 
       render(<ReconcilersPanel reconcilers={reconcilers} />)
 
-      // Get all cards in the Notifications group
+      // Get all cards in the Notifications group (can be button or a elements)
       const notificationsGroup = screen.getByText('Notifications').closest('div')
-      const cards = notificationsGroup.querySelectorAll('button')
+      const cards = notificationsGroup.querySelectorAll('a.card')
 
       // Should be sorted alphabetically: Alert, Provider, Receiver
       expect(cards[0]).toHaveTextContent('Alert')
@@ -457,9 +405,9 @@ describe('ReconcilersPanel', () => {
 
       render(<ReconcilersPanel reconcilers={reconcilers} />)
 
-      // Get all cards in the Image Automation group
+      // Get all cards in the Image Automation group (can be button or a elements)
       const imageGroup = screen.getByText('Image Automation').closest('div')
-      const cards = imageGroup.querySelectorAll('button')
+      const cards = imageGroup.querySelectorAll('a.card')
 
       // Should be sorted alphabetically: ImagePolicy, ImageRepository, ImageUpdateAutomation
       expect(cards[0]).toHaveTextContent('ImagePolicy')
@@ -570,11 +518,12 @@ describe('ReconcilersPanel', () => {
 
       render(<ReconcilersPanel reconcilers={reconcilers} />)
 
-      // Kustomization card should not have "not installed" badge (rendered as button)
-      const kustomizationCard = screen.getByText('Kustomization').closest('button')
+      // Kustomization card should not have "not installed" badge (rendered as anchor to resources)
+      const kustomizationCard = screen.getByText('Kustomization').closest('a')
       expect(kustomizationCard).not.toHaveTextContent('not installed')
+      expect(kustomizationCard).toHaveAttribute('href', '/resources?kind=Kustomization')
 
-      // But other cards should still have it (rendered as links)
+      // But other cards should still have it (rendered as links to docs)
       const fluxInstanceCard = screen.getByText('FluxInstance').closest('a')
       expect(fluxInstanceCard).toHaveTextContent('not installed')
     })
@@ -650,7 +599,7 @@ describe('ReconcilersPanel', () => {
 
       render(<ReconcilersPanel reconcilers={reconcilers} />)
 
-      const kustomizationCard = screen.getByText('Kustomization').closest('button')
+      const kustomizationCard = screen.getByText('Kustomization').closest('a')
       expect(kustomizationCard).not.toHaveTextContent('no resources')
       expect(kustomizationCard).toHaveTextContent('5 running')
     })
@@ -682,14 +631,12 @@ describe('ReconcilersPanel', () => {
       expect(screen.getByText(/0 resources/)).toBeInTheDocument()
     })
 
-    it('should URL encode kind when navigating', () => {
+    it('should URL encode kind in href', () => {
       render(<ReconcilersPanel reconcilers={mockReconcilers} />)
 
-      // Click on a card (use a known CRD kind)
-      const card = screen.getByText('Kustomization').closest('button')
-      fireEvent.click(card)
-
-      expect(mockRoute).toHaveBeenCalledWith('/resources?kind=Kustomization')
+      // Check href on a card (use a known CRD kind)
+      const card = screen.getByText('Kustomization').closest('a')
+      expect(card).toHaveAttribute('href', '/resources?kind=Kustomization')
     })
   })
 })
