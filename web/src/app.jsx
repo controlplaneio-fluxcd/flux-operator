@@ -58,6 +58,10 @@ export async function fetchFluxReport() {
   if (connectionStatus.value !== 'loading') {
     connectionStatus.value = 'loading'
   }
+  // Set reportLoading if we don't have data yet (handles retry after error)
+  if (!reportData.value) {
+    reportLoading.value = true
+  }
 
   try {
     // Fetch FluxReport from API or mock
