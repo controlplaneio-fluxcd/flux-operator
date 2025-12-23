@@ -715,5 +715,64 @@ describe('app.jsx', () => {
 
       consoleErrorSpy.mockRestore()
     })
+
+    it('should recover from error state when retry succeeds', async () => {
+      // Start with error state - first fetch fails
+      fetchWithMock.mockRejectedValueOnce(new Error('Server error 500'))
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      render(<App />)
+
+      // Wait for error state
+      await waitFor(() => {
+        expect(screen.getByText('Failed to load Flux report')).toBeInTheDocument()
+      })
+      expect(connectionStatus.value).toBe('disconnected')
+      expect(reportData.value).toBeNull()
+
+      // Mock successful response for retry
+      const mockReport = {
+        spec: { distribution: { version: 'v2.4.0' } },
+        metadata: { namespace: 'flux-system' }
+      }
+      fetchWithMock.mockResolvedValue(mockReport)
+
+      // Trigger auto-refresh retry
+      vi.advanceTimersByTime(30000)
+
+      // Should show loading spinner while retrying (reportLoading set to true when no data)
+      await waitFor(() => {
+        expect(reportLoading.value).toBe(true)
+      })
+
+      // After successful fetch, should show dashboard
+      await waitFor(() => {
+        expect(screen.queryByText('Failed to load Flux report')).not.toBeInTheDocument()
+      })
+      expect(connectionStatus.value).toBe('connected')
+      expect(reportData.value).toEqual(mockReport)
+      expect(screen.getByTestId('dashboard-view')).toBeInTheDocument()
+
+      consoleErrorSpy.mockRestore()
+    })
+
+    it('should set reportLoading when retrying without data', async () => {
+      // This tests the specific bug fix: when retrying after error with no data,
+      // reportLoading should be set to true to show loading spinner instead of crash
+      reportData.value = null
+      reportLoading.value = false
+      connectionStatus.value = 'disconnected'
+
+      fetchWithMock.mockResolvedValue({ spec: {} })
+
+      // Call fetchFluxReport directly to test the loading state
+      const fetchPromise = fetchFluxReport()
+
+      // Should immediately set reportLoading=true since we have no data
+      expect(reportLoading.value).toBe(true)
+      expect(connectionStatus.value).toBe('loading')
+
+      await fetchPromise
+    })
   })
 })
