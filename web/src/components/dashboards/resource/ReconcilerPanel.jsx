@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { useState, useMemo, useEffect, useRef } from 'preact/hooks'
-import { useLocation } from 'preact-iso'
 import { fetchWithMock } from '../../../utils/fetch'
 import { formatTimestamp } from '../../../utils/time'
 import { getControllerName, getKindAlias } from '../../../utils/constants'
@@ -13,8 +12,6 @@ import { HistoryTimeline } from './HistoryTimeline'
 import { FluxOperatorIcon } from '../../layout/Icons'
 
 export function ReconcilerPanel({ kind, name, namespace, resourceData }) {
-  const location = useLocation()
-
   // State
   const [reconcilerTab, setReconcilerTab] = useState('overview')
   const [eventsData, setEventsData] = useState([])
@@ -247,13 +244,13 @@ export function ReconcilerPanel({ kind, name, namespace, resourceData }) {
                 {(() => {
                   const [refKind, refNamespace, refName] = reconcilerRef.managedBy.split('/')
                   return (
-                    <button
-                      onClick={() => location.route(`/resource/${encodeURIComponent(refKind)}/${encodeURIComponent(refNamespace)}/${encodeURIComponent(refName)}`)}
+                    <a
+                      href={`/resource/${encodeURIComponent(refKind)}/${encodeURIComponent(refNamespace)}/${encodeURIComponent(refName)}`}
                       class="ml-1 text-flux-blue dark:text-blue-400 hover:underline"
                     >
                       <span class="hidden md:inline break-all">{reconcilerRef.managedBy}</span>
                       <span class="md:hidden break-all">{getKindAlias(refKind)}/{refName}</span>
-                    </button>
+                    </a>
                   )
                 })()}
               </div>

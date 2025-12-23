@@ -1,23 +1,11 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/preact'
+import { describe, it, expect } from 'vitest'
+import { render, screen } from '@testing-library/preact'
 import { NotFoundPage } from './NotFoundPage'
 
-// Mock preact-iso
-const mockRoute = vi.fn()
-vi.mock('preact-iso', () => ({
-  useLocation: () => ({
-    route: mockRoute
-  })
-}))
-
 describe('NotFoundPage component', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
-
   it('should render the 404 page with correct elements', () => {
     render(<NotFoundPage />)
 
@@ -27,8 +15,8 @@ describe('NotFoundPage component', () => {
     // Check for description
     expect(screen.getByText("The page you're looking for doesn't exist or has been moved.")).toBeInTheDocument()
 
-    // Check for Go Home button
-    expect(screen.getByRole('button', { name: /go to home/i })).toBeInTheDocument()
+    // Check for Go Home link
+    expect(screen.getByRole('link', { name: /go to home/i })).toBeInTheDocument()
   })
 
   it('should have the correct test id', () => {
@@ -37,13 +25,11 @@ describe('NotFoundPage component', () => {
     expect(screen.getByTestId('not-found-page')).toBeInTheDocument()
   })
 
-  it('should navigate to home when Go Home button is clicked', () => {
+  it('should have correct href on Go Home link', () => {
     render(<NotFoundPage />)
 
-    const goHomeButton = screen.getByRole('button', { name: /go to home/i })
-    fireEvent.click(goHomeButton)
-
-    expect(mockRoute).toHaveBeenCalledWith('/')
+    const goHomeLink = screen.getByRole('link', { name: /go to home/i })
+    expect(goHomeLink).toHaveAttribute('href', '/')
   })
 
   it('should render with proper styling classes', () => {
@@ -62,11 +48,11 @@ describe('NotFoundPage component', () => {
     expect(iconContainer).toBeInTheDocument()
   })
 
-  it('should render the home icon in the button', () => {
+  it('should render the home icon in the link', () => {
     render(<NotFoundPage />)
 
-    const button = screen.getByRole('button', { name: /go to home/i })
-    const svg = button.querySelector('svg')
+    const link = screen.getByRole('link', { name: /go to home/i })
+    const svg = link.querySelector('svg')
     expect(svg).toBeInTheDocument()
   })
 })

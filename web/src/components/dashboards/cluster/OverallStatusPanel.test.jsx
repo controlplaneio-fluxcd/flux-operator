@@ -2,34 +2,19 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/preact'
+import { render, screen } from '@testing-library/preact'
 import { OverallStatusPanel } from './OverallStatusPanel'
 import { reportUpdatedAt } from '../../../app'
-import { selectedResourceStatus } from '../../search/ResourceList'
 
 // Mock the time formatting utility
 vi.mock('../../../utils/time', () => ({
   formatTime: () => '2 minutes ago'
 }))
 
-// Mock preact-iso
-const mockRoute = vi.fn()
-vi.mock('preact-iso', () => ({
-  useLocation: () => ({
-    path: '/',
-    query: {},
-    route: mockRoute
-  })
-}))
-
 describe('OverallStatusPanel', () => {
   beforeEach(() => {
     // Reset signals
     reportUpdatedAt.value = new Date()
-    selectedResourceStatus.value = ''
-
-    // Reset mocks
-    vi.clearAllMocks()
   })
 
   describe('Status: Initializing', () => {
@@ -220,9 +205,10 @@ describe('OverallStatusPanel', () => {
 
       render(<OverallStatusPanel report={report} />)
 
-      const button = screen.getByText('Major Outage').closest('button')
-      expect(button).toBeInTheDocument()
-      expect(button).toHaveClass('cursor-pointer')
+      const link = screen.getByText('Major Outage').closest('a')
+      expect(link).toBeInTheDocument()
+      expect(link).toHaveClass('cursor-pointer')
+      expect(link).toHaveAttribute('href', '/resources?status=Failed')
     })
   })
 
@@ -337,8 +323,9 @@ describe('OverallStatusPanel', () => {
 
       render(<OverallStatusPanel report={report} />)
 
-      const button = screen.getByText('Partial Outage').closest('button')
-      expect(button).toBeInTheDocument()
+      const link = screen.getByText('Partial Outage').closest('a')
+      expect(link).toBeInTheDocument()
+      expect(link).toHaveAttribute('href', '/resources?status=Failed')
     })
   })
 
@@ -391,8 +378,9 @@ describe('OverallStatusPanel', () => {
 
       render(<OverallStatusPanel report={report} />)
 
-      const button = screen.getByText('Degraded Performance').closest('button')
-      expect(button).toBeInTheDocument()
+      const link = screen.getByText('Degraded Performance').closest('a')
+      expect(link).toBeInTheDocument()
+      expect(link).toHaveAttribute('href', '/resources?status=Failed')
     })
   })
 
@@ -449,12 +437,12 @@ describe('OverallStatusPanel', () => {
 
       const wrapper = document.querySelector('.card')
       expect(wrapper.tagName).toBe('DIV')
-      expect(wrapper.tagName).not.toBe('BUTTON')
+      expect(wrapper.tagName).not.toBe('A')
     })
   })
 
-  describe('Click Handler - Navigation', () => {
-    it('should navigate to search view with Failed filter when clicked', () => {
+  describe('Navigation Links', () => {
+    it('should have link to search view with Failed filter in partial outage', () => {
       const report = {
         distribution: { version: 'v2.4.0' },
         components: [
@@ -468,14 +456,11 @@ describe('OverallStatusPanel', () => {
 
       render(<OverallStatusPanel report={report} />)
 
-      const button = screen.getByText('Partial Outage').closest('button')
-      fireEvent.click(button)
-
-      expect(mockRoute).toHaveBeenCalledWith('/resources?status=Failed')
-      expect(selectedResourceStatus.value).toBe('Failed')
+      const link = screen.getByText('Partial Outage').closest('a')
+      expect(link).toHaveAttribute('href', '/resources?status=Failed')
     })
 
-    it('should clear other filters when navigating', () => {
+    it('should have link to search view with Failed filter in degraded state', () => {
       const report = {
         distribution: { version: 'v2.4.0' },
         components: [
@@ -490,11 +475,8 @@ describe('OverallStatusPanel', () => {
 
       render(<OverallStatusPanel report={report} />)
 
-      const button = screen.getByText('Degraded Performance').closest('button')
-      fireEvent.click(button)
-
-      expect(mockRoute).toHaveBeenCalledWith('/resources?status=Failed')
-      expect(selectedResourceStatus.value).toBe('Failed')
+      const link = screen.getByText('Degraded Performance').closest('a')
+      expect(link).toHaveAttribute('href', '/resources?status=Failed')
     })
   })
 

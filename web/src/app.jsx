@@ -98,8 +98,8 @@ function TabNavigation() {
     <div class="border-b border-gray-200 dark:border-gray-700 transition-colors">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <nav class="-mb-px flex space-x-8">
-          <button
-            onClick={() => location.route('/favorites')}
+          <a
+            href="/favorites"
             class={`${
               currentPath === '/favorites'
                 ? 'border-flux-blue text-flux-blue dark:text-blue-400'
@@ -107,9 +107,9 @@ function TabNavigation() {
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm focus:outline-none transition-colors`}
           >
             Favorites
-          </button>
-          <button
-            onClick={() => location.route('/resources')}
+          </a>
+          <a
+            href="/resources"
             class={`${
               currentPath === '/resources'
                 ? 'border-flux-blue text-flux-blue dark:text-blue-400'
@@ -117,9 +117,9 @@ function TabNavigation() {
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm focus:outline-none transition-colors`}
           >
             Resources
-          </button>
-          <button
-            onClick={() => location.route('/events')}
+          </a>
+          <a
+            href="/events"
             class={`${
               currentPath === '/events'
                 ? 'border-flux-blue text-flux-blue dark:text-blue-400'
@@ -127,7 +127,7 @@ function TabNavigation() {
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm focus:outline-none transition-colors`}
           >
             Events
-          </button>
+          </a>
         </nav>
       </div>
     </div>

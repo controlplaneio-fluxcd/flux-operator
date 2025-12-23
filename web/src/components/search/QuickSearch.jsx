@@ -457,17 +457,28 @@ export function QuickSearch() {
     }
   }
 
+  // Build URL for a resource
+  const getResourceUrl = (kind, namespace, name) => {
+    return `/resource/${encodeURIComponent(kind)}/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}`
+  }
+
+  // Get URL for a history entry
+  const getHistoryUrl = (entry) => {
+    if (isHomePage(entry.kind)) {
+      return '/'
+    }
+    return getResourceUrl(entry.kind, entry.namespace, entry.name)
+  }
+
+  // Handle result click via keyboard Enter (anchor will handle mouse clicks)
   const handleResultClick = (resource) => {
-    location.route(`/resource/${encodeURIComponent(resource.kind)}/${encodeURIComponent(resource.namespace)}/${encodeURIComponent(resource.name)}`)
+    location.route(getResourceUrl(resource.kind, resource.namespace, resource.name))
     handleClose()
   }
 
+  // Handle history click via keyboard Enter (anchor will handle mouse clicks)
   const handleHistoryClick = (entry) => {
-    if (isHomePage(entry.kind)) {
-      location.route('/')
-    } else {
-      location.route(`/resource/${encodeURIComponent(entry.kind)}/${encodeURIComponent(entry.namespace)}/${encodeURIComponent(entry.name)}`)
-    }
+    location.route(getHistoryUrl(entry))
     handleClose()
   }
 
@@ -642,9 +653,10 @@ export function QuickSearch() {
               <ul>
                 {quickSearchResults.value.map((resource, index) => (
                   <li key={`${resource.kind}-${resource.namespace}-${resource.name}-${index}`}>
-                    <button
-                      onClick={() => handleResultClick(resource)}
-                      class={`w-full text-left py-1 px-2 focus:outline-none transition-colors ${
+                    <a
+                      href={getResourceUrl(resource.kind, resource.namespace, resource.name)}
+                      onClick={handleClose}
+                      class={`block w-full text-left py-1 px-2 focus:outline-none transition-colors ${
                         index === selectedIndex
                           ? 'bg-gray-100 dark:bg-gray-700'
                           : 'hover:bg-gray-50 dark:hover:bg-gray-700'
@@ -656,7 +668,7 @@ export function QuickSearch() {
                           <span class="text-gray-500 dark:text-gray-400">{resource.kind}/</span>{resource.namespace}/{resource.name}
                         </span>
                       </div>
-                    </button>
+                    </a>
                   </li>
                 ))}
               </ul>
@@ -666,15 +678,13 @@ export function QuickSearch() {
             {panelState === 'empty' && (
               <div class="p-3 text-sm text-gray-500 dark:text-gray-400">
                 <p>No resources found</p>
-                <button
-                  onClick={() => {
-                    location.route('/resources')
-                    handleClose()
-                  }}
-                  class="mt-2 text-flux-blue hover:underline focus:outline-none"
+                <a
+                  href="/resources"
+                  onClick={handleClose}
+                  class="mt-2 inline-block text-flux-blue hover:underline focus:outline-none"
                 >
                   Browse all resources →
-                </button>
+                </a>
               </div>
             )}
 
@@ -718,8 +728,9 @@ export function QuickSearch() {
                     <ul class="space-y-0.5">
                       {navHistory.value.map((entry, index) => (
                         <li key={`${entry.kind}-${entry.namespace}-${entry.name}-${index}`}>
-                          <button
-                            onClick={() => handleHistoryClick(entry)}
+                          <a
+                            href={getHistoryUrl(entry)}
+                            onClick={handleClose}
                             class={`w-full text-left py-1 px-1 -mx-1 rounded focus:outline-none transition-colors flex items-center gap-1.5 ${
                               index === historySelectedIndex
                                 ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
@@ -739,7 +750,7 @@ export function QuickSearch() {
                             <span class="truncate text-gray-900 dark:text-gray-100">
                               <span class="text-gray-500 dark:text-gray-400">{entry.kind}/</span>{entry.namespace}/{entry.name}
                             </span>
-                          </button>
+                          </a>
                         </li>
                       ))}
                     </ul>

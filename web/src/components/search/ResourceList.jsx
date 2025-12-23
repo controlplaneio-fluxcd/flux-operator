@@ -3,7 +3,6 @@
 
 import { signal } from '@preact/signals'
 import { useEffect, useState } from 'preact/hooks'
-import { useLocation } from 'preact-iso'
 import { fetchWithMock } from '../../utils/fetch'
 import { formatTimestamp } from '../../utils/time'
 import { getStatusBadgeClass } from '../../utils/status'
@@ -56,6 +55,13 @@ export async function fetchResourcesStatus() {
 
 
 /**
+ * Build URL path for a resource dashboard
+ */
+function getResourceUrl(kind, namespace, name) {
+  return `/resource/${encodeURIComponent(kind)}/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}`
+}
+
+/**
  * ResourceCard - Individual card displaying a Flux resource with status and details
  *
  * @param {Object} props
@@ -69,18 +75,12 @@ export async function fetchResourcesStatus() {
  * - Expandable details section showing spec and inventory (lazy-loaded via ResourceDetailsView)
  */
 function ResourceCard({ resource }) {
-  const location = useLocation()
   const [isExpanded, setIsExpanded] = useState(false)
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(false)
 
   // Check if resource is a favorite (reactive via favorites signal)
   // Access favorites.value to subscribe to changes and trigger re-renders
   const isFavorited = favorites.value && isFavorite(resource.kind, resource.namespace, resource.name)
-
-  // Handle resource name click - navigate to dashboard
-  const handleResourceClick = () => {
-    location.route(`/resource/${encodeURIComponent(resource.kind)}/${encodeURIComponent(resource.namespace)}/${encodeURIComponent(resource.name)}`)
-  }
 
   // Handle favorite toggle
   const handleFavoriteClick = (e) => {
@@ -136,12 +136,12 @@ function ResourceCard({ resource }) {
 
       {/* Resource namespace/name - clickable link to dashboard */}
       <div class="mb-1 sm:mb-2">
-        <button
-          onClick={handleResourceClick}
-          class="text-sm text-left hover:opacity-80 transition-opacity focus:outline-none focus:ring-2 focus:ring-flux-blue focus:ring-offset-2 rounded inline-block group"
+        <a
+          href={getResourceUrl(resource.kind, resource.namespace, resource.name)}
+          class="text-sm text-left hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flux-blue rounded inline-block group"
         >
           <span class="text-gray-500 dark:text-gray-400">{resource.namespace}/</span><span class="font-semibold text-gray-900 dark:text-gray-100 group-hover:text-flux-blue dark:group-hover:text-blue-400">{resource.name}</span><svg class="w-3.5 h-3.5 text-gray-400 group-hover:text-flux-blue dark:group-hover:text-blue-400 transition-colors ml-1 inline-block align-middle" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
-        </button>
+        </a>
       </div>
 
       {/* Mobile timestamp - below namespace/name */}

@@ -13,13 +13,6 @@ vi.mock('../../../utils/fetch', () => ({
   fetchWithMock: vi.fn()
 }))
 
-// Mock preact-iso
-const mockRoute = vi.fn()
-vi.mock('preact-iso', () => ({
-  useLocation: () => ({
-    route: mockRoute
-  })
-}))
 
 describe('SourcePanel component', () => {
   const mockSourceRef = {
@@ -169,9 +162,8 @@ describe('SourcePanel component', () => {
     expect(textContent).toContain('https://github.com/example/repo.git')
   })
 
-  it('should navigate to source resource when ID button is clicked', async () => {
+  it('should have correct href on source resource link', async () => {
     fetchWithMock.mockResolvedValue(mockSourceData)
-    const user = userEvent.setup()
 
     render(
       <SourcePanel
@@ -183,10 +175,8 @@ describe('SourcePanel component', () => {
       expect(screen.getByText('GitRepository/flux-system/flux-system')).toBeInTheDocument()
     })
 
-    const idButton = screen.getByText('GitRepository/flux-system/flux-system').closest('button')
-    await user.click(idButton)
-
-    expect(mockRoute).toHaveBeenCalledWith('/resource/GitRepository/flux-system/flux-system')
+    const idLink = screen.getByText('GitRepository/flux-system/flux-system').closest('a')
+    expect(idLink).toHaveAttribute('href', '/resource/GitRepository/flux-system/flux-system')
   })
 
   it('should display fetch every and fetched at when source data is available', async () => {
@@ -1082,7 +1072,7 @@ describe('SourcePanel component', () => {
       })
     })
 
-    it('should navigate to HelmChart resource when link is clicked', async () => {
+    it('should have correct href on HelmChart resource link', async () => {
       fetchWithMock.mockResolvedValueOnce(mockHelmRepoSourceData)
       const user = userEvent.setup()
 
@@ -1106,11 +1096,9 @@ describe('SourcePanel component', () => {
         expect(screen.getByText('HelmChart/tailscale/tailscale-tailscale-operator')).toBeInTheDocument()
       })
 
-      // Click on the HelmChart link
-      const chartLink = screen.getByText('HelmChart/tailscale/tailscale-tailscale-operator').closest('button')
-      await user.click(chartLink)
-
-      expect(mockRoute).toHaveBeenCalledWith('/resource/HelmChart/tailscale/tailscale-tailscale-operator')
+      // Check the HelmChart link has correct href
+      const chartLink = screen.getByText('HelmChart/tailscale/tailscale-tailscale-operator').closest('a')
+      expect(chartLink).toHaveAttribute('href', '/resource/HelmChart/tailscale/tailscale-tailscale-operator')
     })
 
     it('should show "*" for semver when version is not specified', async () => {

@@ -275,9 +275,7 @@ describe('ReconcilerPanel component', () => {
     expect(screen.queryByText('Managed by')).not.toBeInTheDocument()
   })
 
-  it('should navigate to reconciler resource when clicking "Managed by" link', async () => {
-    const user = userEvent.setup()
-
+  it('should navigate to reconciler resource when clicking "Managed by" link', () => {
     const dataWithReconcilerRef = {
       ...mockResourceData,
       status: {
@@ -298,10 +296,8 @@ describe('ReconcilerPanel component', () => {
       />
     )
 
-    const managedByButton = screen.getByText('FluxInstance/flux-system/flux')
-    await user.click(managedByButton)
-
-    expect(mockRoute).toHaveBeenCalledWith('/resource/FluxInstance/flux-system/flux')
+    const managedByLink = screen.getByText('FluxInstance/flux-system/flux')
+    expect(managedByLink.closest('a')).toHaveAttribute('href', '/resource/FluxInstance/flux-system/flux')
   })
 
   it('should switch to Specification tab', async () => {

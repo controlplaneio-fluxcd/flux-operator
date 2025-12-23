@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { useState, useMemo, useEffect, useRef } from 'preact/hooks'
-import { useLocation } from 'preact-iso'
 import { fetchWithMock } from '../../../utils/fetch'
 import { getControllerName, getKindAlias } from '../../../utils/constants'
 import { formatTimestamp } from '../../../utils/time'
@@ -16,8 +15,6 @@ import { FluxOperatorIcon } from '../../layout/Icons'
  * Handles its own data fetching and state management
  */
 export function SourcePanel({ resourceData }) {
-  const location = useLocation()
-
   // Derive sourceRef from resourceData
   const sourceRef = resourceData?.status?.sourceRef
   const namespace = sourceRef?.namespace
@@ -297,8 +294,8 @@ export function SourcePanel({ resourceData }) {
           {sourceTab === 'overview' && (
             <div class="space-y-4">
               {/* Resource Link */}
-              <button
-                onClick={() => location.route(`/resource/${encodeURIComponent(sourceRef.kind)}/${encodeURIComponent(sourceRef.namespace || namespace)}/${encodeURIComponent(sourceRef.name)}`)}
+              <a
+                href={`/resource/${encodeURIComponent(sourceRef.kind)}/${encodeURIComponent(sourceRef.namespace || namespace)}/${encodeURIComponent(sourceRef.name)}`}
                 class="flex items-center gap-2 text-sm text-flux-blue dark:text-blue-400 hover:underline"
               >
                 <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -306,7 +303,7 @@ export function SourcePanel({ resourceData }) {
                 </svg>
                 <span class="hidden md:inline break-all">{sourceRef.kind}/{sourceRef.namespace || namespace}/{sourceRef.name}</span>
                 <span class="md:hidden break-all">{getKindAlias(sourceRef.kind)}/{sourceRef.name}</span>
-              </button>
+              </a>
 
               {/* Status Badge */}
               {sourceRef.status && (
@@ -422,8 +419,8 @@ export function SourcePanel({ resourceData }) {
               ) : (
                 <div class="space-y-4">
                   {/* Resource Link */}
-                  <button
-                    onClick={() => location.route(`/resource/HelmChart/${encodeURIComponent(helmChartRef.namespace)}/${encodeURIComponent(helmChartRef.name)}`)}
+                  <a
+                    href={`/resource/HelmChart/${encodeURIComponent(helmChartRef.namespace)}/${encodeURIComponent(helmChartRef.name)}`}
                     class="flex items-center gap-2 text-sm text-flux-blue dark:text-blue-400 hover:underline"
                   >
                     <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -431,7 +428,7 @@ export function SourcePanel({ resourceData }) {
                     </svg>
                     <span class="hidden md:inline break-all">HelmChart/{helmChartRef.namespace}/{helmChartRef.name}</span>
                     <span class="md:hidden break-all">{getKindAlias('HelmChart')}/{helmChartRef.name}</span>
-                  </button>
+                  </a>
 
                   {/* Status Badge */}
                   {chartData?.status?.reconcilerRef?.status && (
