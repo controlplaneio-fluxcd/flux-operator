@@ -1,7 +1,7 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { useState, useMemo, useEffect, useRef } from 'preact/hooks'
+import { useMemo, useEffect, useRef, useState } from 'preact/hooks'
 import { fetchWithMock } from '../../../utils/fetch'
 import { formatTimestamp } from '../../../utils/time'
 import { getControllerName, getKindAlias } from '../../../utils/constants'
@@ -10,10 +10,16 @@ import { YamlBlock } from '../common/yaml'
 import { getStatusBadgeClass, getEventBadgeClass } from '../../../utils/status'
 import { HistoryTimeline } from './HistoryTimeline'
 import { FluxOperatorIcon } from '../../layout/Icons'
+import { useHashTab } from '../../../utils/hash'
+
+// Valid tabs for the ReconcilerPanel
+const RECONCILER_TABS = ['overview', 'history', 'events', 'spec', 'status']
 
 export function ReconcilerPanel({ kind, name, namespace, resourceData }) {
-  // State
-  const [reconcilerTab, setReconcilerTab] = useState('overview')
+  // Tab state synced with URL hash (e.g., #reconciler-events)
+  const [reconcilerTab, setReconcilerTab] = useHashTab('reconciler', 'overview', RECONCILER_TABS, 'reconciler-panel')
+
+  // Events data state
   const [eventsData, setEventsData] = useState([])
   const [eventsLoading, setEventsLoading] = useState(false)
   const [eventsLoaded, setEventsLoaded] = useState(false)
@@ -21,9 +27,8 @@ export function ReconcilerPanel({ kind, name, namespace, resourceData }) {
   // Track initial mount to avoid refetching on first render
   const isInitialMount = useRef(true)
 
-  // Reset tab when navigating to a different resource
+  // Reset events state when navigating to a different resource
   useEffect(() => {
-    setReconcilerTab('overview')
     setEventsLoaded(false)
     setEventsData([])
   }, [kind, namespace, name])

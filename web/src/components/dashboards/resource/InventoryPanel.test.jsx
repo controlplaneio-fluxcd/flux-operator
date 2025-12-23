@@ -7,6 +7,14 @@ import userEvent from '@testing-library/user-event'
 import { InventoryPanel } from './InventoryPanel'
 import { getPanelById } from '../common/panel.test'
 
+// Mock useHashTab to use simple useState instead
+vi.mock('../../../utils/hash', async () => {
+  const { useState } = await import('preact/hooks')
+  return {
+    useHashTab: (panel, defaultTab) => useState(defaultTab)
+  }
+})
+
 describe('InventoryPanel component', () => {
   const mockKustomizationData = {
     apiVersion: 'kustomize.toolkit.fluxcd.io/v1',

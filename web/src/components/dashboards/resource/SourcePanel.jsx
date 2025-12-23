@@ -9,6 +9,10 @@ import { DashboardPanel, TabButton } from '../common/panel'
 import { YamlBlock } from '../common/yaml'
 import { getStatusBadgeClass, getEventBadgeClass } from '../../../utils/status'
 import { FluxOperatorIcon } from '../../layout/Icons'
+import { useHashTab } from '../../../utils/hash'
+
+// Valid tabs for the SourcePanel
+const SOURCE_TABS = ['overview', 'chart', 'events', 'spec', 'status']
 
 /**
  * SourcePanel - Displays source information for a Flux resource
@@ -34,8 +38,8 @@ export function SourcePanel({ resourceData }) {
   // Track initial mount to avoid refetching on first render
   const isInitialMount = useRef(true)
 
-  // Tab state
-  const [sourceTab, setSourceTab] = useState('overview')
+  // Tab state synced with URL hash (e.g., #source-events)
+  const [sourceTab, setSourceTab] = useHashTab('source', 'overview', SOURCE_TABS, 'source-panel')
 
   // Fetch source data when component mounts (initial fetch only)
   useEffect(() => {

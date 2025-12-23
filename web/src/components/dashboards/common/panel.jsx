@@ -10,7 +10,7 @@ export function DashboardPanel({ title, subtitle, id, defaultExpanded = true, ch
   const isExpanded = useSignal(defaultExpanded)
 
   return (
-    <div class="card p-0" data-id={id}>
+    <div class="card p-0" id={id}>
       <button
         onClick={() => isExpanded.value = !isExpanded.value}
         class="w-full px-6 py-4 text-left hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors"
