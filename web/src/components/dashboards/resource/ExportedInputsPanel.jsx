@@ -1,9 +1,12 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { useState } from 'preact/hooks'
 import { DashboardPanel, TabButton } from '../common/panel'
 import { YamlBlock } from '../common/yaml'
+import { useHashTab } from '../../../utils/hash'
+
+// Valid tabs for the ExportedInputsPanel
+const EXPORTED_INPUTS_TABS = ['overview', 'values']
 
 /**
  * Format camelCase to sentence case with spaces
@@ -42,8 +45,8 @@ function getFilterFields(filter) {
  * ExportedInputsPanel - Displays exported inputs information for ResourceSetInputProvider resources
  */
 export function ExportedInputsPanel({ resourceData }) {
-  // Tab state
-  const [activeTab, setActiveTab] = useState('overview')
+  // Tab state synced with URL hash (e.g., #exported-values)
+  const [activeTab, setActiveTab] = useHashTab('exported', 'overview', EXPORTED_INPUTS_TABS, 'exported-inputs-panel')
 
   // Extract data
   const spec = resourceData?.spec

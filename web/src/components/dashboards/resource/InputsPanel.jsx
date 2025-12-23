@@ -1,12 +1,16 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { useState } from 'preact/hooks'
+import { useState, useEffect } from 'preact/hooks'
 import { fetchWithMock } from '../../../utils/fetch'
 import { formatTimestamp } from '../../../utils/time'
 import { DashboardPanel, TabButton } from '../common/panel'
 import { YamlBlock } from '../common/yaml'
 import { FluxOperatorIcon } from '../../layout/Icons'
+import { useHashTab } from '../../../utils/hash'
+
+// Valid tabs for the InputsPanel
+const INPUTS_TABS = ['overview', 'values']
 
 /**
  * Get badge class for provider type
@@ -21,8 +25,8 @@ function getProviderBadgeClass(type) {
  * InputsPanel - Displays inputs information for ResourceSet resources
  */
 export function InputsPanel({ resourceData, namespace }) {
-  // Tab state
-  const [activeTab, setActiveTab] = useState('overview')
+  // Tab state synced with URL hash (e.g., #inputs-values)
+  const [activeTab, setActiveTab] = useHashTab('inputs', 'overview', INPUTS_TABS, 'inputs-panel')
 
   // Values tab state (on-demand loading)
   const [valuesLoaded, setValuesLoaded] = useState(false)
@@ -47,61 +51,63 @@ export function InputsPanel({ resourceData, namespace }) {
   // Get unique provider types
   const providerTypes = [...new Set(inputProviderRefs.map(ref => ref.type).filter(Boolean))]
 
-  // Handle tab change - load values on demand
-  const handleTabChange = async (tab) => {
-    setActiveTab(tab)
+  // Load values on demand when switching to 'values' tab
+  useEffect(() => {
+    if (activeTab === 'values' && !valuesLoaded && !valuesLoading && inputProviderRefs.length > 0) {
+      const loadValues = async () => {
+        setValuesLoading(true)
 
-    if (tab === 'values' && !valuesLoaded && inputProviderRefs.length > 0) {
-      setValuesLoading(true)
+        try {
+          const fetchPromises = inputProviderRefs.map(async (ref) => {
+            const params = new URLSearchParams({
+              kind: 'ResourceSetInputProvider',
+              name: ref.name,
+              namespace: ref.namespace || namespace
+            })
 
-      try {
-        const fetchPromises = inputProviderRefs.map(async (ref) => {
-          const params = new URLSearchParams({
-            kind: 'ResourceSetInputProvider',
-            name: ref.name,
-            namespace: ref.namespace || namespace
+            try {
+              const providerData = await fetchWithMock({
+                endpoint: `/api/v1/resource?${params.toString()}`,
+                mockPath: '../mock/resource',
+                mockExport: 'getMockResource'
+              })
+              return {
+                key: `${ref.namespace || namespace}/${ref.name}`,
+                name: ref.name,
+                namespace: ref.namespace || namespace,
+                type: ref.type,
+                url: providerData?.spec?.url,
+                exportedInputs: providerData?.status?.exportedInputs || [],
+                lastReconciled: providerData?.status?.reconcilerRef?.lastReconciled
+              }
+            } catch (err) {
+              console.error(`Failed to fetch provider ${ref.name}:`, err)
+              return {
+                key: `${ref.namespace || namespace}/${ref.name}`,
+                name: ref.name,
+                namespace: ref.namespace || namespace,
+                type: ref.type,
+                exportedInputs: [],
+                error: err.message
+              }
+            }
           })
 
-          try {
-            const providerData = await fetchWithMock({
-              endpoint: `/api/v1/resource?${params.toString()}`,
-              mockPath: '../mock/resource',
-              mockExport: 'getMockResource'
-            })
-            return {
-              key: `${ref.namespace || namespace}/${ref.name}`,
-              name: ref.name,
-              namespace: ref.namespace || namespace,
-              type: ref.type,
-              url: providerData?.spec?.url,
-              exportedInputs: providerData?.status?.exportedInputs || [],
-              lastReconciled: providerData?.status?.reconcilerRef?.lastReconciled
-            }
-          } catch (err) {
-            console.error(`Failed to fetch provider ${ref.name}:`, err)
-            return {
-              key: `${ref.namespace || namespace}/${ref.name}`,
-              name: ref.name,
-              namespace: ref.namespace || namespace,
-              type: ref.type,
-              exportedInputs: [],
-              error: err.message
-            }
-          }
-        })
-
-        const results = await Promise.all(fetchPromises)
-        const newProviderInputs = {}
-        results.forEach(result => {
-          newProviderInputs[result.key] = result
-        })
-        setProviderInputs(newProviderInputs)
-      } finally {
-        setValuesLoading(false)
-        setValuesLoaded(true)
+          const results = await Promise.all(fetchPromises)
+          const newProviderInputs = {}
+          results.forEach(result => {
+            newProviderInputs[result.key] = result
+          })
+          setProviderInputs(newProviderInputs)
+        } finally {
+          setValuesLoading(false)
+          setValuesLoaded(true)
+        }
       }
+
+      loadValues()
     }
-  }
+  }, [activeTab, valuesLoaded, valuesLoading, inputProviderRefs, namespace])
 
   // Check if there are any inputs
   const hasInputs = inlineInputsCount > 0 || externalInputsCount > 0
@@ -111,11 +117,11 @@ export function InputsPanel({ resourceData, namespace }) {
       {/* Tab Navigation */}
       <div class="border-b border-gray-200 dark:border-gray-700 mb-4">
         <nav class="flex space-x-4">
-          <TabButton active={activeTab === 'overview'} onClick={() => handleTabChange('overview')}>
+          <TabButton active={activeTab === 'overview'} onClick={() => setActiveTab('overview')}>
             <span class="sm:hidden">Info</span>
             <span class="hidden sm:inline">Overview</span>
           </TabButton>
-          <TabButton active={activeTab === 'values'} onClick={() => handleTabChange('values')}>
+          <TabButton active={activeTab === 'values'} onClick={() => setActiveTab('values')}>
             Values
           </TabButton>
         </nav>

@@ -20,6 +20,14 @@ vi.mock('preact-iso', () => ({
   })
 }))
 
+// Mock useHashTab to use simple useState instead
+vi.mock('../../../utils/hash', async () => {
+  const { useState } = await import('preact/hooks')
+  return {
+    useHashTab: (panel, defaultTab) => useState(defaultTab)
+  }
+})
+
 describe('ReconcilerPanel component', () => {
   const mockResourceData = {
     apiVersion: 'fluxcd.controlplane.io/v1',

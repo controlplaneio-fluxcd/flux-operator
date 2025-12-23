@@ -13,6 +13,14 @@ vi.mock('../../../utils/fetch', () => ({
   fetchWithMock: vi.fn()
 }))
 
+// Mock useHashTab to use simple useState instead
+vi.mock('../../../utils/hash', async () => {
+  const { useState } = await import('preact/hooks')
+  return {
+    useHashTab: (panel, defaultTab) => useState(defaultTab)
+  }
+})
+
 
 describe('SourcePanel component', () => {
   const mockSourceRef = {
