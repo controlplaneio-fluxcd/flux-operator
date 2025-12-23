@@ -271,7 +271,7 @@ func (o *oauth2Authenticator) serveAPI(w http.ResponseWriter, r *http.Request, a
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
-	details := o.verifyAccessTokenOrLogError(r.Context(), v, as.AccessToken)
+	details := o.verifyAccessTokenOrDeleteStorageAndLogError(r.Context(), w, v, as.AccessToken)
 	if details == nil {
 		if as.RefreshToken == "" {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
@@ -328,7 +328,7 @@ func (o *oauth2Authenticator) serveIndex(w http.ResponseWriter, r *http.Request,
 	if err != nil {
 		return
 	}
-	if o.verifyAccessTokenOrLogError(ctx, v, as.AccessToken) == nil {
+	if o.verifyAccessTokenOrDeleteStorageAndLogError(ctx, w, v, as.AccessToken) == nil {
 		if as.RefreshToken == "" {
 			return
 		}
@@ -396,24 +396,19 @@ func (o *oauth2Authenticator) verifyTokenAndSetStorageOrLogError(
 	return nil, errUserError
 }
 
-// verifyAccessTokenOrLogError verifies the access token and
-// returns the user details, or logs any error encountered and
-// returns nil.
-func (o *oauth2Authenticator) verifyAccessTokenOrLogError(
-	ctx context.Context, v oauth2Verifier, accessToken string) *user.Details {
+// verifyAccessTokenOrDeleteStorageAndLogError verifies the access token and
+// returns the user details, or logs any error encountered and returns nil.
+func (o *oauth2Authenticator) verifyAccessTokenOrDeleteStorageAndLogError(ctx context.Context,
+	w http.ResponseWriter, v oauth2Verifier, accessToken string) *user.Details {
 
 	details, err := v.verifyAccessToken(ctx, accessToken)
-	if err == nil {
-		return details
+	if err != nil {
+		log.FromContext(ctx).V(1).Info("failed to verify access token", "error", err.Error())
+		deleteAuthStorage(w)
+		return nil
 	}
 
-	switch msg := err.Error(); {
-	case strings.Contains(msg, "expired"), strings.Contains(msg, "before the nbf"):
-		log.FromContext(ctx).V(1).Info("access token expired or not yet valid according to the nbf claim")
-	default:
-		log.FromContext(ctx).V(1).Info("failed to verify access token", "error", err.Error())
-	}
-	return nil
+	return details
 }
 
 // refreshTokenOrLogError refreshes the access token using the

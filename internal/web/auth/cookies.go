@@ -69,15 +69,9 @@ func setAuthErrorCookie(w http.ResponseWriter, err error) {
 }
 
 // setAuthProviderCookie sets the auth provider cookie in the response.
-// It removes any previous auth provider cookies to avoid mistakes.
+// It first clears any existing auth provider cookie to avoid duplicates.
 func setAuthProviderCookie(w http.ResponseWriter, provider, loginURL string, authenticated bool) {
-	cookies := w.Header().Values("Set-Cookie")
-	w.Header().Del("Set-Cookie")
-	for _, c := range cookies {
-		if !strings.HasPrefix(c, cookieNameAuthProvider+"=") {
-			w.Header().Add("Set-Cookie", c)
-		}
-	}
+	clearCookieFromResponse(w, cookieNameAuthProvider)
 	setCookie(w, cookieNameAuthProvider, map[string]any{
 		"provider":      provider,
 		"url":           loginURL,
@@ -100,7 +94,9 @@ type authStorage struct {
 }
 
 // setAuthStorage sets the authStorage in the response cookies.
+// It first clears any existing auth storage cookie to avoid duplicates.
 func setAuthStorage(conf *config.ConfigSpec, w http.ResponseWriter, storage authStorage) {
+	clearCookieFromResponse(w, cookieNameAuthStorage)
 	b, _ := json.Marshal(storage)
 	cValue := base64.RawURLEncoding.EncodeToString(b)
 	setSecureCookie(w, cookieNameAuthStorage, cookiePathAuthStorage, cValue,
@@ -127,4 +123,15 @@ func getAuthStorage(r *http.Request) (*authStorage, error) {
 // deleteAuthStorage deletes the authStorage cookie in the response.
 func deleteAuthStorage(w http.ResponseWriter) {
 	deleteCookie(w, cookieNameAuthStorage, cookiePathAuthStorage)
+}
+
+// clearCookieFromResponse removes a specific cookie from the response headers.
+func clearCookieFromResponse(w http.ResponseWriter, name string) {
+	cookies := w.Header().Values("Set-Cookie")
+	w.Header().Del("Set-Cookie")
+	for _, c := range cookies {
+		if !strings.HasPrefix(c, name+"=") {
+			w.Header().Add("Set-Cookie", c)
+		}
+	}
 }
