@@ -4,9 +4,7 @@
 package web
 
 import (
-	"net/http"
 	"testing"
-	"time"
 
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -31,15 +29,19 @@ func TestGetFavoritesStatus_Privileged_Success(t *testing.T) {
 	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
 	defer testClient.Delete(ctx, resourceSet)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Call GetFavoritesStatus without any user session (privileged)
 	favorites := []FavoriteItem{
 		{Kind: "ResourceSet", Namespace: "default", Name: "test-fav-success"},
 	}
-	resources := router.GetFavoritesStatus(ctx, favorites)
+	resources := handler.GetFavoritesStatus(ctx, favorites)
 
 	g.Expect(resources).To(HaveLen(1))
 	g.Expect(resources[0].Name).To(Equal("test-fav-success"))
@@ -51,15 +53,19 @@ func TestGetFavoritesStatus_Privileged_Success(t *testing.T) {
 func TestGetFavoritesStatus_Privileged_NotFound(t *testing.T) {
 	g := NewWithT(t)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Call GetFavoritesStatus with a non-existent resource
 	favorites := []FavoriteItem{
 		{Kind: "ResourceSet", Namespace: "default", Name: "nonexistent-resourceset"},
 	}
-	resources := router.GetFavoritesStatus(ctx, favorites)
+	resources := handler.GetFavoritesStatus(ctx, favorites)
 
 	// Should return result with NotFound status and user-friendly message
 	g.Expect(resources).To(HaveLen(1))
@@ -73,15 +79,19 @@ func TestGetFavoritesStatus_Privileged_NotFound(t *testing.T) {
 func TestGetFavoritesStatus_Privileged_InvalidKind(t *testing.T) {
 	g := NewWithT(t)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Call GetFavoritesStatus with an invalid kind (unknown to Flux API)
 	favorites := []FavoriteItem{
 		{Kind: "InvalidKind", Namespace: "default", Name: "some-resource"},
 	}
-	resources := router.GetFavoritesStatus(ctx, favorites)
+	resources := handler.GetFavoritesStatus(ctx, favorites)
 
 	// Should return result with NotFound status and internal error message
 	// (unknown kinds are treated as internal errors since they don't map to any Flux group)
@@ -107,9 +117,13 @@ func TestGetFavoritesStatus_UnprivilegedUser_Forbidden(t *testing.T) {
 	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
 	defer testClient.Delete(ctx, resourceSet)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Create an unprivileged user session (no RBAC permissions)
 	imp := user.Impersonation{
@@ -128,7 +142,7 @@ func TestGetFavoritesStatus_UnprivilegedUser_Forbidden(t *testing.T) {
 	favorites := []FavoriteItem{
 		{Kind: "ResourceSet", Namespace: "default", Name: "test-fav-forbidden"},
 	}
-	resources := router.GetFavoritesStatus(userCtx, favorites)
+	resources := handler.GetFavoritesStatus(userCtx, favorites)
 
 	// Should return result with NotFound status and forbidden message
 	g.Expect(resources).To(HaveLen(1))
@@ -188,9 +202,13 @@ func TestGetFavoritesStatus_WithUserRBAC_Success(t *testing.T) {
 	g.Expect(testClient.Create(ctx, roleBinding)).To(Succeed())
 	defer testClient.Delete(ctx, roleBinding)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Create a user session with RBAC access
 	imp := user.Impersonation{
@@ -209,7 +227,7 @@ func TestGetFavoritesStatus_WithUserRBAC_Success(t *testing.T) {
 	favorites := []FavoriteItem{
 		{Kind: "ResourceSet", Namespace: "default", Name: "test-fav-rbac-success"},
 	}
-	resources := router.GetFavoritesStatus(userCtx, favorites)
+	resources := handler.GetFavoritesStatus(userCtx, favorites)
 
 	// Should return the resource successfully
 	g.Expect(resources).To(HaveLen(1))
@@ -277,9 +295,13 @@ func TestGetFavoritesStatus_WithNamespaceScopedRBAC_ForbiddenInOtherNamespace(t 
 	g.Expect(testClient.Create(ctx, roleBinding)).To(Succeed())
 	defer testClient.Delete(ctx, roleBinding)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Create a user session with namespace-scoped access
 	imp := user.Impersonation{
@@ -298,7 +320,7 @@ func TestGetFavoritesStatus_WithNamespaceScopedRBAC_ForbiddenInOtherNamespace(t 
 	favorites := []FavoriteItem{
 		{Kind: "ResourceSet", Namespace: "fav-ns-test", Name: "test-fav-other-ns"},
 	}
-	resources := router.GetFavoritesStatus(userCtx, favorites)
+	resources := handler.GetFavoritesStatus(userCtx, favorites)
 
 	// Should return forbidden message
 	g.Expect(resources).To(HaveLen(1))
@@ -358,9 +380,13 @@ func TestGetFavoritesStatus_MixedResults(t *testing.T) {
 	g.Expect(testClient.Create(ctx, roleBinding)).To(Succeed())
 	defer testClient.Delete(ctx, roleBinding)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Create a user session
 	imp := user.Impersonation{
@@ -384,7 +410,7 @@ func TestGetFavoritesStatus_MixedResults(t *testing.T) {
 		{Kind: "ResourceSet", Namespace: "default", Name: "nonexistent"},
 		{Kind: "InvalidKind", Namespace: "default", Name: "some-resource"},
 	}
-	resources := router.GetFavoritesStatus(userCtx, favorites)
+	resources := handler.GetFavoritesStatus(userCtx, favorites)
 
 	// Should return results for all 3 items with appropriate messages
 	g.Expect(resources).To(HaveLen(3))
@@ -408,13 +434,17 @@ func TestGetFavoritesStatus_MixedResults(t *testing.T) {
 func TestGetFavoritesStatus_EmptyList(t *testing.T) {
 	g := NewWithT(t)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Call GetFavoritesStatus with empty list
 	favorites := []FavoriteItem{}
-	resources := router.GetFavoritesStatus(ctx, favorites)
+	resources := handler.GetFavoritesStatus(ctx, favorites)
 
 	// Should return empty result
 	g.Expect(resources).To(BeEmpty())

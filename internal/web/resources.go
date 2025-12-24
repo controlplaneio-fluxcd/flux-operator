@@ -28,7 +28,7 @@ import (
 // ResourcesHandler handles GET /api/v1/resources requests and returns the status of Flux resources.
 // Supports optional query parameters: kind, name, namespace, status
 // Example: /api/v1/resources?kind=FluxInstance&name=flux&namespace=flux-system&status=Ready
-func (r *Router) ResourcesHandler(w http.ResponseWriter, req *http.Request) {
+func (h *Handler) ResourcesHandler(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodGet && req.Method != http.MethodHead {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -42,7 +42,7 @@ func (r *Router) ResourcesHandler(w http.ResponseWriter, req *http.Request) {
 	status := queryParams.Get("status")
 
 	// Get resource status from the cluster using the request context
-	resources, err := r.GetResourcesStatus(req.Context(), kind, name, namespace, status, 2500)
+	resources, err := h.GetResourcesStatus(req.Context(), kind, name, namespace, status, 2500)
 	if err != nil {
 		log.FromContext(req.Context()).Error(err, "failed to get resources status")
 		// Return empty array instead of error for better UX
@@ -106,7 +106,7 @@ type getResourcesStatusOptions struct {
 // GetResourcesStatus returns the status for the specified resource kinds and optional name in the given namespace.
 // If name is empty, returns the status for all resources of the specified kinds are returned.
 // Filters by status (Ready, Failed, Progressing, Suspended, Unknown) if provided.
-func (r *Router) GetResourcesStatus(ctx context.Context, kind, name, namespace, status string,
+func (h *Handler) GetResourcesStatus(ctx context.Context, kind, name, namespace, status string,
 	matchLimit int, opts ...GetResourcesStatusOption) ([]ResourceStatus, error) {
 
 	var o getResourcesStatusOptions
@@ -147,7 +147,7 @@ func (r *Router) GetResourcesStatus(ctx context.Context, kind, name, namespace, 
 		namespaces = []string{namespace}
 	} else {
 		// Check if the user has access to all namespaces
-		userNamespaces, all, err := r.kubeClient.ListUserNamespaces(ctx)
+		userNamespaces, all, err := h.kubeClient.ListUserNamespaces(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("failed to list user namespaces: %w", err)
 		}
@@ -189,7 +189,7 @@ func (r *Router) GetResourcesStatus(ctx context.Context, kind, name, namespace, 
 		go func(kind string) {
 			defer wg.Done()
 
-			gvk, err := r.preferredFluxGVK(ctx, kind)
+			gvk, err := h.preferredFluxGVK(ctx, kind)
 			if err != nil {
 				if strings.Contains(err.Error(), "no matches for kind") {
 					return
@@ -227,7 +227,7 @@ func (r *Router) GetResourcesStatus(ctx context.Context, kind, name, namespace, 
 					listOpts = append(listOpts, client.MatchingFields{"metadata.name": name})
 				}
 
-				if err := r.kubeClient.GetClient(ctx).List(ctx, &list, listOpts...); err != nil {
+				if err := h.kubeClient.GetClient(ctx).List(ctx, &list, listOpts...); err != nil {
 					if !apierrors.IsForbidden(err) {
 						log.FromContext(ctx).Error(err, "failed to list resources",
 							"kind", kind,
@@ -245,7 +245,7 @@ func (r *Router) GetResourcesStatus(ctx context.Context, kind, name, namespace, 
 						}
 					}
 
-					rs := r.resourceStatusFromUnstructured(obj)
+					rs := h.resourceStatusFromUnstructured(obj)
 					byKindResult = append(byKindResult, rs)
 				}
 			}
@@ -287,7 +287,7 @@ func (r *Router) GetResourcesStatus(ctx context.Context, kind, name, namespace, 
 // resourceStatusFromUnstructured extracts the ResourceStatus from an unstructured Kubernetes object.
 // Maps Kubernetes condition status to one of: "Ready", "Failed", "Progressing", "Suspended", "Unknown"
 // nolint: gocyclo
-func (r *Router) resourceStatusFromUnstructured(obj unstructured.Unstructured) ResourceStatus {
+func (h *Handler) resourceStatusFromUnstructured(obj unstructured.Unstructured) ResourceStatus {
 	status := StatusUnknown
 	message := "No status information available"
 	lastReconciled := metav1.Time{Time: obj.GetCreationTimestamp().Time}

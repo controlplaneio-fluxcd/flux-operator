@@ -28,7 +28,7 @@ type ReconcilerSource struct {
 
 // getReconcilerSource extracts the source reference from the given Flux reconciler object
 // and retrieves the corresponding source URL, origin URL, and origin revision.
-func (r *Router) getReconcilerSource(ctx context.Context, obj unstructured.Unstructured) (*ReconcilerSource, error) {
+func (h *Handler) getReconcilerSource(ctx context.Context, obj unstructured.Unstructured) (*ReconcilerSource, error) {
 	switch obj.GetKind() {
 	case fluxcdv1.FluxKustomizationKind, fluxcdv1.FluxHelmChartKind, fluxcdv1.FluxImageUpdateAutomationKind:
 		if sourceRef, found, err := unstructured.NestedMap(obj.Object, "spec", "sourceRef"); found && err == nil {
@@ -38,7 +38,7 @@ func (r *Router) getReconcilerSource(ctx context.Context, obj unstructured.Unstr
 					if ns, exists := sourceRef["namespace"]; exists && ns != "" {
 						namespace = ns.(string)
 					}
-					return r.extractSourceRef(ctx, kind.(string), namespace, name.(string))
+					return h.extractSourceRef(ctx, kind.(string), namespace, name.(string))
 				}
 			}
 		}
@@ -51,7 +51,7 @@ func (r *Router) getReconcilerSource(ctx context.Context, obj unstructured.Unstr
 					if ns, exists := chartRef["namespace"]; exists && ns != "" {
 						namespace = ns.(string)
 					}
-					return r.extractSourceRef(ctx, kind.(string), namespace, name.(string))
+					return h.extractSourceRef(ctx, kind.(string), namespace, name.(string))
 				}
 			}
 		} else if chartSourceRef, found, err := unstructured.NestedMap(obj.Object, "spec", "chart", "spec", "sourceRef"); found && err == nil {
@@ -62,7 +62,7 @@ func (r *Router) getReconcilerSource(ctx context.Context, obj unstructured.Unstr
 					if ns, exists := chartSourceRef["namespace"]; exists && ns != "" {
 						namespace = ns.(string)
 					}
-					return r.extractSourceRef(ctx, kind.(string), namespace, name.(string))
+					return h.extractSourceRef(ctx, kind.(string), namespace, name.(string))
 				}
 			}
 		}
@@ -71,8 +71,8 @@ func (r *Router) getReconcilerSource(ctx context.Context, obj unstructured.Unstr
 }
 
 // extractSourceRef retrieves the source URL, origin URL, and origin revision for a given source reference.
-func (r *Router) extractSourceRef(ctx context.Context, kind, namespace, name string) (*ReconcilerSource, error) {
-	gvk, err := r.preferredFluxGVK(ctx, kind)
+func (h *Handler) extractSourceRef(ctx context.Context, kind, namespace, name string) (*ReconcilerSource, error) {
+	gvk, err := h.preferredFluxGVK(ctx, kind)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get gvk for kind %s: %w", kind, err)
 	}
@@ -85,7 +85,7 @@ func (r *Router) extractSourceRef(ctx context.Context, kind, namespace, name str
 		Name:      name,
 	}
 
-	err = r.kubeClient.GetClient(ctx).Get(ctx, namespacedName, sourceObj)
+	err = h.kubeClient.GetClient(ctx).Get(ctx, namespacedName, sourceObj)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get %s %s: %w", kind, namespacedName, err)
 	}
@@ -102,7 +102,7 @@ func (r *Router) extractSourceRef(ctx context.Context, kind, namespace, name str
 					if ns, exists := sourceRef["namespace"]; exists && ns != "" {
 						chartSourceNamespace = ns.(string)
 					}
-					return r.extractSourceRef(
+					return h.extractSourceRef(
 						ctx,
 						chartSourceKind.(string),
 						chartSourceNamespace,
@@ -142,7 +142,7 @@ func (r *Router) extractSourceRef(ctx context.Context, kind, namespace, name str
 		return nil, fmt.Errorf("no URL found in %s/%s/%s", kind, namespace, name)
 	}
 
-	status := r.resourceStatusFromUnstructured(*sourceObj)
+	status := h.resourceStatusFromUnstructured(*sourceObj)
 	return &ReconcilerSource{
 		Kind:           kind,
 		Name:           name,

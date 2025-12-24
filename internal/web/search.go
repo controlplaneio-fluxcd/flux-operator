@@ -14,7 +14,7 @@ import (
 // SearchHandler handles GET /api/v1/search requests and returns the status of Flux resources.
 // Results are filtered by name with wildcard support.
 // Example: /api/v1/search?&name=flux
-func (r *Router) SearchHandler(w http.ResponseWriter, req *http.Request) {
+func (h *Handler) SearchHandler(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodGet && req.Method != http.MethodHead {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -32,7 +32,7 @@ func (r *Router) SearchHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// Get resource status from the cluster using the request context
-	resources, err := r.GetResourcesStatus(req.Context(), kind, name, namespace, "", 10, WithSourcesIfNamespace())
+	resources, err := h.GetResourcesStatus(req.Context(), kind, name, namespace, "", 10, WithSourcesIfNamespace())
 	if err != nil {
 		log.FromContext(req.Context()).Error(err, "failed to get resources status for quick search")
 		// Return empty array instead of error for better UX

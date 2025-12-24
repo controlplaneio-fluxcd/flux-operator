@@ -4,7 +4,7 @@
 package web
 
 import (
-	"net/http"
+	"context"
 	"testing"
 	"time"
 
@@ -382,15 +382,48 @@ func TestCleanObjectForExport(t *testing.T) {
 	}
 }
 
+func TestGetReport_CachedAndPrivileged(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create the handler with the test kubeclient
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	// Start report cache.
+	ctx, cancel := context.WithCancel(ctx)
+	stopped := handler.startReportCache(ctx, 5*time.Minute)
+	defer func() {
+		cancel()
+		<-stopped
+	}()
+
+	// Call GetReport without any user session (privileged)
+	report, err := handler.GetReport(ctx)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(report).NotTo(BeNil())
+
+	// Verify basic report structure
+	g.Expect(report.GetKind()).To(Equal(fluxcdv1.FluxReportKind))
+	g.Expect(report.GetAPIVersion()).To(Equal(fluxcdv1.GroupVersion.String()))
+}
+
 func TestGetReport_Privileged(t *testing.T) {
 	g := NewWithT(t)
 
-	// Create the router with the test kubeclient
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler with the test kubeclient
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Call GetReport without any user session (privileged)
-	report, err := router.GetReport(ctx)
+	report, err := handler.GetReport(ctx)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(report).NotTo(BeNil())
 
@@ -402,9 +435,13 @@ func TestGetReport_Privileged(t *testing.T) {
 func TestGetReport_WithUnprivilegedUser_ReportStillBuilt(t *testing.T) {
 	g := NewWithT(t)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Create an unprivileged user session (no RBAC permissions)
 	imp := user.Impersonation{
@@ -421,7 +458,7 @@ func TestGetReport_WithUnprivilegedUser_ReportStillBuilt(t *testing.T) {
 
 	// Call GetReport with the unprivileged user context
 	// The report should still be built successfully because it uses privileged access internally
-	report, err := router.GetReport(userCtx)
+	report, err := handler.GetReport(userCtx)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(report).NotTo(BeNil())
 
@@ -490,9 +527,13 @@ func TestGetReport_WithUserRBAC_NamespacesPopulated(t *testing.T) {
 	g.Expect(testClient.Create(ctx, clusterRoleBinding)).To(Succeed())
 	defer testClient.Delete(ctx, clusterRoleBinding)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Create a user session with resourcesets access (which grants namespace visibility)
 	imp := user.Impersonation{
@@ -508,7 +549,7 @@ func TestGetReport_WithUserRBAC_NamespacesPopulated(t *testing.T) {
 	}, userClient)
 
 	// Call GetReport with the user context
-	report, err := router.GetReport(userCtx)
+	report, err := handler.GetReport(userCtx)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(report).NotTo(BeNil())
 
@@ -569,9 +610,13 @@ func TestGetReport_WithUserRBAC_SingleNamespaceAccess(t *testing.T) {
 	g.Expect(testClient.Create(ctx, roleBinding)).To(Succeed())
 	defer testClient.Delete(ctx, roleBinding)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Create a user session with access only in the default namespace
 	imp := user.Impersonation{
@@ -587,7 +632,7 @@ func TestGetReport_WithUserRBAC_SingleNamespaceAccess(t *testing.T) {
 	}, userClient)
 
 	// Call GetReport with the user context
-	report, err := router.GetReport(userCtx)
+	report, err := handler.GetReport(userCtx)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(report).NotTo(BeNil())
 
@@ -620,9 +665,13 @@ func TestGetReport_WithUserRBAC_SingleNamespaceAccess(t *testing.T) {
 func TestGetReport_InjectsUserInfo(t *testing.T) {
 	g := NewWithT(t)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Create a user session with name set (this tests the case where Name is displayed)
 	imp := user.Impersonation{
@@ -640,7 +689,7 @@ func TestGetReport_InjectsUserInfo(t *testing.T) {
 	}, userClient)
 
 	// Call GetReport
-	report, err := router.GetReport(userCtx)
+	report, err := handler.GetReport(userCtx)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(report).NotTo(BeNil())
 
@@ -655,9 +704,13 @@ func TestGetReport_InjectsUserInfo(t *testing.T) {
 func TestGetReport_InjectsUserInfoWithRole(t *testing.T) {
 	g := NewWithT(t)
 
-	// Create the router
-	mux := http.NewServeMux()
-	router := NewRouter(mux, nil, kubeClient, "v1.0.0", "test-status-manager", "flux-system", 5*time.Minute, func(h http.Handler) http.Handler { return h })
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
 
 	// Create a user session without name but with groups (role comes from groups when name is empty)
 	imp := user.Impersonation{
@@ -673,7 +726,7 @@ func TestGetReport_InjectsUserInfoWithRole(t *testing.T) {
 	}, userClient)
 
 	// Call GetReport
-	report, err := router.GetReport(userCtx)
+	report, err := handler.GetReport(userCtx)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(report).NotTo(BeNil())
 

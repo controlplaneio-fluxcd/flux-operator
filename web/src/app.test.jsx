@@ -687,6 +687,23 @@ describe('app.jsx', () => {
       consoleErrorSpy.mockRestore()
     })
 
+    it('should show special error state for server not initialized', async () => {
+      // Mock fetchWithMock to reject immediately so the component goes to error state
+      fetchWithMock.mockRejectedValue(new Error('server not initialized'))
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      render(<App />)
+
+      // Wait for the fetch to complete and error state to be set
+      await waitFor(() => {
+        expect(screen.getByText('Failed to load Flux report')).toBeInTheDocument()
+      })
+
+      expect(screen.getByText('Server configuration is not initialized. Retrying automatically...')).toBeInTheDocument()
+
+      consoleErrorSpy.mockRestore()
+    })
+
     it('should show ConnectionStatus in error state', async () => {
       fetchWithMock.mockRejectedValue(new Error('Network error'))
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})

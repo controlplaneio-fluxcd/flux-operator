@@ -26,7 +26,7 @@ import (
 // EventsHandler handles GET /api/v1/events requests and returns Kubernetes events for Flux resources.
 // Supports optional query parameters: kind, name, namespace, type
 // Example: /api/v1/events?kind=FluxInstance&name=flux&namespace=flux-system&type=Warning
-func (r *Router) EventsHandler(w http.ResponseWriter, req *http.Request) {
+func (h *Handler) EventsHandler(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -40,7 +40,7 @@ func (r *Router) EventsHandler(w http.ResponseWriter, req *http.Request) {
 	eventType := queryParams.Get("type")
 
 	// Get events from the cluster using the request context
-	events, err := r.GetEvents(req.Context(), kind, name, namespace, "", eventType)
+	events, err := h.GetEvents(req.Context(), kind, name, namespace, "", eventType)
 	if err != nil {
 		log.FromContext(req.Context()).Error(err, "failed to get events")
 		// Return empty array instead of error for better UX
@@ -70,7 +70,7 @@ type Event struct {
 // GetEvents retrieves events for the specified resource kinds.
 // Returns at most 500 events per kind (100 if multiple kinds are specified), sorted by timestamp descending.
 // Filters by eventType (Normal, Warning) if provided.
-func (r *Router) GetEvents(ctx context.Context, kind, name, namespace, excludeReason, eventType string) ([]Event, error) {
+func (h *Handler) GetEvents(ctx context.Context, kind, name, namespace, excludeReason, eventType string) ([]Event, error) {
 	// Build kinds array based on query parameter
 	var kinds []string
 	if kind != "" {
@@ -99,7 +99,7 @@ func (r *Router) GetEvents(ctx context.Context, kind, name, namespace, excludeRe
 		namespaces = []string{namespace}
 	} else {
 		// Check if the user has access to all namespaces
-		userNamespaces, all, err := r.kubeClient.ListUserNamespaces(ctx)
+		userNamespaces, all, err := h.kubeClient.ListUserNamespaces(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("failed to list user namespaces: %w", err)
 		}
@@ -177,7 +177,7 @@ func (r *Router) GetEvents(ctx context.Context, kind, name, namespace, excludeRe
 					listOpts = append(listOpts, client.InNamespace(ns))
 				}
 
-				if err := r.kubeClient.GetAPIReader(ctx).List(ctx, el, listOpts...); err != nil {
+				if err := h.kubeClient.GetAPIReader(ctx).List(ctx, el, listOpts...); err != nil {
 					if !apierrors.IsForbidden(err) {
 						log.FromContext(ctx).Error(err, "failed to list events for user",
 							"kind", kind,

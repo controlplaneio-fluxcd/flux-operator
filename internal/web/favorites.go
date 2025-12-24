@@ -30,7 +30,7 @@ type FavoritesRequest struct {
 
 // FavoritesHandler handles POST /api/v1/favorites requests and returns the status
 // of the specified favorite resources.
-func (r *Router) FavoritesHandler(w http.ResponseWriter, req *http.Request) {
+func (h *Handler) FavoritesHandler(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -53,7 +53,7 @@ func (r *Router) FavoritesHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// Fetch status for all favorites
-	resources := r.GetFavoritesStatus(req.Context(), favReq.Favorites)
+	resources := h.GetFavoritesStatus(req.Context(), favReq.Favorites)
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(map[string]any{"resources": resources}); err != nil {
@@ -64,7 +64,7 @@ func (r *Router) FavoritesHandler(w http.ResponseWriter, req *http.Request) {
 
 // GetFavoritesStatus fetches the status for the specified favorite resources.
 // Resources are queried in parallel with a concurrency limit of 4.
-func (r *Router) GetFavoritesStatus(ctx context.Context, favorites []FavoriteItem) []ResourceStatus {
+func (h *Handler) GetFavoritesStatus(ctx context.Context, favorites []FavoriteItem) []ResourceStatus {
 	result := make([]ResourceStatus, len(favorites))
 
 	var wg sync.WaitGroup
@@ -94,7 +94,7 @@ func (r *Router) GetFavoritesStatus(ctx context.Context, favorites []FavoriteIte
 				mu.Unlock()
 			}
 
-			gvk, err := r.preferredFluxGVK(ctx, fav.Kind)
+			gvk, err := h.preferredFluxGVK(ctx, fav.Kind)
 			if err != nil {
 				var message string
 				switch {
@@ -115,7 +115,7 @@ func (r *Router) GetFavoritesStatus(ctx context.Context, favorites []FavoriteIte
 			obj := unstructured.Unstructured{}
 			obj.SetGroupVersionKind(*gvk)
 
-			err = r.kubeClient.GetClient(ctx).Get(ctx, client.ObjectKey{
+			err = h.kubeClient.GetClient(ctx).Get(ctx, client.ObjectKey{
 				Namespace: fav.Namespace,
 				Name:      fav.Name,
 			}, &obj)
@@ -139,7 +139,7 @@ func (r *Router) GetFavoritesStatus(ctx context.Context, favorites []FavoriteIte
 				return
 			}
 
-			rs := r.resourceStatusFromUnstructured(obj)
+			rs := h.resourceStatusFromUnstructured(obj)
 			mu.Lock()
 			result[i] = rs
 			mu.Unlock()
