@@ -419,9 +419,11 @@ describe('app.jsx', () => {
 
       reportLoading.value = false
       connectionStatus.value = 'disconnected'
+      reportError.value = 'Connection error'
       rerender(<App />)
       expect(container.querySelector('.min-h-screen')).toBeInTheDocument()
 
+      reportError.value = null
       reportData.value = { spec: {} }
       rerender(<App />)
       expect(container.querySelector('.min-h-screen')).toBeInTheDocument()
@@ -675,10 +677,11 @@ describe('app.jsx', () => {
 
       // Wait for the fetch to complete and error state to be set
       await waitFor(() => {
-        expect(screen.getByText('Failed to load Flux report')).toBeInTheDocument()
+        expect(screen.getByText('Flux API Server Unavailable')).toBeInTheDocument()
       })
 
-      expect(screen.getByText('Unable to connect to the server. Retrying automatically...')).toBeInTheDocument()
+      expect(screen.getByText('Unable to connect to the server')).toBeInTheDocument()
+      expect(screen.getByText('Retrying automatically...')).toBeInTheDocument()
 
       consoleErrorSpy.mockRestore()
     })
@@ -692,10 +695,11 @@ describe('app.jsx', () => {
 
       // Wait for the fetch to complete and error state to be set
       await waitFor(() => {
-        expect(screen.getByText('Failed to load Flux report')).toBeInTheDocument()
+        expect(screen.getByText('Flux API Server Unavailable')).toBeInTheDocument()
       })
 
-      expect(screen.getByText('Server configuration is not initialized. Retrying automatically...')).toBeInTheDocument()
+      expect(screen.getByText('Server configuration is not initialized')).toBeInTheDocument()
+      expect(screen.getByText('Retrying automatically...')).toBeInTheDocument()
 
       consoleErrorSpy.mockRestore()
     })
@@ -725,7 +729,7 @@ describe('app.jsx', () => {
 
       // Wait for error state
       await waitFor(() => {
-        expect(screen.getByText('Failed to load Flux report')).toBeInTheDocument()
+        expect(screen.getByText('Flux API Server Unavailable')).toBeInTheDocument()
       })
       expect(connectionStatus.value).toBe('disconnected')
       expect(reportData.value).toBeNull()
