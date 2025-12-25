@@ -28,7 +28,7 @@ const (
 // AuthenticationSpec holds the Flux Status Page configuration.
 type AuthenticationSpec struct {
 	// Type is the authentication type.
-	// +kubebuilder:validation:Enum=Anonymous
+	// +kubebuilder:validation:Enum=Anonymous;OAuth2
 	// +required
 	Type string `json:"type"`
 
