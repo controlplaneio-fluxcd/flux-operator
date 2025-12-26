@@ -5,6 +5,7 @@ import { useEffect } from 'preact/hooks'
 import { signal } from '@preact/signals'
 import { LocationProvider, Router, Route, useLocation } from 'preact-iso'
 import { fetchWithMock, authRequired, shouldUseMockData } from './utils/fetch'
+import { POLL_INTERVAL_MS } from './utils/constants'
 import { parseAuthProviderCookie } from './utils/cookies'
 import { checkVersionChange } from './utils/version'
 import './utils/theme'
@@ -170,8 +171,8 @@ export function App() {
     // Fetch data immediately on mount
     fetchFluxReport()
 
-    // Setup auto-refresh interval (30 seconds)
-    const interval = setInterval(fetchFluxReport, 30000)
+    // Setup auto-refresh interval
+    const interval = setInterval(fetchFluxReport, POLL_INTERVAL_MS)
 
     // Cleanup interval on unmount
     return () => clearInterval(interval)
