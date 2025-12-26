@@ -12,6 +12,7 @@ import {
   reportError,
   connectionStatus
 } from './app'
+import { POLL_INTERVAL_MS } from './utils/constants'
 
 // Mock location state that can be modified in tests
 let mockLocationPath = '/'
@@ -343,14 +344,14 @@ describe('app.jsx', () => {
       })
 
       // Advance time by 30 seconds
-      vi.advanceTimersByTime(30000)
+      vi.advanceTimersByTime(POLL_INTERVAL_MS)
 
       await waitFor(() => {
         expect(fetchWithMock).toHaveBeenCalledTimes(2)
       })
 
       // Advance another 30 seconds
-      vi.advanceTimersByTime(30000)
+      vi.advanceTimersByTime(POLL_INTERVAL_MS)
 
       await waitFor(() => {
         expect(fetchWithMock).toHaveBeenCalledTimes(3)
@@ -369,7 +370,7 @@ describe('app.jsx', () => {
       unmount()
 
       // Advance time by 30 seconds after unmount
-      vi.advanceTimersByTime(30000)
+      vi.advanceTimersByTime(POLL_INTERVAL_MS)
 
       // Should not call fetch again after unmount
       expect(fetchWithMock).toHaveBeenCalledTimes(1)
@@ -742,7 +743,7 @@ describe('app.jsx', () => {
       fetchWithMock.mockResolvedValue(mockReport)
 
       // Trigger auto-refresh retry
-      vi.advanceTimersByTime(30000)
+      vi.advanceTimersByTime(POLL_INTERVAL_MS)
 
       // Should show loading spinner while retrying (reportLoading set to true when no data)
       await waitFor(() => {

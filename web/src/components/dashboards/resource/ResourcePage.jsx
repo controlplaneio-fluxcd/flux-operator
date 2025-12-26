@@ -15,7 +15,7 @@ import { InventoryPanel } from './InventoryPanel'
 import { ArtifactPanel } from './ArtifactPanel'
 import { ExportedInputsPanel } from './ExportedInputsPanel'
 import { InputsPanel } from './InputsPanel'
-import { isKindWithInventory } from '../../../utils/constants'
+import { isKindWithInventory, POLL_INTERVAL_MS } from '../../../utils/constants'
 
 /**
  * Get loading status styling info with spinning refresh icon
@@ -187,8 +187,8 @@ export function ResourcePage({ kind, namespace, name }) {
     // Fetch data immediately
     fetchData()
 
-    // Setup auto-refresh interval (30 seconds)
-    const interval = setInterval(fetchData, 30000)
+    // Setup auto-refresh interval
+    const interval = setInterval(fetchData, POLL_INTERVAL_MS)
 
     // Cleanup interval on unmount or when dependencies change
     return () => clearInterval(interval)

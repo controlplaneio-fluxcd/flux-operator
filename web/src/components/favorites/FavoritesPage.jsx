@@ -4,6 +4,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'preact/hooks'
 import { fetchWithMock } from '../../utils/fetch'
 import { favorites, reorderFavorites, getFavoriteKey, removeFavorite } from '../../utils/favorites'
+import { POLL_INTERVAL_MS } from '../../utils/constants'
 import { usePageMeta } from '../../utils/meta'
 import { FavoritesHeader } from './FavoritesHeader'
 import { FavoriteCard } from './FavoriteCard'
@@ -116,8 +117,8 @@ export function FavoritesPage() {
   useEffect(() => {
     fetchFavoritesData()
 
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(fetchFavoritesData, 30000)
+    // Auto-refresh
+    const interval = setInterval(fetchFavoritesData, POLL_INTERVAL_MS)
     return () => clearInterval(interval)
   }, [fetchFavoritesData])
 

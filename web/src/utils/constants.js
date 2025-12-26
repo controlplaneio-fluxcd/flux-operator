@@ -1,6 +1,9 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
+// Auto-refresh polling interval in milliseconds
+export const POLL_INTERVAL_MS = 30000
+
 // Flux resource kinds and their metadata (ordered by group for display)
 export const fluxCRDs = [
   // Appliers
