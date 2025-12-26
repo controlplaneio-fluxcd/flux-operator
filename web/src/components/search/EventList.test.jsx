@@ -412,36 +412,32 @@ describe('EventList', () => {
   })
 
   describe('Navigation to resource dashboard', () => {
-    it('should navigate to resource dashboard when resource name is clicked', async () => {
+    it('should have correct href on resource name link', async () => {
       fetchWithMock.mockResolvedValue({ events: [mockEvents[0]] })
 
       render(<EventList />)
 
-      // Wait for events to load and find the resource name button
-      const resourceButton = await screen.findByRole('button', { name: /flux-system\/flux-system/ })
-      fireEvent.click(resourceButton)
-
-      expect(mockRoute).toHaveBeenCalledWith('/resource/GitRepository/flux-system/flux-system')
+      // Wait for events to load and find the resource name link
+      const resourceLink = await screen.findByRole('link', { name: /flux-system\/flux-system/ })
+      expect(resourceLink).toHaveAttribute('href', '/resource/GitRepository/flux-system/flux-system')
     })
 
-    it('should navigate with correct params for different resource', async () => {
+    it('should have correct href for different resource', async () => {
       fetchWithMock.mockResolvedValue({ events: [mockEvents[1]] })
 
       render(<EventList />)
 
-      const resourceButton = await screen.findByRole('button', { name: /flux-system\/apps/ })
-      fireEvent.click(resourceButton)
-
-      expect(mockRoute).toHaveBeenCalledWith('/resource/Kustomization/flux-system/apps')
+      const resourceLink = await screen.findByRole('link', { name: /flux-system\/apps/ })
+      expect(resourceLink).toHaveAttribute('href', '/resource/Kustomization/flux-system/apps')
     })
 
-    it('should display navigation icon in resource button', async () => {
+    it('should display navigation icon in resource link', async () => {
       fetchWithMock.mockResolvedValue({ events: [mockEvents[0]] })
 
       render(<EventList />)
 
-      const resourceButton = await screen.findByRole('button', { name: /flux-system\/flux-system/ })
-      const svg = resourceButton.querySelector('svg')
+      const resourceLink = await screen.findByRole('link', { name: /flux-system\/flux-system/ })
+      const svg = resourceLink.querySelector('svg')
 
       expect(svg).toBeInTheDocument()
       expect(svg).toHaveAttribute('viewBox', '0 0 24 24')

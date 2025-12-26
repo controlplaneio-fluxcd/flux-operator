@@ -5,6 +5,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/preact'
 import { ResourcePage } from './ResourcePage'
 import { fetchWithMock } from '../../../utils/fetch'
+import { POLL_INTERVAL_MS } from '../../../utils/constants'
 
 // Mock fetchWithMock
 vi.mock('../../../utils/fetch', () => ({
@@ -332,7 +333,7 @@ describe('ResourcePage component', () => {
       fetchWithMock.mockResolvedValue(mockResourceData)
 
       // Fast-forward 30 seconds
-      vi.advanceTimersByTime(30000)
+      vi.advanceTimersByTime(POLL_INTERVAL_MS)
 
       // Auto-refresh should trigger
       await waitFor(() => {
@@ -372,7 +373,7 @@ describe('ResourcePage component', () => {
       fetchWithMock.mockRejectedValue(new Error('Network error'))
 
       // Fast-forward to trigger auto-refresh
-      vi.advanceTimersByTime(30000)
+      vi.advanceTimersByTime(POLL_INTERVAL_MS)
 
       // Wait for fetch to be called
       await waitFor(() => {
@@ -399,7 +400,7 @@ describe('ResourcePage component', () => {
       })
 
       // Fast-forward to trigger auto-refresh
-      vi.advanceTimersByTime(30000)
+      vi.advanceTimersByTime(POLL_INTERVAL_MS)
 
       // Content should remain visible during refresh (no loading message)
       expect(screen.queryByTestId('loading-message')).not.toBeInTheDocument()
@@ -422,7 +423,7 @@ describe('ResourcePage component', () => {
       unmount()
 
       // Fast-forward time - should NOT trigger fetch
-      vi.advanceTimersByTime(30000)
+      vi.advanceTimersByTime(POLL_INTERVAL_MS)
 
       // Fetch should NOT be called after unmount
       expect(fetchWithMock).not.toHaveBeenCalled()

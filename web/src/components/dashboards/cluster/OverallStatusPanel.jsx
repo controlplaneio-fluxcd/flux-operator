@@ -1,15 +1,8 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { useLocation } from 'preact-iso'
 import { reportUpdatedAt } from '../../../app'
 import { formatTime } from '../../../utils/time'
-import {
-  selectedResourceStatus,
-  selectedResourceKind,
-  selectedResourceName,
-  selectedResourceNamespace
-} from '../../search/ResourceList'
 
 /**
  * OverallStatusPanel component - Displays overall health status of the Flux cluster
@@ -109,28 +102,14 @@ export function OverallStatusPanel({ report }) {
 
   const statusInfo = getStatusInfo()
 
-  const location = useLocation()
-
-  // Handler to navigate to ResourceList with Failed filter
-  const handleViewFailures = () => {
-    // Clear all filters first
-    selectedResourceKind.value = ''
-    selectedResourceName.value = ''
-    selectedResourceNamespace.value = ''
-    // Set status filter to Failed
-    selectedResourceStatus.value = 'Failed'
-    // Navigate to resources page with status filter
-    location.route('/resources?status=Failed')
-  }
-
   // Check if status has failures (clickable states)
   const hasFailures = ['degraded', 'partial-outage', 'major-outage'].includes(statusInfo.status)
 
-  // Wrapper element - button if clickable, div otherwise
-  const WrapperElement = hasFailures ? 'button' : 'div'
+  // Wrapper element - anchor if clickable, div otherwise
+  const WrapperElement = hasFailures ? 'a' : 'div'
   const wrapperProps = hasFailures ? {
-    onClick: handleViewFailures,
-    class: `card ${statusInfo.bgColor} dark:bg-opacity-20 border-2 ${statusInfo.borderColor} w-full text-left cursor-pointer hover:shadow-lg transition-shadow focus:outline-none focus:ring-2 focus:ring-flux-blue focus:ring-offset-2`
+    href: '/resources?status=Failed',
+    class: `card ${statusInfo.bgColor} dark:bg-opacity-20 border-2 ${statusInfo.borderColor} w-full text-left cursor-pointer hover:shadow-lg transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flux-blue block`
   } : {
     class: `card ${statusInfo.bgColor} dark:bg-opacity-20 border-2 ${statusInfo.borderColor}`
   }

@@ -1,10 +1,16 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { useLocation } from 'preact-iso'
 import { getStatusBadgeClass, getStatusBorderClass } from '../../utils/status'
 import { formatTimestamp } from '../../utils/time'
 import { removeFavorite } from '../../utils/favorites'
+
+/**
+ * Build URL path for a resource dashboard
+ */
+function getResourceUrl(kind, namespace, name) {
+  return `/resource/${encodeURIComponent(kind)}/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}`
+}
 
 /**
  * FavoriteCard - Card displaying a favorite Flux resource
@@ -14,16 +20,13 @@ import { removeFavorite } from '../../utils/favorites'
  * @param {Object} props.resourceData - Resource data with status, lastReconciled (may be null if not found)
  */
 export function FavoriteCard({ favorite, resourceData }) {
-  const location = useLocation()
   const { kind, namespace, name } = favorite
 
-  // Handle resource name click - navigate to dashboard
-  const handleResourceClick = () => {
-    location.route(`/resource/${encodeURIComponent(kind)}/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}`)
-  }
-
-  // Handle unfavorite
+  // Handle unfavorite - need both preventDefault and stopPropagation
+  // preventDefault: prevents the anchor's default navigation
+  // stopPropagation: prevents the event from reaching preact-iso's router at document level
   const handleUnfavorite = (e) => {
+    e.preventDefault()
     e.stopPropagation()
     removeFavorite(kind, namespace, name)
   }
@@ -35,9 +38,9 @@ export function FavoriteCard({ favorite, resourceData }) {
   const message = resourceData?.message
 
   return (
-    <button
-      onClick={handleResourceClick}
-      class={`card border-l-4 p-4 hover:shadow-md transition-shadow dark:shadow-none cursor-pointer text-left w-full ${getStatusBorderClass(status)} ${notFound ? 'opacity-60' : ''}`}
+    <a
+      href={getResourceUrl(kind, namespace, name)}
+      class={`card border-l-4 p-4 hover:shadow-md transition-shadow dark:shadow-none cursor-pointer text-left w-full block ${getStatusBorderClass(status)} ${notFound ? 'opacity-60' : ''}`}
     >
       {/* Header row: star + kind + status badge */}
       <div class="flex items-center justify-between mb-2">
@@ -119,6 +122,6 @@ export function FavoriteCard({ favorite, resourceData }) {
           )}
         </div>
       )}
-    </button>
+    </a>
   )
 }

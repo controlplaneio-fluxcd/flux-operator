@@ -1,11 +1,19 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/preact'
 import userEvent from '@testing-library/user-event'
 import { ArtifactPanel } from './ArtifactPanel'
 import { getPanelById } from '../common/panel.test'
+
+// Mock useHashTab to use simple useState instead
+vi.mock('../../../utils/hash', async () => {
+  const { useState } = await import('preact/hooks')
+  return {
+    useHashTab: (panel, defaultTab) => useState(defaultTab)
+  }
+})
 
 describe('ArtifactPanel component', () => {
   const mockGitRepository = {

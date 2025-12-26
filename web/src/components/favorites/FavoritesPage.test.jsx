@@ -6,6 +6,7 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/preact'
 import { FavoritesPage } from './FavoritesPage'
 import { favorites, reorderFavorites, removeFavorite } from '../../utils/favorites'
 import { fetchWithMock } from '../../utils/fetch'
+import { POLL_INTERVAL_MS } from '../../utils/constants'
 
 // Mock fetchWithMock
 vi.mock('../../utils/fetch', () => ({
@@ -126,15 +127,14 @@ describe('FavoritesPage component', () => {
       })
     })
 
-    it('should navigate to /resources when browse button is clicked', async () => {
+    it('should have correct href on browse resources link', async () => {
       favorites.value = []
 
       render(<FavoritesPage />)
 
       await waitFor(() => {
-        const browseButton = screen.getByText('Browse resources')
-        fireEvent.click(browseButton)
-        expect(mockRoute).toHaveBeenCalledWith('/resources')
+        const browseLink = screen.getByText('Browse resources')
+        expect(browseLink).toHaveAttribute('href', '/resources')
       })
     })
 
@@ -604,7 +604,7 @@ describe('FavoritesPage component', () => {
         expect(screen.getByTestId('header-loading')).toHaveTextContent('loaded')
       })
 
-      expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 30000)
+      expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), POLL_INTERVAL_MS)
     })
 
     it('should call fetchWithMock on refresh interval', async () => {
@@ -620,7 +620,7 @@ describe('FavoritesPage component', () => {
       fetchWithMock.mockClear()
 
       // Advance timer by 30 seconds
-      vi.advanceTimersByTime(30000)
+      vi.advanceTimersByTime(POLL_INTERVAL_MS)
 
       expect(fetchWithMock).toHaveBeenCalledTimes(1)
     })

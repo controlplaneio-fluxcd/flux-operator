@@ -103,6 +103,8 @@ func SecurityHeadersMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		// Permissions policy (disable unnecessary browser features)
 		w.Header().Set("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+		// Instruct search engines not to index or follow links
+		w.Header().Set("X-Robots-Tag", "noindex, nofollow")
 
 		next.ServeHTTP(w, r)
 	})

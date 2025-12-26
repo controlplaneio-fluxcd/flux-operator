@@ -346,7 +346,7 @@ describe('QuickSearch', () => {
       })
     })
 
-    it('should navigate to resource dashboard when result is clicked', async () => {
+    it('should have correct href on search result links', async () => {
       render(<QuickSearch />)
 
       const input = screen.getByPlaceholderText('Search appliers...')
@@ -355,13 +355,11 @@ describe('QuickSearch', () => {
       vi.advanceTimersByTime(400)
       await vi.runAllTimersAsync()
 
-      const resultButton = screen.getByText('flux-system/flux').closest('button')
-      fireEvent.click(resultButton)
-
-      expect(mockRoute).toHaveBeenCalledWith('/resource/FluxInstance/flux-system/flux')
+      const resultLink = screen.getByText('flux-system/flux').closest('a')
+      expect(resultLink).toHaveAttribute('href', '/resource/FluxInstance/flux-system/flux')
     })
 
-    it('should close search after navigating', async () => {
+    it('should close search after clicking result link', async () => {
       render(<QuickSearch />)
 
       const input = screen.getByPlaceholderText('Search appliers...')
@@ -370,8 +368,8 @@ describe('QuickSearch', () => {
       vi.advanceTimersByTime(400)
       await vi.runAllTimersAsync()
 
-      const resultButton = screen.getByText('flux-system/flux').closest('button')
-      fireEvent.click(resultButton)
+      const resultLink = screen.getByText('flux-system/flux').closest('a')
+      fireEvent.click(resultLink)
 
       expect(quickSearchOpen.value).toBe(false)
       expect(quickSearchQuery.value).toBe('')
@@ -1008,7 +1006,7 @@ describe('QuickSearch', () => {
       // Press ArrowDown to select first result
       fireEvent.keyDown(input, { key: 'ArrowDown' })
 
-      const firstResult = screen.getByText('flux-system/flux').closest('button')
+      const firstResult = screen.getByText('flux-system/flux').closest('a')
       expect(firstResult.className).toContain('bg-gray-100')
     })
 
@@ -1042,7 +1040,7 @@ describe('QuickSearch', () => {
       fireEvent.keyDown(input, { key: 'ArrowDown' })
       fireEvent.keyDown(input, { key: 'ArrowUp' })
 
-      const firstResult = screen.getByText('flux-system/flux').closest('button')
+      const firstResult = screen.getByText('flux-system/flux').closest('a')
       expect(firstResult.className).toContain('bg-gray-100')
     })
   })
@@ -1053,7 +1051,20 @@ describe('QuickSearch', () => {
       fetchWithMock.mockResolvedValue({ resources: [] })
     })
 
-    it('should navigate to resources page when clicking browse link', async () => {
+    it('should have correct href on browse resources link', async () => {
+      render(<QuickSearch />)
+
+      const input = screen.getByPlaceholderText('Search appliers...')
+      fireEvent.input(input, { target: { value: 'nonexistent' } })
+
+      vi.advanceTimersByTime(400)
+      await vi.runAllTimersAsync()
+
+      const browseLink = screen.getByText('Browse all resources →')
+      expect(browseLink).toHaveAttribute('href', '/resources')
+    })
+
+    it('should close search when browse link is clicked', async () => {
       render(<QuickSearch />)
 
       const input = screen.getByPlaceholderText('Search appliers...')
@@ -1065,7 +1076,6 @@ describe('QuickSearch', () => {
       const browseLink = screen.getByText('Browse all resources →')
       fireEvent.click(browseLink)
 
-      expect(mockRoute).toHaveBeenCalledWith('/resources')
       expect(quickSearchOpen.value).toBe(false)
     })
   })
@@ -1223,31 +1233,51 @@ describe('QuickSearch', () => {
       expect(cubeIcon).toBeInTheDocument()
     })
 
-    it('should navigate to home page when clicking FluxReport entry', () => {
+    it('should have correct href for FluxReport entry (home page)', () => {
       navHistory.value = [
         { kind: 'FluxReport', namespace: 'flux-system', name: 'flux' }
       ]
       quickSearchOpen.value = true
       render(<QuickSearch />)
 
-      const historyButton = screen.getByText('FluxReport/').closest('button')
-      fireEvent.click(historyButton)
+      const historyLink = screen.getByText('FluxReport/').closest('a')
+      expect(historyLink).toHaveAttribute('href', '/')
+    })
 
-      expect(mockRoute).toHaveBeenCalledWith('/')
+    it('should close search when clicking FluxReport entry', () => {
+      navHistory.value = [
+        { kind: 'FluxReport', namespace: 'flux-system', name: 'flux' }
+      ]
+      quickSearchOpen.value = true
+      render(<QuickSearch />)
+
+      const historyLink = screen.getByText('FluxReport/').closest('a')
+      fireEvent.click(historyLink)
+
       expect(quickSearchOpen.value).toBe(false)
     })
 
-    it('should navigate to resource page when clicking resource entry', () => {
+    it('should have correct href for resource entry', () => {
       navHistory.value = [
         { kind: 'HelmRelease', namespace: 'flux-system', name: 'podinfo' }
       ]
       quickSearchOpen.value = true
       render(<QuickSearch />)
 
-      const historyButton = screen.getByText('HelmRelease/').closest('button')
-      fireEvent.click(historyButton)
+      const historyLink = screen.getByText('HelmRelease/').closest('a')
+      expect(historyLink).toHaveAttribute('href', '/resource/HelmRelease/flux-system/podinfo')
+    })
 
-      expect(mockRoute).toHaveBeenCalledWith('/resource/HelmRelease/flux-system/podinfo')
+    it('should close search when clicking resource entry', () => {
+      navHistory.value = [
+        { kind: 'HelmRelease', namespace: 'flux-system', name: 'podinfo' }
+      ]
+      quickSearchOpen.value = true
+      render(<QuickSearch />)
+
+      const historyLink = screen.getByText('HelmRelease/').closest('a')
+      fireEvent.click(historyLink)
+
       expect(quickSearchOpen.value).toBe(false)
     })
 
@@ -1277,8 +1307,8 @@ describe('QuickSearch', () => {
       fireEvent.keyDown(input, { key: 'ArrowDown' })
 
       // First entry should be highlighted (has bg-gray-100 class)
-      const firstButton = screen.getByText('HelmRelease/').closest('button')
-      expect(firstButton.className).toContain('bg-gray-100')
+      const firstLink = screen.getByText('HelmRelease/').closest('a')
+      expect(firstLink.className).toContain('bg-gray-100')
     })
 
     it('should navigate up through history entries', () => {
@@ -1296,8 +1326,8 @@ describe('QuickSearch', () => {
       fireEvent.keyDown(input, { key: 'ArrowUp' })
 
       // First entry should be highlighted
-      const firstButton = screen.getByText('HelmRelease/').closest('button')
-      expect(firstButton.className).toContain('bg-gray-100')
+      const firstLink = screen.getByText('HelmRelease/').closest('a')
+      expect(firstLink.className).toContain('bg-gray-100')
     })
 
     it('should navigate to selected history entry on Enter', () => {

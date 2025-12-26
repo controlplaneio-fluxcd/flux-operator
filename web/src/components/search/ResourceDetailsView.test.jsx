@@ -814,15 +814,12 @@ describe('ResourceDetailsView component', () => {
       const inventoryTab = await screen.findByText(/Inventory \(2\)/)
       await user.click(inventoryTab)
 
-      // Find the GitRepository button
-      const gitRepoButton = await screen.findByRole('button', { name: /GitRepository\/flux-system\/podinfo/ })
-      expect(gitRepoButton).toBeInTheDocument()
+      // Find the GitRepository link
+      const gitRepoLink = await screen.findByRole('link', { name: /GitRepository\/flux-system\/podinfo/ })
+      expect(gitRepoLink).toBeInTheDocument()
 
-      // Click the GitRepository inventory item
-      await user.click(gitRepoButton)
-
-      // Verify navigation to resource dashboard
-      expect(mockRoute).toHaveBeenCalledWith('/resource/GitRepository/flux-system/podinfo')
+      // Verify correct href for navigation to resource dashboard
+      expect(gitRepoLink).toHaveAttribute('href', '/resource/GitRepository/flux-system/podinfo')
     })
 
     it('should not make non-Flux resource inventory items clickable', async () => {
@@ -904,12 +901,11 @@ describe('ResourceDetailsView component', () => {
       const inventoryTab = await screen.findByText(/Inventory \(1\)/)
       await user.click(inventoryTab)
 
-      // Find and click the FluxInstance button
-      const fluxButton = await screen.findByRole('button', { name: /FluxInstance\/flux/ })
-      await user.click(fluxButton)
+      // Find the FluxInstance link
+      const fluxLink = await screen.findByRole('link', { name: /FluxInstance\/flux/ })
 
-      // Verify navigation to resource dashboard (with empty namespace)
-      expect(mockRoute).toHaveBeenCalledWith('/resource/FluxInstance//flux')
+      // Verify correct href for navigation to resource dashboard (with empty namespace)
+      expect(fluxLink).toHaveAttribute('href', '/resource/FluxInstance//flux')
     })
 
     it('should display navigation icon for clickable Flux resources', async () => {
@@ -944,9 +940,9 @@ describe('ResourceDetailsView component', () => {
       const inventoryTab = await screen.findByText(/Inventory \(1\)/)
       await user.click(inventoryTab)
 
-      // Find the button and check for icon
-      const kustomizationButton = await screen.findByRole('button', { name: /Kustomization\/apps\/backend/ })
-      const svg = kustomizationButton.querySelector('svg')
+      // Find the link and check for icon
+      const kustomizationLink = await screen.findByRole('link', { name: /Kustomization\/apps\/backend/ })
+      const svg = kustomizationLink.querySelector('svg')
 
       expect(svg).toBeInTheDocument()
       expect(svg).toHaveAttribute('viewBox', '0 0 24 24')
