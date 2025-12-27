@@ -10,7 +10,6 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/auth"
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/toolbox/library"
 )
 
@@ -34,7 +33,7 @@ type searchFluxDocsInput struct {
 
 // HandleSearchFluxDocs is the handler function for the search_flux_docs tool.
 func (m *Manager) HandleSearchFluxDocs(ctx context.Context, request *mcp.CallToolRequest, input searchFluxDocsInput) (*mcp.CallToolResult, any, error) {
-	if err := auth.CheckScopes(ctx, getScopeNames(ToolSearchFluxDocs, m.readOnly)); err != nil {
+	if err := CheckScopes(ctx, ToolSearchFluxDocs, m.readOnly); err != nil {
 		return NewToolResultError(err.Error())
 	}
 

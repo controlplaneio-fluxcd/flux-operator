@@ -24,7 +24,7 @@ func TestManager_HandleGetKubeconfigContexts(t *testing.T) {
 
 	m := &Manager{
 		kubeconfig: k8s.NewKubeConfig(),
-		flags:      cli.NewConfigFlags(false),
+		kubeClient: k8s.NewClientFactory(cli.NewConfigFlags(false)),
 	}
 
 	request := &mcp.CallToolRequest{

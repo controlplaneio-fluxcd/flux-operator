@@ -8,9 +8,6 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"sigs.k8s.io/yaml"
-
-	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/auth"
-	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/k8s"
 )
 
 const (
@@ -35,7 +32,7 @@ type getKubernetesMetricsInput struct {
 
 // HandleGetKubernetesMetrics is the handler function for the get_kubernetes_metrics tool.
 func (m *Manager) HandleGetKubernetesMetrics(ctx context.Context, request *mcp.CallToolRequest, input getKubernetesMetricsInput) (*mcp.CallToolResult, any, error) {
-	if err := auth.CheckScopes(ctx, getScopeNames(ToolGetKubernetesMetrics, m.readOnly)); err != nil {
+	if err := CheckScopes(ctx, ToolGetKubernetesMetrics, m.readOnly); err != nil {
 		return NewToolResultError(err.Error())
 	}
 
@@ -50,9 +47,9 @@ func (m *Manager) HandleGetKubernetesMetrics(ctx context.Context, request *mcp.C
 	ctx, cancel := context.WithTimeout(ctx, m.timeout)
 	defer cancel()
 
-	kubeClient, err := k8s.NewClient(ctx, m.flags)
+	kubeClient, err := m.kubeClient.GetClient(ctx)
 	if err != nil {
-		return NewToolResultErrorFromErr("Failed to create Kubernetes client", err)
+		return NewToolResultErrorFromErr("Failed to get Kubernetes client", err)
 	}
 
 	result, err := kubeClient.GetMetrics(ctx, input.PodName, input.PodNamespace, input.PodSelector, limit)

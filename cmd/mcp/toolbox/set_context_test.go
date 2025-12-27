@@ -22,7 +22,7 @@ func TestManager_HandleSetKubeconfigContext(t *testing.T) {
 	flags := cli.NewConfigFlags(false)
 	m := &Manager{
 		kubeconfig: k8s.NewKubeConfig(),
-		flags:      flags,
+		kubeClient: k8s.NewClientFactory(flags),
 	}
 
 	request := &mcp.CallToolRequest{
