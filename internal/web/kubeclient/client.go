@@ -118,15 +118,21 @@ func (c *Client) getUserClientFromContext(ctx context.Context, opts ...Option) *
 		opt(&o)
 	}
 
-	if uc := user.KubeClient(ctx); uc != nil && !o.withPrivileges {
-		return uc.(*userClient)
-	}
-
-	return &userClient{
+	u := &userClient{
 		reader: c.reader,
 		client: c.client,
 		config: c.config,
 	}
+
+	if v := user.KubeClient(ctx); v != nil && !o.withPrivileges {
+		uc := v.(*userClient)
+		u.reader = uc.reader
+		u.client = uc.client
+		u.config = uc.config
+	}
+
+	u.config = rest.CopyConfig(u.config)
+	return u
 }
 
 // GetUserClientFromCache retrieves a userClient from the cache or creates and caches a new one.
@@ -160,7 +166,7 @@ func (c *Client) newUserClient(imp user.Impersonation) (*userClient, error) {
 		return nil, fmt.Errorf("failed to create user REST mapper: %w", err)
 	}
 
-	// Create userreader without cache.
+	// Create user reader without cache.
 	kubeReader, err := client.New(kubeConfig, client.Options{
 		HTTPClient: httpClient,
 		Scheme:     c.scheme,
@@ -170,7 +176,7 @@ func (c *Client) newUserClient(imp user.Impersonation) (*userClient, error) {
 		return nil, fmt.Errorf("failed to create user reader: %w", err)
 	}
 
-	// Create user kubeClient with cache, excluding Secrets and ConfigMaps.
+	// Create user client with cache, excluding Secrets and ConfigMaps.
 	kubeClient, err := client.New(kubeConfig, client.Options{
 		HTTPClient: httpClient,
 		Scheme:     c.scheme,
