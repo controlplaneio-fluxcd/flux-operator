@@ -4,8 +4,17 @@
 package auth
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/hkdf"
+	"crypto/sha256"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
+
+	. "github.com/onsi/gomega"
 )
 
 func TestIsSafeRedirectPath(t *testing.T) {
@@ -190,4 +199,228 @@ func TestOriginalURL(t *testing.T) {
 			}
 		})
 	}
+}
+
+// newTestOAuth2Authenticator creates an oauth2Authenticator for testing with a valid GCM cipher.
+func newTestOAuth2Authenticator(t *testing.T) *oauth2Authenticator {
+	t.Helper()
+
+	secret := []byte("test-client-secret-for-testing-purposes")
+	hash := sha256.New
+	var salt []byte
+	const info = "oauth2 login state cookie encryption"
+	key, err := hkdf.Key(hash, secret, salt, info, oauth2LoginStateAESKeySize)
+	if err != nil {
+		t.Fatalf("failed to derive key: %v", err)
+	}
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		t.Fatalf("failed to create cipher: %v", err)
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		t.Fatalf("failed to create GCM: %v", err)
+	}
+
+	return &oauth2Authenticator{
+		gcm: gcm,
+	}
+}
+
+func TestOAuth2LoginStateEncoding(t *testing.T) {
+	t.Run("round-trip encode/decode preserves state", func(t *testing.T) {
+		g := NewWithT(t)
+
+		auth := newTestOAuth2Authenticator(t)
+
+		originalState := oauth2LoginState{
+			PKCEVerifier: "pkce-verifier-123",
+			CSRFToken:    "csrf-token-456",
+			Nonce:        "nonce-789",
+			URLQuery: url.Values{
+				"originalPath": []string{"/dashboard"},
+				"param":        []string{"value"},
+			},
+			ExpiresAt: time.Now().Add(5 * time.Minute).Truncate(time.Second),
+		}
+
+		// Encode
+		encoded, err := auth.encodeState(originalState)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(encoded).NotTo(BeEmpty())
+
+		// Decode
+		decoded, err := auth.decodeState(encoded)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(decoded).NotTo(BeNil())
+
+		// Verify all fields
+		g.Expect(decoded.PKCEVerifier).To(Equal(originalState.PKCEVerifier))
+		g.Expect(decoded.CSRFToken).To(Equal(originalState.CSRFToken))
+		g.Expect(decoded.Nonce).To(Equal(originalState.Nonce))
+		g.Expect(decoded.URLQuery).To(Equal(originalState.URLQuery))
+		g.Expect(decoded.ExpiresAt.Unix()).To(Equal(originalState.ExpiresAt.Unix()))
+	})
+
+	t.Run("decode fails on invalid base64", func(t *testing.T) {
+		g := NewWithT(t)
+
+		auth := newTestOAuth2Authenticator(t)
+
+		_, err := auth.decodeState("not-valid-base64!!!")
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("failed to decode oauth2 login state"))
+	})
+
+	t.Run("decode fails on too-short input", func(t *testing.T) {
+		g := NewWithT(t)
+
+		auth := newTestOAuth2Authenticator(t)
+
+		// Less than 12 bytes (GCM nonce size)
+		_, err := auth.decodeState("c2hvcnQ")
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("invalid oauth2 login state size"))
+	})
+
+	t.Run("decode fails on invalid ciphertext", func(t *testing.T) {
+		g := NewWithT(t)
+
+		auth := newTestOAuth2Authenticator(t)
+
+		// Valid base64 but not valid encrypted state
+		_, err := auth.decodeState("YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXo")
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("failed to decrypt oauth2 login state"))
+	})
+
+	t.Run("different encryptions produce different outputs", func(t *testing.T) {
+		g := NewWithT(t)
+
+		auth := newTestOAuth2Authenticator(t)
+
+		state := oauth2LoginState{
+			PKCEVerifier: "verifier",
+			CSRFToken:    "csrf",
+			Nonce:        "nonce",
+			ExpiresAt:    time.Now().Add(5 * time.Minute),
+		}
+
+		encoded1, err := auth.encodeState(state)
+		g.Expect(err).NotTo(HaveOccurred())
+
+		encoded2, err := auth.encodeState(state)
+		g.Expect(err).NotTo(HaveOccurred())
+
+		// Each encryption should produce different output due to random nonce
+		g.Expect(encoded1).NotTo(Equal(encoded2))
+
+		// Both should decode to the same state
+		decoded1, _ := auth.decodeState(encoded1)
+		decoded2, _ := auth.decodeState(encoded2)
+		g.Expect(decoded1.PKCEVerifier).To(Equal(decoded2.PKCEVerifier))
+		g.Expect(decoded1.CSRFToken).To(Equal(decoded2.CSRFToken))
+		g.Expect(decoded1.Nonce).To(Equal(decoded2.Nonce))
+	})
+}
+
+func TestOAuth2LoginStateRedirectURL(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		state    oauth2LoginState
+		expected string
+	}{
+		{
+			name: "returns path from originalPath",
+			state: oauth2LoginState{
+				URLQuery: url.Values{
+					authQueryParamOriginalPath: []string{"/dashboard"},
+				},
+			},
+			expected: "/dashboard",
+		},
+		{
+			name: "falls back to root for missing param",
+			state: oauth2LoginState{
+				URLQuery: url.Values{},
+			},
+			expected: "/",
+		},
+		{
+			name: "preserves other query params",
+			state: oauth2LoginState{
+				URLQuery: url.Values{
+					authQueryParamOriginalPath: []string{"/page"},
+					"foo":                      []string{"bar"},
+				},
+			},
+			expected: "/page?foo=bar",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			result := tt.state.redirectURL()
+			g.Expect(result).To(Equal(tt.expected))
+		})
+	}
+}
+
+func TestConsumeOAuth2LoginStates(t *testing.T) {
+	t.Run("returns query state and cookie state", func(t *testing.T) {
+		g := NewWithT(t)
+
+		req := httptest.NewRequest(http.MethodGet, "/oauth2/callback?state=query-state-123", nil)
+		req.AddCookie(&http.Cookie{
+			Name:  cookieNameOAuth2LoginState,
+			Value: "cookie-state-456",
+		})
+		rec := httptest.NewRecorder()
+
+		queryState, cookieState := consumeOAuth2LoginStates(rec, req)
+
+		g.Expect(queryState).To(Equal("query-state-123"))
+		g.Expect(cookieState).To(Equal("cookie-state-456"))
+
+		// Should delete the cookie
+		cookies := rec.Result().Cookies()
+		var deletedCookie *http.Cookie
+		for _, c := range cookies {
+			if c.Name == cookieNameOAuth2LoginState {
+				deletedCookie = c
+				break
+			}
+		}
+		g.Expect(deletedCookie).NotTo(BeNil())
+		g.Expect(deletedCookie.MaxAge).To(Equal(-1))
+	})
+
+	t.Run("returns empty string when cookie missing", func(t *testing.T) {
+		g := NewWithT(t)
+
+		req := httptest.NewRequest(http.MethodGet, "/oauth2/callback?state=query-state-123", nil)
+		rec := httptest.NewRecorder()
+
+		queryState, cookieState := consumeOAuth2LoginStates(rec, req)
+
+		g.Expect(queryState).To(Equal("query-state-123"))
+		g.Expect(cookieState).To(BeEmpty())
+	})
+
+	t.Run("returns empty query state when missing", func(t *testing.T) {
+		g := NewWithT(t)
+
+		req := httptest.NewRequest(http.MethodGet, "/oauth2/callback", nil)
+		req.AddCookie(&http.Cookie{
+			Name:  cookieNameOAuth2LoginState,
+			Value: "cookie-state-456",
+		})
+		rec := httptest.NewRecorder()
+
+		queryState, cookieState := consumeOAuth2LoginStates(rec, req)
+
+		g.Expect(queryState).To(BeEmpty())
+		g.Expect(cookieState).To(Equal("cookie-state-456"))
+	})
 }
