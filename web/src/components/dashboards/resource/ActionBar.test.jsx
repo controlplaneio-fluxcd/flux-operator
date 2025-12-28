@@ -152,7 +152,7 @@ describe('ActionBar component', () => {
       expect(screen.getByTestId('suspend-resume-button')).toBeDisabled()
     })
 
-    it('should show Reconciling indicator when status is Progressing', () => {
+    it('should show spinner in Reconcile button when status is Progressing', () => {
       const props = {
         ...defaultProps,
         resourceData: {
@@ -164,7 +164,9 @@ describe('ActionBar component', () => {
       }
       render(<ActionBar {...props} />)
 
-      expect(screen.getByText('Reconciling...')).toBeInTheDocument()
+      const reconcileButton = screen.getByTestId('reconcile-button')
+      expect(reconcileButton).toHaveTextContent('Reconcile')
+      expect(reconcileButton.querySelector('.animate-spin')).toBeInTheDocument()
     })
 
     it('should disable Reconcile button when resource is Suspended', () => {
