@@ -15,6 +15,7 @@ import { InventoryPanel } from './InventoryPanel'
 import { ArtifactPanel } from './ArtifactPanel'
 import { ExportedInputsPanel } from './ExportedInputsPanel'
 import { InputsPanel } from './InputsPanel'
+import { isKindWithInventory, POLL_INTERVAL_MS } from '../../../utils/constants'
 
 /**
  * Get loading status styling info with spinning refresh icon
@@ -186,8 +187,8 @@ export function ResourcePage({ kind, namespace, name }) {
     // Fetch data immediately
     fetchData()
 
-    // Setup auto-refresh interval (30 seconds)
-    const interval = setInterval(fetchData, 30000)
+    // Setup auto-refresh interval
+    const interval = setInterval(fetchData, POLL_INTERVAL_MS)
 
     // Cleanup interval on unmount or when dependencies change
     return () => clearInterval(interval)
@@ -232,7 +233,10 @@ export function ResourcePage({ kind, namespace, name }) {
   // Navigate to another resource
   const handleNavigate = (item) => {
     const ns = item.namespace || namespace
-    location.route(`/resource/${encodeURIComponent(item.kind)}/${encodeURIComponent(ns)}/${encodeURIComponent(item.name)}`)
+    const basePath = `/resource/${encodeURIComponent(item.kind)}/${encodeURIComponent(ns)}/${encodeURIComponent(item.name)}`
+    // If navigating to a resource that has inventory (from Graph), deep link to its Graph tab
+    const hash = isKindWithInventory(item.kind) ? '#inventory-graph' : ''
+    location.route(basePath + hash)
   }
 
   return (

@@ -53,13 +53,14 @@ describe('Header', () => {
   })
 
   describe('Branding', () => {
-    it('should render Flux logo button', () => {
+    it('should render Flux logo link', () => {
       render(<Header />)
 
-      const logoButton = screen.getByRole('button', { name: 'Flux CD' })
-      expect(logoButton).toBeInTheDocument()
+      const logoLink = screen.getByRole('link', { name: 'Flux CD' })
+      expect(logoLink).toBeInTheDocument()
+      expect(logoLink).toHaveAttribute('href', '/')
       // Should contain an SVG (the FluxIcon)
-      expect(logoButton.querySelector('svg')).toBeInTheDocument()
+      expect(logoLink.querySelector('svg')).toBeInTheDocument()
     })
 
     it('should render "Flux Status" title', () => {
@@ -79,14 +80,13 @@ describe('Header', () => {
 
       render(<Header />)
 
-      const logoButton = screen.getByRole('button', { name: 'Flux CD' })
-      fireEvent.click(logoButton)
+      const logoLink = screen.getByRole('link', { name: 'Flux CD' })
+      fireEvent.click(logoLink)
 
       expect(fetchFluxReport).toHaveBeenCalledTimes(1)
-      expect(mockRoute).not.toHaveBeenCalled()
     })
 
-    it('should return to dashboard when logo clicked in events view', () => {
+    it('should have correct href for navigation to dashboard', () => {
       useLocation.mockReturnValue({
         path: '/events',
         query: {},
@@ -95,14 +95,11 @@ describe('Header', () => {
 
       render(<Header />)
 
-      const logoButton = screen.getByRole('button', { name: 'Flux CD' })
-      fireEvent.click(logoButton)
-
-      expect(mockRoute).toHaveBeenCalledWith('/')
-      expect(fetchFluxReport).not.toHaveBeenCalled()
+      const logoLink = screen.getByRole('link', { name: 'Flux CD' })
+      expect(logoLink).toHaveAttribute('href', '/')
     })
 
-    it('should return to dashboard when logo clicked in resources view', () => {
+    it('should not call fetchFluxReport when not on dashboard', () => {
       useLocation.mockReturnValue({
         path: '/resources',
         query: {},
@@ -111,36 +108,20 @@ describe('Header', () => {
 
       render(<Header />)
 
-      const logoButton = screen.getByRole('button', { name: 'Flux CD' })
-      fireEvent.click(logoButton)
+      const logoLink = screen.getByRole('link', { name: 'Flux CD' })
+      fireEvent.click(logoLink)
 
-      expect(mockRoute).toHaveBeenCalledWith('/')
-      expect(fetchFluxReport).not.toHaveBeenCalled()
-    })
-
-    it('should return to dashboard when logo clicked on unknown route (404)', () => {
-      useLocation.mockReturnValue({
-        path: '/unknown/route',
-        query: {},
-        route: mockRoute
-      })
-
-      render(<Header />)
-
-      const logoButton = screen.getByRole('button', { name: 'Flux CD' })
-      fireEvent.click(logoButton)
-
-      expect(mockRoute).toHaveBeenCalledWith('/')
       expect(fetchFluxReport).not.toHaveBeenCalled()
     })
   })
 
-  describe('Browse Resources Button', () => {
-    it('should render browse resources button', () => {
+  describe('Browse Resources Link', () => {
+    it('should render browse resources link', () => {
       render(<Header />)
 
-      const navButton = screen.getByTitle('Browse Resources')
-      expect(navButton).toBeInTheDocument()
+      const navLink = screen.getByTitle('Browse Resources')
+      expect(navLink).toBeInTheDocument()
+      expect(navLink).toHaveAttribute('href', '/favorites')
     })
 
     it('should always show folder icon regardless of view', () => {
@@ -177,7 +158,7 @@ describe('Header', () => {
       expect(folderIcon).toBeInTheDocument()
     })
 
-    it('should navigate to favorites view when clicked from dashboard', () => {
+    it('should have correct href to favorites view', () => {
       useLocation.mockReturnValue({
         path: '/',
         query: {},
@@ -186,40 +167,8 @@ describe('Header', () => {
 
       render(<Header />)
 
-      const navButton = screen.getByTitle('Browse Resources')
-      fireEvent.click(navButton)
-
-      expect(mockRoute).toHaveBeenCalledWith('/favorites')
-    })
-
-    it('should navigate to favorites view when clicked from events view', () => {
-      useLocation.mockReturnValue({
-        path: '/events',
-        query: {},
-        route: mockRoute
-      })
-
-      render(<Header />)
-
-      const navButton = screen.getByTitle('Browse Resources')
-      fireEvent.click(navButton)
-
-      expect(mockRoute).toHaveBeenCalledWith('/favorites')
-    })
-
-    it('should navigate to favorites view when clicked from resources view', () => {
-      useLocation.mockReturnValue({
-        path: '/resources',
-        query: {},
-        route: mockRoute
-      })
-
-      render(<Header />)
-
-      const navButton = screen.getByTitle('Browse Resources')
-      fireEvent.click(navButton)
-
-      expect(mockRoute).toHaveBeenCalledWith('/favorites')
+      const navLink = screen.getByTitle('Browse Resources')
+      expect(navLink).toHaveAttribute('href', '/favorites')
     })
   })
 

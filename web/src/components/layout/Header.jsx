@@ -21,22 +21,21 @@ export function Header() {
   const location = useLocation()
   const currentPath = location.path
 
-  // Handle browse resources button click
-  const handleBrowseResources = () => {
-    quickSearchOpen.value = false
-    location.route('/favorites')
-  }
-
-  // Handle logo/title click
-  const handleLogoClick = () => {
+  // Handle logo/title click - refresh if already on home, otherwise navigate
+  const handleLogoClick = (e) => {
     quickSearchOpen.value = false
     if (currentPath === '/') {
-      // Refresh data if already on home page
+      // Prevent navigation and refresh data if already on home page
+      e.preventDefault()
+      e.stopPropagation()
       fetchFluxReport()
-    } else {
-      // Navigate to home page from any other route
-      location.route('/')
     }
+    // Otherwise, let the anchor tag handle navigation naturally
+  }
+
+  // Handle browse resources link click - close search panel
+  const handleBrowseResourcesClick = () => {
+    quickSearchOpen.value = false
   }
 
   return (
@@ -54,7 +53,8 @@ export function Header() {
           {/* Left side: Logo and title (or expanded search on desktop) */}
           <div class="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
             {/* Logo - always visible */}
-            <button
+            <a
+              href="/"
               onClick={handleLogoClick}
               class="flex items-center space-x-2 sm:space-x-4 hover:opacity-80 transition-opacity focus:outline-none flex-shrink-0"
               aria-label="Flux CD"
@@ -64,7 +64,7 @@ export function Header() {
               {!quickSearchOpen.value && (
                 <h1 class="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white">Flux Status</h1>
               )}
-            </button>
+            </a>
 
             {/* Quick Search - expands to fill space when open (desktop only) */}
             {quickSearchOpen.value && (
@@ -86,16 +86,17 @@ export function Header() {
             )}
             {/* Navigation and User buttons - closer together on desktop */}
             <div class="flex items-center space-x-3 sm:space-x-2">
-              {/* Browse Resources Button */}
-              <button
-                onClick={handleBrowseResources}
+              {/* Browse Resources Link */}
+              <a
+                href="/favorites"
+                onClick={handleBrowseResourcesClick}
                 title="Browse Resources"
                 class="inline-flex items-center justify-center p-1.5 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-flux-blue"
               >
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 0 0-1.883 2.542l.857 6a2.25 2.25 0 0 0 2.227 1.932H19.05a2.25 2.25 0 0 0 2.227-1.932l.857-6a2.25 2.25 0 0 0-1.883-2.542m-16.5 0V6A2.25 2.25 0 0 1 6 3.75h3.879a1.5 1.5 0 0 1 1.06.44l2.122 2.12a1.5 1.5 0 0 0 1.06.44H18A2.25 2.25 0 0 1 20.25 9v.776" />
                 </svg>
-              </button>
+              </a>
 
               <UserMenu />
             </div>

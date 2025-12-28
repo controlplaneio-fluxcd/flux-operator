@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { useSignal } from '@preact/signals'
-import { useLocation } from 'preact-iso'
 
 /**
  * SyncPanel component - Displays cluster sync information
@@ -12,7 +11,6 @@ import { useLocation } from 'preact-iso'
  * @param {string} props.namespace - Report namespace
  */
 export function SyncPanel({ sync, namespace }) {
-  const location = useLocation()
 
   // Extract name from sync.id (e.g., "kustomization/flux-system" -> "flux-system")
   const syncName = sync.id ? sync.id.split('/').pop() : ''
@@ -87,15 +85,15 @@ export function SyncPanel({ sync, namespace }) {
       {isExpanded.value && (
         <div class="px-6 py-4 space-y-2">
           <div class="flex flex-col gap-2 text-sm text-gray-900 dark:text-white break-all">
-            <button
-              onClick={() => location.route(`/resource/${encodeURIComponent('Kustomization')}/${encodeURIComponent(namespace)}/${encodeURIComponent(syncName)}`)}
+            <a
+              href={`/resource/${encodeURIComponent('Kustomization')}/${encodeURIComponent(namespace)}/${encodeURIComponent(syncName)}`}
               class="flex items-start gap-2 text-flux-blue dark:text-blue-400 hover:underline text-left"
             >
               <svg class="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
               </svg>
               <span class="break-all">Kustomization/{namespace}/{syncName}</span>
-            </button>
+            </a>
             <div class="flex items-start gap-2">
               {(sync.source?.startsWith('http') || sync.source?.startsWith('ssh')) ? (
                 <svg class="w-5 h-5 flex-shrink-0 mt-0.5 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 24 24">

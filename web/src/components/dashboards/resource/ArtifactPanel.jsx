@@ -1,8 +1,11 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { useState } from 'preact/hooks'
 import { DashboardPanel, TabButton } from '../common/panel'
+import { useHashTab } from '../../../utils/hash'
+
+// Valid tabs for the ArtifactPanel
+const ARTIFACT_TABS = ['overview', 'metadata']
 
 /**
  * Get the source reference display string
@@ -68,8 +71,8 @@ function formatSize(bytes) {
  * ArtifactPanel - Displays artifact information for Flux source resources
  */
 export function ArtifactPanel({ resourceData }) {
-  // Tab state
-  const [activeTab, setActiveTab] = useState('overview')
+  // Tab state synced with URL hash (e.g., #artifact-metadata)
+  const [activeTab, setActiveTab] = useHashTab('artifact', 'overview', ARTIFACT_TABS, 'artifact-panel')
 
   // Extract data
   const kind = resourceData?.kind

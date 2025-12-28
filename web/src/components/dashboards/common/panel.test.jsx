@@ -7,10 +7,10 @@ import userEvent from '@testing-library/user-event'
 import { DashboardPanel, TabButton } from './panel'
 
 /**
- * Helper function to get panel by data-id attribute
+ * Helper function to get panel by id attribute
  */
 export function getPanelById(container, id) {
-  return container.querySelector(`[data-id="${id}"]`)
+  return container.querySelector(`#${id}`)
 }
 
 describe('DashboardPanel component', () => {

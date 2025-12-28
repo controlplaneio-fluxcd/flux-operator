@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'preact/hooks'
-import { useLocation } from 'preact-iso'
 import { fetchWithMock } from '../../utils/fetch'
 import { favorites, reorderFavorites, getFavoriteKey, removeFavorite } from '../../utils/favorites'
+import { POLL_INTERVAL_MS } from '../../utils/constants'
 import { usePageMeta } from '../../utils/meta'
 import { FavoritesHeader } from './FavoritesHeader'
 import { FavoriteCard } from './FavoriteCard'
@@ -22,7 +22,6 @@ import { FluxOperatorIcon } from '../layout/Icons'
  */
 export function FavoritesPage() {
   usePageMeta('Favorites', 'Favorites dashboard')
-  const location = useLocation()
 
   // State
   const [resourcesData, setResourcesData] = useState({}) // Map of key -> resource data
@@ -118,8 +117,8 @@ export function FavoritesPage() {
   useEffect(() => {
     fetchFavoritesData()
 
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(fetchFavoritesData, 30000)
+    // Auto-refresh
+    const interval = setInterval(fetchFavoritesData, POLL_INTERVAL_MS)
     return () => clearInterval(interval)
   }, [fetchFavoritesData])
 
@@ -293,12 +292,12 @@ export function FavoritesPage() {
                 Mark resources as favorites for quick access.
               </p>
               <div class="mt-6">
-                <button
-                  onClick={() => location.route('/resources')}
-                  class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-flux-blue hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-flux-blue"
+                <a
+                  href="/resources"
+                  class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-flux-blue hover:bg-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flux-blue"
                 >
                   Browse resources
-                </button>
+                </a>
               </div>
               <p class="mt-6 text-sm text-gray-400 dark:text-gray-500">
                 Favorites are stored in your browser's local storage

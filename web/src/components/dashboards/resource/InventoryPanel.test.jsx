@@ -7,6 +7,14 @@ import userEvent from '@testing-library/user-event'
 import { InventoryPanel } from './InventoryPanel'
 import { getPanelById } from '../common/panel.test'
 
+// Mock useHashTab to use simple useState instead
+vi.mock('../../../utils/hash', async () => {
+  const { useState } = await import('preact/hooks')
+  return {
+    useHashTab: (panel, defaultTab) => useState(defaultTab)
+  }
+})
+
 describe('InventoryPanel component', () => {
   const mockKustomizationData = {
     apiVersion: 'kustomize.toolkit.fluxcd.io/v1',
@@ -426,20 +434,12 @@ describe('InventoryPanel component', () => {
     const inventoryTab = screen.getByText('Inventory')
     await user.click(inventoryTab)
 
-    // Find the Kustomization button (Flux resource)
-    const kustomizationButton = screen.getByText('backend').closest('button')
-    expect(kustomizationButton).toBeInTheDocument()
+    // Find the Kustomization link (Flux resource)
+    const kustomizationLink = screen.getByText('backend').closest('a')
+    expect(kustomizationLink).toBeInTheDocument()
 
-    // Click it
-    await user.click(kustomizationButton)
-
-    // Check that onNavigate was called with the correct item
-    expect(mockOnNavigate).toHaveBeenCalledWith({
-      apiVersion: 'kustomize.toolkit.fluxcd.io/v1',
-      kind: 'Kustomization',
-      namespace: 'production',
-      name: 'backend'
-    })
+    // Check that it has the correct href
+    expect(kustomizationLink).toHaveAttribute('href', '/resource/Kustomization/production/backend')
   })
 
   it('should not make non-Flux resources clickable in inventory', async () => {
@@ -456,10 +456,10 @@ describe('InventoryPanel component', () => {
     const inventoryTab = screen.getByText('Inventory')
     await user.click(inventoryTab)
 
-    // ConfigMap should not be in a button
+    // ConfigMap should not be in a link
     const configMapElement = screen.getByText('app-config')
     expect(configMapElement.tagName).toBe('SPAN')
-    expect(configMapElement.closest('button')).toBeNull()
+    expect(configMapElement.closest('a')).toBeNull()
   })
 
   it('should toggle collapse/expand state', async () => {
@@ -865,14 +865,15 @@ describe('InventoryPanel component', () => {
     const inventoryTab = screen.getByText('Inventory')
     await user.click(inventoryTab)
 
-    // Find the Kustomization button (Flux resource)
-    const kustomizationButton = screen.getByText('backend').closest('button')
+    // Find the Kustomization link (Flux resource)
+    const kustomizationLink = screen.getByText('backend').closest('a')
 
     // Click it - should not throw
-    await user.click(kustomizationButton)
+    await user.click(kustomizationLink)
 
-    // No error should occur
-    expect(kustomizationButton).toBeInTheDocument()
+    // No error should occur - link should have correct href
+    expect(kustomizationLink).toBeInTheDocument()
+    expect(kustomizationLink).toHaveAttribute('href', '/resource/Kustomization/production/backend')
   })
 
   it('should show garbage collection as disabled for unknown kind without prune spec', () => {

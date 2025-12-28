@@ -111,11 +111,11 @@ func UsernameAndRole(ctx context.Context) (string, string) {
 		// Authentication is not configured, and no pod hostname is set.
 		// We are using a local kubeconfig in development mode.
 		return "kubeconfig (dev)", ""
-	case s == nil && hn != "":
+	case s == nil:
 		// Authentication is not configured, but pod hostname is set.
 		// We are using the pod's service account.
 		return hn, ""
-	case s != nil && s.Name != "":
+	case s.Name != "":
 		// We are using an identity provider.
 		// Then only name is relevant for display.
 		return s.Name, ""

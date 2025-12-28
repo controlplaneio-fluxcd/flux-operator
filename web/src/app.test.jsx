@@ -12,6 +12,7 @@ import {
   reportError,
   connectionStatus
 } from './app'
+import { POLL_INTERVAL_MS } from './utils/constants'
 
 // Mock location state that can be modified in tests
 let mockLocationPath = '/'
@@ -343,14 +344,14 @@ describe('app.jsx', () => {
       })
 
       // Advance time by 30 seconds
-      vi.advanceTimersByTime(30000)
+      vi.advanceTimersByTime(POLL_INTERVAL_MS)
 
       await waitFor(() => {
         expect(fetchWithMock).toHaveBeenCalledTimes(2)
       })
 
       // Advance another 30 seconds
-      vi.advanceTimersByTime(30000)
+      vi.advanceTimersByTime(POLL_INTERVAL_MS)
 
       await waitFor(() => {
         expect(fetchWithMock).toHaveBeenCalledTimes(3)
@@ -369,7 +370,7 @@ describe('app.jsx', () => {
       unmount()
 
       // Advance time by 30 seconds after unmount
-      vi.advanceTimersByTime(30000)
+      vi.advanceTimersByTime(POLL_INTERVAL_MS)
 
       // Should not call fetch again after unmount
       expect(fetchWithMock).toHaveBeenCalledTimes(1)
@@ -419,9 +420,11 @@ describe('app.jsx', () => {
 
       reportLoading.value = false
       connectionStatus.value = 'disconnected'
+      reportError.value = 'Connection error'
       rerender(<App />)
       expect(container.querySelector('.min-h-screen')).toBeInTheDocument()
 
+      reportError.value = null
       reportData.value = { spec: {} }
       rerender(<App />)
       expect(container.querySelector('.min-h-screen')).toBeInTheDocument()
@@ -540,8 +543,8 @@ describe('app.jsx', () => {
 
       render(<App />)
 
-      expect(screen.getByRole('button', { name: 'Resources' })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Events' })).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: 'Resources' })).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: 'Events' })).toBeInTheDocument()
     })
 
     it('should show tab navigation on /events path', () => {
@@ -551,8 +554,8 @@ describe('app.jsx', () => {
 
       render(<App />)
 
-      expect(screen.getByRole('button', { name: 'Resources' })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Events' })).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: 'Resources' })).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: 'Events' })).toBeInTheDocument()
     })
 
     it('should not show tab navigation on root path', () => {
@@ -562,8 +565,8 @@ describe('app.jsx', () => {
 
       render(<App />)
 
-      expect(screen.queryByRole('button', { name: 'Resources' })).not.toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: 'Events' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: 'Resources' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: 'Events' })).not.toBeInTheDocument()
     })
 
     it('should not show tab navigation on resource detail path', () => {
@@ -573,8 +576,8 @@ describe('app.jsx', () => {
 
       render(<App />)
 
-      expect(screen.queryByRole('button', { name: 'Resources' })).not.toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: 'Events' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: 'Resources' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: 'Events' })).not.toBeInTheDocument()
     })
 
     it('should highlight Resources tab when on /resources path', () => {
@@ -584,8 +587,8 @@ describe('app.jsx', () => {
 
       render(<App />)
 
-      const resourcesTab = screen.getByRole('button', { name: 'Resources' })
-      const eventsTab = screen.getByRole('button', { name: 'Events' })
+      const resourcesTab = screen.getByRole('link', { name: 'Resources' })
+      const eventsTab = screen.getByRole('link', { name: 'Events' })
 
       expect(resourcesTab.className).toContain('border-flux-blue')
       expect(resourcesTab.className).toContain('text-flux-blue')
@@ -599,38 +602,34 @@ describe('app.jsx', () => {
 
       render(<App />)
 
-      const resourcesTab = screen.getByRole('button', { name: 'Resources' })
-      const eventsTab = screen.getByRole('button', { name: 'Events' })
+      const resourcesTab = screen.getByRole('link', { name: 'Resources' })
+      const eventsTab = screen.getByRole('link', { name: 'Events' })
 
       expect(eventsTab.className).toContain('border-flux-blue')
       expect(eventsTab.className).toContain('text-flux-blue')
       expect(resourcesTab.className).toContain('border-transparent')
     })
 
-    it('should navigate to /resources when Resources tab is clicked', async () => {
+    it('should have correct href on Resources tab', async () => {
       mockLocationPath = '/events'
       reportLoading.value = false
       reportData.value = mockReport
 
       render(<App />)
 
-      const resourcesTab = screen.getByRole('button', { name: 'Resources' })
-      resourcesTab.click()
-
-      expect(mockRoute).toHaveBeenCalledWith('/resources')
+      const resourcesTab = screen.getByRole('link', { name: 'Resources' })
+      expect(resourcesTab).toHaveAttribute('href', '/resources')
     })
 
-    it('should navigate to /events when Events tab is clicked', async () => {
+    it('should have correct href on Events tab', async () => {
       mockLocationPath = '/resources'
       reportLoading.value = false
       reportData.value = mockReport
 
       render(<App />)
 
-      const eventsTab = screen.getByRole('button', { name: 'Events' })
-      eventsTab.click()
-
-      expect(mockRoute).toHaveBeenCalledWith('/events')
+      const eventsTab = screen.getByRole('link', { name: 'Events' })
+      expect(eventsTab).toHaveAttribute('href', '/events')
     })
   })
 
@@ -679,10 +678,11 @@ describe('app.jsx', () => {
 
       // Wait for the fetch to complete and error state to be set
       await waitFor(() => {
-        expect(screen.getByText('Failed to load Flux report')).toBeInTheDocument()
+        expect(screen.getByText('Flux API Server Unavailable')).toBeInTheDocument()
       })
 
-      expect(screen.getByText('Unable to connect to the server. Retrying automatically...')).toBeInTheDocument()
+      expect(screen.getByText('Unable to connect to the server')).toBeInTheDocument()
+      expect(screen.getByText('Retrying automatically...')).toBeInTheDocument()
 
       consoleErrorSpy.mockRestore()
     })
@@ -696,10 +696,11 @@ describe('app.jsx', () => {
 
       // Wait for the fetch to complete and error state to be set
       await waitFor(() => {
-        expect(screen.getByText('Failed to load Flux report')).toBeInTheDocument()
+        expect(screen.getByText('Flux API Server Unavailable')).toBeInTheDocument()
       })
 
-      expect(screen.getByText('Server configuration is not initialized. Retrying automatically...')).toBeInTheDocument()
+      expect(screen.getByText('Server configuration is not initialized')).toBeInTheDocument()
+      expect(screen.getByText('Retrying automatically...')).toBeInTheDocument()
 
       consoleErrorSpy.mockRestore()
     })
@@ -718,6 +719,65 @@ describe('app.jsx', () => {
       expect(screen.getByTestId('connection-status')).toBeInTheDocument()
 
       consoleErrorSpy.mockRestore()
+    })
+
+    it('should recover from error state when retry succeeds', async () => {
+      // Start with error state - first fetch fails
+      fetchWithMock.mockRejectedValueOnce(new Error('Server error 500'))
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      render(<App />)
+
+      // Wait for error state
+      await waitFor(() => {
+        expect(screen.getByText('Flux API Server Unavailable')).toBeInTheDocument()
+      })
+      expect(connectionStatus.value).toBe('disconnected')
+      expect(reportData.value).toBeNull()
+
+      // Mock successful response for retry
+      const mockReport = {
+        spec: { distribution: { version: 'v2.4.0' } },
+        metadata: { namespace: 'flux-system' }
+      }
+      fetchWithMock.mockResolvedValue(mockReport)
+
+      // Trigger auto-refresh retry
+      vi.advanceTimersByTime(POLL_INTERVAL_MS)
+
+      // Should show loading spinner while retrying (reportLoading set to true when no data)
+      await waitFor(() => {
+        expect(reportLoading.value).toBe(true)
+      })
+
+      // After successful fetch, should show dashboard
+      await waitFor(() => {
+        expect(screen.queryByText('Failed to load Flux report')).not.toBeInTheDocument()
+      })
+      expect(connectionStatus.value).toBe('connected')
+      expect(reportData.value).toEqual(mockReport)
+      expect(screen.getByTestId('dashboard-view')).toBeInTheDocument()
+
+      consoleErrorSpy.mockRestore()
+    })
+
+    it('should set reportLoading when retrying without data', async () => {
+      // This tests the specific bug fix: when retrying after error with no data,
+      // reportLoading should be set to true to show loading spinner instead of crash
+      reportData.value = null
+      reportLoading.value = false
+      connectionStatus.value = 'disconnected'
+
+      fetchWithMock.mockResolvedValue({ spec: {} })
+
+      // Call fetchFluxReport directly to test the loading state
+      const fetchPromise = fetchFluxReport()
+
+      // Should immediately set reportLoading=true since we have no data
+      expect(reportLoading.value).toBe(true)
+      expect(connectionStatus.value).toBe('loading')
+
+      await fetchPromise
     })
   })
 })

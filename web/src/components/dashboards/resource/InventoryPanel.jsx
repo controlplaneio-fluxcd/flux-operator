@@ -1,19 +1,23 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { useState, useMemo } from 'preact/compat'
+import { useMemo } from 'preact/compat'
 import { fluxKinds, workloadKinds, isKindWithInventory } from '../../../utils/constants'
 import { DashboardPanel, TabButton } from '../common/panel'
 import { WorkloadsTabContent } from './WorkloadsTabContent'
 import { GraphTabContent } from './GraphTabContent'
+import { useHashTab } from '../../../utils/hash'
+
+// Valid tabs for the InventoryPanel
+const INVENTORY_TABS = ['overview', 'graph', 'inventory', 'workloads']
 
 /**
  * InventoryPanel - Displays managed objects inventory for a Flux resource
  * Handles its own state management and statistics calculations
  */
 export function InventoryPanel({ resourceData, onNavigate }) {
-  // Tab state
-  const [activeTab, setActiveTab] = useState('overview')
+  // Tab state synced with URL hash (e.g., #inventory-graph)
+  const [activeTab, setActiveTab] = useHashTab('inventory', 'overview', INVENTORY_TABS, 'inventory-panel')
 
   // Check if inventory exists
   const hasInventory = resourceData?.status?.inventory && resourceData.status.inventory.length > 0
@@ -112,11 +116,10 @@ export function InventoryPanel({ resourceData, onNavigate }) {
     return resourceData.status.inventory.filter(item => workloadKinds.includes(item.kind))
   }, [resourceData, hasInventory])
 
-  // Handle navigation to a resource
-  const handleNavigate = (item) => {
-    if (onNavigate) {
-      onNavigate(item)
-    }
+  // Build URL for a resource
+  const getResourceUrl = (item) => {
+    const ns = item.namespace || resourceData.metadata.namespace
+    return `/resource/${encodeURIComponent(item.kind)}/${encodeURIComponent(ns)}/${encodeURIComponent(item.name)}`
   }
 
   return (
@@ -253,12 +256,12 @@ export function InventoryPanel({ resourceData, onNavigate }) {
                   <tr key={idx} class="hover:bg-gray-50 dark:hover:bg-gray-800">
                     <td class="px-3 py-2 text-sm">
                       {isFluxResource ? (
-                        <button
-                          onClick={() => handleNavigate(item)}
+                        <a
+                          href={getResourceUrl(item)}
                           class="text-flux-blue dark:text-blue-400 hover:underline"
                         >
                           {item.name}
-                        </button>
+                        </a>
                       ) : (
                         <span class="text-gray-900 dark:text-gray-100">{item.name}</span>
                       )}
