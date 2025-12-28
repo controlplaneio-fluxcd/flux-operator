@@ -9,6 +9,7 @@ import { formatTime } from '../../../utils/time'
 import { usePageMeta } from '../../../utils/meta'
 import { isFavorite, toggleFavorite, favorites } from '../../../utils/favorites'
 import { addToNavHistory } from '../../../utils/navHistory'
+import { ActionBar } from './ActionBar'
 import { ReconcilerPanel } from './ReconcilerPanel'
 import { SourcePanel } from './SourcePanel'
 import { InventoryPanel } from './InventoryPanel'
@@ -158,32 +159,33 @@ export function ResourcePage({ kind, namespace, name }) {
     setError(null)
   }, [kind, namespace, name])
 
-  // Fetch data
-  useEffect(() => {
-    const fetchData = async () => {
-      // Clear error before fetching (will be set again if fetch fails)
-      setError(null)
+  // Fetch resource data
+  const fetchData = async () => {
+    // Clear error before fetching (will be set again if fetch fails)
+    setError(null)
 
-      const params = new URLSearchParams({ kind, name, namespace })
+    const params = new URLSearchParams({ kind, name, namespace })
 
-      try {
-        const resourceResp = await fetchWithMock({
-          endpoint: `/api/v1/resource?${params.toString()}`,
-          mockPath: '../mock/resource',
-          mockExport: 'getMockResource'
-        })
+    try {
+      const resourceResp = await fetchWithMock({
+        endpoint: `/api/v1/resource?${params.toString()}`,
+        mockPath: '../mock/resource',
+        mockExport: 'getMockResource'
+      })
 
-        setResourceData(resourceResp)
-        setLastUpdatedAt(new Date())
-        setError(null) // Clear error on success
-      } catch (err) {
-        setError(err.message)
-        // Don't clear existing data on error - keep showing stale data
-      } finally {
-        setLoading(false)
-      }
+      setResourceData(resourceResp)
+      setLastUpdatedAt(new Date())
+      setError(null) // Clear error on success
+    } catch (err) {
+      setError(err.message)
+      // Don't clear existing data on error - keep showing stale data
+    } finally {
+      setLoading(false)
     }
+  }
 
+  // Fetch data on mount and setup polling
+  useEffect(() => {
     // Fetch data immediately
     fetchData()
 
@@ -305,6 +307,15 @@ export function ResourcePage({ kind, namespace, name }) {
         {/* Success content - only show panels when we have valid data */}
         {isSuccess && (
           <>
+            {/* Action Bar */}
+            <ActionBar
+              kind={kind}
+              namespace={namespace}
+              name={name}
+              resourceData={resourceData}
+              onActionComplete={fetchData}
+            />
+
             {/* Reconciler Section */}
             <ReconcilerPanel
               kind={kind}

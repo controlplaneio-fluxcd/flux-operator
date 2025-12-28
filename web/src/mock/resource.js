@@ -4414,5 +4414,17 @@ export const getMockResource = (endpoint) => {
     r.metadata.namespace === namespace
   )
 
-  return resource || null
+  if (!resource) {
+    return null
+  }
+
+  // Inject actionable field - true for all kinds except Bucket
+  const actionable = kind !== 'Bucket'
+  return {
+    ...resource,
+    status: {
+      ...resource.status,
+      actionable
+    }
+  }
 }
