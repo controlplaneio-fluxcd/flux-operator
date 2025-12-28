@@ -6,18 +6,22 @@ package kubeclient
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"time"
 
+	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/cache"
 	authzv1 "k8s.io/api/authorization/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
-
-	"github.com/fluxcd/pkg/cache"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
@@ -245,13 +249,22 @@ func (c *Client) filterNamespacesByAccess(ctx context.Context, namespaces []stri
 		return namespaces, true, nil
 	}
 
+	// Look up the plural for ResourceSet from FluxOperatorKinds.
+	var resourceSetPlural string
+	for _, kind := range fluxcdv1.FluxOperatorKinds {
+		if kind.Name == fluxcdv1.ResourceSetKind {
+			resourceSetPlural = kind.Plural
+			break
+		}
+	}
+
 	// Check for cluster-wide access first in case the user has a ClusterRoleBinding.
 	clusterSSAR := &authzv1.SelfSubjectAccessReview{
 		Spec: authzv1.SelfSubjectAccessReviewSpec{
 			ResourceAttributes: &authzv1.ResourceAttributes{
 				Verb:     "get",
 				Group:    fluxcdv1.GroupVersion.Group,
-				Resource: "resourcesets",
+				Resource: resourceSetPlural,
 			},
 		},
 	}
@@ -270,7 +283,7 @@ func (c *Client) filterNamespacesByAccess(ctx context.Context, namespaces []stri
 				ResourceAttributes: &authzv1.ResourceAttributes{
 					Verb:      "get",
 					Group:     fluxcdv1.GroupVersion.Group,
-					Resource:  "resourcesets",
+					Resource:  resourceSetPlural,
 					Namespace: ns,
 				},
 			},
@@ -286,4 +299,122 @@ func (c *Client) filterNamespacesByAccess(ctx context.Context, namespaces []stri
 	}
 
 	return filteredNamespaces, false, nil
+}
+
+// CanPatchResource checks if the user has permission to patch a resource
+// by performing a SelfSubjectAccessReview with the "patch" verb.
+func (c *Client) CanPatchResource(ctx context.Context, group, resource, namespace string) (bool, error) {
+	kubeClient := c.GetClient(ctx)
+	if kubeClient == c.client {
+		// Privileged client has access to all resources.
+		return true, nil
+	}
+
+	ssar := &authzv1.SelfSubjectAccessReview{
+		Spec: authzv1.SelfSubjectAccessReviewSpec{
+			ResourceAttributes: &authzv1.ResourceAttributes{
+				Verb:      "patch",
+				Group:     group,
+				Resource:  resource,
+				Namespace: namespace,
+			},
+		},
+	}
+
+	if err := kubeClient.Create(ctx, ssar); err != nil {
+		return false, fmt.Errorf("failed to create SelfSubjectAccessReview: %w", err)
+	}
+
+	return ssar.Status.Allowed, nil
+}
+
+// AnnotateResource annotates a resource with the provided map of annotations.
+func (c *Client) AnnotateResource(ctx context.Context, gvk schema.GroupVersionKind, name, namespace string, annotations map[string]string) error {
+	kubeClient := c.GetClient(ctx)
+
+	resource := &metav1.PartialObjectMetadata{}
+	resource.SetGroupVersionKind(gvk)
+
+	objectKey := client.ObjectKey{
+		Namespace: namespace,
+		Name:      name,
+	}
+
+	if err := kubeClient.Get(ctx, objectKey, resource); err != nil {
+		return fmt.Errorf("unable to read %s/%s/%s: %w", gvk.Kind, namespace, name, err)
+	}
+
+	patch := client.MergeFrom(resource.DeepCopy())
+
+	existingAnnotations := resource.GetAnnotations()
+	if existingAnnotations == nil {
+		existingAnnotations = make(map[string]string)
+	}
+	maps.Copy(existingAnnotations, annotations)
+	resource.SetAnnotations(existingAnnotations)
+
+	if err := kubeClient.Patch(ctx, resource, patch); err != nil {
+		return fmt.Errorf("unable to annotate %s/%s/%s: %w", gvk.Kind, namespace, name, err)
+	}
+
+	return nil
+}
+
+// ToggleSuspension toggles the suspension of a Flux resource.
+// For Flux Operator resources, it uses the reconcile annotation.
+// For Flux resources, it patches the spec.suspend field.
+func (c *Client) ToggleSuspension(ctx context.Context, gvk schema.GroupVersionKind, name, namespace, requestTime string, suspend bool) error {
+	kubeClient := c.GetClient(ctx)
+
+	// Handle Flux Operator resources using annotations.
+	if gvk.GroupVersion() == fluxcdv1.GroupVersion {
+		var annotations map[string]string
+		if suspend {
+			annotations = map[string]string{
+				fluxcdv1.ReconcileAnnotation: fluxcdv1.DisabledValue,
+			}
+		} else {
+			annotations = map[string]string{
+				fluxcdv1.ReconcileAnnotation:    fluxcdv1.EnabledValue,
+				meta.ReconcileRequestAnnotation: requestTime,
+			}
+		}
+
+		return c.AnnotateResource(ctx, gvk, name, namespace, annotations)
+	}
+
+	// Handle Flux resources by patching the spec.suspend field.
+	resource := &unstructured.Unstructured{}
+	resource.SetGroupVersionKind(gvk)
+	resource.SetName(name)
+	resource.SetNamespace(namespace)
+
+	if err := kubeClient.Get(ctx, client.ObjectKeyFromObject(resource), resource); err != nil {
+		return fmt.Errorf("unable to read %s/%s/%s: %w", gvk.Kind, namespace, name, err)
+	}
+
+	patch := client.MergeFrom(resource.DeepCopy())
+
+	if suspend {
+		if err := unstructured.SetNestedField(resource.Object, suspend, "spec", "suspend"); err != nil {
+			return fmt.Errorf("unable to set suspend field: %w", err)
+		}
+	} else {
+		unstructured.RemoveNestedField(resource.Object, "spec", "suspend")
+
+		annotations := resource.GetAnnotations()
+		if annotations == nil {
+			annotations = make(map[string]string)
+		}
+		maps.Copy(annotations, map[string]string{
+			meta.ReconcileRequestAnnotation: requestTime,
+		})
+		resource.SetAnnotations(annotations)
+	}
+
+	if err := kubeClient.Patch(ctx, resource, patch); err != nil {
+		return fmt.Errorf("unable to patch %s/%s/%s: %w", gvk.Kind, namespace, name, err)
+	}
+
+	return nil
 }

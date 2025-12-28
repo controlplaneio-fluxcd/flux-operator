@@ -78,13 +78,13 @@ func (h *Handler) ResourceHandler(w http.ResponseWriter, req *http.Request) {
 // GetResource fetches a single Flux resource by kind, name and namespace,
 // and injects the inventory into the .status.inventory field before returning it.
 func (h *Handler) GetResource(ctx context.Context, kind, name, namespace string) (*unstructured.Unstructured, error) {
-	exactKind, err := findFluxKind(kind)
+	kindInfo, err := findFluxKindInfo(kind)
 	if err != nil {
 		return nil, fmt.Errorf("unable to find Flux kind %s: %w", kind, err)
 	}
 
 	// Get the preferred GVK for the kind
-	gvk, err := h.preferredFluxGVK(ctx, exactKind)
+	gvk, err := h.preferredFluxGVK(ctx, kindInfo.Name)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get GVK for kind %s: %w", kind, err)
 	}
@@ -190,23 +190,37 @@ func (h *Handler) GetResource(ctx context.Context, kind, name, namespace string)
 		}
 	}
 
+	// Check if the user can perform actions on this resource
+	actionable := false
+	if kindInfo.Reconcilable {
+		canPatch, err := h.kubeClient.CanPatchResource(ctx, gvk.Group, kindInfo.Plural, namespace)
+		if err != nil {
+			log.FromContext(ctx).Error(err, "failed to check patch permission")
+		} else {
+			actionable = canPatch
+		}
+	}
+	if err := unstructured.SetNestedField(obj.Object, actionable, "status", "actionable"); err != nil {
+		return nil, fmt.Errorf("unable to set actionable in status: %w", err)
+	}
+
 	cleanObjectForExport(obj, true)
 	return obj, nil
 }
 
-// findFluxKind searches for a Flux kind in a case-insensitive way and returns the proper casing.
+// findFluxKindInfo searches for a FluxKindInfo in a case-insensitive way.
 // Returns an error if the kind is not found in the fluxKinds list.
-func findFluxKind(kind string) (string, error) {
+func findFluxKindInfo(kind string) (*fluxcdv1.FluxKindInfo, error) {
 	fluxKinds := slices.Concat(fluxcdv1.FluxOperatorKinds, fluxcdv1.FluxKinds)
 	for _, fluxKind := range fluxKinds {
 		if strings.EqualFold(fluxKind.Name, kind) {
-			return fluxKind.Name, nil
+			return &fluxKind, nil
 		}
 		if strings.EqualFold(fluxKind.ShortName, kind) {
-			return fluxKind.Name, nil
+			return &fluxKind, nil
 		}
 	}
-	return "", fmt.Errorf("kind %s not found", kind)
+	return nil, fmt.Errorf("kind %s not found", kind)
 }
 
 // getReconcilerRef retrieves the Flux reconciler information

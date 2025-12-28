@@ -4,6 +4,10 @@
 package web
 
 import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -11,6 +15,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
@@ -445,3 +450,490 @@ func TestGetResource_InvalidKind(t *testing.T) {
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("unable to find Flux kind"))
 }
+
+// Tests for findFluxKindInfo function
+
+func TestFindFluxKindInfo_ExactMatch(t *testing.T) {
+	// Test exact match for various kinds
+	testCases := []struct {
+		input    string
+		expected string
+	}{
+		{"Kustomization", fluxcdv1.FluxKustomizationKind},
+		{"HelmRelease", fluxcdv1.FluxHelmReleaseKind},
+		{"GitRepository", fluxcdv1.FluxGitRepositoryKind},
+		{"ResourceSet", fluxcdv1.ResourceSetKind},
+		{"FluxInstance", fluxcdv1.FluxInstanceKind},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.input, func(t *testing.T) {
+			g := NewWithT(t)
+			info, err := findFluxKindInfo(tc.input)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(info.Name).To(Equal(tc.expected))
+		})
+	}
+}
+
+func TestFindFluxKindInfo_CaseInsensitive(t *testing.T) {
+	// Test case-insensitive matching
+	testCases := []struct {
+		input    string
+		expected string
+	}{
+		{"kustomization", fluxcdv1.FluxKustomizationKind},
+		{"KUSTOMIZATION", fluxcdv1.FluxKustomizationKind},
+		{"KuStOmIzAtIoN", fluxcdv1.FluxKustomizationKind},
+		{"helmrelease", fluxcdv1.FluxHelmReleaseKind},
+		{"HELMRELEASE", fluxcdv1.FluxHelmReleaseKind},
+		{"gitrepository", fluxcdv1.FluxGitRepositoryKind},
+		{"resourceset", fluxcdv1.ResourceSetKind},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.input, func(t *testing.T) {
+			g := NewWithT(t)
+			info, err := findFluxKindInfo(tc.input)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(info.Name).To(Equal(tc.expected))
+		})
+	}
+}
+
+func TestFindFluxKindInfo_ShortName(t *testing.T) {
+	// Test short name matching
+	testCases := []struct {
+		input    string
+		expected string
+	}{
+		{"ks", fluxcdv1.FluxKustomizationKind},
+		{"hr", fluxcdv1.FluxHelmReleaseKind},
+		{"gitrepo", fluxcdv1.FluxGitRepositoryKind},
+		{"rset", fluxcdv1.ResourceSetKind},
+		{"instance", fluxcdv1.FluxInstanceKind},
+		{"hc", fluxcdv1.FluxHelmChartKind},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.input, func(t *testing.T) {
+			g := NewWithT(t)
+			info, err := findFluxKindInfo(tc.input)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(info.Name).To(Equal(tc.expected))
+		})
+	}
+}
+
+func TestFindFluxKindInfo_ShortNameCaseInsensitive(t *testing.T) {
+	// Test short name case-insensitive matching
+	testCases := []struct {
+		input    string
+		expected string
+	}{
+		{"KS", fluxcdv1.FluxKustomizationKind},
+		{"Ks", fluxcdv1.FluxKustomizationKind},
+		{"HR", fluxcdv1.FluxHelmReleaseKind},
+		{"Hr", fluxcdv1.FluxHelmReleaseKind},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.input, func(t *testing.T) {
+			g := NewWithT(t)
+			info, err := findFluxKindInfo(tc.input)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(info.Name).To(Equal(tc.expected))
+		})
+	}
+}
+
+func TestFindFluxKindInfo_NotFound(t *testing.T) {
+	testCases := []string{
+		"UnknownKind",
+		"Deployment",
+		"Service",
+		"",
+		"xyz",
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc, func(t *testing.T) {
+			g := NewWithT(t)
+			_, err := findFluxKindInfo(tc)
+			g.Expect(err).To(HaveOccurred())
+			g.Expect(err.Error()).To(ContainSubstring("not found"))
+		})
+	}
+}
+
+func TestFindFluxKindInfo_ReturnsCorrectPlural(t *testing.T) {
+	testCases := []struct {
+		input          string
+		expectedPlural string
+	}{
+		{"Kustomization", "kustomizations"},
+		{"HelmRelease", "helmreleases"},
+		{"GitRepository", "gitrepositories"},
+		{"ResourceSet", "resourcesets"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.input, func(t *testing.T) {
+			g := NewWithT(t)
+			info, err := findFluxKindInfo(tc.input)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(info.Plural).To(Equal(tc.expectedPlural))
+		})
+	}
+}
+
+// Tests for getReconcilerRef function
+
+func TestGetReconcilerRef_KustomizationLabels(t *testing.T) {
+	g := NewWithT(t)
+
+	obj := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": "apps/v1",
+			"kind":       "Deployment",
+			"metadata": map[string]any{
+				"name":      "my-app",
+				"namespace": "default",
+				"labels": map[string]any{
+					"kustomize.toolkit.fluxcd.io/name":      "my-kustomization",
+					"kustomize.toolkit.fluxcd.io/namespace": "flux-system",
+				},
+			},
+		},
+	}
+
+	result := getReconcilerRef(obj)
+	g.Expect(result).To(Equal("Kustomization/flux-system/my-kustomization"))
+}
+
+func TestGetReconcilerRef_HelmReleaseLabels(t *testing.T) {
+	g := NewWithT(t)
+
+	obj := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": "apps/v1",
+			"kind":       "Deployment",
+			"metadata": map[string]any{
+				"name":      "my-app",
+				"namespace": "default",
+				"labels": map[string]any{
+					"helm.toolkit.fluxcd.io/name":      "my-helmrelease",
+					"helm.toolkit.fluxcd.io/namespace": "flux-system",
+				},
+			},
+		},
+	}
+
+	result := getReconcilerRef(obj)
+	g.Expect(result).To(Equal("HelmRelease/flux-system/my-helmrelease"))
+}
+
+func TestGetReconcilerRef_ResourceSetLabels(t *testing.T) {
+	g := NewWithT(t)
+
+	obj := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": "apps/v1",
+			"kind":       "Deployment",
+			"metadata": map[string]any{
+				"name":      "my-app",
+				"namespace": "default",
+				"labels": map[string]any{
+					"resourceset.fluxcd.controlplane.io/name":      "my-resourceset",
+					"resourceset.fluxcd.controlplane.io/namespace": "flux-system",
+				},
+			},
+		},
+	}
+
+	result := getReconcilerRef(obj)
+	g.Expect(result).To(Equal("ResourceSet/flux-system/my-resourceset"))
+}
+
+func TestGetReconcilerRef_FluxOperatorLabels(t *testing.T) {
+	g := NewWithT(t)
+
+	obj := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": "apps/v1",
+			"kind":       "Deployment",
+			"metadata": map[string]any{
+				"name":      "source-controller",
+				"namespace": "flux-system",
+				"labels": map[string]any{
+					"app.kubernetes.io/managed-by":     "flux-operator",
+					"fluxcd.controlplane.io/name":      "flux",
+					"fluxcd.controlplane.io/namespace": "flux-system",
+				},
+			},
+		},
+	}
+
+	result := getReconcilerRef(obj)
+	g.Expect(result).To(Equal("FluxInstance/flux-system/flux"))
+}
+
+func TestGetReconcilerRef_NoLabels(t *testing.T) {
+	g := NewWithT(t)
+
+	obj := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": "apps/v1",
+			"kind":       "Deployment",
+			"metadata": map[string]any{
+				"name":      "my-app",
+				"namespace": "default",
+			},
+		},
+	}
+
+	result := getReconcilerRef(obj)
+	g.Expect(result).To(BeEmpty())
+}
+
+func TestGetReconcilerRef_NonFluxLabels(t *testing.T) {
+	g := NewWithT(t)
+
+	obj := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": "apps/v1",
+			"kind":       "Deployment",
+			"metadata": map[string]any{
+				"name":      "my-app",
+				"namespace": "default",
+				"labels": map[string]any{
+					"app":     "my-app",
+					"version": "v1",
+				},
+			},
+		},
+	}
+
+	result := getReconcilerRef(obj)
+	g.Expect(result).To(BeEmpty())
+}
+
+func TestGetReconcilerRef_PartialLabels(t *testing.T) {
+	g := NewWithT(t)
+
+	// Only has name, missing namespace
+	obj := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": "apps/v1",
+			"kind":       "Deployment",
+			"metadata": map[string]any{
+				"name":      "my-app",
+				"namespace": "default",
+				"labels": map[string]any{
+					"kustomize.toolkit.fluxcd.io/name": "my-kustomization",
+				},
+			},
+		},
+	}
+
+	result := getReconcilerRef(obj)
+	g.Expect(result).To(BeEmpty())
+}
+
+// Tests for ResourceHandler HTTP handler
+
+func TestResourceHandler_MethodNotAllowed(t *testing.T) {
+	g := NewWithT(t)
+
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	// Test with POST method (should fail)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource", nil)
+	rec := httptest.NewRecorder()
+
+	handler.ResourceHandler(rec, req)
+
+	g.Expect(rec.Code).To(Equal(http.StatusMethodNotAllowed))
+	g.Expect(rec.Body.String()).To(ContainSubstring("Method not allowed"))
+}
+
+func TestResourceHandler_MissingParameters(t *testing.T) {
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	testCases := []struct {
+		name  string
+		query string
+	}{
+		{"missing all", ""},
+		{"missing kind", "name=test&namespace=default"},
+		{"missing name", "kind=ResourceSet&namespace=default"},
+		{"missing namespace", "kind=ResourceSet&name=test"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/resource?"+tc.query, nil)
+			rec := httptest.NewRecorder()
+
+			handler.ResourceHandler(rec, req)
+
+			g.Expect(rec.Code).To(Equal(http.StatusBadRequest))
+			g.Expect(rec.Body.String()).To(ContainSubstring("Missing required parameters"))
+		})
+	}
+}
+
+func TestResourceHandler_HeadMethod(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a ResourceSet for testing
+	resourceSet := &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-head-method",
+			Namespace: "default",
+		},
+		Spec: fluxcdv1.ResourceSetSpec{},
+	}
+	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
+	defer testClient.Delete(ctx, resourceSet)
+
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	req := httptest.NewRequest(http.MethodHead, "/api/v1/resource?kind=ResourceSet&name=test-head-method&namespace=default", nil)
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.ResourceHandler(rec, req)
+
+	// HEAD should succeed (not return 405)
+	g.Expect(rec.Code).NotTo(Equal(http.StatusMethodNotAllowed))
+}
+
+func TestResourceHandler_Success(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a ResourceSet for testing
+	resourceSet := &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-handler-success",
+			Namespace: "default",
+		},
+		Spec: fluxcdv1.ResourceSetSpec{},
+	}
+	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
+	defer testClient.Delete(ctx, resourceSet)
+
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/resource?kind=ResourceSet&name=test-handler-success&namespace=default", nil)
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.ResourceHandler(rec, req)
+
+	g.Expect(rec.Code).To(Equal(http.StatusOK))
+	g.Expect(rec.Header().Get("Content-Type")).To(Equal("application/json"))
+
+	// Verify response body is valid JSON with expected fields
+	var result map[string]any
+	err := json.NewDecoder(rec.Body).Decode(&result)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(result["kind"]).To(Equal("ResourceSet"))
+
+	// Check metadata
+	metadata, ok := result["metadata"].(map[string]any)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(metadata["name"]).To(Equal("test-handler-success"))
+	g.Expect(metadata["namespace"]).To(Equal("default"))
+}
+
+func TestResourceHandler_NotFound_ReturnsEmptyJSON(t *testing.T) {
+	g := NewWithT(t)
+
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/resource?kind=ResourceSet&name=non-existent&namespace=default", nil)
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.ResourceHandler(rec, req)
+
+	// Not found returns 200 with empty JSON
+	g.Expect(rec.Code).To(Equal(http.StatusOK))
+	g.Expect(rec.Header().Get("Content-Type")).To(Equal("application/json"))
+	g.Expect(rec.Body.String()).To(Equal("{}"))
+}
+
+func TestResourceHandler_Forbidden(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a ResourceSet for testing
+	resourceSet := &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-handler-forbidden",
+			Namespace: "default",
+		},
+		Spec: fluxcdv1.ResourceSetSpec{},
+	}
+	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
+	defer testClient.Delete(ctx, resourceSet)
+
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	// Create an unprivileged user session
+	imp := user.Impersonation{
+		Username: "unprivileged-handler-user",
+		Groups:   []string{"unprivileged-group"},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile:       user.Profile{Name: "Unprivileged User"},
+		Impersonation: imp,
+	}, userClient)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/resource?kind=ResourceSet&name=test-handler-forbidden&namespace=default", nil)
+	req = req.WithContext(userCtx)
+	rec := httptest.NewRecorder()
+
+	handler.ResourceHandler(rec, req)
+
+	g.Expect(rec.Code).To(Equal(http.StatusForbidden))
+	g.Expect(rec.Body.String()).To(ContainSubstring("do not have access"))
+}
+
+// Suppress unused import warning
+var _ = bytes.Buffer{}
