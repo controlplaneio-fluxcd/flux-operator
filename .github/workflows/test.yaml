@@ -1,4 +1,4 @@
-name: e2e
+name: test
 
 on:
   pull_request:
@@ -11,7 +11,42 @@ permissions:
   contents: read # for actions/checkout to fetch code
 
 jobs:
-  kind:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - name: Disk Cleanup
+        uses: ./.github/actions/runner-cleanup
+      - name: Setup Go
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
+        with:
+          go-version: 1.25.x
+          cache-dependency-path: |
+            **/go.sum
+            **/go.mod
+      - name: Setup Node
+        uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
+        with:
+          node-version: 24
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+      - name: Build frontend
+        run: make web-ci-install web-build
+      - name: Run linters
+        run: make lint
+      - name: Run frontend tests
+        run: make web-test
+      - name: Run controller tests
+        run: make test
+      - name: Check if working tree is dirty
+        run: |
+          if [[ $(git diff --stat) != '' ]]; then
+            git --no-pager diff
+            echo 'run make test and commit changes'
+            exit 1
+          fi
+  e2e-tests:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -38,12 +73,6 @@ jobs:
           cluster_name: kind
       - name: Build frontend
         run: make web-ci-install web-build
-      - name: Run linters
-        run: make lint
-      - name: Run frontend tests
-        run: make web-test
-      - name: Run controller tests
-        run: make test
       - name: Run controller e2e tests
         run: make test-e2e
       - name: Check if working tree is dirty
