@@ -4,6 +4,7 @@
 package e2e
 
 import (
+	"bytes"
 	"os/exec"
 	"time"
 
@@ -190,6 +191,39 @@ var _ = Describe("FluxInstance", Ordered, func() {
 				return nil
 			}
 			EventuallyWithOffset(1, verifyFluxReport, time.Minute, 10*time.Second).Should(Succeed())
+		})
+	})
+
+	Context("web API", func() {
+		It("should return report data", func() {
+			By("patching service to NodePort")
+			cmd := exec.Command("kubectl", "-n", namespace, "patch", "svc/flux-operator",
+				"--type=json", `-p=[{"op":"replace","path":"/spec/type","value":"NodePort"},{"op":"add","path":"/spec/ports/0/nodePort","value":30080}]`,
+			)
+			_, err := Run(cmd, "/test/e2e")
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+
+			By("fetching report from web API")
+			verifyWebAPI := func() error {
+				cmd := exec.Command("docker", "exec", "kind-control-plane",
+					"curl", "-s", "-f", "--max-time", "5", "http://localhost:30080/api/v1/report")
+				output, err := Run(cmd, "/test/e2e")
+				if err != nil {
+					GinkgoWriter.Printf("curl failed: %v\n", err)
+					return err
+				}
+
+				GinkgoWriter.Println("running: jq assertions on response")
+				cmd = exec.Command("jq", "-e",
+					`.kind == "FluxReport" and .spec.distribution.managedBy == "flux-operator" and (.spec.userInfo.username | startswith("flux-operator-"))`)
+				cmd.Stdin = bytes.NewReader(output)
+				if err := cmd.Run(); err != nil {
+					GinkgoWriter.Printf("jq assertion failed, response: %s\n", output)
+					return err
+				}
+				return nil
+			}
+			EventuallyWithOffset(1, verifyWebAPI, time.Minute, 10*time.Second).Should(Succeed())
 		})
 	})
 
