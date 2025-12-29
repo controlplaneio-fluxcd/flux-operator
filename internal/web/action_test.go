@@ -17,13 +17,27 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
+
+// oauthConfig returns a config with OAuth2 authentication enabled for testing.
+func oauthConfig() *config.ConfigSpec {
+	return &config.ConfigSpec{
+		Authentication: &config.AuthenticationSpec{
+			Type: config.AuthenticationTypeOAuth2,
+		},
+		UserActions: &config.UserActionsSpec{
+			AuthType: config.AuthenticationTypeOAuth2,
+		},
+	}
+}
 
 func TestActionHandler_MethodNotAllowed(t *testing.T) {
 	g := NewWithT(t)
 
 	handler := &Handler{
+		conf:          oauthConfig(),
 		kubeClient:    kubeClient,
 		version:       "v1.0.0",
 		statusManager: "test-status-manager",
@@ -44,6 +58,7 @@ func TestActionHandler_InvalidJSON(t *testing.T) {
 	g := NewWithT(t)
 
 	handler := &Handler{
+		conf:          oauthConfig(),
 		kubeClient:    kubeClient,
 		version:       "v1.0.0",
 		statusManager: "test-status-manager",
@@ -61,6 +76,7 @@ func TestActionHandler_InvalidJSON(t *testing.T) {
 
 func TestActionHandler_MissingFields(t *testing.T) {
 	handler := &Handler{
+		conf:          oauthConfig(),
 		kubeClient:    kubeClient,
 		version:       "v1.0.0",
 		statusManager: "test-status-manager",
@@ -109,6 +125,7 @@ func TestActionHandler_InvalidAction(t *testing.T) {
 	g := NewWithT(t)
 
 	handler := &Handler{
+		conf:          oauthConfig(),
 		kubeClient:    kubeClient,
 		version:       "v1.0.0",
 		statusManager: "test-status-manager",
@@ -135,6 +152,7 @@ func TestActionHandler_UnknownKind(t *testing.T) {
 	g := NewWithT(t)
 
 	handler := &Handler{
+		conf:          oauthConfig(),
 		kubeClient:    kubeClient,
 		version:       "v1.0.0",
 		statusManager: "test-status-manager",
@@ -161,6 +179,7 @@ func TestActionHandler_NonReconcilableKind_ReconcileRejected(t *testing.T) {
 	g := NewWithT(t)
 
 	handler := &Handler{
+		conf:          oauthConfig(),
 		kubeClient:    kubeClient,
 		version:       "v1.0.0",
 		statusManager: "test-status-manager",
@@ -199,6 +218,7 @@ func TestActionHandler_Reconcile_Success(t *testing.T) {
 	defer testClient.Delete(ctx, resourceSet)
 
 	handler := &Handler{
+		conf:          oauthConfig(),
 		kubeClient:    kubeClient,
 		version:       "v1.0.0",
 		statusManager: "test-status-manager",
@@ -247,6 +267,7 @@ func TestActionHandler_Suspend_Success(t *testing.T) {
 	defer testClient.Delete(ctx, resourceSet)
 
 	handler := &Handler{
+		conf:          oauthConfig(),
 		kubeClient:    kubeClient,
 		version:       "v1.0.0",
 		statusManager: "test-status-manager",
@@ -298,6 +319,7 @@ func TestActionHandler_Resume_Success(t *testing.T) {
 	defer testClient.Delete(ctx, resourceSet)
 
 	handler := &Handler{
+		conf:          oauthConfig(),
 		kubeClient:    kubeClient,
 		version:       "v1.0.0",
 		statusManager: "test-status-manager",
@@ -336,6 +358,7 @@ func TestActionHandler_ResourceNotFound(t *testing.T) {
 	g := NewWithT(t)
 
 	handler := &Handler{
+		conf:          oauthConfig(),
 		kubeClient:    kubeClient,
 		version:       "v1.0.0",
 		statusManager: "test-status-manager",
@@ -374,6 +397,7 @@ func TestActionHandler_UnprivilegedUser_Forbidden(t *testing.T) {
 	defer testClient.Delete(ctx, resourceSet)
 
 	handler := &Handler{
+		conf:          oauthConfig(),
 		kubeClient:    kubeClient,
 		version:       "v1.0.0",
 		statusManager: "test-status-manager",
@@ -460,6 +484,7 @@ func TestActionHandler_WithUserRBAC_Success(t *testing.T) {
 	defer testClient.Delete(ctx, clusterRoleBinding)
 
 	handler := &Handler{
+		conf:          oauthConfig(),
 		kubeClient:    kubeClient,
 		version:       "v1.0.0",
 		statusManager: "test-status-manager",
@@ -552,6 +577,7 @@ func TestActionHandler_NamespaceScopedRBAC_ForbiddenInOtherNamespace(t *testing.
 	defer testClient.Delete(ctx, roleBinding)
 
 	handler := &Handler{
+		conf:          oauthConfig(),
 		kubeClient:    kubeClient,
 		version:       "v1.0.0",
 		statusManager: "test-status-manager",
@@ -604,6 +630,7 @@ func TestActionHandler_ResponseContentType(t *testing.T) {
 	defer testClient.Delete(ctx, resourceSet)
 
 	handler := &Handler{
+		conf:          oauthConfig(),
 		kubeClient:    kubeClient,
 		version:       "v1.0.0",
 		statusManager: "test-status-manager",
@@ -655,6 +682,7 @@ func TestActionHandler_AllValidActions(t *testing.T) {
 			defer testClient.Delete(ctx, resourceSet)
 
 			handler := &Handler{
+				conf:          oauthConfig(),
 				kubeClient:    kubeClient,
 				version:       "v1.0.0",
 				statusManager: "test-status-manager",
@@ -683,4 +711,264 @@ func TestActionHandler_AllValidActions(t *testing.T) {
 			g.Expect(resp.Success).To(BeTrue())
 		})
 	}
+}
+
+func TestActionHandler_ActionsDisabled_NoAuth(t *testing.T) {
+	g := NewWithT(t)
+
+	// Test with no authentication configured
+	handler := &Handler{
+		conf: &config.ConfigSpec{
+			UserActions: &config.UserActionsSpec{
+				AuthType: config.AuthenticationTypeOAuth2,
+			},
+		},
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	actionReq := ActionRequest{
+		Kind:      "ResourceSet",
+		Namespace: "default",
+		Name:      "test",
+		Action:    "reconcile",
+	}
+	body, _ := json.Marshal(actionReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	rec := httptest.NewRecorder()
+
+	handler.ActionHandler(rec, req)
+
+	g.Expect(rec.Code).To(Equal(http.StatusMethodNotAllowed))
+	g.Expect(rec.Body.String()).To(ContainSubstring("User actions are disabled"))
+}
+
+func TestActionHandler_ActionsDisabled_AnonymousAuth(t *testing.T) {
+	g := NewWithT(t)
+
+	// Test with Anonymous authentication but userActions.authType is OAuth2 (default)
+	handler := &Handler{
+		conf: &config.ConfigSpec{
+			Authentication: &config.AuthenticationSpec{
+				Type: config.AuthenticationTypeAnonymous,
+			},
+			UserActions: &config.UserActionsSpec{
+				AuthType: config.AuthenticationTypeOAuth2,
+			},
+		},
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	actionReq := ActionRequest{
+		Kind:      "ResourceSet",
+		Namespace: "default",
+		Name:      "test",
+		Action:    "reconcile",
+	}
+	body, _ := json.Marshal(actionReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	rec := httptest.NewRecorder()
+
+	handler.ActionHandler(rec, req)
+
+	g.Expect(rec.Code).To(Equal(http.StatusMethodNotAllowed))
+	g.Expect(rec.Body.String()).To(ContainSubstring("User actions are disabled"))
+}
+
+func TestActionHandler_ActionNotEnabled(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a ResourceSet for testing
+	resourceSet := &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-action-not-enabled",
+			Namespace: "default",
+		},
+		Spec: fluxcdv1.ResourceSetSpec{},
+	}
+	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
+	defer testClient.Delete(ctx, resourceSet)
+
+	// Configure only suspend and resume actions (not reconcile)
+	handler := &Handler{
+		conf: &config.ConfigSpec{
+			Authentication: &config.AuthenticationSpec{
+				Type: config.AuthenticationTypeOAuth2,
+			},
+			UserActions: &config.UserActionsSpec{
+				Enabled:  []string{config.UserActionSuspend, config.UserActionResume},
+				AuthType: config.AuthenticationTypeOAuth2,
+			},
+		},
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	// Try to perform reconcile action which is not enabled
+	actionReq := ActionRequest{
+		Kind:      "ResourceSet",
+		Namespace: "default",
+		Name:      "test-action-not-enabled",
+		Action:    "reconcile",
+	}
+	body, _ := json.Marshal(actionReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.ActionHandler(rec, req)
+
+	g.Expect(rec.Code).To(Equal(http.StatusMethodNotAllowed))
+	g.Expect(rec.Body.String()).To(ContainSubstring("Action 'reconcile' is not enabled"))
+
+	// Verify the resource was NOT modified
+	var updated fluxcdv1.ResourceSet
+	g.Expect(testClient.Get(ctx, client.ObjectKeyFromObject(resourceSet), &updated)).To(Succeed())
+	g.Expect(updated.Annotations).NotTo(HaveKey("reconcile.fluxcd.io/requestedAt"))
+}
+
+func TestActionHandler_ActionEnabled(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a ResourceSet for testing
+	resourceSet := &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-action-enabled",
+			Namespace: "default",
+		},
+		Spec: fluxcdv1.ResourceSetSpec{},
+	}
+	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
+	defer testClient.Delete(ctx, resourceSet)
+
+	// Configure only reconcile action
+	handler := &Handler{
+		conf: &config.ConfigSpec{
+			Authentication: &config.AuthenticationSpec{
+				Type: config.AuthenticationTypeOAuth2,
+			},
+			UserActions: &config.UserActionsSpec{
+				Enabled:  []string{config.UserActionReconcile},
+				AuthType: config.AuthenticationTypeOAuth2,
+			},
+		},
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	actionReq := ActionRequest{
+		Kind:      "ResourceSet",
+		Namespace: "default",
+		Name:      "test-action-enabled",
+		Action:    "reconcile",
+	}
+	body, _ := json.Marshal(actionReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.ActionHandler(rec, req)
+
+	g.Expect(rec.Code).To(Equal(http.StatusOK))
+
+	var resp ActionResponse
+	err := json.NewDecoder(rec.Body).Decode(&resp)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(resp.Success).To(BeTrue())
+}
+
+func TestActionHandler_AllActionsEnabledByDefault(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a ResourceSet for testing
+	resourceSet := &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-action-default",
+			Namespace: "default",
+		},
+		Spec: fluxcdv1.ResourceSetSpec{},
+	}
+	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
+	defer testClient.Delete(ctx, resourceSet)
+
+	// Configure OAuth2 with nil Enabled (all actions enabled by default)
+	handler := &Handler{
+		conf: &config.ConfigSpec{
+			Authentication: &config.AuthenticationSpec{
+				Type: config.AuthenticationTypeOAuth2,
+			},
+			UserActions: &config.UserActionsSpec{
+				AuthType: config.AuthenticationTypeOAuth2,
+			},
+		},
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	actionReq := ActionRequest{
+		Kind:      "ResourceSet",
+		Namespace: "default",
+		Name:      "test-action-default",
+		Action:    "reconcile",
+	}
+	body, _ := json.Marshal(actionReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.ActionHandler(rec, req)
+
+	g.Expect(rec.Code).To(Equal(http.StatusOK))
+
+	var resp ActionResponse
+	err := json.NewDecoder(rec.Body).Decode(&resp)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(resp.Success).To(BeTrue())
+}
+
+func TestActionHandler_AllActionsExplicitlyDisabled(t *testing.T) {
+	g := NewWithT(t)
+
+	// Configure OAuth2 with explicitly empty Enabled list (disables all actions)
+	handler := &Handler{
+		conf: &config.ConfigSpec{
+			Authentication: &config.AuthenticationSpec{
+				Type: config.AuthenticationTypeOAuth2,
+			},
+			UserActions: &config.UserActionsSpec{
+				Enabled:  []string{}, // Explicitly empty - disables all actions
+				AuthType: config.AuthenticationTypeOAuth2,
+			},
+		},
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	actionReq := ActionRequest{
+		Kind:      "ResourceSet",
+		Namespace: "default",
+		Name:      "test",
+		Action:    "reconcile",
+	}
+	body, _ := json.Marshal(actionReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	rec := httptest.NewRecorder()
+
+	handler.ActionHandler(rec, req)
+
+	g.Expect(rec.Code).To(Equal(http.StatusMethodNotAllowed))
+	g.Expect(rec.Body.String()).To(ContainSubstring("User actions are disabled"))
 }

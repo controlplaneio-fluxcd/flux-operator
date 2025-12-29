@@ -18,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
 
@@ -196,10 +197,21 @@ func (h *Handler) GetResource(ctx context.Context, kind, name, namespace string)
 	if err != nil {
 		log.FromContext(ctx).Error(err, "failed to check patch permission")
 	} else {
-		actionable = canPatch
+		actionable = canPatch && h.conf.UserActionsEnabled()
 	}
 	if err := unstructured.SetNestedField(obj.Object, actionable, "status", "actionable"); err != nil {
 		return nil, fmt.Errorf("unable to set actionable in status: %w", err)
+	}
+
+	// Inject the available actions if actionable
+	if actionable {
+		actions := config.AllUserActions
+		if ua := h.conf.UserActions; len(ua.Enabled) > 0 {
+			actions = ua.Enabled
+		}
+		if err := unstructured.SetNestedStringSlice(obj.Object, actions, "status", "actions"); err != nil {
+			return nil, fmt.Errorf("unable to set actions in status: %w", err)
+		}
 	}
 
 	cleanObjectForExport(obj, true)
