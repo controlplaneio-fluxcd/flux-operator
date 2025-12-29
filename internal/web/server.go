@@ -171,12 +171,13 @@ func RunServer(ctx context.Context, c cluster.Cluster,
 
 		// Successfully created all components with the new configuration.
 		confVersion = conf.Version
-		conf = nil // Clear conf to receive a new one in the next iteration.
 
 		// Create new handler.
 		newHandlerCtx, cancelNewHandlerCtx := context.WithCancel(context.Background())
 		newHandler, newHandlerStopped := NewHandler(newHandlerCtx, conf, spaHandler, kubeClient,
 			version, statusManager, namespace, reportInterval, eventRecorder, authMiddleware, serverLog)
+
+		conf = nil // Clear conf to receive a new one in the next iteration.
 
 		// Route new requests to the new handler.
 		handlerMu.Lock()
