@@ -59,13 +59,16 @@ export function ActionBar({ kind, namespace, name, resourceData, onActionComplet
     prevSourceStatusRef.current = sourceStatus
   }, [sourceStatus])
 
-  // Check if this is a Kustomization or HelmRelease (can reconcile source)
-  const canReconcileSource = (kind === 'Kustomization' || kind === 'HelmRelease') && sourceRef
+  // Check if this kind supports reconciliation (Alert and Provider only support suspend/resume)
+  const canReconcile = kind !== 'Alert' && kind !== 'Provider'
+
+  // Check if this is a Kustomization or HelmRelease with a pullable source (not ExternalArtifact)
+  const canReconcileSource = (kind === 'Kustomization' || kind === 'HelmRelease') && sourceRef && sourceRef.kind !== 'ExternalArtifact'
 
   // Determine button disabled states
-  const allButtonsDisabled = !actionable || isProgressing
-  const reconcileDisabled = allButtonsDisabled || isSuspended
-  const reconcileSourceDisabled = allButtonsDisabled || isSuspended || sourceStatus === 'Suspended'
+  const reconcileDisabled = !actionable || isProgressing || isSuspended
+  const reconcileSourceDisabled = !actionable || isSuspended || sourceStatus === 'Suspended'
+  const suspendResumeDisabled = !actionable
 
   // Perform an action
   const performAction = async (action, targetKind, targetNamespace, targetName, loadingId = action) => {
@@ -147,25 +150,27 @@ export function ActionBar({ kind, namespace, name, resourceData, onActionComplet
 
   return (
     <div class="flex flex-wrap items-center gap-2" data-testid="action-bar">
-      {/* Reconcile button */}
-      <button
-        onClick={handleReconcile}
-        disabled={reconcileDisabled || loading !== null}
-        class={`${baseButtonClass} ${
-          reconcileDisabled || loading !== null
-            ? disabledClass
-            : 'border-blue-500 text-blue-600 hover:bg-blue-50 dark:border-blue-400 dark:text-blue-400 dark:hover:bg-blue-900/30 focus:ring-blue-500'
-        }`}
-        data-testid="reconcile-button"
-        title="Trigger a reconciliation"
-      >
-        {(loading === 'reconcile' || isProgressing) ? <LoadingSpinner /> : showSuccess === 'reconcile' ? <SuccessCheck /> : (
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-        )}
-        Reconcile
-      </button>
+      {/* Reconcile button (hidden for Alert and Provider) */}
+      {canReconcile && (
+        <button
+          onClick={handleReconcile}
+          disabled={reconcileDisabled || loading !== null}
+          class={`${baseButtonClass} ${
+            reconcileDisabled || loading !== null
+              ? disabledClass
+              : 'border-blue-500 text-blue-600 hover:bg-blue-50 dark:border-blue-400 dark:text-blue-400 dark:hover:bg-blue-900/30 focus:ring-blue-500'
+          }`}
+          data-testid="reconcile-button"
+          title="Trigger a reconciliation"
+        >
+          {(loading === 'reconcile' || isProgressing) ? <LoadingSpinner /> : showSuccess === 'reconcile' ? <SuccessCheck /> : (
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          )}
+          Reconcile
+        </button>
+      )}
 
       {/* Reconcile Source button (only for Kustomization/HelmRelease with sourceRef) */}
       {canReconcileSource && (
@@ -178,23 +183,23 @@ export function ActionBar({ kind, namespace, name, resourceData, onActionComplet
               : 'border-purple-500 text-purple-600 hover:bg-purple-50 dark:border-purple-400 dark:text-purple-400 dark:hover:bg-purple-900/30 focus:ring-purple-500'
           }`}
           data-testid="reconcile-source-button"
-          title="Fetch changes from source"
+          title="Pull changes from upstream source"
         >
           {(loading === 'reconcile-source' || isSourceProgressing) ? <LoadingSpinner /> : showSuccess === 'reconcile-source' ? <SuccessCheck /> : (
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
           )}
-          Fetch
+          Pull
         </button>
       )}
 
       {/* Suspend/Resume button */}
       <button
         onClick={handleSuspendResume}
-        disabled={allButtonsDisabled || loading !== null}
+        disabled={suspendResumeDisabled || loading !== null}
         class={`${baseButtonClass} ${
-          allButtonsDisabled || loading !== null
+          suspendResumeDisabled || loading !== null
             ? disabledClass
             : isSuspended
               ? 'border-green-500 text-green-600 hover:bg-green-50 dark:border-green-400 dark:text-green-400 dark:hover:bg-green-900/30 focus:ring-green-500'
@@ -205,13 +210,12 @@ export function ActionBar({ kind, namespace, name, resourceData, onActionComplet
       >
         {(loading === 'suspend' || loading === 'resume') ? <LoadingSpinner /> : (
           isSuspended ? (
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z" />
             </svg>
           ) : (
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
             </svg>
           )
         )}

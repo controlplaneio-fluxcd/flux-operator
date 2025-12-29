@@ -157,7 +157,7 @@ func TestActionHandler_UnknownKind(t *testing.T) {
 	g.Expect(rec.Body.String()).To(ContainSubstring("Unknown resource kind"))
 }
 
-func TestActionHandler_NonReconcilableKind(t *testing.T) {
+func TestActionHandler_NonReconcilableKind_ReconcileRejected(t *testing.T) {
 	g := NewWithT(t)
 
 	handler := &Handler{
@@ -167,7 +167,7 @@ func TestActionHandler_NonReconcilableKind(t *testing.T) {
 		namespace:     "flux-system",
 	}
 
-	// Alert is not reconcilable
+	// Alert is not reconcilable, but reconcile action should be rejected
 	actionReq := ActionRequest{
 		Kind:      "Alert",
 		Namespace: "default",
@@ -181,7 +181,7 @@ func TestActionHandler_NonReconcilableKind(t *testing.T) {
 	handler.ActionHandler(rec, req)
 
 	g.Expect(rec.Code).To(Equal(http.StatusBadRequest))
-	g.Expect(rec.Body.String()).To(ContainSubstring("does not support actions"))
+	g.Expect(rec.Body.String()).To(ContainSubstring("does not support reconciliation"))
 }
 
 func TestActionHandler_Reconcile_Success(t *testing.T) {

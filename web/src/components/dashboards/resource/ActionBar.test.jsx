@@ -134,7 +134,7 @@ describe('ActionBar component', () => {
       expect(screen.queryByTestId('action-bar')).not.toBeInTheDocument()
     })
 
-    it('should disable all buttons when status is Progressing', () => {
+    it('should only disable Reconcile button when status is Progressing', () => {
       const props = {
         ...defaultProps,
         resourceData: {
@@ -148,8 +148,8 @@ describe('ActionBar component', () => {
       render(<ActionBar {...props} />)
 
       expect(screen.getByTestId('reconcile-button')).toBeDisabled()
-      expect(screen.getByTestId('reconcile-source-button')).toBeDisabled()
-      expect(screen.getByTestId('suspend-resume-button')).toBeDisabled()
+      expect(screen.getByTestId('reconcile-source-button')).not.toBeDisabled()
+      expect(screen.getByTestId('suspend-resume-button')).not.toBeDisabled()
     })
 
     it('should show spinner in Reconcile button when status is Progressing', () => {

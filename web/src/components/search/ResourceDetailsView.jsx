@@ -5,7 +5,7 @@ import { useState, useMemo, useEffect } from 'preact/hooks'
 import { fetchWithMock } from '../../utils/fetch'
 import { usePrismTheme, YamlBlock } from '../dashboards/common/yaml'
 import { fluxKinds, isKindWithInventory, getKindAlias } from '../../utils/constants'
-import { getStatusBadgeClass } from '../../utils/status'
+import { getStatusBadgeClass, cleanStatus } from '../../utils/status'
 import { FluxOperatorIcon } from '../layout/Icons'
 
 /**
@@ -191,14 +191,6 @@ export function ResourceDetailsView({ kind, name, namespace, isExpanded }) {
   const statusData = useMemo(() => {
     if (!resourceData) return null
 
-    const cleanStatus = resourceData.status
-      ? (() => {
-        // eslint-disable-next-line no-unused-vars
-        const { inventory, sourceRef, reconcilerRef, ...rest } = resourceData.status
-        return rest
-      })()
-      : undefined
-
     return {
       apiVersion: resourceData.apiVersion,
       kind: resourceData.kind,
@@ -206,7 +198,7 @@ export function ResourceDetailsView({ kind, name, namespace, isExpanded }) {
         name: resourceData.metadata.name,
         namespace: resourceData.metadata.namespace
       },
-      status: cleanStatus
+      status: cleanStatus(resourceData.status)
     }
   }, [resourceData])
 

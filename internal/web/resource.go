@@ -190,15 +190,13 @@ func (h *Handler) GetResource(ctx context.Context, kind, name, namespace string)
 		}
 	}
 
-	// Check if the user can perform actions on this resource
+	// Check if the user can perform actions on this resource (RBAC only)
 	actionable := false
-	if kindInfo.Reconcilable {
-		canPatch, err := h.kubeClient.CanPatchResource(ctx, gvk.Group, kindInfo.Plural, namespace)
-		if err != nil {
-			log.FromContext(ctx).Error(err, "failed to check patch permission")
-		} else {
-			actionable = canPatch
-		}
+	canPatch, err := h.kubeClient.CanPatchResource(ctx, gvk.Group, kindInfo.Plural, namespace)
+	if err != nil {
+		log.FromContext(ctx).Error(err, "failed to check patch permission")
+	} else {
+		actionable = canPatch
 	}
 	if err := unstructured.SetNestedField(obj.Object, actionable, "status", "actionable"); err != nil {
 		return nil, fmt.Errorf("unable to set actionable in status: %w", err)

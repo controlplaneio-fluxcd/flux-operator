@@ -66,9 +66,9 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Check if the kind supports reconciliation
-	if !kindInfo.Reconcilable {
-		http.Error(w, fmt.Sprintf("Resource kind %s does not support actions", kindInfo.Name), http.StatusBadRequest)
+	// Check if the kind supports reconciliation (only for reconcile action)
+	if actionReq.Action == "reconcile" && !kindInfo.Reconcilable {
+		http.Error(w, fmt.Sprintf("Resource kind %s does not support reconciliation", kindInfo.Name), http.StatusBadRequest)
 		return
 	}
 

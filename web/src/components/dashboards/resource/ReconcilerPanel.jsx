@@ -7,7 +7,7 @@ import { formatTimestamp } from '../../../utils/time'
 import { getControllerName, getKindAlias } from '../../../utils/constants'
 import { DashboardPanel, TabButton } from '../common/panel'
 import { YamlBlock } from '../common/yaml'
-import { getStatusBadgeClass, getEventBadgeClass } from '../../../utils/status'
+import { getStatusBadgeClass, getEventBadgeClass, cleanStatus } from '../../../utils/status'
 import { HistoryTimeline } from './HistoryTimeline'
 import { FluxOperatorIcon } from '../../layout/Icons'
 import { useHashTab } from '../../../utils/hash'
@@ -113,13 +113,11 @@ export function ReconcilerPanel({ kind, name, namespace, resourceData }) {
 
   const statusYaml = useMemo(() => {
     if (!resourceData?.status) return null
-    // eslint-disable-next-line no-unused-vars
-    const { inventory, sourceRef, reconcilerRef, exportedInputs, ...rest } = resourceData.status
     return {
       apiVersion: resourceData.apiVersion,
       kind: resourceData.kind,
       metadata: { name: resourceData.metadata.name, namespace: resourceData.metadata.namespace },
-      status: rest
+      status: cleanStatus(resourceData.status)
     }
   }, [resourceData])
 

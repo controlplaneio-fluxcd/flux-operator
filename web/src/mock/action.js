@@ -3,7 +3,6 @@
 
 // Mock action response for POST /api/v1/action
 export const mockAction = (body) => {
-  // Simulate a small delay for realism
   return {
     success: true,
     message: `${body.action.charAt(0).toUpperCase() + body.action.slice(1)} triggered for ${body.namespace}/${body.name}`
