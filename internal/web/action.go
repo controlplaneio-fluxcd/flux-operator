@@ -4,14 +4,20 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/util/retry"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
@@ -95,15 +101,15 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 		if kindInfo.Name == fluxcdv1.FluxHelmReleaseKind || kindInfo.Name == fluxcdv1.ResourceSetInputProviderKind {
 			annotations[meta.ForceRequestAnnotation] = now
 		}
-		actionErr = h.kubeClient.AnnotateResource(ctx, *gvk, actionReq.Name, actionReq.Namespace, annotations)
+		actionErr = h.annotateResource(ctx, *gvk, actionReq.Name, actionReq.Namespace, annotations)
 		message = fmt.Sprintf("Reconciliation triggered for %s/%s", actionReq.Namespace, actionReq.Name)
 
 	case "suspend":
-		actionErr = h.kubeClient.ToggleSuspension(ctx, *gvk, actionReq.Name, actionReq.Namespace, now, true)
+		actionErr = h.setSuspension(ctx, *gvk, actionReq.Name, actionReq.Namespace, now, true)
 		message = fmt.Sprintf("Suspended %s/%s", actionReq.Namespace, actionReq.Name)
 
 	case "resume":
-		actionErr = h.kubeClient.ToggleSuspension(ctx, *gvk, actionReq.Name, actionReq.Namespace, now, false)
+		actionErr = h.setSuspension(ctx, *gvk, actionReq.Name, actionReq.Namespace, now, false)
 		message = fmt.Sprintf("Resumed %s/%s", actionReq.Namespace, actionReq.Name)
 	}
 
@@ -137,4 +143,98 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+}
+
+// annotateResource annotates a resource with the provided map of annotations.
+func (h *Handler) annotateResource(ctx context.Context, gvk schema.GroupVersionKind, name, namespace string, annotations map[string]string) error {
+	kubeClient := h.kubeClient.GetClient(ctx)
+
+	resource := &metav1.PartialObjectMetadata{}
+	resource.SetGroupVersionKind(gvk)
+
+	objectKey := client.ObjectKey{
+		Namespace: namespace,
+		Name:      name,
+	}
+
+	return retry.RetryOnConflict(retry.DefaultBackoff, func() (err error) {
+		if err := kubeClient.Get(ctx, objectKey, resource); err != nil {
+			return err
+		}
+
+		patch := client.MergeFrom(resource.DeepCopy())
+
+		existingAnnotations := resource.GetAnnotations()
+		if existingAnnotations == nil {
+			existingAnnotations = make(map[string]string)
+		}
+		maps.Copy(existingAnnotations, annotations)
+		resource.SetAnnotations(existingAnnotations)
+
+		if err := kubeClient.Patch(ctx, resource, patch); err != nil {
+			return err
+		}
+		return nil
+	})
+}
+
+// setSuspension sets the suspension state of a Flux resource.
+// For Flux Operator resources, it uses the reconcile annotation.
+// For Flux resources, it patches the spec.suspend field.
+func (h *Handler) setSuspension(ctx context.Context, gvk schema.GroupVersionKind, name, namespace, requestTime string, suspend bool) error {
+	kubeClient := h.kubeClient.GetClient(ctx)
+
+	// Handle Flux Operator resources using annotations.
+	if gvk.GroupVersion() == fluxcdv1.GroupVersion {
+		var annotations map[string]string
+		if suspend {
+			annotations = map[string]string{
+				fluxcdv1.ReconcileAnnotation: fluxcdv1.DisabledValue,
+			}
+		} else {
+			annotations = map[string]string{
+				fluxcdv1.ReconcileAnnotation:    fluxcdv1.EnabledValue,
+				meta.ReconcileRequestAnnotation: requestTime,
+			}
+		}
+
+		return h.annotateResource(ctx, gvk, name, namespace, annotations)
+	}
+
+	// Handle Flux resources by patching the spec.suspend field.
+	resource := &unstructured.Unstructured{}
+	resource.SetGroupVersionKind(gvk)
+	resource.SetName(name)
+	resource.SetNamespace(namespace)
+
+	return retry.RetryOnConflict(retry.DefaultBackoff, func() (err error) {
+		if err := kubeClient.Get(ctx, client.ObjectKeyFromObject(resource), resource); err != nil {
+			return fmt.Errorf("unable to read %s/%s/%s: %w", gvk.Kind, namespace, name, err)
+		}
+
+		patch := client.MergeFrom(resource.DeepCopy())
+
+		if suspend {
+			if err := unstructured.SetNestedField(resource.Object, suspend, "spec", "suspend"); err != nil {
+				return fmt.Errorf("unable to set suspend field: %w", err)
+			}
+		} else {
+			unstructured.RemoveNestedField(resource.Object, "spec", "suspend")
+
+			annotations := resource.GetAnnotations()
+			if annotations == nil {
+				annotations = make(map[string]string)
+			}
+			maps.Copy(annotations, map[string]string{
+				meta.ReconcileRequestAnnotation: requestTime,
+			})
+			resource.SetAnnotations(annotations)
+		}
+
+		if err := kubeClient.Patch(ctx, resource, patch); err != nil {
+			return err
+		}
+
+		return nil
+	})
 }

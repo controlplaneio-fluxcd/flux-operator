@@ -192,7 +192,7 @@ func (h *Handler) GetResource(ctx context.Context, kind, name, namespace string)
 
 	// Check if the user can perform actions on this resource (RBAC only)
 	actionable := false
-	canPatch, err := h.kubeClient.CanPatchResource(ctx, gvk.Group, kindInfo.Plural, namespace)
+	canPatch, err := h.kubeClient.CanPatchResource(ctx, gvk.Group, kindInfo.Plural, namespace, name)
 	if err != nil {
 		log.FromContext(ctx).Error(err, "failed to check patch permission")
 	} else {
