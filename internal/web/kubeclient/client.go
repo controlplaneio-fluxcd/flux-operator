@@ -91,6 +91,11 @@ func New(c cluster.Cluster, userCacheSize int, namespaceCacheDuration time.Durat
 	}, nil
 }
 
+// GetScheme returns the client's scheme.
+func (c *Client) GetScheme() *runtime.Scheme {
+	return c.scheme
+}
+
 // GetAPIReader returns a client.Reader that will be configured to hit the API server directly.
 func (c *Client) GetAPIReader(ctx context.Context, opts ...Option) client.Reader {
 	return c.getUserClientFromContext(ctx, opts...).reader

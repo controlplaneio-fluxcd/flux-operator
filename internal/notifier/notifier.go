@@ -53,8 +53,8 @@ func New(ctx context.Context, base record.EventRecorder, scheme *runtime.Scheme,
 	}
 
 	// Figure out the notification-controller address from the flux instance.
-	var eventsAddr string
-	if os.Getenv("NOTIFICATIONS_DISABLED") == "" {
+	eventsAddr := os.Getenv("NOTIFICATION_CONTROLLER_ADDRESS")
+	if eventsAddr == "" && os.Getenv("NOTIFICATIONS_DISABLED") == "" {
 		fluxInstance := o.fluxInstance
 		if fluxInstance == nil {
 			if o.client == nil {
