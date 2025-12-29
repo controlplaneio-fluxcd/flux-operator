@@ -209,6 +209,30 @@ make web-dev
 
 The Vite dev server will proxy API requests to the Go backend running on port 35000.
 
+To run the web server as cluster-admin (for testing user actions that require elevated permissions),
+first create a `web-config.yaml` file with the following content:
+
+```yaml
+apiVersion: web.fluxcd.controlplane.io/v1
+kind: Config
+spec:
+  baseURL: http://localhost:9080
+  userActions:
+    authType: Anonymous
+  authentication:
+    type: Anonymous
+    anonymous:
+      username: cluster-admin
+      groups:
+        - system:masters
+```
+
+Then run the web server with the config:
+
+```shell
+make web-run WEB_RUN_ARGS=--web-config=web-config.yaml
+```
+
 ## Project Documentation Structure
 
 The project documentation is written in Markdown.
