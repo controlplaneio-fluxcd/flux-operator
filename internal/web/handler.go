@@ -13,11 +13,13 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/tools/record"
 
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/kubeclient"
 )
 
 // Handler provides HTTP handlers for the API endpoints and SPA static files.
 type Handler struct {
+	conf          *config.ConfigSpec
 	kubeClient    *kubeclient.Client
 	eventRecorder record.EventRecorder
 	version       string
@@ -35,12 +37,13 @@ type Handler struct {
 // the report periodically. They run until the context
 // is canceled. The returned channel is closed when all
 // the goroutines have stopped.
-func NewHandler(ctx context.Context, spaHandler http.Handler, kubeClient *kubeclient.Client,
+func NewHandler(ctx context.Context, conf *config.ConfigSpec, spaHandler http.Handler, kubeClient *kubeclient.Client,
 	version, statusManager, namespace string, reportInterval time.Duration, eventRecorder record.EventRecorder,
 	authMiddleware func(http.Handler) http.Handler, l logr.Logger) (http.Handler, <-chan struct{}) {
 
 	// Build the Handler struct.
 	h := &Handler{
+		conf:          conf,
 		kubeClient:    kubeClient,
 		eventRecorder: eventRecorder,
 		version:       version,

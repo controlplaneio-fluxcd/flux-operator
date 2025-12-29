@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -27,6 +28,7 @@ import (
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/notifier"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/kubeclient"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
@@ -36,7 +38,7 @@ type ActionRequest struct {
 	Kind      string `json:"kind"`
 	Namespace string `json:"namespace"`
 	Name      string `json:"name"`
-	Action    string `json:"action"` // "reconcile", "suspend", "resume"
+	Action    string `json:"action"`
 }
 
 // ActionResponse represents the response body for POST /api/v1/action.
@@ -49,6 +51,14 @@ type ActionResponse struct {
 func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Check if actions are enabled.
+	if !h.actionsEnabled() {
+		http.Error(w,
+			"User actions are only available when authentication is configured with the OAuth2 type",
+			http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -65,9 +75,14 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Check if the specified action is enabled in the configuration.
+	if ua := h.conf.UserActions; ua != nil && len(ua.Enabled) > 0 && !slices.Contains(ua.Enabled, actionReq.Action) {
+		http.Error(w, fmt.Sprintf("Action '%s' is not enabled", actionReq.Action), http.StatusMethodNotAllowed)
+		return
+	}
+
 	// Validate action type
-	validActions := map[string]bool{"reconcile": true, "suspend": true, "resume": true}
-	if !validActions[actionReq.Action] {
+	if !slices.Contains(config.AllUserActions, actionReq.Action) {
 		http.Error(w, "Invalid action. Must be one of: reconcile, suspend, resume", http.StatusBadRequest)
 		return
 	}
@@ -80,7 +95,7 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// Check if the kind supports reconciliation (only for reconcile action)
-	if actionReq.Action == "reconcile" && !kindInfo.Reconcilable {
+	if actionReq.Action == config.UserActionReconcile && !kindInfo.Reconcilable {
 		http.Error(w, fmt.Sprintf("Resource kind %s does not support reconciliation", kindInfo.Name), http.StatusBadRequest)
 		return
 	}
@@ -101,7 +116,7 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 
 	var obj client.Object
 	switch actionReq.Action {
-	case "reconcile":
+	case config.UserActionReconcile:
 		annotations := map[string]string{
 			meta.ReconcileRequestAnnotation: now,
 		}
@@ -112,11 +127,11 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 		obj, actionErr = h.annotateResource(ctx, *gvk, actionReq.Name, actionReq.Namespace, annotations)
 		message = fmt.Sprintf("Reconciliation triggered for %s/%s", actionReq.Namespace, actionReq.Name)
 
-	case "suspend":
+	case config.UserActionSuspend:
 		obj, actionErr = h.setSuspension(ctx, *gvk, actionReq.Name, actionReq.Namespace, now, true)
 		message = fmt.Sprintf("Suspended %s/%s", actionReq.Namespace, actionReq.Name)
 
-	case "resume":
+	case config.UserActionResume:
 		obj, actionErr = h.setSuspension(ctx, *gvk, actionReq.Name, actionReq.Namespace, now, false)
 		message = fmt.Sprintf("Resumed %s/%s", actionReq.Namespace, actionReq.Name)
 	}
@@ -142,7 +157,7 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// Send audit event.
-	if h.eventRecorder != nil {
+	if h.eventRecorder != nil && h.conf.UserActions != nil && h.conf.UserActions.Audit {
 		const reason = "WebAction"
 
 		// Get a privileged kube client for the notifier to ensure it can fetch the FluxInstance.
@@ -177,6 +192,22 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+}
+
+// actionsEnabled checks if any user actions are enabled in the configuration.
+func (h *Handler) actionsEnabled() bool {
+	if h.conf == nil {
+		return false
+	}
+
+	// Administrator explicitly disabled all user actions.
+	if ua := h.conf.UserActions; ua != nil && ua.Enabled != nil && len(ua.Enabled) == 0 {
+		return false
+	}
+
+	// User actions are only available when authentication is configured with the OAuth2 type.
+	a := h.conf.Authentication
+	return a != nil && a.Type == config.AuthenticationTypeOAuth2
 }
 
 // annotateResource annotates a resource with the provided map of annotations.

@@ -175,7 +175,7 @@ func RunServer(ctx context.Context, c cluster.Cluster,
 
 		// Create new handler.
 		newHandlerCtx, cancelNewHandlerCtx := context.WithCancel(context.Background())
-		newHandler, newHandlerStopped := NewHandler(newHandlerCtx, spaHandler, kubeClient,
+		newHandler, newHandlerStopped := NewHandler(newHandlerCtx, conf, spaHandler, kubeClient,
 			version, statusManager, namespace, reportInterval, eventRecorder, authMiddleware, serverLog)
 
 		// Route new requests to the new handler.

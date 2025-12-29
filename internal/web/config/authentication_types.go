@@ -61,10 +61,6 @@ type AuthenticationConfiguration interface {
 
 // Validate validates the AuthenticationSpec configuration.
 func (a *AuthenticationSpec) Validate() error {
-	if a == nil {
-		return nil
-	}
-
 	authConfigs := make(map[string]AuthenticationConfiguration)
 
 	// For each authentication type, add it to the map.

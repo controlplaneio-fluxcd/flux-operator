@@ -151,6 +151,25 @@ func TestConfigSpec_Validate(t *testing.T) {
 			wantErr: "invalid authentication configuration",
 		},
 		{
+			name: "userActions validation errors propagate",
+			spec: ConfigSpec{
+				UserActions: &UserActionsSpec{
+					Enabled: []string{"invalid-action"},
+				},
+			},
+			wantErr: "invalid user actions configuration",
+		},
+		{
+			name: "valid userActions config",
+			spec: ConfigSpec{
+				UserActions: &UserActionsSpec{
+					Enabled: []string{UserActionReconcile, UserActionSuspend},
+					Audit:   true,
+				},
+			},
+			wantErr: "",
+		},
+		{
 			name: "insecure mode is allowed",
 			spec: ConfigSpec{
 				Insecure: true,
@@ -202,4 +221,13 @@ func TestConfigSpec_ApplyDefaults(t *testing.T) {
 	// spec without auth does not panic
 	spec2 := &ConfigSpec{}
 	spec2.ApplyDefaults()
+
+	// spec with userActions applies defaults
+	spec3 := &ConfigSpec{
+		UserActions: &UserActionsSpec{
+			Enabled: []string{UserActionReconcile},
+		},
+	}
+	spec3.ApplyDefaults()
+	g.Expect(spec3.UserActions.Enabled).To(Equal([]string{UserActionReconcile}))
 }

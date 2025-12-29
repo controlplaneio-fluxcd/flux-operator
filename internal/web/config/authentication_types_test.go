@@ -18,11 +18,6 @@ func TestAuthenticationSpec_Validate(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name:    "nil spec is valid",
-			spec:    nil,
-			wantErr: "",
-		},
-		{
 			name: "valid Anonymous authentication",
 			spec: &AuthenticationSpec{
 				Type: AuthenticationTypeAnonymous,
