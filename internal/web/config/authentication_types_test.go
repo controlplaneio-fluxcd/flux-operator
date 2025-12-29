@@ -679,3 +679,11 @@ func TestImpersonationSpec_ApplyDefaults(t *testing.T) {
 	g.Expect(spec2.Username).To(Equal("claims.sub"))
 	g.Expect(spec2.Groups).To(Equal("claims.roles"))
 }
+
+func TestAllAuthenticationTypes(t *testing.T) {
+	g := NewWithT(t)
+
+	// Verify AllAuthenticationTypes contains the expected types
+	g.Expect(AllAuthenticationTypes).To(ConsistOf(AuthenticationTypeAnonymous, AuthenticationTypeOAuth2))
+	g.Expect(AllAuthenticationTypes).To(HaveLen(2))
+}

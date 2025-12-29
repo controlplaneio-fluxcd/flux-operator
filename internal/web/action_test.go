@@ -27,6 +27,9 @@ func oauthConfig() *config.ConfigSpec {
 		Authentication: &config.AuthenticationSpec{
 			Type: config.AuthenticationTypeOAuth2,
 		},
+		UserActions: &config.UserActionsSpec{
+			AuthType: config.AuthenticationTypeOAuth2,
+		},
 	}
 }
 
@@ -715,37 +718,9 @@ func TestActionHandler_ActionsDisabled_NoAuth(t *testing.T) {
 
 	// Test with no authentication configured
 	handler := &Handler{
-		conf:          &config.ConfigSpec{},
-		kubeClient:    kubeClient,
-		version:       "v1.0.0",
-		statusManager: "test-status-manager",
-		namespace:     "flux-system",
-	}
-
-	actionReq := ActionRequest{
-		Kind:      "ResourceSet",
-		Namespace: "default",
-		Name:      "test",
-		Action:    "reconcile",
-	}
-	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
-	rec := httptest.NewRecorder()
-
-	handler.ActionHandler(rec, req)
-
-	g.Expect(rec.Code).To(Equal(http.StatusMethodNotAllowed))
-	g.Expect(rec.Body.String()).To(ContainSubstring("User actions are only available when authentication is configured with the OAuth2 type"))
-}
-
-func TestActionHandler_ActionsDisabled_AnonymousAuth(t *testing.T) {
-	g := NewWithT(t)
-
-	// Test with Anonymous authentication (not OAuth2)
-	handler := &Handler{
 		conf: &config.ConfigSpec{
-			Authentication: &config.AuthenticationSpec{
-				Type: config.AuthenticationTypeAnonymous,
+			UserActions: &config.UserActionsSpec{
+				AuthType: config.AuthenticationTypeOAuth2,
 			},
 		},
 		kubeClient:    kubeClient,
@@ -767,7 +742,42 @@ func TestActionHandler_ActionsDisabled_AnonymousAuth(t *testing.T) {
 	handler.ActionHandler(rec, req)
 
 	g.Expect(rec.Code).To(Equal(http.StatusMethodNotAllowed))
-	g.Expect(rec.Body.String()).To(ContainSubstring("User actions are only available when authentication is configured with the OAuth2 type"))
+	g.Expect(rec.Body.String()).To(ContainSubstring("User actions are disabled"))
+}
+
+func TestActionHandler_ActionsDisabled_AnonymousAuth(t *testing.T) {
+	g := NewWithT(t)
+
+	// Test with Anonymous authentication but userActions.authType is OAuth2 (default)
+	handler := &Handler{
+		conf: &config.ConfigSpec{
+			Authentication: &config.AuthenticationSpec{
+				Type: config.AuthenticationTypeAnonymous,
+			},
+			UserActions: &config.UserActionsSpec{
+				AuthType: config.AuthenticationTypeOAuth2,
+			},
+		},
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	actionReq := ActionRequest{
+		Kind:      "ResourceSet",
+		Namespace: "default",
+		Name:      "test",
+		Action:    "reconcile",
+	}
+	body, _ := json.Marshal(actionReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	rec := httptest.NewRecorder()
+
+	handler.ActionHandler(rec, req)
+
+	g.Expect(rec.Code).To(Equal(http.StatusMethodNotAllowed))
+	g.Expect(rec.Body.String()).To(ContainSubstring("User actions are disabled"))
 }
 
 func TestActionHandler_ActionNotEnabled(t *testing.T) {
@@ -791,7 +801,8 @@ func TestActionHandler_ActionNotEnabled(t *testing.T) {
 				Type: config.AuthenticationTypeOAuth2,
 			},
 			UserActions: &config.UserActionsSpec{
-				Enabled: []string{config.UserActionSuspend, config.UserActionResume},
+				Enabled:  []string{config.UserActionSuspend, config.UserActionResume},
+				AuthType: config.AuthenticationTypeOAuth2,
 			},
 		},
 		kubeClient:    kubeClient,
@@ -844,7 +855,8 @@ func TestActionHandler_ActionEnabled(t *testing.T) {
 				Type: config.AuthenticationTypeOAuth2,
 			},
 			UserActions: &config.UserActionsSpec{
-				Enabled: []string{config.UserActionReconcile},
+				Enabled:  []string{config.UserActionReconcile},
+				AuthType: config.AuthenticationTypeOAuth2,
 			},
 		},
 		kubeClient:    kubeClient,
@@ -888,11 +900,14 @@ func TestActionHandler_AllActionsEnabledByDefault(t *testing.T) {
 	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
 	defer testClient.Delete(ctx, resourceSet)
 
-	// Configure OAuth2 but with empty UserActions (all actions enabled by default)
+	// Configure OAuth2 with nil Enabled (all actions enabled by default)
 	handler := &Handler{
 		conf: &config.ConfigSpec{
 			Authentication: &config.AuthenticationSpec{
 				Type: config.AuthenticationTypeOAuth2,
+			},
+			UserActions: &config.UserActionsSpec{
+				AuthType: config.AuthenticationTypeOAuth2,
 			},
 		},
 		kubeClient:    kubeClient,
@@ -932,7 +947,8 @@ func TestActionHandler_AllActionsExplicitlyDisabled(t *testing.T) {
 				Type: config.AuthenticationTypeOAuth2,
 			},
 			UserActions: &config.UserActionsSpec{
-				Enabled: []string{}, // Explicitly empty - disables all actions
+				Enabled:  []string{}, // Explicitly empty - disables all actions
+				AuthType: config.AuthenticationTypeOAuth2,
 			},
 		},
 		kubeClient:    kubeClient,
@@ -954,5 +970,5 @@ func TestActionHandler_AllActionsExplicitlyDisabled(t *testing.T) {
 	handler.ActionHandler(rec, req)
 
 	g.Expect(rec.Code).To(Equal(http.StatusMethodNotAllowed))
-	g.Expect(rec.Body.String()).To(ContainSubstring("User actions are only available when authentication is configured with the OAuth2 type"))
+	g.Expect(rec.Body.String()).To(ContainSubstring("User actions are disabled"))
 }

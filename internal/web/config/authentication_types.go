@@ -25,6 +25,14 @@ const (
 	OAuth2ProviderOIDC = "OIDC"
 )
 
+var (
+	// AllAuthenticationTypes lists all possible authentication types.
+	AllAuthenticationTypes = []string{
+		AuthenticationTypeAnonymous,
+		AuthenticationTypeOAuth2,
+	}
+)
+
 // AuthenticationSpec holds the Flux Status Page configuration.
 type AuthenticationSpec struct {
 	// Type is the authentication type.

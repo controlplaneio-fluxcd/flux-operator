@@ -55,10 +55,8 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// Check if actions are enabled.
-	if !h.actionsEnabled() {
-		http.Error(w,
-			"User actions are only available when authentication is configured with the OAuth2 type",
-			http.StatusMethodNotAllowed)
+	if !h.conf.UserActionsEnabled() {
+		http.Error(w, "User actions are disabled", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -76,7 +74,7 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// Check if the specified action is enabled in the configuration.
-	if ua := h.conf.UserActions; ua != nil && len(ua.Enabled) > 0 && !slices.Contains(ua.Enabled, actionReq.Action) {
+	if !h.conf.UserActions.IsEnabled(actionReq.Action) {
 		http.Error(w, fmt.Sprintf("Action '%s' is not enabled", actionReq.Action), http.StatusMethodNotAllowed)
 		return
 	}
@@ -157,7 +155,7 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// Send audit event.
-	if h.eventRecorder != nil && h.conf.UserActions != nil && h.conf.UserActions.Audit {
+	if h.eventRecorder != nil && h.conf.UserActions.Audit {
 		const reason = "WebAction"
 
 		// Get a privileged kube client for the notifier to ensure it can fetch the FluxInstance.
@@ -192,22 +190,6 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-}
-
-// actionsEnabled checks if any user actions are enabled in the configuration.
-func (h *Handler) actionsEnabled() bool {
-	if h.conf == nil {
-		return false
-	}
-
-	// Administrator explicitly disabled all user actions.
-	if ua := h.conf.UserActions; ua != nil && ua.Enabled != nil && len(ua.Enabled) == 0 {
-		return false
-	}
-
-	// User actions are only available when authentication is configured with the OAuth2 type.
-	a := h.conf.Authentication
-	return a != nil && a.Type == config.AuthenticationTypeOAuth2
 }
 
 // annotateResource annotates a resource with the provided map of annotations.

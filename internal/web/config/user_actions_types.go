@@ -11,8 +11,10 @@ import (
 const (
 	// UserActionReconcile is the reconcile user action.
 	UserActionReconcile = "reconcile"
+
 	// UserActionSuspend is the suspend user action.
 	UserActionSuspend = "suspend"
+
 	// UserActionResume is the resume user action.
 	UserActionResume = "resume"
 )
@@ -30,11 +32,18 @@ var (
 type UserActionsSpec struct {
 	// Enabled lists which user actions are enabled. If not set, all actions are considered enabled.
 	// To disable all user actions, set this field to an empty list.
-	// Note that actions are only available when authentication is configured with the OAuth2 type.
+	// Note that actions are only available when authentication is configured with the type AuthType.
 	// +optional
 	Enabled []string `json:"enabled,omitempty"`
 
+	// AuthType specifies the authentication type required for enabling user actions.
+	// Defaults to OAuth2.
+	// +kubebuilder:validation:Enum=Anonymous;OAuth2
+	// +optional
+	AuthType string `json:"authType,omitempty"`
+
 	// Audit indicates whether to send audit events when users perform actions.
+	// Defaults to false.
 	// +optional
 	Audit bool `json:"audit,omitempty"`
 }
@@ -51,6 +60,11 @@ func (u *UserActionsSpec) Validate() error {
 		}
 		actions[action] = struct{}{}
 	}
+
+	if u.AuthType != "" && !slices.Contains(AllAuthenticationTypes, u.AuthType) {
+		return fmt.Errorf("invalid authType: '%s'", u.AuthType)
+	}
+
 	return nil
 }
 
@@ -59,4 +73,13 @@ func (u *UserActionsSpec) ApplyDefaults() {
 	if u == nil {
 		return
 	}
+
+	if u.AuthType == "" {
+		u.AuthType = AuthenticationTypeOAuth2
+	}
+}
+
+// IsEnabled checks if the specified action is enabled.
+func (u *UserActionsSpec) IsEnabled(action string) bool {
+	return u == nil || u.Enabled == nil || slices.Contains(u.Enabled, action)
 }
