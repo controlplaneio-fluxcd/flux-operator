@@ -297,7 +297,7 @@ describe('status utilities', () => {
         sourceRef: { kind: 'GitRepository', name: 'test' },
         reconcilerRef: { status: 'Ready' },
         exportedInputs: { key: 'value' },
-        actionable: true,
+        userActions: true,
         inputProviderRefs: [{ name: 'provider1' }],
         conditions: [{ type: 'Ready', status: 'True' }],
         observedGeneration: 1
@@ -314,7 +314,7 @@ describe('status utilities', () => {
         customField: 'value',
         anotherField: 123,
         inventory: [],
-        actionable: false
+        userActions: false
       }
       const result = cleanStatus(status)
       expect(result).toEqual({

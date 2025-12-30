@@ -28,9 +28,14 @@ export function ActionBar({ kind, namespace, name, resourceData, onActionComplet
 
   // Extract status information
   const status = resourceData?.status?.reconcilerRef?.status || 'Unknown'
-  const actionable = resourceData?.status?.actionable === true
+  const userActions = resourceData?.status?.userActions || []
   const sourceRef = resourceData?.status?.sourceRef
   const sourceStatus = sourceRef?.status
+
+  // Check which actions are allowed based on userActions array
+  const canDoReconcile = userActions.includes('reconcile')
+  const canDoSuspend = userActions.includes('suspend')
+  const canDoResume = userActions.includes('resume')
 
   // Determine if resource is suspended
   const isSuspended = status === 'Suspended'
@@ -66,9 +71,9 @@ export function ActionBar({ kind, namespace, name, resourceData, onActionComplet
   const canReconcileSource = (kind === 'Kustomization' || kind === 'HelmRelease') && sourceRef && sourceRef.kind !== 'ExternalArtifact'
 
   // Determine button disabled states
-  const reconcileDisabled = !actionable || isProgressing || isSuspended
-  const reconcileSourceDisabled = !actionable || isSuspended || sourceStatus === 'Suspended'
-  const suspendResumeDisabled = !actionable
+  const reconcileDisabled = !canDoReconcile || isProgressing || isSuspended
+  const reconcileSourceDisabled = !canDoReconcile || isSuspended || sourceStatus === 'Suspended'
+  const suspendResumeDisabled = isSuspended ? !canDoResume : !canDoSuspend
 
   // Perform an action
   const performAction = async (action, targetKind, targetNamespace, targetName, loadingId = action) => {
@@ -139,8 +144,8 @@ export function ActionBar({ kind, namespace, name, resourceData, onActionComplet
     </svg>
   )
 
-  // Don't render if not actionable (no permissions)
-  if (!actionable) {
+  // Don't render if no actions are allowed (no permissions)
+  if (userActions.length === 0) {
     return null
   }
 

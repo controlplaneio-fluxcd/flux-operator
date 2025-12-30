@@ -4418,13 +4418,13 @@ export const getMockResource = (endpoint) => {
     return null
   }
 
-  // Inject actionable field - true for all kinds except Bucket
-  const actionable = kind !== 'Bucket'
+  // Inject userActions field - array of allowed actions (empty for Bucket)
+  const userActions = kind !== 'Bucket' ? ['reconcile', 'suspend', 'resume'] : []
   return {
     ...resource,
     status: {
       ...resource.status,
-      actionable
+      userActions
     }
   }
 }

@@ -26,7 +26,7 @@ describe('ActionBar component', () => {
     resourceData: {
       status: {
         reconcilerRef: { status: 'Ready' },
-        actionable: true,
+        userActions: ['reconcile', 'suspend', 'resume'],
         sourceRef: {
           kind: 'GitRepository',
           namespace: 'flux-system',
@@ -39,7 +39,7 @@ describe('ActionBar component', () => {
   }
 
   describe('Rendering', () => {
-    it('should render action buttons when actionable is true', () => {
+    it('should render action buttons when userActions has actions', () => {
       render(<ActionBar {...defaultProps} />)
 
       expect(screen.getByTestId('action-bar')).toBeInTheDocument()
@@ -47,12 +47,12 @@ describe('ActionBar component', () => {
       expect(screen.getByTestId('suspend-resume-button')).toBeInTheDocument()
     })
 
-    it('should not render when actionable is false', () => {
+    it('should not render when userActions is empty', () => {
       const props = {
         ...defaultProps,
         resourceData: {
           ...defaultProps.resourceData,
-          status: { ...defaultProps.resourceData.status, actionable: false }
+          status: { ...defaultProps.resourceData.status, userActions: [] }
         }
       }
       render(<ActionBar {...props} />)
@@ -86,7 +86,7 @@ describe('ActionBar component', () => {
         resourceData: {
           status: {
             reconcilerRef: { status: 'Ready' },
-            actionable: true
+            userActions: ['reconcile', 'suspend', 'resume']
           }
         }
       }
@@ -101,7 +101,7 @@ describe('ActionBar component', () => {
         resourceData: {
           status: {
             reconcilerRef: { status: 'Suspended' },
-            actionable: true
+            userActions: ['reconcile', 'suspend', 'resume']
           }
         }
       }
@@ -118,19 +118,19 @@ describe('ActionBar component', () => {
   })
 
   describe('Disabled states', () => {
-    it('should disable all buttons when actionable is false', () => {
+    it('should not render when userActions is empty', () => {
       const props = {
         ...defaultProps,
         resourceData: {
           status: {
             reconcilerRef: { status: 'Ready' },
-            actionable: false
+            userActions: []
           }
         }
       }
       render(<ActionBar {...props} />)
 
-      // Component should not render at all when not actionable
+      // Component should not render at all when no actions allowed
       expect(screen.queryByTestId('action-bar')).not.toBeInTheDocument()
     })
 
@@ -140,7 +140,7 @@ describe('ActionBar component', () => {
         resourceData: {
           status: {
             reconcilerRef: { status: 'Progressing' },
-            actionable: true,
+            userActions: ['reconcile', 'suspend', 'resume'],
             sourceRef: defaultProps.resourceData.status.sourceRef
           }
         }
@@ -158,7 +158,7 @@ describe('ActionBar component', () => {
         resourceData: {
           status: {
             reconcilerRef: { status: 'Progressing' },
-            actionable: true
+            userActions: ['reconcile', 'suspend', 'resume']
           }
         }
       }
@@ -175,7 +175,7 @@ describe('ActionBar component', () => {
         resourceData: {
           status: {
             reconcilerRef: { status: 'Suspended' },
-            actionable: true
+            userActions: ['reconcile', 'suspend', 'resume']
           }
         }
       }
@@ -190,7 +190,7 @@ describe('ActionBar component', () => {
         resourceData: {
           status: {
             reconcilerRef: { status: 'Ready' },
-            actionable: true,
+            userActions: ['reconcile', 'suspend', 'resume'],
             sourceRef: {
               kind: 'GitRepository',
               namespace: 'flux-system',
@@ -280,7 +280,7 @@ describe('ActionBar component', () => {
         resourceData: {
           status: {
             reconcilerRef: { status: 'Suspended' },
-            actionable: true
+            userActions: ['reconcile', 'suspend', 'resume']
           }
         }
       }
@@ -341,7 +341,7 @@ describe('ActionBar component', () => {
           resourceData={{
             status: {
               reconcilerRef: { status: 'Progressing' },
-              actionable: true
+              userActions: ['reconcile', 'suspend', 'resume']
             }
           }}
         />
@@ -357,7 +357,7 @@ describe('ActionBar component', () => {
           resourceData={{
             status: {
               reconcilerRef: { status: 'Ready' },
-              actionable: true
+              userActions: ['reconcile', 'suspend', 'resume']
             }
           }}
         />
@@ -374,7 +374,7 @@ describe('ActionBar component', () => {
           resourceData={{
             status: {
               reconcilerRef: { status: 'Progressing' },
-              actionable: true
+              userActions: ['reconcile', 'suspend', 'resume']
             }
           }}
         />
@@ -388,7 +388,7 @@ describe('ActionBar component', () => {
           resourceData={{
             status: {
               reconcilerRef: { status: 'Failed' },
-              actionable: true
+              userActions: ['reconcile', 'suspend', 'resume']
             }
           }}
         />

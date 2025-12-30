@@ -197,10 +197,8 @@ func (h *Handler) GetResource(ctx context.Context, kind, name, namespace string)
 	if err != nil {
 		log.FromContext(ctx).Error(err, "failed to check patch permission")
 	} else {
+		// Check if user actions are enabled in the configuration
 		actionable = canPatch && h.conf.UserActionsEnabled()
-	}
-	if err := unstructured.SetNestedField(obj.Object, actionable, "status", "actionable"); err != nil {
-		return nil, fmt.Errorf("unable to set actionable in status: %w", err)
 	}
 
 	// Inject the available actions if actionable
@@ -209,8 +207,8 @@ func (h *Handler) GetResource(ctx context.Context, kind, name, namespace string)
 		if ua := h.conf.UserActions; len(ua.Enabled) > 0 {
 			actions = ua.Enabled
 		}
-		if err := unstructured.SetNestedStringSlice(obj.Object, actions, "status", "actions"); err != nil {
-			return nil, fmt.Errorf("unable to set actions in status: %w", err)
+		if err := unstructured.SetNestedStringSlice(obj.Object, actions, "status", "userActions"); err != nil {
+			return nil, fmt.Errorf("unable to set user actions in status: %w", err)
 		}
 	}
 
