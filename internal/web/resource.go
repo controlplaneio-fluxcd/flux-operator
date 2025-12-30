@@ -18,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
 
@@ -78,13 +79,13 @@ func (h *Handler) ResourceHandler(w http.ResponseWriter, req *http.Request) {
 // GetResource fetches a single Flux resource by kind, name and namespace,
 // and injects the inventory into the .status.inventory field before returning it.
 func (h *Handler) GetResource(ctx context.Context, kind, name, namespace string) (*unstructured.Unstructured, error) {
-	exactKind, err := findFluxKind(kind)
+	kindInfo, err := fluxcdv1.FindFluxKindInfo(kind)
 	if err != nil {
 		return nil, fmt.Errorf("unable to find Flux kind %s: %w", kind, err)
 	}
 
 	// Get the preferred GVK for the kind
-	gvk, err := h.preferredFluxGVK(ctx, exactKind)
+	gvk, err := h.preferredFluxGVK(ctx, kindInfo.Name)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get GVK for kind %s: %w", kind, err)
 	}
@@ -190,23 +191,29 @@ func (h *Handler) GetResource(ctx context.Context, kind, name, namespace string)
 		}
 	}
 
-	cleanObjectForExport(obj, true)
-	return obj, nil
-}
+	// Check if the user can perform actions on this resource (RBAC only)
+	actionable := false
+	canPatch, err := h.kubeClient.CanPatchResource(ctx, gvk.Group, kindInfo.Plural, namespace, name)
+	if err != nil {
+		log.FromContext(ctx).Error(err, "failed to check patch permission")
+	} else {
+		// Check if user actions are enabled in the configuration
+		actionable = canPatch && h.conf.UserActionsEnabled()
+	}
 
-// findFluxKind searches for a Flux kind in a case-insensitive way and returns the proper casing.
-// Returns an error if the kind is not found in the fluxKinds list.
-func findFluxKind(kind string) (string, error) {
-	fluxKinds := slices.Concat(fluxcdv1.FluxOperatorKinds, fluxcdv1.FluxKinds)
-	for _, fluxKind := range fluxKinds {
-		if strings.EqualFold(fluxKind.Name, kind) {
-			return fluxKind.Name, nil
+	// Inject the available actions if actionable
+	if actionable {
+		actions := config.AllUserActions
+		if ua := h.conf.UserActions; len(ua.Enabled) > 0 {
+			actions = ua.Enabled
 		}
-		if strings.EqualFold(fluxKind.ShortName, kind) {
-			return fluxKind.Name, nil
+		if err := unstructured.SetNestedStringSlice(obj.Object, actions, "status", "userActions"); err != nil {
+			return nil, fmt.Errorf("unable to set user actions in status: %w", err)
 		}
 	}
-	return "", fmt.Errorf("kind %s not found", kind)
+
+	cleanObjectForExport(obj, true)
+	return obj, nil
 }
 
 // getReconcilerRef retrieves the Flux reconciler information

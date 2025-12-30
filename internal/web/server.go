@@ -50,6 +50,9 @@ func RunServer(ctx context.Context, c cluster.Cluster,
 
 	l := ctrl.Log.WithName("web-server").WithValues("port", port)
 
+	// Get event recorder.
+	eventRecorder := c.GetEventRecorderFor("flux-operator-web-ui")
+
 	// Build SPA handler.
 	spaHandler := http.FileServer(http.FS(NewFileSystem(web.GetFS())))
 
@@ -168,12 +171,13 @@ func RunServer(ctx context.Context, c cluster.Cluster,
 
 		// Successfully created all components with the new configuration.
 		confVersion = conf.Version
-		conf = nil // Clear conf to receive a new one in the next iteration.
 
 		// Create new handler.
 		newHandlerCtx, cancelNewHandlerCtx := context.WithCancel(context.Background())
-		newHandler, newHandlerStopped := NewHandler(newHandlerCtx, spaHandler, kubeClient,
-			version, statusManager, namespace, reportInterval, authMiddleware, serverLog)
+		newHandler, newHandlerStopped := NewHandler(newHandlerCtx, conf, spaHandler, kubeClient,
+			version, statusManager, namespace, reportInterval, eventRecorder, authMiddleware, serverLog)
+
+		conf = nil // Clear conf to receive a new one in the next iteration.
 
 		// Route new requests to the new handler.
 		handlerMu.Lock()

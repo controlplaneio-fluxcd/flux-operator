@@ -180,3 +180,16 @@ export function getStatusBorderClass(status) {
     return 'border-gray-300 dark:border-gray-600'
   }
 }
+
+/**
+ * Clean status object for display by removing internal fields.
+ * Removes fields that are displayed separately or are internal to the UI.
+ * @param {object} status - The status object from a Flux resource
+ * @returns {object|undefined} Cleaned status object or undefined if input is falsy
+ */
+export function cleanStatus(status) {
+  if (!status) return undefined
+  // eslint-disable-next-line no-unused-vars
+  const { exportedInputs, inputProviderRefs, inventory, reconcilerRef, sourceRef, userActions, ...clean } = status
+  return clean
+}

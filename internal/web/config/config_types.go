@@ -49,6 +49,12 @@ type ConfigSpec struct {
 	// +optional
 	Insecure bool `json:"insecure,omitempty"`
 
+	// UserActions holds the user actions configuration. Defaults to enabling all actions if not set.
+	// Note that, by default, actions are only available when authentication is configured with the
+	// OAuth2 type.
+	// +optional
+	UserActions *UserActionsSpec `json:"userActions,omitempty"`
+
 	// Authentication holds the authentication configuration.
 	// If Authentication.Type is set to OAuth2, BaseURL must be set.
 	// +optional
@@ -67,13 +73,34 @@ func (c ConfigSpec) Validate() error {
 		}
 	}
 
-	if err := c.Authentication.Validate(); err != nil {
-		return fmt.Errorf("invalid authentication configuration: %w", err)
+	if c.UserActions != nil {
+		if err := c.UserActions.Validate(); err != nil {
+			return fmt.Errorf("invalid user actions configuration: %w", err)
+		}
 	}
+
+	if c.Authentication != nil {
+		if err := c.Authentication.Validate(); err != nil {
+			return fmt.Errorf("invalid authentication configuration: %w", err)
+		}
+	}
+
 	return nil
 }
 
 // ApplyDefaults applies default values to the ConfigSpec.
 func (c *ConfigSpec) ApplyDefaults() {
+	if c.UserActions == nil {
+		c.UserActions = &UserActionsSpec{}
+	}
+	c.UserActions.ApplyDefaults()
+
 	c.Authentication.ApplyDefaults()
+}
+
+// UserActionsEnabled checks if user actions are enabled.
+func (c *ConfigSpec) UserActionsEnabled() bool {
+	return c != nil &&
+		(c.UserActions.Enabled == nil || len(c.UserActions.Enabled) > 0) &&
+		(c.Authentication != nil && c.Authentication.Type == c.UserActions.AuthType)
 }

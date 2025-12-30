@@ -4414,5 +4414,17 @@ export const getMockResource = (endpoint) => {
     r.metadata.namespace === namespace
   )
 
-  return resource || null
+  if (!resource) {
+    return null
+  }
+
+  // Inject userActions field - array of allowed actions (empty for Bucket)
+  const userActions = kind !== 'Bucket' ? ['reconcile', 'suspend', 'resume'] : []
+  return {
+    ...resource,
+    status: {
+      ...resource.status,
+      userActions
+    }
+  }
 }

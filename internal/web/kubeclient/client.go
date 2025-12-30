@@ -91,6 +91,11 @@ func New(c cluster.Cluster, userCacheSize int, namespaceCacheDuration time.Durat
 	}, nil
 }
 
+// GetScheme returns the client's scheme.
+func (c *Client) GetScheme() *runtime.Scheme {
+	return c.scheme
+}
+
 // GetAPIReader returns a client.Reader that will be configured to hit the API server directly.
 func (c *Client) GetAPIReader(ctx context.Context, opts ...Option) client.Reader {
 	return c.getUserClientFromContext(ctx, opts...).reader
@@ -245,13 +250,22 @@ func (c *Client) filterNamespacesByAccess(ctx context.Context, namespaces []stri
 		return namespaces, true, nil
 	}
 
+	// Look up the plural for ResourceSet from FluxOperatorKinds.
+	var resourceSetPlural string
+	for _, kind := range fluxcdv1.FluxOperatorKinds {
+		if kind.Name == fluxcdv1.ResourceSetKind {
+			resourceSetPlural = kind.Plural
+			break
+		}
+	}
+
 	// Check for cluster-wide access first in case the user has a ClusterRoleBinding.
 	clusterSSAR := &authzv1.SelfSubjectAccessReview{
 		Spec: authzv1.SelfSubjectAccessReviewSpec{
 			ResourceAttributes: &authzv1.ResourceAttributes{
 				Verb:     "get",
 				Group:    fluxcdv1.GroupVersion.Group,
-				Resource: "resourcesets",
+				Resource: resourceSetPlural,
 			},
 		},
 	}
@@ -270,7 +284,7 @@ func (c *Client) filterNamespacesByAccess(ctx context.Context, namespaces []stri
 				ResourceAttributes: &authzv1.ResourceAttributes{
 					Verb:      "get",
 					Group:     fluxcdv1.GroupVersion.Group,
-					Resource:  "resourcesets",
+					Resource:  resourceSetPlural,
 					Namespace: ns,
 				},
 			},
@@ -286,4 +300,32 @@ func (c *Client) filterNamespacesByAccess(ctx context.Context, namespaces []stri
 	}
 
 	return filteredNamespaces, false, nil
+}
+
+// CanPatchResource checks if the user has permission to patch a resource
+// by performing a SelfSubjectAccessReview with the "patch" verb.
+func (c *Client) CanPatchResource(ctx context.Context, group, resource, namespace, name string) (bool, error) {
+	kubeClient := c.GetClient(ctx)
+	if kubeClient == c.client {
+		// Privileged client has access to all resources.
+		return true, nil
+	}
+
+	ssar := &authzv1.SelfSubjectAccessReview{
+		Spec: authzv1.SelfSubjectAccessReviewSpec{
+			ResourceAttributes: &authzv1.ResourceAttributes{
+				Verb:      "patch",
+				Group:     group,
+				Resource:  resource,
+				Namespace: namespace,
+				Name:      name,
+			},
+		},
+	}
+
+	if err := kubeClient.Create(ctx, ssar); err != nil {
+		return false, fmt.Errorf("failed to create SelfSubjectAccessReview: %w", err)
+	}
+
+	return ssar.Status.Allowed, nil
 }

@@ -25,6 +25,14 @@ const (
 	OAuth2ProviderOIDC = "OIDC"
 )
 
+var (
+	// AllAuthenticationTypes lists all possible authentication types.
+	AllAuthenticationTypes = []string{
+		AuthenticationTypeAnonymous,
+		AuthenticationTypeOAuth2,
+	}
+)
+
 // AuthenticationSpec holds the Flux Status Page configuration.
 type AuthenticationSpec struct {
 	// Type is the authentication type.
@@ -61,10 +69,6 @@ type AuthenticationConfiguration interface {
 
 // Validate validates the AuthenticationSpec configuration.
 func (a *AuthenticationSpec) Validate() error {
-	if a == nil {
-		return nil
-	}
-
 	authConfigs := make(map[string]AuthenticationConfiguration)
 
 	// For each authentication type, add it to the map.
