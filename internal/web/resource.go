@@ -79,7 +79,7 @@ func (h *Handler) ResourceHandler(w http.ResponseWriter, req *http.Request) {
 // GetResource fetches a single Flux resource by kind, name and namespace,
 // and injects the inventory into the .status.inventory field before returning it.
 func (h *Handler) GetResource(ctx context.Context, kind, name, namespace string) (*unstructured.Unstructured, error) {
-	kindInfo, err := findFluxKindInfo(kind)
+	kindInfo, err := fluxcdv1.FindFluxKindInfo(kind)
 	if err != nil {
 		return nil, fmt.Errorf("unable to find Flux kind %s: %w", kind, err)
 	}
@@ -214,21 +214,6 @@ func (h *Handler) GetResource(ctx context.Context, kind, name, namespace string)
 
 	cleanObjectForExport(obj, true)
 	return obj, nil
-}
-
-// findFluxKindInfo searches for a FluxKindInfo in a case-insensitive way.
-// Returns an error if the kind is not found in the fluxKinds list.
-func findFluxKindInfo(kind string) (*fluxcdv1.FluxKindInfo, error) {
-	fluxKinds := slices.Concat(fluxcdv1.FluxOperatorKinds, fluxcdv1.FluxKinds)
-	for _, fluxKind := range fluxKinds {
-		if strings.EqualFold(fluxKind.Name, kind) {
-			return &fluxKind, nil
-		}
-		if strings.EqualFold(fluxKind.ShortName, kind) {
-			return &fluxKind, nil
-		}
-	}
-	return nil, fmt.Errorf("kind %s not found", kind)
 }
 
 // getReconcilerRef retrieves the Flux reconciler information

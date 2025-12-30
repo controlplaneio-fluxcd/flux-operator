@@ -86,7 +86,7 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// Find the FluxKindInfo for validation
-	kindInfo, err := findFluxKindInfo(actionReq.Kind)
+	kindInfo, err := fluxcdv1.FindFluxKindInfo(actionReq.Kind)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Unknown resource kind: %s", actionReq.Kind), http.StatusBadRequest)
 		return

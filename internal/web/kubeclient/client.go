@@ -251,13 +251,7 @@ func (c *Client) filterNamespacesByAccess(ctx context.Context, namespaces []stri
 	}
 
 	// Look up the plural for ResourceSet from FluxOperatorKinds.
-	var resourceSetPlural string
-	for _, kind := range fluxcdv1.FluxOperatorKinds {
-		if kind.Name == fluxcdv1.ResourceSetKind {
-			resourceSetPlural = kind.Plural
-			break
-		}
-	}
+	rsetKind, _ := fluxcdv1.FindFluxKindInfo(fluxcdv1.ResourceSetKind)
 
 	// Check for cluster-wide access first in case the user has a ClusterRoleBinding.
 	clusterSSAR := &authzv1.SelfSubjectAccessReview{
@@ -265,7 +259,7 @@ func (c *Client) filterNamespacesByAccess(ctx context.Context, namespaces []stri
 			ResourceAttributes: &authzv1.ResourceAttributes{
 				Verb:     "get",
 				Group:    fluxcdv1.GroupVersion.Group,
-				Resource: resourceSetPlural,
+				Resource: rsetKind.Plural,
 			},
 		},
 	}
@@ -284,7 +278,7 @@ func (c *Client) filterNamespacesByAccess(ctx context.Context, namespaces []stri
 				ResourceAttributes: &authzv1.ResourceAttributes{
 					Verb:      "get",
 					Group:     fluxcdv1.GroupVersion.Group,
-					Resource:  resourceSetPlural,
+					Resource:  rsetKind.Plural,
 					Namespace: ns,
 				},
 			},
