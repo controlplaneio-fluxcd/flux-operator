@@ -193,3 +193,19 @@ func FluxGroupFor(kind string) (*schema.GroupKind, error) {
 func IsFluxAPI(apiVersion string) bool {
 	return strings.Contains(apiVersion, "fluxcd.")
 }
+
+// FindFluxKindInfo searches for a FluxKindInfo in a case-insensitive way.
+// It matches both Name and ShortName and returns the corresponding FluxKindInfo.
+// Returns an error if the kind is not found in the fluxKinds list.
+func FindFluxKindInfo(kind string) (*FluxKindInfo, error) {
+	fluxKinds := append(FluxOperatorKinds, FluxKinds...)
+	for _, fluxKind := range fluxKinds {
+		if strings.EqualFold(fluxKind.Name, kind) {
+			return &fluxKind, nil
+		}
+		if strings.EqualFold(fluxKind.ShortName, kind) {
+			return &fluxKind, nil
+		}
+	}
+	return nil, fmt.Errorf("kind %s not found", kind)
+}
