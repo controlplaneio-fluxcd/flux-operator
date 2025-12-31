@@ -33,12 +33,7 @@ func (m *Manager) HandleSetKubeconfigContext(ctx context.Context, request *mcp.C
 		return NewToolResultError("name is required")
 	}
 
-	err := m.kubeconfig.Load()
-	if err != nil {
-		return NewToolResultErrorFromErr("error reading kubeconfig contexts", err)
-	}
-
-	err = m.kubeconfig.SetCurrentContext(input.Name)
+	err := m.kubeconfig.SetCurrentContext(input.Name)
 	if err != nil {
 		return NewToolResultErrorFromErr("error setting kubeconfig context", err)
 	}

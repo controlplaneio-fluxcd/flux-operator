@@ -23,7 +23,7 @@ func TestManager_HandleGetKubeconfigContexts(t *testing.T) {
 	t.Setenv("KUBECONFIG", configFile)
 
 	m := &Manager{
-		kubeconfig: k8s.NewKubeConfig(),
+		kubeconfig: k8s.NewKubeConfig(cli.NewConfigFlags(false)),
 		flags:      cli.NewConfigFlags(false),
 	}
 

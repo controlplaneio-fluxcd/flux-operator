@@ -67,17 +67,13 @@ Add the following configuration to your AI assistant's settings to enable the Fl
  "mcpServers": {
    "flux-operator-mcp": {
      "command": "/path/to/flux-operator-mcp",
-     "args": ["serve"],
-     "env": {
-       "KUBECONFIG": "/path/to/.kube/config"
-     }
+     "args": ["serve"]
    }
  }
 }
 ```
 
-Replace `/path/to/flux-operator-mcp` with the actual path to the binary
-and `/path/to/.kube/config` with the path to your kubeconfig file.
+Replace `/path/to/flux-operator-mcp` with the actual path to the binary.
 
 To determine the correct paths for the binary and kubeconfig, you can use the following commands:
 
@@ -96,10 +92,7 @@ Add the following configuration to your VS Code settings:
    "servers": {
      "flux-operator-mcp": {
        "command": "/path/to/flux-operator-mcp",
-       "args": ["serve"],
-       "env": {
-         "KUBECONFIG": "/path/to/.kube/config"
-       }
+       "args": ["serve"]
      }
    }
  },
@@ -107,8 +100,7 @@ Add the following configuration to your VS Code settings:
 }
 ```
 
-Replace `/path/to/flux-operator-mcp` with the actual path to the binary
-and `/path/to/.kube/config` with the path to your kubeconfig file.
+Replace `/path/to/flux-operator-mcp` with the actual path to the binary.
 
 When using GitHub Copilot Chat, enable Agent mode to access the Flux MCP tools.
 

@@ -124,24 +124,19 @@ To run the MCP Server using stdio, add the following configuration to your AI as
   "mcpServers": {
     "flux-operator-mcp": {
       "command": "/path/to/bin/flux-operator-mcp",
-      "args": ["serve"],
-      "env": {
-        "KUBECONFIG": "/path/to/.kube/config"
-      }
+      "args": ["serve"]
     }
   }
 }
 ```
 
-Replace `/path/to/bin/flux-operator-mcp` with the absolute path to the binary
-and `/path/to/.kube/config` with the absolute path to your kubeconfig file.
+Replace `/path/to/bin/flux-operator-mcp` with the absolute path to the binary.
 
 After rebuilding the MCP Server binary, you need to restart the AI assistant app to test the new build.
 
 To run the MCP Server using SSE, use the following command:
 
 ```shell
-export KUBECONFIG=$HOME/.kube/config
 ./bin/flux-operator-mcp serve --transport sse --port 8080
 ```
 

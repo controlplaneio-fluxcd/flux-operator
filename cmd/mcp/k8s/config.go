@@ -5,19 +5,17 @@ package k8s
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
-	"sort"
-	"sync"
+	"slices"
+	"strings"
 
-	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
 )
 
-// KubeConfig represents a thread-safe configuration for
-// managing Kubernetes contexts and clusters.
+// KubeConfig represents a configuration for managing Kubernetes
+// contexts and clusters. This must be kept thread-safe.
 type KubeConfig struct {
-	mx       sync.Mutex
-	contexts []KubeConfigContext
+	CurrentContextName string
+	flags              *genericclioptions.ConfigFlags
 }
 
 // KubeConfigContext represents a Kubernetes context with
@@ -29,111 +27,60 @@ type KubeConfigContext struct {
 }
 
 // NewKubeConfig initializes a new instance of KubeConfig
-// with an empty list of contexts.
-func NewKubeConfig() *KubeConfig {
+// set to the default context.
+func NewKubeConfig(flags *genericclioptions.ConfigFlags) *KubeConfig {
 	return &KubeConfig{
-		contexts: []KubeConfigContext{},
+		CurrentContextName: "",
+		flags:              flags,
 	}
 }
 
-// Load loads and updates Kubernetes configuration contexts based on the KUBECONFIG environment variable.
-// It ensures thread safety and preserves the current context if it exists in the new configuration.
-// Returns an error if KUBECONFIG is not set or if there is an issue loading the configuration.
-func (c *KubeConfig) Load() error {
-	c.mx.Lock()
-	defer c.mx.Unlock()
-
-	configPaths := os.Getenv("KUBECONFIG")
-	if configPaths == "" {
-		return fmt.Errorf("KUBECONFIG environment variable not set")
-	}
-
-	paths := filepath.SplitList(configPaths)
-
-	newContexts := make([]KubeConfigContext, 0)
-	config, err := clientcmd.LoadFromFile(paths[0])
+// Contexts returns a slice of all Kubernetes contexts
+// currently loaded in the kubeconfig files.
+func (c *KubeConfig) Contexts() ([]KubeConfigContext, error) {
+	rawConfig, err := c.flags.ToRawKubeConfigLoader().RawConfig()
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("loading kubeconfig failed: %w", err)
 	}
 
-	for name, ct := range config.Contexts {
+	var currentContext string
+	if c.CurrentContextName != "" {
+		currentContext = c.CurrentContextName
+	} else {
+		currentContext = rawConfig.CurrentContext
+	}
+
+	contexts := make([]KubeConfigContext, 0)
+	for name, ct := range rawConfig.Contexts {
 		kubeCtx := KubeConfigContext{
 			ContextName: name,
 			ClusterName: ct.Cluster,
 		}
-		if name == config.CurrentContext {
+		if name == currentContext {
 			kubeCtx.CurrentContext = true
 		}
-		newContexts = append(newContexts, kubeCtx)
+		contexts = append(contexts, kubeCtx)
 	}
 
-	if len(c.contexts) > 0 {
-		currentContextName := ""
-		for i := range c.contexts {
-			if c.contexts[i].CurrentContext {
-				currentContextName = c.contexts[i].ContextName
-				break
-			}
-		}
-
-		currentContextExists := false
-		for i := range newContexts {
-			if newContexts[i].ContextName == currentContextName {
-				currentContextExists = true
-				break
-			}
-		}
-
-		if currentContextExists {
-			for i := range newContexts {
-				newContexts[i].CurrentContext = false
-			}
-			for i := range newContexts {
-				if newContexts[i].ContextName == currentContextName {
-					newContexts[i].CurrentContext = true
-					break
-				}
-			}
-		}
-	}
-
-	c.contexts = newContexts
-	return nil
-}
-
-// Contexts returns a slice of all Kubernetes contexts
-// currently loaded in the KubeConfig instance.
-func (c *KubeConfig) Contexts() []KubeConfigContext {
-	c.mx.Lock()
-	defer c.mx.Unlock()
-
-	// sort the contexts by name
-	sort.Slice(c.contexts, func(i, j int) bool {
-		return c.contexts[i].ContextName < c.contexts[j].ContextName
+	slices.SortFunc(contexts, func(a, b KubeConfigContext) int {
+		return strings.Compare(a.ContextName, b.ContextName)
 	})
-
-	return c.contexts
+	return contexts, nil
 }
 
 // SetCurrentContext sets the specified context as the current context in the KubeConfig.
 // It returns an error if the context with the given name does not exist.
 // This function does not change the kubeconfig file.
 func (c *KubeConfig) SetCurrentContext(name string) error {
-	c.mx.Lock()
-	defer c.mx.Unlock()
-
-	found := false
-	for i := range c.contexts {
-		if c.contexts[i].ContextName == name {
-			found = true
-			c.contexts[i].CurrentContext = true
-		} else {
-			c.contexts[i].CurrentContext = false
-		}
+	rawConfig, err := c.flags.ToRawKubeConfigLoader().RawConfig()
+	if err != nil {
+		return fmt.Errorf("loading kubeconfig failed: %w", err)
 	}
 
-	if !found {
+	// Validate that the context actually exists before switching
+	if _, exists := rawConfig.Contexts[name]; !exists {
 		return fmt.Errorf("context %s not found", name)
 	}
+	c.CurrentContextName = name
 	return nil
 }
