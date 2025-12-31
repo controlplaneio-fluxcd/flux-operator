@@ -40,7 +40,7 @@ type Manager struct {
 // with the provided configuration and settings.
 func NewManager(flags *cli.ConfigFlags, timeout time.Duration, maskSecrets bool, readOnly bool) *Manager {
 	m := &Manager{
-		kubeconfig:  k8s.NewKubeConfig(),
+		kubeconfig:  k8s.NewKubeConfig(flags),
 		flags:       flags,
 		timeout:     timeout,
 		maskSecrets: maskSecrets,

@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -21,7 +20,6 @@ import (
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
-	"k8s.io/client-go/tools/clientcmd"
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/yaml"
@@ -114,7 +112,7 @@ func addKubeConfigFlags(cmd *cobra.Command) {
 	}
 	kubeconfigArgs.Namespace = &namespace
 
-	cmd.PersistentFlags().StringVar(kubeconfigArgs.KubeConfig, "kubeconfig", getCurrentKubeconfigPath(),
+	cmd.PersistentFlags().StringVar(kubeconfigArgs.KubeConfig, "kubeconfig", "",
 		"Path to the kubeconfig file.")
 	cmd.PersistentFlags().StringVar(kubeconfigArgs.Context, "kube-context", "",
 		"The name of the kubeconfig context to use.")
@@ -139,37 +137,7 @@ func addKubeConfigFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().BoolVar(kubeconfigArgs.Insecure, "kube-insecure-skip-tls-verify", false,
 		"if true, the Kubernetes API server's certificate will not be checked for validity. This will make your HTTPS connections insecure.")
 	cmd.PersistentFlags().StringVarP(kubeconfigArgs.Namespace, "namespace", "n",
-		*kubeconfigArgs.Namespace, "The the namespace scope for the operation.")
-}
-
-func getCurrentKubeconfigPath() string {
-	defaultPath := ""
-
-	kubeConfig := os.Getenv("KUBECONFIG")
-	if kubeConfig == "" {
-		return defaultPath
-	}
-
-	paths := filepath.SplitList(kubeConfig)
-	if len(paths) == 1 {
-		return paths[0]
-	}
-
-	var currentContext string
-	for _, path := range paths {
-		conf, err := clientcmd.LoadFromFile(path)
-		if err != nil {
-			continue
-		}
-		if currentContext == "" {
-			currentContext = conf.CurrentContext
-		}
-		_, ok := conf.Contexts[currentContext]
-		if ok {
-			return path
-		}
-	}
-	return defaultPath
+		*kubeconfigArgs.Namespace, "If present, the namespace scope for the operation.")
 }
 
 var serveCmd = &cobra.Command{
@@ -213,10 +181,6 @@ func serveCmdRun(cmd *cobra.Command, args []string) error {
 	inCluster := os.Getenv("KUBERNETES_SERVICE_HOST") != ""
 	if inCluster {
 		log.Printf("Starting the MCP server in-cluster with read-only mode set to %t", readOnly)
-	}
-
-	if os.Getenv("KUBECONFIG") == "" && !inCluster {
-		return errors.New("KUBECONFIG environment variable is not set")
 	}
 
 	// Create the MCP server

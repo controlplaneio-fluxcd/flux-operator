@@ -50,7 +50,7 @@ func (m *Manager) HandleGetKubernetesMetrics(ctx context.Context, request *mcp.C
 	ctx, cancel := context.WithTimeout(ctx, m.timeout)
 	defer cancel()
 
-	kubeClient, err := k8s.NewClient(ctx, m.flags)
+	kubeClient, err := k8s.NewClient(ctx, m.flags, m.kubeconfig.CurrentContextName)
 	if err != nil {
 		return NewToolResultErrorFromErr("Failed to create Kubernetes client", err)
 	}

@@ -21,7 +21,7 @@ func TestManager_HandleSetKubeconfigContext(t *testing.T) {
 
 	flags := cli.NewConfigFlags(false)
 	m := &Manager{
-		kubeconfig: k8s.NewKubeConfig(),
+		kubeconfig: k8s.NewKubeConfig(cli.NewConfigFlags(false)),
 		flags:      flags,
 	}
 

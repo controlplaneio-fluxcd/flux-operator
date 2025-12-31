@@ -20,9 +20,11 @@ func TestManager_HandleApplyKubernetesManifest(t *testing.T) {
 	configFile := "testdata/kubeconfig.yaml"
 	t.Setenv("KUBECONFIG", configFile)
 
+	flags := cli.NewConfigFlags(false)
+
 	m := &Manager{
-		kubeconfig: k8s.NewKubeConfig(),
-		flags:      cli.NewConfigFlags(false),
+		kubeconfig: k8s.NewKubeConfig(flags),
+		flags:      flags,
 		timeout:    time.Second,
 	}
 

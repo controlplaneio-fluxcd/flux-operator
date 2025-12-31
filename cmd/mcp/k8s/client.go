@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	cli "k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
@@ -32,21 +33,39 @@ type Client struct {
 
 // NewClient creates a new Kubernetes client using the provided cli.ConfigFlags,
 // configuring QPS, Burst, and custom schemes.
-func NewClient(ctx context.Context, flags *cli.ConfigFlags) (*Client, error) {
-	cfg, err := flags.ToRESTConfig()
-	if err != nil {
-		return nil, fmt.Errorf("loading kubeconfig failed: %w", err)
+func NewClient(ctx context.Context, flags *cli.ConfigFlags, kubeContextOverride string) (*Client, error) {
+	var restConfig *rest.Config
+	var err error
+
+	if kubeContextOverride != "" {
+		// This technically doesn't support in-cluster
+		// clients, but they should never be able to hit this
+		// since the `set_kubeconfig_context` tool would be disabled.
+		rawConfig, err := flags.ToRawKubeConfigLoader().RawConfig()
+		if err != nil {
+			return nil, fmt.Errorf("loading kubeconfig failed: %w", err)
+		}
+		rawConfig.CurrentContext = kubeContextOverride
+		restConfig, err = clientcmd.NewDefaultClientConfig(rawConfig, &clientcmd.ConfigOverrides{}).ClientConfig()
+		if err != nil {
+			return nil, fmt.Errorf("creating client config for context %s failed: %w", kubeContextOverride, err)
+		}
+	} else {
+		restConfig, err = flags.ToRESTConfig()
+		if err != nil {
+			return nil, fmt.Errorf("loading default rest config failed: %w", err)
+		}
 	}
 
 	if sess := auth.FromContext(ctx); sess != nil {
-		cfg.Impersonate = rest.ImpersonationConfig{
+		restConfig.Impersonate = rest.ImpersonationConfig{
 			UserName: sess.UserName,
 			Groups:   sess.Groups,
 		}
 	}
 
-	cfg.QPS = 100.0
-	cfg.Burst = 300
+	restConfig.QPS = 100.0
+	restConfig.Burst = 300
 
 	restMapper, err := flags.ToRESTMapper()
 	if err != nil {
@@ -64,7 +83,7 @@ func NewClient(ctx context.Context, flags *cli.ConfigFlags) (*Client, error) {
 		return nil, err
 	}
 
-	kubeClient, err := ctrlclient.New(cfg, ctrlclient.Options{Mapper: restMapper, Scheme: scheme})
+	kubeClient, err := ctrlclient.New(restConfig, ctrlclient.Options{Mapper: restMapper, Scheme: scheme})
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +96,7 @@ func NewClient(ctx context.Context, flags *cli.ConfigFlags) (*Client, error) {
 
 	return &Client{
 		Client: ctrlclient.WithFieldOwner(kubeClient, "flux-operator-mcp"),
-		cfg:    cfg,
+		cfg:    restConfig,
 		rm:     rm,
 	}, nil
 }

@@ -30,16 +30,13 @@ Add the following configuration to your AI assistant's MCP settings:
     "args":[
       "serve",
       "--read-only=false"
-    ],
-    "env":{
-      "KUBECONFIG":"/path/to/.kube/config"
-    }
+    ]
   }
 }
 ```
 
-Replace `/path/to/.kube/config` with the absolute path to your kubeconfig file,
-you can find it with: `echo $HOME/.kube/config`.
+The kubeconfig file location can be overridden with the `$KUBECONFIG`
+environment variable, or the `--kubeconfig` flag.
 
 Copy the AI rules from
 [instructions.md](https://raw.githubusercontent.com/controlplaneio-fluxcd/distribution/refs/heads/main/docs/mcp/instructions.md)
