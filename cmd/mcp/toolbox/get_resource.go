@@ -10,8 +10,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
-	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/auth"
-	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/k8s"
 )
 
 const (
@@ -38,7 +36,7 @@ type getKubernetesResourcesInput struct {
 
 // HandleGetKubernetesResources is the handler function for the get_kubernetes_resources tool.
 func (m *Manager) HandleGetKubernetesResources(ctx context.Context, request *mcp.CallToolRequest, input getKubernetesResourcesInput) (*mcp.CallToolResult, any, error) {
-	if err := auth.CheckScopes(ctx, getScopeNames(ToolGetKubernetesResources, m.readOnly)); err != nil {
+	if err := CheckScopes(ctx, ToolGetKubernetesResources, m.readOnly); err != nil {
 		return NewToolResultError(err.Error())
 	}
 
@@ -53,9 +51,9 @@ func (m *Manager) HandleGetKubernetesResources(ctx context.Context, request *mcp
 	ctx, cancel := context.WithTimeout(ctx, m.timeout)
 	defer cancel()
 
-	kubeClient, err := k8s.NewClient(ctx, m.flags)
+	kubeClient, err := m.kubeClient.GetClient(ctx)
 	if err != nil {
-		return NewToolResultErrorFromErr("Failed to create Kubernetes client", err)
+		return NewToolResultErrorFromErr("Failed to get Kubernetes client", err)
 	}
 
 	gvk, err := kubeClient.ParseGroupVersionKind(input.APIVersion, input.Kind)

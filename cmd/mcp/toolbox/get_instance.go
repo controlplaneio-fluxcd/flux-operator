@@ -10,8 +10,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
-	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/auth"
-	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/k8s"
 )
 
 const (
@@ -28,16 +26,16 @@ func init() {
 
 // HandleGetFluxInstance is the handler function for the get_flux_instance tool.
 func (m *Manager) HandleGetFluxInstance(ctx context.Context, request *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, any, error) {
-	if err := auth.CheckScopes(ctx, getScopeNames(ToolGetFluxInstance, m.readOnly)); err != nil {
+	if err := CheckScopes(ctx, ToolGetFluxInstance, m.readOnly); err != nil {
 		return NewToolResultError(err.Error())
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, m.timeout)
 	defer cancel()
 
-	kubeClient, err := k8s.NewClient(ctx, m.flags)
+	kubeClient, err := m.kubeClient.GetClient(ctx)
 	if err != nil {
-		return NewToolResultErrorFromErr("Failed to create Kubernetes client", err)
+		return NewToolResultErrorFromErr("Failed to get Kubernetes client", err)
 	}
 
 	result, err := kubeClient.Export(ctx, []schema.GroupVersionKind{

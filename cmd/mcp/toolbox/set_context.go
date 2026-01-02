@@ -29,6 +29,10 @@ type setKubeconfigContextInput struct {
 
 // HandleSetKubeconfigContext is the handler function for the set_kubeconfig_context tool.
 func (m *Manager) HandleSetKubeconfigContext(ctx context.Context, request *mcp.CallToolRequest, input setKubeconfigContextInput) (*mcp.CallToolResult, any, error) {
+	if err := CheckScopes(ctx, ToolSetKubeConfigContext, m.readOnly); err != nil {
+		return NewToolResultError(err.Error())
+	}
+
 	if input.Name == "" {
 		return NewToolResultError("name is required")
 	}
@@ -42,7 +46,7 @@ func (m *Manager) HandleSetKubeconfigContext(ctx context.Context, request *mcp.C
 	if err != nil {
 		return NewToolResultErrorFromErr("error setting kubeconfig context", err)
 	}
-	m.flags.Context = &input.Name
+	m.kubeClient.SetCurrentContext(input.Name)
 
 	return NewToolResultText(fmt.Sprintf("Context changed to %s", input.Name))
 }

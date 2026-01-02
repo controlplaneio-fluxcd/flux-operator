@@ -295,39 +295,3 @@ Searches the Flux documentation for specific information, ensuring the AI assist
 **Output:**
 
 Relevant documentation from the Flux project that matches the search query.
-
-## Scopes and the `tools/list` request
-
-**Note:** The feature described in this section is available only with the Streamable HTTP
-transport mode and when authentication is configured.
-
-Scopes are a part of the Flux MCP Server authentication and
-authorization system. Credentials can have a set of scopes on them to indicate to
-the Flux MCP Server which operations are allowed for that credential. For responding
-to the `tools/list` request, the server checks the scopes of the credential to
-dynamically filter the list of available tools out of those remaining after
-considering if the MCP server is running in read-only mode. In other words, the tools
-advertised in the `tools/list` request will be those that are not eliminated by the
-read-only mode and that are not eliminated by the scopes granted to the credential.
-
-Furthermore, the Flux MCP Server leverages the `_meta` field of the `tools/list`
-response (as defined by the MCP specification) to advertise the available scopes
-in `_meta.scopes`. Those will be the scopes that can be useful for the tools
-available in the server taking the read-only mode into account.
-
-Each scope has the following fields:
-
-- `name`: The scope identifier. Will always have the prefix `toolbox:`.
-- `description`: A short human-readable description of what the scope allows.
-- `tools`: The list of tools the scope grants access to, discarding any tools that
-  are not available due to the read-only mode if enabled.
-
-The advertised scopes for a given instance of the Flux MCP Server can be inspected
-by running the following command:
-
-```bash
-flux-operator-mcp debug scopes <Flux MCP URL>
-```
-
-This command will make a `tools/list` request to the pointed MCP URL and will print
-in the JSON format the content of the `_meta.scopes` field returned in the response.

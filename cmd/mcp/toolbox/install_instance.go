@@ -14,11 +14,9 @@ import (
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/client-go/rest"
 	"sigs.k8s.io/yaml"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
-	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/auth"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/install"
 )
 
@@ -42,7 +40,7 @@ type installFluxInstanceInput struct {
 
 // HandleInstallFluxInstance is the handler function for the install_flux_instance tool.
 func (m *Manager) HandleInstallFluxInstance(ctx context.Context, request *mcp.CallToolRequest, input installFluxInstanceInput) (*mcp.CallToolResult, any, error) {
-	if err := auth.CheckScopes(ctx, getScopeNames(ToolInstallFluxInstance, m.readOnly)); err != nil {
+	if err := CheckScopes(ctx, ToolInstallFluxInstance, m.readOnly); err != nil {
 		return NewToolResultError(err.Error())
 	}
 	now := time.Now()
@@ -80,23 +78,16 @@ func (m *Manager) HandleInstallFluxInstance(ctx context.Context, request *mcp.Ca
 	if err != nil {
 		return NewToolResultErrorFromErr("failed to fetch operator manifest", err)
 	}
-	installLog.WriteString(fmt.Sprintf("Artifact download completed in %s\n", time.Since(now).Round(time.Second)))
+	fmt.Fprintf(&installLog, "Artifact download completed in %s\n", time.Since(now).Round(time.Second))
 
-	// Step 2: Create Kubernetes client with impersonation if needed
+	// Step 2: Create installer
 
-	cfg, err := m.flags.ToRESTConfig()
+	kubeClient, err := m.kubeClient.GetClient(ctx)
 	if err != nil {
-		return NewToolResultErrorFromErr("loading kubeconfig failed", err)
+		return NewToolResultErrorFromErr("failed to get Kubernetes client", err)
 	}
 
-	if sess := auth.FromContext(ctx); sess != nil {
-		cfg.Impersonate = rest.ImpersonationConfig{
-			UserName: sess.UserName,
-			Groups:   sess.Groups,
-		}
-	}
-
-	installer, err := install.NewInstaller(ctx, cfg)
+	installer, err := install.NewInstaller(ctx, kubeClient.GetConfig())
 	if err != nil {
 		return NewToolResultErrorFromErr("failed to create installer", err)
 	}

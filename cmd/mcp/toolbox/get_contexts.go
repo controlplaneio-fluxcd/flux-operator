@@ -24,6 +24,10 @@ func init() {
 
 // HandleGetKubeconfigContexts is the handler function for the get_kubeconfig_contexts tool.
 func (m *Manager) HandleGetKubeconfigContexts(ctx context.Context, request *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, any, error) {
+	if err := CheckScopes(ctx, ToolGetKubeConfigContexts, m.readOnly); err != nil {
+		return NewToolResultError(err.Error())
+	}
+
 	err := m.kubeconfig.Load()
 	if err != nil {
 		return NewToolResultErrorFromErr("Failed to read kubeconfig", err)

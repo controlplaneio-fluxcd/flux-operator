@@ -22,7 +22,7 @@ func TestManager_HandleGetKubernetesResources(t *testing.T) {
 
 	m := &Manager{
 		kubeconfig: k8s.NewKubeConfig(),
-		flags:      cli.NewConfigFlags(false),
+		kubeClient: k8s.NewClientFactory(cli.NewConfigFlags(false)),
 		timeout:    time.Second,
 	}
 
@@ -58,7 +58,7 @@ func TestManager_HandleGetKubernetesResources(t *testing.T) {
 				"apiVersion": "apps/v1",
 				"kind":       "Deployment",
 			},
-			matchErr: "Failed to create Kubernetes client",
+			matchErr: "Failed to get Kubernetes client",
 		},
 	}
 

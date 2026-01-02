@@ -14,8 +14,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
-	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/auth"
-	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/k8s"
 )
 
 const (
@@ -39,7 +37,7 @@ type reconcileFluxKustomizationInput struct {
 
 // HandleReconcileKustomization is the handler function for the reconcile_flux_kustomization tool.
 func (m *Manager) HandleReconcileKustomization(ctx context.Context, request *mcp.CallToolRequest, input reconcileFluxKustomizationInput) (*mcp.CallToolResult, any, error) {
-	if err := auth.CheckScopes(ctx, getScopeNames(ToolReconcileFluxKustomization, m.readOnly)); err != nil {
+	if err := CheckScopes(ctx, ToolReconcileFluxKustomization, m.readOnly); err != nil {
 		return NewToolResultError(err.Error())
 	}
 
@@ -53,9 +51,9 @@ func (m *Manager) HandleReconcileKustomization(ctx context.Context, request *mcp
 	ctx, cancel := context.WithTimeout(ctx, m.timeout)
 	defer cancel()
 
-	kubeClient, err := k8s.NewClient(ctx, m.flags)
+	kubeClient, err := m.kubeClient.GetClient(ctx)
 	if err != nil {
-		return NewToolResultErrorFromErr("Failed to create Kubernetes client", err)
+		return NewToolResultErrorFromErr("Failed to get Kubernetes client", err)
 	}
 	ks := &unstructured.Unstructured{
 		Object: map[string]any{

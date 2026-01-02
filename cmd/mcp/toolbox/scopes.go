@@ -5,25 +5,22 @@ package toolbox
 
 import (
 	"context"
-	"slices"
-
-	"github.com/modelcontextprotocol/go-sdk/mcp"
-
-	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/auth"
+	"fmt"
+	"strings"
 )
 
 const (
-	// scopesPrefix is the prefix for all toolbox-related scopes.
-	scopesPrefix = "toolbox:"
-	// scopeReadOnly is a scope that allows all read-only toolbox operations.
-	scopeReadOnly = scopesPrefix + "read_only"
-	// scopeReadWrite is a scope that allows all toolbox operations.
-	scopeReadWrite = scopesPrefix + "read_write"
+	// ScopesPrefix is the prefix for all toolbox-related scopes.
+	ScopesPrefix = "toolbox:"
+	// ScopeReadOnly is a scope that allows all read-only toolbox operations.
+	ScopeReadOnly = ScopesPrefix + "read_only"
+	// ScopeReadWrite is a scope that allows all toolbox operations.
+	ScopeReadWrite = ScopesPrefix + "read_write"
 )
 
 var scopeDescriptions = map[string]string{
-	scopeReadOnly:  "Allow all read-only toolbox operations.",
-	scopeReadWrite: "Allow all toolbox operations.",
+	ScopeReadOnly:  "Allow all read-only operations.",
+	ScopeReadWrite: "Allow all operations.",
 }
 
 // Scope represents a scope with its metadata.
@@ -31,6 +28,7 @@ type Scope struct {
 	// Name is the scope identifier.
 	// +required
 	Name string `json:"name"`
+
 	// Description is a brief, human-readable description
 	// of the scope for a permission consent screen. It
 	// should not refer to the scope name or as a concept,
@@ -38,9 +36,9 @@ type Scope struct {
 	// the scope allows.
 	// +required
 	Description string `json:"description"`
-	// Tools are tools whose access are granted by this scope.
-	// Not necessarily all of them, but at least one.
-	// +required
+
+	// Tools whose access are granted by this scope.
+	// +optional
 	Tools []string `json:"tools,omitempty"`
 }
 
@@ -60,27 +58,27 @@ type toolScopes struct {
 var scopesPerTool = map[string]toolScopes{
 	ToolSearchFluxDocs: {
 		ownScopeDescription: "Allow searching the Flux documentation.",
-		extraScopes:         []string{scopeReadOnly},
+		extraScopes:         []string{ScopeReadOnly},
 	},
 	ToolGetKubernetesAPIVersions: {
 		ownScopeDescription: "Allow getting available Kubernetes APIs.",
-		extraScopes:         []string{scopeReadOnly},
+		extraScopes:         []string{ScopeReadOnly},
 	},
 	ToolGetFluxInstance: {
 		ownScopeDescription: "Allow getting a FluxInstance resource.",
-		extraScopes:         []string{scopeReadOnly},
+		extraScopes:         []string{ScopeReadOnly},
 	},
 	ToolGetKubernetesLogs: {
 		ownScopeDescription: "Allow getting logs from pods.",
-		extraScopes:         []string{scopeReadOnly},
+		extraScopes:         []string{ScopeReadOnly},
 	},
 	ToolGetKubernetesMetrics: {
 		ownScopeDescription: "Allow getting metrics from the Kubernetes API.",
-		extraScopes:         []string{scopeReadOnly},
+		extraScopes:         []string{ScopeReadOnly},
 	},
 	ToolGetKubernetesResources: {
 		ownScopeDescription: "Allow getting Kubernetes resources.",
-		extraScopes:         []string{scopeReadOnly},
+		extraScopes:         []string{ScopeReadOnly},
 	},
 	ToolApplyKubernetesManifest: {
 		ownScopeDescription: "Allow applying Kubernetes manifests.",
@@ -115,22 +113,30 @@ var scopesPerTool = map[string]toolScopes{
 		extraScopes:         []string{},
 	},
 	ToolInstallFluxInstance: {
-		ownScopeDescription: "Allow installing Flux Operator and Flux instance.",
+		ownScopeDescription: "Allow installing Flux Operator and a FluxInstance.",
 		extraScopes:         []string{},
+	},
+	ToolGetKubeConfigContexts: {
+		ownScopeDescription: "Allow getting kubeconfig contexts.",
+		extraScopes:         []string{ScopeReadOnly},
+	},
+	ToolSetKubeConfigContext: {
+		ownScopeDescription: "Allow setting the current kubeconfig context in the MCP server memory.",
+		extraScopes:         []string{ScopeReadOnly},
 	},
 }
 
-// getScopes returns the scopes that grant access to the given tool.
+// GetToolScopes returns the scopes that grant access to the given tool.
 // Those are the tool-specific scope, the ScopeReadWrite scope, and
 // any other extra scopes the tool can accept according to the
 // static/global scopesPerTool map.
-func getScopes(tool string, readOnly bool) []Scope {
+func GetToolScopes(tool string, readOnly bool) []Scope {
 	ts := scopesPerTool[tool]
 	scopes := make([]Scope, 0, 2+len(ts.extraScopes))
-	scopes = append(scopes, Scope{scopesPrefix + tool, ts.ownScopeDescription, []string{tool}})
+	scopes = append(scopes, Scope{ScopesPrefix + tool, ts.ownScopeDescription, []string{tool}})
 	var extraScopes []string
 	if !readOnly {
-		extraScopes = []string{scopeReadWrite}
+		extraScopes = []string{ScopeReadWrite}
 	}
 	for _, name := range append(extraScopes, ts.extraScopes...) {
 		scopes = append(scopes, Scope{name, scopeDescriptions[name], []string{tool}})
@@ -138,71 +144,44 @@ func getScopes(tool string, readOnly bool) []Scope {
 	return scopes
 }
 
-// getScopeNames returns the names of the scopes that grant access to
-// the given tool according to GetScopes.
-func getScopeNames(tool string, readOnly bool) []string {
-	scopes := getScopes(tool, readOnly)
-	scopeNames := make([]string, 0, len(scopes))
-	for _, s := range scopes {
-		scopeNames = append(scopeNames, s.Name)
-	}
-	return scopeNames
+// scopesContextKey is the context key for storing scopes.
+type scopesContextKey struct{}
+
+// WithScopes adds the scopes to the given context.
+func WithScopes(ctx context.Context, scopes []string) context.Context {
+	return context.WithValue(ctx, scopesContextKey{}, scopes)
 }
 
-// AddScopesAndFilter adds to the ListToolsResult metadata the scopes
-// granting access to each tool in the MCP server, and filters out tools
-// that the user session does not have access to based on the scopes
-// present in the provided context. If the context is nil, no filtering
-// is done.
-func AddScopesAndFilter(ctx context.Context, result *mcp.ListToolsResult, readOnly bool) {
-	// Sweep tools accumulating scopes and filtering out the tools
-	// that the user session does not have access to.
-	// The scopes are accumulated in a map to avoid duplicates.
-	scopesMap := make(map[string]*Scope)
-	scopeIndex := map[string]int{
-		// Extra scopes should come first in the output.
-		scopeReadOnly:  -2,
-		scopeReadWrite: -1,
+// CheckScopes returns an error if the context does not include
+// at least one of the required scopes. If scope validation is
+// disabled, nil is returned.
+func CheckScopes(ctx context.Context, tool string, readOnly bool) error {
+	// Get the scopes from the context.
+	v := ctx.Value(scopesContextKey{})
+	if v == nil {
+		// Scopes are not present in the context, hence they are not enabled.
+		return nil
 	}
-	var filteredTools []*mcp.Tool
-	for idx, t := range result.Tools {
-		toolScopes := getScopes(t.Name, readOnly)
-		toolScopeNames := make([]string, 0, len(toolScopes))
-		for _, ts := range toolScopes {
-			scope, ok := scopesMap[ts.Name]
-			if !ok {
-				scopesMap[ts.Name] = &ts
-			} else {
-				scope.Tools = append(scope.Tools, t.Name)
-			}
-			if ts.Name == scopesPrefix+t.Name {
-				scopeIndex[ts.Name] = idx
-			}
-			toolScopeNames = append(toolScopeNames, ts.Name)
-		}
-		if ctx == nil {
-			filteredTools = append(filteredTools, t)
-			continue
-		}
-		if err := auth.CheckScopes(ctx, toolScopeNames); err == nil {
-			filteredTools = append(filteredTools, t)
+	scopes := make(map[string]struct{})
+	for _, scope := range v.([]string) {
+		scopes[scope] = struct{}{}
+	}
+
+	// Compute required scopes.
+	toolScopes := GetToolScopes(tool, readOnly)
+	requiredScopes := make([]string, 0, len(toolScopes))
+	for _, s := range toolScopes {
+		requiredScopes = append(requiredScopes, s.Name)
+	}
+
+	// Check if at least one required scope is present.
+	for _, reqScope := range requiredScopes {
+		if _, ok := scopes[reqScope]; ok {
+			return nil
 		}
 	}
 
-	// Convert the scopes map to a slice and sort according to the
-	// original order of the tools, with the extra scopes first.
-	scopes := make([]*Scope, 0, len(scopesMap))
-	for _, scope := range scopesMap {
-		scopes = append(scopes, scope)
-	}
-	slices.SortFunc(scopes, func(a, b *Scope) int {
-		return scopeIndex[a.Name] - scopeIndex[b.Name]
-	})
-
-	// Add the scopes to the result metadata and update the tools.
-	if result.Meta == nil {
-		result.Meta = make(map[string]any)
-	}
-	result.Meta["scopes"] = scopes
-	result.Tools = filteredTools
+	// No required scope found.
+	return fmt.Errorf("at least one of the following scopes is required: {%s}",
+		strings.Join(requiredScopes, ", "))
 }
