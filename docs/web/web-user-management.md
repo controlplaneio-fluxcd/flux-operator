@@ -7,8 +7,7 @@ description: Flux Status Web UI user management guide.
 
 By default, the Flux Operator exposes the Web UI without authentication,
 providing read-only access to all Flux resources in the cluster.
-
-The Web UI is strictly read-only. Users can view the current state of Flux reconcilers
+Users can view the current state of Flux reconcilers
 and their managed resources, but cannot access sensitive data such as Kubernetes Secrets and ConfigMaps.
 
 We recommend restricting access to the Web UI using [Single Sign-On](#single-sign-on)
@@ -56,6 +55,60 @@ web:
       type: Anonymous
       anonymous:
         username: flux-web
+```
+
+### Anonymous User Actions
+
+To allow anonymous users to perform specific actions,
+such as triggering reconciliations or suspending/resuming resources,
+cluster admins have to enable these actions in the Web UI configuration and assign
+the necessary permissions to the anonymous user.
+
+To enable all actions for anonymous users, set the following values in the Flux Operator
+[Helm chart](https://github.com/controlplaneio-fluxcd/charts/tree/main/charts/flux-operator):
+
+```yaml
+web:
+  config:
+    authentication:
+      type: Anonymous
+      anonymous:
+        username: flux-web
+    userActions:
+      authType: Anonymous
+```
+
+Then, create the necessary RBAC resources to grant the required permissions to the `flux-web` user:
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: flux-web-actions
+rules:
+  - apiGroups:
+     - "fluxcd.controlplane.io"
+     - "source.toolkit.fluxcd.io"
+     - "source.extensions.fluxcd.io"
+     - "kustomize.toolkit.fluxcd.io"
+     - "helm.toolkit.fluxcd.io"
+     - "image.toolkit.fluxcd.io"
+     - "notification.toolkit.fluxcd.io"
+    resources: ["*"]
+    verbs: ["patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: flux-web-global-actions
+subjects:
+  - kind: User
+    name: flux-web
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: flux-web-actions
+  apiGroup: rbac.authorization.k8s.io
 ```
 
 For more information about configuring the Web UI, see the [Web Config API](web-config-api.md) documentation.
