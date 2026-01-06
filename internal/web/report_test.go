@@ -5,6 +5,7 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -572,6 +573,36 @@ func TestGetReport_WithUserRBAC_NamespacesPopulated(t *testing.T) {
 func TestGetReport_WithUserRBAC_SingleNamespaceAccess(t *testing.T) {
 	g := NewWithT(t)
 
+	// Create another namespace to test filtering
+	otherNS := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "report-test-other-ns",
+		},
+	}
+	g.Expect(testClient.Create(ctx, otherNS)).To(Succeed())
+	defer testClient.Delete(ctx, otherNS)
+
+	// Create ResourceSets in both namespaces to test filtering
+	resourceSetDefault := &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-report-rs-default",
+			Namespace: "default",
+		},
+		Spec: fluxcdv1.ResourceSetSpec{},
+	}
+	g.Expect(testClient.Create(ctx, resourceSetDefault)).To(Succeed())
+	defer testClient.Delete(ctx, resourceSetDefault)
+
+	resourceSetOther := &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-report-rs-other",
+			Namespace: "report-test-other-ns",
+		},
+		Spec: fluxcdv1.ResourceSetSpec{},
+	}
+	g.Expect(testClient.Create(ctx, resourceSetOther)).To(Succeed())
+	defer testClient.Delete(ctx, resourceSetOther)
+
 	// Create RBAC for the test user with access only in the default namespace
 	// Using a Role and RoleBinding (namespace-scoped) instead of ClusterRole/ClusterRoleBinding
 	role := &rbacv1.Role{
@@ -660,6 +691,25 @@ func TestGetReport_WithUserRBAC_SingleNamespaceAccess(t *testing.T) {
 	userInfo, found := spec["userInfo"].(map[string]any)
 	g.Expect(found).To(BeTrue())
 	g.Expect(userInfo["username"]).To(Equal("Single NS User"))
+
+	// Verify reconcilers stats are filtered to only show resources in accessible namespaces
+	reconcilers, found := spec["reconcilers"]
+	g.Expect(found).To(BeTrue(), "reconcilers should be present in spec")
+
+	// Marshal and unmarshal to work with the data in a type-agnostic way
+	reconcilersJSON, err := json.Marshal(reconcilers)
+	g.Expect(err).NotTo(HaveOccurred())
+	var reconcilersList []fluxcdv1.FluxReconcilerStatus
+	g.Expect(json.Unmarshal(reconcilersJSON, &reconcilersList)).To(Succeed())
+
+	// Find the ResourceSet entry and verify it only counts the one in "default" namespace
+	for _, rec := range reconcilersList {
+		if rec.Kind == fluxcdv1.ResourceSetKind {
+			// Since user only has access to "default" namespace, they should only see
+			// stats for the ResourceSet in "default" (running=1), not the one in "report-test-other-ns"
+			g.Expect(rec.Stats.Running).To(Equal(1), "should only count ResourceSet in accessible namespace")
+		}
+	}
 }
 
 func TestGetReport_InjectsUserInfo(t *testing.T) {

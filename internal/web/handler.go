@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/tools/record"
 
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/kubeclient"
 )
@@ -27,8 +28,9 @@ type Handler struct {
 	namespace     string
 
 	// Report cache
-	reportCache   *unstructured.Unstructured
-	reportCacheMu sync.RWMutex
+	reportCache                 *unstructured.Unstructured
+	reportCacheStatsByNamespace []reporter.ReconcilerStatsByNamespace
+	reportCacheMu               sync.RWMutex
 }
 
 // NewHandler creates a new handler for the web server.
