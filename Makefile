@@ -135,9 +135,11 @@ web-dev: ## Start frontend dev server connected to backend.
 web-dev-mock: ## Start frontend dev server with mock data enabled.
 	cd web && VITE_USE_MOCK_DATA=true npm run dev
 
+WEB_RUN_ARGS ?=
+
 .PHONY: web-run
 web-run: build ## Start operator with frontend server only.
-	./bin/flux-operator --log-level=debug --web-server-only --web-server-port=9080
+	./bin/flux-operator --log-level=debug --web-server-only --web-server-port=9080 $(WEB_RUN_ARGS)
 
 .PHONY: web-build
 web-build:  web-fmt ## Build frontend for production.

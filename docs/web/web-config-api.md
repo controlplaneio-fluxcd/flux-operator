@@ -51,6 +51,22 @@ spec:
   # Use only for local development or testing.
   insecure: false # Optional, default is false.
 
+  # User actions (optional)
+  userActions:
+    # Enabled lists which actions should be enabled in the UI. By default, all actions are enabled.
+    # To disable actions, set this field to [] (empty list).
+    enabled:
+      - reconcile
+      - suspend
+      - resume
+
+    # Actions will only be enabled if this field matches the configured
+    # authentication type. Defaults to OAuth2.
+    authType: OAuth2 # Anonymous | OAuth2
+
+    # Send audit events to Kubernetes and Flux's notification-controller.
+    audit: false # Optional, default is false.
+
   # Authentication configuration (optional)
   authentication:
     type: OAuth2 # Anonymous | OAuth2
@@ -74,6 +90,25 @@ spec:
       clientSecret: flux-web-client-secret
       issuerURL: https://dex.example.com
 ```
+
+## User Actions
+
+The `userActions` section allows enabling/disabling the actions available to users
+in the web UI. By default, all actions are enabled. To disable all actions, set
+`enabled` to an empty list (`[]`).
+
+Note that actions will only be enabled if the `authType` matches the configured
+authentication type. For example, if `authType` is set to `OAuth2`, actions will
+only be enabled when `OAuth2` authentication is in use. The default value for
+`authType` is `OAuth2`. This field forces cluster administrators to explicitly
+declare their intent if they want to enable actions for authentication types
+where users are not tied to the Kubernetes RBAC permissions that will be used
+by the web UI on their behalf, e.g. the `Anonymous` authentication type.
+
+When `audit` is set to `true`, user actions performed in the web UI will
+generate audit events that are sent to both the Kubernetes API server and
+Flux's `notification-controller`. This allows administrators to track user
+activities for security and compliance purposes.
 
 ## Authentication
 

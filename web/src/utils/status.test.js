@@ -11,7 +11,8 @@ import {
   getEventBadgeClass,
   getStatusBarColor,
   getEventBarColor,
-  getStatusBorderClass
+  getStatusBorderClass,
+  cleanStatus
 } from './status'
 
 describe('status utilities', () => {
@@ -280,6 +281,55 @@ describe('status utilities', () => {
       expect(getStatusBorderClass('SomethingElse')).toBe('border-gray-300 dark:border-gray-600')
       expect(getStatusBorderClass(null)).toBe('border-gray-300 dark:border-gray-600')
       expect(getStatusBorderClass(undefined)).toBe('border-gray-300 dark:border-gray-600')
+    })
+  })
+
+  describe('cleanStatus', () => {
+    it('should return undefined for falsy input', () => {
+      expect(cleanStatus(null)).toBeUndefined()
+      expect(cleanStatus(undefined)).toBeUndefined()
+      expect(cleanStatus('')).toBeUndefined()
+    })
+
+    it('should remove internal fields from status', () => {
+      const status = {
+        inventory: [{ name: 'item1' }],
+        sourceRef: { kind: 'GitRepository', name: 'test' },
+        reconcilerRef: { status: 'Ready' },
+        exportedInputs: { key: 'value' },
+        userActions: true,
+        inputProviderRefs: [{ name: 'provider1' }],
+        conditions: [{ type: 'Ready', status: 'True' }],
+        observedGeneration: 1
+      }
+      const result = cleanStatus(status)
+      expect(result).toEqual({
+        conditions: [{ type: 'Ready', status: 'True' }],
+        observedGeneration: 1
+      })
+    })
+
+    it('should preserve other status fields', () => {
+      const status = {
+        customField: 'value',
+        anotherField: 123,
+        inventory: [],
+        userActions: false
+      }
+      const result = cleanStatus(status)
+      expect(result).toEqual({
+        customField: 'value',
+        anotherField: 123
+      })
+    })
+
+    it('should handle status with no internal fields', () => {
+      const status = {
+        conditions: [],
+        observedGeneration: 5
+      }
+      const result = cleanStatus(status)
+      expect(result).toEqual(status)
     })
   })
 })

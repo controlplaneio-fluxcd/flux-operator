@@ -9,6 +9,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/marketplacemetering v1.35.4
 	github.com/coreos/go-oidc/v3 v3.16.0
 	github.com/fluxcd/cli-utils v0.36.0-flux.15
+	github.com/fluxcd/pkg/apis/event v0.21.0
 	github.com/fluxcd/pkg/apis/kustomize v1.14.0
 	github.com/fluxcd/pkg/apis/meta v1.23.0
 	github.com/fluxcd/pkg/auth v0.33.0
@@ -102,7 +103,6 @@ require (
 	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
 	github.com/exponent-io/jsonpath v0.0.0-20210407135951-1de76d718b3f // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
-	github.com/fluxcd/pkg/apis/event v0.21.0 // indirect
 	github.com/fluxcd/pkg/envsubst v1.5.0 // indirect
 	github.com/fluxcd/pkg/sourceignore v0.15.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect

@@ -18,11 +18,6 @@ func TestAuthenticationSpec_Validate(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name:    "nil spec is valid",
-			spec:    nil,
-			wantErr: "",
-		},
-		{
 			name: "valid Anonymous authentication",
 			spec: &AuthenticationSpec{
 				Type: AuthenticationTypeAnonymous,
@@ -683,4 +678,12 @@ func TestImpersonationSpec_ApplyDefaults(t *testing.T) {
 	spec2.ApplyDefaults()
 	g.Expect(spec2.Username).To(Equal("claims.sub"))
 	g.Expect(spec2.Groups).To(Equal("claims.roles"))
+}
+
+func TestAllAuthenticationTypes(t *testing.T) {
+	g := NewWithT(t)
+
+	// Verify AllAuthenticationTypes contains the expected types
+	g.Expect(AllAuthenticationTypes).To(ConsistOf(AuthenticationTypeAnonymous, AuthenticationTypeOAuth2))
+	g.Expect(AllAuthenticationTypes).To(HaveLen(2))
 }
