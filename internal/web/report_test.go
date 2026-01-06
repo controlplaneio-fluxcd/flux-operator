@@ -475,8 +475,11 @@ func TestGetReport_WithUnprivilegedUser_ReportStillBuilt(t *testing.T) {
 	g.Expect(userInfo["username"]).To(Equal("Unprivileged User"))
 
 	// Verify namespaces is empty since the user has no access
-	_, found = spec["namespaces"]
-	g.Expect(found).To(BeFalse())
+	namespacesValue, found := spec["namespaces"]
+	g.Expect(found).To(BeTrue())
+	namespaces, ok := namespacesValue.([]string)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(namespaces).To(BeEmpty())
 }
 
 func TestGetReport_WithUserRBAC_NamespacesPopulated(t *testing.T) {

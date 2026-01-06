@@ -68,31 +68,33 @@ func (h *Handler) GetReport(ctx context.Context) (*unstructured.Unstructured, er
 		}
 	}
 
-	// Inject user info
-	if spec, found := report.Object["spec"].(map[string]any); found {
-		username, role := user.UsernameAndRole(ctx)
-		userInfo := make(map[string]any)
-		if username != "" {
-			userInfo["username"] = username
-		}
-		if role != "" {
-			userInfo["role"] = role
-		}
-		spec["userInfo"] = userInfo
-
-		// Inject user-visible namespaces (non-fatal if it fails)
-		namespaces, _, err := h.kubeClient.ListUserNamespaces(ctx)
-		switch {
-		case err != nil:
-			log.FromContext(ctx).Error(err, "failed to list user namespaces for report injection")
-		case len(namespaces) > 0:
-			spec["namespaces"] = namespaces
-		}
-
-		// Compute stats filtered by user-visible namespaces and inject into report
-		filteredStats := reporter.FilterReconcilerStatsByNamespaces(statsByNamespace, namespaces)
-		spec["reconcilers"] = filteredStats
+	// Get and modify the report spec
+	spec, found := report.Object["spec"].(map[string]any)
+	if !found {
+		return nil, fmt.Errorf("report spec not found")
 	}
+
+	// Inject user info
+	username, role := user.UsernameAndRole(ctx)
+	userInfo := make(map[string]any)
+	if username != "" {
+		userInfo["username"] = username
+	}
+	if role != "" {
+		userInfo["role"] = role
+	}
+	spec["userInfo"] = userInfo
+
+	// Inject user-visible namespaces
+	namespaces, _, err := h.kubeClient.ListUserNamespaces(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list user namespaces: %w", err)
+	}
+	spec["namespaces"] = namespaces
+
+	// Compute stats filtered by user-visible namespaces and inject into report
+	filteredStats := reporter.FilterReconcilerStatsByNamespaces(statsByNamespace, namespaces)
+	spec["reconcilers"] = filteredStats
 
 	return report, nil
 }
