@@ -202,6 +202,9 @@ func isReady(obj *unstructured.Unstructured) (bool, error) {
 				return false, nil
 			case string(corev1.ConditionFalse):
 				reason, _, _ := unstructured.NestedString(condition, "reason")
+				if reason == meta.HealthCheckCanceledReason {
+					return false, nil
+				}
 				message, _, _ := unstructured.NestedString(condition, "message")
 				return false, fmt.Errorf("%s: %s", reason, message)
 			}
