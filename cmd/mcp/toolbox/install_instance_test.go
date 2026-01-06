@@ -22,7 +22,7 @@ func TestManager_HandleInstallFluxInstance(t *testing.T) {
 
 	m := &Manager{
 		kubeconfig: k8s.NewKubeConfig(),
-		flags:      cli.NewConfigFlags(false),
+		kubeClient: k8s.NewClientFactory(cli.NewConfigFlags(false)),
 		timeout:    time.Second,
 	}
 

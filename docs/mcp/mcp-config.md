@@ -264,4 +264,6 @@ For the legacy `sse` transport, add:
 !!! warning "Warning"
 
     Note that when running in-cluster, the kubeconfig context switching tools are disabled,
-    so comparing deployments across clusters is not possible.
+    the only context available is for the cluster where the MCP server is deployed. To
+    compare deployments across multiple clusters, you will need to deploy the MCP server
+    in each cluster and configure each one in your AI assistant.

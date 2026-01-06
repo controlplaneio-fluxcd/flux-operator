@@ -7,9 +7,6 @@ import (
 	"context"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-
-	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/auth"
-	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/k8s"
 )
 
 const (
@@ -32,7 +29,7 @@ type applyKubernetesManifestInput struct {
 
 // HandleApplyKubernetesManifest is the handler function for the apply_kubernetes_manifest tool.
 func (m *Manager) HandleApplyKubernetesManifest(ctx context.Context, request *mcp.CallToolRequest, input applyKubernetesManifestInput) (*mcp.CallToolResult, any, error) {
-	if err := auth.CheckScopes(ctx, getScopeNames(ToolApplyKubernetesManifest, m.readOnly)); err != nil {
+	if err := CheckScopes(ctx, ToolApplyKubernetesManifest, m.readOnly); err != nil {
 		return NewToolResultError(err.Error())
 	}
 
@@ -43,9 +40,9 @@ func (m *Manager) HandleApplyKubernetesManifest(ctx context.Context, request *mc
 	ctx, cancel := context.WithTimeout(ctx, m.timeout)
 	defer cancel()
 
-	kubeClient, err := k8s.NewClient(ctx, m.flags)
+	kubeClient, err := m.kubeClient.GetClient(ctx)
 	if err != nil {
-		return NewToolResultErrorFromErr("Failed to create Kubernetes client", err)
+		return NewToolResultErrorFromErr("Failed to get Kubernetes client", err)
 	}
 
 	changeSet, err := kubeClient.Apply(ctx, input.YAMLContent, input.Overwrite)

@@ -8,9 +8,6 @@ import (
 	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-
-	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/auth"
-	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/k8s"
 )
 
 const (
@@ -35,7 +32,7 @@ type suspendFluxReconciliationInput struct {
 
 // HandleSuspendReconciliation is the handler function for the suspend_flux_reconciliation tool.
 func (m *Manager) HandleSuspendReconciliation(ctx context.Context, request *mcp.CallToolRequest, input suspendFluxReconciliationInput) (*mcp.CallToolResult, any, error) {
-	if err := auth.CheckScopes(ctx, getScopeNames(ToolSuspendFluxReconciliation, m.readOnly)); err != nil {
+	if err := CheckScopes(ctx, ToolSuspendFluxReconciliation, m.readOnly); err != nil {
 		return NewToolResultError(err.Error())
 	}
 
@@ -55,9 +52,9 @@ func (m *Manager) HandleSuspendReconciliation(ctx context.Context, request *mcp.
 	ctx, cancel := context.WithTimeout(ctx, m.timeout)
 	defer cancel()
 
-	kubeClient, err := k8s.NewClient(ctx, m.flags)
+	kubeClient, err := m.kubeClient.GetClient(ctx)
 	if err != nil {
-		return NewToolResultErrorFromErr("Failed to create Kubernetes client", err)
+		return NewToolResultErrorFromErr("Failed to get Kubernetes client", err)
 	}
 
 	gvk, err := kubeClient.ParseGroupVersionKind(input.APIVersion, input.Kind)

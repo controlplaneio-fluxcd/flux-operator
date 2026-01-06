@@ -7,9 +7,6 @@ import (
 	"context"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-
-	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/auth"
-	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/k8s"
 )
 
 const (
@@ -34,7 +31,7 @@ type deleteKubernetesResourceInput struct {
 
 // HandleDeleteKubernetesResource is the handler function for the delete_kubernetes_resource tool.
 func (m *Manager) HandleDeleteKubernetesResource(ctx context.Context, request *mcp.CallToolRequest, input deleteKubernetesResourceInput) (*mcp.CallToolResult, any, error) {
-	if err := auth.CheckScopes(ctx, getScopeNames(ToolDeleteKubernetesResource, m.readOnly)); err != nil {
+	if err := CheckScopes(ctx, ToolDeleteKubernetesResource, m.readOnly); err != nil {
 		return NewToolResultError(err.Error())
 	}
 
@@ -51,9 +48,9 @@ func (m *Manager) HandleDeleteKubernetesResource(ctx context.Context, request *m
 	ctx, cancel := context.WithTimeout(ctx, m.timeout)
 	defer cancel()
 
-	kubeClient, err := k8s.NewClient(ctx, m.flags)
+	kubeClient, err := m.kubeClient.GetClient(ctx)
 	if err != nil {
-		return NewToolResultErrorFromErr("Failed to create Kubernetes client", err)
+		return NewToolResultErrorFromErr("Failed to get Kubernetes client", err)
 	}
 
 	gvk, err := kubeClient.ParseGroupVersionKind(input.APIVersion, input.Kind)

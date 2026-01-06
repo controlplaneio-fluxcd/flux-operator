@@ -14,8 +14,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
-	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/auth"
-	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/k8s"
 )
 
 const (
@@ -39,7 +37,7 @@ type reconcileFluxHelmReleaseInput struct {
 
 // HandleReconcileHelmRelease is the handler function for the reconcile_flux_helmrelease tool.
 func (m *Manager) HandleReconcileHelmRelease(ctx context.Context, request *mcp.CallToolRequest, input reconcileFluxHelmReleaseInput) (*mcp.CallToolResult, any, error) {
-	if err := auth.CheckScopes(ctx, getScopeNames(ToolReconcileFluxHelmRelease, m.readOnly)); err != nil {
+	if err := CheckScopes(ctx, ToolReconcileFluxHelmRelease, m.readOnly); err != nil {
 		return NewToolResultError(err.Error())
 	}
 
@@ -53,9 +51,9 @@ func (m *Manager) HandleReconcileHelmRelease(ctx context.Context, request *mcp.C
 	ctx, cancel := context.WithTimeout(ctx, m.timeout)
 	defer cancel()
 
-	kubeClient, err := k8s.NewClient(ctx, m.flags)
+	kubeClient, err := m.kubeClient.GetClient(ctx)
 	if err != nil {
-		return NewToolResultErrorFromErr("Failed to create Kubernetes client", err)
+		return NewToolResultErrorFromErr("Failed to get Kubernetes client", err)
 	}
 
 	hr := &unstructured.Unstructured{
