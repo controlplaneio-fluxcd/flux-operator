@@ -72,7 +72,7 @@ func (r *FluxReportReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	// Compute the status of the Flux instance.
 	rep := reporter.NewFluxStatusReporter(r.Client, fluxcdv1.DefaultInstanceName, r.StatusManager, obj.Namespace)
-	report, err := rep.Compute(ctx)
+	report, _, err := rep.Compute(ctx)
 	if err != nil {
 		log.Error(err, "report computed with errors")
 	}

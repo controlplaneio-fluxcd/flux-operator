@@ -41,40 +41,40 @@ func NewFluxStatusReporter(kubeClient client.Client, instance, manager, namespac
 }
 
 // Compute generate the status report of the Flux installation.
-func (r *FluxStatusReporter) Compute(ctx context.Context) (fluxcdv1.FluxReportSpec, error) {
+func (r *FluxStatusReporter) Compute(ctx context.Context) (fluxcdv1.FluxReportSpec, []ReconcilerStatsByNamespace, error) {
 	report := fluxcdv1.FluxReportSpec{}
 	report.Distribution = r.getDistributionStatus(ctx)
 
 	cluster, err := r.getClusterInfo(ctx)
 	if err != nil {
-		return report, fmt.Errorf("failed to compute cluster info: %w", err)
+		return report, nil, fmt.Errorf("failed to compute cluster info: %w", err)
 	}
 	report.Cluster = cluster
 
 	crds, err := r.listCRDs(ctx)
 	if err != nil {
-		return report, fmt.Errorf("failed to list CRDs: %w", err)
+		return report, nil, fmt.Errorf("failed to list CRDs: %w", err)
 	}
 
 	componentsStatus, err := r.getComponentsStatus(ctx)
 	if err != nil {
-		return report, fmt.Errorf("failed to compute components status: %w", err)
+		return report, nil, fmt.Errorf("failed to compute components status: %w", err)
 	}
 	report.ComponentsStatus = componentsStatus
 
-	reconcilersStatus, err := r.getReconcilersStatus(ctx, crds)
+	reconcilersStatus, reconcilersStatsByNamespace, err := r.getReconcilersStatus(ctx, crds)
 	if err != nil {
-		return report, fmt.Errorf("failed to compute reconcilers status: %w", err)
+		return report, nil, fmt.Errorf("failed to compute reconcilers status: %w", err)
 	}
 	report.ReconcilersStatus = reconcilersStatus
 
 	syncStatus, err := r.getSyncStatus(ctx, crds)
 	if err != nil {
-		return report, fmt.Errorf("failed to compute sync status: %w", err)
+		return report, nil, fmt.Errorf("failed to compute sync status: %w", err)
 	}
 	report.SyncStatus = syncStatus
 
-	return report, nil
+	return report, reconcilersStatsByNamespace, nil
 }
 
 // RequestReportUpdate annotates the FluxReport object to trigger a reconciliation.

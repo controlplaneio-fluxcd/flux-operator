@@ -6,7 +6,6 @@ package kubeclient_test
 import (
 	"context"
 	"testing"
-	"time"
 
 	authzv1 "k8s.io/api/authorization/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -16,7 +15,6 @@ import (
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/cluster"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 )
 
@@ -27,7 +25,6 @@ var (
 	testEnvConf *rest.Config
 	testScheme  *runtime.Scheme
 	testClient  client.Client
-	testCluster cluster.Cluster
 )
 
 func init() {
@@ -50,27 +47,6 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(err)
 	}
-
-	testCluster, err = cluster.New(testEnvConf, func(o *cluster.Options) {
-		o.Scheme = testScheme
-	})
-	if err != nil {
-		panic(err)
-	}
-
-	// Start the cluster in a goroutine
-	go func() {
-		if err := testCluster.Start(ctx); err != nil {
-			panic(err)
-		}
-	}()
-
-	// Wait for the cache to sync
-	syncCtx, syncCancel := context.WithTimeout(ctx, 30*time.Second)
-	if !testCluster.GetCache().WaitForCacheSync(syncCtx) {
-		panic("Failed to sync test cluster cache")
-	}
-	syncCancel()
 
 	m.Run()
 

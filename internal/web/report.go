@@ -57,37 +57,44 @@ func (h *Handler) ReportHandler(w http.ResponseWriter, req *http.Request) {
 // building a fresh report (this should only happen during initial startup).
 func (h *Handler) GetReport(ctx context.Context) (*unstructured.Unstructured, error) {
 	var report *unstructured.Unstructured
-	if cached := h.getCachedReport(); cached != nil {
-		report = cached
+	var statsByNamespace []reporter.ReconcilerStatsByNamespace
+	if cached, cachedStats := h.getCachedReport(); cached != nil {
+		report, statsByNamespace = cached, cachedStats
 	} else {
-		if r, err := h.buildReport(ctx); err != nil {
+		if r, s, err := h.buildReport(ctx); err != nil {
 			return nil, err
 		} else {
-			report = r
+			report, statsByNamespace = r, s
 		}
+	}
+
+	// Get and modify the report spec
+	spec, found := report.Object["spec"].(map[string]any)
+	if !found {
+		return nil, fmt.Errorf("report spec not found")
 	}
 
 	// Inject user info
-	if spec, found := report.Object["spec"].(map[string]any); found {
-		username, role := user.UsernameAndRole(ctx)
-		userInfo := make(map[string]any)
-		if username != "" {
-			userInfo["username"] = username
-		}
-		if role != "" {
-			userInfo["role"] = role
-		}
-		spec["userInfo"] = userInfo
-
-		// Inject user-visible namespaces (non-fatal if it fails)
-		namespaces, _, err := h.kubeClient.ListUserNamespaces(ctx)
-		switch {
-		case err != nil:
-			log.FromContext(ctx).Error(err, "failed to list user namespaces for report injection")
-		case len(namespaces) > 0:
-			spec["namespaces"] = namespaces
-		}
+	username, role := user.UsernameAndRole(ctx)
+	userInfo := make(map[string]any)
+	if username != "" {
+		userInfo["username"] = username
 	}
+	if role != "" {
+		userInfo["role"] = role
+	}
+	spec["userInfo"] = userInfo
+
+	// Inject user-visible namespaces
+	namespaces, _, err := h.kubeClient.ListUserNamespaces(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list user namespaces: %w", err)
+	}
+	spec["namespaces"] = namespaces
+
+	// Compute stats filtered by user-visible namespaces and inject into report
+	filteredStats := reporter.FilterReconcilerStatsByNamespaces(statsByNamespace, namespaces)
+	spec["reconcilers"] = filteredStats
 
 	return report, nil
 }
@@ -121,7 +128,7 @@ func (h *Handler) startReportCache(ctx context.Context, reportInterval time.Dura
 
 // refreshReportCache builds a fresh report and updates the cache.
 func (h *Handler) refreshReportCache(ctx context.Context) {
-	report, err := h.buildReport(ctx)
+	report, statsByNamespace, err := h.buildReport(ctx)
 	if err != nil {
 		if !errors.Is(err, context.Canceled) || ctx.Err() == nil {
 			log.FromContext(ctx).Error(err, "failed to refresh report cache")
@@ -131,27 +138,29 @@ func (h *Handler) refreshReportCache(ctx context.Context) {
 
 	h.reportCacheMu.Lock()
 	h.reportCache = report
+	h.reportCacheStatsByNamespace = statsByNamespace
 	h.reportCacheMu.Unlock()
 }
 
 // getCachedReport returns the cached report if available.
-func (h *Handler) getCachedReport() *unstructured.Unstructured {
+func (h *Handler) getCachedReport() (*unstructured.Unstructured, []reporter.ReconcilerStatsByNamespace) {
 	h.reportCacheMu.RLock()
 	if h.reportCache == nil {
 		h.reportCacheMu.RUnlock()
-		return nil
+		return nil, nil
 	}
 	b, _ := json.Marshal(h.reportCache)
+	statsByNamespace := h.reportCacheStatsByNamespace
 	h.reportCacheMu.RUnlock()
 
 	var obj unstructured.Unstructured
 	_ = json.Unmarshal(b, &obj)
-	return &obj
+	return &obj, statsByNamespace
 }
 
 // buildReport builds the FluxReport directly using the reporter package
 // and injects pod metrics into the report spec.
-func (h *Handler) buildReport(ctx context.Context) (*unstructured.Unstructured, error) {
+func (h *Handler) buildReport(ctx context.Context) (*unstructured.Unstructured, []reporter.ReconcilerStatsByNamespace, error) {
 	// The report client needs privileged access as it needs to access all
 	// resources in the cluster to build the report. The report information,
 	// however, is crunched in a way that does not expose sensitive information.
@@ -161,7 +170,7 @@ func (h *Handler) buildReport(ctx context.Context) (*unstructured.Unstructured, 
 	// so there's no user session available to use for impersonation.
 	repClient := h.kubeClient.GetClient(ctx, kubeclient.WithPrivileges())
 	rep := reporter.NewFluxStatusReporter(repClient, fluxcdv1.DefaultInstanceName, h.statusManager, h.namespace)
-	reportSpec, err := rep.Compute(ctx)
+	reportSpec, statsByNamespace, err := rep.Compute(ctx)
 	if err != nil {
 		log.FromContext(ctx).Error(err, "report computed with errors")
 	}
@@ -189,7 +198,7 @@ func (h *Handler) buildReport(ctx context.Context) (*unstructured.Unstructured, 
 	// Convert to unstructured
 	rawMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert report to unstructured: %w", err)
+		return nil, nil, fmt.Errorf("failed to convert report to unstructured: %w", err)
 	}
 	result := &unstructured.Unstructured{Object: rawMap}
 
@@ -207,7 +216,7 @@ func (h *Handler) buildReport(ctx context.Context) (*unstructured.Unstructured, 
 		}
 	}
 
-	return result, nil
+	return result, statsByNamespace, nil
 }
 
 func uninitialisedReport() *unstructured.Unstructured {

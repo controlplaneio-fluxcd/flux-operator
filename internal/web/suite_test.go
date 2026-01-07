@@ -91,7 +91,7 @@ func TestMain(m *testing.M) {
 	syncCancel()
 
 	// Create the kubeclient
-	kubeClient, err = kubeclient.New(testCluster, 100, 5*time.Minute)
+	kubeClient, err = kubeclient.New(testClient, testClient, cfg, testScheme, 100, 5*time.Minute)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create kubeclient: %v", err))
 	}
