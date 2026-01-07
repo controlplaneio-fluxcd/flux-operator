@@ -681,10 +681,6 @@ func TestActionHandler_AllValidActions(t *testing.T) {
 			g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
 			defer testClient.Delete(ctx, resourceSet)
 
-			g.Eventually(func() error {
-				return kubeClient.GetClient(ctx).Get(ctx, client.ObjectKeyFromObject(resourceSet), resourceSet)
-			}).Should(Succeed())
-
 			handler := &Handler{
 				conf:          oauthConfig(),
 				kubeClient:    kubeClient,
@@ -852,10 +848,6 @@ func TestActionHandler_ActionEnabled(t *testing.T) {
 	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
 	defer testClient.Delete(ctx, resourceSet)
 
-	g.Eventually(func() error {
-		return kubeClient.GetClient(ctx).Get(ctx, client.ObjectKeyFromObject(resourceSet), resourceSet)
-	}).Should(Succeed())
-
 	// Configure only reconcile action
 	handler := &Handler{
 		conf: &config.ConfigSpec{
@@ -907,10 +899,6 @@ func TestActionHandler_AllActionsEnabledByDefault(t *testing.T) {
 	}
 	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
 	defer testClient.Delete(ctx, resourceSet)
-
-	g.Eventually(func() error {
-		return kubeClient.GetClient(ctx).Get(ctx, client.ObjectKeyFromObject(resourceSet), resourceSet)
-	}).Should(Succeed())
 
 	// Configure OAuth2 with nil Enabled (all actions enabled by default)
 	handler := &Handler{

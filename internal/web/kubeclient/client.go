@@ -15,7 +15,6 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
-	"sigs.k8s.io/controller-runtime/pkg/cluster"
 
 	"github.com/fluxcd/pkg/cache"
 
@@ -69,7 +68,9 @@ func WithPrivileges() Option {
 }
 
 // New returns a new Client wrapping the given cluster.Cluster.
-func New(c cluster.Cluster, userCacheSize int, namespaceCacheDuration time.Duration) (*Client, error) {
+func New(reader client.Reader, kClient client.Client, config *rest.Config, scheme *runtime.Scheme,
+	userCacheSize int, namespaceCacheDuration time.Duration) (*Client, error) {
+
 	userClientCache, err := cache.NewLRU[*userClient](userCacheSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create user client cache: %w", err)
@@ -81,10 +82,10 @@ func New(c cluster.Cluster, userCacheSize int, namespaceCacheDuration time.Durat
 	}
 
 	return &Client{
-		reader:                 c.GetAPIReader(),
-		client:                 c.GetClient(),
-		config:                 c.GetConfig(),
-		scheme:                 c.GetScheme(),
+		reader:                 reader,
+		client:                 kClient,
+		config:                 config,
+		scheme:                 scheme,
 		userClientCache:        userClientCache,
 		userNamespacesCache:    userNamespacesCache,
 		namespaceCacheDuration: namespaceCacheDuration,

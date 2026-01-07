@@ -156,7 +156,8 @@ func RunServer(ctx context.Context, c cluster.Cluster,
 		if a := conf.Authentication; a != nil && a.Type != config.AuthenticationTypeAnonymous {
 			userCacheSize = a.UserCacheSize
 		}
-		kubeClient, err := kubeclient.New(c, userCacheSize, namespaceCacheDuration)
+		kubeClient, err := kubeclient.New(c.GetAPIReader(), c.GetClient(), c.GetConfig(), c.GetScheme(),
+			userCacheSize, namespaceCacheDuration)
 		if err != nil {
 			eventLog.Error(err, "unable to create kubeclient with new configuration, keeping existing configuration")
 			continue

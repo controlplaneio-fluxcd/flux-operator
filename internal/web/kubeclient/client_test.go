@@ -23,7 +23,7 @@ import (
 func TestNew(t *testing.T) {
 	g := NewWithT(t)
 
-	kubeClient, err := kubeclient.New(testCluster, 100, 5*time.Minute)
+	kubeClient, err := kubeclient.New(testClient, testClient, testEnvConf, testScheme, 100, 5*time.Minute)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(kubeClient).NotTo(BeNil())
 }
@@ -31,7 +31,7 @@ func TestNew(t *testing.T) {
 func TestGetAPIReader_Privileged(t *testing.T) {
 	g := NewWithT(t)
 
-	kubeClient, err := kubeclient.New(testCluster, 100, 5*time.Minute)
+	kubeClient, err := kubeclient.New(testClient, testClient, testEnvConf, testScheme, 100, 5*time.Minute)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	// Without a user session in context, should return the privileged reader
@@ -48,7 +48,7 @@ func TestGetAPIReader_Privileged(t *testing.T) {
 func TestGetAPIReader_Unprivileged_Forbidden(t *testing.T) {
 	g := NewWithT(t)
 
-	kubeClient, err := kubeclient.New(testCluster, 100, 5*time.Minute)
+	kubeClient, err := kubeclient.New(testClient, testClient, testEnvConf, testScheme, 100, 5*time.Minute)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	// Create a user client with no RBAC permissions
@@ -78,7 +78,7 @@ func TestGetAPIReader_Unprivileged_Forbidden(t *testing.T) {
 func TestGetAPIReader_WithUserRBAC(t *testing.T) {
 	g := NewWithT(t)
 
-	kubeClient, err := kubeclient.New(testCluster, 100, 5*time.Minute)
+	kubeClient, err := kubeclient.New(testClient, testClient, testEnvConf, testScheme, 100, 5*time.Minute)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	// Create ClusterRole with namespace list access
@@ -152,7 +152,7 @@ func TestGetAPIReader_WithUserRBAC(t *testing.T) {
 func TestGetAPIReader_WithGroupRBAC(t *testing.T) {
 	g := NewWithT(t)
 
-	kubeClient, err := kubeclient.New(testCluster, 100, 5*time.Minute)
+	kubeClient, err := kubeclient.New(testClient, testClient, testEnvConf, testScheme, 100, 5*time.Minute)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	// Create ClusterRole with namespace list access
@@ -226,7 +226,7 @@ func TestGetAPIReader_WithGroupRBAC(t *testing.T) {
 func TestGetClient_Privileged(t *testing.T) {
 	g := NewWithT(t)
 
-	kubeClient, err := kubeclient.New(testCluster, 100, 5*time.Minute)
+	kubeClient, err := kubeclient.New(testClient, testClient, testEnvConf, testScheme, 100, 5*time.Minute)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	// Without a user session in context, should return the privileged client
@@ -243,7 +243,7 @@ func TestGetClient_Privileged(t *testing.T) {
 func TestGetClient_Unprivileged_Forbidden(t *testing.T) {
 	g := NewWithT(t)
 
-	kubeClient, err := kubeclient.New(testCluster, 100, 5*time.Minute)
+	kubeClient, err := kubeclient.New(testClient, testClient, testEnvConf, testScheme, 100, 5*time.Minute)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	// Create a user client with no RBAC permissions
@@ -273,7 +273,7 @@ func TestGetClient_Unprivileged_Forbidden(t *testing.T) {
 func TestGetClient_WithUserRBAC(t *testing.T) {
 	g := NewWithT(t)
 
-	kubeClient, err := kubeclient.New(testCluster, 100, 5*time.Minute)
+	kubeClient, err := kubeclient.New(testClient, testClient, testEnvConf, testScheme, 100, 5*time.Minute)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	// Create ClusterRole with namespace list access
@@ -347,7 +347,7 @@ func TestGetClient_WithUserRBAC(t *testing.T) {
 func TestGetClient_WithGroupRBAC(t *testing.T) {
 	g := NewWithT(t)
 
-	kubeClient, err := kubeclient.New(testCluster, 100, 5*time.Minute)
+	kubeClient, err := kubeclient.New(testClient, testClient, testEnvConf, testScheme, 100, 5*time.Minute)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	// Create ClusterRole with namespace list access
@@ -421,7 +421,7 @@ func TestGetClient_WithGroupRBAC(t *testing.T) {
 func TestGetConfig_Privileged(t *testing.T) {
 	g := NewWithT(t)
 
-	kubeClient, err := kubeclient.New(testCluster, 100, 5*time.Minute)
+	kubeClient, err := kubeclient.New(testClient, testClient, testEnvConf, testScheme, 100, 5*time.Minute)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	// Without a user session in context, should return the privileged config
@@ -433,7 +433,7 @@ func TestGetConfig_Privileged(t *testing.T) {
 func TestGetConfig_Unprivileged_Forbidden(t *testing.T) {
 	g := NewWithT(t)
 
-	kubeClient, err := kubeclient.New(testCluster, 100, 5*time.Minute)
+	kubeClient, err := kubeclient.New(testClient, testClient, testEnvConf, testScheme, 100, 5*time.Minute)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	// Create a user client with no RBAC permissions
@@ -468,7 +468,7 @@ func TestGetConfig_Unprivileged_Forbidden(t *testing.T) {
 func TestGetConfig_WithUserRBAC(t *testing.T) {
 	g := NewWithT(t)
 
-	kubeClient, err := kubeclient.New(testCluster, 100, 5*time.Minute)
+	kubeClient, err := kubeclient.New(testClient, testClient, testEnvConf, testScheme, 100, 5*time.Minute)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	// Create ClusterRole with namespace list access
@@ -547,7 +547,7 @@ func TestGetConfig_WithUserRBAC(t *testing.T) {
 func TestGetConfig_WithGroupRBAC(t *testing.T) {
 	g := NewWithT(t)
 
-	kubeClient, err := kubeclient.New(testCluster, 100, 5*time.Minute)
+	kubeClient, err := kubeclient.New(testClient, testClient, testEnvConf, testScheme, 100, 5*time.Minute)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	// Create ClusterRole with namespace list access
@@ -627,7 +627,7 @@ func TestGetConfig_WithGroupRBAC(t *testing.T) {
 func TestWithPrivileges_OverridesUserContext(t *testing.T) {
 	g := NewWithT(t)
 
-	kubeClient, err := kubeclient.New(testCluster, 100, 5*time.Minute)
+	kubeClient, err := kubeclient.New(testClient, testClient, testEnvConf, testScheme, 100, 5*time.Minute)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	// Create a user client and store in context
@@ -657,7 +657,7 @@ func TestWithPrivileges_OverridesUserContext(t *testing.T) {
 func TestGetUserClientFromCache(t *testing.T) {
 	g := NewWithT(t)
 
-	kubeClient, err := kubeclient.New(testCluster, 100, 5*time.Minute)
+	kubeClient, err := kubeclient.New(testClient, testClient, testEnvConf, testScheme, 100, 5*time.Minute)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	imp := user.Impersonation{
@@ -679,7 +679,7 @@ func TestGetUserClientFromCache(t *testing.T) {
 func TestGetUserClientFromCache_DifferentUsers(t *testing.T) {
 	g := NewWithT(t)
 
-	kubeClient, err := kubeclient.New(testCluster, 100, 5*time.Minute)
+	kubeClient, err := kubeclient.New(testClient, testClient, testEnvConf, testScheme, 100, 5*time.Minute)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	imp1 := user.Impersonation{
@@ -704,7 +704,7 @@ func TestGetUserClientFromCache_DifferentUsers(t *testing.T) {
 func TestListUserNamespaces_Privileged(t *testing.T) {
 	g := NewWithT(t)
 
-	kubeClient, err := kubeclient.New(testCluster, 100, 5*time.Minute)
+	kubeClient, err := kubeclient.New(testClient, testClient, testEnvConf, testScheme, 100, 5*time.Minute)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	// Without a user session, should list all namespaces with full access
@@ -722,7 +722,7 @@ func TestListUserNamespaces_Privileged(t *testing.T) {
 func TestListUserNamespaces_Cached(t *testing.T) {
 	g := NewWithT(t)
 
-	kubeClient, err := kubeclient.New(testCluster, 100, 5*time.Minute)
+	kubeClient, err := kubeclient.New(testClient, testClient, testEnvConf, testScheme, 100, 5*time.Minute)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	// First call
@@ -740,7 +740,7 @@ func TestListUserNamespaces_Cached(t *testing.T) {
 func TestListUserNamespaces_WithUserSession(t *testing.T) {
 	g := NewWithT(t)
 
-	kubeClient, err := kubeclient.New(testCluster, 100, 5*time.Minute)
+	kubeClient, err := kubeclient.New(testClient, testClient, testEnvConf, testScheme, 100, 5*time.Minute)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	// Create test namespace for RBAC testing
@@ -778,7 +778,7 @@ func TestListUserNamespaces_WithUserSession(t *testing.T) {
 func TestListUserNamespaces_WithClusterRoleBinding(t *testing.T) {
 	g := NewWithT(t)
 
-	kubeClient, err := kubeclient.New(testCluster, 100, 5*time.Minute)
+	kubeClient, err := kubeclient.New(testClient, testClient, testEnvConf, testScheme, 100, 5*time.Minute)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	// Create ClusterRole with resourcesets access
@@ -847,7 +847,7 @@ func TestListUserNamespaces_WithClusterRoleBinding(t *testing.T) {
 func TestListUserNamespaces_WithRoleBinding(t *testing.T) {
 	g := NewWithT(t)
 
-	kubeClient, err := kubeclient.New(testCluster, 100, 5*time.Minute)
+	kubeClient, err := kubeclient.New(testClient, testClient, testEnvConf, testScheme, 100, 5*time.Minute)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	// Create test namespace
@@ -931,7 +931,7 @@ func TestListUserNamespaces_WithRoleBinding(t *testing.T) {
 func TestUserClientImpersonation(t *testing.T) {
 	g := NewWithT(t)
 
-	kubeClient, err := kubeclient.New(testCluster, 100, 5*time.Minute)
+	kubeClient, err := kubeclient.New(testClient, testClient, testEnvConf, testScheme, 100, 5*time.Minute)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	imp := user.Impersonation{
@@ -955,7 +955,7 @@ func TestUserClientImpersonation(t *testing.T) {
 func TestUserClientCanCreateSSAR(t *testing.T) {
 	g := NewWithT(t)
 
-	kubeClient, err := kubeclient.New(testCluster, 100, 5*time.Minute)
+	kubeClient, err := kubeclient.New(testClient, testClient, testEnvConf, testScheme, 100, 5*time.Minute)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	imp := user.Impersonation{
@@ -991,7 +991,7 @@ func TestNamespaceCacheExpiration(t *testing.T) {
 	g := NewWithT(t)
 
 	// Use a very short cache duration for this test
-	kubeClient, err := kubeclient.New(testCluster, 100, 100*time.Millisecond)
+	kubeClient, err := kubeclient.New(testClient, testClient, testEnvConf, testScheme, 100, 100*time.Millisecond)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	// First call
