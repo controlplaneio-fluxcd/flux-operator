@@ -6,8 +6,8 @@ description: Flux Status Web UI setup guide for standalone installation.
 # Flux Web UI Standalone Installation
 
 This guide will walk you through the steps to set up the Flux Status Web UI as a dedicated deployment
-in your Kubernetes cluster, separate from the Flux Operator. This setup is useful for OpenShift clusters
-or environments where you want to isolate the Web UI from the main Flux Operator installation.
+in your Kubernetes cluster, separate from the Flux Operator. This setup is useful for environments
+where you want to isolate the Web UI from the main Flux Operator installation.
 
 ## Prerequisites
 
