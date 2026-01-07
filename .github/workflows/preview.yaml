@@ -1,0 +1,94 @@
+name: preview
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'docs/**'
+      - 'config/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}-preview
+
+jobs:
+  branch-build-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # for creating OIDC tokens for signing.
+      packages: write # for pushing and signing container images.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - name: Setup Go
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
+        with:
+          go-version: 1.25.x
+      - name: Setup Node
+        uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
+        with:
+          node-version: 24
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+      - name: Build frontend
+        run: make web-ci-install web-build
+      - name: Prepare
+        id: prep
+        run: |
+          TIMESTAMP=$(git log -1 --pretty=%ct)
+          TAG="${GITHUB_REF_NAME//\//-}-${GITHUB_SHA::8}-${TIMESTAMP}"
+          LATEST_TAG="${GITHUB_REF_NAME//\//-}-latest"
+          echo "TIMESTAMP=${TIMESTAMP}" >> $GITHUB_OUTPUT
+          echo "TAG=${TAG}" >> $GITHUB_OUTPUT
+          echo "LATEST_TAG=${LATEST_TAG}" >> $GITHUB_OUTPUT
+      - name: Setup QEMU
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+      - name: Setup Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Generate image meta
+        id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        with:
+          images: |
+            ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=${{ steps.prep.outputs.TAG }}
+            type=raw,value=${{ steps.prep.outputs.LATEST_TAG }}
+          annotations:
+            org.opencontainers.image.description=Flux Operator preview build
+      - name: Push image
+        id: build-push
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        env:
+          SOURCE_DATE_EPOCH: ${{ steps.prep.outputs.TIMESTAMP }}
+        with:
+          sbom: true
+          provenance: true
+          push: true
+          builder: ${{ steps.buildx.outputs.name }}
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          build-args: "VERSION=0.0.0-${{ steps.prep.outputs.TAG }}"
+      - uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
+        with:
+          cosign-release: v2.6.1 # TODO: remove after Flux 2.8 with support for cosign v3
+      - name: Sign image
+        env:
+          COSIGN_EXPERIMENTAL: 1
+        run: |
+          cosign sign --yes ${{ env.IMAGE }}@${{ steps.build-push.outputs.digest }}
