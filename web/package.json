@@ -11,25 +11,25 @@
     "test": "vitest --run"
   },
   "dependencies": {
-    "@preact/signals": "^2.3.2",
+    "@preact/signals": "^2.5.1",
     "js-yaml": "^4.1.1",
-    "preact": "^10.26.1",
-    "preact-iso": "^2.11.0",
+    "preact": "^10.28.2",
+    "preact-iso": "^2.11.1",
     "prismjs": "^1.30.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",
-    "@preact/preset-vite": "^2.9.3",
+    "@preact/preset-vite": "^2.10.2",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/preact": "^3.2.4",
     "@testing-library/user-event": "^14.6.1",
-    "@vitest/coverage-v8": "^4.0.10",
-    "autoprefixer": "^10.4.20",
-    "eslint": "^9.39.0",
-    "jsdom": "^27.2.0",
-    "postcss": "^8.4.49",
-    "tailwindcss": "^3.4.18",
-    "vite": "^7.1.12",
+    "@vitest/coverage-v8": "^4.0.16",
+    "autoprefixer": "^10.4.23",
+    "eslint": "^9.39.2",
+    "jsdom": "^27.4.0",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.19",
+    "vite": "^7.3.1",
     "vitest": "^4.0.9"
   }
 }

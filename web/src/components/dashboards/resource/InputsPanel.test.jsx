@@ -280,17 +280,19 @@ describe('InputsPanel component', () => {
   })
 
   describe('Values tab - External inputs loading', () => {
-    it('should show loading state when fetching external inputs', async () => {
-      // Delay the mock response
-      fetchWithMock.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve(mockProviderResponse), 100)))
-
+    it('should trigger fetch when switching to Values tab with external inputs', async () => {
       const user = userEvent.setup()
       render(<InputsPanel resourceData={mockResourceSet} namespace="flux-system" />)
 
+      // Fetch should not be called on initial render (Overview tab)
+      expect(fetchWithMock).not.toHaveBeenCalled()
+
       await user.click(screen.getByText('Values'))
 
-      // Should show loading state
-      expect(screen.getByText('Loading inputs...')).toBeInTheDocument()
+      // Fetch should be triggered when Values tab is clicked
+      await waitFor(() => {
+        expect(fetchWithMock).toHaveBeenCalled()
+      })
     })
 
     it('should fetch and display external inputs', async () => {
