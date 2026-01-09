@@ -308,10 +308,9 @@ func (c *Client) filterNamespacesByAccess(ctx context.Context, namespaces []stri
 func (c *Client) CanActOnResource(ctx context.Context, action, group, plural, namespace, name string) (bool, error) {
 	kubeClient := c.GetClient(ctx)
 
-	// Here, we can't bail out early if kubeClient == c.client
-	// because we enforce custom RBAC verbs, so for the
-	// Anonymous authentication type to be properly protected
-	// we still need to check its access.
+	// CanActOnResource will never be called when c.GetClient(ctx) == c.client
+	// because actions can only be used when authentication is enabled, and
+	// authentication always implies an impersonated user client.
 
 	ssar := &authzv1.SelfSubjectAccessReview{
 		Spec: authzv1.SelfSubjectAccessReviewSpec{
