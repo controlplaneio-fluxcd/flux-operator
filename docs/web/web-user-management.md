@@ -70,12 +70,12 @@ To enable all actions for anonymous users, set the following values in the Flux 
 ```yaml
 web:
   config:
+    userActions:
+      authType: Anonymous
     authentication:
       type: Anonymous
       anonymous:
         username: flux-web
-    userActions:
-      authType: Anonymous
 ```
 
 Then, create the necessary RBAC resources to grant the required permissions to the `flux-web` user:
@@ -95,7 +95,7 @@ rules:
      - "image.toolkit.fluxcd.io"
      - "notification.toolkit.fluxcd.io"
     resources: ["*"]
-    verbs: ["patch"]
+    verbs: ["patch", "reconcile", "suspend", "resume"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

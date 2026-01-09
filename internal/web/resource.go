@@ -191,24 +191,18 @@ func (h *Handler) GetResource(ctx context.Context, kind, name, namespace string)
 		}
 	}
 
-	// Check if the user can perform actions on this resource (RBAC only)
-	actionable := false
-	canPatch, err := h.kubeClient.CanPatchResource(ctx, gvk.Group, kindInfo.Plural, namespace, name)
-	if err != nil {
-		log.FromContext(ctx).Error(err, "failed to check patch permission")
-	} else {
-		// Check if user actions are enabled in the configuration
-		actionable = canPatch && h.conf.UserActionsEnabled()
-	}
-
-	// Inject the available actions if actionable
-	if actionable {
-		actions := config.AllUserActions
-		if ua := h.conf.UserActions; len(ua.Enabled) > 0 {
-			actions = ua.Enabled
+	// List which actions the user can perform on this resource.
+	if h.conf.UserActionsEnabled() {
+		var actions []string
+		for _, action := range config.AllUserActions {
+			if canAct, err := h.kubeClient.CanActOnResource(ctx, action, gvk.Group, kindInfo.Plural, namespace, name); err == nil && canAct {
+				actions = append(actions, action)
+			}
 		}
-		if err := unstructured.SetNestedStringSlice(obj.Object, actions, "status", "userActions"); err != nil {
-			return nil, fmt.Errorf("unable to set user actions in status: %w", err)
+		if len(actions) > 0 {
+			if err := unstructured.SetNestedStringSlice(obj.Object, actions, "status", "userActions"); err != nil {
+				return nil, fmt.Errorf("unable to set user actions in status: %w", err)
+			}
 		}
 	}
 

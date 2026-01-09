@@ -303,19 +303,20 @@ func (c *Client) filterNamespacesByAccess(ctx context.Context, namespaces []stri
 	return filteredNamespaces, false, nil
 }
 
-// CanPatchResource checks if the user has permission to patch a resource
-// by performing a SelfSubjectAccessReview with the "patch" verb.
-func (c *Client) CanPatchResource(ctx context.Context, group, resource, namespace, name string) (bool, error) {
+// CanActOnResource checks if the user has permission to perform a specific action on a
+// resource by performing a SelfSubjectAccessReview with the action as the RBAC verb.
+func (c *Client) CanActOnResource(ctx context.Context, action, group, resource, namespace, name string) (bool, error) {
 	kubeClient := c.GetClient(ctx)
-	if kubeClient == c.client {
-		// Privileged client has access to all resources.
-		return true, nil
-	}
+
+	// Here, we can't bail out early if kubeClient == c.client
+	// because we enforce custom RBAC verbs, so for the
+	// Anonymous authentication type to be properly protected
+	// we still need to check its access.
 
 	ssar := &authzv1.SelfSubjectAccessReview{
 		Spec: authzv1.SelfSubjectAccessReviewSpec{
 			ResourceAttributes: &authzv1.ResourceAttributes{
-				Verb:      "patch",
+				Verb:      action,
 				Group:     group,
 				Resource:  resource,
 				Namespace: namespace,
@@ -325,7 +326,7 @@ func (c *Client) CanPatchResource(ctx context.Context, group, resource, namespac
 	}
 
 	if err := kubeClient.Create(ctx, ssar); err != nil {
-		return false, fmt.Errorf("failed to create SelfSubjectAccessReview: %w", err)
+		return false, fmt.Errorf("failed to check action permission on resource: %w", err)
 	}
 
 	return ssar.Status.Allowed, nil

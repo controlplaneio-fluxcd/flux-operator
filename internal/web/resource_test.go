@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
 
@@ -797,6 +798,316 @@ func TestResourceHandler_Forbidden(t *testing.T) {
 
 	g.Expect(rec.Code).To(Equal(http.StatusForbidden))
 	g.Expect(rec.Body.String()).To(ContainSubstring("do not have access"))
+}
+
+func TestGetResource_UserActions_PartialRBAC(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a ResourceSet for testing
+	resourceSet := &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-resourceset-partial-actions",
+			Namespace: "default",
+		},
+		Spec: fluxcdv1.ResourceSetSpec{},
+	}
+	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
+	defer testClient.Delete(ctx, resourceSet)
+
+	// Create RBAC with only reconcile and suspend verbs (not resume)
+	clusterRole := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-resource-partial-actions",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{fluxcdv1.GroupVersion.Group},
+				Resources: []string{"resourcesets"},
+				Verbs:     []string{"get", "list", "reconcile", "suspend"},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, clusterRole)).To(Succeed())
+	defer testClient.Delete(ctx, clusterRole)
+
+	clusterRoleBinding := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-resource-partial-actions-binding",
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     clusterRole.Name,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind: "User",
+				Name: "resource-partial-actions-user",
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, clusterRoleBinding)).To(Succeed())
+	defer testClient.Delete(ctx, clusterRoleBinding)
+
+	// Create the handler with user actions enabled
+	handler := &Handler{
+		conf: &config.ConfigSpec{
+			Authentication: &config.AuthenticationSpec{
+				Type: config.AuthenticationTypeOAuth2,
+			},
+			UserActions: &config.UserActionsSpec{
+				AuthType: config.AuthenticationTypeOAuth2,
+			},
+		},
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	// Create a user session with partial action permissions
+	imp := user.Impersonation{
+		Username: "resource-partial-actions-user",
+		Groups:   []string{"system:authenticated"},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile:       user.Profile{Name: "Partial Actions User"},
+		Impersonation: imp,
+	}, userClient)
+
+	// Call GetResource - should return only reconcile and suspend, not resume
+	resource, err := handler.GetResource(userCtx, "ResourceSet", "test-resourceset-partial-actions", "default")
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(resource).NotTo(BeNil())
+
+	// Check that userActions contains only the actions the user has RBAC for
+	userActions, found, err := unstructured.NestedStringSlice(resource.Object, "status", "userActions")
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(found).To(BeTrue(), "userActions should be present in status")
+	g.Expect(userActions).To(ContainElement("reconcile"))
+	g.Expect(userActions).To(ContainElement("suspend"))
+	g.Expect(userActions).NotTo(ContainElement("resume"), "resume should NOT be in userActions")
+}
+
+func TestGetResource_UserActions_AllActions(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a ResourceSet for testing
+	resourceSet := &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-resourceset-all-actions",
+			Namespace: "default",
+		},
+		Spec: fluxcdv1.ResourceSetSpec{},
+	}
+	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
+	defer testClient.Delete(ctx, resourceSet)
+
+	// Create RBAC with all action verbs
+	clusterRole := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-resource-all-actions",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{fluxcdv1.GroupVersion.Group},
+				Resources: []string{"resourcesets"},
+				Verbs:     []string{"get", "list", "reconcile", "suspend", "resume"},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, clusterRole)).To(Succeed())
+	defer testClient.Delete(ctx, clusterRole)
+
+	clusterRoleBinding := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-resource-all-actions-binding",
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     clusterRole.Name,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind: "User",
+				Name: "resource-all-actions-user",
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, clusterRoleBinding)).To(Succeed())
+	defer testClient.Delete(ctx, clusterRoleBinding)
+
+	// Create the handler with user actions enabled
+	handler := &Handler{
+		conf: &config.ConfigSpec{
+			Authentication: &config.AuthenticationSpec{
+				Type: config.AuthenticationTypeOAuth2,
+			},
+			UserActions: &config.UserActionsSpec{
+				AuthType: config.AuthenticationTypeOAuth2,
+			},
+		},
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	// Create a user session with all action permissions
+	imp := user.Impersonation{
+		Username: "resource-all-actions-user",
+		Groups:   []string{"system:authenticated"},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile:       user.Profile{Name: "All Actions User"},
+		Impersonation: imp,
+	}, userClient)
+
+	// Call GetResource - should return all actions
+	resource, err := handler.GetResource(userCtx, "ResourceSet", "test-resourceset-all-actions", "default")
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(resource).NotTo(BeNil())
+
+	// Check that userActions contains all actions
+	userActions, found, err := unstructured.NestedStringSlice(resource.Object, "status", "userActions")
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(found).To(BeTrue(), "userActions should be present in status")
+	g.Expect(userActions).To(ConsistOf("reconcile", "suspend", "resume"))
+}
+
+func TestGetResource_UserActions_NoActions(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a ResourceSet for testing
+	resourceSet := &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-resourceset-no-actions",
+			Namespace: "default",
+		},
+		Spec: fluxcdv1.ResourceSetSpec{},
+	}
+	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
+	defer testClient.Delete(ctx, resourceSet)
+
+	// Create RBAC with only read access (no action verbs)
+	clusterRole := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-resource-no-actions",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{fluxcdv1.GroupVersion.Group},
+				Resources: []string{"resourcesets"},
+				Verbs:     []string{"get", "list"},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, clusterRole)).To(Succeed())
+	defer testClient.Delete(ctx, clusterRole)
+
+	clusterRoleBinding := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-resource-no-actions-binding",
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     clusterRole.Name,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind: "User",
+				Name: "resource-no-actions-user",
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, clusterRoleBinding)).To(Succeed())
+	defer testClient.Delete(ctx, clusterRoleBinding)
+
+	// Create the handler with user actions enabled
+	handler := &Handler{
+		conf: &config.ConfigSpec{
+			Authentication: &config.AuthenticationSpec{
+				Type: config.AuthenticationTypeOAuth2,
+			},
+			UserActions: &config.UserActionsSpec{
+				AuthType: config.AuthenticationTypeOAuth2,
+			},
+		},
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	// Create a user session with read-only access
+	imp := user.Impersonation{
+		Username: "resource-no-actions-user",
+		Groups:   []string{"system:authenticated"},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile:       user.Profile{Name: "No Actions User"},
+		Impersonation: imp,
+	}, userClient)
+
+	// Call GetResource - should not have userActions in status
+	resource, err := handler.GetResource(userCtx, "ResourceSet", "test-resourceset-no-actions", "default")
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(resource).NotTo(BeNil())
+
+	// Check that userActions is NOT present (user has no action permissions)
+	_, found, err := unstructured.NestedStringSlice(resource.Object, "status", "userActions")
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(found).To(BeFalse(), "userActions should NOT be present when user has no action permissions")
+}
+
+func TestGetResource_UserActions_Disabled(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a ResourceSet for testing
+	resourceSet := &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-resourceset-actions-disabled",
+			Namespace: "default",
+		},
+		Spec: fluxcdv1.ResourceSetSpec{},
+	}
+	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
+	defer testClient.Delete(ctx, resourceSet)
+
+	// Create the handler without user actions enabled (no auth configured)
+	handler := &Handler{
+		conf: &config.ConfigSpec{
+			// No authentication configured, so UserActionsEnabled() returns false
+			UserActions: &config.UserActionsSpec{
+				AuthType: config.AuthenticationTypeOAuth2,
+			},
+		},
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	// Call GetResource without user actions enabled
+	resource, err := handler.GetResource(ctx, "ResourceSet", "test-resourceset-actions-disabled", "default")
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(resource).NotTo(BeNil())
+
+	// Check that userActions is NOT present (user actions are disabled)
+	_, found, err := unstructured.NestedStringSlice(resource.Object, "status", "userActions")
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(found).To(BeFalse(), "userActions should NOT be present when user actions are disabled")
 }
 
 // Suppress unused import warning

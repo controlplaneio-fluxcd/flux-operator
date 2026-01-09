@@ -151,20 +151,10 @@ func TestConfigSpec_Validate(t *testing.T) {
 			wantErr: "invalid authentication configuration",
 		},
 		{
-			name: "userActions validation errors propagate",
-			spec: ConfigSpec{
-				UserActions: &UserActionsSpec{
-					Enabled: []string{"invalid-action"},
-				},
-			},
-			wantErr: "invalid user actions configuration",
-		},
-		{
 			name: "valid userActions config",
 			spec: ConfigSpec{
 				UserActions: &UserActionsSpec{
-					Enabled: []string{UserActionReconcile, UserActionSuspend},
-					Audit:   true,
+					Audit: true,
 				},
 			},
 			wantErr: "",
@@ -230,11 +220,11 @@ func TestConfigSpec_ApplyDefaults(t *testing.T) {
 	// spec with userActions applies defaults
 	spec3 := &ConfigSpec{
 		UserActions: &UserActionsSpec{
-			Enabled: []string{UserActionReconcile},
+			Audit: true,
 		},
 	}
 	spec3.ApplyDefaults()
-	g.Expect(spec3.UserActions.Enabled).To(Equal([]string{UserActionReconcile}))
+	g.Expect(spec3.UserActions.Audit).To(BeTrue())
 	g.Expect(spec3.UserActions.AuthType).To(Equal(AuthenticationTypeOAuth2))
 }
 
@@ -287,30 +277,6 @@ func TestConfigSpec_UserActionsEnabled(t *testing.T) {
 				UserActions:    &UserActionsSpec{AuthType: AuthenticationTypeAnonymous},
 			},
 			expected: false,
-		},
-		{
-			name: "empty Enabled list disables actions",
-			spec: &ConfigSpec{
-				Authentication: &AuthenticationSpec{Type: AuthenticationTypeOAuth2},
-				UserActions:    &UserActionsSpec{Enabled: []string{}, AuthType: AuthenticationTypeOAuth2},
-			},
-			expected: false,
-		},
-		{
-			name: "nil Enabled enables actions",
-			spec: &ConfigSpec{
-				Authentication: &AuthenticationSpec{Type: AuthenticationTypeOAuth2},
-				UserActions:    &UserActionsSpec{Enabled: nil, AuthType: AuthenticationTypeOAuth2},
-			},
-			expected: true,
-		},
-		{
-			name: "non-empty Enabled enables actions",
-			spec: &ConfigSpec{
-				Authentication: &AuthenticationSpec{Type: AuthenticationTypeOAuth2},
-				UserActions:    &UserActionsSpec{Enabled: []string{UserActionReconcile}, AuthType: AuthenticationTypeOAuth2},
-			},
-			expected: true,
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

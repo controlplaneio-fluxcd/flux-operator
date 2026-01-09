@@ -73,12 +73,6 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Check if the specified action is enabled in the configuration.
-	if !h.conf.UserActions.IsEnabled(actionReq.Action) {
-		http.Error(w, fmt.Sprintf("Action '%s' is not enabled", actionReq.Action), http.StatusMethodNotAllowed)
-		return
-	}
-
 	// Validate action type
 	if !slices.Contains(config.AllUserActions, actionReq.Action) {
 		http.Error(w, "Invalid action. Must be one of: reconcile, suspend, resume", http.StatusBadRequest)
