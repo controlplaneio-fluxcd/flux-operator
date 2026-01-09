@@ -1,0 +1,49 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: flux-bootstrap
+  namespace: flux-system
+spec:
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      serviceAccountName: flux-operator
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: bootstrap
+          image: ghcr.io/fluxcd/flux-cli:v2.7.5
+          command:
+            - /bin/sh
+            - /scripts/bootstrap.sh
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          resources:
+            limits:
+              cpu: 100m
+              memory: 64Mi
+            requests:
+              cpu: 100m
+              memory: 64Mi
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+            - name: manifests
+              mountPath: /manifests
+              readOnly: true
+      volumes:
+        - name: scripts
+          configMap:
+            name: flux-bootstrap-scripts
+            defaultMode: 0755
+        - name: manifests
+          configMap:
+            name: flux-bootstrap-manifests
