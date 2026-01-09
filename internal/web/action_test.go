@@ -14,6 +14,7 @@ import (
 	. "github.com/onsi/gomega"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
@@ -27,9 +28,7 @@ func oauthConfig() *config.ConfigSpec {
 		Authentication: &config.AuthenticationSpec{
 			Type: config.AuthenticationTypeOAuth2,
 		},
-		UserActions: &config.UserActionsSpec{
-			AuthType: config.AuthenticationTypeOAuth2,
-		},
+		UserActions: &config.UserActionsSpec{},
 	}
 }
 
@@ -448,7 +447,8 @@ func TestActionHandler_WithUserRBAC_Success(t *testing.T) {
 	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
 	defer testClient.Delete(ctx, resourceSet)
 
-	// Create RBAC for the test user to patch resourcesets
+	// Create RBAC for the test user to perform actions on resourcesets
+	// The action verb (reconcile, suspend, resume) is used as the RBAC verb
 	clusterRole := &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-action-resourceset-patcher",
@@ -457,7 +457,7 @@ func TestActionHandler_WithUserRBAC_Success(t *testing.T) {
 			{
 				APIGroups: []string{fluxcdv1.GroupVersion.Group},
 				Resources: []string{"resourcesets"},
-				Verbs:     []string{"get", "list", "patch"},
+				Verbs:     []string{"get", "list", "patch", "reconcile", "suspend", "resume"},
 			},
 		},
 	}
@@ -540,6 +540,7 @@ func TestActionHandler_NamespaceScopedRBAC_ForbiddenInOtherNamespace(t *testing.
 	defer testClient.Delete(ctx, resourceSet)
 
 	// Create RBAC for the test user with access only in a different namespace
+	// The action verb (reconcile, suspend, resume) is used as the RBAC verb
 	role := &rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-action-ns-patcher",
@@ -549,7 +550,7 @@ func TestActionHandler_NamespaceScopedRBAC_ForbiddenInOtherNamespace(t *testing.
 			{
 				APIGroups: []string{fluxcdv1.GroupVersion.Group},
 				Resources: []string{"resourcesets"},
-				Verbs:     []string{"get", "list", "patch"},
+				Verbs:     []string{"get", "list", "patch", "reconcile", "suspend", "resume"},
 			},
 		},
 	}
@@ -719,9 +720,7 @@ func TestActionHandler_ActionsDisabled_NoAuth(t *testing.T) {
 	// Test with no authentication configured
 	handler := &Handler{
 		conf: &config.ConfigSpec{
-			UserActions: &config.UserActionsSpec{
-				AuthType: config.AuthenticationTypeOAuth2,
-			},
+			UserActions: &config.UserActionsSpec{},
 		},
 		kubeClient:    kubeClient,
 		version:       "v1.0.0",
@@ -743,147 +742,6 @@ func TestActionHandler_ActionsDisabled_NoAuth(t *testing.T) {
 
 	g.Expect(rec.Code).To(Equal(http.StatusMethodNotAllowed))
 	g.Expect(rec.Body.String()).To(ContainSubstring("User actions are disabled"))
-}
-
-func TestActionHandler_ActionsDisabled_AnonymousAuth(t *testing.T) {
-	g := NewWithT(t)
-
-	// Test with Anonymous authentication but userActions.authType is OAuth2 (default)
-	handler := &Handler{
-		conf: &config.ConfigSpec{
-			Authentication: &config.AuthenticationSpec{
-				Type: config.AuthenticationTypeAnonymous,
-			},
-			UserActions: &config.UserActionsSpec{
-				AuthType: config.AuthenticationTypeOAuth2,
-			},
-		},
-		kubeClient:    kubeClient,
-		version:       "v1.0.0",
-		statusManager: "test-status-manager",
-		namespace:     "flux-system",
-	}
-
-	actionReq := ActionRequest{
-		Kind:      "ResourceSet",
-		Namespace: "default",
-		Name:      "test",
-		Action:    "reconcile",
-	}
-	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
-	rec := httptest.NewRecorder()
-
-	handler.ActionHandler(rec, req)
-
-	g.Expect(rec.Code).To(Equal(http.StatusMethodNotAllowed))
-	g.Expect(rec.Body.String()).To(ContainSubstring("User actions are disabled"))
-}
-
-func TestActionHandler_ActionNotEnabled(t *testing.T) {
-	g := NewWithT(t)
-
-	// Create a ResourceSet for testing
-	resourceSet := &fluxcdv1.ResourceSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-action-not-enabled",
-			Namespace: "default",
-		},
-		Spec: fluxcdv1.ResourceSetSpec{},
-	}
-	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
-	defer testClient.Delete(ctx, resourceSet)
-
-	// Configure only suspend and resume actions (not reconcile)
-	handler := &Handler{
-		conf: &config.ConfigSpec{
-			Authentication: &config.AuthenticationSpec{
-				Type: config.AuthenticationTypeOAuth2,
-			},
-			UserActions: &config.UserActionsSpec{
-				Enabled:  []string{config.UserActionSuspend, config.UserActionResume},
-				AuthType: config.AuthenticationTypeOAuth2,
-			},
-		},
-		kubeClient:    kubeClient,
-		version:       "v1.0.0",
-		statusManager: "test-status-manager",
-		namespace:     "flux-system",
-	}
-
-	// Try to perform reconcile action which is not enabled
-	actionReq := ActionRequest{
-		Kind:      "ResourceSet",
-		Namespace: "default",
-		Name:      "test-action-not-enabled",
-		Action:    "reconcile",
-	}
-	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
-	req = req.WithContext(ctx)
-	rec := httptest.NewRecorder()
-
-	handler.ActionHandler(rec, req)
-
-	g.Expect(rec.Code).To(Equal(http.StatusMethodNotAllowed))
-	g.Expect(rec.Body.String()).To(ContainSubstring("Action 'reconcile' is not enabled"))
-
-	// Verify the resource was NOT modified
-	var updated fluxcdv1.ResourceSet
-	g.Expect(testClient.Get(ctx, client.ObjectKeyFromObject(resourceSet), &updated)).To(Succeed())
-	g.Expect(updated.Annotations).NotTo(HaveKey("reconcile.fluxcd.io/requestedAt"))
-}
-
-func TestActionHandler_ActionEnabled(t *testing.T) {
-	g := NewWithT(t)
-
-	// Create a ResourceSet for testing
-	resourceSet := &fluxcdv1.ResourceSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-action-enabled",
-			Namespace: "default",
-		},
-		Spec: fluxcdv1.ResourceSetSpec{},
-	}
-	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
-	defer testClient.Delete(ctx, resourceSet)
-
-	// Configure only reconcile action
-	handler := &Handler{
-		conf: &config.ConfigSpec{
-			Authentication: &config.AuthenticationSpec{
-				Type: config.AuthenticationTypeOAuth2,
-			},
-			UserActions: &config.UserActionsSpec{
-				Enabled:  []string{config.UserActionReconcile},
-				AuthType: config.AuthenticationTypeOAuth2,
-			},
-		},
-		kubeClient:    kubeClient,
-		version:       "v1.0.0",
-		statusManager: "test-status-manager",
-		namespace:     "flux-system",
-	}
-
-	actionReq := ActionRequest{
-		Kind:      "ResourceSet",
-		Namespace: "default",
-		Name:      "test-action-enabled",
-		Action:    "reconcile",
-	}
-	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
-	req = req.WithContext(ctx)
-	rec := httptest.NewRecorder()
-
-	handler.ActionHandler(rec, req)
-
-	g.Expect(rec.Code).To(Equal(http.StatusOK))
-
-	var resp ActionResponse
-	err := json.NewDecoder(rec.Body).Decode(&resp)
-	g.Expect(err).NotTo(HaveOccurred())
-	g.Expect(resp.Success).To(BeTrue())
 }
 
 func TestActionHandler_AllActionsEnabledByDefault(t *testing.T) {
@@ -906,9 +764,7 @@ func TestActionHandler_AllActionsEnabledByDefault(t *testing.T) {
 			Authentication: &config.AuthenticationSpec{
 				Type: config.AuthenticationTypeOAuth2,
 			},
-			UserActions: &config.UserActionsSpec{
-				AuthType: config.AuthenticationTypeOAuth2,
-			},
+			UserActions: &config.UserActionsSpec{},
 		},
 		kubeClient:    kubeClient,
 		version:       "v1.0.0",
@@ -937,38 +793,415 @@ func TestActionHandler_AllActionsEnabledByDefault(t *testing.T) {
 	g.Expect(resp.Success).To(BeTrue())
 }
 
-func TestActionHandler_AllActionsExplicitlyDisabled(t *testing.T) {
+func TestActionHandler_HasCustomVerbButNoPatch_Forbidden(t *testing.T) {
 	g := NewWithT(t)
 
-	// Configure OAuth2 with explicitly empty Enabled list (disables all actions)
-	handler := &Handler{
-		conf: &config.ConfigSpec{
-			Authentication: &config.AuthenticationSpec{
-				Type: config.AuthenticationTypeOAuth2,
-			},
-			UserActions: &config.UserActionsSpec{
-				Enabled:  []string{}, // Explicitly empty - disables all actions
-				AuthType: config.AuthenticationTypeOAuth2,
+	// Create a ResourceSet for testing
+	resourceSet := &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-action-no-patch",
+			Namespace: "default",
+		},
+		Spec: fluxcdv1.ResourceSetSpec{},
+	}
+	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
+	defer testClient.Delete(ctx, resourceSet)
+
+	// Create RBAC with custom verb (reconcile) but WITHOUT patch permission
+	clusterRole := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-action-custom-verb-only",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{fluxcdv1.GroupVersion.Group},
+				Resources: []string{"resourcesets"},
+				Verbs:     []string{"get", "list", "reconcile"}, // Has reconcile but NOT patch
 			},
 		},
+	}
+	g.Expect(testClient.Create(ctx, clusterRole)).To(Succeed())
+	defer testClient.Delete(ctx, clusterRole)
+
+	clusterRoleBinding := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-action-custom-verb-only-binding",
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     clusterRole.Name,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind: "User",
+				Name: "custom-verb-only-user",
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, clusterRoleBinding)).To(Succeed())
+	defer testClient.Delete(ctx, clusterRoleBinding)
+
+	handler := &Handler{
+		conf:          oauthConfig(),
 		kubeClient:    kubeClient,
 		version:       "v1.0.0",
 		statusManager: "test-status-manager",
 		namespace:     "flux-system",
 	}
 
+	// Create user session with custom verb but no patch
+	imp := user.Impersonation{
+		Username: "custom-verb-only-user",
+		Groups:   []string{"system:authenticated"},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile:       user.Profile{Name: "Custom Verb Only User"},
+		Impersonation: imp,
+	}, userClient)
+
+	// Attempt reconcile action - passes custom RBAC check but fails on K8s patch
 	actionReq := ActionRequest{
 		Kind:      "ResourceSet",
 		Namespace: "default",
-		Name:      "test",
+		Name:      "test-action-no-patch",
 		Action:    "reconcile",
 	}
 	body, _ := json.Marshal(actionReq)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req = req.WithContext(userCtx)
 	rec := httptest.NewRecorder()
 
 	handler.ActionHandler(rec, req)
 
-	g.Expect(rec.Code).To(Equal(http.StatusMethodNotAllowed))
-	g.Expect(rec.Body.String()).To(ContainSubstring("User actions are disabled"))
+	// Should fail with forbidden because user can't patch the resource
+	g.Expect(rec.Code).To(Equal(http.StatusForbidden))
+}
+
+func TestActionHandler_HasPatchButNoCustomVerb_Forbidden(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a ResourceSet for testing
+	resourceSet := &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-action-no-custom-verb",
+			Namespace: "default",
+		},
+		Spec: fluxcdv1.ResourceSetSpec{},
+	}
+	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
+	defer testClient.Delete(ctx, resourceSet)
+
+	// Create RBAC with patch permission but WITHOUT custom verb
+	clusterRole := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-action-patch-only",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{fluxcdv1.GroupVersion.Group},
+				Resources: []string{"resourcesets"},
+				Verbs:     []string{"get", "list", "patch"}, // Has patch but NOT reconcile
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, clusterRole)).To(Succeed())
+	defer testClient.Delete(ctx, clusterRole)
+
+	clusterRoleBinding := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-action-patch-only-binding",
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     clusterRole.Name,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind: "User",
+				Name: "patch-only-user",
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, clusterRoleBinding)).To(Succeed())
+	defer testClient.Delete(ctx, clusterRoleBinding)
+
+	handler := &Handler{
+		conf:          oauthConfig(),
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	// Create user session with patch but no custom verb
+	imp := user.Impersonation{
+		Username: "patch-only-user",
+		Groups:   []string{"system:authenticated"},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile:       user.Profile{Name: "Patch Only User"},
+		Impersonation: imp,
+	}, userClient)
+
+	// Attempt reconcile action - fails at custom RBAC check
+	actionReq := ActionRequest{
+		Kind:      "ResourceSet",
+		Namespace: "default",
+		Name:      "test-action-no-custom-verb",
+		Action:    "reconcile",
+	}
+	body, _ := json.Marshal(actionReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req = req.WithContext(userCtx)
+	rec := httptest.NewRecorder()
+
+	handler.ActionHandler(rec, req)
+
+	// Should fail with forbidden at the custom RBAC check
+	g.Expect(rec.Code).To(Equal(http.StatusForbidden))
+	g.Expect(rec.Body.String()).To(ContainSubstring("Permission denied"))
+}
+
+func TestActionHandler_Audit_SpecificAction(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a ResourceSet for testing
+	resourceSet := &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-audit-specific",
+			Namespace: "default",
+		},
+		Spec: fluxcdv1.ResourceSetSpec{},
+	}
+	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
+	defer testClient.Delete(ctx, resourceSet)
+
+	// Create a fake event recorder
+	fakeRecorder := record.NewFakeRecorder(10)
+
+	// Configure with audit only for reconcile action
+	handler := &Handler{
+		conf: &config.ConfigSpec{
+			Authentication: &config.AuthenticationSpec{
+				Type: config.AuthenticationTypeOAuth2,
+			},
+			UserActions: &config.UserActionsSpec{
+				Audit: []string{config.UserActionReconcile},
+			},
+		},
+		kubeClient:    kubeClient,
+		eventRecorder: fakeRecorder,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	// Perform reconcile action - should be audited
+	actionReq := ActionRequest{
+		Kind:      "ResourceSet",
+		Namespace: "default",
+		Name:      "test-audit-specific",
+		Action:    "reconcile",
+	}
+	body, _ := json.Marshal(actionReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.ActionHandler(rec, req)
+
+	g.Expect(rec.Code).To(Equal(http.StatusOK))
+
+	// Check that an event was recorded
+	select {
+	case event := <-fakeRecorder.Events:
+		g.Expect(event).To(ContainSubstring("WebAction"))
+	default:
+		t.Fatal("expected an audit event to be recorded for reconcile action")
+	}
+}
+
+func TestActionHandler_Audit_ActionNotInList(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a ResourceSet for testing
+	resourceSet := &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-audit-not-in-list",
+			Namespace: "default",
+		},
+		Spec: fluxcdv1.ResourceSetSpec{},
+	}
+	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
+	defer testClient.Delete(ctx, resourceSet)
+
+	// Create a fake event recorder
+	fakeRecorder := record.NewFakeRecorder(10)
+
+	// Configure with audit only for suspend action (not reconcile)
+	handler := &Handler{
+		conf: &config.ConfigSpec{
+			Authentication: &config.AuthenticationSpec{
+				Type: config.AuthenticationTypeOAuth2,
+			},
+			UserActions: &config.UserActionsSpec{
+				Audit: []string{config.UserActionSuspend},
+			},
+		},
+		kubeClient:    kubeClient,
+		eventRecorder: fakeRecorder,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	// Perform reconcile action - should NOT be audited (only suspend is audited)
+	actionReq := ActionRequest{
+		Kind:      "ResourceSet",
+		Namespace: "default",
+		Name:      "test-audit-not-in-list",
+		Action:    "reconcile",
+	}
+	body, _ := json.Marshal(actionReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.ActionHandler(rec, req)
+
+	g.Expect(rec.Code).To(Equal(http.StatusOK))
+
+	// Check that NO event was recorded
+	select {
+	case event := <-fakeRecorder.Events:
+		t.Fatalf("expected no audit event for reconcile action, but got: %s", event)
+	default:
+		// No event - this is expected
+	}
+}
+
+func TestActionHandler_Audit_EmptyList(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a ResourceSet for testing
+	resourceSet := &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-audit-empty",
+			Namespace: "default",
+		},
+		Spec: fluxcdv1.ResourceSetSpec{},
+	}
+	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
+	defer testClient.Delete(ctx, resourceSet)
+
+	// Create a fake event recorder
+	fakeRecorder := record.NewFakeRecorder(10)
+
+	// Configure with empty audit list
+	handler := &Handler{
+		conf: &config.ConfigSpec{
+			Authentication: &config.AuthenticationSpec{
+				Type: config.AuthenticationTypeOAuth2,
+			},
+			UserActions: &config.UserActionsSpec{
+				Audit: []string{},
+			},
+		},
+		kubeClient:    kubeClient,
+		eventRecorder: fakeRecorder,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	// Perform reconcile action - should NOT be audited
+	actionReq := ActionRequest{
+		Kind:      "ResourceSet",
+		Namespace: "default",
+		Name:      "test-audit-empty",
+		Action:    "reconcile",
+	}
+	body, _ := json.Marshal(actionReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.ActionHandler(rec, req)
+
+	g.Expect(rec.Code).To(Equal(http.StatusOK))
+
+	// Check that NO event was recorded
+	select {
+	case event := <-fakeRecorder.Events:
+		t.Fatalf("expected no audit event with empty audit list, but got: %s", event)
+	default:
+		// No event - this is expected
+	}
+}
+
+func TestActionHandler_Audit_AllActions(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a ResourceSet for testing
+	resourceSet := &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-audit-all-actions",
+			Namespace: "default",
+		},
+		Spec: fluxcdv1.ResourceSetSpec{},
+	}
+	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
+	defer testClient.Delete(ctx, resourceSet)
+
+	// Create a fake event recorder
+	fakeRecorder := record.NewFakeRecorder(10)
+
+	// Configure with all actions in audit list
+	handler := &Handler{
+		conf: &config.ConfigSpec{
+			Authentication: &config.AuthenticationSpec{
+				Type: config.AuthenticationTypeOAuth2,
+			},
+			UserActions: &config.UserActionsSpec{
+				Audit: []string{config.UserActionReconcile, config.UserActionSuspend, config.UserActionResume},
+			},
+		},
+		kubeClient:    kubeClient,
+		eventRecorder: fakeRecorder,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	// Perform reconcile action - should be audited
+	actionReq := ActionRequest{
+		Kind:      "ResourceSet",
+		Namespace: "default",
+		Name:      "test-audit-all-actions",
+		Action:    "reconcile",
+	}
+	body, _ := json.Marshal(actionReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.ActionHandler(rec, req)
+
+	g.Expect(rec.Code).To(Equal(http.StatusOK))
+
+	// Check that an event was recorded
+	select {
+	case event := <-fakeRecorder.Events:
+		g.Expect(event).To(ContainSubstring("WebAction"))
+	default:
+		t.Fatal("expected an audit event to be recorded when all actions are audited")
+	}
 }

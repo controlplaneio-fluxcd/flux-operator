@@ -151,20 +151,10 @@ func TestConfigSpec_Validate(t *testing.T) {
 			wantErr: "invalid authentication configuration",
 		},
 		{
-			name: "userActions validation errors propagate",
-			spec: ConfigSpec{
-				UserActions: &UserActionsSpec{
-					Enabled: []string{"invalid-action"},
-				},
-			},
-			wantErr: "invalid user actions configuration",
-		},
-		{
 			name: "valid userActions config",
 			spec: ConfigSpec{
 				UserActions: &UserActionsSpec{
-					Enabled: []string{UserActionReconcile, UserActionSuspend},
-					Audit:   true,
+					Audit: []string{UserActionReconcile},
 				},
 			},
 			wantErr: "",
@@ -219,23 +209,20 @@ func TestConfigSpec_ApplyDefaults(t *testing.T) {
 	g.Expect(spec.Authentication.UserCacheSize).To(Equal(100))
 	// UserActions should be initialized
 	g.Expect(spec.UserActions).NotTo(BeNil())
-	g.Expect(spec.UserActions.AuthType).To(Equal(AuthenticationTypeOAuth2))
 
 	// spec without auth does not panic and initializes UserActions
 	spec2 := &ConfigSpec{}
 	spec2.ApplyDefaults()
 	g.Expect(spec2.UserActions).NotTo(BeNil())
-	g.Expect(spec2.UserActions.AuthType).To(Equal(AuthenticationTypeOAuth2))
 
-	// spec with userActions applies defaults
+	// spec with userActions preserves values
 	spec3 := &ConfigSpec{
 		UserActions: &UserActionsSpec{
-			Enabled: []string{UserActionReconcile},
+			Audit: []string{UserActionReconcile},
 		},
 	}
 	spec3.ApplyDefaults()
-	g.Expect(spec3.UserActions.Enabled).To(Equal([]string{UserActionReconcile}))
-	g.Expect(spec3.UserActions.AuthType).To(Equal(AuthenticationTypeOAuth2))
+	g.Expect(spec3.UserActions.Audit).To(Equal([]string{UserActionReconcile}))
 }
 
 func TestConfigSpec_UserActionsEnabled(t *testing.T) {
@@ -250,65 +237,21 @@ func TestConfigSpec_UserActionsEnabled(t *testing.T) {
 			expected: false,
 		},
 		{
-			name: "nil authentication disables actions",
-			spec: &ConfigSpec{
-				UserActions: &UserActionsSpec{AuthType: AuthenticationTypeOAuth2},
-			},
+			name:     "nil authentication disables actions",
+			spec:     &ConfigSpec{},
 			expected: false,
 		},
 		{
-			name: "OAuth2 auth with default authType enables actions",
+			name: "OAuth2 auth enables actions",
 			spec: &ConfigSpec{
 				Authentication: &AuthenticationSpec{Type: AuthenticationTypeOAuth2},
-				UserActions:    &UserActionsSpec{AuthType: AuthenticationTypeOAuth2},
 			},
 			expected: true,
 		},
 		{
-			name: "Anonymous auth with default authType (OAuth2) disables actions",
+			name: "Anonymous auth enables actions",
 			spec: &ConfigSpec{
 				Authentication: &AuthenticationSpec{Type: AuthenticationTypeAnonymous},
-				UserActions:    &UserActionsSpec{AuthType: AuthenticationTypeOAuth2},
-			},
-			expected: false,
-		},
-		{
-			name: "Anonymous auth with authType Anonymous enables actions",
-			spec: &ConfigSpec{
-				Authentication: &AuthenticationSpec{Type: AuthenticationTypeAnonymous},
-				UserActions:    &UserActionsSpec{AuthType: AuthenticationTypeAnonymous},
-			},
-			expected: true,
-		},
-		{
-			name: "OAuth2 auth with authType Anonymous disables actions",
-			spec: &ConfigSpec{
-				Authentication: &AuthenticationSpec{Type: AuthenticationTypeOAuth2},
-				UserActions:    &UserActionsSpec{AuthType: AuthenticationTypeAnonymous},
-			},
-			expected: false,
-		},
-		{
-			name: "empty Enabled list disables actions",
-			spec: &ConfigSpec{
-				Authentication: &AuthenticationSpec{Type: AuthenticationTypeOAuth2},
-				UserActions:    &UserActionsSpec{Enabled: []string{}, AuthType: AuthenticationTypeOAuth2},
-			},
-			expected: false,
-		},
-		{
-			name: "nil Enabled enables actions",
-			spec: &ConfigSpec{
-				Authentication: &AuthenticationSpec{Type: AuthenticationTypeOAuth2},
-				UserActions:    &UserActionsSpec{Enabled: nil, AuthType: AuthenticationTypeOAuth2},
-			},
-			expected: true,
-		},
-		{
-			name: "non-empty Enabled enables actions",
-			spec: &ConfigSpec{
-				Authentication: &AuthenticationSpec{Type: AuthenticationTypeOAuth2},
-				UserActions:    &UserActionsSpec{Enabled: []string{UserActionReconcile}, AuthType: AuthenticationTypeOAuth2},
 			},
 			expected: true,
 		},

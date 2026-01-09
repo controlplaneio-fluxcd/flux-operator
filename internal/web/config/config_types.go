@@ -100,7 +100,5 @@ func (c *ConfigSpec) ApplyDefaults() {
 
 // UserActionsEnabled checks if user actions are enabled.
 func (c *ConfigSpec) UserActionsEnabled() bool {
-	return c != nil &&
-		(c.UserActions.Enabled == nil || len(c.UserActions.Enabled) > 0) &&
-		(c.Authentication != nil && c.Authentication.Type == c.UserActions.AuthType)
+	return c != nil && c.Authentication != nil
 }

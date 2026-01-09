@@ -26,89 +26,46 @@ func TestUserActionsSpec_Validate(t *testing.T) {
 			wantErr: "",
 		},
 		{
-			name: "valid reconcile action",
+			name: "valid audit with single action",
 			spec: &UserActionsSpec{
-				Enabled: []string{UserActionReconcile},
+				Audit: []string{UserActionReconcile},
 			},
 			wantErr: "",
 		},
 		{
-			name: "valid suspend action",
+			name: "valid audit with multiple actions",
 			spec: &UserActionsSpec{
-				Enabled: []string{UserActionSuspend},
+				Audit: []string{UserActionReconcile, UserActionSuspend, UserActionResume},
 			},
 			wantErr: "",
 		},
 		{
-			name: "valid resume action",
+			name: "valid audit with wildcard",
 			spec: &UserActionsSpec{
-				Enabled: []string{UserActionResume},
+				Audit: []string{"*"},
 			},
 			wantErr: "",
 		},
 		{
-			name: "valid multiple actions",
+			name: "duplicate audit action",
 			spec: &UserActionsSpec{
-				Enabled: []string{UserActionReconcile, UserActionSuspend, UserActionResume},
+				Audit: []string{UserActionReconcile, UserActionSuspend, UserActionReconcile},
 			},
-			wantErr: "",
+			wantErr: "duplicate audit action: 'reconcile'",
 		},
 		{
-			name: "valid with audit enabled",
+			name: "invalid audit action",
 			spec: &UserActionsSpec{
-				Enabled: []string{UserActionReconcile},
-				Audit:   true,
+				Audit: []string{"invalid-action"},
 			},
-			wantErr: "",
+			wantErr: "invalid audit action: 'invalid-action'",
 		},
 		{
-			name: "unknown action",
+			name: "wildcard combined with other actions",
 			spec: &UserActionsSpec{
-				Enabled: []string{"unknown"},
+				Audit: []string{"*", UserActionReconcile},
 			},
-			wantErr: "unknown user action: 'unknown'",
-		},
-		{
-			name: "unknown action among valid ones",
-			spec: &UserActionsSpec{
-				Enabled: []string{UserActionReconcile, "invalid", UserActionSuspend},
-			},
-			wantErr: "unknown user action: 'invalid'",
-		},
-		{
-			name: "duplicate action",
-			spec: &UserActionsSpec{
-				Enabled: []string{UserActionReconcile, UserActionSuspend, UserActionReconcile},
-			},
-			wantErr: "duplicate user action: 'reconcile'",
-		},
-		{
-			name: "duplicate action at beginning",
-			spec: &UserActionsSpec{
-				Enabled: []string{UserActionSuspend, UserActionSuspend},
-			},
-			wantErr: "duplicate user action: 'suspend'",
-		},
-		{
-			name: "valid authType Anonymous",
-			spec: &UserActionsSpec{
-				AuthType: AuthenticationTypeAnonymous,
-			},
-			wantErr: "",
-		},
-		{
-			name: "valid authType OAuth2",
-			spec: &UserActionsSpec{
-				AuthType: AuthenticationTypeOAuth2,
-			},
-			wantErr: "",
-		},
-		{
-			name: "invalid authType",
-			spec: &UserActionsSpec{
-				AuthType: "InvalidType",
-			},
-			wantErr: "invalid authType: 'InvalidType'",
+			wantErr: "audit action '*' cannot be combined with other actions",
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -136,19 +93,15 @@ func TestUserActionsSpec_ApplyDefaults(t *testing.T) {
 
 	// spec with values preserves them
 	spec := &UserActionsSpec{
-		Enabled:  []string{UserActionReconcile},
-		AuthType: AuthenticationTypeAnonymous,
-		Audit:    true,
+		Audit: []string{UserActionReconcile},
 	}
 	spec.ApplyDefaults()
-	g.Expect(spec.Enabled).To(Equal([]string{UserActionReconcile}))
-	g.Expect(spec.AuthType).To(Equal(AuthenticationTypeAnonymous))
-	g.Expect(spec.Audit).To(BeTrue())
+	g.Expect(spec.Audit).To(Equal([]string{UserActionReconcile}))
 
-	// empty authType defaults to OAuth2
+	// empty spec applies defaults without error
 	spec2 := &UserActionsSpec{}
 	spec2.ApplyDefaults()
-	g.Expect(spec2.AuthType).To(Equal(AuthenticationTypeOAuth2))
+	g.Expect(spec2.Audit).To(BeNil())
 }
 
 func TestAllUserActions(t *testing.T) {
@@ -157,49 +110,4 @@ func TestAllUserActions(t *testing.T) {
 	// Verify AllUserActions contains the expected actions
 	g.Expect(AllUserActions).To(ConsistOf(UserActionReconcile, UserActionSuspend, UserActionResume))
 	g.Expect(AllUserActions).To(HaveLen(3))
-}
-
-func TestUserActionsSpec_IsEnabled(t *testing.T) {
-	for _, tt := range []struct {
-		name     string
-		spec     *UserActionsSpec
-		action   string
-		expected bool
-	}{
-		{
-			name:     "nil spec enables all actions",
-			spec:     nil,
-			action:   UserActionReconcile,
-			expected: true,
-		},
-		{
-			name:     "nil Enabled enables all actions",
-			spec:     &UserActionsSpec{Enabled: nil},
-			action:   UserActionReconcile,
-			expected: true,
-		},
-		{
-			name:     "empty Enabled disables all actions",
-			spec:     &UserActionsSpec{Enabled: []string{}},
-			action:   UserActionReconcile,
-			expected: false,
-		},
-		{
-			name:     "action in Enabled list is enabled",
-			spec:     &UserActionsSpec{Enabled: []string{UserActionReconcile, UserActionSuspend}},
-			action:   UserActionReconcile,
-			expected: true,
-		},
-		{
-			name:     "action not in Enabled list is disabled",
-			spec:     &UserActionsSpec{Enabled: []string{UserActionReconcile, UserActionSuspend}},
-			action:   UserActionResume,
-			expected: false,
-		},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			g := NewWithT(t)
-			g.Expect(tt.spec.IsEnabled(tt.action)).To(Equal(tt.expected))
-		})
-	}
 }

@@ -303,21 +303,21 @@ func (c *Client) filterNamespacesByAccess(ctx context.Context, namespaces []stri
 	return filteredNamespaces, false, nil
 }
 
-// CanPatchResource checks if the user has permission to patch a resource
-// by performing a SelfSubjectAccessReview with the "patch" verb.
-func (c *Client) CanPatchResource(ctx context.Context, group, resource, namespace, name string) (bool, error) {
+// CanActOnResource checks if the user has permission to perform a specific action on a
+// resource by performing a SelfSubjectAccessReview with the action as the RBAC verb.
+func (c *Client) CanActOnResource(ctx context.Context, action, group, plural, namespace, name string) (bool, error) {
 	kubeClient := c.GetClient(ctx)
-	if kubeClient == c.client {
-		// Privileged client has access to all resources.
-		return true, nil
-	}
+
+	// CanActOnResource will never be called when c.GetClient(ctx) == c.client
+	// because actions can only be used when authentication is enabled, and
+	// authentication always implies an impersonated user client.
 
 	ssar := &authzv1.SelfSubjectAccessReview{
 		Spec: authzv1.SelfSubjectAccessReviewSpec{
 			ResourceAttributes: &authzv1.ResourceAttributes{
-				Verb:      "patch",
+				Verb:      action,
 				Group:     group,
-				Resource:  resource,
+				Resource:  plural,
 				Namespace: namespace,
 				Name:      name,
 			},

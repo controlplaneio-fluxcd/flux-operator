@@ -1007,3 +1007,183 @@ func TestNamespaceCacheExpiration(t *testing.T) {
 
 	g.Expect(namespaces2).To(Equal(namespaces1))
 }
+
+func TestCanActOnResource_Unprivileged_Denied(t *testing.T) {
+	g := NewWithT(t)
+
+	kubeClient, err := kubeclient.New(testClient, testClient, testEnvConf, testScheme, 100, 5*time.Minute)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Create a user client with no RBAC permissions
+	imp := user.Impersonation{
+		Username: "unprivileged-action-user",
+		Groups:   []string{"unprivileged-group"},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile:       user.Profile{Name: "Unprivileged Action User"},
+		Impersonation: imp,
+	}, userClient)
+
+	// User without RBAC should not be able to perform any action
+	for _, action := range []string{"reconcile", "suspend", "resume"} {
+		canAct, err := kubeClient.CanActOnResource(userCtx, action, "fluxcd.controlplane.io", "resourcesets", "default", "test")
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(canAct).To(BeFalse(), "unprivileged user should not be able to %s", action)
+	}
+}
+
+func TestCanActOnResource_WithCustomVerbs(t *testing.T) {
+	g := NewWithT(t)
+
+	kubeClient, err := kubeclient.New(testClient, testClient, testEnvConf, testScheme, 100, 5*time.Minute)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Create ClusterRole with only reconcile and suspend verbs (not resume)
+	clusterRole := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-partial-actions",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"fluxcd.controlplane.io"},
+				Resources: []string{"resourcesets"},
+				Verbs:     []string{"get", "list", "reconcile", "suspend"},
+			},
+		},
+	}
+	err = testClient.Create(ctx, clusterRole)
+	g.Expect(client.IgnoreAlreadyExists(err)).NotTo(HaveOccurred())
+
+	t.Cleanup(func() {
+		_ = testClient.Delete(context.Background(), clusterRole)
+	})
+
+	// Create ClusterRoleBinding for the user
+	clusterRoleBinding := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-partial-actions-binding",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind: "User",
+				Name: "partial-actions-user",
+			},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     "test-partial-actions",
+		},
+	}
+	err = testClient.Create(ctx, clusterRoleBinding)
+	g.Expect(client.IgnoreAlreadyExists(err)).NotTo(HaveOccurred())
+
+	t.Cleanup(func() {
+		_ = testClient.Delete(context.Background(), clusterRoleBinding)
+	})
+
+	// Create user client with partial action permissions
+	imp := user.Impersonation{
+		Username: "partial-actions-user",
+		Groups:   []string{},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile:       user.Profile{Name: "Partial Actions User"},
+		Impersonation: imp,
+	}, userClient)
+
+	// User should be able to reconcile and suspend, but not resume
+	canReconcile, err := kubeClient.CanActOnResource(userCtx, "reconcile", "fluxcd.controlplane.io", "resourcesets", "default", "test")
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(canReconcile).To(BeTrue(), "user should be able to reconcile")
+
+	canSuspend, err := kubeClient.CanActOnResource(userCtx, "suspend", "fluxcd.controlplane.io", "resourcesets", "default", "test")
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(canSuspend).To(BeTrue(), "user should be able to suspend")
+
+	canResume, err := kubeClient.CanActOnResource(userCtx, "resume", "fluxcd.controlplane.io", "resourcesets", "default", "test")
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(canResume).To(BeFalse(), "user should NOT be able to resume")
+}
+
+func TestCanActOnResource_NamespaceScoped(t *testing.T) {
+	g := NewWithT(t)
+
+	kubeClient, err := kubeclient.New(testClient, testClient, testEnvConf, testScheme, 100, 5*time.Minute)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Create Role with reconcile verb only in default namespace
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-ns-scoped-actions",
+			Namespace: "default",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"fluxcd.controlplane.io"},
+				Resources: []string{"resourcesets"},
+				Verbs:     []string{"reconcile"},
+			},
+		},
+	}
+	err = testClient.Create(ctx, role)
+	g.Expect(client.IgnoreAlreadyExists(err)).NotTo(HaveOccurred())
+
+	t.Cleanup(func() {
+		_ = testClient.Delete(context.Background(), role)
+	})
+
+	// Create RoleBinding for the user
+	roleBinding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-ns-scoped-actions-binding",
+			Namespace: "default",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind: "User",
+				Name: "ns-scoped-actions-user",
+			},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     "test-ns-scoped-actions",
+		},
+	}
+	err = testClient.Create(ctx, roleBinding)
+	g.Expect(client.IgnoreAlreadyExists(err)).NotTo(HaveOccurred())
+
+	t.Cleanup(func() {
+		_ = testClient.Delete(context.Background(), roleBinding)
+	})
+
+	// Create user client
+	imp := user.Impersonation{
+		Username: "ns-scoped-actions-user",
+		Groups:   []string{},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile:       user.Profile{Name: "NS Scoped Actions User"},
+		Impersonation: imp,
+	}, userClient)
+
+	// User should be able to reconcile in default namespace
+	canActDefault, err := kubeClient.CanActOnResource(userCtx, "reconcile", "fluxcd.controlplane.io", "resourcesets", "default", "test")
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(canActDefault).To(BeTrue(), "user should be able to reconcile in default namespace")
+
+	// User should NOT be able to reconcile in kube-system namespace
+	canActKubeSystem, err := kubeClient.CanActOnResource(userCtx, "reconcile", "fluxcd.controlplane.io", "resourcesets", "kube-system", "test")
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(canActKubeSystem).To(BeFalse(), "user should NOT be able to reconcile in kube-system namespace")
+}

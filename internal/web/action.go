@@ -73,12 +73,6 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Check if the specified action is enabled in the configuration.
-	if !h.conf.UserActions.IsEnabled(actionReq.Action) {
-		http.Error(w, fmt.Sprintf("Action '%s' is not enabled", actionReq.Action), http.StatusMethodNotAllowed)
-		return
-	}
-
 	// Validate action type
 	if !slices.Contains(config.AllUserActions, actionReq.Action) {
 		http.Error(w, "Invalid action. Must be one of: reconcile, suspend, resume", http.StatusBadRequest)
@@ -108,6 +102,20 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 
 	ctx := req.Context()
 	now := metav1.Now().Format(time.RFC3339Nano)
+
+	// Check custom RBAC.
+	if allowed, err := h.kubeClient.CanActOnResource(ctx,
+		actionReq.Action, gvk.Group, kindInfo.Plural, actionReq.Namespace, actionReq.Name); err != nil {
+		log.FromContext(req.Context()).Error(err, "failed to check custom RBAC for action",
+			"action", actionReq.Action, "kind", actionReq.Kind, "name", actionReq.Name, "namespace", actionReq.Namespace)
+		http.Error(w, "Unable to verify permissions", http.StatusInternalServerError)
+		return
+	} else if !allowed {
+		perms := user.Permissions(req.Context())
+		http.Error(w, fmt.Sprintf("Permission denied. User %s does not have access to %s %s/%s/%s",
+			perms.Username, actionReq.Action, actionReq.Kind, actionReq.Namespace, actionReq.Name), http.StatusForbidden)
+		return
+	}
 
 	var actionErr error
 	var message string
@@ -155,7 +163,7 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// Send audit event.
-	if h.eventRecorder != nil && h.conf.UserActions.Audit {
+	if h.eventRecorder != nil && slices.Contains(h.conf.UserActions.Audit, actionReq.Action) {
 		const reason = "WebAction"
 
 		// Get a privileged kube client for the notifier to ensure it can fetch the FluxInstance.
