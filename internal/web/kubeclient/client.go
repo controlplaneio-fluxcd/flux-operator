@@ -305,7 +305,7 @@ func (c *Client) filterNamespacesByAccess(ctx context.Context, namespaces []stri
 
 // CanActOnResource checks if the user has permission to perform a specific action on a
 // resource by performing a SelfSubjectAccessReview with the action as the RBAC verb.
-func (c *Client) CanActOnResource(ctx context.Context, action, group, resource, namespace, name string) (bool, error) {
+func (c *Client) CanActOnResource(ctx context.Context, action, group, plural, namespace, name string) (bool, error) {
 	kubeClient := c.GetClient(ctx)
 
 	// Here, we can't bail out early if kubeClient == c.client
@@ -318,7 +318,7 @@ func (c *Client) CanActOnResource(ctx context.Context, action, group, resource, 
 			ResourceAttributes: &authzv1.ResourceAttributes{
 				Verb:      action,
 				Group:     group,
-				Resource:  resource,
+				Resource:  plural,
 				Namespace: namespace,
 				Name:      name,
 			},

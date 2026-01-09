@@ -834,6 +834,183 @@ func TestActionHandler_AllActionsEnabledByDefault(t *testing.T) {
 	g.Expect(resp.Success).To(BeTrue())
 }
 
+func TestActionHandler_HasCustomVerbButNoPatch_Forbidden(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a ResourceSet for testing
+	resourceSet := &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-action-no-patch",
+			Namespace: "default",
+		},
+		Spec: fluxcdv1.ResourceSetSpec{},
+	}
+	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
+	defer testClient.Delete(ctx, resourceSet)
+
+	// Create RBAC with custom verb (reconcile) but WITHOUT patch permission
+	clusterRole := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-action-custom-verb-only",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{fluxcdv1.GroupVersion.Group},
+				Resources: []string{"resourcesets"},
+				Verbs:     []string{"get", "list", "reconcile"}, // Has reconcile but NOT patch
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, clusterRole)).To(Succeed())
+	defer testClient.Delete(ctx, clusterRole)
+
+	clusterRoleBinding := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-action-custom-verb-only-binding",
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     clusterRole.Name,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind: "User",
+				Name: "custom-verb-only-user",
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, clusterRoleBinding)).To(Succeed())
+	defer testClient.Delete(ctx, clusterRoleBinding)
+
+	handler := &Handler{
+		conf:          oauthConfig(),
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	// Create user session with custom verb but no patch
+	imp := user.Impersonation{
+		Username: "custom-verb-only-user",
+		Groups:   []string{"system:authenticated"},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile:       user.Profile{Name: "Custom Verb Only User"},
+		Impersonation: imp,
+	}, userClient)
+
+	// Attempt reconcile action - passes custom RBAC check but fails on K8s patch
+	actionReq := ActionRequest{
+		Kind:      "ResourceSet",
+		Namespace: "default",
+		Name:      "test-action-no-patch",
+		Action:    "reconcile",
+	}
+	body, _ := json.Marshal(actionReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req = req.WithContext(userCtx)
+	rec := httptest.NewRecorder()
+
+	handler.ActionHandler(rec, req)
+
+	// Should fail with forbidden because user can't patch the resource
+	g.Expect(rec.Code).To(Equal(http.StatusForbidden))
+}
+
+func TestActionHandler_HasPatchButNoCustomVerb_Forbidden(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a ResourceSet for testing
+	resourceSet := &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-action-no-custom-verb",
+			Namespace: "default",
+		},
+		Spec: fluxcdv1.ResourceSetSpec{},
+	}
+	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
+	defer testClient.Delete(ctx, resourceSet)
+
+	// Create RBAC with patch permission but WITHOUT custom verb
+	clusterRole := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-action-patch-only",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{fluxcdv1.GroupVersion.Group},
+				Resources: []string{"resourcesets"},
+				Verbs:     []string{"get", "list", "patch"}, // Has patch but NOT reconcile
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, clusterRole)).To(Succeed())
+	defer testClient.Delete(ctx, clusterRole)
+
+	clusterRoleBinding := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-action-patch-only-binding",
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     clusterRole.Name,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind: "User",
+				Name: "patch-only-user",
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, clusterRoleBinding)).To(Succeed())
+	defer testClient.Delete(ctx, clusterRoleBinding)
+
+	handler := &Handler{
+		conf:          oauthConfig(),
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	// Create user session with patch but no custom verb
+	imp := user.Impersonation{
+		Username: "patch-only-user",
+		Groups:   []string{"system:authenticated"},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile:       user.Profile{Name: "Patch Only User"},
+		Impersonation: imp,
+	}, userClient)
+
+	// Attempt reconcile action - fails at custom RBAC check
+	actionReq := ActionRequest{
+		Kind:      "ResourceSet",
+		Namespace: "default",
+		Name:      "test-action-no-custom-verb",
+		Action:    "reconcile",
+	}
+	body, _ := json.Marshal(actionReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req = req.WithContext(userCtx)
+	rec := httptest.NewRecorder()
+
+	handler.ActionHandler(rec, req)
+
+	// Should fail with forbidden at the custom RBAC check
+	g.Expect(rec.Code).To(Equal(http.StatusForbidden))
+	g.Expect(rec.Body.String()).To(ContainSubstring("Permission denied"))
+}
+
 func TestActionHandler_Audit_SpecificAction(t *testing.T) {
 	g := NewWithT(t)
 
