@@ -456,7 +456,7 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 	}
 
 	// Configure the Kubernetes client for impersonation.
-	impersonation, err := r.makeImpersonator(ctx, obj)
+	impersonation, err := r.makeImpersonator(obj)
 	if err != nil {
 		return "", err
 	}
@@ -820,7 +820,7 @@ func (r *ResourceSetReconciler) patch(ctx context.Context,
 
 // makeImpersonator creates an impersonator for the ResourceSet.
 // It configures service account impersonation and custom health check readers.
-func (r *ResourceSetReconciler) makeImpersonator(ctx context.Context, obj *fluxcdv1.ResourceSet) (*runtimeClient.Impersonator, error) {
+func (r *ResourceSetReconciler) makeImpersonator(obj *fluxcdv1.ResourceSet) (*runtimeClient.Impersonator, error) {
 	var impersonatorOpts []runtimeClient.ImpersonatorOption
 
 	// Configure service account for impersonation.
@@ -844,13 +844,13 @@ func (r *ResourceSetReconciler) makeImpersonator(ctx context.Context, obj *fluxc
 			})
 		}
 
-		statusReaders, err := cel.PollerWithCustomHealthChecks(ctx, healthChecks)
+		statusReader, err := cel.NewStatusReader(healthChecks)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create custom health check readers: %w", err)
 		}
 
 		impersonatorOpts = append(impersonatorOpts,
-			runtimeClient.WithPolling(r.ClusterReader, statusReaders...),
+			runtimeClient.WithPolling(r.ClusterReader, statusReader),
 		)
 	}
 

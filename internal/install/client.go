@@ -94,15 +94,15 @@ func NewStatusPoller(ctx context.Context, reader client.Reader, mapper meta.REST
 		})
 	}
 
-	statusReaders, err := cel.PollerWithCustomHealthChecks(ctx, healthChecks)
+	statusReader, err := cel.NewStatusReader(healthChecks)
 	if err != nil {
 		return nil, err
 	}
 
-	readers := make([]engine.StatusReader, 0, 1+len(statusReaders))
+	readers := make([]engine.StatusReader, 0, 1+len(healthChecks))
 	readers = append(readers, statusreaders.NewCustomJobStatusReader(mapper))
-	for _, sr := range statusReaders {
-		readers = append(readers, sr(mapper))
+	if len(healthChecks) > 0 {
+		readers = append(readers, statusReader(mapper))
 	}
 
 	kubePoller := polling.NewStatusPoller(reader, mapper, polling.Options{
