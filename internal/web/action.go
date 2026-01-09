@@ -149,7 +149,7 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// Send audit event.
-	if h.eventRecorder != nil && h.conf.UserActions.Audit {
+	if h.eventRecorder != nil && slices.Contains(h.conf.UserActions.Audit, actionReq.Action) {
 		const reason = "WebAction"
 
 		// Get a privileged kube client for the notifier to ensure it can fetch the FluxInstance.

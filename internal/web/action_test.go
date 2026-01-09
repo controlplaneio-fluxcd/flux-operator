@@ -14,6 +14,7 @@ import (
 	. "github.com/onsi/gomega"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
@@ -831,4 +832,244 @@ func TestActionHandler_AllActionsEnabledByDefault(t *testing.T) {
 	err := json.NewDecoder(rec.Body).Decode(&resp)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(resp.Success).To(BeTrue())
+}
+
+func TestActionHandler_Audit_SpecificAction(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a ResourceSet for testing
+	resourceSet := &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-audit-specific",
+			Namespace: "default",
+		},
+		Spec: fluxcdv1.ResourceSetSpec{},
+	}
+	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
+	defer testClient.Delete(ctx, resourceSet)
+
+	// Create a fake event recorder
+	fakeRecorder := record.NewFakeRecorder(10)
+
+	// Configure with audit only for reconcile action
+	handler := &Handler{
+		conf: &config.ConfigSpec{
+			Authentication: &config.AuthenticationSpec{
+				Type: config.AuthenticationTypeOAuth2,
+			},
+			UserActions: &config.UserActionsSpec{
+				AuthType: config.AuthenticationTypeOAuth2,
+				Audit:    []string{config.UserActionReconcile},
+			},
+		},
+		kubeClient:    kubeClient,
+		eventRecorder: fakeRecorder,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	// Perform reconcile action - should be audited
+	actionReq := ActionRequest{
+		Kind:      "ResourceSet",
+		Namespace: "default",
+		Name:      "test-audit-specific",
+		Action:    "reconcile",
+	}
+	body, _ := json.Marshal(actionReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.ActionHandler(rec, req)
+
+	g.Expect(rec.Code).To(Equal(http.StatusOK))
+
+	// Check that an event was recorded
+	select {
+	case event := <-fakeRecorder.Events:
+		g.Expect(event).To(ContainSubstring("WebAction"))
+	default:
+		t.Fatal("expected an audit event to be recorded for reconcile action")
+	}
+}
+
+func TestActionHandler_Audit_ActionNotInList(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a ResourceSet for testing
+	resourceSet := &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-audit-not-in-list",
+			Namespace: "default",
+		},
+		Spec: fluxcdv1.ResourceSetSpec{},
+	}
+	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
+	defer testClient.Delete(ctx, resourceSet)
+
+	// Create a fake event recorder
+	fakeRecorder := record.NewFakeRecorder(10)
+
+	// Configure with audit only for suspend action (not reconcile)
+	handler := &Handler{
+		conf: &config.ConfigSpec{
+			Authentication: &config.AuthenticationSpec{
+				Type: config.AuthenticationTypeOAuth2,
+			},
+			UserActions: &config.UserActionsSpec{
+				AuthType: config.AuthenticationTypeOAuth2,
+				Audit:    []string{config.UserActionSuspend},
+			},
+		},
+		kubeClient:    kubeClient,
+		eventRecorder: fakeRecorder,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	// Perform reconcile action - should NOT be audited (only suspend is audited)
+	actionReq := ActionRequest{
+		Kind:      "ResourceSet",
+		Namespace: "default",
+		Name:      "test-audit-not-in-list",
+		Action:    "reconcile",
+	}
+	body, _ := json.Marshal(actionReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.ActionHandler(rec, req)
+
+	g.Expect(rec.Code).To(Equal(http.StatusOK))
+
+	// Check that NO event was recorded
+	select {
+	case event := <-fakeRecorder.Events:
+		t.Fatalf("expected no audit event for reconcile action, but got: %s", event)
+	default:
+		// No event - this is expected
+	}
+}
+
+func TestActionHandler_Audit_EmptyList(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a ResourceSet for testing
+	resourceSet := &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-audit-empty",
+			Namespace: "default",
+		},
+		Spec: fluxcdv1.ResourceSetSpec{},
+	}
+	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
+	defer testClient.Delete(ctx, resourceSet)
+
+	// Create a fake event recorder
+	fakeRecorder := record.NewFakeRecorder(10)
+
+	// Configure with empty audit list
+	handler := &Handler{
+		conf: &config.ConfigSpec{
+			Authentication: &config.AuthenticationSpec{
+				Type: config.AuthenticationTypeOAuth2,
+			},
+			UserActions: &config.UserActionsSpec{
+				AuthType: config.AuthenticationTypeOAuth2,
+				Audit:    []string{},
+			},
+		},
+		kubeClient:    kubeClient,
+		eventRecorder: fakeRecorder,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	// Perform reconcile action - should NOT be audited
+	actionReq := ActionRequest{
+		Kind:      "ResourceSet",
+		Namespace: "default",
+		Name:      "test-audit-empty",
+		Action:    "reconcile",
+	}
+	body, _ := json.Marshal(actionReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.ActionHandler(rec, req)
+
+	g.Expect(rec.Code).To(Equal(http.StatusOK))
+
+	// Check that NO event was recorded
+	select {
+	case event := <-fakeRecorder.Events:
+		t.Fatalf("expected no audit event with empty audit list, but got: %s", event)
+	default:
+		// No event - this is expected
+	}
+}
+
+func TestActionHandler_Audit_AllActions(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a ResourceSet for testing
+	resourceSet := &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-audit-all-actions",
+			Namespace: "default",
+		},
+		Spec: fluxcdv1.ResourceSetSpec{},
+	}
+	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
+	defer testClient.Delete(ctx, resourceSet)
+
+	// Create a fake event recorder
+	fakeRecorder := record.NewFakeRecorder(10)
+
+	// Configure with all actions in audit list
+	handler := &Handler{
+		conf: &config.ConfigSpec{
+			Authentication: &config.AuthenticationSpec{
+				Type: config.AuthenticationTypeOAuth2,
+			},
+			UserActions: &config.UserActionsSpec{
+				AuthType: config.AuthenticationTypeOAuth2,
+				Audit:    []string{config.UserActionReconcile, config.UserActionSuspend, config.UserActionResume},
+			},
+		},
+		kubeClient:    kubeClient,
+		eventRecorder: fakeRecorder,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	// Perform reconcile action - should be audited
+	actionReq := ActionRequest{
+		Kind:      "ResourceSet",
+		Namespace: "default",
+		Name:      "test-audit-all-actions",
+		Action:    "reconcile",
+	}
+	body, _ := json.Marshal(actionReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.ActionHandler(rec, req)
+
+	g.Expect(rec.Code).To(Equal(http.StatusOK))
+
+	// Check that an event was recorded
+	select {
+	case event := <-fakeRecorder.Events:
+		g.Expect(event).To(ContainSubstring("WebAction"))
+	default:
+		t.Fatal("expected an audit event to be recorded when all actions are audited")
+	}
 }

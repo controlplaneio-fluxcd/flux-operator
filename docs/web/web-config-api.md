@@ -58,7 +58,11 @@ spec:
     authType: OAuth2 # Anonymous | OAuth2
 
     # Send audit events to Kubernetes and Flux's notification-controller.
-    audit: false # Optional, default is false.
+    # Optional. Disabled by default. Special value ["*"] enables all actions.
+    audit:
+      - reconcile
+      - suspend
+      - resume
 
   # Authentication configuration (optional)
   authentication:
@@ -96,11 +100,12 @@ Kubernetes RBAC permissions that will be used by the web UI on their behalf,
 e.g. the `Anonymous` authentication type.
 
 To enable audit notifications integrated with both Kubernetes Events and
-Flux's `notification-controller`, set `.spec.userActions.audit` to `true`.
-When `audit` is set to `true`, user actions performed in the web UI will
+Flux's `notification-controller`, set `.spec.userActions.audit` to a list
+of actions to audit. When set, user actions performed in the web UI will
 generate audit events that are sent to both the Kubernetes API server and
 Flux's `notification-controller`. This allows administrators to track user
-activities for security and compliance purposes.
+activities for security and compliance purposes. The special value `["*"]`
+can be used to enable auditing for all supported actions.
 
 ## Authentication
 

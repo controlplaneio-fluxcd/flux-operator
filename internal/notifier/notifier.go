@@ -60,22 +60,22 @@ func New(ctx context.Context, base record.EventRecorder, scheme *runtime.Scheme,
 			if o.client == nil {
 				const msg = "flux instance object or client is required"
 				log.Error(errors.New(msg), msg)
-				return nilNotifier{}
+				return base
 			}
 			var instanceList fluxcdv1.FluxInstanceList
 			if err := o.client.List(ctx, &instanceList); err != nil {
 				log.Error(err, "failed to list flux instances")
-				return nilNotifier{}
+				return base
 			}
 			if len(instanceList.Items) == 0 {
 				const msg = "no flux instances found"
 				log.Error(errors.New(msg), msg)
-				return nilNotifier{}
+				return base
 			}
 			if len(instanceList.Items) > 1 {
 				const msg = "multiple flux instances found, only one is supported"
 				log.Error(errors.New(msg), msg)
-				return nilNotifier{}
+				return base
 			}
 			fluxInstance = &instanceList.Items[0]
 		}
@@ -89,22 +89,8 @@ func New(ctx context.Context, base record.EventRecorder, scheme *runtime.Scheme,
 	er, err := events.NewRecorderForScheme(scheme, base, log, eventsAddr, reportingController)
 	if err != nil {
 		log.Error(err, "failed to create event recorder")
-		return nilNotifier{}
+		return base
 	}
 
 	return er
-}
-
-type nilNotifier struct{}
-
-// AnnotatedEventf implements record.EventRecorder.
-func (nilNotifier) AnnotatedEventf(runtime.Object, map[string]string, string, string, string, ...any) {
-}
-
-// Event implements record.EventRecorder.
-func (nilNotifier) Event(runtime.Object, string, string, string) {
-}
-
-// Eventf implements record.EventRecorder.
-func (nilNotifier) Eventf(runtime.Object, string, string, string, ...any) {
 }

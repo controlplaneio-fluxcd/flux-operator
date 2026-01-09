@@ -154,7 +154,7 @@ func TestConfigSpec_Validate(t *testing.T) {
 			name: "valid userActions config",
 			spec: ConfigSpec{
 				UserActions: &UserActionsSpec{
-					Audit: true,
+					Audit: []string{UserActionReconcile},
 				},
 			},
 			wantErr: "",
@@ -220,11 +220,11 @@ func TestConfigSpec_ApplyDefaults(t *testing.T) {
 	// spec with userActions applies defaults
 	spec3 := &ConfigSpec{
 		UserActions: &UserActionsSpec{
-			Audit: true,
+			Audit: []string{UserActionReconcile},
 		},
 	}
 	spec3.ApplyDefaults()
-	g.Expect(spec3.UserActions.Audit).To(BeTrue())
+	g.Expect(spec3.UserActions.Audit).To(Equal([]string{UserActionReconcile}))
 	g.Expect(spec3.UserActions.AuthType).To(Equal(AuthenticationTypeOAuth2))
 }
 

@@ -36,10 +36,11 @@ type UserActionsSpec struct {
 	// +optional
 	AuthType string `json:"authType,omitempty"`
 
-	// Audit indicates whether to send audit events when users perform actions.
-	// Defaults to false.
+	// Audit is a list of actions to be audited.
+	// If the field is empty or omitted, no actions are audited.
+	// The special value ["*"] can be used to audit all actions.
 	// +optional
-	Audit bool `json:"audit,omitempty"`
+	Audit []string `json:"audit,omitempty"`
 }
 
 // Validate validates the UserActionsSpec configuration.
@@ -47,6 +48,21 @@ func (u *UserActionsSpec) Validate() error {
 	if u.AuthType != "" && !slices.Contains(AllAuthenticationTypes, u.AuthType) {
 		return fmt.Errorf("invalid authType: '%s'", u.AuthType)
 	}
+
+	auditedActions := make(map[string]struct{})
+	for _, action := range u.Audit {
+		if _, exists := auditedActions[action]; exists {
+			return fmt.Errorf("duplicate audit action: '%s'", action)
+		}
+		if !slices.Contains(AllUserActions, action) && action != "*" {
+			return fmt.Errorf("invalid audit action: '%s'", action)
+		}
+		auditedActions[action] = struct{}{}
+	}
+	if _, exists := auditedActions["*"]; exists && len(auditedActions) > 1 {
+		return fmt.Errorf("audit action '*' cannot be combined with other actions")
+	}
+
 	return nil
 }
 
