@@ -326,7 +326,7 @@ func (c *Client) CanActOnResource(ctx context.Context, action, group, plural, na
 	}
 
 	if err := kubeClient.Create(ctx, ssar); err != nil {
-		return false, fmt.Errorf("failed to check action permission on resource: %w", err)
+		return false, fmt.Errorf("failed to create SelfSubjectAccessReview: %w", err)
 	}
 
 	return ssar.Status.Allowed, nil

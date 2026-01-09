@@ -106,11 +106,8 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 	// Check custom RBAC.
 	if allowed, err := h.kubeClient.CanActOnResource(ctx,
 		actionReq.Action, gvk.Group, kindInfo.Plural, actionReq.Namespace, actionReq.Name); err != nil {
-		log.FromContext(req.Context()).Error(err, "failed to check permissions",
-			"action", actionReq.Action,
-			"kind", actionReq.Kind,
-			"name", actionReq.Name,
-			"namespace", actionReq.Namespace)
+		log.FromContext(req.Context()).Error(err, "failed to check custom RBAC for action",
+			"action", actionReq.Action, "kind", actionReq.Kind, "name", actionReq.Name, "namespace", actionReq.Namespace)
 		http.Error(w, "Unable to verify permissions", http.StatusInternalServerError)
 		return
 	} else if !allowed {
