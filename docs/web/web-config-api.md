@@ -53,10 +53,6 @@ spec:
 
   # User actions (optional)
   userActions:
-    # Actions will only be enabled if this field matches the configured
-    # authentication type. Defaults to OAuth2.
-    authType: OAuth2 # Anonymous | OAuth2
-
     # Send audit events to Kubernetes and Flux's notification-controller.
     # Optional. Disabled by default. Special value ["*"] enables all actions.
     audit:
@@ -90,14 +86,7 @@ spec:
 
 ## User Actions
 
-To enable user actions, make sure to set `.spec.userActions.authType` to
-match the configured authentication type. For example, if `authType` is
-set to `OAuth2`, actions will only be enabled when `OAuth2` authentication
-is in use. The default value for `authType` is `OAuth2`. This field forces
-cluster administrators to explicitly declare their intent if they want to
-enable actions for authentication types where users are not tied to the
-Kubernetes RBAC permissions that will be used by the web UI on their behalf,
-e.g. the `Anonymous` authentication type.
+To enable user actions, you need to configure [Authentication](#authentication).
 
 To enable audit notifications integrated with both Kubernetes Events and
 Flux's `notification-controller`, set `.spec.userActions.audit` to a list

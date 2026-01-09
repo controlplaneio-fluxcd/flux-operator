@@ -26,27 +26,6 @@ func TestUserActionsSpec_Validate(t *testing.T) {
 			wantErr: "",
 		},
 		{
-			name: "valid authType Anonymous",
-			spec: &UserActionsSpec{
-				AuthType: AuthenticationTypeAnonymous,
-			},
-			wantErr: "",
-		},
-		{
-			name: "valid authType OAuth2",
-			spec: &UserActionsSpec{
-				AuthType: AuthenticationTypeOAuth2,
-			},
-			wantErr: "",
-		},
-		{
-			name: "invalid authType",
-			spec: &UserActionsSpec{
-				AuthType: "InvalidType",
-			},
-			wantErr: "invalid authType: 'InvalidType'",
-		},
-		{
 			name: "valid audit with single action",
 			spec: &UserActionsSpec{
 				Audit: []string{UserActionReconcile},
@@ -114,17 +93,15 @@ func TestUserActionsSpec_ApplyDefaults(t *testing.T) {
 
 	// spec with values preserves them
 	spec := &UserActionsSpec{
-		AuthType: AuthenticationTypeAnonymous,
-		Audit:    []string{UserActionReconcile},
+		Audit: []string{UserActionReconcile},
 	}
 	spec.ApplyDefaults()
-	g.Expect(spec.AuthType).To(Equal(AuthenticationTypeAnonymous))
 	g.Expect(spec.Audit).To(Equal([]string{UserActionReconcile}))
 
-	// empty authType defaults to OAuth2
+	// empty spec applies defaults without error
 	spec2 := &UserActionsSpec{}
 	spec2.ApplyDefaults()
-	g.Expect(spec2.AuthType).To(Equal(AuthenticationTypeOAuth2))
+	g.Expect(spec2.Audit).To(BeNil())
 }
 
 func TestAllUserActions(t *testing.T) {

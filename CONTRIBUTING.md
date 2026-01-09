@@ -217,8 +217,6 @@ apiVersion: web.fluxcd.controlplane.io/v1
 kind: Config
 spec:
   baseURL: http://localhost:9080
-  userActions:
-    authType: Anonymous
   authentication:
     type: Anonymous
     anonymous:

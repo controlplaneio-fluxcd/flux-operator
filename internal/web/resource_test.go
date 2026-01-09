@@ -855,9 +855,7 @@ func TestGetResource_UserActions_PartialRBAC(t *testing.T) {
 			Authentication: &config.AuthenticationSpec{
 				Type: config.AuthenticationTypeOAuth2,
 			},
-			UserActions: &config.UserActionsSpec{
-				AuthType: config.AuthenticationTypeOAuth2,
-			},
+			UserActions: &config.UserActionsSpec{},
 		},
 		kubeClient:    kubeClient,
 		version:       "v1.0.0",
@@ -947,9 +945,7 @@ func TestGetResource_UserActions_AllActions(t *testing.T) {
 			Authentication: &config.AuthenticationSpec{
 				Type: config.AuthenticationTypeOAuth2,
 			},
-			UserActions: &config.UserActionsSpec{
-				AuthType: config.AuthenticationTypeOAuth2,
-			},
+			UserActions: &config.UserActionsSpec{},
 		},
 		kubeClient:    kubeClient,
 		version:       "v1.0.0",
@@ -1037,9 +1033,7 @@ func TestGetResource_UserActions_NoActions(t *testing.T) {
 			Authentication: &config.AuthenticationSpec{
 				Type: config.AuthenticationTypeOAuth2,
 			},
-			UserActions: &config.UserActionsSpec{
-				AuthType: config.AuthenticationTypeOAuth2,
-			},
+			UserActions: &config.UserActionsSpec{},
 		},
 		kubeClient:    kubeClient,
 		version:       "v1.0.0",
@@ -1089,9 +1083,7 @@ func TestGetResource_UserActions_Disabled(t *testing.T) {
 	handler := &Handler{
 		conf: &config.ConfigSpec{
 			// No authentication configured, so UserActionsEnabled() returns false
-			UserActions: &config.UserActionsSpec{
-				AuthType: config.AuthenticationTypeOAuth2,
-			},
+			UserActions: &config.UserActionsSpec{},
 		},
 		kubeClient:    kubeClient,
 		version:       "v1.0.0",

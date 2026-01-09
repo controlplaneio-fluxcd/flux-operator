@@ -30,12 +30,6 @@ var (
 
 // UserActionsSpec holds the actions configuration.
 type UserActionsSpec struct {
-	// AuthType specifies the authentication type required for enabling user actions.
-	// Defaults to OAuth2.
-	// +kubebuilder:validation:Enum=Anonymous;OAuth2
-	// +optional
-	AuthType string `json:"authType,omitempty"`
-
 	// Audit is a list of actions to be audited.
 	// If the field is empty or omitted, no actions are audited.
 	// The special value ["*"] can be used to audit all actions.
@@ -45,10 +39,6 @@ type UserActionsSpec struct {
 
 // Validate validates the UserActionsSpec configuration.
 func (u *UserActionsSpec) Validate() error {
-	if u.AuthType != "" && !slices.Contains(AllAuthenticationTypes, u.AuthType) {
-		return fmt.Errorf("invalid authType: '%s'", u.AuthType)
-	}
-
 	auditedActions := make(map[string]struct{})
 	for _, action := range u.Audit {
 		if _, exists := auditedActions[action]; exists {
@@ -62,7 +52,6 @@ func (u *UserActionsSpec) Validate() error {
 	if _, exists := auditedActions["*"]; exists && len(auditedActions) > 1 {
 		return fmt.Errorf("audit action '*' cannot be combined with other actions")
 	}
-
 	return nil
 }
 
@@ -70,9 +59,5 @@ func (u *UserActionsSpec) Validate() error {
 func (u *UserActionsSpec) ApplyDefaults() {
 	if u == nil {
 		return
-	}
-
-	if u.AuthType == "" {
-		u.AuthType = AuthenticationTypeOAuth2
 	}
 }

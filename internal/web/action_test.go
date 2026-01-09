@@ -28,9 +28,7 @@ func oauthConfig() *config.ConfigSpec {
 		Authentication: &config.AuthenticationSpec{
 			Type: config.AuthenticationTypeOAuth2,
 		},
-		UserActions: &config.UserActionsSpec{
-			AuthType: config.AuthenticationTypeOAuth2,
-		},
+		UserActions: &config.UserActionsSpec{},
 	}
 }
 
@@ -722,44 +720,7 @@ func TestActionHandler_ActionsDisabled_NoAuth(t *testing.T) {
 	// Test with no authentication configured
 	handler := &Handler{
 		conf: &config.ConfigSpec{
-			UserActions: &config.UserActionsSpec{
-				AuthType: config.AuthenticationTypeOAuth2,
-			},
-		},
-		kubeClient:    kubeClient,
-		version:       "v1.0.0",
-		statusManager: "test-status-manager",
-		namespace:     "flux-system",
-	}
-
-	actionReq := ActionRequest{
-		Kind:      "ResourceSet",
-		Namespace: "default",
-		Name:      "test",
-		Action:    "reconcile",
-	}
-	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
-	rec := httptest.NewRecorder()
-
-	handler.ActionHandler(rec, req)
-
-	g.Expect(rec.Code).To(Equal(http.StatusMethodNotAllowed))
-	g.Expect(rec.Body.String()).To(ContainSubstring("User actions are disabled"))
-}
-
-func TestActionHandler_ActionsDisabled_AnonymousAuth(t *testing.T) {
-	g := NewWithT(t)
-
-	// Test with Anonymous authentication but userActions.authType is OAuth2 (default)
-	handler := &Handler{
-		conf: &config.ConfigSpec{
-			Authentication: &config.AuthenticationSpec{
-				Type: config.AuthenticationTypeAnonymous,
-			},
-			UserActions: &config.UserActionsSpec{
-				AuthType: config.AuthenticationTypeOAuth2,
-			},
+			UserActions: &config.UserActionsSpec{},
 		},
 		kubeClient:    kubeClient,
 		version:       "v1.0.0",
@@ -803,9 +764,7 @@ func TestActionHandler_AllActionsEnabledByDefault(t *testing.T) {
 			Authentication: &config.AuthenticationSpec{
 				Type: config.AuthenticationTypeOAuth2,
 			},
-			UserActions: &config.UserActionsSpec{
-				AuthType: config.AuthenticationTypeOAuth2,
-			},
+			UserActions: &config.UserActionsSpec{},
 		},
 		kubeClient:    kubeClient,
 		version:       "v1.0.0",
@@ -1035,8 +994,7 @@ func TestActionHandler_Audit_SpecificAction(t *testing.T) {
 				Type: config.AuthenticationTypeOAuth2,
 			},
 			UserActions: &config.UserActionsSpec{
-				AuthType: config.AuthenticationTypeOAuth2,
-				Audit:    []string{config.UserActionReconcile},
+				Audit: []string{config.UserActionReconcile},
 			},
 		},
 		kubeClient:    kubeClient,
@@ -1095,8 +1053,7 @@ func TestActionHandler_Audit_ActionNotInList(t *testing.T) {
 				Type: config.AuthenticationTypeOAuth2,
 			},
 			UserActions: &config.UserActionsSpec{
-				AuthType: config.AuthenticationTypeOAuth2,
-				Audit:    []string{config.UserActionSuspend},
+				Audit: []string{config.UserActionSuspend},
 			},
 		},
 		kubeClient:    kubeClient,
@@ -1155,8 +1112,7 @@ func TestActionHandler_Audit_EmptyList(t *testing.T) {
 				Type: config.AuthenticationTypeOAuth2,
 			},
 			UserActions: &config.UserActionsSpec{
-				AuthType: config.AuthenticationTypeOAuth2,
-				Audit:    []string{},
+				Audit: []string{},
 			},
 		},
 		kubeClient:    kubeClient,
@@ -1215,8 +1171,7 @@ func TestActionHandler_Audit_AllActions(t *testing.T) {
 				Type: config.AuthenticationTypeOAuth2,
 			},
 			UserActions: &config.UserActionsSpec{
-				AuthType: config.AuthenticationTypeOAuth2,
-				Audit:    []string{config.UserActionReconcile, config.UserActionSuspend, config.UserActionResume},
+				Audit: []string{config.UserActionReconcile, config.UserActionSuspend, config.UserActionResume},
 			},
 		},
 		kubeClient:    kubeClient,

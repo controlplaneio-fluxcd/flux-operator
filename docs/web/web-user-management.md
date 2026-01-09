@@ -70,8 +70,6 @@ To enable all actions for anonymous users, set the following values in the Flux 
 ```yaml
 web:
   config:
-    userActions:
-      authType: Anonymous
     authentication:
       type: Anonymous
       anonymous:
