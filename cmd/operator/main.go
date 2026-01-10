@@ -8,7 +8,6 @@ import (
 	"errors"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/fluxcd/cli-utils/pkg/kstatus/polling"
@@ -90,7 +89,6 @@ func main() {
 		storagePath                           string
 		defaultServiceAccount                 string
 		defaultWorkloadIdentityServiceAccount string
-		disableWaitInterruption               bool
 		watchOptions                          runtimeCtrl.WatchOptions
 		webServerPort                         int
 		webServerOnly                         bool
@@ -117,8 +115,6 @@ func main() {
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", true,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
-	flag.BoolVar(&disableWaitInterruption, "disable-wait-interruption", false,
-		"Keep the health checks running when the object is requeued.")
 	flag.CommandLine.StringVar(&watchOptions.ConfigsLabelSelector, "watch-configs-label-selector", meta.LabelKeyWatch+"="+meta.LabelValueWatchEnabled,
 		"Watch for ConfigMaps and Secrets with matching labels.")
 	flag.IntVar(&webServerPort, "web-server-port", 9080,
@@ -188,11 +184,6 @@ func main() {
 			os.Exit(1)
 		}
 		reportingInterval = d
-	}
-
-	// Load requeue environment variable.
-	if v, ok := os.LookupEnv(disableWaitInterruptionEnvKey); ok {
-		disableWaitInterruption = strings.ToLower(v) == "true"
 	}
 
 	// Disable the status poller cache to reduce memory usage.
@@ -294,8 +285,7 @@ func main() {
 			EventRecorder: mgr.GetEventRecorderFor(controllerName),
 		}).SetupWithManager(mgr,
 			controller.FluxInstanceReconcilerOptions{
-				RateLimiter:             runtimeCtrl.GetRateLimiter(rateLimiterOptions),
-				DisableWaitInterruption: disableWaitInterruption,
+				RateLimiter: runtimeCtrl.GetRateLimiter(rateLimiterOptions),
 			}); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", fluxcdv1.FluxInstanceKind)
 			os.Exit(1)
@@ -340,9 +330,8 @@ func main() {
 			RequeueDependency:     requeueDependency,
 		}).SetupWithManager(ctx, mgr,
 			controller.ResourceSetReconcilerOptions{
-				RateLimiter:             runtimeCtrl.GetRateLimiter(rateLimiterOptions),
-				WatchConfigsPredicate:   watchConfigsPredicate,
-				DisableWaitInterruption: disableWaitInterruption,
+				RateLimiter:           runtimeCtrl.GetRateLimiter(rateLimiterOptions),
+				WatchConfigsPredicate: watchConfigsPredicate,
 			}); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", fluxcdv1.ResourceSetKind)
 			os.Exit(1)
