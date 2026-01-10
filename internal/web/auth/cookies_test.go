@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -294,18 +295,25 @@ func TestAuthStorage(t *testing.T) {
 		g.Expect(err.Error()).To(ContainSubstring("failed to unmarshal auth storage cookie"))
 	})
 
-	t.Run("deleteAuthStorage deletes the cookie", func(t *testing.T) {
+	t.Run("deleteAuthStorage deletes all chunk cookies", func(t *testing.T) {
 		g := NewWithT(t)
 
 		rec := httptest.NewRecorder()
 		deleteAuthStorage(rec)
 
 		cookies := rec.Result().Cookies()
-		g.Expect(cookies).To(HaveLen(1))
+		// Should have deletion cookies for base and all potential chunks.
+		g.Expect(cookies).To(HaveLen(cookieChunkMaxCount))
 
-		cookie := cookies[0]
-		g.Expect(cookie.Name).To(Equal(cookieNameAuthStorage))
-		g.Expect(cookie.MaxAge).To(Equal(-1))
+		// Verify the base cookie is deleted.
+		g.Expect(cookies[0].Name).To(Equal(cookieNameAuthStorage))
+		g.Expect(cookies[0].MaxAge).To(Equal(-1))
+
+		// Verify all chunk cookies are deleted.
+		for i := 1; i < cookieChunkMaxCount; i++ {
+			g.Expect(cookies[i].Name).To(Equal(chunkCookieName(cookieNameAuthStorage, i)))
+			g.Expect(cookies[i].MaxAge).To(Equal(-1))
+		}
 	})
 }
 
@@ -343,4 +351,231 @@ func TestClearCookieFromResponse(t *testing.T) {
 	g.Expect(hasKeepMe).To(BeTrue())
 	g.Expect(hasAlsoKeep).To(BeTrue())
 	g.Expect(hasRemoveMe).To(BeFalse())
+}
+
+func TestSplitIntoChunks(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		value     string
+		maxSize   int
+		maxChunks int
+		wantCount int
+		wantErr   bool
+	}{
+		{
+			name:      "small value fits in single chunk",
+			value:     "small",
+			maxSize:   100,
+			maxChunks: 10,
+			wantCount: 1,
+		},
+		{
+			name:      "value exactly at chunk size",
+			value:     "abc",
+			maxSize:   3,
+			maxChunks: 10,
+			wantCount: 1,
+		},
+		{
+			name:      "value needs two chunks",
+			value:     "abcdef",
+			maxSize:   3,
+			maxChunks: 10,
+			wantCount: 2,
+		},
+		{
+			name:      "value needs three chunks with remainder",
+			value:     "abcdefgh",
+			maxSize:   3,
+			maxChunks: 10,
+			wantCount: 3,
+		},
+		{
+			name:      "exceeds max chunks",
+			value:     "abcdefghij",
+			maxSize:   3,
+			maxChunks: 2,
+			wantErr:   true,
+		},
+		{
+			name:      "empty value",
+			value:     "",
+			maxSize:   3,
+			maxChunks: 10,
+			wantCount: 1,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			chunks, err := splitIntoChunks(tt.value, tt.maxSize, tt.maxChunks)
+			if tt.wantErr {
+				g.Expect(err).To(HaveOccurred())
+				return
+			}
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(chunks).To(HaveLen(tt.wantCount))
+			// Verify reassembly produces the original value.
+			g.Expect(strings.Join(chunks, "")).To(Equal(tt.value))
+		})
+	}
+}
+
+func TestChunkCookieName(t *testing.T) {
+	g := NewWithT(t)
+
+	g.Expect(chunkCookieName("auth-storage", 0)).To(Equal("auth-storage"))
+	g.Expect(chunkCookieName("auth-storage", 1)).To(Equal("auth-storage-1"))
+	g.Expect(chunkCookieName("auth-storage", 9)).To(Equal("auth-storage-9"))
+}
+
+func TestAuthStorageChunking(t *testing.T) {
+	t.Run("small token uses single cookie", func(t *testing.T) {
+		g := NewWithT(t)
+
+		conf := &config.ConfigSpec{
+			Insecure: false,
+			Authentication: &config.AuthenticationSpec{
+				SessionDuration: &metav1.Duration{Duration: 24 * time.Hour},
+			},
+		}
+		rec := httptest.NewRecorder()
+		storage := authStorage{
+			AccessToken:  "short-token",
+			RefreshToken: "short-refresh",
+		}
+		setAuthStorage(conf, rec, storage)
+
+		cookies := rec.Result().Cookies()
+		// Count auth-storage cookies.
+		authStorageCookies := 0
+		for _, c := range cookies {
+			if c.Name == cookieNameAuthStorage || len(c.Name) > len(cookieNameAuthStorage) &&
+				c.Name[:len(cookieNameAuthStorage)] == cookieNameAuthStorage {
+				authStorageCookies++
+			}
+		}
+		g.Expect(authStorageCookies).To(Equal(1))
+	})
+
+	t.Run("large token is chunked and reassembled", func(t *testing.T) {
+		g := NewWithT(t)
+
+		conf := &config.ConfigSpec{
+			Insecure: false,
+			Authentication: &config.AuthenticationSpec{
+				SessionDuration: &metav1.Duration{Duration: 24 * time.Hour},
+			},
+		}
+
+		// Create a large token that exceeds chunk size.
+		largeToken := strings.Repeat("a", cookieChunkMaxSize+500)
+
+		rec := httptest.NewRecorder()
+		storage := authStorage{
+			AccessToken:  largeToken,
+			RefreshToken: "refresh-token",
+		}
+		setAuthStorage(conf, rec, storage)
+
+		cookies := rec.Result().Cookies()
+
+		// Count auth-storage cookies (should be > 1).
+		authStorageCookies := 0
+		for _, c := range cookies {
+			if c.Name == cookieNameAuthStorage || len(c.Name) > len(cookieNameAuthStorage) &&
+				c.Name[:len(cookieNameAuthStorage)] == cookieNameAuthStorage {
+				authStorageCookies++
+			}
+		}
+		g.Expect(authStorageCookies).To(BeNumerically(">", 1))
+
+		// Create a request with all the cookies.
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		for _, c := range cookies {
+			req.AddCookie(c)
+		}
+
+		// Verify reassembly.
+		result, err := getAuthStorage(req)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(result.AccessToken).To(Equal(largeToken))
+		g.Expect(result.RefreshToken).To(Equal("refresh-token"))
+	})
+
+	t.Run("backward compatibility with single cookie", func(t *testing.T) {
+		g := NewWithT(t)
+
+		// Simulate old-format single cookie.
+		storage := authStorage{
+			AccessToken:  "old-token",
+			RefreshToken: "old-refresh",
+		}
+		b, _ := json.Marshal(storage)
+		encoded := base64.RawURLEncoding.EncodeToString(b)
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.AddCookie(&http.Cookie{
+			Name:  cookieNameAuthStorage,
+			Value: encoded,
+		})
+
+		result, err := getAuthStorage(req)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(result.AccessToken).To(Equal("old-token"))
+		g.Expect(result.RefreshToken).To(Equal("old-refresh"))
+	})
+}
+
+func TestGetChunkedCookieValue(t *testing.T) {
+	t.Run("returns error for missing cookie", func(t *testing.T) {
+		g := NewWithT(t)
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		_, err := getChunkedCookieValue(req, "missing-cookie")
+		g.Expect(err).To(HaveOccurred())
+	})
+
+	t.Run("handles partial chunks gracefully", func(t *testing.T) {
+		g := NewWithT(t)
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.AddCookie(&http.Cookie{Name: "test-cookie", Value: "chunk0"})
+		req.AddCookie(&http.Cookie{Name: "test-cookie-1", Value: "chunk1"})
+		req.AddCookie(&http.Cookie{Name: "test-cookie-2", Value: "chunk2"})
+		// Intentionally missing chunk-3 and beyond.
+
+		value, err := getChunkedCookieValue(req, "test-cookie")
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(value).To(Equal("chunk0chunk1chunk2"))
+	})
+
+	t.Run("reads single cookie when no chunks exist", func(t *testing.T) {
+		g := NewWithT(t)
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.AddCookie(&http.Cookie{Name: "test-cookie", Value: "single-value"})
+
+		value, err := getChunkedCookieValue(req, "test-cookie")
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(value).To(Equal("single-value"))
+	})
+}
+
+func TestClearChunkedCookiesFromResponse(t *testing.T) {
+	g := NewWithT(t)
+
+	rec := httptest.NewRecorder()
+
+	// Set multiple chunk cookies.
+	http.SetCookie(rec, &http.Cookie{Name: "auth-storage", Value: "chunk0"})
+	http.SetCookie(rec, &http.Cookie{Name: "auth-storage-1", Value: "chunk1"})
+	http.SetCookie(rec, &http.Cookie{Name: "auth-storage-2", Value: "chunk2"})
+	http.SetCookie(rec, &http.Cookie{Name: "other-cookie", Value: "keep"})
+
+	clearChunkedCookiesFromResponse(rec, "auth-storage")
+
+	cookieHeaders := rec.Header().Values("Set-Cookie")
+	// Only "other-cookie" should remain.
+	g.Expect(cookieHeaders).To(HaveLen(1))
+	g.Expect(cookieHeaders[0]).To(ContainSubstring("other-cookie"))
 }
