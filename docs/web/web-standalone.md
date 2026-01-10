@@ -16,6 +16,13 @@ The Kubernetes cluster should have the following components:
 - Flux Operator installed in the `flux-system` namespace.
 - A [FluxInstance](fluxinstance.md) deployed in the `flux-system` namespace.
 
+The Flux Operator Helm release should be configured with the web UI disabled:
+
+```yaml
+web:
+  enabled: false
+```
+
 ## Install with Helm
 
 You can install the Flux Web UI using the Flux Operator [Helm chart](https://github.com/controlplaneio-fluxcd/charts/tree/main/charts/flux-operator),
