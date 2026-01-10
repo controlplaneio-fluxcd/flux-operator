@@ -227,14 +227,6 @@ spec:
       username: "admin"
   resources:
     - apiVersion: rbac.authorization.k8s.io/v1
-      kind: ClusterRole
-      metadata:
-        name: flux-web-view
-      rules:
-        - apiGroups: ["*"]
-          resources: ["*"]
-          verbs: ["get", "list", "watch"]
-    - apiVersion: rbac.authorization.k8s.io/v1
       kind: ClusterRoleBinding
       metadata:
         name: flux-web-<< inputs.username >>
@@ -244,7 +236,7 @@ spec:
           apiGroup: rbac.authorization.k8s.io
       roleRef:
         kind: ClusterRole
-        name: flux-web-view
+        name: flux-web-admin
         apiGroup: rbac.authorization.k8s.io
 ```
 
@@ -252,6 +244,11 @@ Make sure to replace the inputs with your actual domain name.
 
 Apply the [ResourceSet](resourceset.md) and log in to the Flux Web UI using the Dex identity provider
 with the `admin@<your-domain>` user. You should have access in the UI to view all resources in the cluster.
+
+Note that the `flux-web-admin` is a predefined role included with the Flux Operator
+that grants full access to Flux resources including the ability to perform actions.
+See the [user management RBAC](web-user-management.md#role-based-access-control)
+section for more information about predefined roles.
 
 ## Dex Configuration with GitHub
 
@@ -415,7 +412,7 @@ spec:
           apiGroup: rbac.authorization.k8s.io
       roleRef:
         kind: ClusterRole
-        name: admin
+        name: flux-web-admin
         apiGroup: rbac.authorization.k8s.io
 ```
 
@@ -448,7 +445,7 @@ spec:
           apiGroup: rbac.authorization.k8s.io
       roleRef:
         kind: ClusterRole
-        name: admin
+        name: flux-web-admin
         apiGroup: rbac.authorization.k8s.io
 ```
 

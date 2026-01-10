@@ -16,36 +16,9 @@ and Kubernetes Role-Based Access Control (RBAC) policies.
 ## Anonymous Access
 
 By default, the Web UI runs under the `flux-operator` Kubernetes service account.
-Cluster admins can assign a different identity to the Web UI by creating a
-Kubernetes `ClusterRoleBinding` that binds a specific user to a set of permissions.
+Cluster admins can assign a different identity to the Web UI using the configuration options.
 
-For example, to grant read-only access to all resources in the cluster to the `flux-web` user:
-
-```yaml
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: flux-web-view
-rules:
-  - apiGroups: ["*"]
-    resources: ["*"]
-    verbs: ["get", "list", "watch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: flux-web-global-view
-subjects:
-  - kind: User
-    name: flux-web
-    apiGroup: rbac.authorization.k8s.io
-roleRef:
-  kind: ClusterRole
-  name: flux-web-view
-  apiGroup: rbac.authorization.k8s.io
-```
-
-To assign the `flux-web` identity to the Web UI, set the following values in the Flux Operator
+To assign the `flux` identity to the Web UI, set the following values in the Flux Operator
 [Helm chart](https://github.com/controlplaneio-fluxcd/charts/tree/main/charts/flux-operator):
 
 ```yaml
@@ -54,62 +27,32 @@ web:
     authentication:
       type: Anonymous
       anonymous:
-        username: flux-web
+        username: flux
+        groups:
+          - flux-admin
 ```
 
-### Anonymous User Actions
-
-To allow anonymous users to perform specific actions,
-such as triggering reconciliations or suspending/resuming resources,
-cluster admins have to enable these actions in the Web UI configuration and assign
-the necessary permissions to the anonymous user.
-
-To enable all actions for anonymous users, set the following values in the Flux Operator
-[Helm chart](https://github.com/controlplaneio-fluxcd/charts/tree/main/charts/flux-operator):
+To grant full permissions to the anonymous user, create the necessary RBAC resources for the `flux-admin` group:
 
 ```yaml
-web:
-  config:
-    authentication:
-      type: Anonymous
-      anonymous:
-        username: flux-web
-```
-
-Then, create the necessary RBAC resources to grant the required permissions to the `flux-web` user:
-
-```yaml
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: flux-web-actions
-rules:
-  - apiGroups:
-     - "fluxcd.controlplane.io"
-     - "source.toolkit.fluxcd.io"
-     - "source.extensions.fluxcd.io"
-     - "kustomize.toolkit.fluxcd.io"
-     - "helm.toolkit.fluxcd.io"
-     - "image.toolkit.fluxcd.io"
-     - "notification.toolkit.fluxcd.io"
-    resources: ["*"]
-    verbs: ["patch", "reconcile", "suspend", "resume"]
----
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: flux-web-global-actions
+  name: flux-admin
 subjects:
-  - kind: User
-    name: flux-web
+  - kind: Group
+    name: flux-admin
     apiGroup: rbac.authorization.k8s.io
 roleRef:
   kind: ClusterRole
-  name: flux-web-actions
+  name: flux-web-admin
   apiGroup: rbac.authorization.k8s.io
 ```
 
-For more information about configuring the Web UI, see the [Web Config API](web-config-api.md) documentation.
+Note that the `flux-web-admin` is a predefined role included with the Flux Operator
+that grants full access to Flux resources including the ability to perform actions.
+See the [Role-Based Access Control (RBAC)](#role-based-access-control) section
+for more information about predefined roles.
 
 ## Single Sign-On
 
@@ -152,18 +95,9 @@ The Flux Operator enforces these permissions when users access the Web UI, ensur
 the resources they are authorized to see.
 
 For example, if your OIDC provider includes a `groups` claim in the user's ID token, you can create
-a `ClusterRoleBinding` to grant read-only access to members of the `platform-team` group:
+a `ClusterRoleBinding` to grant full access to members of the `platform-team` group:
 
 ```yaml
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: flux-web-view
-rules:
-  - apiGroups: ["*"]
-    resources: ["*"]
-    verbs: ["get", "list", "watch"]
----
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
@@ -174,7 +108,7 @@ subjects:
     apiGroup: rbac.authorization.k8s.io
 roleRef:
   kind: ClusterRole
-  name: flux-web-view
+  name: flux-web-admin
   apiGroup: rbac.authorization.k8s.io
 ```
 
@@ -193,14 +127,104 @@ subjects:
     apiGroup: rbac.authorization.k8s.io
 roleRef:
   kind: ClusterRole
-  name: flux-web-view
+  name: flux-web-user
   apiGroup: rbac.authorization.k8s.io
 ```
 
 When a user from the `dev-team` group logs in, they can only search and view
 Flux resources in the `apps` namespace. Attempting to access resources in other
-namespaces will result in a "403 Forbidden" error.
+namespaces will result in a "403 Forbidden" error. To allow the dev team to
+perform actions on their resources, you can bind them to the `flux-web-admin` role instead.
 
 Users who are not part of any group with assigned permissions will only see the main dashboard,
-without access to any specific resources. The dashboard displays cluster-wide statistics
-such as the number of deployed apps and the readiness status of the Flux controllers.
+without access to any specific resources. The main dashboard will only display
+the readiness status of the Flux controllers.
+
+## Role-Based Access Control
+
+The Flux Web UI relies on Kubernetes Role-Based Access Control (RBAC)
+to manage user permissions and access to resources.
+
+The Web UI impersonates the authenticated user when making requests to the Kubernetes API server.
+This means that the permissions granted to a user in the Web UI are determined by
+the Kubernetes RBAC policies assigned to that user or to the groups they belong to.
+
+### Predefined Roles
+
+The Flux Operator includes several predefined `ClusterRole` resources
+that can be used to grant specific permissions to users or groups.
+
+- `flux-web-user`: Grants read-only access to Flux resources and workloads.
+- `flux-web-admin`: Grants full access to Flux resources and workloads, including the ability to trigger actions.
+
+If you prefer to define custom permissions, you can create your own roles using the predefined roles as a reference.
+To disable the creation of the standard roles, set the following values in the Flux Operator
+[Helm chart](https://github.com/controlplaneio-fluxcd/charts/tree/main/charts/flux-operator):
+
+```yaml
+web:
+  rbac:
+    createRoles: false
+```
+
+### Flux Web User Role
+
+The `flux-web-user` role grants read-only access to Flux resources
+and is suitable for users who only need to view the state of their managed resources and workloads.
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: flux-web-user
+  labels:
+    app.kubernetes.io/part-of: flux-operator
+rules:
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs:
+      - get
+      - list
+      - watch
+```
+
+### Flux Web Admin Role
+
+The `flux-web-admin` role grants full access to Flux resources,
+including the ability to perform actions such as triggering reconciliations
+and suspending/resuming resources.
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: flux-web-admin
+  labels:
+    app.kubernetes.io/part-of: flux-operator
+rules:
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - fluxcd.controlplane.io
+      - source.toolkit.fluxcd.io
+      - source.extensions.fluxcd.io
+      - kustomize.toolkit.fluxcd.io
+      - helm.toolkit.fluxcd.io
+      - image.toolkit.fluxcd.io
+      - notification.toolkit.fluxcd.io
+    resources: ["*"]
+    verbs:
+      - patch
+      - reconcile
+      - suspend
+      - resume
+```
+
+Note that the `patch` verb is not enough to allow a user to perform actions in the Web UI.
+The user also needs the `reconcile`, `suspend`, and `resume` verbs
+for the respective resources. These verbs are specially defined in Flux Operator
+to assign action permissions.

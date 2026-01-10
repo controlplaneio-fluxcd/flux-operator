@@ -144,7 +144,7 @@ spec:
           apiGroup: rbac.authorization.k8s.io
       roleRef:
         kind: ClusterRole
-        name: admin
+        name: flux-web-admin
         apiGroup: rbac.authorization.k8s.io
 ```
 
@@ -175,9 +175,14 @@ spec:
           apiGroup: rbac.authorization.k8s.io
       roleRef:
         kind: ClusterRole
-        name: admin
+        name: flux-web-admin
         apiGroup: rbac.authorization.k8s.io
 ```
 
 The above example assumes that you have two dev teams (`dev-team-1` and `dev-team-2`)
 that should have access to resources in the `apps-1` and `apps-2` namespaces respectively.
+
+Note that the `flux-web-admin` is a predefined role included with the Flux Operator
+that grants full access to Flux resources including the ability to perform actions.
+See the [user management RBAC](web-user-management.md#role-based-access-control)
+section for more information about predefined roles.
