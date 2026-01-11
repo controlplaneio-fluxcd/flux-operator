@@ -163,7 +163,7 @@ spec:
                         failing:
                           description: |-
                             Failing is the number of reconciled
-                            resources in the Failing state.
+                            resources in the Failing state and not Suspended.
                           type: integer
                         running:
                           description: |-

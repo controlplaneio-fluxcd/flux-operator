@@ -30,6 +30,8 @@ type reconcilerStats struct {
 	totalSize int64
 }
 
+// ReconcilerStatsByNamespace holds reconciler stats grouped by namespace.
+// If an object is suspended, it is not counted as failing even if it has a failing condition.
 type ReconcilerStatsByNamespace struct {
 	apiVersion string
 	kind       string
@@ -106,12 +108,11 @@ func (r *FluxStatusReporter) getReconcilersStatus(ctx context.Context,
 				nsStats := statsByNamespace[i].stats[ns]
 				nsStats.total++
 
+				// Suspended takes precedence over the ready condition.
 				if s, _, _ := unstructured.NestedBool(item.Object, "spec", "suspend"); s {
 					globalStats.suspended++
 					nsStats.suspended++
-				}
-
-				if obj, err := status.GetObjectWithConditions(item.Object); err == nil {
+				} else if obj, err := status.GetObjectWithConditions(item.Object); err == nil {
 					for _, cond := range obj.Status.Conditions {
 						if cond.Type == meta.ReadyCondition && cond.Status == corev1.ConditionFalse {
 							globalStats.failing++
@@ -205,12 +206,11 @@ func (r *FluxStatusReporter) getOperatorReconcilersStatus(
 				nsStats := statsByNamespace[i].stats[ns]
 				nsStats.total++
 
+				// Suspended takes precedence over the ready condition.
 				if ssautil.AnyInMetadata(&item, map[string]string{fluxcdv1.ReconcileAnnotation: fluxcdv1.DisabledValue}) {
 					globalStats.suspended++
 					nsStats.suspended++
-				}
-
-				if obj, err := status.GetObjectWithConditions(item.Object); err == nil {
+				} else if obj, err := status.GetObjectWithConditions(item.Object); err == nil {
 					for _, cond := range obj.Status.Conditions {
 						if cond.Type == meta.ReadyCondition && cond.Status == corev1.ConditionFalse {
 							globalStats.failing++

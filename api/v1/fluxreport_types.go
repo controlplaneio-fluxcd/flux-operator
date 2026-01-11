@@ -137,7 +137,7 @@ type FluxReconcilerStats struct {
 	Running int `json:"running"`
 
 	// Failing is the number of reconciled
-	// resources in the Failing state.
+	// resources in the Failing state and not Suspended.
 	// +required
 	Failing int `json:"failing"`
 
