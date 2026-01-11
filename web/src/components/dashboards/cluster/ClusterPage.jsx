@@ -12,6 +12,36 @@ import { ReconcilersPanel } from './ReconcilersPanel'
 import { Footer } from '../../layout/Footer'
 
 /**
+ * Warning panel displayed when the user has no access to any namespaces
+ */
+function NoNamespaceAccessWarning({ userInfo }) {
+  return (
+    <div class="card border-warning">
+      <div class="flex items-start gap-3">
+        <svg class="w-5 h-5 text-yellow-500 dark:text-yellow-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <div>
+          <h3 class="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+            Limited Access
+          </h3>
+          <p class="mt-1 text-sm text-yellow-700 dark:text-yellow-300">
+            You don't have access to any namespaces. Contact your administrator to grant your group the necessary permissions.
+          </p>
+          {(userInfo?.username || userInfo?.role) && (
+            <p class="mt-2 text-xs text-yellow-600 dark:text-yellow-400 font-mono">
+              {userInfo.username && `User: ${userInfo.username}`}
+              {userInfo.username && userInfo.role && ' · '}
+              {userInfo.role && `Groups: ${userInfo.role}`}
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
  * ClusterPage component - Main dashboard displaying cluster status and resources
  *
  * @param {Object} props
@@ -31,6 +61,10 @@ export function ClusterPage({ spec, namespace }) {
       <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
         <div class="space-y-6">
           <OverallStatusPanel report={spec} />
+
+          {(!spec.namespaces || spec.namespaces.length === 0) && (
+            <NoNamespaceAccessWarning userInfo={spec.userInfo} />
+          )}
 
           {spec.operator && (
             <InfoPanel
