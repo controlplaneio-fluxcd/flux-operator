@@ -272,4 +272,108 @@ describe('ClusterPage', () => {
       expect(spacer).toBeInTheDocument()
     })
   })
+
+  describe('No Namespace Access Warning', () => {
+    it('should show warning when namespaces array is empty', () => {
+      const spec = {
+        ...baseSpec,
+        namespaces: [],
+        userInfo: { username: 'test-user', role: 'dev-group' }
+      }
+
+      render(<ClusterPage spec={spec} />)
+
+      expect(screen.getByText('Limited Access')).toBeInTheDocument()
+      expect(screen.getByText(/Contact your administrator/)).toBeInTheDocument()
+    })
+
+    it('should show warning when namespaces is undefined', () => {
+      const spec = {
+        ...baseSpec,
+        userInfo: { username: 'test-user', role: 'dev-group' }
+      }
+
+      render(<ClusterPage spec={spec} />)
+
+      expect(screen.getByText('Limited Access')).toBeInTheDocument()
+    })
+
+    it('should not show warning when namespaces has items', () => {
+      const spec = {
+        ...baseSpec,
+        namespaces: ['default', 'flux-system'],
+        userInfo: { username: 'test-user', role: 'dev-group' }
+      }
+
+      render(<ClusterPage spec={spec} />)
+
+      expect(screen.queryByText('Limited Access')).not.toBeInTheDocument()
+    })
+
+    it('should display username and groups when both exist', () => {
+      const spec = {
+        ...baseSpec,
+        namespaces: [],
+        userInfo: { username: 'flux-user', role: 'cluster:view' }
+      }
+
+      render(<ClusterPage spec={spec} />)
+
+      expect(screen.getByText(/User: flux-user/)).toBeInTheDocument()
+      expect(screen.getByText(/Groups: cluster:view/)).toBeInTheDocument()
+    })
+
+    it('should display only username when no groups', () => {
+      const spec = {
+        ...baseSpec,
+        namespaces: [],
+        userInfo: { username: 'flux-user' }
+      }
+
+      render(<ClusterPage spec={spec} />)
+
+      expect(screen.getByText('User: flux-user')).toBeInTheDocument()
+      expect(screen.queryByText(/Groups:/)).not.toBeInTheDocument()
+    })
+
+    it('should display only groups when no username', () => {
+      const spec = {
+        ...baseSpec,
+        namespaces: [],
+        userInfo: { role: 'dev-team,ops-team' }
+      }
+
+      render(<ClusterPage spec={spec} />)
+
+      expect(screen.getByText('Groups: dev-team,ops-team')).toBeInTheDocument()
+      expect(screen.queryByText(/User:/)).not.toBeInTheDocument()
+    })
+
+    it('should not display user info line when neither username nor groups exist', () => {
+      const spec = {
+        ...baseSpec,
+        namespaces: [],
+        userInfo: {}
+      }
+
+      render(<ClusterPage spec={spec} />)
+
+      expect(screen.getByText('Limited Access')).toBeInTheDocument()
+      expect(screen.queryByText(/User:/)).not.toBeInTheDocument()
+      expect(screen.queryByText(/Groups:/)).not.toBeInTheDocument()
+    })
+
+    it('should not display user info line when userInfo is missing', () => {
+      const spec = {
+        ...baseSpec,
+        namespaces: []
+      }
+
+      render(<ClusterPage spec={spec} />)
+
+      expect(screen.getByText('Limited Access')).toBeInTheDocument()
+      expect(screen.queryByText(/User:/)).not.toBeInTheDocument()
+      expect(screen.queryByText(/Groups:/)).not.toBeInTheDocument()
+    })
+  })
 })
