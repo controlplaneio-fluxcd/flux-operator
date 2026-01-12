@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -16,9 +17,12 @@ import (
 
 var exportReportCmd = &cobra.Command{
 	Use:   "report",
-	Short: "Export the FluxReport resource in YAML format",
+	Short: "Export the FluxReport resource in YAML or JSON format",
 	Example: `  # Export the FluxReport to standard output
   flux-operator export report
+
+  # Export the FluxReport in JSON format
+  flux-operator export report -o json
 
   # Export the FluxReport to a YAML file
   flux-operator export report > flux-report.yaml`,
@@ -26,7 +30,15 @@ var exportReportCmd = &cobra.Command{
 	Args: cobra.NoArgs,
 }
 
+type exportReportFlags struct {
+	output string
+}
+
+var exportReportArgs exportReportFlags
+
 func init() {
+	exportReportCmd.Flags().StringVarP(&exportReportArgs.output, "output", "o", "yaml",
+		"Output format. One of: yaml, json.")
 	exportCmd.AddCommand(exportReportCmd)
 }
 
@@ -53,9 +65,20 @@ func exportReportCmdRun(_ *cobra.Command, args []string) error {
 	report := &reportList.Items[0]
 	cleanObjectForExport(report)
 
-	output, err := yaml.Marshal(report.Object)
-	if err != nil {
-		return fmt.Errorf("unable to marshal output to YAML: %w", err)
+	var output []byte
+	switch exportReportArgs.output {
+	case "json":
+		output, err = json.MarshalIndent(report.Object, "", "  ")
+		if err != nil {
+			return fmt.Errorf("unable to marshal output to JSON: %w", err)
+		}
+	case "yaml":
+		output, err = yaml.Marshal(report.Object)
+		if err != nil {
+			return fmt.Errorf("unable to marshal output to YAML: %w", err)
+		}
+	default:
+		return fmt.Errorf("unsupported output format: %s", exportReportArgs.output)
 	}
 
 	_, err = rootCmd.OutOrStdout().Write(output)

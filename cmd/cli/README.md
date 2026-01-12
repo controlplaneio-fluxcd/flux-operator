@@ -98,7 +98,7 @@ Arguments:
 
 ### Export Commands
 
-The `flux-operator export` commands are used to export the Flux Operator resources in YAML format.
+The `flux-operator export` commands are used to export the Flux Operator resources in YAML or JSON format.
 The exported resources can be used for backup, migration, or inspection purposes.
 
 The following commands are available:
@@ -109,6 +109,7 @@ The following commands are available:
 Arguments:
 
 - `-n, --namespace`: Specifies the namespace scope of the command.
+- `-o, --output`: Specifies the output format (yaml, json). Default is yaml.
 
 ### Reconcile Commands
 

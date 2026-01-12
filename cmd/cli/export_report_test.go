@@ -11,6 +11,7 @@ import (
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/util/json"
 	"sigs.k8s.io/yaml"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
@@ -164,6 +165,95 @@ func TestExportReportCmd(t *testing.T) {
 			g.Expect(found).To(BeTrue())
 			g.Expect(labels).ToNot(HaveKey("fluxcd.io/name"))
 			g.Expect(labels).ToNot(HaveKey("fluxcd.io/namespace"))
+		})
+	}
+}
+
+func TestExportReportCmdOutputFormat(t *testing.T) {
+	tests := []struct {
+		name         string
+		outputFormat string
+		expectError  bool
+	}{
+		{
+			name:         "yaml output",
+			outputFormat: "yaml",
+		},
+		{
+			name:         "json output",
+			outputFormat: "json",
+		},
+		{
+			name:         "invalid output format",
+			outputFormat: "invalid",
+			expectError:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			defer cancel()
+
+			g := NewWithT(t)
+
+			// Create FluxReport
+			ns, err := testEnv.CreateNamespace(ctx, "test")
+			g.Expect(err).ToNot(HaveOccurred())
+
+			report := &fluxcdv1.FluxReport{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "flux",
+					Namespace: ns.Name,
+				},
+				Spec: fluxcdv1.FluxReportSpec{
+					Distribution: fluxcdv1.FluxDistributionStatus{
+						Entitlement: "oss",
+						Status:      "ready",
+						Version:     "v1.2.3",
+					},
+				},
+			}
+
+			err = testClient.Create(ctx, report)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			defer func() {
+				_ = testClient.Delete(ctx, report)
+			}()
+
+			// Execute command with output format
+			output, err := executeCommand([]string{"export", "report", "-o", tt.outputFormat})
+
+			if tt.expectError {
+				g.Expect(err).To(HaveOccurred())
+				return
+			}
+
+			g.Expect(err).ToNot(HaveOccurred())
+
+			// Parse output based on format
+			obj := &unstructured.Unstructured{}
+			switch tt.outputFormat {
+			case "json":
+				g.Expect(output).To(HavePrefix("{"))
+				err = json.Unmarshal([]byte(output), &obj.Object)
+			case "yaml":
+				g.Expect(output).NotTo(HavePrefix("{"))
+				err = yaml.Unmarshal([]byte(output), &obj.Object)
+			}
+			g.Expect(err).ToNot(HaveOccurred())
+
+			// Verify basic structure
+			g.Expect(obj.GetAPIVersion()).To(Equal("fluxcd.controlplane.io/v1"))
+			g.Expect(obj.GetKind()).To(Equal("FluxReport"))
+			g.Expect(obj.GetName()).To(Equal("flux"))
+
+			// Verify spec content
+			entitlement, found, err := unstructured.NestedString(obj.Object, "spec", "distribution", "entitlement")
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(found).To(BeTrue())
+			g.Expect(entitlement).To(Equal("oss"))
 		})
 	}
 }
