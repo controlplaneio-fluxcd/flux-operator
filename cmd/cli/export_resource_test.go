@@ -12,6 +12,7 @@ import (
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/util/json"
 	"sigs.k8s.io/yaml"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
@@ -197,6 +198,99 @@ spec:
 			g.Expect(found).To(BeTrue())
 			g.Expect(labels).ToNot(HaveKey("fluxcd.io/name"))
 			g.Expect(labels).ToNot(HaveKey("fluxcd.io/namespace"))
+		})
+	}
+}
+
+func TestExportResourceCmdOutputFormat(t *testing.T) {
+	tests := []struct {
+		name         string
+		outputFormat string
+		expectError  bool
+	}{
+		{
+			name:         "yaml output",
+			outputFormat: "yaml",
+		},
+		{
+			name:         "json output",
+			outputFormat: "json",
+		},
+		{
+			name:         "invalid output format",
+			outputFormat: "invalid",
+			expectError:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			defer cancel()
+
+			g := NewWithT(t)
+
+			// Create ResourceSet
+			ns, err := testEnv.CreateNamespace(ctx, "test")
+			g.Expect(err).ToNot(HaveOccurred())
+
+			input, err := fluxcdv1.NewResourceSetInput(nil, map[string]any{
+				"appName": "my-app",
+			})
+			g.Expect(err).ToNot(HaveOccurred())
+
+			resourceSet := &fluxcdv1.ResourceSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-rs",
+					Namespace: ns.Name,
+				},
+				Spec: fluxcdv1.ResourceSetSpec{
+					Inputs:            []fluxcdv1.ResourceSetInput{input},
+					ResourcesTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test\n",
+				},
+			}
+
+			err = testClient.Create(ctx, resourceSet)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			// Set up the namespace for the command
+			kubeconfigArgs.Namespace = &ns.Name
+
+			defer func() {
+				_ = testClient.Delete(ctx, resourceSet)
+			}()
+
+			// Execute command with output format
+			output, err := executeCommand([]string{"export", "resource", "ResourceSet/test-rs", "-o", tt.outputFormat})
+
+			if tt.expectError {
+				g.Expect(err).To(HaveOccurred())
+				return
+			}
+
+			g.Expect(err).ToNot(HaveOccurred())
+
+			// Parse output based on format
+			obj := &unstructured.Unstructured{}
+			switch tt.outputFormat {
+			case "json":
+				g.Expect(output).To(HavePrefix("{"))
+				err = json.Unmarshal([]byte(output), &obj.Object)
+			case "yaml":
+				err = yaml.Unmarshal([]byte(output), &obj.Object)
+			}
+			g.Expect(err).ToNot(HaveOccurred())
+
+			// Verify basic structure
+			g.Expect(obj.GetAPIVersion()).To(Equal("fluxcd.controlplane.io/v1"))
+			g.Expect(obj.GetKind()).To(Equal("ResourceSet"))
+			g.Expect(obj.GetName()).To(Equal("test-rs"))
+
+			// Verify spec content
+			inputs, found, err := unstructured.NestedSlice(obj.Object, "spec", "inputs")
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(found).To(BeTrue())
+			g.Expect(inputs).To(HaveLen(1))
 		})
 	}
 }

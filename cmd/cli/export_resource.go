@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -19,9 +20,12 @@ import (
 
 var exportResourceCmd = &cobra.Command{
 	Use:   "resource [kind/name]",
-	Short: "Export a Flux custom resource in YAML format",
+	Short: "Export a Flux custom resource in YAML or JSON format",
 	Example: `  # Export a ResourceSet to standard output
   flux-operator -n flux-system export resource ResourceSet/apps
+
+  # Export a ResourceSet in JSON format
+  flux-operator -n flux-system export resource ResourceSet/apps -o json
 
   # Export a OCIRepository to a YAML file
   flux-operator -n apps export resource OCIRepository/my-app > my-app.yaml
@@ -31,7 +35,15 @@ var exportResourceCmd = &cobra.Command{
 	ValidArgsFunction: resourceKindNameCompletionFunc(false),
 }
 
+type exportResourceFlags struct {
+	output string
+}
+
+var exportResourceArgs exportResourceFlags
+
 func init() {
+	exportResourceCmd.Flags().StringVarP(&exportResourceArgs.output, "output", "o", "yaml",
+		"Output format. One of: yaml, json.")
 	exportCmd.AddCommand(exportResourceCmd)
 }
 
@@ -74,10 +86,22 @@ func exportResourceCmdRun(_ *cobra.Command, args []string) error {
 
 	cleanObjectForExport(obj)
 
-	output, err := yaml.Marshal(obj.Object)
-	if err != nil {
-		return fmt.Errorf("unable to marshal output to YAML: %w", err)
+	var output []byte
+	switch exportResourceArgs.output {
+	case "json":
+		output, err = json.MarshalIndent(obj.Object, "", "  ")
+		if err != nil {
+			return fmt.Errorf("unable to marshal output to JSON: %w", err)
+		}
+	case "yaml":
+		output, err = yaml.Marshal(obj.Object)
+		if err != nil {
+			return fmt.Errorf("unable to marshal output to YAML: %w", err)
+		}
+	default:
+		return fmt.Errorf("unsupported output format: %s", exportResourceArgs.output)
 	}
+
 	_, err = rootCmd.OutOrStdout().Write(output)
 	return err
 }

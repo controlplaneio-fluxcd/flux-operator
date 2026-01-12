@@ -168,6 +168,10 @@ func resetCmdArgs() {
 	createSecretRegistryArgs = createSecretRegistryFlags{}
 	createSecretSOPSArgs = createSecretSOPSFlags{}
 
+	// Export commands
+	exportReportArgs = exportReportFlags{output: "yaml"}
+	exportResourceArgs = exportResourceFlags{output: "yaml"}
+
 	// Distro commands
 	distroKeygenSigArgs = distroKeygenSigFlags{}
 	distroSignManifestsArgs = distroSignManifestsFlags{}
