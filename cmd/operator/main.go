@@ -18,6 +18,7 @@ import (
 	"github.com/fluxcd/pkg/cache"
 	runtimeCtrl "github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/jitter"
+	"github.com/fluxcd/pkg/runtime/leaderelection"
 	"github.com/fluxcd/pkg/runtime/logger"
 	"github.com/fluxcd/pkg/runtime/pprof"
 	"github.com/fluxcd/pkg/runtime/probes"
@@ -71,7 +72,6 @@ func main() {
 		runtimeNamespaceEnvKey                      = "RUNTIME_NAMESPACE"
 		webServerPortEnvKey                         = "WEB_SERVER_PORT"
 		webConfigSecretNameEnvKey                   = "WEB_CONFIG_SECRET_NAME"
-		disableWaitInterruptionEnvKey               = "DISABLE_WAIT_INTERRUPTION"
 		tokenCacheDefaultMaxSize                    = 100
 	)
 
@@ -82,7 +82,7 @@ func main() {
 		tokenCacheOptions                     cache.TokenFlags
 		metricsAddr                           string
 		healthAddr                            string
-		enableLeaderElection                  bool
+		leaderElectionOptions                 leaderelection.Options
 		logOptions                            logger.Options
 		rateLimiterOptions                    runtimeCtrl.RateLimiterOptions
 		intervalJitterOptions                 jitter.IntervalOptions
@@ -112,9 +112,6 @@ func main() {
 		"Default service account used for impersonation.")
 	flag.StringVar(&defaultWorkloadIdentityServiceAccount, "default-workload-identity-service-account", "",
 		"Default service account to use for workload identity when not specified in resources.")
-	flag.BoolVar(&enableLeaderElection, "enable-leader-election", true,
-		"Enable leader election for controller manager. "+
-			"Enabling this will ensure there is only one active controller manager.")
 	flag.CommandLine.StringVar(&watchOptions.ConfigsLabelSelector, "watch-configs-label-selector", meta.LabelKeyWatch+"="+meta.LabelValueWatchEnabled,
 		"Watch for ConfigMaps and Secrets with matching labels.")
 	flag.IntVar(&webServerPort, "web-server-port", 9080,
@@ -130,6 +127,8 @@ func main() {
 	logOptions.BindFlags(flag.CommandLine)
 	rateLimiterOptions.BindFlags(flag.CommandLine)
 	intervalJitterOptions.BindFlags(flag.CommandLine)
+	leaderElectionOptions.Enable = true
+	leaderElectionOptions.BindFlags(flag.CommandLine)
 
 	flag.Parse()
 
@@ -191,7 +190,7 @@ func main() {
 
 	if webServerOnly {
 		setupLog.Info("Starting in web server only mode, controllers are disabled")
-		enableLeaderElection = false
+		leaderElectionOptions.Enable = false
 	} else {
 		reporter.MustRegisterMetrics()
 	}
@@ -204,9 +203,12 @@ func main() {
 			ExtraHandlers: pprof.GetHandlers(),
 		},
 		HealthProbeBindAddress:        healthAddr,
-		LeaderElection:                enableLeaderElection,
+		LeaderElection:                leaderElectionOptions.Enable,
 		LeaderElectionID:              controllerName,
-		LeaderElectionReleaseOnCancel: true,
+		LeaderElectionReleaseOnCancel: leaderElectionOptions.ReleaseOnCancel,
+		LeaseDuration:                 &leaderElectionOptions.LeaseDuration,
+		RenewDeadline:                 &leaderElectionOptions.RenewDeadline,
+		RetryPeriod:                   &leaderElectionOptions.RetryPeriod,
 		Controller: ctrlcfg.Controller{
 			MaxConcurrentReconciles: concurrent,
 			RecoverPanic:            ptr.To(true),
