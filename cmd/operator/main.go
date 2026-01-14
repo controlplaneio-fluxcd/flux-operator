@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/fluxcd/cli-utils/pkg/kstatus/polling"
@@ -68,6 +69,7 @@ func main() {
 		controllerName                              = "flux-operator"
 		defaultServiceAccountEnvKey                 = "DEFAULT_SERVICE_ACCOUNT"
 		defaultWorkloadIdentityServiceAccountEnvKey = "DEFAULT_WORKLOAD_IDENTITY_SERVICE_ACCOUNT"
+		overrideManagersEnvKey                      = "OVERRIDE_MANAGERS"
 		reportingIntervalEnvKey                     = "REPORTING_INTERVAL"
 		runtimeNamespaceEnvKey                      = "RUNTIME_NAMESPACE"
 		webServerPortEnvKey                         = "WEB_SERVER_PORT"
@@ -89,6 +91,7 @@ func main() {
 		storagePath                           string
 		defaultServiceAccount                 string
 		defaultWorkloadIdentityServiceAccount string
+		overrideFieldManagers                 []string
 		watchOptions                          runtimeCtrl.WatchOptions
 		webServerPort                         int
 		webServerOnly                         bool
@@ -112,6 +115,8 @@ func main() {
 		"Default service account used for impersonation.")
 	flag.StringVar(&defaultWorkloadIdentityServiceAccount, "default-workload-identity-service-account", "",
 		"Default service account to use for workload identity when not specified in resources.")
+	flag.StringArrayVar(&overrideFieldManagers, "override-manager", []string{},
+		"Field manager disallowed to perform changes on managed resources.")
 	flag.CommandLine.StringVar(&watchOptions.ConfigsLabelSelector, "watch-configs-label-selector", meta.LabelKeyWatch+"="+meta.LabelValueWatchEnabled,
 		"Watch for ConfigMaps and Secrets with matching labels.")
 	flag.IntVar(&webServerPort, "web-server-port", 9080,
@@ -166,6 +171,9 @@ func main() {
 	}
 	if s := os.Getenv(defaultWorkloadIdentityServiceAccountEnvKey); s != "" {
 		defaultWorkloadIdentityServiceAccount = s
+	}
+	if s := os.Getenv(overrideManagersEnvKey); s != "" {
+		overrideFieldManagers = strings.Split(s, ",")
 	}
 
 	// auth setup.
@@ -279,12 +287,13 @@ func main() {
 		}
 
 		if err = (&controller.FluxInstanceReconciler{
-			Client:        mgr.GetClient(),
-			Scheme:        mgr.GetScheme(),
-			ClusterReader: clusterReader,
-			StoragePath:   storagePath,
-			StatusManager: controllerName,
-			EventRecorder: mgr.GetEventRecorderFor(controllerName),
+			Client:                mgr.GetClient(),
+			Scheme:                mgr.GetScheme(),
+			ClusterReader:         clusterReader,
+			StoragePath:           storagePath,
+			StatusManager:         controllerName,
+			OverrideFieldManagers: overrideFieldManagers,
+			EventRecorder:         mgr.GetEventRecorderFor(controllerName),
 		}).SetupWithManager(mgr,
 			controller.FluxInstanceReconcilerOptions{
 				RateLimiter: runtimeCtrl.GetRateLimiter(rateLimiterOptions),
@@ -329,6 +338,7 @@ func main() {
 			StatusManager:         controllerName,
 			EventRecorder:         mgr.GetEventRecorderFor(controllerName),
 			DefaultServiceAccount: defaultServiceAccount,
+			OverrideFieldManagers: overrideFieldManagers,
 			RequeueDependency:     requeueDependency,
 		}).SetupWithManager(ctx, mgr,
 			controller.ResourceSetReconcilerOptions{

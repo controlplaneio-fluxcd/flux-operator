@@ -51,8 +51,9 @@ type FluxInstanceReconciler struct {
 	Scheme        *runtime.Scheme
 	ClusterReader engine.ClusterReaderFactory
 
-	StatusManager string
-	StoragePath   string
+	StatusManager         string
+	StoragePath           string
+	OverrideFieldManagers []string
 }
 
 // +kubebuilder:rbac:groups=fluxcd.controlplane.io,resources=fluxinstances,verbs=get;list;watch;create;update;patch;delete
@@ -484,7 +485,7 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 		},
 		// Take ownership of the Flux resources if they
 		// were previously managed by other tools.
-		FieldManagers: takeOwnershipFrom([]string{"flux"}),
+		FieldManagers: takeOwnershipFrom(append([]string{"flux"}, r.OverrideFieldManagers...)),
 	}
 
 	resultSet := ssa.NewChangeSet()

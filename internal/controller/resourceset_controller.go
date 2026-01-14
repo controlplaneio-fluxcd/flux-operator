@@ -58,6 +58,7 @@ type ResourceSetReconciler struct {
 
 	StatusManager         string
 	DefaultServiceAccount string
+	OverrideFieldManagers []string
 
 	RequeueDependency time.Duration
 }
@@ -512,7 +513,7 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 		},
 		// Take ownership of existing resources and
 		// undo changes made with kubectl or helm.
-		FieldManagers: takeOwnershipFrom(nil),
+		FieldManagers: takeOwnershipFrom(r.OverrideFieldManagers),
 	}
 
 	resultSet := ssa.NewChangeSet()
