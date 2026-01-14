@@ -80,14 +80,17 @@ spec:
     env:
       - name: DEFAULT_SERVICE_ACCOUNT
         value: "flux-operator"
-      - name: DEFAULT_WORKLOAD_IDENTITY_SERVICE_ACCOUNT
-        value: "flux-operator"
       - name: REPORTING_INTERVAL
         value: "30s"
 ```
 
-The Flux Operator is also available in the Openshift and OKD
+The Flux Operator is also available in the OpenShift and OKD
 [production-ready catalog](https://github.com/redhat-openshift-ecosystem/community-operators-prod).
+
+!!! note "Environment Variables"
+    
+    Flux Operator supports various environment variables to customize its behavior on OpenShift.
+    Please see the operator [configuration guide](operator-config.md#environment-variables) for more details.
 
 ### Kubectl
 
