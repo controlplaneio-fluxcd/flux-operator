@@ -716,8 +716,6 @@ func TestGetReport_WithUserRBAC_SingleNamespaceAccess(t *testing.T) {
 }
 
 func TestGetReport_InjectsUserInfo(t *testing.T) {
-	g := NewWithT(t)
-
 	// Create the handler
 	handler := &Handler{
 		kubeClient:    kubeClient,
@@ -726,32 +724,79 @@ func TestGetReport_InjectsUserInfo(t *testing.T) {
 		namespace:     "flux-system",
 	}
 
-	// Create a user session with name set (this tests the case where Name is displayed)
-	imp := user.Impersonation{
-		Username: "info-test-user",
-		Groups:   []string{"system:authenticated"},
-	}
-	userClient, err := kubeClient.GetUserClientFromCache(imp)
-	g.Expect(err).NotTo(HaveOccurred())
+	t.Run("at least one group", func(t *testing.T) {
+		g := NewWithT(t)
 
-	userCtx := user.StoreSession(ctx, user.Details{
-		Profile: user.Profile{
-			Name: "Info Test User",
-		},
-		Impersonation: imp,
-	}, userClient)
+		// Create a user session with name set (this tests the case where Name is displayed)
+		imp := user.Impersonation{
+			Username: "info-test-user",
+			Groups:   []string{"system:authenticated"},
+		}
+		userClient, err := kubeClient.GetUserClientFromCache(imp)
+		g.Expect(err).NotTo(HaveOccurred())
 
-	// Call GetReport
-	report, err := handler.GetReport(userCtx)
-	g.Expect(err).NotTo(HaveOccurred())
-	g.Expect(report).NotTo(BeNil())
+		userCtx := user.StoreSession(ctx, user.Details{
+			Profile: user.Profile{
+				Name: "Info Test User",
+			},
+			Impersonation: imp,
+		}, userClient)
 
-	// Verify user info is injected
-	spec, found := report.Object["spec"].(map[string]any)
-	g.Expect(found).To(BeTrue())
-	userInfo, found := spec["userInfo"].(map[string]any)
-	g.Expect(found).To(BeTrue())
-	g.Expect(userInfo["username"]).To(Equal("Info Test User"))
+		// Call GetReport
+		report, err := handler.GetReport(userCtx)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(report).NotTo(BeNil())
+
+		// Verify user info is injected
+		spec, found := report.Object["spec"].(map[string]any)
+		g.Expect(found).To(BeTrue())
+		userInfo, found := spec["userInfo"].(map[string]any)
+		g.Expect(found).To(BeTrue())
+		g.Expect(userInfo["username"]).To(Equal("Info Test User"))
+		g.Expect(userInfo["impersonation"]).To(Equal(user.Impersonation{
+			Username: "info-test-user",
+			Groups:   []string{"system:authenticated"},
+		}))
+	})
+
+	t.Run("zero groups returns nil", func(t *testing.T) {
+		g := NewWithT(t)
+
+		// Create a user session with name set (this tests the case where Name is displayed)
+		imp := user.Impersonation{
+			Username: "info-test-user",
+			Groups:   []string{},
+		}
+		userClient, err := kubeClient.GetUserClientFromCache(imp)
+		g.Expect(err).NotTo(HaveOccurred())
+
+		userCtx := user.StoreSession(ctx, user.Details{
+			Profile: user.Profile{
+				Name: "Info Test User",
+			},
+			Impersonation: imp,
+		}, userClient)
+
+		// Call GetReport
+		report, err := handler.GetReport(userCtx)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(report).NotTo(BeNil())
+
+		// Verify user info is injected
+		spec, found := report.Object["spec"].(map[string]any)
+		g.Expect(found).To(BeTrue())
+		userInfo, found := spec["userInfo"].(map[string]any)
+		g.Expect(found).To(BeTrue())
+		g.Expect(userInfo["username"]).To(Equal("Info Test User"))
+		g.Expect(userInfo["impersonation"]).To(Equal(user.Impersonation{
+			Username: "info-test-user",
+			Groups:   nil,
+		}))
+		g.Expect(userInfo["impersonation"]).NotTo(Equal(user.Impersonation{
+			Username: "info-test-user",
+			Groups:   []string{},
+		}))
+	})
 }
 
 func TestGetReport_InjectsUserInfoWithRole(t *testing.T) {

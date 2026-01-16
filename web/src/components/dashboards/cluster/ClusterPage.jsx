@@ -28,11 +28,11 @@ function NoNamespaceAccessWarning({ userInfo }) {
           <p class="mt-1 text-sm text-yellow-700 dark:text-yellow-300">
             You don't have access to any namespaces. Contact your administrator to grant your group the necessary permissions.
           </p>
-          {(userInfo?.username || userInfo?.role) && (
+          {(userInfo?.impersonation) && (userInfo?.impersonation.username || userInfo?.impersonation.groups) && (
             <p class="mt-2 text-xs text-yellow-600 dark:text-yellow-400 font-mono">
-              {userInfo.username && `User: ${userInfo.username}`}
-              {userInfo.username && userInfo.role && ' · '}
-              {userInfo.role && `Groups: ${userInfo.role}`}
+              {userInfo.impersonation.username && `User: ${userInfo.impersonation.username}`}
+              {userInfo.impersonation.username && userInfo.impersonation.groups && ' · '}
+              {userInfo.impersonation.groups && `Groups: ${userInfo.impersonation.groups.join(', ')}`}
             </p>
           )}
         </div>

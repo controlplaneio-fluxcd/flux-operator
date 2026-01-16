@@ -101,7 +101,9 @@ func Permissions(ctx context.Context) Impersonation {
 	return imp
 }
 
-// UsernameAndRole returns the username and role for display purposes.
+// UsernameAndRole returns the username and role for UX purposes.
+// The information returned here is not meant for debugging RBAC.
+// For RBAC debugging purposes, display Permissions() instead.
 func UsernameAndRole(ctx context.Context) (string, string) {
 	s := LoadSession(ctx)
 	hn := os.Getenv("HOSTNAME")
