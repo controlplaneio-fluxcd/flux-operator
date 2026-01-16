@@ -108,7 +108,9 @@ type authStorage struct {
 // setAuthStorage sets the authStorage in the response cookies.
 // It first clears any existing auth storage cookies to avoid duplicates.
 // For large tokens, the value is automatically split across multiple cookies.
-func setAuthStorage(conf *config.ConfigSpec, w http.ResponseWriter, storage authStorage) {
+// It only returns an error if the storage data is too large to fit
+// within the allowed number of cookie chunks.
+func setAuthStorage(conf *config.ConfigSpec, w http.ResponseWriter, storage authStorage) error {
 	// Clear any existing auth storage cookies (including chunks).
 	clearChunkedCookiesFromResponse(w, cookieNameAuthStorage)
 
@@ -116,7 +118,7 @@ func setAuthStorage(conf *config.ConfigSpec, w http.ResponseWriter, storage auth
 	cValue := base64.RawURLEncoding.EncodeToString(b)
 
 	// Set chunked cookies (automatically handles single vs multiple cookies).
-	_ = setChunkedCookies(w, cookieNameAuthStorage, cookiePathAuthStorage, cValue,
+	return setChunkedCookies(w, cookieNameAuthStorage, cookiePathAuthStorage, cValue,
 		conf.Authentication.SessionDuration.Duration, !conf.Insecure)
 }
 
@@ -160,6 +162,7 @@ func clearCookieFromResponse(w http.ResponseWriter, name string) {
 
 // splitIntoChunks splits a string value into chunks of the specified maximum size.
 // Returns an error if the value would require more than the maximum allowed chunks.
+// It only errors if the value is too large to fit within the allowed number of chunks.
 func splitIntoChunks(value string, maxChunkSize, maxChunks int) ([]string, error) {
 	if len(value) <= maxChunkSize {
 		return []string{value}, nil
@@ -223,6 +226,8 @@ func getChunkedCookieValue(r *http.Request, baseName string) (string, error) {
 // setChunkedCookies sets a value across multiple cookies if needed.
 // For values smaller than maxChunkSize, sets a single cookie.
 // For larger values, splits across multiple cookies.
+// It only returns an error if the value is too large to fit within
+// the allowed number of chunks.
 func setChunkedCookies(w http.ResponseWriter, baseName, path, value string,
 	maxAge time.Duration, secure bool) error {
 

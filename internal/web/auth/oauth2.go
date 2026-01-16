@@ -32,12 +32,16 @@ const (
 	oauth2LoginStateAESKeySize   = 32 // 32 bytes = AES-256
 )
 
-var (
-	errInvalidOAuth2Scopes = errors.New(
-		"the OAuth2 authorization server does not support the requested scopes. " +
-			"if you are using the default scopes, please consider setting custom " +
-			"scopes in the OAuth2 configuration that are supported by your provider, " +
-			"see docs: https://fluxoperator.dev/docs/web-ui/web-config-api/")
+const (
+	errInvalidOAuth2Scopes = "The OAuth2 provider does not support the requested scopes. " +
+		"If you are using the default scopes, please consider setting custom " +
+		"scopes in the OAuth2 configuration that are supported by your provider: " +
+		"https://fluxoperator.dev/docs/web-ui/web-config-api/#oidc-provider"
+
+	logCookieTooLarge = "The credentials issued by the OAuth2 provider are too large to fit in HTTP cookies. " +
+		"If your provider is Dex with the Microsoft connector, please consider reducing " +
+		"the number of groups returned by Dex: " +
+		"https://fluxoperator.dev/docs/web-ui/sso-microsoft#restricting-the-groups-added-by-dex-to-the-id-token"
 )
 
 // oauth2Authenticator implements OAuth2 authentication.
@@ -150,10 +154,11 @@ func (o *oauth2Authenticator) serveCallback(w http.ResponseWriter, r *http.Reque
 	errURI := r.URL.Query().Get(errorURIKey)
 	if errCode != "" || errDesc != "" || errURI != "" {
 		const logMsg = "OAuth2 callback error"
-		switch errCode {
+		const invalidScope = "invalid_scope"
+		switch {
 		// Special case: it's common needing to configure the correct scopes.
-		case "invalid_scope":
-			callbackErr = errInvalidOAuth2Scopes
+		case strings.Contains(errCode, invalidScope), strings.Contains(errDesc, invalidScope):
+			callbackErr = fmt.Errorf("%s", errInvalidOAuth2Scopes)
 			log.FromContext(r.Context()).Error(callbackErr, logMsg)
 		default:
 			callbackErr = errInternalError
@@ -387,13 +392,17 @@ func (o *oauth2Authenticator) verifyTokenAndSetStorageOrLogError(
 	token *oauth2.Token, nonce ...string) (*user.Details, error) {
 
 	details, as, err := v.verifyToken(ctx, token, nonce...)
-	if err == nil {
-		setAuthStorage(o.conf, w, *as)
-		return details, nil
+	if err != nil {
+		log.FromContext(ctx).Error(err, "failed to verify token")
+		return nil, errUserError
 	}
 
-	log.FromContext(ctx).Error(err, "failed to verify token")
-	return nil, errUserError
+	if err := setAuthStorage(o.conf, w, *as); err != nil {
+		log.FromContext(ctx).Error(err, logCookieTooLarge)
+		return nil, errInternalError
+	}
+
+	return details, nil
 }
 
 // verifyAccessTokenOrDeleteStorageAndLogError verifies the access token and

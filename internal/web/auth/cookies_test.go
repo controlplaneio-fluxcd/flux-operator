@@ -223,7 +223,7 @@ func TestAuthStorage(t *testing.T) {
 			AccessToken:  "access-token-123",
 			RefreshToken: "refresh-token-456",
 		}
-		setAuthStorage(conf, rec, storage)
+		g.Expect(setAuthStorage(conf, rec, storage)).To(Succeed())
 
 		cookies := rec.Result().Cookies()
 		g.Expect(cookies).To(HaveLen(1))
@@ -443,7 +443,7 @@ func TestAuthStorageChunking(t *testing.T) {
 			AccessToken:  "short-token",
 			RefreshToken: "short-refresh",
 		}
-		setAuthStorage(conf, rec, storage)
+		g.Expect(setAuthStorage(conf, rec, storage)).To(Succeed())
 
 		cookies := rec.Result().Cookies()
 		// Count auth-storage cookies.
@@ -475,7 +475,7 @@ func TestAuthStorageChunking(t *testing.T) {
 			AccessToken:  largeToken,
 			RefreshToken: "refresh-token",
 		}
-		setAuthStorage(conf, rec, storage)
+		g.Expect(setAuthStorage(conf, rec, storage)).To(Succeed())
 
 		cookies := rec.Result().Cookies()
 
@@ -500,6 +500,29 @@ func TestAuthStorageChunking(t *testing.T) {
 		g.Expect(err).NotTo(HaveOccurred())
 		g.Expect(result.AccessToken).To(Equal(largeToken))
 		g.Expect(result.RefreshToken).To(Equal("refresh-token"))
+	})
+
+	t.Run("too large token errors out", func(t *testing.T) {
+		g := NewWithT(t)
+
+		conf := &config.ConfigSpec{
+			Insecure: false,
+			Authentication: &config.AuthenticationSpec{
+				SessionDuration: &metav1.Duration{Duration: 24 * time.Hour},
+			},
+		}
+
+		// Create a large token that exceeds chunk size.
+		largeToken := strings.Repeat("12345678901234567890", 10000)
+
+		rec := httptest.NewRecorder()
+		storage := authStorage{
+			AccessToken:  largeToken,
+			RefreshToken: "refresh-token",
+		}
+		err := setAuthStorage(conf, rec, storage)
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("value too large: requires 75 chunks"))
 	})
 
 	t.Run("backward compatibility with single cookie", func(t *testing.T) {

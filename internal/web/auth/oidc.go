@@ -11,6 +11,7 @@ import (
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
@@ -135,6 +136,7 @@ func (o *oidcVerifier) verifyAccessToken(ctx context.Context,
 	if err != nil {
 		return nil, fmt.Errorf("failed to process claims from OIDC ID token: %w", err)
 	}
+	log.FromContext(ctx).V(1).Info("OIDC authentication successful", "claims", claims)
 
 	return details, nil
 }
