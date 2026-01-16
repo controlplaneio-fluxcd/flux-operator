@@ -75,8 +75,14 @@ func (h *Handler) GetReport(ctx context.Context) (*unstructured.Unstructured, er
 	}
 
 	// Inject user info
+	impersonation := user.Permissions(ctx)
+	if len(impersonation.Groups) == 0 {
+		impersonation.Groups = nil
+	}
 	username, role := user.UsernameAndRole(ctx)
-	userInfo := make(map[string]any)
+	userInfo := map[string]any{
+		"impersonation": impersonation,
+	}
 	if username != "" {
 		userInfo["username"] = username
 	}

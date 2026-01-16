@@ -314,7 +314,7 @@ describe('ClusterPage', () => {
       const spec = {
         ...baseSpec,
         namespaces: [],
-        userInfo: { username: 'flux-user', role: 'cluster:view' }
+        userInfo: { impersonation: { username: 'flux-user', groups: ['cluster:view'] } }
       }
 
       render(<ClusterPage spec={spec} />)
@@ -327,7 +327,7 @@ describe('ClusterPage', () => {
       const spec = {
         ...baseSpec,
         namespaces: [],
-        userInfo: { username: 'flux-user' }
+        userInfo: { impersonation: { username: 'flux-user' } }
       }
 
       render(<ClusterPage spec={spec} />)
@@ -340,12 +340,12 @@ describe('ClusterPage', () => {
       const spec = {
         ...baseSpec,
         namespaces: [],
-        userInfo: { role: 'dev-team,ops-team' }
+        userInfo: { impersonation: { groups: ['dev-team', 'ops-team'] } }
       }
 
       render(<ClusterPage spec={spec} />)
 
-      expect(screen.getByText('Groups: dev-team,ops-team')).toBeInTheDocument()
+      expect(screen.getByText('Groups: dev-team, ops-team')).toBeInTheDocument()
       expect(screen.queryByText(/User:/)).not.toBeInTheDocument()
     })
 
