@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/auth/serviceaccounttoken"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -425,6 +426,102 @@ func TestResourceSetInputProviderReconciler_ProviderAuthAndSecretsCompatiblity(t
 			}
 		})
 	}
+}
+
+func TestResourceSetInputProviderReconciler_CredentialAndAudiencesValidation(t *testing.T) {
+	g := NewWithT(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test-credential-audiences-validation")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	t.Run("credential can only be ServiceAccountToken when type is OCIArtifactTag", func(t *testing.T) {
+		g := NewWithT(t)
+
+		for _, provider := range []string{
+			fluxcdv1.InputProviderACRArtifactTag,
+			fluxcdv1.InputProviderECRArtifactTag,
+			fluxcdv1.InputProviderGARArtifactTag,
+		} {
+			obj := &fluxcdv1.ResourceSetInputProvider{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-credential-" + strings.ToLower(provider),
+					Namespace: ns.Name,
+				},
+				Spec: fluxcdv1.ResourceSetInputProviderSpec{
+					Type:       provider,
+					URL:        "oci://example.com/owner/repo",
+					Credential: serviceaccounttoken.CredentialName,
+					Audiences:  []string{"aud1"},
+				},
+			}
+			err := testEnv.Create(ctx, obj)
+			g.Expect(err).To(HaveOccurred())
+			g.Expect(err.Error()).To(ContainSubstring(
+				"spec.credential can be set to 'ServiceAccountToken' only when spec.type is 'OCIArtifactTag'"))
+		}
+	})
+
+	t.Run("audiences can only be set when credential is ServiceAccountToken", func(t *testing.T) {
+		g := NewWithT(t)
+
+		obj := &fluxcdv1.ResourceSetInputProvider{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-audiences-without-credential",
+				Namespace: ns.Name,
+			},
+			Spec: fluxcdv1.ResourceSetInputProviderSpec{
+				Type:      fluxcdv1.InputProviderOCIArtifactTag,
+				URL:       "oci://example.com/owner/repo",
+				Audiences: []string{"aud1"},
+			},
+		}
+		err := testEnv.Create(ctx, obj)
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring(
+			"spec.audiences can be set only when spec.credential is set to 'ServiceAccountToken'"))
+	})
+
+	t.Run("audiences must be set when credential is ServiceAccountToken", func(t *testing.T) {
+		g := NewWithT(t)
+
+		obj := &fluxcdv1.ResourceSetInputProvider{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-credential-without-audiences",
+				Namespace: ns.Name,
+			},
+			Spec: fluxcdv1.ResourceSetInputProviderSpec{
+				Type:       fluxcdv1.InputProviderOCIArtifactTag,
+				URL:        "oci://example.com/owner/repo",
+				Credential: serviceaccounttoken.CredentialName,
+			},
+		}
+		err := testEnv.Create(ctx, obj)
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring(
+			"spec.audiences must be set when spec.credential is set to 'ServiceAccountToken'"))
+	})
+
+	t.Run("valid credential and audiences configuration", func(t *testing.T) {
+		g := NewWithT(t)
+
+		obj := &fluxcdv1.ResourceSetInputProvider{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-valid-credential-audiences",
+				Namespace: ns.Name,
+			},
+			Spec: fluxcdv1.ResourceSetInputProviderSpec{
+				Type:       fluxcdv1.InputProviderOCIArtifactTag,
+				URL:        "oci://example.com/owner/repo",
+				Credential: serviceaccounttoken.CredentialName,
+				Audiences:  []string{"aud1"},
+			},
+		}
+		err := testEnv.Create(ctx, obj, client.DryRunAll, client.FieldOwner(controllerName))
+		g.Expect(err).ToNot(HaveOccurred())
+	})
 }
 
 func TestResourceSetInputProviderReconciler_makeFilters(t *testing.T) {

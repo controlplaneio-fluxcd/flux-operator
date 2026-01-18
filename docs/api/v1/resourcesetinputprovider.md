@@ -350,6 +350,7 @@ The `.spec.serviceAccountName` field can only be used with the following provide
 - `AzureDevOpsPullRequest`
 - `AzureDevOpsBranch`
 - `AzureDevOpsTag`
+- `OCIArtifactTag` (when `.spec.credential` is set to `ServiceAccountToken`)
 - `ACRArtifactTag`
 - `ECRArtifactTag`
 - `GARArtifactTag`
@@ -358,6 +359,41 @@ When this field is not present and one of the types above is specified (and, in 
 DevOps, [`.spec.secretRef`](#secret-based) is also not specified), the operator will attempt
 to authenticate using the environment credentials, i.e. either the identity of the node or the
 operator ServiceAccount. This is called *controller-level workload identity*.
+
+##### ServiceAccountToken Credential for OCI Registries
+
+For the `OCIArtifactTag` provider [type](#type), the `.spec.credential` field can be set
+to `ServiceAccountToken` to enable authentication using a Kubernetes ServiceAccount token.
+When this credential type is used, the operator generates a ServiceAccount token and sends
+it as a bearer token to the OCI registry. This is useful for connecting to OCI registries
+that support workload identity federation.
+
+When using `ServiceAccountToken` credential, the `.spec.audiences` field is required and
+specifies the audience claims to be included in the generated JWT token. The audience
+values depend on the OCI registry provider being used.
+
+If `.spec.serviceAccountName` is specified, the token is generated for that ServiceAccount.
+Otherwise, the operator's own ServiceAccount is used to generate the token.
+
+Example:
+
+```yaml
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSetInputProvider
+metadata:
+  name: oci-provider
+  namespace: default
+spec:
+  type: OCIArtifactTag
+  url: oci://registry.example.com/my-repo
+  credential: ServiceAccountToken
+  audiences:
+    - "https://registry.example.com"
+  serviceAccountName: my-service-account # optional
+  filter:
+    semver: ">=1.0.0"
+    limit: 1
+```
 
 For configuring a Kubernetes ServiceAccount with workload identity, see the following documentation:
 

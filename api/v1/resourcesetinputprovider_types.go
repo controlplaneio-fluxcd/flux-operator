@@ -48,11 +48,33 @@ const (
 // +kubebuilder:validation:XValidation:rule="!has(self.serviceAccountName) || self.type.startsWith('AzureDevOps') || self.type.endsWith('ArtifactTag')", message="cannot specify spec.serviceAccountName when spec.type is not one of AzureDevOps* or *ArtifactTag"
 // +kubebuilder:validation:XValidation:rule="!has(self.certSecretRef) || !(self.url == 'Static' || self.type.startsWith('AzureDevOps') || (self.type.endsWith('ArtifactTag') && self.type != 'OCIArtifactTag'))", message="cannot specify spec.certSecretRef when spec.type is one of Static, AzureDevOps*, ACRArtifactTag, ECRArtifactTag or GARArtifactTag"
 // +kubebuilder:validation:XValidation:rule="!has(self.secretRef) || !(self.url == 'Static' || (self.type.endsWith('ArtifactTag') && self.type != 'OCIArtifactTag'))", message="cannot specify spec.secretRef when spec.type is one of Static, ACRArtifactTag, ECRArtifactTag or GARArtifactTag"
+// +kubebuilder:validation:XValidation:rule="!has(self.credential) || (self.credential == 'ServiceAccountToken' && self.type == 'OCIArtifactTag')", message="spec.credential can be set to 'ServiceAccountToken' only when spec.type is 'OCIArtifactTag'"
+// +kubebuilder:validation:XValidation:rule="!has(self.audiences) || size(self.audiences) == 0 || (has(self.credential) && self.credential == 'ServiceAccountToken')", message="spec.audiences can be set only when spec.credential is set to 'ServiceAccountToken'"
+// +kubebuilder:validation:XValidation:rule="!has(self.credential) || self.credential != 'ServiceAccountToken' || (has(self.audiences) && size(self.audiences) > 0)", message="spec.audiences must be set when spec.credential is set to 'ServiceAccountToken'"
 type ResourceSetInputProviderSpec struct {
 	// Type specifies the type of the input provider.
 	// +kubebuilder:validation:Enum=Static;GitHubBranch;GitHubTag;GitHubPullRequest;GitLabBranch;GitLabTag;GitLabMergeRequest;GitLabEnvironment;AzureDevOpsBranch;AzureDevOpsTag;AzureDevOpsPullRequest;OCIArtifactTag;ACRArtifactTag;ECRArtifactTag;GARArtifactTag
 	// +required
 	Type string `json:"type"`
+
+	// Credential specifies the type of credential that will be sent to the input provider.
+	// Supported values are:
+	//
+	//   - ServiceAccountToken: The operator will generate a Kubernetes ServiceAccount
+	//     token and send it as a bearer token to the provider. Currently supported only
+	//     for the OCIArtifactTag type when connecting to OCI registries that support
+	//     workload identity federation. If ServiceAccountName is not specified, the
+	//     ServiceAccount of the operator will be used to generate the token.
+	//
+	// +kubebuilder:validation:Enum=ServiceAccountToken
+	// +optional
+	Credential string `json:"credential,omitempty"`
+
+	// Audiences specifies the audience claim to be set in JWT credentials,
+	// like the ServiceAccountToken credential. Required when using JWT
+	// credentials.
+	// +optional
+	Audiences []string `json:"audiences,omitempty"`
 
 	// URL specifies the HTTP/S or OCI address of the input provider API.
 	// When connecting to a Git provider, the URL should point to the repository address.
@@ -62,10 +84,13 @@ type ResourceSetInputProviderSpec struct {
 	URL string `json:"url,omitempty"`
 
 	// ServiceAccountName specifies the name of the Kubernetes ServiceAccount
-	// used for authentication with AWS, Azure or GCP services through
-	// workload identity federation features. If not specified, the
-	// authentication for these cloud providers will use the ServiceAccount
-	// of the operator (or any other environment authentication configuration).
+	// in the same namespace as the ResourceSetInputProvider used for
+	// authentication with workload identity federation features. If
+	// not specified, the authentication will use the ServiceAccount of the
+	// operator (or any other environment authentication configuration, e.g.
+	// for cloud providers). If Type is set to OCIArtifactTag and Credential
+	// is not set, the image pull secrets of the ServiceAccount are used to
+	// authenticate to the OCI registry.
 	// +optional
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 

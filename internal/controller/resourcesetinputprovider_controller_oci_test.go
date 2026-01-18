@@ -11,6 +11,8 @@ import (
 	"testing"
 
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/auth"
+	"github.com/fluxcd/pkg/auth/serviceaccounttoken"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	kauth "github.com/google/go-containerregistry/pkg/authn/kubernetes"
 	"github.com/google/go-containerregistry/pkg/crane"
@@ -257,6 +259,89 @@ func TestResourceSetInputProviderReconciler_buildOCIOptions(t *testing.T) {
 			g.Expect(o.Keychain).To(Equal(keychain))
 		})
 	}
+}
+
+func TestResourceSetInputProviderReconciler_buildOCIOptions_ServiceAccountToken(t *testing.T) {
+	g := NewWithT(t)
+
+	r := getResourceSetInputProviderReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test-build-oci-options-sa-token")
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Create a ServiceAccount for the test.
+	sa := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-sa",
+			Namespace: ns.Name,
+		},
+	}
+	err = testEnv.Create(ctx, sa)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	t.Run("uses serviceaccounttoken provider with serviceAccountName", func(t *testing.T) {
+		g := NewWithT(t)
+
+		// Enable the feature gate for ServiceAccountToken.
+		auth.EnableObjectLevelWorkloadIdentity()
+
+		obj := &fluxcdv1.ResourceSetInputProvider{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test",
+				Namespace: ns.Name,
+			},
+			Spec: fluxcdv1.ResourceSetInputProviderSpec{
+				Type:               fluxcdv1.InputProviderOCIArtifactTag,
+				ServiceAccountName: "test-sa",
+				Credential:         serviceaccounttoken.CredentialName,
+				Audiences:          []string{"test-audience"},
+			},
+		}
+
+		const repo = "example.com/stefanprodan/podinfo"
+
+		opts, err := r.buildOCIOptions(ctx, obj, repo, nil, nil)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(opts).NotTo(BeNil())
+	})
+
+	t.Run("TLS config is applied with ServiceAccountToken credential", func(t *testing.T) {
+		g := NewWithT(t)
+
+		// Enable the feature gate for ServiceAccountToken.
+		auth.EnableObjectLevelWorkloadIdentity()
+
+		obj := &fluxcdv1.ResourceSetInputProvider{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-tls",
+				Namespace: ns.Name,
+			},
+			Spec: fluxcdv1.ResourceSetInputProviderSpec{
+				Type:               fluxcdv1.InputProviderOCIArtifactTag,
+				ServiceAccountName: "test-sa",
+				Credential:         serviceaccounttoken.CredentialName,
+				Audiences:          []string{"test-audience"},
+			},
+		}
+
+		const repo = "example.com/stefanprodan/podinfo"
+
+		tlsConfig := &tls.Config{
+			ServerName: "server.example.com",
+		}
+
+		opts, err := r.buildOCIOptions(ctx, obj, repo, tlsConfig, nil)
+		g.Expect(err).NotTo(HaveOccurred())
+
+		o := crane.GetOptions(opts...)
+
+		// Validate TLS config is set.
+		g.Expect(o.Transport).NotTo(BeNil())
+		g.Expect(o.Transport.(*http.Transport)).NotTo(BeNil())
+		g.Expect(o.Transport.(*http.Transport).TLSClientConfig.ServerName).To(Equal("server.example.com"))
+	})
 }
 
 func TestResourceSetInputProviderReconciler_InvalidOCIURL(t *testing.T) {

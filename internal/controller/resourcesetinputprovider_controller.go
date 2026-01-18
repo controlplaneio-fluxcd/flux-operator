@@ -20,6 +20,7 @@ import (
 	"github.com/fluxcd/pkg/auth/aws"
 	"github.com/fluxcd/pkg/auth/azure"
 	"github.com/fluxcd/pkg/auth/gcp"
+	"github.com/fluxcd/pkg/auth/serviceaccounttoken"
 	authutils "github.com/fluxcd/pkg/auth/utils"
 	"github.com/fluxcd/pkg/cache"
 	"github.com/fluxcd/pkg/git/github"
@@ -700,7 +701,8 @@ func (r *ResourceSetInputProviderReconciler) callOCIProvider(ctx context.Context
 	return res, nil
 }
 
-var inputProviderToCloudProvider = map[string]string{
+var ociInputProviderToAuthProvider = map[string]string{
+	fluxcdv1.InputProviderOCIArtifactTag: serviceaccounttoken.CredentialName,
 	fluxcdv1.InputProviderACRArtifactTag: azure.ProviderName,
 	fluxcdv1.InputProviderECRArtifactTag: aws.ProviderName,
 	fluxcdv1.InputProviderGARArtifactTag: gcp.ProviderName,
@@ -719,10 +721,17 @@ func (r *ResourceSetInputProviderReconciler) buildOCIOptions(ctx context.Context
 	switch {
 
 	// Configure workload identity for cloud providers.
-	case obj.Spec.Type != fluxcdv1.InputProviderOCIArtifactTag:
+	case obj.Spec.Type != fluxcdv1.InputProviderOCIArtifactTag ||
+		obj.Spec.Credential == serviceaccounttoken.CredentialName:
+
 		authOpts := []auth.Option{
 			auth.WithClient(r.Client),
 			auth.WithServiceAccountNamespace(obj.GetNamespace()),
+		}
+
+		// Configure audiences.
+		if a := obj.Spec.Audiences; len(a) > 0 {
+			authOpts = append(authOpts, auth.WithAudiences(a...))
 		}
 
 		// Configure service account.
@@ -737,7 +746,7 @@ func (r *ResourceSetInputProviderReconciler) buildOCIOptions(ctx context.Context
 		}
 
 		// Build authenticator.
-		provider := inputProviderToCloudProvider[obj.Spec.Type]
+		provider := ociInputProviderToAuthProvider[obj.Spec.Type]
 		authenticator, err := authutils.GetArtifactRegistryCredentials(ctx, provider, repo, authOpts...)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get artifact registry credentials for '%s', provider '%s': %w",
@@ -775,13 +784,13 @@ func (r *ResourceSetInputProviderReconciler) buildOCIOptions(ctx context.Context
 			}
 			opts = append(opts, crane.WithAuthFromKeychain(keychain))
 		}
+	}
 
-		// Configure TLS settings.
-		if tlsConfig != nil {
-			transport := http.DefaultTransport.(*http.Transport).Clone()
-			transport.TLSClientConfig = tlsConfig
-			opts = append(opts, crane.WithTransport(transport))
-		}
+	// Configure TLS settings.
+	if tlsConfig != nil && obj.Spec.Type == fluxcdv1.InputProviderOCIArtifactTag {
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+		transport.TLSClientConfig = tlsConfig
+		opts = append(opts, crane.WithTransport(transport))
 	}
 
 	return opts, nil
