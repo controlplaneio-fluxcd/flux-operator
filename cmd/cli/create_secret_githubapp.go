@@ -42,10 +42,11 @@ var createSecretGitHubAppCmd = &cobra.Command{
 }
 
 type createSecretGitHubAppFlags struct {
-	appID          string
-	installationID string
-	privateKeyFile string
-	baseURL        string
+	appID             string
+	installationOwner string
+	installationID    string
+	privateKeyFile    string
+	baseURL           string
 
 	annotations []string
 	labels      []string
@@ -58,8 +59,10 @@ var createSecretGitHubAppArgs createSecretGitHubAppFlags
 func init() {
 	createSecretGitHubAppCmd.Flags().StringVar(&createSecretGitHubAppArgs.appID, "app-id", "",
 		"GitHub App ID (required)")
+	createSecretGitHubAppCmd.Flags().StringVar(&createSecretGitHubAppArgs.installationOwner, "app-installation-owner", "",
+		"GitHub App Installation Owner (organization or user) (optional)")
 	createSecretGitHubAppCmd.Flags().StringVar(&createSecretGitHubAppArgs.installationID, "app-installation-id", "",
-		"GitHub App Installation ID (required)")
+		"GitHub App Installation ID (optional)")
 	createSecretGitHubAppCmd.Flags().StringVar(&createSecretGitHubAppArgs.privateKeyFile, "app-private-key-file", "",
 		"path to GitHub App private key file (required)")
 	createSecretGitHubAppCmd.Flags().StringVar(&createSecretGitHubAppArgs.baseURL, "app-base-url", "",
@@ -89,13 +92,22 @@ func createSecretGitHubAppCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Build the secret
+	var opts []secrets.GitHubAppOption
+	if owner := createSecretGitHubAppArgs.installationOwner; owner != "" {
+		opts = append(opts, secrets.WithGitHubAppInstallationOwner(owner))
+	}
+	if ID := createSecretGitHubAppArgs.installationID; ID != "" {
+		opts = append(opts, secrets.WithGitHubAppInstallationID(ID))
+	}
+	if u := createSecretGitHubAppArgs.baseURL; u != "" {
+		opts = append(opts, secrets.WithGitHubAppBaseURL(u))
+	}
 	secret, err := secrets.MakeGitHubAppSecret(
 		name,
 		*kubeconfigArgs.Namespace,
 		createSecretGitHubAppArgs.appID,
-		createSecretGitHubAppArgs.installationID,
 		string(privateKey),
-		createSecretGitHubAppArgs.baseURL,
+		opts...,
 	)
 	if err != nil {
 		return err

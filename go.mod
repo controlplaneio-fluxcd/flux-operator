@@ -14,9 +14,9 @@ require (
 	github.com/fluxcd/pkg/apis/meta v1.24.0
 	github.com/fluxcd/pkg/auth v0.34.0
 	github.com/fluxcd/pkg/cache v0.12.0
-	github.com/fluxcd/pkg/git v0.39.0
+	github.com/fluxcd/pkg/git v0.40.0
 	github.com/fluxcd/pkg/kustomize v1.24.0
-	github.com/fluxcd/pkg/runtime v0.94.0
+	github.com/fluxcd/pkg/runtime v0.95.0
 	github.com/fluxcd/pkg/ssa v0.62.0
 	github.com/fluxcd/pkg/tar v0.16.0
 	github.com/fluxcd/pkg/version v0.11.0

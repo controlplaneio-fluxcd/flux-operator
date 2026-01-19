@@ -38,7 +38,7 @@ terraform apply \
   -var flux_version="2.x" \
   -var flux_registry="ghcr.io/fluxcd" \
   -var github_app_id="1" \
-  -var github_app_installation_id="2" \
+  -var github_app_installation_owner="org" \
   -var github_app_pem="$GITHUB_APP_PEM" \
   -var git_url="https://github.com/org/repo.git" \
   -var git_ref="refs/heads/main" \
