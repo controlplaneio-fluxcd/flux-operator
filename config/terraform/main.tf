@@ -24,7 +24,7 @@ resource "kubernetes_secret" "git_auth" {
     username = var.git_token != "" ? "git" : null
     password = var.git_token != "" ? var.git_token : null
     githubAppID = var.github_app_id != "" ? var.github_app_id : null
-    githubAppInstallationID = var.github_app_installation_id != "" ? var.github_app_installation_id : null
+    githubAppInstallationOwner = var.github_app_installation_owner != "" ? var.github_app_installation_owner : null
     githubAppPrivateKey = var.github_app_pem != "" ? var.github_app_pem: null
   }
 

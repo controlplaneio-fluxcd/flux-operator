@@ -408,6 +408,7 @@ metadata:
   namespace: default
 stringData:
   githubAppID: "<GITHUB APP ID>"
+  githubAppInstallationOwner: "<GITHUB ORG OR USER>"
   githubAppInstallationID: "<GITHUB APP INSTALLATION ID>"
   githubAppBaseURL: <github-enterprise-api-url> # optional, for self-hosted GitHub Enterprise
   githubAppPrivateKey: |
@@ -423,6 +424,11 @@ spec:
   secretRef:
     name: github-app
 ```
+
+Exactly one of `githubAppInstallationOwner` or `githubAppInstallationID` must be provided.
+If neither or both are provided, the reconciliation will fail with a misconfiguration error.
+When `githubAppInstallationOwner` is provided, the operator will look for the installation
+ID corresponding to the owner using the GitHub API.
 
 The GitHub App ID and Installation ID are integer numbers, so remember to quote them in the secret
 if using the `stringData` field as all values in this field must be strings.
