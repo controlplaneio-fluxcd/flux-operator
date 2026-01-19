@@ -22,10 +22,18 @@ config:
     type: OAuth2
     oauth2:
       provider: OIDC
-      clientID: 2d01bd48-7914-4b50-9667-068be6afd2f2           # App registration's "Application (client) ID" value.
-      clientSecret: "O.y8Q~MGIm9B.ahUlOx376EP7l5mu9xgIet6hdBD" # App registration's "Client secret" value.
-      issuerURL: https://login.microsoftonline.com/4bd94393-a3a0-ab26-4c05-bfc69377f6c0/v2.0 # URL containing tenant ID.
-      scopes: [openid, profile, email, offline_access]         # Scopes supported by Microsoft Entra OIDC.
+
+      # App registration's "Application (client) ID" value.
+      clientID: 2d01bd48-7914-4b50-9667-068be6afd2f2
+
+      # App registration's "Client secret" value.
+      clientSecret: "O.y8Q~MGIm9B.ahUlOx376EP7l5mu9xgIet6hdBD"
+
+      # URL containing tenant ID.
+      issuerURL: https://login.microsoftonline.com/4bd94393-a3a0-ab26-4c05-bfc69377f6c0/v2.0
+
+      # Scopes supported by Microsoft Entra OIDC.
+      scopes: [openid, profile, email, offline_access]
 ```
 
 In order to receive groups from Microsoft Entra, you need to configure the
