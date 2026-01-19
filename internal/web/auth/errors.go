@@ -5,6 +5,7 @@ package auth
 
 import (
 	"errors"
+	"strings"
 )
 
 var (
@@ -16,7 +17,7 @@ var (
 // avoids exposing internal error details that could aid attackers.
 func sanitizeErrorMessage(err error) string {
 	switch {
-	case errors.Is(err, errInternalError), errors.Is(err, errInvalidOAuth2Scopes):
+	case errors.Is(err, errInternalError), err != nil && strings.Contains(err.Error(), errInvalidOAuth2Scopes):
 		return "An internal error occurred. Please try again. Contact your administrator if the problem persists."
 	default:
 		return "Authentication failed. Please try again."

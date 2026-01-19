@@ -29,12 +29,12 @@ func TestSanitizeErrorMessage(t *testing.T) {
 		},
 		{
 			name:     "invalid scopes error returns generic message",
-			err:      errInvalidOAuth2Scopes,
+			err:      errors.New(errInvalidOAuth2Scopes),
 			expected: "An internal error occurred. Please try again. Contact your administrator if the problem persists.",
 		},
 		{
 			name:     "wrapped invalid scopes error returns generic message",
-			err:      fmt.Errorf("scope issue: %w", errInvalidOAuth2Scopes),
+			err:      fmt.Errorf("scope issue: %s", errInvalidOAuth2Scopes),
 			expected: "An internal error occurred. Please try again. Contact your administrator if the problem persists.",
 		},
 		{
