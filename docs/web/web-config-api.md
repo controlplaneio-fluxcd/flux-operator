@@ -149,10 +149,18 @@ spec:
     type: OAuth2
     oauth2:
       provider: OIDC
-      clientID: flux-web                          # Required: OAuth2 client ID
-      clientSecret: flux-web-secret               # Required: OAuth2 client secret
-      issuerURL: https://auth.example.com        # Required: OIDC issuer URL
-      scopes:                                    # Optional: custom scopes to request instead of defaults
+
+      # Required: OAuth2 client ID
+      clientID: flux-web
+
+      # Required: OAuth2 client secret
+      clientSecret: flux-web-secret
+
+      # Required: OIDC issuer URL
+      issuerURL: https://auth.example.com
+
+      # Optional: custom scopes to request instead of defaults
+      scopes:
         - groups
         - email
 ```
