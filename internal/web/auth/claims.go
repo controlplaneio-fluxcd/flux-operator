@@ -135,6 +135,11 @@ func newClaimsProcessor(conf *config.ConfigSpec) (claimsProcessorFunc, error) {
 			imp.Groups = []string{}
 		}
 
+		// Sanitize and validate the extracted impersonation.
+		if err := imp.SanitizeAndValidate(); err != nil {
+			return nil, fmt.Errorf("impersonation validation failed: %w", err)
+		}
+
 		return &user.Details{
 			Profile:       profile,
 			Impersonation: imp,

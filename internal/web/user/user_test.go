@@ -11,6 +11,123 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+func TestImpersonation_SanitizeAndValidate(t *testing.T) {
+	for _, tt := range []struct {
+		name         string
+		imp          Impersonation
+		wantErr      string
+		wantUsername string
+		wantGroups   []string
+	}{
+		{
+			name: "valid username only",
+			imp: Impersonation{
+				Username: "user@example.com",
+			},
+			wantUsername: "user@example.com",
+			wantGroups:   []string{},
+		},
+		{
+			name: "valid groups only",
+			imp: Impersonation{
+				Groups: []string{"group1", "group2"},
+			},
+			wantUsername: "",
+			wantGroups:   []string{"group1", "group2"},
+		},
+		{
+			name: "valid username and groups",
+			imp: Impersonation{
+				Username: "user@example.com",
+				Groups:   []string{"admin", "developer"},
+			},
+			wantUsername: "user@example.com",
+			wantGroups:   []string{"admin", "developer"},
+		},
+		{
+			name: "trims whitespace from username",
+			imp: Impersonation{
+				Username: "  user@example.com  ",
+				Groups:   []string{"group1"},
+			},
+			wantUsername: "user@example.com",
+			wantGroups:   []string{"group1"},
+		},
+		{
+			name: "trims whitespace from groups",
+			imp: Impersonation{
+				Username: "user@example.com",
+				Groups:   []string{"  group1  ", "  group2  "},
+			},
+			wantUsername: "user@example.com",
+			wantGroups:   []string{"group1", "group2"},
+		},
+		{
+			name: "sorts groups alphabetically",
+			imp: Impersonation{
+				Username: "user@example.com",
+				Groups:   []string{"zebra", "alpha", "middle"},
+			},
+			wantUsername: "user@example.com",
+			wantGroups:   []string{"alpha", "middle", "zebra"},
+		},
+		{
+			name: "nil groups becomes empty slice",
+			imp: Impersonation{
+				Username: "user@example.com",
+				Groups:   nil,
+			},
+			wantUsername: "user@example.com",
+			wantGroups:   []string{},
+		},
+		{
+			name: "missing both username and groups fails",
+			imp: Impersonation{
+				Username: "",
+				Groups:   []string{},
+			},
+			wantErr: "at least one of 'username' or 'groups' must be set for user impersonation",
+		},
+		{
+			name: "whitespace-only username with no groups fails",
+			imp: Impersonation{
+				Username: "   ",
+				Groups:   []string{},
+			},
+			wantErr: "at least one of 'username' or 'groups' must be set for user impersonation",
+		},
+		{
+			name: "empty string in groups fails",
+			imp: Impersonation{
+				Username: "user@example.com",
+				Groups:   []string{"group1", "", "group2"},
+			},
+			wantErr: "group[0] is an empty string",
+		},
+		{
+			name: "whitespace-only group becomes empty string and fails",
+			imp: Impersonation{
+				Username: "user@example.com",
+				Groups:   []string{"group1", "   "},
+			},
+			wantErr: "group[0] is an empty string",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			err := tt.imp.SanitizeAndValidate()
+			if tt.wantErr == "" {
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(tt.imp.Username).To(Equal(tt.wantUsername))
+				g.Expect(tt.imp.Groups).To(Equal(tt.wantGroups))
+			} else {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr))
+			}
+		})
+	}
+}
+
 func TestSessionKey(t *testing.T) {
 	t.Run("nil session returns privileged-user", func(t *testing.T) {
 		g := NewWithT(t)
