@@ -24,8 +24,7 @@ describe('UserMenu', () => {
     reportData.value = {
       spec: {
         userInfo: {
-          username: '@flux-user',
-          role: 'cluster:view'
+          username: '@flux-user'
         }
       }
     }
@@ -93,7 +92,6 @@ describe('UserMenu', () => {
       render(<UserMenu />)
 
       expect(screen.getByText('@flux-user')).toBeInTheDocument()
-      expect(screen.getByText('cluster:view')).toBeInTheDocument()
     })
 
     it('should render mobile close button', () => {

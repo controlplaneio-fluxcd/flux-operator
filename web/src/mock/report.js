@@ -243,8 +243,24 @@ export const mockReport = {
       'registry'
     ],
     userInfo: {
-      username: 'flux-user',
-      role: 'cluster:view'
+      username: 'Flux User',
+      impersonation: {
+        username: "user@example.com",
+        groups: [
+          "fluxcd:maintainers"
+        ]
+      },
+      provider: {
+        "iss":   "https://accounts.example.com",
+        "sub":   "1234567890",
+        "iat":   Math.floor(Date.now() / 1000),
+        "email": "user@example.com",
+        "name":  "Flux User",
+        "groups": [
+          "fluxcd/maintainers",
+          "fluxcd/developers"
+        ]
+      }
     }
   }
 }
