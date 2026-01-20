@@ -93,6 +93,7 @@ func (i *initializedOIDCProvider) config() *oauth2.Config {
 // newVerifier implements initializedOAuth2Provider.
 func (i *initializedOIDCProvider) newVerifier(ctx context.Context) (oauth2Verifier, error) {
 	return &oidcVerifier{
+		conf:          i.conf,
 		verifier:      i.provider.VerifierContext(ctx, &oidc.Config{ClientID: i.conf.Authentication.OAuth2.ClientID}),
 		processClaims: i.processClaims,
 	}, nil
@@ -100,6 +101,7 @@ func (i *initializedOIDCProvider) newVerifier(ctx context.Context) (oauth2Verifi
 
 // oidcVerifier implements oauth2Verifier.
 type oidcVerifier struct {
+	conf          *config.ConfigSpec
 	verifier      *oidc.IDTokenVerifier
 	processClaims claimsProcessorFunc
 }
@@ -107,6 +109,8 @@ type oidcVerifier struct {
 // verifyAccessToken implements oauth2Verifier.
 func (o *oidcVerifier) verifyAccessToken(ctx context.Context,
 	accessToken string, nonce ...string) (*user.Details, error) {
+
+	l := log.FromContext(ctx)
 
 	idToken, err := o.verifier.Verify(ctx, accessToken)
 	if err != nil {
@@ -117,6 +121,7 @@ func (o *oidcVerifier) verifyAccessToken(ctx context.Context,
 	if err := idToken.Claims(&claims); err != nil {
 		return nil, fmt.Errorf("failed to extract claims from OIDC ID token: %w", err)
 	}
+	l.V(1).Info("OIDC authentication successful", "claims", claims)
 
 	if len(nonce) > 0 {
 		tokenNonce, ok := claims["nonce"]
@@ -134,9 +139,11 @@ func (o *oidcVerifier) verifyAccessToken(ctx context.Context,
 
 	details, err := o.processClaims(ctx, claims)
 	if err != nil {
+		l.Error(err, "failed to process claims from OIDC ID token",
+			"claimsProcessor", o.conf.Authentication.OAuth2.ClaimsProcessorSpec)
 		return nil, fmt.Errorf("failed to process claims from OIDC ID token: %w", err)
 	}
-	log.FromContext(ctx).V(1).Info("OIDC authentication successful", "claims", claims)
+	details.Provider = claims
 
 	return details, nil
 }

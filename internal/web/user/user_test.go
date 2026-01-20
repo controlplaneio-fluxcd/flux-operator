@@ -25,7 +25,7 @@ func TestImpersonation_SanitizeAndValidate(t *testing.T) {
 				Username: "user@example.com",
 			},
 			wantUsername: "user@example.com",
-			wantGroups:   []string{},
+			wantGroups:   nil,
 		},
 		{
 			name: "valid groups only",
@@ -72,13 +72,13 @@ func TestImpersonation_SanitizeAndValidate(t *testing.T) {
 			wantGroups:   []string{"alpha", "middle", "zebra"},
 		},
 		{
-			name: "nil groups becomes empty slice",
+			name: "nil groups stays nil",
 			imp: Impersonation{
 				Username: "user@example.com",
 				Groups:   nil,
 			},
 			wantUsername: "user@example.com",
-			wantGroups:   []string{},
+			wantGroups:   nil,
 		},
 		{
 			name: "missing both username and groups fails",
@@ -124,6 +124,55 @@ func TestImpersonation_SanitizeAndValidate(t *testing.T) {
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr))
 			}
+		})
+	}
+}
+
+func TestImpersonation_IsEmpty(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		imp      Impersonation
+		expected bool
+	}{
+		{
+			name:     "empty username and nil groups is empty",
+			imp:      Impersonation{},
+			expected: true,
+		},
+		{
+			name: "empty username and empty groups is empty",
+			imp: Impersonation{
+				Username: "",
+				Groups:   []string{},
+			},
+			expected: true,
+		},
+		{
+			name: "username only is not empty",
+			imp: Impersonation{
+				Username: "user@example.com",
+			},
+			expected: false,
+		},
+		{
+			name: "groups only is not empty",
+			imp: Impersonation{
+				Groups: []string{"group1"},
+			},
+			expected: false,
+		},
+		{
+			name: "username and groups is not empty",
+			imp: Impersonation{
+				Username: "user@example.com",
+				Groups:   []string{"group1"},
+			},
+			expected: false,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			g.Expect(tt.imp.IsEmpty()).To(Equal(tt.expected))
 		})
 	}
 }
@@ -338,7 +387,57 @@ func TestPermissions(t *testing.T) {
 	})
 }
 
-func TestUsernameAndRole(t *testing.T) {
+func TestProvider(t *testing.T) {
+	t.Run("returns Provider from session", func(t *testing.T) {
+		g := NewWithT(t)
+
+		ctx := context.Background()
+		providerDetails := map[string]any{
+			"iss":   "https://example.com",
+			"sub":   "user123",
+			"email": "user@example.com",
+		}
+		details := Details{
+			Impersonation: Impersonation{
+				Username: "test-user",
+				Groups:   []string{"group1"},
+			},
+			Provider: providerDetails,
+		}
+
+		ctx = StoreSession(ctx, details, nil)
+		result := Provider(ctx)
+
+		g.Expect(result).To(Equal(providerDetails))
+	})
+
+	t.Run("returns nil when no session", func(t *testing.T) {
+		g := NewWithT(t)
+
+		ctx := context.Background()
+		result := Provider(ctx)
+
+		g.Expect(result).To(BeNil())
+	})
+
+	t.Run("returns nil when session has no provider", func(t *testing.T) {
+		g := NewWithT(t)
+
+		ctx := context.Background()
+		details := Details{
+			Impersonation: Impersonation{
+				Username: "test-user",
+			},
+		}
+
+		ctx = StoreSession(ctx, details, nil)
+		result := Provider(ctx)
+
+		g.Expect(result).To(BeNil())
+	})
+}
+
+func TestUsername(t *testing.T) {
 	t.Run("returns kubeconfig dev when no session and no HOSTNAME", func(t *testing.T) {
 		g := NewWithT(t)
 
@@ -347,10 +446,9 @@ func TestUsernameAndRole(t *testing.T) {
 		os.Unsetenv("HOSTNAME") //nolint:errcheck
 
 		ctx := context.Background()
-		username, role := UsernameAndRole(ctx)
+		username := Username(ctx)
 
 		g.Expect(username).To(Equal("kubeconfig (dev)"))
-		g.Expect(role).To(BeEmpty())
 	})
 
 	t.Run("returns hostname when no session but HOSTNAME set", func(t *testing.T) {
@@ -359,13 +457,12 @@ func TestUsernameAndRole(t *testing.T) {
 		t.Setenv("HOSTNAME", "flux-operator-pod-abc123")
 
 		ctx := context.Background()
-		username, role := UsernameAndRole(ctx)
+		username := Username(ctx)
 
 		g.Expect(username).To(Equal("flux-operator-pod-abc123"))
-		g.Expect(role).To(BeEmpty())
 	})
 
-	t.Run("returns profile name with empty role when session has name", func(t *testing.T) {
+	t.Run("returns profile name when session has name", func(t *testing.T) {
 		g := NewWithT(t)
 
 		ctx := context.Background()
@@ -378,13 +475,12 @@ func TestUsernameAndRole(t *testing.T) {
 		}
 
 		ctx = StoreSession(ctx, details, nil)
-		username, role := UsernameAndRole(ctx)
+		username := Username(ctx)
 
 		g.Expect(username).To(Equal("John Doe"))
-		g.Expect(role).To(BeEmpty())
 	})
 
-	t.Run("returns username and groups as role when session has no name", func(t *testing.T) {
+	t.Run("returns username when session has no name", func(t *testing.T) {
 		g := NewWithT(t)
 
 		ctx := context.Background()
@@ -396,13 +492,12 @@ func TestUsernameAndRole(t *testing.T) {
 		}
 
 		ctx = StoreSession(ctx, details, nil)
-		username, role := UsernameAndRole(ctx)
+		username := Username(ctx)
 
 		g.Expect(username).To(Equal("john@example.com"))
-		g.Expect(role).To(Equal("admins, developers"))
 	})
 
-	t.Run("returns username with empty role when no groups", func(t *testing.T) {
+	t.Run("returns username when no groups", func(t *testing.T) {
 		g := NewWithT(t)
 
 		ctx := context.Background()
@@ -414,9 +509,25 @@ func TestUsernameAndRole(t *testing.T) {
 		}
 
 		ctx = StoreSession(ctx, details, nil)
-		username, role := UsernameAndRole(ctx)
+		username := Username(ctx)
 
 		g.Expect(username).To(Equal("john@example.com"))
-		g.Expect(role).To(BeEmpty())
+	})
+
+	t.Run("returns placeholder when session has no name and no username", func(t *testing.T) {
+		g := NewWithT(t)
+
+		ctx := context.Background()
+		details := Details{
+			Impersonation: Impersonation{
+				Username: "",
+				Groups:   []string{"some-group"},
+			},
+		}
+
+		ctx = StoreSession(ctx, details, nil)
+		username := Username(ctx)
+
+		g.Expect(username).To(Equal("unknown"))
 	})
 }

@@ -190,7 +190,7 @@ func TestAnonymousAuthenticationSpec_Validate(t *testing.T) {
 				Username: "test-user",
 			},
 			wantUsername: "test-user",
-			wantGroups:   []string{},
+			wantGroups:   nil,
 		},
 		{
 			name: "has groups only",
@@ -215,7 +215,7 @@ func TestAnonymousAuthenticationSpec_Validate(t *testing.T) {
 				Username: "  test-user  ",
 			},
 			wantUsername: "test-user",
-			wantGroups:   []string{},
+			wantGroups:   nil,
 		},
 		{
 			name: "trims whitespace from groups",
