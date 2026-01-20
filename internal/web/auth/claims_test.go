@@ -133,7 +133,7 @@ func TestClaimsProcessorFunc(t *testing.T) {
 			wantGroups:      []string{"group1"},
 		},
 		{
-			name: "returns empty groups when groups claim missing",
+			name: "returns nil groups when groups claim missing",
 			conf: validOAuth2ConfigSpec(),
 			claims: map[string]any{
 				"email": "user@example.com",
@@ -141,7 +141,7 @@ func TestClaimsProcessorFunc(t *testing.T) {
 			},
 			wantProfileName: "Test User",
 			wantUsername:    "user@example.com",
-			wantGroups:      []string{},
+			wantGroups:      nil,
 		},
 		{
 			name: "extracts variables and uses in validation",
@@ -162,7 +162,7 @@ func TestClaimsProcessorFunc(t *testing.T) {
 			},
 			wantProfileName: "Test User",
 			wantUsername:    "user@example.com",
-			wantGroups:      []string{},
+			wantGroups:      nil,
 		},
 		{
 			name: "validation fails with message when expression returns false",
@@ -214,7 +214,7 @@ func TestClaimsProcessorFunc(t *testing.T) {
 			},
 			wantProfileName: "cooluser",
 			wantUsername:    "user@example.com",
-			wantGroups:      []string{},
+			wantGroups:      nil,
 		},
 		{
 			name: "impersonation validation fails when username and groups are empty",
@@ -263,7 +263,7 @@ func TestClaimsProcessorFunc(t *testing.T) {
 			},
 			wantProfileName: "Test User",
 			wantUsername:    "user@example.com",
-			wantGroups:      []string{},
+			wantGroups:      nil,
 		},
 		{
 			name: "impersonation sanitizes and sorts groups",

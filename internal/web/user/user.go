@@ -15,6 +15,7 @@ import (
 type Details struct {
 	Profile
 	Impersonation
+	Provider map[string]any
 }
 
 // Profile holds the user profile information for display purposes.
@@ -28,17 +29,22 @@ type Impersonation struct {
 	Groups   []string `json:"groups"`
 }
 
+// IsEmpty checks if the impersonation details are empty.
+func (imp *Impersonation) IsEmpty() bool {
+	return imp.Username == "" && len(imp.Groups) == 0
+}
+
 // SanitizeAndValidate sanitizes and validates the user impersonation details.
 func (imp *Impersonation) SanitizeAndValidate() error {
 	imp.Username = strings.TrimSpace(imp.Username)
 	for i, g := range imp.Groups {
 		imp.Groups[i] = strings.TrimSpace(g)
 	}
-	if imp.Groups == nil {
-		imp.Groups = []string{}
+	if len(imp.Groups) == 0 {
+		imp.Groups = nil
 	}
 	slices.Sort(imp.Groups)
-	if imp.Username == "" && len(imp.Groups) == 0 {
+	if imp.IsEmpty() {
 		return fmt.Errorf("at least one of 'username' or 'groups' must be set for user impersonation")
 	}
 	for i, g := range imp.Groups {
@@ -122,10 +128,19 @@ func Permissions(ctx context.Context) Impersonation {
 	return imp
 }
 
-// UsernameAndRole returns the username and role for UX purposes.
+// Provider returns the user's authentication provider details from the session in the context.
+func Provider(ctx context.Context) map[string]any {
+	var p map[string]any
+	if s := LoadSession(ctx); s != nil {
+		p = s.Provider
+	}
+	return p
+}
+
+// Username returns the username for UX purposes.
 // The information returned here is not meant for debugging RBAC.
-// For RBAC debugging purposes, display Permissions() instead.
-func UsernameAndRole(ctx context.Context) (string, string) {
+// For RBAC debugging purposes, display Permissions() and Provider() instead.
+func Username(ctx context.Context) string {
 	s := LoadSession(ctx)
 	hn := os.Getenv("HOSTNAME")
 
@@ -133,19 +148,23 @@ func UsernameAndRole(ctx context.Context) (string, string) {
 	case s == nil && hn == "":
 		// Authentication is not configured, and no pod hostname is set.
 		// We are using a local kubeconfig in development mode.
-		return "kubeconfig (dev)", ""
+		return "kubeconfig (dev)"
 	case s == nil:
 		// Authentication is not configured, but pod hostname is set.
 		// We are using the pod's service account.
-		return hn, ""
+		return hn
 	case s.Name != "":
 		// We are using an identity provider.
 		// Then only name is relevant for display.
-		return s.Name, ""
+		return s.Name
 	default:
 		// We are using an identity provider that does not provide
 		// a name, or we are using Anonymous authentication.
-		// Return username and role (groups).
-		return s.Username, strings.Join(s.Groups, ", ")
+
+		// Do we have at least a username?
+		if s.Username != "" {
+			return s.Username
+		}
+		return "unknown"
 	}
 }

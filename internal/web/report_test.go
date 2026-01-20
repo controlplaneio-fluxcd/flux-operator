@@ -765,7 +765,7 @@ func TestGetReport_InjectsUserInfo(t *testing.T) {
 		// Create a user session with name set (this tests the case where Name is displayed)
 		imp := user.Impersonation{
 			Username: "info-test-user",
-			Groups:   []string{},
+			Groups:   nil,
 		}
 		userClient, err := kubeClient.GetUserClientFromCache(imp)
 		g.Expect(err).NotTo(HaveOccurred())
@@ -834,5 +834,128 @@ func TestGetReport_InjectsUserInfoWithRole(t *testing.T) {
 	userInfo, found := spec["userInfo"].(map[string]any)
 	g.Expect(found).To(BeTrue())
 	g.Expect(userInfo["username"]).To(Equal("info-test-user"))
-	g.Expect(userInfo["role"]).To(Equal("admin, developers"))
+}
+
+func TestGetReport_InjectsUserInfoWithProvider(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	// Create provider details (simulating OIDC claims)
+	providerDetails := map[string]any{
+		"iss":   "https://accounts.example.com",
+		"sub":   "1234567890",
+		"email": "user@example.com",
+		"name":  "Test User",
+	}
+
+	// Create a user session with provider details
+	imp := user.Impersonation{
+		Username: "provider-test-user",
+		Groups:   []string{"system:authenticated"},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile:       user.Profile{Name: "Provider Test User"},
+		Impersonation: imp,
+		Provider:      providerDetails,
+	}, userClient)
+
+	// Call GetReport
+	report, err := handler.GetReport(userCtx)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(report).NotTo(BeNil())
+
+	// Verify provider info is injected in userInfo
+	spec, found := report.Object["spec"].(map[string]any)
+	g.Expect(found).To(BeTrue())
+	userInfo, found := spec["userInfo"].(map[string]any)
+	g.Expect(found).To(BeTrue())
+	g.Expect(userInfo["username"]).To(Equal("Provider Test User"))
+	g.Expect(userInfo["provider"]).To(Equal(providerDetails))
+}
+
+func TestGetReport_UserInfoProviderIsNilWhenNotSet(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	// Create a user session without provider details
+	imp := user.Impersonation{
+		Username: "no-provider-test-user",
+		Groups:   []string{"system:authenticated"},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile:       user.Profile{Name: "No Provider Test User"},
+		Impersonation: imp,
+		// Provider not set
+	}, userClient)
+
+	// Call GetReport
+	report, err := handler.GetReport(userCtx)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(report).NotTo(BeNil())
+
+	// Verify provider is nil in userInfo
+	spec, found := report.Object["spec"].(map[string]any)
+	g.Expect(found).To(BeTrue())
+	userInfo, found := spec["userInfo"].(map[string]any)
+	g.Expect(found).To(BeTrue())
+	g.Expect(userInfo["username"]).To(Equal("No Provider Test User"))
+	g.Expect(userInfo["provider"]).To(BeNil())
+}
+
+func TestGetReport_NoAuthConfigured_UserInfoOnlyContainsUsername(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create the handler with the test kubeclient
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	// Call GetReport with a plain context (no user session stored).
+	// This simulates the case when authentication is not configured.
+	report, err := handler.GetReport(ctx)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(report).NotTo(BeNil())
+
+	// Verify the report structure
+	spec, found := report.Object["spec"].(map[string]any)
+	g.Expect(found).To(BeTrue())
+
+	// Verify userInfo is present
+	userInfo, found := spec["userInfo"].(map[string]any)
+	g.Expect(found).To(BeTrue())
+
+	// Verify username is present (will be "kubeconfig (dev)" or hostname when no auth)
+	_, hasUsername := userInfo["username"]
+	g.Expect(hasUsername).To(BeTrue(), "userInfo should contain 'username'")
+
+	// Verify impersonation is NOT present (since auth is not configured, Permissions().IsEmpty() == true)
+	_, hasImpersonation := userInfo["impersonation"]
+	g.Expect(hasImpersonation).To(BeFalse(), "userInfo should NOT contain 'impersonation' when auth is not configured")
+
+	// Verify provider is NOT present (since auth is not configured, Provider() returns nil)
+	_, hasProvider := userInfo["provider"]
+	g.Expect(hasProvider).To(BeFalse(), "userInfo should NOT contain 'provider' when auth is not configured")
 }
