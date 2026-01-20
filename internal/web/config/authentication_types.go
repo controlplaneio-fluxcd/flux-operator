@@ -12,6 +12,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fluxcd/pkg/runtime/cel"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
 
 const (
@@ -139,9 +141,11 @@ func (a *AnonymousAuthenticationSpec) Configured() bool { return a != nil }
 
 // Validate validates the AnonymousAuthenticationSpec configuration.
 func (a *AnonymousAuthenticationSpec) Validate() error {
-	if a.Username == "" && len(a.Groups) == 0 {
-		return fmt.Errorf("at least one of 'username' or 'groups' must be set for Anonymous authentication")
+	imp := (user.Impersonation)(*a)
+	if err := imp.SanitizeAndValidate(); err != nil {
+		return fmt.Errorf("invalid anonymous authentication impersonation: %w", err)
 	}
+	*a = (AnonymousAuthenticationSpec)(imp)
 	return nil
 }
 

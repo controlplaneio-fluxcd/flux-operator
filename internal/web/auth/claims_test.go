@@ -216,6 +216,73 @@ func TestClaimsProcessorFunc(t *testing.T) {
 			wantUsername:    "user@example.com",
 			wantGroups:      []string{},
 		},
+		{
+			name: "impersonation validation fails when username and groups are empty",
+			conf: func() *config.ConfigSpec {
+				c := validOAuth2ConfigSpec()
+				c.Authentication.OAuth2.Impersonation = &config.ImpersonationSpec{
+					Username: "''",
+					Groups:   "[]",
+				}
+				return c
+			}(),
+			claims: map[string]any{
+				"email": "user@example.com",
+				"name":  "Test User",
+			},
+			wantErr: "impersonation validation failed: at least one of 'username' or 'groups' must be set",
+		},
+		{
+			name: "impersonation validation fails when group is empty string",
+			conf: func() *config.ConfigSpec {
+				c := validOAuth2ConfigSpec()
+				c.Authentication.OAuth2.Impersonation = &config.ImpersonationSpec{
+					Username: "claims.email",
+					Groups:   "['group1', '']",
+				}
+				return c
+			}(),
+			claims: map[string]any{
+				"email": "user@example.com",
+				"name":  "Test User",
+			},
+			wantErr: "impersonation validation failed: group[0] is an empty string",
+		},
+		{
+			name: "impersonation sanitizes whitespace from username",
+			conf: func() *config.ConfigSpec {
+				c := validOAuth2ConfigSpec()
+				c.Authentication.OAuth2.Impersonation = &config.ImpersonationSpec{
+					Username: "'  user@example.com  '",
+					Groups:   "[]",
+				}
+				return c
+			}(),
+			claims: map[string]any{
+				"name": "Test User",
+			},
+			wantProfileName: "Test User",
+			wantUsername:    "user@example.com",
+			wantGroups:      []string{},
+		},
+		{
+			name: "impersonation sanitizes and sorts groups",
+			conf: func() *config.ConfigSpec {
+				c := validOAuth2ConfigSpec()
+				c.Authentication.OAuth2.Impersonation = &config.ImpersonationSpec{
+					Username: "claims.email",
+					Groups:   "['  zebra  ', '  alpha  ']",
+				}
+				return c
+			}(),
+			claims: map[string]any{
+				"email": "user@example.com",
+				"name":  "Test User",
+			},
+			wantProfileName: "Test User",
+			wantUsername:    "user@example.com",
+			wantGroups:      []string{"alpha", "zebra"},
+		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)

@@ -28,6 +28,27 @@ type Impersonation struct {
 	Groups   []string `json:"groups"`
 }
 
+// SanitizeAndValidate sanitizes and validates the user impersonation details.
+func (imp *Impersonation) SanitizeAndValidate() error {
+	imp.Username = strings.TrimSpace(imp.Username)
+	for i, g := range imp.Groups {
+		imp.Groups[i] = strings.TrimSpace(g)
+	}
+	if imp.Groups == nil {
+		imp.Groups = []string{}
+	}
+	slices.Sort(imp.Groups)
+	if imp.Username == "" && len(imp.Groups) == 0 {
+		return fmt.Errorf("at least one of 'username' or 'groups' must be set for user impersonation")
+	}
+	for i, g := range imp.Groups {
+		if g == "" {
+			return fmt.Errorf("group[%d] is an empty string", i)
+		}
+	}
+	return nil
+}
+
 // session holds the user session information during the life of a request.
 type session struct {
 	Details

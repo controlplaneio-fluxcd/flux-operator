@@ -173,9 +173,11 @@ func TestAnonymousAuthenticationSpec_Configured(t *testing.T) {
 
 func TestAnonymousAuthenticationSpec_Validate(t *testing.T) {
 	for _, tt := range []struct {
-		name    string
-		spec    *AnonymousAuthenticationSpec
-		wantErr string
+		name         string
+		spec         *AnonymousAuthenticationSpec
+		wantErr      string
+		wantUsername string
+		wantGroups   []string
 	}{
 		{
 			name:    "missing both username and groups",
@@ -187,14 +189,16 @@ func TestAnonymousAuthenticationSpec_Validate(t *testing.T) {
 			spec: &AnonymousAuthenticationSpec{
 				Username: "test-user",
 			},
-			wantErr: "",
+			wantUsername: "test-user",
+			wantGroups:   []string{},
 		},
 		{
 			name: "has groups only",
 			spec: &AnonymousAuthenticationSpec{
 				Groups: []string{"group1", "group2"},
 			},
-			wantErr: "",
+			wantUsername: "",
+			wantGroups:   []string{"group1", "group2"},
 		},
 		{
 			name: "has both username and groups",
@@ -202,7 +206,56 @@ func TestAnonymousAuthenticationSpec_Validate(t *testing.T) {
 				Username: "test-user",
 				Groups:   []string{"group1"},
 			},
-			wantErr: "",
+			wantUsername: "test-user",
+			wantGroups:   []string{"group1"},
+		},
+		{
+			name: "trims whitespace from username",
+			spec: &AnonymousAuthenticationSpec{
+				Username: "  test-user  ",
+			},
+			wantUsername: "test-user",
+			wantGroups:   []string{},
+		},
+		{
+			name: "trims whitespace from groups",
+			spec: &AnonymousAuthenticationSpec{
+				Groups: []string{"  group1  ", "  group2  "},
+			},
+			wantUsername: "",
+			wantGroups:   []string{"group1", "group2"},
+		},
+		{
+			name: "sorts groups alphabetically",
+			spec: &AnonymousAuthenticationSpec{
+				Username: "test-user",
+				Groups:   []string{"zebra", "alpha", "middle"},
+			},
+			wantUsername: "test-user",
+			wantGroups:   []string{"alpha", "middle", "zebra"},
+		},
+		{
+			name: "whitespace-only username with no groups fails",
+			spec: &AnonymousAuthenticationSpec{
+				Username: "   ",
+			},
+			wantErr: "at least one of 'username' or 'groups' must be set",
+		},
+		{
+			name: "empty string in groups fails",
+			spec: &AnonymousAuthenticationSpec{
+				Username: "test-user",
+				Groups:   []string{"group1", ""},
+			},
+			wantErr: "group[0] is an empty string",
+		},
+		{
+			name: "whitespace-only group fails",
+			spec: &AnonymousAuthenticationSpec{
+				Username: "test-user",
+				Groups:   []string{"group1", "   "},
+			},
+			wantErr: "group[0] is an empty string",
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -210,6 +263,8 @@ func TestAnonymousAuthenticationSpec_Validate(t *testing.T) {
 			err := tt.spec.Validate()
 			if tt.wantErr == "" {
 				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(tt.spec.Username).To(Equal(tt.wantUsername))
+				g.Expect(tt.spec.Groups).To(Equal(tt.wantGroups))
 			} else {
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr))
