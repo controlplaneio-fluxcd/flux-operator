@@ -9,7 +9,7 @@ import { fetchWithMock } from '../../../utils/fetch'
  *
  * This component is designed to be reusable across ResourcePage, Favorites, and ResourceList views.
  */
-export function ActionBar({ kind, namespace, name, resourceData, onActionComplete }) {
+export function ActionBar({ kind, namespace, name, resourceData, onActionComplete, onActionStart }) {
   const [loading, setLoading] = useState(null) // tracks which action is loading
   const [error, setError] = useState(null)
   const [showSuccess, setShowSuccess] = useState(null) // tracks which button shows success checkmark
@@ -77,6 +77,10 @@ export function ActionBar({ kind, namespace, name, resourceData, onActionComplet
 
   // Perform an action
   const performAction = async (action, targetKind, targetNamespace, targetName, loadingId = action) => {
+    // Notify parent that action is starting (for faster polling)
+    if (onActionStart) {
+      onActionStart()
+    }
     setLoading(loadingId)
     setError(null)
 

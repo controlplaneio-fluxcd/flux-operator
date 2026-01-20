@@ -1,7 +1,7 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { useState, useEffect } from 'preact/hooks'
+import { useState, useEffect, useRef } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
 import { fetchWithMock } from '../../../utils/fetch'
 import { usePrismTheme } from '../common/yaml'
@@ -16,7 +16,7 @@ import { InventoryPanel } from './InventoryPanel'
 import { ArtifactPanel } from './ArtifactPanel'
 import { ExportedInputsPanel } from './ExportedInputsPanel'
 import { InputsPanel } from './InputsPanel'
-import { isKindWithInventory, POLL_INTERVAL_MS } from '../../../utils/constants'
+import { isKindWithInventory, POLL_INTERVAL_MS, FAST_POLL_INTERVAL_MS, FAST_POLL_TIMEOUT_MS } from '../../../utils/constants'
 
 /**
  * Get loading status styling info with spinning refresh icon
@@ -144,6 +144,13 @@ export function ResourcePage({ kind, namespace, name }) {
   const [error, setError] = useState(null)
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null)
 
+  // Track fast polling mode (activated by user actions)
+  const [fastPolling, setFastPolling] = useState(false)
+  const fastPollTimeoutRef = useRef(null)
+
+  // Use faster polling when recently activated by action
+  const currentPollInterval = fastPolling ? FAST_POLL_INTERVAL_MS : POLL_INTERVAL_MS
+
   // Load Prism theme based on current app theme
   usePrismTheme()
 
@@ -184,17 +191,25 @@ export function ResourcePage({ kind, namespace, name }) {
     }
   }
 
-  // Fetch data on mount and setup polling
+  // Fetch data on mount and when route params change
   useEffect(() => {
-    // Fetch data immediately
     fetchData()
-
-    // Setup auto-refresh interval
-    const interval = setInterval(fetchData, POLL_INTERVAL_MS)
-
-    // Cleanup interval on unmount or when dependencies change
-    return () => clearInterval(interval)
   }, [kind, namespace, name])
+
+  // Setup polling with dynamic interval (no immediate fetch - handled above or by action completion)
+  useEffect(() => {
+    const interval = setInterval(fetchData, currentPollInterval)
+    return () => clearInterval(interval)
+  }, [kind, namespace, name, currentPollInterval])
+
+  // Cleanup fast poll timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (fastPollTimeoutRef.current) {
+        window.clearTimeout(fastPollTimeoutRef.current)
+      }
+    }
+  }, [])
 
   // Determine display state
   // Check that resourceData matches the requested resource to avoid rendering stale data during navigation
@@ -230,6 +245,22 @@ export function ResourcePage({ kind, namespace, name }) {
   const handleFavoriteClick = (e) => {
     e.stopPropagation()
     toggleFavorite(kind, namespace, name)
+  }
+
+  // Handle action start - switch to fast polling with timeout
+  const handleActionStart = () => {
+    // Enable fast polling
+    setFastPolling(true)
+
+    // Clear any existing timeout
+    if (fastPollTimeoutRef.current) {
+      window.clearTimeout(fastPollTimeoutRef.current)
+    }
+
+    // Set timeout to revert to normal polling after 5 minutes
+    fastPollTimeoutRef.current = window.setTimeout(() => {
+      setFastPolling(false)
+    }, FAST_POLL_TIMEOUT_MS)
   }
 
   // Navigate to another resource
@@ -314,6 +345,7 @@ export function ResourcePage({ kind, namespace, name }) {
               name={name}
               resourceData={resourceData}
               onActionComplete={fetchData}
+              onActionStart={handleActionStart}
             />
 
             {/* Reconciler Section */}

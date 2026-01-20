@@ -4,6 +4,12 @@
 // Auto-refresh polling interval in milliseconds
 export const POLL_INTERVAL_MS = 30000
 
+// Fast polling interval when actions are in flight (5 seconds)
+export const FAST_POLL_INTERVAL_MS = 5000
+
+// Timeout to revert to normal polling after last action (5 minutes)
+export const FAST_POLL_TIMEOUT_MS = 300000
+
 // Flux resource kinds and their metadata (ordered by group for display)
 export const fluxCRDs = [
   // Appliers
