@@ -53,6 +53,14 @@ spec:
             description: ResourceSetInputProviderSpec defines the desired state of
               ResourceSetInputProvider
             properties:
+              audiences:
+                description: |-
+                  Audiences specifies the audience claim to be set in JWT credentials,
+                  like the ServiceAccountToken credential. Required when using JWT
+                  credentials.
+                items:
+                  type: string
+                type: array
               certSecretRef:
                 description: |-
                   CertSecretRef specifies the Kubernetes Secret containing either or both of
@@ -71,6 +79,19 @@ spec:
                 required:
                 - name
                 type: object
+              credential:
+                description: |-
+                  Credential specifies the type of credential that will be sent to the input provider.
+                  Supported values are:
+
+                    - ServiceAccountToken: The operator will generate a Kubernetes ServiceAccount
+                      token and send it as a bearer token to the provider. Currently supported only
+                      for the OCIArtifactTag type when connecting to OCI registries that support
+                      workload identity federation. If ServiceAccountName is not specified, the
+                      ServiceAccount of the operator will be used to generate the token.
+                enum:
+                - ServiceAccountToken
+                type: string
               defaultValues:
                 additionalProperties:
                   x-kubernetes-preserve-unknown-fields: true
@@ -177,10 +198,13 @@ spec:
               serviceAccountName:
                 description: |-
                   ServiceAccountName specifies the name of the Kubernetes ServiceAccount
-                  used for authentication with AWS, Azure or GCP services through
-                  workload identity federation features. If not specified, the
-                  authentication for these cloud providers will use the ServiceAccount
-                  of the operator (or any other environment authentication configuration).
+                  in the same namespace as the ResourceSetInputProvider used for
+                  authentication with workload identity federation features. If
+                  not specified, the authentication will use the ServiceAccount of the
+                  operator (or any other environment authentication configuration, e.g.
+                  for cloud providers). If Type is set to OCIArtifactTag and Credential
+                  is not set, the image pull secrets of the ServiceAccount are used to
+                  authenticate to the OCI registry.
                 type: string
               skip:
                 description: Skip defines whether we need to skip input provider response
@@ -249,6 +273,17 @@ spec:
                 ACRArtifactTag, ECRArtifactTag or GARArtifactTag
               rule: '!has(self.secretRef) || !(self.url == ''Static'' || (self.type.endsWith(''ArtifactTag'')
                 && self.type != ''OCIArtifactTag''))'
+            - message: spec.credential can be set to 'ServiceAccountToken' only when
+                spec.type is 'OCIArtifactTag'
+              rule: '!has(self.credential) || (self.credential == ''ServiceAccountToken''
+                && self.type == ''OCIArtifactTag'')'
+            - message: spec.audiences can be set only when spec.credential is set
+                to 'ServiceAccountToken'
+              rule: '!has(self.audiences) || size(self.audiences) == 0 || (has(self.credential)
+                && self.credential == ''ServiceAccountToken'')'
+            - message: spec.audiences must be set when spec.credential is set to 'ServiceAccountToken'
+              rule: '!has(self.credential) || self.credential != ''ServiceAccountToken''
+                || (has(self.audiences) && size(self.audiences) > 0)'
           status:
             description: ResourceSetInputProviderStatus defines the observed state
               of ResourceSetInputProvider.

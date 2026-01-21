@@ -12,7 +12,7 @@ require (
 	github.com/fluxcd/pkg/apis/event v0.21.0
 	github.com/fluxcd/pkg/apis/kustomize v1.14.0
 	github.com/fluxcd/pkg/apis/meta v1.24.0
-	github.com/fluxcd/pkg/auth v0.34.0
+	github.com/fluxcd/pkg/auth v0.34.1-0.20260118212638-6e3e8ddfe8fe
 	github.com/fluxcd/pkg/cache v0.12.0
 	github.com/fluxcd/pkg/git v0.40.0
 	github.com/fluxcd/pkg/kustomize v1.24.0
