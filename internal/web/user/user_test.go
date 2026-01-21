@@ -7,6 +7,7 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	. "github.com/onsi/gomega"
 )
@@ -432,6 +433,53 @@ func TestProvider(t *testing.T) {
 
 		ctx = StoreSession(ctx, details, nil)
 		result := Provider(ctx)
+
+		g.Expect(result).To(BeNil())
+	})
+}
+
+func TestSessionStart(t *testing.T) {
+	t.Run("returns SessionStart from session", func(t *testing.T) {
+		g := NewWithT(t)
+
+		ctx := context.Background()
+		sessionStartTime := time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC)
+		details := Details{
+			Impersonation: Impersonation{
+				Username: "test-user",
+				Groups:   []string{"group1"},
+			},
+			SessionStart: &sessionStartTime,
+		}
+
+		ctx = StoreSession(ctx, details, nil)
+		result := SessionStart(ctx)
+
+		g.Expect(result).NotTo(BeNil())
+		g.Expect(*result).To(Equal(sessionStartTime))
+	})
+
+	t.Run("returns nil when no session", func(t *testing.T) {
+		g := NewWithT(t)
+
+		ctx := context.Background()
+		result := SessionStart(ctx)
+
+		g.Expect(result).To(BeNil())
+	})
+
+	t.Run("returns nil when session has no SessionStart", func(t *testing.T) {
+		g := NewWithT(t)
+
+		ctx := context.Background()
+		details := Details{
+			Impersonation: Impersonation{
+				Username: "test-user",
+			},
+		}
+
+		ctx = StoreSession(ctx, details, nil)
+		result := SessionStart(ctx)
 
 		g.Expect(result).To(BeNil())
 	})

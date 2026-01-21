@@ -9,13 +9,15 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"time"
 )
 
 // Details holds the user authentication details.
 type Details struct {
 	Profile
 	Impersonation
-	Provider map[string]any
+	Provider     map[string]any
+	SessionStart *time.Time
 }
 
 // Profile holds the user profile information for display purposes.
@@ -135,6 +137,14 @@ func Provider(ctx context.Context) map[string]any {
 		p = s.Provider
 	}
 	return p
+}
+
+// SessionStart returns the user's session start time from the session in the context.
+func SessionStart(ctx context.Context) *time.Time {
+	if s := LoadSession(ctx); s != nil {
+		return s.SessionStart
+	}
+	return nil
 }
 
 // Username returns the username for UX purposes.

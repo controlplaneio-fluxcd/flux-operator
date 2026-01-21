@@ -101,8 +101,9 @@ func SetAnonymousAuthProviderCookie(w http.ResponseWriter) {
 // is persisted after a successful authentication flow, and is used
 // to authenticate subsequent API requests.
 type authStorage struct {
-	AccessToken  string `json:"accessToken"`
-	RefreshToken string `json:"refreshToken"`
+	AccessToken  string    `json:"accessToken"`
+	RefreshToken string    `json:"refreshToken"`
+	SessionStart time.Time `json:"sessionStart"`
 }
 
 // setAuthStorage sets the authStorage in the response cookies.

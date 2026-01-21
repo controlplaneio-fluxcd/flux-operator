@@ -244,6 +244,7 @@ export const mockReport = {
     ],
     userInfo: {
       username: 'Flux User',
+      sessionStart: new Date().toISOString(), // server sends RFC 3339 format
       impersonation: {
         username: "user@example.com",
         groups: [
