@@ -298,6 +298,7 @@ func TestActionHandler_Suspend_Success(t *testing.T) {
 	var updated fluxcdv1.ResourceSet
 	g.Expect(testClient.Get(ctx, client.ObjectKeyFromObject(resourceSet), &updated)).To(Succeed())
 	g.Expect(updated.Annotations).To(HaveKeyWithValue(fluxcdv1.ReconcileAnnotation, fluxcdv1.DisabledValue))
+	g.Expect(updated.Annotations).To(HaveKey(fluxcdv1.SuspendedByAnnotation))
 }
 
 func TestActionHandler_Resume_Success(t *testing.T) {
@@ -309,7 +310,8 @@ func TestActionHandler_Resume_Success(t *testing.T) {
 			Name:      "test-action-resume",
 			Namespace: "default",
 			Annotations: map[string]string{
-				fluxcdv1.ReconcileAnnotation: fluxcdv1.DisabledValue,
+				fluxcdv1.ReconcileAnnotation:   fluxcdv1.DisabledValue,
+				fluxcdv1.SuspendedByAnnotation: "test-user",
 			},
 		},
 		Spec: fluxcdv1.ResourceSetSpec{},
@@ -351,6 +353,7 @@ func TestActionHandler_Resume_Success(t *testing.T) {
 	g.Expect(testClient.Get(ctx, client.ObjectKeyFromObject(resourceSet), &updated)).To(Succeed())
 	g.Expect(updated.Annotations).To(HaveKeyWithValue(fluxcdv1.ReconcileAnnotation, fluxcdv1.EnabledValue))
 	g.Expect(updated.Annotations).To(HaveKey("reconcile.fluxcd.io/requestedAt"))
+	g.Expect(updated.Annotations).NotTo(HaveKey(fluxcdv1.SuspendedByAnnotation))
 }
 
 func TestActionHandler_ResourceNotFound(t *testing.T) {

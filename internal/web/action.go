@@ -244,25 +244,54 @@ func (h *Handler) annotateResource(ctx context.Context, gvk schema.GroupVersionK
 // setSuspension sets the suspension state of a Flux resource.
 // For Flux Operator resources, it uses the reconcile annotation.
 // For Flux resources, it patches the spec.suspend field.
+// When suspending, it sets the SuspendedBy annotation to track the user who performed the action.
+// When resuming, it removes the SuspendedBy annotation if present.
 func (h *Handler) setSuspension(ctx context.Context, gvk schema.GroupVersionKind,
 	name, namespace, requestTime string, suspend bool) (client.Object, error) {
 	kubeClient := h.kubeClient.GetClient(ctx)
 
 	// Handle Flux Operator resources using annotations.
 	if gvk.GroupVersion() == fluxcdv1.GroupVersion {
-		var annotations map[string]string
-		if suspend {
-			annotations = map[string]string{
-				fluxcdv1.ReconcileAnnotation: fluxcdv1.DisabledValue,
-			}
-		} else {
-			annotations = map[string]string{
-				fluxcdv1.ReconcileAnnotation:    fluxcdv1.EnabledValue,
-				meta.ReconcileRequestAnnotation: requestTime,
-			}
-		}
+		resource := &metav1.PartialObjectMetadata{}
+		resource.SetGroupVersionKind(gvk)
+		resource.SetName(name)
+		resource.SetNamespace(namespace)
 
-		return h.annotateResource(ctx, gvk, name, namespace, annotations)
+		err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+			if err := kubeClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, resource); err != nil {
+				return err
+			}
+
+			// Check current state before creating the patch.
+			annotations := resource.GetAnnotations()
+			if suspend {
+				// Skip if already suspended to preserve the original SuspendedBy annotation.
+				if annotations[fluxcdv1.ReconcileAnnotation] == fluxcdv1.DisabledValue {
+					return nil
+				}
+			}
+
+			patch := client.MergeFrom(resource.DeepCopy())
+
+			if annotations == nil {
+				annotations = make(map[string]string)
+			}
+			if suspend {
+				annotations[fluxcdv1.ReconcileAnnotation] = fluxcdv1.DisabledValue
+				annotations[fluxcdv1.SuspendedByAnnotation] = user.Username(ctx)
+			} else {
+				annotations[fluxcdv1.ReconcileAnnotation] = fluxcdv1.EnabledValue
+				annotations[meta.ReconcileRequestAnnotation] = requestTime
+				delete(annotations, fluxcdv1.SuspendedByAnnotation)
+			}
+			resource.SetAnnotations(annotations)
+
+			return kubeClient.Patch(ctx, resource, patch)
+		})
+		if err != nil {
+			return nil, err
+		}
+		return resource, nil
 	}
 
 	// Handle Flux resources by patching the spec.suspend field.
@@ -278,22 +307,27 @@ func (h *Handler) setSuspension(ctx context.Context, gvk schema.GroupVersionKind
 
 		patch := client.MergeFrom(resource.DeepCopy())
 
+		annotations := resource.GetAnnotations()
+		if annotations == nil {
+			annotations = make(map[string]string)
+		}
+
 		if suspend {
+			// Skip if already suspended to preserve the original SuspendedBy annotation.
+			alreadySuspended, _, _ := unstructured.NestedBool(resource.Object, "spec", "suspend")
+			if alreadySuspended {
+				return nil
+			}
 			if err := unstructured.SetNestedField(resource.Object, suspend, "spec", "suspend"); err != nil {
 				return fmt.Errorf("unable to set suspend field: %w", err)
 			}
+			annotations[fluxcdv1.SuspendedByAnnotation] = user.Username(ctx)
 		} else {
 			unstructured.RemoveNestedField(resource.Object, "spec", "suspend")
-
-			annotations := resource.GetAnnotations()
-			if annotations == nil {
-				annotations = make(map[string]string)
-			}
-			maps.Copy(annotations, map[string]string{
-				meta.ReconcileRequestAnnotation: requestTime,
-			})
-			resource.SetAnnotations(annotations)
+			annotations[meta.ReconcileRequestAnnotation] = requestTime
+			delete(annotations, fluxcdv1.SuspendedByAnnotation)
 		}
+		resource.SetAnnotations(annotations)
 
 		if err := kubeClient.Patch(ctx, resource, patch); err != nil {
 			return err

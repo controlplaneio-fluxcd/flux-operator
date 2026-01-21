@@ -3770,7 +3770,10 @@ export const mockResourcesArray =
     "kind": "Bucket",
     "metadata": {
       "name": "preview-configs",
-      "namespace": "flux-system"
+      "namespace": "flux-system",
+      "annotations": {
+        "fluxcd.controlplane.io/suspendedBy": "John Doe"
+      }
     },
     "spec": {
       "bucketName": "preview-configs",
