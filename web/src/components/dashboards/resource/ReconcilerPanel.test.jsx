@@ -1023,4 +1023,94 @@ describe('ReconcilerPanel component', () => {
       expect(screen.queryByText('Last action')).not.toBeInTheDocument()
     })
   })
+
+  describe('Suspended by', () => {
+    it('should display "Suspended by" when status is Suspended and annotation exists', () => {
+      const suspendedData = {
+        ...mockResourceData,
+        metadata: {
+          ...mockResourceData.metadata,
+          annotations: {
+            ...mockResourceData.metadata.annotations,
+            'fluxcd.controlplane.io/suspendedBy': 'test-user@example.com'
+          }
+        },
+        status: {
+          ...mockResourceData.status,
+          reconcilerRef: {
+            ...mockResourceData.status.reconcilerRef,
+            status: 'Suspended'
+          }
+        }
+      }
+
+      render(
+        <ReconcilerPanel
+          kind="FluxInstance"
+          name="flux"
+          namespace="flux-system"
+          resourceData={suspendedData}
+        />
+      )
+
+      expect(screen.getByText('Suspended by')).toBeInTheDocument()
+      expect(screen.getByText('test-user@example.com')).toBeInTheDocument()
+    })
+
+    it('should NOT display "Suspended by" when status is not Suspended', () => {
+      const readyDataWithAnnotation = {
+        ...mockResourceData,
+        metadata: {
+          ...mockResourceData.metadata,
+          annotations: {
+            ...mockResourceData.metadata.annotations,
+            'fluxcd.controlplane.io/suspendedBy': 'test-user@example.com'
+          }
+        },
+        status: {
+          ...mockResourceData.status,
+          reconcilerRef: {
+            ...mockResourceData.status.reconcilerRef,
+            status: 'Ready'
+          }
+        }
+      }
+
+      render(
+        <ReconcilerPanel
+          kind="FluxInstance"
+          name="flux"
+          namespace="flux-system"
+          resourceData={readyDataWithAnnotation}
+        />
+      )
+
+      expect(screen.queryByText('Suspended by')).not.toBeInTheDocument()
+    })
+
+    it('should NOT display "Suspended by" when annotation does not exist', () => {
+      const suspendedNoAnnotation = {
+        ...mockResourceData,
+        status: {
+          ...mockResourceData.status,
+          reconcilerRef: {
+            ...mockResourceData.status.reconcilerRef,
+            status: 'Suspended'
+          }
+        }
+      }
+
+      render(
+        <ReconcilerPanel
+          kind="FluxInstance"
+          name="flux"
+          namespace="flux-system"
+          resourceData={suspendedNoAnnotation}
+        />
+      )
+
+      expect(screen.getByText('Suspended')).toBeInTheDocument()
+      expect(screen.queryByText('Suspended by')).not.toBeInTheDocument()
+    })
+  })
 })

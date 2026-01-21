@@ -260,15 +260,25 @@ export function ReconcilerPanel({ kind, name, namespace, resourceData }) {
             )}
           </div>
 
-          {/* Right column: Last action message */}
-          {message && (
+          {/* Right column: Suspended by and Last action message */}
+          {(message || (status === 'Suspended' && resourceData?.metadata?.annotations?.['fluxcd.controlplane.io/suspendedBy'])) && (
             <div class="space-y-2 border-gray-200 dark:border-gray-700 border-t pt-4 md:border-t-0 md:border-l md:pt-0 md:pl-6">
-              <div class="text-sm text-gray-500 dark:text-gray-400">
-                Last action <span class="text-gray-900 dark:text-white">{lastReconciled ? new Date(lastReconciled).toLocaleString().replace(',', '') : '-'}</span>
-              </div>
-              <div class="text-sm text-gray-700 dark:text-gray-300">
-                <pre class="whitespace-pre-wrap break-all font-sans">{message}</pre>
-              </div>
+              {/* Suspended by - shown when status is Suspended and annotation exists */}
+              {status === 'Suspended' && resourceData?.metadata?.annotations?.['fluxcd.controlplane.io/suspendedBy'] && (
+                <div class="text-sm text-gray-500 dark:text-gray-400">
+                  Suspended by <span class="text-gray-900 dark:text-white">{resourceData.metadata.annotations['fluxcd.controlplane.io/suspendedBy']}</span>
+                </div>
+              )}
+              {message && (
+                <>
+                  <div class="text-sm text-gray-500 dark:text-gray-400">
+                    Last action <span class="text-gray-900 dark:text-white">{lastReconciled ? new Date(lastReconciled).toLocaleString().replace(',', '') : '-'}</span>
+                  </div>
+                  <div class="text-sm text-gray-700 dark:text-gray-300">
+                    <pre class="whitespace-pre-wrap break-all font-sans">{message}</pre>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>

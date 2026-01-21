@@ -33,6 +33,7 @@ var (
 	ForceAnnotation                  = fmt.Sprintf("%s/force", GroupVersion.Group)
 	RevisionAnnotation               = fmt.Sprintf("%s/revision", GroupVersion.Group)
 	CopyFromAnnotation               = fmt.Sprintf("%s/copyFrom", GroupVersion.Group)
+	SuspendedByAnnotation            = fmt.Sprintf("%s/suspendedBy", GroupVersion.Group)
 )
 
 // FluxObject is the interface that all Flux objects must implement.
