@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/preact'
+import { render, screen, waitFor, act } from '@testing-library/preact'
 import { ResourcePage } from './ResourcePage'
 import { fetchWithMock } from '../../../utils/fetch'
-import { POLL_INTERVAL_MS } from '../../../utils/constants'
+import { POLL_INTERVAL_MS, FAST_POLL_INTERVAL_MS, FAST_POLL_TIMEOUT_MS } from '../../../utils/constants'
 
 // Mock fetchWithMock
 vi.mock('../../../utils/fetch', () => ({
@@ -42,6 +42,16 @@ vi.mock('./SourcePanel', () => ({
       SourcePanel: {resourceData?.status?.sourceRef?.namespace}/{resourceData?.status?.sourceRef?.name}
     </div>
   )
+}))
+
+// Store ActionBar callbacks for testing dynamic polling
+let capturedOnActionStart = null
+
+vi.mock('./ActionBar', () => ({
+  ActionBar: ({ onActionStart }) => {
+    capturedOnActionStart = onActionStart
+    return <div data-testid="action-bar">ActionBar</div>
+  }
 }))
 
 describe('ResourcePage component', () => {
@@ -452,6 +462,155 @@ describe('ResourcePage component', () => {
       await waitFor(() => {
         expect(fetchWithMock).toHaveBeenCalledTimes(1) // resource only
       })
+    })
+  })
+
+  describe('Dynamic polling (fast polling on action)', () => {
+    beforeEach(() => {
+      vi.useFakeTimers()
+      capturedOnActionStart = null
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('should use default polling interval initially', async () => {
+      fetchWithMock.mockResolvedValue(mockResourceData)
+
+      render(<ResourcePage kind="FluxInstance" namespace="flux-system" name="flux" />)
+
+      // Wait for initial fetch
+      await waitFor(() => {
+        expect(fetchWithMock).toHaveBeenCalledTimes(1)
+      })
+
+      // Clear mock history
+      fetchWithMock.mockClear()
+
+      // Fast-forward less than normal poll interval - should not trigger fetch
+      vi.advanceTimersByTime(POLL_INTERVAL_MS - 1000)
+      expect(fetchWithMock).not.toHaveBeenCalled()
+
+      // Complete the interval
+      vi.advanceTimersByTime(1000)
+      await waitFor(() => {
+        expect(fetchWithMock).toHaveBeenCalledTimes(1)
+      })
+    })
+
+    it('should switch to fast polling when action is triggered', async () => {
+      fetchWithMock.mockResolvedValue(mockResourceData)
+
+      render(<ResourcePage kind="FluxInstance" namespace="flux-system" name="flux" />)
+
+      // Wait for initial fetch and ActionBar to be rendered
+      await waitFor(() => {
+        expect(capturedOnActionStart).toBeTruthy()
+      })
+
+      // Clear mock history
+      fetchWithMock.mockClear()
+
+      // Trigger action start within act to process state update
+      // Poll interval changes but no immediate fetch (action completion handles that)
+      await act(async () => {
+        capturedOnActionStart()
+      })
+
+      // No immediate fetch when poll interval changes
+      expect(fetchWithMock).not.toHaveBeenCalled()
+
+      // Fast-forward to fast poll interval - should trigger fetch
+      await act(async () => {
+        vi.advanceTimersByTime(FAST_POLL_INTERVAL_MS)
+      })
+
+      // Fetch from the fast polling interval
+      expect(fetchWithMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('should revert to normal polling after timeout', async () => {
+      fetchWithMock.mockResolvedValue(mockResourceData)
+
+      render(<ResourcePage kind="FluxInstance" namespace="flux-system" name="flux" />)
+
+      // Wait for initial fetch and ActionBar to be rendered
+      await waitFor(() => {
+        expect(capturedOnActionStart).toBeTruthy()
+      })
+
+      // Clear mock history
+      fetchWithMock.mockClear()
+
+      // Trigger action start within act to process state update
+      await act(async () => {
+        capturedOnActionStart()
+      })
+
+      // Fast-forward past the timeout
+      await act(async () => {
+        vi.advanceTimersByTime(FAST_POLL_TIMEOUT_MS)
+      })
+
+      // Clear mock history again
+      fetchWithMock.mockClear()
+
+      // Now fast poll interval should NOT trigger fetch (reverted to normal interval)
+      await act(async () => {
+        vi.advanceTimersByTime(FAST_POLL_INTERVAL_MS)
+      })
+
+      // At this point we've only advanced 5s into a 30s interval, so no fetch
+      expect(fetchWithMock).not.toHaveBeenCalled()
+
+      // Complete the normal interval
+      await act(async () => {
+        vi.advanceTimersByTime(POLL_INTERVAL_MS - FAST_POLL_INTERVAL_MS)
+      })
+
+      expect(fetchWithMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('should reset timeout when another action is triggered', async () => {
+      fetchWithMock.mockResolvedValue(mockResourceData)
+
+      render(<ResourcePage kind="FluxInstance" namespace="flux-system" name="flux" />)
+
+      // Wait for initial fetch and ActionBar to be rendered
+      await waitFor(() => {
+        expect(capturedOnActionStart).toBeTruthy()
+      })
+
+      // Trigger first action
+      await act(async () => {
+        capturedOnActionStart()
+      })
+
+      // Fast-forward partway through the timeout
+      await act(async () => {
+        vi.advanceTimersByTime(FAST_POLL_TIMEOUT_MS / 2)
+      })
+
+      // Trigger another action (should reset the timeout)
+      await act(async () => {
+        capturedOnActionStart()
+      })
+
+      // Clear mock history
+      fetchWithMock.mockClear()
+
+      // Fast-forward past the original timeout but not the new one
+      await act(async () => {
+        vi.advanceTimersByTime(FAST_POLL_TIMEOUT_MS / 2 + 1000)
+      })
+
+      // Should still be in fast polling mode
+      await act(async () => {
+        vi.advanceTimersByTime(FAST_POLL_INTERVAL_MS)
+      })
+
+      expect(fetchWithMock).toHaveBeenCalled()
     })
   })
 })

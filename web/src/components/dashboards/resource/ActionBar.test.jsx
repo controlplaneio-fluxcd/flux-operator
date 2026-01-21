@@ -315,6 +315,42 @@ describe('ActionBar component', () => {
         expect(onActionComplete).toHaveBeenCalled()
       })
     })
+
+    it('should call onActionStart when action begins', async () => {
+      const user = userEvent.setup()
+      const onActionStart = vi.fn()
+      render(<ActionBar {...defaultProps} onActionStart={onActionStart} />)
+
+      await user.click(screen.getByTestId('reconcile-button'))
+
+      await waitFor(() => {
+        expect(onActionStart).toHaveBeenCalled()
+      })
+    })
+
+    it('should call onActionStart for reconcile source action', async () => {
+      const user = userEvent.setup()
+      const onActionStart = vi.fn()
+      render(<ActionBar {...defaultProps} onActionStart={onActionStart} />)
+
+      await user.click(screen.getByTestId('reconcile-source-button'))
+
+      await waitFor(() => {
+        expect(onActionStart).toHaveBeenCalled()
+      })
+    })
+
+    it('should call onActionStart for suspend/resume action', async () => {
+      const user = userEvent.setup()
+      const onActionStart = vi.fn()
+      render(<ActionBar {...defaultProps} onActionStart={onActionStart} />)
+
+      await user.click(screen.getByTestId('suspend-resume-button'))
+
+      await waitFor(() => {
+        expect(onActionStart).toHaveBeenCalled()
+      })
+    })
   })
 
   describe('Error handling', () => {
