@@ -240,13 +240,14 @@ spec:
 
     ### Operator Features
 
-    The operator extends Flux with self-service capabilities, deployment windows,
+    The operator extends Flux with [Web UI](https://fluxoperator.dev/web-ui/),
+    self-service capabilities, deployment windows,
     and preview environments for GitHub, GitLab and Azure DevOps pull requests testing.
 
     The operator ResourceSet API enables platform teams to define their own application standard
     as a group of Flux and Kubernetes resources that can be templated, parameterized and deployed
     as a single unit on self-service environments. For more information, please see the
-    [ResourceSet documentation](https://fluxcd.control-plane.io/operator/resourcesets/introduction/).
+    [ResourceSet documentation](https://fluxoperator.dev/docs/resourcesets/introduction/).
 
     ### OpenShift Support
 
@@ -257,7 +258,7 @@ spec:
     and set the `.spec.cluster.type` field to `openshift`.
 
     For more information on how to configure the Flux instance, please see the
-    [Flux Operator documentation](https://fluxcd.control-plane.io/operator/flux-config/).
+    [Flux Operator documentation](https://fluxoperator.dev/docs/instance/controllers/).
   maturity: beta
   version: ${FLUX_OPERATOR_VERSION}
   minKubeVersion: 1.22.0
@@ -281,7 +282,7 @@ spec:
     - name: Source Code
       url: https://github.com/controlplaneio-fluxcd/flux-operator
     - name: Documentation
-      url: https://fluxcd.control-plane.io/operator/
+      url: https://fluxoperator.dev/docs/
     - name: Enterprise Support
       url: https://fluxcd.control-plane.io/pricing/
   icon:
