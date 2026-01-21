@@ -121,7 +121,7 @@ func (o *oidcVerifier) verifyAccessToken(ctx context.Context,
 	if err := idToken.Claims(&claims); err != nil {
 		return nil, fmt.Errorf("failed to extract claims from OIDC ID token: %w", err)
 	}
-	l.V(1).Info("OIDC authentication successful", "claims", claims)
+	l.V(1).Info("OIDC claims", "claims", claims)
 
 	if len(nonce) > 0 {
 		tokenNonce, ok := claims["nonce"]
@@ -140,6 +140,7 @@ func (o *oidcVerifier) verifyAccessToken(ctx context.Context,
 	details, err := o.processClaims(ctx, claims)
 	if err != nil {
 		l.Error(err, "failed to process claims from OIDC ID token",
+			"claims", claims,
 			"claimsProcessor", o.conf.Authentication.OAuth2.ClaimsProcessorSpec)
 		return nil, fmt.Errorf("failed to process claims from OIDC ID token: %w", err)
 	}
