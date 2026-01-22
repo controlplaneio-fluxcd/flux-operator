@@ -60,6 +60,16 @@ linters:
       - linters:
           - staticcheck
         source: "r\\.Requeue"
+      # TODO: Migrate to the new events API (GetEventRecorder) once the controller-runtime
+      # deprecation period ends. The new events.EventRecorder has a different interface.
+      - linters:
+          - staticcheck
+        text: "GetEventRecorderFor is deprecated"
+      # TODO: Migrate to the new client.Client.Apply() with ApplyConfiguration types
+      # once the controller-runtime deprecation period ends.
+      - linters:
+          - staticcheck
+        text: "client.Apply is deprecated"
       - linters:
           - lll
         path: api/*
