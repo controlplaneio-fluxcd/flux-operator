@@ -99,7 +99,16 @@ func (in *Installer) ApplyInstance(ctx context.Context, instance *fluxcdv1.FluxI
 		return nil, err
 	}
 
-	return in.kubeClient.Manager.ApplyAllStaged(ctx, []*unstructured.Unstructured{{Object: rawMap}}, ssa.DefaultApplyOptions())
+	// Apply.
+	csEntry, err := in.kubeClient.Manager.Apply(ctx, &unstructured.Unstructured{Object: rawMap}, ssa.DefaultApplyOptions())
+	if err != nil {
+		return nil, err
+	}
+
+	// Return single-entry ChangeSet.
+	cs := ssa.NewChangeSet()
+	cs.Add(*csEntry)
+	return cs, nil
 }
 
 // WaitFor waits for all resources in the provided ChangeSet to be ready within the given timeout.

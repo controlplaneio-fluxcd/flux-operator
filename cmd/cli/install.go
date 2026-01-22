@@ -222,10 +222,12 @@ func installCmdRun(cmd *cobra.Command, args []string) error {
 			secretName = instance.Spec.Sync.PullSecret
 		}
 
-		cs, err := installer.ApplyCredentials(ctx, secretName, syncURL)
+		csEntry, err := installer.ApplyCredentials(ctx, secretName, syncURL)
 		if err != nil {
 			return err
 		}
+		cs := ssa.NewChangeSet()
+		cs.Add(*csEntry)
 		printChangeSet(cs)
 	}
 
