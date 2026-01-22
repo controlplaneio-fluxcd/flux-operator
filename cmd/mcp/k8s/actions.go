@@ -46,7 +46,11 @@ func (k *Client) Apply(ctx context.Context, manifest string, overwrite bool) (st
 		return "", fmt.Errorf("unable to normalize objects: %w", err)
 	}
 
-	changeSet, err := k.rm.ApplyAllStaged(ctx, objects, ssa.DefaultApplyOptions())
+	opts := ssa.DefaultApplyOptions()
+	opts.CustomStageKinds = map[schema.GroupKind]struct{}{
+		{Group: "rbac.authorization.k8s.io", Kind: "Role"}: {},
+	}
+	changeSet, err := k.rm.ApplyAllStaged(ctx, objects, opts)
 	if err != nil {
 		return "", fmt.Errorf("unable to apply objects: %w", err)
 	}

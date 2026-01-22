@@ -19,7 +19,7 @@ import (
 // for the provided address using the credentials in the format "username:token".
 // It supports both Git (HTTP/S or SSH) and OCI registry sources.
 // The secret is created in the installer's namespace with the given secretName.
-func (in *Installer) ApplyCredentials(ctx context.Context, secretName, address string) (*ssa.ChangeSet, error) {
+func (in *Installer) ApplyCredentials(ctx context.Context, secretName, address string) (*ssa.ChangeSetEntry, error) {
 	if address == "" {
 		return nil, fmt.Errorf("address is required to create credentials secret")
 	}
@@ -36,9 +36,7 @@ func (in *Installer) ApplyCredentials(ctx context.Context, secretName, address s
 	var err error
 
 	// Determine source type and create appropriate secret
-	if strings.HasPrefix(address, "oci://") {
-		// Extract server from OCI URL (strip oci:// prefix and take host part)
-		server := strings.TrimPrefix(address, "oci://")
+	if server, ok := strings.CutPrefix(address, "oci://"); ok {
 		if idx := strings.Index(server, "/"); idx > 0 {
 			server = server[:idx]
 		}
@@ -67,5 +65,5 @@ func (in *Installer) ApplyCredentials(ctx context.Context, secretName, address s
 		return nil, fmt.Errorf("failed to convert secret to unstructured: %w", err)
 	}
 
-	return in.kubeClient.Manager.ApplyAllStaged(ctx, []*unstructured.Unstructured{{Object: rawMap}}, ssa.DefaultApplyOptions())
+	return in.kubeClient.Manager.Apply(ctx, &unstructured.Unstructured{Object: rawMap}, ssa.DefaultApplyOptions())
 }

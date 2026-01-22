@@ -515,6 +515,9 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 		// undo changes made with kubectl or helm.
 		FieldManagers: takeOwnershipFrom(r.OverrideFieldManagers),
 	}
+	applyOpts.CustomStageKinds = map[schema.GroupKind]struct{}{
+		{Group: "rbac.authorization.k8s.io", Kind: "Role"}: {},
+	}
 
 	resultSet := ssa.NewChangeSet()
 
