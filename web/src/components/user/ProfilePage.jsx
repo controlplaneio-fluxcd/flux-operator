@@ -5,7 +5,7 @@ import { useMemo } from 'preact/hooks'
 import { useState } from 'preact/hooks'
 import { reportData } from '../../app'
 import { usePageMeta } from '../../utils/meta'
-import { formatTime } from '../../utils/time'
+import { formatTimestamp } from '../../utils/time'
 import { usePrismTheme } from '../dashboards/common/yaml'
 import { DashboardPanel, TabButton } from '../dashboards/common/panel'
 import { KubernetesIcon, OpenIDIcon } from '../layout/Icons'
@@ -83,11 +83,11 @@ export function ProfilePage() {
                 {userInfo?.username || 'unknown'}
               </h1>
             </div>
-            {/* Session Started - only show when provider has iat claim */}
-            {userInfo?.provider?.iat && (
+            {/* Session Started - only show when present */}
+            {userInfo?.sessionStart && (
               <div class="hidden md:block text-right flex-shrink-0">
                 <div class="text-sm text-gray-600 dark:text-gray-400">Session Started</div>
-                <div class="text-lg font-semibold text-gray-900 dark:text-white">{formatTime(new Date(userInfo.provider.iat * 1000))}</div>
+                <div class="text-lg font-semibold text-gray-900 dark:text-white">{formatTimestamp(userInfo.sessionStart)}</div>
               </div>
             )}
           </div>

@@ -295,6 +295,63 @@ func TestAuthStorage(t *testing.T) {
 		g.Expect(err.Error()).To(ContainSubstring("failed to unmarshal auth storage cookie"))
 	})
 
+	t.Run("setAuthStorage and getAuthStorage preserve SessionStart", func(t *testing.T) {
+		g := NewWithT(t)
+
+		conf := &config.ConfigSpec{
+			Insecure: false,
+			Authentication: &config.AuthenticationSpec{
+				SessionDuration: &metav1.Duration{Duration: 24 * time.Hour},
+			},
+		}
+		rec := httptest.NewRecorder()
+		sessionStartTime := time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC)
+		storage := authStorage{
+			AccessToken:  "access-token-123",
+			RefreshToken: "refresh-token-456",
+			SessionStart: sessionStartTime,
+		}
+		g.Expect(setAuthStorage(conf, rec, storage)).To(Succeed())
+
+		// Create a request with the cookies from the response
+		cookies := rec.Result().Cookies()
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		for _, c := range cookies {
+			req.AddCookie(c)
+		}
+
+		// Verify SessionStart is preserved
+		result, err := getAuthStorage(req)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(result.AccessToken).To(Equal("access-token-123"))
+		g.Expect(result.RefreshToken).To(Equal("refresh-token-456"))
+		g.Expect(result.SessionStart).To(Equal(sessionStartTime))
+	})
+
+	t.Run("getAuthStorage handles zero SessionStart for backward compatibility", func(t *testing.T) {
+		g := NewWithT(t)
+
+		// Simulate an old storage without SessionStart (or with zero value)
+		storage := authStorage{
+			AccessToken:  "access-token-123",
+			RefreshToken: "refresh-token-456",
+		}
+		b, _ := json.Marshal(storage)
+		encoded := base64.RawURLEncoding.EncodeToString(b)
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.AddCookie(&http.Cookie{
+			Name:  cookieNameAuthStorage,
+			Value: encoded,
+		})
+
+		result, err := getAuthStorage(req)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(result.AccessToken).To(Equal("access-token-123"))
+		g.Expect(result.RefreshToken).To(Equal("refresh-token-456"))
+		g.Expect(result.SessionStart.IsZero()).To(BeTrue())
+	})
+
 	t.Run("deleteAuthStorage deletes all chunk cookies", func(t *testing.T) {
 		g := NewWithT(t)
 

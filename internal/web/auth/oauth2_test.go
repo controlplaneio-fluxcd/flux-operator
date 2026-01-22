@@ -4,6 +4,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hkdf"
@@ -15,6 +16,11 @@ import (
 	"time"
 
 	. "github.com/onsi/gomega"
+	"golang.org/x/oauth2"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
 
 func TestIsSafeRedirectPath(t *testing.T) {
@@ -365,6 +371,200 @@ func TestOAuth2LoginStateRedirectURL(t *testing.T) {
 			g.Expect(result).To(Equal(tt.expected))
 		})
 	}
+}
+
+func TestVerifyTokenAndSetStorageOrLogErrorOptions(t *testing.T) {
+	t.Run("withNonce sets nonce in options", func(t *testing.T) {
+		g := NewWithT(t)
+
+		var opts verifyTokenAndSetStorageOrLogErrorOptions
+		withNonce("test-nonce-123")(&opts)
+
+		g.Expect(opts.nonce).To(Equal("test-nonce-123"))
+		g.Expect(opts.sessionStart).To(BeNil())
+	})
+
+	t.Run("withNonce with empty string sets empty nonce", func(t *testing.T) {
+		g := NewWithT(t)
+
+		var opts verifyTokenAndSetStorageOrLogErrorOptions
+		withNonce("")(&opts)
+
+		g.Expect(opts.nonce).To(Equal(""))
+		g.Expect(opts.sessionStart).To(BeNil())
+	})
+
+	t.Run("withSessionStart sets sessionStart in options", func(t *testing.T) {
+		g := NewWithT(t)
+
+		var opts verifyTokenAndSetStorageOrLogErrorOptions
+		sessionTime := time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC)
+		withSessionStart(sessionTime)(&opts)
+
+		g.Expect(opts.nonce).To(Equal(""))
+		g.Expect(opts.sessionStart).NotTo(BeNil())
+		g.Expect(*opts.sessionStart).To(Equal(sessionTime))
+	})
+
+	t.Run("multiple options can be applied", func(t *testing.T) {
+		g := NewWithT(t)
+
+		var opts verifyTokenAndSetStorageOrLogErrorOptions
+		sessionTime := time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC)
+		withNonce("test-nonce")(&opts)
+		withSessionStart(sessionTime)(&opts)
+
+		g.Expect(opts.nonce).To(Equal("test-nonce"))
+		g.Expect(opts.sessionStart).NotTo(BeNil())
+		g.Expect(*opts.sessionStart).To(Equal(sessionTime))
+	})
+
+	t.Run("later options override earlier ones", func(t *testing.T) {
+		g := NewWithT(t)
+
+		var opts verifyTokenAndSetStorageOrLogErrorOptions
+		sessionTime1 := time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC)
+		sessionTime2 := time.Date(2025, 6, 20, 14, 45, 0, 0, time.UTC)
+
+		withNonce("first-nonce")(&opts)
+		withSessionStart(sessionTime1)(&opts)
+		withNonce("second-nonce")(&opts)
+		withSessionStart(sessionTime2)(&opts)
+
+		g.Expect(opts.nonce).To(Equal("second-nonce"))
+		g.Expect(*opts.sessionStart).To(Equal(sessionTime2))
+	})
+
+	t.Run("withSessionStart with zero time sets pointer to zero time", func(t *testing.T) {
+		g := NewWithT(t)
+
+		var opts verifyTokenAndSetStorageOrLogErrorOptions
+		var zeroTime time.Time
+		withSessionStart(zeroTime)(&opts)
+
+		g.Expect(opts.sessionStart).NotTo(BeNil())
+		g.Expect(opts.sessionStart.IsZero()).To(BeTrue())
+	})
+}
+
+// mockOAuth2Verifier is a test double for oauth2Verifier.
+type mockOAuth2Verifier struct {
+	details *user.Details
+	storage *authStorage
+	err     error
+}
+
+func (m *mockOAuth2Verifier) verifyAccessToken(ctx context.Context, accessToken string, nonce ...string) (*user.Details, error) {
+	return m.details, m.err
+}
+
+func (m *mockOAuth2Verifier) verifyToken(ctx context.Context, token *oauth2.Token, nonce ...string) (*user.Details, *authStorage, error) {
+	return m.details, m.storage, m.err
+}
+
+func TestVerifyTokenAndSetStorageOrLogError_SessionStart(t *testing.T) {
+	// Helper to create a test oauth2Authenticator
+	newTestAuthenticator := func(t *testing.T) *oauth2Authenticator {
+		t.Helper()
+		auth := newTestOAuth2Authenticator(t)
+		auth.conf = &config.ConfigSpec{
+			Insecure: true,
+			Authentication: &config.AuthenticationSpec{
+				SessionDuration: &metav1.Duration{Duration: 24 * time.Hour},
+			},
+		}
+		return auth
+	}
+
+	t.Run("uses provided non-zero sessionStart", func(t *testing.T) {
+		g := NewWithT(t)
+
+		auth := newTestAuthenticator(t)
+		mockVerifier := &mockOAuth2Verifier{
+			details: &user.Details{
+				Profile: user.Profile{Name: "Test User"},
+			},
+			storage: &authStorage{
+				AccessToken:  "access-token",
+				RefreshToken: "refresh-token",
+			},
+		}
+
+		providedTime := time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC)
+		rec := httptest.NewRecorder()
+
+		details, err := auth.verifyTokenAndSetStorageOrLogError(
+			context.Background(), rec, mockVerifier, &oauth2.Token{},
+			withSessionStart(providedTime),
+		)
+
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(details).NotTo(BeNil())
+		g.Expect(details.SessionStart).NotTo(BeNil())
+		g.Expect(*details.SessionStart).To(Equal(providedTime))
+	})
+
+	t.Run("uses time.Now when sessionStart option is zero", func(t *testing.T) {
+		g := NewWithT(t)
+
+		auth := newTestAuthenticator(t)
+		mockVerifier := &mockOAuth2Verifier{
+			details: &user.Details{
+				Profile: user.Profile{Name: "Test User"},
+			},
+			storage: &authStorage{
+				AccessToken:  "access-token",
+				RefreshToken: "refresh-token",
+			},
+		}
+
+		beforeCall := time.Now()
+		rec := httptest.NewRecorder()
+
+		var zeroTime time.Time
+		details, err := auth.verifyTokenAndSetStorageOrLogError(
+			context.Background(), rec, mockVerifier, &oauth2.Token{},
+			withSessionStart(zeroTime),
+		)
+		afterCall := time.Now()
+
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(details).NotTo(BeNil())
+		g.Expect(details.SessionStart).NotTo(BeNil())
+		// Session start should be set to approximately time.Now()
+		g.Expect(details.SessionStart.After(beforeCall.Add(-time.Second))).To(BeTrue())
+		g.Expect(details.SessionStart.Before(afterCall.Add(time.Second))).To(BeTrue())
+	})
+
+	t.Run("uses time.Now when no sessionStart option provided", func(t *testing.T) {
+		g := NewWithT(t)
+
+		auth := newTestAuthenticator(t)
+		mockVerifier := &mockOAuth2Verifier{
+			details: &user.Details{
+				Profile: user.Profile{Name: "Test User"},
+			},
+			storage: &authStorage{
+				AccessToken:  "access-token",
+				RefreshToken: "refresh-token",
+			},
+		}
+
+		beforeCall := time.Now()
+		rec := httptest.NewRecorder()
+
+		details, err := auth.verifyTokenAndSetStorageOrLogError(
+			context.Background(), rec, mockVerifier, &oauth2.Token{},
+		)
+		afterCall := time.Now()
+
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(details).NotTo(BeNil())
+		g.Expect(details.SessionStart).NotTo(BeNil())
+		// Session start should be set to approximately time.Now()
+		g.Expect(details.SessionStart.After(beforeCall.Add(-time.Second))).To(BeTrue())
+		g.Expect(details.SessionStart.Before(afterCall.Add(time.Second))).To(BeTrue())
+	})
 }
 
 func TestConsumeOAuth2LoginStates(t *testing.T) {

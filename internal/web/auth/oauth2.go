@@ -248,7 +248,7 @@ func (o *oauth2Authenticator) serveCallback(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Verify the token and set the auth storage.
-	if _, err := o.verifyTokenAndSetStorageOrLogError(r.Context(), w, v, token, state.Nonce); err != nil {
+	if _, err := o.verifyTokenAndSetStorageOrLogError(r.Context(), w, v, token, withNonce(state.Nonce)); err != nil {
 		setAuthErrorCookie(w, err)
 		return
 	}
@@ -287,10 +287,13 @@ func (o *oauth2Authenticator) serveAPI(w http.ResponseWriter, r *http.Request, a
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
-		if details, err = o.verifyTokenAndSetStorageOrLogError(r.Context(), w, v, token); err != nil {
+		if details, err = o.verifyTokenAndSetStorageOrLogError(r.Context(), w, v, token, withSessionStart(as.SessionStart)); err != nil {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
+	}
+	if !as.SessionStart.IsZero() {
+		details.SessionStart = &as.SessionStart
 	}
 
 	// Authentication successful. Set the auth provider cookie.
@@ -341,7 +344,7 @@ func (o *oauth2Authenticator) serveIndex(w http.ResponseWriter, r *http.Request,
 		if token == nil {
 			return
 		}
-		if _, err := o.verifyTokenAndSetStorageOrLogError(ctx, w, v, token); err != nil {
+		if _, err := o.verifyTokenAndSetStorageOrLogError(ctx, w, v, token, withSessionStart(as.SessionStart)); err != nil {
 			return
 		}
 	}
@@ -384,18 +387,52 @@ func (o *oauth2Authenticator) config(p initializedOAuth2Provider) *oauth2.Config
 	return base
 }
 
+type verifyTokenAndSetStorageOrLogErrorOption func(*verifyTokenAndSetStorageOrLogErrorOptions)
+
+type verifyTokenAndSetStorageOrLogErrorOptions struct {
+	nonce        string
+	sessionStart *time.Time
+}
+
+func withNonce(nonce string) verifyTokenAndSetStorageOrLogErrorOption {
+	return func(o *verifyTokenAndSetStorageOrLogErrorOptions) {
+		o.nonce = nonce
+	}
+}
+
+func withSessionStart(t time.Time) verifyTokenAndSetStorageOrLogErrorOption {
+	return func(o *verifyTokenAndSetStorageOrLogErrorOptions) {
+		o.sessionStart = &t
+	}
+}
+
 // verifyTokenAndSetStorageOrLogError verifies the token, sets
 // the auth storage and returns the user details, or logs any
 // error and returns an error for the auth error cookie.
 func (o *oauth2Authenticator) verifyTokenAndSetStorageOrLogError(
-	ctx context.Context, w http.ResponseWriter, v oauth2Verifier,
-	token *oauth2.Token, nonce ...string) (*user.Details, error) {
+	ctx context.Context, w http.ResponseWriter, v oauth2Verifier, token *oauth2.Token,
+	opts ...verifyTokenAndSetStorageOrLogErrorOption) (*user.Details, error) {
 
+	var options verifyTokenAndSetStorageOrLogErrorOptions
+	for _, opt := range opts {
+		opt(&options)
+	}
+
+	var nonce []string
+	if options.nonce != "" {
+		nonce = append(nonce, options.nonce)
+	}
 	details, as, err := v.verifyToken(ctx, token, nonce...)
 	if err != nil {
 		log.FromContext(ctx).Error(err, "failed to verify token")
 		return nil, errUserError
 	}
+	if s := options.sessionStart; s != nil && !s.IsZero() {
+		as.SessionStart = *s
+	} else {
+		as.SessionStart = time.Now()
+	}
+	details.SessionStart = &as.SessionStart
 
 	if err := setAuthStorage(o.conf, w, *as); err != nil {
 		log.FromContext(ctx).Error(err, logCookieTooLarge)

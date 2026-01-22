@@ -84,6 +84,9 @@ func (h *Handler) GetReport(ctx context.Context) (*unstructured.Unstructured, er
 	if p := user.Provider(ctx); len(p) > 0 {
 		userInfo["provider"] = p
 	}
+	if s := user.SessionStart(ctx); s != nil {
+		userInfo["sessionStart"] = s.Format(time.RFC3339)
+	}
 	spec["userInfo"] = userInfo
 
 	// Inject user-visible namespaces

@@ -959,3 +959,85 @@ func TestGetReport_NoAuthConfigured_UserInfoOnlyContainsUsername(t *testing.T) {
 	_, hasProvider := userInfo["provider"]
 	g.Expect(hasProvider).To(BeFalse(), "userInfo should NOT contain 'provider' when auth is not configured")
 }
+
+func TestGetReport_InjectsUserInfoWithSessionStart(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	// Create a session start time
+	sessionStartTime := time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC)
+
+	// Create a user session with session start time
+	imp := user.Impersonation{
+		Username: "session-start-test-user",
+		Groups:   []string{"system:authenticated"},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile:       user.Profile{Name: "Session Start Test User"},
+		Impersonation: imp,
+		SessionStart:  &sessionStartTime,
+	}, userClient)
+
+	// Call GetReport
+	report, err := handler.GetReport(userCtx)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(report).NotTo(BeNil())
+
+	// Verify session start is injected in userInfo
+	spec, found := report.Object["spec"].(map[string]any)
+	g.Expect(found).To(BeTrue())
+	userInfo, found := spec["userInfo"].(map[string]any)
+	g.Expect(found).To(BeTrue())
+	g.Expect(userInfo["username"]).To(Equal("Session Start Test User"))
+	g.Expect(userInfo["sessionStart"]).To(Equal(sessionStartTime.Format(time.RFC3339)))
+}
+
+func TestGetReport_UserInfoSessionStartIsNilWhenNotSet(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create the handler
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	// Create a user session without session start time
+	imp := user.Impersonation{
+		Username: "no-session-start-test-user",
+		Groups:   []string{"system:authenticated"},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile:       user.Profile{Name: "No Session Start Test User"},
+		Impersonation: imp,
+		// SessionStart not set
+	}, userClient)
+
+	// Call GetReport
+	report, err := handler.GetReport(userCtx)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(report).NotTo(BeNil())
+
+	// Verify session start is nil in userInfo
+	spec, found := report.Object["spec"].(map[string]any)
+	g.Expect(found).To(BeTrue())
+	userInfo, found := spec["userInfo"].(map[string]any)
+	g.Expect(found).To(BeTrue())
+	g.Expect(userInfo["username"]).To(Equal("No Session Start Test User"))
+	_, hasSessionStart := userInfo["sessionStart"]
+	g.Expect(hasSessionStart).To(BeFalse(), "userInfo should NOT contain 'sessionStart' when not set")
+}
