@@ -47,18 +47,18 @@ type ConfigSpec struct {
 
 	// Insecure indicates whether to use insecure settings across the web application.
 	// +optional
-	Insecure bool `json:"insecure,omitempty"`
+	Insecure bool `json:"insecure"`
 
 	// UserActions holds the user actions configuration. Defaults to enabling all actions if not set.
 	// Note that, by default, actions are only available when authentication is configured with the
 	// OAuth2 type.
 	// +optional
-	UserActions *UserActionsSpec `json:"userActions,omitempty"`
+	UserActions *UserActionsSpec `json:"userActions"`
 
 	// Authentication holds the authentication configuration.
 	// If Authentication.Type is set to OAuth2, BaseURL must be set.
 	// +optional
-	Authentication *AuthenticationSpec `json:"authentication,omitempty"`
+	Authentication *AuthenticationSpec `json:"authentication"`
 }
 
 // Validate validates the ConfigSpec configuration.

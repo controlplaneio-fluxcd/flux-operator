@@ -389,6 +389,25 @@ spec:
 `,
 			wantErr: "unknown fields: .unknownRoot, .spec.unknownSpec, .spec.authentication.unknownAuth, .spec.authentication.oauth2.unknownOAuth2, .spec.authentication.oauth2.impersonation.unknownImpersonation, .spec.authentication.oauth2.profile.unknownProfile, .spec.authentication.oauth2.validations[0].unknownValidation, .spec.authentication.oauth2.variables[0].unknownVar, .spec.authentication.oauth2.variables[1].anotherUnknownVar",
 		},
+		{
+			name: "OAuth2 with empty impersonation fields",
+			content: `apiVersion: web.fluxcd.controlplane.io/v1
+kind: Config
+spec:
+  baseURL: https://status.example.com
+  authentication:
+    type: OAuth2
+    oauth2:
+      provider: OIDC
+      clientID: client-id
+      clientSecret: secret
+      issuerURL: https://issuer.example.com
+      impersonation:
+        username: ""
+        groups: ""
+`,
+			wantErr: "impersonation must have at least one of username or groups expressions",
+		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)

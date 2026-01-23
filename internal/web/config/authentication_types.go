@@ -44,23 +44,23 @@ type AuthenticationSpec struct {
 
 	// Anonymous holds the Anonymous authentication configuration.
 	// +optional
-	Anonymous *AnonymousAuthenticationSpec `json:"anonymous,omitempty"`
+	Anonymous *AnonymousAuthenticationSpec `json:"anonymous"`
 
 	// OAuth2 holds the OAuth2 authentication configuration.
 	// +optional
-	OAuth2 *OAuth2AuthenticationSpec `json:"oauth2,omitempty"`
+	OAuth2 *OAuth2AuthenticationSpec `json:"oauth2"`
 
 	// SessionDuration is the duration of the user session.
 	// Defaults to one week.
 	// +kubebuilder:validation:Type=string
 	// +kubebuilder:validation:Pattern="^([0-9]+(\\.[0-9]+)?(ms|s|m|h))+$"
 	// +optional
-	SessionDuration *metav1.Duration `json:"sessionDuration,omitempty"`
+	SessionDuration *metav1.Duration `json:"sessionDuration"`
 
 	// UserCacheSize is the size of the user cache in number of users.
 	// Defaults to 100.
 	// +optional
-	UserCacheSize int `json:"userCacheSize,omitempty"`
+	UserCacheSize int `json:"userCacheSize"`
 }
 
 // AuthenticationConfiguration is an interface for different authentication configurations.
@@ -129,11 +129,11 @@ func (a *AuthenticationSpec) ApplyDefaults() {
 type AnonymousAuthenticationSpec struct {
 	// Username is used for Kubernetes User RBAC impersonation.
 	// +optional
-	Username string `json:"username,omitempty"`
+	Username string `json:"username"`
 
 	// Groups is used for Kubernetes Group RBAC impersonation.
 	// +optional
-	Groups []string `json:"groups,omitempty"`
+	Groups []string `json:"groups"`
 }
 
 // Configured checks if the AnonymousAuthenticationSpec is configured.
@@ -177,13 +177,13 @@ type OAuth2AuthenticationSpec struct {
 	// Scopes is the list of OAuth2 scopes to request.
 	// Each provider may have different default scopes.
 	// +optional
-	Scopes []string `json:"scopes,omitempty"`
+	Scopes []string `json:"scopes"`
 
 	// IssuerURL is used for OIDC provider discovery.
 	// Required for the OIDC provider.
 	// Used only by the OIDC provider.
 	// +optional
-	IssuerURL string `json:"issuerURL,omitempty"`
+	IssuerURL string `json:"issuerURL"`
 
 	// ClaimsProcessorSpec holds the configuration for processing claims with CEL expressions.
 	// Used only by the OIDC provider.
@@ -241,13 +241,13 @@ type ClaimsProcessorSpec struct {
 	// Variables is a list of CEL expressions to extract information from the ID token claims
 	// into named variables that can be reused in other expressions, e.g. "variables.username".
 	// +optional
-	Variables []VariableSpec `json:"variables,omitempty"`
+	Variables []VariableSpec `json:"variables"`
 
 	// Validations is a list of CEL expressions that validate the ID token claims and extracted
 	// variables. Each expression must return the type bool. If the expression evaluates to false,
 	// the message is returned as an error.
 	// +optional
-	Validations []ValidationSpec `json:"validations,omitempty"`
+	Validations []ValidationSpec `json:"validations"`
 
 	// Profile contains CEL expressions to extract user profile information from the ID token
 	// claims and extracted variables for populating the user profile.
@@ -255,7 +255,7 @@ type ClaimsProcessorSpec struct {
 	//   Name:  "has(claims.name) ? claims.name : (has(claims.email) ? claims.email : '')",
 	// }
 	// +optional
-	Profile *ProfileSpec `json:"profile,omitempty"`
+	Profile *ProfileSpec `json:"profile"`
 
 	// Impersonation is a pair of CEL expressions that extract the username and groups
 	// from the ID token claims and extracted variables for Kubernetes RBAC impersonation.
@@ -266,7 +266,7 @@ type ClaimsProcessorSpec struct {
 	//   Groups:   "has(claims.groups) ? claims.groups : []",
 	// }
 	// +optional
-	Impersonation *ImpersonationSpec `json:"impersonation,omitempty"`
+	Impersonation *ImpersonationSpec `json:"impersonation"`
 }
 
 // Validate validates the ClaimsProcessorSpec configuration.
@@ -364,7 +364,7 @@ type ProfileSpec struct {
 	// and extracted variables. This expression must return the type string.
 	// Defaults to "has(claims.name) ? claims.name : (has(claims.email) ? claims.email : '')".
 	// +optional
-	Name string `json:"name,omitempty"`
+	Name string `json:"name"`
 }
 
 // Validate validates the ProfileSpec configuration.
@@ -398,13 +398,13 @@ type ImpersonationSpec struct {
 	// and extracted variables. This expression must return the type string.
 	// Defaults to "has(claims.email) ? claims.email : ''".
 	// +optional
-	Username string `json:"username,omitempty"`
+	Username string `json:"username"`
 
 	// Groups is a CEL expression that extracts the groups from the ID token claims
 	// and extracted variables. This expression must return the type []string.
 	// Defaults to "has(claims.groups) ? claims.groups : []".
 	// +optional
-	Groups string `json:"groups,omitempty"`
+	Groups string `json:"groups"`
 }
 
 // Validate validates the ImpersonationSpec configuration.
