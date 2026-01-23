@@ -34,7 +34,7 @@ type UserActionsSpec struct {
 	// If the field is empty or omitted, no actions are audited.
 	// The special value ["*"] can be used to audit all actions.
 	// +optional
-	Audit []string `json:"audit,omitempty"`
+	Audit []string `json:"audit"`
 }
 
 // Validate validates the UserActionsSpec configuration.
