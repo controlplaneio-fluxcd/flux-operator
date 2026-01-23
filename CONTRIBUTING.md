@@ -23,10 +23,9 @@ The project is structured as a [Go module](https://go.dev/doc/modules/developing
 - [Flux Operator MCP Server](#flux-operator-mcp-server)
 - [Flux Status Web UI](#flux-status-web-ui)
 
-The documentation is structured as follows:
+The documentation structure is described in the following section:
 
-- [API documentation](#api-documentation-flux-operator-repository)
-- [User Guides](#website-distribution-repository)
+- [Project Documentation](#project-documentation-structure)
 
 ## Source Code Structure
 
@@ -234,19 +233,25 @@ make web-run WEB_RUN_ARGS=--web-config=web-config.yaml
 ## Project Documentation Structure
 
 The project documentation is written in Markdown.
+Each Markdown file must include YAML front matter with `title` and `description` fields:
+
+```yaml
+---
+title: Page Title
+description: A brief description of the page content
+---
+```
+
 To contribute to the documentation, you can edit the Markdown files in the following locations:
 
-### API documentation (flux-operator repository)
+- [docs/api/v1](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/docs/api/v1) - API documentation for the Kubernetes CRDs
+- [docs/guides/operator](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/docs/guides/operator) - Flux Operator installation, configuration, and migration guides
+- [docs/guides/instance](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/docs/guides/instance) - FluxInstance configuration guides
+- [docs/guides/resourcesets](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/docs/guides/resourcesets) - ResourceSet guides
+- [docs/mcp](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/docs/mcp) - MCP Server tools, prompts, and configuration documentation
+- [docs/web](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/docs/web) - Flux Status Page configuration, SSO, and ingress documentation
 
-- [docs/api](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/docs/api/v1) - contains the API documentation for the Flux Operator Kubernetes CRDs
-- [docs/mcp](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/docs/mcp) - contains the documentation for the MCP Server tools and prompts
-
-### Website (distribution repository)
-
-- [docs/operator](https://github.com/controlplaneio-fluxcd/distribution/tree/main/docs/operator) - contains the user guides for the Flux Operator
-- [docs/mcp](https://github.com/controlplaneio-fluxcd/distribution/tree/main/docs/mcp) - contains the user guides for the MCP Server
-
-The documentation website is built using [Material for MkDocs](https://squidfunk.github.io/mkdocs-material/).
+The documentation is automatically published to [fluxoperator.dev/docs](https://fluxoperator.dev/docs) after a new release.
 
 ## Acceptance policy
 

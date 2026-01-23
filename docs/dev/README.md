@@ -46,13 +46,6 @@
 2. Merge the PR opened by the `release` workflow.
 3. Verify the new version is available by running `brew upgrade flux-operator flux-operator-mcp` on your local machine.
 
-### Documentation Website
-
-1. Trigger the `vendor-operator-docs` GitHub Workflow in the [`controlplaneio-fluxcd/distribution` repository](https://github.com/controlplaneio-fluxcd/distribution/blob/main/.github/workflows/vendor-operator-docs.yaml).
-2. Merge the PR opened by the `vendor-operator-docs` workflow.
-3. Trigger the `docs` GitHub Workflow in the [`controlplaneio-fluxcd/distribution` repository](https://github.com/controlplaneio-fluxcd/distribution/blob/main/.github/workflows/docs.yaml).
-4. Wait for the `docs` workflow to finish and verify the changes on the [Flux Operator documentation site](https://fluxcd.control-plane.io/operator/).
-
 ## Manifests Release Procedure
 
 ### Manifests Update for a New Flux Version
