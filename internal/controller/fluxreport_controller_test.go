@@ -167,6 +167,9 @@ func TestFluxReportReconciler_Reconcile(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(emptyReport.Spec.Distribution.Status).To(Equal("Not Installed"))
 	g.Expect(emptyReport.Spec.Distribution.Entitlement).To(Equal("Issued by " + entitlement.DefaultVendor))
+
+	// Wait for CRDs to be fully deleted to prevent race conditions with subsequent tests.
+	waitForFluxCRDsDeletion(ctx, g)
 }
 
 func TestFluxReportReconciler_CustomSyncName(t *testing.T) {
@@ -263,6 +266,9 @@ func TestFluxReportReconciler_CustomSyncName(t *testing.T) {
 		NamespacedName: client.ObjectKeyFromObject(instance),
 	})
 	g.Expect(err).ToNot(HaveOccurred())
+
+	// Wait for CRDs to be fully deleted to prevent race conditions with subsequent tests.
+	waitForFluxCRDsDeletion(ctx, g)
 }
 
 func getFluxReportReconciler() *FluxReportReconciler {

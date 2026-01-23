@@ -20,6 +20,7 @@ import (
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -425,6 +426,9 @@ func TestFluxInstanceReconciler_LifeCycle(t *testing.T) {
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+
+	// Wait for CRDs to be fully deleted to prevent race conditions with subsequent tests.
+	waitForFluxCRDsDeletion(ctx, g)
 }
 
 func TestFluxInstanceReconciler_FetchFail(t *testing.T) {
@@ -640,6 +644,9 @@ func TestFluxInstanceReconciler_Downgrade(t *testing.T) {
 	err = testClient.Get(ctx, types.NamespacedName{Name: "source-controller", Namespace: ns.Name}, sc)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+
+	// Wait for CRDs to be fully deleted to prevent race conditions with subsequent tests.
+	waitForFluxCRDsDeletion(ctx, g)
 }
 
 func TestFluxInstanceReconciler_Disabled(t *testing.T) {
@@ -737,6 +744,9 @@ func TestFluxInstanceReconciler_Disabled(t *testing.T) {
 	err = testClient.Get(ctx, types.NamespacedName{Name: "source-controller", Namespace: ns.Name}, sc)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+
+	// Wait for CRDs to be fully deleted to prevent race conditions with subsequent tests.
+	waitForFluxCRDsDeletion(ctx, g)
 }
 
 func TestFluxInstanceReconciler_Profiles(t *testing.T) {
@@ -880,6 +890,9 @@ func TestFluxInstanceReconciler_Profiles(t *testing.T) {
 	err = testClient.Get(ctx, types.NamespacedName{Name: "source-controller", Namespace: ns.Name}, sc)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+
+	// Wait for CRDs to be fully deleted to prevent race conditions with subsequent tests.
+	waitForFluxCRDsDeletion(ctx, g)
 }
 
 func TestFluxInstanceReconciler_NewVersion(t *testing.T) {
@@ -933,6 +946,8 @@ func TestFluxInstanceReconciler_NewVersion(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(r.IsZero()).To(BeTrue())
 
+	// Wait for CRDs to be fully deleted to prevent race conditions with subsequent tests.
+	waitForFluxCRDsDeletion(ctx, g)
 }
 
 func TestFluxInstanceReconciler_WaitTimeout(t *testing.T) {
@@ -1015,6 +1030,8 @@ $patch: delete
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 
+	// Wait for CRDs to be fully deleted to prevent race conditions with subsequent tests.
+	waitForFluxCRDsDeletion(ctx, g)
 }
 
 func getDefaultFluxSpec(t *testing.T) fluxcdv1.FluxInstanceSpec {
@@ -1082,4 +1099,22 @@ func checkInstanceReadiness(g *WithT, obj *fluxcdv1.FluxInstance) {
 	statusCheck.DisableFetch = true
 	statusCheck.WithT(g).CheckErr(context.Background(), obj)
 	g.Expect(conditions.IsTrue(obj, meta.ReadyCondition)).To(BeTrue())
+}
+
+// waitForFluxCRDsDeletion waits for all Flux CRDs to be deleted.
+// This prevents race conditions between tests where CRDs from a previous
+// test are still being deleted when the next test starts.
+func waitForFluxCRDsDeletion(ctx context.Context, g *WithT) {
+	g.Eventually(func() bool {
+		crdList := &apiextensionsv1.CustomResourceDefinitionList{}
+		if err := testClient.List(ctx, crdList); err != nil {
+			return false
+		}
+		for _, crd := range crdList.Items {
+			if strings.HasSuffix(crd.Name, ".toolkit.fluxcd.io") {
+				return false
+			}
+		}
+		return true
+	}).WithTimeout(2 * time.Minute).WithPolling(time.Second).Should(BeTrue())
 }
