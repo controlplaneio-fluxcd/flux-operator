@@ -261,6 +261,134 @@ spec:
 				g.Expect(spec.Authentication.OAuth2.Impersonation.Groups).To(Equal("claims.roles"))
 			},
 		},
+		{
+			name: "unknown field at root level",
+			content: `apiVersion: web.fluxcd.controlplane.io/v1
+kind: Config
+unknownField: value
+spec:
+  authentication:
+    type: Anonymous
+    anonymous:
+      username: test-user
+`,
+			wantErr: "unknown fields: .unknownField",
+		},
+		{
+			name: "unknown field in spec",
+			content: `apiVersion: web.fluxcd.controlplane.io/v1
+kind: Config
+spec:
+  unknownSpecField: value
+  authentication:
+    type: Anonymous
+    anonymous:
+      username: test-user
+`,
+			wantErr: "unknown fields: .spec.unknownSpecField",
+		},
+		{
+			name: "unknown field in authentication",
+			content: `apiVersion: web.fluxcd.controlplane.io/v1
+kind: Config
+spec:
+  authentication:
+    type: Anonymous
+    unknownAuthField: value
+    anonymous:
+      username: test-user
+`,
+			wantErr: "unknown fields: .spec.authentication.unknownAuthField",
+		},
+		{
+			name: "unknown field in nested oauth2",
+			content: `apiVersion: web.fluxcd.controlplane.io/v1
+kind: Config
+spec:
+  baseURL: https://status.example.com
+  authentication:
+    type: OAuth2
+    oauth2:
+      provider: OIDC
+      clientID: client-id
+      clientSecret: secret
+      issuerURL: https://issuer.example.com
+      unknownOAuth2Field: value
+`,
+			wantErr: "unknown fields: .spec.authentication.oauth2.unknownOAuth2Field",
+		},
+		{
+			name: "unknown field in array item",
+			content: `apiVersion: web.fluxcd.controlplane.io/v1
+kind: Config
+spec:
+  baseURL: https://status.example.com
+  authentication:
+    type: OAuth2
+    oauth2:
+      provider: OIDC
+      clientID: client-id
+      clientSecret: secret
+      issuerURL: https://issuer.example.com
+      variables:
+        - name: domain
+          expression: "claims.email"
+          unknownVarField: value
+`,
+			wantErr: "unknown fields: .spec.authentication.oauth2.variables[0].unknownVarField",
+		},
+		{
+			name: "multiple unknown fields",
+			content: `apiVersion: web.fluxcd.controlplane.io/v1
+kind: Config
+unknownRoot: value
+spec:
+  unknownSpec: value
+  authentication:
+    type: Anonymous
+    anonymous:
+      username: test-user
+`,
+			wantErr: "unknown fields: .unknownRoot, .spec.unknownSpec",
+		},
+		{
+			name: "multiple unknown fields at various levels with arrays",
+			content: `apiVersion: web.fluxcd.controlplane.io/v1
+kind: Config
+unknownRoot: value
+spec:
+  baseURL: https://status.example.com
+  unknownSpec: value
+  authentication:
+    type: OAuth2
+    unknownAuth: value
+    oauth2:
+      provider: OIDC
+      clientID: client-id
+      clientSecret: secret
+      issuerURL: https://issuer.example.com
+      unknownOAuth2: value
+      variables:
+        - name: var1
+          expression: "claims.email"
+          unknownVar: value
+        - name: var2
+          expression: "claims.sub"
+          anotherUnknownVar: value
+      validations:
+        - expression: "true"
+          message: "ok"
+          unknownValidation: value
+      profile:
+        name: claims.name
+        unknownProfile: value
+      impersonation:
+        username: claims.sub
+        groups: claims.groups
+        unknownImpersonation: value
+`,
+			wantErr: "unknown fields: .unknownRoot, .spec.unknownSpec, .spec.authentication.unknownAuth, .spec.authentication.oauth2.unknownOAuth2, .spec.authentication.oauth2.impersonation.unknownImpersonation, .spec.authentication.oauth2.profile.unknownProfile, .spec.authentication.oauth2.validations[0].unknownValidation, .spec.authentication.oauth2.variables[0].unknownVar, .spec.authentication.oauth2.variables[1].anotherUnknownVar",
+		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
