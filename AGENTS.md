@@ -41,14 +41,15 @@ The project is structured as a Go module with the following components:
 ## Rules of Engagement for AI Agents
 
 - Do not deviate from the established patterns in the codebase
-- If files are modified between reads, assume the change is intentional
+- New files must have a license header matching existing files
+- All new features must have associated documentation
 - Never run `git tag` and never push tags
 - Follow the Go code style used in the project
 - Add proper doc comments for new functions and types
 - After modifying a function or type, update its doc comment
 - Add comments for complex logic but don't comment obvious code
 - Read existing tests before writing new ones
-- Run individual tests when debugging
+- Run individual tests when debugging, run the full test suite when done
 - Replace `interface{}` with `any` type alias
 - Use `go doc` to read func signatures in external packages
 
