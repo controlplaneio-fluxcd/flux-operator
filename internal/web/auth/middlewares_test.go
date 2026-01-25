@@ -12,7 +12,7 @@ import (
 
 	. "github.com/onsi/gomega"
 
-	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
 func TestNewDefaultMiddleware(t *testing.T) {
@@ -57,7 +57,7 @@ func TestNewDefaultMiddleware(t *testing.T) {
 	var result map[string]any
 	err = json.Unmarshal(decoded, &result)
 	g.Expect(err).NotTo(HaveOccurred())
-	g.Expect(result["provider"]).To(Equal(config.AuthenticationTypeAnonymous))
+	g.Expect(result["provider"]).To(Equal(fluxcdv1.AuthenticationTypeAnonymous))
 	g.Expect(result["authenticated"]).To(BeTrue())
 }
 

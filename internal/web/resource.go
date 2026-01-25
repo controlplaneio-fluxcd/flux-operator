@@ -18,7 +18,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
-	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
 
@@ -194,7 +193,7 @@ func (h *Handler) GetResource(ctx context.Context, kind, name, namespace string)
 	// List which actions the user can perform on this resource.
 	if h.conf.UserActionsEnabled() {
 		var actions []string
-		for _, action := range config.AllUserActions {
+		for _, action := range fluxcdv1.AllUserActions {
 			canAct, err := h.kubeClient.CanActOnResource(ctx, action, gvk.Group, kindInfo.Plural, namespace, name)
 			if err != nil {
 				log.FromContext(ctx).Error(err, "failed to check custom RBAC for action",

@@ -8,29 +8,31 @@ import (
 
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
-func TestConfig_Validate(t *testing.T) {
+func TestValidateWebConfig(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
-		config  Config
+		config  fluxcdv1.WebConfig
 		wantErr string
 	}{
 		{
 			name: "wrong API version",
-			config: Config{
+			config: fluxcdv1.WebConfig{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "wrong/v1",
-					Kind:       ConfigKind,
+					Kind:       fluxcdv1.WebConfigKind,
 				},
 			},
 			wantErr: "expected apiVersion 'web.fluxcd.controlplane.io/v1'",
 		},
 		{
 			name: "wrong kind",
-			config: Config{
+			config: fluxcdv1.WebConfig{
 				TypeMeta: metav1.TypeMeta{
-					APIVersion: GroupVersion.String(),
+					APIVersion: fluxcdv1.WebConfigGroupVersion.String(),
 					Kind:       "WrongKind",
 				},
 			},
@@ -38,15 +40,15 @@ func TestConfig_Validate(t *testing.T) {
 		},
 		{
 			name: "valid config with Anonymous auth",
-			config: Config{
+			config: fluxcdv1.WebConfig{
 				TypeMeta: metav1.TypeMeta{
-					APIVersion: GroupVersion.String(),
-					Kind:       ConfigKind,
+					APIVersion: fluxcdv1.WebConfigGroupVersion.String(),
+					Kind:       fluxcdv1.WebConfigKind,
 				},
-				Spec: ConfigSpec{
-					Authentication: &AuthenticationSpec{
-						Type: AuthenticationTypeAnonymous,
-						Anonymous: &AnonymousAuthenticationSpec{
+				Spec: fluxcdv1.WebConfigSpec{
+					Authentication: &fluxcdv1.AuthenticationSpec{
+						Type: fluxcdv1.AuthenticationTypeAnonymous,
+						Anonymous: &fluxcdv1.AnonymousAuthenticationSpec{
 							Username: "test-user",
 						},
 					},
@@ -56,17 +58,17 @@ func TestConfig_Validate(t *testing.T) {
 		},
 		{
 			name: "valid config with OAuth2 auth",
-			config: Config{
+			config: fluxcdv1.WebConfig{
 				TypeMeta: metav1.TypeMeta{
-					APIVersion: GroupVersion.String(),
-					Kind:       ConfigKind,
+					APIVersion: fluxcdv1.WebConfigGroupVersion.String(),
+					Kind:       fluxcdv1.WebConfigKind,
 				},
-				Spec: ConfigSpec{
+				Spec: fluxcdv1.WebConfigSpec{
 					BaseURL: "https://status.example.com",
-					Authentication: &AuthenticationSpec{
-						Type: AuthenticationTypeOAuth2,
-						OAuth2: &OAuth2AuthenticationSpec{
-							Provider:     OAuth2ProviderOIDC,
+					Authentication: &fluxcdv1.AuthenticationSpec{
+						Type: fluxcdv1.AuthenticationTypeOAuth2,
+						OAuth2: &fluxcdv1.OAuth2AuthenticationSpec{
+							Provider:     fluxcdv1.OAuth2ProviderOIDC,
 							ClientID:     "client-id",
 							ClientSecret: "secret",
 							IssuerURL:    "https://issuer.example.com",
@@ -78,19 +80,19 @@ func TestConfig_Validate(t *testing.T) {
 		},
 		{
 			name: "valid config without auth",
-			config: Config{
+			config: fluxcdv1.WebConfig{
 				TypeMeta: metav1.TypeMeta{
-					APIVersion: GroupVersion.String(),
-					Kind:       ConfigKind,
+					APIVersion: fluxcdv1.WebConfigGroupVersion.String(),
+					Kind:       fluxcdv1.WebConfigKind,
 				},
-				Spec: ConfigSpec{},
+				Spec: fluxcdv1.WebConfigSpec{},
 			},
 			wantErr: "",
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
-			err := tt.config.Validate()
+			err := ValidateWebConfig(&tt.config)
 			if tt.wantErr == "" {
 				g.Expect(err).NotTo(HaveOccurred())
 			} else {
@@ -101,24 +103,24 @@ func TestConfig_Validate(t *testing.T) {
 	}
 }
 
-func TestConfigSpec_Validate(t *testing.T) {
+func TestValidateWebConfigSpec(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
-		spec    ConfigSpec
+		spec    fluxcdv1.WebConfigSpec
 		wantErr string
 	}{
 		{
 			name:    "empty spec is valid",
-			spec:    ConfigSpec{},
+			spec:    fluxcdv1.WebConfigSpec{},
 			wantErr: "",
 		},
 		{
 			name: "OAuth2 without baseURL fails",
-			spec: ConfigSpec{
-				Authentication: &AuthenticationSpec{
-					Type: AuthenticationTypeOAuth2,
-					OAuth2: &OAuth2AuthenticationSpec{
-						Provider:     OAuth2ProviderOIDC,
+			spec: fluxcdv1.WebConfigSpec{
+				Authentication: &fluxcdv1.AuthenticationSpec{
+					Type: fluxcdv1.AuthenticationTypeOAuth2,
+					OAuth2: &fluxcdv1.OAuth2AuthenticationSpec{
+						Provider:     fluxcdv1.OAuth2ProviderOIDC,
 						ClientID:     "client-id",
 						ClientSecret: "secret",
 						IssuerURL:    "https://issuer.example.com",
@@ -129,22 +131,22 @@ func TestConfigSpec_Validate(t *testing.T) {
 		},
 		{
 			name: "valid baseURL",
-			spec: ConfigSpec{
+			spec: fluxcdv1.WebConfigSpec{
 				BaseURL: "https://status.example.com",
 			},
 			wantErr: "",
 		},
 		{
 			name: "baseURL with path",
-			spec: ConfigSpec{
+			spec: fluxcdv1.WebConfigSpec{
 				BaseURL: "https://status.example.com/flux",
 			},
 			wantErr: "",
 		},
 		{
 			name: "auth validation errors propagate",
-			spec: ConfigSpec{
-				Authentication: &AuthenticationSpec{
+			spec: fluxcdv1.WebConfigSpec{
+				Authentication: &fluxcdv1.AuthenticationSpec{
 					Type: "InvalidType",
 				},
 			},
@@ -152,26 +154,26 @@ func TestConfigSpec_Validate(t *testing.T) {
 		},
 		{
 			name: "valid userActions config",
-			spec: ConfigSpec{
-				UserActions: &UserActionsSpec{
-					Audit: []string{UserActionReconcile},
+			spec: fluxcdv1.WebConfigSpec{
+				UserActions: &fluxcdv1.UserActionsSpec{
+					Audit: []string{fluxcdv1.UserActionReconcile},
 				},
 			},
 			wantErr: "",
 		},
 		{
 			name: "insecure mode is allowed",
-			spec: ConfigSpec{
+			spec: fluxcdv1.WebConfigSpec{
 				Insecure: true,
 			},
 			wantErr: "",
 		},
 		{
 			name: "Anonymous auth does not require baseURL",
-			spec: ConfigSpec{
-				Authentication: &AuthenticationSpec{
-					Type: AuthenticationTypeAnonymous,
-					Anonymous: &AnonymousAuthenticationSpec{
+			spec: fluxcdv1.WebConfigSpec{
+				Authentication: &fluxcdv1.AuthenticationSpec{
+					Type: fluxcdv1.AuthenticationTypeAnonymous,
+					Anonymous: &fluxcdv1.AnonymousAuthenticationSpec{
 						Username: "test-user",
 					},
 				},
@@ -181,7 +183,7 @@ func TestConfigSpec_Validate(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
-			err := tt.spec.Validate()
+			err := ValidateWebConfigSpec(&tt.spec)
 			if tt.wantErr == "" {
 				g.Expect(err).NotTo(HaveOccurred())
 			} else {
@@ -192,43 +194,43 @@ func TestConfigSpec_Validate(t *testing.T) {
 	}
 }
 
-func TestConfigSpec_ApplyDefaults(t *testing.T) {
+func TestApplyWebConfigSpecDefaults(t *testing.T) {
 	g := NewWithT(t)
 
 	// spec with auth applies auth defaults
-	spec := &ConfigSpec{
-		Authentication: &AuthenticationSpec{
-			Type: AuthenticationTypeAnonymous,
-			Anonymous: &AnonymousAuthenticationSpec{
+	spec := &fluxcdv1.WebConfigSpec{
+		Authentication: &fluxcdv1.AuthenticationSpec{
+			Type: fluxcdv1.AuthenticationTypeAnonymous,
+			Anonymous: &fluxcdv1.AnonymousAuthenticationSpec{
 				Username: "test-user",
 			},
 		},
 	}
-	spec.ApplyDefaults()
+	ApplyWebConfigSpecDefaults(spec)
 	g.Expect(spec.Authentication.SessionDuration).NotTo(BeNil())
 	g.Expect(spec.Authentication.UserCacheSize).To(Equal(100))
 	// UserActions should be initialized
 	g.Expect(spec.UserActions).NotTo(BeNil())
 
 	// spec without auth does not panic and initializes UserActions
-	spec2 := &ConfigSpec{}
-	spec2.ApplyDefaults()
+	spec2 := &fluxcdv1.WebConfigSpec{}
+	ApplyWebConfigSpecDefaults(spec2)
 	g.Expect(spec2.UserActions).NotTo(BeNil())
 
 	// spec with userActions preserves values
-	spec3 := &ConfigSpec{
-		UserActions: &UserActionsSpec{
-			Audit: []string{UserActionReconcile},
+	spec3 := &fluxcdv1.WebConfigSpec{
+		UserActions: &fluxcdv1.UserActionsSpec{
+			Audit: []string{fluxcdv1.UserActionReconcile},
 		},
 	}
-	spec3.ApplyDefaults()
-	g.Expect(spec3.UserActions.Audit).To(Equal([]string{UserActionReconcile}))
+	ApplyWebConfigSpecDefaults(spec3)
+	g.Expect(spec3.UserActions.Audit).To(Equal([]string{fluxcdv1.UserActionReconcile}))
 }
 
-func TestConfigSpec_UserActionsEnabled(t *testing.T) {
+func TestWebConfigSpec_UserActionsEnabled(t *testing.T) {
 	for _, tt := range []struct {
 		name     string
-		spec     *ConfigSpec
+		spec     *fluxcdv1.WebConfigSpec
 		expected bool
 	}{
 		{
@@ -238,20 +240,20 @@ func TestConfigSpec_UserActionsEnabled(t *testing.T) {
 		},
 		{
 			name:     "nil authentication disables actions",
-			spec:     &ConfigSpec{},
+			spec:     &fluxcdv1.WebConfigSpec{},
 			expected: false,
 		},
 		{
 			name: "OAuth2 auth enables actions",
-			spec: &ConfigSpec{
-				Authentication: &AuthenticationSpec{Type: AuthenticationTypeOAuth2},
+			spec: &fluxcdv1.WebConfigSpec{
+				Authentication: &fluxcdv1.AuthenticationSpec{Type: fluxcdv1.AuthenticationTypeOAuth2},
 			},
 			expected: true,
 		},
 		{
 			name: "Anonymous auth enables actions",
-			spec: &ConfigSpec{
-				Authentication: &AuthenticationSpec{Type: AuthenticationTypeAnonymous},
+			spec: &fluxcdv1.WebConfigSpec{
+				Authentication: &fluxcdv1.AuthenticationSpec{Type: fluxcdv1.AuthenticationTypeAnonymous},
 			},
 			expected: true,
 		},

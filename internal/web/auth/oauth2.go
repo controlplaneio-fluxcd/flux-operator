@@ -22,7 +22,7 @@ import (
 	"golang.org/x/oauth2"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	webconfig "github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/kubeclient"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
@@ -46,7 +46,7 @@ const (
 
 // oauth2Authenticator implements OAuth2 authentication.
 type oauth2Authenticator struct {
-	conf       *webconfig.ConfigSpec
+	conf       *fluxcdv1.WebConfigSpec
 	kubeClient *kubeclient.Client
 	provider   oauth2Provider
 	gcm        cipher.AEAD
@@ -70,7 +70,7 @@ type oauth2Verifier interface {
 }
 
 // newOAuth2Authenticator creates a new OAuth2 authenticator.
-func newOAuth2Authenticator(conf *webconfig.ConfigSpec,
+func newOAuth2Authenticator(conf *fluxcdv1.WebConfigSpec,
 	kubeClient *kubeclient.Client, provider oauth2Provider) (*oauth2Authenticator, error) {
 
 	// Build encryptor/decryptor for login state cookies.

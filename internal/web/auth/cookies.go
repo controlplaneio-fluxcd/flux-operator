@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
 const (
@@ -93,7 +93,7 @@ func setAuthProviderCookie(w http.ResponseWriter, provider, loginURL string, aut
 
 // SetAnonymousAuthProviderCookie sets the anonymous auth provider cookie in the response.
 func SetAnonymousAuthProviderCookie(w http.ResponseWriter) {
-	setAuthProviderCookie(w, config.AuthenticationTypeAnonymous, "", true)
+	setAuthProviderCookie(w, fluxcdv1.AuthenticationTypeAnonymous, "", true)
 }
 
 // authStorage holds the authentication information stored in cookies.
@@ -111,7 +111,7 @@ type authStorage struct {
 // For large tokens, the value is automatically split across multiple cookies.
 // It only returns an error if the storage data is too large to fit
 // within the allowed number of cookie chunks.
-func setAuthStorage(conf *config.ConfigSpec, w http.ResponseWriter, storage authStorage) error {
+func setAuthStorage(conf *fluxcdv1.WebConfigSpec, w http.ResponseWriter, storage authStorage) error {
 	// Clear any existing auth storage cookies (including chunks).
 	clearChunkedCookiesFromResponse(w, cookieNameAuthStorage)
 

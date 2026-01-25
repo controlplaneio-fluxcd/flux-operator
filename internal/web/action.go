@@ -28,7 +28,6 @@ import (
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/notifier"
-	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/kubeclient"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
@@ -74,7 +73,7 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// Validate action type
-	if !slices.Contains(config.AllUserActions, actionReq.Action) {
+	if !slices.Contains(fluxcdv1.AllUserActions, actionReq.Action) {
 		http.Error(w, "Invalid action. Must be one of: reconcile, suspend, resume", http.StatusBadRequest)
 		return
 	}
@@ -87,7 +86,7 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// Check if the kind supports reconciliation (only for reconcile action)
-	if actionReq.Action == config.UserActionReconcile && !kindInfo.Reconcilable {
+	if actionReq.Action == fluxcdv1.UserActionReconcile && !kindInfo.Reconcilable {
 		http.Error(w, fmt.Sprintf("Resource kind %s does not support reconciliation", kindInfo.Name), http.StatusBadRequest)
 		return
 	}
@@ -122,7 +121,7 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 
 	var obj client.Object
 	switch actionReq.Action {
-	case config.UserActionReconcile:
+	case fluxcdv1.UserActionReconcile:
 		annotations := map[string]string{
 			meta.ReconcileRequestAnnotation: now,
 		}
@@ -133,11 +132,11 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 		obj, actionErr = h.annotateResource(ctx, *gvk, actionReq.Name, actionReq.Namespace, annotations)
 		message = fmt.Sprintf("Reconciliation triggered for %s/%s", actionReq.Namespace, actionReq.Name)
 
-	case config.UserActionSuspend:
+	case fluxcdv1.UserActionSuspend:
 		obj, actionErr = h.setSuspension(ctx, *gvk, actionReq.Name, actionReq.Namespace, now, true)
 		message = fmt.Sprintf("Suspended %s/%s", actionReq.Namespace, actionReq.Name)
 
-	case config.UserActionResume:
+	case fluxcdv1.UserActionResume:
 		obj, actionErr = h.setSuspension(ctx, *gvk, actionReq.Name, actionReq.Namespace, now, false)
 		message = fmt.Sprintf("Resumed %s/%s", actionReq.Namespace, actionReq.Name)
 	}

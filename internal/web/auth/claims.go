@@ -9,7 +9,7 @@ import (
 
 	"github.com/fluxcd/pkg/runtime/cel"
 
-	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
 
@@ -18,7 +18,7 @@ type claimsProcessorFunc func(ctx context.Context, claims map[string]any) (*user
 
 // newClaimsProcessor creates a new claims processor for validating and
 // extracting relevant information from tokens and userinfo responses.
-func newClaimsProcessor(conf *config.ConfigSpec) (claimsProcessorFunc, error) {
+func newClaimsProcessor(conf *fluxcdv1.WebConfigSpec) (claimsProcessorFunc, error) {
 	// Build variable CEL expressions.
 	type variable struct {
 		name string

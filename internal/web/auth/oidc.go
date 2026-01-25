@@ -13,7 +13,7 @@ import (
 	"golang.org/x/oauth2"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
 
@@ -23,7 +23,7 @@ const (
 
 // oidcProvider implements oauth2Provider for OIDC.
 type oidcProvider struct {
-	conf          *config.ConfigSpec
+	conf          *fluxcdv1.WebConfigSpec
 	processClaims claimsProcessorFunc
 
 	mu        sync.RWMutex
@@ -32,7 +32,7 @@ type oidcProvider struct {
 }
 
 // newOIDCProvider creates a new OIDC OAuth2 provider.
-func newOIDCProvider(conf *config.ConfigSpec) (oauth2Provider, error) {
+func newOIDCProvider(conf *fluxcdv1.WebConfigSpec) (oauth2Provider, error) {
 	processClaims, err := newClaimsProcessor(conf)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create claims processor: %w", err)
@@ -77,7 +77,7 @@ func (o *oidcProvider) init(ctx context.Context) (initializedOAuth2Provider, err
 
 // initializedOIDCProvider implements initializedOAuth2Provider.
 type initializedOIDCProvider struct {
-	conf          *config.ConfigSpec
+	conf          *fluxcdv1.WebConfigSpec
 	processClaims claimsProcessorFunc
 	provider      *oidc.Provider
 }
@@ -101,7 +101,7 @@ func (i *initializedOIDCProvider) newVerifier(ctx context.Context) (oauth2Verifi
 
 // oidcVerifier implements oauth2Verifier.
 type oidcVerifier struct {
-	conf          *config.ConfigSpec
+	conf          *fluxcdv1.WebConfigSpec
 	verifier      *oidc.IDTokenVerifier
 	processClaims claimsProcessorFunc
 }

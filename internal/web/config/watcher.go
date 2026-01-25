@@ -17,6 +17,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlcache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
 const (
@@ -36,7 +38,7 @@ const (
 // and sends the updated configuration on the returned channel. It also returns
 // a channel that is closed when the watcher stops.
 func WatchSecret(ctx context.Context, name, namespace string,
-	restConfig *rest.Config) (<-chan *ConfigSpec, <-chan struct{}, error) {
+	restConfig *rest.Config) (<-chan *fluxcdv1.WebConfigSpec, <-chan struct{}, error) {
 
 	l := ctrl.Log.WithName("web-config-watcher").WithValues("secretRef", map[string]any{
 		"name":      name,
@@ -85,7 +87,7 @@ func WatchSecret(ctx context.Context, name, namespace string,
 	if err != nil {
 		return nil, nil, err
 	}
-	confChannel := make(chan *ConfigSpec, 10)
+	confChannel := make(chan *fluxcdv1.WebConfigSpec, 10)
 	_, err = informer.AddEventHandler(toolscache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj any) {
 			b, version := getBytesAndVersion(obj)

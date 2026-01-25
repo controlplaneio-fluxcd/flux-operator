@@ -11,13 +11,14 @@ import (
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
 )
 
 func TestNewClaimsProcessor(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
-		conf    *config.ConfigSpec
+		conf    *fluxcdv1.WebConfigSpec
 		wantErr string
 	}{
 		{
@@ -27,9 +28,9 @@ func TestNewClaimsProcessor(t *testing.T) {
 		},
 		{
 			name: "invalid variable CEL expression returns error",
-			conf: func() *config.ConfigSpec {
+			conf: func() *fluxcdv1.WebConfigSpec {
 				c := validOAuth2ConfigSpec()
-				c.Authentication.OAuth2.Variables = []config.VariableSpec{
+				c.Authentication.OAuth2.Variables = []fluxcdv1.VariableSpec{
 					{Name: "test", Expression: "invalid[[["},
 				}
 				return c
@@ -38,9 +39,9 @@ func TestNewClaimsProcessor(t *testing.T) {
 		},
 		{
 			name: "invalid validation CEL expression returns error",
-			conf: func() *config.ConfigSpec {
+			conf: func() *fluxcdv1.WebConfigSpec {
 				c := validOAuth2ConfigSpec()
-				c.Authentication.OAuth2.Validations = []config.ValidationSpec{
+				c.Authentication.OAuth2.Validations = []fluxcdv1.ValidationSpec{
 					{Expression: "invalid[[[", Message: "test"},
 				}
 				return c
@@ -49,9 +50,9 @@ func TestNewClaimsProcessor(t *testing.T) {
 		},
 		{
 			name: "invalid profile CEL expression returns error",
-			conf: func() *config.ConfigSpec {
+			conf: func() *fluxcdv1.WebConfigSpec {
 				c := validOAuth2ConfigSpec()
-				c.Authentication.OAuth2.Profile = &config.ProfileSpec{
+				c.Authentication.OAuth2.Profile = &fluxcdv1.ProfileSpec{
 					Name: "invalid[[[",
 				}
 				return c
@@ -60,9 +61,9 @@ func TestNewClaimsProcessor(t *testing.T) {
 		},
 		{
 			name: "invalid impersonation username CEL expression returns error",
-			conf: func() *config.ConfigSpec {
+			conf: func() *fluxcdv1.WebConfigSpec {
 				c := validOAuth2ConfigSpec()
-				c.Authentication.OAuth2.Impersonation = &config.ImpersonationSpec{
+				c.Authentication.OAuth2.Impersonation = &fluxcdv1.ImpersonationSpec{
 					Username: "invalid[[[",
 					Groups:   "[]",
 				}
@@ -72,9 +73,9 @@ func TestNewClaimsProcessor(t *testing.T) {
 		},
 		{
 			name: "invalid impersonation groups CEL expression returns error",
-			conf: func() *config.ConfigSpec {
+			conf: func() *fluxcdv1.WebConfigSpec {
 				c := validOAuth2ConfigSpec()
-				c.Authentication.OAuth2.Impersonation = &config.ImpersonationSpec{
+				c.Authentication.OAuth2.Impersonation = &fluxcdv1.ImpersonationSpec{
 					Username: "claims.email",
 					Groups:   "invalid[[[",
 				}
@@ -102,7 +103,7 @@ func TestClaimsProcessorFunc(t *testing.T) {
 
 	for _, tt := range []struct {
 		name            string
-		conf            *config.ConfigSpec
+		conf            *fluxcdv1.WebConfigSpec
 		claims          map[string]any
 		wantErr         string
 		wantProfileName string
@@ -145,12 +146,12 @@ func TestClaimsProcessorFunc(t *testing.T) {
 		},
 		{
 			name: "extracts variables and uses in validation",
-			conf: func() *config.ConfigSpec {
+			conf: func() *fluxcdv1.WebConfigSpec {
 				c := validOAuth2ConfigSpec()
-				c.Authentication.OAuth2.Variables = []config.VariableSpec{
+				c.Authentication.OAuth2.Variables = []fluxcdv1.VariableSpec{
 					{Name: "domain", Expression: "claims.email.split('@')[1]"},
 				}
-				c.Authentication.OAuth2.Validations = []config.ValidationSpec{
+				c.Authentication.OAuth2.Validations = []fluxcdv1.ValidationSpec{
 					{Expression: "variables.domain == 'example.com'", Message: "Only example.com allowed"},
 				}
 				return c
@@ -166,9 +167,9 @@ func TestClaimsProcessorFunc(t *testing.T) {
 		},
 		{
 			name: "validation fails with message when expression returns false",
-			conf: func() *config.ConfigSpec {
+			conf: func() *fluxcdv1.WebConfigSpec {
 				c := validOAuth2ConfigSpec()
-				c.Authentication.OAuth2.Validations = []config.ValidationSpec{
+				c.Authentication.OAuth2.Validations = []fluxcdv1.ValidationSpec{
 					{Expression: "has(claims.admin) && claims.admin == true", Message: "Admin access required"},
 				}
 				return c
@@ -181,9 +182,9 @@ func TestClaimsProcessorFunc(t *testing.T) {
 		},
 		{
 			name: "custom impersonation expressions work",
-			conf: func() *config.ConfigSpec {
+			conf: func() *fluxcdv1.WebConfigSpec {
 				c := validOAuth2ConfigSpec()
-				c.Authentication.OAuth2.Impersonation = &config.ImpersonationSpec{
+				c.Authentication.OAuth2.Impersonation = &fluxcdv1.ImpersonationSpec{
 					Username: "claims.sub",
 					Groups:   "claims.roles",
 				}
@@ -200,9 +201,9 @@ func TestClaimsProcessorFunc(t *testing.T) {
 		},
 		{
 			name: "custom profile name expression works",
-			conf: func() *config.ConfigSpec {
+			conf: func() *fluxcdv1.WebConfigSpec {
 				c := validOAuth2ConfigSpec()
-				c.Authentication.OAuth2.Profile = &config.ProfileSpec{
+				c.Authentication.OAuth2.Profile = &fluxcdv1.ProfileSpec{
 					Name: "claims.preferred_username",
 				}
 				return c
@@ -218,9 +219,9 @@ func TestClaimsProcessorFunc(t *testing.T) {
 		},
 		{
 			name: "impersonation validation fails when username and groups are empty",
-			conf: func() *config.ConfigSpec {
+			conf: func() *fluxcdv1.WebConfigSpec {
 				c := validOAuth2ConfigSpec()
-				c.Authentication.OAuth2.Impersonation = &config.ImpersonationSpec{
+				c.Authentication.OAuth2.Impersonation = &fluxcdv1.ImpersonationSpec{
 					Username: "''",
 					Groups:   "[]",
 				}
@@ -234,9 +235,9 @@ func TestClaimsProcessorFunc(t *testing.T) {
 		},
 		{
 			name: "impersonation validation fails when group is empty string",
-			conf: func() *config.ConfigSpec {
+			conf: func() *fluxcdv1.WebConfigSpec {
 				c := validOAuth2ConfigSpec()
-				c.Authentication.OAuth2.Impersonation = &config.ImpersonationSpec{
+				c.Authentication.OAuth2.Impersonation = &fluxcdv1.ImpersonationSpec{
 					Username: "claims.email",
 					Groups:   "['group1', '']",
 				}
@@ -250,9 +251,9 @@ func TestClaimsProcessorFunc(t *testing.T) {
 		},
 		{
 			name: "impersonation sanitizes whitespace from username",
-			conf: func() *config.ConfigSpec {
+			conf: func() *fluxcdv1.WebConfigSpec {
 				c := validOAuth2ConfigSpec()
-				c.Authentication.OAuth2.Impersonation = &config.ImpersonationSpec{
+				c.Authentication.OAuth2.Impersonation = &fluxcdv1.ImpersonationSpec{
 					Username: "'  user@example.com  '",
 					Groups:   "[]",
 				}
@@ -267,9 +268,9 @@ func TestClaimsProcessorFunc(t *testing.T) {
 		},
 		{
 			name: "impersonation sanitizes and sorts groups",
-			conf: func() *config.ConfigSpec {
+			conf: func() *fluxcdv1.WebConfigSpec {
 				c := validOAuth2ConfigSpec()
-				c.Authentication.OAuth2.Impersonation = &config.ImpersonationSpec{
+				c.Authentication.OAuth2.Impersonation = &fluxcdv1.ImpersonationSpec{
 					Username: "claims.email",
 					Groups:   "['  zebra  ', '  alpha  ']",
 				}
@@ -307,21 +308,21 @@ func TestClaimsProcessorFunc(t *testing.T) {
 
 // validOAuth2ConfigSpec returns a valid ConfigSpec with OAuth2 authentication
 // configured with default CEL expressions for testing.
-func validOAuth2ConfigSpec() *config.ConfigSpec {
-	conf := &config.ConfigSpec{
+func validOAuth2ConfigSpec() *fluxcdv1.WebConfigSpec {
+	conf := &fluxcdv1.WebConfigSpec{
 		BaseURL: "https://status.example.com",
-		Authentication: &config.AuthenticationSpec{
-			Type:            config.AuthenticationTypeOAuth2,
+		Authentication: &fluxcdv1.AuthenticationSpec{
+			Type:            fluxcdv1.AuthenticationTypeOAuth2,
 			SessionDuration: &metav1.Duration{Duration: 24 * time.Hour},
 			UserCacheSize:   100,
-			OAuth2: &config.OAuth2AuthenticationSpec{
-				Provider:     config.OAuth2ProviderOIDC,
+			OAuth2: &fluxcdv1.OAuth2AuthenticationSpec{
+				Provider:     fluxcdv1.OAuth2ProviderOIDC,
 				ClientID:     "test-client-id",
 				ClientSecret: "test-client-secret",
 				IssuerURL:    "https://issuer.example.com",
 			},
 		},
 	}
-	conf.Authentication.OAuth2.ApplyDefaults()
+	config.ApplyOAuth2AuthenticationSpecDefaults(conf.Authentication.OAuth2)
 	return conf
 }

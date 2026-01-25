@@ -390,7 +390,7 @@ func main() {
 		}
 
 		// Open configuration channel.
-		var confChannel <-chan *webconfig.ConfigSpec
+		var confChannel <-chan *fluxcdv1.WebConfigSpec
 		var confWatcherStopped <-chan struct{}
 		if webConfigSecretName != "" {
 			confChannel, confWatcherStopped, err = webconfig.WatchSecret(
@@ -405,7 +405,7 @@ func main() {
 				setupLog.Error(err, "unable to load web server configuration file")
 				os.Exit(1)
 			}
-			cch := make(chan *webconfig.ConfigSpec, 1)
+			cch := make(chan *fluxcdv1.WebConfigSpec, 1)
 			cch <- conf
 			confChannel = cch
 

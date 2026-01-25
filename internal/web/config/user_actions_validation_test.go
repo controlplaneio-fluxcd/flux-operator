@@ -7,12 +7,14 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
+
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
-func TestUserActionsSpec_Validate(t *testing.T) {
+func TestValidateUserActionsSpec(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
-		spec    *UserActionsSpec
+		spec    *fluxcdv1.UserActionsSpec
 		wantErr string
 	}{
 		{
@@ -22,48 +24,48 @@ func TestUserActionsSpec_Validate(t *testing.T) {
 		},
 		{
 			name:    "empty spec is valid",
-			spec:    &UserActionsSpec{},
+			spec:    &fluxcdv1.UserActionsSpec{},
 			wantErr: "",
 		},
 		{
 			name: "valid audit with single action",
-			spec: &UserActionsSpec{
-				Audit: []string{UserActionReconcile},
+			spec: &fluxcdv1.UserActionsSpec{
+				Audit: []string{fluxcdv1.UserActionReconcile},
 			},
 			wantErr: "",
 		},
 		{
 			name: "valid audit with multiple actions",
-			spec: &UserActionsSpec{
-				Audit: []string{UserActionReconcile, UserActionSuspend, UserActionResume},
+			spec: &fluxcdv1.UserActionsSpec{
+				Audit: []string{fluxcdv1.UserActionReconcile, fluxcdv1.UserActionSuspend, fluxcdv1.UserActionResume},
 			},
 			wantErr: "",
 		},
 		{
 			name: "valid audit with wildcard",
-			spec: &UserActionsSpec{
+			spec: &fluxcdv1.UserActionsSpec{
 				Audit: []string{"*"},
 			},
 			wantErr: "",
 		},
 		{
 			name: "duplicate audit action",
-			spec: &UserActionsSpec{
-				Audit: []string{UserActionReconcile, UserActionSuspend, UserActionReconcile},
+			spec: &fluxcdv1.UserActionsSpec{
+				Audit: []string{fluxcdv1.UserActionReconcile, fluxcdv1.UserActionSuspend, fluxcdv1.UserActionReconcile},
 			},
 			wantErr: "duplicate audit action: 'reconcile'",
 		},
 		{
 			name: "invalid audit action",
-			spec: &UserActionsSpec{
+			spec: &fluxcdv1.UserActionsSpec{
 				Audit: []string{"invalid-action"},
 			},
 			wantErr: "invalid audit action: 'invalid-action'",
 		},
 		{
 			name: "wildcard combined with other actions",
-			spec: &UserActionsSpec{
-				Audit: []string{"*", UserActionReconcile},
+			spec: &fluxcdv1.UserActionsSpec{
+				Audit: []string{"*", fluxcdv1.UserActionReconcile},
 			},
 			wantErr: "audit action '*' cannot be combined with other actions",
 		},
@@ -72,7 +74,7 @@ func TestUserActionsSpec_Validate(t *testing.T) {
 			g := NewWithT(t)
 			var err error
 			if tt.spec != nil {
-				err = tt.spec.Validate()
+				err = ValidateUserActionsSpec(tt.spec)
 			}
 			if tt.wantErr == "" {
 				g.Expect(err).NotTo(HaveOccurred())
@@ -84,30 +86,10 @@ func TestUserActionsSpec_Validate(t *testing.T) {
 	}
 }
 
-func TestUserActionsSpec_ApplyDefaults(t *testing.T) {
-	g := NewWithT(t)
-
-	// nil spec does not panic
-	var nilSpec *UserActionsSpec
-	nilSpec.ApplyDefaults()
-
-	// spec with values preserves them
-	spec := &UserActionsSpec{
-		Audit: []string{UserActionReconcile},
-	}
-	spec.ApplyDefaults()
-	g.Expect(spec.Audit).To(Equal([]string{UserActionReconcile}))
-
-	// empty spec applies defaults without error
-	spec2 := &UserActionsSpec{}
-	spec2.ApplyDefaults()
-	g.Expect(spec2.Audit).To(BeNil())
-}
-
 func TestAllUserActions(t *testing.T) {
 	g := NewWithT(t)
 
 	// Verify AllUserActions contains the expected actions
-	g.Expect(AllUserActions).To(ConsistOf(UserActionReconcile, UserActionSuspend, UserActionResume))
-	g.Expect(AllUserActions).To(HaveLen(3))
+	g.Expect(fluxcdv1.AllUserActions).To(ConsistOf(fluxcdv1.UserActionReconcile, fluxcdv1.UserActionSuspend, fluxcdv1.UserActionResume))
+	g.Expect(fluxcdv1.AllUserActions).To(HaveLen(3))
 }
