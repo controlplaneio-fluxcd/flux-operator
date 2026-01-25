@@ -167,6 +167,7 @@ func resetCmdArgs() {
 	createSecretSSHArgs = createSecretSSHFlags{}
 	createSecretRegistryArgs = createSecretRegistryFlags{}
 	createSecretSOPSArgs = createSecretSOPSFlags{}
+	webConfigArgs = webConfigFlags{}
 
 	// Export commands
 	exportReportArgs = exportReportFlags{output: "yaml"}

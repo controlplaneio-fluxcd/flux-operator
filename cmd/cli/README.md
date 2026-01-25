@@ -257,6 +257,15 @@ The following commands are available:
   - `--tls-crt-file`: Path to TLS client certificate file.
   - `--tls-key-file`: Path to TLS client private key file.
   - `--ca-crt-file`: Path to CA certificate file (optional).
+- `flux-operator create secret web-config`: Create a Kubernetes Secret containing Flux Web UI configuration.
+  - `--base-url`: The external URL for the Flux Web UI (required).
+  - `--provider`: Authentication provider (defaults to OIDC).
+  - `--issuer-url`: OIDC issuer URL (required when provider is OIDC).
+  - `--client-id`: OIDC client ID (required when provider is OIDC).
+  - `--client-secret`: OIDC client secret.
+  - `--client-secret-stdin`: Read the client secret from stdin.
+  - `--client-secret-rnd`: Generate a random client secret.
+
 
 Arguments:
 
