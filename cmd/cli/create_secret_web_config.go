@@ -28,6 +28,9 @@ type webConfigFlags struct {
 	clientSecretRnd   bool
 	clientSecretStdin bool
 	export            bool
+	annotations       []string
+	labels            []string
+	immutable         bool
 }
 
 var createSecretWebConfigCmd = &cobra.Command{
@@ -88,6 +91,12 @@ func init() {
 		"read client secret from stdin")
 	createSecretWebConfigCmd.Flags().BoolVar(&webConfigArgs.export, "export", false,
 		"export resource in YAML format to stdout")
+	createSecretWebConfigCmd.Flags().StringSliceVar(&webConfigArgs.annotations, "annotation", nil,
+		"set annotations on the resource (can specify multiple annotations with commas: annotation1=value1,annotation2=value2)")
+	createSecretWebConfigCmd.Flags().StringSliceVar(&webConfigArgs.labels, "label", nil,
+		"set labels on the resource (can specify multiple labels with commas: label1=value1,label2=value2)")
+	createSecretWebConfigCmd.Flags().BoolVar(&webConfigArgs.immutable, "immutable", false,
+		"set the immutable flag on the Secret")
 
 	_ = createSecretWebConfigCmd.MarkFlagRequired("base-url")
 	_ = createSecretWebConfigCmd.MarkFlagRequired("client-id")
@@ -147,6 +156,14 @@ func createSecretWebConfigCmdRun(cmd *cobra.Command, args []string) error {
 		},
 	}
 
+	if err := setSecretMetadata(
+		secret,
+		webConfigArgs.annotations,
+		webConfigArgs.labels,
+	); err != nil {
+		return fmt.Errorf("unable to set metadata on secret: %w", err)
+	}
+
 	if webConfigArgs.export {
 		return printSecret(secret)
 	}
@@ -164,6 +181,7 @@ func createSecretWebConfigCmdRun(cmd *cobra.Command, args []string) error {
 		kubeClient,
 		secret,
 		secrets.WithForce(),
+		secrets.WithImmutable(webConfigArgs.immutable),
 	)
 	if err != nil {
 		return err
