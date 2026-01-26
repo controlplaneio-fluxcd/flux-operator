@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
+
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
 func TestLoad(t *testing.T) {
@@ -18,7 +20,7 @@ func TestLoad(t *testing.T) {
 		createFile      bool
 		wantErr         string
 		expectedVersion string
-		validate        func(g Gomega, spec *ConfigSpec)
+		validate        func(g Gomega, spec *fluxcdv1.WebConfigSpec)
 	}{
 		{
 			name:            "empty filename returns defaults",
@@ -26,7 +28,7 @@ func TestLoad(t *testing.T) {
 			createFile:      false,
 			wantErr:         "",
 			expectedVersion: "no-config",
-			validate: func(g Gomega, spec *ConfigSpec) {
+			validate: func(g Gomega, spec *fluxcdv1.WebConfigSpec) {
 				g.Expect(spec).NotTo(BeNil())
 			},
 		},
@@ -49,9 +51,9 @@ spec:
 			createFile:      true,
 			wantErr:         "",
 			expectedVersion: "static-file",
-			validate: func(g Gomega, spec *ConfigSpec) {
+			validate: func(g Gomega, spec *fluxcdv1.WebConfigSpec) {
 				g.Expect(spec.Authentication).NotTo(BeNil())
-				g.Expect(spec.Authentication.Type).To(Equal(AuthenticationTypeAnonymous))
+				g.Expect(spec.Authentication.Type).To(Equal(fluxcdv1.AuthenticationTypeAnonymous))
 				g.Expect(spec.Authentication.Anonymous.Username).To(Equal("test-user"))
 			},
 		},
@@ -107,7 +109,7 @@ func TestParse(t *testing.T) {
 		name     string
 		content  string
 		wantErr  string
-		validate func(g Gomega, spec *ConfigSpec)
+		validate func(g Gomega, spec *fluxcdv1.WebConfigSpec)
 	}{
 		{
 			name: "valid YAML with Anonymous auth",
@@ -123,9 +125,9 @@ spec:
         - group2
 `,
 			wantErr: "",
-			validate: func(g Gomega, spec *ConfigSpec) {
+			validate: func(g Gomega, spec *fluxcdv1.WebConfigSpec) {
 				g.Expect(spec.Authentication).NotTo(BeNil())
-				g.Expect(spec.Authentication.Type).To(Equal(AuthenticationTypeAnonymous))
+				g.Expect(spec.Authentication.Type).To(Equal(fluxcdv1.AuthenticationTypeAnonymous))
 				g.Expect(spec.Authentication.Anonymous.Username).To(Equal("test-user"))
 				g.Expect(spec.Authentication.Anonymous.Groups).To(Equal([]string{"group1", "group2"}))
 				// defaults should be applied
@@ -151,11 +153,11 @@ spec:
         - profile
 `,
 			wantErr: "",
-			validate: func(g Gomega, spec *ConfigSpec) {
+			validate: func(g Gomega, spec *fluxcdv1.WebConfigSpec) {
 				g.Expect(spec.BaseURL).To(Equal("https://status.example.com"))
 				g.Expect(spec.Authentication).NotTo(BeNil())
-				g.Expect(spec.Authentication.Type).To(Equal(AuthenticationTypeOAuth2))
-				g.Expect(spec.Authentication.OAuth2.Provider).To(Equal(OAuth2ProviderOIDC))
+				g.Expect(spec.Authentication.Type).To(Equal(fluxcdv1.AuthenticationTypeOAuth2))
+				g.Expect(spec.Authentication.OAuth2.Provider).To(Equal(fluxcdv1.OAuth2ProviderOIDC))
 				g.Expect(spec.Authentication.OAuth2.ClientID).To(Equal("my-client-id"))
 				g.Expect(spec.Authentication.OAuth2.IssuerURL).To(Equal("https://issuer.example.com"))
 				g.Expect(spec.Authentication.OAuth2.Scopes).To(Equal([]string{"openid", "profile"}))
@@ -222,7 +224,7 @@ spec:
       username: test-user
 `,
 			wantErr: "",
-			validate: func(g Gomega, spec *ConfigSpec) {
+			validate: func(g Gomega, spec *fluxcdv1.WebConfigSpec) {
 				g.Expect(spec.Insecure).To(BeTrue())
 			},
 		},
@@ -252,7 +254,7 @@ spec:
         groups: claims.roles
 `,
 			wantErr: "",
-			validate: func(g Gomega, spec *ConfigSpec) {
+			validate: func(g Gomega, spec *fluxcdv1.WebConfigSpec) {
 				g.Expect(spec.Authentication.OAuth2.Variables).To(HaveLen(1))
 				g.Expect(spec.Authentication.OAuth2.Variables[0].Name).To(Equal("domain"))
 				g.Expect(spec.Authentication.OAuth2.Validations).To(HaveLen(1))

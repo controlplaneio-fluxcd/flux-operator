@@ -16,8 +16,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
 
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/auth"
-	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/kubeclient"
 	"github.com/controlplaneio-fluxcd/flux-operator/web"
 )
@@ -44,7 +44,7 @@ var (
 // The error returned is either from http.Server.Shutdown() or
 // graceful shutdown deadline exceeded.
 func RunServer(ctx context.Context, c cluster.Cluster,
-	confChannel <-chan *config.ConfigSpec,
+	confChannel <-chan *fluxcdv1.WebConfigSpec,
 	version, statusManager, namespace string,
 	gracefulShutdownTimeout time.Duration, port int) error {
 
@@ -129,7 +129,7 @@ func RunServer(ctx context.Context, c cluster.Cluster,
 	}
 
 	// Listen for configuration updates.
-	var conf *config.ConfigSpec
+	var conf *fluxcdv1.WebConfigSpec
 	confVersion := "uninitialized"
 	for {
 		// If the context is done, initiate graceful shutdown.
@@ -153,7 +153,7 @@ func RunServer(ctx context.Context, c cluster.Cluster,
 
 		// Create kubeclient.
 		userCacheSize := 1 // Single cache entry if authentication is disabled or anonymous.
-		if a := conf.Authentication; a != nil && a.Type != config.AuthenticationTypeAnonymous {
+		if a := conf.Authentication; a != nil && a.Type != fluxcdv1.AuthenticationTypeAnonymous {
 			userCacheSize = a.UserCacheSize
 		}
 		kubeClient, err := kubeclient.New(c.GetAPIReader(), c.GetClient(), c.GetConfig(), c.GetScheme(),

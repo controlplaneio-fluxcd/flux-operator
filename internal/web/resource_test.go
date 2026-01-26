@@ -18,7 +18,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
-	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
 
@@ -851,11 +850,11 @@ func TestGetResource_UserActions_PartialRBAC(t *testing.T) {
 
 	// Create the handler with user actions enabled
 	handler := &Handler{
-		conf: &config.ConfigSpec{
-			Authentication: &config.AuthenticationSpec{
-				Type: config.AuthenticationTypeOAuth2,
+		conf: &fluxcdv1.WebConfigSpec{
+			Authentication: &fluxcdv1.AuthenticationSpec{
+				Type: fluxcdv1.AuthenticationTypeOAuth2,
 			},
-			UserActions: &config.UserActionsSpec{},
+			UserActions: &fluxcdv1.UserActionsSpec{},
 		},
 		kubeClient:    kubeClient,
 		version:       "v1.0.0",
@@ -941,11 +940,11 @@ func TestGetResource_UserActions_AllActions(t *testing.T) {
 
 	// Create the handler with user actions enabled
 	handler := &Handler{
-		conf: &config.ConfigSpec{
-			Authentication: &config.AuthenticationSpec{
-				Type: config.AuthenticationTypeOAuth2,
+		conf: &fluxcdv1.WebConfigSpec{
+			Authentication: &fluxcdv1.AuthenticationSpec{
+				Type: fluxcdv1.AuthenticationTypeOAuth2,
 			},
-			UserActions: &config.UserActionsSpec{},
+			UserActions: &fluxcdv1.UserActionsSpec{},
 		},
 		kubeClient:    kubeClient,
 		version:       "v1.0.0",
@@ -1029,11 +1028,11 @@ func TestGetResource_UserActions_NoActions(t *testing.T) {
 
 	// Create the handler with user actions enabled
 	handler := &Handler{
-		conf: &config.ConfigSpec{
-			Authentication: &config.AuthenticationSpec{
-				Type: config.AuthenticationTypeOAuth2,
+		conf: &fluxcdv1.WebConfigSpec{
+			Authentication: &fluxcdv1.AuthenticationSpec{
+				Type: fluxcdv1.AuthenticationTypeOAuth2,
 			},
-			UserActions: &config.UserActionsSpec{},
+			UserActions: &fluxcdv1.UserActionsSpec{},
 		},
 		kubeClient:    kubeClient,
 		version:       "v1.0.0",
@@ -1081,9 +1080,9 @@ func TestGetResource_UserActions_Disabled(t *testing.T) {
 
 	// Create the handler without user actions enabled (no auth configured)
 	handler := &Handler{
-		conf: &config.ConfigSpec{
+		conf: &fluxcdv1.WebConfigSpec{
 			// No authentication configured, so UserActionsEnabled() returns false
-			UserActions: &config.UserActionsSpec{},
+			UserActions: &fluxcdv1.UserActionsSpec{},
 		},
 		kubeClient:    kubeClient,
 		version:       "v1.0.0",

@@ -19,7 +19,7 @@ import (
 	"golang.org/x/oauth2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
 
@@ -467,9 +467,9 @@ func TestVerifyTokenAndSetStorageOrLogError_SessionStart(t *testing.T) {
 	newTestAuthenticator := func(t *testing.T) *oauth2Authenticator {
 		t.Helper()
 		auth := newTestOAuth2Authenticator(t)
-		auth.conf = &config.ConfigSpec{
+		auth.conf = &fluxcdv1.WebConfigSpec{
 			Insecure: true,
-			Authentication: &config.AuthenticationSpec{
+			Authentication: &fluxcdv1.AuthenticationSpec{
 				SessionDuration: &metav1.Duration{Duration: 24 * time.Hour},
 			},
 		}

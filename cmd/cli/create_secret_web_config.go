@@ -1,4 +1,4 @@
-// Copyright 2025 Stefan Prodan.
+// Copyright 2026 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
 package main
@@ -15,6 +15,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
+
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
 type webConfigFlags struct {
@@ -26,29 +28,6 @@ type webConfigFlags struct {
 	clientSecretRnd   bool
 	clientSecretStdin bool
 	export            bool
-}
-
-type webConfig struct {
-	APIVersion string        `json:"apiVersion"`
-	Kind       string        `json:"kind"`
-	Spec       webConfigSpec `json:"spec"`
-}
-
-type webConfigSpec struct {
-	BaseURL        string        `json:"baseURL"`
-	Authentication webConfigAuth `json:"authentication"`
-}
-
-type webConfigAuth struct {
-	Type   string          `json:"type"`
-	OAuth2 webConfigOAuth2 `json:"oauth2"`
-}
-
-type webConfigOAuth2 struct {
-	Provider     string `json:"provider"`
-	ClientID     string `json:"clientID"`
-	ClientSecret string `json:"clientSecret"`
-	IssuerURL    string `json:"issuerURL"`
 }
 
 var createSecretWebConfigCmd = &cobra.Command{
@@ -129,14 +108,16 @@ func createSecretWebConfigCmdRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to get client secret: %w", err)
 	}
 
-	config := webConfig{
-		APIVersion: "web.fluxcd.controlplane.io/v1",
-		Kind:       "Config",
-		Spec: webConfigSpec{
+	config := fluxcdv1.WebConfig{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: fluxcdv1.WebConfigGroupVersion.String(),
+			Kind:       fluxcdv1.WebConfigKind,
+		},
+		Spec: fluxcdv1.WebConfigSpec{
 			BaseURL: webConfigArgs.baseURL,
-			Authentication: webConfigAuth{
-				Type: "OAuth2",
-				OAuth2: webConfigOAuth2{
+			Authentication: &fluxcdv1.AuthenticationSpec{
+				Type: fluxcdv1.AuthenticationTypeOAuth2,
+				OAuth2: &fluxcdv1.OAuth2AuthenticationSpec{
 					Provider:     webConfigArgs.provider,
 					ClientID:     webConfigArgs.clientID,
 					ClientSecret: clientSecret,

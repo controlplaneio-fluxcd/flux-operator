@@ -15,7 +15,7 @@ import (
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
 func TestSetCookie(t *testing.T) {
@@ -203,7 +203,7 @@ func TestSetAnonymousAuthProviderCookie(t *testing.T) {
 	var result map[string]any
 	err = json.Unmarshal(decoded, &result)
 	g.Expect(err).NotTo(HaveOccurred())
-	g.Expect(result["provider"]).To(Equal(config.AuthenticationTypeAnonymous))
+	g.Expect(result["provider"]).To(Equal(fluxcdv1.AuthenticationTypeAnonymous))
 	g.Expect(result["url"]).To(BeEmpty())
 	g.Expect(result["authenticated"]).To(BeTrue())
 }
@@ -212,9 +212,9 @@ func TestAuthStorage(t *testing.T) {
 	t.Run("setAuthStorage stores tokens", func(t *testing.T) {
 		g := NewWithT(t)
 
-		conf := &config.ConfigSpec{
+		conf := &fluxcdv1.WebConfigSpec{
 			Insecure: false,
-			Authentication: &config.AuthenticationSpec{
+			Authentication: &fluxcdv1.AuthenticationSpec{
 				SessionDuration: &metav1.Duration{Duration: 24 * time.Hour},
 			},
 		}
@@ -298,9 +298,9 @@ func TestAuthStorage(t *testing.T) {
 	t.Run("setAuthStorage and getAuthStorage preserve SessionStart", func(t *testing.T) {
 		g := NewWithT(t)
 
-		conf := &config.ConfigSpec{
+		conf := &fluxcdv1.WebConfigSpec{
 			Insecure: false,
-			Authentication: &config.AuthenticationSpec{
+			Authentication: &fluxcdv1.AuthenticationSpec{
 				SessionDuration: &metav1.Duration{Duration: 24 * time.Hour},
 			},
 		}
@@ -489,9 +489,9 @@ func TestAuthStorageChunking(t *testing.T) {
 	t.Run("small token uses single cookie", func(t *testing.T) {
 		g := NewWithT(t)
 
-		conf := &config.ConfigSpec{
+		conf := &fluxcdv1.WebConfigSpec{
 			Insecure: false,
-			Authentication: &config.AuthenticationSpec{
+			Authentication: &fluxcdv1.AuthenticationSpec{
 				SessionDuration: &metav1.Duration{Duration: 24 * time.Hour},
 			},
 		}
@@ -517,9 +517,9 @@ func TestAuthStorageChunking(t *testing.T) {
 	t.Run("large token is chunked and reassembled", func(t *testing.T) {
 		g := NewWithT(t)
 
-		conf := &config.ConfigSpec{
+		conf := &fluxcdv1.WebConfigSpec{
 			Insecure: false,
-			Authentication: &config.AuthenticationSpec{
+			Authentication: &fluxcdv1.AuthenticationSpec{
 				SessionDuration: &metav1.Duration{Duration: 24 * time.Hour},
 			},
 		}
@@ -562,9 +562,9 @@ func TestAuthStorageChunking(t *testing.T) {
 	t.Run("too large token errors out", func(t *testing.T) {
 		g := NewWithT(t)
 
-		conf := &config.ConfigSpec{
+		conf := &fluxcdv1.WebConfigSpec{
 			Insecure: false,
-			Authentication: &config.AuthenticationSpec{
+			Authentication: &fluxcdv1.AuthenticationSpec{
 				SessionDuration: &metav1.Duration{Duration: 24 * time.Hour},
 			},
 		}

@@ -9,19 +9,21 @@ import (
 
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
-func TestAuthenticationSpec_Validate(t *testing.T) {
+func TestValidateAuthenticationSpec(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
-		spec    *AuthenticationSpec
+		spec    *fluxcdv1.AuthenticationSpec
 		wantErr string
 	}{
 		{
 			name: "valid Anonymous authentication",
-			spec: &AuthenticationSpec{
-				Type: AuthenticationTypeAnonymous,
-				Anonymous: &AnonymousAuthenticationSpec{
+			spec: &fluxcdv1.AuthenticationSpec{
+				Type: fluxcdv1.AuthenticationTypeAnonymous,
+				Anonymous: &fluxcdv1.AnonymousAuthenticationSpec{
 					Username: "test-user",
 				},
 			},
@@ -29,10 +31,10 @@ func TestAuthenticationSpec_Validate(t *testing.T) {
 		},
 		{
 			name: "valid OAuth2 authentication",
-			spec: &AuthenticationSpec{
-				Type: AuthenticationTypeOAuth2,
-				OAuth2: &OAuth2AuthenticationSpec{
-					Provider:     OAuth2ProviderOIDC,
+			spec: &fluxcdv1.AuthenticationSpec{
+				Type: fluxcdv1.AuthenticationTypeOAuth2,
+				OAuth2: &fluxcdv1.OAuth2AuthenticationSpec{
+					Provider:     fluxcdv1.OAuth2ProviderOIDC,
 					ClientID:     "client-id",
 					ClientSecret: "client-secret",
 					IssuerURL:    "https://issuer.example.com",
@@ -42,27 +44,27 @@ func TestAuthenticationSpec_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid authentication type",
-			spec: &AuthenticationSpec{
+			spec: &fluxcdv1.AuthenticationSpec{
 				Type: "InvalidType",
 			},
 			wantErr: "invalid authentication type 'InvalidType'",
 		},
 		{
 			name: "unconfigured authentication type",
-			spec: &AuthenticationSpec{
-				Type: AuthenticationTypeAnonymous,
+			spec: &fluxcdv1.AuthenticationSpec{
+				Type: fluxcdv1.AuthenticationTypeAnonymous,
 			},
 			wantErr: "authentication type 'Anonymous' is not configured",
 		},
 		{
 			name: "multiple authentication types configured",
-			spec: &AuthenticationSpec{
-				Type: AuthenticationTypeAnonymous,
-				Anonymous: &AnonymousAuthenticationSpec{
+			spec: &fluxcdv1.AuthenticationSpec{
+				Type: fluxcdv1.AuthenticationTypeAnonymous,
+				Anonymous: &fluxcdv1.AnonymousAuthenticationSpec{
 					Username: "test-user",
 				},
-				OAuth2: &OAuth2AuthenticationSpec{
-					Provider:     OAuth2ProviderOIDC,
+				OAuth2: &fluxcdv1.OAuth2AuthenticationSpec{
+					Provider:     fluxcdv1.OAuth2ProviderOIDC,
 					ClientID:     "client-id",
 					ClientSecret: "client-secret",
 					IssuerURL:    "https://issuer.example.com",
@@ -72,18 +74,18 @@ func TestAuthenticationSpec_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid Anonymous configuration",
-			spec: &AuthenticationSpec{
-				Type:      AuthenticationTypeAnonymous,
-				Anonymous: &AnonymousAuthenticationSpec{},
+			spec: &fluxcdv1.AuthenticationSpec{
+				Type:      fluxcdv1.AuthenticationTypeAnonymous,
+				Anonymous: &fluxcdv1.AnonymousAuthenticationSpec{},
 			},
 			wantErr: "invalid Anonymous authentication configuration",
 		},
 		{
 			name: "invalid OAuth2 configuration",
-			spec: &AuthenticationSpec{
-				Type: AuthenticationTypeOAuth2,
-				OAuth2: &OAuth2AuthenticationSpec{
-					Provider: OAuth2ProviderOIDC,
+			spec: &fluxcdv1.AuthenticationSpec{
+				Type: fluxcdv1.AuthenticationTypeOAuth2,
+				OAuth2: &fluxcdv1.OAuth2AuthenticationSpec{
+					Provider: fluxcdv1.OAuth2ProviderOIDC,
 				},
 			},
 			wantErr: "invalid OAuth2 authentication configuration",
@@ -91,7 +93,7 @@ func TestAuthenticationSpec_Validate(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
-			err := tt.spec.Validate()
+			err := ValidateAuthenticationSpec(tt.spec)
 			if tt.wantErr == "" {
 				g.Expect(err).NotTo(HaveOccurred())
 			} else {
@@ -102,10 +104,10 @@ func TestAuthenticationSpec_Validate(t *testing.T) {
 	}
 }
 
-func TestAuthenticationSpec_ApplyDefaults(t *testing.T) {
+func TestApplyAuthenticationSpecDefaults(t *testing.T) {
 	for _, tt := range []struct {
 		name                    string
-		spec                    *AuthenticationSpec
+		spec                    *fluxcdv1.AuthenticationSpec
 		expectedSessionDuration time.Duration
 		expectedUserCacheSize   int
 	}{
@@ -115,9 +117,9 @@ func TestAuthenticationSpec_ApplyDefaults(t *testing.T) {
 		},
 		{
 			name: "sets session duration default",
-			spec: &AuthenticationSpec{
-				Type: AuthenticationTypeAnonymous,
-				Anonymous: &AnonymousAuthenticationSpec{
+			spec: &fluxcdv1.AuthenticationSpec{
+				Type: fluxcdv1.AuthenticationTypeAnonymous,
+				Anonymous: &fluxcdv1.AnonymousAuthenticationSpec{
 					Username: "test-user",
 				},
 			},
@@ -126,9 +128,9 @@ func TestAuthenticationSpec_ApplyDefaults(t *testing.T) {
 		},
 		{
 			name: "preserves existing session duration",
-			spec: &AuthenticationSpec{
-				Type: AuthenticationTypeAnonymous,
-				Anonymous: &AnonymousAuthenticationSpec{
+			spec: &fluxcdv1.AuthenticationSpec{
+				Type: fluxcdv1.AuthenticationTypeAnonymous,
+				Anonymous: &fluxcdv1.AnonymousAuthenticationSpec{
 					Username: "test-user",
 				},
 				SessionDuration: &metav1.Duration{Duration: 2 * time.Hour},
@@ -139,9 +141,9 @@ func TestAuthenticationSpec_ApplyDefaults(t *testing.T) {
 		},
 		{
 			name: "replaces zero session duration with default",
-			spec: &AuthenticationSpec{
-				Type: AuthenticationTypeAnonymous,
-				Anonymous: &AnonymousAuthenticationSpec{
+			spec: &fluxcdv1.AuthenticationSpec{
+				Type: fluxcdv1.AuthenticationTypeAnonymous,
+				Anonymous: &fluxcdv1.AnonymousAuthenticationSpec{
 					Username: "test-user",
 				},
 				SessionDuration: &metav1.Duration{Duration: 0},
@@ -152,7 +154,7 @@ func TestAuthenticationSpec_ApplyDefaults(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
-			tt.spec.ApplyDefaults()
+			ApplyAuthenticationSpecDefaults(tt.spec)
 			if tt.spec != nil {
 				g.Expect(tt.spec.SessionDuration.Duration).To(Equal(tt.expectedSessionDuration))
 				g.Expect(tt.spec.UserCacheSize).To(Equal(tt.expectedUserCacheSize))
@@ -164,29 +166,29 @@ func TestAuthenticationSpec_ApplyDefaults(t *testing.T) {
 func TestAnonymousAuthenticationSpec_Configured(t *testing.T) {
 	g := NewWithT(t)
 
-	var nilSpec *AnonymousAuthenticationSpec
+	var nilSpec *fluxcdv1.AnonymousAuthenticationSpec
 	g.Expect(nilSpec.Configured()).To(BeFalse())
 
-	spec := &AnonymousAuthenticationSpec{}
+	spec := &fluxcdv1.AnonymousAuthenticationSpec{}
 	g.Expect(spec.Configured()).To(BeTrue())
 }
 
-func TestAnonymousAuthenticationSpec_Validate(t *testing.T) {
+func TestValidateAnonymousAuthenticationSpec(t *testing.T) {
 	for _, tt := range []struct {
 		name         string
-		spec         *AnonymousAuthenticationSpec
+		spec         *fluxcdv1.AnonymousAuthenticationSpec
 		wantErr      string
 		wantUsername string
 		wantGroups   []string
 	}{
 		{
 			name:    "missing both username and groups",
-			spec:    &AnonymousAuthenticationSpec{},
+			spec:    &fluxcdv1.AnonymousAuthenticationSpec{},
 			wantErr: "at least one of 'username' or 'groups' must be set",
 		},
 		{
 			name: "has username only",
-			spec: &AnonymousAuthenticationSpec{
+			spec: &fluxcdv1.AnonymousAuthenticationSpec{
 				Username: "test-user",
 			},
 			wantUsername: "test-user",
@@ -194,7 +196,7 @@ func TestAnonymousAuthenticationSpec_Validate(t *testing.T) {
 		},
 		{
 			name: "has groups only",
-			spec: &AnonymousAuthenticationSpec{
+			spec: &fluxcdv1.AnonymousAuthenticationSpec{
 				Groups: []string{"group1", "group2"},
 			},
 			wantUsername: "",
@@ -202,7 +204,7 @@ func TestAnonymousAuthenticationSpec_Validate(t *testing.T) {
 		},
 		{
 			name: "has both username and groups",
-			spec: &AnonymousAuthenticationSpec{
+			spec: &fluxcdv1.AnonymousAuthenticationSpec{
 				Username: "test-user",
 				Groups:   []string{"group1"},
 			},
@@ -211,7 +213,7 @@ func TestAnonymousAuthenticationSpec_Validate(t *testing.T) {
 		},
 		{
 			name: "trims whitespace from username",
-			spec: &AnonymousAuthenticationSpec{
+			spec: &fluxcdv1.AnonymousAuthenticationSpec{
 				Username: "  test-user  ",
 			},
 			wantUsername: "test-user",
@@ -219,7 +221,7 @@ func TestAnonymousAuthenticationSpec_Validate(t *testing.T) {
 		},
 		{
 			name: "trims whitespace from groups",
-			spec: &AnonymousAuthenticationSpec{
+			spec: &fluxcdv1.AnonymousAuthenticationSpec{
 				Groups: []string{"  group1  ", "  group2  "},
 			},
 			wantUsername: "",
@@ -227,7 +229,7 @@ func TestAnonymousAuthenticationSpec_Validate(t *testing.T) {
 		},
 		{
 			name: "sorts groups alphabetically",
-			spec: &AnonymousAuthenticationSpec{
+			spec: &fluxcdv1.AnonymousAuthenticationSpec{
 				Username: "test-user",
 				Groups:   []string{"zebra", "alpha", "middle"},
 			},
@@ -236,14 +238,14 @@ func TestAnonymousAuthenticationSpec_Validate(t *testing.T) {
 		},
 		{
 			name: "whitespace-only username with no groups fails",
-			spec: &AnonymousAuthenticationSpec{
+			spec: &fluxcdv1.AnonymousAuthenticationSpec{
 				Username: "   ",
 			},
 			wantErr: "at least one of 'username' or 'groups' must be set",
 		},
 		{
 			name: "empty string in groups fails",
-			spec: &AnonymousAuthenticationSpec{
+			spec: &fluxcdv1.AnonymousAuthenticationSpec{
 				Username: "test-user",
 				Groups:   []string{"group1", ""},
 			},
@@ -251,7 +253,7 @@ func TestAnonymousAuthenticationSpec_Validate(t *testing.T) {
 		},
 		{
 			name: "whitespace-only group fails",
-			spec: &AnonymousAuthenticationSpec{
+			spec: &fluxcdv1.AnonymousAuthenticationSpec{
 				Username: "test-user",
 				Groups:   []string{"group1", "   "},
 			},
@@ -260,7 +262,7 @@ func TestAnonymousAuthenticationSpec_Validate(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
-			err := tt.spec.Validate()
+			err := ValidateAnonymousAuthenticationSpec(tt.spec)
 			if tt.wantErr == "" {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(tt.spec.Username).To(Equal(tt.wantUsername))
@@ -273,50 +275,50 @@ func TestAnonymousAuthenticationSpec_Validate(t *testing.T) {
 	}
 }
 
-func TestAnonymousAuthenticationSpec_ApplyDefaults(t *testing.T) {
+func TestApplyAnonymousAuthenticationSpecDefaults(t *testing.T) {
 	g := NewWithT(t)
 
 	// nil spec does not panic
-	var nilSpec *AnonymousAuthenticationSpec
-	nilSpec.ApplyDefaults()
+	var nilSpec *fluxcdv1.AnonymousAuthenticationSpec
+	ApplyAnonymousAuthenticationSpecDefaults(nilSpec)
 
 	// nil groups becomes empty slice
-	spec := &AnonymousAuthenticationSpec{
+	spec := &fluxcdv1.AnonymousAuthenticationSpec{
 		Username: "test-user",
 	}
-	spec.ApplyDefaults()
+	ApplyAnonymousAuthenticationSpecDefaults(spec)
 	g.Expect(spec.Groups).NotTo(BeNil())
 	g.Expect(spec.Groups).To(BeEmpty())
 
 	// existing groups are preserved
-	spec2 := &AnonymousAuthenticationSpec{
+	spec2 := &fluxcdv1.AnonymousAuthenticationSpec{
 		Username: "test-user",
 		Groups:   []string{"group1"},
 	}
-	spec2.ApplyDefaults()
+	ApplyAnonymousAuthenticationSpecDefaults(spec2)
 	g.Expect(spec2.Groups).To(Equal([]string{"group1"}))
 }
 
 func TestOAuth2AuthenticationSpec_Configured(t *testing.T) {
 	g := NewWithT(t)
 
-	var nilSpec *OAuth2AuthenticationSpec
+	var nilSpec *fluxcdv1.OAuth2AuthenticationSpec
 	g.Expect(nilSpec.Configured()).To(BeFalse())
 
-	spec := &OAuth2AuthenticationSpec{}
+	spec := &fluxcdv1.OAuth2AuthenticationSpec{}
 	g.Expect(spec.Configured()).To(BeTrue())
 }
 
-func TestOAuth2AuthenticationSpec_Validate(t *testing.T) {
+func TestValidateOAuth2AuthenticationSpec(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
-		spec    *OAuth2AuthenticationSpec
+		spec    *fluxcdv1.OAuth2AuthenticationSpec
 		wantErr string
 	}{
 		{
 			name: "missing clientID",
-			spec: &OAuth2AuthenticationSpec{
-				Provider:     OAuth2ProviderOIDC,
+			spec: &fluxcdv1.OAuth2AuthenticationSpec{
+				Provider:     fluxcdv1.OAuth2ProviderOIDC,
 				ClientSecret: "secret",
 				IssuerURL:    "https://issuer.example.com",
 			},
@@ -324,8 +326,8 @@ func TestOAuth2AuthenticationSpec_Validate(t *testing.T) {
 		},
 		{
 			name: "missing clientSecret",
-			spec: &OAuth2AuthenticationSpec{
-				Provider:  OAuth2ProviderOIDC,
+			spec: &fluxcdv1.OAuth2AuthenticationSpec{
+				Provider:  fluxcdv1.OAuth2ProviderOIDC,
 				ClientID:  "client-id",
 				IssuerURL: "https://issuer.example.com",
 			},
@@ -333,8 +335,8 @@ func TestOAuth2AuthenticationSpec_Validate(t *testing.T) {
 		},
 		{
 			name: "OIDC missing issuerURL",
-			spec: &OAuth2AuthenticationSpec{
-				Provider:     OAuth2ProviderOIDC,
+			spec: &fluxcdv1.OAuth2AuthenticationSpec{
+				Provider:     fluxcdv1.OAuth2ProviderOIDC,
 				ClientID:     "client-id",
 				ClientSecret: "secret",
 			},
@@ -342,7 +344,7 @@ func TestOAuth2AuthenticationSpec_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid provider",
-			spec: &OAuth2AuthenticationSpec{
+			spec: &fluxcdv1.OAuth2AuthenticationSpec{
 				Provider:     "InvalidProvider",
 				ClientID:     "client-id",
 				ClientSecret: "secret",
@@ -351,8 +353,8 @@ func TestOAuth2AuthenticationSpec_Validate(t *testing.T) {
 		},
 		{
 			name: "valid OIDC config",
-			spec: &OAuth2AuthenticationSpec{
-				Provider:     OAuth2ProviderOIDC,
+			spec: &fluxcdv1.OAuth2AuthenticationSpec{
+				Provider:     fluxcdv1.OAuth2ProviderOIDC,
 				ClientID:     "client-id",
 				ClientSecret: "secret",
 				IssuerURL:    "https://issuer.example.com",
@@ -361,8 +363,8 @@ func TestOAuth2AuthenticationSpec_Validate(t *testing.T) {
 		},
 		{
 			name: "valid OIDC config with scopes",
-			spec: &OAuth2AuthenticationSpec{
-				Provider:     OAuth2ProviderOIDC,
+			spec: &fluxcdv1.OAuth2AuthenticationSpec{
+				Provider:     fluxcdv1.OAuth2ProviderOIDC,
 				ClientID:     "client-id",
 				ClientSecret: "secret",
 				IssuerURL:    "https://issuer.example.com",
@@ -372,13 +374,13 @@ func TestOAuth2AuthenticationSpec_Validate(t *testing.T) {
 		},
 		{
 			name: "OIDC with invalid variable CEL expression",
-			spec: &OAuth2AuthenticationSpec{
-				Provider:     OAuth2ProviderOIDC,
+			spec: &fluxcdv1.OAuth2AuthenticationSpec{
+				Provider:     fluxcdv1.OAuth2ProviderOIDC,
 				ClientID:     "client-id",
 				ClientSecret: "secret",
 				IssuerURL:    "https://issuer.example.com",
-				ClaimsProcessorSpec: ClaimsProcessorSpec{
-					Variables: []VariableSpec{
+				ClaimsProcessorSpec: fluxcdv1.ClaimsProcessorSpec{
+					Variables: []fluxcdv1.VariableSpec{
 						{Name: "test", Expression: "invalid[[["},
 					},
 				},
@@ -387,13 +389,13 @@ func TestOAuth2AuthenticationSpec_Validate(t *testing.T) {
 		},
 		{
 			name: "OIDC with invalid impersonation",
-			spec: &OAuth2AuthenticationSpec{
-				Provider:     OAuth2ProviderOIDC,
+			spec: &fluxcdv1.OAuth2AuthenticationSpec{
+				Provider:     fluxcdv1.OAuth2ProviderOIDC,
 				ClientID:     "client-id",
 				ClientSecret: "secret",
 				IssuerURL:    "https://issuer.example.com",
-				ClaimsProcessorSpec: ClaimsProcessorSpec{
-					Impersonation: &ImpersonationSpec{},
+				ClaimsProcessorSpec: fluxcdv1.ClaimsProcessorSpec{
+					Impersonation: &fluxcdv1.ImpersonationSpec{},
 				},
 			},
 			wantErr: "invalid impersonation",
@@ -401,7 +403,7 @@ func TestOAuth2AuthenticationSpec_Validate(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
-			err := tt.spec.Validate()
+			err := ValidateOAuth2AuthenticationSpec(tt.spec)
 			if tt.wantErr == "" {
 				g.Expect(err).NotTo(HaveOccurred())
 			} else {
@@ -412,21 +414,21 @@ func TestOAuth2AuthenticationSpec_Validate(t *testing.T) {
 	}
 }
 
-func TestOAuth2AuthenticationSpec_ApplyDefaults(t *testing.T) {
+func TestApplyOAuth2AuthenticationSpecDefaults(t *testing.T) {
 	g := NewWithT(t)
 
 	// nil spec does not panic
-	var nilSpec *OAuth2AuthenticationSpec
-	nilSpec.ApplyDefaults()
+	var nilSpec *fluxcdv1.OAuth2AuthenticationSpec
+	ApplyOAuth2AuthenticationSpecDefaults(nilSpec)
 
 	// OIDC provider applies claims processor defaults
-	spec := &OAuth2AuthenticationSpec{
-		Provider:     OAuth2ProviderOIDC,
+	spec := &fluxcdv1.OAuth2AuthenticationSpec{
+		Provider:     fluxcdv1.OAuth2ProviderOIDC,
 		ClientID:     "client-id",
 		ClientSecret: "secret",
 		IssuerURL:    "https://issuer.example.com",
 	}
-	spec.ApplyDefaults()
+	ApplyOAuth2AuthenticationSpecDefaults(spec)
 	g.Expect(spec.Profile).NotTo(BeNil())
 	g.Expect(spec.Profile.Name).NotTo(BeEmpty())
 	g.Expect(spec.Impersonation).NotTo(BeNil())
@@ -434,24 +436,24 @@ func TestOAuth2AuthenticationSpec_ApplyDefaults(t *testing.T) {
 	g.Expect(spec.Impersonation.Groups).NotTo(BeEmpty())
 }
 
-func TestClaimsProcessorSpec_Validate(t *testing.T) {
+func TestValidateClaimsProcessorSpec(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
-		spec    ClaimsProcessorSpec
+		spec    fluxcdv1.ClaimsProcessorSpec
 		wantErr string
 	}{
 		{
 			name:    "empty spec is valid",
-			spec:    ClaimsProcessorSpec{},
+			spec:    fluxcdv1.ClaimsProcessorSpec{},
 			wantErr: "",
 		},
 		{
 			name: "valid config with variables and validations",
-			spec: ClaimsProcessorSpec{
-				Variables: []VariableSpec{
+			spec: fluxcdv1.ClaimsProcessorSpec{
+				Variables: []fluxcdv1.VariableSpec{
 					{Name: "email", Expression: "claims.email"},
 				},
-				Validations: []ValidationSpec{
+				Validations: []fluxcdv1.ValidationSpec{
 					{Expression: "variables.email != ''", Message: "Email required"},
 				},
 			},
@@ -459,8 +461,8 @@ func TestClaimsProcessorSpec_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid variable",
-			spec: ClaimsProcessorSpec{
-				Variables: []VariableSpec{
+			spec: fluxcdv1.ClaimsProcessorSpec{
+				Variables: []fluxcdv1.VariableSpec{
 					{Name: "", Expression: "claims.email"},
 				},
 			},
@@ -468,8 +470,8 @@ func TestClaimsProcessorSpec_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid validation",
-			spec: ClaimsProcessorSpec{
-				Validations: []ValidationSpec{
+			spec: fluxcdv1.ClaimsProcessorSpec{
+				Validations: []fluxcdv1.ValidationSpec{
 					{Expression: "", Message: "test"},
 				},
 			},
@@ -477,8 +479,8 @@ func TestClaimsProcessorSpec_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid profile",
-			spec: ClaimsProcessorSpec{
-				Profile: &ProfileSpec{
+			spec: fluxcdv1.ClaimsProcessorSpec{
+				Profile: &fluxcdv1.ProfileSpec{
 					Name: "invalid[[[",
 				},
 			},
@@ -486,15 +488,15 @@ func TestClaimsProcessorSpec_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid impersonation",
-			spec: ClaimsProcessorSpec{
-				Impersonation: &ImpersonationSpec{},
+			spec: fluxcdv1.ClaimsProcessorSpec{
+				Impersonation: &fluxcdv1.ImpersonationSpec{},
 			},
 			wantErr: "invalid impersonation",
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
-			err := tt.spec.Validate()
+			err := ValidateClaimsProcessorSpec(&tt.spec)
 			if tt.wantErr == "" {
 				g.Expect(err).NotTo(HaveOccurred())
 			} else {
@@ -505,50 +507,50 @@ func TestClaimsProcessorSpec_Validate(t *testing.T) {
 	}
 }
 
-func TestClaimsProcessorSpec_ApplyDefaults(t *testing.T) {
+func TestApplyClaimsProcessorSpecDefaults(t *testing.T) {
 	g := NewWithT(t)
 
 	// nil spec does not panic
-	var nilSpec *ClaimsProcessorSpec
-	nilSpec.ApplyDefaults()
+	var nilSpec *fluxcdv1.ClaimsProcessorSpec
+	ApplyClaimsProcessorSpecDefaults(nilSpec)
 
 	// sets default profile and impersonation
-	spec := ClaimsProcessorSpec{}
-	spec.ApplyDefaults()
+	spec := fluxcdv1.ClaimsProcessorSpec{}
+	ApplyClaimsProcessorSpecDefaults(&spec)
 	g.Expect(spec.Profile).NotTo(BeNil())
 	g.Expect(spec.Impersonation).NotTo(BeNil())
 }
 
-func TestVariableSpec_Validate(t *testing.T) {
+func TestValidateVariableSpec(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
-		spec    VariableSpec
+		spec    fluxcdv1.VariableSpec
 		wantErr string
 	}{
 		{
 			name:    "missing name",
-			spec:    VariableSpec{Expression: "claims.email"},
+			spec:    fluxcdv1.VariableSpec{Expression: "claims.email"},
 			wantErr: "variable name must be provided",
 		},
 		{
 			name:    "missing expression",
-			spec:    VariableSpec{Name: "email"},
+			spec:    fluxcdv1.VariableSpec{Name: "email"},
 			wantErr: "variable expression must be provided",
 		},
 		{
 			name:    "invalid CEL expression",
-			spec:    VariableSpec{Name: "test", Expression: "invalid[[["},
+			spec:    fluxcdv1.VariableSpec{Name: "test", Expression: "invalid[[["},
 			wantErr: "failed to parse variable 'test' CEL expression",
 		},
 		{
 			name:    "valid config",
-			spec:    VariableSpec{Name: "email", Expression: "claims.email"},
+			spec:    fluxcdv1.VariableSpec{Name: "email", Expression: "claims.email"},
 			wantErr: "",
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
-			err := tt.spec.Validate()
+			err := ValidateVariableSpec(&tt.spec)
 			if tt.wantErr == "" {
 				g.Expect(err).NotTo(HaveOccurred())
 			} else {
@@ -559,36 +561,36 @@ func TestVariableSpec_Validate(t *testing.T) {
 	}
 }
 
-func TestValidationSpec_Validate(t *testing.T) {
+func TestValidateValidationSpec(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
-		spec    ValidationSpec
+		spec    fluxcdv1.ValidationSpec
 		wantErr string
 	}{
 		{
 			name:    "missing expression",
-			spec:    ValidationSpec{Message: "test message"},
+			spec:    fluxcdv1.ValidationSpec{Message: "test message"},
 			wantErr: "validation expression must be provided",
 		},
 		{
 			name:    "missing message",
-			spec:    ValidationSpec{Expression: "true"},
+			spec:    fluxcdv1.ValidationSpec{Expression: "true"},
 			wantErr: "validation message must be provided",
 		},
 		{
 			name:    "invalid CEL expression",
-			spec:    ValidationSpec{Expression: "invalid[[[", Message: "test"},
+			spec:    fluxcdv1.ValidationSpec{Expression: "invalid[[[", Message: "test"},
 			wantErr: "failed to parse validation CEL expression",
 		},
 		{
 			name:    "valid config",
-			spec:    ValidationSpec{Expression: "true", Message: "always pass"},
+			spec:    fluxcdv1.ValidationSpec{Expression: "true", Message: "always pass"},
 			wantErr: "",
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
-			err := tt.spec.Validate()
+			err := ValidateValidationSpec(&tt.spec)
 			if tt.wantErr == "" {
 				g.Expect(err).NotTo(HaveOccurred())
 			} else {
@@ -599,10 +601,10 @@ func TestValidationSpec_Validate(t *testing.T) {
 	}
 }
 
-func TestProfileSpec_Validate(t *testing.T) {
+func TestValidateProfileSpec(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
-		spec    *ProfileSpec
+		spec    *fluxcdv1.ProfileSpec
 		wantErr string
 	}{
 		{
@@ -612,23 +614,23 @@ func TestProfileSpec_Validate(t *testing.T) {
 		},
 		{
 			name:    "empty spec is valid",
-			spec:    &ProfileSpec{},
+			spec:    &fluxcdv1.ProfileSpec{},
 			wantErr: "",
 		},
 		{
 			name:    "valid CEL expression",
-			spec:    &ProfileSpec{Name: "claims.name"},
+			spec:    &fluxcdv1.ProfileSpec{Name: "claims.name"},
 			wantErr: "",
 		},
 		{
 			name:    "invalid CEL expression",
-			spec:    &ProfileSpec{Name: "invalid[[["},
+			spec:    &fluxcdv1.ProfileSpec{Name: "invalid[[["},
 			wantErr: "failed to parse name expression",
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
-			err := tt.spec.Validate()
+			err := ValidateProfileSpec(tt.spec)
 			if tt.wantErr == "" {
 				g.Expect(err).NotTo(HaveOccurred())
 			} else {
@@ -639,28 +641,28 @@ func TestProfileSpec_Validate(t *testing.T) {
 	}
 }
 
-func TestProfileSpec_ApplyDefaults(t *testing.T) {
+func TestApplyProfileSpecDefaults(t *testing.T) {
 	g := NewWithT(t)
 
 	// nil spec does not panic
-	var nilSpec *ProfileSpec
-	nilSpec.ApplyDefaults()
+	var nilSpec *fluxcdv1.ProfileSpec
+	ApplyProfileSpecDefaults(nilSpec)
 
 	// sets default name expression
-	spec := &ProfileSpec{}
-	spec.ApplyDefaults()
+	spec := &fluxcdv1.ProfileSpec{}
+	ApplyProfileSpecDefaults(spec)
 	g.Expect(spec.Name).To(Equal("has(claims.name) ? claims.name : (has(claims.email) ? claims.email : '')"))
 
 	// preserves existing name
-	spec2 := &ProfileSpec{Name: "claims.preferred_username"}
-	spec2.ApplyDefaults()
+	spec2 := &fluxcdv1.ProfileSpec{Name: "claims.preferred_username"}
+	ApplyProfileSpecDefaults(spec2)
 	g.Expect(spec2.Name).To(Equal("claims.preferred_username"))
 }
 
-func TestImpersonationSpec_Validate(t *testing.T) {
+func TestValidateImpersonationSpec(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
-		spec    *ImpersonationSpec
+		spec    *fluxcdv1.ImpersonationSpec
 		wantErr string
 	}{
 		{
@@ -670,38 +672,38 @@ func TestImpersonationSpec_Validate(t *testing.T) {
 		},
 		{
 			name:    "both empty fails",
-			spec:    &ImpersonationSpec{},
+			spec:    &fluxcdv1.ImpersonationSpec{},
 			wantErr: "impersonation must have at least one of username or groups expressions",
 		},
 		{
 			name:    "username only valid",
-			spec:    &ImpersonationSpec{Username: "claims.email"},
+			spec:    &fluxcdv1.ImpersonationSpec{Username: "claims.email"},
 			wantErr: "",
 		},
 		{
 			name:    "groups only valid",
-			spec:    &ImpersonationSpec{Groups: "claims.groups"},
+			spec:    &fluxcdv1.ImpersonationSpec{Groups: "claims.groups"},
 			wantErr: "",
 		},
 		{
 			name:    "both valid",
-			spec:    &ImpersonationSpec{Username: "claims.email", Groups: "claims.groups"},
+			spec:    &fluxcdv1.ImpersonationSpec{Username: "claims.email", Groups: "claims.groups"},
 			wantErr: "",
 		},
 		{
 			name:    "invalid username CEL",
-			spec:    &ImpersonationSpec{Username: "invalid[[["},
+			spec:    &fluxcdv1.ImpersonationSpec{Username: "invalid[[["},
 			wantErr: "failed to parse username expression",
 		},
 		{
 			name:    "invalid groups CEL",
-			spec:    &ImpersonationSpec{Username: "claims.email", Groups: "invalid[[["},
+			spec:    &fluxcdv1.ImpersonationSpec{Username: "claims.email", Groups: "invalid[[["},
 			wantErr: "failed to parse groups expression",
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
-			err := tt.spec.Validate()
+			err := ValidateImpersonationSpec(tt.spec)
 			if tt.wantErr == "" {
 				g.Expect(err).NotTo(HaveOccurred())
 			} else {
@@ -712,25 +714,25 @@ func TestImpersonationSpec_Validate(t *testing.T) {
 	}
 }
 
-func TestImpersonationSpec_ApplyDefaults(t *testing.T) {
+func TestApplyImpersonationSpecDefaults(t *testing.T) {
 	g := NewWithT(t)
 
 	// nil spec does not panic
-	var nilSpec *ImpersonationSpec
-	nilSpec.ApplyDefaults()
+	var nilSpec *fluxcdv1.ImpersonationSpec
+	ApplyImpersonationSpecDefaults(nilSpec)
 
 	// sets default username and groups expressions
-	spec := &ImpersonationSpec{}
-	spec.ApplyDefaults()
+	spec := &fluxcdv1.ImpersonationSpec{}
+	ApplyImpersonationSpecDefaults(spec)
 	g.Expect(spec.Username).To(Equal("has(claims.email) ? claims.email : ''"))
 	g.Expect(spec.Groups).To(Equal("has(claims.groups) ? claims.groups : []"))
 
 	// preserves existing values
-	spec2 := &ImpersonationSpec{
+	spec2 := &fluxcdv1.ImpersonationSpec{
 		Username: "claims.sub",
 		Groups:   "claims.roles",
 	}
-	spec2.ApplyDefaults()
+	ApplyImpersonationSpecDefaults(spec2)
 	g.Expect(spec2.Username).To(Equal("claims.sub"))
 	g.Expect(spec2.Groups).To(Equal("claims.roles"))
 }
@@ -739,6 +741,6 @@ func TestAllAuthenticationTypes(t *testing.T) {
 	g := NewWithT(t)
 
 	// Verify AllAuthenticationTypes contains the expected types
-	g.Expect(AllAuthenticationTypes).To(ConsistOf(AuthenticationTypeAnonymous, AuthenticationTypeOAuth2))
-	g.Expect(AllAuthenticationTypes).To(HaveLen(2))
+	g.Expect(fluxcdv1.AllAuthenticationTypes).To(ConsistOf(fluxcdv1.AuthenticationTypeAnonymous, fluxcdv1.AuthenticationTypeOAuth2))
+	g.Expect(fluxcdv1.AllAuthenticationTypes).To(HaveLen(2))
 }

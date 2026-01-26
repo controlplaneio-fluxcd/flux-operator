@@ -11,7 +11,7 @@ import (
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/kubeclient"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
@@ -25,7 +25,7 @@ const (
 )
 
 // NewMiddleware creates a new authentication middleware for HTTP handlers.
-func NewMiddleware(conf *config.ConfigSpec, kubeClient *kubeclient.Client,
+func NewMiddleware(conf *fluxcdv1.WebConfigSpec, kubeClient *kubeclient.Client,
 	initLog logr.Logger) (func(next http.Handler) http.Handler, error) {
 
 	// Build middleware according to the authentication type.
@@ -41,14 +41,14 @@ func NewMiddleware(conf *config.ConfigSpec, kubeClient *kubeclient.Client,
 		if err != nil {
 			return nil, fmt.Errorf("failed to create anonymous authentication middleware: %w", err)
 		}
-		provider = config.AuthenticationTypeAnonymous
+		provider = fluxcdv1.AuthenticationTypeAnonymous
 	case conf.Authentication.OAuth2 != nil:
 		var err error
 		middleware, err = newOAuth2Middleware(conf, kubeClient)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create OAuth2 authentication middleware: %w", err)
 		}
-		provider = fmt.Sprintf("%s/%s", config.AuthenticationTypeOAuth2, conf.Authentication.OAuth2.Provider)
+		provider = fmt.Sprintf("%s/%s", fluxcdv1.AuthenticationTypeOAuth2, conf.Authentication.OAuth2.Provider)
 	default:
 		return nil, fmt.Errorf("unsupported authentication method")
 	}
@@ -91,7 +91,7 @@ func newDefaultMiddleware() func(next http.Handler) http.Handler {
 }
 
 // newAnonymousMiddleware creates an anonymous authentication middleware.
-func newAnonymousMiddleware(conf *config.ConfigSpec, kubeClient *kubeclient.Client) (func(next http.Handler) http.Handler, error) {
+func newAnonymousMiddleware(conf *fluxcdv1.WebConfigSpec, kubeClient *kubeclient.Client) (func(next http.Handler) http.Handler, error) {
 	anonConf := conf.Authentication.Anonymous
 
 	username := anonConf.Username
@@ -119,12 +119,12 @@ func newAnonymousMiddleware(conf *config.ConfigSpec, kubeClient *kubeclient.Clie
 }
 
 // newOAuth2Middleware creates an OAuth2 authentication middleware.
-func newOAuth2Middleware(conf *config.ConfigSpec, kubeClient *kubeclient.Client) (func(next http.Handler) http.Handler, error) {
+func newOAuth2Middleware(conf *fluxcdv1.WebConfigSpec, kubeClient *kubeclient.Client) (func(next http.Handler) http.Handler, error) {
 	// Build the OAuth2 provider.
 	var provider oauth2Provider
 	var err error
 	switch conf.Authentication.OAuth2.Provider {
-	case config.OAuth2ProviderOIDC:
+	case fluxcdv1.OAuth2ProviderOIDC:
 		provider, err = newOIDCProvider(conf)
 		if err != nil {
 			return nil, err

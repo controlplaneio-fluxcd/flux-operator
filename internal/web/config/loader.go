@@ -11,15 +11,17 @@ import (
 	"strings"
 
 	"sigs.k8s.io/yaml"
+
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
 // Load reads, validates, and applies default values to missing fields in the configuration
 // for the Flux Status Page. If the filename is empty it returns the configuration object
 // with default values applied.
-func Load(filename string) (*ConfigSpec, error) {
+func Load(filename string) (*fluxcdv1.WebConfigSpec, error) {
 	if filename == "" {
-		var confSpec ConfigSpec
-		confSpec.ApplyDefaults()
+		var confSpec fluxcdv1.WebConfigSpec
+		ApplyWebConfigSpecDefaults(&confSpec)
 		confSpec.Version = "no-config"
 		return &confSpec, nil
 	}
@@ -37,31 +39,31 @@ func Load(filename string) (*ConfigSpec, error) {
 
 // parse unmarshals, validates and applies default values to
 // missing fields in the configuration.
-func parse(b []byte) (*ConfigSpec, error) {
-	var conf Config
+func parse(b []byte) (*fluxcdv1.WebConfigSpec, error) {
+	var conf fluxcdv1.WebConfig
 	if err := yaml.Unmarshal(b, &conf); err != nil {
 		return nil, err
 	}
 	if err := checkUnknownFields(b, &conf); err != nil {
 		return nil, fmt.Errorf("unknown fields: %w", err)
 	}
-	if err := conf.Validate(); err != nil {
+	if err := ValidateWebConfig(&conf); err != nil {
 		return nil, err
 	}
-	conf.Spec.ApplyDefaults()
+	ApplyWebConfigSpecDefaults(&conf.Spec)
 	return &conf.Spec, nil
 }
 
 // checkUnknownFields checks for any fields in the raw YAML
-// that are not defined in the Config struct schema.
-func checkUnknownFields(b []byte, conf *Config) error {
+// that are not defined in the WebConfig struct schema.
+func checkUnknownFields(b []byte, conf *fluxcdv1.WebConfig) error {
 	// Unmarshal the raw YAML into a generic map.
 	var withoutSchema map[string]any
 	if err := yaml.Unmarshal(b, &withoutSchema); err != nil {
 		return err
 	}
 
-	// Recast the Config struct back to YAML and then into a generic map.
+	// Recast the WebConfig struct back to YAML and then into a generic map.
 	b, err := yaml.Marshal(conf)
 	if err != nil {
 		return err

@@ -18,17 +18,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
-	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/config"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
 
 // oauthConfig returns a config with OAuth2 authentication enabled for testing.
-func oauthConfig() *config.ConfigSpec {
-	return &config.ConfigSpec{
-		Authentication: &config.AuthenticationSpec{
-			Type: config.AuthenticationTypeOAuth2,
+func oauthConfig() *fluxcdv1.WebConfigSpec {
+	return &fluxcdv1.WebConfigSpec{
+		Authentication: &fluxcdv1.AuthenticationSpec{
+			Type: fluxcdv1.AuthenticationTypeOAuth2,
 		},
-		UserActions: &config.UserActionsSpec{},
+		UserActions: &fluxcdv1.UserActionsSpec{},
 	}
 }
 
@@ -722,8 +721,8 @@ func TestActionHandler_ActionsDisabled_NoAuth(t *testing.T) {
 
 	// Test with no authentication configured
 	handler := &Handler{
-		conf: &config.ConfigSpec{
-			UserActions: &config.UserActionsSpec{},
+		conf: &fluxcdv1.WebConfigSpec{
+			UserActions: &fluxcdv1.UserActionsSpec{},
 		},
 		kubeClient:    kubeClient,
 		version:       "v1.0.0",
@@ -763,11 +762,11 @@ func TestActionHandler_AllActionsEnabledByDefault(t *testing.T) {
 
 	// Configure OAuth2 with nil Enabled (all actions enabled by default)
 	handler := &Handler{
-		conf: &config.ConfigSpec{
-			Authentication: &config.AuthenticationSpec{
-				Type: config.AuthenticationTypeOAuth2,
+		conf: &fluxcdv1.WebConfigSpec{
+			Authentication: &fluxcdv1.AuthenticationSpec{
+				Type: fluxcdv1.AuthenticationTypeOAuth2,
 			},
-			UserActions: &config.UserActionsSpec{},
+			UserActions: &fluxcdv1.UserActionsSpec{},
 		},
 		kubeClient:    kubeClient,
 		version:       "v1.0.0",
@@ -992,12 +991,12 @@ func TestActionHandler_Audit_SpecificAction(t *testing.T) {
 
 	// Configure with audit only for reconcile action
 	handler := &Handler{
-		conf: &config.ConfigSpec{
-			Authentication: &config.AuthenticationSpec{
-				Type: config.AuthenticationTypeOAuth2,
+		conf: &fluxcdv1.WebConfigSpec{
+			Authentication: &fluxcdv1.AuthenticationSpec{
+				Type: fluxcdv1.AuthenticationTypeOAuth2,
 			},
-			UserActions: &config.UserActionsSpec{
-				Audit: []string{config.UserActionReconcile},
+			UserActions: &fluxcdv1.UserActionsSpec{
+				Audit: []string{fluxcdv1.UserActionReconcile},
 			},
 		},
 		kubeClient:    kubeClient,
@@ -1051,12 +1050,12 @@ func TestActionHandler_Audit_ActionNotInList(t *testing.T) {
 
 	// Configure with audit only for suspend action (not reconcile)
 	handler := &Handler{
-		conf: &config.ConfigSpec{
-			Authentication: &config.AuthenticationSpec{
-				Type: config.AuthenticationTypeOAuth2,
+		conf: &fluxcdv1.WebConfigSpec{
+			Authentication: &fluxcdv1.AuthenticationSpec{
+				Type: fluxcdv1.AuthenticationTypeOAuth2,
 			},
-			UserActions: &config.UserActionsSpec{
-				Audit: []string{config.UserActionSuspend},
+			UserActions: &fluxcdv1.UserActionsSpec{
+				Audit: []string{fluxcdv1.UserActionSuspend},
 			},
 		},
 		kubeClient:    kubeClient,
@@ -1110,11 +1109,11 @@ func TestActionHandler_Audit_EmptyList(t *testing.T) {
 
 	// Configure with empty audit list
 	handler := &Handler{
-		conf: &config.ConfigSpec{
-			Authentication: &config.AuthenticationSpec{
-				Type: config.AuthenticationTypeOAuth2,
+		conf: &fluxcdv1.WebConfigSpec{
+			Authentication: &fluxcdv1.AuthenticationSpec{
+				Type: fluxcdv1.AuthenticationTypeOAuth2,
 			},
-			UserActions: &config.UserActionsSpec{
+			UserActions: &fluxcdv1.UserActionsSpec{
 				Audit: []string{},
 			},
 		},
@@ -1169,12 +1168,12 @@ func TestActionHandler_Audit_AllActions(t *testing.T) {
 
 	// Configure with all actions in audit list
 	handler := &Handler{
-		conf: &config.ConfigSpec{
-			Authentication: &config.AuthenticationSpec{
-				Type: config.AuthenticationTypeOAuth2,
+		conf: &fluxcdv1.WebConfigSpec{
+			Authentication: &fluxcdv1.AuthenticationSpec{
+				Type: fluxcdv1.AuthenticationTypeOAuth2,
 			},
-			UserActions: &config.UserActionsSpec{
-				Audit: []string{config.UserActionReconcile, config.UserActionSuspend, config.UserActionResume},
+			UserActions: &fluxcdv1.UserActionsSpec{
+				Audit: []string{fluxcdv1.UserActionReconcile, fluxcdv1.UserActionSuspend, fluxcdv1.UserActionResume},
 			},
 		},
 		kubeClient:    kubeClient,
