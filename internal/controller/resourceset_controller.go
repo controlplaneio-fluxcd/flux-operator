@@ -43,6 +43,7 @@ import (
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/builder"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/inputs"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/inventory"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/kubeconfig"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/notifier"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
 )
@@ -487,6 +488,10 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 		return "", err
 	}
 
+	if err := r.convertKubeConfigResources(ctx, kubeClient, objects); err != nil {
+		return "", err
+	}
+
 	// Compute the sha256 digest of the resources.
 	data, err := ssautil.ObjectsToYAML(objects)
 	if err != nil {
@@ -668,6 +673,75 @@ func (r *ResourceSetReconciler) copyResources(ctx context.Context,
 			}
 		}
 	}
+	return nil
+}
+
+// convertKubeConfigResources converts kubeconfig data stored in Secrets
+// into ConfigMap fields by extracting the server and CA certificate.
+// The conversion is triggered using a specific annotation on the ConfigMap.
+func (r *ResourceSetReconciler) convertKubeConfigResources(
+	ctx context.Context,
+	kubeClient client.Client,
+	objects []*unstructured.Unstructured,
+) error {
+
+	for i := range objects {
+		if objects[i].GetAPIVersion() != "v1" || objects[i].GetKind() != "ConfigMap" {
+			continue
+		}
+
+		source, found := objects[i].GetAnnotations()[fluxcdv1.ConvertKubeConfigFromAnnotation]
+		if !found {
+			continue
+		}
+
+		sourceParts := strings.Split(source, "/")
+		if len(sourceParts) != 2 {
+			return fmt.Errorf("invalid %s annotation value '%s' must be in the format 'namespace/name'", fluxcdv1.ConvertKubeConfigFromAnnotation, source)
+		}
+
+		sourceName := types.NamespacedName{
+			Namespace: sourceParts[0],
+			Name:      sourceParts[1],
+		}
+
+		secret := &corev1.Secret{}
+		if err := kubeClient.Get(ctx, sourceName, secret); err != nil {
+			return fmt.Errorf("failed to get kubeconfig Secret/%s: %w", source, err)
+		}
+
+		data, exists := secret.Data["value"]
+		if !exists {
+			return fmt.Errorf("kubeconfig Secret/%s does not have 'value' field", source)
+		}
+
+		kubeconfigYAML := string(data)
+
+		server, caCert, err := kubeconfig.ExtractFluxFields(kubeconfigYAML)
+		if err != nil {
+			return fmt.Errorf("failed to extract fields from kubeconfig Secret/%s: %w", source, err)
+		}
+
+		existingData, _, err := unstructured.NestedStringMap(objects[i].Object, "data")
+		if err != nil {
+			return fmt.Errorf("failed to get existing data from ConfigMap: %w", err)
+		}
+		if existingData == nil {
+			existingData = make(map[string]string)
+		}
+
+		if _, exists := existingData["address"]; !exists {
+			existingData["address"] = server
+		}
+		if _, exists := existingData["ca.crt"]; !exists {
+			existingData["ca.crt"] = caCert
+		}
+
+		if err := unstructured.SetNestedStringMap(objects[i].Object, existingData, "data"); err != nil {
+			return fmt.Errorf("failed to set data on ConfigMap: %w", err)
+		}
+	}
+
 	return nil
 }
 
