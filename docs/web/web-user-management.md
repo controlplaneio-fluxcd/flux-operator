@@ -136,6 +136,13 @@ Flux resources in the `apps` namespace. Attempting to access resources in other
 namespaces will result in a "403 Forbidden" error. To allow the dev team to
 perform actions on their resources, you can bind them to the `flux-web-admin` role instead.
 
+!!! info "Namespace filtering"
+
+    The Web UI fiters the list of namespaces a user can pick from the dropdowns
+    based on the `get` permission assigned to their groups for the `ResourceSet` kind.
+    By default, the Flux Operator Helm chart creates a role that grants access to `ResourceSet`
+    by aggregating to `view` and `edit` roles.
+
 Users who are not part of any group with assigned permissions will only see the main dashboard,
 without access to any specific resources. The main dashboard will only display
 the readiness status of the Flux controllers.
