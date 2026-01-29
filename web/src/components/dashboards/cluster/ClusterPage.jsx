@@ -77,7 +77,7 @@ export function ClusterPage({ spec, namespace }) {
           )}
 
           {spec.sync && (
-            <SyncPanel sync={spec.sync} namespace={namespace} />
+            <SyncPanel sync={spec.sync} namespace={namespace} namespaces={spec.namespaces} />
           )}
 
           {spec.components && spec.components.length > 0 && (

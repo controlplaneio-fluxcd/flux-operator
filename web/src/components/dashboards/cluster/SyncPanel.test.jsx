@@ -28,7 +28,8 @@ describe('SyncPanel', () => {
       status: 'Applied revision: v2.4.0',
       ready: true
     },
-    namespace: 'flux-system'
+    namespace: 'flux-system',
+    namespaces: ['flux-system']
   }
 
   describe('Basic Rendering', () => {
@@ -314,6 +315,44 @@ describe('SyncPanel', () => {
 
       // "failing" badge should be present
       expect(screen.getByText('failing')).toBeInTheDocument()
+    })
+  })
+
+  describe('Kustomization Link Visibility', () => {
+    it('should show Kustomization link when namespace is in namespaces list', () => {
+      const props = {
+        ...baseProps,
+        namespaces: ['flux-system', 'default']
+      }
+      render(<SyncPanel {...props} />)
+      expect(screen.getByText('Kustomization/flux-system/flux-cluster')).toBeInTheDocument()
+    })
+
+    it('should hide Kustomization link when namespace is not in namespaces list', () => {
+      const props = {
+        ...baseProps,
+        namespaces: ['default', 'monitoring']
+      }
+      render(<SyncPanel {...props} />)
+      expect(screen.queryByText('Kustomization/flux-system/flux-cluster')).not.toBeInTheDocument()
+    })
+
+    it('should hide Kustomization link when namespaces is undefined', () => {
+      const props = {
+        ...baseProps,
+        namespaces: undefined
+      }
+      render(<SyncPanel {...props} />)
+      expect(screen.queryByText('Kustomization/flux-system/flux-cluster')).not.toBeInTheDocument()
+    })
+
+    it('should hide Kustomization link when namespaces is empty', () => {
+      const props = {
+        ...baseProps,
+        namespaces: []
+      }
+      render(<SyncPanel {...props} />)
+      expect(screen.queryByText('Kustomization/flux-system/flux-cluster')).not.toBeInTheDocument()
     })
   })
 })
