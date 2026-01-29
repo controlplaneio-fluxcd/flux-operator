@@ -132,10 +132,14 @@ func main() {
 	logOptions.BindFlags(flag.CommandLine)
 	rateLimiterOptions.BindFlags(flag.CommandLine)
 	intervalJitterOptions.BindFlags(flag.CommandLine)
-	leaderElectionOptions.Enable = true
 	leaderElectionOptions.BindFlags(flag.CommandLine)
 
 	flag.Parse()
+
+	// Enable leader election by default.
+	if !flag.CommandLine.Changed("enable-leader-election") {
+		leaderElectionOptions.Enable = true
+	}
 
 	logger.SetLogger(logger.NewLogger(logOptions))
 
