@@ -28,6 +28,13 @@ describe('formatTimestamp', () => {
     date.toLocaleString = mockToLocaleString;
     expect(formatTimestamp(date)).toMatch(/\w{3} \d{1,2}, \d{2}:\d{2} (AM|PM)/)
   })
+
+  it('should include year for timestamps from a different year', () => {
+    const lastYear = now.getFullYear() - 1
+    const date = new Date(lastYear, 0, 15, 14, 30) // Jan 15 of last year
+    // Should include the year in the output
+    expect(formatTimestamp(date)).toMatch(/\w{3} \d{1,2}, \d{4}, \d{2}:\d{2} (AM|PM)/)
+  })
 })
 
 describe('formatTime', () => {
