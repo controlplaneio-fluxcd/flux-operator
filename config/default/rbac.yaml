@@ -49,3 +49,43 @@ rules:
       - get
       - list
       - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: flux-web-user
+rules:
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs:
+      - get
+      - list
+      - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: flux-web-admin
+  labels:
+    app.kubernetes.io/part-of: flux-operator
+rules:
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - fluxcd.controlplane.io
+      - source.toolkit.fluxcd.io
+      - source.extensions.fluxcd.io
+      - kustomize.toolkit.fluxcd.io
+      - helm.toolkit.fluxcd.io
+      - image.toolkit.fluxcd.io
+      - notification.toolkit.fluxcd.io
+    resources: ["*"]
+    verbs:
+      - patch
+      - reconcile
+      - suspend
+      - resume
