@@ -124,8 +124,8 @@ export function HistoryTimeline({ history, kind }) {
               <div class={`flex-1 ${!isLast ? 'pb-6' : 'pb-0'}`}>
                 {/* Time range */}
                 <div class="text-sm text-gray-900 dark:text-white mb-1">
-                  {firstTime === lastTime ? (
-                    <span>{formatTimestamp(firstTime)}</span>
+                  {isHelmRelease || firstTime === lastTime ? (
+                    <span>{formatTimestamp(lastTime)}</span>
                   ) : (
                     <span>
                       {formatTimestamp(firstTime)} → {formatTimestamp(lastTime)}

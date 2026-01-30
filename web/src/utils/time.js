@@ -11,7 +11,8 @@
  * - Less than 1 minute: "just now"
  * - Less than 60 minutes: "5m ago"
  * - Less than 24 hours: "3h ago"
- * - Older: "Jan 15, 02:30 PM"
+ * - Older (same year): "Jan 15, 02:30 PM"
+ * - Older (different year): "Jan 15, 2024, 02:30 PM"
  */
 export const formatTimestamp = (timestamp) => {
   const date = new Date(timestamp)
@@ -22,12 +23,19 @@ export const formatTimestamp = (timestamp) => {
   if (diffMins < 1) return 'just now'
   if (diffMins < 60) return `${diffMins}m ago`
   if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`
-  return date.toLocaleString('en-US', {
+
+  // Include year if date is from a different year
+  const includeYear = date.getFullYear() !== now.getFullYear()
+  const options = {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit'
-  })
+  }
+  if (includeYear) {
+    options.year = 'numeric'
+  }
+  return date.toLocaleString('en-US', options)
 }
 
 /**
