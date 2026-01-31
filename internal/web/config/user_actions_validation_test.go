@@ -90,6 +90,11 @@ func TestAllUserActions(t *testing.T) {
 	g := NewWithT(t)
 
 	// Verify AllUserActions contains the expected actions
-	g.Expect(fluxcdv1.AllUserActions).To(ConsistOf(fluxcdv1.UserActionReconcile, fluxcdv1.UserActionSuspend, fluxcdv1.UserActionResume))
-	g.Expect(fluxcdv1.AllUserActions).To(HaveLen(3))
+	g.Expect(fluxcdv1.AllUserActions).To(ConsistOf(
+		fluxcdv1.UserActionReconcile,
+		fluxcdv1.UserActionSuspend,
+		fluxcdv1.UserActionResume,
+		fluxcdv1.UserActionDownload,
+	))
+	g.Expect(fluxcdv1.AllUserActions).To(HaveLen(4))
 }

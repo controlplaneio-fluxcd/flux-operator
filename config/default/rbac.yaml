@@ -89,3 +89,4 @@ rules:
       - reconcile
       - suspend
       - resume
+      - download

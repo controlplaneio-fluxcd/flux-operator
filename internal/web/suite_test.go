@@ -59,7 +59,7 @@ func setupActionRBAC(ctx context.Context, c client.Client) error {
 			{
 				APIGroups: []string{fluxcdv1.GroupVersion.Group},
 				Resources: []string{"*"},
-				Verbs:     []string{"reconcile", "suspend", "resume"},
+				Verbs:     []string{"reconcile", "suspend", "resume", "download"},
 			},
 		},
 	}
