@@ -489,6 +489,440 @@ spec:
 	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 }
 
+func TestResourceSetReconciler_ConvertKubeConfig(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceSetReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Create a source Secret with kubeconfig data
+	kubeconfigData := `apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    certificate-authority-data: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURCVENDQWUyZ0F3SUJBZ0lJUjRkdzMxSTVSK0F3RFFZSktvWklodmNOQVFFTEJRQXdGVEVUTUJFR0ExVUUKQXhNS2EzVmlaWEp1WlhSbGN6QWVGdzB5TkRFeU1qY3hOVEkyTWpoYUZ3MHpOREV5TWpVeE5UTXhNamhhTUJVeApFekFSQmdOVkJBTVRDbXQxWW1WeWJtVjBaWE13Z2dFaU1BMEdDU3FHU0liM0RRRUJBUVVBQTRJQkR3QXdnZ0VLCkFvSUJBUUM2dEhwVzEwcHlXU29ZSFpQdVFpVEY1bGh2SjB2RXJ0SWRzbWxpYXBpcHdRQT09Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K
+    server: https://test-cluster.example.com:6443
+  name: test-cluster
+contexts:
+- context:
+    cluster: test-cluster
+    user: test-user
+  name: test-context
+current-context: test-context
+users:
+- name: test-user
+  user:
+    token: test-token-12345`
+
+	sourceSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-kubeconfig",
+			Namespace: ns.Name,
+		},
+		StringData: map[string]string{
+			"value": kubeconfigData,
+		},
+	}
+	err = testEnv.Create(ctx, sourceSecret)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	objDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: kubeconfig-test
+  namespace: "%[1]s"
+spec:
+  inputs:
+    - cluster: prod
+  resources:
+    - apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: << inputs.cluster >>-config
+        namespace: "%[1]s"
+        annotations:
+          fluxcd.controlplane.io/convertKubeConfigFrom: "%[1]s/test-kubeconfig"
+      data:
+        cluster: << inputs.cluster >>
+`, ns.Name)
+
+	obj := &fluxcdv1.ResourceSet{}
+	err = yaml.Unmarshal([]byte(objDef), obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize the instance.
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Reconcile the ResourceSet.
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeFalse())
+
+	// Check if the ResourceSet was deployed.
+	result := &fluxcdv1.ResourceSet{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	testutils.LogObjectStatus(t, result)
+	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
+
+	// Check if the inventory was updated.
+	g.Expect(result.Status.Inventory.Entries).To(HaveLen(1))
+	g.Expect(result.Status.Inventory.Entries).To(ContainElements(
+		fluxcdv1.ResourceRef{
+			ID:      fmt.Sprintf("%s_prod-config__ConfigMap", ns.Name),
+			Version: "v1",
+		},
+	))
+
+	// Check if the ConfigMap was created with converted kubeconfig data.
+	resultCM := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "prod-config",
+			Namespace: ns.Name,
+		},
+	}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(resultCM), resultCM)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Verify that the original data is preserved.
+	g.Expect(resultCM.Data).To(HaveKeyWithValue("cluster", "prod"))
+
+	// Verify that the kubeconfig fields were extracted and added.
+	g.Expect(resultCM.Data).To(HaveKey("address"))
+	g.Expect(resultCM.Data["address"]).To(Equal("https://test-cluster.example.com:6443"))
+	g.Expect(resultCM.Data).To(HaveKey("ca.crt"))
+	g.Expect(resultCM.Data["ca.crt"]).To(ContainSubstring("BEGIN CERTIFICATE"))
+	g.Expect(resultCM.Data["ca.crt"]).To(ContainSubstring("END CERTIFICATE"))
+
+	// Delete the resource group.
+	err = testClient.Delete(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.IsZero()).To(BeTrue())
+
+	// Check if the resource group was finalized.
+	result = &fluxcdv1.ResourceSet{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+
+	// Check if the ConfigMap was deleted.
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(resultCM), resultCM)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+}
+
+func TestResourceSetReconciler_ConvertKubeConfigWithExistingData(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceSetReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Create a source Secret with kubeconfig data
+	kubeconfigData := `apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    certificate-authority-data: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURCVENDQWUyZ0F3SUJBZ0lJUjRkdzMxSTVSK0F3RFFZSktvWklodmNOQVFFTEJRQXdGVEVUTUJFR0ExVUUKQXhNS2EzVmlaWEp1WlhSbGN6QWVGdzB5TkRFeU1qY3hOVEkyTWpoYUZ3MHpOREV5TWpVeE5UTXhNamhhTUJVeApFekFSQmdOVkJBTVRDbXQxWW1WeWJtVjBaWE13Z2dFaU1BMEdDU3FHU0liM0RRRUJBUVVBQTRJQkR3QXdnZ0VLCkFvSUJBUUM2dEhwVzEwcHlXU29ZSFpQdVFpVEY1bGh2SjB2RXJ0SWRzbWxpYXBpcHdRQT09Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K
+    server: https://test-cluster.example.com:6443
+  name: test-cluster
+contexts:
+- context:
+    cluster: test-cluster
+    user: test-user
+  name: test-context
+current-context: test-context
+users:
+- name: test-user
+  user:
+    token: test-token-12345`
+
+	sourceSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-kubeconfig",
+			Namespace: ns.Name,
+		},
+		StringData: map[string]string{
+			"value": kubeconfigData,
+		},
+	}
+	err = testEnv.Create(ctx, sourceSecret)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Test that existing server and ca.crt fields are NOT overwritten
+	objDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: kubeconfig-test-preserve
+  namespace: "%[1]s"
+spec:
+  inputs:
+    - cluster: staging
+  resources:
+    - apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: << inputs.cluster >>-config-preserve
+        namespace: "%[1]s"
+        annotations:
+          fluxcd.controlplane.io/convertKubeConfigFrom: "%[1]s/test-kubeconfig"
+      data:
+        cluster: << inputs.cluster >>
+        address: https://existing-server.example.com:6443
+        ca.crt: "existing-ca-cert-data"
+`, ns.Name)
+
+	obj := &fluxcdv1.ResourceSet{}
+	err = yaml.Unmarshal([]byte(objDef), obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize and reconcile
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeFalse())
+
+	// Check if the ConfigMap preserves existing data
+	resultCM := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "staging-config-preserve",
+			Namespace: ns.Name,
+		},
+	}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(resultCM), resultCM)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Verify existing values were NOT overwritten
+	g.Expect(resultCM.Data["address"]).To(Equal("https://existing-server.example.com:6443"))
+	g.Expect(resultCM.Data["ca.crt"]).To(Equal("existing-ca-cert-data"))
+	g.Expect(resultCM.Data["cluster"]).To(Equal("staging"))
+
+	// Cleanup
+	err = testClient.Delete(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+}
+
+func TestResourceSetReconciler_ConvertKubeConfigInvalidAnnotation(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceSetReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Test with invalid annotation format (missing namespace)
+	objDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: kubeconfig-test-invalid
+  namespace: "%[1]s"
+spec:
+  inputs:
+    - cluster: dev
+  resources:
+    - apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: << inputs.cluster >>-config-invalid
+        namespace: "%[1]s"
+        annotations:
+          fluxcd.controlplane.io/convertKubeConfigFrom: "invalid-format-without-slash"
+      data:
+        cluster: << inputs.cluster >>
+`, ns.Name)
+
+	obj := &fluxcdv1.ResourceSet{}
+	err = yaml.Unmarshal([]byte(objDef), obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Reconcile should fail with invalid annotation format
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("must be in the format 'namespace/name'"))
+
+	// Check the status
+	result := &fluxcdv1.ResourceSet{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(conditions.IsReady(result)).To(BeFalse())
+
+	// Cleanup
+	err = testClient.Delete(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+}
+
+func TestResourceSetReconciler_ConvertKubeConfigMissingSecret(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceSetReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Test with non-existent source Secret
+	objDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: kubeconfig-test-missing
+  namespace: "%[1]s"
+spec:
+  inputs:
+    - cluster: qa
+  resources:
+    - apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: << inputs.cluster >>-config-missing
+        namespace: "%[1]s"
+        annotations:
+          fluxcd.controlplane.io/convertKubeConfigFrom: "%[1]s/non-existent-secret"
+      data:
+        cluster: << inputs.cluster >>
+`, ns.Name)
+
+	obj := &fluxcdv1.ResourceSet{}
+	err = yaml.Unmarshal([]byte(objDef), obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Reconcile should fail with missing Secret
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("failed to get kubeconfig Secret"))
+
+	// Cleanup
+	err = testClient.Delete(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+}
+
+func TestResourceSetReconciler_ConvertKubeConfigMissingValueField(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceSetReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Create a source Secret without 'value' field
+	sourceSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-kubeconfig-novalue",
+			Namespace: ns.Name,
+		},
+		StringData: map[string]string{
+			"kubeconfig": "some-data", // Wrong field name
+		},
+	}
+	err = testEnv.Create(ctx, sourceSecret)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	objDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: kubeconfig-test-novalue
+  namespace: "%[1]s"
+spec:
+  inputs:
+    - cluster: test
+  resources:
+    - apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: << inputs.cluster >>-config-novalue
+        namespace: "%[1]s"
+        annotations:
+          fluxcd.controlplane.io/convertKubeConfigFrom: "%[1]s/test-kubeconfig-novalue"
+      data:
+        cluster: << inputs.cluster >>
+`, ns.Name)
+
+	obj := &fluxcdv1.ResourceSet{}
+	err = yaml.Unmarshal([]byte(objDef), obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Reconcile should fail with missing 'value' field
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("does not have 'value' field"))
+
+	// Cleanup
+	err = testClient.Delete(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+}
+
 func TestResourceSetReconciler_DependsOn(t *testing.T) {
 	g := NewWithT(t)
 	reconciler := getResourceSetReconciler(t)
