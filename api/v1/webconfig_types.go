@@ -28,6 +28,9 @@ const (
 
 	// UserActionResume is the resume user action.
 	UserActionResume = "resume"
+
+	// UserActionDownload is the download user action.
+	UserActionDownload = "download"
 )
 
 var (
@@ -42,6 +45,7 @@ var (
 		UserActionReconcile,
 		UserActionSuspend,
 		UserActionResume,
+		UserActionDownload,
 	}
 )
 

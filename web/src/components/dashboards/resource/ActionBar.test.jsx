@@ -369,6 +369,120 @@ describe('ActionBar component', () => {
     })
   })
 
+  describe('Download button', () => {
+    const downloadableProps = {
+      kind: 'GitRepository',
+      namespace: 'flux-system',
+      name: 'my-repo',
+      resourceData: {
+        status: {
+          reconcilerRef: { status: 'Ready' },
+          userActions: ['reconcile', 'suspend', 'resume', 'download'],
+          artifact: {
+            url: 'http://source-controller.flux-system.svc/artifact.tar.gz'
+          }
+        }
+      },
+      onActionComplete: vi.fn()
+    }
+
+    it('should render Download button for source kind with artifact', () => {
+      render(<ActionBar {...downloadableProps} />)
+
+      expect(screen.getByTestId('download-button')).toBeInTheDocument()
+      expect(screen.getByText('Download')).toBeInTheDocument()
+    })
+
+    it('should not render Download button for non-source kinds', () => {
+      const props = {
+        ...downloadableProps,
+        kind: 'Kustomization',
+        resourceData: {
+          status: {
+            reconcilerRef: { status: 'Ready' },
+            userActions: ['reconcile', 'suspend', 'resume', 'download']
+          }
+        }
+      }
+      render(<ActionBar {...props} />)
+
+      expect(screen.queryByTestId('download-button')).not.toBeInTheDocument()
+    })
+
+    it('should not render Download button when no artifact present', () => {
+      const props = {
+        ...downloadableProps,
+        resourceData: {
+          status: {
+            reconcilerRef: { status: 'Ready' },
+            userActions: ['reconcile', 'suspend', 'resume', 'download']
+            // No artifact
+          }
+        }
+      }
+      render(<ActionBar {...props} />)
+
+      expect(screen.queryByTestId('download-button')).not.toBeInTheDocument()
+    })
+
+    it('should not render Download button without download permission', () => {
+      const props = {
+        ...downloadableProps,
+        resourceData: {
+          status: {
+            reconcilerRef: { status: 'Ready' },
+            userActions: ['reconcile', 'suspend', 'resume'], // No download permission
+            artifact: {
+              url: 'http://source-controller.flux-system.svc/artifact.tar.gz'
+            }
+          }
+        }
+      }
+      render(<ActionBar {...props} />)
+
+      expect(screen.queryByTestId('download-button')).not.toBeInTheDocument()
+    })
+
+    it('should trigger download via fetch/blob when clicked', async () => {
+      const user = userEvent.setup()
+      const mockBlob = new Blob(['test content'], { type: 'application/octet-stream' })
+      const mockFetch = vi.spyOn(global, 'fetch').mockResolvedValue({
+        ok: true,
+        blob: () => Promise.resolve(mockBlob)
+      })
+      const mockCreateObjectURL = vi.spyOn(window.URL, 'createObjectURL').mockReturnValue('blob:test')
+      const mockRevokeObjectURL = vi.spyOn(window.URL, 'revokeObjectURL').mockImplementation(() => {})
+
+      render(<ActionBar {...downloadableProps} />)
+
+      await user.click(screen.getByTestId('download-button'))
+
+      await waitFor(() => {
+        expect(mockFetch).toHaveBeenCalledWith(
+          '/api/v1/download?kind=GitRepository&namespace=flux-system&name=my-repo'
+        )
+      })
+
+      mockFetch.mockRestore()
+      mockCreateObjectURL.mockRestore()
+      mockRevokeObjectURL.mockRestore()
+    })
+
+    it('should render Download button for all downloadable kinds', () => {
+      const downloadableKinds = ['Bucket', 'GitRepository', 'OCIRepository', 'HelmChart', 'ExternalArtifact']
+
+      downloadableKinds.forEach(kind => {
+        const props = {
+          ...downloadableProps,
+          kind
+        }
+        const { unmount } = render(<ActionBar {...props} />)
+        expect(screen.getByTestId('download-button')).toBeInTheDocument()
+        unmount()
+      })
+    })
+  })
+
   describe('Button re-enable states', () => {
     it('should enable buttons when status changes from Progressing to Ready', () => {
       const { rerender } = render(

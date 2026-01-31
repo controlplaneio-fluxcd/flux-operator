@@ -36,6 +36,12 @@ func (w *gzipResponseWriter) Flush() {
 // GzipMiddleware adds gzip compression to responses.
 func GzipMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Skip gzip for download endpoint to avoid double compression of Flux artifacts
+		if r.URL.Path == "/api/v1/download" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		// Check if client accepts gzip compression
 		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
 			next.ServeHTTP(w, r)

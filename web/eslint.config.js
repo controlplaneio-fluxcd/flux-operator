@@ -59,6 +59,7 @@ export default [
         global: 'readonly',
         window: 'readonly',
         document: 'readonly',
+        Blob: 'readonly',
       },
     },
     rules: {
