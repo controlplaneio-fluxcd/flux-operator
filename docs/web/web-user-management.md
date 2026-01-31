@@ -229,9 +229,13 @@ rules:
       - reconcile
       - suspend
       - resume
+      - download
 ```
 
 Note that the `patch` verb is not enough to allow a user to perform actions in the Web UI.
-The user also needs the `reconcile`, `suspend`, and `resume` verbs
+The user also needs the `reconcile`, `suspend`, `resume`, and `download` verbs
 for the respective resources. These verbs are specially defined in Flux Operator
 to assign action permissions.
+
+The `download` verb allows users to download artifacts from Flux source resources
+(Bucket, GitRepository, OCIRepository, HelmChart, and ExternalArtifact).

@@ -36,6 +36,7 @@ export function ActionBar({ kind, namespace, name, resourceData, onActionComplet
   const canDoReconcile = userActions.includes('reconcile')
   const canDoSuspend = userActions.includes('suspend')
   const canDoResume = userActions.includes('resume')
+  const canDoDownload = userActions.includes('download')
 
   // Determine if resource is suspended
   const isSuspended = status === 'Suspended'
@@ -69,6 +70,13 @@ export function ActionBar({ kind, namespace, name, resourceData, onActionComplet
 
   // Check if this is a Kustomization or HelmRelease with a pullable source (not ExternalArtifact)
   const canReconcileSource = (kind === 'Kustomization' || kind === 'HelmRelease') && sourceRef && sourceRef.kind !== 'ExternalArtifact'
+
+  // Source kinds that have downloadable artifacts
+  const downloadableKinds = ['Bucket', 'GitRepository', 'OCIRepository', 'HelmChart', 'ExternalArtifact']
+
+  // Check if this is a source kind with a downloadable artifact
+  const hasArtifact = resourceData?.status?.artifact?.url
+  const canDownload = canDoDownload && downloadableKinds.includes(kind) && hasArtifact
 
   // Determine button disabled states
   const reconcileDisabled = !canDoReconcile || isProgressing || isSuspended
@@ -133,6 +141,39 @@ export function ActionBar({ kind, namespace, name, resourceData, onActionComplet
     performAction(action, kind, namespace, name)
   }
 
+  // Handle download - use fetch/blob approach for better error handling and Tailscale compatibility
+  const handleDownload = async () => {
+    const url = `/api/v1/download?kind=${encodeURIComponent(kind)}&namespace=${encodeURIComponent(namespace)}&name=${encodeURIComponent(name)}`
+
+    setLoading('download')
+    setError(null)
+
+    try {
+      const response = await fetch(url)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || `Server responded with ${response.status}`)
+      }
+
+      const blob = await response.blob()
+      const blobUrl = window.URL.createObjectURL(blob)
+
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = `${kind}-${namespace}-${name}.tar.gz`
+      document.body.appendChild(a)
+      a.click()
+
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(blobUrl)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(null)
+    }
+  }
+
   // Loading spinner
   const LoadingSpinner = () => (
     <svg class="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
@@ -178,6 +219,28 @@ export function ActionBar({ kind, namespace, name, resourceData, onActionComplet
             </svg>
           )}
           Reconcile
+        </button>
+      )}
+
+      {/* Download button (only for source kinds with artifacts) */}
+      {canDownload && (
+        <button
+          onClick={handleDownload}
+          disabled={loading !== null}
+          class={`${baseButtonClass} ${
+            loading !== null
+              ? disabledClass
+              : 'border-purple-500 text-purple-600 hover:bg-purple-50 dark:border-purple-400 dark:text-purple-400 dark:hover:bg-purple-900/30 focus:ring-purple-500'
+          }`}
+          data-testid="download-button"
+          title="Download artifact"
+        >
+          {loading === 'download' ? <LoadingSpinner /> : (
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+          )}
+          Download
         </button>
       )}
 
