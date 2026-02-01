@@ -28,6 +28,9 @@ const (
 	InputProviderAzureDevOpsBranch      = "AzureDevOpsBranch"
 	InputProviderAzureDevOpsPullRequest = "AzureDevOpsPullRequest"
 	InputProviderAzureDevOpsTag         = "AzureDevOpsTag"
+	InputProviderGiteaBranch            = "GiteaBranch"
+	InputProviderGiteaTag               = "GiteaTag"
+	InputProviderGiteaPullRequest       = "GiteaPullRequest"
 	InputProviderOCIArtifactTag         = "OCIArtifactTag"
 	InputProviderACRArtifactTag         = "ACRArtifactTag"
 	InputProviderECRArtifactTag         = "ECRArtifactTag"
@@ -50,7 +53,7 @@ const (
 // +kubebuilder:validation:XValidation:rule="!has(self.secretRef) || !(self.url == 'Static' || (self.type.endsWith('ArtifactTag') && self.type != 'OCIArtifactTag'))", message="cannot specify spec.secretRef when spec.type is one of Static, ACRArtifactTag, ECRArtifactTag or GARArtifactTag"
 type ResourceSetInputProviderSpec struct {
 	// Type specifies the type of the input provider.
-	// +kubebuilder:validation:Enum=Static;GitHubBranch;GitHubTag;GitHubPullRequest;GitLabBranch;GitLabTag;GitLabMergeRequest;GitLabEnvironment;AzureDevOpsBranch;AzureDevOpsTag;AzureDevOpsPullRequest;OCIArtifactTag;ACRArtifactTag;ECRArtifactTag;GARArtifactTag
+	// +kubebuilder:validation:Enum=Static;GitHubBranch;GitHubTag;GitHubPullRequest;GitLabBranch;GitLabTag;GitLabMergeRequest;GitLabEnvironment;AzureDevOpsBranch;AzureDevOpsTag;AzureDevOpsPullRequest;GiteaBranch;GiteaTag;GiteaPullRequest;OCIArtifactTag;ACRArtifactTag;ECRArtifactTag;GARArtifactTag
 	// +required
 	Type string `json:"type"`
 
