@@ -13,10 +13,12 @@ export function ActionBar({ kind, namespace, name, resourceData, onActionComplet
   const [loading, setLoading] = useState(null) // tracks which action is loading
   const [error, setError] = useState(null)
   const [showSuccess, setShowSuccess] = useState(null) // tracks which button shows success checkmark
+  const [dropdownOpen, setDropdownOpen] = useState(false)
 
   // Track previous status values to detect transitions
   const prevStatusRef = useRef(null)
   const prevSourceStatusRef = useRef(null)
+  const dropdownRef = useRef(null)
 
   // Auto-dismiss error after 5 seconds
   useEffect(() => {
@@ -65,8 +67,39 @@ export function ActionBar({ kind, namespace, name, resourceData, onActionComplet
     prevSourceStatusRef.current = sourceStatus
   }, [sourceStatus])
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    if (!dropdownOpen) return
+
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setDropdownOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [dropdownOpen])
+
+  // Close dropdown on Escape key
+  useEffect(() => {
+    if (!dropdownOpen) return
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setDropdownOpen(false)
+      }
+    }
+
+    document.addEventListener('keydown', handleEscape)
+    return () => document.removeEventListener('keydown', handleEscape)
+  }, [dropdownOpen])
+
   // Check if this kind supports reconciliation (Alert and Provider only support suspend/resume)
   const canReconcile = kind !== 'Alert' && kind !== 'Provider'
+
+  // Check if this kind supports suspend/resume (ExternalArtifact doesn't)
+  const canSuspendResume = kind !== 'ExternalArtifact'
 
   // Check if this is a Kustomization or HelmRelease with a pullable source (not ExternalArtifact)
   const canReconcileSource = (kind === 'Kustomization' || kind === 'HelmRelease') && sourceRef && sourceRef.kind !== 'ExternalArtifact'
@@ -77,6 +110,14 @@ export function ActionBar({ kind, namespace, name, resourceData, onActionComplet
   // Check if this is a source kind with a downloadable artifact
   const hasArtifact = resourceData?.status?.artifact?.url
   const canDownload = canDoDownload && downloadableKinds.includes(kind) && hasArtifact
+
+  // Check if this is an ArtifactGenerator with ExternalArtifacts in inventory
+  // Inventory items have: name, namespace, digest, filename
+  const isArtifactGenerator = kind === 'ArtifactGenerator'
+  const inventoryArtifacts = isArtifactGenerator
+    ? (resourceData?.status?.inventory || [])
+    : []
+  const canDownloadArtifacts = canDoDownload && isArtifactGenerator && inventoryArtifacts.length > 0
 
   // Determine button disabled states
   const reconcileDisabled = !canDoReconcile || isProgressing || isSuspended
@@ -174,6 +215,40 @@ export function ActionBar({ kind, namespace, name, resourceData, onActionComplet
     }
   }
 
+  // Handle download for ArtifactGenerator inventory items (ExternalArtifacts)
+  const handleDownloadArtifact = async (artifact) => {
+    const url = `/api/v1/download?kind=ExternalArtifact&namespace=${encodeURIComponent(artifact.namespace)}&name=${encodeURIComponent(artifact.name)}`
+
+    setLoading('download')
+    setDropdownOpen(false)
+    setError(null)
+
+    try {
+      const response = await fetch(url)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || `Server responded with ${response.status}`)
+      }
+
+      const blob = await response.blob()
+      const blobUrl = window.URL.createObjectURL(blob)
+
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = artifact.filename || `${artifact.name}.tar.gz`
+      document.body.appendChild(a)
+      a.click()
+
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(blobUrl)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(null)
+    }
+  }
+
   // Loading spinner
   const LoadingSpinner = () => (
     <svg class="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
@@ -244,6 +319,54 @@ export function ActionBar({ kind, namespace, name, resourceData, onActionComplet
         </button>
       )}
 
+      {/* Download dropdown for ArtifactGenerator */}
+      {canDownloadArtifacts && (
+        <div class="relative" ref={dropdownRef}>
+          <button
+            onClick={() => setDropdownOpen(!dropdownOpen)}
+            disabled={loading !== null}
+            class={`${baseButtonClass} ${
+              loading !== null
+                ? disabledClass
+                : dropdownOpen
+                  ? 'border-purple-500 text-purple-600 bg-purple-50 dark:border-purple-400 dark:text-purple-400 dark:bg-purple-900/30 ring-0'
+                  : 'border-purple-500 text-purple-600 hover:bg-purple-50 dark:border-purple-400 dark:text-purple-400 dark:hover:bg-purple-900/30 focus:ring-purple-500'
+            }`}
+            data-testid="download-dropdown-button"
+            title="Download artifacts"
+          >
+            {loading === 'download' ? <LoadingSpinner /> : (
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+            )}
+            Download
+            <svg class="w-3 h-3 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          {dropdownOpen && (
+            <div
+              class="absolute left-0 mt-1 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50"
+              data-testid="download-dropdown-menu"
+            >
+              {inventoryArtifacts.map((artifact) => (
+                <button
+                  key={`${artifact.namespace}/${artifact.name}`}
+                  onClick={() => handleDownloadArtifact(artifact)}
+                  class="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  data-testid={`download-artifact-${artifact.name}`}
+                >
+                  <div class="font-medium truncate text-gray-900 dark:text-gray-100">{artifact.name}</div>
+                  <div class="text-xs text-gray-500 dark:text-gray-400 truncate">{artifact.namespace}</div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Reconcile Source button (only for Kustomization/HelmRelease with sourceRef) */}
       {canReconcileSource && (
         <button
@@ -266,33 +389,35 @@ export function ActionBar({ kind, namespace, name, resourceData, onActionComplet
         </button>
       )}
 
-      {/* Suspend/Resume button */}
-      <button
-        onClick={handleSuspendResume}
-        disabled={suspendResumeDisabled || loading !== null}
-        class={`${baseButtonClass} ${
-          suspendResumeDisabled || loading !== null
-            ? disabledClass
-            : isSuspended
-              ? 'border-green-500 text-green-600 hover:bg-green-50 dark:border-green-400 dark:text-green-400 dark:hover:bg-green-900/30 focus:ring-green-500'
-              : 'border-amber-500 text-amber-600 hover:bg-amber-50 dark:border-amber-400 dark:text-amber-400 dark:hover:bg-amber-900/30 focus:ring-amber-500'
-        }`}
-        data-testid="suspend-resume-button"
-        title={isSuspended ? 'Resume reconciliation' : 'Suspend reconciliation'}
-      >
-        {(loading === 'suspend' || loading === 'resume') ? <LoadingSpinner /> : (
-          isSuspended ? (
-            <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M8 5v14l11-7z" />
-            </svg>
-          ) : (
-            <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
-            </svg>
-          )
-        )}
-        {isSuspended ? 'Resume' : 'Suspend'}
-      </button>
+      {/* Suspend/Resume button (hidden for ExternalArtifact) */}
+      {canSuspendResume && (
+        <button
+          onClick={handleSuspendResume}
+          disabled={suspendResumeDisabled || loading !== null}
+          class={`${baseButtonClass} ${
+            suspendResumeDisabled || loading !== null
+              ? disabledClass
+              : isSuspended
+                ? 'border-green-500 text-green-600 hover:bg-green-50 dark:border-green-400 dark:text-green-400 dark:hover:bg-green-900/30 focus:ring-green-500'
+                : 'border-amber-500 text-amber-600 hover:bg-amber-50 dark:border-amber-400 dark:text-amber-400 dark:hover:bg-amber-900/30 focus:ring-amber-500'
+          }`}
+          data-testid="suspend-resume-button"
+          title={isSuspended ? 'Resume reconciliation' : 'Suspend reconciliation'}
+        >
+          {(loading === 'suspend' || loading === 'resume') ? <LoadingSpinner /> : (
+            isSuspended ? (
+              <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            ) : (
+              <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+              </svg>
+            )
+          )}
+          {isSuspended ? 'Resume' : 'Suspend'}
+        </button>
+      )}
 
       {/* Error message */}
       {error && (
