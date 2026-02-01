@@ -483,6 +483,173 @@ describe('ActionBar component', () => {
     })
   })
 
+  describe('Download dropdown for ArtifactGenerator', () => {
+    const artifactGeneratorProps = {
+      kind: 'ArtifactGenerator',
+      namespace: 'flux-system',
+      name: 'my-generator',
+      resourceData: {
+        status: {
+          reconcilerRef: { status: 'Ready' },
+          userActions: ['reconcile', 'suspend', 'resume', 'download'],
+          inventory: [
+            { name: 'artifact-1', namespace: 'flux-system', filename: 'config.tar.gz', digest: 'sha256:abc123' },
+            { name: 'artifact-2', namespace: 'default', filename: 'data.tar.gz', digest: 'sha256:def456' }
+          ]
+        }
+      },
+      onActionComplete: vi.fn()
+    }
+
+    it('should render download dropdown button for ArtifactGenerator with inventory', () => {
+      render(<ActionBar {...artifactGeneratorProps} />)
+
+      expect(screen.getByTestId('download-dropdown-button')).toBeInTheDocument()
+      expect(screen.getByTestId('download-dropdown-button')).toHaveTextContent('Download')
+    })
+
+    it('should not render download dropdown when no inventory', () => {
+      const props = {
+        ...artifactGeneratorProps,
+        resourceData: {
+          status: {
+            reconcilerRef: { status: 'Ready' },
+            userActions: ['reconcile', 'suspend', 'resume', 'download'],
+            inventory: []
+          }
+        }
+      }
+      render(<ActionBar {...props} />)
+
+      expect(screen.queryByTestId('download-dropdown-button')).not.toBeInTheDocument()
+    })
+
+    it('should not render download dropdown without download permission', () => {
+      const props = {
+        ...artifactGeneratorProps,
+        resourceData: {
+          status: {
+            reconcilerRef: { status: 'Ready' },
+            userActions: ['reconcile', 'suspend', 'resume'], // No download permission
+            inventory: [
+              { name: 'artifact-1', namespace: 'flux-system', filename: 'config.tar.gz', digest: 'sha256:abc123' }
+            ]
+          }
+        }
+      }
+      render(<ActionBar {...props} />)
+
+      expect(screen.queryByTestId('download-dropdown-button')).not.toBeInTheDocument()
+    })
+
+    it('should open dropdown menu on click', async () => {
+      const user = userEvent.setup()
+      render(<ActionBar {...artifactGeneratorProps} />)
+
+      expect(screen.queryByTestId('download-dropdown-menu')).not.toBeInTheDocument()
+
+      await user.click(screen.getByTestId('download-dropdown-button'))
+
+      expect(screen.getByTestId('download-dropdown-menu')).toBeInTheDocument()
+      expect(screen.getByTestId('download-artifact-artifact-1')).toBeInTheDocument()
+      expect(screen.getByTestId('download-artifact-artifact-2')).toBeInTheDocument()
+    })
+
+    it('should close dropdown on second click', async () => {
+      const user = userEvent.setup()
+      render(<ActionBar {...artifactGeneratorProps} />)
+
+      await user.click(screen.getByTestId('download-dropdown-button'))
+      expect(screen.getByTestId('download-dropdown-menu')).toBeInTheDocument()
+
+      await user.click(screen.getByTestId('download-dropdown-button'))
+      expect(screen.queryByTestId('download-dropdown-menu')).not.toBeInTheDocument()
+    })
+
+    it('should trigger download with correct artifact parameters', async () => {
+      const user = userEvent.setup()
+      const mockBlob = new Blob(['test content'], { type: 'application/octet-stream' })
+      const mockFetch = vi.spyOn(global, 'fetch').mockResolvedValue({
+        ok: true,
+        blob: () => Promise.resolve(mockBlob)
+      })
+      const mockCreateObjectURL = vi.spyOn(window.URL, 'createObjectURL').mockReturnValue('blob:test')
+      const mockRevokeObjectURL = vi.spyOn(window.URL, 'revokeObjectURL').mockImplementation(() => {})
+
+      render(<ActionBar {...artifactGeneratorProps} />)
+
+      await user.click(screen.getByTestId('download-dropdown-button'))
+      await user.click(screen.getByTestId('download-artifact-artifact-1'))
+
+      await waitFor(() => {
+        expect(mockFetch).toHaveBeenCalledWith(
+          '/api/v1/download?kind=ExternalArtifact&namespace=flux-system&name=artifact-1'
+        )
+      })
+
+      mockFetch.mockRestore()
+      mockCreateObjectURL.mockRestore()
+      mockRevokeObjectURL.mockRestore()
+    })
+
+    it('should close dropdown after artifact selection', async () => {
+      const user = userEvent.setup()
+      const mockBlob = new Blob(['test content'], { type: 'application/octet-stream' })
+      vi.spyOn(global, 'fetch').mockResolvedValue({
+        ok: true,
+        blob: () => Promise.resolve(mockBlob)
+      })
+      vi.spyOn(window.URL, 'createObjectURL').mockReturnValue('blob:test')
+      vi.spyOn(window.URL, 'revokeObjectURL').mockImplementation(() => {})
+
+      render(<ActionBar {...artifactGeneratorProps} />)
+
+      await user.click(screen.getByTestId('download-dropdown-button'))
+      expect(screen.getByTestId('download-dropdown-menu')).toBeInTheDocument()
+
+      await user.click(screen.getByTestId('download-artifact-artifact-1'))
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('download-dropdown-menu')).not.toBeInTheDocument()
+      })
+
+      vi.restoreAllMocks()
+    })
+
+    it('should display artifact names and namespaces in dropdown', async () => {
+      const user = userEvent.setup()
+      render(<ActionBar {...artifactGeneratorProps} />)
+
+      await user.click(screen.getByTestId('download-dropdown-button'))
+
+      expect(screen.getByText('artifact-1')).toBeInTheDocument()
+      expect(screen.getByText('flux-system')).toBeInTheDocument()
+      expect(screen.getByText('artifact-2')).toBeInTheDocument()
+      expect(screen.getByText('default')).toBeInTheDocument()
+    })
+
+    it('should show error when download fails', async () => {
+      const user = userEvent.setup()
+      vi.spyOn(global, 'fetch').mockResolvedValue({
+        ok: false,
+        status: 404,
+        text: () => Promise.resolve('Artifact not found')
+      })
+
+      render(<ActionBar {...artifactGeneratorProps} />)
+
+      await user.click(screen.getByTestId('download-dropdown-button'))
+      await user.click(screen.getByTestId('download-artifact-artifact-1'))
+
+      await waitFor(() => {
+        expect(screen.getByTestId('action-error')).toBeInTheDocument()
+        expect(screen.getByText('Artifact not found')).toBeInTheDocument()
+      })
+
+      vi.restoreAllMocks()
+    })
+  })
+
   describe('Button re-enable states', () => {
     it('should enable buttons when status changes from Progressing to Ready', () => {
       const { rerender } = render(
