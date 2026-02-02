@@ -1360,6 +1360,10 @@ describe('getWorkloadDotClass function', () => {
     expect(getWorkloadDotClass('Ready')).toBe('bg-green-500 dark:bg-green-400')
   })
 
+  it('should return green class for Idle status', () => {
+    expect(getWorkloadDotClass('Idle')).toBe('bg-green-500 dark:bg-green-400')
+  })
+
   it('should return red class for Failed status', () => {
     expect(getWorkloadDotClass('Failed')).toBe('bg-red-500 dark:bg-red-400')
   })
@@ -1374,6 +1378,10 @@ describe('getWorkloadDotClass function', () => {
 
   it('should return yellow class for Terminating status', () => {
     expect(getWorkloadDotClass('Terminating')).toBe('bg-yellow-500 dark:bg-yellow-400')
+  })
+
+  it('should return yellow class for Suspended status', () => {
+    expect(getWorkloadDotClass('Suspended')).toBe('bg-yellow-500 dark:bg-yellow-400')
   })
 
   it('should return gray class for unknown status', () => {
@@ -1394,39 +1402,28 @@ describe('formatWorkloadGraphMessage function', () => {
     expect(formatWorkloadGraphMessage('Current', undefined)).toBeNull()
   })
 
-  it('should extract Replicas part for Current status', () => {
-    const message = 'Deployment is available. Replicas: 3/3'
-    expect(formatWorkloadGraphMessage('Current', message)).toBe('Replicas: 3/3')
+  it('should pass through Replicas message for Current status', () => {
+    expect(formatWorkloadGraphMessage('Current', 'Replicas: 3')).toBe('Replicas: 3')
   })
 
-  it('should extract Replicas part for Ready status', () => {
-    const message = 'StatefulSet is ready. Replicas: 2/2'
-    expect(formatWorkloadGraphMessage('Ready', message)).toBe('Replicas: 2/2')
+  it('should pass through Replicas message for Ready status', () => {
+    expect(formatWorkloadGraphMessage('Ready', 'Replicas: 2')).toBe('Replicas: 2')
   })
 
-  it('should extract Replicas with different formats', () => {
-    const message = 'Some text. Replicas: 2 of 3 ready'
-    expect(formatWorkloadGraphMessage('Current', message)).toBe('Replicas: 2 of 3 ready')
+  it('should return Idle for Idle status regardless of message', () => {
+    expect(formatWorkloadGraphMessage('Idle', '0 */6 * * *')).toBe('Idle')
   })
 
-  it('should return full message when no Replicas part for ready status', () => {
-    const message = 'Deployment is available'
-    expect(formatWorkloadGraphMessage('Current', message)).toBe('Deployment is available')
-  })
-
-  it('should return full message for Failed status even with Replicas', () => {
-    const message = 'Deployment failed. Replicas: 1/3'
-    expect(formatWorkloadGraphMessage('Failed', message)).toBe('Deployment failed. Replicas: 1/3')
+  it('should return full message for Failed status', () => {
+    expect(formatWorkloadGraphMessage('Failed', 'Job failed: BackoffLimitExceeded')).toBe('Job failed: BackoffLimitExceeded')
   })
 
   it('should return full message for InProgress status', () => {
-    const message = 'Deployment progressing. Replicas: 2/3'
-    expect(formatWorkloadGraphMessage('InProgress', message)).toBe('Deployment progressing. Replicas: 2/3')
+    expect(formatWorkloadGraphMessage('InProgress', 'Deployment progressing')).toBe('Deployment progressing')
   })
 
   it('should return full message for Terminating status', () => {
-    const message = 'Pod is terminating'
-    expect(formatWorkloadGraphMessage('Terminating', message)).toBe('Pod is terminating')
+    expect(formatWorkloadGraphMessage('Terminating', 'Pod is terminating')).toBe('Pod is terminating')
   })
 })
 

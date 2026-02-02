@@ -12,6 +12,7 @@ const getTimestamp = (daysAgo, hoursAgo = 0, minutesAgo = 0) => {
 }
 
 // Mock workload data
+// Pod statuses use Kubernetes pod phases: Pending, Running, Succeeded, Failed, Unknown
 const mockWorkloads = {
   // Flux controllers in flux-system namespace
   'Deployment/flux-system/source-controller': {
@@ -19,15 +20,15 @@ const mockWorkloads = {
     name: 'source-controller',
     namespace: 'flux-system',
     status: 'Current',
-    statusMessage: 'Deployment is available. Replicas: 1',
+    statusMessage: 'Replicas: 1',
     containerImages: [
       'ghcr.io/fluxcd/source-controller:v1.7.4@sha256:16f21ac1795528df80ddef51ccbb14a57b78ea26e66dc8551636ef9a3cec71b3'
     ],
     pods: [
       {
         name: 'source-controller-5f76f5c549-wz2gk',
-        status: 'Current',
-        statusMessage: 'Pod is Ready',
+        status: 'Running',
+        statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
         timestamp: getTimestamp(7, 2, 15) // 7 days, 2 hours, 15 minutes ago
       }
     ]
@@ -37,15 +38,15 @@ const mockWorkloads = {
     name: 'kustomize-controller',
     namespace: 'flux-system',
     status: 'Current',
-    statusMessage: 'Deployment is available. Replicas: 1',
+    statusMessage: 'Replicas: 1',
     containerImages: [
       'ghcr.io/fluxcd/kustomize-controller:v1.7.3@sha256:e8ca82d66dafdd8ef77e0917f4adec53478075130ac61264dc0f91eb0f8cb6ce'
     ],
     pods: [
       {
         name: 'kustomize-controller-5fc57fb9cc-bhl8q',
-        status: 'Current',
-        statusMessage: 'Pod is Ready',
+        status: 'Running',
+        statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
         timestamp: getTimestamp(7, 2, 20)
       }
     ]
@@ -55,15 +56,15 @@ const mockWorkloads = {
     name: 'helm-controller',
     namespace: 'flux-system',
     status: 'Current',
-    statusMessage: 'Deployment is available. Replicas: 1',
+    statusMessage: 'Replicas: 1',
     containerImages: [
       'ghcr.io/fluxcd/helm-controller:v1.4.4@sha256:5eae73909e1471c0cd01bb23d87c9d4219a4f645134a23629c8708c72635398d'
     ],
     pods: [
       {
         name: 'helm-controller-bf4685d7f-nxqsj',
-        status: 'Current',
-        statusMessage: 'Pod is Ready',
+        status: 'Running',
+        statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
         timestamp: getTimestamp(7, 2, 25)
       }
     ]
@@ -73,15 +74,15 @@ const mockWorkloads = {
     name: 'notification-controller',
     namespace: 'flux-system',
     status: 'Current',
-    statusMessage: 'Deployment is available. Replicas: 1',
+    statusMessage: 'Replicas: 1',
     containerImages: [
       'ghcr.io/fluxcd/notification-controller:v1.7.5@sha256:ba723a55f7c7c7feedd50bb5db0ff2dd9a3b0ae85b50f61a0457184025b38c54'
     ],
     pods: [
       {
         name: 'notification-controller-58cfb55954-fcf6l',
-        status: 'Current',
-        statusMessage: 'Pod is Ready',
+        status: 'Running',
+        statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
         timestamp: getTimestamp(7, 2, 30)
       }
     ]
@@ -98,14 +99,14 @@ const mockWorkloads = {
     pods: [
       {
         name: 'image-automation-controller-5c5fc5487b-w4458',
-        status: 'Current',
-        statusMessage: 'Pod is Ready',
+        status: 'Running',
+        statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
         timestamp: getTimestamp(5, 8, 45)
       },
       {
         name: 'image-automation-controller-dfcfc789b-9dtqk',
-        status: 'InProgress',
-        statusMessage: 'Pod is in the Pending phase. Reason: ImagePullBackOff',
+        status: 'Pending',
+        statusMessage: 'Waiting: ImagePullBackOff',
         timestamp: getTimestamp(0, 0, 5) // Recent pod with issue
       }
     ]
@@ -115,15 +116,15 @@ const mockWorkloads = {
     name: 'image-reflector-controller',
     namespace: 'flux-system',
     status: 'Current',
-    statusMessage: 'Deployment is available. Replicas: 1',
+    statusMessage: 'Replicas: 1',
     containerImages: [
       'ghcr.io/fluxcd/image-reflector-controller:v1.0.4@sha256:0bdc30aea2b7cdfea02d0f6d53c06b9df0ea1c6516b85ed523792e222329c039'
     ],
     pods: [
       {
         name: 'image-reflector-controller-547c8dbffc-2gjhj',
-        status: 'Current',
-        statusMessage: 'Pod is Ready',
+        status: 'Running',
+        statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
         timestamp: getTimestamp(7, 3, 10)
       }
     ]
@@ -133,15 +134,15 @@ const mockWorkloads = {
     name: 'source-watcher',
     namespace: 'flux-system',
     status: 'Current',
-    statusMessage: 'Deployment is available. Replicas: 1',
+    statusMessage: 'Replicas: 1',
     containerImages: [
       'ghcr.io/fluxcd/source-watcher:v2.0.3@sha256:9cd46c3c958dcfcd8a3c857fa09989f9df5d8396eae165f219cbb472343371a9'
     ],
     pods: [
       {
         name: 'source-watcher-85bcf4bd57-vfbs6',
-        status: 'Current',
-        statusMessage: 'Pod is Ready',
+        status: 'Running',
+        statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
         timestamp: getTimestamp(7, 3, 20)
       }
     ]
@@ -151,15 +152,15 @@ const mockWorkloads = {
     name: 'flux-operator',
     namespace: 'flux-system',
     status: 'Current',
-    statusMessage: 'Deployment is available. Replicas: 1',
+    statusMessage: 'Replicas: 1',
     containerImages: [
       'ghcr.io/controlplaneio-fluxcd/flux-operator:v0.34.0'
     ],
     pods: [
       {
         name: 'flux-operator-67cdfc557d-h656w',
-        status: 'Current',
-        statusMessage: 'Pod is Ready',
+        status: 'Running',
+        statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
         timestamp: getTimestamp(7, 3, 30)
       }
     ]
@@ -171,15 +172,15 @@ const mockWorkloads = {
     name: 'cert-manager',
     namespace: 'cert-manager',
     status: 'Current',
-    statusMessage: 'Deployment is available. Replicas: 1',
+    statusMessage: 'Replicas: 1',
     containerImages: [
       'quay.io/jetstack/cert-manager-controller:v1.19.1'
     ],
     pods: [
       {
         name: 'cert-manager-6b7bcdbb84-cclfj',
-        status: 'Current',
-        statusMessage: 'Pod is Ready',
+        status: 'Running',
+        statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
         timestamp: getTimestamp(10, 4, 15)
       }
     ]
@@ -189,15 +190,15 @@ const mockWorkloads = {
     name: 'cert-manager-cainjector',
     namespace: 'cert-manager',
     status: 'Current',
-    statusMessage: 'Deployment is available. Replicas: 1',
+    statusMessage: 'Replicas: 1',
     containerImages: [
       'quay.io/jetstack/cert-manager-cainjector:v1.19.1'
     ],
     pods: [
       {
         name: 'cert-manager-cainjector-d74c65ddb-6v869',
-        status: 'Current',
-        statusMessage: 'Pod is Ready',
+        status: 'Running',
+        statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
         timestamp: getTimestamp(10, 4, 20)
       }
     ]
@@ -207,15 +208,15 @@ const mockWorkloads = {
     name: 'cert-manager-webhook',
     namespace: 'cert-manager',
     status: 'Current',
-    statusMessage: 'Deployment is available. Replicas: 1',
+    statusMessage: 'Replicas: 1',
     containerImages: [
       'quay.io/jetstack/cert-manager-webhook:v1.19.1'
     ],
     pods: [
       {
         name: 'cert-manager-webhook-6bf5dfc659-w95d9',
-        status: 'Current',
-        statusMessage: 'Pod is Ready',
+        status: 'Running',
+        statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
         timestamp: getTimestamp(10, 4, 25)
       }
     ]
@@ -227,15 +228,15 @@ const mockWorkloads = {
     name: 'metrics-server',
     namespace: 'monitoring',
     status: 'Current',
-    statusMessage: 'Deployment is available. Replicas: 1',
+    statusMessage: 'Replicas: 1',
     containerImages: [
       'registry.k8s.io/metrics-server/metrics-server:v0.8.0'
     ],
     pods: [
       {
         name: 'metrics-server-57b56685f4-59gn2',
-        status: 'Current',
-        statusMessage: 'Pod is Ready',
+        status: 'Running',
+        statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
         timestamp: getTimestamp(14, 6, 30)
       }
     ]
@@ -245,15 +246,15 @@ const mockWorkloads = {
     name: 'operator',
     namespace: 'tailscale',
     status: 'Current',
-    statusMessage: 'Deployment is available. Replicas: 1',
+    statusMessage: 'Replicas: 1',
     containerImages: [
       'tailscale/k8s-operator:v1.90.8'
     ],
     pods: [
       {
         name: 'operator-84ddf77c66-gjsxz',
-        status: 'Current',
-        statusMessage: 'Pod is Ready',
+        status: 'Running',
+        statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
         timestamp: getTimestamp(12, 8, 45)
       }
     ]
@@ -263,16 +264,72 @@ const mockWorkloads = {
     name: 'zot-registry',
     namespace: 'registry',
     status: 'Current',
-    statusMessage: 'Partition rollout complete. updated: 1',
+    statusMessage: 'Replicas: 1',
     containerImages: [
       'ghcr.io/project-zot/zot:v2.1.11'
     ],
     pods: [
       {
         name: 'zot-registry-0',
-        status: 'Current',
-        statusMessage: 'Pod is Ready',
+        status: 'Running',
+        statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
         timestamp: getTimestamp(15, 10, 0)
+      }
+    ]
+  },
+
+  // CronJob examples
+  'CronJob/flux-system/garbage-collection': {
+    kind: 'CronJob',
+    name: 'garbage-collection',
+    namespace: 'flux-system',
+    status: 'Idle',
+    statusMessage: '0 */6 * * *',
+    containerImages: [
+      'ghcr.io/fluxcd/flux-cli:v2.6.1'
+    ],
+    pods: [
+      {
+        name: 'garbage-collection-28945678-xk9j2',
+        status: 'Succeeded',
+        statusMessage: 'Completed at 2026-02-02 10:30:00 UTC',
+        timestamp: getTimestamp(0, 1, 30) // 1 hour 30 minutes ago
+      }
+    ]
+  },
+  'CronJob/monitoring/prometheus-backup': {
+    kind: 'CronJob',
+    name: 'prometheus-backup',
+    namespace: 'monitoring',
+    status: 'Idle',
+    statusMessage: '0 0 * * *',
+    containerImages: [
+      'prom/prometheus:v3.3.0'
+    ],
+    pods: [
+      {
+        name: 'prometheus-backup-28945600-abc12',
+        status: 'Succeeded',
+        statusMessage: 'Completed at 2026-02-02 06:00:00 UTC',
+        timestamp: getTimestamp(0, 6, 0) // 6 hours ago
+      }
+    ]
+  },
+  'CronJob/cert-manager/cert-renewal-check': {
+    kind: 'CronJob',
+    name: 'cert-renewal-check',
+    namespace: 'cert-manager',
+    status: 'Failed',
+    statusMessage: 'Job failed: BackoffLimitExceeded',
+    containerImages: [
+      'quay.io/jetstack/cert-manager-ctl:v1.19.1'
+    ],
+    pods: [
+      {
+        name: 'cert-renewal-check-28945500-def34',
+        status: 'Failed',
+        statusMessage: 'Reason: Error',
+        timestamp: getTimestamp(0, 12, 0) // 12 hours ago
       }
     ]
   }

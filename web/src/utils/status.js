@@ -33,22 +33,33 @@ export function getStatusBadgeClass(status) {
 
 /**
  * Get badge class for Kubernetes workload statuses.
- * Accepts both backend values (Current, InProgress) and display values (Ready, Progressing).
- * @param {string} status - Status value (Current/Ready, Failed, InProgress/Progressing, Terminating)
+ * Accepts workload-level statuses (Current, InProgress, Ready, Progressing) and
+ * Kubernetes pod phases (Pending, Running, Succeeded, Failed).
+ * @param {string} status - Status value
  * @returns {string} Tailwind CSS classes for the badge
  */
 export function getWorkloadStatusBadgeClass(status) {
   switch (status) {
+  // Workload-level statuses
   case 'Current':
   case 'Ready':
+  case 'Idle':
     return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-  case 'Failed':
-    return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
   case 'InProgress':
   case 'Progressing':
     return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
   case 'Terminating':
+  case 'Suspended':
     return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
+  // Kubernetes pod phases
+  case 'Pending':
+    return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
+  case 'Running':
+    return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
+  case 'Succeeded':
+    return 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-400'
+  case 'Failed':
+    return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
   default:
     return 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400'
   }

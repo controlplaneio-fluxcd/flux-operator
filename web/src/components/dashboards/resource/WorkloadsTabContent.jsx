@@ -5,6 +5,7 @@ import { useState, useEffect } from 'preact/hooks'
 import { fetchWithMock } from '../../../utils/fetch'
 import { formatTimestamp } from '../../../utils/time'
 import { getWorkloadStatusBadgeClass, formatWorkloadStatus } from '../../../utils/status'
+import { formatScheduleMessage } from '../../../utils/cron'
 import { FluxOperatorIcon } from '../../layout/Icons'
 
 /**
@@ -130,7 +131,7 @@ export function WorkloadsTabContent({ workloadItems, namespace }) {
                   {/* Line 3: StatusMessage */}
                   {workload && workload.statusMessage && (
                     <div class="text-sm text-gray-700 dark:text-gray-300 mt-1 break-all">
-                      {workload.statusMessage}
+                      {formatScheduleMessage(workload.statusMessage)}
                     </div>
                   )}
                 </div>
@@ -190,7 +191,9 @@ export function WorkloadsTabContent({ workloadItems, namespace }) {
 
                 {/* No Pods */}
                 {(!workload.pods || workload.pods.length === 0) && (
-                  <p class="text-xs text-gray-500 dark:text-gray-400">No pods found</p>
+                  <p class="text-xs text-gray-500 dark:text-gray-400">
+                    {item.kind === 'CronJob' ? 'No recent jobs' : 'No pods found'}
+                  </p>
                 )}
               </div>
             )}

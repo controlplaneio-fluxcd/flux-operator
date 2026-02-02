@@ -393,6 +393,51 @@ describe('WorkloadsTabContent component', () => {
     })
   })
 
+  it('should show "No recent jobs" for CronJob with no pods', async () => {
+    const cronJobWorkload = {
+      kind: 'CronJob',
+      name: 'backup',
+      namespace: 'default',
+      status: 'Idle',
+      statusMessage: '0 */6 * * *',
+      containerImages: ['busybox:1.36'],
+      pods: []
+    }
+
+    fetchWithMock.mockImplementation(() =>
+      Promise.resolve({ workloads: [cronJobWorkload] })
+    )
+    const user = userEvent.setup()
+
+    const cronJobItem = [{
+      kind: 'CronJob',
+      name: 'backup',
+      namespace: 'default'
+    }]
+
+    render(
+      <WorkloadsTabContent
+        workloadItems={cronJobItem}
+        namespace="default"
+      />
+    )
+
+    await waitFor(() => {
+      const textContent = document.body.textContent
+      expect(textContent).toContain('default/backup')
+    })
+
+    // Expand the workload
+    const workloadButtons = screen.getAllByRole('button')
+    const backupButton = workloadButtons.find(btn => btn.textContent.includes('backup'))
+    await user.click(backupButton)
+
+    // Should show "No recent jobs" for CronJob
+    await waitFor(() => {
+      expect(screen.getByText('No recent jobs')).toBeInTheDocument()
+    })
+  })
+
   it('should refetch workload data when workloadItems change', async () => {
     const { rerender } = render(
       <WorkloadsTabContent
