@@ -13,6 +13,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	authzv1 "k8s.io/api/authorization/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,13 +30,14 @@ import (
 )
 
 var (
-	ctx         context.Context
-	cancel      context.CancelFunc
-	testEnv     *envtest.Environment
-	testScheme  *runtime.Scheme
-	testClient  client.Client
-	testCluster cluster.Cluster
-	kubeClient  *kubeclient.Client
+	ctx             context.Context
+	cancel          context.CancelFunc
+	testEnv         *envtest.Environment
+	testScheme      *runtime.Scheme
+	testClient      client.Client
+	testCluster     cluster.Cluster
+	kubeClient      *kubeclient.Client
+	kubeClientCache *kubeclient.Client
 )
 
 func NewTestScheme() *runtime.Scheme {
@@ -43,6 +45,7 @@ func NewTestScheme() *runtime.Scheme {
 	utilruntime.Must(corev1.AddToScheme(s))
 	utilruntime.Must(rbacv1.AddToScheme(s))
 	utilruntime.Must(appsv1.AddToScheme(s))
+	utilruntime.Must(batchv1.AddToScheme(s))
 	utilruntime.Must(authzv1.AddToScheme(s))
 	utilruntime.Must(fluxcdv1.AddToScheme(s))
 	return s
@@ -121,6 +124,19 @@ func TestMain(m *testing.M) {
 		panic(fmt.Sprintf("Failed to create test cluster: %v", err))
 	}
 
+	// Index Jobs by CronJob owner for the workload handler tests
+	if err := testCluster.GetFieldIndexer().IndexField(ctx, &batchv1.Job{}, JobOwnerCronJobField, func(obj client.Object) []string {
+		job := obj.(*batchv1.Job)
+		for _, ref := range job.OwnerReferences {
+			if ref.APIVersion == "batch/v1" && ref.Kind == "CronJob" {
+				return []string{ref.Name}
+			}
+		}
+		return nil
+	}); err != nil {
+		panic(fmt.Sprintf("Failed to create field index for Jobs: %v", err))
+	}
+
 	// Start the cluster in a goroutine
 	go func() {
 		if err := testCluster.Start(ctx); err != nil {
@@ -139,6 +155,12 @@ func TestMain(m *testing.M) {
 	kubeClient, err = kubeclient.New(testClient, testClient, cfg, testScheme, 100, 5*time.Minute)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create kubeclient: %v", err))
+	}
+
+	// Create a kubeclient with the manager cache
+	kubeClientCache, err = kubeclient.New(testClient, testCluster.GetClient(), cfg, testScheme, 100, 5*time.Minute)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to create kubeclient with cache: %v", err))
 	}
 
 	// Create RBAC for custom action verbs (reconcile, suspend, resume)

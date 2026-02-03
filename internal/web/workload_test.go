@@ -8,6 +8,7 @@ import (
 
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -760,4 +761,139 @@ func TestGetWorkloadStatus_DaemonSet(t *testing.T) {
 	g.Expect(workload.Kind).To(Equal("DaemonSet"))
 	g.Expect(workload.Name).To(Equal("test-daemonset-status"))
 	g.Expect(workload.ContainerImages).To(ContainElement("fluentd:v1.16"))
+}
+
+func TestGetWorkloadStatus_CronJob(t *testing.T) {
+	// Create the handler with kubeClientCache which has the field index for Jobs
+	handler := &Handler{
+		kubeClient:    kubeClientCache,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	t.Run("idle cronjob without active jobs", func(t *testing.T) {
+		g := NewWithT(t)
+
+		cronJob := &batchv1.CronJob{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-cronjob-idle",
+				Namespace: "default",
+			},
+			Spec: batchv1.CronJobSpec{
+				Schedule: "*/5 * * * *",
+				JobTemplate: batchv1.JobTemplateSpec{
+					Spec: batchv1.JobSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								RestartPolicy: corev1.RestartPolicyOnFailure,
+								Containers: []corev1.Container{
+									{
+										Name:    "backup",
+										Image:   "busybox:1.36",
+										Command: []string{"/bin/sh", "-c", "echo hello"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		g.Expect(testClient.Create(ctx, cronJob)).To(Succeed())
+		defer testClient.Delete(ctx, cronJob)
+
+		workload, err := handler.GetWorkloadStatus(ctx, "CronJob", "test-cronjob-idle", "default")
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(workload).NotTo(BeNil())
+		g.Expect(workload.Kind).To(Equal("CronJob"))
+		g.Expect(workload.Name).To(Equal("test-cronjob-idle"))
+		g.Expect(workload.ContainerImages).To(ContainElement("busybox:1.36"))
+		g.Expect(workload.Status).To(Equal("Idle"))
+		g.Expect(workload.StatusMessage).To(Equal("*/5 * * * *"))
+	})
+
+	t.Run("suspended cronjob", func(t *testing.T) {
+		g := NewWithT(t)
+
+		suspended := true
+		cronJob := &batchv1.CronJob{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-cronjob-suspended",
+				Namespace: "default",
+			},
+			Spec: batchv1.CronJobSpec{
+				Schedule: "0 0 * * *",
+				Suspend:  &suspended,
+				JobTemplate: batchv1.JobTemplateSpec{
+					Spec: batchv1.JobSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								RestartPolicy: corev1.RestartPolicyOnFailure,
+								Containers: []corev1.Container{
+									{
+										Name:    "backup",
+										Image:   "busybox:1.36",
+										Command: []string{"/bin/sh", "-c", "echo hello"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		g.Expect(testClient.Create(ctx, cronJob)).To(Succeed())
+		defer testClient.Delete(ctx, cronJob)
+
+		workload, err := handler.GetWorkloadStatus(ctx, "CronJob", "test-cronjob-suspended", "default")
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(workload).NotTo(BeNil())
+		g.Expect(workload.Status).To(Equal("Suspended"))
+		g.Expect(workload.StatusMessage).To(Equal("CronJob is suspended"))
+	})
+
+	t.Run("cronjob with active jobs", func(t *testing.T) {
+		g := NewWithT(t)
+
+		cronJob := &batchv1.CronJob{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-cronjob-active",
+				Namespace: "default",
+			},
+			Spec: batchv1.CronJobSpec{
+				Schedule: "*/10 * * * *",
+				JobTemplate: batchv1.JobTemplateSpec{
+					Spec: batchv1.JobSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								RestartPolicy: corev1.RestartPolicyOnFailure,
+								Containers: []corev1.Container{
+									{
+										Name:    "worker",
+										Image:   "busybox:1.36",
+										Command: []string{"/bin/sh", "-c", "sleep 60"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		g.Expect(testClient.Create(ctx, cronJob)).To(Succeed())
+		defer testClient.Delete(ctx, cronJob)
+
+		// Update status separately (status is a subresource)
+		cronJob.Status.Active = []corev1.ObjectReference{
+			{Name: "test-cronjob-active-12345", Namespace: "default"},
+		}
+		g.Expect(testClient.Status().Update(ctx, cronJob)).To(Succeed())
+
+		workload, err := handler.GetWorkloadStatus(ctx, "CronJob", "test-cronjob-active", "default")
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(workload).NotTo(BeNil())
+		g.Expect(workload.Status).To(Equal("Progressing"))
+		g.Expect(workload.StatusMessage).To(Equal("Active jobs: 1"))
+	})
 }

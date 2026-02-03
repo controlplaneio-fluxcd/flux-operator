@@ -156,21 +156,18 @@ function getStatusBorderClass(status) {
 }
 
 /**
- * Format workload status message for display in the graph
- * For ready workloads, extracts just the "Replicas: X" part if present
+ * Format workload status message for display in the graph.
+ * For Idle CronJobs, returns "Idle" as the display message.
  * @param {string} status - Workload status
- * @param {string} message - Full status message
+ * @param {string} message - Status message
  * @returns {string|null} Formatted message or null
  */
 export function formatWorkloadGraphMessage(status, message) {
   if (!message) return null
 
-  // For ready workloads, extract just the replicas part
-  if (status === 'Current' || status === 'Ready') {
-    const replicasMatch = message.match(/Replicas:\s*.+/)
-    if (replicasMatch) {
-      return replicasMatch[0]
-    }
+  // For idle CronJobs, show "Idle" as the status message
+  if (status === 'Idle') {
+    return 'Idle'
   }
 
   return message
@@ -179,13 +176,14 @@ export function formatWorkloadGraphMessage(status, message) {
 /**
  * Get dot color class for workload status
  * Uses same color scheme as getWorkloadStatusBadgeClass from utils/status
- * @param {string} status - Workload status (Current, Ready, Failed, InProgress, Progressing, Terminating)
+ * @param {string} status - Workload status (Current, Ready, Idle, Failed, InProgress, Progressing, Terminating, Suspended)
  * @returns {string} Tailwind CSS classes for the dot
  */
 export function getWorkloadDotClass(status) {
   switch (status) {
   case 'Current':
   case 'Ready':
+  case 'Idle':
     return 'bg-green-500 dark:bg-green-400'
   case 'Failed':
     return 'bg-red-500 dark:bg-red-400'
@@ -193,6 +191,7 @@ export function getWorkloadDotClass(status) {
   case 'Progressing':
     return 'bg-blue-500 dark:bg-blue-400'
   case 'Terminating':
+  case 'Suspended':
     return 'bg-yellow-500 dark:bg-yellow-400'
   default:
     return 'bg-gray-400 dark:bg-gray-500'

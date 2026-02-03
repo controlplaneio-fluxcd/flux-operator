@@ -155,6 +155,7 @@ export const resourceStatuses = ['Ready', 'Failed', 'Progressing', 'Suspended', 
 
 // Kubernetes workload kinds
 export const workloadKinds = [
+  'CronJob',
   'DaemonSet',
   'Deployment',
   'StatefulSet'

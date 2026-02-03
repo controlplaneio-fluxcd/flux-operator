@@ -24,6 +24,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/pprof"
 	"github.com/fluxcd/pkg/runtime/probes"
 	flag "github.com/spf13/pflag"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -390,6 +391,20 @@ func main() {
 			err := errors.New("both web-config and web-config-secret-name are set, " +
 				"only one of the two options can be used to configure the web server")
 			setupLog.Error(err, "invalid web server configuration flags")
+			os.Exit(1)
+		}
+
+		// Index Jobs by CronJob owner.
+		if err := mgr.GetFieldIndexer().IndexField(ctx, &batchv1.Job{}, web.JobOwnerCronJobField, func(obj ctrlclient.Object) []string {
+			job := obj.(*batchv1.Job)
+			for _, ref := range job.OwnerReferences {
+				if ref.APIVersion == "batch/v1" && ref.Kind == "CronJob" {
+					return []string{ref.Name}
+				}
+			}
+			return nil
+		}); err != nil {
+			setupLog.Error(err, "unable to create field index for Jobs by CronJob owner")
 			os.Exit(1)
 		}
 
