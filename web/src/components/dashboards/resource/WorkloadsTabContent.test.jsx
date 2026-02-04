@@ -38,13 +38,13 @@ describe('WorkloadsTabContent component', () => {
         name: 'podinfo-7d8b9c4f5d-abc12',
         status: 'Current',
         statusMessage: 'Pod is running',
-        timestamp: '2025-01-15T10:30:00Z'
+        createdAt: '2025-01-15T10:30:00Z'
       },
       {
         name: 'podinfo-7d8b9c4f5d-def34',
         status: 'Current',
         statusMessage: 'Pod is running',
-        timestamp: '2025-01-15T10:30:05Z'
+        createdAt: '2025-01-15T10:30:05Z'
       }
     ]
   }
@@ -61,13 +61,13 @@ describe('WorkloadsTabContent component', () => {
         name: 'redis-0',
         status: 'Current',
         statusMessage: 'Pod is running',
-        timestamp: '2025-01-15T10:25:00Z'
+        createdAt: '2025-01-15T10:25:00Z'
       },
       {
         name: 'redis-1',
         status: 'InProgress',
         statusMessage: 'Container creating. Reason: ContainerCreating',
-        timestamp: '2025-01-15T10:35:00Z'
+        createdAt: '2025-01-15T10:35:00Z'
       }
     ]
   }
@@ -487,7 +487,7 @@ describe('WorkloadsTabContent component', () => {
             name: 'podinfo-recent-pod',
             status: 'Current',
             statusMessage: 'Pod is running',
-            timestamp: recentTimestamp
+            createdAt: recentTimestamp
           }
         ]
       }
@@ -541,7 +541,7 @@ describe('WorkloadsTabContent component', () => {
             name: 'podinfo-old-pod',
             status: 'Current',
             statusMessage: 'Pod is running',
-            timestamp: oldTimestamp
+            createdAt: oldTimestamp
           }
         ]
       }

@@ -9,22 +9,17 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
-	"strings"
 	"time"
 
-	"github.com/google/uuid"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
-
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
-	"github.com/controlplaneio-fluxcd/flux-operator/internal/notifier"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/kubeclient"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
@@ -145,39 +140,27 @@ func (h *Handler) WorkloadActionHandler(w http.ResponseWriter, req *http.Request
 	}
 
 	// Send audit event.
-	if h.eventRecorder != nil && slices.Contains(h.conf.UserActions.Audit, actionReq.Action) {
-		const reason = "WebAction"
-
-		// Get a privileged kube client for the notifier.
-		kubeClient := h.kubeClient.GetClient(req.Context(), kubeclient.WithPrivileges())
-
-		// Build annotations.
-		perms := user.Permissions(req.Context())
-		token := fmt.Sprintf("%s/%s", kindInfo.group, eventv1.MetaTokenKey)
-		annotations := map[string]string{
-			eventv1.Group + "/action":   actionReq.Action,
-			eventv1.Group + "/username": perms.Username,
-			eventv1.Group + "/groups":   strings.Join(perms.Groups, ", "),
-			token:                       uuid.NewString(),
+	// Only fetch workload for reconciler ref if audit is enabled.
+	reconcilerRef := ""
+	if h.isAuditEnabled(actionReq.Action) {
+		workload := &unstructured.Unstructured{}
+		workload.SetGroupVersionKind(schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: actionReq.Kind})
+		if err := h.kubeClient.GetClient(ctx).Get(ctx, client.ObjectKey{
+			Namespace: actionReq.Namespace, Name: actionReq.Name,
+		}, workload); err == nil {
+			reconcilerRef = getReconcilerRef(workload)
 		}
-
-		// Create a minimal object for the event.
-		obj := &metav1.PartialObjectMetadata{}
-		obj.SetNamespace(actionReq.Namespace)
-		obj.SetName(actionReq.Name)
-		obj.SetGroupVersionKind(schema.GroupVersionKind{
-			Group:   kindInfo.group,
-			Version: "v1",
-			Kind:    actionReq.Kind,
-		})
-
-		// Send the event.
-		notifier.
-			New(req.Context(), h.eventRecorder,
-				h.kubeClient.GetScheme(), notifier.WithClient(kubeClient)).
-			AnnotatedEventf(obj, annotations, corev1.EventTypeNormal, reason,
-				"User '%s' performed action '%s' on the web UI", perms.Username, actionReq.Action)
 	}
+
+	obj := &metav1.PartialObjectMetadata{}
+	obj.SetNamespace(actionReq.Namespace)
+	obj.SetName(actionReq.Name)
+	obj.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   kindInfo.group,
+		Version: "v1",
+		Kind:    actionReq.Kind,
+	})
+	h.sendAuditEvent(req.Context(), actionReq.Action, obj, reconcilerRef)
 
 	// Return success response.
 	w.Header().Set("Content-Type", "application/json")

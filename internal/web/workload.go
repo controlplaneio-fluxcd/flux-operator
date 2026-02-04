@@ -107,10 +107,10 @@ type WorkloadStatus struct {
 	// about the workload observed state.
 	StatusMessage string `json:"statusMessage,omitempty"`
 
-	// CreatedAt is the creation timestamp of the workload in RFC3339 format.
-	CreatedAt string `json:"createdAt,omitempty"`
+	// CreatedAt is the creation timestamp of the workload.
+	CreatedAt time.Time `json:"createdAt"`
 
-	// RestartedAt is the timestamp of the last rollout restart in RFC3339 format.
+	// RestartedAt is the timestamp of the last rollout restart.
 	// Extracted from the kubectl.kubernetes.io/restartedAt annotation.
 	RestartedAt string `json:"restartedAt,omitempty"`
 
@@ -134,8 +134,8 @@ type WorkloadPodStatus struct {
 	// about the pod observed state.
 	StatusMessage string `json:"statusMessage,omitempty"`
 
-	// Timestamp is the creation timestamp of the pod.
-	Timestamp string `json:"timestamp"`
+	// CreatedAt is the creation timestamp of the pod.
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 // getWorkloadGVK returns the GroupVersionKind for a given workload kind.
@@ -173,7 +173,7 @@ func (h *Handler) GetWorkloadStatus(ctx context.Context, kind, name, namespace s
 	// Extract creation timestamp
 	creationTimestamp := obj.GetCreationTimestamp()
 	if !creationTimestamp.IsZero() {
-		workload.CreatedAt = creationTimestamp.Format(time.RFC3339)
+		workload.CreatedAt = creationTimestamp.Time
 	}
 
 	// Extract restartedAt annotation from pod template
@@ -259,7 +259,7 @@ func (h *Handler) GetWorkloadPods(ctx context.Context, obj *unstructured.Unstruc
 			Name:          pod.GetName(),
 			Status:        podStatus,
 			StatusMessage: podMessage,
-			Timestamp:     pod.GetCreationTimestamp().Format(time.RFC3339),
+			CreatedAt:     pod.GetCreationTimestamp().Time,
 		})
 	}
 
@@ -323,7 +323,7 @@ func (h *Handler) getCronJobPods(ctx context.Context, cronJob *unstructured.Unst
 			Name:          pod.GetName(),
 			Status:        podStatus,
 			StatusMessage: podMessage,
-			Timestamp:     pod.GetCreationTimestamp().Format(time.RFC3339),
+			CreatedAt:     pod.GetCreationTimestamp().Time,
 		})
 	}
 

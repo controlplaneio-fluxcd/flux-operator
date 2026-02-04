@@ -31,7 +31,7 @@ const mockWorkloads = {
         name: 'source-controller-5f76f5c549-wz2gk',
         status: 'Running',
         statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
-        timestamp: getTimestamp(7, 2, 15) // 7 days, 2 hours, 15 minutes ago
+        createdAt: getTimestamp(7, 2, 15) // 7 days, 2 hours, 15 minutes ago
       }
     ]
   },
@@ -50,7 +50,7 @@ const mockWorkloads = {
         name: 'kustomize-controller-5fc57fb9cc-bhl8q',
         status: 'Running',
         statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
-        timestamp: getTimestamp(7, 2, 20)
+        createdAt: getTimestamp(7, 2, 20)
       }
     ]
   },
@@ -69,7 +69,7 @@ const mockWorkloads = {
         name: 'helm-controller-bf4685d7f-nxqsj',
         status: 'Running',
         statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
-        timestamp: getTimestamp(7, 2, 25)
+        createdAt: getTimestamp(7, 2, 25)
       }
     ]
   },
@@ -87,7 +87,7 @@ const mockWorkloads = {
         name: 'notification-controller-58cfb55954-fcf6l',
         status: 'Running',
         statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
-        timestamp: getTimestamp(7, 2, 30)
+        createdAt: getTimestamp(7, 2, 30)
       }
     ]
   },
@@ -107,13 +107,13 @@ const mockWorkloads = {
         name: 'image-automation-controller-5c5fc5487b-w4458',
         status: 'Running',
         statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
-        timestamp: getTimestamp(5, 8, 45)
+        createdAt: getTimestamp(5, 8, 45)
       },
       {
         name: 'image-automation-controller-dfcfc789b-9dtqk',
         status: 'Pending',
         statusMessage: 'Waiting: ImagePullBackOff',
-        timestamp: getTimestamp(0, 0, 5) // Recent pod with issue
+        createdAt: getTimestamp(0, 0, 5) // Recent pod with issue
       }
     ]
   },
@@ -131,7 +131,7 @@ const mockWorkloads = {
         name: 'image-reflector-controller-547c8dbffc-2gjhj',
         status: 'Running',
         statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
-        timestamp: getTimestamp(7, 3, 10)
+        createdAt: getTimestamp(7, 3, 10)
       }
     ]
   },
@@ -149,7 +149,7 @@ const mockWorkloads = {
         name: 'source-watcher-85bcf4bd57-vfbs6',
         status: 'Running',
         statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
-        timestamp: getTimestamp(7, 3, 20)
+        createdAt: getTimestamp(7, 3, 20)
       }
     ]
   },
@@ -167,7 +167,7 @@ const mockWorkloads = {
         name: 'flux-operator-67cdfc557d-h656w',
         status: 'Running',
         statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
-        timestamp: getTimestamp(7, 3, 30)
+        createdAt: getTimestamp(7, 3, 30)
       }
     ]
   },
@@ -187,7 +187,7 @@ const mockWorkloads = {
         name: 'cert-manager-6b7bcdbb84-cclfj',
         status: 'Running',
         statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
-        timestamp: getTimestamp(10, 4, 15)
+        createdAt: getTimestamp(10, 4, 15)
       }
     ]
   },
@@ -205,7 +205,7 @@ const mockWorkloads = {
         name: 'cert-manager-cainjector-d74c65ddb-6v869',
         status: 'Running',
         statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
-        timestamp: getTimestamp(10, 4, 20)
+        createdAt: getTimestamp(10, 4, 20)
       }
     ]
   },
@@ -223,7 +223,7 @@ const mockWorkloads = {
         name: 'cert-manager-webhook-6bf5dfc659-w95d9',
         status: 'Running',
         statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
-        timestamp: getTimestamp(0, 0, 0)
+        createdAt: getTimestamp(0, 0, 0)
       }
     ]
   },
@@ -243,7 +243,7 @@ const mockWorkloads = {
         name: 'metrics-server-57b56685f4-59gn2',
         status: 'Running',
         statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
-        timestamp: getTimestamp(14, 6, 30)
+        createdAt: getTimestamp(14, 6, 30)
       }
     ]
   },
@@ -261,7 +261,7 @@ const mockWorkloads = {
         name: 'operator-84ddf77c66-gjsxz',
         status: 'Running',
         statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
-        timestamp: getTimestamp(12, 8, 45)
+        createdAt: getTimestamp(12, 8, 45)
       }
     ]
   },
@@ -280,7 +280,7 @@ const mockWorkloads = {
         name: 'zot-registry-0',
         status: 'Running',
         statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
-        timestamp: getTimestamp(15, 10, 0)
+        createdAt: getTimestamp(15, 10, 0)
       }
     ]
   },
@@ -301,7 +301,7 @@ const mockWorkloads = {
         name: 'garbage-collection-28945678-xk9j2',
         status: 'Succeeded',
         statusMessage: 'Completed at 2026-02-02 10:30:00 UTC',
-        timestamp: getTimestamp(0, 1, 30) // 1 hour 30 minutes ago
+        createdAt: getTimestamp(0, 1, 30) // 1 hour 30 minutes ago
       }
     ]
   },
@@ -319,7 +319,7 @@ const mockWorkloads = {
         name: 'prometheus-backup-28945600-abc12',
         status: 'Succeeded',
         statusMessage: 'Completed at 2026-02-02 06:00:00 UTC',
-        timestamp: getTimestamp(0, 0, 0) // now
+        createdAt: getTimestamp(0, 0, 0) // now
       }
     ]
   },
@@ -337,7 +337,7 @@ const mockWorkloads = {
         name: 'cert-renewal-check-28945500-def34',
         status: 'Failed',
         statusMessage: 'Reason: Error',
-        timestamp: getTimestamp(0, 12, 0) // 12 hours ago
+        createdAt: getTimestamp(0, 12, 0) // 12 hours ago
       }
     ]
   }

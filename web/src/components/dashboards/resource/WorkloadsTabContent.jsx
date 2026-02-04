@@ -146,9 +146,9 @@ export function WorkloadsTabContent({ workloadItems, namespace, userActions = []
         // Get most recent pod timestamp
         const mostRecentTimestamp = workload?.pods?.length > 0
           ? workload.pods.reduce((latest, pod) => {
-            if (!pod.timestamp) return latest
-            if (!latest) return pod.timestamp
-            return new Date(pod.timestamp) > new Date(latest) ? pod.timestamp : latest
+            if (!pod.createdAt) return latest
+            if (!latest) return pod.createdAt
+            return new Date(pod.createdAt) > new Date(latest) ? pod.createdAt : latest
           }, null)
           : null
 
@@ -243,12 +243,12 @@ export function WorkloadsTabContent({ workloadItems, namespace, userActions = []
                       {[...workload.pods].sort((a, b) => {
                         // Sort by timestamp descending (most recent first)
                         // Pods without timestamps go to the end
-                        if (!a.timestamp && !b.timestamp) return 0
-                        if (!a.timestamp) return 1
-                        if (!b.timestamp) return -1
-                        return new Date(b.timestamp) - new Date(a.timestamp)
+                        if (!a.createdAt && !b.createdAt) return 0
+                        if (!a.createdAt) return 1
+                        if (!b.createdAt) return -1
+                        return new Date(b.createdAt) - new Date(a.createdAt)
                       }).map((pod, idx) => {
-                        const isRecent = isRecentTimestamp(pod.timestamp)
+                        const isRecent = isRecentTimestamp(pod.createdAt)
                         return (
                           <div
                             key={idx}
