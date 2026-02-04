@@ -32,7 +32,7 @@ import (
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
 
-// ActionRequest represents the request body for POST /api/v1/action.
+// ActionRequest represents the request body for POST /api/v1/resource/action.
 type ActionRequest struct {
 	Kind      string `json:"kind"`
 	Namespace string `json:"namespace"`
@@ -40,13 +40,13 @@ type ActionRequest struct {
 	Action    string `json:"action"`
 }
 
-// ActionResponse represents the response body for POST /api/v1/action.
+// ActionResponse represents the response body for POST /api/v1/resource/action.
 type ActionResponse struct {
 	Success bool   `json:"success"`
 	Message string `json:"message"`
 }
 
-// ActionHandler handles POST /api/v1/action requests to perform actions on Flux resources.
+// ActionHandler handles POST /api/v1/resource/action requests to perform actions on Flux resources.
 func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)

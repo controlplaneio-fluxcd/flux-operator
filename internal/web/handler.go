@@ -60,15 +60,16 @@ func NewHandler(ctx context.Context, conf *fluxcdv1.WebConfigSpec, spaHandler ht
 	mux.Handle("/", spaHandler)
 
 	// Handle API.
-	mux.HandleFunc("POST /api/v1/action", h.ActionHandler)
-	mux.HandleFunc("GET /api/v1/download", h.DownloadHandler)
+	mux.HandleFunc("GET /api/v1/artifact/download", h.DownloadHandler)
 	mux.HandleFunc("GET /api/v1/events", h.EventsHandler)
 	mux.HandleFunc("POST /api/v1/favorites", h.FavoritesHandler)
 	mux.HandleFunc("GET /api/v1/report", h.ReportHandler)
 	mux.HandleFunc("GET /api/v1/resource", h.ResourceHandler)
+	mux.HandleFunc("POST /api/v1/resource/action", h.ActionHandler)
 	mux.HandleFunc("GET /api/v1/resources", h.ResourcesHandler)
 	mux.HandleFunc("GET /api/v1/search", h.SearchHandler)
 	mux.HandleFunc("GET /api/v1/workload", h.WorkloadHandler)
+	mux.HandleFunc("POST /api/v1/workload/action", h.WorkloadActionHandler)
 	mux.HandleFunc("POST /api/v1/workloads", h.WorkloadsHandler)
 
 	// Wrap the mux with middlewares to produce the final handler.

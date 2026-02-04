@@ -43,7 +43,7 @@ func TestActionHandler_MethodNotAllowed(t *testing.T) {
 	}
 
 	// Test with GET method (should fail)
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/action", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/resource/action", nil)
 	rec := httptest.NewRecorder()
 
 	handler.ActionHandler(rec, req)
@@ -63,7 +63,7 @@ func TestActionHandler_InvalidJSON(t *testing.T) {
 		namespace:     "flux-system",
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBufferString("invalid json"))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBufferString("invalid json"))
 	rec := httptest.NewRecorder()
 
 	handler.ActionHandler(rec, req)
@@ -108,7 +108,7 @@ func TestActionHandler_MissingFields(t *testing.T) {
 			g := NewWithT(t)
 
 			body, _ := json.Marshal(tc.request)
-			req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 			rec := httptest.NewRecorder()
 
 			handler.ActionHandler(rec, req)
@@ -137,7 +137,7 @@ func TestActionHandler_InvalidAction(t *testing.T) {
 		Action:    "invalid-action",
 	}
 	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 	rec := httptest.NewRecorder()
 
 	handler.ActionHandler(rec, req)
@@ -164,7 +164,7 @@ func TestActionHandler_UnknownKind(t *testing.T) {
 		Action:    "reconcile",
 	}
 	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 	rec := httptest.NewRecorder()
 
 	handler.ActionHandler(rec, req)
@@ -192,7 +192,7 @@ func TestActionHandler_NonReconcilableKind_ReconcileRejected(t *testing.T) {
 		Action:    "reconcile",
 	}
 	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 	rec := httptest.NewRecorder()
 
 	handler.ActionHandler(rec, req)
@@ -230,7 +230,7 @@ func TestActionHandler_Reconcile_Success(t *testing.T) {
 		Action:    "reconcile",
 	}
 	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 
@@ -279,7 +279,7 @@ func TestActionHandler_Suspend_Success(t *testing.T) {
 		Action:    "suspend",
 	}
 	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 
@@ -333,7 +333,7 @@ func TestActionHandler_Resume_Success(t *testing.T) {
 		Action:    "resume",
 	}
 	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 
@@ -373,7 +373,7 @@ func TestActionHandler_ResourceNotFound(t *testing.T) {
 		Action:    "reconcile",
 	}
 	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 
@@ -425,7 +425,7 @@ func TestActionHandler_UnprivilegedUser_Forbidden(t *testing.T) {
 		Action:    "reconcile",
 	}
 	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 	req = req.WithContext(userCtx)
 	rec := httptest.NewRecorder()
 
@@ -513,7 +513,7 @@ func TestActionHandler_WithUserRBAC_Success(t *testing.T) {
 		Action:    "reconcile",
 	}
 	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 	req = req.WithContext(userCtx)
 	rec := httptest.NewRecorder()
 
@@ -608,7 +608,7 @@ func TestActionHandler_NamespaceScopedRBAC_ForbiddenInOtherNamespace(t *testing.
 		Action:    "reconcile",
 	}
 	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 	req = req.WithContext(userCtx)
 	rec := httptest.NewRecorder()
 
@@ -647,7 +647,7 @@ func TestActionHandler_ResponseContentType(t *testing.T) {
 		Action:    "reconcile",
 	}
 	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 
@@ -699,7 +699,7 @@ func TestActionHandler_AllValidActions(t *testing.T) {
 				Action:    action,
 			}
 			body, _ := json.Marshal(actionReq)
-			req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 			req = req.WithContext(ctx)
 			rec := httptest.NewRecorder()
 
@@ -737,7 +737,7 @@ func TestActionHandler_ActionsDisabled_NoAuth(t *testing.T) {
 		Action:    "reconcile",
 	}
 	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 	rec := httptest.NewRecorder()
 
 	handler.ActionHandler(rec, req)
@@ -781,7 +781,7 @@ func TestActionHandler_AllActionsEnabledByDefault(t *testing.T) {
 		Action:    "reconcile",
 	}
 	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 
@@ -873,7 +873,7 @@ func TestActionHandler_HasCustomVerbButNoPatch_Forbidden(t *testing.T) {
 		Action:    "reconcile",
 	}
 	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 	req = req.WithContext(userCtx)
 	rec := httptest.NewRecorder()
 
@@ -961,7 +961,7 @@ func TestActionHandler_HasPatchButNoCustomVerb_Forbidden(t *testing.T) {
 		Action:    "reconcile",
 	}
 	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 	req = req.WithContext(userCtx)
 	rec := httptest.NewRecorder()
 
@@ -1014,7 +1014,7 @@ func TestActionHandler_Audit_SpecificAction(t *testing.T) {
 		Action:    "reconcile",
 	}
 	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 
@@ -1073,7 +1073,7 @@ func TestActionHandler_Audit_ActionNotInList(t *testing.T) {
 		Action:    "reconcile",
 	}
 	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 
@@ -1132,7 +1132,7 @@ func TestActionHandler_Audit_EmptyList(t *testing.T) {
 		Action:    "reconcile",
 	}
 	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 
@@ -1191,7 +1191,7 @@ func TestActionHandler_Audit_AllActions(t *testing.T) {
 		Action:    "reconcile",
 	}
 	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 

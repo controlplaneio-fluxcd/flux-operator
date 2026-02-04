@@ -22,6 +22,10 @@ import (
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
 
+// FieldOwner is the field manager name used
+// for actions performed by the Web UI users.
+const FieldOwner = "flux-operator-web"
+
 // Client exposes RBAC-aware methods to
 // talk to the Kubernetes API server.
 type Client struct {
@@ -192,7 +196,7 @@ func (c *Client) newUserClient(imp user.Impersonation) (*userClient, error) {
 
 	return &userClient{
 		reader: kubeReader,
-		client: kubeClient,
+		client: client.WithFieldOwner(kubeClient, FieldOwner),
 		config: kubeConfig,
 	}, nil
 }

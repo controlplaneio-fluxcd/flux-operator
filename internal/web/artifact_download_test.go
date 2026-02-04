@@ -28,7 +28,7 @@ func TestDownloadHandler_MethodNotAllowed(t *testing.T) {
 	}
 
 	// Test with POST method (should fail)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/download?kind=GitRepository&namespace=default&name=test", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/artifact/download?kind=GitRepository&namespace=default&name=test", nil)
 	rec := httptest.NewRecorder()
 
 	handler.DownloadHandler(rec, req)
@@ -72,7 +72,7 @@ func TestDownloadHandler_MissingParameters(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			req := httptest.NewRequest(http.MethodGet, "/api/v1/download?"+tc.query, nil)
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/artifact/download?"+tc.query, nil)
 			rec := httptest.NewRecorder()
 
 			handler.DownloadHandler(rec, req)
@@ -94,7 +94,7 @@ func TestDownloadHandler_UnknownKind(t *testing.T) {
 		namespace:     "flux-system",
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/download?kind=UnknownKind&namespace=default&name=test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/artifact/download?kind=UnknownKind&namespace=default&name=test", nil)
 	rec := httptest.NewRecorder()
 
 	handler.DownloadHandler(rec, req)
@@ -115,7 +115,7 @@ func TestDownloadHandler_NonDownloadableKind(t *testing.T) {
 	}
 
 	// Kustomization is a valid Flux kind but doesn't support downloads
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/download?kind=Kustomization&namespace=default&name=test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/artifact/download?kind=Kustomization&namespace=default&name=test", nil)
 	rec := httptest.NewRecorder()
 
 	handler.DownloadHandler(rec, req)
@@ -138,7 +138,7 @@ func TestDownloadHandler_ActionsDisabled_NoAuth(t *testing.T) {
 		namespace:     "flux-system",
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/download?kind=GitRepository&namespace=default&name=test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/artifact/download?kind=GitRepository&namespace=default&name=test", nil)
 	rec := httptest.NewRecorder()
 
 	handler.DownloadHandler(rec, req)
@@ -208,7 +208,7 @@ func TestDownloadHandler_UnprivilegedUser_Forbidden(t *testing.T) {
 
 	// Request for a ResourceSet - will fail at RBAC check
 	// Using ResourceSet because FluxOperator CRDs are installed in test env
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/download?kind=ResourceSet&namespace=default&name=test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/artifact/download?kind=ResourceSet&namespace=default&name=test", nil)
 	req = req.WithContext(userCtx)
 	rec := httptest.NewRecorder()
 
@@ -235,7 +235,7 @@ func TestDownloadHandler_GVKLookupFailsWhenCRDNotInstalled(t *testing.T) {
 	}
 
 	// Request for a GitRepository - will fail at GVK lookup because CRD is not installed
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/download?kind=GitRepository&namespace=default&name=test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/artifact/download?kind=GitRepository&namespace=default&name=test", nil)
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 
@@ -292,7 +292,7 @@ func TestDownloadHandler_DownloadableKindsValidation(t *testing.T) {
 		t.Run("downloadable_"+kind, func(t *testing.T) {
 			g := NewWithT(t)
 
-			req := httptest.NewRequest(http.MethodGet, "/api/v1/download?kind="+kind+"&namespace=default&name=test", nil)
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/artifact/download?kind="+kind+"&namespace=default&name=test", nil)
 			req = req.WithContext(ctx)
 			rec := httptest.NewRecorder()
 
@@ -309,7 +309,7 @@ func TestDownloadHandler_DownloadableKindsValidation(t *testing.T) {
 		t.Run("non_downloadable_"+kind, func(t *testing.T) {
 			g := NewWithT(t)
 
-			req := httptest.NewRequest(http.MethodGet, "/api/v1/download?kind="+kind+"&namespace=default&name=test", nil)
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/artifact/download?kind="+kind+"&namespace=default&name=test", nil)
 			req = req.WithContext(ctx)
 			rec := httptest.NewRecorder()
 
