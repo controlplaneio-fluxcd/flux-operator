@@ -31,6 +31,9 @@ const (
 
 	// UserActionDownload is the download user action.
 	UserActionDownload = "download"
+
+	// UserActionRestart is the restart user action for workloads.
+	UserActionRestart = "restart"
 )
 
 var (
@@ -46,6 +49,7 @@ var (
 		UserActionSuspend,
 		UserActionResume,
 		UserActionDownload,
+		UserActionRestart,
 	}
 )
 
