@@ -6,8 +6,8 @@
 
 // Helper to generate timestamps
 const now = new Date()
-const getTimestamp = (daysAgo, hoursAgo = 0, minutesAgo = 0) => {
-  const time = new Date(now.getTime() - (daysAgo * 24 * 60 + hoursAgo * 60 + minutesAgo) * 60000)
+const getTimestamp = (daysAgo, hoursAgo = 0, minutesAgo = 0, secondsAgo = 0) => {
+  const time = new Date(now.getTime() - ((daysAgo * 24 * 60 + hoursAgo * 60 + minutesAgo) * 60 + secondsAgo) * 1000)
   return time.toISOString()
 }
 
@@ -21,6 +21,8 @@ const mockWorkloads = {
     namespace: 'flux-system',
     status: 'Current',
     statusMessage: 'Replicas: 1',
+    createdAt: getTimestamp(30, 0, 0), // 30 days ago
+    restartedAt: getTimestamp(7, 2, 15), // Last restarted 7 days ago
     containerImages: [
       'ghcr.io/fluxcd/source-controller:v1.7.4@sha256:16f21ac1795528df80ddef51ccbb14a57b78ea26e66dc8551636ef9a3cec71b3'
     ],
@@ -39,6 +41,7 @@ const mockWorkloads = {
     namespace: 'flux-system',
     status: 'Current',
     statusMessage: 'Replicas: 1',
+    createdAt: getTimestamp(30, 0, 0), // 30 days ago
     containerImages: [
       'ghcr.io/fluxcd/kustomize-controller:v1.7.3@sha256:e8ca82d66dafdd8ef77e0917f4adec53478075130ac61264dc0f91eb0f8cb6ce'
     ],
@@ -57,6 +60,7 @@ const mockWorkloads = {
     namespace: 'flux-system',
     status: 'Current',
     statusMessage: 'Replicas: 1',
+    createdAt: getTimestamp(30, 0, 0),
     containerImages: [
       'ghcr.io/fluxcd/helm-controller:v1.4.4@sha256:5eae73909e1471c0cd01bb23d87c9d4219a4f645134a23629c8708c72635398d'
     ],
@@ -91,8 +95,10 @@ const mockWorkloads = {
     kind: 'Deployment',
     name: 'image-automation-controller',
     namespace: 'flux-system',
-    status: 'Failed',
-    statusMessage: 'Progress deadline exceeded',
+    status: 'InProgress',
+    statusMessage: 'Waiting for rollout to finish: 0 of 1 updated replicas are available',
+    createdAt: getTimestamp(30, 0, 0),
+    restartedAt: getTimestamp(0, 0, 0, 10), // Restarted 10 seconds ago (recent, still in progress)
     containerImages: [
       'ghcr.io/fluxcd/image-automation-controller:v1.0.4@sha256:f9383dccb80ec65e274648941af623ce74084d25026e14389111c14b630efece'
     ],
@@ -217,7 +223,7 @@ const mockWorkloads = {
         name: 'cert-manager-webhook-6bf5dfc659-w95d9',
         status: 'Running',
         statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
-        timestamp: getTimestamp(10, 4, 25)
+        timestamp: getTimestamp(0, 0, 0)
       }
     ]
   },
@@ -265,6 +271,7 @@ const mockWorkloads = {
     namespace: 'registry',
     status: 'Current',
     statusMessage: 'Replicas: 1',
+    createdAt: getTimestamp(60, 0, 0), // 60 days ago
     containerImages: [
       'ghcr.io/project-zot/zot:v2.1.11'
     ],
@@ -285,6 +292,7 @@ const mockWorkloads = {
     namespace: 'flux-system',
     status: 'Idle',
     statusMessage: '0 */6 * * *',
+    createdAt: getTimestamp(45, 0, 0), // 45 days ago
     containerImages: [
       'ghcr.io/fluxcd/flux-cli:v2.6.1'
     ],
@@ -311,7 +319,7 @@ const mockWorkloads = {
         name: 'prometheus-backup-28945600-abc12',
         status: 'Succeeded',
         statusMessage: 'Completed at 2026-02-02 06:00:00 UTC',
-        timestamp: getTimestamp(0, 6, 0) // 6 hours ago
+        timestamp: getTimestamp(0, 0, 0) // now
       }
     ]
   },

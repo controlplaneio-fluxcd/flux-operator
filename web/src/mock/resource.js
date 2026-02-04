@@ -1934,6 +1934,24 @@ export const mockResourcesArray =
           "kind": "ResourceSet",
           "name": "cluster-infra",
           "namespace": "flux-system"
+        },
+        {
+          "apiVersion": "batch/v1",
+          "kind": "CronJob",
+          "name": "garbage-collection",
+          "namespace": "flux-system"
+        },
+        {
+          "apiVersion": "batch/v1",
+          "kind": "CronJob",
+          "name": "prometheus-backup",
+          "namespace": "monitoring"
+        },
+        {
+          "apiVersion": "batch/v1",
+          "kind": "CronJob",
+          "name": "cert-renewal-check",
+          "namespace": "cert-manager"
         }
       ],
       "lastAppliedRevision": "refs/heads/main@sha1:d676e33990dc2865d67c022d26dea93d5e3236ff",
@@ -4422,7 +4440,7 @@ export const getMockResource = (endpoint) => {
   }
 
   // Inject userActions field - array of allowed actions (empty for Bucket)
-  const userActions = kind !== 'Bucket' ? ['reconcile', 'suspend', 'resume'] : []
+  const userActions = kind !== 'Bucket' ? ['reconcile', 'suspend', 'resume', 'restart'] : []
   return {
     ...resource,
     status: {

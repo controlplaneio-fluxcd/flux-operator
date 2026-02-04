@@ -473,4 +473,160 @@ describe('WorkloadsTabContent component', () => {
       expect(fetchWithMock).toHaveBeenCalledTimes(2) // 1 initial + 1 after rerender
     })
   })
+
+  describe('Recent pod highlighting', () => {
+    it('should highlight pods with timestamps within the last 30 seconds', async () => {
+      const user = userEvent.setup()
+      const now = new Date()
+      const recentTimestamp = new Date(now.getTime() - 10000).toISOString() // 10 seconds ago
+
+      const workloadWithRecentPod = {
+        ...mockDeploymentWorkload,
+        pods: [
+          {
+            name: 'podinfo-recent-pod',
+            status: 'Current',
+            statusMessage: 'Pod is running',
+            timestamp: recentTimestamp
+          }
+        ]
+      }
+
+      fetchWithMock.mockImplementation(() =>
+        Promise.resolve({ workloads: [workloadWithRecentPod] })
+      )
+
+      const singleWorkloadItem = [{
+        kind: 'Deployment',
+        name: 'podinfo',
+        namespace: 'default'
+      }]
+
+      render(
+        <WorkloadsTabContent
+          workloadItems={singleWorkloadItem}
+          namespace="default"
+        />
+      )
+
+      await waitFor(() => {
+        const textContent = document.body.textContent
+        expect(textContent).toContain('default/podinfo')
+      })
+
+      // Expand the workload
+      const workloadButtons = screen.getAllByRole('button')
+      const podinfoButton = workloadButtons.find(btn => btn.textContent.includes('podinfo'))
+      await user.click(podinfoButton)
+
+      // Should have the recent-pod data-testid
+      await waitFor(() => {
+        expect(screen.getByTestId('recent-pod')).toBeInTheDocument()
+      })
+
+      // Should have the ring highlight class
+      const recentPod = screen.getByTestId('recent-pod')
+      expect(recentPod.className).toContain('ring-2')
+      expect(recentPod.className).toContain('ring-blue-400')
+    })
+
+    it('should not highlight pods with timestamps older than 30 seconds', async () => {
+      const user = userEvent.setup()
+      const oldTimestamp = new Date(Date.now() - 60000).toISOString() // 60 seconds ago
+
+      const workloadWithOldPod = {
+        ...mockDeploymentWorkload,
+        pods: [
+          {
+            name: 'podinfo-old-pod',
+            status: 'Current',
+            statusMessage: 'Pod is running',
+            timestamp: oldTimestamp
+          }
+        ]
+      }
+
+      fetchWithMock.mockImplementation(() =>
+        Promise.resolve({ workloads: [workloadWithOldPod] })
+      )
+
+      const singleWorkloadItem = [{
+        kind: 'Deployment',
+        name: 'podinfo',
+        namespace: 'default'
+      }]
+
+      render(
+        <WorkloadsTabContent
+          workloadItems={singleWorkloadItem}
+          namespace="default"
+        />
+      )
+
+      await waitFor(() => {
+        const textContent = document.body.textContent
+        expect(textContent).toContain('default/podinfo')
+      })
+
+      // Expand the workload
+      const workloadButtons = screen.getAllByRole('button')
+      const podinfoButton = workloadButtons.find(btn => btn.textContent.includes('podinfo'))
+      await user.click(podinfoButton)
+
+      // Should NOT have the recent-pod data-testid
+      await waitFor(() => {
+        expect(screen.getByText('podinfo-old-pod')).toBeInTheDocument()
+      })
+      expect(screen.queryByTestId('recent-pod')).not.toBeInTheDocument()
+    })
+
+    it('should not highlight pods without timestamps', async () => {
+      const user = userEvent.setup()
+
+      const workloadWithNoTimestampPod = {
+        ...mockDeploymentWorkload,
+        pods: [
+          {
+            name: 'podinfo-no-timestamp',
+            status: 'Current',
+            statusMessage: 'Pod is running'
+            // No timestamp
+          }
+        ]
+      }
+
+      fetchWithMock.mockImplementation(() =>
+        Promise.resolve({ workloads: [workloadWithNoTimestampPod] })
+      )
+
+      const singleWorkloadItem = [{
+        kind: 'Deployment',
+        name: 'podinfo',
+        namespace: 'default'
+      }]
+
+      render(
+        <WorkloadsTabContent
+          workloadItems={singleWorkloadItem}
+          namespace="default"
+        />
+      )
+
+      await waitFor(() => {
+        const textContent = document.body.textContent
+        expect(textContent).toContain('default/podinfo')
+      })
+
+      // Expand the workload
+      const workloadButtons = screen.getAllByRole('button')
+      const podinfoButton = workloadButtons.find(btn => btn.textContent.includes('podinfo'))
+      await user.click(podinfoButton)
+
+      // Should NOT have the recent-pod data-testid
+      await waitFor(() => {
+        expect(screen.getByText('podinfo-no-timestamp')).toBeInTheDocument()
+      })
+      expect(screen.queryByTestId('recent-pod')).not.toBeInTheDocument()
+    })
+  })
 })
