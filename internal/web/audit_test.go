@@ -14,6 +14,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/tools/record"
 
@@ -123,10 +124,12 @@ func TestFetchReconcilerRef(t *testing.T) {
 		kubeClient: kubeClient,
 	}
 
+	client := kubeClient.GetClient(ctx)
+
 	t.Run("valid reconciler ref", func(t *testing.T) {
 		g := NewWithT(t)
 
-		obj, err := handler.fetchReconcilerRef(ctx, "ResourceSet/default/test-fetch-reconciler")
+		obj, err := handler.fetchReconcilerRef(ctx, client, "ResourceSet/default/test-fetch-reconciler")
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(obj).ToNot(BeNil())
 		g.Expect(obj.GetName()).To(Equal("test-fetch-reconciler"))
@@ -136,7 +139,7 @@ func TestFetchReconcilerRef(t *testing.T) {
 	t.Run("invalid format - too few parts", func(t *testing.T) {
 		g := NewWithT(t)
 
-		_, err := handler.fetchReconcilerRef(ctx, "ResourceSet/default")
+		_, err := handler.fetchReconcilerRef(ctx, client, "ResourceSet/default")
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).To(ContainSubstring("invalid reconciler ref"))
 	})
@@ -144,7 +147,7 @@ func TestFetchReconcilerRef(t *testing.T) {
 	t.Run("invalid format - too many parts", func(t *testing.T) {
 		g := NewWithT(t)
 
-		_, err := handler.fetchReconcilerRef(ctx, "ResourceSet/default/name/extra")
+		_, err := handler.fetchReconcilerRef(ctx, client, "ResourceSet/default/name/extra")
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).To(ContainSubstring("invalid reconciler ref"))
 	})
@@ -152,7 +155,7 @@ func TestFetchReconcilerRef(t *testing.T) {
 	t.Run("unknown kind", func(t *testing.T) {
 		g := NewWithT(t)
 
-		_, err := handler.fetchReconcilerRef(ctx, "UnknownKind/default/test")
+		_, err := handler.fetchReconcilerRef(ctx, client, "UnknownKind/default/test")
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).To(ContainSubstring("unable to get GVK"))
 	})
@@ -160,13 +163,13 @@ func TestFetchReconcilerRef(t *testing.T) {
 	t.Run("resource not found", func(t *testing.T) {
 		g := NewWithT(t)
 
-		_, err := handler.fetchReconcilerRef(ctx, "ResourceSet/default/nonexistent")
+		_, err := handler.fetchReconcilerRef(ctx, client, "ResourceSet/default/nonexistent")
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).To(ContainSubstring("unable to fetch reconciler"))
 	})
 }
 
-func TestSendAuditEvent_WithReconcilerRef(t *testing.T) {
+func TestSendAuditEvent_WithWorkload(t *testing.T) {
 	g := NewWithT(t)
 
 	// Create a ResourceSet to act as the reconciler.
@@ -205,6 +208,16 @@ func TestSendAuditEvent_WithReconcilerRef(t *testing.T) {
 		Kind:    "Deployment",
 	})
 
+	// Create a workload with labels pointing to the ResourceSet.
+	workload := &unstructured.Unstructured{}
+	workload.SetGroupVersionKind(schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"})
+	workload.SetName("my-deployment")
+	workload.SetNamespace("default")
+	workload.SetLabels(map[string]string{
+		"resourceset.fluxcd.controlplane.io/name":      "test-audit-reconciler-ref",
+		"resourceset.fluxcd.controlplane.io/namespace": "default",
+	})
+
 	// Set up user context.
 	testCtx := user.StoreSession(ctx, user.Details{
 		Impersonation: user.Impersonation{
@@ -213,8 +226,8 @@ func TestSendAuditEvent_WithReconcilerRef(t *testing.T) {
 		},
 	}, nil)
 
-	// Send audit event with reconciler ref.
-	handler.sendAuditEvent(testCtx, "restart", workloadObj, "ResourceSet/default/test-audit-reconciler-ref")
+	// Send audit event with workload.
+	handler.sendAuditEvent(testCtx, "restart", workloadObj, workload)
 
 	// Check that an event was recorded.
 	select {
@@ -227,7 +240,7 @@ func TestSendAuditEvent_WithReconcilerRef(t *testing.T) {
 	}
 }
 
-func TestSendAuditEvent_ReconcilerRefNotFound(t *testing.T) {
+func TestSendAuditEvent_WorkloadReconcilerNotFound(t *testing.T) {
 	fakeRecorder := record.NewFakeRecorder(10)
 
 	handler := &Handler{
@@ -253,6 +266,16 @@ func TestSendAuditEvent_ReconcilerRefNotFound(t *testing.T) {
 		Kind:    "Deployment",
 	})
 
+	// Create a workload with labels pointing to a non-existent ResourceSet.
+	workload := &unstructured.Unstructured{}
+	workload.SetGroupVersionKind(schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"})
+	workload.SetName("my-deployment")
+	workload.SetNamespace("default")
+	workload.SetLabels(map[string]string{
+		"resourceset.fluxcd.controlplane.io/name":      "nonexistent",
+		"resourceset.fluxcd.controlplane.io/namespace": "default",
+	})
+
 	// Set up user context.
 	testCtx := user.StoreSession(ctx, user.Details{
 		Impersonation: user.Impersonation{
@@ -261,8 +284,8 @@ func TestSendAuditEvent_ReconcilerRefNotFound(t *testing.T) {
 		},
 	}, nil)
 
-	// Send audit event with non-existent reconciler ref.
-	handler.sendAuditEvent(testCtx, "restart", workloadObj, "ResourceSet/default/nonexistent")
+	// Send audit event with workload pointing to non-existent reconciler.
+	handler.sendAuditEvent(testCtx, "restart", workloadObj, workload)
 
 	// Check that NO event was recorded (fetch failed, so audit is skipped).
 	select {
@@ -273,7 +296,7 @@ func TestSendAuditEvent_ReconcilerRefNotFound(t *testing.T) {
 	}
 }
 
-func TestSendAuditEvent_EmptyReconcilerRef(t *testing.T) {
+func TestSendAuditEvent_NilWorkload(t *testing.T) {
 	g := NewWithT(t)
 
 	// Create a ResourceSet for testing.
@@ -302,7 +325,7 @@ func TestSendAuditEvent_EmptyReconcilerRef(t *testing.T) {
 		eventRecorder: fakeRecorder,
 	}
 
-	// Create the object directly (no reconciler ref).
+	// Create the object directly (no workload).
 	obj := &metav1.PartialObjectMetadata{}
 	obj.SetName("test-audit-empty-ref")
 	obj.SetNamespace("default")
@@ -316,8 +339,8 @@ func TestSendAuditEvent_EmptyReconcilerRef(t *testing.T) {
 		},
 	}, nil)
 
-	// Send audit event with empty reconciler ref.
-	handler.sendAuditEvent(testCtx, "reconcile", obj, "")
+	// Send audit event with nil workload.
+	handler.sendAuditEvent(testCtx, "reconcile", obj, nil)
 
 	// Check that an event was recorded.
 	select {
@@ -355,7 +378,7 @@ func TestSendAuditEvent_AuditDisabled(t *testing.T) {
 	}, nil)
 
 	// Send audit event - should be skipped.
-	handler.sendAuditEvent(testCtx, "reconcile", obj, "")
+	handler.sendAuditEvent(testCtx, "reconcile", obj, nil)
 
 	// Check that NO event was recorded.
 	select {
@@ -390,7 +413,7 @@ func TestSendAuditEvent_NilEventRecorder(t *testing.T) {
 	}, nil)
 
 	// This should not panic.
-	handler.sendAuditEvent(testCtx, "reconcile", obj, "")
+	handler.sendAuditEvent(testCtx, "reconcile", obj, nil)
 }
 
 // Integration tests for audit through handlers.

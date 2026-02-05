@@ -177,6 +177,9 @@ func (h *Handler) DownloadHandler(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", artifactResp.ContentLength))
 	}
 
+	// Send audit event for the download action.
+	h.sendAuditEvent(ctx, fluxcdv1.UserActionDownload, resource, nil)
+
 	w.WriteHeader(http.StatusOK)
 
 	// Use chunked writing with flush to keep connection alive through proxies.
