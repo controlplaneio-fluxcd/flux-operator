@@ -215,7 +215,7 @@ describe('ActionBar component', () => {
 
       await waitFor(() => {
         expect(fetchWithMock).toHaveBeenCalledWith({
-          endpoint: '/api/v1/action',
+          endpoint: '/api/v1/resource/action',
           mockPath: '../mock/action',
           mockExport: 'mockAction',
           method: 'POST',
@@ -237,7 +237,7 @@ describe('ActionBar component', () => {
 
       await waitFor(() => {
         expect(fetchWithMock).toHaveBeenCalledWith({
-          endpoint: '/api/v1/action',
+          endpoint: '/api/v1/resource/action',
           mockPath: '../mock/action',
           mockExport: 'mockAction',
           method: 'POST',
@@ -259,7 +259,7 @@ describe('ActionBar component', () => {
 
       await waitFor(() => {
         expect(fetchWithMock).toHaveBeenCalledWith({
-          endpoint: '/api/v1/action',
+          endpoint: '/api/v1/resource/action',
           mockPath: '../mock/action',
           mockExport: 'mockAction',
           method: 'POST',
@@ -290,7 +290,7 @@ describe('ActionBar component', () => {
 
       await waitFor(() => {
         expect(fetchWithMock).toHaveBeenCalledWith({
-          endpoint: '/api/v1/action',
+          endpoint: '/api/v1/resource/action',
           mockPath: '../mock/action',
           mockExport: 'mockAction',
           method: 'POST',
@@ -459,7 +459,7 @@ describe('ActionBar component', () => {
 
       await waitFor(() => {
         expect(mockFetch).toHaveBeenCalledWith(
-          '/api/v1/download?kind=GitRepository&namespace=flux-system&name=my-repo'
+          '/api/v1/artifact/download?kind=GitRepository&namespace=flux-system&name=my-repo'
         )
       })
 
@@ -583,7 +583,7 @@ describe('ActionBar component', () => {
 
       await waitFor(() => {
         expect(mockFetch).toHaveBeenCalledWith(
-          '/api/v1/download?kind=ExternalArtifact&namespace=flux-system&name=artifact-1'
+          '/api/v1/artifact/download?kind=ExternalArtifact&namespace=flux-system&name=artifact-1'
         )
       })
 

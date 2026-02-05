@@ -135,7 +135,7 @@ export function ActionBar({ kind, namespace, name, resourceData, onActionComplet
 
     try {
       await fetchWithMock({
-        endpoint: '/api/v1/action',
+        endpoint: '/api/v1/resource/action',
         mockPath: '../mock/action',
         mockExport: 'mockAction',
         method: 'POST',
@@ -184,7 +184,7 @@ export function ActionBar({ kind, namespace, name, resourceData, onActionComplet
 
   // Handle download - use fetch/blob approach for better error handling and Tailscale compatibility
   const handleDownload = async () => {
-    const url = `/api/v1/download?kind=${encodeURIComponent(kind)}&namespace=${encodeURIComponent(namespace)}&name=${encodeURIComponent(name)}`
+    const url = `/api/v1/artifact/download?kind=${encodeURIComponent(kind)}&namespace=${encodeURIComponent(namespace)}&name=${encodeURIComponent(name)}`
 
     setLoading('download')
     setError(null)
@@ -217,7 +217,7 @@ export function ActionBar({ kind, namespace, name, resourceData, onActionComplet
 
   // Handle download for ArtifactGenerator inventory items (ExternalArtifacts)
   const handleDownloadArtifact = async (artifact) => {
-    const url = `/api/v1/download?kind=ExternalArtifact&namespace=${encodeURIComponent(artifact.namespace)}&name=${encodeURIComponent(artifact.name)}`
+    const url = `/api/v1/artifact/download?kind=ExternalArtifact&namespace=${encodeURIComponent(artifact.namespace)}&name=${encodeURIComponent(artifact.name)}`
 
     setLoading('download')
     setDropdownOpen(false)

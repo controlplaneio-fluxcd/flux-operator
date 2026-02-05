@@ -107,6 +107,13 @@ type WorkloadStatus struct {
 	// about the workload observed state.
 	StatusMessage string `json:"statusMessage,omitempty"`
 
+	// CreatedAt is the creation timestamp of the workload.
+	CreatedAt time.Time `json:"createdAt"`
+
+	// RestartedAt is the timestamp of the last rollout restart.
+	// Extracted from the kubectl.kubernetes.io/restartedAt annotation.
+	RestartedAt string `json:"restartedAt,omitempty"`
+
 	// ContainerImages is the list of container images used by the workload.
 	ContainerImages []string `json:"containerImages,omitempty"`
 
@@ -127,8 +134,8 @@ type WorkloadPodStatus struct {
 	// about the pod observed state.
 	StatusMessage string `json:"statusMessage,omitempty"`
 
-	// Timestamp is the creation timestamp of the pod.
-	Timestamp string `json:"timestamp"`
+	// CreatedAt is the creation timestamp of the pod.
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 // getWorkloadGVK returns the GroupVersionKind for a given workload kind.
@@ -162,6 +169,15 @@ func (h *Handler) GetWorkloadStatus(ctx context.Context, kind, name, namespace s
 		Name:      name,
 		Namespace: namespace,
 	}
+
+	// Extract creation timestamp
+	creationTimestamp := obj.GetCreationTimestamp()
+	if !creationTimestamp.IsZero() {
+		workload.CreatedAt = creationTimestamp.Time
+	}
+
+	// Extract restartedAt annotation from pod template
+	workload.RestartedAt = extractRestartedAt(obj)
 
 	// Extract container images
 	workload.ContainerImages = extractContainerImages(obj)
@@ -243,7 +259,7 @@ func (h *Handler) GetWorkloadPods(ctx context.Context, obj *unstructured.Unstruc
 			Name:          pod.GetName(),
 			Status:        podStatus,
 			StatusMessage: podMessage,
-			Timestamp:     pod.GetCreationTimestamp().Format(time.RFC3339),
+			CreatedAt:     pod.GetCreationTimestamp().Time,
 		})
 	}
 
@@ -307,7 +323,7 @@ func (h *Handler) getCronJobPods(ctx context.Context, cronJob *unstructured.Unst
 			Name:          pod.GetName(),
 			Status:        podStatus,
 			StatusMessage: podMessage,
-			Timestamp:     pod.GetCreationTimestamp().Format(time.RFC3339),
+			CreatedAt:     pod.GetCreationTimestamp().Time,
 		})
 	}
 
@@ -358,6 +374,25 @@ func extractContainerImages(obj *unstructured.Unstructured) []string {
 	slices.Sort(containerImages)
 
 	return containerImages
+}
+
+// extractRestartedAt extracts the kubectl.kubernetes.io/restartedAt annotation from the pod template.
+// For CronJob, the path is spec.jobTemplate.spec.template.metadata.annotations.
+// For Deployment/StatefulSet/DaemonSet, the path is spec.template.metadata.annotations.
+func extractRestartedAt(obj *unstructured.Unstructured) string {
+	var annotationsPath []string
+	if obj.GetKind() == workloadKindCronJob {
+		annotationsPath = []string{"spec", "jobTemplate", "spec", "template", "metadata", "annotations"}
+	} else {
+		annotationsPath = []string{"spec", "template", "metadata", "annotations"}
+	}
+
+	annotations, found, _ := unstructured.NestedStringMap(obj.Object, annotationsPath...)
+	if !found {
+		return ""
+	}
+
+	return annotations["kubectl.kubernetes.io/restartedAt"]
 }
 
 // getCronJobWorkloadStatus returns the status and message for a CronJob workload.

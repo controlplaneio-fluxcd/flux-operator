@@ -10,11 +10,8 @@ import (
 	"maps"
 	"net/http"
 	"slices"
-	"strings"
 	"time"
 
-	"github.com/google/uuid"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -23,16 +20,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/apis/meta"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
-	"github.com/controlplaneio-fluxcd/flux-operator/internal/notifier"
-	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/kubeclient"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
 
-// ActionRequest represents the request body for POST /api/v1/action.
+// ActionRequest represents the request body for POST /api/v1/resource/action.
 type ActionRequest struct {
 	Kind      string `json:"kind"`
 	Namespace string `json:"namespace"`
@@ -40,13 +34,13 @@ type ActionRequest struct {
 	Action    string `json:"action"`
 }
 
-// ActionResponse represents the response body for POST /api/v1/action.
+// ActionResponse represents the response body for POST /api/v1/resource/action.
 type ActionResponse struct {
 	Success bool   `json:"success"`
 	Message string `json:"message"`
 }
 
-// ActionHandler handles POST /api/v1/action requests to perform actions on Flux resources.
+// ActionHandler handles POST /api/v1/resource/action requests to perform actions on Flux resources.
 func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -162,30 +156,7 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// Send audit event.
-	if h.eventRecorder != nil && slices.Contains(h.conf.UserActions.Audit, actionReq.Action) {
-		const reason = "WebAction"
-
-		// Get a privileged kube client for the notifier to ensure it can fetch the FluxInstance.
-		// We need the FluxInstance to know the notification-controller address.
-		kubeClient := h.kubeClient.GetClient(req.Context(), kubeclient.WithPrivileges())
-
-		// Build annotations.
-		perms := user.Permissions(req.Context())
-		token := fmt.Sprintf("%s/%s", obj.GetObjectKind().GroupVersionKind().Group, eventv1.MetaTokenKey)
-		annotations := map[string]string{
-			eventv1.Group + "/action":   actionReq.Action,
-			eventv1.Group + "/username": perms.Username,
-			eventv1.Group + "/groups":   strings.Join(perms.Groups, ", "),
-			token:                       uuid.NewString(), // Forces unique events (this is an audit feature).
-		}
-
-		// Send the event.
-		notifier.
-			New(req.Context(), h.eventRecorder,
-				h.kubeClient.GetScheme(), notifier.WithClient(kubeClient)).
-			AnnotatedEventf(obj, annotations, corev1.EventTypeNormal, reason,
-				"User '%s' performed action '%s' on the web UI", perms.Username, actionReq.Action)
-	}
+	h.sendAuditEvent(req.Context(), actionReq.Action, obj, "")
 
 	// Return success response
 	w.Header().Set("Content-Type", "application/json")

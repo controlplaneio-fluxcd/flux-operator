@@ -198,8 +198,8 @@ rules:
 ### Flux Web Admin Role
 
 The `flux-web-admin` role grants full access to Flux resources,
-including the ability to perform actions such as triggering reconciliations
-and suspending/resuming resources.
+including the ability to perform actions such as triggering reconciliations,
+suspending/resuming resources, and restarting workloads.
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -230,12 +230,24 @@ rules:
       - suspend
       - resume
       - download
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+      - statefulsets
+      - daemonsets
+    verbs:
+      - patch
+      - restart
 ```
 
 Note that the `patch` verb is not enough to allow a user to perform actions in the Web UI.
-The user also needs the `reconcile`, `suspend`, `resume`, and `download` verbs
+The user also needs the `reconcile`, `suspend`, `resume`, `download`, and `restart` verbs
 for the respective resources. These verbs are specially defined in Flux Operator
 to assign action permissions.
 
 The `download` verb allows users to download artifacts from Flux source resources
 (Bucket, GitRepository, OCIRepository, HelmChart, and ExternalArtifact).
+
+The `restart` verb allows users to trigger a rollout restart on workloads
+(Deployment, StatefulSet, and DaemonSet).

@@ -20,17 +20,21 @@ const (
 	// OAuth2ProviderOIDC is the name of the OIDC OAuth2 provider.
 	OAuth2ProviderOIDC = "OIDC"
 
-	// UserActionReconcile is the reconcile user action.
+	// UserActionReconcile is the reconcile user action for Flux resources.
 	UserActionReconcile = "reconcile"
 
-	// UserActionSuspend is the suspend user action.
+	// UserActionSuspend is the suspend user action for Flux resources.
 	UserActionSuspend = "suspend"
 
-	// UserActionResume is the resume user action.
+	// UserActionResume is the resume user action for Flux resources.
 	UserActionResume = "resume"
 
-	// UserActionDownload is the download user action.
+	// UserActionDownload is the download user action for Flux artifacts.
 	UserActionDownload = "download"
+
+	// UserActionRestart is the restart user action for workloads
+	// (Deployments, StatefulSets, DaemonSets).
+	UserActionRestart = "restart"
 )
 
 var (
@@ -46,6 +50,7 @@ var (
 		UserActionSuspend,
 		UserActionResume,
 		UserActionDownload,
+		UserActionRestart,
 	}
 )
 

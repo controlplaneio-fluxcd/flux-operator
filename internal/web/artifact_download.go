@@ -48,7 +48,7 @@ var artifactHTTPClient = &http.Client{
 	},
 }
 
-// DownloadHandler handles GET /api/v1/download requests to download artifacts from Flux sources.
+// DownloadHandler handles GET /api/v1/artifact/download requests to download artifacts from Flux sources.
 func (h *Handler) DownloadHandler(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)

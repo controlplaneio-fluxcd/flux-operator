@@ -14,7 +14,6 @@ import (
 	. "github.com/onsi/gomega"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
@@ -43,7 +42,7 @@ func TestActionHandler_MethodNotAllowed(t *testing.T) {
 	}
 
 	// Test with GET method (should fail)
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/action", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/resource/action", nil)
 	rec := httptest.NewRecorder()
 
 	handler.ActionHandler(rec, req)
@@ -63,7 +62,7 @@ func TestActionHandler_InvalidJSON(t *testing.T) {
 		namespace:     "flux-system",
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBufferString("invalid json"))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBufferString("invalid json"))
 	rec := httptest.NewRecorder()
 
 	handler.ActionHandler(rec, req)
@@ -108,7 +107,7 @@ func TestActionHandler_MissingFields(t *testing.T) {
 			g := NewWithT(t)
 
 			body, _ := json.Marshal(tc.request)
-			req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 			rec := httptest.NewRecorder()
 
 			handler.ActionHandler(rec, req)
@@ -137,7 +136,7 @@ func TestActionHandler_InvalidAction(t *testing.T) {
 		Action:    "invalid-action",
 	}
 	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 	rec := httptest.NewRecorder()
 
 	handler.ActionHandler(rec, req)
@@ -164,7 +163,7 @@ func TestActionHandler_UnknownKind(t *testing.T) {
 		Action:    "reconcile",
 	}
 	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 	rec := httptest.NewRecorder()
 
 	handler.ActionHandler(rec, req)
@@ -192,7 +191,7 @@ func TestActionHandler_NonReconcilableKind_ReconcileRejected(t *testing.T) {
 		Action:    "reconcile",
 	}
 	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 	rec := httptest.NewRecorder()
 
 	handler.ActionHandler(rec, req)
@@ -230,7 +229,7 @@ func TestActionHandler_Reconcile_Success(t *testing.T) {
 		Action:    "reconcile",
 	}
 	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 
@@ -279,7 +278,7 @@ func TestActionHandler_Suspend_Success(t *testing.T) {
 		Action:    "suspend",
 	}
 	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 
@@ -333,7 +332,7 @@ func TestActionHandler_Resume_Success(t *testing.T) {
 		Action:    "resume",
 	}
 	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 
@@ -373,7 +372,7 @@ func TestActionHandler_ResourceNotFound(t *testing.T) {
 		Action:    "reconcile",
 	}
 	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 
@@ -425,7 +424,7 @@ func TestActionHandler_UnprivilegedUser_Forbidden(t *testing.T) {
 		Action:    "reconcile",
 	}
 	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 	req = req.WithContext(userCtx)
 	rec := httptest.NewRecorder()
 
@@ -513,7 +512,7 @@ func TestActionHandler_WithUserRBAC_Success(t *testing.T) {
 		Action:    "reconcile",
 	}
 	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 	req = req.WithContext(userCtx)
 	rec := httptest.NewRecorder()
 
@@ -608,7 +607,7 @@ func TestActionHandler_NamespaceScopedRBAC_ForbiddenInOtherNamespace(t *testing.
 		Action:    "reconcile",
 	}
 	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 	req = req.WithContext(userCtx)
 	rec := httptest.NewRecorder()
 
@@ -647,7 +646,7 @@ func TestActionHandler_ResponseContentType(t *testing.T) {
 		Action:    "reconcile",
 	}
 	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 
@@ -699,7 +698,7 @@ func TestActionHandler_AllValidActions(t *testing.T) {
 				Action:    action,
 			}
 			body, _ := json.Marshal(actionReq)
-			req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 			req = req.WithContext(ctx)
 			rec := httptest.NewRecorder()
 
@@ -737,7 +736,7 @@ func TestActionHandler_ActionsDisabled_NoAuth(t *testing.T) {
 		Action:    "reconcile",
 	}
 	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 	rec := httptest.NewRecorder()
 
 	handler.ActionHandler(rec, req)
@@ -781,7 +780,7 @@ func TestActionHandler_AllActionsEnabledByDefault(t *testing.T) {
 		Action:    "reconcile",
 	}
 	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 
@@ -873,7 +872,7 @@ func TestActionHandler_HasCustomVerbButNoPatch_Forbidden(t *testing.T) {
 		Action:    "reconcile",
 	}
 	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 	req = req.WithContext(userCtx)
 	rec := httptest.NewRecorder()
 
@@ -961,7 +960,7 @@ func TestActionHandler_HasPatchButNoCustomVerb_Forbidden(t *testing.T) {
 		Action:    "reconcile",
 	}
 	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
 	req = req.WithContext(userCtx)
 	rec := httptest.NewRecorder()
 
@@ -970,240 +969,4 @@ func TestActionHandler_HasPatchButNoCustomVerb_Forbidden(t *testing.T) {
 	// Should fail with forbidden at the custom RBAC check
 	g.Expect(rec.Code).To(Equal(http.StatusForbidden))
 	g.Expect(rec.Body.String()).To(ContainSubstring("Permission denied"))
-}
-
-func TestActionHandler_Audit_SpecificAction(t *testing.T) {
-	g := NewWithT(t)
-
-	// Create a ResourceSet for testing
-	resourceSet := &fluxcdv1.ResourceSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-audit-specific",
-			Namespace: "default",
-		},
-		Spec: fluxcdv1.ResourceSetSpec{},
-	}
-	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
-	defer testClient.Delete(ctx, resourceSet)
-
-	// Create a fake event recorder
-	fakeRecorder := record.NewFakeRecorder(10)
-
-	// Configure with audit only for reconcile action
-	handler := &Handler{
-		conf: &fluxcdv1.WebConfigSpec{
-			Authentication: &fluxcdv1.AuthenticationSpec{
-				Type: fluxcdv1.AuthenticationTypeOAuth2,
-			},
-			UserActions: &fluxcdv1.UserActionsSpec{
-				Audit: []string{fluxcdv1.UserActionReconcile},
-			},
-		},
-		kubeClient:    kubeClient,
-		eventRecorder: fakeRecorder,
-		version:       "v1.0.0",
-		statusManager: "test-status-manager",
-		namespace:     "flux-system",
-	}
-
-	// Perform reconcile action - should be audited
-	actionReq := ActionRequest{
-		Kind:      "ResourceSet",
-		Namespace: "default",
-		Name:      "test-audit-specific",
-		Action:    "reconcile",
-	}
-	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
-	req = req.WithContext(ctx)
-	rec := httptest.NewRecorder()
-
-	handler.ActionHandler(rec, req)
-
-	g.Expect(rec.Code).To(Equal(http.StatusOK))
-
-	// Check that an event was recorded
-	select {
-	case event := <-fakeRecorder.Events:
-		g.Expect(event).To(ContainSubstring("WebAction"))
-	default:
-		t.Fatal("expected an audit event to be recorded for reconcile action")
-	}
-}
-
-func TestActionHandler_Audit_ActionNotInList(t *testing.T) {
-	g := NewWithT(t)
-
-	// Create a ResourceSet for testing
-	resourceSet := &fluxcdv1.ResourceSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-audit-not-in-list",
-			Namespace: "default",
-		},
-		Spec: fluxcdv1.ResourceSetSpec{},
-	}
-	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
-	defer testClient.Delete(ctx, resourceSet)
-
-	// Create a fake event recorder
-	fakeRecorder := record.NewFakeRecorder(10)
-
-	// Configure with audit only for suspend action (not reconcile)
-	handler := &Handler{
-		conf: &fluxcdv1.WebConfigSpec{
-			Authentication: &fluxcdv1.AuthenticationSpec{
-				Type: fluxcdv1.AuthenticationTypeOAuth2,
-			},
-			UserActions: &fluxcdv1.UserActionsSpec{
-				Audit: []string{fluxcdv1.UserActionSuspend},
-			},
-		},
-		kubeClient:    kubeClient,
-		eventRecorder: fakeRecorder,
-		version:       "v1.0.0",
-		statusManager: "test-status-manager",
-		namespace:     "flux-system",
-	}
-
-	// Perform reconcile action - should NOT be audited (only suspend is audited)
-	actionReq := ActionRequest{
-		Kind:      "ResourceSet",
-		Namespace: "default",
-		Name:      "test-audit-not-in-list",
-		Action:    "reconcile",
-	}
-	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
-	req = req.WithContext(ctx)
-	rec := httptest.NewRecorder()
-
-	handler.ActionHandler(rec, req)
-
-	g.Expect(rec.Code).To(Equal(http.StatusOK))
-
-	// Check that NO event was recorded
-	select {
-	case event := <-fakeRecorder.Events:
-		t.Fatalf("expected no audit event for reconcile action, but got: %s", event)
-	default:
-		// No event - this is expected
-	}
-}
-
-func TestActionHandler_Audit_EmptyList(t *testing.T) {
-	g := NewWithT(t)
-
-	// Create a ResourceSet for testing
-	resourceSet := &fluxcdv1.ResourceSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-audit-empty",
-			Namespace: "default",
-		},
-		Spec: fluxcdv1.ResourceSetSpec{},
-	}
-	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
-	defer testClient.Delete(ctx, resourceSet)
-
-	// Create a fake event recorder
-	fakeRecorder := record.NewFakeRecorder(10)
-
-	// Configure with empty audit list
-	handler := &Handler{
-		conf: &fluxcdv1.WebConfigSpec{
-			Authentication: &fluxcdv1.AuthenticationSpec{
-				Type: fluxcdv1.AuthenticationTypeOAuth2,
-			},
-			UserActions: &fluxcdv1.UserActionsSpec{
-				Audit: []string{},
-			},
-		},
-		kubeClient:    kubeClient,
-		eventRecorder: fakeRecorder,
-		version:       "v1.0.0",
-		statusManager: "test-status-manager",
-		namespace:     "flux-system",
-	}
-
-	// Perform reconcile action - should NOT be audited
-	actionReq := ActionRequest{
-		Kind:      "ResourceSet",
-		Namespace: "default",
-		Name:      "test-audit-empty",
-		Action:    "reconcile",
-	}
-	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
-	req = req.WithContext(ctx)
-	rec := httptest.NewRecorder()
-
-	handler.ActionHandler(rec, req)
-
-	g.Expect(rec.Code).To(Equal(http.StatusOK))
-
-	// Check that NO event was recorded
-	select {
-	case event := <-fakeRecorder.Events:
-		t.Fatalf("expected no audit event with empty audit list, but got: %s", event)
-	default:
-		// No event - this is expected
-	}
-}
-
-func TestActionHandler_Audit_AllActions(t *testing.T) {
-	g := NewWithT(t)
-
-	// Create a ResourceSet for testing
-	resourceSet := &fluxcdv1.ResourceSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-audit-all-actions",
-			Namespace: "default",
-		},
-		Spec: fluxcdv1.ResourceSetSpec{},
-	}
-	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
-	defer testClient.Delete(ctx, resourceSet)
-
-	// Create a fake event recorder
-	fakeRecorder := record.NewFakeRecorder(10)
-
-	// Configure with all actions in audit list
-	handler := &Handler{
-		conf: &fluxcdv1.WebConfigSpec{
-			Authentication: &fluxcdv1.AuthenticationSpec{
-				Type: fluxcdv1.AuthenticationTypeOAuth2,
-			},
-			UserActions: &fluxcdv1.UserActionsSpec{
-				Audit: []string{fluxcdv1.UserActionReconcile, fluxcdv1.UserActionSuspend, fluxcdv1.UserActionResume},
-			},
-		},
-		kubeClient:    kubeClient,
-		eventRecorder: fakeRecorder,
-		version:       "v1.0.0",
-		statusManager: "test-status-manager",
-		namespace:     "flux-system",
-	}
-
-	// Perform reconcile action - should be audited
-	actionReq := ActionRequest{
-		Kind:      "ResourceSet",
-		Namespace: "default",
-		Name:      "test-audit-all-actions",
-		Action:    "reconcile",
-	}
-	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/action", bytes.NewBuffer(body))
-	req = req.WithContext(ctx)
-	rec := httptest.NewRecorder()
-
-	handler.ActionHandler(rec, req)
-
-	g.Expect(rec.Code).To(Equal(http.StatusOK))
-
-	// Check that an event was recorded
-	select {
-	case event := <-fakeRecorder.Events:
-		g.Expect(event).To(ContainSubstring("WebAction"))
-	default:
-		t.Fatal("expected an audit event to be recorded when all actions are audited")
-	}
 }

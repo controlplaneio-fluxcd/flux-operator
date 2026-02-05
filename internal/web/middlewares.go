@@ -37,7 +37,7 @@ func (w *gzipResponseWriter) Flush() {
 func GzipMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Skip gzip for download endpoint to avoid double compression of Flux artifacts
-		if r.URL.Path == "/api/v1/download" {
+		if r.URL.Path == "/api/v1/artifact/download" {
 			next.ServeHTTP(w, r)
 			return
 		}
