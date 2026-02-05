@@ -156,7 +156,7 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// Send audit event.
-	h.sendAuditEvent(req.Context(), actionReq.Action, obj, "")
+	h.sendAuditEvent(req.Context(), actionReq.Action, obj, nil)
 
 	// Return success response
 	w.Header().Set("Content-Type", "application/json")

@@ -107,6 +107,20 @@ func (h *Handler) WorkloadActionHandler(w http.ResponseWriter, req *http.Request
 		return
 	}
 
+	// Fetch workload for audit if enabled.
+	var workload *unstructured.Unstructured
+	if h.isAuditEnabled(actionReq.Action) {
+		workload = &unstructured.Unstructured{}
+		workload.SetGroupVersionKind(schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: actionReq.Kind})
+		if err := h.kubeClient.GetClient(ctx).Get(ctx, client.ObjectKey{
+			Namespace: actionReq.Namespace, Name: actionReq.Name,
+		}, workload); err != nil {
+			http.Error(w, fmt.Sprintf("Failed to get %s/%s/%s",
+				actionReq.Kind, actionReq.Namespace, actionReq.Name), http.StatusInternalServerError)
+			return
+		}
+	}
+
 	var actionErr error
 	var message string
 
@@ -140,18 +154,6 @@ func (h *Handler) WorkloadActionHandler(w http.ResponseWriter, req *http.Request
 	}
 
 	// Send audit event.
-	// Only fetch workload for reconciler ref if audit is enabled.
-	reconcilerRef := ""
-	if h.isAuditEnabled(actionReq.Action) {
-		workload := &unstructured.Unstructured{}
-		workload.SetGroupVersionKind(schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: actionReq.Kind})
-		if err := h.kubeClient.GetClient(ctx).Get(ctx, client.ObjectKey{
-			Namespace: actionReq.Namespace, Name: actionReq.Name,
-		}, workload); err == nil {
-			reconcilerRef = getReconcilerRef(workload)
-		}
-	}
-
 	obj := &metav1.PartialObjectMetadata{}
 	obj.SetNamespace(actionReq.Namespace)
 	obj.SetName(actionReq.Name)
@@ -160,7 +162,7 @@ func (h *Handler) WorkloadActionHandler(w http.ResponseWriter, req *http.Request
 		Version: "v1",
 		Kind:    actionReq.Kind,
 	})
-	h.sendAuditEvent(req.Context(), actionReq.Action, obj, reconcilerRef)
+	h.sendAuditEvent(req.Context(), actionReq.Action, obj, workload)
 
 	// Return success response.
 	w.Header().Set("Content-Type", "application/json")
