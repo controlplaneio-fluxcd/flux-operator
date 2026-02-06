@@ -110,6 +110,10 @@ The following types are supported:
 - `ECRArtifactTag`: fetches input values from Elastic Container Registry OCI artifact tags.
 - `GARArtifactTag`: fetches input values from Google Artifact Registry OCI artifact tags.
 
+Throughout this document, the term **change request** is used to refer collectively to
+GitHub Pull Requests, GitLab Merge Requests, Azure DevOps Pull Requests, and
+Gitea/Forgejo Pull Requests.
+
 For the `Static` type, the flux-operator will export in `.status.exportedInputs` a
 single input map with the values from the field `.spec.defaultValues` and the
 additional value:
@@ -117,16 +121,16 @@ additional value:
 - `id`: the Adler-32 checksum of the ResourceSetInputProvider UID (type string).
 
 For all non-static types, the flux-operator will export in `.status.exportedInputs` a
-set of input values for each Pull/Merge Request or Branch
+set of input values for each change request, branch, tag, environment, or OCI artifact tag
 that matches the [filter](#filter) criteria.
 
-For Pull/Merge Requests the [exported inputs](#exported-inputs-status) structure is:
+For change requests the [exported inputs](#exported-inputs-status) structure is:
 
-- `id`: the ID number of the PR/MR (type string).
-- `sha`: the commit SHA of the PR/MR (type string).
-- `branch`: the branch name of the PR/MR (type string).
-- `author`: the author username of the PR/MR (type string).
-- `title`: the title of the PR/MR (type string).
+- `id`: the ID number of the change request (type string).
+- `sha`: the commit SHA of the change request (type string).
+- `branch`: the branch name of the change request (type string).
+- `author`: the author username of the change request (type string).
+- `title`: the title of the change request (type string).
 
 For Git Branches the [exported inputs](#exported-inputs-status) structure is:
 
@@ -174,7 +178,7 @@ The `.spec.filter` field is optional and specifies the filter criteria for the i
 The following filters are supported:
 
 - `limit`: limit the number of input values fetched (default is 100).
-- `labels`: filter GitHub Pull Requests, GitLab Merge Requests, or Gitea/Forgejo Pull Requests by labels.
+- `labels`: filter change requests by labels.
 - `includeBranch`: regular expression to include branches by name.
 - `excludeBranch`: regular expression to exclude branches by name.
 - `includeTag`: regular expression to include tags by name.
@@ -183,7 +187,7 @@ The following filters are supported:
 - `excludeEnvironment`: regular expression to exclude environments by name.
 - `semver`: sematic version range to filter and sort tags.
 
-Example of a filter configuration for GitLab Merge Requests:
+Example of a filter configuration for change requests:
 
 ```yaml
 spec:
@@ -216,7 +220,7 @@ spec:
 ### Skip
 
 The `.spec.skip` field is optional and specifies the skip criteria for skipping input updates.
-This field can be used to wait until certain PR/MR is ready.
+This field can be used to wait until a certain change request is ready.
 
 The following skips are supported:
 
@@ -267,7 +271,7 @@ This field is not supported by the following provider [types](#type):
 - `GARArtifactTag`
 
 For Git services, the secret should contain the `username` and `password` keys, with the password
-set to a personal access token that grants access for listing Pull Requests or Merge Requests
+set to a personal access token that grants access for listing change requests
 and Git branches.
 
 For the `OCIArtifactTag` provider [type](#type), the secret should contain a Kubernetes Docker
