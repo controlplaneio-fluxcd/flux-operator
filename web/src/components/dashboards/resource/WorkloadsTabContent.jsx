@@ -11,8 +11,8 @@ import { WorkloadActionBar } from './WorkloadActionBar'
 
 // Polling intervals
 const NORMAL_POLL_INTERVAL = 10000 // 10 seconds
-const FAST_POLL_INTERVAL = 2000 // 2 seconds
-const FAST_POLL_DURATION = 30000 // 30 seconds
+const FAST_POLL_INTERVAL = 5000 // 5 seconds
+const FAST_POLL_DURATION = 60000 // 60 seconds
 
 // Highlight threshold for recently changed pods
 const RECENT_POD_THRESHOLD = 30000 // 30 seconds
@@ -152,6 +152,15 @@ export function WorkloadsTabContent({ workloadItems, namespace, userActions = []
           }, null)
           : null
 
+        // Find the most recent triggered pod (has createdBy set)
+        const triggeredPod = workload?.pods?.length > 0
+          ? workload.pods.reduce((latest, pod) => {
+            if (!pod.createdBy || !pod.createdAt) return latest
+            if (!latest) return pod
+            return new Date(pod.createdAt) > new Date(latest.createdAt) ? pod : latest
+          }, null)
+          : null
+
         return (
           <div key={key} class="border border-gray-200 dark:border-gray-700 rounded-md overflow-hidden">
             {/* Workload Header */}
@@ -206,7 +215,7 @@ export function WorkloadsTabContent({ workloadItems, namespace, userActions = []
             {isExpanded && workload && (
               <div class="px-4 py-3 bg-gray-50 dark:bg-gray-800/30 border-t border-gray-200 dark:border-gray-700">
                 {/* Action Bar - Workload actions */}
-                {(item.kind === 'Deployment' || item.kind === 'StatefulSet' || item.kind === 'DaemonSet') && userActions.includes('restart') && (
+                {(item.kind === 'Deployment' || item.kind === 'StatefulSet' || item.kind === 'DaemonSet' || item.kind === 'CronJob') && userActions.includes('restart') && (
                   <div class="mb-3 pb-3 border-b border-gray-200 dark:border-gray-700" onClick={(e) => e.stopPropagation()}>
                     <WorkloadActionBar
                       kind={item.kind}
@@ -214,6 +223,8 @@ export function WorkloadsTabContent({ workloadItems, namespace, userActions = []
                       name={item.name}
                       status={workload.status}
                       restartedAt={workload.restartedAt}
+                      lastTriggeredAt={triggeredPod?.createdAt}
+                      lastTriggeredPodStatus={triggeredPod?.status}
                       userActions={userActions}
                       onActionStart={handleActionStart}
                       onActionComplete={fetchWorkloadsData}
@@ -270,6 +281,11 @@ export function WorkloadsTabContent({ workloadItems, namespace, userActions = []
                             {pod.statusMessage && (
                               <p class="text-xs text-gray-600 dark:text-gray-400 mt-1 break-all">
                                 {pod.statusMessage}
+                              </p>
+                            )}
+                            {pod.createdBy && (
+                              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1" data-testid="pod-created-by">
+                                Triggered by {pod.createdBy}
                               </p>
                             )}
                           </div>

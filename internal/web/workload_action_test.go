@@ -13,6 +13,7 @@ import (
 
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -582,7 +583,7 @@ func TestWorkloadActionHandler_ResponseContentType(t *testing.T) {
 }
 
 func TestWorkloadActionHandler_AllSupportedKinds(t *testing.T) {
-	supportedKinds := []string{"Deployment", "StatefulSet", "DaemonSet"}
+	supportedKinds := []string{"Deployment", "StatefulSet", "DaemonSet", "CronJob"}
 
 	for _, kind := range supportedKinds {
 		t.Run(kind, func(t *testing.T) {
@@ -636,6 +637,23 @@ func TestWorkloadActionHandler_AllSupportedKinds(t *testing.T) {
 				}
 				g.Expect(testClient.Create(ctx, daemonset)).To(Succeed())
 				defer testClient.Delete(ctx, daemonset)
+			case "CronJob":
+				cronJob := &batchv1.CronJob{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      name,
+						Namespace: "default",
+					},
+					Spec: batchv1.CronJobSpec{
+						Schedule: "*/5 * * * *",
+						JobTemplate: batchv1.JobTemplateSpec{
+							Spec: batchv1.JobSpec{
+								Template: cronJobPodTemplateSpec(name),
+							},
+						},
+					},
+				}
+				g.Expect(testClient.Create(ctx, cronJob)).To(Succeed())
+				defer testClient.Delete(ctx, cronJob)
 			}
 
 			handler := &Handler{
@@ -669,6 +687,266 @@ func TestWorkloadActionHandler_AllSupportedKinds(t *testing.T) {
 	}
 }
 
+func TestWorkloadActionHandler_RunJob_CronJob_Success(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a CronJob for testing
+	cronJob := &batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cronjob-run",
+			Namespace: "default",
+		},
+		Spec: batchv1.CronJobSpec{
+			Schedule: "*/5 * * * *",
+			JobTemplate: batchv1.JobTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"app": "test-cronjob"},
+				},
+				Spec: batchv1.JobSpec{
+					Template: cronJobPodTemplateSpec("test-cronjob"),
+				},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, cronJob)).To(Succeed())
+	defer testClient.Delete(ctx, cronJob)
+
+	handler := &Handler{
+		conf:          oauthConfig(),
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	actionReq := WorkloadActionRequest{
+		Kind:      "CronJob",
+		Namespace: "default",
+		Name:      "test-cronjob-run",
+		Action:    "restart",
+	}
+	body, _ := json.Marshal(actionReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/workload/action", bytes.NewBuffer(body))
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.WorkloadActionHandler(rec, req)
+
+	g.Expect(rec.Code).To(Equal(http.StatusOK))
+
+	var resp WorkloadActionResponse
+	err := json.NewDecoder(rec.Body).Decode(&resp)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(resp.Success).To(BeTrue())
+	g.Expect(resp.Message).To(ContainSubstring("Job created from CronJob"))
+
+	// Verify a Job was created with the correct owner reference
+	var jobList batchv1.JobList
+	g.Expect(testClient.List(ctx, &jobList, client.InNamespace("default"))).To(Succeed())
+
+	var foundJob *batchv1.Job
+	for i := range jobList.Items {
+		for _, ref := range jobList.Items[i].OwnerReferences {
+			if ref.Kind == "CronJob" && ref.Name == "test-cronjob-run" {
+				foundJob = &jobList.Items[i]
+				break
+			}
+		}
+	}
+	g.Expect(foundJob).NotTo(BeNil(), "Expected to find a Job owned by the CronJob")
+
+	// Verify owner reference has Controller set to true
+	g.Expect(foundJob.OwnerReferences).To(HaveLen(1))
+	g.Expect(foundJob.OwnerReferences[0].Controller).NotTo(BeNil())
+	g.Expect(*foundJob.OwnerReferences[0].Controller).To(BeTrue())
+
+	// Verify CreatedBy annotation on the Job
+	g.Expect(foundJob.Annotations).To(HaveKey(fluxcdv1.CreatedByAnnotation))
+
+	// Verify labels copied from jobTemplate
+	g.Expect(foundJob.Labels).To(HaveKeyWithValue("app", "test-cronjob"))
+
+	// Verify CreatedBy annotation on the pod template
+	g.Expect(foundJob.Spec.Template.Annotations).To(HaveKey(fluxcdv1.CreatedByAnnotation))
+
+	// Cleanup the created Job
+	g.Expect(testClient.Delete(ctx, foundJob)).To(Succeed())
+}
+
+func TestWorkloadActionHandler_RunJob_CronJob_WithUserRBAC(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a CronJob for testing
+	cronJob := &batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cronjob-rbac",
+			Namespace: "default",
+		},
+		Spec: batchv1.CronJobSpec{
+			Schedule: "*/5 * * * *",
+			JobTemplate: batchv1.JobTemplateSpec{
+				Spec: batchv1.JobSpec{
+					Template: cronJobPodTemplateSpec("test-cronjob-rbac"),
+				},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, cronJob)).To(Succeed())
+	defer testClient.Delete(ctx, cronJob)
+
+	// Create RBAC for the test user to perform restart action on cronjobs and create jobs
+	clusterRole := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-cronjob-runner",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"batch"},
+				Resources: []string{"cronjobs"},
+				Verbs:     []string{"get", "list", "restart"},
+			},
+			{
+				APIGroups: []string{"batch"},
+				Resources: []string{"jobs"},
+				Verbs:     []string{"create"},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, clusterRole)).To(Succeed())
+	defer testClient.Delete(ctx, clusterRole)
+
+	clusterRoleBinding := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-cronjob-runner-binding",
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     clusterRole.Name,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind: "User",
+				Name: "cronjob-runner-user",
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, clusterRoleBinding)).To(Succeed())
+	defer testClient.Delete(ctx, clusterRoleBinding)
+
+	handler := &Handler{
+		conf:          oauthConfig(),
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	// Create a user session with restart access
+	imp := user.Impersonation{
+		Username: "cronjob-runner-user",
+		Groups:   []string{"system:authenticated"},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile:       user.Profile{Name: "CronJob Runner User"},
+		Impersonation: imp,
+	}, userClient)
+
+	actionReq := WorkloadActionRequest{
+		Kind:      "CronJob",
+		Namespace: "default",
+		Name:      "test-cronjob-rbac",
+		Action:    "restart",
+	}
+	body, _ := json.Marshal(actionReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/workload/action", bytes.NewBuffer(body))
+	req = req.WithContext(userCtx)
+	rec := httptest.NewRecorder()
+
+	handler.WorkloadActionHandler(rec, req)
+
+	g.Expect(rec.Code).To(Equal(http.StatusOK))
+
+	var resp WorkloadActionResponse
+	err = json.NewDecoder(rec.Body).Decode(&resp)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(resp.Success).To(BeTrue())
+	g.Expect(resp.Message).To(ContainSubstring("Job created from CronJob"))
+
+	// Cleanup any created Jobs
+	var jobList batchv1.JobList
+	g.Expect(testClient.List(ctx, &jobList, client.InNamespace("default"))).To(Succeed())
+	for i := range jobList.Items {
+		for _, ref := range jobList.Items[i].OwnerReferences {
+			if ref.Kind == "CronJob" && ref.Name == "test-cronjob-rbac" {
+				g.Expect(testClient.Delete(ctx, &jobList.Items[i])).To(Succeed())
+			}
+		}
+	}
+}
+
+func TestWorkloadActionHandler_RunJob_CronJob_Forbidden(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a CronJob for testing
+	cronJob := &batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cronjob-forbidden",
+			Namespace: "default",
+		},
+		Spec: batchv1.CronJobSpec{
+			Schedule: "*/5 * * * *",
+			JobTemplate: batchv1.JobTemplateSpec{
+				Spec: batchv1.JobSpec{
+					Template: cronJobPodTemplateSpec("test-cronjob-forbidden"),
+				},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, cronJob)).To(Succeed())
+	defer testClient.Delete(ctx, cronJob)
+
+	handler := &Handler{
+		conf:          oauthConfig(),
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	// Create an unprivileged user session (no RBAC permissions)
+	imp := user.Impersonation{
+		Username: "unprivileged-cronjob-user",
+		Groups:   []string{"unprivileged-group"},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile:       user.Profile{Name: "Unprivileged CronJob User"},
+		Impersonation: imp,
+	}, userClient)
+
+	actionReq := WorkloadActionRequest{
+		Kind:      "CronJob",
+		Namespace: "default",
+		Name:      "test-cronjob-forbidden",
+		Action:    "restart",
+	}
+	body, _ := json.Marshal(actionReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/workload/action", bytes.NewBuffer(body))
+	req = req.WithContext(userCtx)
+	rec := httptest.NewRecorder()
+
+	handler.WorkloadActionHandler(rec, req)
+
+	g.Expect(rec.Code).To(Equal(http.StatusForbidden))
+	g.Expect(rec.Body.String()).To(ContainSubstring("Permission denied"))
+}
+
 // corev1PodTemplateSpec creates a minimal pod template spec for testing.
 func corev1PodTemplateSpec(appLabel string) corev1.PodTemplateSpec {
 	return corev1.PodTemplateSpec{
@@ -680,6 +958,25 @@ func corev1PodTemplateSpec(appLabel string) corev1.PodTemplateSpec {
 				{
 					Name:  "test",
 					Image: "nginx:latest",
+				},
+			},
+		},
+	}
+}
+
+// cronJobPodTemplateSpec creates a minimal pod template spec for CronJob testing.
+// CronJobs require restartPolicy to be "Never" or "OnFailure".
+func cronJobPodTemplateSpec(appLabel string) corev1.PodTemplateSpec {
+	return corev1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels: map[string]string{"app": appLabel},
+		},
+		Spec: corev1.PodSpec{
+			RestartPolicy: corev1.RestartPolicyNever,
+			Containers: []corev1.Container{
+				{
+					Name:  "test",
+					Image: "busybox:latest",
 				},
 			},
 		},

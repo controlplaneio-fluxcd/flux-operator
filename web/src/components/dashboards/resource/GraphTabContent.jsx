@@ -519,6 +519,8 @@ export function GraphTabContent({ resourceData, namespace, onNavigate, setActive
       return
     }
 
+    let cancelled = false
+
     const fetchWorkloadStatuses = async () => {
       try {
         // Build workloads array with resolved namespaces
@@ -547,13 +549,14 @@ export function GraphTabContent({ resourceData, namespace, onNavigate, setActive
             statusMessage: workload.statusMessage
           }
         })
-        setWorkloadStatuses(newStatuses)
+        if (!cancelled) setWorkloadStatuses(newStatuses)
       } catch (err) {
         console.error('Failed to fetch workload statuses:', err)
       }
     }
 
     fetchWorkloadStatuses()
+    return () => { cancelled = true }
   }, [isActive, resourceData, namespace, graphData.inventory.workloads])
 
   const { upstream, sources, helmChart, reconciler, inventory } = graphData

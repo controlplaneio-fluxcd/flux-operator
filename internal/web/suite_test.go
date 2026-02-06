@@ -64,6 +64,11 @@ func setupActionRBAC(ctx context.Context, c client.Client) error {
 				Resources: []string{"*"},
 				Verbs:     []string{"reconcile", "suspend", "resume", "download"},
 			},
+			{
+				APIGroups: []string{"batch"},
+				Resources: []string{"cronjobs", "jobs"},
+				Verbs:     []string{"get", "list", "create", "restart"},
+			},
 		},
 	}
 	if err := c.Create(ctx, clusterRole); err != nil {

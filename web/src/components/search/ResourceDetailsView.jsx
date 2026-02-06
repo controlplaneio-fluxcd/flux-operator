@@ -1,7 +1,7 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { useState, useMemo, useEffect } from 'preact/hooks'
+import { useState, useMemo, useEffect, useRef } from 'preact/hooks'
 import { fetchWithMock } from '../../utils/fetch'
 import { usePrismTheme, YamlBlock } from '../dashboards/common/yaml'
 import { fluxKinds, isKindWithInventory, getKindAlias } from '../../utils/constants'
@@ -134,17 +134,30 @@ export function ResourceDetailsView({ kind, name, namespace, isExpanded }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [activeTab, setActiveTab] = useState('inventory')
+  const fetchingRef = useRef(false)
 
   // Load Prism theme based on current app theme
   usePrismTheme()
 
+  // Reset state when resource identity changes
+  useEffect(() => {
+    setResourceData(null)
+    setError(null)
+    setActiveTab('inventory')
+  }, [kind, name, namespace])
+
   // Fetch resource details when expanded
   useEffect(() => {
-    if (!isExpanded || resourceData || loading || error) return
+    if (!isExpanded || resourceData || fetchingRef.current) return
+
+    let cancelled = false
+    fetchingRef.current = true
 
     const fetchResourceDetails = async () => {
-      setLoading(true)
-      setError(null)
+      if (!cancelled) {
+        setLoading(true)
+        setError(null)
+      }
 
       const params = new URLSearchParams({ kind, name, namespace })
 
@@ -154,27 +167,31 @@ export function ResourceDetailsView({ kind, name, namespace, isExpanded }) {
           mockPath: '../mock/resource',
           mockExport: 'getMockResource'
         })
-        setResourceData(data)
+        if (!cancelled) {
+          setResourceData(data)
 
-        // Set default active tab: inventory > source > specification
-        const hasInventory = data.status?.inventory && data.status.inventory.length > 0
-        if (isKindWithInventory(data.kind) || hasInventory) {
-          setActiveTab('inventory')
-        } else if (data.status?.sourceRef) {
-          setActiveTab('source')
-        } else {
-          setActiveTab('specification')
+          // Set default active tab: inventory > source > specification
+          const hasInventory = data.status?.inventory && data.status.inventory.length > 0
+          if (isKindWithInventory(data.kind) || hasInventory) {
+            setActiveTab('inventory')
+          } else if (data.status?.sourceRef) {
+            setActiveTab('source')
+          } else {
+            setActiveTab('specification')
+          }
         }
       } catch (err) {
         console.error('Failed to fetch resource details:', err)
-        setError(err.message)
+        if (!cancelled) setError(err.message)
       } finally {
-        setLoading(false)
+        fetchingRef.current = false
+        if (!cancelled) setLoading(false)
       }
     }
 
     fetchResourceDetails()
-  }, [isExpanded, kind, name, namespace, resourceData, loading, error])
+    return () => { cancelled = true }
+  }, [isExpanded, kind, name, namespace, resourceData])
 
   // Build resource definition object (memoized)
   const definitionData = useMemo(() => {

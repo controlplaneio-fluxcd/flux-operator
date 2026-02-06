@@ -299,9 +299,10 @@ const mockWorkloads = {
     pods: [
       {
         name: 'garbage-collection-28945678-xk9j2',
-        status: 'Succeeded',
-        statusMessage: 'Completed at 2026-02-02 10:30:00 UTC',
-        createdAt: getTimestamp(0, 1, 30) // 1 hour 30 minutes ago
+        status: 'Running',
+        statusMessage: 'Started at 2026-02-06 10:30:00 UTC',
+        createdAt: getTimestamp(0, 0, 0, 10), // 10 seconds ago (recent, in progress)
+        createdBy: 'admin@example.com'
       }
     ]
   },

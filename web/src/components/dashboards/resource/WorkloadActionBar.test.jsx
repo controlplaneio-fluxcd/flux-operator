@@ -49,10 +49,13 @@ describe('WorkloadActionBar component', () => {
       expect(screen.getByTestId('restart-button')).toBeInTheDocument()
     })
 
-    it('should not render for CronJob (restart not supported)', () => {
+    it('should render run job button for CronJob with restart permission', () => {
       render(<WorkloadActionBar {...defaultProps} kind="CronJob" />)
 
-      expect(screen.queryByTestId('workload-action-bar')).not.toBeInTheDocument()
+      expect(screen.getByTestId('workload-action-bar')).toBeInTheDocument()
+      expect(screen.getByTestId('run-job-button')).toBeInTheDocument()
+      expect(screen.getByText('Run Job')).toBeInTheDocument()
+      expect(screen.queryByTestId('restart-button')).not.toBeInTheDocument()
     })
 
     it('should not render when userActions does not include restart', () => {
@@ -189,13 +192,25 @@ describe('WorkloadActionBar component', () => {
   })
 
   describe('Different workload kinds', () => {
-    const supportedKinds = ['Deployment', 'StatefulSet', 'DaemonSet']
-    const unsupportedKinds = ['CronJob', 'Pod', 'Job']
+    const restartKinds = ['Deployment', 'StatefulSet', 'DaemonSet']
+    const runJobKinds = ['CronJob']
+    const unsupportedKinds = ['Pod', 'Job']
 
-    supportedKinds.forEach(kind => {
-      it(`should render for ${kind}`, () => {
+    restartKinds.forEach(kind => {
+      it(`should render restart button for ${kind}`, () => {
         render(<WorkloadActionBar {...defaultProps} kind={kind} />)
         expect(screen.getByTestId('workload-action-bar')).toBeInTheDocument()
+        expect(screen.getByTestId('restart-button')).toBeInTheDocument()
+        expect(screen.queryByTestId('run-job-button')).not.toBeInTheDocument()
+      })
+    })
+
+    runJobKinds.forEach(kind => {
+      it(`should render run job button for ${kind}`, () => {
+        render(<WorkloadActionBar {...defaultProps} kind={kind} />)
+        expect(screen.getByTestId('workload-action-bar')).toBeInTheDocument()
+        expect(screen.getByTestId('run-job-button')).toBeInTheDocument()
+        expect(screen.queryByTestId('restart-button')).not.toBeInTheDocument()
       })
     })
 
@@ -204,6 +219,87 @@ describe('WorkloadActionBar component', () => {
         render(<WorkloadActionBar {...defaultProps} kind={kind} />)
         expect(screen.queryByTestId('workload-action-bar')).not.toBeInTheDocument()
       })
+    })
+  })
+
+  describe('CronJob Run Job actions', () => {
+    it('should call run job action with correct parameters for CronJob', async () => {
+      const user = userEvent.setup()
+      render(<WorkloadActionBar {...defaultProps} kind="CronJob" />)
+
+      await user.click(screen.getByTestId('run-job-button'))
+
+      await waitFor(() => {
+        expect(fetchWithMock).toHaveBeenCalledWith({
+          endpoint: '/api/v1/workload/action',
+          mockPath: '../mock/action',
+          mockExport: 'mockWorkloadAction',
+          method: 'POST',
+          body: {
+            kind: 'CronJob',
+            namespace: 'default',
+            name: 'my-app',
+            action: 'restart'
+          }
+        })
+      })
+    })
+
+    it('should show loading spinner while run job is in progress', async () => {
+      const user = userEvent.setup()
+      fetchWithMock.mockImplementation(() => new Promise(() => {}))
+
+      render(<WorkloadActionBar {...defaultProps} kind="CronJob" />)
+
+      await user.click(screen.getByTestId('run-job-button'))
+
+      expect(screen.getByTestId('run-job-button').querySelector('.animate-spin')).toBeInTheDocument()
+    })
+
+    it('should disable run job button while action is in progress', async () => {
+      const user = userEvent.setup()
+      fetchWithMock.mockImplementation(() => new Promise(() => {}))
+
+      render(<WorkloadActionBar {...defaultProps} kind="CronJob" />)
+
+      await user.click(screen.getByTestId('run-job-button'))
+
+      expect(screen.getByTestId('run-job-button')).toBeDisabled()
+    })
+
+    it('should show success checkmark after successful run job action', async () => {
+      const user = userEvent.setup()
+      render(<WorkloadActionBar {...defaultProps} kind="CronJob" />)
+
+      await user.click(screen.getByTestId('run-job-button'))
+
+      await waitFor(() => {
+        const button = screen.getByTestId('run-job-button')
+        const checkmark = button.querySelector('path[d="M5 13l4 4L19 7"]')
+        expect(checkmark).toBeInTheDocument()
+      })
+    })
+
+    it('should display error message when run job fails', async () => {
+      const user = userEvent.setup()
+      fetchWithMock.mockRejectedValue(new Error('Permission denied'))
+
+      render(<WorkloadActionBar {...defaultProps} kind="CronJob" />)
+
+      await user.click(screen.getByTestId('run-job-button'))
+
+      await waitFor(() => {
+        expect(screen.getByTestId('workload-action-error')).toBeInTheDocument()
+        expect(screen.getByText('Permission denied')).toBeInTheDocument()
+      })
+    })
+
+    it('should have play icon in run job button', () => {
+      render(<WorkloadActionBar {...defaultProps} kind="CronJob" />)
+
+      const button = screen.getByTestId('run-job-button')
+      const playIcon = button.querySelector('path[d="M8 5v14l11-7z"]')
+      expect(playIcon).toBeInTheDocument()
     })
   })
 
@@ -294,7 +390,7 @@ describe('WorkloadActionBar component', () => {
       expect(button.querySelector('.animate-spin')).not.toBeInTheDocument()
     })
 
-    it('should show success checkmark when restart is recent and status is Current', () => {
+    it('should show success checkmark when restart is recent and status is Current (no spinner)', () => {
       const recentTimestamp = new Date(Date.now() - 10000).toISOString() // 10 seconds ago
       render(
         <WorkloadActionBar
@@ -309,6 +405,73 @@ describe('WorkloadActionBar component', () => {
       // Should show checkmark (success) icon
       const checkmark = button.querySelector('path[d="M5 13l4 4L19 7"]')
       expect(checkmark).toBeInTheDocument()
+    })
+  })
+
+  describe('Run Job in progress detection', () => {
+    const cronJobProps = {
+      ...defaultProps,
+      kind: 'CronJob'
+    }
+
+    it('should show spinner and disable button when triggered pod is recent and not Succeeded', () => {
+      const recentTimestamp = new Date(Date.now() - 10000).toISOString() // 10 seconds ago
+      render(
+        <WorkloadActionBar
+          {...cronJobProps}
+          lastTriggeredAt={recentTimestamp}
+          lastTriggeredPodStatus="Running"
+        />
+      )
+
+      const button = screen.getByTestId('run-job-button')
+      expect(button).toBeDisabled()
+      expect(button.querySelector('.animate-spin')).toBeInTheDocument()
+    })
+
+    it('should show checkmark and not disable when triggered pod is recent and Succeeded', () => {
+      const recentTimestamp = new Date(Date.now() - 10000).toISOString() // 10 seconds ago
+      render(
+        <WorkloadActionBar
+          {...cronJobProps}
+          lastTriggeredAt={recentTimestamp}
+          lastTriggeredPodStatus="Succeeded"
+        />
+      )
+
+      const button = screen.getByTestId('run-job-button')
+      expect(button).not.toBeDisabled()
+      const checkmark = button.querySelector('path[d="M5 13l4 4L19 7"]')
+      expect(checkmark).toBeInTheDocument()
+    })
+
+    it('should not disable button when triggered pod is old', () => {
+      const oldTimestamp = new Date(Date.now() - 60000).toISOString() // 60 seconds ago
+      render(
+        <WorkloadActionBar
+          {...cronJobProps}
+          lastTriggeredAt={oldTimestamp}
+          lastTriggeredPodStatus="Running"
+        />
+      )
+
+      const button = screen.getByTestId('run-job-button')
+      expect(button).not.toBeDisabled()
+      expect(button.querySelector('.animate-spin')).not.toBeInTheDocument()
+    })
+
+    it('should not disable button when lastTriggeredAt is undefined', () => {
+      render(
+        <WorkloadActionBar
+          {...cronJobProps}
+          lastTriggeredAt={undefined}
+          lastTriggeredPodStatus={undefined}
+        />
+      )
+
+      const button = screen.getByTestId('run-job-button')
+      expect(button).not.toBeDisabled()
+      expect(button.querySelector('.animate-spin')).not.toBeInTheDocument()
     })
   })
 })

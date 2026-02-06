@@ -23,11 +23,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/kubeclient"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
 
-const workloadKindCronJob = "CronJob"
+const (
+	workloadKindDeployment  = "Deployment"
+	workloadKindStatefulSet = "StatefulSet"
+	workloadKindDaemonSet   = "DaemonSet"
+	workloadKindCronJob     = "CronJob"
+)
 
 // JobOwnerCronJobField is the field index key for querying Jobs by their CronJob owner.
 // This index must be set up when creating the controller-runtime manager.
@@ -136,6 +142,9 @@ type WorkloadPodStatus struct {
 
 	// CreatedAt is the creation timestamp of the pod.
 	CreatedAt time.Time `json:"createdAt"`
+
+	// CreatedBy is the user who triggered the pod creation.
+	CreatedBy string `json:"createdBy,omitempty"`
 }
 
 // getWorkloadGVK returns the GroupVersionKind for a given workload kind.
@@ -324,6 +333,7 @@ func (h *Handler) getCronJobPods(ctx context.Context, cronJob *unstructured.Unst
 			Status:        podStatus,
 			StatusMessage: podMessage,
 			CreatedAt:     pod.GetCreationTimestamp().Time,
+			CreatedBy:     pod.GetAnnotations()[fluxcdv1.CreatedByAnnotation],
 		})
 	}
 
@@ -425,9 +435,9 @@ func getAppsWorkloadStatusMessage(obj *unstructured.Unstructured, kind string) s
 	var found bool
 
 	switch kind {
-	case "Deployment", "StatefulSet":
+	case workloadKindDeployment, workloadKindStatefulSet:
 		replicas, found, _ = unstructured.NestedInt64(obj.Object, "status", "readyReplicas")
-	case "DaemonSet":
+	case workloadKindDaemonSet:
 		replicas, found, _ = unstructured.NestedInt64(obj.Object, "status", "numberReady")
 	}
 

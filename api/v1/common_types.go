@@ -35,6 +35,7 @@ var (
 	CopyFromAnnotation               = fmt.Sprintf("%s/copyFrom", GroupVersion.Group)
 	ConvertKubeConfigFromAnnotation  = fmt.Sprintf("%s/convertKubeConfigFrom", GroupVersion.Group)
 	SuspendedByAnnotation            = fmt.Sprintf("%s/suspendedBy", GroupVersion.Group)
+	CreatedByAnnotation              = fmt.Sprintf("%s/createdBy", GroupVersion.Group)
 )
 
 // FluxObject is the interface that all Flux objects must implement.
