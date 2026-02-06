@@ -11,12 +11,14 @@ import (
 	"slices"
 	"time"
 
+	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
@@ -47,9 +49,10 @@ type workloadKindInfo struct {
 
 // supportedWorkloadKinds maps workload kinds to their API group and supported actions.
 var supportedWorkloadKinds = map[string]workloadKindInfo{
-	"Deployment":  {group: "apps", plural: "deployments", actions: []string{fluxcdv1.UserActionRestart}},
-	"StatefulSet": {group: "apps", plural: "statefulsets", actions: []string{fluxcdv1.UserActionRestart}},
-	"DaemonSet":   {group: "apps", plural: "daemonsets", actions: []string{fluxcdv1.UserActionRestart}},
+	workloadKindDeployment:  {group: "apps", plural: "deployments", actions: []string{fluxcdv1.UserActionRestart}},
+	workloadKindStatefulSet: {group: "apps", plural: "statefulsets", actions: []string{fluxcdv1.UserActionRestart}},
+	workloadKindDaemonSet:   {group: "apps", plural: "daemonsets", actions: []string{fluxcdv1.UserActionRestart}},
+	workloadKindCronJob:     {group: "batch", plural: "cronjobs", actions: []string{fluxcdv1.UserActionRestart}},
 }
 
 // WorkloadActionHandler handles POST /api/v1/workload/action requests to perform actions on workloads.
@@ -81,7 +84,7 @@ func (h *Handler) WorkloadActionHandler(w http.ResponseWriter, req *http.Request
 	// Validate workload kind.
 	kindInfo, ok := supportedWorkloadKinds[actionReq.Kind]
 	if !ok {
-		http.Error(w, fmt.Sprintf("Unsupported workload kind: %s. Supported kinds: Deployment, StatefulSet, DaemonSet", actionReq.Kind), http.StatusBadRequest)
+		http.Error(w, fmt.Sprintf("Unsupported workload kind: %s", actionReq.Kind), http.StatusBadRequest)
 		return
 	}
 
@@ -111,7 +114,7 @@ func (h *Handler) WorkloadActionHandler(w http.ResponseWriter, req *http.Request
 	var workload *unstructured.Unstructured
 	if h.isAuditEnabled(actionReq.Action) {
 		workload = &unstructured.Unstructured{}
-		workload.SetGroupVersionKind(schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: actionReq.Kind})
+		workload.SetGroupVersionKind(schema.GroupVersionKind{Group: kindInfo.group, Version: "v1", Kind: actionReq.Kind})
 		if err := h.kubeClient.GetClient(ctx).Get(ctx, client.ObjectKey{
 			Namespace: actionReq.Namespace, Name: actionReq.Name,
 		}, workload); err != nil {
@@ -126,8 +129,13 @@ func (h *Handler) WorkloadActionHandler(w http.ResponseWriter, req *http.Request
 
 	switch actionReq.Action {
 	case fluxcdv1.UserActionRestart:
-		actionErr = h.restartWorkload(ctx, actionReq.Kind, actionReq.Namespace, actionReq.Name)
-		message = fmt.Sprintf("Rollout restart triggered for %s/%s", actionReq.Namespace, actionReq.Name)
+		if actionReq.Kind == workloadKindCronJob {
+			actionErr = h.runJob(ctx, actionReq.Namespace, actionReq.Name)
+			message = fmt.Sprintf("Job created from CronJob %s/%s", actionReq.Namespace, actionReq.Name)
+		} else {
+			actionErr = h.restartWorkload(ctx, actionReq.Kind, actionReq.Namespace, actionReq.Name)
+			message = fmt.Sprintf("Rollout restart triggered for %s/%s", actionReq.Namespace, actionReq.Name)
+		}
 	default:
 		http.Error(w, fmt.Sprintf("Unknown action: %s", actionReq.Action), http.StatusBadRequest)
 		return
@@ -223,6 +231,63 @@ func (h *Handler) restartWorkload(ctx context.Context, kind, namespace, name str
 		client.ForceOwnership, client.FieldOwner(kubeclient.FieldOwner))
 	if err != nil {
 		return fmt.Errorf("failed to patch workload: %w", err)
+	}
+
+	return nil
+}
+
+// runJob creates a new Job from a CronJob's jobTemplate spec.
+// The Job is created with an owner reference to the CronJob so that
+// its pods show up under the CronJob in the UI. The CreatedBy annotation
+// is set on both the Job and its pods to differentiate manually
+// triggered jobs from those created by the CronJob schedule.
+func (h *Handler) runJob(ctx context.Context, namespace, name string) error {
+	kubeClient := h.kubeClient.GetClient(ctx)
+
+	// Fetch the CronJob to get its jobTemplate spec.
+	var cronJob batchv1.CronJob
+	if err := kubeClient.Get(ctx, client.ObjectKey{
+		Namespace: namespace,
+		Name:      name,
+	}, &cronJob); err != nil {
+		return err
+	}
+
+	// Get the username for the CreatedBy annotation.
+	username := user.Username(ctx)
+
+	// Build the Job from the CronJob's jobTemplate.
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: name + "-",
+			Namespace:    namespace,
+			Annotations: map[string]string{
+				fluxcdv1.CreatedByAnnotation: username,
+			},
+		},
+		Spec: *cronJob.Spec.JobTemplate.Spec.DeepCopy(),
+	}
+
+	// Set the CronJob as the controller owner of the Job so that
+	// its pods show up under the CronJob in the UI.
+	if err := controllerutil.SetControllerReference(&cronJob, job, h.kubeClient.GetScheme()); err != nil {
+		return fmt.Errorf("failed to set controller reference to job from cronjob %s/%s: %w", namespace, name, err)
+	}
+
+	// Copy labels from the CronJob's jobTemplate.
+	job.Labels = make(map[string]string)
+	for k, v := range cronJob.Spec.JobTemplate.Labels {
+		job.Labels[k] = v
+	}
+
+	// Set the CreatedBy annotation on the pod template.
+	if job.Spec.Template.Annotations == nil {
+		job.Spec.Template.Annotations = make(map[string]string)
+	}
+	job.Spec.Template.Annotations[fluxcdv1.CreatedByAnnotation] = username
+
+	if err := kubeClient.Create(ctx, job); err != nil {
+		return fmt.Errorf("failed to create job from cronjob %s/%s: %w", namespace, name, err)
 	}
 
 	return nil

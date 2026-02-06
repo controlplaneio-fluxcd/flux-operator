@@ -50,77 +50,83 @@ export function FavoritesPage() {
     return [...new Set(currentFavorites.map(f => f.kind))].sort()
   }, [currentFavorites])
 
-  // Fetch resource data for all favorites
-  const fetchFavoritesData = useCallback(async () => {
-    if (currentFavorites.length === 0) {
-      setResourcesData({})
-      setLoading(false)
-      initialLoadDone.current = true
-      return
-    }
+  // Fetch data on mount, when favorites change, and auto-refresh
+  useEffect(() => {
+    let cancelled = false
 
-    // Only show loading on initial load, not on refresh
-    if (!initialLoadDone.current) {
-      setLoading(true)
-    } else {
-      // For refreshes, show spinner after 300ms delay
-      refreshTimeoutRef.current = window.setTimeout(() => {
-        setRefreshing(true)
-      }, 300)
-    }
-    setError(null)
-
-    try {
-      // Send all favorites in a single POST request
-      const data = await fetchWithMock({
-        endpoint: '/api/v1/favorites',
-        mockPath: '../mock/resources',
-        mockExport: 'getMockFavorites',
-        method: 'POST',
-        body: { favorites: currentFavorites }
-      })
-
-      // Build results map from returned resources
-      const results = {}
-      const resources = data.resources || []
-
-      // Then, update with found resources
-      resources.forEach(resource => {
-        const key = getFavoriteKey(resource.kind, resource.namespace, resource.name)
-        results[key] = {
-          status: resource.status,
-          lastReconciled: resource.lastReconciled,
-          message: resource.message
+    const fetchData = async () => {
+      if (currentFavorites.length === 0) {
+        if (!cancelled) {
+          setResourcesData({})
+          setLoading(false)
         }
-      })
+        initialLoadDone.current = true
+        return
+      }
 
-      setResourcesData(results)
-    } catch (err) {
-      // Only show error panel on initial load, not on refresh
+      // Only show loading on initial load, not on refresh
       if (!initialLoadDone.current) {
-        setError(err.message)
+        if (!cancelled) setLoading(true)
+      } else {
+        // For refreshes, show spinner after 300ms delay
+        refreshTimeoutRef.current = window.setTimeout(() => {
+          if (!cancelled) setRefreshing(true)
+        }, 300)
       }
-      // Don't clear existing data on error - keep showing stale data
-    } finally {
-      // Clear the delayed refresh timeout and hide spinner
-      if (refreshTimeoutRef.current) {
-        window.clearTimeout(refreshTimeoutRef.current)
-        refreshTimeoutRef.current = null
+      if (!cancelled) setError(null)
+
+      try {
+        // Send all favorites in a single POST request
+        const data = await fetchWithMock({
+          endpoint: '/api/v1/favorites',
+          mockPath: '../mock/resources',
+          mockExport: 'getMockFavorites',
+          method: 'POST',
+          body: { favorites: currentFavorites }
+        })
+
+        // Build results map from returned resources
+        const results = {}
+        const resources = data.resources || []
+
+        // Then, update with found resources
+        resources.forEach(resource => {
+          const key = getFavoriteKey(resource.kind, resource.namespace, resource.name)
+          results[key] = {
+            status: resource.status,
+            lastReconciled: resource.lastReconciled,
+            message: resource.message
+          }
+        })
+
+        if (!cancelled) setResourcesData(results)
+      } catch (err) {
+        // Only show error panel on initial load, not on refresh
+        if (!initialLoadDone.current && !cancelled) {
+          setError(err.message)
+        }
+        // Don't clear existing data on error - keep showing stale data
+      } finally {
+        // Always clear timeout (no cancelled guard)
+        if (refreshTimeoutRef.current) {
+          window.clearTimeout(refreshTimeoutRef.current)
+          refreshTimeoutRef.current = null
+        }
+        if (!cancelled) {
+          setRefreshing(false)
+          setLoading(false)
+        }
+        initialLoadDone.current = true
       }
-      setRefreshing(false)
-      setLoading(false)
-      initialLoadDone.current = true
+    }
+
+    fetchData()
+    const interval = setInterval(fetchData, POLL_INTERVAL_MS)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
     }
   }, [currentFavorites])
-
-  // Fetch data on mount and when favorites change
-  useEffect(() => {
-    fetchFavoritesData()
-
-    // Auto-refresh
-    const interval = setInterval(fetchFavoritesData, POLL_INTERVAL_MS)
-    return () => clearInterval(interval)
-  }, [fetchFavoritesData])
 
   // Build list of favorites with their resource data
   const favoritesWithData = useMemo(() => {

@@ -239,6 +239,14 @@ rules:
     verbs:
       - patch
       - restart
+  - apiGroups:
+      - batch
+    resources:
+      - cronjobs
+      - jobs
+    verbs:
+      - create
+      - restart
 ```
 
 Note that the `patch` verb is not enough to allow a user to perform actions in the Web UI.
@@ -250,4 +258,4 @@ The `download` verb allows users to download artifacts from Flux source resource
 (Bucket, GitRepository, OCIRepository, HelmChart, and ExternalArtifact).
 
 The `restart` verb allows users to trigger a rollout restart on workloads
-(Deployment, StatefulSet, and DaemonSet).
+(Deployment, StatefulSet, and DaemonSet) and to create Jobs from CronJobs.

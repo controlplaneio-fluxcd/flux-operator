@@ -20,10 +20,11 @@ function isRecentRestart(restartedAt) {
 }
 
 /**
- * WorkloadActionBar - Action buttons for Kubernetes workloads (Deployment, StatefulSet, DaemonSet)
+ * WorkloadActionBar - Action buttons for Kubernetes workloads (Deployment, StatefulSet, DaemonSet, CronJob)
  *
  * Supports:
  * - Rollout Restart for Deployment, StatefulSet, DaemonSet
+ * - Run Job for CronJob
  *
  * @param {Object} props
  * @param {string} props.kind - Workload kind (Deployment, StatefulSet, DaemonSet, CronJob)
@@ -31,11 +32,13 @@ function isRecentRestart(restartedAt) {
  * @param {string} props.name - Workload name
  * @param {string} props.status - Workload status (e.g., "Current", "InProgress", "Failed")
  * @param {string} props.restartedAt - Timestamp of last restart (RFC3339 format)
+ * @param {string} props.lastTriggeredAt - Timestamp of most recent triggered pod (RFC3339 format)
+ * @param {string} props.lastTriggeredPodStatus - Status of the most recent triggered pod
  * @param {Array} props.userActions - Array of allowed user actions
  * @param {Function} props.onActionStart - Callback when action starts (for faster polling)
  * @param {Function} props.onActionComplete - Callback to refetch workload data after action
  */
-export function WorkloadActionBar({ kind, namespace, name, status, restartedAt, userActions = [], onActionStart, onActionComplete }) {
+export function WorkloadActionBar({ kind, namespace, name, status, restartedAt, lastTriggeredAt, lastTriggeredPodStatus, userActions = [], onActionStart, onActionComplete }) {
   const { loading, error, showSuccess, performAction, clearError } = useAction({
     onActionStart,
     onActionComplete
@@ -46,11 +49,19 @@ export function WorkloadActionBar({ kind, namespace, name, status, restartedAt, 
   const isRestartInProgress = recentRestart && status === 'InProgress'
   const isRestartCompleted = recentRestart && status === 'Current'
 
+  // Check if a recent run job is still in progress or just completed
+  const recentJob = kind === 'CronJob' && isRecentRestart(lastTriggeredAt)
+  const isJobRunning = recentJob && lastTriggeredPodStatus !== 'Succeeded'
+  const isJobCompleted = recentJob && lastTriggeredPodStatus === 'Succeeded'
+
   // Check if restart action is allowed
   const canRestart = userActions.includes('restart')
 
   // Only Deployment, StatefulSet, DaemonSet support restart
   const supportsRestart = kind === 'Deployment' || kind === 'StatefulSet' || kind === 'DaemonSet'
+
+  // CronJob supports Run Job
+  const supportsRunJob = kind === 'CronJob'
 
   // Handle restart action
   const handleRestart = () => {
@@ -63,6 +74,23 @@ export function WorkloadActionBar({ kind, namespace, name, status, restartedAt, 
         action: 'restart'
       },
       loadingId: 'restart',
+      mockPath: '../mock/action',
+      mockExport: 'mockWorkloadAction',
+      showSuccessCheck: true
+    })
+  }
+
+  // Handle run job action
+  const handleRunJob = () => {
+    performAction({
+      endpoint: '/api/v1/workload/action',
+      body: {
+        kind,
+        namespace,
+        name,
+        action: 'restart'
+      },
+      loadingId: 'run-job',
       mockPath: '../mock/action',
       mockExport: 'mockWorkloadAction',
       showSuccessCheck: true
@@ -85,7 +113,7 @@ export function WorkloadActionBar({ kind, namespace, name, status, restartedAt, 
   )
 
   // If no actions available, don't render
-  if (!supportsRestart || !canRestart) {
+  if ((!supportsRestart && !supportsRunJob) || !canRestart) {
     return null
   }
 
@@ -95,25 +123,49 @@ export function WorkloadActionBar({ kind, namespace, name, status, restartedAt, 
 
   return (
     <div class="flex flex-wrap items-center gap-2" data-testid="workload-action-bar">
-      {/* Restart button */}
-      <button
-        onClick={handleRestart}
-        disabled={loading !== null || isRestartInProgress}
-        class={`${baseButtonClass} ${
-          loading !== null || isRestartInProgress
-            ? disabledClass
-            : 'border-blue-500 text-blue-600 hover:bg-blue-50 dark:border-blue-400 dark:text-blue-400 dark:hover:bg-blue-900/30 focus:ring-blue-500'
-        }`}
-        data-testid="restart-button"
-        title="Restart workload by triggering a rollout"
-      >
-        {loading === 'restart' || isRestartInProgress ? <LoadingSpinner /> : showSuccess === 'restart' || isRestartCompleted ? <SuccessCheck /> : (
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-        )}
-        Rollout Restart
-      </button>
+      {/* Restart button - for Deployment, StatefulSet, DaemonSet */}
+      {supportsRestart && (
+        <button
+          onClick={handleRestart}
+          disabled={loading !== null || isRestartInProgress}
+          class={`${baseButtonClass} ${
+            loading !== null || isRestartInProgress
+              ? disabledClass
+              : 'border-blue-500 text-blue-600 hover:bg-blue-50 dark:border-blue-400 dark:text-blue-400 dark:hover:bg-blue-900/30 focus:ring-blue-500'
+          }`}
+          data-testid="restart-button"
+          title="Restart workload by triggering a rollout"
+        >
+          {loading === 'restart' || isRestartInProgress ? <LoadingSpinner /> : showSuccess === 'restart' || isRestartCompleted ? <SuccessCheck /> : (
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          )}
+          Rollout Restart
+        </button>
+      )}
+
+      {/* Run Job button - for CronJob */}
+      {supportsRunJob && (
+        <button
+          onClick={handleRunJob}
+          disabled={loading !== null || isJobRunning}
+          class={`${baseButtonClass} ${
+            loading !== null || isJobRunning
+              ? disabledClass
+              : 'border-blue-500 text-blue-600 hover:bg-blue-50 dark:border-blue-400 dark:text-blue-400 dark:hover:bg-blue-900/30 focus:ring-blue-500'
+          }`}
+          data-testid="run-job-button"
+          title="Create a new Job from this CronJob"
+        >
+          {loading === 'run-job' || isJobRunning ? <LoadingSpinner /> : showSuccess === 'run-job' || isJobCompleted ? <SuccessCheck /> : (
+            <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          )}
+          Run Job
+        </button>
+      )}
 
       {/* Error message */}
       {error && (
