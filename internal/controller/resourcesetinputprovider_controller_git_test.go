@@ -931,6 +931,9 @@ func TestResourceSetInputProviderReconciler_InvalidGitURL(t *testing.T) {
 		{provider: fluxcdv1.InputProviderAzureDevOpsBranch},
 		{provider: fluxcdv1.InputProviderAzureDevOpsPullRequest},
 		{provider: fluxcdv1.InputProviderAzureDevOpsTag},
+		{provider: fluxcdv1.InputProviderGiteaBranch},
+		{provider: fluxcdv1.InputProviderGiteaTag},
+		{provider: fluxcdv1.InputProviderGiteaPullRequest},
 	} {
 		t.Run(tt.provider, func(t *testing.T) {
 			g := NewWithT(t)

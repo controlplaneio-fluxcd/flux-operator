@@ -102,6 +102,9 @@ The following types are supported:
 - `AzureDevOpsPullRequest`: fetches input values from opened Azure DevOps Pull Requests.
 - `AzureDevOpsBranch`: fetches input values from Azure DevOps repository branches.
 - `AzureDevOpsTag`: fetches input values from AzureDevOps project tags.
+- `GiteaPullRequest`: fetches input values from opened Gitea/Forgejo Pull Requests.
+- `GiteaBranch`: fetches input values from Gitea/Forgejo repository branches.
+- `GiteaTag`: fetches input values from Gitea/Forgejo repository tags.
 - `OCIArtifactTag`: fetches input values from OCI artifact tags from generic container registries.
 - `ACRArtifactTag`: fetches input values from Azure Container Registry OCI artifact tags.
 - `ECRArtifactTag`: fetches input values from Elastic Container Registry OCI artifact tags.
@@ -159,8 +162,8 @@ with the difference on the authentication method used to connect to the registry
 ### URL
 
 The `.spec.url` field is required for external providers.
-For Git services, the URL should contain GitHub repository or the GitLab project address,
-including the HTTP/S scheme (`(http|https)://`).
+For Git services, the URL should contain the GitHub repository, GitLab project,
+or Gitea/Forgejo repository address, including the HTTP/S scheme (`(http|https)://`).
 For OCI services, the URL should contain the OCI repository address,
 including the OCI scheme (`oci://`).
 
@@ -171,7 +174,7 @@ The `.spec.filter` field is optional and specifies the filter criteria for the i
 The following filters are supported:
 
 - `limit`: limit the number of input values fetched (default is 100).
-- `labels`: filter GitHub Pull Requests or GitLab Merge Requests by labels.
+- `labels`: filter GitHub Pull Requests, GitLab Merge Requests, or Gitea/Forgejo Pull Requests by labels.
 - `includeBranch`: regular expression to include branches by name.
 - `excludeBranch`: regular expression to exclude branches by name.
 - `includeTag`: regular expression to include tags by name.

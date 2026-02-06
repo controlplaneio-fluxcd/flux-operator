@@ -346,6 +346,16 @@ func (r *ResourceSetInputProviderReconciler) newGitProvider(ctx context.Context,
 			TLSConfig: tlsConfig,
 			Token:     token,
 		})
+	case strings.HasPrefix(obj.Spec.Type, "Gitea"):
+		token, err := r.getGiteaToken(obj, authData)
+		if err != nil {
+			return nil, err
+		}
+		return gitprovider.NewGiteaProvider(ctx, gitprovider.Options{
+			URL:       obj.Spec.URL,
+			TLSConfig: tlsConfig,
+			Token:     token,
+		})
 	default:
 		return nil, fmt.Errorf("unsupported type: %s", obj.Spec.Type)
 	}
@@ -601,6 +611,19 @@ func (r *ResourceSetInputProviderReconciler) getGitHubToken(
 
 // getGitLabToken returns the appropriate GitLab token by reading the secrets in authData.
 func (r *ResourceSetInputProviderReconciler) getGitLabToken(
+	obj *fluxcdv1.ResourceSetInputProvider,
+	authData map[string][]byte) (string, error) {
+
+	if authData == nil {
+		return "", nil
+	}
+
+	_, password, err := r.getBasicAuth(obj, authData)
+	return password, err
+}
+
+// getGiteaToken returns the appropriate Gitea token by reading the secrets in authData.
+func (r *ResourceSetInputProviderReconciler) getGiteaToken(
 	obj *fluxcdv1.ResourceSetInputProvider,
 	authData map[string][]byte) (string, error) {
 

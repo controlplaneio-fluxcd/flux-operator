@@ -208,6 +208,9 @@ spec:
                 - AzureDevOpsBranch
                 - AzureDevOpsTag
                 - AzureDevOpsPullRequest
+                - GiteaBranch
+                - GiteaTag
+                - GiteaPullRequest
                 - OCIArtifactTag
                 - ACRArtifactTag
                 - ECRArtifactTag
