@@ -96,6 +96,7 @@ func TestAllUserActions(t *testing.T) {
 		fluxcdv1.UserActionResume,
 		fluxcdv1.UserActionDownload,
 		fluxcdv1.UserActionRestart,
+		fluxcdv1.UserActionDelete,
 	))
-	g.Expect(fluxcdv1.AllUserActions).To(HaveLen(5))
+	g.Expect(fluxcdv1.AllUserActions).To(HaveLen(6))
 }

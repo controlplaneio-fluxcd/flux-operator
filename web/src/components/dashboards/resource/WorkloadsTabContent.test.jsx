@@ -629,4 +629,178 @@ describe('WorkloadsTabContent component', () => {
       expect(screen.queryByTestId('recent-pod')).not.toBeInTheDocument()
     })
   })
+
+  describe('Delete pod button', () => {
+    it('should show delete button when canDeletePods is true', async () => {
+      const user = userEvent.setup()
+
+      const workloadWithDeletePods = {
+        ...mockDeploymentWorkload,
+        canDeletePods: true
+      }
+
+      fetchWithMock.mockImplementation(() =>
+        Promise.resolve({ workloads: [workloadWithDeletePods] })
+      )
+
+      const singleWorkloadItem = [{
+        kind: 'Deployment',
+        name: 'podinfo',
+        namespace: 'default'
+      }]
+
+      render(
+        <WorkloadsTabContent
+          workloadItems={singleWorkloadItem}
+          namespace="default"
+        />
+      )
+
+      await waitFor(() => {
+        const textContent = document.body.textContent
+        expect(textContent).toContain('default/podinfo')
+      })
+
+      // Expand the workload
+      const workloadButtons = screen.getAllByRole('button')
+      const podinfoButton = workloadButtons.find(btn => btn.textContent.includes('podinfo'))
+      await user.click(podinfoButton)
+
+      await waitFor(() => {
+        expect(screen.getAllByTestId('delete-pod-button').length).toBeGreaterThan(0)
+      })
+    })
+
+    it('should not show delete button when canDeletePods is false', async () => {
+      const user = userEvent.setup()
+
+      const workloadWithoutDeletePods = {
+        ...mockDeploymentWorkload,
+        canDeletePods: false
+      }
+
+      fetchWithMock.mockImplementation(() =>
+        Promise.resolve({ workloads: [workloadWithoutDeletePods] })
+      )
+
+      const singleWorkloadItem = [{
+        kind: 'Deployment',
+        name: 'podinfo',
+        namespace: 'default'
+      }]
+
+      render(
+        <WorkloadsTabContent
+          workloadItems={singleWorkloadItem}
+          namespace="default"
+        />
+      )
+
+      await waitFor(() => {
+        const textContent = document.body.textContent
+        expect(textContent).toContain('default/podinfo')
+      })
+
+      // Expand the workload
+      const workloadButtons = screen.getAllByRole('button')
+      const podinfoButton = workloadButtons.find(btn => btn.textContent.includes('podinfo'))
+      await user.click(podinfoButton)
+
+      await waitFor(() => {
+        expect(screen.getByText('podinfo-7d8b9c4f5d-abc12')).toBeInTheDocument()
+      })
+      expect(screen.queryByTestId('delete-pod-button')).not.toBeInTheDocument()
+    })
+
+    it('should show Terminating badge when pod delete is pending', async () => {
+      const user = userEvent.setup()
+
+      const workloadWithDeletePods = {
+        ...mockDeploymentWorkload,
+        canDeletePods: true
+      }
+
+      fetchWithMock.mockImplementation(({ endpoint, body }) => {
+        // Handle the workloads fetch
+        if (endpoint === '/api/v1/workloads' || body?.workloads) {
+          return Promise.resolve({ workloads: [workloadWithDeletePods] })
+        }
+        // Handle the delete action
+        return Promise.resolve({ success: true, message: 'Pod deleted' })
+      })
+
+      const singleWorkloadItem = [{
+        kind: 'Deployment',
+        name: 'podinfo',
+        namespace: 'default'
+      }]
+
+      render(
+        <WorkloadsTabContent
+          workloadItems={singleWorkloadItem}
+          namespace="default"
+        />
+      )
+
+      await waitFor(() => {
+        const textContent = document.body.textContent
+        expect(textContent).toContain('default/podinfo')
+      })
+
+      // Expand the workload
+      const workloadButtons = screen.getAllByRole('button')
+      const podinfoButton = workloadButtons.find(btn => btn.textContent.includes('podinfo'))
+      await user.click(podinfoButton)
+
+      await waitFor(() => {
+        expect(screen.getAllByTestId('delete-pod-button').length).toBeGreaterThan(0)
+      })
+
+      // Click the first delete button and confirm
+      vi.spyOn(window, 'confirm').mockReturnValue(true)
+      const deleteButtons = screen.getAllByTestId('delete-pod-button')
+      await user.click(deleteButtons[0])
+
+      // The pod badge should now show Terminating with yellow styling
+      await waitFor(() => {
+        const terminatingBadges = screen.getAllByText('Terminating')
+        expect(terminatingBadges.length).toBeGreaterThan(0)
+        expect(terminatingBadges[0].className).toContain('bg-yellow-100')
+      })
+
+      window.confirm.mockRestore()
+    })
+
+    it('should not show delete button when canDeletePods is missing', async () => {
+      const user = userEvent.setup()
+
+      const singleWorkloadItem = [{
+        kind: 'Deployment',
+        name: 'podinfo',
+        namespace: 'default'
+      }]
+
+      render(
+        <WorkloadsTabContent
+          workloadItems={singleWorkloadItem}
+          namespace="default"
+        />
+      )
+
+      await waitFor(() => {
+        const textContent = document.body.textContent
+        expect(textContent).toContain('default/podinfo')
+      })
+
+      // Expand the workload
+      const workloadButtons = screen.getAllByRole('button')
+      const podinfoButton = workloadButtons.find(btn => btn.textContent.includes('podinfo'))
+      await user.click(podinfoButton)
+
+      await waitFor(() => {
+        expect(screen.getByText('podinfo-7d8b9c4f5d-abc12')).toBeInTheDocument()
+      })
+      expect(screen.queryByTestId('delete-pod-button')).not.toBeInTheDocument()
+    })
+  })
 })

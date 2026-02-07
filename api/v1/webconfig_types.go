@@ -35,6 +35,10 @@ const (
 	// UserActionRestart is the restart user action for workloads
 	// (Deployments, StatefulSets, DaemonSets).
 	UserActionRestart = "restart"
+
+	// UserActionDelete is the delete user action for Pods owned
+	// by workloads managed by Flux.
+	UserActionDelete = "delete"
 )
 
 var (
@@ -51,6 +55,7 @@ var (
 		UserActionResume,
 		UserActionDownload,
 		UserActionRestart,
+		UserActionDelete,
 	}
 )
 

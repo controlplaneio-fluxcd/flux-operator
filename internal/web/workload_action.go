@@ -12,6 +12,7 @@ import (
 	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -53,6 +54,7 @@ var supportedWorkloadKinds = map[string]workloadKindInfo{
 	workloadKindStatefulSet: {group: "apps", plural: "statefulsets", actions: []string{fluxcdv1.UserActionRestart}},
 	workloadKindDaemonSet:   {group: "apps", plural: "daemonsets", actions: []string{fluxcdv1.UserActionRestart}},
 	workloadKindCronJob:     {group: "batch", plural: "cronjobs", actions: []string{fluxcdv1.UserActionRestart}},
+	workloadKindPod:         {group: "", plural: "pods", actions: []string{fluxcdv1.UserActionDelete}},
 }
 
 // WorkloadActionHandler handles POST /api/v1/workload/action requests to perform actions on workloads.
@@ -111,16 +113,29 @@ func (h *Handler) WorkloadActionHandler(w http.ResponseWriter, req *http.Request
 	}
 
 	// Fetch workload for audit if enabled.
+	// For Pods, resolve the owner workload (Deployment, StatefulSet, etc.)
+	// so the audit event is associated with the Flux resource managing it.
 	var workload *unstructured.Unstructured
 	if h.isAuditEnabled(actionReq.Action) {
-		workload = &unstructured.Unstructured{}
-		workload.SetGroupVersionKind(schema.GroupVersionKind{Group: kindInfo.group, Version: "v1", Kind: actionReq.Kind})
-		if err := h.kubeClient.GetClient(ctx).Get(ctx, client.ObjectKey{
-			Namespace: actionReq.Namespace, Name: actionReq.Name,
-		}, workload); err != nil {
-			http.Error(w, fmt.Sprintf("Failed to get %s/%s/%s",
-				actionReq.Kind, actionReq.Namespace, actionReq.Name), http.StatusInternalServerError)
-			return
+		if actionReq.Kind == workloadKindPod {
+			ownerWorkload, err := h.getPodOwnerWorkload(ctx, actionReq.Namespace, actionReq.Name)
+			if err != nil {
+				// Log the error but continue with the audit, the owner may be deleted in parallel.
+				log.FromContext(ctx).Error(err, "failed to resolve pod owner for audit",
+					"pod", actionReq.Name, "namespace", actionReq.Namespace)
+			} else {
+				workload = ownerWorkload
+			}
+		} else {
+			workload = &unstructured.Unstructured{}
+			workload.SetGroupVersionKind(schema.GroupVersionKind{Group: kindInfo.group, Version: "v1", Kind: actionReq.Kind})
+			if err := h.kubeClient.GetClient(ctx).Get(ctx, client.ObjectKey{
+				Namespace: actionReq.Namespace, Name: actionReq.Name,
+			}, workload); err != nil {
+				http.Error(w, fmt.Sprintf("Failed to get %s/%s/%s",
+					actionReq.Kind, actionReq.Namespace, actionReq.Name), http.StatusInternalServerError)
+				return
+			}
 		}
 	}
 
@@ -136,6 +151,9 @@ func (h *Handler) WorkloadActionHandler(w http.ResponseWriter, req *http.Request
 			actionErr = h.restartWorkload(ctx, actionReq.Kind, actionReq.Namespace, actionReq.Name)
 			message = fmt.Sprintf("Rollout restart triggered for %s/%s", actionReq.Namespace, actionReq.Name)
 		}
+	case fluxcdv1.UserActionDelete:
+		actionErr = h.deletePod(ctx, actionReq.Namespace, actionReq.Name)
+		message = fmt.Sprintf("Pod %s/%s deleted", actionReq.Namespace, actionReq.Name)
 	default:
 		http.Error(w, fmt.Sprintf("Unknown action: %s", actionReq.Action), http.StatusBadRequest)
 		return
@@ -288,6 +306,20 @@ func (h *Handler) runJob(ctx context.Context, namespace, name string) error {
 
 	if err := kubeClient.Create(ctx, job); err != nil {
 		return fmt.Errorf("failed to create job from cronjob %s/%s: %w", namespace, name, err)
+	}
+
+	return nil
+}
+
+// deletePod deletes a pod by namespace and name.
+// The pod's controller (Deployment, StatefulSet, etc.) will recreate it.
+func (h *Handler) deletePod(ctx context.Context, namespace, name string) error {
+	pod := &corev1.Pod{}
+	pod.SetName(name)
+	pod.SetNamespace(namespace)
+
+	if err := h.kubeClient.GetClient(ctx).Delete(ctx, pod); err != nil {
+		return fmt.Errorf("failed to delete pod %s/%s: %w", namespace, name, err)
 	}
 
 	return nil
