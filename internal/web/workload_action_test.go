@@ -16,6 +16,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -123,7 +124,7 @@ func TestWorkloadActionHandler_UnsupportedKind(t *testing.T) {
 	}
 
 	actionReq := WorkloadActionRequest{
-		Kind:      "Pod",
+		Kind:      "ReplicaSet",
 		Namespace: "default",
 		Name:      "test",
 		Action:    "restart",
@@ -583,15 +584,24 @@ func TestWorkloadActionHandler_ResponseContentType(t *testing.T) {
 }
 
 func TestWorkloadActionHandler_AllSupportedKinds(t *testing.T) {
-	supportedKinds := []string{"Deployment", "StatefulSet", "DaemonSet", "CronJob"}
+	testCases := []struct {
+		kind   string
+		action string
+	}{
+		{"Deployment", "restart"},
+		{"StatefulSet", "restart"},
+		{"DaemonSet", "restart"},
+		{"CronJob", "restart"},
+		{"Pod", "delete"},
+	}
 
-	for _, kind := range supportedKinds {
-		t.Run(kind, func(t *testing.T) {
+	for _, tc := range testCases {
+		t.Run(tc.kind+"/"+tc.action, func(t *testing.T) {
 			g := NewWithT(t)
 
 			// Create workload based on kind (use lowercase names for K8s)
-			name := "test-workload-all-" + strings.ToLower(kind)
-			switch kind {
+			name := "test-workload-all-" + strings.ToLower(tc.kind)
+			switch tc.kind {
 			case "Deployment":
 				deployment := &appsv1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
@@ -606,7 +616,7 @@ func TestWorkloadActionHandler_AllSupportedKinds(t *testing.T) {
 					},
 				}
 				g.Expect(testClient.Create(ctx, deployment)).To(Succeed())
-				defer testClient.Delete(ctx, deployment)
+				defer func() { g.Expect(testClient.Delete(ctx, deployment)).To(Succeed()) }()
 			case "StatefulSet":
 				statefulset := &appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{
@@ -621,7 +631,7 @@ func TestWorkloadActionHandler_AllSupportedKinds(t *testing.T) {
 					},
 				}
 				g.Expect(testClient.Create(ctx, statefulset)).To(Succeed())
-				defer testClient.Delete(ctx, statefulset)
+				defer func() { g.Expect(testClient.Delete(ctx, statefulset)).To(Succeed()) }()
 			case "DaemonSet":
 				daemonset := &appsv1.DaemonSet{
 					ObjectMeta: metav1.ObjectMeta{
@@ -636,7 +646,7 @@ func TestWorkloadActionHandler_AllSupportedKinds(t *testing.T) {
 					},
 				}
 				g.Expect(testClient.Create(ctx, daemonset)).To(Succeed())
-				defer testClient.Delete(ctx, daemonset)
+				defer func() { g.Expect(testClient.Delete(ctx, daemonset)).To(Succeed()) }()
 			case "CronJob":
 				cronJob := &batchv1.CronJob{
 					ObjectMeta: metav1.ObjectMeta{
@@ -653,7 +663,21 @@ func TestWorkloadActionHandler_AllSupportedKinds(t *testing.T) {
 					},
 				}
 				g.Expect(testClient.Create(ctx, cronJob)).To(Succeed())
-				defer testClient.Delete(ctx, cronJob)
+				defer func() { g.Expect(testClient.Delete(ctx, cronJob)).To(Succeed()) }()
+			case "Pod":
+				pod := &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      name,
+						Namespace: "default",
+					},
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{Name: "test", Image: "nginx:latest"},
+						},
+					},
+				}
+				g.Expect(testClient.Create(ctx, pod)).To(Succeed())
+				// Pod will be deleted by the action, no defer needed
 			}
 
 			handler := &Handler{
@@ -665,10 +689,10 @@ func TestWorkloadActionHandler_AllSupportedKinds(t *testing.T) {
 			}
 
 			actionReq := WorkloadActionRequest{
-				Kind:      kind,
+				Kind:      tc.kind,
 				Namespace: "default",
 				Name:      name,
-				Action:    "restart",
+				Action:    tc.action,
 			}
 			body, _ := json.Marshal(actionReq)
 			req := httptest.NewRequest(http.MethodPost, "/api/v1/workload/action", bytes.NewBuffer(body))
@@ -935,6 +959,142 @@ func TestWorkloadActionHandler_RunJob_CronJob_Forbidden(t *testing.T) {
 		Namespace: "default",
 		Name:      "test-cronjob-forbidden",
 		Action:    "restart",
+	}
+	body, _ := json.Marshal(actionReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/workload/action", bytes.NewBuffer(body))
+	req = req.WithContext(userCtx)
+	rec := httptest.NewRecorder()
+
+	handler.WorkloadActionHandler(rec, req)
+
+	g.Expect(rec.Code).To(Equal(http.StatusForbidden))
+	g.Expect(rec.Body.String()).To(ContainSubstring("Permission denied"))
+}
+
+func TestWorkloadActionHandler_DeletePod_Success(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a Pod for testing
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pod-delete-success",
+			Namespace: "default",
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{Name: "test", Image: "nginx:latest"},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, pod)).To(Succeed())
+
+	handler := &Handler{
+		conf:          oauthConfig(),
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	actionReq := WorkloadActionRequest{
+		Kind:      "Pod",
+		Namespace: "default",
+		Name:      "test-pod-delete-success",
+		Action:    "delete",
+	}
+	body, _ := json.Marshal(actionReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/workload/action", bytes.NewBuffer(body))
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.WorkloadActionHandler(rec, req)
+
+	g.Expect(rec.Code).To(Equal(http.StatusOK))
+
+	var resp WorkloadActionResponse
+	err := json.NewDecoder(rec.Body).Decode(&resp)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(resp.Success).To(BeTrue())
+	g.Expect(resp.Message).To(ContainSubstring("Pod default/test-pod-delete-success deleted"))
+
+	// Verify pod is gone
+	var deletedPod corev1.Pod
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(pod), &deletedPod)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(errors.IsNotFound(err)).To(BeTrue())
+}
+
+func TestWorkloadActionHandler_DeletePod_NotFound(t *testing.T) {
+	g := NewWithT(t)
+
+	handler := &Handler{
+		conf:          oauthConfig(),
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	actionReq := WorkloadActionRequest{
+		Kind:      "Pod",
+		Namespace: "default",
+		Name:      "non-existent-pod-12345",
+		Action:    "delete",
+	}
+	body, _ := json.Marshal(actionReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/workload/action", bytes.NewBuffer(body))
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.WorkloadActionHandler(rec, req)
+
+	g.Expect(rec.Code).To(Equal(http.StatusNotFound))
+}
+
+func TestWorkloadActionHandler_DeletePod_Forbidden(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a Pod for testing
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pod-delete-forbidden",
+			Namespace: "default",
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{Name: "test", Image: "nginx:latest"},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, pod)).To(Succeed())
+	defer func() { g.Expect(testClient.Delete(ctx, pod)).To(Succeed()) }()
+
+	handler := &Handler{
+		conf:          oauthConfig(),
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	// Create an unprivileged user session (no RBAC permissions)
+	imp := user.Impersonation{
+		Username: "unprivileged-pod-user",
+		Groups:   []string{"unprivileged-group"},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile:       user.Profile{Name: "Unprivileged Pod User"},
+		Impersonation: imp,
+	}, userClient)
+
+	actionReq := WorkloadActionRequest{
+		Kind:      "Pod",
+		Namespace: "default",
+		Name:      "test-pod-delete-forbidden",
+		Action:    "delete",
 	}
 	body, _ := json.Marshal(actionReq)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/workload/action", bytes.NewBuffer(body))

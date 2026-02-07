@@ -26,6 +26,7 @@ const mockWorkloads = {
     containerImages: [
       'ghcr.io/fluxcd/source-controller:v1.7.4@sha256:16f21ac1795528df80ddef51ccbb14a57b78ea26e66dc8551636ef9a3cec71b3'
     ],
+    canDeletePods: true,
     pods: [
       {
         name: 'source-controller-5f76f5c549-wz2gk',
@@ -45,6 +46,7 @@ const mockWorkloads = {
     containerImages: [
       'ghcr.io/fluxcd/kustomize-controller:v1.7.3@sha256:e8ca82d66dafdd8ef77e0917f4adec53478075130ac61264dc0f91eb0f8cb6ce'
     ],
+    canDeletePods: true,
     pods: [
       {
         name: 'kustomize-controller-5fc57fb9cc-bhl8q',
@@ -64,6 +66,7 @@ const mockWorkloads = {
     containerImages: [
       'ghcr.io/fluxcd/helm-controller:v1.4.4@sha256:5eae73909e1471c0cd01bb23d87c9d4219a4f645134a23629c8708c72635398d'
     ],
+    canDeletePods: true,
     pods: [
       {
         name: 'helm-controller-bf4685d7f-nxqsj',
@@ -82,6 +85,7 @@ const mockWorkloads = {
     containerImages: [
       'ghcr.io/fluxcd/notification-controller:v1.7.5@sha256:ba723a55f7c7c7feedd50bb5db0ff2dd9a3b0ae85b50f61a0457184025b38c54'
     ],
+    canDeletePods: true,
     pods: [
       {
         name: 'notification-controller-58cfb55954-fcf6l',
@@ -102,6 +106,7 @@ const mockWorkloads = {
     containerImages: [
       'ghcr.io/fluxcd/image-automation-controller:v1.0.4@sha256:f9383dccb80ec65e274648941af623ce74084d25026e14389111c14b630efece'
     ],
+    canDeletePods: true,
     pods: [
       {
         name: 'image-automation-controller-5c5fc5487b-w4458',
@@ -126,6 +131,7 @@ const mockWorkloads = {
     containerImages: [
       'ghcr.io/fluxcd/image-reflector-controller:v1.0.4@sha256:0bdc30aea2b7cdfea02d0f6d53c06b9df0ea1c6516b85ed523792e222329c039'
     ],
+    canDeletePods: true,
     pods: [
       {
         name: 'image-reflector-controller-547c8dbffc-2gjhj',
@@ -144,6 +150,7 @@ const mockWorkloads = {
     containerImages: [
       'ghcr.io/fluxcd/source-watcher:v2.0.3@sha256:9cd46c3c958dcfcd8a3c857fa09989f9df5d8396eae165f219cbb472343371a9'
     ],
+    canDeletePods: true,
     pods: [
       {
         name: 'source-watcher-85bcf4bd57-vfbs6',
@@ -162,6 +169,7 @@ const mockWorkloads = {
     containerImages: [
       'ghcr.io/controlplaneio-fluxcd/flux-operator:v0.34.0'
     ],
+    canDeletePods: true,
     pods: [
       {
         name: 'flux-operator-67cdfc557d-h656w',
@@ -182,6 +190,7 @@ const mockWorkloads = {
     containerImages: [
       'quay.io/jetstack/cert-manager-controller:v1.19.1'
     ],
+    canDeletePods: true,
     pods: [
       {
         name: 'cert-manager-6b7bcdbb84-cclfj',
@@ -200,6 +209,7 @@ const mockWorkloads = {
     containerImages: [
       'quay.io/jetstack/cert-manager-cainjector:v1.19.1'
     ],
+    canDeletePods: true,
     pods: [
       {
         name: 'cert-manager-cainjector-d74c65ddb-6v869',
@@ -218,6 +228,7 @@ const mockWorkloads = {
     containerImages: [
       'quay.io/jetstack/cert-manager-webhook:v1.19.1'
     ],
+    canDeletePods: true,
     pods: [
       {
         name: 'cert-manager-webhook-6bf5dfc659-w95d9',
@@ -238,6 +249,7 @@ const mockWorkloads = {
     containerImages: [
       'registry.k8s.io/metrics-server/metrics-server:v0.8.0'
     ],
+    canDeletePods: true,
     pods: [
       {
         name: 'metrics-server-57b56685f4-59gn2',
@@ -256,6 +268,7 @@ const mockWorkloads = {
     containerImages: [
       'tailscale/k8s-operator:v1.90.8'
     ],
+    canDeletePods: true,
     pods: [
       {
         name: 'operator-84ddf77c66-gjsxz',
@@ -275,6 +288,7 @@ const mockWorkloads = {
     containerImages: [
       'ghcr.io/project-zot/zot:v2.1.11'
     ],
+    canDeletePods: true,
     pods: [
       {
         name: 'zot-registry-0',
@@ -296,6 +310,7 @@ const mockWorkloads = {
     containerImages: [
       'ghcr.io/fluxcd/flux-cli:v2.6.1'
     ],
+    canDeletePods: true,
     pods: [
       {
         name: 'garbage-collection-28945678-xk9j2',
@@ -315,6 +330,7 @@ const mockWorkloads = {
     containerImages: [
       'prom/prometheus:v3.3.0'
     ],
+    canDeletePods: true,
     pods: [
       {
         name: 'prometheus-backup-28945600-abc12',
@@ -333,6 +349,7 @@ const mockWorkloads = {
     containerImages: [
       'quay.io/jetstack/cert-manager-ctl:v1.19.1'
     ],
+    canDeletePods: true,
     pods: [
       {
         name: 'cert-renewal-check-28945500-def34',

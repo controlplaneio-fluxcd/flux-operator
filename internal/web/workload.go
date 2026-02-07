@@ -33,6 +33,7 @@ const (
 	workloadKindStatefulSet = "StatefulSet"
 	workloadKindDaemonSet   = "DaemonSet"
 	workloadKindCronJob     = "CronJob"
+	workloadKindPod         = "Pod"
 )
 
 // JobOwnerCronJobField is the field index key for querying Jobs by their CronJob owner.
@@ -125,6 +126,9 @@ type WorkloadStatus struct {
 
 	// Pods is the list of pods managed by the workload.
 	Pods []WorkloadPodStatus `json:"pods,omitempty"`
+
+	// CanDeletePods indicates if the user can delete pods of this workload.
+	CanDeletePods bool `json:"canDeletePods,omitempty"`
 }
 
 // WorkloadPodStatus represents the status of a pod managed by a workload.
@@ -217,6 +221,17 @@ func (h *Handler) GetWorkloadStatus(ctx context.Context, kind, name, namespace s
 		return nil, fmt.Errorf("failed to get pods for workload %s/%s: %w", namespace, name, err)
 	}
 	workload.Pods = podsStatus
+
+	// Check if the user can delete pods in this namespace.
+	if h.conf.UserActionsEnabled() {
+		canDelete, err := h.kubeClient.CanActOnResource(ctx, fluxcdv1.UserActionDelete, "", "pods", namespace, "")
+		if err != nil {
+			log.FromContext(ctx).Error(err, "failed to check delete pod RBAC",
+				"namespace", namespace)
+		} else if canDelete {
+			workload.CanDeletePods = true
+		}
+	}
 
 	return workload, nil
 }

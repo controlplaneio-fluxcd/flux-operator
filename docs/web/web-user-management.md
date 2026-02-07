@@ -247,6 +247,12 @@ rules:
     verbs:
       - create
       - restart
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - delete
 ```
 
 Note that the `patch` verb is not enough to allow a user to perform actions in the Web UI.
@@ -259,3 +265,6 @@ The `download` verb allows users to download artifacts from Flux source resource
 
 The `restart` verb allows users to trigger a rollout restart on workloads
 (Deployment, StatefulSet, and DaemonSet) and to create Jobs from CronJobs.
+
+The `delete` verb on pods allows users to delete individual pods,
+which will be recreated by their controller.

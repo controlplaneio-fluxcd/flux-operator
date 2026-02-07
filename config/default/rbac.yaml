@@ -75,6 +75,7 @@ rules:
       - get
       - list
       - watch
+  # Allow actions: reconcile, suspend/resume and download for Flux resources.
   - apiGroups:
       - fluxcd.controlplane.io
       - source.toolkit.fluxcd.io
@@ -90,3 +91,29 @@ rules:
       - suspend
       - resume
       - download
+  # Allow action: rollout restart for Deployments, StatefulSets and DaemonSets managed by Flux.
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+      - statefulsets
+      - daemonsets
+    verbs:
+      - patch
+      - restart
+  # Allow action: create Job from CronJobs managed by Flux.
+  - apiGroups:
+      - batch
+    resources:
+      - cronjobs
+      - jobs
+    verbs:
+      - create
+      - restart
+  # Allow action: delete Pods owned by workloads managed by Flux.
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - delete

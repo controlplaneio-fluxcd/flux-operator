@@ -8,6 +8,7 @@ import { getWorkloadStatusBadgeClass, formatWorkloadStatus } from '../../../util
 import { formatScheduleMessage } from '../../../utils/cron'
 import { FluxOperatorIcon } from '../../layout/Icons'
 import { WorkloadActionBar } from './WorkloadActionBar'
+import { WorkloadDeleteAction } from './WorkloadDeleteAction'
 
 // Polling intervals
 const NORMAL_POLL_INTERVAL = 10000 // 10 seconds
@@ -39,6 +40,7 @@ export function WorkloadsTabContent({ workloadItems, namespace, userActions = []
   const [loading, setLoading] = useState(true)
   const [expandedWorkloads, setExpandedWorkloads] = useState({})
   const [pollInterval, setPollInterval] = useState(NORMAL_POLL_INTERVAL)
+  const [pendingDeletions, setPendingDeletions] = useState(new Set())
 
   // Refs for polling and initial load tracking
   const fastPollTimeoutRef = useRef(null)
@@ -77,6 +79,19 @@ export function WorkloadsTabContent({ workloadItems, namespace, userActions = []
       })
       setWorkloadsData(newWorkloadsData)
       hasLoadedRef.current = true
+
+      // Clean up pending deletions for pods that have disappeared
+      setPendingDeletions(prev => {
+        if (prev.size === 0) return prev
+        const allPodNames = new Set()
+        for (const w of returnedWorkloads) {
+          for (const pod of (w.pods || [])) {
+            allPodNames.add(pod.name)
+          }
+        }
+        const next = new Set([...prev].filter(name => allPodNames.has(name)))
+        return next.size === prev.size ? prev : next
+      })
     } catch (err) {
       console.error('Failed to fetch workloads:', err)
     } finally {
@@ -115,6 +130,20 @@ export function WorkloadsTabContent({ workloadItems, namespace, userActions = []
     fastPollTimeoutRef.current = window.setTimeout(() => {
       setPollInterval(NORMAL_POLL_INTERVAL)
     }, FAST_POLL_DURATION)
+  }, [])
+
+  // Track pod deletion start - keeps spinner visible until the pod disappears
+  const handlePodDeleteStart = useCallback((podName) => {
+    setPendingDeletions(prev => new Set([...prev, podName]))
+  }, [])
+
+  // Remove pod from pending deletions on error so the error message is visible
+  const handlePodDeleteFailed = useCallback((podName) => {
+    setPendingDeletions(prev => {
+      const next = new Set(prev)
+      next.delete(podName)
+      return next
+    })
   }, [])
 
   // Toggle workload expansion
@@ -258,11 +287,13 @@ export function WorkloadsTabContent({ workloadItems, namespace, userActions = []
                         if (!a.createdAt) return 1
                         if (!b.createdAt) return -1
                         return new Date(b.createdAt) - new Date(a.createdAt)
-                      }).map((pod, idx) => {
+                      }).map((pod) => {
                         const isRecent = isRecentTimestamp(pod.createdAt)
+                        const isPendingDeletion = pendingDeletions.has(pod.name)
+                        const displayStatus = isPendingDeletion ? 'Terminating' : pod.status
                         return (
                           <div
-                            key={idx}
+                            key={pod.name}
                             class={`bg-white dark:bg-gray-900 rounded px-3 py-2 ${
                               isRecent
                                 ? 'ring-2 ring-blue-400 dark:ring-blue-500 ring-opacity-50'
@@ -274,9 +305,22 @@ export function WorkloadsTabContent({ workloadItems, namespace, userActions = []
                               <span class="text-xs text-gray-900 dark:text-white truncate flex-grow mr-2">
                                 {pod.name}
                               </span>
-                              <span class={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${getWorkloadStatusBadgeClass(pod.status)}`}>
-                                {formatWorkloadStatus(pod.status)}
-                              </span>
+                              <div class="flex items-center gap-1.5 flex-shrink-0">
+                                <span class={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getWorkloadStatusBadgeClass(displayStatus)}`}>
+                                  {formatWorkloadStatus(displayStatus)}
+                                </span>
+                                {workload.canDeletePods && (
+                                  <WorkloadDeleteAction
+                                    namespace={workload.namespace}
+                                    name={pod.name}
+                                    isPendingDeletion={pendingDeletions.has(pod.name)}
+                                    onActionStart={handleActionStart}
+                                    onActionComplete={fetchWorkloadsData}
+                                    onPodDeleteStart={handlePodDeleteStart}
+                                    onPodDeleteFailed={handlePodDeleteFailed}
+                                  />
+                                )}
+                              </div>
                             </div>
                             {pod.statusMessage && (
                               <p class="text-xs text-gray-600 dark:text-gray-400 mt-1 break-all">
