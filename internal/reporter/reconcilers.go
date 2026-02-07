@@ -114,7 +114,8 @@ func (r *FluxStatusReporter) getReconcilersStatus(ctx context.Context,
 					nsStats.suspended++
 				} else if obj, err := status.GetObjectWithConditions(item.Object); err == nil {
 					for _, cond := range obj.Status.Conditions {
-						if cond.Type == meta.ReadyCondition && cond.Status == corev1.ConditionFalse {
+						if cond.Type == meta.ReadyCondition && cond.Status == corev1.ConditionFalse &&
+							cond.Reason != meta.DependencyNotReadyReason {
 							globalStats.failing++
 							nsStats.failing++
 						}
@@ -212,7 +213,8 @@ func (r *FluxStatusReporter) getOperatorReconcilersStatus(
 					nsStats.suspended++
 				} else if obj, err := status.GetObjectWithConditions(item.Object); err == nil {
 					for _, cond := range obj.Status.Conditions {
-						if cond.Type == meta.ReadyCondition && cond.Status == corev1.ConditionFalse {
+						if cond.Type == meta.ReadyCondition && cond.Status == corev1.ConditionFalse &&
+							cond.Reason != meta.DependencyNotReadyReason {
 							globalStats.failing++
 							nsStats.failing++
 						}

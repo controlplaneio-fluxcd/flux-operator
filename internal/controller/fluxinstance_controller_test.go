@@ -1110,10 +1110,20 @@ func waitForFluxCRDsDeletion(ctx context.Context, g *WithT) {
 		if err := testClient.List(ctx, crdList); err != nil {
 			return false
 		}
-		for _, crd := range crdList.Items {
-			if strings.HasSuffix(crd.Name, ".toolkit.fluxcd.io") {
-				return false
+		for i := range crdList.Items {
+			crd := &crdList.Items[i]
+			if !strings.HasSuffix(crd.Name, ".toolkit.fluxcd.io") {
+				continue
 			}
+			// Force-delete CRDs stuck in terminating state by removing the
+			// customresourcecleanup finalizer added by the API server.
+			// On slow CI environments, this finalizer can take minutes
+			// to be released by the CRD cleanup controller.
+			if len(crd.Finalizers) > 0 {
+				crd.Finalizers = nil
+				_ = testClient.Update(ctx, crd)
+			}
+			return false
 		}
 		return true
 	}).WithTimeout(2 * time.Minute).WithPolling(time.Second).Should(BeTrue())
