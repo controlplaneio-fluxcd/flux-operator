@@ -302,6 +302,12 @@ func (h *Handler) resourceStatusFromUnstructured(obj unstructured.Unstructured) 
 					case "True":
 						status = StatusReady
 					case "False":
+						if reason, exists := condition["reason"]; exists {
+							if reasonStr, _ := reason.(string); reasonStr == meta.DependencyNotReadyReason {
+								status = StatusProgressing
+								break
+							}
+						}
 						status = StatusFailed
 					case "Unknown":
 						// Check reason to determine if it's progressing or truly unknown
