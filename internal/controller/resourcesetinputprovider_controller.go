@@ -20,9 +20,9 @@ import (
 	"github.com/fluxcd/pkg/auth/aws"
 	"github.com/fluxcd/pkg/auth/azure"
 	"github.com/fluxcd/pkg/auth/gcp"
+	"github.com/fluxcd/pkg/auth/githubapp"
 	authutils "github.com/fluxcd/pkg/auth/utils"
 	"github.com/fluxcd/pkg/cache"
-	"github.com/fluxcd/pkg/git/github"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/runtime/secrets"
@@ -577,26 +577,26 @@ func (r *ResourceSetInputProviderReconciler) getGitHubToken(
 		return "", nil
 	}
 
-	if _, ok := authData[github.KeyAppID]; !ok {
+	if _, ok := authData[githubapp.KeyAppID]; !ok {
 		_, password, err := r.getBasicAuth(obj, authData)
 		return password, err
 	}
 
-	opts := []github.OptFunc{github.WithAppData(authData)}
+	opts := []githubapp.OptFunc{githubapp.WithAppData(authData)}
 
 	if tlsConfig != nil {
-		opts = append(opts, github.WithTLSConfig(tlsConfig))
+		opts = append(opts, githubapp.WithTLSConfig(tlsConfig))
 	}
 
 	if r.TokenCache != nil {
-		opts = append(opts, github.WithCache(r.TokenCache,
+		opts = append(opts, githubapp.WithCache(r.TokenCache,
 			fluxcdv1.ResourceSetInputProviderKind,
 			obj.GetName(),
 			obj.GetNamespace(),
 			cache.OperationReconcile))
 	}
 
-	ghc, err := github.New(opts...)
+	ghc, err := githubapp.New(opts...)
 	if err != nil {
 		return "", err
 	}
