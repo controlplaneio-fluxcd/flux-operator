@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/auth/githubapp"
 	"github.com/fluxcd/pkg/cache"
-	"github.com/fluxcd/pkg/git/github"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -705,7 +705,7 @@ spec:
 }
 
 func TestResourceSetInputProviderReconciler_getGitHubToken_cached(t *testing.T) {
-	const key = "2fb26928de0418fa7b8f44c5c9629f7408035d751b751bedef50784ee1b1d900"
+	const key = "16b8b06786e2796aa1a04a57f4f74fa72ff7d8e481cf53905b6a741cf4c380e2"
 
 	g := NewWithT(t)
 
@@ -719,7 +719,7 @@ func TestResourceSetInputProviderReconciler_getGitHubToken_cached(t *testing.T) 
 	}
 
 	_, _, err = r.TokenCache.GetOrSet(ctx, key, func(context.Context) (cache.Token, error) {
-		return &github.AppToken{
+		return &githubapp.AppToken{
 			Token:     "my-gh-app-token",
 			ExpiresAt: time.Now().Add(time.Hour),
 		}, nil
