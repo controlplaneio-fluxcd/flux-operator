@@ -582,7 +582,7 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 	// Migrate all custom resources if the Flux CRDs storage version has changed.
 	if obj.GetMigrateResources() {
 		// Force migration if this is a minor upgrade.
-		if minor, err := builder.IsMinorUpgrade(obj.Status.LastAppliedRevision, buildResult.Revision); err != nil && minor {
+		if minor, err := builder.IsMinorUpgrade(obj.Status.LastAppliedRevision, buildResult.Revision); err == nil && minor {
 			force = true
 		}
 		if err := r.migrateResources(ctx, client.MatchingLabels{"app.kubernetes.io/part-of": obj.Name}, force); err != nil {
