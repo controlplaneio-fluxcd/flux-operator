@@ -130,7 +130,7 @@ jobs:
           kustomize build config/crd > bin/release/crds.yaml
       - name: Generate OpenAPI JSON schemas from CRDs
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: fluxcd/pkg/actions/crdjsonschema@f78daaa7afb29eb2add793a131947f1679710625 # main
+        uses: fluxcd/pkg/actions/crdjsonschema@9a8c0edd5da84dc51a585738c67e3a3950d7fbf0 # main
         with:
           crd: bin/release/crds.yaml
           output: schemas
