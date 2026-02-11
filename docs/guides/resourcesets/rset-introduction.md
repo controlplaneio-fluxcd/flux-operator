@@ -27,11 +27,11 @@ To get started with ResourceSets see the [Using ResourceSets for Application Def
 ### Self-service environments
 
 A main goal of the Flux Operator is to enable self-service environments. In order to achieve this,
-the ResourceSet controller integrates with services such as GitHub and GitLab to automate
-the lifecycle of applications based on external events and state changes.
+the ResourceSet controller integrates with services such as GitHub, GitLab, Gitea, Forgejo and Azure DevOps
+to automate the lifecycle of applications based on external events and state changes.
 
-One such use-case is deploying app code and/or config changes made in a GitHub Pull Request
-or GitLab Merge Request to an ephemeral environment for testing and validation.
+One such use-case is deploying app code and/or config changes made in a change request
+to an ephemeral environment for testing and validation.
 The Flux Operator has the ability to create, update and delete application instances on-demand
 based on the ResourceSet definitions and Pull/Merge Requests state.
 

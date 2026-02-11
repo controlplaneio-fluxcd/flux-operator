@@ -11,7 +11,8 @@ statically compiled as a single binary with no external dependencies.
 
 ## Install methods
 
-The Flux Operator can be installed with Helm, Terraform, Operator Lifecycle Manager (OLM), or kubectl.
+The Flux Operator can be installed with Helm, Terraform, Operator Lifecycle Manager (OLM),
+the `flux-operator` CLI, or `kubectl`.
 It is recommended to install the operator in a dedicated namespace, such as `flux-system`.
 
 ### Helm
@@ -92,6 +93,24 @@ The Flux Operator is also available in the OpenShift and OKD
     Flux Operator supports various environment variables to customize its behavior on OpenShift.
     Please see the operator [configuration guide](operator-config.md#environment-variables) for more details.
 
+### Flux Operator CLI
+
+The Flux Operator can be installed using the
+[flux-operator CLI](https://fluxoperator.dev/docs/guides/cli/),
+which bootstraps a Kubernetes cluster with the Flux Operator and a Flux instance.
+
+Install the CLI with Homebrew:
+
+```shell
+brew install controlplaneio-fluxcd/tap/flux-operator
+```
+
+Install the Flux Operator and a Flux instance from a configuration file:
+
+```shell
+flux-operator install -f flux-instance.yaml
+```
+
 ### Kubectl
 
 The Flux Operator can be installed with `kubectl` by
@@ -101,9 +120,25 @@ applying the Kubernetes manifests published on the releases page:
 kubectl apply -f https://github.com/controlplaneio-fluxcd/flux-operator/releases/latest/download/install.yaml
 ```
 
+!!! warning "Development and testing"
+
+    This method is intended for development and testing purposes. On production environments,
+    it is recommended to use [Helm](#helm) or [Terraform](#terraform).
+
 ## Uninstall
 
-Before uninstalling the Flux Operator, make sure to delete the `FluxInstance` resources with:
+The recommended way to uninstall the Flux Operator and Flux instance is using the
+[flux-operator CLI](https://fluxoperator.dev/docs/guides/cli/):
+
+```shell
+flux-operator -n flux-system uninstall --keep-namespace
+```
+
+The `uninstall` command safely removes the Flux Operator and Flux controllers
+without affecting the Kubernetes objects or Helm releases reconciled by Flux.
+It is safe to re-install the Flux Operator later to resume managing the existing resources.
+
+Alternatively, you can uninstall manually by first deleting the `FluxInstance` resources:
 
 ```shell
 kubectl -n flux-system delete fluxinstances --all
@@ -111,13 +146,7 @@ kubectl -n flux-system delete fluxinstances --all
 
 The operator will uninstall Flux from the cluster without affecting the Flux-managed workloads.
 
-Verify that the Flux controllers have been removed:
-
-```shell
-kubectl -n flux-system get deployments
-```
-
-Uninstall the Flux Operator with your preferred method, e.g. Helm:
+Then uninstall the Flux Operator with your preferred method, e.g. Helm:
 
 ```shell
 helm -n flux-system uninstall flux-operator
