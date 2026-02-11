@@ -14,6 +14,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
 
@@ -50,7 +51,7 @@ func TestGetWorkloadStatus_Privileged(t *testing.T) {
 	g.Expect(testClient.Create(ctx, deployment)).To(Succeed())
 	defer testClient.Delete(ctx, deployment)
 
-	// Create the handler
+	// Create the handler without auth (no user actions)
 	handler := &Handler{
 		kubeClient:    kubeClient,
 		version:       "v1.0.0",
@@ -66,6 +67,8 @@ func TestGetWorkloadStatus_Privileged(t *testing.T) {
 	g.Expect(workload.Name).To(Equal("test-workload-priv"))
 	g.Expect(workload.Namespace).To(Equal("default"))
 	g.Expect(workload.ContainerImages).To(ContainElement("nginx:latest"))
+	// Without auth configured, UserActions should be empty
+	g.Expect(workload.UserActions).To(BeEmpty())
 }
 
 func TestGetWorkloadStatus_UnprivilegedUser_Forbidden(t *testing.T) {
@@ -896,4 +899,726 @@ func TestGetWorkloadStatus_CronJob(t *testing.T) {
 		g.Expect(workload.Status).To(Equal("Progressing"))
 		g.Expect(workload.StatusMessage).To(Equal("Active jobs: 1"))
 	})
+}
+
+func TestGetWorkloadStatus_UserActions_WithRestartAndDeletePods(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a Deployment for testing
+	replicas := int32(1)
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-workload-ua-both",
+			Namespace: "default",
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "test-workload-ua-both"},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"app": "test-workload-ua-both"},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "nginx", Image: "nginx:latest"},
+					},
+				},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, deployment)).To(Succeed())
+	defer testClient.Delete(ctx, deployment)
+
+	// Create RBAC for the test user: restart on deployments + delete on pods + get/list
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-ua-both-role",
+			Namespace: "default",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"apps"},
+				Resources: []string{"deployments"},
+				Verbs:     []string{"get", "list", "restart"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods"},
+				Verbs:     []string{"get", "list", "delete"},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, role)).To(Succeed())
+	defer testClient.Delete(ctx, role)
+
+	roleBinding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-ua-both-binding",
+			Namespace: "default",
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     role.Name,
+		},
+		Subjects: []rbacv1.Subject{
+			{Kind: "User", Name: "ua-both-user"},
+		},
+	}
+	g.Expect(testClient.Create(ctx, roleBinding)).To(Succeed())
+	defer testClient.Delete(ctx, roleBinding)
+
+	handler := &Handler{
+		conf:          oauthConfig(),
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	imp := user.Impersonation{
+		Username: "ua-both-user",
+		Groups:   []string{"system:authenticated"},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile:       user.Profile{Name: "UA Both User"},
+		Impersonation: imp,
+	}, userClient)
+
+	workload, err := handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-ua-both", "default")
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(workload).NotTo(BeNil())
+	g.Expect(workload.UserActions).To(ContainElement(fluxcdv1.UserActionRestart))
+	g.Expect(workload.UserActions).To(ContainElement(fluxcdv1.UserActionDeletePods))
+}
+
+func TestGetWorkloadStatus_UserActions_RestartOnly(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a Deployment for testing
+	replicas := int32(1)
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-workload-ua-restart",
+			Namespace: "default",
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "test-workload-ua-restart"},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"app": "test-workload-ua-restart"},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "nginx", Image: "nginx:latest"},
+					},
+				},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, deployment)).To(Succeed())
+	defer testClient.Delete(ctx, deployment)
+
+	// Create RBAC: restart on deployments + get/list pods (but NOT delete pods)
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-ua-restart-role",
+			Namespace: "default",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"apps"},
+				Resources: []string{"deployments"},
+				Verbs:     []string{"get", "list", "restart"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods"},
+				Verbs:     []string{"get", "list"},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, role)).To(Succeed())
+	defer testClient.Delete(ctx, role)
+
+	roleBinding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-ua-restart-binding",
+			Namespace: "default",
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     role.Name,
+		},
+		Subjects: []rbacv1.Subject{
+			{Kind: "User", Name: "ua-restart-user"},
+		},
+	}
+	g.Expect(testClient.Create(ctx, roleBinding)).To(Succeed())
+	defer testClient.Delete(ctx, roleBinding)
+
+	handler := &Handler{
+		conf:          oauthConfig(),
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	imp := user.Impersonation{
+		Username: "ua-restart-user",
+		Groups:   []string{"system:authenticated"},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile:       user.Profile{Name: "UA Restart User"},
+		Impersonation: imp,
+	}, userClient)
+
+	workload, err := handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-ua-restart", "default")
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(workload).NotTo(BeNil())
+	g.Expect(workload.UserActions).To(ContainElement(fluxcdv1.UserActionRestart))
+	g.Expect(workload.UserActions).NotTo(ContainElement(fluxcdv1.UserActionDeletePods))
+}
+
+func TestGetWorkloadStatus_UserActions_DeletePodsOnly(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a Deployment for testing
+	replicas := int32(1)
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-workload-ua-delpods",
+			Namespace: "default",
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "test-workload-ua-delpods"},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"app": "test-workload-ua-delpods"},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "nginx", Image: "nginx:latest"},
+					},
+				},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, deployment)).To(Succeed())
+	defer testClient.Delete(ctx, deployment)
+
+	// Create RBAC: get/list deployments + delete pods (but NOT restart)
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-ua-delpods-role",
+			Namespace: "default",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"apps"},
+				Resources: []string{"deployments"},
+				Verbs:     []string{"get", "list"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods"},
+				Verbs:     []string{"get", "list", "delete"},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, role)).To(Succeed())
+	defer testClient.Delete(ctx, role)
+
+	roleBinding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-ua-delpods-binding",
+			Namespace: "default",
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     role.Name,
+		},
+		Subjects: []rbacv1.Subject{
+			{Kind: "User", Name: "ua-delpods-user"},
+		},
+	}
+	g.Expect(testClient.Create(ctx, roleBinding)).To(Succeed())
+	defer testClient.Delete(ctx, roleBinding)
+
+	handler := &Handler{
+		conf:          oauthConfig(),
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	imp := user.Impersonation{
+		Username: "ua-delpods-user",
+		Groups:   []string{"system:authenticated"},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile:       user.Profile{Name: "UA DeletePods User"},
+		Impersonation: imp,
+	}, userClient)
+
+	workload, err := handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-ua-delpods", "default")
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(workload).NotTo(BeNil())
+	g.Expect(workload.UserActions).NotTo(ContainElement(fluxcdv1.UserActionRestart))
+	g.Expect(workload.UserActions).To(ContainElement(fluxcdv1.UserActionDeletePods))
+}
+
+func TestGetWorkloadStatus_UserActions_NoActions(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a Deployment for testing
+	replicas := int32(1)
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-workload-ua-none",
+			Namespace: "default",
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "test-workload-ua-none"},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"app": "test-workload-ua-none"},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "nginx", Image: "nginx:latest"},
+					},
+				},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, deployment)).To(Succeed())
+	defer testClient.Delete(ctx, deployment)
+
+	// Create RBAC: only get/list, no restart or delete
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-ua-none-role",
+			Namespace: "default",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"apps"},
+				Resources: []string{"deployments"},
+				Verbs:     []string{"get", "list"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods"},
+				Verbs:     []string{"get", "list"},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, role)).To(Succeed())
+	defer testClient.Delete(ctx, role)
+
+	roleBinding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-ua-none-binding",
+			Namespace: "default",
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     role.Name,
+		},
+		Subjects: []rbacv1.Subject{
+			{Kind: "User", Name: "ua-none-user"},
+		},
+	}
+	g.Expect(testClient.Create(ctx, roleBinding)).To(Succeed())
+	defer testClient.Delete(ctx, roleBinding)
+
+	handler := &Handler{
+		conf:          oauthConfig(),
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	imp := user.Impersonation{
+		Username: "ua-none-user",
+		Groups:   []string{"system:authenticated"},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile:       user.Profile{Name: "UA No Actions User"},
+		Impersonation: imp,
+	}, userClient)
+
+	workload, err := handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-ua-none", "default")
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(workload).NotTo(BeNil())
+	g.Expect(workload.UserActions).To(BeEmpty())
+}
+
+func TestGetWorkloadStatus_UserActions_DisabledWithoutAuth(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a Deployment for testing
+	replicas := int32(1)
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-workload-ua-disabled",
+			Namespace: "default",
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "test-workload-ua-disabled"},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"app": "test-workload-ua-disabled"},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "nginx", Image: "nginx:latest"},
+					},
+				},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, deployment)).To(Succeed())
+	defer testClient.Delete(ctx, deployment)
+
+	// Handler without authentication configured (UserActions should be disabled)
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	// Call with privileged context (system:masters has all permissions)
+	workload, err := handler.GetWorkloadStatus(ctx, "Deployment", "test-workload-ua-disabled", "default")
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(workload).NotTo(BeNil())
+	// Even though the privileged user has all permissions, UserActions should be empty
+	// because authentication is not configured
+	g.Expect(workload.UserActions).To(BeEmpty())
+}
+
+func TestGetWorkloadStatus_UserActions_StatefulSet(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a StatefulSet for testing
+	replicas := int32(1)
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-workload-ua-sts",
+			Namespace: "default",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "test-workload-ua-sts"},
+			},
+			ServiceName: "test-workload-ua-sts",
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"app": "test-workload-ua-sts"},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "redis", Image: "redis:7"},
+					},
+				},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, statefulSet)).To(Succeed())
+	defer testClient.Delete(ctx, statefulSet)
+
+	// Create RBAC: restart on statefulsets + delete pods
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-ua-sts-role",
+			Namespace: "default",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"apps"},
+				Resources: []string{"statefulsets"},
+				Verbs:     []string{"get", "list", "restart"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods"},
+				Verbs:     []string{"get", "list", "delete"},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, role)).To(Succeed())
+	defer testClient.Delete(ctx, role)
+
+	roleBinding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-ua-sts-binding",
+			Namespace: "default",
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     role.Name,
+		},
+		Subjects: []rbacv1.Subject{
+			{Kind: "User", Name: "ua-sts-user"},
+		},
+	}
+	g.Expect(testClient.Create(ctx, roleBinding)).To(Succeed())
+	defer testClient.Delete(ctx, roleBinding)
+
+	handler := &Handler{
+		conf:          oauthConfig(),
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	imp := user.Impersonation{
+		Username: "ua-sts-user",
+		Groups:   []string{"system:authenticated"},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile:       user.Profile{Name: "UA StatefulSet User"},
+		Impersonation: imp,
+	}, userClient)
+
+	workload, err := handler.GetWorkloadStatus(userCtx, "StatefulSet", "test-workload-ua-sts", "default")
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(workload).NotTo(BeNil())
+	g.Expect(workload.UserActions).To(ContainElement(fluxcdv1.UserActionRestart))
+	g.Expect(workload.UserActions).To(ContainElement(fluxcdv1.UserActionDeletePods))
+}
+
+func TestGetWorkloadStatus_UserActions_CronJob(t *testing.T) {
+	g := NewWithT(t)
+
+	cronJob := &batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-workload-ua-cron",
+			Namespace: "default",
+		},
+		Spec: batchv1.CronJobSpec{
+			Schedule: "*/5 * * * *",
+			JobTemplate: batchv1.JobTemplateSpec{
+				Spec: batchv1.JobSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							RestartPolicy: corev1.RestartPolicyOnFailure,
+							Containers: []corev1.Container{
+								{
+									Name:    "worker",
+									Image:   "busybox:1.36",
+									Command: []string{"/bin/sh", "-c", "echo hello"},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, cronJob)).To(Succeed())
+	defer testClient.Delete(ctx, cronJob)
+
+	// Create RBAC: restart on cronjobs + delete pods
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-ua-cron-role",
+			Namespace: "default",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"batch"},
+				Resources: []string{"cronjobs"},
+				Verbs:     []string{"get", "list", "restart"},
+			},
+			{
+				APIGroups: []string{"batch"},
+				Resources: []string{"jobs"},
+				Verbs:     []string{"get", "list"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods"},
+				Verbs:     []string{"get", "list", "delete"},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, role)).To(Succeed())
+	defer testClient.Delete(ctx, role)
+
+	roleBinding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-ua-cron-binding",
+			Namespace: "default",
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     role.Name,
+		},
+		Subjects: []rbacv1.Subject{
+			{Kind: "User", Name: "ua-cron-user"},
+		},
+	}
+	g.Expect(testClient.Create(ctx, roleBinding)).To(Succeed())
+	defer testClient.Delete(ctx, roleBinding)
+
+	handler := &Handler{
+		conf:          oauthConfig(),
+		kubeClient:    kubeClientCache,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	imp := user.Impersonation{
+		Username: "ua-cron-user",
+		Groups:   []string{"system:authenticated"},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile:       user.Profile{Name: "UA CronJob User"},
+		Impersonation: imp,
+	}, userClient)
+
+	workload, err := handler.GetWorkloadStatus(userCtx, "CronJob", "test-workload-ua-cron", "default")
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(workload).NotTo(BeNil())
+	g.Expect(workload.UserActions).To(ContainElement(fluxcdv1.UserActionRestart))
+	g.Expect(workload.UserActions).To(ContainElement(fluxcdv1.UserActionDeletePods))
+}
+
+func TestGetWorkloadStatus_UserActions_DaemonSet(t *testing.T) {
+	g := NewWithT(t)
+
+	daemonSet := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-workload-ua-ds",
+			Namespace: "default",
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "test-workload-ua-ds"},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"app": "test-workload-ua-ds"},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "fluentd", Image: "fluentd:v1.16"},
+					},
+				},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, daemonSet)).To(Succeed())
+	defer testClient.Delete(ctx, daemonSet)
+
+	// Create RBAC: restart on daemonsets, no delete pods
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-ua-ds-role",
+			Namespace: "default",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"apps"},
+				Resources: []string{"daemonsets"},
+				Verbs:     []string{"get", "list", "restart"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods"},
+				Verbs:     []string{"get", "list"},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, role)).To(Succeed())
+	defer testClient.Delete(ctx, role)
+
+	roleBinding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-ua-ds-binding",
+			Namespace: "default",
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     role.Name,
+		},
+		Subjects: []rbacv1.Subject{
+			{Kind: "User", Name: "ua-ds-user"},
+		},
+	}
+	g.Expect(testClient.Create(ctx, roleBinding)).To(Succeed())
+	defer testClient.Delete(ctx, roleBinding)
+
+	handler := &Handler{
+		conf:          oauthConfig(),
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	imp := user.Impersonation{
+		Username: "ua-ds-user",
+		Groups:   []string{"system:authenticated"},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile:       user.Profile{Name: "UA DaemonSet User"},
+		Impersonation: imp,
+	}, userClient)
+
+	workload, err := handler.GetWorkloadStatus(userCtx, "DaemonSet", "test-workload-ua-ds", "default")
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(workload).NotTo(BeNil())
+	g.Expect(workload.UserActions).To(ContainElement(fluxcdv1.UserActionRestart))
+	g.Expect(workload.UserActions).NotTo(ContainElement(fluxcdv1.UserActionDeletePods))
 }

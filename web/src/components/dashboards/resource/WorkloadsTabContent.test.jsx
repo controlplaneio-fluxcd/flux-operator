@@ -630,13 +630,230 @@ describe('WorkloadsTabContent component', () => {
     })
   })
 
+  describe('Restart action bar', () => {
+    it('should show restart button when workload userActions contains restart', async () => {
+      const user = userEvent.setup()
+
+      const workloadWithRestart = {
+        ...mockDeploymentWorkload,
+        userActions: ['restart']
+      }
+
+      fetchWithMock.mockImplementation(() =>
+        Promise.resolve({ workloads: [workloadWithRestart] })
+      )
+
+      const singleWorkloadItem = [{
+        kind: 'Deployment',
+        name: 'podinfo',
+        namespace: 'default'
+      }]
+
+      render(
+        <WorkloadsTabContent
+          workloadItems={singleWorkloadItem}
+          namespace="default"
+        />
+      )
+
+      await waitFor(() => {
+        const textContent = document.body.textContent
+        expect(textContent).toContain('default/podinfo')
+      })
+
+      // Expand the workload
+      const workloadButtons = screen.getAllByRole('button')
+      const podinfoButton = workloadButtons.find(btn => btn.textContent.includes('podinfo'))
+      await user.click(podinfoButton)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('workload-action-bar')).toBeInTheDocument()
+        expect(screen.getByTestId('restart-button')).toBeInTheDocument()
+      })
+    })
+
+    it('should not show restart button when workload userActions does not contain restart', async () => {
+      const user = userEvent.setup()
+
+      const workloadWithoutRestart = {
+        ...mockDeploymentWorkload,
+        userActions: ['deletePods']
+      }
+
+      fetchWithMock.mockImplementation(() =>
+        Promise.resolve({ workloads: [workloadWithoutRestart] })
+      )
+
+      const singleWorkloadItem = [{
+        kind: 'Deployment',
+        name: 'podinfo',
+        namespace: 'default'
+      }]
+
+      render(
+        <WorkloadsTabContent
+          workloadItems={singleWorkloadItem}
+          namespace="default"
+        />
+      )
+
+      await waitFor(() => {
+        const textContent = document.body.textContent
+        expect(textContent).toContain('default/podinfo')
+      })
+
+      // Expand the workload
+      const workloadButtons = screen.getAllByRole('button')
+      const podinfoButton = workloadButtons.find(btn => btn.textContent.includes('podinfo'))
+      await user.click(podinfoButton)
+
+      await waitFor(() => {
+        expect(screen.getByText('podinfo-7d8b9c4f5d-abc12')).toBeInTheDocument()
+      })
+      expect(screen.queryByTestId('workload-action-bar')).not.toBeInTheDocument()
+    })
+
+    it('should not show restart button when workload userActions is undefined', async () => {
+      const user = userEvent.setup()
+
+      // mockDeploymentWorkload has no userActions field
+      fetchWithMock.mockImplementation(() =>
+        Promise.resolve({ workloads: [mockDeploymentWorkload] })
+      )
+
+      const singleWorkloadItem = [{
+        kind: 'Deployment',
+        name: 'podinfo',
+        namespace: 'default'
+      }]
+
+      render(
+        <WorkloadsTabContent
+          workloadItems={singleWorkloadItem}
+          namespace="default"
+        />
+      )
+
+      await waitFor(() => {
+        const textContent = document.body.textContent
+        expect(textContent).toContain('default/podinfo')
+      })
+
+      // Expand the workload
+      const workloadButtons = screen.getAllByRole('button')
+      const podinfoButton = workloadButtons.find(btn => btn.textContent.includes('podinfo'))
+      await user.click(podinfoButton)
+
+      await waitFor(() => {
+        expect(screen.getByText('podinfo-7d8b9c4f5d-abc12')).toBeInTheDocument()
+      })
+      expect(screen.queryByTestId('workload-action-bar')).not.toBeInTheDocument()
+    })
+
+    it('should show both restart and delete pods when workload userActions contains both', async () => {
+      const user = userEvent.setup()
+
+      const workloadWithBoth = {
+        ...mockDeploymentWorkload,
+        userActions: ['restart', 'deletePods']
+      }
+
+      fetchWithMock.mockImplementation(() =>
+        Promise.resolve({ workloads: [workloadWithBoth] })
+      )
+
+      const singleWorkloadItem = [{
+        kind: 'Deployment',
+        name: 'podinfo',
+        namespace: 'default'
+      }]
+
+      render(
+        <WorkloadsTabContent
+          workloadItems={singleWorkloadItem}
+          namespace="default"
+        />
+      )
+
+      await waitFor(() => {
+        const textContent = document.body.textContent
+        expect(textContent).toContain('default/podinfo')
+      })
+
+      // Expand the workload
+      const workloadButtons = screen.getAllByRole('button')
+      const podinfoButton = workloadButtons.find(btn => btn.textContent.includes('podinfo'))
+      await user.click(podinfoButton)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('workload-action-bar')).toBeInTheDocument()
+        expect(screen.getByTestId('restart-button')).toBeInTheDocument()
+        expect(screen.getAllByTestId('delete-pod-button').length).toBeGreaterThan(0)
+      })
+    })
+
+    it('should show run job button for CronJob when workload userActions contains restart', async () => {
+      const user = userEvent.setup()
+
+      const cronJobWorkload = {
+        kind: 'CronJob',
+        name: 'backup',
+        namespace: 'default',
+        status: 'Idle',
+        statusMessage: '*/5 * * * *',
+        containerImages: ['busybox:1.36'],
+        userActions: ['restart'],
+        pods: [
+          {
+            name: 'backup-28945678-xk9j2',
+            status: 'Succeeded',
+            statusMessage: 'Pod completed successfully',
+            createdAt: '2025-01-15T10:30:00Z'
+          }
+        ]
+      }
+
+      fetchWithMock.mockImplementation(() =>
+        Promise.resolve({ workloads: [cronJobWorkload] })
+      )
+
+      const cronJobItem = [{
+        kind: 'CronJob',
+        name: 'backup',
+        namespace: 'default'
+      }]
+
+      render(
+        <WorkloadsTabContent
+          workloadItems={cronJobItem}
+          namespace="default"
+        />
+      )
+
+      await waitFor(() => {
+        const textContent = document.body.textContent
+        expect(textContent).toContain('default/backup')
+      })
+
+      // Expand the workload
+      const workloadButtons = screen.getAllByRole('button')
+      const backupButton = workloadButtons.find(btn => btn.textContent.includes('backup'))
+      await user.click(backupButton)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('workload-action-bar')).toBeInTheDocument()
+        expect(screen.getByTestId('run-job-button')).toBeInTheDocument()
+      })
+    })
+  })
+
   describe('Delete pod button', () => {
-    it('should show delete button when canDeletePods is true', async () => {
+    it('should show delete button when userActions contains deletePods', async () => {
       const user = userEvent.setup()
 
       const workloadWithDeletePods = {
         ...mockDeploymentWorkload,
-        canDeletePods: true
+        userActions: ['deletePods']
       }
 
       fetchWithMock.mockImplementation(() =>
@@ -671,12 +888,12 @@ describe('WorkloadsTabContent component', () => {
       })
     })
 
-    it('should not show delete button when canDeletePods is false', async () => {
+    it('should not show delete button when userActions does not contain deletePods', async () => {
       const user = userEvent.setup()
 
       const workloadWithoutDeletePods = {
         ...mockDeploymentWorkload,
-        canDeletePods: false
+        userActions: []
       }
 
       fetchWithMock.mockImplementation(() =>
@@ -717,7 +934,7 @@ describe('WorkloadsTabContent component', () => {
 
       const workloadWithDeletePods = {
         ...mockDeploymentWorkload,
-        canDeletePods: true
+        userActions: ['deletePods']
       }
 
       fetchWithMock.mockImplementation(({ endpoint, body }) => {
@@ -771,7 +988,7 @@ describe('WorkloadsTabContent component', () => {
       window.confirm.mockRestore()
     })
 
-    it('should not show delete button when canDeletePods is missing', async () => {
+    it('should not show delete button when userActions does not contain deletePods', async () => {
       const user = userEvent.setup()
 
       const singleWorkloadItem = [{

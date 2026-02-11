@@ -280,7 +280,6 @@ export function InventoryPanel({ resourceData, onNavigate }) {
         <WorkloadsTabContent
           workloadItems={workloadItems}
           namespace={resourceData.metadata.namespace}
-          userActions={resourceData?.status?.userActions || []}
         />
       )}
     </DashboardPanel>
