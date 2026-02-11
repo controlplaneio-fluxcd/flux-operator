@@ -33,12 +33,18 @@ const (
 	UserActionDownload = "download"
 
 	// UserActionRestart is the restart user action for workloads
-	// (Deployments, StatefulSets, DaemonSets).
+	// (Deployments, StatefulSets, DaemonSets, CronJobs).
 	UserActionRestart = "restart"
 
-	// UserActionDelete is the delete user action for Pods owned
-	// by workloads managed by Flux.
+	// UserActionDelete is the delete user action for resources
+	// managed by Flux.
 	UserActionDelete = "delete"
+
+	// UserActionDeletePods is the delete user action for pods of workloads
+	// managed by Flux. This constant is not used for RBAC checks, and is
+	// only used for sinalizing to the frontend that the user can delete
+	// pods of a workload. Should not be added to the AllUserActions list.
+	UserActionDeletePods = "deletePods"
 )
 
 var (

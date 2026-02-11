@@ -127,8 +127,8 @@ type WorkloadStatus struct {
 	// Pods is the list of pods managed by the workload.
 	Pods []WorkloadPodStatus `json:"pods,omitempty"`
 
-	// CanDeletePods indicates if the user can delete pods of this workload.
-	CanDeletePods bool `json:"canDeletePods,omitempty"`
+	// UserActions indicates which actions the user can perform on this workload.
+	UserActions []string `json:"userActions,omitempty"`
 }
 
 // WorkloadPodStatus represents the status of a pod managed by a workload.
@@ -222,14 +222,33 @@ func (h *Handler) GetWorkloadStatus(ctx context.Context, kind, name, namespace s
 	}
 	workload.Pods = podsStatus
 
-	// Check if the user can delete pods in this namespace.
+	// Check which actions the user can perform on this workload
 	if h.conf.UserActionsEnabled() {
+		kindInfo, ok := supportedWorkloadKinds[kind]
+		if ok {
+			for _, action := range kindInfo.actions {
+				canAct, err := h.kubeClient.CanActOnResource(ctx, action, kindInfo.group, kindInfo.plural, namespace, name)
+				if err != nil {
+					log.FromContext(ctx).Error(err, "failed to check RBAC for action",
+						"action", action,
+						"kind", kind,
+						"name", name,
+						"namespace", namespace)
+					continue
+				}
+				if canAct {
+					workload.UserActions = append(workload.UserActions, action)
+				}
+			}
+		}
+
+		// Check if the user can delete pods in this namespace
 		canDelete, err := h.kubeClient.CanActOnResource(ctx, fluxcdv1.UserActionDelete, "", "pods", namespace, "")
 		if err != nil {
 			log.FromContext(ctx).Error(err, "failed to check delete pod RBAC",
 				"namespace", namespace)
 		} else if canDelete {
-			workload.CanDeletePods = true
+			workload.UserActions = append(workload.UserActions, fluxcdv1.UserActionDeletePods)
 		}
 	}
 

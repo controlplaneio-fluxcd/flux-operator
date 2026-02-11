@@ -34,7 +34,7 @@ function isRecentTimestamp(timestamp) {
  * WorkloadsTabContent - Displays detailed Kubernetes workload information
  * Handles data fetching and state management for workload details
  */
-export function WorkloadsTabContent({ workloadItems, namespace, userActions = [] }) {
+export function WorkloadsTabContent({ workloadItems, namespace }) {
   // State
   const [workloadsData, setWorkloadsData] = useState({})
   const [loading, setLoading] = useState(true)
@@ -244,7 +244,7 @@ export function WorkloadsTabContent({ workloadItems, namespace, userActions = []
             {isExpanded && workload && (
               <div class="px-4 py-3 bg-gray-50 dark:bg-gray-800/30 border-t border-gray-200 dark:border-gray-700">
                 {/* Action Bar - Workload actions */}
-                {(item.kind === 'Deployment' || item.kind === 'StatefulSet' || item.kind === 'DaemonSet' || item.kind === 'CronJob') && userActions.includes('restart') && (
+                {(item.kind === 'Deployment' || item.kind === 'StatefulSet' || item.kind === 'DaemonSet' || item.kind === 'CronJob') && workload.userActions?.includes('restart') && (
                   <div class="mb-3 pb-3 border-b border-gray-200 dark:border-gray-700" onClick={(e) => e.stopPropagation()}>
                     <WorkloadActionBar
                       kind={item.kind}
@@ -254,7 +254,7 @@ export function WorkloadsTabContent({ workloadItems, namespace, userActions = []
                       restartedAt={workload.restartedAt}
                       lastTriggeredAt={triggeredPod?.createdAt}
                       lastTriggeredPodStatus={triggeredPod?.status}
-                      userActions={userActions}
+                      userActions={workload.userActions}
                       onActionStart={handleActionStart}
                       onActionComplete={fetchWorkloadsData}
                     />
@@ -309,7 +309,7 @@ export function WorkloadsTabContent({ workloadItems, namespace, userActions = []
                                 <span class={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getWorkloadStatusBadgeClass(displayStatus)}`}>
                                   {formatWorkloadStatus(displayStatus)}
                                 </span>
-                                {workload.canDeletePods && (
+                                {workload.userActions?.includes('deletePods') && (
                                   <WorkloadDeleteAction
                                     namespace={workload.namespace}
                                     name={pod.name}
