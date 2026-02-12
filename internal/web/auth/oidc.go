@@ -22,97 +22,151 @@ const (
 )
 
 // oidcProvider implements oauth2Provider for OIDC.
+// It refreshes the OIDC provider in a background goroutine
+// so that HTTP request handlers never block on OIDC discovery.
 type oidcProvider struct {
 	conf          *fluxcdv1.WebConfigSpec
 	processClaims claimsProcessorFunc
+	cancelFunc    context.CancelFunc
+	stopped       chan struct{}
 
-	mu        sync.RWMutex
-	p         *oidc.Provider
-	nextFetch time.Time
+	mu          sync.RWMutex
+	initialized bool
+	lastErr     error
+	provider    *oidc.Provider
+	cachedVer   *oidc.IDTokenVerifier
 }
 
-// newOIDCProvider creates a new OIDC OAuth2 provider.
+// newOIDCProvider creates a new OIDC OAuth2 provider and starts
+// a background goroutine that periodically refreshes the OIDC
+// discovery configuration.
 func newOIDCProvider(conf *fluxcdv1.WebConfigSpec) (oauth2Provider, error) {
 	processClaims, err := newClaimsProcessor(conf)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create claims processor: %w", err)
 	}
 
-	return &oidcProvider{
+	ctx, cancel := context.WithCancel(context.Background())
+	o := &oidcProvider{
 		conf:          conf,
 		processClaims: processClaims,
-	}, nil
+		cancelFunc:    cancel,
+		stopped:       make(chan struct{}),
+	}
+	go o.run(ctx)
+	return o, nil
 }
 
-// init implements oauth2Provider.
-func (o *oidcProvider) init(ctx context.Context) (initializedOAuth2Provider, error) {
-	var p *oidc.Provider
+// run is the background goroutine that periodically refreshes
+// the OIDC provider.
+func (o *oidcProvider) run(ctx context.Context) {
+	defer close(o.stopped)
 
-	o.mu.RLock()
-	if time.Now().Before(o.nextFetch) {
-		p = o.p
+	o.refresh(ctx)
+
+	ticker := time.NewTicker(oidcProviderRefreshInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			o.refresh(ctx)
+		}
 	}
-	o.mu.RUnlock()
+}
 
-	if p == nil {
-		// Fetch without locking to avoid contention.
-		var err error
-		p, err = oidc.NewProvider(ctx, o.conf.Authentication.OAuth2.IssuerURL)
-		if err != nil {
-			return nil, fmt.Errorf("failed to discover OIDC configuration: %w", err)
+// refresh fetches the OIDC discovery configuration and updates
+// the cached provider and verifier.
+func (o *oidcProvider) refresh(ctx context.Context) {
+	p, err := oidc.NewProvider(ctx, o.conf.Authentication.OAuth2.IssuerURL)
+	if err != nil {
+		// On failure: if already initialized, keep stale data.
+		// Only log if the context hasn't been canceled (clean shutdown).
+		if ctx.Err() == nil {
+			log.FromContext(ctx).Error(err, "failed to refresh OIDC provider")
 		}
 
 		o.mu.Lock()
-		o.p = p
-		o.nextFetch = time.Now().Add(oidcProviderRefreshInterval)
+		if !o.initialized {
+			o.lastErr = fmt.Errorf("failed to discover OIDC configuration: %w", err)
+		}
 		o.mu.Unlock()
+		return
 	}
 
-	return &initializedOIDCProvider{
-		conf:          o.conf,
-		processClaims: o.processClaims,
-		provider:      p,
-	}, nil
+	ver := p.VerifierContext(ctx, &oidc.Config{
+		ClientID: o.conf.Authentication.OAuth2.ClientID,
+	})
+
+	o.mu.Lock()
+	o.provider = p
+	o.cachedVer = ver
+	o.initialized = true
+	o.lastErr = nil
+	o.mu.Unlock()
 }
 
-// initializedOIDCProvider implements initializedOAuth2Provider.
-type initializedOIDCProvider struct {
-	conf          *fluxcdv1.WebConfigSpec
-	processClaims claimsProcessorFunc
-	provider      *oidc.Provider
-}
+// config implements oauth2Provider.
+func (o *oidcProvider) config() (*oauth2.Config, error) {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
 
-// config implements initializedOAuth2Provider.
-func (i *initializedOIDCProvider) config() *oauth2.Config {
+	if !o.initialized {
+		if o.lastErr != nil {
+			return nil, fmt.Errorf("OIDC provider not yet initialized: %w", o.lastErr)
+		}
+		return nil, fmt.Errorf("OIDC provider not yet initialized")
+	}
+
 	return &oauth2.Config{
-		Endpoint: i.provider.Endpoint(),
+		Endpoint: o.provider.Endpoint(),
 		Scopes:   []string{oidc.ScopeOpenID, oidc.ScopeOfflineAccess, "profile", "email", "groups"},
-	}
-}
-
-// newVerifier implements initializedOAuth2Provider.
-func (i *initializedOIDCProvider) newVerifier(ctx context.Context) (oauth2Verifier, error) {
-	return &oidcVerifier{
-		conf:          i.conf,
-		verifier:      i.provider.VerifierContext(ctx, &oidc.Config{ClientID: i.conf.Authentication.OAuth2.ClientID}),
-		processClaims: i.processClaims,
 	}, nil
 }
 
-// oidcVerifier implements oauth2Verifier.
-type oidcVerifier struct {
-	conf          *fluxcdv1.WebConfigSpec
-	verifier      *oidc.IDTokenVerifier
-	processClaims claimsProcessorFunc
+// close implements oauth2Provider. It stops the background
+// goroutine and waits for it to exit or for the context to
+// expire, whichever comes first.
+func (o *oidcProvider) close(ctx context.Context) error {
+	o.cancelFunc()
+	select {
+	case <-o.stopped:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// cachedVerifier returns the cached ID token verifier, or an
+// error if the provider has not yet been initialized.
+func (o *oidcProvider) cachedVerifier() (*oidc.IDTokenVerifier, error) {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+
+	if !o.initialized {
+		if o.lastErr != nil {
+			return nil, fmt.Errorf("OIDC provider not yet initialized: %w", o.lastErr)
+		}
+		return nil, fmt.Errorf("OIDC provider not yet initialized")
+	}
+
+	return o.cachedVer, nil
 }
 
 // verifyAccessToken implements oauth2Verifier.
-func (o *oidcVerifier) verifyAccessToken(ctx context.Context,
+func (o *oidcProvider) verifyAccessToken(ctx context.Context,
 	accessToken string, nonce ...string) (*user.Details, error) {
+
+	v, err := o.cachedVerifier()
+	if err != nil {
+		return nil, err
+	}
 
 	l := log.FromContext(ctx)
 
-	idToken, err := o.verifier.Verify(ctx, accessToken)
+	idToken, err := v.Verify(ctx, accessToken)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify OIDC ID token: %w", err)
 	}
@@ -150,7 +204,7 @@ func (o *oidcVerifier) verifyAccessToken(ctx context.Context,
 }
 
 // verifyToken implements oauth2Verifier.
-func (o *oidcVerifier) verifyToken(ctx context.Context,
+func (o *oidcProvider) verifyToken(ctx context.Context,
 	token *oauth2.Token, nonce ...string) (*user.Details, *authStorage, error) {
 
 	idToken, ok := token.Extra("id_token").(string)

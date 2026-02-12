@@ -4,9 +4,12 @@
 package auth
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -25,32 +28,39 @@ const (
 )
 
 // NewMiddleware creates a new authentication middleware for HTTP handlers.
+// It returns the middleware, a closer function that must be called to release
+// resources (e.g. stop background goroutines), and an error. The closer
+// accepts a context to limit the time spent waiting for cleanup, similar
+// to http.Server.Shutdown.
 func NewMiddleware(conf *fluxcdv1.WebConfigSpec, kubeClient *kubeclient.Client,
-	initLog logr.Logger) (func(next http.Handler) http.Handler, error) {
+	initLog logr.Logger) (func(next http.Handler) http.Handler, func(context.Context) error, error) {
 
 	// Build middleware according to the authentication type.
 	var middleware func(next http.Handler) http.Handler
+	var closer func(context.Context) error
 	var provider string
 	switch {
 	case conf.Authentication == nil:
 		middleware = newDefaultMiddleware()
+		closer = func(context.Context) error { return nil }
 		provider = "None"
 	case conf.Authentication.Anonymous != nil:
 		var err error
 		middleware, err = newAnonymousMiddleware(conf, kubeClient)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create anonymous authentication middleware: %w", err)
+			return nil, nil, fmt.Errorf("failed to create anonymous authentication middleware: %w", err)
 		}
+		closer = func(context.Context) error { return nil }
 		provider = fluxcdv1.AuthenticationTypeAnonymous
 	case conf.Authentication.OAuth2 != nil:
 		var err error
-		middleware, err = newOAuth2Middleware(conf, kubeClient)
+		middleware, closer, err = newOAuth2Middleware(conf, kubeClient)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create OAuth2 authentication middleware: %w", err)
+			return nil, nil, fmt.Errorf("failed to create OAuth2 authentication middleware: %w", err)
 		}
 		provider = fmt.Sprintf("%s/%s", fluxcdv1.AuthenticationTypeOAuth2, conf.Authentication.OAuth2.Provider)
 	default:
-		return nil, fmt.Errorf("unsupported authentication method")
+		return nil, nil, fmt.Errorf("unsupported authentication method")
 	}
 	initLog.Info("authentication initialized successfully", "authProvider", provider)
 
@@ -76,7 +86,7 @@ func NewMiddleware(conf *fluxcdv1.WebConfigSpec, kubeClient *kubeclient.Client,
 				next.ServeHTTP(w, r)
 			}
 		})
-	}, nil
+	}, closer, nil
 }
 
 // newDefaultMiddleware creates a default authentication middleware
@@ -119,7 +129,7 @@ func newAnonymousMiddleware(conf *fluxcdv1.WebConfigSpec, kubeClient *kubeclient
 }
 
 // newOAuth2Middleware creates an OAuth2 authentication middleware.
-func newOAuth2Middleware(conf *fluxcdv1.WebConfigSpec, kubeClient *kubeclient.Client) (func(next http.Handler) http.Handler, error) {
+func newOAuth2Middleware(conf *fluxcdv1.WebConfigSpec, kubeClient *kubeclient.Client) (func(next http.Handler) http.Handler, func(context.Context) error, error) {
 	// Build the OAuth2 provider.
 	var provider oauth2Provider
 	var err error
@@ -127,19 +137,24 @@ func newOAuth2Middleware(conf *fluxcdv1.WebConfigSpec, kubeClient *kubeclient.Cl
 	case fluxcdv1.OAuth2ProviderOIDC:
 		provider, err = newOIDCProvider(conf)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	default:
-		return nil, fmt.Errorf("unsupported OAuth2 provider: %s", conf.Authentication.OAuth2.Provider)
+		return nil, nil, fmt.Errorf("unsupported OAuth2 provider: %s", conf.Authentication.OAuth2.Provider)
 	}
 
 	// Build the OAuth2 authenticator.
 	authenticator, err := newOAuth2Authenticator(conf, kubeClient, provider)
 	if err != nil {
-		return nil, err
+		closeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if closeErr := provider.close(closeCtx); closeErr != nil {
+			return nil, nil, errors.Join(err, fmt.Errorf("failed to close OAuth2 provider: %w", closeErr))
+		}
+		return nil, nil, err
 	}
 
-	// Return the middleware.
+	// Return the middleware and its closer.
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch {
@@ -155,5 +170,5 @@ func newOAuth2Middleware(conf *fluxcdv1.WebConfigSpec, kubeClient *kubeclient.Cl
 				next.ServeHTTP(w, r)
 			}
 		})
-	}, nil
+	}, provider.close, nil
 }
