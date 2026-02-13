@@ -96,12 +96,14 @@ func RunServer(ctx context.Context, c cluster.Cluster,
 	// Create management variables for the current handler.
 	var cancelHandlerCtx context.CancelFunc
 	var handlerStopped <-chan struct{}
+	var closeAuth func(context.Context) error
 
 	// Initialize them for the initial handler which does not fire off any goroutines.
 	_, cancelHandlerCtx = context.WithCancel(context.Background())
 	ch := make(chan struct{})
 	close(ch)
 	handlerStopped = ch
+	closeAuth = func(context.Context) error { return nil }
 
 	// Configure graceful shutdown procedure.
 	gracefulShutdown := func() error {
@@ -116,6 +118,14 @@ func RunServer(ctx context.Context, c cluster.Cluster,
 		case <-shutdownCtx.Done():
 			return errGracefulShutdownDeadlineExceeded
 		case <-serverStopped:
+		}
+
+		// Stop the auth provider background goroutines.
+		if err := closeAuth(shutdownCtx); err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				return errGracefulShutdownDeadlineExceeded
+			}
+			return err
 		}
 
 		// Wait for the current handler goroutines to stop.
@@ -164,7 +174,7 @@ func RunServer(ctx context.Context, c cluster.Cluster,
 		}
 
 		// Create auth middleware.
-		authMiddleware, err := auth.NewMiddleware(conf, kubeClient, serverLog)
+		authMiddleware, newCloseAuth, err := auth.NewMiddleware(conf, kubeClient, serverLog)
 		if err != nil {
 			eventLog.Error(err, "unable to create auth middleware with new configuration, keeping existing configuration")
 			continue
@@ -186,11 +196,16 @@ func RunServer(ctx context.Context, c cluster.Cluster,
 		handlerMu.Unlock()
 		eventLog.Info("web server reconfiguration successful, new configuration was applied")
 
-		// Switch handler management variables.
-		cancelOldHandlerCtx, oldHandlerStopped := cancelHandlerCtx, handlerStopped
-		cancelHandlerCtx, handlerStopped = cancelNewHandlerCtx, newHandlerStopped
+		// Swap handler management variables.
+		cancelOldHandlerCtx, oldHandlerStopped, closeOldAuth := cancelHandlerCtx, handlerStopped, closeAuth
+		cancelHandlerCtx, handlerStopped, closeAuth = cancelNewHandlerCtx, newHandlerStopped, newCloseAuth
 
-		// Stop the old handler and wait for any of the possible events at this point.
+		// Stop the old auth provider and handler, then wait for any of the possible events.
+		closeOldAuthCtx, cancelCloseOldAuth := context.WithTimeout(context.Background(), 10*time.Second)
+		if err := closeOldAuth(closeOldAuthCtx); err != nil {
+			eventLog.Error(err, "failed to close old auth provider")
+		}
+		cancelCloseOldAuth()
 		cancelOldHandlerCtx()
 		select {
 		case <-oldHandlerStopped:

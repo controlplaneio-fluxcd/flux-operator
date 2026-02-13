@@ -447,18 +447,26 @@ func TestVerifyTokenAndSetStorageOrLogErrorOptions(t *testing.T) {
 	})
 }
 
-// mockOAuth2Verifier is a test double for oauth2Verifier.
-type mockOAuth2Verifier struct {
+// mockOAuth2Provider is a test double for oauth2Provider.
+type mockOAuth2Provider struct {
 	details *user.Details
 	storage *authStorage
 	err     error
 }
 
-func (m *mockOAuth2Verifier) verifyAccessToken(ctx context.Context, accessToken string, nonce ...string) (*user.Details, error) {
+func (m *mockOAuth2Provider) config() (*oauth2.Config, error) {
+	return &oauth2.Config{}, nil
+}
+
+func (m *mockOAuth2Provider) close(ctx context.Context) error {
+	return nil
+}
+
+func (m *mockOAuth2Provider) verifyAccessToken(ctx context.Context, accessToken string, nonce ...string) (*user.Details, error) {
 	return m.details, m.err
 }
 
-func (m *mockOAuth2Verifier) verifyToken(ctx context.Context, token *oauth2.Token, nonce ...string) (*user.Details, *authStorage, error) {
+func (m *mockOAuth2Provider) verifyToken(ctx context.Context, token *oauth2.Token, nonce ...string) (*user.Details, *authStorage, error) {
 	return m.details, m.storage, m.err
 }
 
@@ -480,7 +488,7 @@ func TestVerifyTokenAndSetStorageOrLogError_SessionStart(t *testing.T) {
 		g := NewWithT(t)
 
 		auth := newTestAuthenticator(t)
-		mockVerifier := &mockOAuth2Verifier{
+		auth.provider = &mockOAuth2Provider{
 			details: &user.Details{
 				Profile: user.Profile{Name: "Test User"},
 			},
@@ -494,7 +502,7 @@ func TestVerifyTokenAndSetStorageOrLogError_SessionStart(t *testing.T) {
 		rec := httptest.NewRecorder()
 
 		details, err := auth.verifyTokenAndSetStorageOrLogError(
-			context.Background(), rec, mockVerifier, &oauth2.Token{},
+			context.Background(), rec, &oauth2.Token{},
 			withSessionStart(providedTime),
 		)
 
@@ -508,7 +516,7 @@ func TestVerifyTokenAndSetStorageOrLogError_SessionStart(t *testing.T) {
 		g := NewWithT(t)
 
 		auth := newTestAuthenticator(t)
-		mockVerifier := &mockOAuth2Verifier{
+		auth.provider = &mockOAuth2Provider{
 			details: &user.Details{
 				Profile: user.Profile{Name: "Test User"},
 			},
@@ -523,7 +531,7 @@ func TestVerifyTokenAndSetStorageOrLogError_SessionStart(t *testing.T) {
 
 		var zeroTime time.Time
 		details, err := auth.verifyTokenAndSetStorageOrLogError(
-			context.Background(), rec, mockVerifier, &oauth2.Token{},
+			context.Background(), rec, &oauth2.Token{},
 			withSessionStart(zeroTime),
 		)
 		afterCall := time.Now()
@@ -540,7 +548,7 @@ func TestVerifyTokenAndSetStorageOrLogError_SessionStart(t *testing.T) {
 		g := NewWithT(t)
 
 		auth := newTestAuthenticator(t)
-		mockVerifier := &mockOAuth2Verifier{
+		auth.provider = &mockOAuth2Provider{
 			details: &user.Details{
 				Profile: user.Profile{Name: "Test User"},
 			},
@@ -554,7 +562,7 @@ func TestVerifyTokenAndSetStorageOrLogError_SessionStart(t *testing.T) {
 		rec := httptest.NewRecorder()
 
 		details, err := auth.verifyTokenAndSetStorageOrLogError(
-			context.Background(), rec, mockVerifier, &oauth2.Token{},
+			context.Background(), rec, &oauth2.Token{},
 		)
 		afterCall := time.Now()
 

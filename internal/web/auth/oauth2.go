@@ -54,17 +54,8 @@ type oauth2Authenticator struct {
 
 // oauth2Provider has methods for implementing the OAuth2 protocol.
 type oauth2Provider interface {
-	init(ctx context.Context) (initializedOAuth2Provider, error)
-}
-
-// initializedOAuth2Provider has methods for implementing the OAuth2 protocol.
-type initializedOAuth2Provider interface {
-	config() *oauth2.Config
-	newVerifier(ctx context.Context) (oauth2Verifier, error)
-}
-
-// oauth2Verifier has methods for verifying OAuth2 tokens.
-type oauth2Verifier interface {
+	config() (*oauth2.Config, error)
+	close(ctx context.Context) error
 	verifyAccessToken(ctx context.Context, accessToken string, nonce ...string) (*user.Details, error)
 	verifyToken(ctx context.Context, token *oauth2.Token, nonce ...string) (*user.Details, *authStorage, error)
 }
@@ -102,14 +93,13 @@ func newOAuth2Authenticator(conf *fluxcdv1.WebConfigSpec,
 // serveAuthorize serves the OAuth2 authorize endpoint.
 func (o *oauth2Authenticator) serveAuthorize(w http.ResponseWriter, r *http.Request) {
 	// Build OAuth2 config.
-	p, err := o.provider.init(r.Context())
+	oauth2Conf, err := o.oauth2Config()
 	if err != nil {
 		log.FromContext(r.Context()).Error(err, "failed to initialize OAuth2 provider")
 		setAuthErrorCookie(w, errInternalError)
 		http.Redirect(w, r, originalURL(r.URL.Query()), http.StatusSeeOther)
 		return
 	}
-	oauth2Conf := o.config(p)
 	oauth2Conf.ClientSecret = "" // No need for client secret in this part of the flow.
 
 	// Build and set state.
@@ -230,8 +220,8 @@ func (o *oauth2Authenticator) serveCallback(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Initialize provider and verifier.
-	p, v, err := o.providerAndVerifierOrLogError(r.Context())
+	// Get OAuth2 config.
+	conf, err := o.oauth2ConfigOrLogError(r.Context())
 	if err != nil {
 		setAuthErrorCookie(w, err)
 		return
@@ -239,7 +229,7 @@ func (o *oauth2Authenticator) serveCallback(w http.ResponseWriter, r *http.Reque
 
 	// Exchange code for token.
 	code := r.URL.Query().Get("code")
-	token, err := o.config(p).Exchange(r.Context(), code,
+	token, err := conf.Exchange(r.Context(), code,
 		oauth2.SetAuthURLParam("code_verifier", state.PKCEVerifier))
 	if err != nil {
 		log.FromContext(r.Context()).Error(err, "failed to exchange code for token")
@@ -248,7 +238,7 @@ func (o *oauth2Authenticator) serveCallback(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Verify the token and set the auth storage.
-	if _, err := o.verifyTokenAndSetStorageOrLogError(r.Context(), w, v, token, withNonce(state.Nonce)); err != nil {
+	if _, err := o.verifyTokenAndSetStorageOrLogError(r.Context(), w, token, withNonce(state.Nonce)); err != nil {
 		setAuthErrorCookie(w, err)
 		return
 	}
@@ -271,23 +261,23 @@ func (o *oauth2Authenticator) serveAPI(w http.ResponseWriter, r *http.Request, a
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
-	p, v, err := o.providerAndVerifierOrLogError(r.Context())
+	conf, err := o.oauth2ConfigOrLogError(r.Context())
 	if err != nil {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
-	details := o.verifyAccessTokenOrDeleteStorageAndLogError(r.Context(), w, v, as.AccessToken)
+	details := o.verifyAccessTokenOrDeleteStorageAndLogError(r.Context(), w, as.AccessToken)
 	if details == nil {
 		if as.RefreshToken == "" {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
-		token := o.refreshTokenOrLogError(r.Context(), p, as.RefreshToken)
+		token := o.refreshTokenOrLogError(r.Context(), conf, as.RefreshToken)
 		if token == nil {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
-		if details, err = o.verifyTokenAndSetStorageOrLogError(r.Context(), w, v, token, withSessionStart(as.SessionStart)); err != nil {
+		if details, err = o.verifyTokenAndSetStorageOrLogError(r.Context(), w, token, withSessionStart(as.SessionStart)); err != nil {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
@@ -332,19 +322,19 @@ func (o *oauth2Authenticator) serveIndex(w http.ResponseWriter, r *http.Request,
 		log.FromContext(ctx).V(1).Info("failed to get auth storage from request", "error", err.Error())
 		return
 	}
-	p, v, err := o.providerAndVerifierOrLogError(ctx)
+	conf, err := o.oauth2ConfigOrLogError(ctx)
 	if err != nil {
 		return
 	}
-	if o.verifyAccessTokenOrDeleteStorageAndLogError(ctx, w, v, as.AccessToken) == nil {
+	if o.verifyAccessTokenOrDeleteStorageAndLogError(ctx, w, as.AccessToken) == nil {
 		if as.RefreshToken == "" {
 			return
 		}
-		token := o.refreshTokenOrLogError(ctx, p, as.RefreshToken)
+		token := o.refreshTokenOrLogError(ctx, conf, as.RefreshToken)
 		if token == nil {
 			return
 		}
-		if _, err := o.verifyTokenAndSetStorageOrLogError(ctx, w, v, token, withSessionStart(as.SessionStart)); err != nil {
+		if _, err := o.verifyTokenAndSetStorageOrLogError(ctx, w, token, withSessionStart(as.SessionStart)); err != nil {
 			return
 		}
 	}
@@ -353,38 +343,34 @@ func (o *oauth2Authenticator) serveIndex(w http.ResponseWriter, r *http.Request,
 	o.setAuthenticated(w)
 }
 
-// providerAndVerifierOrLogError initializes the OAuth2 provider
-// and verifier, or logs any error and returns internalErr on
-// failure.
-func (o *oauth2Authenticator) providerAndVerifierOrLogError(
-	ctx context.Context) (initializedOAuth2Provider, oauth2Verifier, error) {
+// oauth2ConfigOrLogError returns the OAuth2 configuration,
+// or logs any error and returns errInternalError on failure.
+func (o *oauth2Authenticator) oauth2ConfigOrLogError(
+	ctx context.Context) (*oauth2.Config, error) {
 
-	p, err := o.provider.init(ctx)
+	conf, err := o.oauth2Config()
 	if err != nil {
-		log.FromContext(ctx).Error(err, "failed to initialize OAuth2 provider")
-		return nil, nil, errInternalError
+		log.FromContext(ctx).Error(err, "failed to get OAuth2 configuration")
+		return nil, errInternalError
 	}
 
-	v, err := p.newVerifier(ctx)
-	if err != nil {
-		log.FromContext(ctx).Error(err, "failed to initialize OAuth2 provider verifier")
-		return nil, nil, errInternalError
-	}
-
-	return p, v, nil
+	return conf, nil
 }
 
-// config builds the OAuth2 configuration from the
+// oauth2Config builds the OAuth2 configuration from the
 // provider base and from the web server configuration.
-func (o *oauth2Authenticator) config(p initializedOAuth2Provider) *oauth2.Config {
-	base := p.config()
+func (o *oauth2Authenticator) oauth2Config() (*oauth2.Config, error) {
+	base, err := o.provider.config()
+	if err != nil {
+		return nil, err
+	}
 	base.ClientID = o.conf.Authentication.OAuth2.ClientID
 	base.ClientSecret = o.conf.Authentication.OAuth2.ClientSecret
 	base.RedirectURL = o.conf.BaseURL + oauth2PathCallback
 	if s := o.conf.Authentication.OAuth2.Scopes; len(s) > 0 {
 		base.Scopes = s
 	}
-	return base
+	return base, nil
 }
 
 type verifyTokenAndSetStorageOrLogErrorOption func(*verifyTokenAndSetStorageOrLogErrorOptions)
@@ -410,7 +396,7 @@ func withSessionStart(t time.Time) verifyTokenAndSetStorageOrLogErrorOption {
 // the auth storage and returns the user details, or logs any
 // error and returns an error for the auth error cookie.
 func (o *oauth2Authenticator) verifyTokenAndSetStorageOrLogError(
-	ctx context.Context, w http.ResponseWriter, v oauth2Verifier, token *oauth2.Token,
+	ctx context.Context, w http.ResponseWriter, token *oauth2.Token,
 	opts ...verifyTokenAndSetStorageOrLogErrorOption) (*user.Details, error) {
 
 	var options verifyTokenAndSetStorageOrLogErrorOptions
@@ -422,7 +408,7 @@ func (o *oauth2Authenticator) verifyTokenAndSetStorageOrLogError(
 	if options.nonce != "" {
 		nonce = append(nonce, options.nonce)
 	}
-	details, as, err := v.verifyToken(ctx, token, nonce...)
+	details, as, err := o.provider.verifyToken(ctx, token, nonce...)
 	if err != nil {
 		log.FromContext(ctx).Error(err, "failed to verify token")
 		return nil, errUserError
@@ -445,9 +431,9 @@ func (o *oauth2Authenticator) verifyTokenAndSetStorageOrLogError(
 // verifyAccessTokenOrDeleteStorageAndLogError verifies the access token and
 // returns the user details, or logs any error encountered and returns nil.
 func (o *oauth2Authenticator) verifyAccessTokenOrDeleteStorageAndLogError(ctx context.Context,
-	w http.ResponseWriter, v oauth2Verifier, accessToken string) *user.Details {
+	w http.ResponseWriter, accessToken string) *user.Details {
 
-	details, err := v.verifyAccessToken(ctx, accessToken)
+	details, err := o.provider.verifyAccessToken(ctx, accessToken)
 	if err != nil {
 		log.FromContext(ctx).V(1).Info("failed to verify access token", "error", err.Error())
 		deleteAuthStorage(w)
@@ -460,8 +446,8 @@ func (o *oauth2Authenticator) verifyAccessTokenOrDeleteStorageAndLogError(ctx co
 // refreshTokenOrLogError refreshes the access token using the
 // refresh token, or logs any error encountered and returns nil.
 func (o *oauth2Authenticator) refreshTokenOrLogError(
-	ctx context.Context, p initializedOAuth2Provider, refreshToken string) *oauth2.Token {
-	token, err := o.config(p).
+	ctx context.Context, conf *oauth2.Config, refreshToken string) *oauth2.Token {
+	token, err := conf.
 		TokenSource(ctx, &oauth2.Token{RefreshToken: refreshToken}).
 		Token()
 	if err != nil {
