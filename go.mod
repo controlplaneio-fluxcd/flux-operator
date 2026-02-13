@@ -17,7 +17,7 @@ require (
 	github.com/fluxcd/pkg/cache v0.13.0
 	github.com/fluxcd/pkg/kustomize v1.27.0
 	github.com/fluxcd/pkg/runtime v0.100.0
-	github.com/fluxcd/pkg/ssa v0.67.0
+	github.com/fluxcd/pkg/ssa v0.68.0
 	github.com/fluxcd/pkg/tar v0.17.0
 	github.com/fluxcd/pkg/version v0.12.0
 	github.com/go-jose/go-jose/v4 v4.1.3
@@ -42,6 +42,7 @@ require (
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
+	github.com/wI2L/jsondiff v0.6.1
 	gitlab.com/gitlab-org/api/client-go v1.32.0
 	golang.org/x/exp v0.0.0-20250813145105-42675adae3e6
 	golang.org/x/mod v0.33.0
@@ -155,6 +156,10 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
+	github.com/tidwall/gjson v1.18.0 // indirect
+	github.com/tidwall/match v1.1.1 // indirect
+	github.com/tidwall/pretty v1.2.1 // indirect
+	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/vbatts/tar-split v0.12.2 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xlab/treeprint v1.2.0 // indirect

@@ -1,0 +1,9 @@
+- op: replace
+  path: /spec/interval
+  value: 10m
+- op: replace
+  path: /spec/provider
+  value: aws
+- op: add
+  path: /spec/region
+  value: us-east-1

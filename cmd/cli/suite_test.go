@@ -172,6 +172,9 @@ func resetCmdArgs() {
 	exportReportArgs = exportReportFlags{output: "yaml"}
 	exportResourceArgs = exportResourceFlags{output: "yaml"}
 
+	// Diff commands
+	diffYAMLArgs = diffYAMLFlags{output: "json-patch-yaml"}
+
 	// Distro commands
 	distroKeygenSigArgs = distroKeygenSigFlags{}
 	distroSignManifestsArgs = distroSignManifestsFlags{}
