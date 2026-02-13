@@ -126,8 +126,7 @@ func executeCommand(args []string) (string, error) {
 // This should be called between tests to ensure clean state.
 func resetCmdArgs() {
 	rootArgs.timeout = timeout
-	defaultNamespace := ""
-	kubeconfigArgs.Namespace = &defaultNamespace
+	kubeconfigArgs.Namespace = new("")
 
 	// Version command
 	versionArgs = versionFlags{}

@@ -235,8 +235,7 @@ func TestArtifactsAttestation_GetIssuedAt(t *testing.T) {
 func TestArtifactsAttestation_HasDigest(t *testing.T) {
 	t.Run("returns true for existing digest", func(t *testing.T) {
 		g := NewWithT(t)
-		testAtt := testArtifactsAttestation()
-		aa := &testAtt
+		aa := new(testArtifactsAttestation())
 
 		g.Expect(aa.HasDigest("sha256:abc123")).To(BeTrue())
 		g.Expect(aa.HasDigest("sha256:def456")).To(BeTrue())
@@ -244,8 +243,7 @@ func TestArtifactsAttestation_HasDigest(t *testing.T) {
 
 	t.Run("returns false for non-existing digest", func(t *testing.T) {
 		g := NewWithT(t)
-		testAtt := testArtifactsAttestation()
-		aa := &testAtt
+		aa := new(testArtifactsAttestation())
 
 		g.Expect(aa.HasDigest("sha256:nonexistent")).To(BeFalse())
 		g.Expect(aa.HasDigest("")).To(BeFalse())
@@ -359,8 +357,7 @@ func TestArtifactsAttestation_Sign(t *testing.T) {
 
 	t.Run("fails when attestation already has digests", func(t *testing.T) {
 		g := NewWithT(t)
-		testAtt := testArtifactsAttestation()
-		aa := &testAtt
+		aa := new(testArtifactsAttestation())
 		_, privateKey := genTestKeys(t)
 		digests := []string{"sha256:newdigest"}
 

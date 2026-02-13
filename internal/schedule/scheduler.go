@@ -55,13 +55,13 @@ func NewScheduler(schedules []fluxcdv1.Schedule, timeout time.Duration) (*Schedu
 			return nil, fmt.Errorf("failed to validate schedule[%d]: negative window: %s", i, window)
 		}
 
-		// Parse cron spec.
-		cron, err := Parse(schedules[i].Cron, schedules[i].TimeZone)
+		// Parse schedule spec.
+		schedule, err := Parse(schedules[i].Cron, schedules[i].TimeZone)
 		if err != nil {
 			return nil, fmt.Errorf("failed to validate schedule[%d]: %w", i, err)
 		}
 		s.schedules[i] = parsedSchedule{
-			Schedule: cron,
+			Schedule: schedule,
 			spec:     schedules[i],
 		}
 	}

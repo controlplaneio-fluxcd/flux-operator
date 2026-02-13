@@ -19,14 +19,13 @@ func TestGetWorkloadsStatus_Privileged_Success(t *testing.T) {
 	g := NewWithT(t)
 
 	// Create a Deployment for testing
-	replicas := int32(1)
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-workload-success",
 			Namespace: "default",
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
+			Replicas: new(int32(1)),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{"app": "test-workload-success"},
 			},
@@ -99,14 +98,13 @@ func TestGetWorkloadsStatus_UnprivilegedUser_Forbidden(t *testing.T) {
 	g := NewWithT(t)
 
 	// Create a Deployment for testing
-	replicas := int32(1)
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-workload-forbidden",
 			Namespace: "default",
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
+			Replicas: new(int32(1)),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{"app": "test-workload-forbidden"},
 			},
@@ -166,14 +164,13 @@ func TestGetWorkloadsStatus_WithUserRBAC_Success(t *testing.T) {
 	g := NewWithT(t)
 
 	// Create a Deployment for testing
-	replicas := int32(1)
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-workload-rbac-success",
 			Namespace: "default",
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
+			Replicas: new(int32(1)),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{"app": "test-workload-rbac-success"},
 			},
@@ -283,14 +280,13 @@ func TestGetWorkloadsStatus_WithNamespaceScopedRBAC_ForbiddenInOtherNamespace(t 
 	defer testClient.Delete(ctx, otherNS)
 
 	// Create a Deployment in the other namespace
-	replicas := int32(1)
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-workload-other-ns",
 			Namespace: "workloads-ns-test",
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
+			Replicas: new(int32(1)),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{"app": "test-workload-other-ns"},
 			},
@@ -392,14 +388,13 @@ func TestGetWorkloadsStatus_WithDeploymentAccessButNoPodAccess_Forbidden(t *test
 	g := NewWithT(t)
 
 	// Create a Deployment for testing
-	replicas := int32(1)
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-workload-no-pod-access",
 			Namespace: "default",
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
+			Replicas: new(int32(1)),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{"app": "test-workload-no-pod-access"},
 			},
@@ -497,14 +492,13 @@ func TestGetWorkloadsStatus_MixedResults(t *testing.T) {
 	g := NewWithT(t)
 
 	// Create a Deployment for testing
-	replicas := int32(1)
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-workload-mixed-exists",
 			Namespace: "default",
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
+			Replicas: new(int32(1)),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{"app": "test-workload-mixed-exists"},
 			},
@@ -634,14 +628,13 @@ func TestGetWorkloadsStatus_StatefulSet(t *testing.T) {
 	g := NewWithT(t)
 
 	// Create a StatefulSet for testing
-	replicas := int32(1)
 	statefulSet := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-statefulset",
 			Namespace: "default",
 		},
 		Spec: appsv1.StatefulSetSpec{
-			Replicas: &replicas,
+			Replicas: new(int32(1)),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{"app": "test-statefulset"},
 			},

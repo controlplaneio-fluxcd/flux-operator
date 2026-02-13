@@ -22,14 +22,13 @@ func TestGetWorkloadStatus_Privileged(t *testing.T) {
 	g := NewWithT(t)
 
 	// Create a Deployment for testing
-	replicas := int32(1)
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-workload-priv",
 			Namespace: "default",
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
+			Replicas: new(int32(1)),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{"app": "test-workload-priv"},
 			},
@@ -75,14 +74,13 @@ func TestGetWorkloadStatus_UnprivilegedUser_Forbidden(t *testing.T) {
 	g := NewWithT(t)
 
 	// Create a Deployment for testing
-	replicas := int32(1)
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-workload-unpriv",
 			Namespace: "default",
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
+			Replicas: new(int32(1)),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{"app": "test-workload-unpriv"},
 			},
@@ -135,14 +133,13 @@ func TestGetWorkloadStatus_WithUserRBAC_Success(t *testing.T) {
 	g := NewWithT(t)
 
 	// Create a Deployment for testing
-	replicas := int32(1)
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-workload-rbac",
 			Namespace: "default",
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
+			Replicas: new(int32(1)),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{"app": "test-workload-rbac"},
 			},
@@ -239,14 +236,13 @@ func TestGetWorkloadStatus_WithGroupRBAC_Success(t *testing.T) {
 	g := NewWithT(t)
 
 	// Create a Deployment for testing
-	replicas := int32(1)
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-workload-group-rbac",
 			Namespace: "default",
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
+			Replicas: new(int32(1)),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{"app": "test-workload-group-rbac"},
 			},
@@ -342,14 +338,13 @@ func TestGetWorkloadStatus_WithNamespaceScopedRBAC_Success(t *testing.T) {
 	g := NewWithT(t)
 
 	// Create a Deployment for testing in default namespace
-	replicas := int32(1)
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-workload-ns-scoped",
 			Namespace: "default",
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
+			Replicas: new(int32(1)),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{"app": "test-workload-ns-scoped"},
 			},
@@ -454,14 +449,13 @@ func TestGetWorkloadStatus_WithNamespaceScopedRBAC_ForbiddenInOtherNamespace(t *
 	defer testClient.Delete(ctx, otherNS)
 
 	// Create a Deployment in the other namespace
-	replicas := int32(1)
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-workload-other-ns",
 			Namespace: "workload-other-ns-test",
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
+			Replicas: new(int32(1)),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{"app": "test-workload-other-ns"},
 			},
@@ -556,14 +550,13 @@ func TestGetWorkloadStatus_WithDeploymentAccessButNoPodAccess_Forbidden(t *testi
 	g := NewWithT(t)
 
 	// Create a Deployment for testing
-	replicas := int32(1)
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-workload-no-pods",
 			Namespace: "default",
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
+			Replicas: new(int32(1)),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{"app": "test-workload-no-pods"},
 			},
@@ -671,14 +664,13 @@ func TestGetWorkloadStatus_StatefulSet(t *testing.T) {
 	g := NewWithT(t)
 
 	// Create a StatefulSet for testing
-	replicas := int32(1)
 	statefulSet := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-statefulset-status",
 			Namespace: "default",
 		},
 		Spec: appsv1.StatefulSetSpec{
-			Replicas: &replicas,
+			Replicas: new(int32(1)),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{"app": "test-statefulset-status"},
 			},
@@ -819,7 +811,6 @@ func TestGetWorkloadStatus_CronJob(t *testing.T) {
 	t.Run("suspended cronjob", func(t *testing.T) {
 		g := NewWithT(t)
 
-		suspended := true
 		cronJob := &batchv1.CronJob{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-cronjob-suspended",
@@ -827,7 +818,7 @@ func TestGetWorkloadStatus_CronJob(t *testing.T) {
 			},
 			Spec: batchv1.CronJobSpec{
 				Schedule: "0 0 * * *",
-				Suspend:  &suspended,
+				Suspend:  new(true),
 				JobTemplate: batchv1.JobTemplateSpec{
 					Spec: batchv1.JobSpec{
 						Template: corev1.PodTemplateSpec{
@@ -905,14 +896,13 @@ func TestGetWorkloadStatus_UserActions_WithRestartAndDeletePods(t *testing.T) {
 	g := NewWithT(t)
 
 	// Create a Deployment for testing
-	replicas := int32(1)
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-workload-ua-both",
 			Namespace: "default",
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
+			Replicas: new(int32(1)),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{"app": "test-workload-ua-both"},
 			},
@@ -1001,14 +991,13 @@ func TestGetWorkloadStatus_UserActions_RestartOnly(t *testing.T) {
 	g := NewWithT(t)
 
 	// Create a Deployment for testing
-	replicas := int32(1)
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-workload-ua-restart",
 			Namespace: "default",
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
+			Replicas: new(int32(1)),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{"app": "test-workload-ua-restart"},
 			},
@@ -1097,14 +1086,13 @@ func TestGetWorkloadStatus_UserActions_DeletePodsOnly(t *testing.T) {
 	g := NewWithT(t)
 
 	// Create a Deployment for testing
-	replicas := int32(1)
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-workload-ua-delpods",
 			Namespace: "default",
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
+			Replicas: new(int32(1)),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{"app": "test-workload-ua-delpods"},
 			},
@@ -1193,14 +1181,13 @@ func TestGetWorkloadStatus_UserActions_NoActions(t *testing.T) {
 	g := NewWithT(t)
 
 	// Create a Deployment for testing
-	replicas := int32(1)
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-workload-ua-none",
 			Namespace: "default",
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
+			Replicas: new(int32(1)),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{"app": "test-workload-ua-none"},
 			},
@@ -1288,14 +1275,13 @@ func TestGetWorkloadStatus_UserActions_DisabledWithoutAuth(t *testing.T) {
 	g := NewWithT(t)
 
 	// Create a Deployment for testing
-	replicas := int32(1)
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-workload-ua-disabled",
 			Namespace: "default",
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
+			Replicas: new(int32(1)),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{"app": "test-workload-ua-disabled"},
 			},
@@ -1335,14 +1321,13 @@ func TestGetWorkloadStatus_UserActions_StatefulSet(t *testing.T) {
 	g := NewWithT(t)
 
 	// Create a StatefulSet for testing
-	replicas := int32(1)
 	statefulSet := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-workload-ua-sts",
 			Namespace: "default",
 		},
 		Spec: appsv1.StatefulSetSpec{
-			Replicas: &replicas,
+			Replicas: new(int32(1)),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{"app": "test-workload-ua-sts"},
 			},
