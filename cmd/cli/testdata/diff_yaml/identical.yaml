@@ -1,0 +1,12 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: Bucket
+metadata:
+  name: test-bucket
+  namespace: flux-system
+spec:
+  interval: 5m
+  provider: generic
+  bucketName: my-bucket
+  endpoint: s3.amazonaws.com
+  secretRef:
+    name: bucket-credentials

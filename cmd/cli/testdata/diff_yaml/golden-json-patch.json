@@ -1,0 +1,17 @@
+[
+  {
+    "value": "10m",
+    "op": "replace",
+    "path": "/spec/interval"
+  },
+  {
+    "value": "aws",
+    "op": "replace",
+    "path": "/spec/provider"
+  },
+  {
+    "value": "us-east-1",
+    "op": "add",
+    "path": "/spec/region"
+  }
+]
