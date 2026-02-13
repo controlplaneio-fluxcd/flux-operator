@@ -53,11 +53,10 @@ func NewAzureDevOpsProvider(ctx context.Context, opts Options) (*AzureDevOpsProv
 }
 
 func (p *AzureDevOpsProvider) ListTags(ctx context.Context, opts Options) ([]Result, error) {
-	filterString := "tags"
 	azRefArguments := git.GetRefsArgs{
 		RepositoryId: &p.Repo,
 		Project:      &p.Project,
-		Filter:       &filterString,
+		Filter:       new("tags"),
 	}
 
 	// No straightforward api call to list all tags (GetAnnotatedTag() does not return lightweight tags)

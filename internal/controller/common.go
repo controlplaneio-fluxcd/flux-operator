@@ -133,7 +133,7 @@ func aggregateNotReadyStatus(ctx context.Context, kubeClient client.Client, obje
 // for taking ownership of resources from other controllers and tools.
 // By default, it includes managers for kustomize-controller, helm, and kubectl.
 func takeOwnershipFrom(managers []string) []ssa.FieldManager {
-	fieldManagers := []ssa.FieldManager{
+	fieldManagers := []ssa.FieldManager{ //nolint:prealloc
 		{
 			Name:          "kustomize-controller",
 			OperationType: metav1.ManagedFieldsOperationApply,

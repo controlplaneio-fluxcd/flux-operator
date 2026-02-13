@@ -46,9 +46,8 @@ func WatchSecret(ctx context.Context, name, namespace string,
 	})
 
 	// Build a cache to watch the secret.
-	sp := syncPeriod
 	cache, err := ctrlcache.New(restConfig, ctrlcache.Options{
-		SyncPeriod: &sp,
+		SyncPeriod: new(syncPeriod),
 		ByObject: map[client.Object]ctrlcache.ByObject{
 			&corev1.Secret{}: {
 				Field: fields.SelectorFromSet(fields.Set{

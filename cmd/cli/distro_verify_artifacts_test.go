@@ -301,7 +301,7 @@ func TestDistroVerifyArtifactsCmd_RemoteAttestation(t *testing.T) {
 
 	// Create local attestation file
 	localAttestationFile := filepath.Join(tempDir, "artifacts.jwt")
-	signArgs := []string{"distro", "sign", "artifacts", "--key-set", privateKeyFile, "--attestation", localAttestationFile}
+	signArgs := []string{"distro", "sign", "artifacts", "--key-set", privateKeyFile, "--attestation", localAttestationFile} //nolint:prealloc
 	for _, url := range digestURLs {
 		signArgs = append(signArgs, "--url", url)
 	}
@@ -320,7 +320,7 @@ func TestDistroVerifyArtifactsCmd_RemoteAttestation(t *testing.T) {
 	defer attestationServer.Close()
 
 	// Now verify using HTTP-hosted attestation and key-set
-	verifyArgs := []string{"distro", "verify", "artifacts", "--key-set", publicServer.URL, "--attestation", attestationServer.URL}
+	verifyArgs := []string{"distro", "verify", "artifacts", "--key-set", publicServer.URL, "--attestation", attestationServer.URL} //nolint:prealloc
 	for _, url := range digestURLs {
 		verifyArgs = append(verifyArgs, "--url", url)
 	}
