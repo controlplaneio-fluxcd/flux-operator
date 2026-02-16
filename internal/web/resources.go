@@ -38,12 +38,19 @@ func (h *Handler) ResourcesHandler(w http.ResponseWriter, req *http.Request) {
 	namespace := queryParams.Get("namespace")
 	status := queryParams.Get("status")
 
-	// Get resource status from the cluster using the request context
-	resources, err := h.GetResourcesStatus(req.Context(), kind, name, namespace, status, 2500)
-	if err != nil {
-		log.FromContext(req.Context()).Error(err, "failed to get resources status")
-		// Return empty array instead of error for better UX
-		resources = []reporter.ResourceStatus{}
+	var resources []reporter.ResourceStatus
+	if h.conf.Search != nil && h.conf.Search.Cached {
+		// Use the cached search index instead of realtime cluster queries.
+		resources = h.GetCachedResources(req.Context(), kind, name, namespace, status, 2500)
+	} else {
+		// Get resource status from the cluster using the request context.
+		var err error
+		resources, err = h.GetLiveResources(req.Context(), kind, name, namespace, status, 2500)
+		if err != nil {
+			log.FromContext(req.Context()).Error(err, "failed to get resources status")
+			// Return empty array instead of error for better UX
+			resources = []reporter.ResourceStatus{}
+		}
 	}
 
 	// Set response headers
@@ -57,30 +64,10 @@ func (h *Handler) ResourcesHandler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-// GetResourcesStatusOption defines a functional option for GetResourcesStatus.
-type GetResourcesStatusOption func(*getResourcesStatusOptions)
-
-// WithSourcesIfNamespace is a functional option to include source kinds when a specific namespace is provided.
-func WithSourcesIfNamespace() GetResourcesStatusOption {
-	return func(opts *getResourcesStatusOptions) {
-		opts.sourcesIfNamespace = true
-	}
-}
-
-type getResourcesStatusOptions struct {
-	sourcesIfNamespace bool
-}
-
-// GetResourcesStatus returns the status for the specified resource kinds and optional name in the given namespace.
-// If name is empty, returns the status for all resources of the specified kinds are returned.
-// Filters by status (Ready, Failed, Progressing, Suspended, Unknown) if provided.
-func (h *Handler) GetResourcesStatus(ctx context.Context, kind, name, namespace, status string,
-	matchLimit int, opts ...GetResourcesStatusOption) ([]reporter.ResourceStatus, error) {
-
-	var o getResourcesStatusOptions
-	for _, opt := range opts {
-		opt(&o)
-	}
+// GetLiveResources returns a list of ResourceStatus for the specified filters by querying the cluster directly.
+// If name and namespace filters are empty, it will return resources across all namespaces (subject to RBAC).
+func (h *Handler) GetLiveResources(ctx context.Context, kind, name, namespace, status string,
+	matchLimit int) ([]reporter.ResourceStatus, error) {
 
 	// Build kinds array based on query parameter
 	var kinds []string
@@ -93,19 +80,14 @@ func (h *Handler) GetResourcesStatus(ctx context.Context, kind, name, namespace,
 			fluxcdv1.ResourceSetKind,
 			fluxcdv1.FluxKustomizationKind,
 			fluxcdv1.FluxHelmReleaseKind,
-		}
-
-		// If option is not set or namespace is specified, add source kinds as well
-		if !o.sourcesIfNamespace || namespace != "" {
-			kinds = append(kinds,
-				fluxcdv1.FluxGitRepositoryKind,
-				fluxcdv1.FluxOCIRepositoryKind,
-				fluxcdv1.FluxHelmChartKind,
-				fluxcdv1.FluxHelmRepositoryKind,
-				fluxcdv1.FluxBucketKind,
-				fluxcdv1.FluxArtifactGeneratorKind,
-				fluxcdv1.ResourceSetInputProviderKind,
-			)
+			// Sources
+			fluxcdv1.FluxGitRepositoryKind,
+			fluxcdv1.FluxOCIRepositoryKind,
+			fluxcdv1.FluxHelmChartKind,
+			fluxcdv1.FluxHelmRepositoryKind,
+			fluxcdv1.FluxBucketKind,
+			fluxcdv1.FluxArtifactGeneratorKind,
+			fluxcdv1.ResourceSetInputProviderKind,
 		}
 	}
 

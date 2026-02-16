@@ -19,10 +19,11 @@ type SearchIndex struct {
 	updatedAt time.Time
 }
 
-// Update replaces the indexed resources and sets the updated timestamp.
+// Update sorts and stores the given resources in the index, replacing any existing data.
 func (idx *SearchIndex) Update(resources []reporter.ResourceStatus) {
+	sortedResources := buildSearchIndex(resources)
 	idx.mu.Lock()
-	idx.resources = resources
+	idx.resources = sortedResources
 	idx.updatedAt = time.Now()
 	idx.mu.Unlock()
 }
@@ -34,9 +35,10 @@ func (idx *SearchIndex) Update(resources []reporter.ResourceStatus) {
 // kind filters by exact match (empty means all kinds).
 // name filters by wildcard match using matchesWildcard() (empty means all names).
 // namespace filters by exact match (empty means all namespaces).
+// status filters by exact match (empty means all statuses).
 // limit caps the number of returned results (0 means unlimited).
 // Results are sorted by LastReconciled (newest first).
-func (idx *SearchIndex) SearchResources(allowedNamespaces []string, kind, name, namespace string, limit int) []reporter.ResourceStatus {
+func (idx *SearchIndex) SearchResources(allowedNamespaces []string, kind, name, namespace, status string, limit int) []reporter.ResourceStatus {
 	idx.mu.RLock()
 	resources := idx.resources
 	idx.mu.RUnlock()
@@ -72,6 +74,11 @@ func (idx *SearchIndex) SearchResources(allowedNamespaces []string, kind, name, 
 
 		// Filter by kind (exact match).
 		if kind != "" && rs.Kind != kind {
+			continue
+		}
+
+		// Filter by status (exact match).
+		if status != "" && rs.Status != status {
 			continue
 		}
 

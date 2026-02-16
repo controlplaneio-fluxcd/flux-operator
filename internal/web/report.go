@@ -146,7 +146,7 @@ func (h *Handler) refreshReportCache(ctx context.Context) {
 	h.reportCacheMu.Unlock()
 
 	// Update the search index from the reporter's resource statuses.
-	h.searchIndex.Update(buildSearchIndex(computeResult.Resources))
+	h.searchIndex.Update(computeResult.Resources)
 }
 
 // getCachedReport returns the cached report if available.

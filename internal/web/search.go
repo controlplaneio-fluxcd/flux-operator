@@ -4,6 +4,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -33,31 +34,8 @@ func (h *Handler) SearchHandler(w http.ResponseWriter, req *http.Request) {
 		name = "*" + name + "*"
 	}
 
-	// Get user-visible namespaces for RBAC filtering.
-	userNamespaces, allNamespaces, err := h.kubeClient.ListUserNamespaces(req.Context())
-	if err != nil {
-		log.FromContext(req.Context()).Error(err, "failed to list user namespaces for quick search")
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{"resources": []reporter.ResourceStatus{}}) //nolint:errcheck
-		return
-	}
-
-	// If the user has no access to any namespace, return empty results.
-	if !allNamespaces && len(userNamespaces) == 0 {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{"resources": []reporter.ResourceStatus{}}) //nolint:errcheck
-		return
-	}
-
-	// For cluster-wide access, pass nil (no RBAC filtering).
-	// Otherwise, pass the user's namespace list.
-	var allowedNamespaces []string
-	if !allNamespaces {
-		allowedNamespaces = userNamespaces
-	}
-
-	// Query the cached search index
-	resources := h.searchIndex.SearchResources(allowedNamespaces, kind, name, namespace, 10)
+	// Query the cached search index with RBAC filtering.
+	resources := h.GetCachedResources(req.Context(), kind, name, namespace, "", 10)
 
 	// Strip message from results, not needed for search.
 	for i := range resources {
@@ -73,6 +51,31 @@ func (h *Handler) SearchHandler(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+}
+
+// GetCachedResources returns resources from the cached search index filtered by the given criteria.
+// If name and namespace filters are empty, it will return resources across all namespaces (subject to RBAC).
+func (h *Handler) GetCachedResources(ctx context.Context, kind, name, namespace, status string, limit int) []reporter.ResourceStatus {
+	// Get user-visible namespaces for RBAC filtering.
+	userNamespaces, allNamespaces, err := h.kubeClient.ListUserNamespaces(ctx)
+	if err != nil {
+		log.FromContext(ctx).Error(err, "failed to list user namespaces for cached resources")
+		return []reporter.ResourceStatus{}
+	}
+
+	// If the user has no access to any namespace, return empty results.
+	if !allNamespaces && len(userNamespaces) == 0 {
+		return []reporter.ResourceStatus{}
+	}
+
+	// For cluster-wide access, pass nil (no RBAC filtering).
+	// Otherwise, pass the user's namespace list.
+	var allowedNamespaces []string
+	if !allNamespaces {
+		allowedNamespaces = userNamespaces
+	}
+
+	return h.searchIndex.SearchResources(allowedNamespaces, kind, name, namespace, status, limit)
 }
 
 // hasWildcard returns true if the pattern contains wildcard characters.

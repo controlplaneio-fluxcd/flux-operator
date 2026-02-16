@@ -81,20 +81,20 @@ func TestSearchIndex_SearchResources_NameFilter(t *testing.T) {
 	})
 
 	// Wildcard match
-	results := idx.SearchResources(nil, "", "*flux*", "", 0)
+	results := idx.SearchResources(nil, "", "*flux*", "", "", 0)
 	g.Expect(results).To(HaveLen(2))
 
 	// Prefix match
-	results = idx.SearchResources(nil, "", "flux*", "", 0)
+	results = idx.SearchResources(nil, "", "flux*", "", "", 0)
 	g.Expect(results).To(HaveLen(2))
 
 	// Exact match
-	results = idx.SearchResources(nil, "", "app-deploy", "", 0)
+	results = idx.SearchResources(nil, "", "app-deploy", "", "", 0)
 	g.Expect(results).To(HaveLen(1))
 	g.Expect(results[0].Name).To(Equal("app-deploy"))
 
 	// No match
-	results = idx.SearchResources(nil, "", "*nonexistent*", "", 0)
+	results = idx.SearchResources(nil, "", "*nonexistent*", "", "", 0)
 	g.Expect(results).To(BeEmpty())
 }
 
@@ -108,7 +108,7 @@ func TestSearchIndex_SearchResources_NamespaceFilter(t *testing.T) {
 		{Name: "app-3", Kind: "HelmRelease", Namespace: "team-a", Status: reporter.StatusReady, LastReconciled: metav1.Now()},
 	})
 
-	results := idx.SearchResources(nil, "", "", "team-a", 0)
+	results := idx.SearchResources(nil, "", "", "team-a", "", 0)
 	g.Expect(results).To(HaveLen(2))
 	for _, r := range results {
 		g.Expect(r.Namespace).To(Equal("team-a"))
@@ -125,7 +125,7 @@ func TestSearchIndex_SearchResources_KindFilter(t *testing.T) {
 		{Name: "app-3", Kind: "Kustomization", Namespace: "default", Status: reporter.StatusReady, LastReconciled: metav1.Now()},
 	})
 
-	results := idx.SearchResources(nil, "HelmRelease", "", "", 0)
+	results := idx.SearchResources(nil, "HelmRelease", "", "", "", 0)
 	g.Expect(results).To(HaveLen(1))
 	g.Expect(results[0].Kind).To(Equal("HelmRelease"))
 }
@@ -145,7 +145,7 @@ func TestSearchIndex_SearchResources_Limit(t *testing.T) {
 	})
 
 	// Limit 2 should return the 2 most recently reconciled
-	results := idx.SearchResources(nil, "", "", "", 2)
+	results := idx.SearchResources(nil, "", "", "", "", 2)
 	g.Expect(results).To(HaveLen(2))
 	g.Expect(results[0].Name).To(Equal("app-new"))
 	g.Expect(results[1].Name).To(Equal("app-mid"))
@@ -162,18 +162,18 @@ func TestSearchIndex_SearchResources_AllowedNamespaces(t *testing.T) {
 	})
 
 	// Only team-a and team-c visible
-	results := idx.SearchResources([]string{"team-a", "team-c"}, "", "", "", 0)
+	results := idx.SearchResources([]string{"team-a", "team-c"}, "", "", "", "", 0)
 	g.Expect(results).To(HaveLen(2))
 	for _, r := range results {
 		g.Expect(r.Namespace).To(BeElementOf("team-a", "team-c"))
 	}
 
 	// nil allowedNamespaces means all namespaces visible (cluster-wide access)
-	results = idx.SearchResources(nil, "", "", "", 0)
+	results = idx.SearchResources(nil, "", "", "", "", 0)
 	g.Expect(results).To(HaveLen(3))
 
 	// Empty non-nil allowedNamespaces means no access — should return nothing
-	results = idx.SearchResources([]string{}, "", "", "", 0)
+	results = idx.SearchResources([]string{}, "", "", "", "", 0)
 	g.Expect(results).To(BeEmpty())
 }
 
@@ -189,7 +189,7 @@ func TestSearchIndex_SearchResources_CombinedFilters(t *testing.T) {
 	})
 
 	// Filter by name, kind, and namespace simultaneously
-	results := idx.SearchResources(nil, "Kustomization", "*flux*", "team-a", 0)
+	results := idx.SearchResources(nil, "Kustomization", "*flux*", "team-a", "", 0)
 	g.Expect(results).To(HaveLen(1))
 	g.Expect(results[0].Name).To(Equal("flux-app"))
 }
@@ -199,7 +199,7 @@ func TestSearchIndex_SearchResources_EmptyIndex(t *testing.T) {
 
 	idx := &SearchIndex{}
 
-	results := idx.SearchResources(nil, "", "*flux*", "", 10)
+	results := idx.SearchResources(nil, "", "*flux*", "", "", 10)
 	g.Expect(results).To(BeEmpty())
 }
 
@@ -215,8 +215,50 @@ func TestSearchIndex_SearchResources_SortedByLastReconciled(t *testing.T) {
 		{Name: "new-app", Kind: "Kustomization", Namespace: "default", Status: reporter.StatusReady, LastReconciled: newer},
 	})
 
-	results := idx.SearchResources(nil, "", "", "", 0)
+	results := idx.SearchResources(nil, "", "", "", "", 0)
 	g.Expect(results).To(HaveLen(2))
 	g.Expect(results[0].Name).To(Equal("new-app"))
 	g.Expect(results[1].Name).To(Equal("old-app"))
+}
+
+func TestSearchIndex_SearchResources_StatusFilter(t *testing.T) {
+	g := NewWithT(t)
+
+	idx := &SearchIndex{}
+	idx.Update([]reporter.ResourceStatus{
+		{Name: "app-ready", Kind: "Kustomization", Namespace: "default", Status: reporter.StatusReady, LastReconciled: metav1.Now()},
+		{Name: "app-failed", Kind: "Kustomization", Namespace: "default", Status: reporter.StatusFailed, LastReconciled: metav1.Now()},
+		{Name: "app-suspended", Kind: "HelmRelease", Namespace: "default", Status: reporter.StatusSuspended, LastReconciled: metav1.Now()},
+	})
+
+	// Filter by Ready status
+	results := idx.SearchResources(nil, "", "", "", reporter.StatusReady, 0)
+	g.Expect(results).To(HaveLen(1))
+	g.Expect(results[0].Name).To(Equal("app-ready"))
+
+	// Filter by Failed status
+	results = idx.SearchResources(nil, "", "", "", reporter.StatusFailed, 0)
+	g.Expect(results).To(HaveLen(1))
+	g.Expect(results[0].Name).To(Equal("app-failed"))
+
+	// No status filter returns all
+	results = idx.SearchResources(nil, "", "", "", "", 0)
+	g.Expect(results).To(HaveLen(3))
+}
+
+func TestSearchIndex_SearchResources_StatusWithOtherFilters(t *testing.T) {
+	g := NewWithT(t)
+
+	idx := &SearchIndex{}
+	idx.Update([]reporter.ResourceStatus{
+		{Name: "app-1", Kind: "Kustomization", Namespace: "team-a", Status: reporter.StatusReady, LastReconciled: metav1.Now()},
+		{Name: "app-2", Kind: "Kustomization", Namespace: "team-a", Status: reporter.StatusFailed, LastReconciled: metav1.Now()},
+		{Name: "app-3", Kind: "HelmRelease", Namespace: "team-a", Status: reporter.StatusFailed, LastReconciled: metav1.Now()},
+		{Name: "app-4", Kind: "Kustomization", Namespace: "team-b", Status: reporter.StatusFailed, LastReconciled: metav1.Now()},
+	})
+
+	// Filter by kind + namespace + status
+	results := idx.SearchResources(nil, "Kustomization", "", "team-a", reporter.StatusFailed, 0)
+	g.Expect(results).To(HaveLen(1))
+	g.Expect(results[0].Name).To(Equal("app-2"))
 }

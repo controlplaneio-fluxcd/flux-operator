@@ -108,7 +108,8 @@ func NewResourceStatus(obj unstructured.Unstructured) ResourceStatus {
 		}
 	}
 
-	// If kind is Alert or Provider set status to Ready as they don't have conditions
+	// If kind is Alert or Provider set status to Ready if no conditions are found.
+	// Old API versions of Alert and Provider do have conditions, and these may come back in future versions.
 	if (obj.GetKind() == fluxcdv1.FluxAlertKind ||
 		obj.GetKind() == fluxcdv1.FluxAlertProviderKind) &&
 		status == StatusUnknown {

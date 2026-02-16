@@ -91,6 +91,10 @@ type WebConfigSpec struct {
 	// +optional
 	Insecure bool `json:"insecure"`
 
+	// Search holds the search configuration.
+	// +optional
+	Search *SearchSpec `json:"search"`
+
 	// UserActions holds the user actions configuration. Defaults to enabling all actions if not set.
 	// Note that, by default, actions are only available when authentication is configured with the
 	// OAuth2 type.
@@ -265,6 +269,17 @@ type ImpersonationSpec struct {
 	// Defaults to "has(claims.groups) ? claims.groups : []".
 	// +optional
 	Groups string `json:"groups"`
+}
+
+// SearchSpec holds the search configuration.
+type SearchSpec struct {
+	// Cached enables serving resource listings from the cached search index
+	// instead of querying the Kubernetes API in realtime. When enabled, the
+	// /api/v1/resources endpoint returns data from the periodically refreshed
+	// in-memory index, reducing API server load and improving response latency.
+	// The cache is updated on the same interval as the report cache.
+	// +optional
+	Cached bool `json:"cached"`
 }
 
 // UserActionsSpec holds the actions configuration.

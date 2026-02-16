@@ -229,6 +229,24 @@ spec:
 			},
 		},
 		{
+			name: "config with search.cached enabled",
+			content: `apiVersion: web.fluxcd.controlplane.io/v1
+kind: Config
+spec:
+  search:
+    cached: true
+  authentication:
+    type: Anonymous
+    anonymous:
+      username: test-user
+`,
+			wantErr: "",
+			validate: func(g Gomega, spec *fluxcdv1.WebConfigSpec) {
+				g.Expect(spec.Search).ToNot(BeNil())
+				g.Expect(spec.Search.Cached).To(BeTrue())
+			},
+		},
+		{
 			name: "config with custom claims processor",
 			content: `apiVersion: web.fluxcd.controlplane.io/v1
 kind: Config
