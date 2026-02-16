@@ -14,6 +14,8 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
 )
 
 // FavoriteItem represents a single favorite resource request.
@@ -46,7 +48,7 @@ func (h *Handler) FavoritesHandler(w http.ResponseWriter, req *http.Request) {
 	// Return empty array if no favorites
 	if len(favReq.Favorites) == 0 {
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(map[string]any{"resources": []ResourceStatus{}}); err != nil {
+		if err := json.NewEncoder(w).Encode(map[string]any{"resources": []reporter.ResourceStatus{}}); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 		return
@@ -64,8 +66,8 @@ func (h *Handler) FavoritesHandler(w http.ResponseWriter, req *http.Request) {
 
 // GetFavoritesStatus fetches the status for the specified favorite resources.
 // Resources are queried in parallel with a concurrency limit of 4.
-func (h *Handler) GetFavoritesStatus(ctx context.Context, favorites []FavoriteItem) []ResourceStatus {
-	result := make([]ResourceStatus, len(favorites))
+func (h *Handler) GetFavoritesStatus(ctx context.Context, favorites []FavoriteItem) []reporter.ResourceStatus {
+	result := make([]reporter.ResourceStatus, len(favorites))
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -84,7 +86,7 @@ func (h *Handler) GetFavoritesStatus(ctx context.Context, favorites []FavoriteIt
 
 			storeNotFound := func(message string) {
 				mu.Lock()
-				result[i] = ResourceStatus{
+				result[i] = reporter.ResourceStatus{
 					Kind:      fav.Kind,
 					Name:      fav.Name,
 					Namespace: fav.Namespace,
@@ -139,7 +141,7 @@ func (h *Handler) GetFavoritesStatus(ctx context.Context, favorites []FavoriteIt
 				return
 			}
 
-			rs := h.resourceStatusFromUnstructured(obj)
+			rs := reporter.NewResourceStatus(obj)
 			mu.Lock()
 			result[i] = rs
 			mu.Unlock()

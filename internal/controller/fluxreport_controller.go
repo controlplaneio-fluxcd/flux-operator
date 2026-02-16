@@ -72,19 +72,19 @@ func (r *FluxReportReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	// Compute the status of the Flux instance.
 	rep := reporter.NewFluxStatusReporter(r.Client, fluxcdv1.DefaultInstanceName, r.StatusManager, obj.Namespace)
-	report, _, err := rep.Compute(ctx)
+	result, err := rep.Compute(ctx)
 	if err != nil {
 		log.Error(err, "report computed with errors")
 	}
 
 	// Set the operator info.
-	report.Operator = r.getInfo()
+	result.Spec.Operator = r.getInfo()
 
 	// Record the Flux Operator version and platform.
-	reporter.RecordOperatorInfoMetric(report.Operator)
+	reporter.RecordOperatorInfoMetric(result.Spec.Operator)
 
 	// Update the FluxReport with the computed spec.
-	obj.Spec = report
+	obj.Spec = result.Spec
 
 	// Update the report timestamp.
 	msg := fmt.Sprintf("Reporting finished in %s", fmtDuration(reconcileStart))

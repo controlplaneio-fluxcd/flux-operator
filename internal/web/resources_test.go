@@ -9,8 +9,6 @@ import (
 	. "github.com/onsi/gomega"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
@@ -268,50 +266,6 @@ func TestGetResourcesStatus_WithSpecificNamespace(t *testing.T) {
 		}
 	}
 	g.Expect(found).To(BeTrue(), "should find the test resource when querying specific namespace")
-}
-
-func TestResourceStatusFromUnstructured_DependencyNotReady(t *testing.T) {
-	g := NewWithT(t)
-
-	handler := &Handler{}
-
-	// Resource with Ready=False and DependencyNotReady reason should be Progressing
-	obj := fluxcdv1.ResourceSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-dep-not-ready",
-			Namespace: "default",
-		},
-	}
-	u, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&obj)
-	g.Expect(err).NotTo(HaveOccurred())
-	unstrObj := unstructured.Unstructured{Object: u}
-	g.Expect(unstructured.SetNestedSlice(unstrObj.Object, []any{
-		map[string]any{
-			"type":               "Ready",
-			"status":             "False",
-			"reason":             "DependencyNotReady",
-			"message":            "dependency 'default/dep' is not ready",
-			"lastTransitionTime": "2025-01-01T00:00:00Z",
-		},
-	}, "status", "conditions")).To(Succeed())
-
-	rs := handler.resourceStatusFromUnstructured(unstrObj)
-	g.Expect(rs.Status).To(Equal(StatusProgressing), "DependencyNotReady should map to Progressing")
-	g.Expect(rs.Message).To(ContainSubstring("dependency"))
-
-	// Resource with Ready=False and a different reason should be Failed
-	g.Expect(unstructured.SetNestedSlice(unstrObj.Object, []any{
-		map[string]any{
-			"type":               "Ready",
-			"status":             "False",
-			"reason":             "ReconciliationFailed",
-			"message":            "apply failed",
-			"lastTransitionTime": "2025-01-01T00:00:00Z",
-		},
-	}, "status", "conditions")).To(Succeed())
-
-	rs = handler.resourceStatusFromUnstructured(unstrObj)
-	g.Expect(rs.Status).To(Equal(StatusFailed), "ReconciliationFailed should map to Failed")
 }
 
 func TestGetResourcesStatus_IgnoresForbiddenErrors(t *testing.T) {

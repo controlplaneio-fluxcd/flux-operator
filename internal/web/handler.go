@@ -31,6 +31,9 @@ type Handler struct {
 	reportCache                 *unstructured.Unstructured
 	reportCacheStatsByNamespace []reporter.ReconcilerStatsByNamespace
 	reportCacheMu               sync.RWMutex
+
+	// Search index
+	searchIndex *SearchIndex
 }
 
 // NewHandler creates a new handler for the web server.
@@ -51,6 +54,7 @@ func NewHandler(ctx context.Context, conf *fluxcdv1.WebConfigSpec, spaHandler ht
 		version:       version,
 		statusManager: statusManager,
 		namespace:     namespace,
+		searchIndex:   &SearchIndex{},
 	}
 
 	// Create HTTP request multiplexer.

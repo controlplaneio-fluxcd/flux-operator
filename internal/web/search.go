@@ -9,11 +9,13 @@ import (
 	"strings"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
 )
 
-// SearchHandler handles GET /api/v1/search requests and returns the status of Flux resources.
-// Results are filtered by name with wildcard support.
-// Example: /api/v1/search?&name=flux
+// SearchHandler handles GET /api/v1/search requests and returns the status of Flux resources
+// from the cached search index. Results are filtered by name with wildcard support.
+// Example: /api/v1/search?name=flux
 func (h *Handler) SearchHandler(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodGet && req.Method != http.MethodHead {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -31,12 +33,35 @@ func (h *Handler) SearchHandler(w http.ResponseWriter, req *http.Request) {
 		name = "*" + name + "*"
 	}
 
-	// Get resource status from the cluster using the request context
-	resources, err := h.GetResourcesStatus(req.Context(), kind, name, namespace, "", 10, WithSourcesIfNamespace())
+	// Get user-visible namespaces for RBAC filtering.
+	userNamespaces, allNamespaces, err := h.kubeClient.ListUserNamespaces(req.Context())
 	if err != nil {
-		log.FromContext(req.Context()).Error(err, "failed to get resources status for quick search")
-		// Return empty array instead of error for better UX
-		resources = []ResourceStatus{}
+		log.FromContext(req.Context()).Error(err, "failed to list user namespaces for quick search")
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"resources": []reporter.ResourceStatus{}}) //nolint:errcheck
+		return
+	}
+
+	// If the user has no access to any namespace, return empty results.
+	if !allNamespaces && len(userNamespaces) == 0 {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"resources": []reporter.ResourceStatus{}}) //nolint:errcheck
+		return
+	}
+
+	// For cluster-wide access, pass nil (no RBAC filtering).
+	// Otherwise, pass the user's namespace list.
+	var allowedNamespaces []string
+	if !allNamespaces {
+		allowedNamespaces = userNamespaces
+	}
+
+	// Query the cached search index
+	resources := h.searchIndex.SearchResources(allowedNamespaces, kind, name, namespace, 10)
+
+	// Strip message from results, not needed for search.
+	for i := range resources {
+		resources[i].Message = ""
 	}
 
 	// Set response headers

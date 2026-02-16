@@ -17,6 +17,13 @@ import (
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
+// FluxStatusReport holds the complete result of a Flux status computation.
+type FluxStatusReport struct {
+	Spec             fluxcdv1.FluxReportSpec
+	StatsByNamespace []ReconcilerStatsByNamespace
+	Resources        []ResourceStatus
+}
+
 // FluxStatusReporter is responsible for computing
 // the status report of the Flux installation.
 type FluxStatusReporter struct {
@@ -40,41 +47,45 @@ func NewFluxStatusReporter(kubeClient client.Client, instance, manager, namespac
 	}
 }
 
-// Compute generate the status report of the Flux installation.
-func (r *FluxStatusReporter) Compute(ctx context.Context) (fluxcdv1.FluxReportSpec, []ReconcilerStatsByNamespace, error) {
-	report := fluxcdv1.FluxReportSpec{}
-	report.Distribution = r.getDistributionStatus(ctx)
+// Compute generates the status report of the Flux installation.
+// The returned FluxStatusReport is always non-nil, even on error,
+// containing whatever partial data was computed before the failure.
+func (r *FluxStatusReporter) Compute(ctx context.Context) (*FluxStatusReport, error) {
+	result := &FluxStatusReport{}
+	result.Spec.Distribution = r.getDistributionStatus(ctx)
 
 	cluster, err := r.getClusterInfo(ctx)
 	if err != nil {
-		return report, nil, fmt.Errorf("failed to compute cluster info: %w", err)
+		return result, fmt.Errorf("failed to compute cluster info: %w", err)
 	}
-	report.Cluster = cluster
+	result.Spec.Cluster = cluster
 
 	crds, err := r.listCRDs(ctx)
 	if err != nil {
-		return report, nil, fmt.Errorf("failed to list CRDs: %w", err)
+		return result, fmt.Errorf("failed to list CRDs: %w", err)
 	}
 
 	componentsStatus, err := r.getComponentsStatus(ctx)
 	if err != nil {
-		return report, nil, fmt.Errorf("failed to compute components status: %w", err)
+		return result, fmt.Errorf("failed to compute components status: %w", err)
 	}
-	report.ComponentsStatus = componentsStatus
+	result.Spec.ComponentsStatus = componentsStatus
 
-	reconcilersStatus, reconcilersStatsByNamespace, err := r.getReconcilersStatus(ctx, crds)
+	reconcilersStatus, statsByNamespace, resources, err := r.getReconcilersStatus(ctx, crds)
 	if err != nil {
-		return report, nil, fmt.Errorf("failed to compute reconcilers status: %w", err)
+		return result, fmt.Errorf("failed to compute reconcilers status: %w", err)
 	}
-	report.ReconcilersStatus = reconcilersStatus
+	result.Spec.ReconcilersStatus = reconcilersStatus
+	result.StatsByNamespace = statsByNamespace
+	result.Resources = resources
 
 	syncStatus, err := r.getSyncStatus(ctx, crds)
 	if err != nil {
-		return report, nil, fmt.Errorf("failed to compute sync status: %w", err)
+		return result, fmt.Errorf("failed to compute sync status: %w", err)
 	}
-	report.SyncStatus = syncStatus
+	result.Spec.SyncStatus = syncStatus
 
-	return report, reconcilersStatsByNamespace, nil
+	return result, nil
 }
 
 // RequestReportUpdate annotates the FluxReport object to trigger a reconciliation.

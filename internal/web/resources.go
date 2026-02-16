@@ -12,17 +12,14 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
-	"github.com/fluxcd/pkg/apis/meta"
-	ssautil "github.com/fluxcd/pkg/ssa/utils"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
 )
 
 // ResourcesHandler handles GET /api/v1/resources requests and returns the status of Flux resources.
@@ -46,7 +43,7 @@ func (h *Handler) ResourcesHandler(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		log.FromContext(req.Context()).Error(err, "failed to get resources status")
 		// Return empty array instead of error for better UX
-		resources = []ResourceStatus{}
+		resources = []reporter.ResourceStatus{}
 	}
 
 	// Set response headers
@@ -58,35 +55,6 @@ func (h *Handler) ResourcesHandler(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-}
-
-const (
-	StatusReady       = "Ready"
-	StatusFailed      = "Failed"
-	StatusProgressing = "Progressing"
-	StatusSuspended   = "Suspended"
-	StatusUnknown     = "Unknown"
-)
-
-// ResourceStatus represents the reconciliation status of a Flux resource.
-type ResourceStatus struct {
-	// Name of the resource.
-	Name string `json:"name"`
-
-	// Kind of the resource.
-	Kind string `json:"kind"`
-
-	// Namespace of the resource.
-	Namespace string `json:"namespace"`
-
-	// Status can be "Ready", "Failed", "Progressing", "Suspended", "Unknown"
-	Status string `json:"status"`
-
-	// Reason is a brief reason for the current status.
-	Message string `json:"message"`
-
-	// LastReconciled is the timestamp of the last reconciliation.
-	LastReconciled metav1.Time `json:"lastReconciled"`
 }
 
 // GetResourcesStatusOption defines a functional option for GetResourcesStatus.
@@ -107,7 +75,7 @@ type getResourcesStatusOptions struct {
 // If name is empty, returns the status for all resources of the specified kinds are returned.
 // Filters by status (Ready, Failed, Progressing, Suspended, Unknown) if provided.
 func (h *Handler) GetResourcesStatus(ctx context.Context, kind, name, namespace, status string,
-	matchLimit int, opts ...GetResourcesStatusOption) ([]ResourceStatus, error) {
+	matchLimit int, opts ...GetResourcesStatusOption) ([]reporter.ResourceStatus, error) {
 
 	var o getResourcesStatusOptions
 	for _, opt := range opts {
@@ -154,7 +122,7 @@ func (h *Handler) GetResourcesStatus(ctx context.Context, kind, name, namespace,
 
 		// If the user has no access to any namespaces, return empty result
 		if len(userNamespaces) == 0 {
-			return []ResourceStatus{}, nil
+			return []reporter.ResourceStatus{}, nil
 		}
 
 		// If the user has cluster-wide access, we can add FluxInstance to kinds
@@ -168,7 +136,7 @@ func (h *Handler) GetResourcesStatus(ctx context.Context, kind, name, namespace,
 		}
 	}
 
-	var result []ResourceStatus
+	var result []reporter.ResourceStatus
 
 	if len(kinds) == 0 {
 		return nil, errors.New("no resource kinds specified")
@@ -206,7 +174,7 @@ func (h *Handler) GetResourcesStatus(ctx context.Context, kind, name, namespace,
 				namespacesToQuery = []string{""}
 			}
 
-			var byKindResult []ResourceStatus
+			var byKindResult []reporter.ResourceStatus
 			for _, ns := range namespacesToQuery {
 				list := unstructured.UnstructuredList{
 					Object: map[string]any{
@@ -245,7 +213,7 @@ func (h *Handler) GetResourcesStatus(ctx context.Context, kind, name, namespace,
 						}
 					}
 
-					rs := h.resourceStatusFromUnstructured(obj)
+					rs := reporter.NewResourceStatus(obj)
 					byKindResult = append(byKindResult, rs)
 				}
 			}
@@ -267,7 +235,7 @@ func (h *Handler) GetResourcesStatus(ctx context.Context, kind, name, namespace,
 
 	// Filter by status if specified
 	if status != "" {
-		filteredResult := make([]ResourceStatus, 0, len(result))
+		filteredResult := make([]reporter.ResourceStatus, 0, len(result))
 		for _, rs := range result {
 			if rs.Status == status {
 				filteredResult = append(filteredResult, rs)
@@ -282,112 +250,4 @@ func (h *Handler) GetResourcesStatus(ctx context.Context, kind, name, namespace,
 	})
 
 	return result, nil
-}
-
-// resourceStatusFromUnstructured extracts the ResourceStatus from an unstructured Kubernetes object.
-// Maps Kubernetes condition status to one of: "Ready", "Failed", "Progressing", "Suspended", "Unknown"
-// nolint: gocyclo
-func (h *Handler) resourceStatusFromUnstructured(obj unstructured.Unstructured) ResourceStatus {
-	status := StatusUnknown
-	message := "No status information available"
-	lastReconciled := metav1.Time{Time: obj.GetCreationTimestamp().Time}
-
-	// Check for status conditions (Ready condition)
-	if conditions, found, err := unstructured.NestedSlice(obj.Object, "status", "conditions"); found && err == nil {
-		for _, cond := range conditions {
-			if condition, ok := cond.(map[string]any); ok && condition["type"] == meta.ReadyCondition {
-				// Get condition status (True/False/Unknown)
-				if condStatus, ok := condition["status"].(string); ok {
-					switch condStatus {
-					case "True":
-						status = StatusReady
-					case "False":
-						if reason, exists := condition["reason"]; exists {
-							if reasonStr, _ := reason.(string); reasonStr == meta.DependencyNotReadyReason {
-								status = StatusProgressing
-								break
-							}
-						}
-						status = StatusFailed
-					case "Unknown":
-						// Check reason to determine if it's progressing or truly unknown
-						if reason, exists := condition["reason"]; exists {
-							reasonStr, _ := reason.(string)
-							if reasonStr == StatusProgressing || reasonStr == "Reconciling" {
-								status = StatusProgressing
-							} else {
-								status = StatusUnknown
-							}
-						} else {
-							status = StatusProgressing
-						}
-					default:
-						// Any other status value defaults to Unknown
-						status = StatusUnknown
-					}
-				}
-
-				// Extract message
-				if msg, exists := condition["message"]; exists {
-					if msgStr, ok := msg.(string); ok && msgStr != "" {
-						message = msgStr
-					}
-				}
-
-				// Extract last transition time
-				if lastTransitionTime, exists := condition["lastTransitionTime"]; exists {
-					if timeStr, ok := lastTransitionTime.(string); ok {
-						if parsedTime, err := time.Parse(time.RFC3339, timeStr); err == nil {
-							lastReconciled = metav1.Time{Time: parsedTime}
-						}
-					}
-				}
-
-				break // Found Ready condition, no need to check others
-			}
-		}
-	}
-
-	// If kind is Alert or Provider set status to Ready as they don't have conditions
-	if (obj.GetKind() == fluxcdv1.FluxAlertKind ||
-		obj.GetKind() == fluxcdv1.FluxAlertProviderKind) &&
-		status == StatusUnknown {
-		status = StatusReady
-		message = "Valid configuration"
-	}
-
-	// if kind is HelmRepository and has .spec.type of 'oci', set status to Ready
-	if obj.GetKind() == fluxcdv1.FluxHelmRepositoryKind {
-		if specType, found, err := unstructured.NestedString(obj.Object, "spec", "type"); found && err == nil {
-			if specType == "oci" && status == StatusUnknown {
-				status = StatusReady
-				message = "Valid configuration"
-			}
-		}
-	}
-
-	// Check for suspended state (takes precedence over condition status)
-	// Check reconcile annotation
-	if ssautil.AnyInMetadata(&obj,
-		map[string]string{fluxcdv1.ReconcileAnnotation: fluxcdv1.DisabledValue}) {
-		status = StatusSuspended
-		message = "Reconciliation suspended"
-	}
-
-	// Check spec.suspend field
-	if suspend, found, err := unstructured.NestedBool(obj.Object, "spec", "suspend"); suspend && found && err == nil {
-		status = StatusSuspended
-		message = "Reconciliation suspended"
-	}
-
-	rs := ResourceStatus{
-		Kind:           obj.GetKind(),
-		Name:           obj.GetName(),
-		Namespace:      obj.GetNamespace(),
-		LastReconciled: lastReconciled,
-		Status:         status,
-		Message:        message,
-	}
-
-	return rs
 }
