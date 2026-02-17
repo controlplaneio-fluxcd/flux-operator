@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
 )
 
 // ReconcilerSource holds the Flux source info of a managed object.
@@ -142,7 +143,7 @@ func (h *Handler) extractSourceRef(ctx context.Context, kind, namespace, name st
 		return nil, fmt.Errorf("no URL found in %s/%s/%s", kind, namespace, name)
 	}
 
-	status := h.resourceStatusFromUnstructured(*sourceObj)
+	status := reporter.NewResourceStatus(*sourceObj)
 	return &ReconcilerSource{
 		Kind:           kind,
 		Name:           name,

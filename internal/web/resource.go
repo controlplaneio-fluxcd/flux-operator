@@ -18,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
 
@@ -105,7 +106,7 @@ func (h *Handler) GetResource(ctx context.Context, kind, name, namespace string)
 	}
 
 	// Inject the reconciler reference
-	status := h.resourceStatusFromUnstructured(*obj)
+	status := reporter.NewResourceStatus(*obj)
 	reconciler := getReconcilerRef(obj)
 	reconcilerRef := map[string]any{
 		"status":         status.Status,

@@ -61,11 +61,11 @@ func (h *Handler) GetReport(ctx context.Context) (*unstructured.Unstructured, er
 	if cached, cachedStats := h.getCachedReport(); cached != nil {
 		report, statsByNamespace = cached, cachedStats
 	} else {
-		if r, s, err := h.buildReport(ctx); err != nil {
+		r, computeResult, err := h.buildReport(ctx)
+		if err != nil {
 			return nil, err
-		} else {
-			report, statsByNamespace = r, s
 		}
+		report, statsByNamespace = r, computeResult.StatsByNamespace
 	}
 
 	// Get and modify the report spec
@@ -132,7 +132,7 @@ func (h *Handler) startReportCache(ctx context.Context, reportInterval time.Dura
 
 // refreshReportCache builds a fresh report and updates the cache.
 func (h *Handler) refreshReportCache(ctx context.Context) {
-	report, statsByNamespace, err := h.buildReport(ctx)
+	report, computeResult, err := h.buildReport(ctx)
 	if err != nil {
 		if !errors.Is(err, context.Canceled) || ctx.Err() == nil {
 			log.FromContext(ctx).Error(err, "failed to refresh report cache")
@@ -142,8 +142,11 @@ func (h *Handler) refreshReportCache(ctx context.Context) {
 
 	h.reportCacheMu.Lock()
 	h.reportCache = report
-	h.reportCacheStatsByNamespace = statsByNamespace
+	h.reportCacheStatsByNamespace = computeResult.StatsByNamespace
 	h.reportCacheMu.Unlock()
+
+	// Update the search index from the reporter's resource statuses.
+	h.searchIndex.Update(computeResult.Resources)
 }
 
 // getCachedReport returns the cached report if available.
@@ -164,7 +167,7 @@ func (h *Handler) getCachedReport() (*unstructured.Unstructured, []reporter.Reco
 
 // buildReport builds the FluxReport directly using the reporter package
 // and injects pod metrics into the report spec.
-func (h *Handler) buildReport(ctx context.Context) (*unstructured.Unstructured, []reporter.ReconcilerStatsByNamespace, error) {
+func (h *Handler) buildReport(ctx context.Context) (*unstructured.Unstructured, *reporter.FluxStatusReport, error) {
 	// The report client needs privileged access as it needs to access all
 	// resources in the cluster to build the report. The report information,
 	// however, is crunched in a way that does not expose sensitive information.
@@ -174,13 +177,13 @@ func (h *Handler) buildReport(ctx context.Context) (*unstructured.Unstructured, 
 	// so there's no user session available to use for impersonation.
 	repClient := h.kubeClient.GetClient(ctx, kubeclient.WithPrivileges())
 	rep := reporter.NewFluxStatusReporter(repClient, fluxcdv1.DefaultInstanceName, h.statusManager, h.namespace)
-	reportSpec, statsByNamespace, err := rep.Compute(ctx)
+	computeResult, err := rep.Compute(ctx)
 	if err != nil {
 		log.FromContext(ctx).Error(err, "report computed with errors")
 	}
 
 	// Set the operator info
-	reportSpec.Operator = &fluxcdv1.OperatorInfo{
+	computeResult.Spec.Operator = &fluxcdv1.OperatorInfo{
 		APIVersion: fluxcdv1.GroupVersion.String(),
 		Version:    h.version,
 		Platform:   fmt.Sprintf("%s/%s", goruntime.GOOS, goruntime.GOARCH),
@@ -196,7 +199,7 @@ func (h *Handler) buildReport(ctx context.Context) (*unstructured.Unstructured, 
 			Name:      fluxcdv1.DefaultInstanceName,
 			Namespace: h.namespace,
 		},
-		Spec: reportSpec,
+		Spec: computeResult.Spec,
 	}
 
 	// Convert to unstructured
@@ -204,7 +207,7 @@ func (h *Handler) buildReport(ctx context.Context) (*unstructured.Unstructured, 
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to convert report to unstructured: %w", err)
 	}
-	result := &unstructured.Unstructured{Object: rawMap}
+	report := &unstructured.Unstructured{Object: rawMap}
 
 	// Fetch metrics for Flux components (non-fatal if it fails)
 	// We pass WithPrivileges() here to ensure we can read metrics from all Flux controllers,
@@ -214,13 +217,13 @@ func (h *Handler) buildReport(ctx context.Context) (*unstructured.Unstructured, 
 		// Extract the items array from metrics
 		if items, found := metrics.Object["items"]; found {
 			// Add metrics to the result under spec.metrics
-			if spec, found := result.Object["spec"].(map[string]any); found {
+			if spec, found := report.Object["spec"].(map[string]any); found {
 				spec["metrics"] = items
 			}
 		}
 	}
 
-	return result, statsByNamespace, nil
+	return report, computeResult, nil
 }
 
 func uninitialisedReport() *unstructured.Unstructured {

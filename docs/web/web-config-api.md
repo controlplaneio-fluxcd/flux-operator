@@ -16,6 +16,8 @@ The `Config` API supports:
 - **Authentication** - User authentication and authorization
     - **Anonymous** - All users share a single identity for Kubernetes RBAC
     - **OAuth2/OIDC** - Users authenticate via an OpenID Connect provider
+- **User Actions** - Optional auditing of user actions
+- **Search Configuration** - Option to enable cached search results for improved performance
 
 A YAML configuration file defines the settings to be used by the web UI server.
 This file must be specified with `--web-config=<path to file>` when starting the server.
@@ -51,15 +53,6 @@ spec:
   # Use only for local development or testing.
   insecure: false # Optional, default is false.
 
-  # User actions (optional)
-  userActions:
-    # Send audit events to Kubernetes and Flux's notification-controller.
-    # Optional. Disabled by default. Special value ["*"] enables all actions.
-    audit:
-      - reconcile
-      - suspend
-      - resume
-
   # Authentication configuration (optional)
   authentication:
     type: OAuth2 # Anonymous | OAuth2
@@ -82,19 +75,23 @@ spec:
       clientID: flux-web-client-id
       clientSecret: flux-web-client-secret
       issuerURL: https://dex.example.com
+
+  # User actions (optional)
+  userActions:
+    # Send audit events to Kubernetes and Flux's notification-controller.
+    # Optional. Disabled by default. Special value ["*"] enables all actions.
+    audit:
+      - reconcile
+      - suspend
+      - resume
+
+  # Search configuration (optional)
+  search:
+    # If true, the /api/v1/resources endpoint returns data from the periodically
+    # refreshed in-memory cache instead of querying the Kubernetes API in realtime.
+    # This reduces API server load and improves response latency for large clusters.
+    cached: false # Optional, default is false.
 ```
-
-## User Actions
-
-To enable user actions, you need to configure [Authentication](#authentication).
-
-To enable audit notifications integrated with both Kubernetes Events and
-Flux's `notification-controller`, set `.spec.userActions.audit` to a list
-of actions to audit. When set, user actions performed in the web UI will
-generate audit events that are sent to both the Kubernetes API server and
-Flux's `notification-controller`. This allows administrators to track user
-activities for security and compliance purposes. The special value `["*"]`
-can be used to enable auditing for all supported actions.
 
 ## Authentication
 
@@ -268,6 +265,29 @@ Defaults:
 - `groups`: `"has(claims.groups) ? claims.groups : []"`
 
 At least one of `username` or `groups` must result in a non-empty value.
+
+## User Actions
+
+To enable user actions, you need to configure [Authentication](#authentication).
+
+To enable audit notifications integrated with both Kubernetes Events and
+Flux's `notification-controller`, set `.spec.userActions.audit` to a list
+of actions to audit. When set, user actions performed in the web UI will
+generate audit events that are sent to both the Kubernetes API server and
+Flux's `notification-controller`. This allows administrators to track user
+activities for security and compliance purposes. The special value `["*"]`
+can be used to enable auditing for all supported actions.
+
+## Search Configuration
+
+The web UI provides an endpoint (`/api/v1/resources`) that allows users
+to list and filter Flux resources across the cluster. By default, this endpoint queries
+the Kubernetes API server in real-time, which ensures up-to-date results
+but can lead to increased latency and API server load, especially in large clusters.
+
+When enabling the `cached` option, search queries are served from the cache instead of hitting the
+Kubernetes API server directly. This can significantly reduce response times and API server load
+for search operations, at the cost of potentially serving slightly stale data (`20s`).
 
 ## Configuration Examples
 

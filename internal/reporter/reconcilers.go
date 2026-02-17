@@ -72,9 +72,10 @@ func FilterReconcilerStatsByNamespaces(statsByNamespace []ReconcilerStatsByNames
 }
 
 func (r *FluxStatusReporter) getReconcilersStatus(ctx context.Context,
-	crds []metav1.GroupVersionKind) ([]fluxcdv1.FluxReconcilerStatus, []ReconcilerStatsByNamespace, error) {
+	crds []metav1.GroupVersionKind) ([]fluxcdv1.FluxReconcilerStatus, []ReconcilerStatsByNamespace, []ResourceStatus, error) {
 
 	var multiErr error
+	var resources []ResourceStatus
 	metricList := make([]prometheus.Labels, 0)
 	resStats := make([]fluxcdv1.FluxReconcilerStatus, len(crds))
 	statsByNamespace := make([]ReconcilerStatsByNamespace, len(crds))
@@ -100,6 +101,7 @@ func (r *FluxStatusReporter) getReconcilersStatus(ctx context.Context,
 			globalStats.total = len(list.Items)
 			for _, item := range list.Items {
 				metricList = append(metricList, fluxLabelsToValues(item))
+				resources = append(resources, NewResourceStatus(item))
 
 				ns := item.GetNamespace()
 				if _, exists := statsByNamespace[i].stats[ns]; !exists {
@@ -149,12 +151,13 @@ func (r *FluxStatusReporter) getReconcilersStatus(ctx context.Context,
 		metrics["FluxResource"].With(labels).Set(1)
 	}
 
-	opStats, opStatsByNamespace, err := r.getOperatorReconcilersStatus(ctx)
+	opStats, opStatsByNamespace, opResources, err := r.getOperatorReconcilersStatus(ctx)
 	if err != nil {
 		multiErr = kerrors.NewAggregate([]error{multiErr, err})
 	} else {
 		resStats = append(resStats, opStats...)
 		statsByNamespace = append(statsByNamespace, opStatsByNamespace...)
+		resources = append(resources, opResources...)
 	}
 
 	slices.SortStableFunc(resStats, func(i, j fluxcdv1.FluxReconcilerStatus) int {
@@ -164,13 +167,14 @@ func (r *FluxStatusReporter) getReconcilersStatus(ctx context.Context,
 		return cmp.Compare(i.apiVersion+i.kind, j.apiVersion+j.kind)
 	})
 
-	return resStats, statsByNamespace, multiErr
+	return resStats, statsByNamespace, resources, multiErr
 }
 
 func (r *FluxStatusReporter) getOperatorReconcilersStatus(
-	ctx context.Context) ([]fluxcdv1.FluxReconcilerStatus, []ReconcilerStatsByNamespace, error) {
+	ctx context.Context) ([]fluxcdv1.FluxReconcilerStatus, []ReconcilerStatsByNamespace, []ResourceStatus, error) {
 
 	var multiErr error
+	var resources []ResourceStatus
 	crds := []schema.GroupVersionKind{
 		fluxcdv1.GroupVersion.WithKind(fluxcdv1.FluxInstanceKind),
 		fluxcdv1.GroupVersion.WithKind(fluxcdv1.ResourceSetKind),
@@ -200,6 +204,8 @@ func (r *FluxStatusReporter) getOperatorReconcilersStatus(
 			globalStats.total = len(list.Items)
 
 			for _, item := range list.Items {
+				resources = append(resources, NewResourceStatus(item))
+
 				ns := item.GetNamespace()
 				if _, exists := statsByNamespace[i].stats[ns]; !exists {
 					statsByNamespace[i].stats[ns] = &reconcilerStats{}
@@ -236,7 +242,7 @@ func (r *FluxStatusReporter) getOperatorReconcilersStatus(
 		}
 	}
 
-	return resStats, statsByNamespace, multiErr
+	return resStats, statsByNamespace, resources, multiErr
 }
 
 func formatSize(b int64) string {

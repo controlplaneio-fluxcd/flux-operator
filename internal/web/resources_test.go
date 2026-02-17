@@ -9,8 +9,6 @@ import (
 	. "github.com/onsi/gomega"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
@@ -38,8 +36,8 @@ func TestGetResourcesStatus_Privileged(t *testing.T) {
 		namespace:     "flux-system",
 	}
 
-	// Call GetResourcesStatus without any user session (privileged)
-	resources, err := handler.GetResourcesStatus(ctx, "ResourceSet", "", "", "", 100)
+	// Call GetLiveResources without any user session (privileged)
+	resources, err := handler.GetLiveResources(ctx, "ResourceSet", "", "", "", 100)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(resources).NotTo(BeNil())
 
@@ -89,9 +87,9 @@ func TestGetResourcesStatus_UnprivilegedUser_EmptyResult(t *testing.T) {
 		Impersonation: imp,
 	}, userClient)
 
-	// Call GetResourcesStatus with the unprivileged user context
+	// Call GetLiveResources with the unprivileged user context
 	// Should return empty result (not error) because user has no namespace access
-	resources, err := handler.GetResourcesStatus(userCtx, "ResourceSet", "", "", "", 100)
+	resources, err := handler.GetLiveResources(userCtx, "ResourceSet", "", "", "", 100)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(resources).To(BeEmpty(), "unprivileged user should get empty result, not error")
 }
@@ -168,8 +166,8 @@ func TestGetResourcesStatus_WithUserRBAC_OnlyAccessibleResources(t *testing.T) {
 		Impersonation: imp,
 	}, userClient)
 
-	// Call GetResourcesStatus with the user context
-	resources, err := handler.GetResourcesStatus(userCtx, "ResourceSet", "", "", "", 100)
+	// Call GetLiveResources with the user context
+	resources, err := handler.GetLiveResources(userCtx, "ResourceSet", "", "", "", 100)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	// Should find our test resource in default namespace
@@ -255,8 +253,8 @@ func TestGetResourcesStatus_WithSpecificNamespace(t *testing.T) {
 		Impersonation: imp,
 	}, userClient)
 
-	// Call GetResourcesStatus with specific namespace - should work
-	resources, err := handler.GetResourcesStatus(userCtx, "ResourceSet", "", "default", "", 100)
+	// Call GetLiveResources with specific namespace - should work
+	resources, err := handler.GetLiveResources(userCtx, "ResourceSet", "", "default", "", 100)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	// Should find our test resource
@@ -268,50 +266,6 @@ func TestGetResourcesStatus_WithSpecificNamespace(t *testing.T) {
 		}
 	}
 	g.Expect(found).To(BeTrue(), "should find the test resource when querying specific namespace")
-}
-
-func TestResourceStatusFromUnstructured_DependencyNotReady(t *testing.T) {
-	g := NewWithT(t)
-
-	handler := &Handler{}
-
-	// Resource with Ready=False and DependencyNotReady reason should be Progressing
-	obj := fluxcdv1.ResourceSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-dep-not-ready",
-			Namespace: "default",
-		},
-	}
-	u, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&obj)
-	g.Expect(err).NotTo(HaveOccurred())
-	unstrObj := unstructured.Unstructured{Object: u}
-	g.Expect(unstructured.SetNestedSlice(unstrObj.Object, []any{
-		map[string]any{
-			"type":               "Ready",
-			"status":             "False",
-			"reason":             "DependencyNotReady",
-			"message":            "dependency 'default/dep' is not ready",
-			"lastTransitionTime": "2025-01-01T00:00:00Z",
-		},
-	}, "status", "conditions")).To(Succeed())
-
-	rs := handler.resourceStatusFromUnstructured(unstrObj)
-	g.Expect(rs.Status).To(Equal(StatusProgressing), "DependencyNotReady should map to Progressing")
-	g.Expect(rs.Message).To(ContainSubstring("dependency"))
-
-	// Resource with Ready=False and a different reason should be Failed
-	g.Expect(unstructured.SetNestedSlice(unstrObj.Object, []any{
-		map[string]any{
-			"type":               "Ready",
-			"status":             "False",
-			"reason":             "ReconciliationFailed",
-			"message":            "apply failed",
-			"lastTransitionTime": "2025-01-01T00:00:00Z",
-		},
-	}, "status", "conditions")).To(Succeed())
-
-	rs = handler.resourceStatusFromUnstructured(unstrObj)
-	g.Expect(rs.Status).To(Equal(StatusFailed), "ReconciliationFailed should map to Failed")
 }
 
 func TestGetResourcesStatus_IgnoresForbiddenErrors(t *testing.T) {
@@ -375,10 +329,10 @@ func TestGetResourcesStatus_IgnoresForbiddenErrors(t *testing.T) {
 		Impersonation: imp,
 	}, userClient)
 
-	// Call GetResourcesStatus without specifying kind - will query multiple kinds
+	// Call GetLiveResources without specifying kind - will query multiple kinds
 	// User only has access to resourcesets, should get forbidden for other kinds
 	// but the function should NOT return an error, just return results for accessible resources
-	resources, err := handler.GetResourcesStatus(userCtx, "", "", "default", "", 100)
+	resources, err := handler.GetLiveResources(userCtx, "", "", "default", "", 100)
 	g.Expect(err).NotTo(HaveOccurred(), "should not return error even when some kinds are forbidden")
 	// Result can be empty (if no resources exist) but should not error
 	g.Expect(resources).To(BeEmpty())
