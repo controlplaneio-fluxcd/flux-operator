@@ -8,6 +8,9 @@ import (
 
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
@@ -471,6 +474,15 @@ func TestNewResourceStatus_EmptyObject(t *testing.T) {
 }
 
 // --- test helpers ---
+
+// newTestReporter creates a FluxStatusReporter with a fake client for testing.
+func newTestReporter(scheme *runtime.Scheme, objs ...client.Object) *FluxStatusReporter {
+	kubeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(objs...).
+		Build()
+	return NewFluxStatusReporter(kubeClient, "flux", "flux-operator", "flux-system")
+}
 
 // makeObj creates a minimal unstructured object.
 func makeObj(kind, name, namespace string) unstructured.Unstructured {
