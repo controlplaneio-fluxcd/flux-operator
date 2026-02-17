@@ -11,8 +11,8 @@
  * - Less than 1 minute: "just now"
  * - Less than 60 minutes: "5m ago"
  * - Less than 24 hours: "3h ago"
- * - Older (same year): "Jan 15, 02:30 PM"
- * - Older (different year): "Jan 15, 2024, 02:30 PM"
+ * - Older (same year): "Jan 15, 02:30 PM" (en-US) or "15 Jan, 14:30" (de-DE)
+ * - Older (different year): "Jan 15, 2024, 02:30 PM" (en-US) or "15 Jan 2024, 14:30" (de-DE)
  */
 export const formatTimestamp = (timestamp) => {
   const date = new Date(timestamp)
@@ -35,22 +35,22 @@ export const formatTimestamp = (timestamp) => {
   if (includeYear) {
     options.year = 'numeric'
   }
-  return date.toLocaleString('en-US', options)
+  return date.toLocaleString(undefined, options)
 }
 
 /**
  * Format a date into an absolute time string (HH:MM:SS format).
  *
  * @param {Date|null} date - The date to format
- * @returns {string} Formatted time string (e.g., "02:30:45 PM") or "Never" if date is null
+ * @returns {string} Formatted time string (e.g., "02:30:45 PM" or "14:30:45") or "Never" if date is null
  *
  * Examples:
- * - Valid date: "02:30:45 PM"
+ * - Valid date: "02:30:45 PM" (en-US) or "14:30:45" (de-DE)
  * - Null/undefined: "Never"
  */
 export const formatTime = (date) => {
   if (!date) return 'Never'
-  return new Intl.DateTimeFormat('en-US', {
+  return new Intl.DateTimeFormat(undefined, {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
