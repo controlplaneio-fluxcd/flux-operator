@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { useMemo, useState, useEffect } from 'preact/hooks'
-import { fluxKinds, workloadKinds } from '../../../utils/constants'
+import { fluxKinds, isFluxInventoryItem, isWorkloadInventoryItem } from '../../../utils/constants'
 import { fetchWithMock } from '../../../utils/fetch'
 
 /**
@@ -111,13 +111,14 @@ export function buildGraphData(resourceData) {
   const resources = {}
 
   inventoryItems.forEach(item => {
-    if (fluxKinds.includes(item.kind)) {
+    if (isFluxInventoryItem(item)) {
       flux.push({
+        apiVersion: item.apiVersion,
         kind: item.kind,
         name: item.name,
         namespace: item.namespace
       })
-    } else if (workloadKinds.includes(item.kind)) {
+    } else if (isWorkloadInventoryItem(item)) {
       workloads.push({
         kind: item.kind,
         name: item.name,
@@ -285,7 +286,7 @@ function GroupCard({ title, count, items, isItemList, onItemClick, onTitleClick,
         {isItemList ? (
           // Items shown individually with kind and name
           items.map((item, idx) => {
-            const isClickable = onItemClick && fluxKinds.includes(item.kind)
+            const isClickable = onItemClick && isFluxInventoryItem(item)
             const resolvedNamespace = item.namespace || defaultNamespace
             const itemKey = `${item.kind}/${resolvedNamespace}/${item.name}`
             const itemData = itemStatuses?.[itemKey]

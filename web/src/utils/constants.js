@@ -147,6 +147,17 @@ export const fluxCRDs = [
 // Flux resource kinds for dropdown (derived from fluxCRDs)
 export const fluxKinds = fluxCRDs.map(crd => crd.kind)
 
+/**
+ * Check if an inventory item is a Flux resource by verifying
+ * both the kind and apiVersion. This prevents false matches for
+ * non-Flux resources that share the same kind (e.g. Bucket).
+ * @param {object} item - Inventory item with kind and apiVersion
+ * @returns {boolean} True if the item belongs to a Flux API group
+ */
+export function isFluxInventoryItem(item) {
+  return fluxKinds.includes(item.kind) && item.apiVersion?.includes('fluxcd')
+}
+
 // Event severity options (based on Kubernetes event Type field)
 export const eventSeverities = ['Normal', 'Warning']
 
@@ -160,6 +171,20 @@ export const workloadKinds = [
   'Deployment',
   'StatefulSet'
 ]
+
+// Kubernetes workload API groups
+const workloadAPIGroups = ['apps/', 'batch/']
+
+/**
+ * Check if an inventory item is a Kubernetes workload by verifying
+ * both the kind and apiVersion. This prevents false matches for
+ * custom resources that share the same kind (e.g. Deployment).
+ * @param {object} item - Inventory item with kind and apiVersion
+ * @returns {boolean} True if the item is a standard Kubernetes workload
+ */
+export function isWorkloadInventoryItem(item) {
+  return workloadKinds.includes(item.kind) && workloadAPIGroups.some(g => item.apiVersion?.startsWith(g))
+}
 
 // Map resource kind to controller name
 const kindToControllerMap = {
