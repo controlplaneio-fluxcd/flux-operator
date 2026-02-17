@@ -151,9 +151,9 @@ describe('buildGraphData function', () => {
       status: {
         reconcilerRef: { status: 'Ready' },
         inventory: [
-          { kind: 'Kustomization', name: 'child-ks', namespace: 'default' },
-          { kind: 'HelmRelease', name: 'nginx', namespace: 'default' },
-          { kind: 'GitRepository', name: 'apps', namespace: 'flux-system' }
+          { apiVersion: 'kustomize.toolkit.fluxcd.io/v1', kind: 'Kustomization', name: 'child-ks', namespace: 'default' },
+          { apiVersion: 'helm.toolkit.fluxcd.io/v2', kind: 'HelmRelease', name: 'nginx', namespace: 'default' },
+          { apiVersion: 'source.toolkit.fluxcd.io/v1', kind: 'GitRepository', name: 'apps', namespace: 'flux-system' }
         ]
       }
     }
@@ -161,9 +161,9 @@ describe('buildGraphData function', () => {
     const result = buildGraphData(resourceData)
 
     expect(result.inventory.flux).toHaveLength(3)
-    expect(result.inventory.flux[0]).toEqual({ kind: 'Kustomization', name: 'child-ks', namespace: 'default' })
-    expect(result.inventory.flux[1]).toEqual({ kind: 'HelmRelease', name: 'nginx', namespace: 'default' })
-    expect(result.inventory.flux[2]).toEqual({ kind: 'GitRepository', name: 'apps', namespace: 'flux-system' })
+    expect(result.inventory.flux[0]).toEqual({ apiVersion: 'kustomize.toolkit.fluxcd.io/v1', kind: 'Kustomization', name: 'child-ks', namespace: 'default' })
+    expect(result.inventory.flux[1]).toEqual({ apiVersion: 'helm.toolkit.fluxcd.io/v2', kind: 'HelmRelease', name: 'nginx', namespace: 'default' })
+    expect(result.inventory.flux[2]).toEqual({ apiVersion: 'source.toolkit.fluxcd.io/v1', kind: 'GitRepository', name: 'apps', namespace: 'flux-system' })
   })
 
   it('should group workloads as array of items', () => {
@@ -173,9 +173,9 @@ describe('buildGraphData function', () => {
       status: {
         reconcilerRef: { status: 'Ready' },
         inventory: [
-          { kind: 'Deployment', name: 'app1', namespace: 'default' },
-          { kind: 'Deployment', name: 'app2', namespace: 'default' },
-          { kind: 'StatefulSet', name: 'db', namespace: 'default' }
+          { apiVersion: 'apps/v1', kind: 'Deployment', name: 'app1', namespace: 'default' },
+          { apiVersion: 'apps/v1', kind: 'Deployment', name: 'app2', namespace: 'default' },
+          { apiVersion: 'apps/v1', kind: 'StatefulSet', name: 'db', namespace: 'default' }
         ]
       }
     }
@@ -253,8 +253,8 @@ describe('buildGraphData function', () => {
         reconcilerRef: { status: 'Ready' },
         inventory: {
           entries: [
-            { kind: 'ConfigMap', name: 'cm1', namespace: 'default' },
-            { kind: 'Deployment', name: 'app1', namespace: 'default' }
+            { apiVersion: 'v1', kind: 'ConfigMap', name: 'cm1', namespace: 'default' },
+            { apiVersion: 'apps/v1', kind: 'Deployment', name: 'app1', namespace: 'default' }
           ]
         }
       }
@@ -576,12 +576,12 @@ describe('GraphTabContent component', () => {
       },
       lastAttemptedRevision: 'main@sha1:abc123',
       inventory: [
-        { kind: 'Kustomization', name: 'monitoring', namespace: 'flux-system' },
-        { kind: 'HelmRelease', name: 'nginx', namespace: 'default' },
-        { kind: 'Deployment', name: 'app1', namespace: 'default' },
-        { kind: 'Deployment', name: 'app2', namespace: 'default' },
-        { kind: 'Service', name: 'svc1', namespace: 'default' },
-        { kind: 'ConfigMap', name: 'config', namespace: 'default' }
+        { apiVersion: 'kustomize.toolkit.fluxcd.io/v1', kind: 'Kustomization', name: 'monitoring', namespace: 'flux-system' },
+        { apiVersion: 'helm.toolkit.fluxcd.io/v2', kind: 'HelmRelease', name: 'nginx', namespace: 'default' },
+        { apiVersion: 'apps/v1', kind: 'Deployment', name: 'app1', namespace: 'default' },
+        { apiVersion: 'apps/v1', kind: 'Deployment', name: 'app2', namespace: 'default' },
+        { apiVersion: 'v1', kind: 'Service', name: 'svc1', namespace: 'default' },
+        { apiVersion: 'v1', kind: 'ConfigMap', name: 'config', namespace: 'default' }
       ]
     }
   }
@@ -771,7 +771,7 @@ describe('GraphTabContent component', () => {
       status: {
         reconcilerRef: { status: 'Ready' },
         inventory: [
-          { kind: 'Deployment', name: 'app1', namespace: 'default' }
+          { apiVersion: 'apps/v1', kind: 'Deployment', name: 'app1', namespace: 'default' }
         ]
       }
     }
@@ -1030,8 +1030,8 @@ describe('GraphTabContent component', () => {
       status: {
         reconcilerRef: { status: 'Ready' },
         inventory: [
-          { kind: 'Kustomization', name: 'monitoring', namespace: 'flux-system' },
-          { kind: 'HelmRelease', name: 'nginx', namespace: 'web-apps' }
+          { apiVersion: 'kustomize.toolkit.fluxcd.io/v1', kind: 'Kustomization', name: 'monitoring', namespace: 'flux-system' },
+          { apiVersion: 'helm.toolkit.fluxcd.io/v2', kind: 'HelmRelease', name: 'nginx', namespace: 'web-apps' }
         ]
       }
     }
@@ -1055,8 +1055,8 @@ describe('GraphTabContent component', () => {
       status: {
         reconcilerRef: { status: 'Ready' },
         inventory: [
-          { kind: 'Kustomization', name: 'monitoring', namespace: 'flux-system' },
-          { kind: 'HelmRelease', name: 'nginx', namespace: 'flux-system' }
+          { apiVersion: 'kustomize.toolkit.fluxcd.io/v1', kind: 'Kustomization', name: 'monitoring', namespace: 'flux-system' },
+          { apiVersion: 'helm.toolkit.fluxcd.io/v2', kind: 'HelmRelease', name: 'nginx', namespace: 'flux-system' }
         ]
       }
     }
@@ -1437,7 +1437,7 @@ describe('GraphTabContent workload status fetching', () => {
       status: {
         reconcilerRef: { status: 'Ready' },
         inventory: [
-          { kind: 'Deployment', name: 'app1', namespace: 'default' }
+          { apiVersion: 'apps/v1', kind: 'Deployment', name: 'app1', namespace: 'default' }
         ]
       }
     }
@@ -1466,7 +1466,7 @@ describe('GraphTabContent workload status fetching', () => {
       status: {
         reconcilerRef: { status: 'Ready' },
         inventory: [
-          { kind: 'Deployment', name: 'app1', namespace: 'default' }
+          { apiVersion: 'apps/v1', kind: 'Deployment', name: 'app1', namespace: 'default' }
         ]
       }
     }

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { useMemo } from 'preact/compat'
-import { fluxKinds, workloadKinds, isKindWithInventory } from '../../../utils/constants'
+import { isKindWithInventory, isFluxInventoryItem, isWorkloadInventoryItem } from '../../../utils/constants'
 import { DashboardPanel, TabButton } from '../common/panel'
 import { WorkloadsTabContent } from './WorkloadsTabContent'
 import { GraphTabContent } from './GraphTabContent'
@@ -39,11 +39,11 @@ export function InventoryPanel({ resourceData, onNavigate }) {
   }, [resourceData, hasInventory])
 
   const fluxResourcesCount = useMemo(() => {
-    return hasInventory ? resourceData.status.inventory.filter(item => fluxKinds.includes(item.kind)).length : 0
+    return hasInventory ? resourceData.status.inventory.filter(item => isFluxInventoryItem(item)).length : 0
   }, [resourceData, hasInventory])
 
   const workloadsCount = useMemo(() => {
-    return hasInventory ? resourceData.status.inventory.filter(item => workloadKinds.includes(item.kind)).length : 0
+    return hasInventory ? resourceData.status.inventory.filter(item => isWorkloadInventoryItem(item)).length : 0
   }, [resourceData, hasInventory])
 
   const secretsCount = useMemo(() => {
@@ -113,7 +113,7 @@ export function InventoryPanel({ resourceData, onNavigate }) {
   // Filter workload items
   const workloadItems = useMemo(() => {
     if (!hasInventory) return []
-    return resourceData.status.inventory.filter(item => workloadKinds.includes(item.kind))
+    return resourceData.status.inventory.filter(item => isWorkloadInventoryItem(item))
   }, [resourceData, hasInventory])
 
   // Build URL for a resource
@@ -251,7 +251,7 @@ export function InventoryPanel({ resourceData, onNavigate }) {
             </thead>
             <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
               {sortedInventory.map((item, idx) => {
-                const isFluxResource = fluxKinds.includes(item.kind)
+                const isFluxResource = isFluxInventoryItem(item)
                 return (
                   <tr key={idx} class="hover:bg-gray-50 dark:hover:bg-gray-800">
                     <td class="px-3 py-2 text-sm">

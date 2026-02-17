@@ -4,7 +4,7 @@
 import { useState, useMemo, useEffect, useRef } from 'preact/hooks'
 import { fetchWithMock } from '../../utils/fetch'
 import { usePrismTheme, YamlBlock } from '../dashboards/common/yaml'
-import { fluxKinds, isKindWithInventory, getKindAlias } from '../../utils/constants'
+import { isKindWithInventory, getKindAlias, isFluxInventoryItem } from '../../utils/constants'
 import { getStatusBadgeClass, cleanStatus } from '../../utils/status'
 import { FluxOperatorIcon } from '../layout/Icons'
 
@@ -53,7 +53,7 @@ function groupInventoryByApiVersion(inventory) {
  * - Includes navigation icon for clickable items
  */
 function InventoryItem({ item }) {
-  const isFluxResource = fluxKinds.includes(item.kind)
+  const isFluxResource = isFluxInventoryItem(item)
 
   // Build resource URL
   const ns = item.namespace || ''
