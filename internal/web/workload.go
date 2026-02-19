@@ -40,9 +40,11 @@ const (
 // This index must be set up when creating the controller-runtime manager.
 const JobOwnerCronJobField = ".metadata.ownerReferences.cronJob"
 
-// WorkloadHandler handles GET /api/v1/workload requests and returns a Kubernetes workload by kind, name and namespace.
+// WorkloadHandler handles GET /api/v1/workload requests and returns a Kubernetes workload
+// enriched with workloadInfo (status, pods, images, user actions, and parent Flux reconciler).
 // Query parameters: kind, name, namespace (all required).
 // Supported workload kinds: CronJob, DaemonSet, Deployment, StatefulSet.
+// Only Flux-managed workloads are supported — returns an error if the reconciler cannot be determined.
 // Example: /api/v1/workload?kind=Deployment&name=flux-operator&namespace=flux-system
 func (h *Handler) WorkloadHandler(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodGet && req.Method != http.MethodHead {
@@ -62,10 +64,10 @@ func (h *Handler) WorkloadHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Get the resource from the cluster
-	resource, err := h.GetWorkloadStatus(req.Context(), kind, name, namespace)
+	// Get the enriched workload from the cluster
+	obj, err := h.GetWorkloadDetails(req.Context(), kind, name, namespace)
 	if err != nil {
-		log.FromContext(req.Context()).Error(err, "failed to get workload")
+		log.FromContext(req.Context()).Error(err, "failed to get workload details")
 		switch {
 		case errors.IsNotFound(err):
 			// return empty response if resource not found
@@ -74,7 +76,7 @@ func (h *Handler) WorkloadHandler(w http.ResponseWriter, req *http.Request) {
 			_, _ = w.Write([]byte("{}"))
 		case errors.IsForbidden(err):
 			perms := user.Permissions(req.Context())
-			msg := fmt.Sprintf("You do not have access to this workload or for listing its pods. "+
+			msg := fmt.Sprintf("You do not have access to this workload or its parent reconciler. "+
 				"Contact your administrator if you believe this is an error. "+
 				"User: %s, Groups: [%s]",
 				perms.Username, strings.Join(perms.Groups, ", "))
@@ -89,7 +91,7 @@ func (h *Handler) WorkloadHandler(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	// Encode and send the response
-	if err := json.NewEncoder(w).Encode(resource); err != nil {
+	if err := json.NewEncoder(w).Encode(obj.Object); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -149,6 +151,10 @@ type WorkloadPodStatus struct {
 
 	// CreatedBy is the user who triggered the pod creation.
 	CreatedBy string `json:"createdBy,omitempty"`
+
+	// PodStatus is the full Kubernetes PodStatus.
+	// Only populated for the workload detail endpoint.
+	PodStatus *corev1.PodStatus `json:"podStatus,omitempty"`
 }
 
 // getWorkloadGVK returns the GroupVersionKind for a given workload kind.
@@ -161,7 +167,8 @@ func getWorkloadGVK(kind string) schema.GroupVersionKind {
 }
 
 // GetWorkloadStatus should fetch the Deployment/StatefulSet/DaemonSet/CronJob and return the WorkloadStatus.
-func (h *Handler) GetWorkloadStatus(ctx context.Context, kind, name, namespace string) (*WorkloadStatus, error) {
+// When includeFullStatus is true, the full Kubernetes PodStatus is included for each pod.
+func (h *Handler) GetWorkloadStatus(ctx context.Context, kind, name, namespace string, includeFullStatus bool) (*WorkloadStatus, error) {
 	// Create an unstructured object to fetch the resource
 	obj := &unstructured.Unstructured{}
 	obj.SetGroupVersionKind(getWorkloadGVK(kind))
@@ -216,7 +223,7 @@ func (h *Handler) GetWorkloadStatus(ctx context.Context, kind, name, namespace s
 	}
 
 	// Get the pods managed by the workload
-	podsStatus, err := h.GetWorkloadPods(ctx, obj)
+	podsStatus, err := h.GetWorkloadPods(ctx, obj, includeFullStatus)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get pods for workload %s/%s: %w", namespace, name, err)
 	}
@@ -255,15 +262,101 @@ func (h *Handler) GetWorkloadStatus(ctx context.Context, kind, name, namespace s
 	return workload, nil
 }
 
+// GetWorkloadDetails fetches a Kubernetes workload and enriches it with workloadInfo containing
+// the computed WorkloadStatus fields and the parent Flux reconciler data.
+// Only Flux-managed workloads are supported — returns an error if the reconciler cannot be determined.
+func (h *Handler) GetWorkloadDetails(ctx context.Context, kind, name, namespace string) (*unstructured.Unstructured, error) {
+	// Fetch the workload from the cluster
+	obj := &unstructured.Unstructured{}
+	obj.SetGroupVersionKind(getWorkloadGVK(kind))
+	key := client.ObjectKey{Name: name, Namespace: namespace}
+	if err := h.kubeClient.GetClient(ctx).Get(ctx, key, obj); err != nil {
+		return nil, fmt.Errorf("unable to get resource %s/%s in namespace %s: %w", kind, name, namespace, err)
+	}
+
+	// Determine the parent Flux reconciler from labels
+	ref := getReconcilerRef(obj)
+	if ref == "" {
+		return nil, fmt.Errorf("workload %s/%s in namespace %s is not managed by a Flux reconciler", kind, name, namespace)
+	}
+
+	// Parse the reconciler reference (format: "Kind/Namespace/Name")
+	parts := strings.SplitN(ref, "/", 3)
+	if len(parts) != 3 {
+		return nil, fmt.Errorf("invalid reconciler reference %q for workload %s/%s", ref, kind, name)
+	}
+	refKind, refNamespace, refName := parts[0], parts[1], parts[2]
+
+	// Fetch the enriched parent Flux resource
+	parentResource, err := h.GetResource(ctx, refKind, refName, refNamespace)
+	if err != nil {
+		return nil, fmt.Errorf("unable to get parent reconciler %s/%s/%s: %w", refKind, refNamespace, refName, err)
+	}
+
+	// Compute workload status (pods, images, user actions)
+	ws, err := h.GetWorkloadStatus(ctx, kind, name, namespace, true)
+	if err != nil {
+		return nil, fmt.Errorf("unable to compute workload status for %s/%s: %w", kind, name, err)
+	}
+
+	// Build workloadInfo map
+	workloadInfo := map[string]any{
+		"status":        ws.Status,
+		"statusMessage": ws.StatusMessage,
+		"createdAt":     ws.CreatedAt.Format(time.RFC3339),
+		"reconciler":    parentResource.Object,
+	}
+
+	if ws.RestartedAt != "" {
+		workloadInfo["restartedAt"] = ws.RestartedAt
+	}
+	if len(ws.ContainerImages) > 0 {
+		workloadInfo["containerImages"] = ws.ContainerImages
+	}
+	if len(ws.Pods) > 0 {
+		pods := make([]any, 0, len(ws.Pods))
+		for _, pod := range ws.Pods {
+			podMap := map[string]any{
+				"name":      pod.Name,
+				"status":    pod.Status,
+				"createdAt": pod.CreatedAt.Format(time.RFC3339),
+			}
+			if pod.StatusMessage != "" {
+				podMap["statusMessage"] = pod.StatusMessage
+			}
+			if pod.CreatedBy != "" {
+				podMap["createdBy"] = pod.CreatedBy
+			}
+			if pod.PodStatus != nil {
+				podMap["podStatus"] = pod.PodStatus
+			}
+			pods = append(pods, podMap)
+		}
+		workloadInfo["pods"] = pods
+	}
+	if len(ws.UserActions) > 0 {
+		workloadInfo["userActions"] = ws.UserActions
+	}
+
+	// Inject workloadInfo at the root of the object
+	obj.Object["workloadInfo"] = workloadInfo
+
+	// Clean runtime metadata
+	cleanObjectForExport(obj, true)
+
+	return obj, nil
+}
+
 // GetWorkloadPods returns the pods managed by a workload (Deployment, StatefulSet, DaemonSet, or CronJob).
 // For apps/v1 workloads, it uses the selector labels to find pods.
 // For CronJobs, it delegates to getCronJobPods which traverses the CronJob -> Job -> Pod ownership chain.
-func (h *Handler) GetWorkloadPods(ctx context.Context, obj *unstructured.Unstructured) ([]WorkloadPodStatus, error) {
+// When includeFullStatus is true, the full Kubernetes PodStatus is included for each pod.
+func (h *Handler) GetWorkloadPods(ctx context.Context, obj *unstructured.Unstructured, includeFullStatus bool) ([]WorkloadPodStatus, error) {
 	podList := &corev1.PodList{}
 
 	// For CronJob, we need to find Jobs owned by the CronJob, then Pods owned by those Jobs
 	if obj.GetKind() == workloadKindCronJob {
-		return h.getCronJobPods(ctx, obj)
+		return h.getCronJobPods(ctx, obj, includeFullStatus)
 	}
 
 	selector, found, err := unstructured.NestedStringMap(obj.Object, "spec", "selector", "matchLabels")
@@ -298,12 +391,16 @@ func (h *Handler) GetWorkloadPods(ctx context.Context, obj *unstructured.Unstruc
 		podStatus := string(pod.Status.Phase)
 		podMessage := getPodStatusMessage(&pod)
 
-		podsStatus = append(podsStatus, WorkloadPodStatus{
+		ps := WorkloadPodStatus{
 			Name:          pod.GetName(),
 			Status:        podStatus,
 			StatusMessage: podMessage,
 			CreatedAt:     pod.GetCreationTimestamp().Time,
-		})
+		}
+		if includeFullStatus {
+			ps.PodStatus = &pod.Status
+		}
+		podsStatus = append(podsStatus, ps)
 	}
 
 	// Sort pods by name
@@ -316,7 +413,8 @@ func (h *Handler) GetWorkloadPods(ctx context.Context, obj *unstructured.Unstruc
 
 // getCronJobPods returns the pods managed by a CronJob.
 // CronJob ownership is cascading: CronJob -> Job -> Pod.
-func (h *Handler) getCronJobPods(ctx context.Context, cronJob *unstructured.Unstructured) ([]WorkloadPodStatus, error) {
+// When includeFullStatus is true, the full Kubernetes PodStatus is included for each pod.
+func (h *Handler) getCronJobPods(ctx context.Context, cronJob *unstructured.Unstructured, includeFullStatus bool) ([]WorkloadPodStatus, error) {
 	// Query Jobs owned by this CronJob using the field index on the cluster's cached client.
 	// We use WithPrivileges() because the user already has access to the CronJob,
 	// and the index is only available on the privileged cache. This effectively results
@@ -362,13 +460,17 @@ func (h *Handler) getCronJobPods(ctx context.Context, cronJob *unstructured.Unst
 		podStatus := string(pod.Status.Phase)
 		podMessage := getPodStatusMessage(&pod)
 
-		podsStatus = append(podsStatus, WorkloadPodStatus{
+		ps := WorkloadPodStatus{
 			Name:          pod.GetName(),
 			Status:        podStatus,
 			StatusMessage: podMessage,
 			CreatedAt:     pod.GetCreationTimestamp().Time,
 			CreatedBy:     pod.GetAnnotations()[fluxcdv1.CreatedByAnnotation],
-		})
+		}
+		if includeFullStatus {
+			ps.PodStatus = &pod.Status
+		}
+		podsStatus = append(podsStatus, ps)
 	}
 
 	// Sort pods by name

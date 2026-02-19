@@ -79,7 +79,7 @@ func (h *Handler) GetWorkloadsStatus(ctx context.Context, workloads []WorkloadIt
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			ws, err := h.GetWorkloadStatus(ctx, item.Kind, item.Name, item.Namespace)
+			ws, err := h.GetWorkloadStatus(ctx, item.Kind, item.Name, item.Namespace, false)
 			if err != nil {
 				var statusMessage string
 				switch {
