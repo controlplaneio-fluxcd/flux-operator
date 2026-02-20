@@ -67,29 +67,9 @@ func diffYAMLCmdRun(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(cmd.Context(), rootArgs.timeout)
 	defer cancel()
 
-	sourceData, err := fetchYAML(ctx, args[0])
+	patch, err := diffYAML(ctx, args[0], args[1])
 	if err != nil {
-		return fmt.Errorf("fetching source: %w", err)
-	}
-
-	targetData, err := fetchYAML(ctx, args[1])
-	if err != nil {
-		return fmt.Errorf("fetching target: %w", err)
-	}
-
-	source, err := parseUnstructured(sourceData)
-	if err != nil {
-		return fmt.Errorf("parsing source YAML: %w", err)
-	}
-
-	target, err := parseUnstructured(targetData)
-	if err != nil {
-		return fmt.Errorf("parsing target YAML: %w", err)
-	}
-
-	patch, err := ssadiff.DiffUnstructured(source, target, jsondiff.Rationalize())
-	if err != nil {
-		return fmt.Errorf("computing diff: %w", err)
+		return err
 	}
 
 	switch diffYAMLArgs.output {
@@ -108,6 +88,38 @@ func diffYAMLCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+// diffYAML fetches two YAML files (local paths or remote URLs), parses them
+// as unstructured Kubernetes objects, and returns the JSON patch (RFC 6902)
+// needed to transform the source into the target.
+func diffYAML(ctx context.Context, sourcePath, targetPath string) (jsondiff.Patch, error) {
+	sourceData, err := fetchYAML(ctx, sourcePath)
+	if err != nil {
+		return nil, fmt.Errorf("fetching source: %w", err)
+	}
+
+	targetData, err := fetchYAML(ctx, targetPath)
+	if err != nil {
+		return nil, fmt.Errorf("fetching target: %w", err)
+	}
+
+	source, err := parseUnstructured(sourceData)
+	if err != nil {
+		return nil, fmt.Errorf("parsing source YAML: %w", err)
+	}
+
+	target, err := parseUnstructured(targetData)
+	if err != nil {
+		return nil, fmt.Errorf("parsing target YAML: %w", err)
+	}
+
+	patch, err := ssadiff.DiffUnstructured(source, target, jsondiff.Rationalize())
+	if err != nil {
+		return nil, fmt.Errorf("computing diff: %w", err)
+	}
+
+	return patch, nil
 }
 
 // parseUnstructured parses YAML data into an unstructured Kubernetes object.

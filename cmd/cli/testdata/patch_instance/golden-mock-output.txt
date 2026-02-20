@@ -1,0 +1,9 @@
+◎ Resolving current version from 2.7.0
+✔ Resolved version range: 2.7 -> 2.8
+✔ Using GitHub credentials for API requests
+◎ Computing patches for 1 components...
+◎ Processing kustomize-controller...
+◎   Diffing CRD kustomizations.kustomize.toolkit.fluxcd.io
+✔ Appended 2 patches to %s
+◎ Validating patched instance...
+✔ Validation passed

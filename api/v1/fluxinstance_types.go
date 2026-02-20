@@ -27,7 +27,11 @@ type FluxInstanceSpec struct {
 	Distribution Distribution `json:"distribution"`
 
 	// Components is the list of controllers to install.
-	// Defaults to a commonly used subset.
+	// Defaults to the core Flux controllers:
+	//   - source-controller
+	//   - kustomize-controller
+	//   - helm-controller
+	//   - notification-controller
 	// +optional
 	Components []Component `json:"components,omitempty"`
 
@@ -367,10 +371,10 @@ func (in *FluxInstance) GetComponents() []string {
 	}
 	if len(components) == 0 {
 		components = []string{
-			"source-controller",
-			"kustomize-controller",
-			"helm-controller",
-			"notification-controller",
+			FluxSourceController,
+			FluxKustomizeController,
+			FluxHelmController,
+			FluxNotificationController,
 		}
 	}
 

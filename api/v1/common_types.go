@@ -112,6 +112,17 @@ const (
 	FluxArtifactGeneratorKind = "ArtifactGenerator"
 )
 
+// Flux controller names.
+const (
+	FluxSourceController          = "source-controller"
+	FluxKustomizeController       = "kustomize-controller"
+	FluxHelmController            = "helm-controller"
+	FluxNotificationController    = "notification-controller"
+	FluxImageReflectorController  = "image-reflector-controller"
+	FluxImageAutomationController = "image-automation-controller"
+	FluxSourceWatcher             = "source-watcher"
+)
+
 // FluxKindInfo holds information about a Flux resource kind.
 type FluxKindInfo struct {
 	// Name is the singular name of the resource kind.
@@ -162,6 +173,19 @@ var FluxKinds = []FluxKindInfo{
 	{Name: FluxImageRepositoryKind, Plural: "imagerepositories", ShortName: "imgrepo", Reconcilable: true},
 	{Name: FluxImagePolicyKind, Plural: "imagepolicies", ShortName: "imgpol", Reconcilable: true},
 	{Name: FluxImageUpdateAutomationKind, Plural: "imageupdateautomations", ShortName: "imgauto", Reconcilable: true},
+}
+
+// ControllerCRDKinds maps each Flux controller to the CRD kinds it manages.
+// The kind names reference existing constants; use FluxGroupFor() to get the
+// API group and FindFluxKindInfo() to get the plural for each kind.
+var ControllerCRDKinds = map[string][]string{
+	FluxSourceController:          {FluxGitRepositoryKind, FluxOCIRepositoryKind, FluxBucketKind, FluxHelmRepositoryKind, FluxHelmChartKind, FluxExternalArtifactKind},
+	FluxKustomizeController:       {FluxKustomizationKind},
+	FluxHelmController:            {FluxHelmReleaseKind},
+	FluxNotificationController:    {FluxAlertKind, FluxAlertProviderKind, FluxReceiverKind},
+	FluxImageReflectorController:  {FluxImageRepositoryKind, FluxImagePolicyKind},
+	FluxImageAutomationController: {FluxImageUpdateAutomationKind},
+	FluxSourceWatcher:             {FluxArtifactGeneratorKind},
 }
 
 // FluxGroupFor returns the GroupKind for the given kind.

@@ -33,3 +33,6 @@ disto/
 
 # Status Page config.
 web-config.yaml
+
+# CLI (normally how Claude Code builds it).
+/cli
