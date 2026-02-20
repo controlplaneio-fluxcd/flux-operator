@@ -45,7 +45,7 @@ docker run --rm -it --entrypoint=kubectl ghcr.io/controlplaneio-fluxcd/flux-oper
 ## Commands
 
 The Flux Operator CLI provides commands to manage the Flux Operator resources.
-Except for the `build` commands, all others require access to the Kubernetes cluster
+Except for the `build`, `diff` and `patch` commands, all others require access to the Kubernetes cluster
 and the Flux Operator to be installed.
 
 The CLI connects to the cluster using the `~.kube/config` file, similar to `kubectl`.
@@ -65,6 +65,37 @@ The following commands are available:
     - `-f, --file`: Path to the ResourceSet YAML manifest (required).
     - `--inputs-from`: Path to the ResourceSet inputs YAML manifest.
     - `--inputs-from-provider`: Path to the ResourceSetInputProvider static type YAML manifest.
+
+### Diff Commands
+
+The `flux-operator diff` commands are used to compare YAML files and generate patches.
+These commands do not require access to a Kubernetes cluster and can be run in any environment.
+
+The following commands are available:
+
+- `flux-operator diff yaml <source> <target>`: Compares two YAML files and produces a JSON patch (RFC 6902)
+  that can be applied to the source file to obtain the target file. The source and target can be
+  local file paths or remote URLs (including GitHub, GitLab, GitHub Gist and OCI URLs).
+  The comparison ignores metadata and status fields, focusing on the semantic content.
+    - `-o, --output`: Output format for the diff result (json-patch-yaml, json-patch). Default is json-patch-yaml.
+
+### Patch Commands
+
+The `flux-operator patch` commands are used to generate kustomize patches for Flux resources.
+These commands do not require access to a Kubernetes cluster and can be run in any environment.
+
+The following commands are available:
+
+- `flux-operator patch instance`: Generates kustomize patches for upgrading Flux controllers in a FluxInstance.
+  The command modifies the FluxInstance YAML manifest file in-place, appending patches to `.spec.kustomize.patches`.
+  For each controller, the command fetches the CRD schemas for both the current and target controller versions
+  from GitHub, computes a JSON patch for each changed CRD, and generates Deployment image patches pointing to
+  the target controller version. Previously generated patches (CRD and image) are automatically replaced on
+  subsequent runs.
+    - `-f, --filename`: Path to the FluxInstance YAML manifest (required, use `-` for stdin).
+    - `-v, --version`: Target Flux version (default `main`). Accepts: `main`, `v2.<minor>`, or `<minor>`.
+    - `-r, --registry`: Override the container registry for image patches (defaults to `.spec.distribution.registry`).
+    - `-c, --components`: Comma-separated list of controllers to patch (defaults to `.spec.components`).
 
 ### Get Commands
 

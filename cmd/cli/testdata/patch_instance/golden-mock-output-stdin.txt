@@ -1,0 +1,32 @@
+◎ Resolving current version from 2.7.0
+✔ Resolved version range: 2.7 -> 2.8
+✔ Using GitHub credentials for API requests
+◎ Computing patches for 1 components...
+◎ Processing kustomize-controller...
+◎   Diffing CRD kustomizations.kustomize.toolkit.fluxcd.io
+apiVersion: fluxcd.controlplane.io/v1
+kind: FluxInstance
+metadata:
+  name: flux
+  namespace: flux-system
+spec:
+  distribution:
+    version: "2.7.0"
+    registry: "ghcr.io/fluxcd"
+  components:
+    - kustomize-controller
+  kustomize:
+    patches:
+    - patch: |
+        - op: replace
+          path: /spec/template/spec/containers/0/image
+          value: ghcr.io/fluxcd/kustomize-controller:v1.8.0
+      target:
+        kind: Deployment
+        name: kustomize-controller
+    - patch: |
+        - op: remove
+          path: /spec/versions/1
+      target:
+        kind: CustomResourceDefinition
+        name: kustomizations.kustomize.toolkit.fluxcd.io

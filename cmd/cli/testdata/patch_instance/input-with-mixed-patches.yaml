@@ -1,0 +1,44 @@
+apiVersion: fluxcd.controlplane.io/v1
+kind: FluxInstance
+metadata:
+  name: flux
+  namespace: flux-system
+spec:
+  distribution:
+    version: "2.7.0"
+    registry: "ghcr.io/fluxcd"
+  components:
+    - kustomize-controller
+    - notification-controller
+  kustomize:
+    patches:
+    - patch: |
+        - op: replace
+          path: /spec/template/spec/containers/0/image
+          value: ghcr.io/fluxcd/notification-controller:v1.7.1
+      target:
+        kind: Deployment
+        name: notification-controller
+    - patch: |
+        - op: add
+          path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/stale
+          value:
+            type: string
+      target:
+        kind: CustomResourceDefinition
+        name: alerts.notification.toolkit.fluxcd.io
+    - patch: |
+        - op: replace
+          path: /spec/template/spec/containers/0/image
+          value: ghcr.io/fluxcd/kustomize-controller:v1.8.0-rc.1
+      target:
+        kind: Deployment
+        name: kustomize-controller
+    - patch: |
+        - op: add
+          path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/stale
+          value:
+            type: string
+      target:
+        kind: CustomResourceDefinition
+        name: kustomizations.kustomize.toolkit.fluxcd.io
