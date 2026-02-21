@@ -476,10 +476,6 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 	})
 	resourceManager.SetOwnerLabels(objects, obj.GetName(), obj.GetNamespace())
 
-	if err := normalize.UnstructuredList(objects); err != nil {
-		return "", err
-	}
-
 	if cm := obj.Spec.CommonMetadata; cm != nil {
 		ssautil.SetCommonMetadata(objects, cm.Labels, cm.Annotations)
 	}
@@ -489,6 +485,10 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 	}
 
 	if err := r.convertKubeConfigResources(ctx, kubeClient, objects); err != nil {
+		return "", err
+	}
+
+	if err := normalize.UnstructuredList(objects); err != nil {
 		return "", err
 	}
 
