@@ -618,6 +618,85 @@ spec:
 	g.Expect(copyCM.Data).NotTo(HaveKey("field2"))
 }
 
+func TestResourceSetReconciler_CopyFromBinaryData(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceSetReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Create source ConfigMap with both data and binaryData.
+	sourceCM := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "source-cm-binary",
+			Namespace: ns.Name,
+		},
+		Data: map[string]string{
+			"config": "plain-text",
+		},
+		BinaryData: map[string][]byte{
+			"cert.pem": []byte("binary-content"),
+		},
+	}
+	err = testEnv.Create(ctx, sourceCM)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	objDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: test-binary-copy
+  namespace: "%[1]s"
+spec:
+  resources:
+    - apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: copy-cm-binary
+        namespace: "%[1]s"
+        annotations:
+          fluxcd.controlplane.io/copyFrom: "%[1]s/source-cm-binary"
+`, ns.Name)
+
+	obj := &fluxcdv1.ResourceSet{}
+	err = yaml.Unmarshal([]byte(objDef), obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize the ResourceSet.
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Reconcile the ResourceSet.
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeFalse())
+
+	// Check the ResourceSet was deployed.
+	result := &fluxcdv1.ResourceSet{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
+
+	// Verify the copied ConfigMap has both data and binaryData.
+	copyCM := &corev1.ConfigMap{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(&corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "copy-cm-binary", Namespace: ns.Name},
+	}), copyCM)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(copyCM.Data).To(HaveKeyWithValue("config", "plain-text"))
+	g.Expect(copyCM.BinaryData).To(HaveKeyWithValue("cert.pem", []byte("binary-content")))
+}
+
 func TestResourceSetReconciler_ConvertKubeConfig(t *testing.T) {
 	g := NewWithT(t)
 	reconciler := getResourceSetReconciler(t)

@@ -5,6 +5,7 @@ package controller
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -645,6 +646,15 @@ func (r *ResourceSetReconciler) copyResources(ctx context.Context,
 				}
 				if err := unstructured.SetNestedStringMap(objects[i].Object, cm.Data, "data"); err != nil {
 					return fmt.Errorf("failed to copy data from ConfigMap/%s: %w", source, err)
+				}
+				if len(cm.BinaryData) > 0 {
+					binaryData := make(map[string]string, len(cm.BinaryData))
+					for k, v := range cm.BinaryData {
+						binaryData[k] = base64.StdEncoding.EncodeToString(v)
+					}
+					if err := unstructured.SetNestedStringMap(objects[i].Object, binaryData, "binaryData"); err != nil {
+						return fmt.Errorf("failed to copy binaryData from ConfigMap/%s: %w", source, err)
+					}
 				}
 			case "Secret":
 				secret := &corev1.Secret{}
