@@ -1,0 +1,33 @@
+apiVersion: fluxcd.controlplane.io/v1
+kind: FluxInstance
+metadata:
+  name: flux
+  namespace: flux-system
+spec:
+  distribution:
+    version: "2.7.0"
+    registry: "ghcr.io/fluxcd"
+  components:
+    - kustomize-controller
+  kustomize:
+    patches:
+      - target:
+          kind: Deployment
+          name: kustomize-controller
+        patch: |
+          - op: add
+            path: /spec/template/spec/containers/0/args/-
+            value: --log-level=debug
+      - patch: |
+          - op: replace
+            path: /spec/template/spec/containers/0/image
+            value: ghcr.io/fluxcd/kustomize-controller:v1.8.0
+        target:
+          kind: Deployment
+          name: kustomize-controller
+      - patch: |
+          - op: remove
+            path: /spec/versions/1
+        target:
+          kind: CustomResourceDefinition
+          name: kustomizations.kustomize.toolkit.fluxcd.io

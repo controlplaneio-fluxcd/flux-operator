@@ -1,0 +1,11 @@
+◎ Resolving current version from 2.7.0
+✔ Resolved version range: 2.7 -> 2.8
+✔ Using GitHub credentials for API requests
+◎ Computing patches for 1 components...
+◎ Processing notification-controller...
+◎   Diffing CRD alerts.notification.toolkit.fluxcd.io
+◎   Diffing CRD providers.notification.toolkit.fluxcd.io
+◎   Diffing CRD receivers.notification.toolkit.fluxcd.io
+✔ Appended 4 patches to %s
+◎ Validating patched instance...
+✔ Validation passed
