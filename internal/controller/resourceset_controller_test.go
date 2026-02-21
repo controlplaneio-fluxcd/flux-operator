@@ -489,6 +489,135 @@ spec:
 	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 }
 
+func TestResourceSetReconciler_CopyFromFieldRemoval(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceSetReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Create source Secret with two fields.
+	sourceSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "source-secret",
+			Namespace: ns.Name,
+		},
+		StringData: map[string]string{
+			"field1": "value1",
+			"field2": "value2",
+		},
+	}
+	err = testEnv.Create(ctx, sourceSecret)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Create source ConfigMap with two fields.
+	sourceCM := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "source-cm",
+			Namespace: ns.Name,
+		},
+		Data: map[string]string{
+			"field1": "value1",
+			"field2": "value2",
+		},
+	}
+	err = testEnv.Create(ctx, sourceCM)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	objDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: test-field-removal
+  namespace: "%[1]s"
+spec:
+  resources:
+    - apiVersion: v1
+      kind: Secret
+      metadata:
+        name: copy-secret
+        namespace: "%[1]s"
+        annotations:
+          fluxcd.controlplane.io/copyFrom: "%[1]s/source-secret"
+    - apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: copy-cm
+        namespace: "%[1]s"
+        annotations:
+          fluxcd.controlplane.io/copyFrom: "%[1]s/source-cm"
+`, ns.Name)
+
+	obj := &fluxcdv1.ResourceSet{}
+	err = yaml.Unmarshal([]byte(objDef), obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize the ResourceSet.
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Reconcile the ResourceSet.
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeFalse())
+
+	// Verify the copied Secret has both fields.
+	copySecret := &corev1.Secret{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(&corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "copy-secret", Namespace: ns.Name},
+	}), copySecret)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(copySecret.Data).To(HaveKeyWithValue("field1", []byte("value1")))
+	g.Expect(copySecret.Data).To(HaveKeyWithValue("field2", []byte("value2")))
+
+	// Verify the copied ConfigMap has both fields.
+	copyCM := &corev1.ConfigMap{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(&corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "copy-cm", Namespace: ns.Name},
+	}), copyCM)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(copyCM.Data).To(HaveKeyWithValue("field1", "value1"))
+	g.Expect(copyCM.Data).To(HaveKeyWithValue("field2", "value2"))
+
+	// Remove field2 from the source Secret.
+	sourceSecret.Data = map[string][]byte{"field1": []byte("value1")}
+	err = testClient.Update(ctx, sourceSecret)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Remove field2 from the source ConfigMap.
+	sourceCM.Data = map[string]string{"field1": "value1"}
+	err = testClient.Update(ctx, sourceCM)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Reconcile the ResourceSet after field removal.
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Verify field2 was removed from the copied Secret.
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(copySecret), copySecret)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(copySecret.Data).To(HaveKeyWithValue("field1", []byte("value1")))
+	g.Expect(copySecret.Data).NotTo(HaveKey("field2"))
+
+	// Verify field2 was removed from the copied ConfigMap.
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(copyCM), copyCM)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(copyCM.Data).To(HaveKeyWithValue("field1", "value1"))
+	g.Expect(copyCM.Data).NotTo(HaveKey("field2"))
+}
+
 func TestResourceSetReconciler_ConvertKubeConfig(t *testing.T) {
 	g := NewWithT(t)
 	reconciler := getResourceSetReconciler(t)
