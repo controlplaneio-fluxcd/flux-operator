@@ -278,7 +278,9 @@ kubectl create secret docker-registry flux-enterprise-auth \
 The `.spec.distribution.artifact` field is optional and specifies the OCI artifact URL
 containing the Flux distribution manifests. When specified, the operator will pull the
 artifact on a regular interval to determine the latest Flux version available
-including CVE patches and hotfixes.
+including CVE patches and hotfixes. When not specified, the operator will use
+the artifact embedded into its container image. This is the recommended setting
+for air-gapped environments.
 
 Example using the official distribution artifact:
 
