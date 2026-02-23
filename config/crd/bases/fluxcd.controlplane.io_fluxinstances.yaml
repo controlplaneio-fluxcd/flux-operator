@@ -157,7 +157,11 @@ spec:
               components:
                 description: |-
                   Components is the list of controllers to install.
-                  Defaults to a commonly used subset.
+                  Defaults to the core Flux controllers:
+                    - source-controller
+                    - kustomize-controller
+                    - helm-controller
+                    - notification-controller
                 items:
                   description: Component is the name of a controller to install.
                   enum:
