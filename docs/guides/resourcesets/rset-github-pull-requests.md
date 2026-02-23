@@ -65,22 +65,19 @@ In the `app-preview` namespace, we'll create a Kubernetes Secret
 containing a GitHub PAT that grants read access to the app repository and PRs.
 
 ```shell
-flux -n app-preview create secret git github-auth \
-  --url=https://github.com/org/app \
+echo $GITHUB_TOKEN | flux-operator -n app-preview create secret basic-auth github-auth \
   --username=flux \
-  --password=${GITHUB_TOKEN}
+  --password-stdin
 ```
 
 Alternatively, we can use a GitHub App token for authentication:
 
 ```shell
-flux create secret githubapp github-auth \
-  --app-id="1" \
-  --app-installation-id="2" \
-  --app-private-key=./private-key-file.pem
+flux-operator -n app-preview create secret githubapp github-auth \
+  --app-id=1 \
+  --app-installation-id=2 \
+  --app-private-key-file=./private-key-file.pem
 ```
-
-Note that GitHub App support was added in Flux v2.5 and Flux Operator v0.15.
 
 ### ResourceSet input provider
 
@@ -165,8 +162,9 @@ spec:
         name: app-<< inputs.id >>
         namespace: app-preview
         annotations:
+          event.toolkit.fluxcd.io/change_request: << inputs.id | quote >>
+          event.toolkit.fluxcd.io/commit: << inputs.sha | quote >>
           event.toolkit.fluxcd.io/preview-url: "https://app-<< inputs.id >>.example.com"
-          event.toolkit.fluxcd.io/pr-number: << inputs.id | quote >>
           event.toolkit.fluxcd.io/branch: << inputs.branch | quote >>
           event.toolkit.fluxcd.io/author: << inputs.author | quote >>
       spec:
@@ -195,8 +193,9 @@ and is also used to compose the Ingress host name where the app can be accessed.
 The latest commit SHA pushed to the PR HEAD is passed as `<< inputs.sha >>`,
 the SHA is used to set the app image tag in the Helm release values.
 
-The preview URL, PR number, branch name and author are set as annotations on the HelmRelease
-object to enrich the Flux [notifications](#notifications) that the dev team receives.
+The `change_request` and `commit` annotations are used by the Flux notification providers
+to post comments and commit statuses on the Pull Request. The preview URL, branch name
+and author are set as extra metadata to enrich the notifications that the dev team receives.
 
 To verify the ResourceSet templates are valid, we can use the
 [Flux Operator CLI](cli.md) and build them locally:
@@ -257,21 +256,29 @@ spec:
 
 ### Status reporting on Pull Requests
 
-To notify the developers of the preview deployment status, we can use the
-Flux [GitHub Dispatch Provider](https://fluxcd.io/flux/components/notification/providers/#github-dispatch)
-to post a comment on the PR page with the preview URL and the latest Helm release status.
+To notify the developers of the preview deployment status directly on the Pull Request page,
+we can use the Flux notification providers for
+[GitHub PR comments](https://fluxcd.io/flux/components/notification/providers/#github-pull-request-comment)
+and [GitHub commit statuses](https://fluxcd.io/flux/components/notification/providers/#github).
 
-First we create a Flux Provider and Alert in the `app-preview` namespace:
+The `githubpullrequestcomment` provider posts a comment on the PR page with the deployment status
+and metadata. The comment is automatically updated on subsequent events, so it doesn't spam the PR
+with multiple comments. The `github` commit status provider posts a status check on the commit
+that triggered the deployment.
+
+The PR comment provider requires the `change_request` annotation and the commit status provider
+requires the `commit` annotation, both set on the HelmRelease as shown in the
+[ResourceSet template](#resourceset-template) above.
 
 ```yaml
 ---
 apiVersion: notification.toolkit.fluxcd.io/v1beta3
 kind: Provider
 metadata:
-  name: github-dispatch
+  name: github-pr-comment
   namespace: app-preview
 spec:
-  type: githubdispatch
+  type: githubpullrequestcomment
   address: https://github.com/org/app
   secretRef:
     name: github-auth
@@ -283,49 +290,39 @@ metadata:
   namespace: app-preview
 spec:
   providerRef:
-    name: github-dispatch
+    name: github-pr-comment
+  eventSeverity: info
+  eventSources:
+    - kind: HelmRelease
+      name: '*'
+---
+apiVersion: notification.toolkit.fluxcd.io/v1beta3
+kind: Provider
+metadata:
+  name: github-commit-status
+  namespace: app-preview
+spec:
+  type: github
+  address: https://github.com/org/app
+  secretRef:
+    name: github-auth
+---
+apiVersion: notification.toolkit.fluxcd.io/v1beta3
+kind: Alert
+metadata:
+  name: github-commit-status
+  namespace: app-preview
+spec:
+  providerRef:
+    name: github-commit-status
+  eventSeverity: info
   eventSources:
     - kind: HelmRelease
       name: '*'
 ```
 
-Then in the GitHub repository, we need to define a GitHub Workflow that parses the Flux event
-metadata and posts a comment on the PR page:
-
-```yaml
-name: flux-preview-comment
-on:
-  repository_dispatch:
-jobs:
-  comment:
-    if: github.event.client_payload.metadata.pr-number != ''
-    runs-on: ubuntu-latest
-    permissions:
-      pull-requests: write
-    steps:
-      - name: Compose Comment
-        run: |
-          tee comment.md <<'EOF'
-          Flux deployment ${{ github.event.client_payload.severity }}:
-          - Preview URL: ${{ github.event.client_payload.metadata.preview-url }}
-          - Revision: ${{ github.event.client_payload.metadata.revision }}
-          - Status: ${{ github.event.client_payload.message }}
-          EOF
-      - name: Post Comment
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.client_payload.metadata.pr-number }}
-        run: |
-          gh pr comment $PR_NUMBER \
-          --repo $GITHUB_REPO \
-          --body-file comment.md \
-          --create-if-none \
-          --edit-last
-```
-
 Every time a commit is pushed to the PR branch, the Flux Operator will upgrade the Helm release
-and will update the PR comment with the latest deployment status and the preview URL.
+and will update the PR comment and commit status with the latest deployment status.
 
 ## GitHub Workflow
 
