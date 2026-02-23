@@ -67,10 +67,9 @@ In this namespace, we'll create a Kubernetes Secret
 containing a GitLab PAT that grants read access to the app project and MRs.
 
 ```shell
-flux -n app-preview create secret git gitlab-token-readonly \
-  --url=https://gitlab.com/group/app \
+echo $GITLAB_TOKEN | flux-operator -n app-preview create secret basic-auth gitlab-token-readonly \
   --username=flux \
-  --password=${GITLAB_TOKEN}
+  --password-stdin
 ```
 
 ### ResourceSet input provider
@@ -155,6 +154,8 @@ spec:
         name: app-<< inputs.id >>
         namespace: app-preview
         annotations:
+          event.toolkit.fluxcd.io/change_request: << inputs.id | quote >>
+          event.toolkit.fluxcd.io/commit: << inputs.sha | quote >>
           event.toolkit.fluxcd.io/preview-url: "https://app-<< inputs.id >>.example.com"
           event.toolkit.fluxcd.io/branch: << inputs.branch | quote >>
           event.toolkit.fluxcd.io/author: << inputs.author | quote >>
@@ -184,8 +185,9 @@ and is also used to compose the Ingress host name where the app can be accessed.
 The latest commit SHA pushed to the MR HEAD is passed as `<< inputs.sha >>`,
 the SHA is used to set the app image tag in the Helm release values.
 
-The preview URL, branch name and author are set as annotations on the HelmRelease
-object to enrich the Flux [notifications](#notifications) that the dev team receives.
+The `change_request` and `commit` annotations are used by the Flux notification providers
+to post comments and commit statuses on the Merge Request. The preview URL, branch name
+and author are set as extra metadata to enrich the notifications that the dev team receives.
 
 To verify the ResourceSet templates are valid, we can use the
 [Flux Operator CLI](cli.md) and build them locally:
@@ -241,6 +243,76 @@ spec:
     cluster: "preview-cluster-1"
     region: "eastus-1"
 ```
+
+### Status reporting on Merge Requests
+
+To notify the developers of the preview deployment status directly on the Merge Request page,
+we can use the Flux notification providers for
+[GitLab MR comments](https://fluxcd.io/flux/components/notification/providers/#gitlab-merge-request-comment)
+and [GitLab commit statuses](https://fluxcd.io/flux/components/notification/providers/#gitlab-commit-status).
+
+The `gitlabmergerequestcomment` provider posts a comment on the MR page with the deployment status
+and metadata. The comment is automatically updated on subsequent events, so it doesn't spam the MR
+with multiple comments. The `gitlab` commit status provider posts a status check on the commit
+that triggered the deployment.
+
+The MR comment provider requires the `change_request` annotation and the commit status provider
+requires the `commit` annotation, both set on the HelmRelease as shown in the
+[ResourceSet template](#resourceset-template) above.
+
+```yaml
+---
+apiVersion: notification.toolkit.fluxcd.io/v1beta3
+kind: Provider
+metadata:
+  name: gitlab-mr-comment
+  namespace: app-preview
+spec:
+  type: gitlabmergerequestcomment
+  address: https://gitlab.com/group/app
+  secretRef:
+    name: gitlab-token-readonly
+---
+apiVersion: notification.toolkit.fluxcd.io/v1beta3
+kind: Alert
+metadata:
+  name: gitlab-mr-comment
+  namespace: app-preview
+spec:
+  providerRef:
+    name: gitlab-mr-comment
+  eventSeverity: info
+  eventSources:
+    - kind: HelmRelease
+      name: '*'
+---
+apiVersion: notification.toolkit.fluxcd.io/v1beta3
+kind: Provider
+metadata:
+  name: gitlab-commit-status
+  namespace: app-preview
+spec:
+  type: gitlab
+  address: https://gitlab.com/group/app
+  secretRef:
+    name: gitlab-token-readonly
+---
+apiVersion: notification.toolkit.fluxcd.io/v1beta3
+kind: Alert
+metadata:
+  name: gitlab-commit-status
+  namespace: app-preview
+spec:
+  providerRef:
+    name: gitlab-commit-status
+  eventSeverity: info
+  eventSources:
+    - kind: HelmRelease
+      name: '*'
+```
+
+Every time a commit is pushed to the MR branch, the Flux Operator will upgrade the Helm release
+and will update the MR comment and commit status with the latest deployment status.
 
 ## Further reading
 
