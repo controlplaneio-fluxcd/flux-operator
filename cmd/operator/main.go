@@ -360,6 +360,7 @@ func main() {
 			StatusManager: controllerName,
 			EventRecorder: mgr.GetEventRecorderFor(controllerName),
 			TokenCache:    tokenCache,
+			Version:       VERSION,
 		}).SetupWithManager(mgr,
 			controller.ResourceSetInputProviderReconcilerOptions{
 				RateLimiter: runtimeCtrl.GetRateLimiter(rateLimiterOptions),
