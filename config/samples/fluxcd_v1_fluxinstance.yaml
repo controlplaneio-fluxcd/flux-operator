@@ -9,6 +9,7 @@ spec:
     artifact: "oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests:latest"
   components:
     - source-controller
+    - source-watcher
     - kustomize-controller
     - helm-controller
     - notification-controller
@@ -29,7 +30,7 @@ spec:
     kind: GitRepository
     url: "https://github.com/controlplaneio-fluxcd/distribution.git"
     ref: "refs/heads/main"
-    path: "tests/v2.3/sources"
+    path: "tests/v2.8/sources"
   kustomize:
     patches:
       - target:
