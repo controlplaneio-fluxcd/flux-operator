@@ -230,7 +230,8 @@ func patchInstanceCmdRun(cmd *cobra.Command, args []string) error {
 
 // validatePatchedInstance runs 'build instance' on the patched file to
 // verify the generated patches produce valid Flux manifests.
-func validatePatchedInstance(path string) error {
+// It is a variable so tests can override it.
+var validatePatchedInstance = func(path string) error {
 	saved := buildInstanceArgs.filename
 	defer func() { buildInstanceArgs.filename = saved }()
 	buildInstanceArgs.filename = path
