@@ -1,9 +1,9 @@
 # Build the Flux Operator CLI binary using Docker's Debian image.
-FROM --platform=${BUILDPLATFORM} golang:1.25 AS builder
+FROM --platform=${BUILDPLATFORM} golang:1.26 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 ARG VERSION
-ARG KUBECTL_VER=1.33.0
+ARG KUBECTL_VER=1.35.1
 WORKDIR /workspace
 
 RUN apt-get -y install curl
