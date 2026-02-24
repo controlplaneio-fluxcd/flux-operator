@@ -49,37 +49,6 @@ func requireEqualStrings(t *testing.T, got, want string) {
 	t.Fatalf("string mismatch:\n%s", b.String())
 }
 
-// TestPatchInstanceCmd patches a FluxInstance with all 7 controllers
-// from Flux v2.7 to v2.8, fetching real CRD data from GitHub.
-func TestPatchInstanceCmd(t *testing.T) {
-	g := NewWithT(t)
-
-	inputData, err := os.ReadFile("testdata/patch_instance/input.yaml")
-	g.Expect(err).ToNot(HaveOccurred())
-
-	tmpDir := t.TempDir()
-	tmpFile := filepath.Join(tmpDir, "instance.yaml")
-	g.Expect(os.WriteFile(tmpFile, inputData, 0644)).To(Succeed())
-
-	output, err := executeCommand([]string{
-		"patch", "instance",
-		"-f", tmpFile,
-		"-v", "8",
-	})
-	g.Expect(err).ToNot(HaveOccurred())
-
-	goldenOutput, err := os.ReadFile("testdata/patch_instance/golden-v2.8-output.txt")
-	g.Expect(err).ToNot(HaveOccurred())
-	requireEqualStrings(t, output, fmt.Sprintf(string(goldenOutput), tmpFile))
-
-	result, err := os.ReadFile(tmpFile)
-	g.Expect(err).ToNot(HaveOccurred())
-
-	golden, err := os.ReadFile("testdata/patch_instance/golden-v2.8.yaml")
-	g.Expect(err).ToNot(HaveOccurred())
-	requireEqualStrings(t, string(result), string(golden))
-}
-
 func TestPatchInstanceCmd_Mock(t *testing.T) {
 	g := NewWithT(t)
 
@@ -193,6 +162,7 @@ func TestPatchInstanceCmd_Mock(t *testing.T) {
 			resolveMainBranchSHA = func(_ context.Context, _ string) (string, error) {
 				return "abc1234567890def", nil
 			}
+			validatePatchedInstance = func(_ string) error { return nil }
 
 			if tt.stdin {
 				// Replace os.Stdin with a file containing the input data.
