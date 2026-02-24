@@ -40,7 +40,7 @@ For a deep understanding of the Flux CRDs, call the `search_flux_docs` tool for 
 - When asked about the Flux installation status, call the `get_flux_instance` tool.
 - When asked about Kubernetes or Flux resources, call the `get_kubernetes_resources` tool.
 - Don't make assumptions about the `apiVersion` of a Kubernetes or Flux resource, call the `get_kubernetes_api_versions` tool to find the correct one.
-- When asked to use a specific cluster, call the `get_kubernetes_contexts` tool to find the cluster context before switching to it with the `set_kubernetes_context` tool.
+- When asked to use a specific cluster, call the `get_kubeconfig_contexts` tool to find the cluster context before switching to it with the `set_kubeconfig_context` tool.
 - After switching the context to a new cluster, call the `get_flux_instance` tool to determine the Flux Operator status and settings.
 - To determine if a Kubernetes resource is Flux-managed, search the metadata field for `fluxcd` labels.
 - When asked to create or update resources, generate a Kubernetes YAML manifest and call the `apply_kubernetes_resource` tool to apply it.
@@ -92,8 +92,8 @@ When troubleshooting a Kustomization, follow these steps:
 
 When comparing a Flux resource between clusters, follow these steps:
 
-- Use the `get_kubernetes_contexts` tool to get the cluster contexts.
-- Use the `set_kubernetes_context` tool to switch to a specific cluster.
+- Use the `get_kubeconfig_contexts` tool to get the cluster contexts.
+- Use the `set_kubeconfig_context` tool to switch to a specific cluster.
 - Use the `get_flux_instance` tool to check the Flux Operator status and settings.
 - Use the `get_kubernetes_resources` tool to get the resource you want to compare.
 - If the Flux resource contains `valuesFrom` or `substituteFrom`, get all the referenced ConfigMap and Secret resources.
