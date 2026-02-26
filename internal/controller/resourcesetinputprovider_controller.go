@@ -193,8 +193,8 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 			r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSpec, errMsg)
 			return ctrl.Result{}, nil
 		}
-	} else if obj.Spec.Insecure {
-		err := fmt.Errorf("spec.insecure can only be set when spec.type is 'ExternalService'")
+	} else if obj.Spec.Insecure && obj.Spec.Type != fluxcdv1.InputProviderOCIArtifactTag {
+		err := fmt.Errorf("spec.insecure can only be set when spec.type is 'ExternalService' or 'OCIArtifactTag'")
 		errMsg := fmt.Sprintf("%s: %v", msgTerminalError, err)
 		conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
 		conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
@@ -972,11 +972,16 @@ func (r *ResourceSetInputProviderReconciler) buildOCIOptions(ctx context.Context
 			opts = append(opts, crane.WithAuthFromKeychain(keychain))
 		}
 
-		// Configure TLS settings.
+		// Configure TLS or insecure connections.
+		// certSecretRef takes precedence over insecure, matching
+		// source-controller behavior: if certs are provided, use them;
+		// insecure only applies when no cert secret is configured.
 		if tlsConfig != nil {
 			transport := http.DefaultTransport.(*http.Transport).Clone()
 			transport.TLSClientConfig = tlsConfig
 			opts = append(opts, crane.WithTransport(transport))
+		} else if obj.Spec.Insecure {
+			opts = append(opts, crane.Insecure)
 		}
 	}
 

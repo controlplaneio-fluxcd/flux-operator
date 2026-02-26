@@ -135,8 +135,8 @@ spec:
                 type: object
               insecure:
                 description: |-
-                  Insecure allows connecting to an ExternalService provider over
-                  plain HTTP without TLS. When not set, the URL must use HTTPS.
+                  Insecure allows connecting to an ExternalService or OCIArtifactTag provider
+                  over plain HTTP without TLS. When not set, the URL must use HTTPS.
                 type: boolean
               schedule:
                 description: Schedule defines the schedules for the input provider
@@ -253,7 +253,9 @@ spec:
                 is 'ExternalService'
               rule: self.type != 'ExternalService' || self.url.startsWith('http')
             - message: spec.insecure can only be set when spec.type is 'ExternalService'
-              rule: '!has(self.insecure) || !self.insecure || self.type == ''ExternalService'''
+                or 'OCIArtifactTag'
+              rule: '!has(self.insecure) || !self.insecure || self.type == ''ExternalService''
+                || self.type == ''OCIArtifactTag'''
             - message: spec.url must use 'https://' unless spec.insecure is true
               rule: self.type != 'ExternalService' || !self.url.startsWith('http://')
                 || (has(self.insecure) && self.insecure)
