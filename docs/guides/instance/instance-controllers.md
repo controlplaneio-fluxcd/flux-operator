@@ -89,11 +89,11 @@ To access the ControlPlane registry, the `flux-enterprise-auth` Kubernetes secre
 created in the `flux-system` namespace and should contain the credentials to pull the enterprise images:
 
 ```shell
-kubectl create secret docker-registry flux-enterprise-auth \
-  --namespace flux-system \
-  --docker-server=ghcr.io \
-  --docker-username=flux \
-  --docker-password=$ENTERPRISE_TOKEN
+echo $ENTERPRISE_TOKEN | flux-operator create secret registry flux-enterprise-auth \
+  --namespace=flux-system \
+  --server=ghcr.io \
+  --username=flux \
+  --password-stdin
 ```
 
 ## Custom configuration

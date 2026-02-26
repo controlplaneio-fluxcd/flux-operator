@@ -91,6 +91,39 @@ Running the trace command should result in a "Not managed by Flux" message:
 flux trace kustomization flux-system
 ```
 
+## Git credentials rotation
+
+If you wish to rotate the Git credentials used by Flux, you can
+overwrite the existing pull secret using the [Flux Operator CLI](cli.md).
+
+SSH credentials:
+
+```shell
+flux-operator create secret ssh flux-system \
+  --namespace=flux-system \
+  --private-key-file=./path/to/private-key \
+  --knownhosts-file=./path/to/known_hosts
+```
+
+Personal access token credentials:
+
+```shell
+echo $GIT_TOKEN | flux-operator create secret basic-auth flux-system \
+  --namespace=flux-system \
+  --username=git \
+  --password-stdin
+```
+
+GitHub App credentials:
+
+```shell
+flux-operator create secret githubapp flux-system \
+  --namespace=flux-system \
+  --app-id=1 \
+  --app-installation-id=2 \
+  --app-private-key-file=./path/to/private-key-file.pem
+```
+
 ## Cleanup the repository
 
 To finalize the migration, remove the Flux manifests from the Git repository:
@@ -235,10 +268,11 @@ Create an image pull secret in the `flux-system` namespace that contains
 a GitHub token with read access to the GitHub Container Registry:
 
 ```shell
-flux create secret oci ghcr-auth \
-    --url=ghcr.io \
+echo ${GITHUB_TOKEN} | flux-operator create secret registry ghcr-auth \
+    --namespace=flux-system \
+    --server=ghcr.io \
     --username=flux \
-    --password=${GITHUB_TOKEN}
+    --password-stdin
 ```
 
 ### Update the FluxInstance to use OCI artifacts
