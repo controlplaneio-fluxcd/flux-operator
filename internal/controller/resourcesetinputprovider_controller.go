@@ -6,8 +6,10 @@ package controller
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"regexp"
 	"slices"
@@ -28,6 +30,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/secrets"
 	kauth "github.com/google/go-containerregistry/pkg/authn/kubernetes"
 	"github.com/google/go-containerregistry/pkg/crane"
+	"github.com/hashicorp/go-retryablehttp"
 	"github.com/opencontainers/go-digest"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -58,6 +61,7 @@ type ResourceSetInputProviderReconciler struct {
 	Scheme        *runtime.Scheme
 	StatusManager string
 	TokenCache    *cache.TokenCache
+	Version       string
 }
 
 // +kubebuilder:rbac:groups=fluxcd.controlplane.io,resources=resourcesetinputproviders,verbs=get;list;watch;create;update;patch;delete
@@ -165,6 +169,37 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 		conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidDefaultValues, "%s", errMsg)
 		log.Error(err, msgTerminalError)
 		r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidDefaultValues, errMsg)
+		return ctrl.Result{}, nil
+	}
+
+	// Validate the ExternalService spec fields.
+	// This mirrors the CEL validation rules for clusters that don't support CEL.
+	if obj.Spec.Type == fluxcdv1.InputProviderExternalService {
+		if !strings.HasPrefix(obj.Spec.URL, "http://") && !strings.HasPrefix(obj.Spec.URL, "https://") {
+			err := fmt.Errorf("spec.url must start with 'http://' or 'https://' when spec.type is 'ExternalService'")
+			errMsg := fmt.Sprintf("%s: %v", msgTerminalError, err)
+			conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
+			conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
+			log.Error(err, msgTerminalError)
+			r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSpec, errMsg)
+			return ctrl.Result{}, nil
+		}
+		if strings.HasPrefix(obj.Spec.URL, "http://") && !obj.Spec.Insecure {
+			err := fmt.Errorf("spec.url must use 'https://' unless spec.insecure is true")
+			errMsg := fmt.Sprintf("%s: %v", msgTerminalError, err)
+			conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
+			conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
+			log.Error(err, msgTerminalError)
+			r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSpec, errMsg)
+			return ctrl.Result{}, nil
+		}
+	} else if obj.Spec.Insecure {
+		err := fmt.Errorf("spec.insecure can only be set when spec.type is 'ExternalService'")
+		errMsg := fmt.Sprintf("%s: %v", msgTerminalError, err)
+		conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
+		conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
+		log.Error(err, msgTerminalError)
+		r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSpec, errMsg)
 		return ctrl.Result{}, nil
 	}
 
@@ -303,6 +338,13 @@ func (r *ResourceSetInputProviderReconciler) callExternalProvider(
 		exportedInputs, err = r.callOCIProvider(providerCtx, obj, tlsConfig, authSecret, defaults)
 		if err != nil {
 			return nil, fmt.Errorf("failed to call OCI provider: %w", err)
+		}
+	// Handle ExternalService provider.
+	case obj.Spec.Type == fluxcdv1.InputProviderExternalService:
+		var err error
+		exportedInputs, err = r.callExternalServiceProvider(providerCtx, obj, tlsConfig, authData, defaults)
+		if err != nil {
+			return nil, fmt.Errorf("failed to call ExternalService provider: %w", err)
 		}
 	}
 
@@ -716,6 +758,137 @@ func (r *ResourceSetInputProviderReconciler) callOCIProvider(ctx context.Context
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to create ResourceSetInput for tag '%s': %w", tag, err)
+		}
+		res = append(res, input)
+	}
+
+	return res, nil
+}
+
+// maxExternalServicePayloadSize is the maximum allowed response body size
+// for the ExternalService provider. This is set to 900Ki to match the etcd
+// object size limit and protect against OOM.
+const maxExternalServicePayloadSize = 900 * 1024
+
+// externalServiceResponse is the expected JSON response format from the
+// ExternalService provider API.
+type externalServiceResponse struct {
+	Inputs []map[string]any `json:"inputs"`
+}
+
+// callExternalServiceProvider fetches input values from a 3rd-party
+// orchestrator API via HTTP/S and returns the list of ResourceSetInput objects.
+func (r *ResourceSetInputProviderReconciler) callExternalServiceProvider(
+	ctx context.Context,
+	obj *fluxcdv1.ResourceSetInputProvider,
+	tlsConfig *tls.Config,
+	authData map[string][]byte,
+	defaults map[string]any,
+) ([]fluxcdv1.ResourceSetInput, error) {
+
+	// Build a retryable HTTP client with automatic retries on connection errors.
+	// Only network-level failures are retried; HTTP error status codes are
+	// returned immediately so we can handle them ourselves.
+	rtClient := retryablehttp.NewClient()
+	rtClient.Logger = nil
+	rtClient.CheckRetry = func(ctx context.Context, resp *http.Response, err error) (bool, error) {
+		if err != nil {
+			return retryablehttp.DefaultRetryPolicy(ctx, resp, err)
+		}
+		return false, nil
+	}
+	if tlsConfig != nil {
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+		transport.TLSClientConfig = tlsConfig
+		rtClient.HTTPClient.Transport = transport
+	}
+
+	// Create request.
+	req, err := retryablehttp.NewRequest(http.MethodGet, obj.Spec.URL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create HTTP request: %w", err)
+	}
+	req = req.WithContext(ctx)
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "flux-operator/"+r.Version)
+
+	// Add authentication.
+	if authData != nil {
+		if token, ok := authData["token"]; ok {
+			req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(string(token)))
+		} else {
+			username, password, err := r.getBasicAuth(obj, authData)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get auth credentials: %w", err)
+			}
+			req.SetBasicAuth(username, password)
+		}
+	}
+
+	// Execute request.
+	resp, err := rtClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call external service '%s': %w", obj.Spec.URL, err)
+	}
+	defer resp.Body.Close()
+
+	// Check HTTP status code.
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("external service '%s' returned HTTP %d", obj.Spec.URL, resp.StatusCode)
+	}
+
+	// Protect against OOM by limiting the response body size.
+	limitedReader := http.MaxBytesReader(nil, resp.Body, maxExternalServicePayloadSize)
+	body, err := io.ReadAll(limitedReader)
+	if err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			return nil, fmt.Errorf("external service '%s' response body exceeds "+
+				"the maximum allowed size of %d bytes", obj.Spec.URL, maxExternalServicePayloadSize)
+		}
+		return nil, fmt.Errorf("failed to read response from external service '%s': %w", obj.Spec.URL, err)
+	}
+
+	// Parse JSON response.
+	var response externalServiceResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse JSON response from external service '%s': %w", obj.Spec.URL, err)
+	}
+
+	if response.Inputs == nil {
+		return nil, fmt.Errorf("external service '%s' response does not contain an 'inputs' field", obj.Spec.URL)
+	}
+
+	// Validate that each input has a unique 'id' field.
+	seenIDs := make(map[string]struct{}, len(response.Inputs))
+	for i, input := range response.Inputs {
+		idVal, ok := input["id"]
+		if !ok {
+			return nil, fmt.Errorf("external service '%s' input at index %d is missing the required 'id' field", obj.Spec.URL, i)
+		}
+		id, ok := idVal.(string)
+		if !ok {
+			return nil, fmt.Errorf("external service '%s' input at index %d has a non-string 'id' field", obj.Spec.URL, i)
+		}
+		if _, exists := seenIDs[id]; exists {
+			return nil, fmt.Errorf("external service '%s' input at index %d has a duplicate 'id' value '%s'", obj.Spec.URL, i, id)
+		}
+		seenIDs[id] = struct{}{}
+	}
+
+	// Apply filter limit.
+	limit := obj.GetFilterLimit()
+	inputList := response.Inputs
+	if len(inputList) > limit {
+		inputList = inputList[:limit]
+	}
+
+	// Convert to ResourceSetInput.
+	res := make([]fluxcdv1.ResourceSetInput, 0, len(inputList))
+	for _, inputMap := range inputList {
+		input, err := fluxcdv1.NewResourceSetInput(defaults, inputMap)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create ResourceSetInput: %w", err)
 		}
 		res = append(res, input)
 	}

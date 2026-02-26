@@ -109,6 +109,7 @@ The following types are supported:
 - `ACRArtifactTag`: fetches input values from Azure Container Registry OCI artifact tags.
 - `ECRArtifactTag`: fetches input values from Elastic Container Registry OCI artifact tags.
 - `GARArtifactTag`: fetches input values from Google Artifact Registry OCI artifact tags.
+- `ExternalService`: fetches input values from a 3rd-party orchestrator API via HTTP/S.
 
 Throughout this document, the term **change request** is used to refer collectively to
 GitHub Pull Requests, GitLab Merge Requests, Azure DevOps Pull Requests, and
@@ -163,6 +164,31 @@ The ACR, ECR and GAR Artifact Tag providers export the same inputs as the OCI Ar
 with the difference on the authentication method used to connect to the registry. For these providers,
 [secret-less](#secret-less) authentication is used.
 
+For ExternalService the [exported inputs](#exported-inputs-status) structure is user-defined.
+The external service API must return a JSON object with an `inputs` array, where each element
+is an object containing at least an `id` field (type string). All other fields are arbitrary
+and defined by the external service response. Example response:
+
+```json
+{
+  "inputs": [
+    {
+      "id": "1",
+      "tenant": "tenant1",
+      "version": "2.0.0-rc.1",
+      "featureFlags": ["feature1", "feature2"]
+    }
+  ]
+}
+```
+
+The response body must not exceed 900Ki in size and each `id` value must be unique within the array.
+The number of inputs is trimmed based on `.spec.filter.limit` (default 100).
+
+When connecting to an ExternalService provider, the secret referenced by `.spec.secretRef` may
+contain either a `token` key for bearer token authentication, or `username` and `password` keys
+for basic authentication. TLS certificates can be configured via `.spec.certSecretRef`.
+
 ### URL
 
 The `.spec.url` field is required for external providers.
@@ -170,6 +196,14 @@ For Git services, the URL should contain the GitHub repository, GitLab project,
 or Gitea/Forgejo repository address, including the HTTP/S scheme (`(http|https)://`).
 For OCI services, the URL should contain the OCI repository address,
 including the OCI scheme (`oci://`).
+For ExternalService, the URL should contain the HTTP/S address of the orchestrator API endpoint.
+When using plain HTTP (without TLS), the `.spec.insecure` field must be set to `true`.
+
+### Insecure
+
+The `.spec.insecure` field is optional and can only be set when `.spec.type` is `ExternalService`.
+When set to `true`, it allows connecting to the external service over plain HTTP without TLS.
+If not set or set to `false`, the URL must use the `https://` scheme.
 
 ### Filter
 
@@ -702,6 +736,64 @@ status:
   - id: "48955639"
     tag: "6.0.4"
     sha: sha256:d4ec9861522d4961b2acac5a070ef4f92d732480dff2062c2f3a1dcf9a5d1e91
+```
+
+Example for ExternalService:
+
+```yaml
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSetInputProvider
+metadata:
+  name: my-orchestrator
+  namespace: apps
+  annotations:
+    fluxcd.controlplane.io/reconcileEvery: "5m"
+spec:
+  type: ExternalService
+  url: https://my-orchestrator.com/api/v1/flux/inputs?env=prod&app=app1
+  secretRef:
+    name: orchestrator-auth
+  certSecretRef:
+    name: orchestrator-tls
+```
+
+The external service API must return a JSON object containing an `inputs` array:
+
+```json
+{
+  "inputs": [
+    {
+      "id": "1",
+      "tenant": "tenant1",
+      "version": "2.0.0-rc.1",
+      "featureFlags": ["feature1", "feature2"]
+    },
+    {
+      "id": "2",
+      "tenant": "tenant2",
+      "version": "1.9.0",
+      "featureFlags": ["feature1"]
+    }
+  ]
+}
+```
+
+The resulting exported inputs status:
+
+```yaml
+status:
+  exportedInputs:
+  - id: "1"
+    tenant: tenant1
+    version: 2.0.0-rc.1
+    featureFlags:
+    - feature1
+    - feature2
+  - id: "2"
+    tenant: tenant2
+    version: "1.9.0"
+    featureFlags:
+    - feature1
 ```
 
 ### Schedule status
