@@ -40,10 +40,10 @@ If the source repository is private, the Kubernetes secret must be created in th
 and should contain the credentials to clone the repository:
 
 ```shell
-flux create secret git flux-system \
-  --url=https://gitlab.com/my-org/my-fleet.git \
+echo $GITLAB_TOKEN | flux-operator create secret basic-auth flux-system \
+  --namespace=flux-system \
   --username=git \
-  --password=$GITLAB_TOKEN
+  --password-stdin
 ```
 
 ## Sync from a Git Repository using GitHub App auth
@@ -80,17 +80,18 @@ The Kubernetes secret must be created in the `flux-system` namespace
 and should contain the GitHub App private key:
 
 ```shell
-flux create secret githubapp flux-system \
+flux-operator create secret githubapp flux-system \
+  --namespace=flux-system \
   --app-id=1 \
   --app-installation-id=2 \
-  --app-private-key=./path/to/private-key-file.pem
+  --app-private-key-file=./path/to/private-key-file.pem
 ```
 
 !!! tip "GitHub App Support"
 
     Note that GitHub App support was added in Flux v2.5.0 and Flux Operator v0.16.0.
     For more information on how to create a GitHub App see the
-    Flux [GitRepository API reference](https://fluxcd.io/flux/components/source/gitrepositories/#github). 
+    Flux [GitRepository API reference](https://fluxoperator.dev/docs/crd/gitrepository/#github). 
 
 
 ## Sync from an Azure DevOps Repository using AKS Workload Identity
@@ -150,7 +151,7 @@ spec:
 
     Note that Azure DevOps Workload Identity support was added in Flux v2.5.0 and Flux Operator v0.18.0.
     For more information on how to configure Azure DevOps Workload Identity see the
-    Flux [GitRepository API reference](https://fluxcd.io/flux/components/source/gitrepositories/#azure). 
+    Flux [GitRepository API reference](https://fluxoperator.dev/docs/crd/gitrepository/#azure). 
 
 ## Sync from a Container Registry
 
@@ -180,11 +181,11 @@ in the same namespace where the `FluxInstance` is deployed,
 and be of type `kubernetes.io/dockerconfigjson`:
 
 ```shell
-flux create secret oci flux-system \
-  --namespace flux-system \
-  --url=ghcr.io \
+echo $GITHUB_TOKEN | flux-operator create secret registry flux-system \
+  --namespace=flux-system \
+  --server=ghcr.io \
   --username=flux \
-  --password=$GITHUB_TOKEN
+  --password-stdin
 ```
 
 ## Sync from a Container Registry using Workload Identity

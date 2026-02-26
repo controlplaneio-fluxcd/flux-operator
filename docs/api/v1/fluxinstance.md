@@ -266,11 +266,11 @@ and must be of type `kubernetes.io/dockerconfigjson`.
 Example generating a secret for the ControlPlane enterprise registry:
 
 ```sh
-kubectl create secret docker-registry flux-enterprise-auth \
-  --namespace flux-system \
-  --docker-server=ghcr.io \
-  --docker-username=flux \
-  --docker-password=$ENTERPRISE_TOKEN
+echo $ENTERPRISE_TOKEN | flux-operator create secret registry flux-enterprise-auth \
+  --namespace=flux-system \
+  --server=ghcr.io \
+  --username=flux \
+  --password-stdin
 ```
 
 #### Distribution artifact
@@ -695,12 +695,11 @@ stringData:
   password: "git-token"
 ```
 
-To generate the secret with the Flux CLI:
+To generate the secret with the Flux Operator CLI:
 
 ```sh
-flux create secret git git-token-auth \
-  --namespace flux-system \
-  --url=https://gitlab.com/my-group/my-fleet.git \
+flux-operator create secret basic-auth git-token-auth \
+  --namespace=flux-system \
   --username=git-username \
   --password=git-token
 ```
@@ -738,13 +737,13 @@ stringData:
     github.com ecdsa-sha2-nistp256 AAAA...  
 ```
 
-To generate the secret with the Flux CLI:
+To generate the secret with the Flux Operator CLI:
 
 ```sh
-flux create secret git git-ssh-auth \
-  --namespace flux-system \
-  --url=ssh://git@github.com/my-org/my-fleet.git \
-  --private-key-file=my-private.key
+flux-operator create secret ssh git-ssh-auth \
+  --namespace=flux-system \
+  --private-key-file=my-private.key \
+  --knownhosts-file=./known_hosts
 ```
 
 #### Sync from OCI over HTTP/S
@@ -775,12 +774,12 @@ data:
   .dockerconfigjson: "base64-encoded-docker-config"
 ```
 
-To generate the secret with the Flux CLI:
+To generate the secret with the Flux Operator CLI:
 
 ```sh
-flux create secret oci oci-token-auth \
-  --namespace flux-system \
-  --url=ghcr.io \
+flux-operator create secret registry oci-token-auth \
+  --namespace=flux-system \
+  --server=ghcr.io \
   --username=ghcr-username \
   --password=ghcr-token
 ```

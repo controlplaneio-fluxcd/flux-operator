@@ -474,7 +474,7 @@ ID corresponding to the owner using the GitHub API.
 The GitHub App ID and Installation ID are integer numbers, so remember to quote them in the secret
 if using the `stringData` field as all values in this field must be strings.
 
-A simpler alternative is creating the secret using the Flux CLI command `flux create secret githubapp`.
+A simpler alternative is creating the secret using the `flux-operator create secret githubapp` command.
 
 ### TLS certificate configuration
 
