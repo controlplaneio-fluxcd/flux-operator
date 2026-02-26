@@ -30,11 +30,16 @@ var buildInstanceCmd = &cobra.Command{
 2. Validates the instance definition and sets default values.
 3. Pulls the distribution OCI artifact from the registry using the Docker config file for authentication.
    If not specified, the artifact is pulled from 'oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests'.
+   The artifact URL can be overridden with the --distribution-artifact flag.
 4. Builds the Flux Kubernetes manifests according to the instance specifications and kustomize patches.
 5. Prints the multi-doc YAML containing the Flux Kubernetes manifests to stdout.
 `,
 	Example: `  # Build the given FluxInstance and print the generated manifests
   flux-operator build instance -f flux.yaml
+
+  # Build using a custom distribution artifact
+  flux-operator build instance -f flux.yaml \
+    --distribution-artifact oci://ghcr.io/my-org/flux-operator-manifests:latest
 
   # Pipe the FluxInstance definition to the build command
   cat flux.yaml | flux-operator build instance -f -
@@ -48,13 +53,15 @@ var buildInstanceCmd = &cobra.Command{
 }
 
 type buildInstanceFlags struct {
-	filename string
+	filename             string
+	distributionArtifact string
 }
 
 var buildInstanceArgs buildInstanceFlags
 
 func init() {
 	buildInstanceCmd.Flags().StringVarP(&buildInstanceArgs.filename, "filename", "f", "", "Path to the FluxInstance YAML manifest.")
+	buildInstanceCmd.Flags().StringVar(&buildInstanceArgs.distributionArtifact, "distribution-artifact", "", "OCI artifact URL of the Flux distribution, takes precedence over the FluxInstance spec.")
 
 	buildCmd.AddCommand(buildInstanceCmd)
 }
@@ -91,6 +98,9 @@ func buildInstanceCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	setInstanceDefaults(&instance)
+	if buildInstanceArgs.distributionArtifact != "" {
+		instance.Spec.Distribution.Artifact = buildInstanceArgs.distributionArtifact
+	}
 	if err := validateInstance(&instance); err != nil {
 		return err
 	}
