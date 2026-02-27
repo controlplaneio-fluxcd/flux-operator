@@ -201,9 +201,11 @@ When using plain HTTP (without TLS), the `.spec.insecure` field must be set to `
 
 ### Insecure
 
-The `.spec.insecure` field is optional and can only be set when `.spec.type` is `ExternalService`.
-When set to `true`, it allows connecting to the external service over plain HTTP without TLS.
-If not set or set to `false`, the URL must use the `https://` scheme.
+The `.spec.insecure` field is optional and can only be set when `.spec.type` is `ExternalService`
+or `OCIArtifactTag`. When set to `true`, it allows connecting over plain HTTP without TLS.
+For `ExternalService`, the URL may use `http://` instead of `https://`.
+For `OCIArtifactTag`, insecure HTTP connections to the OCI registry are allowed.
+If not set or set to `false`, connections use HTTPS/TLS.
 
 ### Filter
 

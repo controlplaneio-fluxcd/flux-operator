@@ -781,5 +781,5 @@ func TestResourceSetInputProviderReconciler_ExternalService_InsecureOnNonExterna
 	g.Expect(conditions.IsReady(obj)).To(BeFalse())
 	g.Expect(conditions.IsStalled(obj)).To(BeTrue())
 	g.Expect(conditions.GetReason(obj, meta.ReadyCondition)).To(Equal(fluxcdv1.ReasonInvalidSpec))
-	g.Expect(conditions.GetMessage(obj, meta.StalledCondition)).To(ContainSubstring("spec.insecure can only be set"))
+	g.Expect(conditions.GetMessage(obj, meta.StalledCondition)).To(ContainSubstring("spec.insecure can only be set when spec.type is 'ExternalService' or 'OCIArtifactTag'"))
 }

@@ -51,7 +51,7 @@ const (
 // +kubebuilder:validation:XValidation:rule="!self.type.startsWith('AzureDevOps') || self.url.startsWith('http')", message="spec.url must start with 'http://' or 'https://' when spec.type is a Git provider"
 // +kubebuilder:validation:XValidation:rule="!self.type.endsWith('ArtifactTag') || self.url.startsWith('oci')", message="spec.url must start with 'oci://' when spec.type is an OCI provider"
 // +kubebuilder:validation:XValidation:rule="self.type != 'ExternalService' || self.url.startsWith('http')", message="spec.url must start with 'http://' or 'https://' when spec.type is 'ExternalService'"
-// +kubebuilder:validation:XValidation:rule="!has(self.insecure) || !self.insecure || self.type == 'ExternalService'", message="spec.insecure can only be set when spec.type is 'ExternalService'"
+// +kubebuilder:validation:XValidation:rule="!has(self.insecure) || !self.insecure || self.type == 'ExternalService' || self.type == 'OCIArtifactTag'", message="spec.insecure can only be set when spec.type is 'ExternalService' or 'OCIArtifactTag'"
 // +kubebuilder:validation:XValidation:rule="self.type != 'ExternalService' || !self.url.startsWith('http://') || (has(self.insecure) && self.insecure)", message="spec.url must use 'https://' unless spec.insecure is true"
 // +kubebuilder:validation:XValidation:rule="!has(self.serviceAccountName) || self.type.startsWith('AzureDevOps') || self.type.endsWith('ArtifactTag')", message="cannot specify spec.serviceAccountName when spec.type is not one of AzureDevOps* or *ArtifactTag"
 // +kubebuilder:validation:XValidation:rule="!has(self.certSecretRef) || !(self.url == 'Static' || self.type.startsWith('AzureDevOps') || (self.type.endsWith('ArtifactTag') && self.type != 'OCIArtifactTag'))", message="cannot specify spec.certSecretRef when spec.type is one of Static, AzureDevOps*, ACRArtifactTag, ECRArtifactTag or GARArtifactTag"
@@ -102,8 +102,8 @@ type ResourceSetInputProviderSpec struct {
 	// +optional
 	CertSecretRef *meta.LocalObjectReference `json:"certSecretRef,omitempty"`
 
-	// Insecure allows connecting to an ExternalService provider over
-	// plain HTTP without TLS. When not set, the URL must use HTTPS.
+	// Insecure allows connecting to an ExternalService or OCIArtifactTag provider
+	// over plain HTTP without TLS. When not set, the URL must use HTTPS.
 	// +optional
 	Insecure bool `json:"insecure,omitempty"`
 

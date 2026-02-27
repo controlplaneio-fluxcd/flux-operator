@@ -297,3 +297,105 @@ func TestResourceSetInputProviderReconciler_InvalidOCIURL(t *testing.T) {
 		})
 	}
 }
+
+func TestResourceSetInputProviderReconciler_OCIArtifactTag_InsecureOption(t *testing.T) {
+	g := NewWithT(t)
+
+	r := getResourceSetInputProviderReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test-oci-insecure")
+	g.Expect(err).NotTo(HaveOccurred())
+
+	obj := &fluxcdv1.ResourceSetInputProvider{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-insecure",
+			Namespace: ns.Name,
+		},
+		Spec: fluxcdv1.ResourceSetInputProviderSpec{
+			Type:     fluxcdv1.InputProviderOCIArtifactTag,
+			Insecure: true,
+		},
+	}
+
+	const repo = "example.com/stefanprodan/podinfo"
+
+	opts, err := r.buildOCIOptions(ctx, obj, repo, nil, nil)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	o := crane.GetOptions(opts...)
+
+	// Validate that insecure transport is configured.
+	g.Expect(o.Transport).NotTo(BeNil())
+	transport, ok := o.Transport.(*http.Transport)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(transport.TLSClientConfig).NotTo(BeNil())
+	g.Expect(transport.TLSClientConfig.InsecureSkipVerify).To(BeTrue())
+}
+
+func TestResourceSetInputProviderReconciler_OCIArtifactTag_CertSecretTakesPrecedenceOverInsecure(t *testing.T) {
+	g := NewWithT(t)
+
+	r := getResourceSetInputProviderReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test-oci-cert-precedence")
+	g.Expect(err).NotTo(HaveOccurred())
+
+	obj := &fluxcdv1.ResourceSetInputProvider{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cert-precedence",
+			Namespace: ns.Name,
+		},
+		Spec: fluxcdv1.ResourceSetInputProviderSpec{
+			Type:     fluxcdv1.InputProviderOCIArtifactTag,
+			Insecure: true,
+		},
+	}
+
+	const repo = "example.com/stefanprodan/podinfo"
+
+	// Pass a TLS config alongside insecure — cert config should take precedence,
+	// matching source-controller behavior.
+	tlsConfig := &tls.Config{
+		ServerName: "server.example.com",
+	}
+
+	opts, err := r.buildOCIOptions(ctx, obj, repo, tlsConfig, nil)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	o := crane.GetOptions(opts...)
+
+	// Validate that the custom TLS config is used, not insecure.
+	g.Expect(o.Transport).NotTo(BeNil())
+	transport, ok := o.Transport.(*http.Transport)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(transport.TLSClientConfig).NotTo(BeNil())
+	g.Expect(transport.TLSClientConfig.ServerName).To(Equal("server.example.com"))
+	g.Expect(transport.TLSClientConfig.InsecureSkipVerify).To(BeFalse())
+}
+
+func TestResourceSetInputProviderReconciler_OCIArtifactTag_InsecureOnCloudProvider(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceSetInputProviderReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	obj := &fluxcdv1.ResourceSetInputProvider{
+		Spec: fluxcdv1.ResourceSetInputProviderSpec{
+			Type:     fluxcdv1.InputProviderACRArtifactTag,
+			URL:      "oci://myregistry.azurecr.io/myrepo",
+			Insecure: true,
+		},
+	}
+
+	r, err := reconciler.reconcile(ctx, obj, nil)
+	g.Expect(r).To(Equal(reconcile.Result{}))
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(conditions.IsReady(obj)).To(BeFalse())
+	g.Expect(conditions.IsStalled(obj)).To(BeTrue())
+	g.Expect(conditions.GetReason(obj, meta.ReadyCondition)).To(Equal(fluxcdv1.ReasonInvalidSpec))
+	g.Expect(conditions.GetMessage(obj, meta.StalledCondition)).To(ContainSubstring("spec.insecure can only be set when spec.type is 'ExternalService' or 'OCIArtifactTag'"))
+}
