@@ -86,8 +86,9 @@ type HelmHistory struct {
 }
 
 // FromHelmRelease returns the inventory of Kubernetes object refs
-// that are managed by the HelmRelease. It extracts the metadata from the
-// Helm storage secret belonging to the latest release version.
+// that are managed by the HelmRelease. It first checks for
+// status.inventory.entries (Flux v2.8+) and falls back to extracting
+// the metadata from the Helm storage secret for older versions.
 func FromHelmRelease(
 	ctx context.Context,
 	kubeClient client.Client,
@@ -109,6 +110,26 @@ func FromHelmRelease(
 	if err := kubeClient.Get(ctx, hrKey, hrObj); err != nil {
 		return nil, fmt.Errorf("failed to get HelmRelease/%s: %w", hrKey.String(), err)
 	}
+
+	// Check for status.inventory.entries first (Flux v2.8+)
+	if entries, exists, _ := unstructured.NestedSlice(hrObj.Object, "status", "inventory", "entries"); exists && len(entries) > 0 {
+		for _, entry := range entries {
+			if entryMap, ok := entry.(map[string]any); ok {
+				id, found := entryMap["id"].(string)
+				if !found {
+					continue
+				}
+				v, found := entryMap["v"].(string)
+				if !found {
+					continue
+				}
+				result = append(result, fluxcdv1.ResourceRef{ID: id, Version: v})
+			}
+		}
+		return result, nil
+	}
+
+	// Fallback to Helm storage secret for older versions of Flux
 
 	if _, found, _ := unstructured.NestedFieldCopy(hrObj.Object, "spec", "kubeConfig"); found {
 		// Skip release if it targets a remote cluster
