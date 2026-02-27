@@ -67,3 +67,42 @@ func (in *Installer) ApplyCredentials(ctx context.Context, secretName, address s
 
 	return in.kubeClient.Manager.Apply(ctx, &unstructured.Unstructured{Object: rawMap}, ssa.DefaultApplyOptions())
 }
+
+// ApplyGitHubAppCredentials creates and applies a Kubernetes Secret
+// containing GitHub App credentials for authenticating to Git repositories.
+// The secret is created in the installer's namespace with the given secretName.
+func (in *Installer) ApplyGitHubAppCredentials(ctx context.Context, secretName string) (*ssa.ChangeSetEntry, error) {
+	gha := in.options.gitHubApp
+	if gha == nil {
+		return nil, fmt.Errorf("GitHub App credentials are not configured")
+	}
+
+	var opts []secrets.GitHubAppOption
+	if gha.InstallationOwner != "" {
+		opts = append(opts, secrets.WithGitHubAppInstallationOwner(gha.InstallationOwner))
+	}
+	if gha.InstallationID != "" {
+		opts = append(opts, secrets.WithGitHubAppInstallationID(gha.InstallationID))
+	}
+	if gha.BaseURL != "" {
+		opts = append(opts, secrets.WithGitHubAppBaseURL(gha.BaseURL))
+	}
+
+	secret, err := secrets.MakeGitHubAppSecret(
+		secretName,
+		in.options.namespace,
+		gha.AppID,
+		gha.PrivateKey,
+		opts...,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create GitHub App secret: %w", err)
+	}
+
+	rawMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(secret)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert secret to unstructured: %w", err)
+	}
+
+	return in.kubeClient.Manager.Apply(ctx, &unstructured.Unstructured{Object: rawMap}, ssa.DefaultApplyOptions())
+}

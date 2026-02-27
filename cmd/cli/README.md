@@ -347,6 +347,11 @@ it is recommended to follow the [installation guide](https://fluxcd.control-plan
     - `--instance-sync-ref`: Source reference for cluster sync (Git ref name or OCI tag).
     - `--instance-sync-path`: Path to the manifests directory in the source.
     - `--instance-sync-creds`: Credentials for the source in the format `username:token`.
+    - `--instance-sync-gha-app-id`: GitHub App ID for the sync source credentials.
+    - `--instance-sync-gha-installation-id`: GitHub App Installation ID (optional).
+    - `--instance-sync-gha-installation-owner`: GitHub App Installation Owner (optional).
+    - `--instance-sync-gha-private-key-file`: Path to GitHub App private key file.
+    - `--instance-sync-gha-base-url`: GitHub base URL for GitHub Enterprise Server (optional).
     - `--auto-update`: Enable automatic updates of the Flux Operator from the distribution artifact.
 
 ### Uninstall Command
