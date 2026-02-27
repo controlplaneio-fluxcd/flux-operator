@@ -34,6 +34,10 @@ type Options struct {
 	// These are used to create a Kubernetes secret for authenticating to Git or OCI repositories.
 	credentials string
 
+	// gitHubApp holds the GitHub App credentials for the sync source.
+	// When set, a GitHub App secret is created instead of basic auth/registry secret.
+	gitHubApp *GitHubAppCredentials
+
 	// owner is the field manager name used for server-side apply operations.
 	owner string
 
@@ -42,6 +46,24 @@ type Options struct {
 
 	// terminationTimeout is the timeout for waiting for resource termination during uninstall.
 	terminationTimeout time.Duration
+}
+
+// GitHubAppCredentials holds the GitHub App credentials for authenticating to Git repositories.
+type GitHubAppCredentials struct {
+	// AppID is the GitHub App ID.
+	AppID string
+
+	// InstallationID is the GitHub App Installation ID.
+	InstallationID string
+
+	// InstallationOwner is the GitHub App Installation Owner (organization or user).
+	InstallationOwner string
+
+	// PrivateKey is the PEM-encoded private key for the GitHub App.
+	PrivateKey string
+
+	// BaseURL is the base URL for GitHub Enterprise Server.
+	BaseURL string
 }
 
 // Option is a functional option for configuring the installer.
@@ -58,6 +80,13 @@ func WithArtifactURL(url string) Option {
 func WithCredentials(credentials string) Option {
 	return func(o *Options) {
 		o.credentials = credentials
+	}
+}
+
+// WithGitHubAppCredentials sets the GitHub App credentials for the sync source.
+func WithGitHubAppCredentials(creds *GitHubAppCredentials) Option {
+	return func(o *Options) {
+		o.gitHubApp = creds
 	}
 }
 
@@ -109,6 +138,18 @@ func (o *Options) validate() error {
 		}
 	}
 
+	if o.gitHubApp != nil {
+		if o.credentials != "" {
+			return fmt.Errorf("credentials and GitHub App credentials are mutually exclusive")
+		}
+		if o.gitHubApp.AppID == "" {
+			return fmt.Errorf("GitHub App ID is required")
+		}
+		if o.gitHubApp.PrivateKey == "" {
+			return fmt.Errorf("GitHub App private key is required")
+		}
+	}
+
 	return nil
 }
 
@@ -130,6 +171,11 @@ func (o *Options) Owner() string {
 // Namespace returns the installation namespace.
 func (o *Options) Namespace() string {
 	return o.namespace
+}
+
+// GitHubApp returns the GitHub App credentials.
+func (o *Options) GitHubApp() *GitHubAppCredentials {
+	return o.gitHubApp
 }
 
 // TerminationTimeout returns the timeout for waiting for resource termination during uninstall.

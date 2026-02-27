@@ -53,6 +53,15 @@ it is recommended to follow the installation guide at https://fluxcd.control-pla
     --instance-sync-path=./clusters/dev \
     --instance-sync-creds=git:${GITHUB_TOKEN}
 
+  # Install and bootstrap from a Git repository using a GitHub App
+  flux-operator install \
+    --instance-sync-url=https://github.com/my-org/fleet-infra \
+    --instance-sync-ref=refs/heads/main \
+    --instance-sync-path=./clusters/dev \
+    --instance-sync-gha-app-id=123456 \
+    --instance-sync-gha-installation-owner=my-org \
+    --instance-sync-gha-private-key-file=./private-key.pem
+
   # Install and bootstrap from an OCI repository
   flux-operator install \
     --instance-sync-url=oci://ghcr.io/org/manifests \
@@ -85,22 +94,27 @@ it is recommended to follow the installation guide at https://fluxcd.control-pla
 }
 
 type installFlags struct {
-	instanceFile         string
-	components           []string
-	componentsExtra      []string
-	distributionVersion  string
-	distributionRegistry string
-	distributionArtifact string
-	clusterType          string
-	clusterSize          string
-	clusterDomain        string
-	clusterMultitenant   bool
-	clusterNetworkPolicy bool
-	syncURL              string
-	syncRef              string
-	syncPath             string
-	syncCreds            string
-	autoUpdate           bool
+	instanceFile             string
+	components               []string
+	componentsExtra          []string
+	distributionVersion      string
+	distributionRegistry     string
+	distributionArtifact     string
+	clusterType              string
+	clusterSize              string
+	clusterDomain            string
+	clusterMultitenant       bool
+	clusterNetworkPolicy     bool
+	syncURL                  string
+	syncRef                  string
+	syncPath                 string
+	syncCreds                string
+	syncGHAAppID             string
+	syncGHAInstallationID    string
+	syncGHAInstallationOwner string
+	syncGHAPrivateKeyFile    string
+	syncGHABaseURL           string
+	autoUpdate               bool
 }
 
 var installArgs installFlags
@@ -137,6 +151,16 @@ func init() {
 		"path to the manifests directory in the source")
 	installCmd.Flags().StringVar(&installArgs.syncCreds, "instance-sync-creds", "",
 		"credentials for the source in the format username:token (creates a Secret named 'flux-system')")
+	installCmd.Flags().StringVar(&installArgs.syncGHAAppID, "instance-sync-gha-app-id", "",
+		"GitHub App ID for the sync source credentials")
+	installCmd.Flags().StringVar(&installArgs.syncGHAInstallationID, "instance-sync-gha-installation-id", "",
+		"GitHub App Installation ID (optional)")
+	installCmd.Flags().StringVar(&installArgs.syncGHAInstallationOwner, "instance-sync-gha-installation-owner", "",
+		"GitHub App Installation Owner (organization or user) (optional)")
+	installCmd.Flags().StringVar(&installArgs.syncGHAPrivateKeyFile, "instance-sync-gha-private-key-file", "",
+		"path to GitHub App private key file")
+	installCmd.Flags().StringVar(&installArgs.syncGHABaseURL, "instance-sync-gha-base-url", "",
+		"GitHub base URL for GitHub Enterprise Server (optional)")
 	installCmd.Flags().BoolVar(&installArgs.autoUpdate, "auto-update", true,
 		"enable automatic updates of the Flux Operator from the distribution artifact")
 
@@ -178,10 +202,26 @@ func installCmdRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("loading kubeconfig failed: %w", err)
 	}
 
-	installer, err := install.NewInstaller(ctx, cfg,
+	installerOpts := []install.Option{
 		install.WithArtifactURL(artifactURL),
 		install.WithCredentials(installArgs.syncCreds),
-	)
+	}
+
+	if installArgs.hasSyncGHA() {
+		privateKey, err := os.ReadFile(installArgs.syncGHAPrivateKeyFile)
+		if err != nil {
+			return fmt.Errorf("unable to read GitHub App private key file: %w", err)
+		}
+		installerOpts = append(installerOpts, install.WithGitHubAppCredentials(&install.GitHubAppCredentials{
+			AppID:             installArgs.syncGHAAppID,
+			InstallationID:    installArgs.syncGHAInstallationID,
+			InstallationOwner: installArgs.syncGHAInstallationOwner,
+			PrivateKey:        string(privateKey),
+			BaseURL:           installArgs.syncGHABaseURL,
+		}))
+	}
+
+	installer, err := install.NewInstaller(ctx, cfg, installerOpts...)
 	if err != nil {
 		return fmt.Errorf("failed to create installer: %w", err)
 	}
@@ -212,17 +252,21 @@ func installCmdRun(cmd *cobra.Command, args []string) error {
 
 	// Step 4: Create or update the sync credentials secret if specified
 
-	if installArgs.syncCreds != "" && instance.Spec.Sync != nil {
+	if (installArgs.syncCreds != "" || installArgs.hasSyncGHA()) && instance.Spec.Sync != nil {
 		rootCmd.Println(`◎`, "Configuring sync credentials...")
 		secretName := install.DefaultNamespace
-		syncURL := instance.Spec.Sync.URL
 
 		// Override secret name if specified in the instance
 		if instance.Spec.Sync.PullSecret != "" {
 			secretName = instance.Spec.Sync.PullSecret
 		}
 
-		csEntry, err := installer.ApplyCredentials(ctx, secretName, syncURL)
+		var csEntry *ssa.ChangeSetEntry
+		if installArgs.hasSyncGHA() {
+			csEntry, err = installer.ApplyGitHubAppCredentials(ctx, secretName)
+		} else {
+			csEntry, err = installer.ApplyCredentials(ctx, secretName, instance.Spec.Sync.URL)
+		}
 		if err != nil {
 			return err
 		}
@@ -388,7 +432,7 @@ func makeFluxInstance(ctx context.Context) (instance *fluxcdv1.FluxInstance, art
 			}
 
 			// Set PullSecret if credentials were provided
-			if installArgs.syncCreds != "" {
+			if installArgs.syncCreds != "" || installArgs.hasSyncGHA() {
 				sync.PullSecret = install.DefaultNamespace
 			}
 
@@ -488,4 +532,9 @@ func printVersionInfo(ctx context.Context) error {
 		rootCmd.Println(`✔`, "Flux Distribution version:", report.Spec.Distribution.Version)
 	}
 	return nil
+}
+
+// hasSyncGHA returns true if GitHub App credentials flags are set.
+func (f *installFlags) hasSyncGHA() bool {
+	return f.syncGHAAppID != ""
 }
