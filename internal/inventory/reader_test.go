@@ -139,6 +139,68 @@ spec:
 	}
 }
 
+func TestFromHelmRelease_StatusInventory(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a HelmRelease with status.inventory.entries (Flux v2.8+)
+	mockHelmRelease := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": "helm.toolkit.fluxcd.io/v2",
+			"kind":       "HelmRelease",
+			"metadata": map[string]any{
+				"name":      "test-release",
+				"namespace": "default",
+			},
+			"status": map[string]any{
+				"inventory": map[string]any{
+					"entries": []any{
+						map[string]any{
+							"id": "default_test-deployment_apps_Deployment",
+							"v":  "v1",
+						},
+						map[string]any{
+							"id": "default_test-service__Service",
+							"v":  "v1",
+						},
+						map[string]any{
+							"id": "default_test-config__ConfigMap",
+							"v":  "v1",
+						},
+					},
+				},
+			},
+		},
+	}
+	mockHelmRelease.SetGroupVersionKind(mockHelmRelease.GroupVersionKind())
+
+	scheme := runtime.NewScheme()
+	g.Expect(corev1.AddToScheme(scheme)).To(Succeed())
+
+	kubeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(mockHelmRelease).
+		Build()
+
+	ref := fluxcdv1.ResourceRef{
+		ID:      "default_test-release_helm.toolkit.fluxcd.io_HelmRelease",
+		Version: "v2",
+	}
+
+	result, err := FromHelmRelease(context.Background(), kubeClient, ref)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(result).To(HaveLen(3))
+
+	resourceIDs := make(map[string]string)
+	for _, resource := range result {
+		resourceIDs[resource.ID] = resource.Version
+	}
+
+	g.Expect(resourceIDs).To(HaveKey("default_test-deployment_apps_Deployment"))
+	g.Expect(resourceIDs).To(HaveKey("default_test-service__Service"))
+	g.Expect(resourceIDs).To(HaveKey("default_test-config__ConfigMap"))
+	g.Expect(resourceIDs["default_test-deployment_apps_Deployment"]).To(Equal("v1"))
+}
+
 func TestFromHelmRelease_ErrorCases(t *testing.T) {
 	g := NewWithT(t)
 
