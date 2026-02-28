@@ -9,6 +9,7 @@ import {
   getHistoryStatusBadgeClass,
   getHistoryDotClass,
   getEventBadgeClass,
+  getContainerStateBadgeClass,
   getStatusBarColor,
   getEventBarColor,
   getStatusBorderClass,
@@ -209,6 +210,40 @@ describe('status utilities', () => {
     it('should include dark mode classes', () => {
       expect(getEventBadgeClass('Normal')).toContain('dark:bg-green-900/30')
       expect(getEventBadgeClass('Warning')).toContain('dark:bg-red-900/30')
+    })
+  })
+
+  describe('getContainerStateBadgeClass', () => {
+    it('should return blue for Running state', () => {
+      expect(getContainerStateBadgeClass('Running')).toContain('bg-blue-100')
+      expect(getContainerStateBadgeClass('Running')).toContain('text-blue-800')
+    })
+
+    it('should return yellow for Waiting state', () => {
+      expect(getContainerStateBadgeClass('Waiting')).toContain('bg-yellow-100')
+      expect(getContainerStateBadgeClass('Waiting')).toContain('text-yellow-800')
+    })
+
+    it('should return red for Terminated state', () => {
+      expect(getContainerStateBadgeClass('Terminated')).toContain('bg-red-100')
+      expect(getContainerStateBadgeClass('Terminated')).toContain('text-red-800')
+    })
+
+    it('should return cyan for Completed state', () => {
+      expect(getContainerStateBadgeClass('Completed')).toContain('bg-cyan-100')
+      expect(getContainerStateBadgeClass('Completed')).toContain('text-cyan-800')
+    })
+
+    it('should return gray for unknown state', () => {
+      expect(getContainerStateBadgeClass('Unknown')).toContain('bg-gray-100')
+      expect(getContainerStateBadgeClass('Unknown')).toContain('text-gray-800')
+    })
+
+    it('should include dark mode classes', () => {
+      expect(getContainerStateBadgeClass('Running')).toContain('dark:bg-blue-900/30')
+      expect(getContainerStateBadgeClass('Waiting')).toContain('dark:bg-yellow-900/30')
+      expect(getContainerStateBadgeClass('Terminated')).toContain('dark:bg-red-900/30')
+      expect(getContainerStateBadgeClass('Completed')).toContain('dark:bg-cyan-900/30')
     })
   })
 

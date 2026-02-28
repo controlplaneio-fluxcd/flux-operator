@@ -116,10 +116,16 @@ export function InventoryPanel({ resourceData, onNavigate }) {
     return resourceData.status.inventory.filter(item => isWorkloadInventoryItem(item))
   }, [resourceData, hasInventory])
 
-  // Build URL for a resource
+  // Build URL for a Flux resource
   const getResourceUrl = (item) => {
     const ns = item.namespace || resourceData.metadata.namespace
     return `/resource/${encodeURIComponent(item.kind)}/${encodeURIComponent(ns)}/${encodeURIComponent(item.name)}`
+  }
+
+  // Build URL for a workload
+  const getWorkloadUrl = (item) => {
+    const ns = item.namespace || resourceData.metadata.namespace
+    return `/workload/${encodeURIComponent(item.kind)}/${encodeURIComponent(ns)}/${encodeURIComponent(item.name)}`
   }
 
   return (
@@ -252,12 +258,20 @@ export function InventoryPanel({ resourceData, onNavigate }) {
             <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
               {sortedInventory.map((item, idx) => {
                 const isFluxResource = isFluxInventoryItem(item)
+                const isWorkload = !isFluxResource && isWorkloadInventoryItem(item)
                 return (
                   <tr key={idx} class="hover:bg-gray-50 dark:hover:bg-gray-800">
                     <td class="px-3 py-2 text-sm">
                       {isFluxResource ? (
                         <a
                           href={getResourceUrl(item)}
+                          class="text-flux-blue dark:text-blue-400 hover:underline"
+                        >
+                          {item.name}
+                        </a>
+                      ) : isWorkload ? (
+                        <a
+                          href={getWorkloadUrl(item)}
                           class="text-flux-blue dark:text-blue-400 hover:underline"
                         >
                           {item.name}
