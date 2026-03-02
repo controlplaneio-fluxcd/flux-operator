@@ -28,6 +28,7 @@ type getKubernetesLogsInput struct {
 	ContainerName string  `json:"container_name" jsonschema:"The name of the container."`
 	PodNamespace  string  `json:"pod_namespace" jsonschema:"The namespace of the pod."`
 	Limit         float64 `json:"limit,omitempty" jsonschema:"The maximum number of log lines to return. Defaults to 100."`
+	Previous      bool    `json:"previous,omitempty" jsonschema:"Return logs from the previous container instance. Defaults to false."`
 }
 
 // HandleGetKubernetesLogs is the handler function for the get_kubernetes_logs tool.
@@ -58,7 +59,7 @@ func (m *Manager) HandleGetKubernetesLogs(ctx context.Context, request *mcp.Call
 		return NewToolResultErrorFromErr("Failed to get Kubernetes client", err)
 	}
 
-	result, err := kubeClient.GetLogs(ctx, input.PodName, input.ContainerName, input.PodNamespace, limit)
+	result, err := kubeClient.GetLogs(ctx, input.PodName, input.ContainerName, input.PodNamespace, limit, input.Previous)
 	if err != nil {
 		return NewToolResultError(err.Error())
 	}

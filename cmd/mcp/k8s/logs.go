@@ -15,11 +15,13 @@ import (
 )
 
 // GetLogs retrieves the logs for a specific pod container in the given namespace.
-func (k *Client) GetLogs(ctx context.Context, pod, container, namespace string, limit int64) (*unstructured.Unstructured, error) {
+// If previous is true, the logs from the previous container instance are returned.
+func (k *Client) GetLogs(ctx context.Context, pod, container, namespace string, limit int64, previous bool) (*unstructured.Unstructured, error) {
 	podLogOpts := corev1.PodLogOptions{
 		Container:  container,
 		TailLines:  &limit,
-		LimitBytes: new(int64(64 * 1024)),
+		LimitBytes: new(int64(256 * 1024)), // 256 KiB cap
+		Previous:   previous,
 	}
 
 	clientset, err := kubernetes.NewForConfig(k.cfg)

@@ -55,6 +55,7 @@ Retrieves logs from Kubernetes pods, allowing AI assistants to analyze applicati
 - `pod_namespace` (required): The namespace of the pod
 - `container_name` (required): The name of the container
 - `limit` (optional): Maximum number of log lines to return (default: 100)
+- `previous` (optional): Return logs from the previous container instance (default: false)
 
 **Output:**
 
