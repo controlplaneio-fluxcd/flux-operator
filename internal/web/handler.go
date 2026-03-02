@@ -77,8 +77,9 @@ func NewHandler(ctx context.Context, conf *fluxcdv1.WebConfigSpec, spaHandler ht
 	mux.HandleFunc("POST /api/v1/workloads", h.WorkloadsHandler)
 
 	// Wrap the mux with middlewares to produce the final handler.
+	// Limit request body size to 1MB to prevent abuse on POST endpoints.
 	handler := LoggingMiddleware(l, SecurityHeadersMiddleware(
-		GzipMiddleware(CacheControlMiddleware(authMiddleware(mux)))))
+		GzipMiddleware(CacheControlMiddleware(MaxBodySizeMiddleware(1<<20)(authMiddleware(mux))))))
 
 	// The report cache is the only goroutine.
 	stopped := h.startReportCache(ctx, reportInterval)
