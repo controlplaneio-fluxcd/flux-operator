@@ -116,6 +116,19 @@ func SecurityHeadersMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// MaxBodySizeMiddleware limits the size of request bodies to prevent abuse.
+// Only applies to requests that may carry a body (POST, PUT, PATCH).
+func MaxBodySizeMiddleware(maxBytes int64) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch {
+				r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // LoggingMiddleware logs HTTP requests and responses.
 func LoggingMiddleware(logger logr.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
