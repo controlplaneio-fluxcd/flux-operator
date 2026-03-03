@@ -76,6 +76,44 @@ spec:
       clientSecret: flux-web-client-secret
       issuerURL: https://dex.example.com
 
+      # Custom scopes to request instead of the defaults.
+      # Each provider may have different default scopes.
+      scopes: # Optional
+        - groups
+        - email
+
+      # Map of additional query parameters to include in
+      # the authorization URL when redirecting the user to
+      # the OAuth2 provider for authentication. This can be
+      # used to set provider-specific parameters, such as
+      # "access_type=offline" and "prompt=consent".
+      authURLParams: # Optional
+        access_type: offline
+        prompt: consent
+
+      # CEL expressions to extract information from the ID token claims
+      # into named variables that can be reused in other expressions.
+      variables: # Optional
+        - name: username
+          expression: "claims.sub"
+
+      # CEL expressions that validate the ID token claims and extracted
+      # variables. Each expression must return the type bool.
+      validations: # Optional
+        - expression: "size(claims.groups) > 0"
+          message: "user must belong to at least one group"
+
+      # CEL expressions to extract user profile information
+      # from the ID token claims and extracted variables.
+      profile: # Optional
+        name: "claims.name"
+
+      # CEL expressions that extract the username and groups
+      # for Kubernetes RBAC impersonation.
+      impersonation: # Optional
+        username: "claims.email"
+        groups: "claims.groups"
+
   # User actions (optional)
   userActions:
     # Send audit events to Kubernetes and Flux's notification-controller.
@@ -160,6 +198,14 @@ spec:
       scopes:
         - groups
         - email
+
+      # Optional: map of additional query parameters to include in
+      # the authorization URL when redirecting the user to the OAuth2
+      # provider for authentication. This can be used to set
+      # provider-specific parameters.
+      authURLParams:
+        access_type: offline
+        prompt: consent
 ```
 
 The default scopes requested are `openid`, `offline_access`, `profile`, `email` and `groups`.
@@ -319,6 +365,29 @@ spec:
       clientID: flux-web
       clientSecret: my-client-secret
       issuerURL: https://dex.example.com
+```
+
+### OIDC with Authorization URL Parameters
+
+This example configures additional query parameters for the authorization URL,
+useful for provider-specific settings such as forcing offline access and consent
+prompts:
+
+```yaml
+apiVersion: web.fluxcd.controlplane.io/v1
+kind: Config
+spec:
+  baseURL: https://flux-web.example.com
+  authentication:
+    type: OAuth2
+    oauth2:
+      provider: OIDC
+      clientID: flux-web
+      clientSecret: my-client-secret
+      issuerURL: https://accounts.google.com
+      authURLParams:
+        access_type: offline
+        prompt: consent
 ```
 
 ### OIDC with Custom Session Duration
