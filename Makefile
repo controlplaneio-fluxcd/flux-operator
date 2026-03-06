@@ -9,6 +9,7 @@ FLUX_OPERATOR_VERSION ?= $(shell gh release view --json tagName -q '.tagName')
 FLUX_OPERATOR_DEV_VERSION?=0.0.0-$(shell git rev-parse --abbrev-ref HEAD)-$(shell git rev-parse --short HEAD)-$(shell date +%s)
 FLUX_VERSION = $(shell gh release view --repo fluxcd/flux2 --json tagName -q '.tagName')
 ENVTEST_K8S_VERSION = 1.35.0
+GO_TEST_ARGS ?=
 
 # Get the currently used golang install path
 # (in GOPATH/bin, unless GOBIN is set).
@@ -50,7 +51,7 @@ tidy: ## Run go mod tidy.
 
 .PHONY: test
 test: tidy generate fmt vet envtest ## Run all unit tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v -e /e2e -e /olm) -coverprofile cover.out
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v -e /e2e -e /olm) $(GO_TEST_ARGS) -coverprofile cover.out
 
 .PHONY: test-e2e
 test-e2e: ## Run the e2e tests on the Kind cluster.
