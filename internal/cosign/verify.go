@@ -38,6 +38,13 @@ const (
 // The verification process is compatible with cosign v3's default keyless
 // verification and requires a minimum sigstore bundle version of v0.3.
 func VerifyArtifact(ctx context.Context, ociRef string, certIdentityRegexp string, certOIDCIssuer string) error {
+	if certIdentityRegexp == "" {
+		return fmt.Errorf("certificate identity regexp must not be empty")
+	}
+	if certOIDCIssuer == "" {
+		return fmt.Errorf("certificate OIDC issuer must not be empty")
+	}
+
 	// Strip oci:// prefix if present.
 	ociRef = strings.TrimPrefix(ociRef, "oci://")
 
@@ -86,8 +93,11 @@ func VerifyArtifact(ctx context.Context, ociRef string, certIdentityRegexp strin
 		return fmt.Errorf("unsupported sigstore bundle version (minimum v0.3 required)")
 	}
 
-	// Fetch the Sigstore public good trusted root.
-	tufClient, err := tuf.DefaultClient()
+	// Fetch the Sigstore public good trusted root using an in-memory
+	// TUF client to avoid writing cache files to disk.
+	tufOpts := tuf.DefaultOptions()
+	tufOpts.WithDisableLocalCache()
+	tufClient, err := tuf.New(tufOpts)
 	if err != nil {
 		return fmt.Errorf("creating TUF client: %w", err)
 	}

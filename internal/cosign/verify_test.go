@@ -75,6 +75,36 @@ func TestVerifyArtifact(t *testing.T) {
 		g.Expect(err.Error()).To(ContainSubstring("signature verification failed"))
 	})
 
+	t.Run("fails with empty identity", func(t *testing.T) {
+		g := NewWithT(t)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+
+		err := cosign.VerifyArtifact(ctx,
+			"ghcr.io/stefanprodan/podinfo:6.11.0",
+			"",
+			ghActionsIssuer,
+		)
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("certificate identity regexp must not be empty"))
+	})
+
+	t.Run("fails with empty issuer", func(t *testing.T) {
+		g := NewWithT(t)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+
+		err := cosign.VerifyArtifact(ctx,
+			"ghcr.io/stefanprodan/podinfo:6.11.0",
+			ghActionsIdentity,
+			"",
+		)
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("certificate OIDC issuer must not be empty"))
+	})
+
 	t.Run("fails for invalid reference", func(t *testing.T) {
 		g := NewWithT(t)
 
