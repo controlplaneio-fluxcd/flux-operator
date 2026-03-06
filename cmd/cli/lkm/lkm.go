@@ -56,7 +56,7 @@ func VerifyLicenseKey(jwksData, jwtData, revokedKeysJSON []byte, skus ...string)
 
 	for _, s := range skus {
 		if !lic.HasCapability(s) {
-			return nil, fmt.Errorf("sku not found in license: required capability %q is missing", s)
+			return nil, fmt.Errorf("sku not found in license: required capability %s is missing", s)
 		}
 	}
 
