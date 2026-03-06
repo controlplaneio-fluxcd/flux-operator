@@ -8,11 +8,10 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 
-	"github.com/controlplaneio-fluxcd/flux-operator/internal/lkm"
+	"github.com/controlplaneio-fluxcd/flux-operator/cmd/cli/lkm"
 )
 
 var distroVerifyLicenseKeyCmd = &cobra.Command{
@@ -55,12 +54,6 @@ func distroVerifyLicenseKeyCmdRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to read the license key: %w", err)
 	}
 
-	// Extract the public key ID from the JWT header
-	kid, err := lkm.GetKeyIDFromToken(jwtData)
-	if err != nil {
-		return lkm.InvalidLicenseKeyError(err)
-	}
-
 	// Read the JWKS data from the specified source
 	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
 	defer cancel()
@@ -69,47 +62,26 @@ func distroVerifyLicenseKeyCmdRun(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Extract the public key for the specific ID
-	pk, err := lkm.EdPublicKeyFromSet(jwksData, kid)
-	if err != nil {
-		return lkm.InvalidLicenseKeyError(err)
+	// Read the revoked key set if specified
+	var revokedKeysJSON []byte
+	if distroVerifyLicenseKeyArgs.revokedKeySetPath != "" {
+		revokedKeysJSON, err = os.ReadFile(distroVerifyLicenseKeyArgs.revokedKeySetPath)
+		if err != nil {
+			return fmt.Errorf("failed to read the revoked key set: %w", err)
+		}
 	}
 
-	// Verify the JWT signature and extract the license information
-	lic, err := lkm.GetLicenseFromToken(jwtData, pk)
+	// Verify the license key signature, claims, expiry, and revocation
+	result, err := lkm.VerifyLicenseKey(jwksData, jwtData, revokedKeysJSON)
 	if err != nil {
 		return err
 	}
 
 	// Display license key information
-	rootCmd.Println(fmt.Sprintf("✔ license key was issued by %s at %s", lic.GetIssuer(), lic.GetIssuedAt()))
-	if caps := lic.GetKey().Capabilities; len(caps) > 0 {
-		rootCmd.Println(fmt.Sprintf("✔ license key capabilities: %s", strings.Join(caps, ", ")))
+	rootCmd.Println(fmt.Sprintf("✔ license key was issued by %s at %s", result.Issuer, result.IssuedAt))
+	if len(result.Capabilities) > 0 {
+		rootCmd.Println(fmt.Sprintf("✔ license key capabilities: %s", strings.Join(result.Capabilities, ", ")))
 	}
-
-	// Check if the license key is revoked
-	if distroVerifyLicenseKeyArgs.revokedKeySetPath != "" {
-		// Load the revoked key set from file
-		rksData, err := os.ReadFile(distroVerifyLicenseKeyArgs.revokedKeySetPath)
-		if err != nil {
-			return fmt.Errorf("failed to read the revoked key set: %w", err)
-		}
-
-		rks, err := lkm.RevocationKeySetFromJSON(rksData)
-		if err != nil {
-			return fmt.Errorf("failed to parse revoked key set: %w", err)
-		}
-
-		// Check if the license key ID is in the revoked set
-		if revoked, ts := rks.IsRevoked(lic); revoked {
-			return fmt.Errorf("license key is revoked since %s", ts)
-		}
-	}
-
-	// Check if the license key is expired
-	if lic.IsExpired(time.Second) {
-		return fmt.Errorf("license key has expired on %s", lic.GetExpiry())
-	}
-	rootCmd.Println(fmt.Sprintf("✔ license key is valid until %s", lic.GetExpiry()))
+	rootCmd.Println(fmt.Sprintf("✔ license key is valid until %s", result.Expiry))
 	return nil
 }
