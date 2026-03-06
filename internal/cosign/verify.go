@@ -37,7 +37,10 @@ const (
 // matches the given identity regexp and OIDC issuer.
 // The verification process is compatible with cosign v3's default keyless
 // verification and requires a minimum sigstore bundle version of v0.3.
-func VerifyArtifact(ctx context.Context, ociRef string, certIdentityRegexp string, certOIDCIssuer string) error {
+// When trustedRootPath is set, the trusted root is loaded from the given file
+// and TUF is bypassed entirely, enabling offline verification with no network
+// calls beyond the OCI registry.
+func VerifyArtifact(ctx context.Context, ociRef string, certIdentityRegexp string, certOIDCIssuer string, trustedRootPath string) error {
 	if certIdentityRegexp == "" {
 		return fmt.Errorf("certificate identity regexp must not be empty")
 	}
@@ -80,10 +83,6 @@ func VerifyArtifact(ctx context.Context, ociRef string, certIdentityRegexp strin
 		return err
 	}
 
-	if bundleBytes == nil {
-		return fmt.Errorf("no sigstore bundle found in referrers for %s", digest)
-	}
-
 	// Parse the sigstore bundle and check minimum version.
 	var b bundle.Bundle
 	if err := b.UnmarshalJSON(bundleBytes); err != nil {
@@ -93,23 +92,10 @@ func VerifyArtifact(ctx context.Context, ociRef string, certIdentityRegexp strin
 		return fmt.Errorf("unsupported sigstore bundle version (minimum v0.3 required)")
 	}
 
-	// Fetch the Sigstore public good trusted root using an in-memory
-	// TUF client to avoid writing cache files to disk.
-	tufOpts := tuf.DefaultOptions()
-	tufOpts.WithDisableLocalCache()
-	tufClient, err := tuf.New(tufOpts)
+	// Load the trusted root either from a local file or from TUF.
+	trustedRoot, err := loadTrustedRoot(trustedRootPath)
 	if err != nil {
-		return fmt.Errorf("creating TUF client: %w", err)
-	}
-
-	trustedRootJSON, err := tufClient.GetTarget("trusted_root.json")
-	if err != nil {
-		return fmt.Errorf("fetching trusted root: %w", err)
-	}
-
-	trustedRoot, err := root.NewTrustedRootFromJSON(trustedRootJSON)
-	if err != nil {
-		return fmt.Errorf("parsing trusted root: %w", err)
+		return err
 	}
 
 	// Create the verifier with SCT, integrated timestamps, and tlog requirements.
@@ -148,6 +134,44 @@ func VerifyArtifact(ctx context.Context, ociRef string, certIdentityRegexp strin
 	}
 
 	return nil
+}
+
+// loadTrustedRoot loads the Sigstore trusted root material. When trustedRootPath
+// is set, it loads from the given file (offline mode, no TUF calls). Otherwise,
+// it fetches from the Sigstore public good TUF repository using an in-memory
+// client to avoid writing cache files to disk.
+func loadTrustedRoot(trustedRootPath string) (*root.TrustedRoot, error) {
+	if trustedRootPath != "" {
+		trustedRoot, err := root.NewTrustedRootFromPath(trustedRootPath)
+		if err != nil {
+			return nil, fmt.Errorf("loading trusted root from %q: %w", trustedRootPath, err)
+		}
+		return trustedRoot, nil
+	}
+
+	tufClient, err := NewTUFClient()
+	if err != nil {
+		return nil, fmt.Errorf("creating TUF client: %w", err)
+	}
+
+	trustedRootJSON, err := tufClient.GetTarget("trusted_root.json")
+	if err != nil {
+		return nil, fmt.Errorf("fetching trusted root: %w", err)
+	}
+
+	trustedRoot, err := root.NewTrustedRootFromJSON(trustedRootJSON)
+	if err != nil {
+		return nil, fmt.Errorf("parsing trusted root: %w", err)
+	}
+	return trustedRoot, nil
+}
+
+// NewTUFClient creates an in-memory Sigstore TUF client that does not
+// write cache files to disk.
+func NewTUFClient() (*tuf.Client, error) {
+	tufOpts := tuf.DefaultOptions()
+	tufOpts.WithDisableLocalCache()
+	return tuf.New(tufOpts)
 }
 
 // findSigstoreBundle searches through all OCI referrers for a sigstore bundle.

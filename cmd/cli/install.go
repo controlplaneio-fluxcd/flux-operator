@@ -119,6 +119,7 @@ type installFlags struct {
 	verify                   bool
 	certIdentityRegexp       string
 	certOIDCIssuer           string
+	trustedRoot              string
 }
 
 var installArgs installFlags
@@ -173,6 +174,8 @@ func init() {
 		"certificate identity regexp for signature verification")
 	installCmd.Flags().StringVar(&installArgs.certOIDCIssuer, "certificate-oidc-issuer", cosign.DefaultCertOIDCIssuer,
 		"OIDC issuer for signature verification")
+	installCmd.Flags().StringVar(&installArgs.trustedRoot, "trusted-root", "",
+		"path to a trusted_root.json file for offline signature verification")
 
 	rootCmd.AddCommand(installCmd)
 }
@@ -203,7 +206,8 @@ func installCmdRun(cmd *cobra.Command, args []string) error {
 		rootCmd.Println(`◎`, "Verifying artifact signature...")
 		if err := cosign.VerifyArtifact(ctx, artifactURL,
 			installArgs.certIdentityRegexp,
-			installArgs.certOIDCIssuer); err != nil {
+			installArgs.certOIDCIssuer,
+			installArgs.trustedRoot); err != nil {
 			return fmt.Errorf("artifact signature verification failed: %w", err)
 		}
 		rootCmd.Println(`✔`, "Artifact signature verified successfully")

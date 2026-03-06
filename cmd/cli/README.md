@@ -356,6 +356,7 @@ it is recommended to follow the [installation guide](https://fluxcd.control-plan
     - `--verify`: Verify the cosign signature of the distribution artifact before installing.
     - `--certificate-identity-regexp`: Certificate identity regexp for signature verification.
     - `--certificate-oidc-issuer`: OIDC issuer for signature verification.
+    - `--trusted-root`: Path to a `trusted_root.json` file for offline signature verification.
 
 ### Uninstall Command
 
