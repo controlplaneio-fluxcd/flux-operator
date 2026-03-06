@@ -449,12 +449,16 @@ func TestVerifyTokenAndSetStorageOrLogErrorOptions(t *testing.T) {
 
 // mockOAuth2Provider is a test double for oauth2Provider.
 type mockOAuth2Provider struct {
+	conf    *oauth2.Config
 	details *user.Details
 	storage *authStorage
 	err     error
 }
 
 func (m *mockOAuth2Provider) config() (*oauth2.Config, error) {
+	if m.conf != nil {
+		return m.conf, nil
+	}
 	return &oauth2.Config{}, nil
 }
 
@@ -468,6 +472,91 @@ func (m *mockOAuth2Provider) verifyAccessToken(ctx context.Context, accessToken 
 
 func (m *mockOAuth2Provider) verifyToken(ctx context.Context, token *oauth2.Token, nonce ...string) (*user.Details, *authStorage, error) {
 	return m.details, m.storage, m.err
+}
+
+func TestServeAuthorize_AuthURLParams(t *testing.T) {
+	for _, tt := range []struct {
+		name           string
+		authURLParams  map[string]string
+		expectParams   map[string]string
+		unexpectParams []string
+	}{
+		{
+			name:          "includes custom auth URL params in redirect",
+			authURLParams: map[string]string{"access_type": "offline", "prompt": "consent"},
+			expectParams:  map[string]string{"access_type": "offline", "prompt": "consent"},
+		},
+		{
+			name:          "includes single auth URL param",
+			authURLParams: map[string]string{"prompt": "login"},
+			expectParams:  map[string]string{"prompt": "login"},
+		},
+		{
+			name:           "no custom params when authURLParams is nil",
+			authURLParams:  nil,
+			unexpectParams: []string{"access_type", "prompt"},
+		},
+		{
+			name:           "no custom params when authURLParams is empty",
+			authURLParams:  map[string]string{},
+			unexpectParams: []string{"access_type", "prompt"},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			auth := newTestOAuth2Authenticator(t)
+			auth.conf = &fluxcdv1.WebConfigSpec{
+				BaseURL:  "https://flux-web.example.com",
+				Insecure: true,
+				Authentication: &fluxcdv1.AuthenticationSpec{
+					OAuth2: &fluxcdv1.OAuth2AuthenticationSpec{
+						Provider:      "OIDC",
+						ClientID:      "test-client-id",
+						ClientSecret:  "test-client-secret-for-testing-purposes",
+						AuthURLParams: tt.authURLParams,
+					},
+				},
+			}
+			auth.provider = &mockOAuth2Provider{
+				conf: &oauth2.Config{
+					Endpoint: oauth2.Endpoint{
+						AuthURL: "https://auth.example.com/authorize",
+					},
+				},
+			}
+
+			req := httptest.NewRequest(http.MethodGet, "/oauth2/authorize", nil)
+			rec := httptest.NewRecorder()
+
+			auth.serveAuthorize(rec, req)
+
+			g.Expect(rec.Code).To(Equal(http.StatusSeeOther))
+
+			location := rec.Header().Get("Location")
+			g.Expect(location).NotTo(BeEmpty())
+
+			redirectURL, err := url.Parse(location)
+			g.Expect(err).NotTo(HaveOccurred())
+
+			query := redirectURL.Query()
+
+			// Standard PKCE and nonce params should always be present.
+			g.Expect(query.Get("code_challenge")).NotTo(BeEmpty())
+			g.Expect(query.Get("code_challenge_method")).To(Equal("S256"))
+			g.Expect(query.Get("nonce")).NotTo(BeEmpty())
+
+			// Check expected custom params.
+			for k, v := range tt.expectParams {
+				g.Expect(query.Get(k)).To(Equal(v), "expected param %s=%s", k, v)
+			}
+
+			// Check unexpected params are absent.
+			for _, k := range tt.unexpectParams {
+				g.Expect(query.Has(k)).To(BeFalse(), "unexpected param %s", k)
+			}
+		})
+	}
 }
 
 func TestVerifyTokenAndSetStorageOrLogError_SessionStart(t *testing.T) {

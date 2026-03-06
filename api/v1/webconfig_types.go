@@ -175,6 +175,14 @@ type OAuth2AuthenticationSpec struct {
 	// +optional
 	Scopes []string `json:"scopes"`
 
+	// AuthURLParams is a map of additional query parameters
+	// to include in the authorization URL when redirecting
+	// the user to the OAuth2 provider for authentication.
+	// This can be used to set provider-specific parameters,
+	// such as "access_type=offline" and "prompt=consent".
+	// +optional
+	AuthURLParams map[string]string `json:"authURLParams"`
+
 	// IssuerURL is used for OIDC provider discovery.
 	// Required for the OIDC provider.
 	// Used only by the OIDC provider.

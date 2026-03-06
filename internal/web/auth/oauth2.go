@@ -123,11 +123,18 @@ func (o *oauth2Authenticator) serveAuthorize(w http.ResponseWriter, r *http.Requ
 	setSecureCookie(w, cookieNameOAuth2LoginState, cookiePathOAuth2LoginState,
 		state, cookieDurationShortLived, !o.conf.Insecure)
 
-	// Redirect to authorization URL.
-	authCodeURL := oauth2Conf.AuthCodeURL(state,
+	// Build authorization code URL.
+	authCodeOpts := []oauth2.AuthCodeOption{
 		oauth2.SetAuthURLParam("code_challenge", pkceChallenge),
 		oauth2.SetAuthURLParam("code_challenge_method", "S256"),
-		oauth2.SetAuthURLParam("nonce", nonce))
+		oauth2.SetAuthURLParam("nonce", nonce),
+	}
+	for k, v := range o.conf.Authentication.OAuth2.AuthURLParams {
+		authCodeOpts = append(authCodeOpts, oauth2.SetAuthURLParam(k, v))
+	}
+	authCodeURL := oauth2Conf.AuthCodeURL(state, authCodeOpts...)
+
+	// Redirect to authorization URL.
 	http.Redirect(w, r, authCodeURL, http.StatusSeeOther)
 }
 

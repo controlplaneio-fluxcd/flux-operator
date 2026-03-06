@@ -697,6 +697,13 @@ func (in *OAuth2AuthenticationSpec) DeepCopyInto(out *OAuth2AuthenticationSpec) 
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
+	if in.AuthURLParams != nil {
+		in, out := &in.AuthURLParams, &out.AuthURLParams
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
+	}
 	in.ClaimsProcessorSpec.DeepCopyInto(&out.ClaimsProcessorSpec)
 }
 
