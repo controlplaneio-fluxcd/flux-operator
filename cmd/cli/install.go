@@ -21,6 +21,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/cosign"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/install"
 )
 
@@ -115,6 +116,10 @@ type installFlags struct {
 	syncGHAPrivateKeyFile    string
 	syncGHABaseURL           string
 	autoUpdate               bool
+	verify                   bool
+	certIdentityRegexp       string
+	certOIDCIssuer           string
+	trustedRoot              string
 }
 
 var installArgs installFlags
@@ -163,6 +168,14 @@ func init() {
 		"GitHub base URL for GitHub Enterprise Server (optional)")
 	installCmd.Flags().BoolVar(&installArgs.autoUpdate, "auto-update", true,
 		"enable automatic updates of the Flux Operator from the distribution artifact")
+	installCmd.Flags().BoolVar(&installArgs.verify, "verify", false,
+		"verify the cosign signature of the distribution artifact before installing")
+	installCmd.Flags().StringVar(&installArgs.certIdentityRegexp, "certificate-identity-regexp", cosign.DefaultCertIdentityRegexp,
+		"certificate identity regexp for signature verification")
+	installCmd.Flags().StringVar(&installArgs.certOIDCIssuer, "certificate-oidc-issuer", cosign.DefaultCertOIDCIssuer,
+		"OIDC issuer for signature verification")
+	installCmd.Flags().StringVar(&installArgs.trustedRoot, "trusted-root", "",
+		"path to a trusted_root.json file for offline signature verification")
 
 	rootCmd.AddCommand(installCmd)
 }
@@ -187,7 +200,20 @@ func installCmdRun(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Step 2: Download the distribution artifact and extract the manifests
+	// Step 2: Verify the artifact signature if requested
+
+	if installArgs.verify {
+		rootCmd.Println(`◎`, "Verifying artifact signature...")
+		if err := cosign.VerifyArtifact(ctx, artifactURL,
+			installArgs.certIdentityRegexp,
+			installArgs.certOIDCIssuer,
+			installArgs.trustedRoot); err != nil {
+			return fmt.Errorf("artifact signature verification failed: %w", err)
+		}
+		rootCmd.Println(`✔`, "Artifact signature verified successfully")
+	}
+
+	// Step 3: Download the distribution artifact and extract the manifests
 
 	objects, err := fetchOperatorManifests(artifactURL)
 	if err != nil {
@@ -195,7 +221,7 @@ func installCmdRun(cmd *cobra.Command, args []string) error {
 	}
 	rootCmd.Println(`✔`, "Download completed in", time.Since(now).Round(time.Second).String())
 
-	// Step 3: Install or upgrade the Flux Operator
+	// Step 4: Install or upgrade the Flux Operator
 
 	cfg, err := kubeconfigArgs.ToRESTConfig()
 	if err != nil {
@@ -250,7 +276,7 @@ func installCmdRun(cmd *cobra.Command, args []string) error {
 
 	rootCmd.Println(`✔`, "Flux Operator has been installed successfully")
 
-	// Step 4: Create or update the sync credentials secret if specified
+	// Step 5: Create or update the sync credentials secret if specified
 
 	if (installArgs.syncCreds != "" || installArgs.hasSyncGHA()) && instance.Spec.Sync != nil {
 		rootCmd.Println(`◎`, "Configuring sync credentials...")
@@ -275,7 +301,7 @@ func installCmdRun(cmd *cobra.Command, args []string) error {
 		printChangeSet(cs)
 	}
 
-	// Step 5: Install or upgrade the Flux instance
+	// Step 6: Install or upgrade the Flux instance
 
 	rootCmd.Println(`◎`, "Installing the Flux instance...")
 	cs, err = installer.ApplyInstance(ctx, instance)
@@ -304,7 +330,7 @@ func installCmdRun(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Step 6: Configure automatic updates if enabled
+	// Step 7: Configure automatic updates if enabled
 
 	if installArgs.autoUpdate {
 		rootCmd.Println(`◎`, "Configuring automatic updates...")

@@ -353,6 +353,10 @@ it is recommended to follow the [installation guide](https://fluxcd.control-plan
     - `--instance-sync-gha-private-key-file`: Path to GitHub App private key file.
     - `--instance-sync-gha-base-url`: GitHub base URL for GitHub Enterprise Server (optional).
     - `--auto-update`: Enable automatic updates of the Flux Operator from the distribution artifact.
+    - `--verify`: Verify the cosign signature of the distribution artifact before installing.
+    - `--certificate-identity-regexp`: Certificate identity regexp for signature verification.
+    - `--certificate-oidc-issuer`: OIDC issuer for signature verification.
+    - `--trusted-root`: Path to a `trusted_root.json` file for offline signature verification.
 
 ### Uninstall Command
 
