@@ -55,6 +55,10 @@ vi.mock('./components/dashboards/resource/ResourcePage', () => ({
   ResourcePage: () => <div data-testid="resource-page">ResourcePage</div>
 }))
 
+vi.mock('./components/dashboards/workload/WorkloadPage', () => ({
+  WorkloadPage: () => <div data-testid="workload-page">WorkloadPage</div>
+}))
+
 vi.mock('./components/common/NotFoundPage', () => ({
   NotFoundPage: () => <div data-testid="not-found-page">NotFoundPage</div>
 }))
