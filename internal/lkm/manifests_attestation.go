@@ -88,7 +88,7 @@ func (m *ManifestsAttestation) Sign(privateKey *EdPrivateKey, dirPath string, ig
 	}
 
 	// Compute the checksum of the directory contents.
-	checksum, files, err := hashDir(dirPath, "", ignore, dirhash.Hash1)
+	checksum, files, err := HashDir(dirPath, "", ignore, dirhash.Hash1)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to scan files in %s: %w", dirPath, err)
 	}
@@ -151,7 +151,7 @@ func (m *ManifestsAttestation) Verify(jwtData []byte, publicKey *EdPublicKey, di
 	}
 
 	// Compute the checksum of the directory contents.
-	checksum, files, err := hashDir(dirPath, "", ignore, dirhash.Hash1)
+	checksum, files, err := HashDir(dirPath, "", ignore, dirhash.Hash1)
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan files in %s: %w", dirPath, err)
 	}
@@ -164,10 +164,10 @@ func (m *ManifestsAttestation) Verify(jwtData []byte, publicKey *EdPublicKey, di
 	return files, nil
 }
 
-// hashDir returns the hash of the local file system directory dir,
+// HashDir returns the hash of the local file system directory dir,
 // replacing the directory name itself with prefix in the file names
 // used in the hash function.
-func hashDir(dir, prefix string, ignore []string, hash dirhash.Hash) (string, []string, error) {
+func HashDir(dir, prefix string, ignore []string, hash dirhash.Hash) (string, []string, error) {
 	files, err := dirFiles(dir, prefix, ignore)
 	if err != nil {
 		return "", nil, err
