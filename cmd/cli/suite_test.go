@@ -172,6 +172,10 @@ func resetCmdArgs() {
 	exportReportArgs = exportReportFlags{output: "yaml"}
 	exportResourceArgs = exportResourceFlags{output: "yaml"}
 
+	// Skills commands
+	skillsInstallArgs = skillsInstallFlags{tag: "latest", verify: true}
+	skillsUpdateArgs = skillsUpdateFlags{}
+
 	// Diff commands
 	diffYAMLArgs = diffYAMLFlags{output: "json-patch-yaml"}
 
