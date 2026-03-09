@@ -204,6 +204,9 @@ func skillsInstallCmdRun(cmd *cobra.Command, args []string) error {
 	if err := agentops.SaveCatalog(skillsDir, catalog); err != nil {
 		return fmt.Errorf("saving catalog: %w", err)
 	}
+	if err := agentops.SaveCatalogLock(skillsDir, catalog); err != nil {
+		return fmt.Errorf("saving catalog lock: %w", err)
+	}
 
 	rootCmd.Println(`✔`, fmt.Sprintf("Installed %d skill(s) from %s:%s", len(skillNames), repo, tag))
 	for _, name := range skillNames {

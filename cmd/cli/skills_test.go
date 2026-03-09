@@ -80,6 +80,7 @@ func seedCatalog(t *testing.T, skillsDir string) []string {
 	}
 
 	g.Expect(agentops.SaveCatalog(skillsDir, catalog)).To(Succeed())
+	g.Expect(agentops.SaveCatalogLock(skillsDir, catalog)).To(Succeed())
 	return skillNames
 }
 
@@ -160,9 +161,11 @@ func TestSkillsUninstallCmd(t *testing.T) {
 			g.Expect(os.IsNotExist(err)).To(BeTrue(), "skill dir %q should be removed", name)
 		}
 
-		// Verify catalog file was removed (last source).
+		// Verify catalog files were removed (last source).
 		_, err = os.Stat(filepath.Join(skillsDir, agentops.CatalogFileName))
 		g.Expect(os.IsNotExist(err)).To(BeTrue(), "catalog should be removed when no sources remain")
+		_, err = os.Stat(filepath.Join(skillsDir, agentops.CatalogLockFileName))
+		g.Expect(os.IsNotExist(err)).To(BeTrue(), "catalog lock should be removed when no sources remain")
 	})
 
 	t.Run("preserves other sources when uninstalling one", func(t *testing.T) {
@@ -198,6 +201,7 @@ func TestSkillsUninstallCmd(t *testing.T) {
 			Skills:       []fluxcdv1.AgentCatalogSkill{{Name: "other-skill", Checksum: checksum}},
 		})
 		g.Expect(agentops.SaveCatalog(skillsDir, catalog)).To(Succeed())
+		g.Expect(agentops.SaveCatalogLock(skillsDir, catalog)).To(Succeed())
 
 		// Uninstall the first source.
 		_, err = executeCommand([]string{

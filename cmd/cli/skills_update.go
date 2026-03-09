@@ -65,14 +65,13 @@ func skillsUpdateCmdRun(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
-	defer cancel()
-
 	var hadErrors bool
 	var updated int
 
 	for _, src := range catalog.Spec.Sources {
+		ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
 		changed, err := updateSource(ctx, catalog, src, skillsDir)
+		cancel()
 		if err != nil {
 			rootCmd.PrintErrf("✗ %v\n", err)
 			hadErrors = true
@@ -82,8 +81,8 @@ func skillsUpdateCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	if !skillsUpdateArgs.dryRun {
-		if err := agentops.SaveCatalog(skillsDir, catalog); err != nil {
-			return fmt.Errorf("saving catalog: %w", err)
+		if err := agentops.SaveCatalogLock(skillsDir, catalog); err != nil {
+			return fmt.Errorf("saving catalog lock: %w", err)
 		}
 	}
 

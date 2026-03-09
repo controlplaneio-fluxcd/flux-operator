@@ -74,15 +74,19 @@ func skillsUninstallCmdRun(cmd *cobra.Command, args []string) error {
 		catalog.Status.Inventory = append(catalog.Status.Inventory[:invIdx], catalog.Status.Inventory[invIdx+1:]...)
 	}
 
-	// Save or remove catalog.
+	// Save or remove catalog files.
 	if len(catalog.Spec.Sources) == 0 {
-		catalogPath := filepath.Join(skillsDir, agentops.CatalogFileName)
-		if err := os.Remove(catalogPath); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("removing catalog: %w", err)
+		for _, name := range []string{agentops.CatalogFileName, agentops.CatalogLockFileName} {
+			if err := os.Remove(filepath.Join(skillsDir, name)); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("removing %s: %w", name, err)
+			}
 		}
 	} else {
 		if err := agentops.SaveCatalog(skillsDir, catalog); err != nil {
 			return fmt.Errorf("saving catalog: %w", err)
+		}
+		if err := agentops.SaveCatalogLock(skillsDir, catalog); err != nil {
+			return fmt.Errorf("saving catalog lock: %w", err)
 		}
 	}
 

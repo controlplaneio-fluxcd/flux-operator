@@ -79,7 +79,7 @@ func TestLoadSaveCatalog(t *testing.T) {
 		g.Expect(catalog.Spec.Sources).To(BeEmpty())
 	})
 
-	t.Run("round-trips catalog", func(t *testing.T) {
+	t.Run("round-trips spec and lock", func(t *testing.T) {
 		g := NewWithT(t)
 		dir := t.TempDir()
 
@@ -105,8 +105,8 @@ func TestLoadSaveCatalog(t *testing.T) {
 			},
 		}
 
-		err := agentops.SaveCatalog(dir, original)
-		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(agentops.SaveCatalog(dir, original)).To(Succeed())
+		g.Expect(agentops.SaveCatalogLock(dir, original)).To(Succeed())
 
 		loaded, err := agentops.LoadCatalog(dir)
 		g.Expect(err).ToNot(HaveOccurred())
@@ -122,11 +122,68 @@ func TestLoadSaveCatalog(t *testing.T) {
 		g.Expect(entry.Skills[0].Name).To(Equal("my-skill"))
 	})
 
-	t.Run("errors on invalid YAML", func(t *testing.T) {
+	t.Run("spec from catalog.yaml takes precedence over lock", func(t *testing.T) {
 		g := NewWithT(t)
 		dir := t.TempDir()
 
-		// Write invalid YAML as catalog.
+		// Save lock with one source.
+		lock := &fluxcdv1.AgentCatalog{}
+		lock.APIVersion = fluxcdv1.AgentGroupVersion.String()
+		lock.Kind = fluxcdv1.AgentCatalogKind
+		lock.Spec.Sources = []fluxcdv1.AgentCatalogSource{
+			{Repository: "ghcr.io/old/skills", Tag: "v1"},
+		}
+		lock.Status.Inventory = []fluxcdv1.AgentCatalogInventoryEntry{
+			{ID: fluxcdv1.RepositoryID("ghcr.io/old/skills"), Digest: "sha256:old"},
+		}
+		g.Expect(agentops.SaveCatalogLock(dir, lock)).To(Succeed())
+
+		// Save catalog.yaml with a different source.
+		spec := &fluxcdv1.AgentCatalog{}
+		spec.APIVersion = fluxcdv1.AgentGroupVersion.String()
+		spec.Kind = fluxcdv1.AgentCatalogKind
+		spec.Spec.Sources = []fluxcdv1.AgentCatalogSource{
+			{Repository: "ghcr.io/new/skills", Tag: "latest"},
+		}
+		g.Expect(agentops.SaveCatalog(dir, spec)).To(Succeed())
+
+		// LoadCatalog should use spec from catalog.yaml, status from lock.
+		loaded, err := agentops.LoadCatalog(dir)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(loaded.Spec.Sources).To(HaveLen(1))
+		g.Expect(loaded.Spec.Sources[0].Repository).To(Equal("ghcr.io/new/skills"))
+		g.Expect(loaded.Status.Inventory).To(HaveLen(1))
+		g.Expect(loaded.Status.Inventory[0].Digest).To(Equal("sha256:old"))
+	})
+
+	t.Run("catalog spec excludes status", func(t *testing.T) {
+		g := NewWithT(t)
+		dir := t.TempDir()
+
+		catalog := &fluxcdv1.AgentCatalog{}
+		catalog.APIVersion = fluxcdv1.AgentGroupVersion.String()
+		catalog.Kind = fluxcdv1.AgentCatalogKind
+		catalog.Spec.Sources = []fluxcdv1.AgentCatalogSource{
+			{Repository: "ghcr.io/test/skills", Tag: "latest"},
+		}
+		catalog.Status.Inventory = []fluxcdv1.AgentCatalogInventoryEntry{
+			{ID: "test", Digest: "sha256:abc"},
+		}
+
+		err := agentops.SaveCatalog(dir, catalog)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		// Read raw file and verify no status field.
+		data, err := os.ReadFile(filepath.Join(dir, agentops.CatalogFileName))
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(string(data)).ToNot(ContainSubstring("status"))
+		g.Expect(string(data)).To(ContainSubstring("ghcr.io/test/skills"))
+	})
+
+	t.Run("errors on invalid catalog YAML", func(t *testing.T) {
+		g := NewWithT(t)
+		dir := t.TempDir()
+
 		g.Expect(os.WriteFile(filepath.Join(dir, agentops.CatalogFileName), []byte(":::invalid"), 0o644)).To(Succeed())
 
 		_, err := agentops.LoadCatalog(dir)
@@ -134,16 +191,37 @@ func TestLoadSaveCatalog(t *testing.T) {
 		g.Expect(err.Error()).To(ContainSubstring("parsing catalog"))
 	})
 
-	t.Run("errors on unreadable file", func(t *testing.T) {
+	t.Run("errors on invalid lock YAML", func(t *testing.T) {
 		g := NewWithT(t)
 		dir := t.TempDir()
 
-		// Create catalog file as a directory to trigger a read error.
+		g.Expect(os.WriteFile(filepath.Join(dir, agentops.CatalogLockFileName), []byte(":::invalid"), 0o644)).To(Succeed())
+
+		_, err := agentops.LoadCatalog(dir)
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("parsing catalog lock"))
+	})
+
+	t.Run("errors on unreadable catalog", func(t *testing.T) {
+		g := NewWithT(t)
+		dir := t.TempDir()
+
 		g.Expect(os.MkdirAll(filepath.Join(dir, agentops.CatalogFileName), 0o755)).To(Succeed())
 
 		_, err := agentops.LoadCatalog(dir)
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).To(ContainSubstring("reading catalog"))
+	})
+
+	t.Run("errors on unreadable lock", func(t *testing.T) {
+		g := NewWithT(t)
+		dir := t.TempDir()
+
+		g.Expect(os.MkdirAll(filepath.Join(dir, agentops.CatalogLockFileName), 0o755)).To(Succeed())
+
+		_, err := agentops.LoadCatalog(dir)
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("reading catalog lock"))
 	})
 
 	t.Run("errors saving to read-only directory", func(t *testing.T) {
@@ -169,11 +247,11 @@ func TestLoadSaveCatalog(t *testing.T) {
 		catalog.APIVersion = fluxcdv1.AgentGroupVersion.String()
 		catalog.Kind = fluxcdv1.AgentCatalogKind
 
-		err := agentops.SaveCatalog(dir, catalog)
+		err := agentops.SaveCatalogLock(dir, catalog)
 		g.Expect(err).ToNot(HaveOccurred())
 
 		// Verify the file exists.
-		_, err = os.Stat(filepath.Join(dir, agentops.CatalogFileName))
+		_, err = os.Stat(filepath.Join(dir, agentops.CatalogLockFileName))
 		g.Expect(err).ToNot(HaveOccurred())
 
 		// Verify no temp files remain.

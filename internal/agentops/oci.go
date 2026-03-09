@@ -82,7 +82,7 @@ func PullArtifact(ctx context.Context, ociURL, dstDir string) (*ArtifactInfo, er
 		return nil, fmt.Errorf("reading manifest for %s: %w", ociURL, err)
 	}
 
-	layer, err := findFluxContentLayer(img, ociURL)
+	layer, err := findFluxContentLayer(img, manifest, ociURL)
 	if err != nil {
 		return nil, err
 	}
@@ -102,25 +102,21 @@ func PullArtifact(ctx context.Context, ociURL, dstDir string) (*ArtifactInfo, er
 	}, nil
 }
 
-// findFluxContentLayer finds the Flux content layer in an OCI image.
-// It returns an error if no layer matches the Flux content media type.
-func findFluxContentLayer(img v1.Image, ociURL string) (v1.Layer, error) {
-	layers, err := img.Layers()
-	if err != nil {
-		return nil, fmt.Errorf("listing layers in %s: %w", ociURL, err)
-	}
-
-	if len(layers) == 0 {
+// findFluxContentLayer finds the Flux content layer in an OCI image using the
+// pre-parsed manifest to avoid re-parsing. It looks up the layer by digest
+// after matching the media type from the manifest descriptors.
+func findFluxContentLayer(img v1.Image, manifest *v1.Manifest, ociURL string) (v1.Layer, error) {
+	if len(manifest.Layers) == 0 {
 		return nil, fmt.Errorf("no layers found in %s", ociURL)
 	}
 
-	for _, l := range layers {
-		mt, err := l.MediaType()
-		if err != nil {
-			continue
-		}
-		if string(mt) == fluxContentMediaType {
-			return l, nil
+	for _, desc := range manifest.Layers {
+		if string(desc.MediaType) == fluxContentMediaType {
+			layer, err := img.LayerByDigest(desc.Digest)
+			if err != nil {
+				return nil, fmt.Errorf("getting layer %s from %s: %w", desc.Digest, ociURL, err)
+			}
+			return layer, nil
 		}
 	}
 
