@@ -53,36 +53,53 @@ func ResolveDigest(ctx context.Context, ociURL string) (string, error) {
 	return digest, nil
 }
 
+// ArtifactInfo holds metadata from a pulled OCI artifact.
+type ArtifactInfo struct {
+	// Digest is the artifact digest string (e.g. "sha256:...").
+	Digest string
+
+	// Annotations holds the manifest annotations.
+	Annotations map[string]string
+}
+
 // PullArtifact pulls a Flux OCI artifact, finds the content layer by media type,
-// and extracts it to dstDir. It returns the digest string of the pulled artifact.
-func PullArtifact(ctx context.Context, ociURL, dstDir string) (string, error) {
+// and extracts it to dstDir. It returns the artifact metadata.
+func PullArtifact(ctx context.Context, ociURL, dstDir string) (*ArtifactInfo, error) {
 	ref := strings.TrimPrefix(ociURL, "oci://")
 
 	img, err := crane.Pull(ref, crane.WithContext(ctx), crane.WithAuthFromKeychain(authn.DefaultKeychain))
 	if err != nil {
-		return "", fmt.Errorf("pulling artifact %s: %w", ociURL, err)
+		return nil, fmt.Errorf("pulling artifact %s: %w", ociURL, err)
 	}
 
 	digest, err := img.Digest()
 	if err != nil {
-		return "", fmt.Errorf("getting digest for %s: %w", ociURL, err)
+		return nil, fmt.Errorf("getting digest for %s: %w", ociURL, err)
+	}
+
+	manifest, err := img.Manifest()
+	if err != nil {
+		return nil, fmt.Errorf("reading manifest for %s: %w", ociURL, err)
 	}
 
 	layer, err := findFluxContentLayer(img, ociURL)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	blob, err := layer.Compressed()
 	if err != nil {
-		return "", fmt.Errorf("extracting layer from %s: %w", ociURL, err)
+		return nil, fmt.Errorf("extracting layer from %s: %w", ociURL, err)
 	}
 
 	if err := untar.Untar(blob, dstDir, untar.WithMaxUntarSize(-1), untar.WithSkipSymlinks()); err != nil {
-		return "", fmt.Errorf("extracting artifact %s: %w", ociURL, err)
+		return nil, fmt.Errorf("extracting artifact %s: %w", ociURL, err)
 	}
 
-	return digest.String(), nil
+	return &ArtifactInfo{
+		Digest:      digest.String(),
+		Annotations: manifest.Annotations,
+	}, nil
 }
 
 // findFluxContentLayer finds the Flux content layer in an OCI image.

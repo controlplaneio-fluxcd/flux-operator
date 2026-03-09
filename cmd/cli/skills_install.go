@@ -122,7 +122,8 @@ func skillsInstallCmdRun(cmd *cobra.Command, args []string) error {
 	defer os.RemoveAll(tmpDir)
 
 	rootCmd.Println(`◎`, "Pulling skills artifact...")
-	if _, err := agentops.PullArtifact(ctx, pinnedURL, tmpDir); err != nil {
+	artifactInfo, err := agentops.PullArtifact(ctx, pinnedURL, tmpDir)
+	if err != nil {
 		return fmt.Errorf("pulling artifact: %w", err)
 	}
 
@@ -192,6 +193,7 @@ func skillsInstallCmdRun(cmd *cobra.Command, args []string) error {
 		ID:           fluxcdv1.RepositoryID(repo),
 		URL:          fmt.Sprintf("%s:%s", repo, tag),
 		Digest:       digest,
+		Annotations:  artifactInfo.Annotations,
 		LastUpdateAt: now,
 		Skills:       skills,
 	}

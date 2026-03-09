@@ -157,7 +157,8 @@ func updateSource(ctx context.Context, catalog *fluxcdv1.AgentCatalog, src fluxc
 	defer os.RemoveAll(tmpDir)
 
 	rootCmd.Println(`◎`, fmt.Sprintf("Pulling %s...", ociURL))
-	if _, err := agentops.PullArtifact(ctx, pinnedURL, tmpDir); err != nil {
+	artifactInfo, err := agentops.PullArtifact(ctx, pinnedURL, tmpDir)
+	if err != nil {
 		return false, fmt.Errorf("pulling artifact: %w", err)
 	}
 
@@ -194,6 +195,7 @@ func updateSource(ctx context.Context, catalog *fluxcdv1.AgentCatalog, src fluxc
 		ID:           fluxcdv1.RepositoryID(src.Repository),
 		URL:          ociURL,
 		Digest:       remoteDigest,
+		Annotations:  artifactInfo.Annotations,
 		LastUpdateAt: now,
 		Skills:       skills,
 	})

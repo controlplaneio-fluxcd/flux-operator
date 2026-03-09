@@ -100,6 +100,10 @@ type AgentCatalogInventoryEntry struct {
 	// +required
 	LastUpdateAt string `json:"lastUpdateAt"`
 
+	// Annotations holds the OCI artifact manifest annotations.
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty"`
+
 	// Skills is the list of skills provided by this source.
 	// +optional
 	Skills []AgentCatalogSkill `json:"skills,omitempty"`
