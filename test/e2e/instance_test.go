@@ -39,7 +39,7 @@ var _ = Describe("FluxInstance", Ordered, func() {
 				_, err := Run(cmd, "/test/e2e")
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
 
-				cmd = exec.Command(cli, "wait", "instance", "flux", "-n", namespace)
+				cmd = exec.Command(cli, "wait", "instance", "flux", "--timeout=5m", "-n", namespace)
 				_, err = Run(cmd, "/test/e2e")
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
 
