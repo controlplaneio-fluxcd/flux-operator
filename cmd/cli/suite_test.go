@@ -174,6 +174,7 @@ func resetCmdArgs() {
 
 	// Skills commands
 	skillsInstallArgs = skillsInstallFlags{tag: "latest", verify: true}
+	skillsPublishArgs = skillsPublishFlags{path: "skills", tags: []string{"latest"}}
 	skillsUpdateArgs = skillsUpdateFlags{}
 
 	// Diff commands

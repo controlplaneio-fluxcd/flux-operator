@@ -31,7 +31,7 @@ func TestNormalizeRepository(t *testing.T) {
 	}
 }
 
-func TestIsGHCRHost(t *testing.T) {
+func TestIsGitHubContainerRegistry(t *testing.T) {
 	tests := []struct {
 		name   string
 		input  string
@@ -50,7 +50,7 @@ func TestIsGHCRHost(t *testing.T) {
 	}
 }
 
-func TestDeriveGHCROwner(t *testing.T) {
+func TestDeriveGitHubOwner(t *testing.T) {
 	tests := []struct {
 		name   string
 		input  string

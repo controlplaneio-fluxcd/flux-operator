@@ -334,9 +334,11 @@ The following commands are available:
     - `--verify-trusted-root`: Path to a `trusted_root.json` file for offline signature verification.
     - `--dry-run`: Only check for updates without installing them (exits with code 1 if updates are available).
 - `flux-operator skills uninstall <repository>`: Uninstall all skills from the specified repository.
-
-> **Note* that the OCI artifacts should contain a directory for each skill.
-> The skills top dir should be pushed with `flux push artifact --path ./skills` and signed with `cosign` keyless.
+- `flux-operator skills publish <repository>`: Package a local skills directory and push it as an OCI artifact.
+    - `--path`: Path to the skills directory (default `skills`).
+    - `--tag`: OCI artifact tag, can be specified multiple times (default `latest`).
+    - `--annotation, -a`: OCI manifest annotation in `key=value` format, can be specified multiple times.
+    - `--sign`: Sign the artifact with cosign keyless (default `false`).
 
 ### Install Command
 

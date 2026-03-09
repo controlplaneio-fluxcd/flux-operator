@@ -230,6 +230,39 @@ func TestSkillsUninstallCmd(t *testing.T) {
 	})
 }
 
+func TestSkillsPublishCmd(t *testing.T) {
+	t.Run("requires repository argument", func(t *testing.T) {
+		g := NewWithT(t)
+
+		_, err := executeCommand([]string{"skills", "publish"})
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("accepts 1 arg"))
+	})
+
+	t.Run("validates skills in path", func(t *testing.T) {
+		g := NewWithT(t)
+
+		emptyDir := t.TempDir()
+		_, err := executeCommand([]string{
+			"skills", "publish", "ghcr.io/test/skills",
+			"--path", emptyDir,
+		})
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("no skills found"))
+	})
+
+	t.Run("rejects invalid annotations", func(t *testing.T) {
+		g := NewWithT(t)
+
+		_, err := executeCommand([]string{
+			"skills", "publish", "ghcr.io/test/skills",
+			"--annotation", "noequals",
+		})
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("key=value"))
+	})
+}
+
 func TestSkillsUpdateCmd(t *testing.T) {
 	t.Run("no sources shows no skills to update", func(t *testing.T) {
 		g := NewWithT(t)

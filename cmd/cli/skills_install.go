@@ -29,10 +29,10 @@ to the .agents/skills directory in the current working directory.`,
   # Install a specific version
   flux-operator skills install ghcr.io/org/agent-skills --tag v1.0.0
 
-  # Install from a DockerHub with explicit verification
+  # Install from a DockerHub with custom verification
   flux-operator skills install docker.io/my-org/skills \
-    --verify-oidc-issuer=https://token.actions.githubusercontent.com \
-    --verify-oidc-subject-regex='^https://github\.com/my-org/skills/.*$'
+    --verify-oidc-issuer=https://github.com/login/oauth \
+    --verify-oidc-subject-regex='^username@example.com$'
 
   # Install without signature verification
   flux-operator skills install ghcr.io/org/agent-skills --verify=false`,
