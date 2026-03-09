@@ -337,8 +337,10 @@ The following commands are available:
 - `flux-operator skills publish <repository>`: Package a local skills directory and push it as an OCI artifact.
     - `--path`: Path to the skills directory (default `skills`).
     - `--tag`: OCI artifact tag, can be specified multiple times (default `latest`).
+    - `--diff-tag`: Only push if the contents differ from the specified tag.
     - `--annotation, -a`: OCI manifest annotation in `key=value` format, can be specified multiple times.
     - `--sign`: Sign the artifact with cosign keyless (default `false`).
+    - `--output, -o`: Output format (`json`).
 
 ### Install Command
 

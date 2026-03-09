@@ -34,27 +34,19 @@ type PushArtifactOptions struct {
 
 	// Annotations is the map of OCI manifest annotations.
 	Annotations map[string]string
-
-	// SkillNames is the list of skill directory names to include in the artifact.
-	SkillNames []string
 }
 
-// PushArtifact creates a Flux OCI artifact from the given source directory
+// PushArtifact creates a Flux OCI artifact from the pre-built data
 // and pushes it to the specified repository. It returns the artifact digest.
-func PushArtifact(ctx context.Context, repo string, srcDir string, opts PushArtifactOptions) (string, error) {
+func PushArtifact(ctx context.Context, repo string, data []byte, opts PushArtifactOptions) (string, error) {
 	if len(opts.Tags) == 0 {
 		return "", fmt.Errorf("at least one tag is required")
-	}
-
-	data, err := BuildArtifact(srcDir, opts.SkillNames)
-	if err != nil {
-		return "", fmt.Errorf("building artifact: %w", err)
 	}
 
 	img := mutate.MediaType(empty.Image, types.OCIManifestSchema1)
 
 	layer := static.NewLayer(data, types.MediaType(fluxContentMediaType))
-	img, err = mutate.Append(img, mutate.Addendum{Layer: layer})
+	img, err := mutate.Append(img, mutate.Addendum{Layer: layer})
 	if err != nil {
 		return "", fmt.Errorf("appending layer: %w", err)
 	}

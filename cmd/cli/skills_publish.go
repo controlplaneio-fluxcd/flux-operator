@@ -5,6 +5,8 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -24,9 +26,10 @@ var skillsPublishCmd = &cobra.Command{
     --tag latest \
 	--sign
 
-  # Publish latest tag with custom annotations
+  # Publish latest tag with custom annotations only if contents differ
   flux-operator skills publish ghcr.io/my-org/agent-skills \
     --path ./my-skills \
+    --diff-tag latest \
     -a 'org.opencontainers.image.source=https://github.com/my-org/agent-skills' \
     -a 'org.opencontainers.image.description=A collection of skills for my agent'
 `,
@@ -39,6 +42,19 @@ type skillsPublishFlags struct {
 	tags        []string
 	annotations []string
 	sign        bool
+	diffTag     string
+	output      string
+}
+
+// skillsPublishResult holds the structured output for JSON format.
+type skillsPublishResult struct {
+	Repository  string            `json:"repository"`
+	Digest      string            `json:"digest,omitempty"`
+	Tags        []string          `json:"tags"`
+	Skills      []string          `json:"skills"`
+	Signed      bool              `json:"signed"`
+	Skipped     bool              `json:"skipped"`
+	Annotations map[string]string `json:"annotations,omitempty"`
 }
 
 var skillsPublishArgs skillsPublishFlags
@@ -52,6 +68,10 @@ func init() {
 		"OCI manifest annotation in key=value format (can be specified multiple times)")
 	skillsPublishCmd.Flags().BoolVar(&skillsPublishArgs.sign, "sign", false,
 		"sign the artifact with cosign keyless")
+	skillsPublishCmd.Flags().StringVar(&skillsPublishArgs.diffTag, "diff-tag", "",
+		"only push if the contents differ from the specified tag")
+	skillsPublishCmd.Flags().StringVarP(&skillsPublishArgs.output, "output", "o", "",
+		"output format (json)")
 
 	skillsCmd.AddCommand(skillsPublishCmd)
 }
@@ -59,6 +79,7 @@ func init() {
 func skillsPublishCmdRun(cmd *cobra.Command, args []string) error {
 	repo := agentops.NormalizeRepository(args[0])
 	path := skillsPublishArgs.path
+	jsonOutput := skillsPublishArgs.output == "json"
 
 	// Parse annotations.
 	annotations, err := agentops.ParseAnnotations(skillsPublishArgs.annotations)
@@ -78,41 +99,101 @@ func skillsPublishCmdRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no skills found in %s", path)
 	}
 
-	rootCmd.Println(`◎`, fmt.Sprintf("Found %d skill(s) in %s", len(skillNames), path))
-	for _, name := range skillNames {
-		rootCmd.Println(`  •`, name)
+	if !jsonOutput {
+		rootCmd.Println(`◎`, fmt.Sprintf("Found %d skill(s) in %s", len(skillNames), path))
+		for _, name := range skillNames {
+			rootCmd.Println(`  •`, name)
+		}
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
 	defer cancel()
 
-	// Push the artifact.
-	rootCmd.Println(`◎`, "Pushing artifact...")
-	digest, err := agentops.PushArtifact(ctx, repo, path, agentops.PushArtifactOptions{
+	// Build the artifact tarball from the skills directory.
+	if !jsonOutput {
+		rootCmd.Println(`◎`, "Building artifact...")
+	}
+	data, err := agentops.BuildArtifact(path, skillNames)
+	if err != nil {
+		return fmt.Errorf("building artifact: %w", err)
+	}
+
+	// Diff against the remote tag if requested.
+	if skillsPublishArgs.diffTag != "" {
+		if !jsonOutput {
+			rootCmd.Println(`◎`, fmt.Sprintf("Comparing with %s:%s...", repo, skillsPublishArgs.diffTag))
+		}
+		if err := agentops.DiffArtifact(ctx, repo, skillsPublishArgs.diffTag, data); err != nil {
+			if errors.Is(err, agentops.ErrDiffIdentical) {
+				if jsonOutput {
+					return printPublishResult(skillsPublishResult{
+						Repository: repo,
+						Tags:       skillsPublishArgs.tags,
+						Skills:     skillNames,
+						Skipped:    true,
+					})
+				}
+				rootCmd.Println(`✔`, "Contents are identical, skipping push")
+				return nil
+			}
+			return fmt.Errorf("comparing artifact: %w", err)
+		}
+	}
+
+	// Push the artifact to the registry.
+	if !jsonOutput {
+		rootCmd.Println(`◎`, "Pushing artifact...")
+	}
+	digest, err := agentops.PushArtifact(ctx, repo, data, agentops.PushArtifactOptions{
 		Tags:        skillsPublishArgs.tags,
 		Annotations: annotations,
-		SkillNames:  skillNames,
 	})
 	if err != nil {
 		return err
+	}
+
+	// Sign the artifact if requested.
+	signed := false
+	if skillsPublishArgs.sign {
+		pinnedRef := fmt.Sprintf("%s@%s", repo, digest)
+		if !jsonOutput {
+			rootCmd.Println(`◎`, "Signing artifact...")
+		}
+		if err := cosign.SignArtifact(ctx, pinnedRef); err != nil {
+			return fmt.Errorf("signing artifact: %w", err)
+		}
+		signed = true
+	}
+
+	if jsonOutput {
+		return printPublishResult(skillsPublishResult{
+			Repository:  repo,
+			Digest:      digest,
+			Tags:        skillsPublishArgs.tags,
+			Skills:      skillNames,
+			Signed:      signed,
+			Annotations: annotations,
+		})
 	}
 
 	rootCmd.Println(`✔`, fmt.Sprintf("Pushed artifact with digest %s", digest))
 	for _, tag := range skillsPublishArgs.tags {
 		rootCmd.Println(`  •`, fmt.Sprintf("%s:%s", repo, tag))
 	}
-
-	// Sign the artifact if requested.
-	if skillsPublishArgs.sign {
-		pinnedRef := fmt.Sprintf("%s@%s", repo, digest)
-		rootCmd.Println(`◎`, "Signing artifact...")
-		if err := cosign.SignArtifact(ctx, pinnedRef); err != nil {
-			return fmt.Errorf("signing artifact: %w", err)
-		}
+	if signed {
 		rootCmd.Println(`✔`, "Artifact signed")
 	}
-
 	rootCmd.Println(`✔`, fmt.Sprintf("Artifact published to %s", repo))
 
+	return nil
+}
+
+// printPublishResult marshals the result as indented JSON and prints it.
+func printPublishResult(result skillsPublishResult) error {
+	output, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshalling result: %w", err)
+	}
+	rootCmd.Println(string(output))
 	return nil
 }
