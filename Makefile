@@ -186,6 +186,10 @@ cli-build: tidy fmt vet ## Build CLI binary.
 cli-docker-build: ## Build docker image with the CLI.
 	$(CONTAINER_TOOL) build -t ${CLI_IMG} --build-arg VERSION=$(FLUX_OPERATOR_VERSION) -f cmd/cli/Dockerfile .
 
+.PHONY: cli-build
+cli-ci-build: ## Build CLI binary for CI.
+	CGO_ENABLED=0 go build -ldflags="-s -w -X main.VERSION=$(FLUX_OPERATOR_DEV_VERSION)" -o ./bin/flux-operator ./cmd/cli/
+
 ##@ MCP
 
 MCP_IMG ?= ghcr.io/controlplaneio-fluxcd/flux-operator-mcp:latest
