@@ -44,6 +44,7 @@ func PushArtifact(ctx context.Context, repo string, data []byte, opts PushArtifa
 	}
 
 	img := mutate.MediaType(empty.Image, types.OCIManifestSchema1)
+	img = mutate.ConfigMediaType(img, types.MediaType(fluxConfigMediaType))
 
 	layer := static.NewLayer(data, types.MediaType(fluxContentMediaType))
 	img, err := mutate.Append(img, mutate.Addendum{Layer: layer})

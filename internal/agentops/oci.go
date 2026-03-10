@@ -13,6 +13,9 @@ import (
 )
 
 const (
+	// fluxConfigMediaType is the media type for Flux OCI artifact config.
+	fluxConfigMediaType = "application/vnd.cncf.flux.config.v1+json"
+
 	// fluxContentMediaType is the media type for Flux OCI artifact content layers.
 	fluxContentMediaType = "application/vnd.cncf.flux.content.v1.tar+gzip"
 
