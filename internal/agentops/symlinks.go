@@ -86,14 +86,14 @@ func RemoveAgentSymlinks(projectRoot string, agents []string, skillNames []strin
 		}
 
 		// Clean up empty directories: agent skills dir, then parent.
-		removeEmptyDir(agentSkillsDir)
-		removeEmptyDir(filepath.Dir(agentSkillsDir))
+		RemoveEmptyDir(agentSkillsDir)
+		RemoveEmptyDir(filepath.Dir(agentSkillsDir))
 	}
 	return nil
 }
 
-// removeEmptyDir removes a directory if it is empty. Errors are silently ignored.
-func removeEmptyDir(dir string) {
+// RemoveEmptyDir removes a directory if it is empty. Errors are silently ignored.
+func RemoveEmptyDir(dir string) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return

@@ -84,6 +84,43 @@ func seedCatalog(t *testing.T, skillsDir string) []string {
 	return skillNames
 }
 
+// seedSecondSource adds a second OCI source ("ghcr.io/other/skills") with one
+// skill ("other-skill") to an existing catalog. Returns the skill directory path.
+func seedSecondSource(t *testing.T, skillsDir string) string {
+	t.Helper()
+	g := NewWithT(t)
+
+	otherRepo := "ghcr.io/other/skills"
+	otherSkillDir := filepath.Join(skillsDir, "other-skill")
+	g.Expect(os.MkdirAll(otherSkillDir, 0o755)).To(Succeed())
+	g.Expect(os.WriteFile(
+		filepath.Join(otherSkillDir, agentops.SkillFileName),
+		[]byte("---\nname: other-skill\ndescription: other\n---\n"),
+		0o644,
+	)).To(Succeed())
+
+	checksum, err := agentops.HashSkillDir(otherSkillDir)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	catalog, err := agentops.LoadCatalog(skillsDir)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	catalog.Spec.Sources = append(catalog.Spec.Sources, fluxcdv1.AgentCatalogSource{
+		Repository: otherRepo,
+		Tag:        "v1",
+	})
+	catalog.Status.Inventory = append(catalog.Status.Inventory, fluxcdv1.AgentCatalogInventoryEntry{
+		ID:           fluxcdv1.RepositoryID(otherRepo),
+		URL:          otherRepo + ":v1",
+		Digest:       "sha256:other123",
+		LastUpdateAt: "2026-02-01T00:00:00Z",
+		Skills:       []fluxcdv1.AgentCatalogSkill{{Name: "other-skill", Checksum: checksum}},
+	})
+	g.Expect(agentops.SaveCatalog(skillsDir, catalog)).To(Succeed())
+	g.Expect(agentops.SaveCatalogLock(skillsDir, catalog)).To(Succeed())
+	return otherSkillDir
+}
+
 func TestSkillsListCmd(t *testing.T) {
 	t.Run("no catalog shows no skills", func(t *testing.T) {
 		g := NewWithT(t)
@@ -179,45 +216,22 @@ func TestSkillsUninstallCmd(t *testing.T) {
 		g.Expect(os.IsNotExist(err)).To(BeTrue(), "catalog should be removed when no sources remain")
 		_, err = os.Stat(filepath.Join(skillsDir, agentops.CatalogLockFileName))
 		g.Expect(os.IsNotExist(err)).To(BeTrue(), "catalog lock should be removed when no sources remain")
+
+		// Verify empty .agents/skills and .agents directories were cleaned up.
+		_, err = os.Stat(skillsDir)
+		g.Expect(os.IsNotExist(err)).To(BeTrue(), ".agents/skills dir should be removed when empty")
+		_, err = os.Stat(filepath.Dir(skillsDir))
+		g.Expect(os.IsNotExist(err)).To(BeTrue(), ".agents dir should be removed when empty")
 	})
 
 	t.Run("preserves other sources when uninstalling one", func(t *testing.T) {
 		g := NewWithT(t)
 		skillsDir := withSkillsDir(t)
 		seedCatalog(t, skillsDir)
-
-		// Add a second source to the catalog.
-		catalog, err := agentops.LoadCatalog(skillsDir)
-		g.Expect(err).ToNot(HaveOccurred())
-
-		otherRepo := "ghcr.io/other/skills"
-		otherSkillDir := filepath.Join(skillsDir, "other-skill")
-		g.Expect(os.MkdirAll(otherSkillDir, 0o755)).To(Succeed())
-		g.Expect(os.WriteFile(
-			filepath.Join(otherSkillDir, agentops.SkillFileName),
-			[]byte("---\nname: other-skill\ndescription: other\n---\n"),
-			0o644,
-		)).To(Succeed())
-
-		checksum, err := agentops.HashSkillDir(otherSkillDir)
-		g.Expect(err).ToNot(HaveOccurred())
-
-		catalog.Spec.Sources = append(catalog.Spec.Sources, fluxcdv1.AgentCatalogSource{
-			Repository: otherRepo,
-			Tag:        "v1",
-		})
-		catalog.Status.Inventory = append(catalog.Status.Inventory, fluxcdv1.AgentCatalogInventoryEntry{
-			ID:           fluxcdv1.RepositoryID(otherRepo),
-			URL:          otherRepo + ":v1",
-			Digest:       "sha256:other123",
-			LastUpdateAt: "2026-02-01T00:00:00Z",
-			Skills:       []fluxcdv1.AgentCatalogSkill{{Name: "other-skill", Checksum: checksum}},
-		})
-		g.Expect(agentops.SaveCatalog(skillsDir, catalog)).To(Succeed())
-		g.Expect(agentops.SaveCatalogLock(skillsDir, catalog)).To(Succeed())
+		otherSkillDir := seedSecondSource(t, skillsDir)
 
 		// Uninstall the first source.
-		_, err = executeCommand([]string{
+		_, err := executeCommand([]string{
 			"skills", "uninstall", "ghcr.io/test/agent-skills",
 		})
 		g.Expect(err).ToNot(HaveOccurred())
@@ -227,10 +241,10 @@ func TestSkillsUninstallCmd(t *testing.T) {
 		g.Expect(err).ToNot(HaveOccurred(), "other-skill dir should still exist")
 
 		// Catalog should still exist with one source.
-		catalog, err = agentops.LoadCatalog(skillsDir)
+		catalog, err := agentops.LoadCatalog(skillsDir)
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(catalog.Spec.Sources).To(HaveLen(1))
-		g.Expect(catalog.Spec.Sources[0].Repository).To(Equal(otherRepo))
+		g.Expect(catalog.Spec.Sources[0].Repository).To(Equal("ghcr.io/other/skills"))
 		g.Expect(catalog.Status.Inventory).To(HaveLen(1))
 	})
 
@@ -270,12 +284,62 @@ func TestSkillsUninstallCmd(t *testing.T) {
 		g.Expect(os.IsNotExist(err)).To(BeTrue(), ".kiro dir should be removed")
 	})
 
-	t.Run("requires repository argument", func(t *testing.T) {
+	t.Run("requires repository argument or --all flag", func(t *testing.T) {
 		g := NewWithT(t)
 
 		_, err := executeCommand([]string{"skills", "uninstall"})
 		g.Expect(err).To(HaveOccurred())
-		g.Expect(err.Error()).To(ContainSubstring("accepts 1 arg"))
+		g.Expect(err.Error()).To(ContainSubstring("requires a repository argument or --all flag"))
+	})
+
+	t.Run("rejects --all with repository argument", func(t *testing.T) {
+		g := NewWithT(t)
+
+		_, err := executeCommand([]string{
+			"skills", "uninstall", "--all", "ghcr.io/test/skills",
+		})
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("cannot specify a repository when using --all"))
+	})
+
+	t.Run("--all errors when no skills installed", func(t *testing.T) {
+		g := NewWithT(t)
+		withSkillsDir(t)
+
+		_, err := executeCommand([]string{"skills", "uninstall", "--all"})
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("no skills installed"))
+	})
+
+	t.Run("--all uninstalls all sources", func(t *testing.T) {
+		g := NewWithT(t)
+		skillsDir := withSkillsDir(t)
+		seedCatalog(t, skillsDir)
+		seedSecondSource(t, skillsDir)
+
+		// Uninstall all.
+		output, err := executeCommand([]string{"skills", "uninstall", "--all"})
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(output).To(ContainSubstring("Uninstalled skills from ghcr.io/test/agent-skills"))
+		g.Expect(output).To(ContainSubstring("Uninstalled skills from ghcr.io/other/skills"))
+
+		// Verify all skill directories were removed.
+		for _, name := range []string{"code-review", "deploy-helper", "other-skill"} {
+			_, err := os.Stat(filepath.Join(skillsDir, name))
+			g.Expect(os.IsNotExist(err)).To(BeTrue(), "skill dir %q should be removed", name)
+		}
+
+		// Verify catalog files were removed.
+		_, err = os.Stat(filepath.Join(skillsDir, agentops.CatalogFileName))
+		g.Expect(os.IsNotExist(err)).To(BeTrue(), "catalog should be removed")
+		_, err = os.Stat(filepath.Join(skillsDir, agentops.CatalogLockFileName))
+		g.Expect(os.IsNotExist(err)).To(BeTrue(), "catalog lock should be removed")
+
+		// Verify empty .agents/skills and .agents directories were cleaned up.
+		_, err = os.Stat(skillsDir)
+		g.Expect(os.IsNotExist(err)).To(BeTrue(), ".agents/skills dir should be removed when empty")
+		_, err = os.Stat(filepath.Dir(skillsDir))
+		g.Expect(os.IsNotExist(err)).To(BeTrue(), ".agents dir should be removed when empty")
 	})
 }
 
