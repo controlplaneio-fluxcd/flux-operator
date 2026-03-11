@@ -51,6 +51,10 @@ type AgentCatalogSource struct {
 	// Verify holds the signature verification configuration.
 	// +optional
 	Verify *AgentCatalogVerify `json:"verify,omitempty"`
+
+	// TargetAgents is the list of agent IDs for which skill symlinks are managed.
+	// +optional
+	TargetAgents []string `json:"targetAgents,omitempty"`
 }
 
 // AgentCatalogVerify holds the signature verification configuration.
@@ -107,6 +111,26 @@ type AgentCatalogInventoryEntry struct {
 	// Skills is the list of skills provided by this source.
 	// +optional
 	Skills []AgentCatalogSkill `json:"skills,omitempty"`
+}
+
+// FindSource returns the source matching the given repository and its index,
+// or nil and -1 if not found.
+func (s *AgentCatalogSpec) FindSource(repo string) (*AgentCatalogSource, int) {
+	for i := range s.Sources {
+		if s.Sources[i].Repository == repo {
+			return &s.Sources[i], i
+		}
+	}
+	return nil, -1
+}
+
+// SkillNames returns a slice of skill names from the inventory entry.
+func (e *AgentCatalogInventoryEntry) SkillNames() []string {
+	names := make([]string, len(e.Skills))
+	for i, s := range e.Skills {
+		names[i] = s.Name
+	}
+	return names
 }
 
 // RepositoryID returns the Adler-32 checksum of a repository URL as a hex string.

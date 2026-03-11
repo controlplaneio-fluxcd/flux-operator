@@ -19,6 +19,9 @@ const (
 	// DefaultSkillsDirName is the directory name for skills relative to .agents/.
 	DefaultSkillsDirName = ".agents/skills"
 
+	// DefaultGlobalSkillsDirName is the global skills directory path.
+	DefaultGlobalSkillsDirName = "~/.config/agents/skills"
+
 	// CatalogFileName is the name of the catalog spec file.
 	CatalogFileName = "catalog.yaml"
 
@@ -26,13 +29,23 @@ const (
 	CatalogLockFileName = "catalog-lock.yaml"
 )
 
+// ProjectRoot returns the current working directory, which is the root
+// of the project where skills and agent symlinks are managed.
+func ProjectRoot() (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("getting working directory: %w", err)
+	}
+	return cwd, nil
+}
+
 // DefaultSkillsDir resolves the skills directory to an absolute path
 // relative to the current working directory. If the path exists, it
 // verifies that it is a real directory (not a symlink).
 func DefaultSkillsDir() (string, error) {
-	cwd, err := os.Getwd()
+	cwd, err := ProjectRoot()
 	if err != nil {
-		return "", fmt.Errorf("getting working directory: %w", err)
+		return "", err
 	}
 
 	dir := filepath.Join(cwd, DefaultSkillsDirName)

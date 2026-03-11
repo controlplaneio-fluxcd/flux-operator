@@ -173,7 +173,7 @@ func resetCmdArgs() {
 	exportResourceArgs = exportResourceFlags{output: "yaml"}
 
 	// Skills commands
-	skillsInstallArgs = skillsInstallFlags{tag: "latest", verify: true}
+	skillsInstallArgs = skillsInstallFlags{tag: "latest", verify: true, agents: []string{"universal"}}
 	skillsPublishArgs = skillsPublishFlags{path: "skills", tags: []string{"latest"}}
 	skillsUpdateArgs = skillsUpdateFlags{}
 

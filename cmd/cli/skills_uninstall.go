@@ -41,20 +41,27 @@ func skillsUninstallCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Find the matching source.
-	srcIdx := -1
-	for i, src := range catalog.Spec.Sources {
-		if src.Repository == repo {
-			srcIdx = i
-			break
-		}
-	}
-
+	src, srcIdx := catalog.Spec.FindSource(repo)
 	if srcIdx < 0 {
 		return fmt.Errorf("no skills installed from %s", repo)
 	}
 
+	// Look up inventory entry once.
+	entry, invIdx := catalog.Status.FindInventoryEntry(repo)
+
+	// Remove agent symlinks.
+	if entry != nil && len(src.TargetAgents) > 0 {
+		projectRoot, err := agentops.ProjectRoot()
+		if err != nil {
+			return err
+		}
+		if err := agentops.RemoveAgentSymlinks(projectRoot, src.TargetAgents, entry.SkillNames()); err != nil {
+			return fmt.Errorf("removing agent symlinks: %w", err)
+		}
+	}
+
 	// Remove skill directories.
-	if entry, _ := catalog.Status.FindInventoryEntry(repo); entry != nil {
+	if entry != nil {
 		for _, skill := range entry.Skills {
 			if err := agentops.ValidateSkillName(skill.Name); err != nil {
 				return fmt.Errorf("invalid skill name in catalog: %w", err)
@@ -70,7 +77,7 @@ func skillsUninstallCmdRun(cmd *cobra.Command, args []string) error {
 	catalog.Spec.Sources = append(catalog.Spec.Sources[:srcIdx], catalog.Spec.Sources[srcIdx+1:]...)
 
 	// Remove inventory entry.
-	if _, invIdx := catalog.Status.FindInventoryEntry(repo); invIdx >= 0 {
+	if invIdx >= 0 {
 		catalog.Status.Inventory = append(catalog.Status.Inventory[:invIdx], catalog.Status.Inventory[invIdx+1:]...)
 	}
 

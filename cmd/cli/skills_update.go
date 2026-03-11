@@ -199,6 +199,17 @@ func updateSource(ctx context.Context, catalog *fluxcdv1.AgentCatalog, src fluxc
 		Skills:       skills,
 	})
 
+	// Sync agent symlinks for new and existing skills.
+	if len(src.TargetAgents) > 0 {
+		projectRoot, err := agentops.ProjectRoot()
+		if err != nil {
+			return false, err
+		}
+		if err := agentops.SyncAgentSymlinks(projectRoot, src.TargetAgents, skillNames); err != nil {
+			return false, fmt.Errorf("syncing agent symlinks: %w", err)
+		}
+	}
+
 	if restoring {
 		rootCmd.Println(`✔`, fmt.Sprintf("Restored %d skill(s) from %s", len(changedSkills), src.Repository))
 	} else if len(changedSkills) > 0 {

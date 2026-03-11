@@ -130,6 +130,19 @@ func TestSkillsInstallCmd(t *testing.T) {
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).To(ContainSubstring("accepts 1 arg"))
 	})
+
+	t.Run("rejects unknown agent ID", func(t *testing.T) {
+		g := NewWithT(t)
+
+		_, err := executeCommand([]string{
+			"skills", "install", "ghcr.io/org/skills",
+			"--verify=false",
+			"--agent", "nonexistent-agent",
+		})
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("unknown agent ID"))
+		g.Expect(err.Error()).To(ContainSubstring("nonexistent-agent"))
+	})
 }
 
 func TestSkillsUninstallCmd(t *testing.T) {
@@ -219,6 +232,42 @@ func TestSkillsUninstallCmd(t *testing.T) {
 		g.Expect(catalog.Spec.Sources).To(HaveLen(1))
 		g.Expect(catalog.Spec.Sources[0].Repository).To(Equal(otherRepo))
 		g.Expect(catalog.Status.Inventory).To(HaveLen(1))
+	})
+
+	t.Run("removes agent symlinks on uninstall", func(t *testing.T) {
+		g := NewWithT(t)
+		skillsDir := withSkillsDir(t)
+		skillNames := seedCatalog(t, skillsDir)
+
+		// Set agents on the source in the catalog.
+		catalog, err := agentops.LoadCatalog(skillsDir)
+		g.Expect(err).ToNot(HaveOccurred())
+		catalog.Spec.Sources[0].TargetAgents = []string{"claude-code", "kiro"}
+		g.Expect(agentops.SaveCatalog(skillsDir, catalog)).To(Succeed())
+
+		// Create agent symlinks.
+		projectRoot, err := agentops.ProjectRoot()
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(agentops.SyncAgentSymlinks(projectRoot, []string{"claude-code", "kiro"}, skillNames)).To(Succeed())
+
+		// Verify symlinks exist.
+		_, err = os.Lstat(filepath.Join(projectRoot, ".claude/skills", skillNames[0]))
+		g.Expect(err).ToNot(HaveOccurred())
+		_, err = os.Lstat(filepath.Join(projectRoot, ".kiro/skills", skillNames[0]))
+		g.Expect(err).ToNot(HaveOccurred())
+
+		// Uninstall.
+		output, err := executeCommand([]string{
+			"skills", "uninstall", "ghcr.io/test/agent-skills",
+		})
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(output).To(ContainSubstring("Uninstalled skills from"))
+
+		// Verify symlinks were removed.
+		_, err = os.Stat(filepath.Join(projectRoot, ".claude"))
+		g.Expect(os.IsNotExist(err)).To(BeTrue(), ".claude dir should be removed")
+		_, err = os.Stat(filepath.Join(projectRoot, ".kiro"))
+		g.Expect(os.IsNotExist(err)).To(BeTrue(), ".kiro dir should be removed")
 	})
 
 	t.Run("requires repository argument", func(t *testing.T) {

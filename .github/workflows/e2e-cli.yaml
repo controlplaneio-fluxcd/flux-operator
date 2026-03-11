@@ -57,6 +57,7 @@ jobs:
         working-directory: ${{ env.TEST_DIR }}
         run: |
           flux-operator skills install localhost:5000/agent-skills \
+            --agent claude-code,kiro \
             --verify-oidc-issuer=https://token.actions.githubusercontent.com \
             --verify-oidc-subject-regex='^https://github\.com/controlplaneio-fluxcd/.*$'
       - name: Verify catalog
@@ -74,6 +75,15 @@ jobs:
           diff -r .agents/skills/shell-check ${GITHUB_WORKSPACE}/config/testdata/skills/shell-check
           diff -r .agents/skills/yaml-check ${GITHUB_WORKSPACE}/config/testdata/skills/yaml-check
           diff -r .agents/skills/go-check ${GITHUB_WORKSPACE}/config/testdata/skills/go-check
+      - name: Verify agent symlinks
+        working-directory: ${{ env.TEST_DIR }}
+        run: |
+          test -L .claude/skills/go-check
+          test -L .kiro/skills/go-check
+          target=$(readlink .claude/skills/go-check)
+          test "$target" = "../../.agents/skills/go-check"
+          test -d .claude/skills/go-check
+          test -f .claude/skills/go-check/SKILL.md
       - name: Test skills update restores tampered skills
         working-directory: ${{ env.TEST_DIR }}
         run: |
@@ -99,3 +109,6 @@ jobs:
           test ! -d .agents/skills/shell-check
           test ! -d .agents/skills/yaml-check
           test ! -d .agents/skills/go-check
+          test ! -e .claude/skills/go-check
+          test ! -d .claude
+          test ! -d .kiro

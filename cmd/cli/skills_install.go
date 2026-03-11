@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -26,8 +27,11 @@ to the .agents/skills directory in the current working directory.`,
   # with default tag 'latest' and signature verification
   flux-operator skills install ghcr.io/org/agent-skills
 
-  # Install a specific version
-  flux-operator skills install ghcr.io/org/agent-skills --tag v1.0.0
+  # Install a specific version and symlink for specific agents
+  flux-operator skills install ghcr.io/org/agent-skills \
+  --tag v1.0.0 \
+  --agent claude-code \
+  --agent kiro
 
   # Install from a DockerHub with custom verification
   flux-operator skills install docker.io/my-org/skills \
@@ -46,6 +50,7 @@ type skillsInstallFlags struct {
 	verifyOIDCIssuer       string
 	verifyOIDCSubjectRegex string
 	verifyTrustedRoot      string
+	agents                 []string
 }
 
 var skillsInstallArgs skillsInstallFlags
@@ -61,6 +66,11 @@ func init() {
 		"OIDC subject regexp for signature verification")
 	skillsInstallCmd.Flags().StringVar(&skillsInstallArgs.verifyTrustedRoot, "verify-trusted-root", "",
 		"path to a trusted_root.json file for offline signature verification")
+	skillsInstallCmd.Flags().StringSliceVar(&skillsInstallArgs.agents, "agent", []string{"universal"},
+		"agent ID(s) for which to create skill symlinks (can be specified multiple times)")
+	_ = skillsInstallCmd.RegisterFlagCompletionFunc("agent", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return agentops.AgentIDs(), cobra.ShellCompDirectiveNoFileComp
+	})
 
 	skillsCmd.AddCommand(skillsInstallCmd)
 }
@@ -69,24 +79,16 @@ func skillsInstallCmdRun(cmd *cobra.Command, args []string) error {
 	repo := agentops.NormalizeRepository(args[0])
 	tag := skillsInstallArgs.tag
 
-	oidcIssuer := skillsInstallArgs.verifyOIDCIssuer
-	oidcSubjectRegex := skillsInstallArgs.verifyOIDCSubjectRegex
-
-	// Derive OIDC defaults for ghcr.io hosts.
-	if skillsInstallArgs.verify && agentops.IsGitHubContainerRegistry(repo) {
-		if oidcIssuer == "" {
-			oidcIssuer = cosign.DefaultCertOIDCIssuer
-		}
-		if oidcSubjectRegex == "" {
-			owner := agentops.DeriveGitHubOwner(repo)
-			oidcSubjectRegex = fmt.Sprintf(`^https://github\.com/%s/.*$`, owner)
-		}
+	if err := validateAgentIDs(skillsInstallArgs.agents); err != nil {
+		return err
 	}
 
-	// Require OIDC flags for non-ghcr.io hosts when verify is enabled.
-	if skillsInstallArgs.verify && !agentops.IsGitHubContainerRegistry(repo) {
-		if oidcIssuer == "" || oidcSubjectRegex == "" {
-			return fmt.Errorf("--verify-oidc-issuer and --verify-oidc-subject-regex are required when verification is enabled")
+	var oidcIssuer, oidcSubjectRegex string
+	if skillsInstallArgs.verify {
+		var err error
+		oidcIssuer, oidcSubjectRegex, err = resolveInstallOIDC(repo)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -157,12 +159,19 @@ func skillsInstallCmdRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("creating skills directory: %w", err)
 	}
 
-	// Build old checksums map from inventory.
+	// Collect old state from catalog for re-install handling.
+	var oldAgents []string
+	if oldSrc, _ := catalog.Spec.FindSource(repo); oldSrc != nil {
+		oldAgents = oldSrc.TargetAgents
+	}
+
 	oldChecksums := make(map[string]string)
+	var oldSkillNames []string
 	if entry, _ := catalog.Status.FindInventoryEntry(repo); entry != nil {
 		for _, skill := range entry.Skills {
 			oldChecksums[skill.Name] = skill.Checksum
 		}
+		oldSkillNames = entry.SkillNames()
 	}
 
 	// Sync skills: remove old, copy new.
@@ -175,8 +184,9 @@ func skillsInstallCmdRun(cmd *cobra.Command, args []string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 
 	source := fluxcdv1.AgentCatalogSource{
-		Repository: repo,
-		Tag:        tag,
+		Repository:   repo,
+		Tag:          tag,
+		TargetAgents: skillsInstallArgs.agents,
 	}
 	if skillsInstallArgs.verify {
 		source.Verify = &fluxcdv1.AgentCatalogVerify{
@@ -208,11 +218,42 @@ func skillsInstallCmdRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("saving catalog lock: %w", err)
 	}
 
+	projectRoot, err := agentops.ProjectRoot()
+	if err != nil {
+		return err
+	}
+
+	// Remove stale agent symlinks when agents change on re-install.
+	if len(oldAgents) > 0 && len(oldSkillNames) > 0 {
+		if err := agentops.RemoveAgentSymlinks(projectRoot, oldAgents, oldSkillNames); err != nil {
+			return fmt.Errorf("removing old agent symlinks: %w", err)
+		}
+	}
+
+	// Create symlinks for the new agents.
+	if err := agentops.SyncAgentSymlinks(projectRoot, skillsInstallArgs.agents, skillNames); err != nil {
+		return fmt.Errorf("creating agent symlinks: %w", err)
+	}
+
 	rootCmd.Println(`✔`, fmt.Sprintf("Installed %d skill(s) from %s:%s", len(skillNames), repo, tag))
 	for _, name := range skillNames {
 		rootCmd.Println(`  •`, name)
 	}
 
+	return nil
+}
+
+// validateAgentIDs returns an error if any of the given IDs are unknown.
+func validateAgentIDs(ids []string) error {
+	var unknown []string
+	for _, id := range ids {
+		if agentops.FindAgent(id) == nil {
+			unknown = append(unknown, id)
+		}
+	}
+	if len(unknown) > 0 {
+		return fmt.Errorf("unknown agent ID(s): %s; run with --help to see valid IDs", strings.Join(unknown, ", "))
+	}
 	return nil
 }
 
@@ -236,4 +277,23 @@ func upsertInventoryEntry(catalog *fluxcdv1.AgentCatalog, entry fluxcdv1.AgentCa
 		}
 	}
 	catalog.Status.Inventory = append(catalog.Status.Inventory, entry)
+}
+
+// resolveInstallOIDC derives or validates OIDC parameters for signature verification.
+func resolveInstallOIDC(repo string) (oidcIssuer, oidcSubjectRegex string, err error) {
+	oidcIssuer = skillsInstallArgs.verifyOIDCIssuer
+	oidcSubjectRegex = skillsInstallArgs.verifyOIDCSubjectRegex
+
+	if agentops.IsGitHubContainerRegistry(repo) {
+		if oidcIssuer == "" {
+			oidcIssuer = cosign.DefaultCertOIDCIssuer
+		}
+		if oidcSubjectRegex == "" {
+			owner := agentops.DeriveGitHubOwner(repo)
+			oidcSubjectRegex = fmt.Sprintf(`^https://github\.com/%s/.*$`, owner)
+		}
+	} else if oidcIssuer == "" || oidcSubjectRegex == "" {
+		return "", "", fmt.Errorf("--verify-oidc-issuer and --verify-oidc-subject-regex are required when verification is enabled")
+	}
+	return oidcIssuer, oidcSubjectRegex, nil
 }
