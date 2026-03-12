@@ -126,6 +126,35 @@ func parseFrontmatter(data []byte) (*skillFrontmatter, error) {
 	return fm, nil
 }
 
+// FilterSkillNames returns only the skill names present in the target list.
+// If targets is empty, all discovered names are returned unchanged.
+// Returns an error if any target name is not found in the discovered set.
+func FilterSkillNames(discovered []string, targets []string) ([]string, error) {
+	if len(targets) == 0 {
+		return discovered, nil
+	}
+
+	available := make(map[string]struct{}, len(discovered))
+	for _, name := range discovered {
+		available[name] = struct{}{}
+	}
+
+	var missing []string
+	filtered := make([]string, 0, len(targets))
+	for _, t := range targets {
+		if _, ok := available[t]; !ok {
+			missing = append(missing, t)
+		} else {
+			filtered = append(filtered, t)
+		}
+	}
+
+	if len(missing) > 0 {
+		return nil, fmt.Errorf("skill(s) not found in artifact: %s", strings.Join(missing, ", "))
+	}
+	return filtered, nil
+}
+
 // SkillDrift describes a skill that has drifted from its expected state.
 type SkillDrift struct {
 	// Name is the skill name.

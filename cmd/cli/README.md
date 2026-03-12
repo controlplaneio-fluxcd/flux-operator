@@ -325,6 +325,7 @@ The following commands are available:
 
 - `flux-operator skills install <repository>`: Install skills from an OCI artifact.
     - `--tag`: OCI artifact tag (default `latest`).
+    - `--skill`: Skill name(s) to install from the artifact, can be specified multiple times (default: all skills).
     - `--agent`: Agent ID(s) for which to create skill symlinks, can be specified multiple times (e.g. `claude-code`).
     - `--verify`: Verify the cosign signature of the artifact (default `true`).
     - `--verify-oidc-issuer`: OIDC issuer for signature verification (auto-derived for `ghcr.io` hosts).

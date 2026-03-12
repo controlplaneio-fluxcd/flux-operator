@@ -27,6 +27,11 @@ to the .agents/skills directory in the current working directory.`,
   # with default tag 'latest' and signature verification
   flux-operator skills install ghcr.io/org/agent-skills
 
+  # Install only specific skills from an artifact
+  flux-operator skills install ghcr.io/org/agent-skills \
+    --skill code-review \
+    --skill deploy-helper
+
   # Install a specific version and symlink for specific agents
   flux-operator skills install ghcr.io/org/agent-skills \
   --tag v1.0.0 \
@@ -51,6 +56,7 @@ type skillsInstallFlags struct {
 	verifyOIDCSubjectRegex string
 	verifyTrustedRoot      string
 	agents                 []string
+	skills                 []string
 }
 
 var skillsInstallArgs skillsInstallFlags
@@ -71,6 +77,8 @@ func init() {
 	_ = skillsInstallCmd.RegisterFlagCompletionFunc("agent", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return agentops.AgentIDs(), cobra.ShellCompDirectiveNoFileComp
 	})
+	skillsInstallCmd.Flags().StringSliceVar(&skillsInstallArgs.skills, "skill", nil,
+		"skill name(s) to install from the artifact (can be specified multiple times, default: all)")
 
 	skillsCmd.AddCommand(skillsInstallCmd)
 }
@@ -81,6 +89,12 @@ func skillsInstallCmdRun(cmd *cobra.Command, args []string) error {
 
 	if err := validateAgentIDs(skillsInstallArgs.agents); err != nil {
 		return err
+	}
+
+	for _, s := range skillsInstallArgs.skills {
+		if err := agentops.ValidateSkillName(s); err != nil {
+			return fmt.Errorf("invalid --skill value: %w", err)
+		}
 	}
 
 	var oidcIssuer, oidcSubjectRegex string
@@ -138,6 +152,12 @@ func skillsInstallCmdRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no skills found in artifact %s", ociURL)
 	}
 
+	// Filter to selected skills if --skill was specified.
+	skillNames, err = agentops.FilterSkillNames(skillNames, skillsInstallArgs.skills)
+	if err != nil {
+		return err
+	}
+
 	// Load or create the catalog.
 	skillsDir, err := agentops.DefaultSkillsDir()
 	if err != nil {
@@ -187,6 +207,7 @@ func skillsInstallCmdRun(cmd *cobra.Command, args []string) error {
 		Repository:   repo,
 		Tag:          tag,
 		TargetAgents: skillsInstallArgs.agents,
+		TargetSkills: skillsInstallArgs.skills,
 	}
 	if skillsInstallArgs.verify {
 		source.Verify = &fluxcdv1.AgentCatalogVerify{

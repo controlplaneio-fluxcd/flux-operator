@@ -55,6 +55,11 @@ type AgentCatalogSource struct {
 	// TargetAgents is the list of agent IDs for which skill symlinks are managed.
 	// +optional
 	TargetAgents []string `json:"targetAgents,omitempty"`
+
+	// TargetSkills is the list of skill names to install from this source.
+	// When empty, all skills from the artifact are installed.
+	// +optional
+	TargetSkills []string `json:"targetSkills,omitempty"`
 }
 
 // AgentCatalogVerify holds the signature verification configuration.

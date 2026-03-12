@@ -180,6 +180,18 @@ func TestSkillsInstallCmd(t *testing.T) {
 		g.Expect(err.Error()).To(ContainSubstring("unknown agent ID"))
 		g.Expect(err.Error()).To(ContainSubstring("nonexistent-agent"))
 	})
+
+	t.Run("rejects invalid skill name", func(t *testing.T) {
+		g := NewWithT(t)
+
+		_, err := executeCommand([]string{
+			"skills", "install", "ghcr.io/org/skills",
+			"--verify=false",
+			"--skill", "Invalid_Name",
+		})
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("invalid --skill value"))
+	})
 }
 
 func TestSkillsUninstallCmd(t *testing.T) {

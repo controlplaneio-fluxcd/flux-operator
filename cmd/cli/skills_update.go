@@ -170,6 +170,12 @@ func updateSource(ctx context.Context, catalog *fluxcdv1.AgentCatalog, src fluxc
 		return false, fmt.Errorf("no skills found in artifact %s", ociURL)
 	}
 
+	// Filter to selected skills if targetSkills is configured.
+	skillNames, err = agentops.FilterSkillNames(skillNames, src.TargetSkills)
+	if err != nil {
+		return false, err
+	}
+
 	// Check for conflicts.
 	if err := agentops.CheckSkillConflicts(catalog, src.Repository, skillNames); err != nil {
 		return false, err

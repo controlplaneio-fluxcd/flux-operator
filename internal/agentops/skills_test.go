@@ -123,6 +123,55 @@ description: A test skill
 	})
 }
 
+func TestFilterSkillNames(t *testing.T) {
+	t.Run("returns all when targets is empty", func(t *testing.T) {
+		g := NewWithT(t)
+		discovered := []string{"skill-a", "skill-b", "skill-c"}
+
+		result, err := agentops.FilterSkillNames(discovered, nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(result).To(Equal(discovered))
+	})
+
+	t.Run("filters to matching names", func(t *testing.T) {
+		g := NewWithT(t)
+		discovered := []string{"skill-a", "skill-b", "skill-c"}
+
+		result, err := agentops.FilterSkillNames(discovered, []string{"skill-b", "skill-a"})
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(result).To(Equal([]string{"skill-b", "skill-a"}))
+	})
+
+	t.Run("errors on missing target", func(t *testing.T) {
+		g := NewWithT(t)
+		discovered := []string{"skill-a", "skill-b"}
+
+		_, err := agentops.FilterSkillNames(discovered, []string{"skill-a", "nonexistent"})
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("not found in artifact"))
+		g.Expect(err.Error()).To(ContainSubstring("nonexistent"))
+	})
+
+	t.Run("errors listing all missing targets", func(t *testing.T) {
+		g := NewWithT(t)
+		discovered := []string{"skill-a"}
+
+		_, err := agentops.FilterSkillNames(discovered, []string{"missing-1", "missing-2"})
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("missing-1"))
+		g.Expect(err.Error()).To(ContainSubstring("missing-2"))
+	})
+
+	t.Run("single target", func(t *testing.T) {
+		g := NewWithT(t)
+		discovered := []string{"skill-a", "skill-b", "skill-c"}
+
+		result, err := agentops.FilterSkillNames(discovered, []string{"skill-c"})
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(result).To(Equal([]string{"skill-c"}))
+	})
+}
+
 func TestHashSkillDir(t *testing.T) {
 	t.Run("produces consistent hash", func(t *testing.T) {
 		g := NewWithT(t)

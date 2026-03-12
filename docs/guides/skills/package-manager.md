@@ -245,6 +245,17 @@ Skip verification entirely (not recommended for production):
 flux-operator skills install ghcr.io/my-org/agent-skills --verify=false
 ```
 
+The installation process performs the following steps:
+
+1. Resolve the remote digest for the tag
+2. Verify the cosign signature using the digest reference
+3. Pull the artifact content by digest
+4. Discover skills in the artifact (each must have a valid `SKILL.md`)
+5. Check for name conflicts with skills from other sources
+6. Sync skill directories to `.agents/skills/`
+7. Write `catalog.yaml` and `catalog-lock.yaml`
+8. Create agent-specific symlinks if `--agent` is set
+
 #### Agent Symlinks
 
 By default, skills are installed to `.agents/skills/` which is the universal
@@ -273,16 +284,20 @@ in `.agents/skills/` without creating additional symlinks.
 When re-installing with different agents, old symlinks are automatically cleaned up.
 Uninstalling a source removes all associated agent symlinks and cleans up empty directories.
 
-The installation process performs the following steps:
+#### Selective Installation
 
-1. Resolve the remote digest for the tag
-2. Verify the cosign signature using the digest reference
-3. Pull the artifact content by digest
-4. Discover skills in the artifact (each must have a valid `SKILL.md`)
-5. Check for name conflicts with skills from other sources
-6. Sync skill directories to `.agents/skills/`
-7. Write `catalog.yaml` and `catalog-lock.yaml`
-8. Create agent-specific symlinks if `--agent` is set
+By default, all skills from an artifact are installed. Use the `--skill` flag
+to install only specific skills:
+
+```shell
+flux-operator skills install ghcr.io/my-org/agent-skills \
+  --skill gitops-cluster-debug \
+  --skill gitops-repo-audit
+```
+
+The selected skills are stored in `catalog.yaml` as `targetSkills` so that
+`skills update` respects the selection. When re-installing without `--skill`,
+all skills from the artifact are installed and `targetSkills` is cleared.
 
 ### Updates
 
@@ -400,8 +415,6 @@ status:
     skills:
     - name: gitops-cluster-debug
       checksum: h1:XNNWGBTaK0j1zkeuytR/n8mvQfjnXZmlr9Ig7SbMitE=
-    - name: gitops-repo-audit
-      checksum: h1:2zdcnzL2ll8BfSFk4r/H0CW0diMcDexABBrcdvlES6c=
 ```
 
 The `id` field is an Adler-32 checksum of the repository URL, used to match inventory
@@ -415,7 +428,11 @@ across all sources — the CLI rejects installations that would create name conf
 
 ```shell
 flux-operator skills install ghcr.io/fluxcd/agent-skills
-flux-operator skills install ghcr.io/my-org/skills --tag v2.0.0
+
+flux-operator skills install ghcr.io/my-org/skills \
+--agent github-copilot \
+--skill my-skill \
+--tag v2.0.0
 ```
 
 Both sources are tracked in `catalog.yaml`, and `skills update` checks all sources
@@ -435,6 +452,10 @@ spec:
         subject: ^https://github\.com/fluxcd/.*$
   - repository: ghcr.io/my-org/skills
     tag: v2.0.0
+    targetAgents:
+    - github-copilot
+    targetSkills:
+    - my-skill
     verify:
       provider: cosign
       matchOIDCIdentity:
