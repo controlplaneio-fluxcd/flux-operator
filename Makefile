@@ -158,6 +158,14 @@ build-olm-manifests: ## Generate OLM manifests for OperatorHub.
 build-olm-manifests-ubi: ## Generate OLM manifests for Red Hat Marketplace.
 	./hack/build-olm-manifests.sh $(FLUX_OPERATOR_VERSION:v%=%) true
 
+.PHONY: publish-olm-bundle
+publish-olm-bundle: build-olm-manifests ## Publish OLM bundle to OperatorHub.
+	./hack/publish-olm-bundle.sh $(FLUX_OPERATOR_VERSION:v%=%) k8s-operatorhub/community-operators
+
+.PHONY: publish-olm-bundle-ubi
+publish-olm-bundle-ubi: build-olm-manifests-ubi ## Publish OLM bundle to Red Hat OpenShift.
+	./hack/publish-olm-bundle.sh $(FLUX_OPERATOR_VERSION:v%=%) redhat-openshift-ecosystem/community-operators-prod
+
 .PHONY: docker-build-ubi
 docker-build-ubi: ## Build flux-operator docker image using UBI base image.
 	$(CONTAINER_TOOL) build -t ${IMG}-ubi --build-arg VERSION=$(FLUX_OPERATOR_VERSION) -f config/olm/build/Dockerfile .
