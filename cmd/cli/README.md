@@ -315,6 +315,36 @@ and of the Flux distribution running in the cluster.
 - `flux-operator version`: Displays the version information for the CLI and the Flux Operator.
     - `--client`:  If true, shows the client version only (no server required).
 
+### AI Skills Commands
+
+The `flux-operator skills` commands are used to manage AI agent skills distributed as OCI artifacts.
+Skills are installed to the `.agents/skills` directory in the current working directory
+and tracked via a `catalog.yaml` file.
+
+The following commands are available:
+
+- `flux-operator skills install <repository>`: Install skills from an OCI artifact.
+    - `--tag`: OCI artifact tag (default `latest`).
+    - `--skill`: Skill name(s) to install from the artifact, can be specified multiple times (default: all skills).
+    - `--agent`: Agent ID(s) for which to create skill symlinks, can be specified multiple times (e.g. `claude-code`).
+    - `--verify`: Verify the cosign signature of the artifact (default `true`).
+    - `--verify-oidc-issuer`: OIDC issuer for signature verification (auto-derived for `ghcr.io` hosts).
+    - `--verify-oidc-subject-regex`: OIDC subject regexp for signature verification (auto-derived for `ghcr.io` hosts).
+    - `--verify-trusted-root`: Path to a `trusted_root.json` file for offline signature verification.
+- `flux-operator skills list`: List all installed skills and their sources.
+- `flux-operator skills update`: Check for new versions of all installed skills and update them.
+    - `--verify-trusted-root`: Path to a `trusted_root.json` file for offline signature verification.
+    - `--dry-run`: Only check for updates without installing them (exits with code 1 if updates are available).
+- `flux-operator skills uninstall <repository>`: Uninstall all skills from the specified repository.
+    - `--all`: Uninstall all skills from all repositories.
+- `flux-operator skills publish <repository>`: Package a local skills directory and push it as an OCI artifact.
+    - `--path`: Path to the skills directory (default `skills`).
+    - `--tag`: OCI artifact tag, can be specified multiple times (default `latest`).
+    - `--diff-tag`: Only push if the contents differ from the specified tag.
+    - `--annotation, -a`: OCI manifest annotation in `key=value` format, can be specified multiple times.
+    - `--sign`: Sign the artifact with cosign keyless (default `false`).
+    - `--output, -o`: Output format (`json`).
+
 ### Install Command
 
 The `flux-operator install` command provides a quick way to bootstrap a Kubernetes cluster with the Flux Operator and a Flux instance.

@@ -1,0 +1,114 @@
+name: e2e-cli
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ '*' ]
+
+permissions:
+  contents: read
+
+jobs:
+  test-skills:
+    runs-on: ubuntu-latest
+    services:
+      registry:
+        image: registry:3
+        ports:
+          - 5000:5000
+    permissions:
+      id-token: write # for creating OIDC tokens for signing
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Disk Cleanup
+        uses: ./.github/actions/runner-cleanup
+      - name: Setup Cosign
+        uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
+      - name: Setup Go
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version: 1.26.x
+          cache-dependency-path: |
+            **/go.sum
+            **/go.mod
+      - name: Build CLI
+        run: make cli-ci-build
+      - name: Add CLI to PATH
+        run: echo "${GITHUB_WORKSPACE}/bin" >> $GITHUB_PATH
+      - name: Create test directory
+        run: echo "TEST_DIR=$(mktemp -d)" >> $GITHUB_ENV
+      - name: Test skills publish with signing
+        run: |
+          flux-operator skills publish localhost:5000/agent-skills \
+            --path config/testdata/skills \
+            --tag v1.0.0 \
+            --tag latest \
+            --sign \
+            -a 'org.opencontainers.image.source=https://github.com/controlplaneio-fluxcd/flux-operator' \
+            -a 'org.opencontainers.image.description=E2E test skills'
+      - name: Test skills publish diff-tag skips identical content
+        run: |
+          flux-operator skills publish localhost:5000/agent-skills \
+            --path config/testdata/skills \
+            --tag latest \
+            --diff-tag=latest | grep -q 'skipping push'
+      - name: Test skills install with verification
+        working-directory: ${{ env.TEST_DIR }}
+        run: |
+          flux-operator skills install localhost:5000/agent-skills \
+            --agent claude-code,kiro \
+            --verify-oidc-issuer=https://token.actions.githubusercontent.com \
+            --verify-oidc-subject-regex='^https://github\.com/controlplaneio-fluxcd/.*$'
+      - name: Verify catalog
+        working-directory: ${{ env.TEST_DIR }}
+        run: |
+          test -f .agents/skills/catalog.yaml
+          cat .agents/skills/catalog.yaml
+          test -f .agents/skills/catalog-lock.yaml
+          echo "---"
+          cat .agents/skills/catalog-lock.yaml
+          grep -q 'org.opencontainers.image.description: E2E test skills' .agents/skills/catalog-lock.yaml
+      - name: Verify skills
+        working-directory: ${{ env.TEST_DIR }}
+        run: |
+          diff -r .agents/skills/shell-check ${GITHUB_WORKSPACE}/config/testdata/skills/shell-check
+          diff -r .agents/skills/yaml-check ${GITHUB_WORKSPACE}/config/testdata/skills/yaml-check
+          diff -r .agents/skills/go-check ${GITHUB_WORKSPACE}/config/testdata/skills/go-check
+      - name: Verify agent symlinks
+        working-directory: ${{ env.TEST_DIR }}
+        run: |
+          test -L .claude/skills/go-check
+          test -L .kiro/skills/go-check
+          target=$(readlink .claude/skills/go-check)
+          test "$target" = "../../.agents/skills/go-check"
+          test -d .claude/skills/go-check
+          test -f .claude/skills/go-check/SKILL.md
+      - name: Test skills update restores tampered skills
+        working-directory: ${{ env.TEST_DIR }}
+        run: |
+          rm -rf .agents/skills/go-check
+          rm -rf .agents/skills/yaml-check/scripts
+          flux-operator skills update
+          test -d .agents/skills/go-check
+          test -f .agents/skills/go-check/SKILL.md
+          test -d .agents/skills/yaml-check/scripts
+          test -f .agents/skills/yaml-check/scripts/validation.sh
+      - name: Test skills list
+        working-directory: ${{ env.TEST_DIR }}
+        run: |
+          output=$(flux-operator skills list)
+          echo "$output"
+          echo "$output" | grep -q shell-check
+          echo "$output" | grep -q yaml-check
+          echo "$output" | grep -q go-check
+      - name: Test skills uninstall
+        working-directory: ${{ env.TEST_DIR }}
+        run: |
+          flux-operator skills uninstall localhost:5000/agent-skills
+          test ! -d .agents/skills/shell-check
+          test ! -d .agents/skills/yaml-check
+          test ! -d .agents/skills/go-check
+          test ! -e .claude/skills/go-check
+          test ! -d .claude
+          test ! -d .kiro
