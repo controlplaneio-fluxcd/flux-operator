@@ -11,14 +11,14 @@ require (
 	github.com/cli/go-gh/v2 v2.13.0
 	github.com/coreos/go-oidc/v3 v3.17.0
 	github.com/fluxcd/cli-utils v0.37.2-flux.1
-	github.com/fluxcd/pkg/apis/event v0.24.0
-	github.com/fluxcd/pkg/apis/kustomize v1.15.0
-	github.com/fluxcd/pkg/apis/meta v1.25.0
-	github.com/fluxcd/pkg/auth v0.39.0
+	github.com/fluxcd/pkg/apis/event v0.25.0
+	github.com/fluxcd/pkg/apis/kustomize v1.16.0
+	github.com/fluxcd/pkg/apis/meta v1.26.0
+	github.com/fluxcd/pkg/auth v0.40.0
 	github.com/fluxcd/pkg/cache v0.13.0
-	github.com/fluxcd/pkg/kustomize v1.27.0
-	github.com/fluxcd/pkg/runtime v0.102.0
-	github.com/fluxcd/pkg/ssa v0.69.0
+	github.com/fluxcd/pkg/kustomize v1.28.0
+	github.com/fluxcd/pkg/runtime v0.103.0
+	github.com/fluxcd/pkg/ssa v0.70.0
 	github.com/fluxcd/pkg/tar v0.17.0
 	github.com/fluxcd/pkg/version v0.14.0
 	github.com/go-jose/go-jose/v4 v4.1.3
@@ -47,7 +47,7 @@ require (
 	github.com/wI2L/jsondiff v0.6.1
 	gitlab.com/gitlab-org/api/client-go v1.32.0
 	golang.org/x/exp v0.0.0-20250813145105-42675adae3e6
-	golang.org/x/mod v0.33.0
+	golang.org/x/mod v0.34.0
 	golang.org/x/oauth2 v0.36.0
 	k8s.io/api v0.35.2
 	k8s.io/apiextensions-apiserver v0.35.2
@@ -105,7 +105,7 @@ require (
 	github.com/davidmz/go-pageant v1.0.2 // indirect
 	github.com/digitorus/pkcs7 v0.0.0-20230818184609-3a137a874352 // indirect
 	github.com/digitorus/timestamp v0.0.0-20231217203849-220c5c2851b7 // indirect
-	github.com/docker/cli v29.2.1+incompatible // indirect
+	github.com/docker/cli v29.3.0+incompatible // indirect
 	github.com/docker/distribution v2.8.3+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.3 // indirect
 	github.com/emicklei/go-restful/v3 v3.12.2 // indirect
@@ -218,14 +218,14 @@ require (
 	go.uber.org/zap v1.27.1 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/crypto v0.48.0 // indirect
-	golang.org/x/net v0.51.0 // indirect
+	golang.org/x/crypto v0.49.0 // indirect
+	golang.org/x/net v0.52.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
-	golang.org/x/term v0.40.0 // indirect
-	golang.org/x/text v0.34.0 // indirect
+	golang.org/x/term v0.41.0 // indirect
+	golang.org/x/text v0.35.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
-	golang.org/x/tools v0.42.0 // indirect
+	golang.org/x/tools v0.43.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
 	google.golang.org/api v0.261.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20251202230838-ff82c1b0f217 // indirect
