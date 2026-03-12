@@ -35,6 +35,15 @@ fi
 cat ${SOUCE_DIR}/bundle/manifests/flux-operator.clusterserviceversion.yaml | \
 envsubst > ${DEST_DIR}/bundle/manifests/flux-operator.clusterserviceversion.yaml
 
+if [ "$UBI" = "true" ]; then
+  IMG="ghcr.io/controlplaneio-fluxcd/flux-operator"
+  TAG="v${VERSION}${FLUX_OPERATOR_VARIANT}"
+  DIGEST=$(crane digest "${IMG}:${TAG}") || fatal "Failed to get digest for ${IMG}:${TAG}"
+  info "Resolved ${IMG}:${TAG} to ${DIGEST}"
+  CSV="${DEST_DIR}/bundle/manifests/flux-operator.clusterserviceversion.yaml"
+  perl -i -pe "s|\Q${IMG}:${TAG}\E|${IMG}\@${DIGEST}|g" "${CSV}"
+fi
+
 cat ${SOUCE_DIR}/bundle/manifests/flux-operator.service.yaml > \
 ${DEST_DIR}/bundle/manifests/flux-operator.service.yaml
 
