@@ -36,8 +36,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: sigstore/cosign-installer@ba7bc0a3fef59531c69a25acd34668d6d3fe6f22 # v4.1.0
-        with:
-          cosign-release: v2.6.1 # TODO: remove after Flux 2.8 with support for cosign v3
       - name: Push and sign manifests
         env:
           COSIGN_EXPERIMENTAL: 1
