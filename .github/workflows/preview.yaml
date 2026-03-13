@@ -3,6 +3,8 @@ on:
   push:
     branches:
       - main
+    tags:
+      - 'v*'
     paths-ignore:
       - 'docs/**'
       - 'config/**'
@@ -40,11 +42,25 @@ jobs:
         id: prep
         run: |
           TIMESTAMP=$(git log -1 --pretty=%ct)
-          TAG="${GITHUB_REF_NAME//\//-}-${GITHUB_SHA::8}-${TIMESTAMP}"
-          LATEST_TAG="${GITHUB_REF_NAME//\//-}-latest"
           echo "TIMESTAMP=${TIMESTAMP}" >> $GITHUB_OUTPUT
-          echo "TAG=${TAG}" >> $GITHUB_OUTPUT
-          echo "LATEST_TAG=${LATEST_TAG}" >> $GITHUB_OUTPUT
+
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME}-1"
+            TAG="${GITHUB_REF_NAME}"
+            BRANCH_BUILD=false
+          else
+            TAG="${GITHUB_REF_NAME//\//-}-${GITHUB_SHA::8}-${TIMESTAMP}"
+            LATEST_TAG="${GITHUB_REF_NAME//\//-}-latest"
+            VERSION="0.0.0-${TAG}"
+            BRANCH_BUILD=true
+          fi
+
+          {
+            echo "VERSION=${VERSION}"
+            echo "TAG=${TAG}"
+            echo "LATEST_TAG=${LATEST_TAG}"
+            echo "BRANCH_BUILD=${BRANCH_BUILD}"
+          } >> $GITHUB_OUTPUT
       - name: Setup QEMU
         uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
       - name: Setup Docker Buildx
@@ -64,7 +80,7 @@ jobs:
             ${{ env.IMAGE }}
           tags: |
             type=raw,value=${{ steps.prep.outputs.TAG }}
-            type=raw,value=${{ steps.prep.outputs.LATEST_TAG }}
+            type=raw,value=${{ steps.prep.outputs.LATEST_TAG }},enable=${{ steps.prep.outputs.BRANCH_BUILD == 'true' }}
           annotations:
             org.opencontainers.image.description=Flux Operator preview build
       - name: Push image
@@ -83,10 +99,11 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           annotations: ${{ steps.meta.outputs.annotations }}
-          build-args: "VERSION=0.0.0-${{ steps.prep.outputs.TAG }}"
+          build-args: "VERSION=${{ steps.prep.outputs.VERSION }}"
       - uses: sigstore/cosign-installer@ba7bc0a3fef59531c69a25acd34668d6d3fe6f22 # v4.1.0
       - name: Sign image
         env:
           COSIGN_EXPERIMENTAL: 1
+          IMAGE_DIGEST: ${{ steps.build-push.outputs.digest }}
         run: |
-          cosign sign --yes ${{ env.IMAGE }}@${{ steps.build-push.outputs.digest }}
+          cosign sign --yes "${IMAGE}@${IMAGE_DIGEST}"
