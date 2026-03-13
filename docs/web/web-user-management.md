@@ -136,13 +136,6 @@ Flux resources in the `apps` namespace. Attempting to access resources in other
 namespaces will result in a "403 Forbidden" error. To allow the dev team to
 perform actions on their resources, you can bind them to the `flux-web-admin` role instead.
 
-!!! info "Namespace filtering"
-
-    The Web UI fiters the list of namespaces a user can pick from the dropdowns
-    based on the `get` permission assigned to their groups for the `ResourceSet` kind.
-    By default, the Flux Operator Helm chart creates a role that grants access to `ResourceSet`
-    by aggregating to `view` and `edit` roles.
-
 Users who are not part of any group with assigned permissions will only see the main dashboard,
 without access to any specific resources. The main dashboard will only display
 the readiness status of the Flux controllers.
@@ -155,6 +148,15 @@ to manage user permissions and access to resources.
 The Web UI impersonates the authenticated user when making requests to the Kubernetes API server.
 This means that the permissions granted to a user in the Web UI are determined by
 the Kubernetes RBAC policies assigned to that user or to the groups they belong to.
+
+### Namespace Filtering
+
+The Web UI fiters the list of namespaces a user can pick from the dropdowns
+based on the `get` RBAC verb assigned to their groups for the `ResourceSet`
+kind. If a user does not have `get` on `ResourceSet` in any namespaces, they
+will see the warning "Limited Access - You don't have access to any namespaces".
+This warning will go away if the user has `get` on `ResourceSet` in at least
+one namespace.
 
 ### Predefined Roles
 

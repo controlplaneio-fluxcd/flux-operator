@@ -3,6 +3,7 @@
 
 import { useEffect } from 'preact/hooks'
 import { usePageMeta } from '../../../utils/meta'
+import { namespaceFilteringDocUrl } from '../../../utils/constants'
 import { addToNavHistory } from '../../../utils/navHistory'
 import { OverallStatusPanel } from './OverallStatusPanel'
 import { InfoPanel } from './InfoPanel'
@@ -27,6 +28,19 @@ function NoNamespaceAccessWarning({ userInfo }) {
           </h3>
           <p class="mt-1 text-sm text-yellow-700 dark:text-yellow-300">
             You don't have access to any namespaces. Contact your administrator to grant your group the necessary permissions.
+            <a
+              href={namespaceFilteringDocUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              class="inline-flex items-center align-middle text-yellow-700 underline decoration-yellow-500/70 underline-offset-2 transition-colors hover:text-yellow-800 dark:text-yellow-300 dark:hover:text-yellow-200"
+              title="Namespace filtering documentation"
+              aria-label="Namespace filtering documentation"
+            >
+              <svg class="ml-px h-4 w-4 flex-shrink-0 relative -top-px" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </a>
           </p>
           {(userInfo?.impersonation) && (userInfo?.impersonation.username || userInfo?.impersonation.groups) && (
             <p class="mt-2 text-xs text-yellow-600 dark:text-yellow-400 font-mono">

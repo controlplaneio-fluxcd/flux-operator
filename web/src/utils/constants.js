@@ -144,6 +144,9 @@ export const fluxCRDs = [
   },
 ]
 
+// Namespace filtering docs URL.
+export const namespaceFilteringDocUrl = 'https://fluxoperator.dev/docs/web-ui/user-management/#namespace-filtering'
+
 // Flux resource kinds for dropdown (derived from fluxCRDs)
 export const fluxKinds = fluxCRDs.map(crd => crd.kind)
 

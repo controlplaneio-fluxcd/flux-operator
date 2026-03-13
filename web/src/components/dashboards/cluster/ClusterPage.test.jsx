@@ -4,6 +4,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen } from '@testing-library/preact'
 import { ClusterPage } from './ClusterPage'
+import { namespaceFilteringDocUrl } from '../../../utils/constants'
 
 // Mock all child components
 vi.mock('./OverallStatusPanel', () => ({
@@ -285,6 +286,10 @@ describe('ClusterPage', () => {
 
       expect(screen.getByText('Limited Access')).toBeInTheDocument()
       expect(screen.getByText(/Contact your administrator/)).toBeInTheDocument()
+      const docLink = screen.getByRole('link', { name: 'Namespace filtering documentation' })
+      expect(docLink).toHaveAttribute('href', namespaceFilteringDocUrl)
+      expect(docLink).toHaveAttribute('target', '_blank')
+      expect(docLink).toHaveAttribute('rel', 'noopener noreferrer')
     })
 
     it('should show warning when namespaces is undefined', () => {
