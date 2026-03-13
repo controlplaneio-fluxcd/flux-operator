@@ -285,8 +285,7 @@ describe('ClusterPage', () => {
       render(<ClusterPage spec={spec} />)
 
       expect(screen.getByText('Limited Access')).toBeInTheDocument()
-      expect(screen.getByText(/Contact your administrator/)).toBeInTheDocument()
-      const docLink = screen.getByRole('link', { name: 'Namespace filtering documentation' })
+      const docLink = screen.getByRole('link', { name: /You don't have access to any namespaces\. Contact your administrator to grant your group the necessary permissions\./ })
       expect(docLink).toHaveAttribute('href', namespaceFilteringDocUrl)
       expect(docLink).toHaveAttribute('target', '_blank')
       expect(docLink).toHaveAttribute('rel', 'noopener noreferrer')
