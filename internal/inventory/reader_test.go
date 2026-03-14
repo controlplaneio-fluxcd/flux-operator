@@ -368,7 +368,7 @@ data:
 			g := NewWithT(t)
 
 			releaseData := tt.setupData()
-			result, err := decodeHelmStorage(releaseData)
+			result, err := DecodeHelmStorage(releaseData)
 
 			if tt.expectError {
 				g.Expect(err).To(HaveOccurred())

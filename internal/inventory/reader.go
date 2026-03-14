@@ -168,7 +168,7 @@ func FromHelmRelease(
 		return nil, fmt.Errorf("storage not found for HelmRelease/%s", hrKey.String())
 	}
 
-	rls, err := decodeHelmStorage(releaseData)
+	rls, err := DecodeHelmStorage(releaseData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode storage for HelmRelease/%s: %w", hrKey.String(), err)
 	}
@@ -231,16 +231,16 @@ func FromHelmRelease(
 	return result, nil
 }
 
-// decodeHelmStorage decodes the Helm storage secret data into a HelmStorage struct.
+// DecodeHelmStorage decodes the Helm storage secret data into a HelmStorage struct.
 // Adapted from https://github.com/helm/helm/blob/02685e94bd3862afcb44f6cd7716dbeb69743567/pkg/storage/driver/util.go
-func decodeHelmStorage(releaseData []byte) (*HelmStorage, error) {
+func DecodeHelmStorage(releaseData []byte) (*HelmStorage, error) {
 	var b64 = base64.StdEncoding
 	b, err := b64.DecodeString(string(releaseData))
 	if err != nil {
 		return nil, err
 	}
 	var magicGzip = []byte{0x1f, 0x8b, 0x08}
-	if bytes.Equal(b[0:3], magicGzip) {
+	if len(b) >= 3 && bytes.Equal(b[0:3], magicGzip) {
 		r, err := gzip.NewReader(bytes.NewReader(b))
 		if err != nil {
 			return nil, err

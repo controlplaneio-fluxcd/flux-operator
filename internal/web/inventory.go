@@ -4,13 +4,8 @@
 package web
 
 import (
-	"bytes"
-	"compress/gzip"
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
-	"io"
 	"strings"
 
 	"github.com/fluxcd/cli-utils/pkg/object"
@@ -24,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/inventory"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/kubeclient"
 )
 
@@ -59,30 +55,14 @@ func inventoryEntryFrom(id, v string) (*InventoryEntry, error) {
 	}, nil
 }
 
-// HelmStorage is a struct used to decode the Helm storage secret.
-type HelmStorage struct {
-	Name     string `json:"name,omitempty"`
-	Manifest string `json:"manifest,omitempty"`
-}
-
-// HelmHistory is a struct used to decode the release
-// history from the HelmRelease status.
-type HelmHistory struct {
-	ReleaseName string `json:"releaseName,omitempty"`
-	Version     int64  `json:"version,omitempty"`
-	Namespace   string `json:"namespace,omitempty"`
-}
-
 // getInventory returns the inventory of Kubernetes object entries that are managed by the Flux.
 // In the case of a HelmRelease, it extracts the metadata from the Helm storage secret belonging
 // to the latest release version.
-// nolint: gocyclo
 func (h *Handler) getInventory(
 	ctx context.Context,
 	obj unstructured.Unstructured,
 ) ([]InventoryEntry, error) {
-	inventory := make([]InventoryEntry, 0)
-	kubeClient := h.kubeClient.GetClient(ctx)
+	inv := make([]InventoryEntry, 0)
 
 	// If kind is ArtifactGenerator, extract ExternalArtifacts from status.inventory[]
 	if obj.GetKind() == fluxcdv1.FluxArtifactGeneratorKind {
@@ -97,7 +77,7 @@ func (h *Handler) getInventory(
 					if !found {
 						continue
 					}
-					inventory = append(inventory, InventoryEntry{
+					inv = append(inv, InventoryEntry{
 						Name:       name,
 						Namespace:  namespace,
 						Kind:       fluxcdv1.FluxExternalArtifactKind,
@@ -105,7 +85,7 @@ func (h *Handler) getInventory(
 					})
 				}
 			}
-			return inventory, nil
+			return inv, nil
 		}
 	}
 
@@ -122,152 +102,140 @@ func (h *Handler) getInventory(
 					continue
 				}
 				if invEntry, err := inventoryEntryFrom(id, v); err == nil {
-					inventory = append(inventory, *invEntry)
+					inv = append(inv, *invEntry)
 				}
 			}
 		}
-		return inventory, nil
+		return inv, nil
 	}
 
 	// Special handling for HelmRelease to extract inventory from Helm storage
 	if obj.GetKind() == fluxcdv1.FluxHelmReleaseKind {
-		if _, found, _ := unstructured.NestedFieldCopy(obj.Object, "spec", "kubeConfig"); found {
-			// Skip release if it targets a remote cluster
-			return nil, nil
+		return h.getHelmReleaseInventory(ctx, obj)
+	}
+
+	return inv, nil
+}
+
+// getHelmReleaseInventory extracts the inventory from the Helm storage secret
+// belonging to the latest release version of a HelmRelease.
+// Required for Flux <= 2.7
+func (h *Handler) getHelmReleaseInventory(
+	ctx context.Context,
+	obj unstructured.Unstructured,
+) ([]InventoryEntry, error) {
+	inv := make([]InventoryEntry, 0)
+	kubeClient := h.kubeClient.GetClient(ctx)
+
+	if _, found, _ := unstructured.NestedFieldCopy(obj.Object, "spec", "kubeConfig"); found {
+		// Skip release if it targets a remote cluster
+		return nil, nil
+	}
+
+	storageNamespace, _, _ := unstructured.NestedString(obj.Object, "status", "storageNamespace")
+	history, _, _ := unstructured.NestedSlice(obj.Object, "status", "history")
+	if storageNamespace == "" || len(history) == 0 {
+		// Skip release with no history
+		return nil, nil
+	}
+
+	// Get the latest release from the history
+	entry, ok := history[0].(map[string]any)
+	if !ok {
+		return nil, nil
+	}
+	releaseName, _ := entry["name"].(string)
+	releaseVersion, _ := entry["version"].(int64)
+	releaseNamespace, _ := entry["namespace"].(string)
+
+	storageKey := client.ObjectKey{
+		Namespace: storageNamespace,
+		Name:      fmt.Sprintf("sh.helm.release.v1.%s.v%v", releaseName, releaseVersion),
+	}
+
+	storageSecret := &corev1.Secret{}
+	if err := kubeClient.Get(ctx, storageKey, storageSecret); err != nil {
+		// Skip release if it has no storage
+		if errors.IsForbidden(err) {
+			return nil, err
 		}
+		return nil, nil
+	}
 
-		storageNamespace, _, _ := unstructured.NestedString(obj.Object, "status", "storageNamespace")
-		history, _, _ := unstructured.NestedSlice(obj.Object, "status", "history")
-		if storageNamespace == "" || len(history) == 0 {
-			// Skip release with no history
-			return nil, nil
+	releaseData, releaseFound := storageSecret.Data["release"]
+	if !releaseFound {
+		// Skip release if the storage key is missing
+		return nil, nil
+	}
+
+	rls, err := inventory.DecodeHelmStorage(releaseData)
+	if err != nil {
+		// Skip release if the storage cannot be decoded
+		return nil, nil
+	}
+
+	objects, err := ssautil.ReadObjects(strings.NewReader(rls.Manifest))
+	if err != nil {
+		// Skip release if the objects in storage cannot be read
+		return nil, nil
+	}
+
+	// Add the object to the inventory list
+	for _, o := range objects {
+		// Set the namespace on namespaced objects if missing
+		if o.GetNamespace() == "" {
+			isNamespaced, err := apiutil.IsObjectNamespaced(o, kubeClient.Scheme(), kubeClient.RESTMapper())
+			if err != nil && errors.IsForbidden(err) {
+				return nil, err
+			}
+			if isNamespaced {
+				o.SetNamespace(releaseNamespace)
+			}
 		}
+		inv = append(inv, InventoryEntry{
+			Name:       o.GetName(),
+			Namespace:  o.GetNamespace(),
+			Kind:       o.GetKind(),
+			APIVersion: o.GetAPIVersion(),
+		})
+	}
 
-		// Get the latest release from the history
-		latest := &HelmHistory{}
-		latest.ReleaseName = history[0].(map[string]any)["name"].(string)
-		latest.Version = history[0].(map[string]any)["version"].(int64)
-		latest.Namespace = history[0].(map[string]any)["namespace"].(string)
-
-		storageKey := client.ObjectKey{
-			Namespace: storageNamespace,
-			Name:      fmt.Sprintf("sh.helm.release.v1.%s.v%v", latest.ReleaseName, latest.Version),
+	// If the HelmRelease has CRDs to install or upgrade, we need to add them to the inventory
+	_, installCRDs, _ := unstructured.NestedBool(obj.Object, "spec", "install", "crds")
+	_, upgradeCRDs, _ := unstructured.NestedBool(obj.Object, "spec", "upgrade", "crds")
+	if installCRDs || upgradeCRDs {
+		selector := client.MatchingLabels{
+			"helm.toolkit.fluxcd.io/name":      obj.GetName(),
+			"helm.toolkit.fluxcd.io/namespace": obj.GetNamespace(),
 		}
-
-		storageSecret := &corev1.Secret{}
-		if err := kubeClient.Get(ctx, storageKey, storageSecret); err != nil {
-			// Skip release if it has no storage
+		crdKind := "CustomResourceDefinition"
+		var list apiextensionsv1.CustomResourceDefinitionList
+		if err := kubeClient.List(ctx, &list, selector); err != nil {
 			if errors.IsForbidden(err) {
 				return nil, err
 			}
-			return nil, nil
-		}
-
-		releaseData, releaseFound := storageSecret.Data["release"]
-		if !releaseFound {
-			// Skip release if the storage key is missing
-			return nil, nil
-		}
-
-		rls, err := decodeHelmStorage(releaseData)
-		if err != nil {
-			// Skip release if the storage cannot be decoded
-			return nil, nil
-		}
-
-		objects, err := ssautil.ReadObjects(strings.NewReader(rls.Manifest))
-		if err != nil {
-			// Skip release if the objects in storage cannot be read
-			return nil, nil
-		}
-
-		// Add the object to the inventory list
-		for _, o := range objects {
-			// Set the namespace on namespaced objects if missing
-			if o.GetNamespace() == "" {
-				isNamespaced, err := apiutil.IsObjectNamespaced(o, kubeClient.Scheme(), kubeClient.RESTMapper())
-				if err != nil && errors.IsForbidden(err) {
-					return nil, err
-				}
-				if isNamespaced {
-					obj.SetNamespace(latest.Namespace)
-				}
-			}
-			inventory = append(inventory, InventoryEntry{
-				Name:       o.GetName(),
-				Namespace:  o.GetNamespace(),
-				Kind:       o.GetKind(),
-				APIVersion: o.GetAPIVersion(),
-			})
-		}
-
-		// If the HelmRelease has CRDs to install or upgrade, we need to add them to the inventory
-		_, installCRDs, _ := unstructured.NestedBool(obj.Object, "spec", "install", "crds")
-		_, upgradeCRDs, _ := unstructured.NestedBool(obj.Object, "spec", "upgrade", "crds")
-		if installCRDs || upgradeCRDs {
-			selector := client.MatchingLabels{
-				"helm.toolkit.fluxcd.io/name":      obj.GetName(),
-				"helm.toolkit.fluxcd.io/namespace": obj.GetNamespace(),
-			}
-			crdKind := "CustomResourceDefinition"
-			var list apiextensionsv1.CustomResourceDefinitionList
-			if err := kubeClient.List(ctx, &list, selector); err != nil {
-				if errors.IsForbidden(err) {
-					return nil, err
-				}
-			} else {
-				for _, crd := range list.Items {
-					found := false
-					for _, obj := range objects {
-						if obj.GetName() == crd.GetName() && obj.GetKind() == crdKind {
-							found = true
-							break
-						}
-					}
-
-					if !found {
-						inventory = append(inventory, InventoryEntry{
-							Name:       crd.GetName(),
-							Kind:       crdKind,
-							APIVersion: apiextensionsv1.SchemeGroupVersion.String(),
-						})
+		} else {
+			for _, crd := range list.Items {
+				found := false
+				for _, obj := range objects {
+					if obj.GetName() == crd.GetName() && obj.GetKind() == crdKind {
+						found = true
+						break
 					}
 				}
+
+				if !found {
+					inv = append(inv, InventoryEntry{
+						Name:       crd.GetName(),
+						Kind:       crdKind,
+						APIVersion: apiextensionsv1.SchemeGroupVersion.String(),
+					})
+				}
 			}
 		}
 	}
 
-	return inventory, nil
-}
-
-// decodeHelmStorage decodes the Helm storage secret data into a HelmStorage struct.
-// Adapted from https://github.com/helm/helm/blob/02685e94bd3862afcb44f6cd7716dbeb69743567/pkg/storage/driver/util.go
-func decodeHelmStorage(releaseData []byte) (*HelmStorage, error) {
-	var b64 = base64.StdEncoding
-	b, err := b64.DecodeString(string(releaseData))
-	if err != nil {
-		return nil, err
-	}
-	var magicGzip = []byte{0x1f, 0x8b, 0x08}
-	if bytes.Equal(b[0:3], magicGzip) {
-		r, err := gzip.NewReader(bytes.NewReader(b))
-		if err != nil {
-			return nil, err
-		}
-		defer r.Close()
-		b2, err := io.ReadAll(r)
-		if err != nil {
-			return nil, err
-		}
-		b = b2
-	}
-
-	var rls HelmStorage
-	if err := json.Unmarshal(b, &rls); err != nil {
-		return nil, err
-	}
-
-	return &rls, nil
+	return inv, nil
 }
 
 // preferredFluxGVK returns the preferred GroupVersionKind for a given Flux kind.
