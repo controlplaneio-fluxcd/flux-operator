@@ -294,9 +294,12 @@ describe('status utilities', () => {
     it('should remove internal fields from status', () => {
       const status = {
         inventory: [{ name: 'item1' }],
+        inventoryError: 'no access',
         sourceRef: { kind: 'GitRepository', name: 'test' },
         reconcilerRef: { status: 'Ready' },
         exportedInputs: { key: 'value' },
+        helmValues: { replicaCount: 3 },
+        helmValuesError: 'some error',
         userActions: true,
         inputProviderRefs: [{ name: 'provider1' }],
         conditions: [{ type: 'Ready', status: 'True' }],

@@ -107,9 +107,14 @@ type WebConfigSpec struct {
 	Authentication *AuthenticationSpec `json:"authentication"`
 }
 
+// IsAuthEnabled checks if authentication is enabled.
+func (c *WebConfigSpec) IsAuthEnabled() bool {
+	return c != nil && c.Authentication != nil
+}
+
 // UserActionsEnabled checks if user actions are enabled.
 func (c *WebConfigSpec) UserActionsEnabled() bool {
-	return c != nil && c.Authentication != nil
+	return c.IsAuthEnabled()
 }
 
 // AuthenticationSpec holds the Flux Status Page authentication configuration.

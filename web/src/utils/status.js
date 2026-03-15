@@ -201,6 +201,6 @@ export function getStatusBorderClass(status) {
 export function cleanStatus(status) {
   if (!status) return undefined
   // eslint-disable-next-line no-unused-vars
-  const { exportedInputs, inputProviderRefs, inventory, reconcilerRef, sourceRef, userActions, ...clean } = status
+  const { exportedInputs, helmValues, helmValuesError, inputProviderRefs, inventory, inventoryError, reconcilerRef, sourceRef, userActions, ...clean } = status
   return clean
 }

@@ -36,3 +36,6 @@ web-config.yaml
 
 # CLI (normally how Claude Code builds it).
 /cli
+
+# MCP config file.
+.mcp.json

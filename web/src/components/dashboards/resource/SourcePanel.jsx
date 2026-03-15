@@ -267,7 +267,7 @@ export function SourcePanel({ resourceData }) {
         <>
           {/* Tab Navigation */}
           <div class="border-b border-gray-200 dark:border-gray-700 mb-4">
-            <nav class="flex space-x-4">
+            <nav class="flex space-x-4 overflow-x-auto">
               <TabButton active={sourceTab === 'overview'} onClick={() => setSourceTab('overview')}>
                 <span class="sm:hidden">Info</span>
                 <span class="hidden sm:inline">Overview</span>

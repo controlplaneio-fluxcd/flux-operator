@@ -13,10 +13,52 @@ import (
 	"github.com/fluxcd/pkg/runtime/transform"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 )
+
+// getHelmValues extracts valuesFrom references and inline values from a
+// HelmRelease unstructured object, resolves them via helmValuesFromReferences,
+// and returns the merged values map.
+func (h *Handler) getHelmValues(ctx context.Context, obj unstructured.Unstructured) (map[string]any, error) {
+	var refs []meta.ValuesReference
+	if valuesFrom, found, _ := unstructured.NestedSlice(obj.Object, "spec", "valuesFrom"); found {
+		for _, vf := range valuesFrom {
+			m, ok := vf.(map[string]any)
+			if !ok {
+				continue
+			}
+			ref := meta.ValuesReference{}
+			if v, ok := m["kind"].(string); ok {
+				ref.Kind = v
+			}
+			if v, ok := m["name"].(string); ok {
+				ref.Name = v
+			}
+			if v, ok := m["valuesKey"].(string); ok {
+				ref.ValuesKey = v
+			}
+			if v, ok := m["targetPath"].(string); ok {
+				ref.TargetPath = v
+			}
+			if v, ok := m["optional"].(bool); ok {
+				ref.Optional = v
+			}
+			refs = append(refs, ref)
+		}
+	}
+
+	inlineValues, _, _ := unstructured.NestedMap(obj.Object, "spec", "values")
+
+	if len(refs) == 0 && len(inlineValues) == 0 {
+		return nil, nil
+	}
+
+	return helmValuesFromReferences(ctx, h.kubeClient.GetClient(ctx),
+		obj.GetNamespace(), inlineValues, refs...)
+}
 
 // helmValuesFromReferences resolves Helm release values from ConfigMap/Secret
 // references, merging them in the order given. If provided, the values map is
