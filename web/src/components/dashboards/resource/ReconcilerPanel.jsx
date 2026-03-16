@@ -13,7 +13,7 @@ import { FluxOperatorIcon } from '../../layout/Icons'
 import { useHashTab } from '../../../utils/hash'
 
 // Valid tabs for the ReconcilerPanel
-const RECONCILER_TABS = ['overview', 'history', 'events', 'spec', 'status']
+const RECONCILER_TABS = ['overview', 'history', 'events', 'values', 'spec', 'status']
 
 export function ReconcilerPanel({ kind, name, namespace, resourceData }) {
   // Tab state synced with URL hash (e.g., #reconciler-events)
@@ -111,6 +111,18 @@ export function ReconcilerPanel({ kind, name, namespace, resourceData }) {
     }
   }, [resourceData])
 
+  const valuesYaml = useMemo(() => {
+    if (kind !== 'HelmRelease' || !resourceData) return null
+    if (resourceData.status?.helmValues) return resourceData.status.helmValues
+    if (resourceData.spec?.values) return resourceData.spec.values
+    return null
+  }, [resourceData, kind])
+
+  const valuesError = useMemo(() => {
+    if (kind !== 'HelmRelease' || !resourceData) return null
+    return resourceData.status?.helmValuesError || null
+  }, [resourceData, kind])
+
   const statusYaml = useMemo(() => {
     if (!resourceData?.status) return null
     return {
@@ -183,7 +195,7 @@ export function ReconcilerPanel({ kind, name, namespace, resourceData }) {
     <DashboardPanel title="Reconciler" id="reconciler-panel">
       {/* Tab Navigation */}
       <div class="border-b border-gray-200 dark:border-gray-700 mb-4">
-        <nav class="flex space-x-4">
+        <nav class="flex space-x-4 overflow-x-auto">
           <TabButton active={reconcilerTab === 'overview'} onClick={() => setReconcilerTab('overview')}>
             <span class="sm:hidden">Info</span>
             <span class="hidden sm:inline">Overview</span>
@@ -196,6 +208,11 @@ export function ReconcilerPanel({ kind, name, namespace, resourceData }) {
           <TabButton active={reconcilerTab === 'events'} onClick={() => setReconcilerTab('events')}>
             Events
           </TabButton>
+          {kind === 'HelmRelease' && (valuesError || valuesYaml) && (
+            <TabButton active={reconcilerTab === 'values'} onClick={() => setReconcilerTab('values')}>
+              Values
+            </TabButton>
+          )}
           <TabButton active={reconcilerTab === 'spec'} onClick={() => setReconcilerTab('spec')}>
             <span class="sm:hidden">Spec</span>
             <span class="hidden sm:inline">Specification</span>
@@ -290,6 +307,19 @@ export function ReconcilerPanel({ kind, name, namespace, resourceData }) {
           history={resourceData?.status?.history}
           kind={kind}
         />
+      )}
+
+      {/* Values Tab */}
+      {reconcilerTab === 'values' && kind === 'HelmRelease' && (
+        <div>
+          {valuesError ? (
+            <div class="text-sm text-red-600 dark:text-red-400">
+              <pre class="whitespace-pre-wrap break-all font-sans">{valuesError}</pre>
+            </div>
+          ) : valuesYaml ? (
+            <YamlBlock data={valuesYaml} />
+          ) : null}
+        </div>
       )}
 
       {reconcilerTab === 'spec' && <YamlBlock data={specYaml} />}

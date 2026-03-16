@@ -275,7 +275,7 @@ export function ResourceDetailsView({ kind, name, namespace, isExpanded }) {
         <>
           {/* Tab Navigation */}
           <div class="border-b border-gray-200 dark:border-gray-700 mb-4">
-            <nav class="flex space-x-4" aria-label="Tabs">
+            <nav class="flex space-x-4 overflow-x-auto" aria-label="Tabs">
               {shouldShowInventoryTab && (
                 <button
                   onClick={() => setActiveTab('inventory')}

@@ -191,6 +191,37 @@ func (h *Handler) GetResource(ctx context.Context, kind, name, namespace string)
 		}
 	}
 
+	// Get the final values of the resource if it's a HelmRelease and inject into status.
+	// Since values can come from Kubernetes Secrets, we fetch them only
+	// if authentication is enabled to enforce RBAC via impersonation.
+	if h.conf.IsAuthEnabled() && gvk.Kind == fluxcdv1.FluxHelmReleaseKind {
+		var valuesError string
+		helmValues, err := h.getHelmValues(ctx, *obj)
+		if err != nil {
+			if !errors.IsForbidden(err) {
+				return nil, err
+			}
+			log.FromContext(ctx).Error(err, "user does not have access to Helm values references")
+			perms := user.Permissions(ctx)
+			valuesError = fmt.Sprintf("You do not have access to the values references of this resource. "+
+				"Contact your administrator if you believe this is an error. "+
+				"User: %s, Groups: [%s]",
+				perms.Username, strings.Join(perms.Groups, ", "))
+		}
+
+		if len(helmValues) > 0 {
+			if err := unstructured.SetNestedMap(obj.Object, helmValues, "status", "helmValues"); err != nil {
+				return nil, fmt.Errorf("unable to set helmValues in status: %w", err)
+			}
+		}
+
+		if valuesError != "" {
+			if err := unstructured.SetNestedField(obj.Object, valuesError, "status", "helmValuesError"); err != nil {
+				return nil, fmt.Errorf("unable to set helmValuesError in status: %w", err)
+			}
+		}
+	}
+
 	// List which actions the user can perform on this resource.
 	if h.conf.UserActionsEnabled() {
 		var actions []string

@@ -33,6 +33,7 @@ type HelmStorage struct {
 // HelmHistory is a struct used to decode the release
 // history from the HelmRelease status.
 type HelmHistory struct {
+	Name      string `json:"name,omitempty"`
 	ChartName string `json:"chartName,omitempty"`
 	Version   int64  `json:"version,omitempty"`
 	Namespace string `json:"namespace,omitempty"`
@@ -76,13 +77,14 @@ func (k *Client) GetHelmInventory(ctx context.Context, apiVersion string, object
 
 	// get the latest release from the history
 	latest := &HelmHistory{}
+	latest.Name = history[0].(map[string]any)["name"].(string)
 	latest.ChartName = history[0].(map[string]any)["chartName"].(string)
 	latest.Version = history[0].(map[string]any)["version"].(int64)
 	latest.Namespace = history[0].(map[string]any)["namespace"].(string)
 
 	storageKey := ctrlclient.ObjectKey{
 		Namespace: storageNamespace,
-		Name:      fmt.Sprintf("sh.helm.release.v1.%s.v%v", latest.ChartName, latest.Version),
+		Name:      fmt.Sprintf("sh.helm.release.v1.%s.v%v", latest.Name, latest.Version),
 	}
 
 	storageSecret := &corev1.Secret{}
@@ -130,10 +132,9 @@ func (k *Client) GetHelmInventory(ctx context.Context, apiVersion string, object
 		return nil, fmt.Errorf("failed to read the Helm storage object for HelmRelease '%s': %w", objectKey.String(), err)
 	}
 
-	containerImages := make([]string, 0)
-
 	// set the namespace on namespaced objects
 	for _, obj := range objects {
+		containerImages := make([]string, 0)
 		if obj.GetNamespace() == "" {
 			if isNamespaced, _ := apiutil.IsObjectNamespaced(obj, k.Client.Scheme(), k.Client.RESTMapper()); isNamespaced {
 				obj.SetNamespace(latest.Namespace)

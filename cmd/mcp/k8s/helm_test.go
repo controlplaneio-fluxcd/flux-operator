@@ -100,6 +100,7 @@ spec:
 
 	history := []any{
 		map[string]any{
+			"name":      "my-release",
 			"chartName": "test-chart",
 			"version":   int64(1),
 			"namespace": namespace,
@@ -120,7 +121,34 @@ spec:
 				makeHelmRelease(namespace, apiVersion, namespace, history, false),
 				&corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "sh.helm.release.v1.test-chart.v1",
+						Name:      "sh.helm.release.v1.my-release.v1",
+						Namespace: namespace,
+					},
+					Data: map[string][]byte{
+						"release": encodeHelmStorage(t, manifest, false),
+					},
+				},
+			},
+			matchLen:    2,
+			matchImages: []string{"nginx:1.25", "busybox:1.36"},
+		},
+		{
+			testName: "extracts inventory when release name differs from chart name",
+			objects: []client.Object{
+				func() *unstructured.Unstructured {
+					hr := makeHelmRelease(namespace, apiVersion, namespace, []any{
+						map[string]any{
+							"name":      "custom-release",
+							"chartName": "test-chart",
+							"version":   int64(1),
+							"namespace": namespace,
+						},
+					}, false)
+					return hr
+				}(),
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "sh.helm.release.v1.custom-release.v1",
 						Namespace: namespace,
 					},
 					Data: map[string][]byte{
@@ -137,7 +165,7 @@ spec:
 				makeHelmRelease(namespace, apiVersion, namespace, history, false),
 				&corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "sh.helm.release.v1.test-chart.v1",
+						Name:      "sh.helm.release.v1.my-release.v1",
 						Namespace: namespace,
 					},
 					Data: map[string][]byte{
@@ -174,7 +202,7 @@ spec:
 				makeHelmRelease(namespace, apiVersion, namespace, history, false),
 				&corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "sh.helm.release.v1.test-chart.v1",
+						Name:      "sh.helm.release.v1.my-release.v1",
 						Namespace: namespace,
 					},
 					Data: map[string][]byte{},

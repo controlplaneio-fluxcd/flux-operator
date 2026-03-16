@@ -1024,6 +1024,216 @@ describe('ReconcilerPanel component', () => {
     })
   })
 
+  describe('Values Tab', () => {
+    const helmReleaseData = {
+      apiVersion: 'helm.toolkit.fluxcd.io/v2',
+      kind: 'HelmRelease',
+      metadata: { name: 'app', namespace: 'default' },
+      spec: { interval: '10m' },
+      status: {
+        reconcilerRef: {
+          status: 'Ready',
+          message: 'Helm install succeeded',
+          lastReconciled: '2023-01-01T12:00:00Z'
+        }
+      }
+    }
+
+    it('should NOT show Values tab for non-HelmRelease kinds', () => {
+      render(
+        <ReconcilerPanel
+          kind="FluxInstance"
+          name="flux"
+          namespace="flux-system"
+          resourceData={mockResourceData}
+        />
+      )
+
+      expect(screen.queryByText('Values')).not.toBeInTheDocument()
+    })
+
+    it('should NOT show Values tab when HelmRelease has no values', () => {
+      render(
+        <ReconcilerPanel
+          kind="HelmRelease"
+          name="app"
+          namespace="default"
+          resourceData={helmReleaseData}
+        />
+      )
+
+      expect(screen.queryByText('Values')).not.toBeInTheDocument()
+    })
+
+    it('should show Values tab when status.helmValues exists', () => {
+      const data = {
+        ...helmReleaseData,
+        status: {
+          ...helmReleaseData.status,
+          helmValues: { replicaCount: 3, image: { tag: 'latest' } }
+        }
+      }
+
+      render(
+        <ReconcilerPanel
+          kind="HelmRelease"
+          name="app"
+          namespace="default"
+          resourceData={data}
+        />
+      )
+
+      expect(screen.getByText('Values')).toBeInTheDocument()
+    })
+
+    it('should display status.helmValues as YAML when Values tab is clicked', async () => {
+      const user = userEvent.setup()
+      const data = {
+        ...helmReleaseData,
+        status: {
+          ...helmReleaseData.status,
+          helmValues: { replicaCount: 3, image: { tag: 'latest' } }
+        }
+      }
+
+      render(
+        <ReconcilerPanel
+          kind="HelmRelease"
+          name="app"
+          namespace="default"
+          resourceData={data}
+        />
+      )
+
+      const valuesTab = screen.getByText('Values')
+      await user.click(valuesTab)
+
+      expect(screen.getAllByText(/replicaCount/).length).toBeGreaterThan(0)
+    })
+
+    it('should show Values tab when status.helmValuesError exists', () => {
+      const data = {
+        ...helmReleaseData,
+        status: {
+          ...helmReleaseData.status,
+          helmValuesError: 'You do not have access to the values references of this resource.'
+        }
+      }
+
+      render(
+        <ReconcilerPanel
+          kind="HelmRelease"
+          name="app"
+          namespace="default"
+          resourceData={data}
+        />
+      )
+
+      expect(screen.getByText('Values')).toBeInTheDocument()
+    })
+
+    it('should display helmValuesError when Values tab is clicked', async () => {
+      const user = userEvent.setup()
+      const data = {
+        ...helmReleaseData,
+        status: {
+          ...helmReleaseData.status,
+          helmValuesError: 'You do not have access to the values references of this resource.'
+        }
+      }
+
+      render(
+        <ReconcilerPanel
+          kind="HelmRelease"
+          name="app"
+          namespace="default"
+          resourceData={data}
+        />
+      )
+
+      const valuesTab = screen.getByText('Values')
+      await user.click(valuesTab)
+
+      expect(screen.getByText('You do not have access to the values references of this resource.')).toBeInTheDocument()
+    })
+
+    it('should show helmValuesError over helmValues when both exist', async () => {
+      const user = userEvent.setup()
+      const data = {
+        ...helmReleaseData,
+        status: {
+          ...helmReleaseData.status,
+          helmValues: { replicaCount: 3 },
+          helmValuesError: 'Access denied'
+        }
+      }
+
+      render(
+        <ReconcilerPanel
+          kind="HelmRelease"
+          name="app"
+          namespace="default"
+          resourceData={data}
+        />
+      )
+
+      const valuesTab = screen.getByText('Values')
+      await user.click(valuesTab)
+
+      expect(screen.getByText('Access denied')).toBeInTheDocument()
+      expect(screen.queryByText(/replicaCount/)).not.toBeInTheDocument()
+    })
+
+    it('should fall back to spec.values when no status helm values exist', async () => {
+      const user = userEvent.setup()
+      const data = {
+        ...helmReleaseData,
+        spec: { ...helmReleaseData.spec, values: { replicas: 2, debug: true } }
+      }
+
+      render(
+        <ReconcilerPanel
+          kind="HelmRelease"
+          name="app"
+          namespace="default"
+          resourceData={data}
+        />
+      )
+
+      const valuesTab = screen.getByText('Values')
+      await user.click(valuesTab)
+
+      expect(screen.getAllByText(/replicas/).length).toBeGreaterThan(0)
+    })
+
+    it('should prefer status.helmValues over spec.values', async () => {
+      const user = userEvent.setup()
+      const data = {
+        ...helmReleaseData,
+        spec: { ...helmReleaseData.spec, values: { fromSpec: true } },
+        status: {
+          ...helmReleaseData.status,
+          helmValues: { fromStatus: true }
+        }
+      }
+
+      render(
+        <ReconcilerPanel
+          kind="HelmRelease"
+          name="app"
+          namespace="default"
+          resourceData={data}
+        />
+      )
+
+      const valuesTab = screen.getByText('Values')
+      await user.click(valuesTab)
+
+      expect(screen.getAllByText(/fromStatus/).length).toBeGreaterThan(0)
+      expect(screen.queryByText(/fromSpec/)).not.toBeInTheDocument()
+    })
+  })
+
   describe('Suspended by', () => {
     it('should display "Suspended by" when status is Suspended and annotation exists', () => {
       const suspendedData = {
