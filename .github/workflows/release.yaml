@@ -40,7 +40,7 @@ jobs:
       - name: Setup Kustomize
         uses: fluxcd/pkg/actions/kustomize@main
       - name: Setup Flux
-        uses: fluxcd/flux2/action@bfa461ed2153ae5e0cca6bce08e0845268fb3088 #v2.8.2
+        uses: fluxcd/flux2/action@871be9b40d53627786d3a3835a3ddba1e3234bd2 #v2.8.3
       - name: Setup Syft
         uses: anchore/sbom-action/download-syft@57aae528053a48a3f6235f2d9461b05fbcb7366d # v0.23.1
       - name: Setup Node
