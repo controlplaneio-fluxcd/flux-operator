@@ -4,8 +4,8 @@
   "author": "flux-enterprise@control-plane.io",
   "role": "Enterprise Flux Maintainers",
   "timestamp": "2025-09-30T12:26:04.422544+03:00",
-  "last_updated": "2025-10-08T12:20:00.000000+03:00",
-  "version": 2,
+  "last_updated": "2026-03-19T12:00:00.000000+00:00",
+  "version": 3,
   "statements": [
     {
       "vulnerability": {
@@ -155,6 +155,34 @@
       "products": [
         {
           "@id": "pkg:apk/alpine/libcurl@8.14.1-r1"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The vulnerable code is not executed by Flux"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-22184"
+      },
+      "timestamp": "2026-03-19T12:00:00Z",
+      "products": [
+        {
+          "@id": "pkg:apk/alpine/zlib@1.3.1-r2"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The vulnerable code is not executed by Flux"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-27171"
+      },
+      "timestamp": "2026-03-19T12:00:00Z",
+      "products": [
+        {
+          "@id": "pkg:apk/alpine/zlib@1.3.1-r2"
         }
       ],
       "status": "not_affected",
