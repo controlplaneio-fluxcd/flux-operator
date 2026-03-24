@@ -219,6 +219,15 @@ func (m *Manager) RegisterTools(server *mcp.Server, inCluster bool) []string {
 			m.HandleSetKubeconfigContext,
 		)
 	}
+	if m.shouldRegisterTool(ToolReconcileFluxChain, inCluster) {
+		addTool(server, &recorder,
+			&mcp.Tool{
+				Name:        ToolReconcileFluxChain,
+				Description: "This tool reconciles a Flux Kustomization and its entire dependency chain in the correct order, from root dependencies to the target.",
+			},
+			m.HandleReconcileChain,
+		)
+	}
 	return recorder.tools
 }
 
