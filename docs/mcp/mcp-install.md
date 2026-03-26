@@ -36,7 +36,7 @@ unpack it and place the binary in a directory included in your system's `PATH`.
 
 ### Build from Source
 
-If you prefer to build from source, clone the repository and build the binary using `make` (requires Go 1.24+):
+If you prefer to build from source, clone the repository and build the binary using `make` (requires Go 1.26+):
 
 ```shell
 git clone https://github.com/controlplaneio-fluxcd/flux-operator.git
