@@ -151,7 +151,7 @@ Labels:
 - `kind`: The kind of the resource (e.g. `FluxInstance`).
 - `name`: The name of the resource (e.g. `flux`).
 - `exported_namespace`: The namespace where the resource is deployed (e.g. `flux-system`).
-- `ready`: The readiness status of the resource (e.g. `True`, `False` or `Unkown`).
+- `ready`: The readiness status of the resource (e.g. `True`, `False` or `Unknown`).
 - `reason`: The reason for the readiness status (e.g. `Progressing`, `BuildFailed`, `HealthCheckFailed`, etc.).
 - `suspended`: The suspended status of the resource (e.g. `True` or `False`).
 - `registry`: The container registry used by the instance (e.g. `ghcr.io/fluxcd`).
@@ -175,7 +175,7 @@ Labels:
 - `kind`: The kind of the resource (e.g. `ResourceSet`).
 - `name`: The name of the resource (e.g. `podinfo`).
 - `exported_namespace`: The namespace where the resource is deployed (e.g. `apps`).
-- `ready`: The readiness status of the resource (e.g. `True`, `False` or `Unkown`).
+- `ready`: The readiness status of the resource (e.g. `True`, `False` or `Unknown`).
 - `reason`: The reason for the readiness status (e.g. `ReconciliationSucceeded`, `BuildFailed`, `HealthCheckFailed`, etc.).
 - `suspended`: The suspended status of the resource (e.g. `True` or `False`).
 
@@ -196,7 +196,7 @@ Common labels:
 - `kind`: The kind of the resource (e.g. `GitRepository`, `Kustomization`, etc.).
 - `name`: The name of the resource (e.g. `flux-system`).
 - `exported_namespace`: The namespace of the resource (e.g. `flux-system`).
-- `ready`: The readiness status of the resource (e.g. `True`, `False` or `Unkown`).
+- `ready`: The readiness status of the resource (e.g. `True`, `False` or `Unknown`).
 - `reason`: The reason for the readiness status (e.g. `Progressing`, `BuildFailed`, `HealthCheckFailed`, etc.).
 - `suspended`: The suspended status of the resource (e.g. `True` or `False`).
 

@@ -170,7 +170,7 @@ resource in the `flux-system` namespace:
 kubectl get fluxreport/flux -n flux-system -o yaml
 ```
 
-The report is update at regular intervals and contains information about the deployment
+The report is updated at regular intervals and contains information about the deployment
 readiness status, the distribution details, reconcilers statistics, Flux CRDs versions,
 the cluster sync status and more.
 
