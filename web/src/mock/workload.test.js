@@ -9,28 +9,28 @@ describe('getMockWorkload', () => {
     const result = getMockWorkload('/api/v1/workload?kind=Deployment&name=source-controller&namespace=flux-system')
     expect(result).toBeDefined()
     expect(result.kind).toBe('Deployment')
-    expect(result.name).toBe('source-controller')
-    expect(result.namespace).toBe('flux-system')
-    expect(result.status).toBe('Current')
-    expect(result.pods).toBeDefined()
-    expect(result.pods.length).toBeGreaterThan(0)
+    expect(result.metadata.name).toBe('source-controller')
+    expect(result.metadata.namespace).toBe('flux-system')
+    expect(result.workloadInfo.status).toBe('Current')
+    expect(result.workloadInfo.pods).toBeDefined()
+    expect(result.workloadInfo.pods.length).toBeGreaterThan(0)
   })
 
   it('should return workload data for Deployment/flux-system/kustomize-controller', () => {
     const result = getMockWorkload('/api/v1/workload?kind=Deployment&name=kustomize-controller&namespace=flux-system')
     expect(result).toBeDefined()
     expect(result.kind).toBe('Deployment')
-    expect(result.name).toBe('kustomize-controller')
-    expect(result.namespace).toBe('flux-system')
+    expect(result.metadata.name).toBe('kustomize-controller')
+    expect(result.metadata.namespace).toBe('flux-system')
   })
 
   it('should return workload data for StatefulSet/registry/zot-registry', () => {
     const result = getMockWorkload('/api/v1/workload?kind=StatefulSet&name=zot-registry&namespace=registry')
     expect(result).toBeDefined()
     expect(result.kind).toBe('StatefulSet')
-    expect(result.name).toBe('zot-registry')
-    expect(result.namespace).toBe('registry')
-    expect(result.status).toBe('Current')
+    expect(result.metadata.name).toBe('zot-registry')
+    expect(result.metadata.namespace).toBe('registry')
+    expect(result.workloadInfo.status).toBe('Current')
   })
 
   it('should return empty object when kind parameter is missing', () => {
@@ -53,26 +53,35 @@ describe('getMockWorkload', () => {
     expect(result).toEqual({})
   })
 
-  it('should return containerImages array', () => {
+  it('should return containerImages array in workloadInfo', () => {
     const result = getMockWorkload('/api/v1/workload?kind=Deployment&name=source-controller&namespace=flux-system')
-    expect(result.containerImages).toBeDefined()
-    expect(Array.isArray(result.containerImages)).toBe(true)
-    expect(result.containerImages.length).toBeGreaterThan(0)
+    expect(result.workloadInfo.containerImages).toBeDefined()
+    expect(Array.isArray(result.workloadInfo.containerImages)).toBe(true)
+    expect(result.workloadInfo.containerImages.length).toBeGreaterThan(0)
   })
 
-  it('should return pods array with pod status', () => {
+  it('should return pods array with pod status in workloadInfo', () => {
     const result = getMockWorkload('/api/v1/workload?kind=Deployment&name=source-controller&namespace=flux-system')
-    expect(result.pods).toBeDefined()
-    expect(Array.isArray(result.pods)).toBe(true)
-    expect(result.pods[0]).toHaveProperty('name')
-    expect(result.pods[0]).toHaveProperty('status')
-    expect(result.pods[0]).toHaveProperty('statusMessage')
+    expect(result.workloadInfo.pods).toBeDefined()
+    expect(Array.isArray(result.workloadInfo.pods)).toBe(true)
+    expect(result.workloadInfo.pods[0]).toHaveProperty('name')
+    expect(result.workloadInfo.pods[0]).toHaveProperty('status')
+    expect(result.workloadInfo.pods[0]).toHaveProperty('statusMessage')
   })
 
-  it('should return statusMessage for workload', () => {
+  it('should return statusMessage in workloadInfo', () => {
     const result = getMockWorkload('/api/v1/workload?kind=Deployment&name=source-controller&namespace=flux-system')
-    expect(result.statusMessage).toBeDefined()
-    expect(typeof result.statusMessage).toBe('string')
-    expect(result.statusMessage.length).toBeGreaterThan(0)
+    expect(result.workloadInfo.statusMessage).toBeDefined()
+    expect(typeof result.workloadInfo.statusMessage).toBe('string')
+    expect(result.workloadInfo.statusMessage.length).toBeGreaterThan(0)
+  })
+
+  it('should include reconciler data in workloadInfo', () => {
+    const result = getMockWorkload('/api/v1/workload?kind=Deployment&name=source-controller&namespace=flux-system')
+    expect(result.workloadInfo.reconciler).toBeDefined()
+    expect(result.workloadInfo.reconciler.kind).toBe('Kustomization')
+    expect(result.workloadInfo.reconciler.metadata.name).toBe('flux-controllers')
+    expect(result.workloadInfo.reconciler.status.sourceRef).toBeDefined()
+    expect(result.workloadInfo.reconciler.status.reconcilerRef.status).toBe('Ready')
   })
 })

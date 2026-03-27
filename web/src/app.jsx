@@ -16,6 +16,7 @@ import { ClusterPage } from './components/dashboards/cluster/ClusterPage'
 import { EventList } from './components/search/EventList'
 import { ResourceList } from './components/search/ResourceList'
 import { ResourcePage } from './components/dashboards/resource/ResourcePage'
+import { WorkloadPage } from './components/dashboards/workload/WorkloadPage'
 import { FavoritesPage } from './components/favorites/FavoritesPage'
 import { ProfilePage } from './components/user/ProfilePage'
 import { NotFoundPage } from './components/layout/NotFoundPage'
@@ -311,6 +312,7 @@ function AppContent({ spec, namespace }) {
         <Route path="/events" component={EventList} />
         <Route path="/resources" component={ResourceList} />
         <Route path="/resource/:kind/:namespace/:name" component={ResourcePage} />
+        <Route path="/workload/:kind/:namespace/:name" component={WorkloadPage} />
         <Route path="/user/profile" component={ProfilePage} />
         <Route default component={NotFoundPage} />
       </Router>
