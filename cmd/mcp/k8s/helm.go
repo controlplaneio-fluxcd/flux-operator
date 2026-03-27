@@ -76,11 +76,15 @@ func (k *Client) GetHelmInventory(ctx context.Context, apiVersion string, object
 	}
 
 	// get the latest release from the history
+	entry, ok := history[0].(map[string]any)
+	if !ok {
+		return nil, nil
+	}
 	latest := &HelmHistory{}
-	latest.Name = history[0].(map[string]any)["name"].(string)
-	latest.ChartName = history[0].(map[string]any)["chartName"].(string)
-	latest.Version = history[0].(map[string]any)["version"].(int64)
-	latest.Namespace = history[0].(map[string]any)["namespace"].(string)
+	latest.Name, _ = entry["name"].(string)
+	latest.ChartName, _ = entry["chartName"].(string)
+	latest.Version, _ = entry["version"].(int64)
+	latest.Namespace, _ = entry["namespace"].(string)
 
 	storageKey := ctrlclient.ObjectKey{
 		Namespace: storageNamespace,
