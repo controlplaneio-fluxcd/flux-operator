@@ -1036,7 +1036,7 @@ Labels:
 - `kind`: The kind of the resource (e.g. `FluxInstance`).
 - `name`: The name of the resource (e.g. `flux`).
 - `exported_namespace`: The namespace where the resource is deployed (e.g. `flux-system`).
-- `ready`: The readiness status of the resource (e.g. `True`, `False` or `Unkown`).
+- `ready`: The readiness status of the resource (e.g. `True`, `False` or `Unknown`).
 - `reason`: The reason for the readiness status (e.g. `Progressing`, `BuildFailed`, `HealthCheckFailed`, etc.).
 - `suspended`: The suspended status of the resource (e.g. `True` or `False`).
 - `registry`: The container registry used by the instance (e.g. `ghcr.io/fluxcd`).

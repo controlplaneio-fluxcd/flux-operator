@@ -835,7 +835,7 @@ Labels:
 - `kind`: The kind of the resource (e.g. `ResourceSetInputProvider`).
 - `name`: The name of the resource (e.g. `podinfo-prs`).
 - `exported_namespace`: The namespace where the resource is deployed (e.g. `podinfo-review`).
-- `ready`: The readiness status of the resource (e.g. `True`, `False` or `Unkown`).
+- `ready`: The readiness status of the resource (e.g. `True`, `False` or `Unknown`).
 - `reason`: The reason for the readiness status (e.g. `ReconciliationSucceeded` or `ReconciliationFailed`).
 - `suspended`: The suspended status of the resource (e.g. `True` or `False`).
 - `url`: The provider address (e.g. `https://github.com/stefanprodan/podinfo`).
