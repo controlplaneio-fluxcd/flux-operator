@@ -992,7 +992,7 @@ spec:
 		NamespacedName: client.ObjectKeyFromObject(obj),
 	})
 	g.Expect(err).To(HaveOccurred())
-	g.Expect(err.Error()).To(ContainSubstring("must be in the format 'namespace/name'"))
+	g.Expect(err.Error()).To(ContainSubstring("must be in the format 'namespace/name' or 'namespace/name:key'"))
 
 	// Check the status
 	result := &fluxcdv1.ResourceSet{}
@@ -1071,14 +1071,14 @@ func TestResourceSetReconciler_ConvertKubeConfigMissingValueField(t *testing.T) 
 	ns, err := testEnv.CreateNamespace(ctx, "test")
 	g.Expect(err).ToNot(HaveOccurred())
 
-	// Create a source Secret without 'value' field
+	// Create a source Secret without 'kubeconfig' or 'value' field
 	sourceSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-kubeconfig-novalue",
 			Namespace: ns.Name,
 		},
 		StringData: map[string]string{
-			"kubeconfig": "some-data", // Wrong field name
+			"other-key": "some-data",
 		},
 	}
 	err = testEnv.Create(ctx, sourceSecret)
@@ -1119,12 +1119,281 @@ spec:
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(r.Requeue).To(BeTrue())
 
-	// Reconcile should fail with missing 'value' field
+	// Reconcile should fail with missing 'kubeconfig' or 'value' field
 	_, err = reconciler.Reconcile(ctx, reconcile.Request{
 		NamespacedName: client.ObjectKeyFromObject(obj),
 	})
 	g.Expect(err).To(HaveOccurred())
-	g.Expect(err.Error()).To(ContainSubstring("does not have 'value' field"))
+	g.Expect(err.Error()).To(ContainSubstring("does not have 'kubeconfig' or 'value' field"))
+
+	// Cleanup
+	err = testClient.Delete(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+}
+
+func TestResourceSetReconciler_ConvertKubeConfigFromKubeconfigKey(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceSetReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Create a source Secret with kubeconfig data under the 'kubeconfig' key
+	// (e.g. Crossplane Azure provider for AKS).
+	kubeconfigData := `apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    certificate-authority-data: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURCVENDQWUyZ0F3SUJBZ0lJUjRkdzMxSTVSK0F3RFFZSktvWklodmNOQVFFTEJRQXdGVEVUTUJFR0ExVUUKQXhNS2EzVmlaWEp1WlhSbGN6QWVGdzB5TkRFeU1qY3hOVEkyTWpoYUZ3MHpOREV5TWpVeE5UTXhNamhhTUJVeApFekFSQmdOVkJBTVRDbXQxWW1WeWJtVjBaWE13Z2dFaU1BMEdDU3FHU0liM0RRRUJBUVVBQTRJQkR3QXdnZ0VLCkFvSUJBUUM2dEhwVzEwcHlXU29ZSFpQdVFpVEY1bGh2SjB2RXJ0SWRzbWxpYXBpcHdRQT09Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K
+    server: https://crossplane-aks.example.com:443
+  name: crossplane-cluster
+contexts:
+- context:
+    cluster: crossplane-cluster
+    user: crossplane-user
+  name: crossplane-context
+current-context: crossplane-context
+users:
+- name: crossplane-user
+  user:
+    token: crossplane-token`
+
+	sourceSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-kubeconfig-kk",
+			Namespace: ns.Name,
+		},
+		StringData: map[string]string{
+			"kubeconfig": kubeconfigData,
+		},
+	}
+	err = testEnv.Create(ctx, sourceSecret)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	objDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: kubeconfig-test-kk
+  namespace: "%[1]s"
+spec:
+  inputs:
+    - cluster: aks
+  resources:
+    - apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: << inputs.cluster >>-config-kk
+        namespace: "%[1]s"
+        annotations:
+          fluxcd.controlplane.io/convertKubeConfigFrom: "%[1]s/test-kubeconfig-kk"
+      data:
+        cluster: << inputs.cluster >>
+`, ns.Name)
+
+	obj := &fluxcdv1.ResourceSet{}
+	err = yaml.Unmarshal([]byte(objDef), obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Reconcile the ResourceSet.
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeFalse())
+
+	// Check the ConfigMap was created with converted kubeconfig data.
+	resultCM := &corev1.ConfigMap{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(&corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "aks-config-kk", Namespace: ns.Name},
+	}), resultCM)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	g.Expect(resultCM.Data).To(HaveKeyWithValue("cluster", "aks"))
+	g.Expect(resultCM.Data["address"]).To(Equal("https://crossplane-aks.example.com:443"))
+	g.Expect(resultCM.Data).To(HaveKey("ca.crt"))
+	g.Expect(resultCM.Data["ca.crt"]).To(ContainSubstring("BEGIN CERTIFICATE"))
+
+	// Cleanup
+	err = testClient.Delete(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+}
+
+func TestResourceSetReconciler_ConvertKubeConfigWithCustomKey(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceSetReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Create a source Secret with kubeconfig data under a custom key.
+	kubeconfigData := `apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    certificate-authority-data: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURCVENDQWUyZ0F3SUJBZ0lJUjRkdzMxSTVSK0F3RFFZSktvWklodmNOQVFFTEJRQXdGVEVUTUJFR0ExVUUKQXhNS2EzVmlaWEp1WlhSbGN6QWVGdzB5TkRFeU1qY3hOVEkyTWpoYUZ3MHpOREV5TWpVeE5UTXhNamhhTUJVeApFekFSQmdOVkJBTVRDbXQxWW1WeWJtVjBaWE13Z2dFaU1BMEdDU3FHU0liM0RRRUJBUVVBQTRJQkR3QXdnZ0VLCkFvSUJBUUM2dEhwVzEwcHlXU29ZSFpQdVFpVEY1bGh2SjB2RXJ0SWRzbWxpYXBpcHdRQT09Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K
+    server: https://custom-key-cluster.example.com:6443
+  name: custom-cluster
+contexts:
+- context:
+    cluster: custom-cluster
+    user: custom-user
+  name: custom-context
+current-context: custom-context
+users:
+- name: custom-user
+  user:
+    token: custom-token`
+
+	sourceSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-kubeconfig-custom",
+			Namespace: ns.Name,
+		},
+		StringData: map[string]string{
+			"my-kubeconfig": kubeconfigData,
+		},
+	}
+	err = testEnv.Create(ctx, sourceSecret)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Use the 'namespace/name:key' format to specify the custom key.
+	objDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: kubeconfig-test-custom
+  namespace: "%[1]s"
+spec:
+  inputs:
+    - cluster: custom
+  resources:
+    - apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: << inputs.cluster >>-config-custom
+        namespace: "%[1]s"
+        annotations:
+          fluxcd.controlplane.io/convertKubeConfigFrom: "%[1]s/test-kubeconfig-custom:my-kubeconfig"
+      data:
+        cluster: << inputs.cluster >>
+`, ns.Name)
+
+	obj := &fluxcdv1.ResourceSet{}
+	err = yaml.Unmarshal([]byte(objDef), obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Reconcile the ResourceSet.
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeFalse())
+
+	// Check the ConfigMap was created with converted kubeconfig data.
+	resultCM := &corev1.ConfigMap{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(&corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "custom-config-custom", Namespace: ns.Name},
+	}), resultCM)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	g.Expect(resultCM.Data).To(HaveKeyWithValue("cluster", "custom"))
+	g.Expect(resultCM.Data["address"]).To(Equal("https://custom-key-cluster.example.com:6443"))
+	g.Expect(resultCM.Data).To(HaveKey("ca.crt"))
+	g.Expect(resultCM.Data["ca.crt"]).To(ContainSubstring("BEGIN CERTIFICATE"))
+
+	// Cleanup
+	err = testClient.Delete(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+}
+
+func TestResourceSetReconciler_ConvertKubeConfigCustomKeyMissing(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceSetReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Create a source Secret without the custom key.
+	sourceSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-kubeconfig-custommissing",
+			Namespace: ns.Name,
+		},
+		StringData: map[string]string{
+			"value": "some-data",
+		},
+	}
+	err = testEnv.Create(ctx, sourceSecret)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	objDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: kubeconfig-test-custommissing
+  namespace: "%[1]s"
+spec:
+  inputs:
+    - cluster: test
+  resources:
+    - apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: << inputs.cluster >>-config-custommissing
+        namespace: "%[1]s"
+        annotations:
+          fluxcd.controlplane.io/convertKubeConfigFrom: "%[1]s/test-kubeconfig-custommissing:my-custom-key"
+      data:
+        cluster: << inputs.cluster >>
+`, ns.Name)
+
+	obj := &fluxcdv1.ResourceSet{}
+	err = yaml.Unmarshal([]byte(objDef), obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Reconcile should fail with missing custom key
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("does not have 'my-custom-key' field"))
 
 	// Cleanup
 	err = testClient.Delete(ctx, obj)
