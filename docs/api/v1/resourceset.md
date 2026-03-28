@@ -502,6 +502,65 @@ setting the `--watch-configs-label-selector=owner!=helm`
 flag in flux-operator, which allows watching all ConfigMaps
 and Secrets except for Helm storage Secrets.
 
+#### Converting kubeconfig data from Secrets
+
+To generate ConfigMap resources with the API server address and CA certificate
+extracted from a kubeconfig stored in a Secret, the
+`fluxcd.controlplane.io/convertKubeConfigFrom` annotation must be set on the
+ConfigMap template.
+
+The annotation value must be in the format `namespace/name` or `namespace/name:key`:
+
+- `namespace/name` - looks for the kubeconfig data under the `kubeconfig` key first,
+  then falls back to the `value` key in the referenced Secret.
+- `namespace/name:key` - uses the specified custom key to read the kubeconfig data
+  from the referenced Secret.
+
+Example of converting kubeconfig data from a CAPI Secret:
+
+```yaml
+spec:
+  inputs:
+    - cluster: "staging"
+    - cluster: "production"
+  resources:
+    - apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: << inputs.cluster >>-cluster-info
+        namespace: flux-system
+        annotations:
+          fluxcd.controlplane.io/convertKubeConfigFrom: "flux-system/<< inputs.cluster >>-kubeconfig"
+      data:
+        cluster: << inputs.cluster >>
+```
+
+In the above example, the operator reads the kubeconfig from the
+`flux-system/<cluster>-kubeconfig` Secret, extracts the API server address
+and the CA certificate from the first cluster entry, and populates the
+`address` and `ca.crt` fields in the generated ConfigMap.
+
+If the ConfigMap template already contains `address` or `ca.crt` fields,
+the existing values are preserved and not overwritten.
+
+Example using a custom Secret key:
+
+```yaml
+spec:
+  inputs:
+    - cluster: "staging"
+  resources:
+    - apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: << inputs.cluster >>-cluster-info
+        namespace: flux-system
+        annotations:
+          fluxcd.controlplane.io/convertKubeConfigFrom: "flux-system/<< inputs.cluster >>-kubeconfig:my-custom-key"
+      data:
+        cluster: << inputs.cluster >>
+```
+
 #### Conditional resource exclusion
 
 To exclude a resource based on input values, the `fluxcd.controlplane.io/reconcile` annotation can be set

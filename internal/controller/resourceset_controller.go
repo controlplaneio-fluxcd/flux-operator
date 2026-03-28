@@ -689,6 +689,8 @@ func (r *ResourceSetReconciler) copyResources(ctx context.Context,
 // convertKubeConfigResources converts kubeconfig data stored in Secrets
 // into ConfigMap fields by extracting the server and CA certificate.
 // The conversion is triggered using a specific annotation on the ConfigMap.
+// The annotation value must be in the format 'namespace/name' or 'namespace/name:key'.
+// When no key is specified, the function looks for 'kubeconfig' first, then 'value'.
 func (r *ResourceSetReconciler) convertKubeConfigResources(
 	ctx context.Context,
 	kubeClient client.Client,
@@ -705,9 +707,20 @@ func (r *ResourceSetReconciler) convertKubeConfigResources(
 			continue
 		}
 
-		sourceParts := strings.Split(source, "/")
+		// Parse the annotation value to extract namespace/name and optional key.
+		// Supported formats: 'namespace/name' or 'namespace/name:key'.
+		var customKey string
+		nameRef := source
+		if colonIdx := strings.LastIndex(source, ":"); colonIdx > 0 {
+			if slashIdx := strings.Index(source, "/"); slashIdx > 0 && colonIdx > slashIdx {
+				customKey = source[colonIdx+1:]
+				nameRef = source[:colonIdx]
+			}
+		}
+
+		sourceParts := strings.Split(nameRef, "/")
 		if len(sourceParts) != 2 {
-			return fmt.Errorf("invalid %s annotation value '%s' must be in the format 'namespace/name'", fluxcdv1.ConvertKubeConfigFromAnnotation, source)
+			return fmt.Errorf("invalid %s annotation value '%s' must be in the format 'namespace/name' or 'namespace/name:key'", fluxcdv1.ConvertKubeConfigFromAnnotation, source)
 		}
 
 		sourceName := types.NamespacedName{
@@ -717,12 +730,24 @@ func (r *ResourceSetReconciler) convertKubeConfigResources(
 
 		secret := &corev1.Secret{}
 		if err := kubeClient.Get(ctx, sourceName, secret); err != nil {
-			return fmt.Errorf("failed to get kubeconfig Secret/%s: %w", source, err)
+			return fmt.Errorf("failed to get kubeconfig Secret/%s: %w", nameRef, err)
 		}
 
-		data, exists := secret.Data["value"]
-		if !exists {
-			return fmt.Errorf("kubeconfig Secret/%s does not have 'value' field", source)
+		var data []byte
+		var exists bool
+		if customKey != "" {
+			data, exists = secret.Data[customKey]
+			if !exists {
+				return fmt.Errorf("kubeconfig Secret/%s does not have '%s' field", nameRef, customKey)
+			}
+		} else {
+			data, exists = secret.Data["kubeconfig"]
+			if !exists {
+				data, exists = secret.Data["value"]
+			}
+			if !exists {
+				return fmt.Errorf("kubeconfig Secret/%s does not have 'kubeconfig' or 'value' field", nameRef)
+			}
 		}
 
 		kubeconfigYAML := string(data)
