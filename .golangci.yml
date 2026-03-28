@@ -93,6 +93,7 @@ linters:
       - third_party$
       - builtin$
       - examples$
+      - node_modules$
 formatters:
   enable:
     - gofmt
@@ -103,3 +104,4 @@ formatters:
       - third_party$
       - builtin$
       - examples$
+      - node_modules$
