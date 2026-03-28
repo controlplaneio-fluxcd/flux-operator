@@ -69,7 +69,7 @@
 
 ### Prerequisites
 
-- [Go](https://golang.org/doc/install) 1.25+
+- [Go](https://golang.org/doc/install) 1.26+
 - [Docker](https://docs.docker.com/get-docker/)
 - [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/)
 - [Kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
