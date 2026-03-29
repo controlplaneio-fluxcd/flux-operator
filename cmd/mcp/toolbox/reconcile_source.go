@@ -108,7 +108,7 @@ func (m *Manager) HandleReconcileSource(ctx context.Context, request *mcp.CallTo
 		err = kubeClient.Annotate(ctx,
 			schema.GroupVersionKind{
 				Group:   fluxcdv1.FluxSourceGroup,
-				Version: "v1beta2",
+				Version: "v1",
 				Kind:    fluxcdv1.FluxOCIRepositoryKind,
 			},
 			input.Name,
