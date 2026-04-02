@@ -42,8 +42,8 @@ FROM gcr.io/distroless/static:nonroot
 COPY LICENSE /licenses/LICENSE
 
 # Copy the binaries.
-COPY --from=builder --chmod=777 /usr/local/bin/flux-operator /usr/local/bin/
-COPY --from=builder --chmod=777 /usr/local/bin/kubectl /usr/local/bin/
+COPY --from=builder --chmod=755 /usr/local/bin/flux-operator /usr/local/bin/
+COPY --from=builder --chmod=755 /usr/local/bin/kubectl /usr/local/bin/
 
 # Run the binaries under a non-root user.
 USER 65532:65532
