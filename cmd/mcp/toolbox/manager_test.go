@@ -40,6 +40,7 @@ func TestManager_RegisterToolsDoesNotPanic(t *testing.T) {
 		"resume_flux_reconciliation",
 		"get_kubeconfig_contexts",
 		"set_kubeconfig_context",
+		"reconcile_flux_chain",
 	}))
 }
 
