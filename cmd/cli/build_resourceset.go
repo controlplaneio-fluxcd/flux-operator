@@ -210,16 +210,21 @@ func loadProvidersFromFile(rset *fluxcdv1.ResourceSet, path string) ([]*fluxcdv1
 		return nil, fmt.Errorf("error reading file: %w", err)
 	}
 
-	documents := bytes.Split(data, []byte("---"))
+	objects, err := ssautil.ReadObjects(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("error parsing inputs provider file: %w", err)
+	}
+
 	providers := make([]*fluxcdv1.ResourceSetInputProvider, 0)
 
-	for _, doc := range documents {
-		if len(bytes.TrimSpace(doc)) == 0 {
-			continue
+	for _, obj := range objects {
+		objData, err := yaml.Marshal(obj)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing inputs provider file: %w", err)
 		}
 
 		var provider fluxcdv1.ResourceSetInputProvider
-		if err := yaml.Unmarshal(doc, &provider); err != nil {
+		if err := yaml.Unmarshal(objData, &provider); err != nil {
 			return nil, fmt.Errorf("error parsing inputs provider file: %w", err)
 		}
 
