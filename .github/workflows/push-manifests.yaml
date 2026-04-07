@@ -20,7 +20,7 @@ jobs:
       - name: Setup Kustomize
         uses: fluxcd/pkg/actions/kustomize@main
       - name: Setup Flux
-        uses: fluxcd/flux2/action@3cf3cb546fc549fa7e8a9ec6d3254accc027b46e #v2.8.4
+        uses: fluxcd/flux2/action@5adad89dcce7b79f20274ae8e112bcec7bd46764 #v2.8.5
       - name: Prepare
         id: prep
         run: |
