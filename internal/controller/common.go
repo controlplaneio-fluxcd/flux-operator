@@ -196,5 +196,7 @@ func returnHealthChecksCanceled(ctx context.Context, obj conditions.Setter,
 		"New reconciliation triggered by %s/%s/%s", qes.Kind, qes.Namespace, qes.Name)
 
 	// No need to return an error here since there's already a new reconciliation request in the queue.
-	return ctrl.Result{}, nil
+	// Requeue to make sure the object is reconciled. No need to worry about reconciling twice here
+	// since controller-runtime deduplicates requests in the queue.
+	return ctrl.Result{RequeueAfter: 1}, nil
 }
