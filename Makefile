@@ -250,6 +250,16 @@ deploy: generate kustomize ## Deploy flux-operator to the K8s cluster specified 
 undeploy: kustomize ## Delete flux-operator from the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/default | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
+.PHONY: docker-registry-up
+docker-registry-up: ## Create a local docker registry if it doesn't exist.
+	@docker inspect flux-operator-registry > /dev/null 2>&1 || \
+	docker run -d --restart=always -p "5050:5000" --name flux-operator-registry registry:3 > /dev/null
+	@echo "Registry running at localhost:5050"
+
+.PHONY: docker-registry-down
+docker-registry-down: ## Stop and remove the local docker registry if it exists.
+	@docker rm -f flux-operator-registry > /dev/null 2>&1 || true
+
 ##@ Release
 
 NEXT_VERSION ?= ""

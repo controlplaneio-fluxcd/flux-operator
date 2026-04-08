@@ -22,7 +22,9 @@ import (
 	"github.com/spf13/cobra"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/agentops"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/builder"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/cosign"
 )
 
 var distroMirrorCmd = &cobra.Command{
@@ -47,9 +49,10 @@ The source registry (ghcr.io) can be authenticated with --pull-token or
   # Mirror a specific Flux version
   flux-operator distro mirror registry.example.com/flux --version 2.8.x
 
-  # Mirror the enterprise distroless variant
+  # Verify signatures and mirror the enterprise distroless variant
   echo "${GITHUB_TOKEN}" | flux-operator distro mirror registry.example.com/flux \
     --variant enterprise-distroless \
+    --verify \
     --pull-token-stdin
 
   # List the source/destination pairs without copying images
@@ -81,6 +84,7 @@ type distroMirrorFlags struct {
 	immutable            bool
 	pullToken            string
 	pullTokenStdin       bool
+	verify               bool
 }
 
 var distroMirrorArgs = distroMirrorFlags{
@@ -128,6 +132,8 @@ func init() {
 		"GHCR token for the source registry (basic-auth password)")
 	distroMirrorCmd.Flags().BoolVar(&distroMirrorArgs.pullTokenStdin, "pull-token-stdin", false,
 		"read the GHCR token for the source registry from stdin")
+	distroMirrorCmd.Flags().BoolVar(&distroMirrorArgs.verify, "verify", false,
+		"verify the cosign signature of the images before mirroring")
 
 	distroCmd.AddCommand(distroMirrorCmd)
 }
@@ -196,6 +202,22 @@ func distroMirrorCmdRun(_ *cobra.Command, args []string) error {
 	images, err := builder.ExtractComponentImagesWithDigest(filepath.Join(tmpDir, "flux-images"), opts)
 	if err != nil {
 		return fmt.Errorf("failed to extract component images: %w", err)
+	}
+
+	if distroMirrorArgs.verify {
+		rootCmd.Println(`◎`, "Verifying signatures...")
+		for _, img := range images {
+			pinnedRef := img.Repository + "@" + img.Digest
+			certIdentityRegexp := fmt.Sprintf(`^https://github\.com/%s/.*$`, agentops.DeriveGitHubOwner(img.Repository))
+			if err := cosign.VerifyArtifact(ctx, pinnedRef,
+				certIdentityRegexp,
+				cosign.DefaultCertOIDCIssuer,
+				"",
+				keychain); err != nil {
+				return fmt.Errorf("signature verification failed for %s: %w", pinnedRef, err)
+			}
+			rootCmd.Printf("✔ %s\n", pinnedRef)
+		}
 	}
 
 	jobs := buildMirrorJobs(images, dstPrefix,

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/spf13/cobra"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/agentops"
@@ -124,7 +125,7 @@ func skillsInstallCmdRun(cmd *cobra.Command, args []string) error {
 	// Verify the artifact signature using the digest-pinned reference.
 	if skillsInstallArgs.verify {
 		rootCmd.Println(`◎`, "Verifying artifact signature...")
-		if err := cosign.VerifyArtifact(ctx, pinnedURL, oidcSubjectRegex, oidcIssuer, skillsInstallArgs.verifyTrustedRoot); err != nil {
+		if err := cosign.VerifyArtifact(ctx, pinnedURL, oidcSubjectRegex, oidcIssuer, skillsInstallArgs.verifyTrustedRoot, authn.DefaultKeychain); err != nil {
 			return fmt.Errorf("signature verification failed: %w", err)
 		}
 		rootCmd.Println(`✔`, "Artifact signature verified")

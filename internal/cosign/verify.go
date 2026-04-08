@@ -40,12 +40,18 @@ const (
 // When trustedRootPath is set, the trusted root is loaded from the given file
 // and TUF is bypassed entirely, enabling offline verification with no network
 // calls beyond the OCI registry.
-func VerifyArtifact(ctx context.Context, ociRef string, certIdentityRegexp string, certOIDCIssuer string, trustedRootPath string) error {
+// When keychain is nil, authn.DefaultKeychain is used to resolve registry
+// credentials for fetching the artifact descriptor, referrers index, and
+// sigstore bundle.
+func VerifyArtifact(ctx context.Context, ociRef string, certIdentityRegexp string, certOIDCIssuer string, trustedRootPath string, keychain authn.Keychain) error {
 	if certIdentityRegexp == "" {
 		return fmt.Errorf("certificate identity regexp must not be empty")
 	}
 	if certOIDCIssuer == "" {
 		return fmt.Errorf("certificate OIDC issuer must not be empty")
+	}
+	if keychain == nil {
+		keychain = authn.DefaultKeychain
 	}
 
 	// Strip oci:// prefix if present.
@@ -57,14 +63,14 @@ func VerifyArtifact(ctx context.Context, ociRef string, certIdentityRegexp strin
 		return fmt.Errorf("parsing reference %q: %w", ociRef, err)
 	}
 
-	desc, err := remote.Get(ref, remote.WithAuthFromKeychain(authn.DefaultKeychain), remote.WithContext(ctx))
+	desc, err := remote.Get(ref, remote.WithAuthFromKeychain(keychain), remote.WithContext(ctx))
 	if err != nil {
 		return fmt.Errorf("fetching descriptor for %q: %w", ociRef, err)
 	}
 
 	repo := ref.Context()
 	digest := repo.Digest(desc.Digest.String())
-	remoteOpts := []remote.Option{remote.WithAuthFromKeychain(authn.DefaultKeychain), remote.WithContext(ctx)}
+	remoteOpts := []remote.Option{remote.WithAuthFromKeychain(keychain), remote.WithContext(ctx)}
 
 	// Query referrers for sigstore bundles.
 	idx, err := remote.Referrers(digest, remoteOpts...)

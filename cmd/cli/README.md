@@ -422,6 +422,7 @@ The source registry (`ghcr.io`) can be authenticated with `--pull-token` or
     - `--pull-token-stdin`: Read the GHCR token for the source registry from stdin
       (mutually exclusive with `--pull-token`).
     - `--dry-run`: List source→destination pairs without writing anything.
+    - `--verify`: Verify the cosign signatures of the images before mirroring.
 
 ### Uninstall Command
 

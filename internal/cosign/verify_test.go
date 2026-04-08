@@ -30,6 +30,7 @@ func TestVerifyArtifact(t *testing.T) {
 			ghActionsIdentity,
 			ghActionsIssuer,
 			"",
+			nil,
 		)
 		g.Expect(err).ToNot(HaveOccurred())
 	})
@@ -45,6 +46,7 @@ func TestVerifyArtifact(t *testing.T) {
 			ghActionsIdentity,
 			ghActionsIssuer,
 			"",
+			nil,
 		)
 		g.Expect(err).ToNot(HaveOccurred())
 	})
@@ -63,6 +65,7 @@ func TestVerifyArtifact(t *testing.T) {
 			ghActionsIdentity,
 			ghActionsIssuer,
 			trustedRootPath,
+			nil,
 		)
 		g.Expect(err).ToNot(HaveOccurred())
 	})
@@ -78,6 +81,7 @@ func TestVerifyArtifact(t *testing.T) {
 			`^wrong-identity@example\.com$`,
 			ghActionsIssuer,
 			"",
+			nil,
 		)
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).To(ContainSubstring("signature verification failed"))
@@ -94,6 +98,7 @@ func TestVerifyArtifact(t *testing.T) {
 			ghActionsIdentity,
 			"https://wrong-issuer.example.com",
 			"",
+			nil,
 		)
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).To(ContainSubstring("signature verification failed"))
@@ -110,6 +115,7 @@ func TestVerifyArtifact(t *testing.T) {
 			"",
 			ghActionsIssuer,
 			"",
+			nil,
 		)
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).To(ContainSubstring("certificate identity regexp must not be empty"))
@@ -126,6 +132,7 @@ func TestVerifyArtifact(t *testing.T) {
 			ghActionsIdentity,
 			"",
 			"",
+			nil,
 		)
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).To(ContainSubstring("certificate OIDC issuer must not be empty"))
@@ -142,6 +149,7 @@ func TestVerifyArtifact(t *testing.T) {
 			ghActionsIdentity,
 			ghActionsIssuer,
 			"/nonexistent/trusted_root.json",
+			nil,
 		)
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).To(ContainSubstring("loading trusted root"))
@@ -158,6 +166,7 @@ func TestVerifyArtifact(t *testing.T) {
 			cosign.DefaultCertIdentityRegexp,
 			cosign.DefaultCertOIDCIssuer,
 			"",
+			nil,
 		)
 		g.Expect(err).To(HaveOccurred())
 	})
