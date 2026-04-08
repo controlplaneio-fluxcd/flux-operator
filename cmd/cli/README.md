@@ -388,6 +388,41 @@ it is recommended to follow the [installation guide](https://fluxcd.control-plan
     - `--certificate-oidc-issuer`: OIDC issuer for signature verification.
     - `--trusted-root`: Path to a `trusted_root.json` file for offline signature verification.
 
+### Distro Mirror Command
+
+The `flux-operator distro mirror` command copies a complete Flux distribution
+(controller images and optionally the Flux Operator image and Helm chart)
+from the upstream registries to a destination registry. This is intended for users
+running Flux in air-gapped or private-registry environments.
+
+This command performs the following steps:
+
+1. Pulls the Flux distribution manifests OCI artifact to read the image list.
+2. Resolves the requested version against the available distribution releases.
+3. Mirrors every controller image and (optionally) the Flux Operator image
+   and Helm chart to the destination registry.
+
+Authentication for the destination registry uses the local Docker config file.
+The source registry (`ghcr.io`) can be authenticated with `--pull-token` or
+`--pull-token-stdin`, otherwise the Docker config is used as well.
+
+- `flux-operator distro mirror <destination>`: Mirrors the Flux distribution to a destination registry.
+  The destination is a positional argument, e.g. `registry.example.com/flux`.
+    - `--version`: Flux distribution version, e.g. `2.8.5` or `2.8.x` (default `2.x`).
+    - `--components`: Comma-separated list of components to mirror (defaults to all controllers,
+      plus `source-watcher` for Flux 2.7+).
+    - `--variant`: Distribution variant (`upstream-alpine`, `enterprise-alpine`,
+      `enterprise-distroless`, `enterprise-distroless-fips`). Default `upstream-alpine`.
+    - `--include-operator-image`: Also mirror the Flux Operator container image (default `true`).
+    - `--include-operator-chart`: Also mirror the Flux Operator Helm chart (default `true`).
+    - `--immutable`: Treat destination tags as immutable (default `false`). When set,
+      existing tags are never overwritten; new images are pushed under a unique tag
+      suffix (`<tag>-<unix-timestamp>`).
+    - `--pull-token`: GHCR token for the source registry (used as a basic-auth password).
+    - `--pull-token-stdin`: Read the GHCR token for the source registry from stdin
+      (mutually exclusive with `--pull-token`).
+    - `--dry-run`: List source→destination pairs without writing anything.
+
 ### Uninstall Command
 
 The `flux-operator uninstall` command safely removes the Flux Operator and Flux instance from the cluster.
