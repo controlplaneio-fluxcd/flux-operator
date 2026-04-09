@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/spf13/cobra"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
@@ -243,7 +244,7 @@ func verifySource(ctx context.Context, src fluxcdv1.AgentCatalogSource, pinnedUR
 	}
 
 	rootCmd.Println(`◎`, fmt.Sprintf("Verifying %s...", ociURL))
-	if err := cosign.VerifyArtifact(ctx, pinnedURL, oidcSubjectRegex, oidcIssuer, skillsUpdateArgs.verifyTrustedRoot); err != nil {
+	if err := cosign.VerifyArtifact(ctx, pinnedURL, oidcSubjectRegex, oidcIssuer, skillsUpdateArgs.verifyTrustedRoot, authn.DefaultKeychain); err != nil {
 		return fmt.Errorf("signature verification failed for %s: %w", ociURL, err)
 	}
 	rootCmd.Println(`✔`, "Artifact signature verified")

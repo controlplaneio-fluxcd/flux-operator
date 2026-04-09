@@ -204,4 +204,10 @@ func resetCmdArgs() {
 		outputPath: ".",
 		overwrite:  false,
 	}
+	distroMirrorArgs = distroMirrorFlags{
+		version:              "2.x",
+		variant:              "upstream-alpine",
+		includeOperatorImage: true,
+		includeOperatorChart: true,
+	}
 }

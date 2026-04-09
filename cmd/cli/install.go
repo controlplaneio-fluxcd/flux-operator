@@ -207,7 +207,8 @@ func installCmdRun(cmd *cobra.Command, args []string) error {
 		if err := cosign.VerifyArtifact(ctx, artifactURL,
 			installArgs.certIdentityRegexp,
 			installArgs.certOIDCIssuer,
-			installArgs.trustedRoot); err != nil {
+			installArgs.trustedRoot,
+			authn.DefaultKeychain); err != nil {
 			return fmt.Errorf("artifact signature verification failed: %w", err)
 		}
 		rootCmd.Println(`✔`, "Artifact signature verified successfully")
