@@ -1,0 +1,18 @@
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: app1
+  namespace: apps
+spec:
+  inputsFrom:
+    - selector:
+        matchLabels:
+          test: separator
+  resources:
+    - apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: app1-<< inputs.tenant >>
+        namespace: apps
+      data:
+        test.json: << inputs.config | toJson >>

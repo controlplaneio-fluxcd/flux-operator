@@ -1,0 +1,33 @@
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSetInputProvider
+metadata:
+  name: app1-tenant1
+  namespace: apps
+  labels:
+    test: separator
+spec:
+  type: Static
+  defaultValues:
+    tenant: "tenant1"
+    config:
+      test.json: |
+        {
+          "separator": "---"
+        }
+---
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSetInputProvider
+metadata:
+  name: app1-tenant2
+  namespace: apps
+  labels:
+    test: separator
+spec:
+  type: Static
+  defaultValues:
+    tenant: "tenant2"
+    config:
+      test.json: |
+        {
+          "separator": "---"
+        }

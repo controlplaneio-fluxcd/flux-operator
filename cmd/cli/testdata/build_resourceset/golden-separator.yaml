@@ -1,0 +1,30 @@
+---
+apiVersion: v1
+data:
+  test.json:
+    test.json: |
+      {
+        "separator": "---"
+      }
+kind: ConfigMap
+metadata:
+  labels:
+    resourceset.fluxcd.controlplane.io/name: app1
+    resourceset.fluxcd.controlplane.io/namespace: apps
+  name: app1-tenant1
+  namespace: apps
+---
+apiVersion: v1
+data:
+  test.json:
+    test.json: |
+      {
+        "separator": "---"
+      }
+kind: ConfigMap
+metadata:
+  labels:
+    resourceset.fluxcd.controlplane.io/name: app1
+    resourceset.fluxcd.controlplane.io/namespace: apps
+  name: app1-tenant2
+  namespace: apps
