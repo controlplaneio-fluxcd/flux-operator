@@ -1,0 +1,36 @@
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: flux-operator
+  namespace: flux-system
+spec:
+  dependsOn:
+    - apiVersion: apiextensions.k8s.io/v1
+      kind: CustomResourceDefinition
+      name: helmreleases.helm.toolkit.fluxcd.io
+  resources:
+    - apiVersion: source.toolkit.fluxcd.io/v1
+      kind: OCIRepository
+      metadata:
+        name: flux-operator
+        namespace: flux-system
+      spec:
+        interval: 10m
+        url: oci://ghcr.io/controlplaneio-fluxcd/charts/flux-operator
+        ref:
+          semver: '*'
+    - apiVersion: helm.toolkit.fluxcd.io/v2
+      kind: HelmRelease
+      metadata:
+        name: flux-operator
+        namespace: flux-system
+      spec:
+        interval: 30m
+        releaseName: flux-operator
+        chartRef:
+          kind: OCIRepository
+          name: flux-operator
+        valuesFrom:
+          - kind: ConfigMap
+            name: flux-operator-values
+            valuesKey: values.yaml
