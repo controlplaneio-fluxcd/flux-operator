@@ -1,14 +1,15 @@
 # Install Flux with Terraform
 
 This example demonstrates how to deploy Flux on a Kubernetes cluster using Terraform
-and the `flux-operator` and `flux-instance` Helm charts.
+and the [flux-operator-bootstrap](https://github.com/controlplaneio-fluxcd/terraform-kubernetes-flux-operator-bootstrap)
+module.
 
 ## Usage
 
 Create a Kubernetes cluster using KinD:
 
 ```shell
-kind create cluster --name flux
+kind create cluster --name staging
 ```
 
 Install the Flux Operator and deploy the Flux instance on the cluster 
@@ -16,33 +17,30 @@ set as the default context in the `~/.kube/config` file:
 
 ```shell
 terraform apply \
-  -var flux_version="2.x" \
-  -var flux_registry="ghcr.io/fluxcd" \
-  -var git_token="${GITHUB_TOKEN}" \
-  -var git_url="https://github.com/fluxcd/flux2-kustomize-helm-example.git" \
-  -var git_ref="refs/heads/main" \
-  -var git_path="clusters/production"
+  -var cluster_name="staging" \
+  -var cluster_region="eu-west-2"
 ```
 
-Note that the `GITHUB_TOKEN` env var must be set to a GitHub personal access token.
-The `git_token` variable is used to create a Kubernetes secret in the `flux-system` namespace for
-Flux to authenticate with the Git repository over HTTPS.
-If the repository is public, the token variable can be omitted.
-
-Alternatively, you can use a GitHub App to authenticate with a GitHub repository:
+To authenticate with a private GitHub repository using a GitHub App:
 
 ```shell
 export GITHUB_APP_PEM=`cat path/to/app.private-key.pem`
 
 terraform apply \
-  -var flux_version="2.x" \
-  -var flux_registry="ghcr.io/fluxcd" \
+  -var cluster_name="staging" \
+  -var cluster_region="eu-west-2" \
   -var github_app_id="1" \
   -var github_app_installation_owner="org" \
-  -var github_app_pem="$GITHUB_APP_PEM" \
-  -var git_url="https://github.com/org/repo.git" \
-  -var git_ref="refs/heads/main" \
-  -var git_path="clusters/production"
+  -var github_app_pem="$GITHUB_APP_PEM"
+```
+
+To authenticate with a private repository using a Git PAT (e.g. for GitLab):
+
+```shell
+terraform apply \
+  -var cluster_name="staging" \
+  -var cluster_region="eu-west-2" \
+  -var git_token="${GIT_TOKEN}"
 ```
 
 Verify the Flux components are running:
@@ -69,8 +67,8 @@ spec:
   # Distribution status omitted for brevity
   sync:
     id: kustomization/flux-system
-    path: clusters/production
+    path: config/terraform/clusters/staging
     ready: true
-    source: https://github.com/fluxcd/flux2-kustomize-helm-example.git
+    source: https://github.com/controlplaneio-fluxcd/flux-operator.git
     status: 'Applied revision: refs/heads/main@sha1:21486401be9bcdc37e6ebda48a3b68f8350777c9'
 ```
