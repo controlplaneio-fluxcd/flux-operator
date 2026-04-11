@@ -1,0 +1,5 @@
+multitenancy:
+  enabled: true
+  defaultServiceAccount: flux-operator
+commonAnnotations:
+  cluster-region: ${CLUSTER_REGION}
