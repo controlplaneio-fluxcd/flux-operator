@@ -30,34 +30,24 @@ helm install flux-operator oci://ghcr.io/controlplaneio-fluxcd/charts/flux-opera
 ### Terraform
 
 Installing the Flux Operator with Terraform is possible using the
-[Helm provider](https://registry.terraform.io/providers/hashicorp/helm/latest/docs):
+[flux-operator-bootstrap](https://github.com/controlplaneio-fluxcd/terraform-kubernetes-flux-operator-bootstrap)
+module:
 
 ```hcl
-resource "helm_release" "flux_operator" {
-  name             = "flux-operator"
-  namespace        = "flux-system"
-  repository       = "oci://ghcr.io/controlplaneio-fluxcd/charts"
-  chart            = "flux-operator"
-  create_namespace = true
-}
+module "flux_operator_bootstrap" {
+  source  = "controlplaneio-fluxcd/flux-operator-bootstrap/kubernetes"
 
-resource "helm_release" "flux_instance" {
-  depends_on = [helm_release.flux_operator]
+  revision = var.bootstrap_revision
 
-  name       = "flux"
-  namespace  = "flux-system"
-  repository = "oci://ghcr.io/controlplaneio-fluxcd/charts"
-  chart      = "flux-instance"
-
-  values = [
-    file("values/components.yaml")
-  ]
+  gitops_resources = {
+    instance_yaml = file("${path.root}/clusters/staging/flux-system/flux-instance.yaml")
+  }
 }
 ```
 
-For more information of how to configure the Flux instance with Terraform,
+For more information on how to configure the Flux instance with Terraform,
 see the Flux Operator
-[terraform module example](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/config/terraform).
+[terraform example](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/config/terraform).
 
 ### Operator Lifecycle Manager
 
