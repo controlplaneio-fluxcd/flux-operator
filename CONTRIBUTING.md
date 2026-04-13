@@ -1,10 +1,34 @@
 # Contributing
 
 Flux Operator is [AGPL-3.0 licensed](https://github.com/controlplaneio-fluxcd/flux-operator/blob/main/LICENSE)
-and accepts contributions via GitHub pull requests. This document outlines
-some of the conventions on how to make it easier to get your contribution accepted.
+and accepts contributions via GitHub pull requests.
+This document outlines the conventions to get your contribution accepted.
 
 We gratefully welcome improvements to code and documentation!
+
+## AI Contribution Policy
+
+Using AI Agents to help write your PR is acceptable, but as the author, you are responsible
+for understanding the code and the documentation you submit. Please review all the AI-generated
+content and make sure it follows the guidelines in this document before submitting your PR.
+
+The Flux Operator repository contain an `AGENTS.md` file. You must point your AI Agent to
+`AGENTS.md` and ask it to follow the guidelines and conventions described there.
+
+The `Signed-off-by` and `Co-authored-by` tags must identify the human who can
+legally certify the [DCO](https://developercertificate.org/), please don’t fill these will AI product names.
+
+You should disclose the use of AI Agents in the description of your PR and
+in the commit message using the `Assisted-by: AGENT_NAME/LLM_VERSION` tag.
+
+Adding the `Assisted-by` tag to the commit message can be done with:
+
+```sh
+git commit -s -m "Your commit message" --trailer "Assisted-by: <agent>/<model>"
+```
+
+**Note** that the `Signed-off-by` tag is set via the `-s` flag using your real name and email
+(`user.name` and `user.email` must be set in Git config).
 
 ## Certificate of Origin
 
@@ -12,7 +36,7 @@ By contributing to this project, you agree to the Developer Certificate of
 Origin ([DCO](https://developercertificate.org/)). This document was created by the Linux Kernel community and is a
 simple statement that you, as a contributor, have the legal right to make the contribution.
 
-> You must sign-off your commits with your name and email address using `git commit -s`.
+> You must sign-off your commits with your real name and email address using `git commit -s`.
 
 ## Project Overview
 
@@ -257,35 +281,37 @@ The documentation is automatically published to [fluxoperator.dev/docs](https://
 
 These things will make a PR more likely to be accepted:
 
-- a well-described requirement
-- tests for new code
-- tests for old code!
-- new code and tests follow the conventions in old code and tests
-- a good commit message (see below)
-- all code must abide [Go Code Review Comments](https://go.dev/wiki/CodeReviewComments)
-- names should abide [What's in a name](https://talks.golang.org/2014/names.slide#1)
-- code must build on Linux, macOS and Windows via plain `go build`
-- code should have appropriate test coverage, and tests should be written
-  to work with `go test`
-
-Before opening a PR, please check that your code passes the following:
-
-```shell
-make all
-```
+- Addressing an open issue, if one doesn't exist, please open an issue to discuss the problem and the proposed solution before submitting a PR.
+- Flux is GA software and we are committed to maintaining backward compatibility. If your contribution introduces a breaking change, expect for your PR to be rejected.
+- New code and tests must follow the conventions in the existing code and tests. All new code must have good test coverage and be well documented.
+- All top-level Go code and exported names should have doc comments, as should non-trivial unexported type or function declarations.
+- Before submitting a PR, make sure that your code is properly formatted and that all tests are passing by running `make test`.
 
 In general, we will merge a PR once one maintainer has endorsed it.
 For significant changes, more people may become involved, and you might
 get asked to resubmit the PR or divide the changes into more than one PR.
 
-### Format of the Commit Message
+## Format of the Commit Message
 
-For this project, we prefer the following rules for good commit messages:
+For the Flux project we prefer the following rules:
 
-- Limit the subject to 50 characters and write as the continuation
-  of the sentence "If applied, this commit will ..."
-- Explain what and why in the body, if more than a trivial change;
-  wrap it at 72 characters.
+- Limit the subject to 50 characters, start with a capital letter and do not end with a period.
+- Explain what and why in the body, if more than a trivial change; wrap it at 72 characters.
+- Use the imperative mood in the subject line (e.g., "Add support for X" instead of "Added support for X" or "Adds support for X").
+- Do not include GitHub mentions to issues in the commit message, use the PR description instead (e.g., "Fixes #123" or "Closes #123").
+- Do not include GitHub mentions to accounts (e.g., `@username` or `@team`) within the commit message.
 
-The [following article](https://chris.beams.io/posts/git-commit/#seven-rules)
-has some more helpful advice on documenting your work.
+## Pull Request Process
+
+Fork the repository and create a new branch for your changes, do not commit directly to the `main` branch.
+Once you have made your changes and committed them, push your branch to your fork and open a pull request
+against the `main` branch of the Flux Operator repository.
+
+During the review process, you may be asked to make changes to your PR. Add commits to address the feedback
+without force pushing, as this will make it easier for reviewers to see the changes.
+Before committing, make sure to run `make test` to ensure that your code will pass the CI checks.
+
+When the review process is complete, you will be asked to **squash** the commits and **rebase** your branch.
+**Do not merge** the `main` branch into your branch, instead, rebase your branch on top of the latest `main`
+branch after **syncing your fork** with the latest changes from the Flux Operator repository. After rebasing,
+you can push your branch with the `--force-with-lease` option to update the PR.
