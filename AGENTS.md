@@ -20,7 +20,7 @@ The project is structured as a Go module with the following components:
 * **Flux Operator MCP Server**: A server that connects AI assistants to Kubernetes clusters running the operator. It is built using the mcp-go library.
 * **Flux Status Page**: A web UI for displaying the status of the Flux GitOps pipelines. It is built using Preact, Vite, and Tailwind CSS.
 
-## Directory Structure
+### Repository Structure
 
 ```bash
 ├── api/            # Go API definitions for Kubernetes CRDs
@@ -42,7 +42,7 @@ The project is structured as a Go module with the following components:
 
 - Do not deviate from the established patterns in the codebase
 - New files must have a license header matching existing files
-- All new features must have associated documentation
+- All new features must have associated documentation and tests
 - Never run `git tag` and never push tags
 - Follow the Go code style used in the project
 - Add proper doc comments for new functions and types
