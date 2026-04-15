@@ -132,6 +132,19 @@
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
       "impact_statement": "The vulnerable code is not executed by Flux"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-40109"
+      },
+      "timestamp": "2026-04-13T10:00:00Z",
+      "products": [
+        {
+          "@id": "pkg:oci/notification-controller"
+        }
+      ],
+      "status": "fixed",
+      "impact_statement": "False positive: the fix for this vulnerability has been backported to the Enterprise Flux v2.6 release branch of notification-controller via a patch and is included in the shipped binary. Trivy flags this based on the pseudo-version of the Go module being lower than the upstream fixed version (1.8.3), but the vulnerable code path is not present in the binary."
     }
   ]
 }
