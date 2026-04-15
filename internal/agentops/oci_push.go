@@ -4,13 +4,9 @@
 package agentops
 
 import (
-	"archive/tar"
 	"bytes"
-	"compress/gzip"
 	"context"
 	"fmt"
-	"io"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fluxcd/pkg/tar"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/crane"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
@@ -86,86 +83,33 @@ func BuildArtifact(srcDir string, skillNames []string) ([]byte, error) {
 		return nil, fmt.Errorf("no skills to archive")
 	}
 
-	var buf bytes.Buffer
-	gw := gzip.NewWriter(&buf)
-	tw := tar.NewWriter(gw)
+	absSrc, err := filepath.Abs(srcDir)
+	if err != nil {
+		return nil, fmt.Errorf("resolving source directory: %w", err)
+	}
 
+	skills := make(map[string]struct{}, len(skillNames))
 	for _, name := range skillNames {
-		skillDir := filepath.Join(srcDir, name)
-		err := filepath.WalkDir(skillDir, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-
-			info, err := d.Info()
-			if err != nil {
-				return err
-			}
-
-			// Skip symlinks and non-regular files (except directories).
-			if info.Mode()&os.ModeSymlink != 0 {
-				return nil
-			}
-			if !d.IsDir() && !info.Mode().IsRegular() {
-				return nil
-			}
-
-			// Compute relative path from srcDir with forward slashes.
-			relPath, err := filepath.Rel(srcDir, path)
-			if err != nil {
-				return err
-			}
-			relPath = filepath.ToSlash(relPath)
-
-			header, err := tar.FileInfoHeader(info, "")
-			if err != nil {
-				return err
-			}
-
-			// Normalize header for reproducibility.
-			header.Name = relPath
-			header.Uid = 0
-			header.Gid = 0
-			header.Uname = ""
-			header.Gname = ""
-			header.ModTime = time.Time{}
-			header.AccessTime = time.Time{}
-			header.ChangeTime = time.Time{}
-
-			if d.IsDir() {
-				header.Name += "/"
-			}
-
-			if err := tw.WriteHeader(header); err != nil {
-				return err
-			}
-
-			if d.IsDir() {
-				return nil
-			}
-
-			f, err := os.Open(path)
-			if err != nil {
-				return err
-			}
-			defer f.Close()
-
-			if _, err := io.Copy(tw, f); err != nil {
-				return err
-			}
-
-			return nil
-		})
-		if err != nil {
+		skillDir := filepath.Join(absSrc, name)
+		if _, err := os.Stat(skillDir); err != nil {
 			return nil, fmt.Errorf("archiving skill %s: %w", name, err)
 		}
+		skills[name] = struct{}{}
 	}
 
-	if err := tw.Close(); err != nil {
-		return nil, fmt.Errorf("closing tar writer: %w", err)
+	filter := func(path string, _ os.FileInfo) bool {
+		rel, err := filepath.Rel(absSrc, path)
+		if err != nil || rel == "." {
+			return false
+		}
+		top, _, _ := strings.Cut(filepath.ToSlash(rel), "/")
+		_, ok := skills[top]
+		return !ok
 	}
-	if err := gw.Close(); err != nil {
-		return nil, fmt.Errorf("closing gzip writer: %w", err)
+
+	var buf bytes.Buffer
+	if _, err := tar.Tar(absSrc, &buf, tar.WithFilter(filter)); err != nil {
+		return nil, fmt.Errorf("creating archive: %w", err)
 	}
 
 	return buf.Bytes(), nil

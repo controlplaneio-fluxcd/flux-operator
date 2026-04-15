@@ -70,7 +70,7 @@ func TestBuildArtifact(t *testing.T) {
 		g.Expect(header.ModTime.Unix()).To(BeNumerically("<=", 0))
 	}
 
-	g.Expect(entries).To(ContainElement("skill-a/"))
+	g.Expect(entries).To(ContainElement("skill-a"))
 	g.Expect(entries).To(ContainElement("skill-a/SKILL.md"))
 	g.Expect(entries).To(ContainElement("skill-a/instructions.md"))
 }
@@ -107,9 +107,9 @@ func TestBuildArtifactOnlyIncludesSkills(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 
 	entries := extractTarEntries(t, data)
-	g.Expect(entries).To(ContainElement("skill-a/"))
+	g.Expect(entries).To(ContainElement("skill-a"))
 	g.Expect(entries).To(ContainElement("skill-a/SKILL.md"))
-	g.Expect(entries).ToNot(ContainElement("skill-b/"))
+	g.Expect(entries).ToNot(ContainElement("skill-b"))
 	g.Expect(entries).ToNot(ContainElement("stray.txt"))
 }
 
