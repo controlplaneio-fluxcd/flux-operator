@@ -17,7 +17,39 @@ env:
   IMAGE: ghcr.io/controlplaneio-fluxcd/${{ github.event.repository.name }}
 
 jobs:
+  web-build-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Setup Node
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 24
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+      - name: Prepare
+        id: prep
+        run: |
+          VERSION="${{ github.event.inputs.tag }}-${GITHUB_SHA::8}"
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF/refs\/tags\//}
+          fi
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+      - name: Build frontend
+        run: make web-ci-install web-build
+      - name: Upload frontend assets
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: web-dist-${{ steps.prep.outputs.VERSION }}
+          path: web/dist/
+          retention-days: 1
+          if-no-files-found: error
+
   release:
+    needs: [web-build-release]
     outputs:
       image_url: ${{ steps.slsa.outputs.image_url }}
       image_digest: ${{ steps.slsa.outputs.image_digest }}
@@ -45,14 +77,6 @@ jobs:
         uses: fluxcd/flux2/action@5adad89dcce7b79f20274ae8e112bcec7bd46764 #v2.8.5
       - name: Setup Syft
         uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
-      - name: Setup Node
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
-        with:
-          node-version: 24
-          cache: 'npm'
-          cache-dependency-path: web/package-lock.json
-      - name: Build frontend
-        run: make web-ci-install web-build
       - name: Prepare
         id: prep
         run: |
@@ -62,6 +86,11 @@ jobs:
           fi
           echo "BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
           echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+      - name: Download frontend assets
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: web-dist-${{ steps.prep.outputs.VERSION }}
+          path: web/dist/
       - name: Setup QEMU
         uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
       - name: Setup Docker Buildx
