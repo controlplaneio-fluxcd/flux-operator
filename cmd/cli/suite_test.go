@@ -182,6 +182,9 @@ func resetCmdArgs() {
 	// Diff commands
 	diffYAMLArgs = diffYAMLFlags{output: "json-patch-yaml"}
 
+	// Migrate commands
+	migrateResourcesArgs = migrateResourcesFlags{}
+
 	// Patch commands
 	patchInstanceArgs = patchInstanceFlags{version: "main", components: nil}
 	fluxControllerBaseURL = "https://github.com/fluxcd"
