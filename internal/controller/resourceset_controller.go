@@ -486,9 +486,11 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 		return "", err
 	}
 
-	if err := r.computeChecksumsFromAnnotations(ctx, kubeClient, objects); err != nil {
+	externalRefs, err := r.computeChecksumsFromAnnotations(ctx, kubeClient, objects)
+	if err != nil {
 		return "", err
 	}
+	obj.Status.ExternalChecksumRefs = externalRefs
 
 	if err := normalize.UnstructuredList(objects); err != nil {
 		return "", err

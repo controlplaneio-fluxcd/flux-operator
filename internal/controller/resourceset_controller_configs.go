@@ -203,15 +203,20 @@ func (r *ResourceSetReconciler) convertKubeConfigResources(
 // about-to-be-applied data rather than any absent or stale cluster state.
 // Repeated references to the same source within a single reconciliation
 // are fetched at most once.
+//
+// It returns the sorted list of external references resolved from the
+// cluster, so the caller can persist them on the ResourceSet status and
+// trigger reconciliation when any of them changes. In-set references are
+// omitted because their changes already change the applied digest.
 func (r *ResourceSetReconciler) computeChecksumsFromAnnotations(ctx context.Context,
-	kubeClient client.Client, objects []*unstructured.Unstructured) error {
-	cr := newChecksumResolver(ctx, kubeClient, objects)
+	kubeClient client.Client, objects []*unstructured.Unstructured) ([]string, error) {
+	cr := newChecksumResolver(kubeClient, objects)
 	for i := range objects {
-		if err := cr.walk(objects[i].Object); err != nil {
-			return err
+		if err := cr.walk(ctx, objects[i].Object); err != nil {
+			return nil, err
 		}
 	}
-	return nil
+	return cr.externalRefs(), nil
 }
 
 // checksumResolver resolves checksumFrom references during a single
@@ -220,13 +225,13 @@ func (r *ResourceSetReconciler) computeChecksumsFromAnnotations(ctx context.Cont
 // data (not from an absent or stale cluster copy), and caches canonical
 // data per reference so repeated references fetch at most once.
 type checksumResolver struct {
-	ctx       context.Context
 	client    client.Client
 	rendered  map[string]*unstructured.Unstructured
 	canonical map[string]map[string][]byte
+	external  map[string]struct{}
 }
 
-func newChecksumResolver(ctx context.Context, c client.Client,
+func newChecksumResolver(c client.Client,
 	objects []*unstructured.Unstructured) *checksumResolver {
 	rendered := make(map[string]*unstructured.Unstructured)
 	for _, o := range objects {
@@ -235,11 +240,26 @@ func newChecksumResolver(ctx context.Context, c client.Client,
 		}
 	}
 	return &checksumResolver{
-		ctx:       ctx,
 		client:    c,
 		rendered:  rendered,
 		canonical: make(map[string]map[string][]byte),
+		external:  make(map[string]struct{}),
 	}
+}
+
+// externalRefs returns the sorted list of references that were resolved
+// from the cluster (not from the in-set rendered slice). Used by the
+// caller to persist the dependency set on the ResourceSet status.
+func (cr *checksumResolver) externalRefs() []string {
+	if len(cr.external) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(cr.external))
+	for k := range cr.external {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // checksumRefKey builds the canonical "Kind/namespace/name" string used to
@@ -257,13 +277,13 @@ func checksumRefKey(kind, namespace, name string) string {
 // Kubernetes ObjectMeta locations such as metadata.annotations,
 // spec.template.metadata.annotations and
 // spec.jobTemplate.spec.template.metadata.annotations.
-func (cr *checksumResolver) walk(node any) error {
+func (cr *checksumResolver) walk(ctx context.Context, node any) error {
 	switch v := node.(type) {
 	case map[string]any:
 		if metaMap, ok := v["metadata"].(map[string]any); ok {
 			if ann, ok := metaMap["annotations"].(map[string]any); ok {
 				if raw, ok := ann[fluxcdv1.ChecksumFromAnnotation].(string); ok && raw != "" {
-					sum, err := cr.resolve(raw)
+					sum, err := cr.resolve(ctx, raw)
 					if err != nil {
 						return err
 					}
@@ -272,13 +292,13 @@ func (cr *checksumResolver) walk(node any) error {
 			}
 		}
 		for _, val := range v {
-			if err := cr.walk(val); err != nil {
+			if err := cr.walk(ctx, val); err != nil {
 				return err
 			}
 		}
 	case []any:
 		for _, item := range v {
-			if err := cr.walk(item); err != nil {
+			if err := cr.walk(ctx, item); err != nil {
 				return err
 			}
 		}
@@ -289,7 +309,7 @@ func (cr *checksumResolver) walk(node any) error {
 // resolve parses a comma-separated list of ConfigMap/Secret references,
 // resolves each one via data(), and returns a "sha256:<hex>" digest over
 // the combined null-delimited input.
-func (cr *checksumResolver) resolve(refs string) (string, error) {
+func (cr *checksumResolver) resolve(ctx context.Context, refs string) (string, error) {
 	var buf bytes.Buffer
 	for ref := range strings.SplitSeq(refs, ",") {
 		ref = strings.TrimSpace(ref)
@@ -307,7 +327,7 @@ func (cr *checksumResolver) resolve(refs string) (string, error) {
 				kind, fluxcdv1.ChecksumFromAnnotation)
 		}
 
-		data, err := cr.data(kind, ns, name)
+		data, err := cr.data(ctx, kind, ns, name)
 		if err != nil {
 			return "", err
 		}
@@ -333,7 +353,7 @@ func (cr *checksumResolver) resolve(refs string) (string, error) {
 // ConfigMap or Secret, pulling from the in-set rendered slice when
 // available and falling back to the cluster. Results are cached so
 // repeated references within a single reconcile resolve at most once.
-func (cr *checksumResolver) data(kind, ns, name string) (map[string][]byte, error) {
+func (cr *checksumResolver) data(ctx context.Context, kind, ns, name string) (map[string][]byte, error) {
 	key := checksumRefKey(kind, ns, name)
 	if d, ok := cr.canonical[key]; ok {
 		return d, nil
@@ -345,7 +365,8 @@ func (cr *checksumResolver) data(kind, ns, name string) (map[string][]byte, erro
 	if u, ok := cr.rendered[key]; ok {
 		d, err = canonicalFromUnstructured(u)
 	} else {
-		d, err = cr.fetchCanonical(kind, ns, name)
+		d, err = cr.fetchCanonical(ctx, kind, ns, name)
+		cr.external[key] = struct{}{}
 	}
 	if err != nil {
 		return nil, err
@@ -356,12 +377,12 @@ func (cr *checksumResolver) data(kind, ns, name string) (map[string][]byte, erro
 
 // fetchCanonical issues a cluster Get for the referenced ConfigMap or
 // Secret and returns its data as a canonical map[string][]byte.
-func (cr *checksumResolver) fetchCanonical(kind, ns, name string) (map[string][]byte, error) {
+func (cr *checksumResolver) fetchCanonical(ctx context.Context, kind, ns, name string) (map[string][]byte, error) {
 	nn := types.NamespacedName{Namespace: ns, Name: name}
 	switch kind {
 	case kindConfigMap:
 		cm := &corev1.ConfigMap{}
-		if err := cr.client.Get(cr.ctx, nn, cm); err != nil {
+		if err := cr.client.Get(ctx, nn, cm); err != nil {
 			return nil, fmt.Errorf("failed to resolve %s reference ConfigMap/%s/%s: %w",
 				fluxcdv1.ChecksumFromAnnotation, ns, name, err)
 		}
@@ -373,7 +394,7 @@ func (cr *checksumResolver) fetchCanonical(kind, ns, name string) (map[string][]
 		return out, nil
 	case kindSecret:
 		secret := &corev1.Secret{}
-		if err := cr.client.Get(cr.ctx, nn, secret); err != nil {
+		if err := cr.client.Get(ctx, nn, secret); err != nil {
 			return nil, fmt.Errorf("failed to resolve %s reference Secret/%s/%s: %w",
 				fluxcdv1.ChecksumFromAnnotation, ns, name, err)
 		}

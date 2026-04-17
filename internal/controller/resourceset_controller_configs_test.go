@@ -591,6 +591,13 @@ spec:
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
 
+	// Both references are resolved from the cluster, so they are tracked
+	// as external dependencies to drive watch-based reconciliation.
+	g.Expect(result.Status.ExternalChecksumRefs).To(ConsistOf(
+		fmt.Sprintf("ConfigMap/%s/app-config", ns.Name),
+		fmt.Sprintf("Secret/%s/app-secret", ns.Name),
+	))
+
 	// Verify the applied Deployment has both checksumFrom and checksum
 	// annotations on its pod template.
 	resultDep := &appsv1.Deployment{}
@@ -734,6 +741,10 @@ spec:
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
 
+	// The only reference is resolved from the in-set pending data, so the
+	// ResourceSet declares no external dependencies.
+	g.Expect(result.Status.ExternalChecksumRefs).To(BeEmpty())
+
 	// The checksum must be set even though the ConfigMap did not exist
 	// in the cluster when reconciliation started.
 	resultDep := &appsv1.Deployment{}
@@ -808,19 +819,19 @@ func TestResourceSetReconciler_ChecksumFromCanonicalParity(t *testing.T) {
 
 	refs := fmt.Sprintf("ConfigMap/%s/parity-cm", ns.Name)
 
-	clusterSum, err := newChecksumResolver(ctx, testClient, nil).resolve(refs)
+	clusterSum, err := newChecksumResolver(testClient, nil).resolve(ctx, refs)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(clusterSum).To(HavePrefix("sha256:"))
 
 	// Empty refs from trailing, leading, or doubled commas are ignored.
 	for _, variant := range []string{refs + ",", "," + refs, refs + ",,", ",," + refs + ",,"} {
-		sum, err := newChecksumResolver(ctx, testClient, nil).resolve(variant)
+		sum, err := newChecksumResolver(testClient, nil).resolve(ctx, variant)
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(sum).To(Equal(clusterSum))
 	}
 
-	inSetSum, err := newChecksumResolver(ctx, testClient,
-		[]*unstructured.Unstructured{renderedCM}).resolve(refs)
+	inSetSum, err := newChecksumResolver(testClient,
+		[]*unstructured.Unstructured{renderedCM}).resolve(ctx, refs)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(inSetSum).To(Equal(clusterSum))
 
@@ -854,11 +865,11 @@ func TestResourceSetReconciler_ChecksumFromCanonicalParity(t *testing.T) {
 	}, "stringData")).To(Succeed())
 
 	secretRefs := fmt.Sprintf("Secret/%s/parity-secret", ns.Name)
-	clusterSecretSum, err := newChecksumResolver(ctx, testClient, nil).resolve(secretRefs)
+	clusterSecretSum, err := newChecksumResolver(testClient, nil).resolve(ctx, secretRefs)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	inSetSecretSum, err := newChecksumResolver(ctx, testClient,
-		[]*unstructured.Unstructured{renderedSecret}).resolve(secretRefs)
+	inSetSecretSum, err := newChecksumResolver(testClient,
+		[]*unstructured.Unstructured{renderedSecret}).resolve(ctx, secretRefs)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(inSetSecretSum).To(Equal(clusterSecretSum))
 }
