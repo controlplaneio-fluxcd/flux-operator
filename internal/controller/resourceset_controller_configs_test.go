@@ -591,6 +591,13 @@ spec:
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
 
+	// Both references are resolved from the cluster, so they are tracked
+	// as external dependencies to drive watch-based reconciliation.
+	g.Expect(result.Status.ExternalChecksumRefs).To(ConsistOf(
+		fmt.Sprintf("ConfigMap/%s/app-config", ns.Name),
+		fmt.Sprintf("Secret/%s/app-secret", ns.Name),
+	))
+
 	// Verify the applied Deployment has both checksumFrom and checksum
 	// annotations on its pod template.
 	resultDep := &appsv1.Deployment{}
@@ -733,6 +740,10 @@ spec:
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
+
+	// The only reference is resolved from the in-set pending data, so the
+	// ResourceSet declares no external dependencies.
+	g.Expect(result.Status.ExternalChecksumRefs).To(BeEmpty())
 
 	// The checksum must be set even though the ConfigMap did not exist
 	// in the cluster when reconciliation started.

@@ -162,10 +162,12 @@ func (r *ResourceSetReconciler) requestsForResourceSetInputProviders(
 	return reqs
 }
 
-// requestsForConfigMapsOrSecrets lists the metadata of all ConfigMaps or Secrets created
-// by ResourceSets (depending on the kind of the object that triggered the event), and for
-// each ResourceSet being referenced in a copyFrom annotation, a reconcile.Request is
-// included in the returned slice.
+// requestsForConfigMapsOrSecrets enqueues ResourceSets that depend on the
+// ConfigMap or Secret that triggered the event. A ResourceSet is
+// considered dependent if either:
+//   - it applied a ConfigMap or Secret that uses the triggering object
+//     as a copyFrom source, or
+//   - its status.externalChecksumRefs lists the triggering object.
 func (r *ResourceSetReconciler) requestsForConfigMapsOrSecrets(ctx context.Context,
 	obj client.Object) []reconcile.Request {
 
@@ -174,6 +176,9 @@ func (r *ResourceSetReconciler) requestsForConfigMapsOrSecrets(ctx context.Conte
 	// Compute object metadata.
 	objKind := obj.GetObjectKind().GroupVersionKind().Kind
 	objKey := client.ObjectKeyFromObject(obj).String()
+	objRef := objKind + "/" + objKey
+
+	resourceSets := make(map[types.NamespacedName]struct{})
 
 	// List the metadata of all objects of the same kind that were created by
 	// ResourceSets. The WatchesMetadata call in SetupWithManager causes
@@ -208,8 +213,7 @@ func (r *ResourceSetReconciler) requestsForConfigMapsOrSecrets(ctx context.Conte
 	}
 
 	// Match listed objects with the object that triggered the event
-	// to generate a list of reconcile.Requests.
-	resourceSets := make(map[types.NamespacedName]struct{})
+	// via the copyFrom annotation.
 	for _, appliedObject := range appliedObjects.Items {
 		copyFrom := appliedObject.GetAnnotations()[fluxcdv1.CopyFromAnnotation]
 		if copyFrom != objKey {
@@ -222,6 +226,29 @@ func (r *ResourceSetReconciler) requestsForConfigMapsOrSecrets(ctx context.Conte
 		}
 		resourceSets[rset] = struct{}{}
 	}
+
+	// Match ResourceSets whose status.externalChecksumRefs contains the
+	// triggering object. The ResourceSet informer is a full-object cache,
+	// so this List hits memory rather than the API server.
+	var rsetList fluxcdv1.ResourceSetList
+	if err := r.List(ctx, &rsetList, client.UnsafeDisableDeepCopy); err != nil {
+		log.Error(err, "failed to list ResourceSets for checksum ref match",
+			"eventTrigger", map[string]any{
+				"kind":      objKind,
+				"name":      obj.GetName(),
+				"namespace": obj.GetNamespace(),
+			})
+	} else {
+		for _, rs := range rsetList.Items {
+			for _, ref := range rs.Status.ExternalChecksumRefs {
+				if ref == objRef {
+					resourceSets[types.NamespacedName{Name: rs.Name, Namespace: rs.Namespace}] = struct{}{}
+					break
+				}
+			}
+		}
+	}
+
 	reqs := make([]reconcile.Request, 0, len(resourceSets))
 	for rset := range resourceSets {
 		reqs = append(reqs, reconcile.Request{NamespacedName: rset})

@@ -203,15 +203,20 @@ func (r *ResourceSetReconciler) convertKubeConfigResources(
 // about-to-be-applied data rather than any absent or stale cluster state.
 // Repeated references to the same source within a single reconciliation
 // are fetched at most once.
+//
+// It returns the sorted list of external references resolved from the
+// cluster, so the caller can persist them on the ResourceSet status and
+// trigger reconciliation when any of them changes. In-set references are
+// omitted because their changes already change the applied digest.
 func (r *ResourceSetReconciler) computeChecksumsFromAnnotations(ctx context.Context,
-	kubeClient client.Client, objects []*unstructured.Unstructured) error {
+	kubeClient client.Client, objects []*unstructured.Unstructured) ([]string, error) {
 	cr := newChecksumResolver(ctx, kubeClient, objects)
 	for i := range objects {
 		if err := cr.walk(objects[i].Object); err != nil {
-			return err
+			return nil, err
 		}
 	}
-	return nil
+	return cr.externalRefs(), nil
 }
 
 // checksumResolver resolves checksumFrom references during a single
@@ -224,6 +229,7 @@ type checksumResolver struct {
 	client    client.Client
 	rendered  map[string]*unstructured.Unstructured
 	canonical map[string]map[string][]byte
+	external  map[string]struct{}
 }
 
 func newChecksumResolver(ctx context.Context, c client.Client,
@@ -239,7 +245,23 @@ func newChecksumResolver(ctx context.Context, c client.Client,
 		client:    c,
 		rendered:  rendered,
 		canonical: make(map[string]map[string][]byte),
+		external:  make(map[string]struct{}),
 	}
+}
+
+// externalRefs returns the sorted list of references that were resolved
+// from the cluster (not from the in-set rendered slice). Used by the
+// caller to persist the dependency set on the ResourceSet status.
+func (cr *checksumResolver) externalRefs() []string {
+	if len(cr.external) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(cr.external))
+	for k := range cr.external {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // checksumRefKey builds the canonical "Kind/namespace/name" string used to
@@ -346,6 +368,7 @@ func (cr *checksumResolver) data(kind, ns, name string) (map[string][]byte, erro
 		d, err = canonicalFromUnstructured(u)
 	} else {
 		d, err = cr.fetchCanonical(kind, ns, name)
+		cr.external[key] = struct{}{}
 	}
 	if err != nil {
 		return nil, err

@@ -205,6 +205,14 @@ type ResourceSetStatus struct {
 	// +optional
 	LastAppliedRevision string `json:"lastAppliedRevision,omitempty"`
 
+	// ExternalChecksumRefs lists the ConfigMap and Secret references
+	// discovered in checksumFrom annotations on the last reconciliation
+	// that point to objects not rendered by this ResourceSet. Each entry
+	// has the form "Kind/namespace/name". It is used to trigger a
+	// reconciliation when one of the referenced objects changes.
+	// +optional
+	ExternalChecksumRefs []string `json:"externalChecksumRefs,omitempty"`
+
 	// History contains the reconciliation history of the ResourceSet
 	// as a list of snapshots ordered by the last reconciled time.
 	History History `json:"history,omitempty"`

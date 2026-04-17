@@ -310,6 +310,16 @@ spec:
                   - type
                   type: object
                 type: array
+              externalChecksumRefs:
+                description: |-
+                  ExternalChecksumRefs lists the ConfigMap and Secret references
+                  discovered in checksumFrom annotations on the last reconciliation
+                  that point to objects not rendered by this ResourceSet. Each entry
+                  has the form "Kind/namespace/name". It is used to trigger a
+                  reconciliation when one of the referenced objects changes.
+                items:
+                  type: string
+                type: array
               history:
                 description: |-
                   History contains the reconciliation history of the ResourceSet

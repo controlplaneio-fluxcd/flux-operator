@@ -214,6 +214,32 @@ func TestResourceSetReconciler_requestsForConfigMapsOrSecrets(t *testing.T) {
 	})
 	g.Expect(err).NotTo(HaveOccurred())
 
+	// Create a ResourceSet whose status references an external ConfigMap
+	// and an external Secret via checksumFrom.
+	rsetWithRefs := &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "rset-with-external-refs",
+			Namespace: ns.Name,
+		},
+	}
+	err = testEnv.Create(ctx, rsetWithRefs)
+	g.Expect(err).NotTo(HaveOccurred())
+	rsetWithRefs.Status.ExternalChecksumRefs = []string{
+		"ConfigMap/external-ns/external-cm",
+		"Secret/external-ns/external-secret",
+	}
+	err = testEnv.Status().Update(ctx, rsetWithRefs)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Create a second ResourceSet with no external refs.
+	err = testEnv.Create(ctx, &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "rset-without-external-refs",
+			Namespace: ns.Name,
+		},
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+
 	// TypeMetas.
 	cmTypeMeta := metav1.TypeMeta{
 		APIVersion: corev1.SchemeGroupVersion.String(),
@@ -294,6 +320,49 @@ func TestResourceSetReconciler_requestsForConfigMapsOrSecrets(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "secret-without-labels",
 					Namespace: ns.Name,
+				},
+			},
+			expectedRequests: nil,
+		},
+		{
+			name: "ConfigMap referenced by checksumFrom in status",
+			obj: &metav1.PartialObjectMetadata{
+				TypeMeta: cmTypeMeta,
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "external-cm",
+					Namespace: "external-ns",
+				},
+			},
+			expectedRequests: []reconcile.Request{{
+				NamespacedName: client.ObjectKey{
+					Name:      "rset-with-external-refs",
+					Namespace: ns.Name,
+				},
+			}},
+		},
+		{
+			name: "Secret referenced by checksumFrom in status",
+			obj: &metav1.PartialObjectMetadata{
+				TypeMeta: secretTypeMeta,
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "external-secret",
+					Namespace: "external-ns",
+				},
+			},
+			expectedRequests: []reconcile.Request{{
+				NamespacedName: client.ObjectKey{
+					Name:      "rset-with-external-refs",
+					Namespace: ns.Name,
+				},
+			}},
+		},
+		{
+			name: "ConfigMap not referenced by any checksumFrom",
+			obj: &metav1.PartialObjectMetadata{
+				TypeMeta: cmTypeMeta,
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "unreferenced-cm",
+					Namespace: "external-ns",
 				},
 			},
 			expectedRequests: nil,

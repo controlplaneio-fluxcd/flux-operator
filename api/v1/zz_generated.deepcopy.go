@@ -1332,6 +1332,11 @@ func (in *ResourceSetStatus) DeepCopyInto(out *ResourceSetStatus) {
 		*out = new(ResourceInventory)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.ExternalChecksumRefs != nil {
+		in, out := &in.ExternalChecksumRefs, &out.ExternalChecksumRefs
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	if in.History != nil {
 		in, out := &in.History, &out.History
 		*out = make(History, len(*in))
