@@ -38,6 +38,7 @@ import (
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/builder"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/entitlement"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/inventory"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/notifier"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
@@ -156,10 +157,10 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 	}
 
 	// Sanity check for building the distribution manifests.
-	if err := builder.PreflightChecks(r.StoragePath,
-		builder.WithMinVersion("2.2.0"),
-		builder.WithContainerOS("distroless", 12),
-		builder.WithContainerOS("rhel", 8),
+	if err := entitlement.PreflightChecks(r.StoragePath,
+		entitlement.WithMinVersion("2.2.0"),
+		entitlement.WithContainerOS("distroless", 12),
+		entitlement.WithContainerOS("rhel", 8),
 	); err != nil {
 		// If this happens, then the operator image has been tampered with
 		// e.g.: the manifests are missing, or the Flux / OS version is not supported.
