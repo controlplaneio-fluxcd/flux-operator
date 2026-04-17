@@ -1,13 +1,15 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-package builder
+package entitlement
 
 import (
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/builder"
 )
 
 // PreflightOptions holds the configuration for checking prerequisites.
@@ -64,7 +66,7 @@ func PreflightChecks(storagePath string, options ...PreflightOption) error {
 
 		// Check if the Flux version in storage is compatible with the operator.
 		version := strings.TrimSpace(string(versionInfo))
-		if err := CheckMinimumVersion(version, opts.minVersion); err != nil {
+		if err := builder.CheckMinimumVersion(version, opts.minVersion); err != nil {
 			return fmt.Errorf("version compatibility check failed: %w", err)
 		}
 

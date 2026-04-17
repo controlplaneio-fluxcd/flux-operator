@@ -5,7 +5,6 @@ package controller
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -32,7 +31,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
 	kuberecorder "k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -44,7 +42,6 @@ import (
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/builder"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/inputs"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/inventory"
-	"github.com/controlplaneio-fluxcd/flux-operator/internal/kubeconfig"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/notifier"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
 )
@@ -489,6 +486,12 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 		return "", err
 	}
 
+	externalRefs, err := r.computeChecksumsFromAnnotations(ctx, kubeClient, objects)
+	if err != nil {
+		return "", err
+	}
+	obj.Status.ExternalChecksumRefs = externalRefs
+
 	if err := normalize.UnstructuredList(objects); err != nil {
 		return "", err
 	}
@@ -614,170 +617,6 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 	}
 
 	return applySetDigest, nil
-}
-
-// copyResources copies data from ConfigMaps and Secrets based on the
-// annotations set on the resources template.
-func (r *ResourceSetReconciler) copyResources(ctx context.Context,
-	kubeClient client.Client, objects []*unstructured.Unstructured) error {
-	for i := range objects {
-		if objects[i].GetAPIVersion() == "v1" {
-			source, found := objects[i].GetAnnotations()[fluxcdv1.CopyFromAnnotation]
-			if !found {
-				continue
-			}
-
-			sourceParts := strings.Split(source, "/")
-			if len(sourceParts) != 2 {
-				return fmt.Errorf("invalid %s annotation value '%s' must be in the format 'namespace/name'",
-					fluxcdv1.CopyFromAnnotation, source)
-			}
-
-			sourceName := types.NamespacedName{
-				Namespace: sourceParts[0],
-				Name:      sourceParts[1],
-			}
-
-			switch objects[i].GetKind() {
-			case "ConfigMap":
-				cm := &corev1.ConfigMap{}
-				if err := kubeClient.Get(ctx, sourceName, cm); err != nil {
-					return fmt.Errorf("failed to copy data from ConfigMap/%s: %w", source, err)
-				}
-				if err := unstructured.SetNestedStringMap(objects[i].Object, cm.Data, "data"); err != nil {
-					return fmt.Errorf("failed to copy data from ConfigMap/%s: %w", source, err)
-				}
-				if len(cm.BinaryData) > 0 {
-					binaryData := make(map[string]string, len(cm.BinaryData))
-					for k, v := range cm.BinaryData {
-						binaryData[k] = base64.StdEncoding.EncodeToString(v)
-					}
-					if err := unstructured.SetNestedStringMap(objects[i].Object, binaryData, "binaryData"); err != nil {
-						return fmt.Errorf("failed to copy binaryData from ConfigMap/%s: %w", source, err)
-					}
-				}
-			case "Secret":
-				secret := &corev1.Secret{}
-				if err := kubeClient.Get(ctx, sourceName, secret); err != nil {
-					return fmt.Errorf("failed to copy data from Secret/%s: %w", source, err)
-				}
-				_, ok, err := unstructured.NestedString(objects[i].Object, "type")
-				if err != nil {
-					return fmt.Errorf("type field of Secret/%s is not a string: %w", source, err)
-				}
-				if !ok {
-					if secret.Type == "" {
-						secret.Type = corev1.SecretTypeOpaque
-					}
-					if err := unstructured.SetNestedField(objects[i].Object, string(secret.Type), "type"); err != nil {
-						return fmt.Errorf("failed to copy type from Secret/%s: %w", source, err)
-					}
-				}
-				data := make(map[string]string, len(secret.Data))
-				for k, v := range secret.Data {
-					data[k] = string(v)
-				}
-				if err := unstructured.SetNestedStringMap(objects[i].Object, data, "stringData"); err != nil {
-					return fmt.Errorf("failed to copy data from Secret/%s: %w", source, err)
-				}
-			}
-		}
-	}
-	return nil
-}
-
-// convertKubeConfigResources converts kubeconfig data stored in Secrets
-// into ConfigMap fields by extracting the server and CA certificate.
-// The conversion is triggered using a specific annotation on the ConfigMap.
-// The annotation value must be in the format 'namespace/name' or 'namespace/name:key'.
-// When no key is specified, the function looks for 'kubeconfig' first, then 'value'.
-func (r *ResourceSetReconciler) convertKubeConfigResources(
-	ctx context.Context,
-	kubeClient client.Client,
-	objects []*unstructured.Unstructured,
-) error {
-
-	for i := range objects {
-		if objects[i].GetAPIVersion() != "v1" || objects[i].GetKind() != "ConfigMap" {
-			continue
-		}
-
-		source, found := objects[i].GetAnnotations()[fluxcdv1.ConvertKubeConfigFromAnnotation]
-		if !found {
-			continue
-		}
-
-		// Parse the annotation value to extract namespace/name and optional key.
-		// Supported formats: 'namespace/name' or 'namespace/name:key'.
-		var customKey string
-		nameRef := source
-		if colonIdx := strings.LastIndex(source, ":"); colonIdx > 0 {
-			if slashIdx := strings.Index(source, "/"); slashIdx > 0 && colonIdx > slashIdx {
-				customKey = source[colonIdx+1:]
-				nameRef = source[:colonIdx]
-			}
-		}
-
-		sourceParts := strings.Split(nameRef, "/")
-		if len(sourceParts) != 2 {
-			return fmt.Errorf("invalid %s annotation value '%s' must be in the format 'namespace/name' or 'namespace/name:key'", fluxcdv1.ConvertKubeConfigFromAnnotation, source)
-		}
-
-		sourceName := types.NamespacedName{
-			Namespace: sourceParts[0],
-			Name:      sourceParts[1],
-		}
-
-		secret := &corev1.Secret{}
-		if err := kubeClient.Get(ctx, sourceName, secret); err != nil {
-			return fmt.Errorf("failed to get kubeconfig Secret/%s: %w", nameRef, err)
-		}
-
-		var data []byte
-		var exists bool
-		if customKey != "" {
-			data, exists = secret.Data[customKey]
-			if !exists {
-				return fmt.Errorf("kubeconfig Secret/%s does not have '%s' field", nameRef, customKey)
-			}
-		} else {
-			data, exists = secret.Data["kubeconfig"]
-			if !exists {
-				data, exists = secret.Data["value"]
-			}
-			if !exists {
-				return fmt.Errorf("kubeconfig Secret/%s does not have 'kubeconfig' or 'value' field", nameRef)
-			}
-		}
-
-		kubeconfigYAML := string(data)
-
-		server, caCert, err := kubeconfig.ExtractFluxFields(kubeconfigYAML)
-		if err != nil {
-			return fmt.Errorf("failed to extract fields from kubeconfig Secret/%s: %w", source, err)
-		}
-
-		existingData, _, err := unstructured.NestedStringMap(objects[i].Object, "data")
-		if err != nil {
-			return fmt.Errorf("failed to get existing data from ConfigMap: %w", err)
-		}
-		if existingData == nil {
-			existingData = make(map[string]string)
-		}
-
-		if _, exists := existingData["address"]; !exists {
-			existingData["address"] = server
-		}
-		if _, exists := existingData["ca.crt"]; !exists {
-			existingData["ca.crt"] = caCert
-		}
-
-		if err := unstructured.SetNestedStringMap(objects[i].Object, existingData, "data"); err != nil {
-			return fmt.Errorf("failed to set data on ConfigMap: %w", err)
-		}
-	}
-
-	return nil
 }
 
 // deleteAllStaged removes resources in stages, first the Flux resources and then the rest.

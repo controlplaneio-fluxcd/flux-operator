@@ -34,6 +34,8 @@ var (
 	RevisionAnnotation               = fmt.Sprintf("%s/revision", GroupVersion.Group)
 	CopyFromAnnotation               = fmt.Sprintf("%s/copyFrom", GroupVersion.Group)
 	ConvertKubeConfigFromAnnotation  = fmt.Sprintf("%s/convertKubeConfigFrom", GroupVersion.Group)
+	ChecksumFromAnnotation           = fmt.Sprintf("%s/checksumFrom", GroupVersion.Group)
+	ChecksumAnnotation               = fmt.Sprintf("%s/checksum", GroupVersion.Group)
 	SuspendedByAnnotation            = fmt.Sprintf("%s/suspendedBy", GroupVersion.Group)
 	CreatedByAnnotation              = fmt.Sprintf("%s/createdBy", GroupVersion.Group)
 )
