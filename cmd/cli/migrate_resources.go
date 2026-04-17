@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/fluxcd/pkg/ssa"
+	ssautil "github.com/fluxcd/pkg/ssa/utils"
 	"github.com/spf13/cobra"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -126,46 +127,41 @@ func migrateResourcesCmdRun(cmd *cobra.Command, args []string) error {
 
 	for i := range list.Items {
 		u := &list.Items[i]
-		name := u.GetName()
-		namespace := u.GetNamespace()
-		qualified := name
-		if namespace != "" {
-			qualified = namespace + "/" + name
-		}
+		qualified := ssautil.FmtUnstructured(u)
 
 		patches, err := ssa.PatchMigrateToVersion(u, migrateResourcesArgs.apiVersion)
 		if err != nil {
-			rootCmd.Printf("✗ %s %s: failed to build migration patch: %v\n", gvk.Kind, qualified, err)
+			rootCmd.Printf("✗ %s: failed to build migration patch: %v\n", qualified, err)
 			failures++
 			continue
 		}
 		if len(patches) == 0 {
-			rootCmd.Printf("• %s %s already at %s\n", gvk.Kind, qualified, migrateResourcesArgs.apiVersion)
+			rootCmd.Printf("• %s already at %s\n", qualified, migrateResourcesArgs.apiVersion)
 			continue
 		}
 
 		if migrateResourcesArgs.dryRun {
 			managers := staleManagers(u.GetManagedFields(), migrateResourcesArgs.apiVersion)
-			rootCmd.Printf("◎ %s %s needs migration (managers: %s)\n",
-				gvk.Kind, qualified, strings.Join(managers, ", "))
+			rootCmd.Printf("◎ %s needs migration (managers: %s)\n",
+				qualified, strings.Join(managers, ", "))
 			migrated++
 			continue
 		}
 
 		patchBytes, err := json.Marshal(patches)
 		if err != nil {
-			rootCmd.Printf("✗ %s %s: failed to marshal patch: %v\n", gvk.Kind, qualified, err)
+			rootCmd.Printf("✗ %s: failed to marshal patch: %v\n", qualified, err)
 			failures++
 			continue
 		}
 
 		if err := kubeClient.Patch(ctx, u, client.RawPatch(types.JSONPatchType, patchBytes)); err != nil {
-			rootCmd.Printf("✗ %s %s: failed to migrate: %v\n", gvk.Kind, qualified, err)
+			rootCmd.Printf("✗ %s: failed to migrate: %v\n", qualified, err)
 			failures++
 			continue
 		}
 
-		rootCmd.Printf("✔ %s %s migrated to %s\n", gvk.Kind, qualified, migrateResourcesArgs.apiVersion)
+		rootCmd.Printf("✔ %s migrated to %s\n", qualified, migrateResourcesArgs.apiVersion)
 		migrated++
 	}
 

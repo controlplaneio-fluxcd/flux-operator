@@ -184,6 +184,7 @@ func resetCmdArgs() {
 
 	// Migrate commands
 	migrateResourcesArgs = migrateResourcesFlags{}
+	migrateOwnerArgs = migrateOwnerFlags{}
 
 	// Patch commands
 	patchInstanceArgs = patchInstanceFlags{version: "main", components: nil}

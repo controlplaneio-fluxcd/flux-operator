@@ -181,33 +181,6 @@ Arguments:
 - `-n, --namespace`: Specifies the namespace scope of the command.
 - `--wait`: On resume, waits for the reconciliation to complete before returning.
 
-### Migrate Commands
-
-The `flux-operator migrate` commands are used to migrate the managed fields of
-Kubernetes resources to a new API version. This is useful when a CRD introduces
-a new storage version that adds defaulted fields, which can otherwise cause
-server-side applies to fail with `field not declared in schema` errors for
-field managers whose entries are still pinned to the old API version.
-
-The migration rewrites the `apiVersion` of every `metadata.managedFields` entry
-on every listed resource, across all field managers.
-
-The following command is available:
-
-- `flux-operator migrate resources`: Migrates the managed fields of the
-  specified Kubernetes resources to the given API version.
-
-Arguments:
-
-- `--api-version`: The target API version in the format `group/version` (required).
-- `--kind`: The kind of resources to migrate (required).
-- `-n, --namespace`: Specifies the namespace scope of the command.
-- `-A, --all-namespaces`: Migrates resources in all namespaces.
-- `--dry-run`: Lists the resources that need migration without patching them.
-
-Before patching, the command verifies that the target version is present in the
-CRD's `status.storedVersions` field and fails otherwise.
-
 ### Delete Commands
 
 The `flux-operator delete` commands are used to delete the Flux Operator resources from the cluster.
@@ -274,6 +247,27 @@ Arguments:
 
 - `-n, --namespace`: Specifies the namespace scope of the command.
 - `--timeout`: The length of time to wait before giving up (default 1m).
+
+### Migrate Commands
+
+The `flux-operator migrate` commands are used to clean up the managed fields of Kubernetes resources.
+
+The following commands are available:
+
+- `flux-operator migrate owner <kind>/<name>`: Cleans up stale managed fields entries left on resources
+  owned by the given Flux applier (`HelmRelease`, `Kustomization`, `ResourceSet`, or `FluxInstance`),
+  so that the current applier becomes the sole Flux field-owner on each resource.
+    - `-n, --namespace`: Specifies the namespace of the applier.
+    - `--dry-run`: Lists the stale managers that would be stripped without patching resources.
+- `flux-operator migrate resources`: Migrates the managed fields of the specified Kubernetes resources
+  to the given API version. This resolves `field not declared in schema` errors after a CRD introduces
+  a new storage version with defaulted fields. Before patching, the command verifies that the target
+  version is present in the CRD's `status.storedVersions` field.
+    - `--api-version`: The target API version in the format `group/version` (required).
+    - `--kind`: The kind of resources to migrate (required).
+    - `-n, --namespace`: Specifies the namespace scope of the command.
+    - `-A, --all-namespaces`: Migrates resources in all namespaces.
+    - `--dry-run`: Lists the resources that need migration without patching them.
 
 ### Create Secret Commands
 

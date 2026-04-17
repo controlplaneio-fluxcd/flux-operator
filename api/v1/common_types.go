@@ -114,6 +114,7 @@ const (
 
 // Flux controller names.
 const (
+	FluxOperator                  = "flux-operator"
 	FluxSourceController          = "source-controller"
 	FluxKustomizeController       = "kustomize-controller"
 	FluxHelmController            = "helm-controller"

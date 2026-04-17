@@ -26,6 +26,40 @@ import (
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
+// FromUnstructured extracts the inventory entries from the status of a Kubernetes
+// object. This function is suitable for the following kinds: Flux HelmRelease (v2.8+),
+// Kustomization, ResourceSet, and FluxInstance. It returns an empty slice when no
+// inventory is present.
+func FromUnstructured(obj *unstructured.Unstructured) ([]fluxcdv1.ResourceRef, error) {
+	result := make([]fluxcdv1.ResourceRef, 0)
+
+	entries, exists, err := unstructured.NestedSlice(obj.Object, "status", "inventory", "entries")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read status.inventory.entries: %w", err)
+	}
+	if !exists || len(entries) == 0 {
+		return result, nil
+	}
+
+	for _, entry := range entries {
+		entryMap, ok := entry.(map[string]any)
+		if !ok {
+			continue
+		}
+		id, found := entryMap["id"].(string)
+		if !found {
+			continue
+		}
+		v, found := entryMap["v"].(string)
+		if !found {
+			continue
+		}
+		result = append(result, fluxcdv1.ResourceRef{ID: id, Version: v})
+	}
+
+	return result, nil
+}
+
 // FromStatusOf inspects the status of a Kubernetes object and extracts the
 // inventory entries from it. This function is suitable for the following kinds:
 // Flux Kustomization, ResourceSet, and FluxInstance.
@@ -34,8 +68,6 @@ func FromStatusOf(
 	kubeClient client.Client,
 	ref fluxcdv1.ResourceRef,
 ) ([]fluxcdv1.ResourceRef, error) {
-	result := make([]fluxcdv1.ResourceRef, 0)
-
 	obj, err := EntryToUnstructured(ref)
 	if err != nil {
 		return nil, err
@@ -51,24 +83,7 @@ func FromStatusOf(
 		return nil, fmt.Errorf("failed to get %s/%s: %w", obj.GetKind(), objKey.String(), err)
 	}
 
-	// If the object has a status.inventory.entries field, extract the entries.
-	if entries, exists, _ := unstructured.NestedSlice(obj.Object, "status", "inventory", "entries"); exists && len(entries) > 0 {
-		for _, entry := range entries {
-			if entryMap, ok := entry.(map[string]any); ok {
-				id, found := entryMap["id"].(string)
-				if !found {
-					continue
-				}
-				v, found := entryMap["v"].(string)
-				if !found {
-					continue
-				}
-				result = append(result, fluxcdv1.ResourceRef{ID: id, Version: v})
-			}
-		}
-	}
-
-	return result, nil
+	return FromUnstructured(obj)
 }
 
 // HelmStorage is a struct used to decode the Helm storage secret.
@@ -112,21 +127,10 @@ func FromHelmRelease(
 	}
 
 	// Check for status.inventory.entries first (Flux v2.8+)
-	if entries, exists, _ := unstructured.NestedSlice(hrObj.Object, "status", "inventory", "entries"); exists && len(entries) > 0 {
-		for _, entry := range entries {
-			if entryMap, ok := entry.(map[string]any); ok {
-				id, found := entryMap["id"].(string)
-				if !found {
-					continue
-				}
-				v, found := entryMap["v"].(string)
-				if !found {
-					continue
-				}
-				result = append(result, fluxcdv1.ResourceRef{ID: id, Version: v})
-			}
-		}
-		return result, nil
+	if statusEntries, err := FromUnstructured(hrObj); err != nil {
+		return nil, err
+	} else if len(statusEntries) > 0 {
+		return statusEntries, nil
 	}
 
 	// Fallback to Helm storage secret for older versions of Flux

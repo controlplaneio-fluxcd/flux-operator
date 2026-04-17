@@ -9,7 +9,7 @@ import (
 
 var migrateCmd = &cobra.Command{
 	Use:   "migrate",
-	Short: "Migrate Kubernetes resources",
+	Short: "Migrate Kubernetes resources managed fields",
 }
 
 func init() {
