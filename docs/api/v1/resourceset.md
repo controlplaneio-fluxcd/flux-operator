@@ -543,6 +543,10 @@ and the CA certificate from the first cluster entry, and populates the
 If the ConfigMap template already contains `address` or `ca.crt` fields,
 the existing values are preserved and not overwritten.
 
+To trigger an immediate reconciliation of the ResourceSet when the referenced
+kubeconfig Secret changes, you can set the `reconcile.fluxcd.io/watch: Enabled`
+label on the Secret.
+
 Example using a custom Secret key:
 
 ```yaml

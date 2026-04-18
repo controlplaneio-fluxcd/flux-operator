@@ -5,6 +5,7 @@ package controller
 
 import (
 	"context"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -167,6 +168,8 @@ func (r *ResourceSetReconciler) requestsForResourceSetInputProviders(
 // considered dependent if either:
 //   - it applied a ConfigMap or Secret that uses the triggering object
 //     as a copyFrom source, or
+//   - it applied a ConfigMap that uses the triggering Secret as a
+//     convertKubeConfigFrom source, or
 //   - its status.externalChecksumRefs lists the triggering object.
 func (r *ResourceSetReconciler) requestsForConfigMapsOrSecrets(ctx context.Context,
 	obj client.Object) []reconcile.Request {
@@ -225,6 +228,44 @@ func (r *ResourceSetReconciler) requestsForConfigMapsOrSecrets(ctx context.Conte
 			Namespace: objLabels[fluxcdv1.OwnerLabelResourceSetNamespace],
 		}
 		resourceSets[rset] = struct{}{}
+	}
+
+	// When the trigger is a Secret, match applied ConfigMaps whose
+	// convertKubeConfigFrom annotation references it. The annotation
+	// value may be 'namespace/name' or 'namespace/name:key'.
+	if objKind == kindSecret {
+		var appliedConfigMaps metav1.PartialObjectMetadataList
+		appliedConfigMaps.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind(kindConfigMap))
+		if err := r.List(ctx, &appliedConfigMaps, listOpts...); err != nil {
+			log.Error(err, "failed to list ConfigMaps applied by ResourceSets",
+				"eventTrigger", map[string]any{
+					"kind":      objKind,
+					"name":      obj.GetName(),
+					"namespace": obj.GetNamespace(),
+				})
+		} else {
+			for _, appliedObject := range appliedConfigMaps.Items {
+				convertFrom := appliedObject.GetAnnotations()[fluxcdv1.ConvertKubeConfigFromAnnotation]
+				if convertFrom == "" {
+					continue
+				}
+				nameRef := convertFrom
+				if colonIdx := strings.LastIndex(convertFrom, ":"); colonIdx > 0 {
+					if slashIdx := strings.Index(convertFrom, "/"); slashIdx > 0 && colonIdx > slashIdx {
+						nameRef = convertFrom[:colonIdx]
+					}
+				}
+				if nameRef != objKey {
+					continue
+				}
+				objLabels := appliedObject.GetLabels()
+				rset := types.NamespacedName{
+					Name:      objLabels[fluxcdv1.OwnerLabelResourceSetName],
+					Namespace: objLabels[fluxcdv1.OwnerLabelResourceSetNamespace],
+				}
+				resourceSets[rset] = struct{}{}
+			}
+		}
 	}
 
 	// Match ResourceSets whose status.externalChecksumRefs contains the
