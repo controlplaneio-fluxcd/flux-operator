@@ -190,6 +190,40 @@ func TestResourceSetReconciler_requestsForConfigMapsOrSecrets(t *testing.T) {
 	})
 	g.Expect(err).NotTo(HaveOccurred())
 
+	// Create ConfigMap with ResourceSet owner labels and a convertKubeConfigFrom
+	// annotation using the plain 'namespace/name' form.
+	err = testEnv.Create(ctx, &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cm-kubeconfig-plain",
+			Namespace: ns.Name,
+			Annotations: map[string]string{
+				fluxcdv1.ConvertKubeConfigFromAnnotation: "kc-ns/kc-secret",
+			},
+			Labels: map[string]string{
+				fluxcdv1.OwnerLabelResourceSetName:      "rset-kc",
+				fluxcdv1.OwnerLabelResourceSetNamespace: "rset-kc-ns",
+			},
+		},
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Create ConfigMap with ResourceSet owner labels and a convertKubeConfigFrom
+	// annotation using the 'namespace/name:key' form.
+	err = testEnv.Create(ctx, &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cm-kubeconfig-keyed",
+			Namespace: ns.Name,
+			Annotations: map[string]string{
+				fluxcdv1.ConvertKubeConfigFromAnnotation: "kc-ns/kc-secret-keyed:myKey",
+			},
+			Labels: map[string]string{
+				fluxcdv1.OwnerLabelResourceSetName:      "rset-kc-keyed",
+				fluxcdv1.OwnerLabelResourceSetNamespace: "rset-kc-ns",
+			},
+		},
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+
 	// Create ConfigMap without ResourceSet owner labels.
 	err = testEnv.Create(ctx, &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -355,6 +389,49 @@ func TestResourceSetReconciler_requestsForConfigMapsOrSecrets(t *testing.T) {
 					Namespace: ns.Name,
 				},
 			}},
+		},
+		{
+			name: "Secret referenced by convertKubeConfigFrom annotation",
+			obj: &metav1.PartialObjectMetadata{
+				TypeMeta: secretTypeMeta,
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "kc-secret",
+					Namespace: "kc-ns",
+				},
+			},
+			expectedRequests: []reconcile.Request{{
+				NamespacedName: client.ObjectKey{
+					Name:      "rset-kc",
+					Namespace: "rset-kc-ns",
+				},
+			}},
+		},
+		{
+			name: "Secret referenced by convertKubeConfigFrom annotation with key suffix",
+			obj: &metav1.PartialObjectMetadata{
+				TypeMeta: secretTypeMeta,
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "kc-secret-keyed",
+					Namespace: "kc-ns",
+				},
+			},
+			expectedRequests: []reconcile.Request{{
+				NamespacedName: client.ObjectKey{
+					Name:      "rset-kc-keyed",
+					Namespace: "rset-kc-ns",
+				},
+			}},
+		},
+		{
+			name: "ConfigMap trigger does not match convertKubeConfigFrom",
+			obj: &metav1.PartialObjectMetadata{
+				TypeMeta: cmTypeMeta,
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "kc-secret",
+					Namespace: "kc-ns",
+				},
+			},
+			expectedRequests: nil,
 		},
 		{
 			name: "ConfigMap not referenced by any checksumFrom",
