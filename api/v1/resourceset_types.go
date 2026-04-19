@@ -83,6 +83,7 @@ type ResourceSetSpec struct {
 // InputStrategySpec defines how the inputs are combined when multiple
 // input provider objects are used. Defaults to flattening all inputs
 // from all providers into a single list of input sets.
+// +kubebuilder:validation:XValidation:rule="!has(self.includeEmptyProviders) || self.name == 'Permute'",message="includeEmptyProviders only applies when name is Permute"
 type InputStrategySpec struct {
 	// Name defines how the inputs are combined when multiple
 	// input provider objects are used. Supported values are:
@@ -100,6 +101,15 @@ type InputStrategySpec struct {
 	// +kubebuilder:validation:Enum=Flatten;Permute
 	// +required
 	Name string `json:"name,omitempty"`
+
+	// IncludeEmptyProviders controls how input providers that export no
+	// inputs are treated. Only applies when Name is Permute. When true, if
+	// any provider has zero inputs the resulting permutation set is empty
+	// (mathematically correct Cartesian product behavior). When false or
+	// unset (default), providers with zero inputs are silently skipped and
+	// the remaining providers still permute among themselves.
+	// +optional
+	IncludeEmptyProviders bool `json:"includeEmptyProviders,omitempty"`
 }
 
 // GetInputStrategy returns the input strategy name.
@@ -108,6 +118,15 @@ func (in *ResourceSet) GetInputStrategy() string {
 		return InputStrategyFlatten
 	}
 	return in.Spec.InputStrategy.Name
+}
+
+// GetIncludeEmptyProviders returns whether providers with zero exported inputs
+// should be kept when combining inputs. Defaults to false.
+func (in *ResourceSet) GetIncludeEmptyProviders() bool {
+	if in.Spec.InputStrategy == nil {
+		return false
+	}
+	return in.Spec.InputStrategy.Name == InputStrategyPermute && in.Spec.InputStrategy.IncludeEmptyProviders
 }
 
 // InputProviderReference defines a reference to an input provider resource

@@ -110,6 +110,15 @@ spec:
                   input provider objects are used. Defaults to flattening all inputs
                   from all providers into a single list of input sets.
                 properties:
+                  includeEmptyProviders:
+                    description: |-
+                      IncludeEmptyProviders controls how input providers that export no
+                      inputs are treated. Only applies when Name is Permute. When true, if
+                      any provider has zero inputs the resulting permutation set is empty
+                      (mathematically correct Cartesian product behavior). When false or
+                      unset (default), providers with zero inputs are silently skipped and
+                      the remaining providers still permute among themselves.
+                    type: boolean
                   name:
                     description: |-
                       Name defines how the inputs are combined when multiple
@@ -132,6 +141,9 @@ spec:
                 required:
                 - name
                 type: object
+                x-kubernetes-validations:
+                - message: includeEmptyProviders only applies when name is Permute
+                  rule: '!has(self.includeEmptyProviders) || self.name == ''Permute'''
               inputs:
                 description: Inputs contains the list of ResourceSet inputs.
                 items:
