@@ -205,6 +205,10 @@ The `.spec.inputStrategy` field has the following subfields:
 - `.name`: The name of the input strategy. If `.spec.inputStrategy` is not set, the behavior
   matches setting `.spec.inputStrategy.name` to `Flatten`. Supported values are `Flatten` and
   `Permute`.
+- `.includeEmptyProviders`: Only applies when `.name` is `Permute`. When set to `true`, if any
+  input provider exports zero inputs the resulting permutation set is empty (mathematically
+  correct Cartesian product behavior). When `false` or unset (default), providers with zero
+  inputs are silently skipped and the remaining providers still permute among themselves.
 
 When `.spec.inputStrategy.name` is set to `Permute`, the resulting inputs are the Cartesian product
 of the input sets from each selected `ResourceSetInputProvider` object, and from the `ResourceSet`

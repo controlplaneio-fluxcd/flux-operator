@@ -53,7 +53,11 @@ func Combine(rset *fluxcdv1.ResourceSet, providerMap map[ProviderKey]fluxcdv1.In
 	case fluxcdv1.InputStrategyFlatten:
 		combiner = NewFlattener()
 	case fluxcdv1.InputStrategyPermute:
-		combiner = NewPermuter()
+		var opts []PermuterOption
+		if rset.GetIncludeEmptyProviders() {
+			opts = append(opts, WithIncludeEmptyProviders())
+		}
+		combiner = NewPermuter(opts...)
 	default:
 		return nil, fmt.Errorf("unknown input strategy: '%s'", strategy)
 	}

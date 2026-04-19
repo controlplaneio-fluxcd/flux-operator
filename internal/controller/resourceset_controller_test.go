@@ -430,6 +430,46 @@ func TestResourceSetInputsFromValidation(t *testing.T) {
 	g.Expect(err.Error()).To(ContainSubstring("at least one of name or selector must be set for input provider references"))
 }
 
+func TestResourceSetInputStrategyValidation(t *testing.T) {
+	g := NewWithT(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// includeEmptyProviders=true with name=Permute is accepted.
+	err = testEnv.Create(ctx, &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "permute-include-empty",
+			Namespace: ns.Name,
+		},
+		Spec: fluxcdv1.ResourceSetSpec{
+			InputStrategy: &fluxcdv1.InputStrategySpec{
+				Name:                  fluxcdv1.InputStrategyPermute,
+				IncludeEmptyProviders: true,
+			},
+		},
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// includeEmptyProviders=true with name=Flatten is rejected by CEL.
+	err = testEnv.Create(ctx, &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "flatten-include-empty",
+			Namespace: ns.Name,
+		},
+		Spec: fluxcdv1.ResourceSetSpec{
+			InputStrategy: &fluxcdv1.InputStrategySpec{
+				Name:                  fluxcdv1.InputStrategyFlatten,
+				IncludeEmptyProviders: true,
+			},
+		},
+	})
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("includeEmptyProviders only applies when name is Permute"))
+}
+
 func TestResourceSetReconciler_LabelSelector(t *testing.T) {
 	g := NewWithT(t)
 	reconciler := getResourceSetReconciler(t)

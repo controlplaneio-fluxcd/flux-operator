@@ -160,6 +160,104 @@ func TestCombine(t *testing.T) {
 		g.Expect(string(b)).To(MatchYAML(permuted))
 	})
 
+	t.Run("permutes skipping empty providers by default", func(t *testing.T) {
+		g := NewWithT(t)
+
+		rset := rset.DeepCopy()
+		rset.Spec.InputStrategy = &fluxcdv1.InputStrategySpec{
+			Name: fluxcdv1.InputStrategyPermute,
+		}
+
+		emptyRsip := map[inputs.ProviderKey]fluxcdv1.InputProvider{
+			{
+				GVK: schema.GroupVersionKind{
+					Group:   fluxcdv1.GroupVersion.Group,
+					Version: fluxcdv1.GroupVersion.Version,
+					Kind:    fluxcdv1.ResourceSetInputProviderKind,
+				},
+				Name:      "rsip",
+				Namespace: "default",
+			}: &fluxcdv1.ResourceSetInputProvider{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: fluxcdv1.GroupVersion.String(),
+					Kind:       fluxcdv1.ResourceSetInputProviderKind,
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "rsip",
+					Namespace: "default",
+				},
+				Status: fluxcdv1.ResourceSetInputProviderStatus{
+					ExportedInputs: nil,
+				},
+			},
+		}
+
+		c, err := inputs.Combine(rset, emptyRsip)
+		g.Expect(err).NotTo(HaveOccurred())
+
+		// The empty provider is silently skipped, so only rset's 2 inputs
+		// contribute to the permutations.
+		g.Expect(c).To(HaveLen(2))
+	})
+
+	t.Run("permutes to empty when includeEmptyProviders is true and a provider is empty", func(t *testing.T) {
+		g := NewWithT(t)
+
+		rset := rset.DeepCopy()
+		rset.Spec.InputStrategy = &fluxcdv1.InputStrategySpec{
+			Name:                  fluxcdv1.InputStrategyPermute,
+			IncludeEmptyProviders: true,
+		}
+
+		emptyRsip := map[inputs.ProviderKey]fluxcdv1.InputProvider{
+			{
+				GVK: schema.GroupVersionKind{
+					Group:   fluxcdv1.GroupVersion.Group,
+					Version: fluxcdv1.GroupVersion.Version,
+					Kind:    fluxcdv1.ResourceSetInputProviderKind,
+				},
+				Name:      "rsip",
+				Namespace: "default",
+			}: &fluxcdv1.ResourceSetInputProvider{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: fluxcdv1.GroupVersion.String(),
+					Kind:       fluxcdv1.ResourceSetInputProviderKind,
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "rsip",
+					Namespace: "default",
+				},
+				Status: fluxcdv1.ResourceSetInputProviderStatus{
+					ExportedInputs: nil,
+				},
+			},
+		}
+
+		c, err := inputs.Combine(rset, emptyRsip)
+		g.Expect(err).NotTo(HaveOccurred())
+
+		// Cartesian product with an empty set is empty.
+		g.Expect(c).To(BeEmpty())
+	})
+
+	t.Run("permutes with all providers non-empty is unaffected by includeEmptyProviders", func(t *testing.T) {
+		g := NewWithT(t)
+
+		rset := rset.DeepCopy()
+		rset.Spec.InputStrategy = &fluxcdv1.InputStrategySpec{
+			Name:                  fluxcdv1.InputStrategyPermute,
+			IncludeEmptyProviders: true,
+		}
+
+		c, err := inputs.Combine(rset, rsip)
+
+		g.Expect(err).NotTo(HaveOccurred())
+
+		b, err := yaml.Marshal(c)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(string(b)).To(MatchYAML(permuted))
+	})
+
 	t.Run("errors on unknown input strategy", func(t *testing.T) {
 		g := NewWithT(t)
 
