@@ -4,7 +4,7 @@
 import { useState, useMemo, useEffect, useRef } from 'preact/hooks'
 import { fetchWithMock } from '../../utils/fetch'
 import { usePrismTheme, YamlBlock } from '../dashboards/common/yaml'
-import { isKindWithInventory, getKindAlias, isFluxInventoryItem } from '../../utils/constants'
+import { isKindWithInventory, getKindAlias, isFluxInventoryItem, isWorkloadInventoryItem } from '../../utils/constants'
 import { getStatusBadgeClass, cleanStatus } from '../../utils/status'
 import { FluxOperatorIcon } from '../layout/Icons'
 
@@ -54,16 +54,18 @@ function groupInventoryByApiVersion(inventory) {
  */
 function InventoryItem({ item }) {
   const isFluxResource = isFluxInventoryItem(item)
+  const isWorkload = !isFluxResource && isWorkloadInventoryItem(item)
 
   // Build resource URL
   const ns = item.namespace || ''
   const resourceUrl = `/resource/${encodeURIComponent(item.kind)}/${encodeURIComponent(ns)}/${encodeURIComponent(item.name)}`
+  const workloadUrl = `/workload/${encodeURIComponent(item.kind)}/${encodeURIComponent(ns)}/${encodeURIComponent(item.name)}`
 
-  if (isFluxResource) {
+  if (isFluxResource || isWorkload) {
     return (
       <div class="py-1 px-2 text-xs break-all">
         <a
-          href={resourceUrl}
+          href={isFluxResource ? resourceUrl : workloadUrl}
           class="text-left hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flux-blue rounded inline-block group"
         >
           <span class="text-gray-600 dark:text-gray-400">{item.kind}/</span>{item.namespace && <span class="text-gray-500 dark:text-gray-400">{item.namespace}/</span>}<span class="text-gray-900 dark:text-gray-100 group-hover:text-flux-blue dark:group-hover:text-blue-400">{item.name}</span><svg class="w-3 h-3 text-gray-400 group-hover:text-flux-blue dark:group-hover:text-blue-400 transition-colors ml-1 inline-block align-middle" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
@@ -72,7 +74,7 @@ function InventoryItem({ item }) {
     )
   }
 
-  // Non-Flux resource - render as plain text
+  // Non-Flux, non-workload resource - render as plain text
   return (
     <div class="py-1 px-2 text-xs break-all">
       <span class="text-gray-900 dark:text-gray-100">
