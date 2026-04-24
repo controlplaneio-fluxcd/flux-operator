@@ -296,7 +296,8 @@ type Sync struct {
 
 	// Provider specifies OIDC provider for source authentication.
 	// For OCIRepository and Bucket the provider can be set to 'aws', 'azure' or 'gcp'.
-	// for GitRepository the accepted value can be set to 'azure' or 'github'.
+	// For GitRepository the provider can be set to 'aws' (requires Flux 2.9 or later),
+	// 'azure' or 'github'.
 	// To disable OIDC authentication the provider can be set to 'generic' or left empty.
 	// +kubebuilder:validation:Enum=generic;aws;azure;gcp;github
 	// +optional

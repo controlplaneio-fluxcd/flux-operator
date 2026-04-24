@@ -403,6 +403,10 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 			Path:       obj.Spec.Sync.Path,
 			Provider:   obj.Spec.Sync.Provider,
 		}
+
+		if err := options.ValidateSync(); err != nil {
+			return nil, err
+		}
 	}
 
 	if obj.Spec.Kustomize != nil && len(obj.Spec.Kustomize.Patches) > 0 {
