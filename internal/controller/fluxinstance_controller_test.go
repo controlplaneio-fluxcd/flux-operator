@@ -116,6 +116,76 @@ func TestFluxInstanceReconciler_CELValidation(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "sync.provider 'gcp' is rejected for GitRepository",
+			obj: func(t *testing.T) *fluxcdv1.FluxInstance {
+				spec := getDefaultFluxSpec(t)
+				spec.Sync = &fluxcdv1.Sync{
+					Kind:     fluxcdv1.FluxGitRepositoryKind,
+					URL:      "https://github.com/org/repo",
+					Path:     "./",
+					Ref:      "refs/heads/main",
+					Provider: "gcp",
+				}
+				return &fluxcdv1.FluxInstance{
+					ObjectMeta: metav1.ObjectMeta{Name: "flux"},
+					Spec:       spec,
+				}
+			},
+			expectedErr: "sync.provider 'gcp' is only supported for OCIRepository and Bucket",
+		},
+		{
+			name: "sync.provider 'github' is rejected for OCIRepository",
+			obj: func(t *testing.T) *fluxcdv1.FluxInstance {
+				spec := getDefaultFluxSpec(t)
+				spec.Sync = &fluxcdv1.Sync{
+					Kind:     fluxcdv1.FluxOCIRepositoryKind,
+					URL:      "oci://registry/repo",
+					Path:     "./",
+					Ref:      "latest",
+					Provider: "github",
+				}
+				return &fluxcdv1.FluxInstance{
+					ObjectMeta: metav1.ObjectMeta{Name: "flux"},
+					Spec:       spec,
+				}
+			},
+			expectedErr: "sync.provider 'github' is only supported for GitRepository",
+		},
+		{
+			name: "sync.provider 'gcp' is accepted for OCIRepository",
+			obj: func(t *testing.T) *fluxcdv1.FluxInstance {
+				spec := getDefaultFluxSpec(t)
+				spec.Sync = &fluxcdv1.Sync{
+					Kind:     fluxcdv1.FluxOCIRepositoryKind,
+					URL:      "oci://registry/repo",
+					Path:     "./",
+					Ref:      "latest",
+					Provider: "gcp",
+				}
+				return &fluxcdv1.FluxInstance{
+					ObjectMeta: metav1.ObjectMeta{Name: "flux"},
+					Spec:       spec,
+				}
+			},
+		},
+		{
+			name: "sync.provider 'github' is accepted for GitRepository",
+			obj: func(t *testing.T) *fluxcdv1.FluxInstance {
+				spec := getDefaultFluxSpec(t)
+				spec.Sync = &fluxcdv1.Sync{
+					Kind:     fluxcdv1.FluxGitRepositoryKind,
+					URL:      "https://github.com/org/repo",
+					Path:     "./",
+					Ref:      "refs/heads/main",
+					Provider: "github",
+				}
+				return &fluxcdv1.FluxInstance{
+					ObjectMeta: metav1.ObjectMeta{Name: "flux"},
+					Spec:       spec,
+				}
+			},
+		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
