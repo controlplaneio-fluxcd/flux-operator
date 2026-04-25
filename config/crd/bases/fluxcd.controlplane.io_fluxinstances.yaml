@@ -368,7 +368,8 @@ spec:
                     description: |-
                       Provider specifies OIDC provider for source authentication.
                       For OCIRepository and Bucket the provider can be set to 'aws', 'azure' or 'gcp'.
-                      for GitRepository the accepted value can be set to 'azure' or 'github'.
+                      For GitRepository the provider can be set to 'aws' (requires Flux 2.9 or later),
+                      'azure' or 'github'.
                       To disable OIDC authentication the provider can be set to 'generic' or left empty.
                     enum:
                     - generic
@@ -402,6 +403,14 @@ spec:
                 - ref
                 - url
                 type: object
+                x-kubernetes-validations:
+                - message: sync.provider 'gcp' is only supported for OCIRepository
+                    and Bucket
+                  rule: '!has(self.provider) || self.provider != ''gcp'' || self.kind
+                    == ''OCIRepository'' || self.kind == ''Bucket'''
+                - message: sync.provider 'github' is only supported for GitRepository
+                  rule: '!has(self.provider) || self.provider != ''github'' || self.kind
+                    == ''GitRepository'''
               wait:
                 default: true
                 description: |-
