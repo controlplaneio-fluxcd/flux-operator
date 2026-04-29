@@ -8,4 +8,12 @@ updates:
         patterns:
           - "*"
     schedule:
-      interval: "daily"
+      interval: "weekly"
+  - package-ecosystem: "docker"
+    directory: "/cmd/cli"
+    groups:
+      cli-tools:
+        patterns:
+          - "*"
+    schedule:
+      interval: "weekly"

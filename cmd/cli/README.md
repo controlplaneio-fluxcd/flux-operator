@@ -31,7 +31,8 @@ Zsh, Fish, and PowerShell are also supported with their own sub-commands.
 ### Container Image
 
 The Flux Operator CLI is also available as a container image, which can be used in CI pipelines
-or Kubernetes Jobs. The image contains the `flux-operator` CLI binary and the `kubectl` binary.
+or Kubernetes Jobs. The image contains the `flux-operator` CLI binary along with `flux`, `flux-schema`
+and `kubectl` binaries for convenience.
 
 The multi-arch image (Linux AMD64/ARM64) is hosted on GitHub Container Registry at
 `ghcr.io/controlplaneio-fluxcd/flux-operator-cli`.
