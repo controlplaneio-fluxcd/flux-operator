@@ -8,6 +8,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/k8s"
@@ -57,8 +58,25 @@ type toolRecorder struct {
 	tools []string
 }
 
+// emptyObjectSchema is a JSON Schema with an explicit empty "properties" field.
+// OpenAI's function calling API requires "properties" to be present even when
+// empty, but the MCP Go SDK's jsonschema.ForType omits it for struct{} types,
+// producing {"type":"object"} without "properties".
+var emptyObjectSchema = &jsonschema.Schema{
+	Type:       "object",
+	Properties: map[string]*jsonschema.Schema{},
+}
+
 // addTool adds a tool to the MCP server and records it.
+// Tools without an explicit InputSchema get the emptyObjectSchema to ensure
+// the serialized JSON always includes "properties", which is required by
+// OpenAI's function calling API.
 func addTool[In, Out any](s *mcp.Server, r *toolRecorder, t *mcp.Tool, h mcp.ToolHandlerFor[In, Out]) {
+	if t.InputSchema == nil {
+		t.InputSchema = emptyObjectSchema
+	} else if schema, ok := t.InputSchema.(*jsonschema.Schema); ok && schema.Properties == nil {
+		schema.Properties = map[string]*jsonschema.Schema{}
+	}
 	mcp.AddTool(s, t, h)
 	r.tools = append(r.tools, t.Name)
 }
