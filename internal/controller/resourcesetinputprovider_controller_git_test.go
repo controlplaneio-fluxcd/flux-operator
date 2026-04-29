@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -610,6 +611,87 @@ spec:
 	g.Expect(r.IsZero()).To(BeTrue())
 }
 
+func TestResourceSetInputProviderReconciler_CodeCommitTag_LifeCycle(t *testing.T) {
+	if os.Getenv("AWS_ACCESS_KEY_ID") == "" {
+		t.Skip("Skipping CodeCommit test because AWS_ACCESS_KEY_ID is not set")
+	}
+
+	g := NewWithT(t)
+	reconciler := getResourceSetInputProviderReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test-codecommit")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	objDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSetInputProvider
+metadata:
+  name: test-codecommit
+  namespace: "%[1]s"
+spec:
+  type: CodeCommitTag
+  url: "https://git-codecommit.eu-west-1.amazonaws.com/v1/repos/flux-codecommit-repo"
+  filter:
+    includeTag: "^v1\\.2\\.[0-1]$"
+`, ns.Name)
+
+	obj := &fluxcdv1.ResourceSetInputProvider{}
+	err = yaml.Unmarshal([]byte(objDef), obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Create the ResourceSetInputProvider.
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize the ResourceSetInputProvider.
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Retrieve the inputs.
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeFalse())
+
+	// Check if the ResourceSetInputProvider was marked as ready.
+	result := &fluxcdv1.ResourceSetInputProvider{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	testutils.LogObjectStatus(t, result)
+	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
+	g.Expect(len(result.Status.ExportedInputs)).To(Equal(2))
+
+	// Validate the exported inputs match the expected tags (v1.2.0 and v1.2.1).
+	foundTags := []string{}
+	for _, input := range result.Status.ExportedInputs {
+		foundTags = append(foundTags, strings.Trim(string(input["tag"].Raw), "\""))
+	}
+	g.Expect(foundTags).To(ContainElements("v1.2.0", "v1.2.1"))
+
+	// Delete the ResourceSetInputProvider.
+	err = testClient.Delete(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.IsZero()).To(BeTrue())
+
+	// Check if the ResourceSetInputProvider was finalized.
+	result = &fluxcdv1.ResourceSetInputProvider{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+}
+
 func TestResourceSetInputProviderReconciler_FailureRecovery(t *testing.T) {
 	g := NewWithT(t)
 	reconciler := getResourceSetInputProviderReconciler(t)
@@ -953,6 +1035,44 @@ func TestResourceSetInputProviderReconciler_InvalidGitURL(t *testing.T) {
 			g.Expect(err).To(HaveOccurred())
 			g.Expect(err.Error()).To(ContainSubstring(
 				"spec.url must start with 'http://' or 'https://' when spec.type is a Git provider"))
+		})
+	}
+}
+
+func TestResourceSetInputProviderReconciler_InvalidCodeCommitURL(t *testing.T) {
+	g := NewWithT(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test-invalid-cc-url")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	for _, tt := range []struct {
+		provider string
+	}{
+		{provider: fluxcdv1.InputProviderCodeCommitBranch},
+		{provider: fluxcdv1.InputProviderCodeCommitTag},
+		{provider: fluxcdv1.InputProviderCodeCommitPullRequest},
+	} {
+		t.Run(tt.provider, func(t *testing.T) {
+			g := NewWithT(t)
+
+			obj := &fluxcdv1.ResourceSetInputProvider{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: ns.Name,
+				},
+				Spec: fluxcdv1.ResourceSetInputProviderSpec{
+					Type: tt.provider,
+					URL:  "http://git-codecommit.us-east-1.amazonaws.com/v1/repos/my-repo",
+				},
+			}
+
+			err = testEnv.Create(ctx, obj)
+			g.Expect(err).To(HaveOccurred())
+			g.Expect(err.Error()).To(ContainSubstring(
+				"spec.url must start with 'https://' when spec.type is a CodeCommit provider"))
 		})
 	}
 }

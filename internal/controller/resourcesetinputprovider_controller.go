@@ -320,7 +320,7 @@ func (r *ResourceSetInputProviderReconciler) callExternalProvider(
 
 	switch {
 	// Handle Git providers.
-	case strings.HasPrefix(obj.Spec.Type, "Git") || strings.HasPrefix(obj.Spec.Type, "AzureDevOps"):
+	case strings.HasPrefix(obj.Spec.Type, "Git") || strings.HasPrefix(obj.Spec.Type, "AzureDevOps") || strings.HasPrefix(obj.Spec.Type, "CodeCommit"):
 		// Create the provider based on the object type.
 		provider, err := r.newGitProvider(providerCtx, obj, tlsConfig, authData)
 		if err != nil {
@@ -398,6 +398,15 @@ func (r *ResourceSetInputProviderReconciler) newGitProvider(ctx context.Context,
 			TLSConfig: tlsConfig,
 			Token:     token,
 		})
+	case strings.HasPrefix(obj.Spec.Type, "CodeCommit"):
+		token, err := r.getCodeCommitToken(ctx, obj)
+		if err != nil {
+			return nil, err
+		}
+		return gitprovider.NewCodeCommitProvider(ctx, gitprovider.Options{
+			URL:       obj.Spec.URL,
+			TLSConfig: tlsConfig,
+		}, token)
 	default:
 		return nil, fmt.Errorf("unsupported type: %s", obj.Spec.Type)
 	}
@@ -715,6 +724,41 @@ func (r *ResourceSetInputProviderReconciler) getAzureDevOpsToken(
 		}
 		return t.BearerToken, nil
 	}
+}
+
+// getCodeCommitToken returns the AWS credentials token for CodeCommit.
+func (r *ResourceSetInputProviderReconciler) getCodeCommitToken(
+	ctx context.Context, obj *fluxcdv1.ResourceSetInputProvider) (auth.Token, error) {
+
+	// CodeCommit uses workload identity only, no static secrets.
+	opts := []auth.Option{
+		auth.WithClient(r.Client),
+		auth.WithServiceAccountNamespace(obj.GetNamespace()),
+	}
+
+	// Configure service account.
+	if s := obj.Spec.ServiceAccountName; s != "" {
+		opts = append(opts, auth.WithServiceAccountName(s))
+	}
+
+	// Configure token cache.
+	if r.TokenCache != nil {
+		involvedObject := getInputProviderInvolvedObject(obj)
+		opts = append(opts, auth.WithCache(*r.TokenCache, involvedObject))
+	}
+
+	// Extract region from URL for STS region option.
+	region, err := gitprovider.ParseCodeCommitRegion(obj.Spec.URL)
+	if err != nil {
+		return nil, err
+	}
+	opts = append(opts, auth.WithSTSRegion(region))
+
+	token, err := auth.GetAccessToken(ctx, aws.Provider{}, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return token, nil
 }
 
 // callOCIProvider lists the tags of an OCI artifact repository

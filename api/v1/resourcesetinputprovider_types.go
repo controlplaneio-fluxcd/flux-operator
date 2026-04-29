@@ -28,6 +28,9 @@ const (
 	InputProviderAzureDevOpsBranch      = "AzureDevOpsBranch"
 	InputProviderAzureDevOpsPullRequest = "AzureDevOpsPullRequest"
 	InputProviderAzureDevOpsTag         = "AzureDevOpsTag"
+	InputProviderCodeCommitBranch       = "CodeCommitBranch"
+	InputProviderCodeCommitTag          = "CodeCommitTag"
+	InputProviderCodeCommitPullRequest  = "CodeCommitPullRequest"
 	InputProviderGiteaBranch            = "GiteaBranch"
 	InputProviderGiteaTag               = "GiteaTag"
 	InputProviderGiteaPullRequest       = "GiteaPullRequest"
@@ -49,16 +52,17 @@ const (
 // +kubebuilder:validation:XValidation:rule="self.type == 'Static' || has(self.url)", message="spec.url must not be empty when spec.type is not 'Static'"
 // +kubebuilder:validation:XValidation:rule="!self.type.startsWith('Git') || self.url.startsWith('http')", message="spec.url must start with 'http://' or 'https://' when spec.type is a Git provider"
 // +kubebuilder:validation:XValidation:rule="!self.type.startsWith('AzureDevOps') || self.url.startsWith('http')", message="spec.url must start with 'http://' or 'https://' when spec.type is a Git provider"
+// +kubebuilder:validation:XValidation:rule="!self.type.startsWith('CodeCommit') || self.url.startsWith('https')", message="spec.url must start with 'https://' when spec.type is a CodeCommit provider"
 // +kubebuilder:validation:XValidation:rule="!self.type.endsWith('ArtifactTag') || self.url.startsWith('oci')", message="spec.url must start with 'oci://' when spec.type is an OCI provider"
 // +kubebuilder:validation:XValidation:rule="self.type != 'ExternalService' || self.url.startsWith('http')", message="spec.url must start with 'http://' or 'https://' when spec.type is 'ExternalService'"
 // +kubebuilder:validation:XValidation:rule="!has(self.insecure) || !self.insecure || self.type == 'ExternalService' || self.type == 'OCIArtifactTag'", message="spec.insecure can only be set when spec.type is 'ExternalService' or 'OCIArtifactTag'"
 // +kubebuilder:validation:XValidation:rule="self.type != 'ExternalService' || !self.url.startsWith('http://') || (has(self.insecure) && self.insecure)", message="spec.url must use 'https://' unless spec.insecure is true"
-// +kubebuilder:validation:XValidation:rule="!has(self.serviceAccountName) || self.type.startsWith('AzureDevOps') || self.type.endsWith('ArtifactTag')", message="cannot specify spec.serviceAccountName when spec.type is not one of AzureDevOps* or *ArtifactTag"
-// +kubebuilder:validation:XValidation:rule="!has(self.certSecretRef) || !(self.url == 'Static' || self.type.startsWith('AzureDevOps') || (self.type.endsWith('ArtifactTag') && self.type != 'OCIArtifactTag'))", message="cannot specify spec.certSecretRef when spec.type is one of Static, AzureDevOps*, ACRArtifactTag, ECRArtifactTag or GARArtifactTag"
-// +kubebuilder:validation:XValidation:rule="!has(self.secretRef) || !(self.url == 'Static' || (self.type.endsWith('ArtifactTag') && self.type != 'OCIArtifactTag'))", message="cannot specify spec.secretRef when spec.type is one of Static, ACRArtifactTag, ECRArtifactTag or GARArtifactTag"
+// +kubebuilder:validation:XValidation:rule="!has(self.serviceAccountName) || self.type.startsWith('AzureDevOps') || self.type.startsWith('CodeCommit') || self.type.endsWith('ArtifactTag')", message="cannot specify spec.serviceAccountName when spec.type is not one of AzureDevOps*, CodeCommit* or *ArtifactTag"
+// +kubebuilder:validation:XValidation:rule="!has(self.certSecretRef) || !(self.url == 'Static' || self.type.startsWith('AzureDevOps') || self.type.startsWith('CodeCommit') || (self.type.endsWith('ArtifactTag') && self.type != 'OCIArtifactTag'))", message="cannot specify spec.certSecretRef when spec.type is one of Static, AzureDevOps*, CodeCommit*, ACRArtifactTag, ECRArtifactTag or GARArtifactTag"
+// +kubebuilder:validation:XValidation:rule="!has(self.secretRef) || !(self.url == 'Static' || self.type.startsWith('CodeCommit') || (self.type.endsWith('ArtifactTag') && self.type != 'OCIArtifactTag'))", message="cannot specify spec.secretRef when spec.type is one of Static, CodeCommit*, ACRArtifactTag, ECRArtifactTag or GARArtifactTag"
 type ResourceSetInputProviderSpec struct {
 	// Type specifies the type of the input provider.
-	// +kubebuilder:validation:Enum=Static;GitHubBranch;GitHubTag;GitHubPullRequest;GitLabBranch;GitLabTag;GitLabMergeRequest;GitLabEnvironment;AzureDevOpsBranch;AzureDevOpsTag;AzureDevOpsPullRequest;GiteaBranch;GiteaTag;GiteaPullRequest;OCIArtifactTag;ACRArtifactTag;ECRArtifactTag;GARArtifactTag;ExternalService
+	// +kubebuilder:validation:Enum=Static;GitHubBranch;GitHubTag;GitHubPullRequest;GitLabBranch;GitLabTag;GitLabMergeRequest;GitLabEnvironment;AzureDevOpsBranch;AzureDevOpsTag;AzureDevOpsPullRequest;CodeCommitBranch;CodeCommitTag;CodeCommitPullRequest;GiteaBranch;GiteaTag;GiteaPullRequest;OCIArtifactTag;ACRArtifactTag;ECRArtifactTag;GARArtifactTag;ExternalService
 	// +required
 	Type string `json:"type"`
 

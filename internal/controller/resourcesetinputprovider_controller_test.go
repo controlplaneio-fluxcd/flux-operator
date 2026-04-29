@@ -353,6 +353,24 @@ func TestResourceSetInputProviderReconciler_ProviderAuthAndSecretsCompatiblity(t
 			certSecretRef:      false,
 			secretRef:          false,
 		},
+		{
+			provider:           fluxcdv1.InputProviderCodeCommitBranch,
+			serviceAccountName: true,
+			certSecretRef:      false,
+			secretRef:          false,
+		},
+		{
+			provider:           fluxcdv1.InputProviderCodeCommitTag,
+			serviceAccountName: true,
+			certSecretRef:      false,
+			secretRef:          false,
+		},
+		{
+			provider:           fluxcdv1.InputProviderCodeCommitPullRequest,
+			serviceAccountName: true,
+			certSecretRef:      false,
+			secretRef:          false,
+		},
 	} {
 		t.Run(tt.provider, func(t *testing.T) {
 			g := NewWithT(t)
@@ -368,7 +386,7 @@ func TestResourceSetInputProviderReconciler_ProviderAuthAndSecretsCompatiblity(t
 				Type: tt.provider,
 			}
 			urlScheme := "oci"
-			if strings.HasPrefix(tt.provider, "Git") || strings.HasPrefix(tt.provider, "AzureDevOps") {
+			if strings.HasPrefix(tt.provider, "Git") || strings.HasPrefix(tt.provider, "AzureDevOps") || strings.HasPrefix(tt.provider, "CodeCommit") {
 				urlScheme = "https"
 			}
 			if tt.provider != fluxcdv1.InputProviderStatic {
@@ -376,7 +394,7 @@ func TestResourceSetInputProviderReconciler_ProviderAuthAndSecretsCompatiblity(t
 			}
 
 			// Validate serviceAccountName.
-			const saErr = "cannot specify spec.serviceAccountName when spec.type is not one of AzureDevOps* or *ArtifactTag"
+			const saErr = "cannot specify spec.serviceAccountName when spec.type is not one of AzureDevOps*, CodeCommit* or *ArtifactTag"
 			obj.Spec = spec
 			obj.Spec.ServiceAccountName = "test-sa"
 			if !tt.serviceAccountName {
@@ -391,7 +409,7 @@ func TestResourceSetInputProviderReconciler_ProviderAuthAndSecretsCompatiblity(t
 			}
 
 			// Validate certSecretRef.
-			const certErr = "cannot specify spec.certSecretRef when spec.type is one of Static, AzureDevOps*, ACRArtifactTag, ECRArtifactTag or GARArtifactTag"
+			const certErr = "cannot specify spec.certSecretRef when spec.type is one of Static, AzureDevOps*, CodeCommit*, ACRArtifactTag, ECRArtifactTag or GARArtifactTag"
 			obj.Spec = spec
 			obj.Spec.CertSecretRef = &meta.LocalObjectReference{
 				Name: "test-cert-secret",
@@ -408,7 +426,7 @@ func TestResourceSetInputProviderReconciler_ProviderAuthAndSecretsCompatiblity(t
 			}
 
 			// Validate secretRef.
-			const secretErr = "cannot specify spec.secretRef when spec.type is one of Static, ACRArtifactTag, ECRArtifactTag or GARArtifactTag"
+			const secretErr = "cannot specify spec.secretRef when spec.type is one of Static, CodeCommit*, ACRArtifactTag, ECRArtifactTag or GARArtifactTag"
 			obj.Spec = spec
 			obj.Spec.SecretRef = &meta.LocalObjectReference{
 				Name: "test-secret",
