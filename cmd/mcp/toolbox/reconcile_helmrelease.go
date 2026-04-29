@@ -96,7 +96,7 @@ func (m *Manager) HandleReconcileHelmRelease(ctx context.Context, request *mcp.C
 				err = kubeClient.Annotate(ctx,
 					schema.GroupVersionKind{
 						Group:   fluxcdv1.FluxSourceGroup,
-						Version: "v1beta2",
+						Version: "v1",
 						Kind:    fluxcdv1.FluxOCIRepositoryKind,
 					},
 					chartRefName,
