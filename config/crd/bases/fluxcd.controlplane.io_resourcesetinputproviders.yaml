@@ -216,6 +216,9 @@ spec:
                 - AzureDevOpsBranch
                 - AzureDevOpsTag
                 - AzureDevOpsPullRequest
+                - CodeCommitBranch
+                - CodeCommitTag
+                - CodeCommitPullRequest
                 - GiteaBranch
                 - GiteaTag
                 - GiteaPullRequest
@@ -246,6 +249,9 @@ spec:
             - message: spec.url must start with 'http://' or 'https://' when spec.type
                 is a Git provider
               rule: '!self.type.startsWith(''AzureDevOps'') || self.url.startsWith(''http'')'
+            - message: spec.url must start with 'https://' when spec.type is a CodeCommit
+                provider
+              rule: '!self.type.startsWith(''CodeCommit'') || self.url.startsWith(''https'')'
             - message: spec.url must start with 'oci://' when spec.type is an OCI
                 provider
               rule: '!self.type.endsWith(''ArtifactTag'') || self.url.startsWith(''oci'')'
@@ -260,17 +266,19 @@ spec:
               rule: self.type != 'ExternalService' || !self.url.startsWith('http://')
                 || (has(self.insecure) && self.insecure)
             - message: cannot specify spec.serviceAccountName when spec.type is not
-                one of AzureDevOps* or *ArtifactTag
+                one of AzureDevOps*, CodeCommit* or *ArtifactTag
               rule: '!has(self.serviceAccountName) || self.type.startsWith(''AzureDevOps'')
-                || self.type.endsWith(''ArtifactTag'')'
+                || self.type.startsWith(''CodeCommit'') || self.type.endsWith(''ArtifactTag'')'
             - message: cannot specify spec.certSecretRef when spec.type is one of
-                Static, AzureDevOps*, ACRArtifactTag, ECRArtifactTag or GARArtifactTag
+                Static, AzureDevOps*, CodeCommit*, ACRArtifactTag, ECRArtifactTag
+                or GARArtifactTag
               rule: '!has(self.certSecretRef) || !(self.url == ''Static'' || self.type.startsWith(''AzureDevOps'')
-                || (self.type.endsWith(''ArtifactTag'') && self.type != ''OCIArtifactTag''))'
-            - message: cannot specify spec.secretRef when spec.type is one of Static,
-                ACRArtifactTag, ECRArtifactTag or GARArtifactTag
-              rule: '!has(self.secretRef) || !(self.url == ''Static'' || (self.type.endsWith(''ArtifactTag'')
+                || self.type.startsWith(''CodeCommit'') || (self.type.endsWith(''ArtifactTag'')
                 && self.type != ''OCIArtifactTag''))'
+            - message: cannot specify spec.secretRef when spec.type is one of Static,
+                CodeCommit*, ACRArtifactTag, ECRArtifactTag or GARArtifactTag
+              rule: '!has(self.secretRef) || !(self.url == ''Static'' || self.type.startsWith(''CodeCommit'')
+                || (self.type.endsWith(''ArtifactTag'') && self.type != ''OCIArtifactTag''))'
           status:
             description: ResourceSetInputProviderStatus defines the observed state
               of ResourceSetInputProvider.

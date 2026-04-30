@@ -105,6 +105,9 @@ The following types are supported:
 - `GiteaPullRequest`: fetches input values from opened Gitea/Forgejo Pull Requests.
 - `GiteaBranch`: fetches input values from Gitea/Forgejo repository branches.
 - `GiteaTag`: fetches input values from Gitea/Forgejo repository tags.
+- `CodeCommitPullRequest`: fetches input values from opened AWS CodeCommit Pull Requests.
+- `CodeCommitBranch`: fetches input values from AWS CodeCommit repository branches.
+- `CodeCommitTag`: fetches input values from AWS CodeCommit repository tags.
 - `OCIArtifactTag`: fetches input values from OCI artifact tags from generic container registries.
 - `ACRArtifactTag`: fetches input values from Azure Container Registry OCI artifact tags.
 - `ECRArtifactTag`: fetches input values from Elastic Container Registry OCI artifact tags.
@@ -302,6 +305,9 @@ Note that the secret must be created in the same namespace as the ResourceSetInp
 This field is not supported by the following provider [types](#type):
 
 - `Static`
+- `CodeCommitPullRequest`
+- `CodeCommitBranch`
+- `CodeCommitTag`
 - `ACRArtifactTag`
 - `ECRArtifactTag`
 - `GARArtifactTag`
@@ -393,6 +399,9 @@ The `.spec.serviceAccountName` field can only be used with the following provide
 - `AzureDevOpsPullRequest`
 - `AzureDevOpsBranch`
 - `AzureDevOpsTag`
+- `CodeCommitPullRequest`
+- `CodeCommitBranch`
+- `CodeCommitTag`
 - `ACRArtifactTag`
 - `ECRArtifactTag`
 - `GARArtifactTag`
@@ -487,6 +496,12 @@ Note that the secret must be created in the same namespace as the ResourceSetInp
 This field is not supported by the following provider [types](#type):
 
 - `Static`
+- `AzureDevOpsPullRequest`
+- `AzureDevOpsBranch`
+- `AzureDevOpsTag`
+- `CodeCommitPullRequest`
+- `CodeCommitBranch`
+- `CodeCommitTag`
 - `ACRArtifactTag`
 - `ECRArtifactTag`
 - `GARArtifactTag`
