@@ -1,12 +1,15 @@
+# Import tools
+FROM ghcr.io/fluxcd/flux-cli:v2.8.6@sha256:8dac34106b9d684ce07b13c9762b5132813c3d477cfd724e9e13cc5944ad771e AS flux-cli
+FROM ghcr.io/fluxcd/flux-schema:v0.3.0@sha256:92913be498fc0398d8dc2eb749444b81d1f2da3b0e7503177f7a5447ef907a31 AS flux-schema
+FROM registry.k8s.io/kubectl:v1.35.4@sha256:e8bc9c71a813d90d5f7689fa57516b2aacd7a02bb9d70d3ab6664ed6d202fc10 AS kubectl
+
 # Build the Flux Operator CLI binary using Docker's Debian image.
 FROM --platform=${BUILDPLATFORM} golang:1.26 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 ARG VERSION
-ARG KUBECTL_VER=1.35.1
-WORKDIR /workspace
 
-RUN apt-get -y install curl
+WORKDIR /workspace
 
 # Copy the Go Modules manifests.
 COPY go.mod go.mod
@@ -28,23 +31,20 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
 # Verify the Flux Operator CLI binary.
 RUN flux-operator version --client
 
-# Download the kubectl binary.
-RUN curl -sL https://dl.k8s.io/release/v${KUBECTL_VER}/bin/${TARGETOS}/${TARGETARCH}/kubectl \
-    -o /usr/local/bin/kubectl && chmod +x /usr/local/bin/kubectl
-
-# Verify the kubectl binary.
-RUN kubectl version --client
-
-# Distribute the binaries using Google's Distroless image.
-FROM gcr.io/distroless/static:nonroot
+# Distribute the binaries using Google's Distroless image
+# that contains busybox for running shell scripts and debugging.
+FROM gcr.io/distroless/static:debug-nonroot
 
 # Copy the license.
 COPY LICENSE /licenses/LICENSE
 
-# Copy the binaries.
-COPY --from=builder --chmod=777 /usr/local/bin/flux-operator /usr/local/bin/
-COPY --from=builder --chmod=777 /usr/local/bin/kubectl /usr/local/bin/
+# Copy the catalog for offline schema validation.
+COPY --from=flux-schema --chown=nonroot:nonroot /catalog /catalog
 
-# Run the binaries under a non-root user.
-USER 65532:65532
+# Copy the binaries.
+COPY --from=builder --chown=nonroot:nonroot /usr/local/bin/flux-operator /usr/local/bin/flux-operator
+COPY --from=flux-cli --chown=nonroot:nonroot /usr/local/bin/flux /usr/local/bin/flux
+COPY --from=flux-schema --chown=nonroot:nonroot /usr/local/bin/flux-schema /usr/local/bin/flux-schema
+COPY --from=kubectl --chown=nonroot:nonroot /bin/kubectl /usr/local/bin/kubectl
+
 ENTRYPOINT ["flux-operator"]
