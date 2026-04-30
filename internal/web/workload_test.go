@@ -4,6 +4,9 @@
 package web
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -59,7 +62,7 @@ func TestGetWorkloadStatus_Privileged(t *testing.T) {
 	}
 
 	// Call GetWorkloadStatus without any user session (privileged)
-	workload, err := handler.GetWorkloadStatus(ctx, "Deployment", "test-workload-priv", "default")
+	workload, err := handler.GetWorkloadStatus(ctx, "Deployment", "test-workload-priv", "default", false)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(workload).NotTo(BeNil())
 	g.Expect(workload.Kind).To(Equal("Deployment"))
@@ -124,7 +127,7 @@ func TestGetWorkloadStatus_UnprivilegedUser_Forbidden(t *testing.T) {
 	}, userClient)
 
 	// Call GetWorkloadStatus with the unprivileged user context
-	_, err = handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-unpriv", "default")
+	_, err = handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-unpriv", "default", false)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(apierrors.IsForbidden(err)).To(BeTrue(), "expected forbidden error, got: %v", err)
 }
@@ -225,7 +228,7 @@ func TestGetWorkloadStatus_WithUserRBAC_Success(t *testing.T) {
 	}, userClient)
 
 	// Call GetWorkloadStatus with the user context
-	workload, err := handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-rbac", "default")
+	workload, err := handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-rbac", "default", false)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(workload).NotTo(BeNil())
 	g.Expect(workload.Name).To(Equal("test-workload-rbac"))
@@ -328,7 +331,7 @@ func TestGetWorkloadStatus_WithGroupRBAC_Success(t *testing.T) {
 	}, userClient)
 
 	// Call GetWorkloadStatus with the user context
-	workload, err := handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-group-rbac", "default")
+	workload, err := handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-group-rbac", "default", false)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(workload).NotTo(BeNil())
 	g.Expect(workload.Name).To(Equal("test-workload-group-rbac"))
@@ -430,7 +433,7 @@ func TestGetWorkloadStatus_WithNamespaceScopedRBAC_Success(t *testing.T) {
 	}, userClient)
 
 	// Call GetWorkloadStatus in default namespace - should succeed
-	workload, err := handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-ns-scoped", "default")
+	workload, err := handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-ns-scoped", "default", false)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(workload).NotTo(BeNil())
 	g.Expect(workload.Name).To(Equal("test-workload-ns-scoped"))
@@ -541,7 +544,7 @@ func TestGetWorkloadStatus_WithNamespaceScopedRBAC_ForbiddenInOtherNamespace(t *
 	}, userClient)
 
 	// Call GetWorkloadStatus in other namespace - should be forbidden
-	_, err = handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-other-ns", "workload-other-ns-test")
+	_, err = handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-other-ns", "workload-other-ns-test", false)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(apierrors.IsForbidden(err)).To(BeTrue(), "expected forbidden error when accessing workload in unauthorized namespace, got: %v", err)
 }
@@ -638,7 +641,7 @@ func TestGetWorkloadStatus_WithDeploymentAccessButNoPodAccess_Forbidden(t *testi
 	}, userClient)
 
 	// Call GetWorkloadStatus - user can get deployment but not list pods
-	_, err = handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-no-pods", "default")
+	_, err = handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-no-pods", "default", false)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(apierrors.IsForbidden(err)).To(BeTrue(), "expected forbidden error when user cannot list pods, got: %v", err)
 }
@@ -655,7 +658,7 @@ func TestGetWorkloadStatus_NotFound(t *testing.T) {
 	}
 
 	// Call GetWorkloadStatus for a non-existent deployment
-	_, err := handler.GetWorkloadStatus(ctx, "Deployment", "non-existent-deployment", "default")
+	_, err := handler.GetWorkloadStatus(ctx, "Deployment", "non-existent-deployment", "default", false)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(apierrors.IsNotFound(err)).To(BeTrue(), "expected not found error, got: %v", err)
 }
@@ -702,7 +705,7 @@ func TestGetWorkloadStatus_StatefulSet(t *testing.T) {
 	}
 
 	// Call GetWorkloadStatus for StatefulSet
-	workload, err := handler.GetWorkloadStatus(ctx, "StatefulSet", "test-statefulset-status", "default")
+	workload, err := handler.GetWorkloadStatus(ctx, "StatefulSet", "test-statefulset-status", "default", false)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(workload).NotTo(BeNil())
 	g.Expect(workload.Kind).To(Equal("StatefulSet"))
@@ -750,7 +753,7 @@ func TestGetWorkloadStatus_DaemonSet(t *testing.T) {
 	}
 
 	// Call GetWorkloadStatus for DaemonSet
-	workload, err := handler.GetWorkloadStatus(ctx, "DaemonSet", "test-daemonset-status", "default")
+	workload, err := handler.GetWorkloadStatus(ctx, "DaemonSet", "test-daemonset-status", "default", false)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(workload).NotTo(BeNil())
 	g.Expect(workload.Kind).To(Equal("DaemonSet"))
@@ -798,7 +801,7 @@ func TestGetWorkloadStatus_CronJob(t *testing.T) {
 		g.Expect(testClient.Create(ctx, cronJob)).To(Succeed())
 		defer testClient.Delete(ctx, cronJob)
 
-		workload, err := handler.GetWorkloadStatus(ctx, "CronJob", "test-cronjob-idle", "default")
+		workload, err := handler.GetWorkloadStatus(ctx, "CronJob", "test-cronjob-idle", "default", false)
 		g.Expect(err).NotTo(HaveOccurred())
 		g.Expect(workload).NotTo(BeNil())
 		g.Expect(workload.Kind).To(Equal("CronJob"))
@@ -840,7 +843,7 @@ func TestGetWorkloadStatus_CronJob(t *testing.T) {
 		g.Expect(testClient.Create(ctx, cronJob)).To(Succeed())
 		defer testClient.Delete(ctx, cronJob)
 
-		workload, err := handler.GetWorkloadStatus(ctx, "CronJob", "test-cronjob-suspended", "default")
+		workload, err := handler.GetWorkloadStatus(ctx, "CronJob", "test-cronjob-suspended", "default", false)
 		g.Expect(err).NotTo(HaveOccurred())
 		g.Expect(workload).NotTo(BeNil())
 		g.Expect(workload.Status).To(Equal("Suspended"))
@@ -884,7 +887,7 @@ func TestGetWorkloadStatus_CronJob(t *testing.T) {
 		}
 		g.Expect(testClient.Status().Update(ctx, cronJob)).To(Succeed())
 
-		workload, err := handler.GetWorkloadStatus(ctx, "CronJob", "test-cronjob-active", "default")
+		workload, err := handler.GetWorkloadStatus(ctx, "CronJob", "test-cronjob-active", "default", false)
 		g.Expect(err).NotTo(HaveOccurred())
 		g.Expect(workload).NotTo(BeNil())
 		g.Expect(workload.Status).To(Equal("Progressing"))
@@ -980,7 +983,7 @@ func TestGetWorkloadStatus_UserActions_WithRestartAndDeletePods(t *testing.T) {
 		Impersonation: imp,
 	}, userClient)
 
-	workload, err := handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-ua-both", "default")
+	workload, err := handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-ua-both", "default", false)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(workload).NotTo(BeNil())
 	g.Expect(workload.UserActions).To(ContainElement(fluxcdv1.UserActionRestart))
@@ -1075,7 +1078,7 @@ func TestGetWorkloadStatus_UserActions_RestartOnly(t *testing.T) {
 		Impersonation: imp,
 	}, userClient)
 
-	workload, err := handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-ua-restart", "default")
+	workload, err := handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-ua-restart", "default", false)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(workload).NotTo(BeNil())
 	g.Expect(workload.UserActions).To(ContainElement(fluxcdv1.UserActionRestart))
@@ -1170,7 +1173,7 @@ func TestGetWorkloadStatus_UserActions_DeletePodsOnly(t *testing.T) {
 		Impersonation: imp,
 	}, userClient)
 
-	workload, err := handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-ua-delpods", "default")
+	workload, err := handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-ua-delpods", "default", false)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(workload).NotTo(BeNil())
 	g.Expect(workload.UserActions).NotTo(ContainElement(fluxcdv1.UserActionRestart))
@@ -1265,7 +1268,7 @@ func TestGetWorkloadStatus_UserActions_NoActions(t *testing.T) {
 		Impersonation: imp,
 	}, userClient)
 
-	workload, err := handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-ua-none", "default")
+	workload, err := handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-ua-none", "default", false)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(workload).NotTo(BeNil())
 	g.Expect(workload.UserActions).To(BeEmpty())
@@ -1309,7 +1312,7 @@ func TestGetWorkloadStatus_UserActions_DisabledWithoutAuth(t *testing.T) {
 	}
 
 	// Call with privileged context (system:masters has all permissions)
-	workload, err := handler.GetWorkloadStatus(ctx, "Deployment", "test-workload-ua-disabled", "default")
+	workload, err := handler.GetWorkloadStatus(ctx, "Deployment", "test-workload-ua-disabled", "default", false)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(workload).NotTo(BeNil())
 	// Even though the privileged user has all permissions, UserActions should be empty
@@ -1406,7 +1409,7 @@ func TestGetWorkloadStatus_UserActions_StatefulSet(t *testing.T) {
 		Impersonation: imp,
 	}, userClient)
 
-	workload, err := handler.GetWorkloadStatus(userCtx, "StatefulSet", "test-workload-ua-sts", "default")
+	workload, err := handler.GetWorkloadStatus(userCtx, "StatefulSet", "test-workload-ua-sts", "default", false)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(workload).NotTo(BeNil())
 	g.Expect(workload.UserActions).To(ContainElement(fluxcdv1.UserActionRestart))
@@ -1508,7 +1511,7 @@ func TestGetWorkloadStatus_UserActions_CronJob(t *testing.T) {
 		Impersonation: imp,
 	}, userClient)
 
-	workload, err := handler.GetWorkloadStatus(userCtx, "CronJob", "test-workload-ua-cron", "default")
+	workload, err := handler.GetWorkloadStatus(userCtx, "CronJob", "test-workload-ua-cron", "default", false)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(workload).NotTo(BeNil())
 	g.Expect(workload.UserActions).To(ContainElement(fluxcdv1.UserActionRestart))
@@ -1601,9 +1604,277 @@ func TestGetWorkloadStatus_UserActions_DaemonSet(t *testing.T) {
 		Impersonation: imp,
 	}, userClient)
 
-	workload, err := handler.GetWorkloadStatus(userCtx, "DaemonSet", "test-workload-ua-ds", "default")
+	workload, err := handler.GetWorkloadStatus(userCtx, "DaemonSet", "test-workload-ua-ds", "default", false)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(workload).NotTo(BeNil())
 	g.Expect(workload.UserActions).To(ContainElement(fluxcdv1.UserActionRestart))
 	g.Expect(workload.UserActions).NotTo(ContainElement(fluxcdv1.UserActionDeletePods))
+}
+
+func TestWorkloadHandler_Success_WithParentReconciler(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a ResourceSet as the parent reconciler
+	resourceSet := &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-wh-parent",
+			Namespace: "default",
+		},
+		Spec: fluxcdv1.ResourceSetSpec{},
+	}
+	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
+	defer func() { g.Expect(testClient.Delete(ctx, resourceSet)).To(Succeed()) }()
+
+	// Create a Deployment with Flux labels pointing to the parent ResourceSet
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-wh-deploy",
+			Namespace: "default",
+			Labels: map[string]string{
+				"app":                                "test-wh-deploy",
+				"resourceset.toolkit.fluxcd.io/name": "test-wh-parent",
+				"resourceset.toolkit.fluxcd.io/namespace": "default",
+			},
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: new(int32(1)),
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "test-wh-deploy"},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"app": "test-wh-deploy"},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "nginx",
+							Image: "nginx:1.25.0",
+						},
+					},
+				},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, deployment)).To(Succeed())
+	defer func() { g.Expect(testClient.Delete(ctx, deployment)).To(Succeed()) }()
+
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/workload?kind=Deployment&name=test-wh-deploy&namespace=default", nil)
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.WorkloadHandler(rec, req)
+
+	g.Expect(rec.Code).To(Equal(http.StatusOK))
+	g.Expect(rec.Header().Get("Content-Type")).To(Equal("application/json"))
+
+	// Decode response
+	var result map[string]any
+	err := json.NewDecoder(rec.Body).Decode(&result)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Verify workload fields
+	g.Expect(result["apiVersion"]).To(Equal("apps/v1"))
+	g.Expect(result["kind"]).To(Equal("Deployment"))
+
+	metadata, ok := result["metadata"].(map[string]any)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(metadata["name"]).To(Equal("test-wh-deploy"))
+	g.Expect(metadata["namespace"]).To(Equal("default"))
+
+	// Verify workloadInfo
+	workloadInfo, ok := result["workloadInfo"].(map[string]any)
+	g.Expect(ok).To(BeTrue(), "workloadInfo should be present")
+	g.Expect(workloadInfo["status"]).NotTo(BeEmpty())
+	g.Expect(workloadInfo["createdAt"]).NotTo(BeEmpty())
+	g.Expect(workloadInfo["containerImages"]).To(ContainElement("nginx:1.25.0"))
+
+	// Verify reconciler is present and is the parent ResourceSet
+	reconciler, ok := workloadInfo["reconciler"].(map[string]any)
+	g.Expect(ok).To(BeTrue(), "reconciler should be present in workloadInfo")
+	g.Expect(reconciler["kind"]).To(Equal("ResourceSet"))
+
+	reconcilerMeta, ok := reconciler["metadata"].(map[string]any)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(reconcilerMeta["name"]).To(Equal("test-wh-parent"))
+	g.Expect(reconcilerMeta["namespace"]).To(Equal("default"))
+}
+
+func TestWorkloadHandler_NotFluxManaged_ReturnsError(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a Deployment WITHOUT Flux labels
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-wh-no-flux",
+			Namespace: "default",
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: new(int32(1)),
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "test-wh-no-flux"},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"app": "test-wh-no-flux"},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "nginx",
+							Image: "nginx:latest",
+						},
+					},
+				},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, deployment)).To(Succeed())
+	defer func() { g.Expect(testClient.Delete(ctx, deployment)).To(Succeed()) }()
+
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/workload?kind=Deployment&name=test-wh-no-flux&namespace=default", nil)
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.WorkloadHandler(rec, req)
+
+	// Not Flux-managed workloads return 500 with error
+	g.Expect(rec.Code).To(Equal(http.StatusInternalServerError))
+	g.Expect(rec.Body.String()).To(ContainSubstring("not managed by a Flux reconciler"))
+}
+
+func TestWorkloadHandler_NotFound_ReturnsEmptyJSON(t *testing.T) {
+	g := NewWithT(t)
+
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/workload?kind=Deployment&name=non-existent-wh&namespace=default", nil)
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.WorkloadHandler(rec, req)
+
+	// Not found returns 200 with empty JSON
+	g.Expect(rec.Code).To(Equal(http.StatusOK))
+	g.Expect(rec.Header().Get("Content-Type")).To(Equal("application/json"))
+	g.Expect(rec.Body.String()).To(Equal("{}"))
+}
+
+func TestWorkloadHandler_Forbidden(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a Deployment with Flux labels
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-wh-forbidden",
+			Namespace: "default",
+			Labels: map[string]string{
+				"app":                                "test-wh-forbidden",
+				"resourceset.toolkit.fluxcd.io/name": "some-parent",
+				"resourceset.toolkit.fluxcd.io/namespace": "default",
+			},
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: new(int32(1)),
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "test-wh-forbidden"},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"app": "test-wh-forbidden"},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "nginx",
+							Image: "nginx:latest",
+						},
+					},
+				},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, deployment)).To(Succeed())
+	defer func() { g.Expect(testClient.Delete(ctx, deployment)).To(Succeed()) }()
+
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	// Create an unprivileged user session
+	imp := user.Impersonation{
+		Username: "unprivileged-wh-user",
+		Groups:   []string{"unprivileged-group"},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile:       user.Profile{Name: "Unprivileged User"},
+		Impersonation: imp,
+	}, userClient)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/workload?kind=Deployment&name=test-wh-forbidden&namespace=default", nil)
+	req = req.WithContext(userCtx)
+	rec := httptest.NewRecorder()
+
+	handler.WorkloadHandler(rec, req)
+
+	g.Expect(rec.Code).To(Equal(http.StatusForbidden))
+	g.Expect(rec.Body.String()).To(ContainSubstring("do not have access"))
+}
+
+func TestWorkloadHandler_MissingParameters(t *testing.T) {
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	testCases := []struct {
+		name  string
+		query string
+	}{
+		{"missing all", ""},
+		{"missing kind", "name=test&namespace=default"},
+		{"missing name", "kind=Deployment&namespace=default"},
+		{"missing namespace", "kind=Deployment&name=test"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/workload?"+tc.query, nil)
+			rec := httptest.NewRecorder()
+
+			handler.WorkloadHandler(rec, req)
+
+			g.Expect(rec.Code).To(Equal(http.StatusBadRequest))
+			g.Expect(rec.Body.String()).To(ContainSubstring("Missing required parameters"))
+		})
+	}
 }

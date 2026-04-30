@@ -134,6 +134,27 @@ export function getEventBadgeClass(type) {
 }
 
 /**
+ * Get badge class for Kubernetes container states.
+ * Maps container state labels to appropriate badge styling.
+ * @param {string} stateLabel - Container state label (Running, Waiting, Terminated, Completed)
+ * @returns {string} Tailwind CSS classes for the badge
+ */
+export function getContainerStateBadgeClass(stateLabel) {
+  switch (stateLabel) {
+  case 'Running':
+    return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
+  case 'Waiting':
+    return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
+  case 'Completed':
+    return 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-400'
+  case 'Terminated':
+    return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+  default:
+    return 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400'
+  }
+}
+
+/**
  * Get solid background color class for resource status bars/charts.
  * @param {string} status - Status value (Ready, Failed, Progressing, Suspended, Unknown)
  * @returns {string} Tailwind CSS classes for the background
