@@ -6,7 +6,11 @@ package gitprovider
 import (
 	"testing"
 
+	"github.com/Masterminds/semver/v3"
+	"github.com/go-git/go-git/v5/plumbing"
 	. "github.com/onsi/gomega"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/filtering"
 )
 
 func TestParseCodeCommitURL(t *testing.T) {
@@ -96,4 +100,38 @@ func TestParseCodeCommitRegion(t *testing.T) {
 
 	_, err = ParseCodeCommitRegion("https://github.com/owner/repo")
 	g.Expect(err).To(HaveOccurred())
+}
+
+func TestParseGoGitTags(t *testing.T) {
+	g := NewWithT(t)
+
+	refs := []*plumbing.Reference{
+		plumbing.NewHashReference(plumbing.ReferenceName("refs/tags/v1.0.0"), plumbing.NewHash("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")),
+		plumbing.NewHashReference(plumbing.ReferenceName("refs/tags/v1.1.0"), plumbing.NewHash("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")),    // Annotated tag object hash
+		plumbing.NewHashReference(plumbing.ReferenceName("refs/tags/v1.1.0^{}"), plumbing.NewHash("cccccccccccccccccccccccccccccccccccccccc")), // Annotated tag commit hash
+	}
+
+	filters := filtering.Filters{
+		SemVer: newConstraint(">= 1.0.0"),
+	}
+
+	results := parseGoGitTags(refs, filters)
+
+	g.Expect(len(results)).To(Equal(2))
+
+	// v1.1.0 should have the peeled commit hash, NOT the tag object hash.
+	g.Expect(results[0].Tag).To(Equal("v1.1.0"))
+	g.Expect(results[0].SHA).To(Equal("cccccccccccccccccccccccccccccccccccccccc"))
+
+	// v1.0.0 is a lightweight tag.
+	g.Expect(results[1].Tag).To(Equal("v1.0.0"))
+	g.Expect(results[1].SHA).To(Equal("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+}
+
+func newConstraint(s string) *semver.Constraints {
+	c, err := semver.NewConstraint(s)
+	if err != nil {
+		panic(err)
+	}
+	return c
 }

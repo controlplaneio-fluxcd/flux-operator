@@ -17,9 +17,11 @@ import (
 	fluxaws "github.com/fluxcd/pkg/auth/aws"
 	gogit "github.com/go-git/go-git/v5"
 	gogitconfig "github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing"
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/storage/memory"
 
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/filtering"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/inputs"
 )
 
@@ -155,20 +157,39 @@ func (p *CodeCommitProvider) ListTags(ctx context.Context, opts Options) ([]Resu
 		return nil, fmt.Errorf("could not list tags: %w", err)
 	}
 
+	return parseGoGitTags(refs, opts.Filters), nil
+}
+
+// parseGoGitTags extracts tags and their underlying commit SHAs from a slice of go-git references.
+func parseGoGitTags(refs []*plumbing.Reference, filters filtering.Filters) []Result {
 	// Collect tag names and their SHAs.
 	tagMap := make(map[string]string)
+	peeledMap := make(map[string]string)
 	tags := make([]string, 0)
 	for _, ref := range refs {
 		if ref.Name().IsTag() {
 			tagName := ref.Name().Short()
-			tagMap[tagName] = ref.Hash().String()
-			tags = append(tags, tagName)
+
+			// If it's a peeled tag (ends with ^{}), it means it's an annotated tag
+			// and this ref points to the actual commit.
+			if strings.HasSuffix(tagName, "^{}") {
+				tagName = strings.TrimSuffix(tagName, "^{}")
+				peeledMap[tagName] = ref.Hash().String()
+			} else {
+				tagMap[tagName] = ref.Hash().String()
+				tags = append(tags, tagName)
+			}
 		}
+	}
+
+	// Override lightweight tag hashes with peeled annotated tag commit hashes where available.
+	for tagName, hash := range peeledMap {
+		tagMap[tagName] = hash
 	}
 
 	// Apply tag filters (semver, include/exclude regex).
 	results := make([]Result, 0)
-	for _, tagName := range opts.Filters.Tags(tags) {
+	for _, tagName := range filters.Tags(tags) {
 		results = append(results, Result{
 			ID:  inputs.ID(tagName),
 			SHA: tagMap[tagName],
@@ -176,7 +197,7 @@ func (p *CodeCommitProvider) ListTags(ctx context.Context, opts Options) ([]Resu
 		})
 	}
 
-	return results, nil
+	return results
 }
 
 // ListRequests returns a list of open pull requests from the CodeCommit repository.
