@@ -73,6 +73,20 @@ spec:
         value: "flux-operator"
       - name: REPORTING_INTERVAL
         value: "30s"
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: role
+                  operator: In
+                  values:
+                    - flux
+    tolerations:
+      - effect: NoSchedule
+        key: role
+        operator: Equal
+        value: flux
 ```
 
 The Flux Operator is also available in the OpenShift and OKD
