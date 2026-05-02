@@ -13,10 +13,12 @@ import (
 	"net/http"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/Masterminds/semver/v3"
+	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/auth"
 	"github.com/fluxcd/pkg/auth/aws"
@@ -257,8 +259,10 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 		r.notify(ctx, obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
 		return ctrl.Result{}, err
 	}
+	exportedRevision := digest.FromBytes(data).String()
+	lastExportedRevision := obj.Status.LastExportedRevision
 	obj.Status.ExportedInputs = exportedInputs
-	obj.Status.LastExportedRevision = digest.FromBytes(data).String()
+	obj.Status.LastExportedRevision = exportedRevision
 
 	// Mark the object as ready and set the last applied revision.
 	msg := reconcileMessage(reconcileStart)
@@ -266,11 +270,18 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 		meta.ReadyCondition,
 		meta.ReconciliationSucceededReason,
 		"%s", msg)
-	log.Info(msg)
-	r.EventRecorder.Event(obj,
-		corev1.EventTypeNormal,
-		meta.ReconciliationSucceededReason,
-		msg)
+	log.Info(msg, "revision", exportedRevision)
+	msgWithRevision := fmt.Sprintf("%s, revision %s", msg, exportedRevision)
+	token := digest.FromString(strconv.FormatInt(time.Now().UnixNano(), 10)).String()
+	annotations := map[string]string{
+		fluxcdv1.RevisionAnnotation:                              exportedRevision,
+		fluxcdv1.GroupVersion.Group + "/" + eventv1.MetaTokenKey: token,
+	}
+	if lastExportedRevision == exportedRevision {
+		r.EventRecorder.AnnotatedEventf(obj, annotations, corev1.EventTypeNormal, meta.ReconciliationSucceededReason, "%s", msgWithRevision)
+	} else {
+		r.notify(ctx, obj, corev1.EventTypeNormal, meta.ReconciliationSucceededReason, msgWithRevision, annotations)
+	}
 
 	reconcileEnd := time.Now()
 	return requeueAfterResourceSetInputProvider(obj, scheduler, reconcileEnd), nil
@@ -1048,10 +1059,18 @@ func (r *ResourceSetInputProviderReconciler) recordMetrics(obj *fluxcdv1.Resourc
 // linter directive fixes the linter error).
 //
 //nolint:unparam
-func (r *ResourceSetInputProviderReconciler) notify(ctx context.Context, obj *fluxcdv1.ResourceSetInputProvider, eventType, reason, message string) {
+func (r *ResourceSetInputProviderReconciler) notify(ctx context.Context,
+	obj *fluxcdv1.ResourceSetInputProvider, eventType, reason, message string,
+	annotations ...map[string]string) {
+
+	var md map[string]string
+	if len(annotations) > 0 {
+		md = annotations[0]
+	}
+
 	notifier.
 		New(ctx, r.EventRecorder, r.Scheme, notifier.WithClient(r.Client)).
-		Event(obj, eventType, reason, message)
+		AnnotatedEventf(obj, md, eventType, reason, "%s", message)
 }
 
 // requeueAfterResourceSetInputProvider returns a ctrl.Result with the requeue time set to the
