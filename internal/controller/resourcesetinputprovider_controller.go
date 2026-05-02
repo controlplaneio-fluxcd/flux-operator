@@ -257,8 +257,10 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 		r.notify(ctx, obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
 		return ctrl.Result{}, err
 	}
+	exportedRevision := digest.FromBytes(data).String()
+ 	lastExportedRevision := obj.Status.LastExportedRevision
 	obj.Status.ExportedInputs = exportedInputs
-	obj.Status.LastExportedRevision = digest.FromBytes(data).String()
+	obj.Status.LastExportedRevision = exportedRevision
 
 	// Mark the object as ready and set the last applied revision.
 	msg := reconcileMessage(reconcileStart)
@@ -267,10 +269,11 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 		meta.ReconciliationSucceededReason,
 		"%s", msg)
 	log.Info(msg)
-	r.EventRecorder.Event(obj,
-		corev1.EventTypeNormal,
-		meta.ReconciliationSucceededReason,
-		msg)
+	if lastExportedRevision == exportedRevision {
+ 		r.EventRecorder.Event(obj, corev1.EventTypeNormal, meta.ReconciliationSucceededReason, msg)
+	} else {
+		r.notify(ctx, obj, corev1.EventTypeNormal, meta.ReconciliationSucceededReason, msg)
+	}
 
 	reconcileEnd := time.Now()
 	return requeueAfterResourceSetInputProvider(obj, scheduler, reconcileEnd), nil
