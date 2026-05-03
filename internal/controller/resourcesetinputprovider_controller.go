@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"slices"
 	"strconv"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
+	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/auth"
@@ -331,7 +333,7 @@ func (r *ResourceSetInputProviderReconciler) callExternalProvider(
 
 	switch {
 	// Handle Git providers.
-	case strings.HasPrefix(obj.Spec.Type, "Git") || strings.HasPrefix(obj.Spec.Type, "AzureDevOps"):
+	case strings.HasPrefix(obj.Spec.Type, "Git") || strings.HasPrefix(obj.Spec.Type, "AzureDevOps") || strings.HasPrefix(obj.Spec.Type, "AWSCodeCommit"):
 		// Create the provider based on the object type.
 		provider, err := r.newGitProvider(providerCtx, obj, tlsConfig, authData)
 		if err != nil {
@@ -409,6 +411,24 @@ func (r *ResourceSetInputProviderReconciler) newGitProvider(ctx context.Context,
 			TLSConfig: tlsConfig,
 			Token:     token,
 		})
+	case obj.Spec.Type == fluxcdv1.InputProviderAWSCodeCommitPullRequest:
+		credsProvider, region, err := r.getAWSCodeCommitAccessToken(ctx, obj)
+		if err != nil {
+			return nil, err
+		}
+		return gitprovider.NewAWSCodeCommitProvider(gitprovider.Options{
+			URL:       obj.Spec.URL,
+			TLSConfig: tlsConfig,
+		}, credsProvider, region, nil)
+	case strings.HasPrefix(obj.Spec.Type, "AWSCodeCommit"):
+		gitCreds, err := r.getAWSCodeCommitGitCredentials(ctx, obj)
+		if err != nil {
+			return nil, err
+		}
+		return gitprovider.NewAWSCodeCommitProvider(gitprovider.Options{
+			URL:       obj.Spec.URL,
+			TLSConfig: tlsConfig,
+		}, nil, "", gitCreds)
 	default:
 		return nil, fmt.Errorf("unsupported type: %s", obj.Spec.Type)
 	}
@@ -726,6 +746,68 @@ func (r *ResourceSetInputProviderReconciler) getAzureDevOpsToken(
 		}
 		return t.BearerToken, nil
 	}
+}
+
+// getAuthOptions returns the common authentication options for Git providers.
+func (r *ResourceSetInputProviderReconciler) getAuthOptions(obj *fluxcdv1.ResourceSetInputProvider) []auth.Option {
+	opts := []auth.Option{
+		auth.WithClient(r.Client),
+		auth.WithServiceAccountNamespace(obj.GetNamespace()),
+	}
+
+	// Configure service account.
+	if s := obj.Spec.ServiceAccountName; s != "" {
+		opts = append(opts, auth.WithServiceAccountName(s))
+	}
+
+	// Configure token cache.
+	if r.TokenCache != nil {
+		involvedObject := getInputProviderInvolvedObject(obj)
+		opts = append(opts, auth.WithCache(*r.TokenCache, involvedObject))
+	}
+
+	return opts
+}
+
+// getAWSCodeCommitGitCredentials returns the SigV4-signed Git credentials for AWSCodeCommit.
+func (r *ResourceSetInputProviderReconciler) getAWSCodeCommitGitCredentials(
+	ctx context.Context, obj *fluxcdv1.ResourceSetInputProvider) (*auth.GitCredentials, error) {
+
+	opts := r.getAuthOptions(obj)
+
+	// Set the Git URL for SigV4 credential generation.
+	gitURL, err := url.Parse(obj.Spec.URL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse AWSCodeCommit URL: %w", err)
+	}
+	opts = append(opts, auth.WithGitURL(*gitURL))
+
+	// Get the SigV4-signed Git credentials.
+	gitCreds, err := authutils.GetGitCredentials(ctx, aws.ProviderName, opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	return gitCreds, nil
+}
+
+// getAWSCodeCommitAccessToken returns the AWS credentials provider for AWSCodeCommit.
+func (r *ResourceSetInputProviderReconciler) getAWSCodeCommitAccessToken(
+	ctx context.Context, obj *fluxcdv1.ResourceSetInputProvider) (awssdk.CredentialsProvider, string, error) {
+
+	opts := r.getAuthOptions(obj)
+
+	// Extract region from URL for STS region option.
+	region, err := gitprovider.ParseAWSCodeCommitRegion(obj.Spec.URL)
+	if err != nil {
+		return nil, "", err
+	}
+	opts = append(opts, auth.WithSTSRegion(region))
+
+	// Get the AWS credentials provider using the recommended abstraction.
+	credsProvider := aws.NewCredentialsProvider(ctx, opts...)
+
+	return credsProvider, region, nil
 }
 
 // callOCIProvider lists the tags of an OCI artifact repository
