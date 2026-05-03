@@ -277,6 +277,64 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 		fluxcdv1.RevisionAnnotation:                              exportedRevision,
 		fluxcdv1.GroupVersion.Group + "/" + eventv1.MetaTokenKey: token,
 	}
+
+	// Add event metadata for exported inputs if the annotation is configured
+	eventMetadataExportedInputKeysAnnotationValue := obj.GetAnnotations()[fluxcdv1.EventMetadataExportedInputKeysAnnotation]
+	if eventMetadataExportedInputKeysAnnotationValue != "" {
+		// Parse the comma-separated list of exported input keys to include in the event metadata
+		// Format: "exported-input-key1=event-metadata-key1,exported-input-key2=event-metadata-key2" or "exported-input-key1,exported-input-key2"
+		// Example: "tag=image-tag,digest=manifest-digest" or "tag,digest"
+		eventMetadataExportedInputKeys := strings.Split(eventMetadataExportedInputKeysAnnotationValue, ",")
+
+		// Iterate over the exported inputs and add the specified keys to the event metadata
+		for _, eventMetadataExportedInputKey := range eventMetadataExportedInputKeys {
+			for i, exportedInput := range exportedInputs {
+				// Skip empty entries (e.g., from extra commas in annotation)
+				eventMetadataExportedInputKey = strings.TrimSpace(eventMetadataExportedInputKey)
+				if eventMetadataExportedInputKey == "" {
+					continue
+				}
+
+				// Parse the exported-input-key=event-metadata-key format
+				// parts[0] is the source key from the exported input
+				// parts[1] (if present) is the target key for the event metadata
+				parts := strings.SplitN(eventMetadataExportedInputKey, "=", 2)
+				exportedInputKey := strings.TrimSpace(parts[0])
+
+				// Use the source key as the event metadata key by default,
+				// or use a custom name if the mapping format was used
+				eventMetadataKey := exportedInputKey
+				if len(parts) > 1 && parts[1] != "" {
+					eventMetadataKey = strings.TrimSpace(parts[1])
+				}
+
+				// When there are multiple exported inputs, append the index to the event metadata key
+				// to avoid collisions (e.g., "tag" becomes "tag0", "tag1", etc.)
+				if len(exportedInputs) > 1 {
+					eventMetadataKey += strconv.Itoa(i)
+				}
+
+				// Retrieve the value from the exported input by key
+				exportedInputValue, ok := exportedInput[exportedInputKey]
+				if !ok {
+					log.Info("exported input key not found", "key", exportedInputKey, "index", i)
+					continue
+				}
+
+				// Unmarshal the JSON value to a generic type for string conversion
+				var unmarshaledExportedInputValue any
+				if err := json.Unmarshal(exportedInputValue.Raw, &unmarshaledExportedInputValue); err != nil {
+					log.Error(err, "failed to unmarshal exported input value", "key", exportedInputKey, "index", i)
+					continue
+				}
+
+				// Add the value to the event annotations using the fully qualified key
+				annotationKey := fmt.Sprintf("%s/%s", fluxcdv1.GroupVersion.Group, eventMetadataKey)
+				annotations[annotationKey] = fmt.Sprint(unmarshaledExportedInputValue)
+			}
+		}
+	}
+
 	if lastExportedRevision == exportedRevision {
 		r.EventRecorder.AnnotatedEventf(obj, annotations, corev1.EventTypeNormal, meta.ReconciliationSucceededReason, "%s", msgWithRevision)
 	} else {
