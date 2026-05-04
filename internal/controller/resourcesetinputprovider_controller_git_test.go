@@ -928,9 +928,6 @@ func TestResourceSetInputProviderReconciler_InvalidGitURL(t *testing.T) {
 		{provider: fluxcdv1.InputProviderGitLabBranch},
 		{provider: fluxcdv1.InputProviderGitLabTag},
 		{provider: fluxcdv1.InputProviderGitLabMergeRequest},
-		{provider: fluxcdv1.InputProviderAzureDevOpsBranch},
-		{provider: fluxcdv1.InputProviderAzureDevOpsPullRequest},
-		{provider: fluxcdv1.InputProviderAzureDevOpsTag},
 		{provider: fluxcdv1.InputProviderGiteaBranch},
 		{provider: fluxcdv1.InputProviderGiteaTag},
 		{provider: fluxcdv1.InputProviderGiteaPullRequest},
@@ -957,6 +954,82 @@ func TestResourceSetInputProviderReconciler_InvalidGitURL(t *testing.T) {
 	}
 }
 
+func TestResourceSetInputProviderReconciler_InvalidAWSCodeCommitURL(t *testing.T) {
+	g := NewWithT(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test-invalid-cc-url")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	for _, tt := range []struct {
+		provider string
+	}{
+		{provider: fluxcdv1.InputProviderAWSCodeCommitBranch},
+		{provider: fluxcdv1.InputProviderAWSCodeCommitTag},
+		{provider: fluxcdv1.InputProviderAWSCodeCommitPullRequest},
+	} {
+		t.Run(tt.provider, func(t *testing.T) {
+			g := NewWithT(t)
+
+			obj := &fluxcdv1.ResourceSetInputProvider{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: ns.Name,
+				},
+				Spec: fluxcdv1.ResourceSetInputProviderSpec{
+					Type: tt.provider,
+					URL:  "http://git-codecommit.us-east-1.amazonaws.com/v1/repos/my-repo",
+				},
+			}
+
+			err = testEnv.Create(ctx, obj)
+			g.Expect(err).To(HaveOccurred())
+			g.Expect(err.Error()).To(ContainSubstring(
+				"spec.url must start with 'https://' when spec.type is a AWSCodeCommit provider"))
+		})
+	}
+}
+
+func TestResourceSetInputProviderReconciler_InvalidAzureDevOpsURL(t *testing.T) {
+	g := NewWithT(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test-invalid-azure-url")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	for _, tt := range []struct {
+		provider string
+	}{
+		{provider: fluxcdv1.InputProviderAzureDevOpsBranch},
+		{provider: fluxcdv1.InputProviderAzureDevOpsTag},
+		{provider: fluxcdv1.InputProviderAzureDevOpsPullRequest},
+	} {
+		t.Run(tt.provider, func(t *testing.T) {
+			g := NewWithT(t)
+
+			obj := &fluxcdv1.ResourceSetInputProvider{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: ns.Name,
+				},
+				Spec: fluxcdv1.ResourceSetInputProviderSpec{
+					Type: tt.provider,
+					URL:  "dev.azure.com/my-org/my-project/_git/my-repo",
+				},
+			}
+
+			err = testEnv.Create(ctx, obj)
+			g.Expect(err).To(HaveOccurred())
+			g.Expect(err.Error()).To(ContainSubstring(
+				"spec.url must start with 'http://' or 'https://' when spec.type is an AzureDevOps provider"))
+		})
+	}
+}
+
 func TestResouceSetInputProviderReconciler_getAzureDevOpsToken(t *testing.T) {
 	r := getResourceSetInputProviderReconciler(t)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -976,9 +1049,14 @@ func TestResouceSetInputProviderReconciler_getAzureDevOpsToken(t *testing.T) {
 		g := NewWithT(t)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
-		res, err := r.getAzureDevOpsToken(ctx, &fluxcdv1.ResourceSetInputProvider{}, nil)
+		res, err := r.getAzureDevOpsToken(ctx, &fluxcdv1.ResourceSetInputProvider{
+			Spec: fluxcdv1.ResourceSetInputProviderSpec{
+				Type: "AzureDevOpsBranch",
+				URL:  "https://dev.azure.com/org/repo",
+			},
+		}, nil)
 		g.Expect(err).To(HaveOccurred())
-		g.Expect(err.Error()).To(ContainSubstring("ManagedIdentityCredential"))
+		g.Expect(err.Error()).To(ContainSubstring("a Git repository URL is required for issuing Git credentials"))
 		g.Expect(res).To(BeEmpty())
 	})
 }
