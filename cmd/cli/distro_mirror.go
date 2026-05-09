@@ -423,8 +423,7 @@ func isNotFound(err error) bool {
 	if err == nil {
 		return false
 	}
-	var terr *transport.Error
-	if errors.As(err, &terr) {
+	if terr, ok := errors.AsType[*transport.Error](err); ok {
 		return terr.StatusCode == 404
 	}
 	return false

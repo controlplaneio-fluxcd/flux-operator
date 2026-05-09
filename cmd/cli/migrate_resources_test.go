@@ -26,13 +26,12 @@ const (
 )
 
 func installMigrateTestCRD(ctx context.Context, g *WithT) func() {
-	preserve := true
 	schemaProps := &apiextensionsv1.JSONSchemaProps{
 		Type: "object",
 		Properties: map[string]apiextensionsv1.JSONSchemaProps{
 			"spec": {
 				Type:                   "object",
-				XPreserveUnknownFields: &preserve,
+				XPreserveUnknownFields: new(true),
 			},
 		},
 	}

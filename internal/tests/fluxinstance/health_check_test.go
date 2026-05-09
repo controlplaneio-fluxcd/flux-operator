@@ -16,7 +16,6 @@ import (
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
@@ -42,8 +41,8 @@ func TestFluxInstanceReconciler_HealthCheckCanceled(t *testing.T) {
 			},
 		},
 		Spec: fluxcdv1.FluxInstanceSpec{
-			Wait:             ptr.To(true),
-			MigrateResources: ptr.To(false),
+			Wait:             new(true),
+			MigrateResources: new(false),
 			Distribution: fluxcdv1.Distribution{
 				Version:  "v2.3.0",
 				Registry: "ghcr.io/fluxcd",

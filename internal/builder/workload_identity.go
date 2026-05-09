@@ -14,17 +14,15 @@ import (
 // ValidateAndApplyWorkloadIdentityConfig validates and applies the workload identity options
 // based on the provided cluster configuration and Flux version in the Options struct.
 func (o *Options) ValidateAndApplyWorkloadIdentityConfig(cluster fluxcdv1.Cluster) error {
-	var (
-		firstControllersWithObjectLevelWorkloadIdentity = []string{
-			"source-controller",
-			"kustomize-controller",
-			"notification-controller",
-			"image-reflector-controller",
-			"image-automation-controller",
-		}
-
-		allControllers = append(firstControllersWithObjectLevelWorkloadIdentity, "helm-controller")
+	firstControllersWithObjectLevelWorkloadIdentity := make([]string, 0, 6)
+	firstControllersWithObjectLevelWorkloadIdentity = append(firstControllersWithObjectLevelWorkloadIdentity,
+		"source-controller",
+		"kustomize-controller",
+		"notification-controller",
+		"image-reflector-controller",
+		"image-automation-controller",
 	)
+	allControllers := append(firstControllersWithObjectLevelWorkloadIdentity, "helm-controller")
 
 	// Parse Flux version.
 	version, err := semver.NewVersion(o.Version)

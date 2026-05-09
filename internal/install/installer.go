@@ -23,12 +23,13 @@ type Installer struct {
 // If no ArtifactURL, Owner, or Namespace is provided in the options, it uses the defaults.
 func NewInstaller(ctx context.Context, cfg *rest.Config, opts ...Option) (*Installer, error) {
 	// Apply default options
-	defaultOpts := []Option{
+	defaultOpts := make([]Option, 0, 4+len(opts))
+	defaultOpts = append(defaultOpts,
 		WithArtifactURL(DefaultArtifactURL),
 		WithOwner(DefaultOwner),
 		WithNamespace(DefaultNamespace),
 		WithTerminationTimeout(DefaultTerminationTimeout),
-	}
+	)
 
 	// User options override defaults
 	allOpts := append(defaultOpts, opts...)

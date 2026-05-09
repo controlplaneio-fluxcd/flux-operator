@@ -566,7 +566,9 @@ func (o *oauth2Authenticator) encodeState(state oauth2LoginState) (string, error
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal oauth2 login state cookie: %w", err)
 	}
-	nonce := make([]byte, oauth2LoginStateGCMNonceSize)
+	// nonce is a fixed-size GCM nonce buffer, not a slice grown by appends; the prealloc hint is a false positive.
+	nonce := make([]byte, oauth2LoginStateGCMNonceSize) //nolint:prealloc
+
 	if _, err := rand.Read(nonce); err != nil {
 		return "", fmt.Errorf("failed to generate nonce for oauth2 login state cookie: %w", err)
 	}

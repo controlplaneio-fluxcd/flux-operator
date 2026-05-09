@@ -111,7 +111,7 @@ func (p *GitLabProvider) ListBranches(ctx context.Context, opts Options) ([]Resu
 		},
 	}
 	if opts.Filters.Include != nil {
-		glOpts.Regex = gitlab.Ptr(opts.Filters.Include.String())
+		glOpts.Regex = new(opts.Filters.Include.String())
 	}
 
 	results := make([]Result, 0)
@@ -155,7 +155,7 @@ func (p *GitLabProvider) ListRequests(ctx context.Context, opts Options) ([]Resu
 	}
 
 	glOpts := &gitlab.ListProjectMergeRequestsOptions{
-		State:  gitlab.Ptr("opened"),
+		State:  new("opened"),
 		Labels: labels,
 		ListOptions: gitlab.ListOptions{
 			PerPage: 100,
@@ -221,9 +221,9 @@ func (p *GitLabProvider) ListEnvironments(ctx context.Context, opts Options) ([]
 			// This is only available through the Deployments API.
 			deployments, _, err := p.Client.Deployments.ListProjectDeployments(p.Project, &gitlab.ListProjectDeploymentsOptions{
 				ListOptions: gitlab.ListOptions{},
-				OrderBy:     gitlab.Ptr("created_at"),
-				Sort:        gitlab.Ptr("desc"),
-				Environment: gitlab.Ptr(env.Name),
+				OrderBy:     new("created_at"),
+				Sort:        new("desc"),
+				Environment: new(env.Name),
 			})
 			if err != nil {
 				return nil, fmt.Errorf(`could not list deployments for environment "%s": %v`, env.Name, err)

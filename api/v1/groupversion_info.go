@@ -7,17 +7,36 @@
 package v1
 
 import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/controller-runtime/pkg/scheme"
 )
 
 var (
 	// GroupVersion is group version used to register these objects
 	GroupVersion = schema.GroupVersion{Group: "fluxcd.controlplane.io", Version: "v1"}
 
-	// SchemeBuilder is used to add go types to the GroupVersionKind scheme
-	SchemeBuilder = &scheme.Builder{GroupVersion: GroupVersion}
+	// schemeBuilder accumulates the type registration functions for this API group.
+	schemeBuilder runtime.SchemeBuilder
+
+	// SchemeBuilder is used to add go types to the GroupVersionKind scheme.
+	SchemeBuilder = &groupVersionBuilder{}
 
 	// AddToScheme adds the types in this group-version to the given scheme.
-	AddToScheme = SchemeBuilder.AddToScheme
+	AddToScheme = schemeBuilder.AddToScheme
 )
+
+// groupVersionBuilder registers Go types with the package's GroupVersion.
+// It replaces the deprecated sigs.k8s.io/controller-runtime/pkg/scheme.Builder
+// so that this API package depends only on k8s.io/apimachinery.
+type groupVersionBuilder struct{}
+
+// Register schedules the given runtime.Object types to be added to the scheme
+// under the package's GroupVersion when AddToScheme is called.
+func (b *groupVersionBuilder) Register(objects ...runtime.Object) {
+	schemeBuilder.Register(func(s *runtime.Scheme) error {
+		s.AddKnownTypes(GroupVersion, objects...)
+		metav1.AddToGroupVersion(s, GroupVersion)
+		return nil
+	})
+}

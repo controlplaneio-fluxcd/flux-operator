@@ -25,7 +25,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -1024,7 +1023,7 @@ func TestFluxInstanceReconciler_WaitTimeout(t *testing.T) {
 	g := NewWithT(t)
 	reconciler := getFluxInstanceReconciler(t)
 	spec := getDefaultFluxSpec(t)
-	spec.Wait = ptr.To(true)
+	spec.Wait = new(true)
 	spec.Sync = nil
 	spec.Kustomize = &fluxcdv1.Kustomize{
 		Patches: []kustomize.Patch{
@@ -1110,8 +1109,8 @@ func getDefaultFluxSpec(t *testing.T) fluxcdv1.FluxInstanceSpec {
 	t.Setenv("NOTIFICATIONS_DISABLED", "yes")
 
 	return fluxcdv1.FluxInstanceSpec{
-		Wait:             ptr.To(false),
-		MigrateResources: ptr.To(true),
+		Wait:             new(false),
+		MigrateResources: new(true),
 		Distribution: fluxcdv1.Distribution{
 			Version:  "v2.3.0",
 			Registry: "ghcr.io/fluxcd",

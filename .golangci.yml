@@ -8,7 +8,6 @@ linters:
     - dupl
     - errcheck
     - ginkgolinter
-    - goconst
     - gocyclo
     - govet
     - ineffassign
@@ -51,6 +50,9 @@ linters:
         # Omit embedded fields from selector expression.
         # https://staticcheck.dev/docs/checks/#QF1008
         - -QF1008
+        # Use fmt.Fprintf.
+        # https://staticcheck.dev/docs/checks/#QF1008
+        - -QF1012
   exclusions:
     generated: lax
     rules:

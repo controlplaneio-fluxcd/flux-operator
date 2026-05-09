@@ -181,7 +181,7 @@ func TestGitLabProvider_ListBranches(t *testing.T) {
 				{Name: "patch-4", Commit: &gitlab.Commit{ID: "4e1243bd22c66e76c2ba9eddc1f91394e57f9f83"}},
 				{Name: "patch-5_random/suffix", Commit: &gitlab.Commit{ID: "f2aed00334494f13d92d065ecda39aea0d0b871f"}},
 			},
-			expectedRegex: gitlab.Ptr("^patch-.*"),
+			expectedRegex: new("^patch-.*"),
 			want: []Result{
 				{
 					ID:     "183501423",
@@ -232,7 +232,7 @@ func TestGitLabProvider_ListBranches(t *testing.T) {
 				{Name: "patch-3", Commit: &gitlab.Commit{ID: "f2aed00334494f13d92d065ecda39aea0d0b871f"}},
 				{Name: "patch-4", Commit: &gitlab.Commit{ID: "4e1243bd22c66e76c2ba9eddc1f91394e57f9f83"}},
 			},
-			expectedRegex: gitlab.Ptr("^patch-.*"),
+			expectedRegex: new("^patch-.*"),
 			want: []Result{
 				{
 					ID:     "183501423",
@@ -387,7 +387,7 @@ func TestGitLabProvider_ListRequests(t *testing.T) {
 					Labels: []string{"enhancement"},
 				},
 			},
-			expectedLabelOptions: gitlab.Ptr(gitlab.LabelOptions([]string{"enhancement"})),
+			expectedLabelOptions: new(gitlab.LabelOptions([]string{"enhancement"})),
 			mergeRequests: []*gitlab.BasicMergeRequest{
 				{
 					IID:          4,
@@ -507,7 +507,7 @@ func TestGitLabProvider_ListRequests(t *testing.T) {
 
 			mockClient.MockMergeRequests.EXPECT().
 				ListProjectMergeRequests(project, &gitlab.ListProjectMergeRequestsOptions{
-					State:  gitlab.Ptr("opened"),
+					State:  new("opened"),
 					Labels: tt.expectedLabelOptions,
 					ListOptions: gitlab.ListOptions{
 						PerPage: 100,
@@ -868,9 +868,9 @@ func TestGitLabProvider_ListEnvironments(t *testing.T) {
 				mockClient.MockDeployments.EXPECT().
 					ListProjectDeployments(project, &gitlab.ListProjectDeploymentsOptions{
 						ListOptions: gitlab.ListOptions{},
-						OrderBy:     gitlab.Ptr("created_at"),
-						Sort:        gitlab.Ptr("desc"),
-						Environment: gitlab.Ptr(env.Name),
+						OrderBy:     new("created_at"),
+						Sort:        new("desc"),
+						Environment: new(env.Name),
 					}).
 					Return(env.deployments, &gitlab.Response{}, env.deploymentListError)
 			}
