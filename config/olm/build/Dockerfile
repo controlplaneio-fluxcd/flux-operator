@@ -22,5 +22,7 @@ COPY config/data/ /data/
 # Copy the operator binary.
 COPY --from=distroless flux-operator .
 
-# Run the operator as the default user.
+# Run the operator as the nobody user
+# (UBI does not include the 65532 nonroot user from distroless).
+USER 65534:65534
 ENTRYPOINT ["/flux-operator"]
