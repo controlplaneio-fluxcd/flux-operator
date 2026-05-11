@@ -32,7 +32,6 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
-	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlcache "sigs.k8s.io/controller-runtime/pkg/cache"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -224,7 +223,7 @@ func main() {
 		RetryPeriod:                   &leaderElectionOptions.RetryPeriod,
 		Controller: ctrlcfg.Controller{
 			MaxConcurrentReconciles: concurrent,
-			RecoverPanic:            ptr.To(true),
+			RecoverPanic:            new(true),
 		},
 		Client: ctrlclient.Options{
 			Cache: &ctrlclient.CacheOptions{

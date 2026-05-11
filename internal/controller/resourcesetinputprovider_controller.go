@@ -934,8 +934,7 @@ func (r *ResourceSetInputProviderReconciler) callExternalServiceProvider(
 	limitedReader := http.MaxBytesReader(nil, resp.Body, maxExternalServicePayloadSize)
 	body, err := io.ReadAll(limitedReader)
 	if err != nil {
-		var maxBytesErr *http.MaxBytesError
-		if errors.As(err, &maxBytesErr) {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			return nil, fmt.Errorf("external service '%s' response body exceeds "+
 				"the maximum allowed size of %d bytes", obj.Spec.URL, maxExternalServicePayloadSize)
 		}

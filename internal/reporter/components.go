@@ -51,6 +51,7 @@ func (r *FluxStatusReporter) getComponentsStatus(ctx context.Context) ([]fluxcdv
 		}
 	}
 
+	//nolint:govet // govet's inline check does not yet support generic type parameter inference (slices.SortStableFunc).
 	slices.SortStableFunc(components, func(i, j fluxcdv1.FluxComponentStatus) int {
 		return cmp.Compare(i.Name, j.Name)
 	})
