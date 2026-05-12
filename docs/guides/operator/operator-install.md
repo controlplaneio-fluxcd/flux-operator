@@ -129,6 +129,14 @@ kubectl apply -f https://github.com/controlplaneio-fluxcd/flux-operator/releases
     This method is intended for development and testing purposes. On production environments,
     it is recommended to use [Helm](#helm) or [Terraform](#terraform).
 
+## Upgrade
+
+The recommended way to upgrade the Flux Operator is using GitOps, by managing the operator's
+installation with a Flux `HelmRelease`. 
+
+For a complete example, see the [Automating Flux Operator upgrades](operator-migration.md#automating-flux-operator-upgrades)
+section in the migration guide.
+
 ## Uninstall
 
 The recommended way to uninstall the Flux Operator and Flux instance is using the
@@ -141,17 +149,3 @@ flux-operator -n flux-system uninstall --keep-namespace
 The `uninstall` command safely removes the Flux Operator and Flux controllers
 without affecting the Kubernetes objects or Helm releases reconciled by Flux.
 It is safe to re-install the Flux Operator later to resume managing the existing resources.
-
-Alternatively, you can uninstall manually by first deleting the `FluxInstance` resources:
-
-```shell
-kubectl -n flux-system delete fluxinstances --all
-```
-
-The operator will uninstall Flux from the cluster without affecting the Flux-managed workloads.
-
-Then uninstall the Flux Operator with your preferred method, e.g. Helm:
-
-```shell
-helm -n flux-system uninstall flux-operator
-```

@@ -24,9 +24,8 @@ metadata:
   namespace: flux-system
 spec:
   distribution:
-    version: "2.7.x"
+    version: "2.8.x"
     registry: "ghcr.io/fluxcd"
-    artifact: "oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests"
   cluster:
     type: kubernetes
     size: medium
@@ -39,20 +38,13 @@ kubectl apply -f flux-instance.yaml
 ```
 
 The operator will reconcile the `FluxInstance` resource and install
-the latest upstream Flux version in the `2.7` range with the specified components.
-To verify the installation status:
+the latest upstream Flux version in the `2.8` range with the default components.
 
-```shell
-kubectl -n flux-system get fluxinstance flux
-```
+!!! tip "Automatic patch upgrades"
 
-Every hour, the operator will check for Flux patch releases and apply them if available.
-To make the operator check for updates immediately:
-
-```shell
-kubectl -n flux-system annotate --overwrite \
-  fluxinstance flux reconcile.fluxcd.io/requestedAt="$(date +%s)"
-```
+    After a Flux Operator update, if there is a newer patch version of Flux, the operator
+    will automatically upgrade the Flux controllers to the latest patch release within the
+    configured `2.8` semver range, without requiring any changes to the `FluxInstance` resource.
 
 To uninstall the Flux instance:
 
@@ -72,7 +64,7 @@ metadata:
   namespace: flux-system
 spec:
   distribution:
-    version: "2.7.x"
+    version: "2.8.x"
     registry: "ghcr.io/controlplaneio-fluxcd/distroless"
     imagePullSecret: "flux-enterprise-auth"
     artifact: "oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests"
@@ -115,7 +107,7 @@ metadata:
     fluxcd.controlplane.io/reconcileTimeout: "5m"
 spec:
   distribution:
-    version: "2.7.x"
+    version: "2.8.x"
     registry: "ghcr.io/fluxcd"
     artifact: "oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests"
   components:
@@ -130,6 +122,7 @@ spec:
     type: kubernetes
     size: large
     multitenant: true
+    tenantDefaultServiceAccount: flux
     networkPolicy: true
     domain: "cluster.local"
   storage:

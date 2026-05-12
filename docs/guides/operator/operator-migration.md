@@ -28,6 +28,7 @@ For example, if you have bootstrapped the cluster with the following command:
 
 ```shell
 flux bootstrap github \
+  --components-extra=source-watcher \
   --owner=my-org \
   --repository=my-fleet \
   --branch=main \
@@ -44,10 +45,11 @@ metadata:
   namespace: flux-system
 spec:
   distribution:
-    version: "2.7.x"
+    version: "2.8.x"
     registry: "ghcr.io/fluxcd"
   components:
     - source-controller
+    - source-watcher
     - kustomize-controller
     - helm-controller
     - notification-controller
@@ -120,7 +122,7 @@ GitHub App credentials:
 flux-operator create secret githubapp flux-system \
   --namespace=flux-system \
   --app-id=1 \
-  --app-installation-id=2 \
+  --app-installation-owner=my-org \
   --app-private-key-file=./path/to/private-key-file.pem
 ```
 
