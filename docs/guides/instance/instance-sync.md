@@ -16,7 +16,7 @@ to allow transitioning a bootstrapped cluster to a `FluxInstance` managed one.
 
 ## Sync from a Git Repository
 
-To sync the cluster state from a Git repository, add the following configuration to the `FluxInstance`:
+To sync the cluster state from a Git repository, add the `.spec.sync` configuration to the `FluxInstance`:
 
 ```yaml
 apiVersion: fluxcd.controlplane.io/v1
@@ -26,7 +26,7 @@ metadata:
   namespace: flux-system
 spec:
   distribution:
-    version: "2.7.x"
+    version: "2.x"
     registry: "ghcr.io/fluxcd"
   sync:
     kind: GitRepository
@@ -58,15 +58,8 @@ metadata:
   namespace: flux-system
 spec:
   distribution:
-    version: "2.7.x"
+    version: "2.x"
     registry: "ghcr.io/fluxcd"
-  components:
-    - source-controller
-    - kustomize-controller
-    - helm-controller
-    - notification-controller
-    - image-reflector-controller
-    - image-automation-controller
   sync:
     kind: GitRepository
     provider: github
@@ -83,7 +76,7 @@ and should contain the GitHub App private key:
 flux-operator create secret githubapp flux-system \
   --namespace=flux-system \
   --app-id=1 \
-  --app-installation-id=2 \
+  --app-installation-owner=my-org \
   --app-private-key-file=./path/to/private-key-file.pem
 ```
 
@@ -92,7 +85,6 @@ flux-operator create secret githubapp flux-system \
     Note that GitHub App support was added in Flux v2.5.0 and Flux Operator v0.16.0.
     For more information on how to create a GitHub App see the
     Flux [GitRepository API reference](https://fluxoperator.dev/docs/crd/gitrepository/#github). 
-
 
 ## Sync from an Azure DevOps Repository using AKS Workload Identity
 
@@ -106,13 +98,8 @@ metadata:
   namespace: flux-system
 spec:
   distribution:
-    version: "2.7.x"
+    version: "2.x"
     registry: "ghcr.io/fluxcd"
-  components:
-    - source-controller
-    - kustomize-controller
-    - helm-controller
-    - notification-controller
   sync:
     kind: GitRepository
     provider: azure
@@ -146,12 +133,6 @@ spec:
         kind: Deployment
         name: source-controller
 ```
-
-!!! tip "Workload Identity Support"
-
-    Note that Azure DevOps Workload Identity support was added in Flux v2.5.0 and Flux Operator v0.18.0.
-    For more information on how to configure Azure DevOps Workload Identity see the
-    Flux [GitRepository API reference](https://fluxoperator.dev/docs/crd/gitrepository/#azure). 
 
 ## Sync from a Container Registry
 
@@ -212,6 +193,58 @@ spec:
 
 Note that you need to create an EKS Pod Identity association for the `source-controller`
 Service Account to allow it to pull images from the ECR repository.
+
+The supported cloud providers are:
+
+- `aws` for Amazon Elastic Container Registry (ECR)
+- `azure` for Azure Container Registry (ACR)
+- `gcp` for Google Artifact Registry (GAR)
+
+## Sync from a Container Registry using mTLS
+
+To sync the cluster state from a container registry that requires mutual TLS authentication,
+reference the certificate secret with:
+
+```yaml
+apiVersion: fluxcd.controlplane.io/v1
+kind: FluxInstance
+metadata:
+  name: flux
+  namespace: flux-system
+spec:
+  distribution:
+    version: "2.x"
+    registry: "ghcr.io/fluxcd"
+  sync:
+    kind: OCIRepository
+    url: "oci://registry.my-org.com/my-fleet-manifests"
+    ref: "latest"
+    path: "clusters/my-cluster"
+  kustomize:
+    patches:
+      - patch: |
+          - op: add
+            path: /spec/certSecretRef
+            value: registry-tls
+        target:
+          kind: OCIRepository
+```
+
+The Kubernetes secret must be created in the `flux-system` namespace
+and should contain the client certificate, private key, and CA certificate:
+
+```shell
+flux-operator -n flux-system create secret tls registry-tls \
+  --tls-crt-file=./tls.crt \
+  --tls-key-file=./tls.key \
+  --ca-crt-file=./ca.crt
+```
+
+!!! tip "Self-signed certificates"
+
+    If the container registry uses a self-signed certificate and does not require client
+    authentication, you can omit the `--tls-crt-file` and `--tls-key-file` flags and provide
+    only the CA certificate with `--ca-crt-file`.
 
 ## Sync from a Bucket
 
