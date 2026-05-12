@@ -147,6 +147,25 @@ spec:
           kind: Deployment
 ```
 
+### Namespace Pod Security Standards
+
+```yaml
+apiVersion: fluxcd.controlplane.io/v1
+kind: FluxInstance
+spec:
+  kustomize:
+    patches:
+      - patch: |
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: flux-system
+            labels:
+              pod-security.kubernetes.io/enforce: restricted
+        target:
+          kind: Namespace
+```
+
 ### Cluster sync semver range
 
 ```yaml

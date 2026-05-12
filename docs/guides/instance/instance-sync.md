@@ -26,7 +26,7 @@ metadata:
   namespace: flux-system
 spec:
   distribution:
-    version: "2.x"
+    version: "2.8.x"
     registry: "ghcr.io/fluxcd"
   sync:
     kind: GitRepository
@@ -58,7 +58,7 @@ metadata:
   namespace: flux-system
 spec:
   distribution:
-    version: "2.x"
+    version: "2.8.x"
     registry: "ghcr.io/fluxcd"
   sync:
     kind: GitRepository
@@ -98,7 +98,7 @@ metadata:
   namespace: flux-system
 spec:
   distribution:
-    version: "2.x"
+    version: "2.8.x"
     registry: "ghcr.io/fluxcd"
   sync:
     kind: GitRepository
@@ -147,7 +147,7 @@ metadata:
   namespace: flux-system
 spec:
   distribution:
-    version: "2.x"
+    version: "2.8.x"
     registry: "ghcr.io/fluxcd"
   sync:
     kind: OCIRepository
@@ -181,7 +181,7 @@ metadata:
   namespace: flux-system
 spec:
   distribution:
-    version: "2.x"
+    version: "2.8.x"
     registry: "ghcr.io/fluxcd"
   sync:
     kind: OCIRepository
@@ -213,7 +213,7 @@ metadata:
   namespace: flux-system
 spec:
   distribution:
-    version: "2.x"
+    version: "2.8.x"
     registry: "ghcr.io/fluxcd"
   sync:
     kind: OCIRepository
@@ -259,7 +259,7 @@ metadata:
   namespace: flux-system
 spec:
   distribution:
-    version: "2.x"
+    version: "2.8.x"
     registry: "ghcr.io/fluxcd"
   sync:
     kind: Bucket

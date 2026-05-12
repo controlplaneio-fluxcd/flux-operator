@@ -31,7 +31,7 @@ metadata:
     fluxcd.controlplane.io/reconcileTimeout: "5m"
 spec:
   distribution:
-    version: "2.x"
+    version: "2.8.x"
     registry: "ghcr.io/fluxcd"
   components:
     - source-controller
@@ -167,7 +167,7 @@ Example using the upstream Flux distribution:
 ```yaml
 spec:
   distribution:
-    version: "2.x"
+    version: "2.8.x"
     registry: "ghcr.io/fluxcd"
 ```
 
@@ -182,16 +182,16 @@ to the latest Flux minor version:
 ```yaml
 spec:
   distribution:
-    version: "2.x"
+    version: "2.8.x"
 ```
 
 Example using a semver range to configure the automatic upgrade
-to the latest Flux patch version of the `2.3` series:
+to the latest Flux patch version of the `2.8` series:
 
 ```yaml
 spec:
   distribution:
-    version: "2.3.x"
+    version: "2.8.x"
 ```
 
 Example using an exact version to install a specific Flux version:
@@ -199,7 +199,7 @@ Example using an exact version to install a specific Flux version:
 ```yaml
 spec:
   distribution:
-    version: "2.3.0"
+    version: "2.8.0"
 ```
 
 #### Distribution registry
@@ -212,7 +212,7 @@ Example using the upstream Flux distribution registry:
 ```yaml
 spec:
   distribution:
-    version: "2.x"
+    version: "2.8.x"
     registry: "ghcr.io/fluxcd"
 ```
 
@@ -230,7 +230,7 @@ Example using a hypothetical `ghcr.io` mirror:
 ```yaml
 spec:
   distribution:
-    version: "2.x"
+    version: "2.8.x"
     registry: "my-ghcr-mirror.io/fluxcd"
     variant: "upstream-alpine"
 ```
@@ -240,7 +240,7 @@ Example using a hypothetical mirror of the ControlPlane enterprise registry:
 ```yaml
 spec:
   distribution:
-    version: "2.x"
+    version: "2.8.x"
     registry: "my-ghcr-mirror.io/controlplaneio-fluxcd/distroless"
     variant: "enterprise-distroless"
 ```
@@ -255,7 +255,7 @@ Example using the ControlPlane enterprise registry:
 ```yaml
 spec:
   distribution:
-    version: "2.3.x"
+    version: "2.8.x"
     registry: "ghcr.io/controlplaneio-fluxcd/distroless"
     imagePullSecret: "flux-enterprise-auth"
 ```
@@ -287,7 +287,7 @@ Example using the official distribution artifact:
 ```yaml
 spec:
   distribution:
-    version: "2.x"
+    version: "2.8.x"
     registry: "ghcr.io/fluxcd"
     artifact: "oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests"
 ```
@@ -302,7 +302,7 @@ Example using a private registry:
 ```yaml
 spec:
   distribution:
-    version: "2.3.x"
+    version: "2.8.x"
     registry: "ghcr.io/controlplaneio-fluxcd/distroless"
     artifact: "oci://private.registry.com/controlplaneio-fluxcd/flux-operator-manifests"
     artifactPullSecret: "flux-private-auth"
