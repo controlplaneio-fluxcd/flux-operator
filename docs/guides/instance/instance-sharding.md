@@ -25,7 +25,7 @@ metadata:
   namespace: flux-system
 spec:
   distribution:
-    version: "2.7.x"
+    version: "2.8.x"
     registry: "ghcr.io/fluxcd"
   cluster:
     size: large
@@ -83,7 +83,7 @@ metadata:
   namespace: flux-system
 spec:
   distribution:
-    version: "2.7.x"
+    version: "2.8.x"
     registry: "ghcr.io/fluxcd"
   cluster:
     size: large
@@ -280,38 +280,59 @@ spec:
 The `commonMetadata.labels` field is used to propagate the sharding key label to the resources
 reconciled by the Kustomization, such as HelmReleases, OCIRepositories, HelmCharts, HelmRepositories, etc.
 
-### ClusterPolicy Example
+### Admission Policy Example
 
 Another option to assign all the resources of a particular tenant to a specific shard is to use a mutating
 webhook to inject the sharding key label in the resources created for the tenant in their namespace.
 
-Example Kyverno policy to inject the sharding key label to all the Flux
-resources created in the `tenant1` namespace:
+Define the policy that patches the labels of all Flux resources (requires Kubernetes 1.36 or later):
 
 ```yaml
-apiVersion: kyverno.io/v1
-kind: ClusterPolicy
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingAdmissionPolicy
 metadata:
-  name: tenant1-shard1
+  name: flux-shard1
 spec:
-  rules:
-    - name: add-shard-label
-      match:
-        any:
-          - resources:
-              namespaces:
-                - tenant1
-              kinds:
-                - Kustomization
-                - HelmRelease
-                - HelmChart
-                - HelmRepository
-                - GitRepository
-                - OCIRepository
-                - Bucket
-      mutate:
-        patchStrategicMerge:
-          metadata:
-            labels:
-              sharding.fluxcd.io/key: shard1
+  failurePolicy: Fail
+  reinvocationPolicy: IfNeeded
+  matchConstraints:
+    resourceRules:
+      - apiGroups:
+          - kustomize.toolkit.fluxcd.io
+          - helm.toolkit.fluxcd.io
+          - source.toolkit.fluxcd.io
+        apiVersions: ["*"]
+        operations: ["CREATE", "UPDATE"]
+        resources:
+          - kustomizations
+          - helmreleases
+          - helmcharts
+          - helmrepositories
+          - gitrepositories
+          - ocirepositories
+          - buckets
+  mutations:
+    - patchType: ApplyConfiguration
+      applyConfiguration:
+        expression: >
+          Object{
+            metadata: Object.metadata{
+              labels: {"sharding.fluxcd.io/key": "shard1"}
+            }
+          }
+```
+
+Bind the policy to the `tenant1` namespace:
+
+```yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingAdmissionPolicyBinding
+metadata:
+  name: flux-shard1
+spec:
+  policyName: flux-shard1
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: tenant1
 ```
