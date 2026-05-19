@@ -28,8 +28,7 @@ jobs:
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: 24
-          cache: 'npm'
-          cache-dependency-path: web/package-lock.json
+          package-manager-cache: false
       - name: Prepare
         id: prep
         run: |
@@ -63,18 +62,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
       - name: Disk Cleanup
         uses: ./.github/actions/runner-cleanup
-      - name: Unshallow
-        run: git fetch --prune --unshallow
       - name: Setup Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version: 1.26.x
-      - name: Setup Kustomize
-        uses: fluxcd/pkg/actions/kustomize@main
-      - name: Setup Flux
+          cache: false
+      - name: Setup Flux CLI
         uses: fluxcd/flux2/action@04acaec6161ac4fb1a82ffafa88901c03271d34f #v2.8.6
+      - name: Setup Flux Schema CLI
+        uses: fluxcd/flux-schema/actions/setup@c90d3f83707614d21c20226183a9e714d8ba9626 # v0.3.0
       - name: Setup Syft
         uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
       - name: Prepare
@@ -156,18 +156,11 @@ jobs:
         shell: bash
         run: |
           mkdir -p bin/release
-          kustomize build config/default > bin/release/install.yaml
-          kustomize build config/crd > bin/release/crds.yaml
-      - name: Generate OpenAPI JSON schemas from CRDs
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: fluxcd/pkg/actions/crdjsonschema@1bfcca47168cb6d2d7dfdc5b35d8b379a773976d # main
-        with:
-          crd: bin/release/crds.yaml
-          output: schemas
-      - name: Archive the OpenAPI JSON schemas
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: |
-          tar -czvf bin/release/crd-schemas.tar.gz -C schemas .
+          kubectl kustomize config/default > bin/release/install.yaml
+          kubectl kustomize config/crd > bin/release/crds.yaml
+          flux-schema extract crd bin/release/crds.yaml \
+          --output-format '{{ .Kind }}-{{ .GroupPrefix }}-{{ .Version }}.json' \
+          --output-archive bin/release/crd-schemas.tar.gz
       - name: Create release
         if: startsWith(github.ref, 'refs/tags/v')
         id: run-goreleaser
