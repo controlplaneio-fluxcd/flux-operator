@@ -71,10 +71,10 @@ jobs:
         with:
           go-version: 1.26.x
           cache: false
-      - name: Setup Kustomize
-        uses: fluxcd/pkg/actions/kustomize@main
-      - name: Setup Flux
+      - name: Setup Flux CLI
         uses: fluxcd/flux2/action@04acaec6161ac4fb1a82ffafa88901c03271d34f #v2.8.6
+      - name: Setup Flux Schema CLI
+        uses: fluxcd/flux-schema/actions/setup@c90d3f83707614d21c20226183a9e714d8ba9626 # v0.3.0
       - name: Setup Syft
         uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
       - name: Prepare
@@ -156,18 +156,11 @@ jobs:
         shell: bash
         run: |
           mkdir -p bin/release
-          kustomize build config/default > bin/release/install.yaml
-          kustomize build config/crd > bin/release/crds.yaml
-      - name: Generate OpenAPI JSON schemas from CRDs
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: fluxcd/pkg/actions/crdjsonschema@1bfcca47168cb6d2d7dfdc5b35d8b379a773976d # main
-        with:
-          crd: bin/release/crds.yaml
-          output: schemas
-      - name: Archive the OpenAPI JSON schemas
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: |
-          tar -czvf bin/release/crd-schemas.tar.gz -C schemas .
+          kubectl kustomize config/default > bin/release/install.yaml
+          kubectl kustomize config/crd > bin/release/crds.yaml
+          flux-schema extract crd bin/release/crds.yaml \
+          --output-format '{{ .Kind }}-{{ .GroupPrefix }}-{{ .Version }}.json' \
+          --output-archive bin/release/crd-schemas.tar.gz
       - name: Create release
         if: startsWith(github.ref, 'refs/tags/v')
         id: run-goreleaser
