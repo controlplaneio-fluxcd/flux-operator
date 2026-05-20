@@ -72,7 +72,7 @@ jobs:
           go-version: 1.26.x
           cache: false
       - name: Setup Flux CLI
-        uses: fluxcd/flux2/action@54e4ba378e155ada619caafdc599e5c4d759ce5c #v2.8.7
+        uses: fluxcd/flux2/action@1fd61a06264d71cf445ed55c4f14d401d26a1c64 #v2.8.8
       - name: Setup Flux Schema CLI
         uses: fluxcd/flux-schema/actions/setup@c90d3f83707614d21c20226183a9e714d8ba9626 # v0.3.0
       - name: Setup Syft
