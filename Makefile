@@ -265,7 +265,7 @@ docker-registry-down: ## Stop and remove the local docker registry if it exists.
 NEXT_VERSION ?= ""
 
 .PHONY: prep-release
-prep-release: ## Create release PR for the next version (auto minor bump).
+prep-release: mcp-build-search-index ## Create release PR for the next version (auto minor bump).
 	hack/vendor-flux-manifests.sh $(FLUX_VERSION)
 	hack/prep-release.sh $(NEXT_VERSION)
 
