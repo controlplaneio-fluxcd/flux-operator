@@ -1,5 +1,5 @@
 # Import tools
-FROM ghcr.io/fluxcd/flux-cli:v2.8.7@sha256:4bd0394705637ad5dfd63d70893a56c980d2e438def0b8a4579d54fad9be9593 AS flux-cli
+FROM ghcr.io/fluxcd/flux-cli:v2.8.8@sha256:3113a880461938a47ab2ec877aecbf19c570e4df9848d20228d1b4d2c7f8a764 AS flux-cli
 FROM ghcr.io/fluxcd/flux-schema:v0.3.0@sha256:92913be498fc0398d8dc2eb749444b81d1f2da3b0e7503177f7a5447ef907a31 AS flux-schema
 FROM registry.k8s.io/kubectl:v1.36.1@sha256:d08f476d04d0e30f426f06bc6ff6c38913aaa4591943046b77e2f74a72d3611c AS kubectl
 
