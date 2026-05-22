@@ -40,7 +40,8 @@ The command performs the following steps:
   1. Reads the FluxInstance YAML manifest and resolves the current Flux minor version
      from .spec.distribution.version (supports exact versions like '2.7.0' and semver
      constraints like '2.x' resolved via GitHub tags).
-  2. Resolves the target version from the --version flag ('main', 'v2.8', '8', etc.).
+  2. Resolves the target version from the --version flag ('main', a branch name
+     like 'release/v2.8.x', 'v2.8', '8', etc.).
   3. For each controller listed in --components (or .spec.components if not specified):
      a. Fetches the CRD schemas for both the current and target controller versions
         from the fluxcd GitHub repositories.
@@ -56,16 +57,20 @@ The controller version mapping is derived from the fluxcd/pkg/version package, w
 maps each Flux distribution minor version to the corresponding controller versions
 (e.g. Flux v2.7 maps to source-controller v1.7, helm-controller v1.4, etc.).
 
-When --version is set to 'main', the command targets the next unreleased version by
-fetching CRDs from the main branch. Image tags are set to 'rc-<sha>' using the first
-8 characters of each controller's main branch HEAD commit, with the registry fixed to
-ghcr.io/fluxcd.
+When --version is set to 'main' or any other branch name (e.g. 'release/v2.8.x'),
+the command targets that branch by fetching CRDs from it. Image tags are set to
+'rc-<sha>' using the first 8 characters of each controller's branch HEAD commit, with
+the registry fixed to ghcr.io/fluxcd. A value is treated as a branch name unless it
+parses as a released minor version ('8', 'v2.8' or '2.8').
 
 GitHub authentication is optional but recommended to avoid rate limits. The command
 uses credentials from the GH_TOKEN or GITHUB_TOKEN environment variables, or from
 credentials stored by 'gh auth login'.`,
 	Example: `  # Generate patches for upgrading to the latest development version (main branch)
   flux-operator patch instance -f instance.yaml
+
+  # Generate patches for upgrading to a specific branch (e.g. a release branch)
+  flux-operator patch instance -f instance.yaml -v release/v2.8.x
 
   # Generate patches for upgrading from the current version to Flux v2.8
   flux-operator patch instance -f instance.yaml -v v2.8
@@ -98,7 +103,7 @@ func init() {
 	patchInstanceCmd.Flags().StringVarP(&patchInstanceArgs.filename, "filename", "f", "",
 		"Path to the FluxInstance YAML manifest.")
 	patchInstanceCmd.Flags().StringVarP(&patchInstanceArgs.version, "version", "v", "main",
-		"Target Flux version. Accepts: 'main', 'v2.<minor>', or <minor> integer.")
+		"Target Flux version. Accepts: 'main', a branch name (e.g. 'release/v2.8.x'), 'v2.<minor>', or <minor> integer.")
 	patchInstanceCmd.Flags().StringVarP(&patchInstanceArgs.registry, "registry", "r", "",
 		"Override the container registry for image patches (defaults to .spec.distribution.registry).")
 	patchInstanceCmd.Flags().StringSliceVarP(&patchInstanceArgs.components, "components", "c", nil,
@@ -108,8 +113,11 @@ func init() {
 }
 
 // patchTarget represents the resolved target version for patching.
+// When branch is non-empty, CRDs are fetched from that branch ref and image
+// tags are set to 'rc-<sha>' using the branch HEAD commit. Otherwise the
+// target is a released Flux minor version identified by fluxMinor.
 type patchTarget struct {
-	isMain    bool
+	branch    string
 	fluxMinor int
 }
 
@@ -161,12 +169,12 @@ func patchInstanceCmdRun(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("resolving target version: %w", err)
 	}
-	if !target.isMain && target.fluxMinor <= fromMinor {
+	if target.branch == "" && target.fluxMinor <= fromMinor {
 		return fmt.Errorf("target minor version %d must be greater than current minor version %d",
 			target.fluxMinor, fromMinor)
 	}
-	targetLabel := "main"
-	if !target.isMain {
+	targetLabel := target.branch
+	if target.branch == "" {
 		targetLabel = fmt.Sprintf("2.%d", target.fluxMinor)
 	}
 	rootCmd.PrintErrln(`✔`, fmt.Sprintf("Resolved version range: 2.%d -> %s", fromMinor, targetLabel))
@@ -691,10 +699,12 @@ func resolveFromMinor(ctx context.Context, versionExpr string) (int, error) {
 }
 
 // resolveToTarget parses the version flag value into a patchTarget.
-// Accepted formats: "main", "v2.<minor>", "2.<minor>", "<minor>".
+// Release versions ("v2.<minor>", "2.<minor>", "<minor>") resolve to a
+// fluxMinor target. Any other value (e.g. "main", "release/v2.8.x",
+// "feature/foo") is treated as a branch name.
 func resolveToTarget(vFlag string) (patchTarget, error) {
-	if vFlag == "main" {
-		return patchTarget{isMain: true}, nil
+	if !looksLikeVersion(vFlag) {
+		return patchTarget{branch: vFlag}, nil
 	}
 
 	s := strings.TrimPrefix(vFlag, "v")
@@ -713,9 +723,36 @@ func resolveToTarget(vFlag string) (patchTarget, error) {
 
 	minor, err := strconv.Atoi(s)
 	if err != nil {
-		return patchTarget{}, fmt.Errorf("invalid version %q: expected 'main', 'v2.<minor>', or '<minor>'", vFlag)
+		return patchTarget{}, fmt.Errorf("invalid version %q: expected 'main', a branch name, 'v2.<minor>', or '<minor>'", vFlag)
 	}
 	return patchTarget{fluxMinor: minor}, nil
+}
+
+// looksLikeVersion reports whether v is a release version expression
+// ("<minor>", "v<minor>", "2.<minor>", "v2.<minor>") as opposed to a branch
+// name. It returns true only for an optional 'v' prefix followed by one or two
+// dot-separated numeric segments, so anything else (including names with
+// slashes such as "release/v2.8.x") is routed to branch handling.
+func looksLikeVersion(v string) bool {
+	s := strings.TrimPrefix(v, "v")
+	if s == "" {
+		return false
+	}
+	parts := strings.Split(s, ".")
+	if len(parts) > 2 {
+		return false
+	}
+	for _, p := range parts {
+		if p == "" {
+			return false
+		}
+		for _, r := range p {
+			if r < '0' || r > '9' {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // buildCRDURLs constructs the source and target URLs for a CRD file
@@ -743,9 +780,9 @@ func buildCRDURLs(
 		fluxControllerBaseURL, controller, fromRef, crdFile)
 
 	var targetURL string
-	if target.isMain {
-		targetURL = fmt.Sprintf("%s/%s/blob/main/config/crd/bases/%s",
-			fluxControllerBaseURL, controller, crdFile)
+	if target.branch != "" {
+		targetURL = fmt.Sprintf("%s/%s/blob/%s/config/crd/bases/%s",
+			fluxControllerBaseURL, controller, target.branch, crdFile)
 	} else {
 		ctrlToMinor, err := version.RepoMinorForFluxMinor(controller, target.fluxMinor)
 		if err != nil {
@@ -800,11 +837,11 @@ func computeImagePatch(
 	registry string,
 ) (*kustomize.Patch, error) {
 	var imageTag string
-	if target.isMain {
-		rootCmd.PrintErrln(`◎`, fmt.Sprintf("  Resolving main branch SHA for %s", controller))
-		sha, err := resolveMainBranchSHA(ctx, controller)
+	if target.branch != "" {
+		rootCmd.PrintErrln(`◎`, fmt.Sprintf("  Resolving %s branch SHA for %s", target.branch, controller))
+		sha, err := resolveBranchSHA(ctx, controller, target.branch)
 		if err != nil {
-			return nil, fmt.Errorf("resolving main branch SHA for %s: %w", controller, err)
+			return nil, fmt.Errorf("resolving %s branch SHA for %s: %w", target.branch, controller, err)
 		}
 		imageTag = fmt.Sprintf("rc-%s", sha[:8])
 		rootCmd.PrintErrln(`✔`, fmt.Sprintf("  Using image tag %s", imageTag))
@@ -858,16 +895,16 @@ func newGitHubClient(ctx context.Context) *github.Client {
 	return github.NewClient(oauth2.NewClient(ctx, ts))
 }
 
-// resolveMainBranchSHA returns the commit SHA of the main branch
+// resolveBranchSHA returns the HEAD commit SHA of the given branch
 // for the given controller repository under the fluxcd GitHub org.
 // It is a variable so tests can override it.
-var resolveMainBranchSHA = func(ctx context.Context, controller string) (string, error) {
+var resolveBranchSHA = func(ctx context.Context, controller, branch string) (string, error) {
 	ghClient := newGitHubClient(ctx)
-	branch, _, err := ghClient.Repositories.GetBranch(ctx, "fluxcd", controller, "main", 0)
+	b, _, err := ghClient.Repositories.GetBranch(ctx, "fluxcd", controller, branch, 0)
 	if err != nil {
 		return "", err
 	}
-	return branch.GetCommit().GetSHA(), nil
+	return b.GetCommit().GetSHA(), nil
 }
 
 // listFlux2Tags fetches all tags from the fluxcd/flux2 GitHub repository.

@@ -65,6 +65,8 @@ func TestPatchInstanceCmd_Mock(t *testing.T) {
 			_, _ = w.Write(targetData)
 		case strings.Contains(r.URL.Path, "/main/"):
 			_, _ = w.Write(targetData)
+		case strings.Contains(r.URL.Path, "/release/v2.8.x/"):
+			_, _ = w.Write(targetData)
 		default:
 			http.NotFound(w, r)
 		}
@@ -144,6 +146,13 @@ func TestPatchInstanceCmd_Mock(t *testing.T) {
 			extraArgs:    []string{"-v", "main"},
 		},
 		{
+			name:         "version branch",
+			input:        "input-no-kustomize.yaml",
+			goldenOutput: "golden-mock-output-branch.txt",
+			goldenYAML:   "golden-main.yaml",
+			extraArgs:    []string{"-v", "release/v2.8.x"},
+		},
+		{
 			name:         "stdin input",
 			input:        "input-no-kustomize.yaml",
 			goldenOutput: "golden-mock-output-stdin.txt",
@@ -159,7 +168,7 @@ func TestPatchInstanceCmd_Mock(t *testing.T) {
 			g.Expect(err).ToNot(HaveOccurred())
 
 			fluxControllerBaseURL = ts.URL
-			resolveMainBranchSHA = func(_ context.Context, _ string) (string, error) {
+			resolveBranchSHA = func(_ context.Context, _, _ string) (string, error) {
 				return "abc1234567890def", nil
 			}
 			validatePatchedInstance = func(_ string) error { return nil }
@@ -225,8 +234,8 @@ func TestPatchInstanceCmd_Errors(t *testing.T) {
 			expectError: "invalid filename",
 		},
 		{
-			name:        "invalid version flag",
-			args:        []string{"patch", "instance", "-f", "testdata/patch_instance/input.yaml", "-v", "invalid"},
+			name:        "unsupported major version",
+			args:        []string{"patch", "instance", "-f", "testdata/patch_instance/input.yaml", "-v", "v3.8"},
 			expectError: "resolving target version",
 		},
 		{
