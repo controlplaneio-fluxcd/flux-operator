@@ -146,9 +146,7 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 		case errors.IsNotFound(actionErr):
 			http.Error(w, fmt.Sprintf("Resource %s/%s not found", actionReq.Namespace, actionReq.Name), http.StatusNotFound)
 		case errors.IsForbidden(actionErr):
-			perms := user.Permissions(ctx)
-			http.Error(w, fmt.Sprintf("Permission denied. User %s does not have access to %s %s/%s",
-				perms.Username, actionReq.Action, actionReq.Namespace, actionReq.Name), http.StatusForbidden)
+			h.writeActionForbiddenError(ctx, w, actionErr, actionReq.Action, actionReq.Namespace, actionReq.Name)
 		default:
 			http.Error(w, fmt.Sprintf("Action failed: %v", actionErr), http.StatusInternalServerError)
 		}
@@ -173,7 +171,7 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 // annotateResource annotates a resource with the provided map of annotations.
 func (h *Handler) annotateResource(ctx context.Context, gvk schema.GroupVersionKind,
 	name, namespace string, annotations map[string]string) (client.Object, error) {
-	kubeClient := h.kubeClient.GetClient(ctx)
+	kubeClient := h.kubeClient.GetClient(ctx, h.actionClientOptions()...)
 
 	resource := &metav1.PartialObjectMetadata{}
 	resource.SetGroupVersionKind(gvk)
@@ -218,7 +216,7 @@ func (h *Handler) annotateResource(ctx context.Context, gvk schema.GroupVersionK
 // When resuming, it removes the SuspendedBy annotation if present.
 func (h *Handler) setSuspension(ctx context.Context, gvk schema.GroupVersionKind,
 	name, namespace, requestTime string, suspend bool) (client.Object, error) {
-	kubeClient := h.kubeClient.GetClient(ctx)
+	kubeClient := h.kubeClient.GetClient(ctx, h.actionClientOptions()...)
 
 	// Handle Flux Operator resources using annotations.
 	if gvk.GroupVersion() == fluxcdv1.GroupVersion {

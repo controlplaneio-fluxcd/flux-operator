@@ -11,6 +11,7 @@ import (
 	"slices"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -109,8 +110,10 @@ func (h *Handler) DownloadHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Fetch the resource.
-	kubeClient := h.kubeClient.GetClient(ctx)
+	// Fetch the resource. Under fine-grained access this uses the Web UI
+	// application's own privileges; the download custom verb was already
+	// verified against the impersonated user above.
+	kubeClient := h.kubeClient.GetClient(ctx, h.actionClientOptions()...)
 	resource := &unstructured.Unstructured{}
 	resource.SetGroupVersionKind(*gvk)
 	resource.SetName(name)
@@ -118,6 +121,15 @@ func (h *Handler) DownloadHandler(w http.ResponseWriter, req *http.Request) {
 
 	key := client.ObjectKey{Namespace: namespace, Name: name}
 	if err := kubeClient.Get(ctx, key, resource); err != nil {
+		if errors.IsForbidden(err) {
+			// The download custom verb check above only proves the user holds the
+			// "download" verb, not the native "get" verb, so this Get can still be
+			// forbidden. writeActionForbiddenError attributes it correctly: under
+			// fine-grained access it is an application RBAC problem (500), under
+			// impersonation it is the user missing "get" (403).
+			h.writeActionForbiddenError(ctx, w, err, fluxcdv1.UserActionDownload, namespace, name)
+			return
+		}
 		log.FromContext(ctx).Error(err, "failed to fetch resource",
 			"kind", kind, "name", name, "namespace", namespace)
 		http.Error(w, fmt.Sprintf("Resource %s/%s not found", namespace, name), http.StatusNotFound)

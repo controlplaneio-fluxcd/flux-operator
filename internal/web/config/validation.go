@@ -243,5 +243,8 @@ func ValidateUserActionsSpec(u *fluxcdv1.UserActionsSpec) error {
 	if _, exists := auditedActions["*"]; exists && len(auditedActions) > 1 {
 		return fmt.Errorf("audit action '*' cannot be combined with other actions")
 	}
+	if u.Access != "" && !slices.Contains(fluxcdv1.AllUserActionsAccessModes, u.Access) {
+		return fmt.Errorf("invalid user actions access mode: '%s'", u.Access)
+	}
 	return nil
 }

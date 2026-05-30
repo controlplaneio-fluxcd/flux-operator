@@ -122,6 +122,9 @@ spec:
       - reconcile
       - suspend
       - resume
+    # How GitOps actions are authorized and performed.
+    # Optional. Either "Impersonated" (default) or "FineGrained".
+    access: Impersonated
 
   # Search configuration (optional)
   search:
@@ -323,6 +326,32 @@ generate audit events that are sent to both the Kubernetes API server and
 Flux's `notification-controller`. This allows administrators to track user
 activities for security and compliance purposes. The special value `["*"]`
 can be used to enable auditing for all supported actions.
+
+### Access Mode
+
+The `.spec.userActions.access` field controls how GitOps actions
+(`reconcile`, `suspend`, `resume`, `restart`, `delete`, `download`)
+are authorized and performed. It accepts two values:
+
+- `Impersonated` (default): an action is performed by impersonating the
+  user's Kubernetes RBAC identity. This requires the user to hold **both**
+  the custom per-action verb (e.g. `suspend`) **and** the native Kubernetes
+  verbs the action relies on (e.g. `patch`). Because the native verbs are
+  also required, granting a user a single action through the web UI also
+  grants them broader access through other tools (e.g. `kubectl`).
+- `FineGrained`: an action requires **only** the custom per-action verb
+  (e.g. `suspend`). The action itself is performed using the Flux Operator
+  web UI application's own privileges instead of impersonating the user.
+  This enables stricter Zero Trust setups where a user can be granted access
+  to a single action without also gaining the broader native verbs.
+
+When `FineGrained` is enabled, the per-action custom verb is still checked
+against the user's RBAC identity, so the user must be explicitly granted the
+action. The Flux Operator web UI service account, however, must hold the
+native Kubernetes permissions required to perform the actions on behalf of
+users. If those permissions are missing, the action fails with an internal
+error (HTTP 500) clearly indicating that the web UI application — not the
+user — lacks the required RBAC permissions.
 
 ## Search Configuration
 
