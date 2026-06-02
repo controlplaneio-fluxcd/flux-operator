@@ -274,7 +274,14 @@ export function ResourceList() {
         </div>
 
         {/* Status Chart */}
-        <StatusChart items={resourcesData.value} loading={resourcesLoading.value} mode="resources" />
+        <StatusChart
+          items={resourcesData.value}
+          loading={resourcesLoading.value}
+          mode="resources"
+          onBarClick={(status) => {
+            selectedResourceStatus.value = selectedResourceStatus.value === status ? '' : status
+          }}
+        />
 
         {/* Error State */}
         {resourcesError.value && (

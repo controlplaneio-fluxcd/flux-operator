@@ -484,6 +484,35 @@ describe('StatusChart', () => {
     })
   })
 
+  describe('Click Handling', () => {
+    it('calls onBarClick with status when bar is clicked', () => {
+      const normalEvents = createMockEvents(7, 'Normal')
+      const warningEvents = createMockEvents(3, 'Warning')
+      const onBarClick = vi.fn()
+
+      const { container } = render(
+        <StatusChart items={[...normalEvents, ...warningEvents]} loading={false} mode="events" onBarClick={onBarClick} />
+      )
+
+      const bars = container.querySelectorAll('.relative.group')
+      fireEvent.click(bars[0])
+      expect(onBarClick).toHaveBeenCalledWith('Normal')
+
+      fireEvent.click(bars[1])
+      expect(onBarClick).toHaveBeenCalledWith('Warning')
+    })
+
+    it('does not crash when onBarClick is not provided', () => {
+      const events = createMockEvents(5, 'Normal')
+      const { container } = render(
+        <StatusChart items={events} loading={false} mode="events" />
+      )
+
+      const bars = container.querySelectorAll('.relative.group')
+      expect(() => fireEvent.click(bars[0])).not.toThrow()
+    })
+  })
+
   describe('Header with Totals and Stats', () => {
     it('renders header with total count for events', () => {
       const events = createMockEvents(10)
