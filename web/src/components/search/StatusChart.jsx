@@ -72,7 +72,7 @@ function getBarColor(status, mode) {
  * - Shows placeholder bar during loading
  * - Tooltip on hover with count and percentage
  */
-export function StatusChart({ items, loading, mode = 'events' }) {
+export function StatusChart({ items, loading, mode = 'events', onBarClick }) {
   const [hoveredBar, setHoveredBar] = useState(null)
   const [animationComplete, setAnimationComplete] = useState(false)
 
@@ -227,12 +227,14 @@ export function StatusChart({ items, loading, mode = 'events' }) {
                 style={{ flex: `0 0 ${bar.percentage}%` }}
                 onMouseEnter={() => setHoveredBar(index)}
                 onMouseLeave={() => setHoveredBar(null)}
+                onClick={() => onBarClick?.(bar.status)}
+                role={onBarClick ? 'button' : undefined}
               >
                 {/* Gray background */}
                 <div class={`h-full ${grayClass}`}>
                   {/* Colored fill overlay - animates from left to right on initial load */}
                   <div
-                    class={`h-full transition-opacity duration-200 ${colorClass} hover:opacity-80 cursor-pointer`}
+                    class={`h-full transition-opacity duration-200 ${colorClass}${onBarClick ? ' hover:opacity-80 cursor-pointer' : ''}`}
                     style={{
                       width: '100%',
                       animation: !animationComplete ? 'fillRight 0.8s ease-out both' : 'none',

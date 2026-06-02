@@ -223,7 +223,14 @@ export function EventList() {
         </div>
 
         {/* Status Chart */}
-        <StatusChart items={eventsData.value} loading={eventsLoading.value} mode="events" />
+        <StatusChart
+          items={eventsData.value}
+          loading={eventsLoading.value}
+          mode="events"
+          onBarClick={(status) => {
+            selectedEventSeverity.value = selectedEventSeverity.value === status ? '' : status
+          }}
+        />
 
         {/* Error State */}
         {eventsError.value && (
