@@ -264,3 +264,43 @@ func TestWebConfigSpec_UserActionsEnabled(t *testing.T) {
 		})
 	}
 }
+
+func TestWebConfigSpec_FineGrainedAccessEnabled(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		spec     *fluxcdv1.WebConfigSpec
+		expected bool
+	}{
+		{
+			name:     "nil userActions defaults to impersonated",
+			spec:     &fluxcdv1.WebConfigSpec{},
+			expected: false,
+		},
+		{
+			name: "empty access defaults to impersonated",
+			spec: &fluxcdv1.WebConfigSpec{
+				UserActions: &fluxcdv1.UserActionsSpec{},
+			},
+			expected: false,
+		},
+		{
+			name: "explicit Impersonated access",
+			spec: &fluxcdv1.WebConfigSpec{
+				UserActions: &fluxcdv1.UserActionsSpec{Access: fluxcdv1.UserActionsAccessImpersonated},
+			},
+			expected: false,
+		},
+		{
+			name: "FineGrained access enabled",
+			spec: &fluxcdv1.WebConfigSpec{
+				UserActions: &fluxcdv1.UserActionsSpec{Access: fluxcdv1.UserActionsAccessFineGrained},
+			},
+			expected: true,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			g.Expect(tt.spec.FineGrainedAccessEnabled()).To(Equal(tt.expected))
+		})
+	}
+}

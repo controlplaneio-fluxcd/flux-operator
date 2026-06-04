@@ -129,7 +129,7 @@ func (h *Handler) WorkloadActionHandler(w http.ResponseWriter, req *http.Request
 		} else {
 			workload = &unstructured.Unstructured{}
 			workload.SetGroupVersionKind(schema.GroupVersionKind{Group: kindInfo.group, Version: "v1", Kind: actionReq.Kind})
-			if err := h.kubeClient.GetClient(ctx).Get(ctx, client.ObjectKey{
+			if err := h.kubeClient.GetClient(ctx, h.actionClientOptions()...).Get(ctx, client.ObjectKey{
 				Namespace: actionReq.Namespace, Name: actionReq.Name,
 			}, workload); err != nil {
 				http.Error(w, fmt.Sprintf("Failed to get %s/%s/%s",
@@ -170,9 +170,7 @@ func (h *Handler) WorkloadActionHandler(w http.ResponseWriter, req *http.Request
 		case errors.IsNotFound(actionErr):
 			http.Error(w, fmt.Sprintf("Workload %s/%s not found", actionReq.Namespace, actionReq.Name), http.StatusNotFound)
 		case errors.IsForbidden(actionErr):
-			perms := user.Permissions(ctx)
-			http.Error(w, fmt.Sprintf("Permission denied. User %s does not have access to %s %s/%s",
-				perms.Username, actionReq.Action, actionReq.Namespace, actionReq.Name), http.StatusForbidden)
+			h.writeActionForbiddenError(ctx, w, actionErr, actionReq.Action, actionReq.Namespace, actionReq.Name)
 		default:
 			http.Error(w, fmt.Sprintf("Action failed: %v", actionErr), http.StatusInternalServerError)
 		}
@@ -205,7 +203,7 @@ func (h *Handler) WorkloadActionHandler(w http.ResponseWriter, req *http.Request
 // restartWorkload triggers a rollout restart by patching the pod template annotation
 // using Server-Side Apply with the flux-operator-web field manager.
 func (h *Handler) restartWorkload(ctx context.Context, kind, namespace, name string) error {
-	kubeClient := h.kubeClient.GetClient(ctx)
+	kubeClient := h.kubeClient.GetClient(ctx, h.actionClientOptions()...)
 
 	now := metav1.Now().Format(time.RFC3339Nano)
 
@@ -260,7 +258,7 @@ func (h *Handler) restartWorkload(ctx context.Context, kind, namespace, name str
 // is set on both the Job and its pods to differentiate manually
 // triggered jobs from those created by the CronJob schedule.
 func (h *Handler) runJob(ctx context.Context, namespace, name string) error {
-	kubeClient := h.kubeClient.GetClient(ctx)
+	kubeClient := h.kubeClient.GetClient(ctx, h.actionClientOptions()...)
 
 	// Fetch the CronJob to get its jobTemplate spec.
 	var cronJob batchv1.CronJob
@@ -318,7 +316,7 @@ func (h *Handler) deletePod(ctx context.Context, namespace, name string) error {
 	pod.SetName(name)
 	pod.SetNamespace(namespace)
 
-	if err := h.kubeClient.GetClient(ctx).Delete(ctx, pod); err != nil {
+	if err := h.kubeClient.GetClient(ctx, h.actionClientOptions()...).Delete(ctx, pod); err != nil {
 		return fmt.Errorf("failed to delete pod %s/%s: %w", namespace, name, err)
 	}
 

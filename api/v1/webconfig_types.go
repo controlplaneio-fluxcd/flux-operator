@@ -45,6 +45,18 @@ const (
 	// only used for sinalizing to the frontend that the user can delete
 	// pods of a workload. Should not be added to the AllUserActions list.
 	UserActionDeletePods = "deletePods"
+
+	// UserActionsAccessImpersonated configures GitOps actions to be performed
+	// by impersonating the user's Kubernetes RBAC identity. This is the default
+	// and requires the user to hold both the custom per-action verb and the
+	// native Kubernetes verbs (e.g. patch) required by the action.
+	UserActionsAccessImpersonated = "Impersonated"
+
+	// UserActionsAccessFineGrained configures GitOps actions to be performed
+	// using the Flux Operator Web UI's own privileges, requiring the user to
+	// hold only the custom per-action verb (e.g. suspend). This enables
+	// stricter Zero Trust setups.
+	UserActionsAccessFineGrained = "FineGrained"
 )
 
 var (
@@ -62,6 +74,12 @@ var (
 		UserActionDownload,
 		UserActionRestart,
 		UserActionDelete,
+	}
+
+	// AllUserActionsAccessModes lists all possible user actions access modes.
+	AllUserActionsAccessModes = []string{
+		UserActionsAccessImpersonated,
+		UserActionsAccessFineGrained,
 	}
 )
 
@@ -115,6 +133,15 @@ func (c *WebConfigSpec) IsAuthEnabled() bool {
 // UserActionsEnabled checks if user actions are enabled.
 func (c *WebConfigSpec) UserActionsEnabled() bool {
 	return c.IsAuthEnabled()
+}
+
+// FineGrainedAccessEnabled checks if GitOps actions should be performed using
+// the Flux Operator Web UI's own privileges (fine-grained access control)
+// instead of impersonating the user. When enabled, an action requires only the
+// custom per-action RBAC verb from the user, and a 403 returned while
+// performing the action originates from the Web UI application's own RBAC.
+func (c *WebConfigSpec) FineGrainedAccessEnabled() bool {
+	return c.UserActions != nil && c.UserActions.Access == UserActionsAccessFineGrained
 }
 
 // AuthenticationSpec holds the Flux Status Page authentication configuration.
@@ -302,4 +329,20 @@ type UserActionsSpec struct {
 	// The special value ["*"] can be used to audit all actions.
 	// +optional
 	Audit []string `json:"audit"`
+
+	// Access determines how GitOps actions are authorized and performed.
+	//
+	// When set to "Impersonated" (the default), an action requires both the
+	// custom per-action RBAC verb (e.g. "suspend") and the native Kubernetes
+	// verbs (e.g. "patch"), because the action is performed by impersonating
+	// the user.
+	//
+	// When set to "FineGrained", an action requires only the custom per-action
+	// RBAC verb. The action itself is performed using the Flux Operator Web UI's
+	// own privileges instead of impersonating the user. This enables stricter
+	// Zero Trust setups where a user can be granted access to a single action
+	// (e.g. only "suspend") without also gaining the broader native verbs.
+	// +kubebuilder:validation:Enum=Impersonated;FineGrained
+	// +optional
+	Access string `json:"access"`
 }

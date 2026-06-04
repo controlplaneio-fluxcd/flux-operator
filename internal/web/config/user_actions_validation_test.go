@@ -69,6 +69,27 @@ func TestValidateUserActionsSpec(t *testing.T) {
 			},
 			wantErr: "audit action '*' cannot be combined with other actions",
 		},
+		{
+			name: "valid access Impersonated",
+			spec: &fluxcdv1.UserActionsSpec{
+				Access: fluxcdv1.UserActionsAccessImpersonated,
+			},
+			wantErr: "",
+		},
+		{
+			name: "valid access FineGrained",
+			spec: &fluxcdv1.UserActionsSpec{
+				Access: fluxcdv1.UserActionsAccessFineGrained,
+			},
+			wantErr: "",
+		},
+		{
+			name: "invalid access mode",
+			spec: &fluxcdv1.UserActionsSpec{
+				Access: "Bogus",
+			},
+			wantErr: "invalid user actions access mode: 'Bogus'",
+		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
