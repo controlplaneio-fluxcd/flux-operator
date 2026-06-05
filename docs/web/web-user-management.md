@@ -13,6 +13,10 @@ and their managed resources, but cannot access sensitive data such as Kubernetes
 We recommend restricting access to the Web UI using [Single Sign-On](#single-sign-on)
 and Kubernetes Role-Based Access Control (RBAC) policies.
 
+For a detailed overview of the Web UI's security model and every case where
+the backend uses elevated privileges, see the
+[Flux Web UI RBAC Minimization & Zero Trust](web-zero-trust-rbac.md) transparency page.
+
 ## Anonymous Access
 
 By default, the Web UI runs under the `flux-operator` Kubernetes service account.
