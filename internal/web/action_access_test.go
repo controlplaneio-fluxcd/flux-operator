@@ -36,7 +36,7 @@ func fineGrainedConfig() *fluxcdv1.WebConfigSpec {
 
 // grantUserActionVerb creates a ClusterRole/Binding that grants the given user
 // the custom action verbs on resourcesets (get, list and the action verbs) but
-// deliberately NOT the native patch verb. This models a Zero Trust setup where
+// deliberately NOT the native patch verb. This models a least-privilege setup where
 // a user is granted only the right to trigger an action.
 func grantUserActionVerb(t *testing.T, g *WithT, username string, verbs ...string) {
 	t.Helper()

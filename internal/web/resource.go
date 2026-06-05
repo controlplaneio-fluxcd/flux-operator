@@ -225,7 +225,7 @@ func (h *Handler) GetResource(ctx context.Context, kind, name, namespace string)
 	// List which actions the user can perform on this resource.
 	if h.conf.UserActionsEnabled() {
 		var actions []string
-		for _, action := range fluxcdv1.AllUserActions {
+		for _, action := range fluxcdv1.AllUserActions() {
 			canAct, err := h.kubeClient.CanActOnResource(ctx, action, gvk.Group, kindInfo.Plural, namespace, name)
 			if err != nil {
 				log.FromContext(ctx).Error(err, "failed to check custom RBAC for action",

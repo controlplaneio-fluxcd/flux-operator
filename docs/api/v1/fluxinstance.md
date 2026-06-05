@@ -479,7 +479,7 @@ Use cases:
 - **Cloud workload identity**: Each tenant namespace has service accounts bound to cloud IAM roles
 - **Secret management**: Different service accounts for decryption operations (e.g. SOPS with cloud KMS)
 - **Multi-cluster**: Separate service accounts for accessing remote clusters via cloud IAM
-- **Zero-trust**: Prevent controllers from accessing resources outside their intended scope
+- **Least privilege**: Prevent controllers from accessing resources outside their intended scope
 
 See the complete workload identity documentation for CNCF Flux
 [here](https://fluxcd.io/flux/integrations/).

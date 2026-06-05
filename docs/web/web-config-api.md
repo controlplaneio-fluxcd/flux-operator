@@ -342,7 +342,7 @@ are authorized and performed. It accepts two values:
 - `FineGrained`: an action requires **only** the custom per-action verb
   (e.g. `suspend`). The action itself is performed using the Flux Operator
   web UI application's own privileges instead of impersonating the user.
-  This enables stricter Zero Trust setups where a user can be granted access
+  This enables stricter least-privilege setups where a user can be granted access
   to a single action without also gaining the broader native verbs.
 
 When `FineGrained` is enabled, the per-action custom verb is still checked

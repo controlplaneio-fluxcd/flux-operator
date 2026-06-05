@@ -15,7 +15,7 @@ and Kubernetes Role-Based Access Control (RBAC) policies.
 
 For a detailed overview of the Web UI's security model and every case where
 the backend uses elevated privileges, see the
-[Flux Web UI RBAC Minimization & Zero Trust](web-zero-trust-rbac.md) transparency page.
+[Flux Web UI RBAC Minimization & Least Privilege](web-least-privilege-rbac.md) transparency page.
 
 ## Anonymous Access
 

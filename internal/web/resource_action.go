@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
-	"slices"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -67,7 +66,7 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// Validate action type
-	if !slices.Contains(fluxcdv1.AllUserActions, actionReq.Action) {
+	if !fluxcdv1.IsUserAction(actionReq.Action) {
 		http.Error(w, "Invalid action. Must be one of: reconcile, suspend, resume", http.StatusBadRequest)
 		return
 	}
