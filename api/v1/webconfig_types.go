@@ -4,6 +4,9 @@
 package v1
 
 import (
+	"maps"
+	"slices"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -43,7 +46,7 @@ const (
 	// UserActionDeletePods is the delete user action for pods of workloads
 	// managed by Flux. This constant is not used for RBAC checks, and is
 	// only used for sinalizing to the frontend that the user can delete
-	// pods of a workload. Should not be added to the AllUserActions list.
+	// pods of a workload. Should not be added to the userActions map.
 	UserActionDeletePods = "deletePods"
 
 	// UserActionsAccessImpersonated configures GitOps actions to be performed
@@ -66,14 +69,18 @@ var (
 		AuthenticationTypeOAuth2,
 	}
 
-	// AllUserActions lists all possible user actions.
-	AllUserActions = []string{
-		UserActionReconcile,
-		UserActionSuspend,
-		UserActionResume,
-		UserActionDownload,
-		UserActionRestart,
-		UserActionDelete,
+	// userActions is the single source of truth for all GitOps user actions.
+	// The map key is the custom RBAC verb. Because this is a map literal, the Go
+	// compiler rejects any duplicate verb at build time, which guarantees that no
+	// two actions can share a verb. This invariant is what makes FineGrained
+	// access safe: each verb unlocks exactly one action.
+	userActions = map[string]struct{}{
+		UserActionReconcile: {},
+		UserActionSuspend:   {},
+		UserActionResume:    {},
+		UserActionDownload:  {},
+		UserActionRestart:   {},
+		UserActionDelete:    {},
 	}
 
 	// AllUserActionsAccessModes lists all possible user actions access modes.
@@ -82,6 +89,18 @@ var (
 		UserActionsAccessFineGrained,
 	}
 )
+
+// AllUserActions returns all supported user action verbs, sorted, derived from
+// the userActions source of truth.
+func AllUserActions() []string {
+	return slices.Sorted(maps.Keys(userActions))
+}
+
+// IsUserAction reports whether the given verb is a supported user action.
+func IsUserAction(verb string) bool {
+	_, ok := userActions[verb]
+	return ok
+}
 
 // WebConfig is the Flux Status Page configuration.
 type WebConfig struct {

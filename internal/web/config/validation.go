@@ -235,7 +235,7 @@ func ValidateUserActionsSpec(u *fluxcdv1.UserActionsSpec) error {
 		if _, exists := auditedActions[action]; exists {
 			return fmt.Errorf("duplicate audit action: '%s'", action)
 		}
-		if !slices.Contains(fluxcdv1.AllUserActions, action) && action != "*" {
+		if !fluxcdv1.IsUserAction(action) && action != "*" {
 			return fmt.Errorf("invalid audit action: '%s'", action)
 		}
 		auditedActions[action] = struct{}{}
