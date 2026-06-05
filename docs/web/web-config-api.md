@@ -353,6 +353,16 @@ users. If those permissions are missing, the action fails with an internal
 error (HTTP 500) clearly indicating that the web UI application — not the
 user — lacks the required RBAC permissions.
 
+!!! note "Helm chart value"
+
+    When running the web UI as a [standalone deployment](web-standalone.md) with
+    the Flux Operator Helm chart and using `FineGrained` access, set
+    `web.userActions.access` to `FineGrained` as well. This extends the web
+    server's ClusterRole with the native Kubernetes permissions required by the
+    actions, so the service account is granted exactly what it needs. When the
+    web UI runs embedded in the Flux Operator deployment, the operator already
+    runs with cluster-wide privileges and no extra RBAC is needed.
+
 ## Search Configuration
 
 The web UI provides an endpoint (`/api/v1/resources`) that allows users
