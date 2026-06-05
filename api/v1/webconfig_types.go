@@ -55,7 +55,7 @@ const (
 	// UserActionsAccessFineGrained configures GitOps actions to be performed
 	// using the Flux Operator Web UI's own privileges, requiring the user to
 	// hold only the custom per-action verb (e.g. suspend). This enables
-	// stricter Zero Trust setups.
+	// stricter least-privilege setups.
 	UserActionsAccessFineGrained = "FineGrained"
 )
 
@@ -340,7 +340,7 @@ type UserActionsSpec struct {
 	// When set to "FineGrained", an action requires only the custom per-action
 	// RBAC verb. The action itself is performed using the Flux Operator Web UI's
 	// own privileges instead of impersonating the user. This enables stricter
-	// Zero Trust setups where a user can be granted access to a single action
+	// least-privilege setups where a user can be granted access to a single action
 	// (e.g. only "suspend") without also gaining the broader native verbs.
 	// +kubebuilder:validation:Enum=Impersonated;FineGrained
 	// +optional

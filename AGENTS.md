@@ -52,7 +52,7 @@ The project is structured as a Go module with the following components:
 - Run individual tests when debugging, run the full test suite when done
 - Replace `interface{}` with `any` type alias
 - Use `go doc` to read func signatures in external packages
-- Always keep docs/web/web-zero-trust-rbac.md updated after every change you make
+- Always keep docs/web/web-least-privilege-rbac.md updated after every change you make
 
 ## Development Commands for AI Agents
 

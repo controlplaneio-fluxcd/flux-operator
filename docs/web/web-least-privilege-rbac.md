@@ -1,9 +1,9 @@
 ---
-title: Flux Web UI RBAC Minimization & Zero Trust
+title: Flux Web UI RBAC Minimization & Least Privilege
 description: Transparency documentation for all elevated system privileges in the Flux Web UI backend.
 ---
 
-# Flux Web UI RBAC Minimization & Zero Trust
+# Flux Web UI RBAC Minimization & Least Privilege
 
 The Flux Web UI backend enforces strict
 [Role-Based Access Control](web-user-management.md#role-based-access-control)
@@ -19,7 +19,7 @@ system fulfills these critical internal requirements without exposing
 sensitive data.
 
 By relying on the system to safely handle these internal operations,
-administrators can enforce a much stricter Zero Trust posture.
+administrators can enforce a much stricter least-privilege posture.
 
 ## Guiding Principles
 
@@ -29,7 +29,7 @@ administrators can enforce a much stricter Zero Trust posture.
    ConfigMap data, or any other sensitive content to the user.
 3. **RBAC Minimization.** Each usage of elevated system privileges exists because it enables a
    specific, high-value feature that significantly decreases the permissions
-   that users would otherwise require, improving support for Zero Trust.
+   that users would otherwise require, improving support for the principle of least privilege.
 
 ---
 
@@ -50,7 +50,7 @@ The privileged client is used solely to query this index for Jobs owned
 by the CronJob; the resulting Pod statuses (name, phase, timestamps) are
 returned to the user without exposing any sensitive pod spec data.
 
-**Zero Trust benefit:**
+**Least privilege benefit:**
 Without this internal usage, users would need explicit read permissions on all Jobs and Pods just to see their scheduled workloads running. By handling this internally, we limit the user's required RBAC to just the CronJob itself while still providing critical observability.
 
 ---
@@ -72,7 +72,7 @@ is used for this single discovery call because the REST mapper is a
 cluster-level metadata operation that does not read any actual resource
 data.
 
-**Zero Trust benefit:**
+**Least privilege benefit:**
 API discovery is a metadata-only operation that returns no workload data,
 no secrets, and no resource content. If we required the user to have
 explicit RBAC permissions for API discovery, every user role would need
@@ -97,7 +97,7 @@ using the privileged client. It then reads the FluxInstance to find the
 notification-controller address and emits a Kubernetes Event tied to the
 managing Flux resource.
 
-**Zero Trust benefit:**
+**Least privilege benefit:**
 Audit is a security feature, not a user-facing data feature. The user has
 already been authorized to perform the action itself (via their own RBAC). By using the system client, we guarantee that every auditable action produces a complete, traceable event regardless of the acting user's read permissions. Administrators don't need to weaken audit coverage or inflate user RBAC just to ensure logs are written. No data from the privileged reads is returned to the user.
 
@@ -117,7 +117,7 @@ workload. It then looks up the Flux resource managing that workload so
 the audit event is associated with the correct Flux resource. This entire
 chain traversal uses the privileged client.
 
-**Zero Trust benefit:**
+**Least privilege benefit:**
 The user has already been authorized to delete the Pod, which is a
 destructive action with a higher privilege bar than reading. Walking the
 owner chain to produce a meaningful audit trail is an internal task that
@@ -141,7 +141,7 @@ single report object. This report is built periodically on a background
 goroutine and cached. When a user requests the report, the cached data
 is filtered to show only the namespaces the user has access to.
 
-**Zero Trust benefit:**
+**Least privilege benefit:**
 The report is the backbone of the Web UI dashboard. Building it requires
 cross-namespace visibility that no single user is guaranteed to have —
 especially in multi-tenant clusters. The privileged scan produces **aggregated statistics only**
@@ -164,7 +164,7 @@ client is used because the Metrics API call and the pod spec read target
 the operator's own namespace (typically `flux-system`), which users may
 not have access to.
 
-**Zero Trust benefit:**
+**Least privilege benefit:**
 Flux controller health is a cluster-wide concern visible to all dashboard
 users, regardless of their namespace-scoped permissions. Showing CPU and
 memory utilization of Flux controllers helps users understand whether Flux itself is under resource pressure. The metrics data contains no sensitive information. By fetching this internally, administrators are not forced to break namespace isolation by granting everyone read access to the `flux-system` namespace.
@@ -181,8 +181,8 @@ The system performs the actual `patch` operation on the target resource, as long
 **How it works:**
 Normally, GitOps actions are executed by patching the object using the user's impersonated client, which requires the user to hold the native Kubernetes `patch` verb. When fine-grained access control is enabled, the backend verifies that the user holds the specific custom verb for the action, and if so, it uses the privileged client to perform the patch operation, removing the need for user impersonation during the patch.
 
-**Zero Trust benefit:**
-This feature is crucial for Zero Trust security scenarios. If users were required to have the native `patch` verb to suspend or resume resources, they could potentially bypass the Web UI and perform unauthorized modifications via `kubectl` or other SSO-integrated tools. By handling the patch internally, cluster administrators can assign restrictive, fine-grained access policies ensuring tenants can solely perform permitted actions.
+**Least privilege benefit:**
+This feature is crucial for least-privilege security scenarios. If users were required to have the native `patch` verb to suspend or resume resources, they could potentially bypass the Web UI and perform unauthorized modifications via `kubectl` or other SSO-integrated tools. By handling the patch internally, cluster administrators can assign restrictive, fine-grained access policies ensuring tenants can solely perform permitted actions.
 
 ---
 
@@ -196,7 +196,7 @@ The system lists all namespaces to determine which ones the user is permitted to
 **How it works:**
 To populate the namespace filter dropdown and filter the main dashboard statistics, the backend needs to know which namespaces the user is allowed to see. It uses the system client to list all namespaces, and then performs a `SelfSubjectAccessReview` for the user to check if they have `get` permissions on `ResourceSets` in each namespace. If they do, the namespace's existence is revealed to the user in the UI.
 
-**Zero Trust benefit:**
+**Least privilege benefit:**
 Users do not need cluster-wide `list` permissions on namespaces just to populate the UI dropdown. The system determines what the user is allowed to see internally, keeping user permissions tightly scoped to only the resources they actively manage. This preserves strict multi-tenant boundaries by removing the need for broad, cluster-level namespace access.
 
 ---
