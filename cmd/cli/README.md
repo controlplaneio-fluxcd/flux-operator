@@ -31,17 +31,19 @@ Zsh, Fish, and PowerShell are also supported with their own sub-commands.
 ### Container Image
 
 The Flux Operator CLI is also available as a container image, which can be used in CI pipelines
-or Kubernetes Jobs. The image contains the `flux-operator` CLI binary along with `flux`, `flux-schema`
-and `kubectl` binaries for convenience.
+or Kubernetes Jobs. The image bundles the following binaries for convenience:
 
-The multi-arch image (Linux AMD64/ARM64) is hosted on GitHub Container Registry at
-`ghcr.io/controlplaneio-fluxcd/flux-operator-cli`.
+- `flux-operator` - the Flux Operator CLI for managing Flux instances and resources
+- `flux` - the [Flux CLI](https://github.com/fluxcd/flux2) for pushing, pulling, and managing OCI artifacts
+- `flux-schema` - the [Flux schema](https://github.com/fluxcd/flux-schema) plugin for Kubernetes manifests validation and schema generation
+- `flux-mirror` - the [Flux mirror](https://github.com/fluxcd/flux-mirror) plugin for syncing Helm charts and OCI artifacts across registries
+- `kubectl` - the Kubernetes CLI for cluster operations
+- `sh` - the BusyBox shell for running scripts and debugging
 
-```shell
-version=$(gh release view --repo controlplaneio-fluxcd/flux-operator --json tagName -q '.tagName')
-docker run --rm -it --entrypoint=flux-operator ghcr.io/controlplaneio-fluxcd/flux-operator-cli:$version help
-docker run --rm -it --entrypoint=kubectl ghcr.io/controlplaneio-fluxcd/flux-operator-cli:$version help
-```
+The multi-arch image (Linux AMD64/ARM64) is available at:
+
+- `ghcr.io/controlplaneio-fluxcd/flux-operator-cli`
+- `quay.io/fluxoperatordev/flux-operator-cli`
 
 ## Commands
 
@@ -77,7 +79,7 @@ The following commands are available:
 
 - `flux-operator diff yaml <source> <target>`: Compares two YAML files and produces a JSON patch (RFC 6902)
   that can be applied to the source file to obtain the target file. The source and target can be
-  local file paths or remote URLs (including GitHub, GitLab, GitHub Gist and OCI URLs).
+  local file paths or remote URLs (including GitHub, GitLab, GitHub Gist, and OCI URLs).
   The comparison ignores metadata and status fields, focusing on the semantic content.
     - `-o, --output`: Output format for the diff result (json-patch-yaml, json-patch). Default is json-patch-yaml.
 
@@ -117,14 +119,14 @@ Arguments:
 ### Get All Command
 
 This command can be used to retrieve information about all Flux resources in the cluster,
-it supports filtering by resource kind, namespace and ready status.
+it supports filtering by resource kind, namespace, and ready status.
 
 - `flux-operator get all`: Retrieves all Flux resources and their status.
 
 Arguments:
 
 - `--kind`: Specifies the kind of resources to filter (e.g. Kustomization, HelmRelease, etc.).
-- `--ready-status`: Filters resources by their ready status (True, False, Unknown or Suspended).
+- `--ready-status`: Filters resources by their ready status (True, False, Unknown, or Suspended).
 - `-o, --output`: Specifies the output format (table, json, yaml). Default is table.
 - `-n, --namespace`: Specifies the namespace to filter the resources.
 - `-A, --all-namespaces`: Retrieves resources from all namespaces.
@@ -219,7 +221,7 @@ Arguments:
 ### Tree Commands
 
 The `flux-operator tree` commands are used to visualize the Flux-managed Kubernetes objects in a tree format
-by recursively traversing the Flux resources such as ResourceSets, Kustomizations and HelmReleases.
+by recursively traversing the Flux resources such as ResourceSets, Kustomizations, and HelmReleases.
 
 The following commands are available:
 
@@ -331,7 +333,7 @@ Arguments:
 
 ### Version Command
 
-This command is used to display the version of the CLI, of the Flux Operator
+This command is used to display the version of the CLI, of the Flux Operator,
 and of the Flux distribution running in the cluster.
 
 - `flux-operator version`: Displays the version information for the CLI and the Flux Operator.
