@@ -4,8 +4,8 @@
   "author": "flux-enterprise@control-plane.io",
   "role": "Enterprise Flux Maintainers",
   "timestamp": "2025-07-09T09:46:14Z",
-  "last_updated": "2026-03-19T12:00:00.000000+00:00",
-  "version": 3,
+  "last_updated": "2026-06-02T12:00:00.000000+00:00",
+  "version": 4,
   "statements": [
     {
       "vulnerability": {
@@ -145,6 +145,19 @@
       ],
       "status": "fixed",
       "impact_statement": "False positive: the fix for this vulnerability has been backported to the Enterprise Flux v2.6 release branch of notification-controller via a patch and is included in the shipped binary. Trivy flags this based on the pseudo-version of the Go module being lower than the upstream fixed version (1.8.3), but the vulnerable code path is not present in the binary."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-47680"
+      },
+      "timestamp": "2026-06-02T12:00:00Z",
+      "products": [
+        {
+          "@id": "pkg:oci/source-controller"
+        }
+      ],
+      "status": "fixed",
+      "impact_statement": "False positive: the fix for this vulnerability has been backported to the Enterprise Flux v2.6 release branch of source-controller via a patch and is included in the shipped binary. Trivy flags this based on the source-controller module version being lower than the upstream fixed version (1.8.5), but the vulnerable path-traversal code path is fixed in the binary."
     }
   ]
 }
