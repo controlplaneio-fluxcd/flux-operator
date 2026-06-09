@@ -55,18 +55,13 @@ using any of the following transport modes:
 - Server-Sent Events (`sse`)
 - Streamable HTTP (`http`)
 
-See the [Configuration Options](mcp-config.md) for more details on how to set up the server
-in different modes.
-
-### Claude, Cursor, and Windsurf
-
-Add the following configuration to your AI assistant's settings to enable the Flux MCP Server:
+Add the following configuration to your AI assistant's settings to use the Flux MCP Server over stdio:
 
 ```json
 {
  "mcpServers": {
    "flux-operator-mcp": {
-     "command": "/path/to/flux-operator-mcp",
+     "command": "flux-operator-mcp",
      "args": ["serve"],
      "env": {
        "KUBECONFIG": "/path/to/.kube/config"
@@ -76,41 +71,19 @@ Add the following configuration to your AI assistant's settings to enable the Fl
 }
 ```
 
-Replace `/path/to/flux-operator-mcp` with the actual path to the binary
-and `/path/to/.kube/config` with the path to your kubeconfig file.
+Replace `/path/to/.kube/config` with the path to your kubeconfig file.
+To determine the correct path, you can run: `echo $HOME/.kube/config`.
 
-To determine the correct paths for the binary and kubeconfig, you can use the following commands:
+For Codex, you can run:
 
 ```shell
-which flux-operator-mcp
-echo $HOME/.kube/config
+codex mcp add flux-operator-mcp \
+  --env KUBECONFIG=$HOME/.kube/config \
+  -- flux-operator-mcp serve
 ```
 
-### VS Code Copilot Chat
-
-Add the following configuration to your VS Code settings:
-
-```json
-{
- "mcp": {
-   "servers": {
-     "flux-operator-mcp": {
-       "command": "/path/to/flux-operator-mcp",
-       "args": ["serve"],
-       "env": {
-         "KUBECONFIG": "/path/to/.kube/config"
-       }
-     }
-   }
- },
- "chat.mcp.enabled": true
-}
-```
-
-Replace `/path/to/flux-operator-mcp` with the actual path to the binary
-and `/path/to/.kube/config` with the path to your kubeconfig file.
-
-When using GitHub Copilot Chat, enable Agent mode to access the Flux MCP tools.
+See the [Configuration Options](mcp-config.md) for more details on how to set up the server
+in different modes.
 
 ## Testing Your Installation
 

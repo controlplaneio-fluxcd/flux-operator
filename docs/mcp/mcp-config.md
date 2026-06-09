@@ -51,7 +51,7 @@ export KUBECONFIG=$HOME/.kube/config
 flux-operator-mcp serve --transport http --port 8080
 ```
 
-To connect to the server from VS Code, use the following configuration:
+To connect to the server over http, use the following configuration:
 
 ```json
 {
@@ -78,7 +78,7 @@ export KUBECONFIG=$HOME/.kube/config
 flux-operator-mcp serve --transport sse --port 8080
 ```
 
-To connect to the server from VS Code, use the following configuration:
+To connect to the server over sse, use the following configuration:
 
 ```json
 {
@@ -231,7 +231,7 @@ To connect to the server, start port forwarding with:
 kubectl port-forward -n flux-system svc/flux-operator-mcp 9090:9090
 ```
 
-Then, in your VS Code settings, add:
+Then, in your AI settings, add:
 
 ```json
 {

@@ -27,6 +27,28 @@ It is recommended to enhance the instructions with relevant information about yo
 AI assistant understand your context better. For example, Kubernetes distribution, Cloud provider,
 what type of applications are deployed, how secrets are managed.
 
+## AI Agent Skills
+
+For agents that support the [Agent Skills Open Standard](https://agentskills.io/specification),
+the Flux project maintains the official [GitOps Agent Skills](https://github.com/fluxcd/agent-skills)
+which give coding agents deep expertise in Flux CD, Kubernetes, and GitOps best practices.
+
+The skill relevant to the Flux MCP is **gitops-cluster-debug**, which helps
+troubleshoot live Kubernetes clusters using the MCP Server. This skill follows dedicated
+workflows for HelmRelease, Kustomization, and ResourceSet debugging, and produces a root
+cause analysis report with a dependency chain and prioritized remediation steps.
+
+The fastest way to install the skills is with the [Flux Operator CLI](cli.md).
+Navigate to your GitOps repository root and run:
+
+```shell
+flux-operator skills install ghcr.io/fluxcd/agent-skills --agent claude-code
+```
+
+The skills work across compatible agents including Claude Code, Codex, Gemini, and GitHub Copilot.
+For other agents and installation methods,
+refer to the [agent-skills README](https://github.com/fluxcd/agent-skills#install).
+
 ## Prompting Strategies
 
 For the best experience with the Flux MCP Server [tools](tools.md):
