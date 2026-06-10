@@ -143,7 +143,7 @@ func (m *Manager) RegisterTools(server *mcp.Server, inCluster bool) []string {
 		addTool(server, &recorder,
 			&mcp.Tool{
 				Name:        ToolSearchFluxDocs,
-				Description: "This tool searches the Flux documentation for a given query.",
+				Description: "This tool searches the Flux documentation for a given query, using concise docs by default with complete API docs available on request.",
 			},
 			m.HandleSearchFluxDocs,
 		)

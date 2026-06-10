@@ -203,11 +203,12 @@ cli-ci-build: ## Build CLI binary for CI.
 MCP_IMG ?= ghcr.io/controlplaneio-fluxcd/flux-operator-mcp:latest
 
 .PHONY: mcp-build-search-index
-mcp-build-search-index: ## Build search index for MCP docs tool.
-	@echo "Building MCP search index..."
+mcp-build-search-index: ## Build search database for MCP docs tool.
+	@echo "Building MCP search database..."
 	@mkdir -p cmd/mcp/toolbox/library
+	@touch cmd/mcp/toolbox/library/index.db
 	@go run cmd/mcp/toolbox/indexer/main.go
-	@echo "MCP search index built successfully"
+	@echo "MCP search database built successfully"
 
 .PHONY: mcp-test
 mcp-test: tidy fmt vet ## Run MCP tests.

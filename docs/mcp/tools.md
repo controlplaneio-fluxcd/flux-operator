@@ -282,17 +282,18 @@ The tool performs the following operations:
 
 ## Documentation Tool
 
-This tool provides access to the latest Flux documentation.
+This tool provides access to Flux documentation in concise and complete formats.
 
 ### search_flux_docs
 
-Searches the Flux documentation for specific information, ensuring the AI assistant can provide up-to-date guidance.
+Searches the Flux documentation for specific information. By default, the tool returns concise Flux reference documentation optimized for low agent context usage. Use the complete format only when the full upstream API documentation is needed.
 
 **Parameters:**
 
 - `query` (required): The search query
 - `limit` (optional): Maximum number of results to return (default: 1)
+- `format` (optional): Documentation format, one of `concise` or `complete` (default: `concise`)
 
 **Output:**
 
-Relevant documentation from the Flux project that matches the search query.
+Relevant Flux documentation that matches the search query. The `concise` format returns compact reference docs, while the `complete` format returns full upstream API docs.
