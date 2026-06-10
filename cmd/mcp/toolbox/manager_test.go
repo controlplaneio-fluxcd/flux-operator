@@ -48,6 +48,80 @@ func TestManager_RegisterToolsDoesNotPanic(t *testing.T) {
 func TestManager_ToolSchemasIncludeProperties(t *testing.T) {
 	g := NewWithT(t)
 
+	expectedSchemas := map[string]struct {
+		properties []string
+		required   []string
+	}{
+		ToolInstallFluxInstance: {
+			properties: []string{"instance_url", "timeout"},
+			required:   []string{"instance_url"},
+		},
+		ToolGetFluxInstance: {
+			properties: []string{},
+			required:   []string{},
+		},
+		ToolGetKubernetesAPIVersions: {
+			properties: []string{},
+			required:   []string{},
+		},
+		ToolGetKubernetesLogs: {
+			properties: []string{"pod_name", "container_name", "pod_namespace", "limit", "previous"},
+			required:   []string{"pod_name", "container_name", "pod_namespace"},
+		},
+		ToolGetKubernetesMetrics: {
+			properties: []string{"pod_name", "pod_namespace", "pod_selector", "limit"},
+			required:   []string{"pod_namespace"},
+		},
+		ToolGetKubernetesResources: {
+			properties: []string{"apiVersion", "kind", "name", "namespace", "selector", "limit"},
+			required:   []string{"apiVersion", "kind"},
+		},
+		ToolSearchFluxDocs: {
+			properties: []string{"query", "limit"},
+			required:   []string{"query"},
+		},
+		ToolApplyKubernetesManifest: {
+			properties: []string{"yaml_content", "overwrite"},
+			required:   []string{"yaml_content"},
+		},
+		ToolDeleteKubernetesResource: {
+			properties: []string{"apiVersion", "kind", "name", "namespace"},
+			required:   []string{"apiVersion", "kind", "name"},
+		},
+		ToolReconcileFluxSource: {
+			properties: []string{"kind", "name", "namespace"},
+			required:   []string{"kind", "name", "namespace"},
+		},
+		ToolReconcileFluxKustomization: {
+			properties: []string{"name", "namespace", "with_source"},
+			required:   []string{"name", "namespace"},
+		},
+		ToolReconcileFluxHelmRelease: {
+			properties: []string{"name", "namespace", "with_source"},
+			required:   []string{"name", "namespace"},
+		},
+		ToolReconcileFluxResourceSet: {
+			properties: []string{"name", "namespace"},
+			required:   []string{"name", "namespace"},
+		},
+		ToolSuspendFluxReconciliation: {
+			properties: []string{"apiVersion", "kind", "name", "namespace"},
+			required:   []string{"apiVersion", "kind", "name", "namespace"},
+		},
+		ToolResumeFluxReconciliation: {
+			properties: []string{"apiVersion", "kind", "name", "namespace"},
+			required:   []string{"apiVersion", "kind", "name", "namespace"},
+		},
+		ToolGetKubeConfigContexts: {
+			properties: []string{},
+			required:   []string{},
+		},
+		ToolSetKubeConfigContext: {
+			properties: []string{"name"},
+			required:   []string{"name"},
+		},
+	}
+
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "flux-operator-mcp",
 		Version: "test-version",
@@ -72,8 +146,12 @@ func TestManager_ToolSchemasIncludeProperties(t *testing.T) {
 
 	result, err := session.ListTools(ctx, &mcp.ListToolsParams{})
 	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(result.Tools).To(HaveLen(len(expectedSchemas)))
 
 	for _, tool := range result.Tools {
+		expectedSchema, ok := expectedSchemas[tool.Name]
+		g.Expect(ok).To(BeTrue(), "unexpected tool %s", tool.Name)
+
 		raw, err := json.Marshal(tool.InputSchema)
 		g.Expect(err).NotTo(HaveOccurred(), "failed to marshal schema for tool %s", tool.Name)
 
@@ -83,6 +161,30 @@ func TestManager_ToolSchemasIncludeProperties(t *testing.T) {
 
 		g.Expect(schema).To(HaveKey("properties"),
 			"tool %s schema is missing 'properties' field (required by OpenAI function calling API): %s",
+			tool.Name, string(raw))
+
+		properties, ok := schema["properties"].(map[string]any)
+		g.Expect(ok).To(BeTrue(), "tool %s schema has invalid properties field: %s", tool.Name, string(raw))
+		g.Expect(properties).To(HaveLen(len(expectedSchema.properties)),
+			"tool %s schema has unexpected properties: %s", tool.Name, string(raw))
+		for _, property := range expectedSchema.properties {
+			g.Expect(properties).To(HaveKey(property),
+				"tool %s schema is missing inferred %s property: %s",
+				tool.Name, property, string(raw))
+		}
+
+		var required []string
+		if rawRequired, ok := schema["required"]; ok {
+			requiredFields, ok := rawRequired.([]any)
+			g.Expect(ok).To(BeTrue(), "tool %s schema has invalid required field: %s", tool.Name, string(raw))
+			for _, field := range requiredFields {
+				fieldName, ok := field.(string)
+				g.Expect(ok).To(BeTrue(), "tool %s schema has non-string required field: %s", tool.Name, string(raw))
+				required = append(required, fieldName)
+			}
+		}
+		g.Expect(required).To(ConsistOf(expectedSchema.required),
+			"tool %s schema has unexpected required fields: %s",
 			tool.Name, string(raw))
 	}
 }
