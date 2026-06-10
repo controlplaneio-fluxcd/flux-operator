@@ -1,0 +1,92 @@
+name: e2e-mcp
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ '*' ]
+
+permissions:
+  contents: read
+
+env:
+  GOOGLE_CLOUD_LOCATION: global
+  GOOGLE_GENAI_USE_VERTEXAI: 'true'
+  GEMINI_CLI_TRUST_WORKSPACE: 'true'
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # for GCP workload identity federation
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: Disk Cleanup
+        uses: ./.github/actions/runner-cleanup
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version: 1.26.x
+          cache-dependency-path: |
+            **/go.sum
+            **/go.mod
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      - name: Setup Kubernetes
+        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
+        with:
+          version: v0.31.0
+          cluster_name: kind
+      - name: Build CLI and MCP server
+        run: make cli-ci-build mcp-ci-build
+      - name: Add binaries to PATH
+        run: echo "${GITHUB_WORKSPACE}/bin" >> $GITHUB_PATH
+      - name: Install Flux Operator
+        run: flux-operator install
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          project_id: ${{ secrets.GCP_PROJECT }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_E2E_MCP }}
+      - name: Install Gemini CLI
+        run: npm install -g @google/gemini-cli
+      - name: Configure Gemini MCP server
+        run: |
+          mkdir -p .gemini
+          cat > .gemini/settings.json <<EOF
+          {
+            "mcpServers": {
+              "flux-operator-mcp": {
+                "command": "${GITHUB_WORKSPACE}/bin/flux-operator-mcp",
+                "args": ["serve"],
+                "env": {
+                  "KUBECONFIG": "${HOME}/.kube/config"
+                },
+                "timeout": 30000,
+                "trust": true
+              }
+            }
+          }
+          EOF
+      - name: Test get_flux_instance tool
+        run: |
+          gemini --yolo --prompt \
+            "Use the get_flux_instance tool to inspect the Flux instance named 'flux' in the 'flux-system' namespace, then reply with the value of its last applied revision." \
+            | tee output.txt
+          grep -E 'v[0-9]+\.[0-9]+\.[0-9]+' output.txt
+      - name: Test get_kubernetes_resources tool with custom inputs
+        run: |
+          gemini --yolo --prompt \
+            "Use the get_kubernetes_resources tool with apiVersion 'apps/v1', kind 'Deployment' and namespace 'flux-system', then reply with the names of the deployments found, one per line." \
+            | tee output.txt
+          grep -q 'flux-operator' output.txt
+          grep -q 'source-controller' output.txt
+          grep -q 'kustomize-controller' output.txt
+      - name: Test apply_kubernetes_manifest tool with custom inputs
+        run: |
+          gemini --yolo --prompt \
+            "Use the apply_kubernetes_manifest tool to create a ConfigMap named 'gemini-smoke-test' in the 'default' namespace with a data key 'hello' set to the value 'world'."
+          test "$(kubectl get configmap gemini-smoke-test -n default -o jsonpath='{.data.hello}')" = "world"
