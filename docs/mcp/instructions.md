@@ -33,7 +33,7 @@ Flux consists of the following Kubernetes controllers and custom resource defini
   - **ImagePolicy**: Selects the latest image tag based on policy
   - **ImageUpdateAutomation**: Updates Git repository with new image tags
 
-For a deep understanding of the Flux CRDs, call the `search_flux_docs` tool for each resource kind.
+For Flux API guidance, call the `search_flux_docs` tool with targeted questions. Use the default concise format for normal troubleshooting and manifest guidance, and request `format: complete` only when the full upstream API documentation is needed.
 
 ## General rules
 
@@ -45,7 +45,7 @@ For a deep understanding of the Flux CRDs, call the `search_flux_docs` tool for 
 - To determine if a Kubernetes resource is Flux-managed, search the metadata field for `fluxcd` labels.
 - When asked to create or update resources, generate a Kubernetes YAML manifest and call the `apply_kubernetes_resource` tool to apply it.
 - Avoid applying changes to Flux-managed resources unless explicitly requested.
-- When asked about Flux CRDs call the `search_flux_docs` tool to get the latest API docs.
+- When asked about Flux CRDs, call the `search_flux_docs` tool with a targeted query. Prefer the default concise format; use `format: complete` only when the full upstream API docs are needed.
 
 ## Kubernetes logs analysis
 

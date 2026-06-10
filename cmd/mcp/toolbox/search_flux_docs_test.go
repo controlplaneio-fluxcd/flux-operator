@@ -34,22 +34,31 @@ func TestManager_HandleSearchFluxDocs(t *testing.T) {
 			matchErr: "No documents found",
 		},
 		{
-			testName: "returns single result",
+			testName: "returns concise result by default",
 			arguments: map[string]any{
 				"query": "GitHub Pull Request",
 			},
-			matchResults: []string{"ResourceSetInputProvider"},
+			matchResults: []string{"ResourceSet Reference"},
 		},
 		{
-			testName: "returns multiple results",
+			testName: "returns complete results",
 			arguments: map[string]any{
-				"query": "GitLab Merge Request",
-				"limit": 2,
+				"query":  "GitLab Merge Request",
+				"limit":  2,
+				"format": "complete",
 			},
 			matchResults: []string{
 				"ResourceSetInputProvider",
 				"GitRepository",
 			}},
+		{
+			testName: "fails with invalid format",
+			arguments: map[string]any{
+				"query":  "HelmRelease",
+				"format": "short",
+			},
+			matchErr: "format must be one of: concise, complete",
+		},
 	}
 
 	for _, test := range tests {

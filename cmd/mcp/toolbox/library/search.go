@@ -66,8 +66,14 @@ func (idx *SearchIndex) Search(query string, limit int) []SearchResult {
 func (idx *SearchIndex) keywordScore(queryTerms []string, docID int) float64 {
 	doc := idx.Documents[docID]
 
-	// Tokenize keywords to match against stemmed query terms
+	// Tokenize metadata to match against stemmed query terms.
 	keywordSet := make(map[string]bool)
+	for _, text := range []string{doc.Metadata.Title, doc.Metadata.Kind, doc.Metadata.Group} {
+		tokens := Tokenize(text)
+		for _, token := range tokens {
+			keywordSet[token] = true
+		}
+	}
 	for _, kw := range doc.Metadata.Keywords {
 		tokens := Tokenize(kw)
 		for _, token := range tokens {

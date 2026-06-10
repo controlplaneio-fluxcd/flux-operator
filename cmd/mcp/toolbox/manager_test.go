@@ -77,7 +77,7 @@ func TestManager_ToolSchemasIncludeProperties(t *testing.T) {
 			required:   []string{"apiVersion", "kind"},
 		},
 		ToolSearchFluxDocs: {
-			properties: []string{"query", "limit"},
+			properties: []string{"query", "limit", "format"},
 			required:   []string{"query"},
 		},
 		ToolApplyKubernetesManifest: {

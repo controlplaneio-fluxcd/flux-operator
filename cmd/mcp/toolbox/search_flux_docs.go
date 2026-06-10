@@ -27,8 +27,9 @@ func init() {
 
 // searchFluxDocsInput defines the input parameters for searching Flux documentation.
 type searchFluxDocsInput struct {
-	Query string  `json:"query" jsonschema:"The search query."`
-	Limit float64 `json:"limit,omitempty" jsonschema:"The maximum number of matching documents to return. Default is 1."`
+	Query  string  `json:"query" jsonschema:"The search query."`
+	Limit  float64 `json:"limit,omitempty" jsonschema:"The maximum number of matching documents to return. Default is 1."`
+	Format string  `json:"format,omitempty" jsonschema:"The documentation format to search. Allowed values are 'concise' and 'complete'. Default is 'concise'."`
 }
 
 // HandleSearchFluxDocs is the handler function for the search_flux_docs tool.
@@ -42,10 +43,15 @@ func (m *Manager) HandleSearchFluxDocs(ctx context.Context, request *mcp.CallToo
 		limit = 1
 	}
 
+	format, err := library.ParseIndexFormat(input.Format)
+	if err != nil {
+		return NewToolResultError(err.Error())
+	}
+
 	// Use the embedded search index
-	index := library.GetSearchIndex()
+	index := library.GetSearchIndex(format)
 	if index == nil {
-		return NewToolResultError("Search index not available. Run 'make mcp-build-search-index' to build it.")
+		return NewToolResultError(fmt.Sprintf("%s search index not available. Run 'make mcp-build-search-index' to build it.", format))
 	}
 
 	results := index.Search(input.Query, limit)
@@ -61,9 +67,7 @@ func (m *Manager) HandleSearchFluxDocs(ctx context.Context, request *mcp.CallToo
 		}
 
 		// Add metadata header
-		content.WriteString(fmt.Sprintf("# %s (%s)\n\n",
-			result.Document.Metadata.Kind,
-			result.Document.Metadata.Group))
+		content.WriteString(fmt.Sprintf("# %s\n\n", result.Document.Metadata.Label()))
 		content.WriteString(fmt.Sprintf("**URL:** %s\n\n",
 			result.Document.Metadata.URL))
 		content.WriteString(fmt.Sprintf("**Score:** %v\n\n",
