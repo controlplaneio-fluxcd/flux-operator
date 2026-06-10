@@ -32,6 +32,10 @@ func TestExport(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "flux-system",
 			Namespace: "flux-system",
+			Annotations: map[string]string{
+				corev1.LastAppliedConfigAnnotation: `{"apiVersion":"v1","kind":"Secret","data":{"password":"cGFzc3dvcmQ="}}`,
+				"example.com/owner":                "flux",
+			},
 		},
 		Data: map[string][]byte{
 			"username": []byte("flux"),
@@ -116,6 +120,7 @@ func TestExport(t *testing.T) {
 	tests := []struct {
 		testName    string
 		matchResult string
+		missResults []string
 		matchErr    string
 		emptyResult bool
 
@@ -145,6 +150,7 @@ func TestExport(t *testing.T) {
 		{
 			testName:    "mask secret",
 			matchResult: "password: '****'",
+			missResults: []string{"cGFzc3dvcmQ=", "last-applied-configuration"},
 
 			apiVersion:  "v1",
 			kind:        "Secret",
@@ -153,6 +159,14 @@ func TestExport(t *testing.T) {
 		{
 			testName:    "unmask secret",
 			matchResult: "password: cGFzc3dvcmQ=",
+
+			apiVersion: "v1",
+			kind:       "Secret",
+		},
+		{
+			testName:    "remove kubectl annotation",
+			matchResult: "example.com/owner: flux",
+			missResults: []string{"last-applied-configuration"},
 
 			apiVersion: "v1",
 			kind:       "Secret",
@@ -196,6 +210,10 @@ func TestExport(t *testing.T) {
 			} else {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(result).To(ContainSubstring(tt.matchResult))
+			}
+
+			for _, missResult := range tt.missResults {
+				g.Expect(result).NotTo(ContainSubstring(missResult))
 			}
 
 			if tt.emptyResult {
