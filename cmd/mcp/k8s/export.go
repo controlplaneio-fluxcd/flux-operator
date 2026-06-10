@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -65,6 +66,12 @@ func (k *Client) Export(ctx context.Context,
 		if err := k.Client.List(ctx, &list, listOpts...); err == nil {
 			for _, item := range list.Items {
 				unstructured.RemoveNestedField(item.Object, "metadata", "managedFields")
+
+				// Remove the kubectl last-applied annotation as it contains a full copy of the object.
+				unstructured.RemoveNestedField(item.Object, "metadata", "annotations", corev1.LastAppliedConfigAnnotation)
+				if annotations, found, _ := unstructured.NestedStringMap(item.Object, "metadata", "annotations"); found && len(annotations) == 0 {
+					unstructured.RemoveNestedField(item.Object, "metadata", "annotations")
+				}
 
 				// Mask values in Kubernetes Secret
 				if item.GetKind() == "Secret" && maskSecrets {
