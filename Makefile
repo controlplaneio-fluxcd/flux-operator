@@ -218,6 +218,10 @@ mcp-test: tidy fmt vet ## Run MCP tests.
 mcp-build: tidy fmt vet ## Build MCP server binary.
 	CGO_ENABLED=0 go build -ldflags="-s -w -X main.VERSION=$(FLUX_OPERATOR_DEV_VERSION)" -o ./bin/flux-operator-mcp ./cmd/mcp/
 
+.PHONY: mcp-ci-build
+mcp-ci-build: ## Build MCP server binary for CI (same as mcp-build but skips tidy/fmt/vet).
+	CGO_ENABLED=0 go build -ldflags="-s -w -X main.VERSION=$(FLUX_OPERATOR_DEV_VERSION)" -o ./bin/flux-operator-mcp ./cmd/mcp/
+
 .PHONY: mcp-docker-build
 mcp-docker-build: ## Build docker image with the MCP server.
 	$(CONTAINER_TOOL) build -t ${MCP_IMG} --build-arg VERSION=$(FLUX_OPERATOR_VERSION) -f cmd/mcp/Dockerfile .
