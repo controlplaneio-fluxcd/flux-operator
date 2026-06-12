@@ -80,7 +80,9 @@ func TestActionHandler_FineGrained_CustomVerbOnly_Success(t *testing.T) {
 			Name:      "test-fg-custom-verb-only",
 			Namespace: "default",
 		},
-		Spec: fluxcdv1.ResourceSetSpec{},
+		Spec: fluxcdv1.ResourceSetSpec{
+			ResourcesTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\n  namespace: default\n",
+		},
 	}
 	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
 	defer testClient.Delete(ctx, resourceSet)
@@ -155,7 +157,9 @@ func TestActionHandler_FineGrained_Suspend_Success(t *testing.T) {
 			Name:      "test-fg-suspend",
 			Namespace: "default",
 		},
-		Spec: fluxcdv1.ResourceSetSpec{},
+		Spec: fluxcdv1.ResourceSetSpec{
+			ResourcesTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\n  namespace: default\n",
+		},
 	}
 	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
 	defer testClient.Delete(ctx, resourceSet)
@@ -215,7 +219,9 @@ func TestActionHandler_FineGrained_AppLacksPermission_InternalError(t *testing.T
 			Name:      "test-fg-app-no-perms",
 			Namespace: "default",
 		},
-		Spec: fluxcdv1.ResourceSetSpec{},
+		Spec: fluxcdv1.ResourceSetSpec{
+			ResourcesTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\n  namespace: default\n",
+		},
 	}
 	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
 	defer testClient.Delete(ctx, resourceSet)

@@ -592,7 +592,9 @@ func TestGetReport_WithUserRBAC_SingleNamespaceAccess(t *testing.T) {
 			Name:      "test-report-rs-default",
 			Namespace: "default",
 		},
-		Spec: fluxcdv1.ResourceSetSpec{},
+		Spec: fluxcdv1.ResourceSetSpec{
+			ResourcesTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\n  namespace: default\n",
+		},
 	}
 	g.Expect(testClient.Create(ctx, resourceSetDefault)).To(Succeed())
 	defer testClient.Delete(ctx, resourceSetDefault)
@@ -602,7 +604,9 @@ func TestGetReport_WithUserRBAC_SingleNamespaceAccess(t *testing.T) {
 			Name:      "test-report-rs-other",
 			Namespace: "report-test-other-ns",
 		},
-		Spec: fluxcdv1.ResourceSetSpec{},
+		Spec: fluxcdv1.ResourceSetSpec{
+			ResourcesTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\n  namespace: default\n",
+		},
 	}
 	g.Expect(testClient.Create(ctx, resourceSetOther)).To(Succeed())
 	defer testClient.Delete(ctx, resourceSetOther)

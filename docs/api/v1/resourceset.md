@@ -304,7 +304,8 @@ input set.
 ### Resources configuration
 
 The `.spec.resources` field is optional and specifies the list of Kubernetes resource
-to be generated and reconciled on the cluster.
+to be generated and reconciled on the cluster. At least one of `.spec.resources`,
+`.spec.resourcesTemplate` or [`.spec.steps`](#steps-configuration) must be set.
 
 The resources can be templated using the `<< inputs.name >>` syntax. The templating engine
 is based on Go text template. The `<<  >>` delimiters are used instead of `{{  }}` to avoid

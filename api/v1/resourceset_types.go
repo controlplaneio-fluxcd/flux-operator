@@ -30,6 +30,7 @@ var (
 
 // ResourceSetSpec defines the desired state of ResourceSet
 // +kubebuilder:validation:XValidation:rule="!has(self.steps) || (!has(self.resources) && !has(self.resourcesTemplate))",message="steps is mutually exclusive with resources and resourcesTemplate"
+// +kubebuilder:validation:XValidation:rule="has(self.steps) || has(self.resources) || has(self.resourcesTemplate)",message="at least one of steps, resources or resourcesTemplate must be set"
 type ResourceSetSpec struct {
 	// CommonMetadata specifies the common labels and annotations that are
 	// applied to all resources. Any existing label or annotation will be

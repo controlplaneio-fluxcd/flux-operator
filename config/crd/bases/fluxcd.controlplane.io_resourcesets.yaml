@@ -317,6 +317,9 @@ spec:
             x-kubernetes-validations:
             - message: steps is mutually exclusive with resources and resourcesTemplate
               rule: '!has(self.steps) || (!has(self.resources) && !has(self.resourcesTemplate))'
+            - message: at least one of steps, resources or resourcesTemplate must
+                be set
+              rule: has(self.steps) || has(self.resources) || has(self.resourcesTemplate)
           status:
             description: ResourceSetStatus defines the observed state of ResourceSet.
             properties:
