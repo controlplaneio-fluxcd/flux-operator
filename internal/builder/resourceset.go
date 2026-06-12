@@ -129,13 +129,14 @@ func FlattenSteps(steps []StepBuildResult) []*unstructured.Unstructured {
 	return objects
 }
 
-// ValidateResourceSetSpec validates the spec rules that cannot be expressed
-// as CRD CEL rules, see the notes on api/v1 ResourceSetSpec and
-// ResourceSetStep: steps must not be set together with resources or
-// resourcesTemplate, and each step must set at least one of resources or
-// resourcesTemplate. The validation is render-independent so that callers
-// can reject an invalid spec even when no resources are built, e.g. when
-// the input providers return no inputs.
+// ValidateResourceSetSpec validates that steps are not set together with
+// resources or resourcesTemplate, and that each step sets at least one of
+// resources or resourcesTemplate. The rules mirror the CRD CEL rules on
+// api/v1 ResourceSetSpec and ResourceSetStep, enforcing them for offline
+// builds (CLI) and for clusters running a CRD version without the rules.
+// The validation is render-independent so that callers can reject an
+// invalid spec even when no resources are built, e.g. when the input
+// providers return no inputs.
 func ValidateResourceSetSpec(spec fluxcdv1.ResourceSetSpec) error {
 	if len(spec.Steps) > 0 && (len(spec.Resources) > 0 || spec.ResourcesTemplate != "") {
 		return errors.New("spec.steps is mutually exclusive with spec.resources and spec.resourcesTemplate")

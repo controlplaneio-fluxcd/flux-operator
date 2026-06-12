@@ -241,6 +241,7 @@ spec:
                 description: Resources contains the list of Kubernetes resources to
                   reconcile.
                 items:
+                  type: object
                   x-kubernetes-preserve-unknown-fields: true
                 type: array
               resourcesTemplate:
@@ -276,6 +277,7 @@ spec:
                       description: Resources contains the list of Kubernetes resources
                         to reconcile.
                       items:
+                        type: object
                         x-kubernetes-preserve-unknown-fields: true
                       type: array
                     resourcesTemplate:
@@ -296,6 +298,10 @@ spec:
                   required:
                   - name
                   type: object
+                  x-kubernetes-validations:
+                  - message: at least one of resources or resourcesTemplate must be
+                      set
+                    rule: has(self.resources) || has(self.resourcesTemplate)
                 maxItems: 20
                 minItems: 1
                 type: array
@@ -308,6 +314,9 @@ spec:
                   of all the reconciled resources.
                 type: boolean
             type: object
+            x-kubernetes-validations:
+            - message: steps is mutually exclusive with resources and resourcesTemplate
+              rule: '!has(self.steps) || (!has(self.resources) && !has(self.resourcesTemplate))'
           status:
             description: ResourceSetStatus defines the observed state of ResourceSet.
             properties:

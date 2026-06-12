@@ -29,6 +29,7 @@ var (
 )
 
 // ResourceSetSpec defines the desired state of ResourceSet
+// +kubebuilder:validation:XValidation:rule="!has(self.steps) || (!has(self.resources) && !has(self.resourcesTemplate))",message="steps is mutually exclusive with resources and resourcesTemplate"
 type ResourceSetSpec struct {
 	// CommonMetadata specifies the common labels and annotations that are
 	// applied to all resources. Any existing label or annotation will be
@@ -53,6 +54,7 @@ type ResourceSetSpec struct {
 	InputsFrom []InputProviderReference `json:"inputsFrom,omitempty"`
 
 	// Resources contains the list of Kubernetes resources to reconcile.
+	// +kubebuilder:validation:items:Type=object
 	// +optional
 	Resources []*apiextensionsv1.JSON `json:"resources,omitempty"`
 
@@ -141,6 +143,7 @@ func (in *ResourceSet) GetIncludeEmptyProviders() bool {
 // ResourceSetStep defines a named step in the ResourceSet reconciliation
 // sequence. The step's resources are applied and health-checked before
 // the next step starts.
+// +kubebuilder:validation:XValidation:rule="has(self.resources) || has(self.resourcesTemplate)",message="at least one of resources or resourcesTemplate must be set"
 type ResourceSetStep struct {
 	// Name of the step, must be unique within the ResourceSet.
 	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
@@ -149,6 +152,7 @@ type ResourceSetStep struct {
 	Name string `json:"name"`
 
 	// Resources contains the list of Kubernetes resources to reconcile.
+	// +kubebuilder:validation:items:Type=object
 	// +optional
 	Resources []*apiextensionsv1.JSON `json:"resources,omitempty"`
 

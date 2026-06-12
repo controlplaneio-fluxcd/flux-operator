@@ -1099,7 +1099,7 @@ metadata:
 		g.Expect(conditions.GetMessage(result, meta.ReadyCondition)).To(ContainSubstring(msg))
 	}
 
-	// Steps with resources are rejected by the controller.
+	// Steps with resources are rejected by the CRD CEL rule.
 	objDef := fmt.Sprintf(`
 apiVersion: fluxcd.controlplane.io/v1
 kind: ResourceSet
@@ -1125,10 +1125,12 @@ spec:
 	obj := &fluxcdv1.ResourceSet{}
 	err = yaml.Unmarshal([]byte(objDef), obj)
 	g.Expect(err).ToNot(HaveOccurred())
-	reconcileTerminal(obj, "spec.steps is mutually exclusive with spec.resources and spec.resourcesTemplate")
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("steps is mutually exclusive with resources and resourcesTemplate"))
 
-	// Steps with resourcesTemplate are rejected by the controller.
-	obj = &fluxcdv1.ResourceSet{
+	// Steps with resourcesTemplate are rejected by the CRD CEL rule.
+	err = testEnv.Create(ctx, &fluxcdv1.ResourceSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "steps-and-template",
 			Namespace: ns.Name,
@@ -1139,11 +1141,12 @@ spec:
 				{Name: "deploy", ResourcesTemplate: cmTemplate},
 			},
 		},
-	}
-	reconcileTerminal(obj, "spec.steps is mutually exclusive with spec.resources and spec.resourcesTemplate")
+	})
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("steps is mutually exclusive with resources and resourcesTemplate"))
 
-	// Steps without resources and resourcesTemplate are rejected by the controller.
-	obj = &fluxcdv1.ResourceSet{
+	// Steps without resources and resourcesTemplate are rejected by the CRD CEL rule.
+	err = testEnv.Create(ctx, &fluxcdv1.ResourceSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "step-empty",
 			Namespace: ns.Name,
@@ -1153,8 +1156,26 @@ spec:
 				{Name: "migrate"},
 			},
 		},
+	})
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("at least one of resources or resourcesTemplate must be set"))
+
+	// A resource defined in multiple steps is rejected by the controller
+	// at build time, as cross-step duplicates cannot be expressed as a
+	// CRD CEL rule.
+	obj = &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "dup-resources",
+			Namespace: ns.Name,
+		},
+		Spec: fluxcdv1.ResourceSetSpec{
+			Steps: []fluxcdv1.ResourceSetStep{
+				{Name: "pre-deploy", ResourcesTemplate: cmTemplate},
+				{Name: "deploy", ResourcesTemplate: cmTemplate},
+			},
+		},
 	}
-	reconcileTerminal(obj, `step "migrate": at least one of resources or resourcesTemplate must be set`)
+	reconcileTerminal(obj, fmt.Sprintf(`duplicate resource ConfigMap/%s/cm in step "deploy", already defined in step "pre-deploy"`, ns.Name))
 }
 
 func TestResourceSetReconciler_Steps_GCFailureKeepsInventory(t *testing.T) {
@@ -1536,37 +1557,22 @@ spec:
 	g.Expect(conditions.IsReady(result)).To(BeTrue())
 	g.Expect(result.Status.Inventory.Entries).To(HaveLen(2))
 
-	// Make a step invalid and remove the provider label in the same
-	// change, so that the spec validation must reject the object before
-	// the empty-inputs branch can garbage collect the inventory.
+	// Attempt to make a step invalid, the CRD CEL rule must reject the
+	// change so that an invalid spec can never reach the empty-inputs
+	// branch and trigger garbage collection.
 	resultP := result.DeepCopy()
 	resultP.Spec.Steps[1].ResourcesTemplate = ""
 	err = testClient.Patch(ctx, resultP, client.MergeFrom(result))
-	g.Expect(err).ToNot(HaveOccurred())
-
-	rsipResult := &fluxcdv1.ResourceSetInputProvider{}
-	err = testClient.Get(ctx, client.ObjectKeyFromObject(rsip), rsipResult)
-	g.Expect(err).ToNot(HaveOccurred())
-	rsipP := rsipResult.DeepCopy()
-	rsipP.SetLabels(map[string]string{})
-	err = testClient.Patch(ctx, rsipP, client.MergeFrom(rsipResult))
-	g.Expect(err).ToNot(HaveOccurred())
-
-	_, err = reconciler.Reconcile(ctx, reconcile.Request{
-		NamespacedName: client.ObjectKeyFromObject(obj),
-	})
 	g.Expect(err).To(HaveOccurred())
-	g.Expect(err.Error()).To(ContainSubstring(`step "deploy": at least one of resources or resourcesTemplate must be set`))
+	g.Expect(err.Error()).To(ContainSubstring("at least one of resources or resourcesTemplate must be set"))
 
-	// Check that the object is stalled and nothing was garbage collected.
+	// Check that the object is unchanged and nothing was garbage collected.
 	resultFinal := &fluxcdv1.ResourceSet{}
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), resultFinal)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	testutils.LogObjectStatus(t, resultFinal)
-	g.Expect(conditions.IsReady(resultFinal)).To(BeFalse())
-	g.Expect(conditions.GetReason(resultFinal, meta.ReadyCondition)).To(Equal(meta.BuildFailedReason))
-	g.Expect(conditions.IsStalled(resultFinal)).To(BeTrue())
+	g.Expect(conditions.IsReady(resultFinal)).To(BeTrue())
 	g.Expect(resultFinal.Status.Inventory.Entries).To(HaveLen(2))
 
 	for _, name := range []string{"team1-pre", "team1-app"} {
