@@ -1654,3 +1654,145 @@ spec:
 	g.Expect(cm.Annotations[fluxcdv1.ChecksumAnnotation]).To(HavePrefix("sha256:"))
 	g.Expect(result.Status.ExternalChecksumRefs).To(BeEmpty())
 }
+
+// TestResourceSetReconciler_AnonymousStepMessages verifies that the
+// user-facing messages of a steps-less ResourceSet never leak the
+// anonymous step wrapping its resources: the errors, status conditions
+// and events must stay identical to the pre-steps releases.
+func TestResourceSetReconciler_AnonymousStepMessages(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceSetReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Create a service account which is not allowed to create ConfigMaps,
+	// to make the server-side apply fail.
+	sa := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{Name: "anon-sa", Namespace: ns.Name},
+	}
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{Name: "anon-role", Namespace: ns.Name},
+		Rules: []rbacv1.PolicyRule{{
+			APIGroups: []string{""},
+			Resources: []string{"configmaps"},
+			Verbs:     []string{"get", "list", "watch"},
+		}},
+	}
+	rb := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{Name: "anon-role", Namespace: ns.Name},
+		Subjects: []rbacv1.Subject{{
+			Kind: "ServiceAccount", Name: "anon-sa", Namespace: ns.Name,
+		}},
+		RoleRef: rbacv1.RoleRef{Kind: "Role", Name: "anon-role"},
+	}
+	g.Expect(testClient.Create(ctx, sa)).ToNot(HaveOccurred())
+	g.Expect(testClient.Create(ctx, role)).ToNot(HaveOccurred())
+	g.Expect(testClient.Create(ctx, rb)).ToNot(HaveOccurred())
+
+	objDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: anon-apply-fail
+  namespace: "%[1]s"
+spec:
+  serviceAccountName: anon-sa
+  resources:
+    - apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: anon-cm
+        namespace: "%[1]s"
+`, ns.Name)
+
+	obj := &fluxcdv1.ResourceSet{}
+	err = yaml.Unmarshal([]byte(objDef), obj)
+	g.Expect(err).ToNot(HaveOccurred())
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Reconcile with the apply denied by RBAC.
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("forbidden"))
+	g.Expect(err.Error()).ToNot(ContainSubstring(`step`))
+
+	result := &fluxcdv1.ResourceSet{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).ToNot(HaveOccurred())
+	testutils.LogObjectStatus(t, result)
+	for _, c := range result.Status.Conditions {
+		g.Expect(c.Message).ToNot(ContainSubstring(`step`))
+	}
+
+	// Health check failure: a Job never completes in envtest as no
+	// Job controller is running.
+	jobDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: anon-wait-fail
+  namespace: "%[1]s"
+  annotations:
+    fluxcd.controlplane.io/reconcileTimeout: "6s"
+spec:
+  wait: true
+  resources:
+    - apiVersion: batch/v1
+      kind: Job
+      metadata:
+        name: anon-job
+        namespace: "%[1]s"
+      spec:
+        template:
+          spec:
+            restartPolicy: Never
+            containers:
+              - name: main
+                image: busybox
+                command: ["true"]
+`, ns.Name)
+
+	objWait := &fluxcdv1.ResourceSet{}
+	err = yaml.Unmarshal([]byte(jobDef), objWait)
+	g.Expect(err).ToNot(HaveOccurred())
+	err = testEnv.Create(ctx, objWait)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(objWait),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(objWait),
+	})
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("timeout"))
+	g.Expect(err.Error()).ToNot(ContainSubstring(`step`))
+
+	resultWait := &fluxcdv1.ResourceSet{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(objWait), resultWait)
+	g.Expect(err).ToNot(HaveOccurred())
+	testutils.LogObjectStatus(t, resultWait)
+	for _, c := range resultWait.Status.Conditions {
+		g.Expect(c.Message).ToNot(ContainSubstring(`step`))
+	}
+
+	// Verify the events recorded for both objects carry no step prefix.
+	for _, name := range []string{"anon-apply-fail", "anon-wait-fail"} {
+		for _, e := range getEvents(name, ns.Name) {
+			g.Expect(e.Message).ToNot(ContainSubstring(`step`))
+		}
+	}
+}

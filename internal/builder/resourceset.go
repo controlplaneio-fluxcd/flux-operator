@@ -117,6 +117,14 @@ type StepBuildResult struct {
 	Objects []*unstructured.Unstructured
 }
 
+// IsAnonymous returns true when the result is the single unnamed step
+// wrapping the resources of a steps-less ResourceSet, in which case the
+// step must not surface in user-facing messages to keep the steps-less
+// behavior identical to the pre-steps releases.
+func (s StepBuildResult) IsAnonymous() bool {
+	return s.Name == ""
+}
+
 // FlattenSteps returns the objects of all the given steps as a single
 // slice, preserving the step order. The flattened slice shares the object
 // pointers with the step slices, so in-place metadata mutations performed

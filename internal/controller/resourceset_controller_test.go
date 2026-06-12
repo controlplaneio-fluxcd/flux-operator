@@ -449,6 +449,7 @@ func TestResourceSetInputStrategyValidation(t *testing.T) {
 				Name:                  fluxcdv1.InputStrategyPermute,
 				IncludeEmptyProviders: true,
 			},
+			ResourcesTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\n  namespace: default\n",
 		},
 	})
 	g.Expect(err).NotTo(HaveOccurred())
@@ -464,6 +465,7 @@ func TestResourceSetInputStrategyValidation(t *testing.T) {
 				Name:                  fluxcdv1.InputStrategyFlatten,
 				IncludeEmptyProviders: true,
 			},
+			ResourcesTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\n  namespace: default\n",
 		},
 	})
 	g.Expect(err).To(HaveOccurred())

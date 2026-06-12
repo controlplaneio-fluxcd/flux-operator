@@ -172,7 +172,7 @@ func buildResourceSetCmdRun(cmd *cobra.Command, args []string) error {
 	}, nil)
 
 	for _, stepResult := range stepResults {
-		if stepResult.Name != "" && len(stepResult.Objects) > 0 {
+		if !stepResult.IsAnonymous() && len(stepResult.Objects) > 0 {
 			rootCmd.Printf("# step: %s\n", stepResult.Name)
 		}
 		for _, obj := range stepResult.Objects {

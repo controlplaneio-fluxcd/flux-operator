@@ -584,10 +584,10 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 			}
 		}
 
-		// Log the changeset.
+		// Log the changeset with the step name for named steps.
 		if len(resultSet.Entries) > 0 {
 			log.Info("Server-side apply completed",
-				"output", resultSet.ToMap())
+				stepLogValues(step, "output", resultSet.ToMap())...)
 		}
 
 		// Track the applied resources in the inventory and keep the union
@@ -629,7 +629,7 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 			if err := r.waitForStep(ctx, kubeClient, resourceManager, obj, step, changeSet); err != nil {
 				return "", err
 			}
-			log.Info("Health check completed", "step", step.Name)
+			log.Info("Health check completed", stepLogValues(step)...)
 		}
 	}
 
@@ -684,10 +684,11 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 	// always runs at least one iteration and its final iteration either
 	// returns an error or sets the final changeset, so it is never nil here.
 	if obj.Spec.Wait && len(finalChangeSet.Entries) > 0 {
-		if err := r.waitForStep(ctx, kubeClient, resourceManager, obj, steps[len(steps)-1], finalChangeSet); err != nil {
+		finalStep := steps[len(steps)-1]
+		if err := r.waitForStep(ctx, kubeClient, resourceManager, obj, finalStep, finalChangeSet); err != nil {
 			return "", err
 		}
-		log.Info("Health check completed")
+		log.Info("Health check completed", stepLogValues(finalStep)...)
 	}
 
 	return applySetDigest, nil
@@ -737,11 +738,21 @@ func trackPartialApply(obj *fluxcdv1.ResourceSet,
 	return applyErr
 }
 
+// stepLogValues appends the step name to the given log key-value pairs
+// for named steps. For the anonymous step of steps-less ResourceSets the
+// pairs are returned unchanged so the legacy log entries stay identical.
+func stepLogValues(step builder.StepBuildResult, kvs ...any) []any {
+	if step.IsAnonymous() {
+		return kvs
+	}
+	return append(kvs, "step", step.Name)
+}
+
 // stepError wraps the given error with the step name and action for named
 // steps. For the anonymous step of steps-less ResourceSets the error is
 // returned unchanged so the legacy error messages stay identical.
 func stepError(step builder.StepBuildResult, action string, err error) error {
-	if step.Name == "" {
+	if step.IsAnonymous() {
 		return err
 	}
 	return fmt.Errorf("step %q %s: %w", step.Name, action, err)
@@ -807,7 +818,8 @@ func (r *ResourceSetReconciler) deleteFailedJobs(ctx context.Context,
 			client.Preconditions{UID: &jobUID}); err != nil {
 			return fmt.Errorf("failed to delete failed Job %s: %w", ssautil.FmtUnstructured(desired), err)
 		}
-		log.Info("Failed Job deleted for recreation", "job", ssautil.FmtUnstructured(desired))
+		log.Info("Failed Job deleted for recreation",
+			stepLogValues(step, "job", ssautil.FmtUnstructured(desired))...)
 		deletedJobs = append(deletedJobs, job)
 	}
 
