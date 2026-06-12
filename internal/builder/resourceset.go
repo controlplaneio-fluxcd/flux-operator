@@ -278,11 +278,13 @@ func newTemplate(yamlTemplate string, inputSet map[string]any) (*template.Templa
 }
 
 // objectKey returns a unique identifier for the given object
-// composed of its apiVersion, kind, namespace and name.
+// composed of its group, kind, namespace and name. The version is
+// excluded as objects with different versions of the same group
+// share the same identity on the cluster.
 // It is used as map key for object deduplication.
 func objectKey(object *unstructured.Unstructured) string {
 	return strings.Join([]string{
-		object.GetAPIVersion(),
+		object.GroupVersionKind().Group,
 		object.GetKind(),
 		object.GetNamespace(),
 		object.GetName(),

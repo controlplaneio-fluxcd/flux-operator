@@ -237,6 +237,44 @@ func TestBuildResourceSetSteps_Error(t *testing.T) {
 	g.Expect(err.Error()).To(Equal(`duplicate resource ConfigMap/apps/app-config in step "deploy", already defined in step "pre-deploy"`))
 }
 
+func TestBuildResourceSetSteps_CrossVersionDuplicates(t *testing.T) {
+	g := NewWithT(t)
+
+	// the same cluster object referenced with different versions of the
+	// same group must be detected as a cross-step duplicate, as the
+	// object identity on the cluster does not include the version
+	data := `
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: test
+  namespace: apps
+spec:
+  steps:
+    - name: pre-deploy
+      resources:
+        - apiVersion: helm.toolkit.fluxcd.io/v2beta2
+          kind: HelmRelease
+          metadata:
+            name: app
+            namespace: apps
+    - name: deploy
+      resources:
+        - apiVersion: helm.toolkit.fluxcd.io/v2
+          kind: HelmRelease
+          metadata:
+            name: app
+            namespace: apps
+`
+	var rg v1.ResourceSet
+	err := yaml.Unmarshal([]byte(data), &rg)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	_, err = BuildResourceSetSteps(rg.Spec.Steps, nil)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(Equal(`duplicate resource HelmRelease/apps/app in step "deploy", already defined in step "pre-deploy"`))
+}
+
 func TestBuildResourceSetSteps_MissingResources(t *testing.T) {
 	g := NewWithT(t)
 
