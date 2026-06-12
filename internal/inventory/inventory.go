@@ -4,6 +4,8 @@
 package inventory
 
 import (
+	"maps"
+	"slices"
 	"sort"
 
 	"github.com/fluxcd/cli-utils/pkg/object"
@@ -34,6 +36,33 @@ func AddChangeSet(inv *fluxcdv1.ResourceInventory, set *ssa.ChangeSet) error {
 	}
 
 	return nil
+}
+
+// Merge returns a new inventory with all entries from base plus overlay,
+// deduplicated by entry ID with overlay's version taking precedence,
+// sorted by ID for stable status patches. A nil base or overlay is
+// treated as an empty inventory.
+func Merge(base, overlay *fluxcdv1.ResourceInventory) *fluxcdv1.ResourceInventory {
+	versions := make(map[string]string)
+	for _, inv := range []*fluxcdv1.ResourceInventory{base, overlay} {
+		if inv == nil {
+			continue
+		}
+		for _, entry := range inv.Entries {
+			versions[entry.ID] = entry.Version
+		}
+	}
+
+	result := &fluxcdv1.ResourceInventory{
+		Entries: make([]fluxcdv1.ResourceRef, 0, len(versions)),
+	}
+	for _, id := range slices.Sorted(maps.Keys(versions)) {
+		result.Entries = append(result.Entries, fluxcdv1.ResourceRef{
+			ID:      id,
+			Version: versions[id],
+		})
+	}
+	return result
 }
 
 // List returns the inventory entries as unstructured.Unstructured objects.
