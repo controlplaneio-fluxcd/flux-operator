@@ -243,6 +243,7 @@ var completeDocsMetadata = []DocumentMetadata{
 			"flux-operator", "resource", "inputs", "template", "templating",
 			"common", "depends", "wait", "timeout", "account",
 			"health", "cel", "prune", "inventory", "app", "definition",
+			"steps", "job", "migration",
 		},
 	},
 	{

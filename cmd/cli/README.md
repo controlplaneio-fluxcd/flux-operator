@@ -66,6 +66,8 @@ The following commands are available:
     - `-f, --file`: Path to the FluxInstance YAML manifest (required).
     - `--distribution-artifact`: OCI artifact URL of the Flux distribution, takes precedence over the FluxInstance spec.
 - `flux-operator build rset`: Generates the Kubernetes manifests from a ResourceSet definition.
+  For a ResourceSet using `.spec.steps`, the manifests are printed in step order, with each step's
+  objects preceded by a `# step: <name>` comment line.
     - `-f, --file`: Path to the ResourceSet YAML manifest (required).
     - `--inputs-from`: Path to the ResourceSet inputs YAML manifest.
     - `--inputs-from-provider`: Path to the ResourceSetInputProvider static type YAML manifest.

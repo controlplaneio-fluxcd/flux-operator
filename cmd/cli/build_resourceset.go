@@ -148,10 +148,14 @@ func buildResourceSetCmdRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("error combining inputs: %w", err)
 	}
 
-	objects, err := builder.BuildResourceSet(rset.Spec.ResourcesTemplate, rset.Spec.Resources, combinedInputs)
+	stepResults, err := builder.BuildResourceSetFromSpec(rset.Spec, combinedInputs)
 	if err != nil {
 		return err
 	}
+
+	// Flatten the step results sharing the object pointers so that
+	// the metadata mutations below are visible in each step's slice.
+	objects := builder.FlattenSteps(stepResults)
 
 	if len(objects) == 0 {
 		return fmt.Errorf("no objects were generated")
@@ -167,15 +171,20 @@ func buildResourceSetCmdRun(cmd *cobra.Command, args []string) error {
 		fmt.Sprintf("%s/namespace", ownerGroup): rset.GetNamespace(),
 	}, nil)
 
-	for _, obj := range objects {
-		var strBuilder strings.Builder
-		strBuilder.WriteString("---\n")
-		yml, ymlErr := yaml.Marshal(obj)
-		if ymlErr != nil {
-			return fmt.Errorf("error marshalling object: %w", ymlErr)
+	for _, stepResult := range stepResults {
+		if stepResult.Name != "" && len(stepResult.Objects) > 0 {
+			rootCmd.Printf("# step: %s\n", stepResult.Name)
 		}
-		strBuilder.Write(yml)
-		rootCmd.Print(strBuilder.String())
+		for _, obj := range stepResult.Objects {
+			var strBuilder strings.Builder
+			strBuilder.WriteString("---\n")
+			yml, ymlErr := yaml.Marshal(obj)
+			if ymlErr != nil {
+				return fmt.Errorf("error marshalling object: %w", ymlErr)
+			}
+			strBuilder.Write(yml)
+			rootCmd.Print(strBuilder.String())
+		}
 	}
 
 	return nil
