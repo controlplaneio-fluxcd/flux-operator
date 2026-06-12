@@ -1,0 +1,23 @@
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: app
+  namespace: apps
+spec:
+  steps:
+    - name: pre-deploy
+      resourcesTemplate: |
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          name: db-migration
+          namespace: apps
+    - name: deploy
+      resources:
+        - apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: app-config
+            namespace: apps
+          data:
+            source: resources

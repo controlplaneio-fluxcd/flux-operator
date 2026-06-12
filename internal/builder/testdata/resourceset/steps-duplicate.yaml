@@ -1,0 +1,25 @@
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: app
+  namespace: apps
+spec:
+  inputs:
+    - tenant: team1
+  steps:
+    - name: pre-deploy
+      resources:
+        - apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: app-config
+            namespace: apps
+          data:
+            tenant: << inputs.tenant >>
+    - name: deploy
+      resourcesTemplate: |
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: app-config
+          namespace: apps
