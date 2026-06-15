@@ -871,6 +871,11 @@ in the [history](#history) metadata.
 For a complete example of running Jobs before and after an application deployment,
 see the [Running Jobs with ResourceSet Steps](rset-staged-jobs.md) guide.
 
+**Note**: There are no guarantees about the order with which step-defined resources are
+terminated when the ResourceSet is deleted or when resources are removed from the steps.
+We reserve the right to define and change the termination order in future releases. See
+[#909](https://github.com/controlplaneio-fluxcd/flux-operator/issues/909) for details.
+
 ### Common metadata
 
 The `.spec.commonMetadata` field is optional and specifies common metadata to be applied to all resources.
