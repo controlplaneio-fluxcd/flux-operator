@@ -209,7 +209,9 @@ func TestActionHandler_Reconcile_Success(t *testing.T) {
 			Name:      "test-action-reconcile",
 			Namespace: "default",
 		},
-		Spec: fluxcdv1.ResourceSetSpec{},
+		Spec: fluxcdv1.ResourceSetSpec{
+			ResourcesTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\n  namespace: default\n",
+		},
 	}
 	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
 	defer testClient.Delete(ctx, resourceSet)
@@ -258,7 +260,9 @@ func TestActionHandler_Suspend_Success(t *testing.T) {
 			Name:      "test-action-suspend",
 			Namespace: "default",
 		},
-		Spec: fluxcdv1.ResourceSetSpec{},
+		Spec: fluxcdv1.ResourceSetSpec{
+			ResourcesTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\n  namespace: default\n",
+		},
 	}
 	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
 	defer testClient.Delete(ctx, resourceSet)
@@ -312,7 +316,9 @@ func TestActionHandler_Resume_Success(t *testing.T) {
 				fluxcdv1.SuspendedByAnnotation: "test-user",
 			},
 		},
-		Spec: fluxcdv1.ResourceSetSpec{},
+		Spec: fluxcdv1.ResourceSetSpec{
+			ResourcesTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\n  namespace: default\n",
+		},
 	}
 	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
 	defer testClient.Delete(ctx, resourceSet)
@@ -391,7 +397,9 @@ func TestActionHandler_UnprivilegedUser_Forbidden(t *testing.T) {
 			Name:      "test-action-forbidden",
 			Namespace: "default",
 		},
-		Spec: fluxcdv1.ResourceSetSpec{},
+		Spec: fluxcdv1.ResourceSetSpec{
+			ResourcesTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\n  namespace: default\n",
+		},
 	}
 	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
 	defer testClient.Delete(ctx, resourceSet)
@@ -443,7 +451,9 @@ func TestActionHandler_WithUserRBAC_Success(t *testing.T) {
 			Name:      "test-action-rbac-success",
 			Namespace: "default",
 		},
-		Spec: fluxcdv1.ResourceSetSpec{},
+		Spec: fluxcdv1.ResourceSetSpec{
+			ResourcesTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\n  namespace: default\n",
+		},
 	}
 	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
 	defer testClient.Delete(ctx, resourceSet)
@@ -535,7 +545,9 @@ func TestActionHandler_NamespaceScopedRBAC_ForbiddenInOtherNamespace(t *testing.
 			Name:      "test-action-ns-scoped",
 			Namespace: "default",
 		},
-		Spec: fluxcdv1.ResourceSetSpec{},
+		Spec: fluxcdv1.ResourceSetSpec{
+			ResourcesTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\n  namespace: default\n",
+		},
 	}
 	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
 	defer testClient.Delete(ctx, resourceSet)
@@ -626,7 +638,9 @@ func TestActionHandler_ResponseContentType(t *testing.T) {
 			Name:      "test-action-content-type",
 			Namespace: "default",
 		},
-		Spec: fluxcdv1.ResourceSetSpec{},
+		Spec: fluxcdv1.ResourceSetSpec{
+			ResourcesTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\n  namespace: default\n",
+		},
 	}
 	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
 	defer testClient.Delete(ctx, resourceSet)
@@ -678,7 +692,9 @@ func TestActionHandler_AllValidActions(t *testing.T) {
 					Namespace:   "default",
 					Annotations: annotations,
 				},
-				Spec: fluxcdv1.ResourceSetSpec{},
+				Spec: fluxcdv1.ResourceSetSpec{
+					ResourcesTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\n  namespace: default\n",
+				},
 			}
 			g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
 			defer testClient.Delete(ctx, resourceSet)
@@ -754,7 +770,9 @@ func TestActionHandler_AllActionsEnabledByDefault(t *testing.T) {
 			Name:      "test-action-default",
 			Namespace: "default",
 		},
-		Spec: fluxcdv1.ResourceSetSpec{},
+		Spec: fluxcdv1.ResourceSetSpec{
+			ResourcesTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\n  namespace: default\n",
+		},
 	}
 	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
 	defer testClient.Delete(ctx, resourceSet)
@@ -803,7 +821,9 @@ func TestActionHandler_HasCustomVerbButNoPatch_Forbidden(t *testing.T) {
 			Name:      "test-action-no-patch",
 			Namespace: "default",
 		},
-		Spec: fluxcdv1.ResourceSetSpec{},
+		Spec: fluxcdv1.ResourceSetSpec{
+			ResourcesTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\n  namespace: default\n",
+		},
 	}
 	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
 	defer testClient.Delete(ctx, resourceSet)
@@ -891,7 +911,9 @@ func TestActionHandler_HasPatchButNoCustomVerb_Forbidden(t *testing.T) {
 			Name:      "test-action-no-custom-verb",
 			Namespace: "default",
 		},
-		Spec: fluxcdv1.ResourceSetSpec{},
+		Spec: fluxcdv1.ResourceSetSpec{
+			ResourcesTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\n  namespace: default\n",
+		},
 	}
 	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
 	defer testClient.Delete(ctx, resourceSet)

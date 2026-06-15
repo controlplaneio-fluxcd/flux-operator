@@ -37,6 +37,7 @@ func TestResourceSetReconciler_requestsForResourceSetInputProviders(t *testing.T
 					MatchLabels: map[string]string{"app": "test"},
 				},
 			}},
+			ResourcesTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\n  namespace: default\n",
 		},
 	})
 	g.Expect(err).NotTo(HaveOccurred())
@@ -51,6 +52,7 @@ func TestResourceSetReconciler_requestsForResourceSetInputProviders(t *testing.T
 			InputsFrom: []fluxcdv1.InputProviderReference{{
 				Name: "test",
 			}},
+			ResourcesTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\n  namespace: default\n",
 		},
 	})
 	g.Expect(err).NotTo(HaveOccurred())
@@ -255,6 +257,9 @@ func TestResourceSetReconciler_requestsForConfigMapsOrSecrets(t *testing.T) {
 			Name:      "rset-with-external-refs",
 			Namespace: ns.Name,
 		},
+		Spec: fluxcdv1.ResourceSetSpec{
+			ResourcesTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\n  namespace: default\n",
+		},
 	}
 	err = testEnv.Create(ctx, rsetWithRefs)
 	g.Expect(err).NotTo(HaveOccurred())
@@ -270,6 +275,9 @@ func TestResourceSetReconciler_requestsForConfigMapsOrSecrets(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "rset-without-external-refs",
 			Namespace: ns.Name,
+		},
+		Spec: fluxcdv1.ResourceSetSpec{
+			ResourcesTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\n  namespace: default\n",
 		},
 	})
 	g.Expect(err).NotTo(HaveOccurred())

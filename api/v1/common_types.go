@@ -31,6 +31,7 @@ var (
 	ReconcileTimeoutAnnotation       = fmt.Sprintf("%s/reconcileTimeout", GroupVersion.Group)
 	PruneAnnotation                  = fmt.Sprintf("%s/prune", GroupVersion.Group)
 	ForceAnnotation                  = fmt.Sprintf("%s/force", GroupVersion.Group)
+	RecreateOnFailureAnnotation      = fmt.Sprintf("%s/recreateOnFailure", GroupVersion.Group)
 	RevisionAnnotation               = fmt.Sprintf("%s/revision", GroupVersion.Group)
 	CopyFromAnnotation               = fmt.Sprintf("%s/copyFrom", GroupVersion.Group)
 	ConvertKubeConfigFromAnnotation  = fmt.Sprintf("%s/convertKubeConfigFrom", GroupVersion.Group)

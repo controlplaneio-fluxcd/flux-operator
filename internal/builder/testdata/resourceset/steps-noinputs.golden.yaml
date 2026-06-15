@@ -1,0 +1,16 @@
+# step: pre-deploy
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migration
+  namespace: apps
+---
+# step: deploy
+apiVersion: v1
+data:
+  source: resources
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: apps
+---

@@ -56,6 +56,11 @@ func TestBuildResourceSetCmd(t *testing.T) {
 			args:        []string{"build", "resourceset", "-f", "testdata/build_resourceset/rset-with-rsip.yaml"},
 			expectError: "please provide the inputs with --inputs-from",
 		},
+		{
+			name:        "resourceset with steps and resources",
+			args:        []string{"build", "resourceset", "-f", "testdata/build_resourceset/rset-steps-and-resources.yaml"},
+			expectError: "spec.steps is mutually exclusive with spec.resources and spec.resourcesTemplate",
+		},
 	}
 
 	for _, tt := range tests {
@@ -134,6 +139,28 @@ func TestBuildResourceSetCmdWithInputsFromProviderWithSeparator(t *testing.T) {
 
 	// Read expected golden output
 	expectedBytes, err := os.ReadFile("testdata/build_resourceset/golden-separator.yaml")
+	g.Expect(err).ToNot(HaveOccurred())
+	expected := string(expectedBytes)
+
+	g.Expect(output).To(Equal(expected))
+}
+
+func TestBuildResourceSetCmdWithSteps(t *testing.T) {
+	g := NewWithT(t)
+	rsetFile := "testdata/build_resourceset/rset-with-steps.yaml"
+
+	// Execute command with a ResourceSet containing steps
+	output, err := executeCommand([]string{"build", "rset", "-f", rsetFile})
+
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(output).ToNot(BeEmpty())
+
+	// Verify the step separators are present in order
+	g.Expect(output).To(ContainSubstring("# step: pre-deploy\n---\n"))
+	g.Expect(output).To(ContainSubstring("# step: deploy\n---\n"))
+
+	// Read expected golden output
+	expectedBytes, err := os.ReadFile("testdata/build_resourceset/golden-steps.yaml")
 	g.Expect(err).ToNot(HaveOccurred())
 	expected := string(expectedBytes)
 

@@ -13,6 +13,8 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/fluxcd/cli-utils/pkg/object"
+
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
 func Test_Inventory(t *testing.T) {
@@ -51,6 +53,59 @@ func Test_Inventory(t *testing.T) {
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(len(unList)).To(BeIdenticalTo(1))
 		g.Expect(unList[0].GetName()).To(BeIdenticalTo("test2"))
+	})
+}
+
+func Test_Merge(t *testing.T) {
+	base := &fluxcdv1.ResourceInventory{
+		Entries: []fluxcdv1.ResourceRef{
+			{ID: "default_test2__ConfigMap", Version: "v1"},
+			{ID: "default_test1__ConfigMap", Version: "v1"},
+		},
+	}
+	overlay := &fluxcdv1.ResourceInventory{
+		Entries: []fluxcdv1.ResourceRef{
+			{ID: "default_test3_apps_Deployment", Version: "v1"},
+			{ID: "default_test1__ConfigMap", Version: "v2"},
+		},
+	}
+
+	t.Run("dedups entries with overlay version precedence sorted by ID", func(t *testing.T) {
+		g := NewWithT(t)
+
+		result := Merge(base, overlay)
+		g.Expect(result.Entries).To(Equal([]fluxcdv1.ResourceRef{
+			{ID: "default_test1__ConfigMap", Version: "v2"},
+			{ID: "default_test2__ConfigMap", Version: "v1"},
+			{ID: "default_test3_apps_Deployment", Version: "v1"},
+		}))
+	})
+
+	t.Run("treats nil base as empty", func(t *testing.T) {
+		g := NewWithT(t)
+
+		result := Merge(nil, overlay)
+		g.Expect(result.Entries).To(Equal([]fluxcdv1.ResourceRef{
+			{ID: "default_test1__ConfigMap", Version: "v2"},
+			{ID: "default_test3_apps_Deployment", Version: "v1"},
+		}))
+	})
+
+	t.Run("treats nil overlay as empty", func(t *testing.T) {
+		g := NewWithT(t)
+
+		result := Merge(base, nil)
+		g.Expect(result.Entries).To(Equal([]fluxcdv1.ResourceRef{
+			{ID: "default_test1__ConfigMap", Version: "v1"},
+			{ID: "default_test2__ConfigMap", Version: "v1"},
+		}))
+	})
+
+	t.Run("returns empty inventory for nil inputs", func(t *testing.T) {
+		g := NewWithT(t)
+
+		result := Merge(nil, nil)
+		g.Expect(result.Entries).To(BeEmpty())
 	})
 }
 

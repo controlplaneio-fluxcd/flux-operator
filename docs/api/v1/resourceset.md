@@ -304,7 +304,8 @@ input set.
 ### Resources configuration
 
 The `.spec.resources` field is optional and specifies the list of Kubernetes resource
-to be generated and reconciled on the cluster.
+to be generated and reconciled on the cluster. At least one of `.spec.resources`,
+`.spec.resourcesTemplate` or [`.spec.steps`](#steps-configuration) must be set.
 
 The resources can be templated using the `<< inputs.name >>` syntax. The templating engine
 is based on Go text template. The `<<  >>` delimiters are used instead of `{{  }}` to avoid
@@ -769,6 +770,107 @@ spec:
 The above example generates two `OCIRepository` resources (one for each bundle) and four
 `Kustomization` resources (one for each component in each bundle).
 
+### Steps configuration
+
+The `.spec.steps` field is optional and offers an alternative to `.spec.resources` and
+`.spec.resourcesTemplate` for resources that must be reconciled in a specific order,
+e.g. running a database migration Job before deploying an application.
+The `.spec.steps` field is mutually exclusive with `.spec.resources` and `.spec.resourcesTemplate`.
+
+A ResourceSet can define at most 20 steps. Each step has the following fields:
+
+- `name`: The name of the step (required). Must be unique within the ResourceSet
+  and a valid [DNS label](https://kubernetes.io/docs/concepts/overview/working-with-objects/names#dns-label-names).
+- `resources`: The list of Kubernetes resources to reconcile in this step,
+  in the same format as [`.spec.resources`](#resources-configuration). Optional.
+- `resourcesTemplate`: A multi-document YAML template that generates the resources of
+  this step, in the same format as [`.spec.resourcesTemplate`](#resources-template). Optional.
+- `timeout`: The maximum time to wait for the step's resources to become ready. Optional,
+  when not set it defaults to the value of the `fluxcd.controlplane.io/reconcileTimeout`
+  annotation (default `5m`).
+
+At least one of `resources` or `resourcesTemplate` must be set for each step.
+A resource can be defined in only one step, duplicate resources across steps
+result in a build failure.
+
+Example of a Job that must complete before the app Kustomization is applied:
+
+```yaml
+spec:
+  inputs:
+    - version: v1.0.0
+  wait: true
+  steps:
+    - name: db-migration
+      timeout: 5m
+      resources:
+        - apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: db-migration
+            namespace: apps
+            annotations:
+              fluxcd.controlplane.io/force: enabled
+              fluxcd.controlplane.io/recreateOnFailure: enabled
+          spec:
+            template:
+              spec:
+                restartPolicy: Never
+                containers:
+                  - name: migration
+                    image: ghcr.io/org/my-app:<< inputs.version >>
+    - name: app-deploy
+      timeout: 10m
+      resources:
+        - apiVersion: kustomize.toolkit.fluxcd.io/v1
+          kind: Kustomization
+          metadata:
+            name: app-deploy
+            namespace: apps
+          spec:
+            sourceRef:
+              kind: GitRepository
+              name: apps
+            path: ./deploy/my-app
+            interval: 60m
+            prune: true
+            wait: true
+            timeout: 9m
+            images:
+              - name: ghcr.io/org/my-app
+                newTag: << inputs.version | quote >>
+```
+
+The steps are reconciled in order with the following semantics:
+
+- Implied wait: after applying a step's resources, the operator performs a
+  [health check](#health-check-configuration) on them and waits for them to become
+  ready before applying the next step. The wait between steps is always performed,
+  regardless of the `.spec.wait` setting. The final step is health-checked only
+  when `.spec.wait` is set to `true`.
+- Per-step timeout: each step's health check uses the step's `timeout` value,
+  falling back to the ResourceSet's `fluxcd.controlplane.io/reconcileTimeout` annotation.
+- Fail-fast: if a step fails to apply or its health check fails, the subsequent
+  steps are not applied. The `Ready` condition is set to `False` with a message
+  naming the failed step, e.g. `step "db-migration" health check failed`.
+  On the next reconciliation, the full sequence is retried from the first step.
+  Re-applying unchanged resources, including completed Jobs, is a no-op.
+- Garbage collection: stale resources are [garbage collected](#garbage-collection)
+  only after all steps have been applied and their health checks have passed. When a
+  step fails mid-sequence, garbage collection is skipped and stale resources remain
+  on the cluster until the first fully successful reconciliation.
+
+While the steps are being reconciled, the `Reconciling` condition message reports
+the progress, e.g. `Applying step 2/3 "app-deploy"`, and the operator emits an
+`ApplySucceeded` event for each step that changed resources on the cluster.
+The per-step events (prefixed with `step "name":`) are emitted for non-final steps only,
+the final step's changes are reported in the standard unprefixed `ApplySucceeded` event
+together with any garbage collection actions. The number of steps is recorded
+in the [history](#history) metadata.
+
+For a complete example of running Jobs before and after an application deployment,
+see the [Running Jobs with ResourceSet Steps](rset-staged-jobs.md) guide.
+
 ### Common metadata
 
 The `.spec.commonMetadata` field is optional and specifies common metadata to be applied to all resources.
@@ -887,6 +989,11 @@ The reconciliation behavior of a ResourceSet can be configured using the followi
 - `fluxcd.controlplane.io/force`:
   When set to `enabled`, the controller will replace the generated resources that contain immutable field changes.
   This annotation can also be used on individual resources to force their reconciliation.
+- `fluxcd.controlplane.io/recreateOnFailure`:
+  When set to `enabled` on a Kubernetes Job, the controller will delete the Job
+  if it has failed (condition `Failed=True`) and recreate it on the next reconciliation.
+  This annotation takes effect regardless of `fluxcd.controlplane.io/prune: disabled`,
+  the failed Job is deleted and recreated even if it is excluded from garbage collection.
 
 ### Health check configuration
 

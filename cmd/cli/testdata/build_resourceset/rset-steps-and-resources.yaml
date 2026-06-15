@@ -1,0 +1,27 @@
+---
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: my-app
+  namespace: test
+spec:
+  inputs:
+    - version: v1.0.0
+  resources:
+    - apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: my-app-config
+        namespace: test
+      data:
+        version: << inputs.version >>
+  steps:
+    - name: deploy
+      resources:
+        - apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: my-app-config
+            namespace: test
+          data:
+            version: << inputs.version >>

@@ -1,0 +1,48 @@
+# step: pre-deploy
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migration-team1
+  namespace: apps
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migration-team2
+  namespace: apps
+---
+# step: deploy
+apiVersion: v1
+data:
+  source: resources
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: apps
+---
+apiVersion: v1
+data:
+  tenant: team1
+kind: ConfigMap
+metadata:
+  name: app-config-team1
+  namespace: apps
+---
+apiVersion: v1
+data:
+  tenant: team2
+kind: ConfigMap
+metadata:
+  name: app-config-team2
+  namespace: apps
+---
+# step: post-deploy
+apiVersion: batch/v1
+kind: Job
+metadata:
+  annotations:
+    fluxcd.controlplane.io/reconcile: enabled
+  name: smoke-test-team1
+  namespace: apps
+---
+# step: cleanup

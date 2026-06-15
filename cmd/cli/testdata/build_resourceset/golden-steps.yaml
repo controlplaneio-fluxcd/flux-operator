@@ -1,0 +1,34 @@
+# step: pre-deploy
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  annotations:
+    app.kubernetes.io/managed-by: flux-operator
+    fluxcd.controlplane.io/force: enabled
+  labels:
+    resourceset.fluxcd.controlplane.io/name: my-app
+    resourceset.fluxcd.controlplane.io/namespace: test
+  name: db-migration
+  namespace: test
+spec:
+  template:
+    spec:
+      containers:
+      - image: ghcr.io/org/my-app:v1.0.0
+        name: migration
+      restartPolicy: Never
+# step: deploy
+---
+apiVersion: v1
+data:
+  version: v1.0.0
+kind: ConfigMap
+metadata:
+  annotations:
+    app.kubernetes.io/managed-by: flux-operator
+  labels:
+    resourceset.fluxcd.controlplane.io/name: my-app
+    resourceset.fluxcd.controlplane.io/namespace: test
+  name: my-app-config
+  namespace: test

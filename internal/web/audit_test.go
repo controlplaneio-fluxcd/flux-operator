@@ -114,7 +114,9 @@ func TestFetchReconcilerRef(t *testing.T) {
 			Name:      "test-fetch-reconciler",
 			Namespace: "default",
 		},
-		Spec: fluxcdv1.ResourceSetSpec{},
+		Spec: fluxcdv1.ResourceSetSpec{
+			ResourcesTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\n  namespace: default\n",
+		},
 	}
 	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
 	defer testClient.Delete(ctx, resourceSet)
@@ -178,7 +180,9 @@ func TestSendAuditEvent_WithWorkload(t *testing.T) {
 			Name:      "test-audit-reconciler-ref",
 			Namespace: "default",
 		},
-		Spec: fluxcdv1.ResourceSetSpec{},
+		Spec: fluxcdv1.ResourceSetSpec{
+			ResourcesTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\n  namespace: default\n",
+		},
 	}
 	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
 	defer testClient.Delete(ctx, resourceSet)
@@ -305,7 +309,9 @@ func TestSendAuditEvent_NilWorkload(t *testing.T) {
 			Name:      "test-audit-empty-ref",
 			Namespace: "default",
 		},
-		Spec: fluxcdv1.ResourceSetSpec{},
+		Spec: fluxcdv1.ResourceSetSpec{
+			ResourcesTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\n  namespace: default\n",
+		},
 	}
 	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
 	defer testClient.Delete(ctx, resourceSet)
@@ -427,7 +433,9 @@ func TestActionHandler_Audit_Integration(t *testing.T) {
 			Name:      "test-action-audit-integration",
 			Namespace: "default",
 		},
-		Spec: fluxcdv1.ResourceSetSpec{},
+		Spec: fluxcdv1.ResourceSetSpec{
+			ResourcesTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\n  namespace: default\n",
+		},
 	}
 	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
 	defer testClient.Delete(ctx, resourceSet)
@@ -501,7 +509,9 @@ func TestWorkloadActionHandler_Audit_Integration(t *testing.T) {
 			Name:      "test-workload-audit-ks",
 			Namespace: "default",
 		},
-		Spec: fluxcdv1.ResourceSetSpec{},
+		Spec: fluxcdv1.ResourceSetSpec{
+			ResourcesTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\n  namespace: default\n",
+		},
 	}
 	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
 	defer testClient.Delete(ctx, resourceSet)

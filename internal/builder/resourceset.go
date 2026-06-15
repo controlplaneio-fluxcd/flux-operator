@@ -5,6 +5,7 @@ package builder
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"strings"
 	"text/template"
@@ -13,6 +14,7 @@ import (
 	sprig "github.com/go-task/slim-sprig/v3"
 	"github.com/gosimple/slug"
 	apix "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/yaml"
 
@@ -22,9 +24,25 @@ import (
 
 // BuildResourceSet builds a list of Kubernetes resources
 // from a YAML template, a list of JSON templates and the
-// given combined inputs.
+// given combined inputs. The resulting objects are deduplicated
+// by apiVersion, kind, namespace and name, with the objects built
+// from the JSON templates taking precedence over the ones built
+// from the YAML template.
 func BuildResourceSet(yamlTemplate string, templates []*apix.JSON, combinedInputs inputs.Combined) ([]*unstructured.Unstructured, error) {
 	var objects []*unstructured.Unstructured
+	objectKeys := make(map[string]struct{})
+
+	// addObject records the object key and appends the object to the
+	// result. When dedup is set, objects whose key was already recorded
+	// are skipped instead.
+	addObject := func(object *unstructured.Unstructured, dedup bool) {
+		key := objectKey(object)
+		if _, found := objectKeys[key]; dedup && found {
+			return
+		}
+		objectKeys[key] = struct{}{}
+		objects = append(objects, object)
+	}
 
 	// build resources from JSON templates
 	for i, tmpl := range templates {
@@ -34,7 +52,7 @@ func BuildResourceSet(yamlTemplate string, templates []*apix.JSON, combinedInput
 				return nil, fmt.Errorf("failed to build resource: %w", err)
 			}
 
-			objects = append(objects, object)
+			addObject(object, false)
 			continue
 		}
 
@@ -50,9 +68,7 @@ func BuildResourceSet(yamlTemplate string, templates []*apix.JSON, combinedInput
 			}
 
 			// deduplicate objects
-			if !containsObject(objects, object) {
-				objects = append(objects, object)
-			}
+			addObject(object, true)
 		}
 	}
 
@@ -81,13 +97,126 @@ func BuildResourceSet(yamlTemplate string, templates []*apix.JSON, combinedInput
 				continue
 			}
 			// deduplicate objects
-			if !containsObject(objects, object) {
-				objects = append(objects, object)
-			}
+			addObject(object, true)
 		}
 	}
 
 	return objects, nil
+}
+
+// StepBuildResult holds the objects built for a single ResourceSet step.
+type StepBuildResult struct {
+	// Name is the name of the step.
+	Name string
+
+	// Timeout is the health check timeout of the step, nil when
+	// the step does not override the ResourceSet timeout.
+	Timeout *metav1.Duration
+
+	// Objects contains the Kubernetes resources built for the step.
+	Objects []*unstructured.Unstructured
+}
+
+// IsAnonymous returns true when the result is the single unnamed step
+// wrapping the resources of a steps-less ResourceSet, in which case the
+// step must not surface in user-facing messages to keep the steps-less
+// behavior identical to the pre-steps releases.
+func (s StepBuildResult) IsAnonymous() bool {
+	return s.Name == ""
+}
+
+// FlattenSteps returns the objects of all the given steps as a single
+// slice, preserving the step order. The flattened slice shares the object
+// pointers with the step slices, so in-place metadata mutations performed
+// on the flattened objects are visible per step.
+func FlattenSteps(steps []StepBuildResult) []*unstructured.Unstructured {
+	var objects []*unstructured.Unstructured
+	for _, step := range steps {
+		objects = append(objects, step.Objects...)
+	}
+	return objects
+}
+
+// ValidateResourceSetSpec validates that steps are not set together with
+// resources or resourcesTemplate, and that each step sets at least one of
+// resources or resourcesTemplate. The rules mirror the CRD CEL rules on
+// api/v1 ResourceSetSpec and ResourceSetStep, enforcing them for offline
+// builds (CLI) and for clusters running a CRD version without the rules.
+// The validation is render-independent so that callers can reject an
+// invalid spec even when no resources are built, e.g. when the input
+// providers return no inputs.
+func ValidateResourceSetSpec(spec fluxcdv1.ResourceSetSpec) error {
+	if len(spec.Steps) > 0 && (len(spec.Resources) > 0 || spec.ResourcesTemplate != "") {
+		return errors.New("spec.steps is mutually exclusive with spec.resources and spec.resourcesTemplate")
+	}
+	for _, step := range spec.Steps {
+		if len(step.Resources) == 0 && step.ResourcesTemplate == "" {
+			return fmt.Errorf("step %q: at least one of resources or resourcesTemplate must be set", step.Name)
+		}
+	}
+	return nil
+}
+
+// BuildResourceSetFromSpec validates the given ResourceSet spec with
+// ValidateResourceSetSpec and builds its resources using the combined
+// inputs. When steps are set, the resources are built per step with
+// BuildResourceSetSteps, otherwise the spec resources are built with
+// BuildResourceSet and wrapped as a single anonymous step.
+func BuildResourceSetFromSpec(spec fluxcdv1.ResourceSetSpec, combinedInputs inputs.Combined) ([]StepBuildResult, error) {
+	if err := ValidateResourceSetSpec(spec); err != nil {
+		return nil, err
+	}
+
+	if len(spec.Steps) > 0 {
+		return BuildResourceSetSteps(spec.Steps, combinedInputs)
+	}
+
+	objects, err := BuildResourceSet(spec.ResourcesTemplate, spec.Resources, combinedInputs)
+	if err != nil {
+		return nil, err
+	}
+	return []StepBuildResult{{Objects: objects}}, nil
+}
+
+// BuildResourceSetSteps builds the Kubernetes resources of each step
+// using BuildResourceSet and the given combined inputs. The results
+// preserve the order of the steps, including steps that build zero
+// objects. A resource defined in multiple steps results in an error,
+// while duplicates within a step follow the BuildResourceSet semantics.
+// The step fields are expected to have been validated upfront with
+// ValidateResourceSetSpec.
+func BuildResourceSetSteps(steps []fluxcdv1.ResourceSetStep, combinedInputs inputs.Combined) ([]StepBuildResult, error) {
+	results := make([]StepBuildResult, 0, len(steps))
+	stepOfObject := make(map[string]string)
+
+	for _, step := range steps {
+		objects, err := BuildResourceSet(step.ResourcesTemplate, step.Resources, combinedInputs)
+		if err != nil {
+			return nil, fmt.Errorf("step %q: %w", step.Name, err)
+		}
+
+		// reject resources already defined in a previous step, leaving
+		// duplicates within the same step to the BuildResourceSet semantics
+		for _, object := range objects {
+			key := objectKey(object)
+			if prevStep, found := stepOfObject[key]; found {
+				if prevStep == step.Name {
+					continue
+				}
+				return nil, fmt.Errorf("duplicate resource %s in step %q, already defined in step %q",
+					ssautil.FmtUnstructured(object), step.Name, prevStep)
+			}
+			stepOfObject[key] = step.Name
+		}
+
+		results = append(results, StepBuildResult{
+			Name:    step.Name,
+			Timeout: step.Timeout,
+			Objects: objects,
+		})
+	}
+
+	return results, nil
 }
 
 // BuildResource builds a Kubernetes resource from a JSON template using the provided inputs.
@@ -156,18 +285,18 @@ func newTemplate(yamlTemplate string, inputSet map[string]any) (*template.Templa
 	return tp, nil
 }
 
-func containsObject(objects []*unstructured.Unstructured, object *unstructured.Unstructured) bool {
-	found := false
-	for _, obj := range objects {
-		if obj.GetAPIVersion() == object.GetAPIVersion() &&
-			obj.GetKind() == object.GetKind() &&
-			obj.GetNamespace() == object.GetNamespace() &&
-			obj.GetName() == object.GetName() {
-			found = true
-			break
-		}
-	}
-	return found
+// objectKey returns a unique identifier for the given object
+// composed of its group, kind, namespace and name. The version is
+// excluded as objects with different versions of the same group
+// share the same identity on the cluster.
+// It is used as map key for object deduplication.
+func objectKey(object *unstructured.Unstructured) string {
+	return strings.Join([]string{
+		object.GroupVersionKind().Group,
+		object.GetKind(),
+		object.GetNamespace(),
+		object.GetName(),
+	}, "/")
 }
 
 // init initializes the slugify Go template function with the default settings.

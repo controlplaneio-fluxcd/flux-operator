@@ -1,0 +1,60 @@
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: app
+  namespace: apps
+spec:
+  inputs:
+    - tenant: team1
+    - tenant: team2
+  steps:
+    - name: pre-deploy
+      resourcesTemplate: |
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          name: db-migration-<< inputs.tenant >>
+          namespace: apps
+    - name: deploy
+      resources:
+        - apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: app-config
+            namespace: apps
+          data:
+            source: resources
+      resourcesTemplate: |
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: app-config
+          namespace: apps
+        data:
+          source: template
+        ---
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: app-config-<< inputs.tenant >>
+          namespace: apps
+        data:
+          tenant: << inputs.tenant >>
+    - name: post-deploy
+      resourcesTemplate: |
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          name: smoke-test-<< inputs.tenant >>
+          namespace: apps
+          annotations:
+            fluxcd.controlplane.io/reconcile: << if eq inputs.tenant "team2" >>disabled<< else >>enabled<< end >>
+    - name: cleanup
+      resourcesTemplate: |
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          name: cleanup-<< inputs.tenant >>
+          namespace: apps
+          annotations:
+            fluxcd.controlplane.io/reconcile: disabled

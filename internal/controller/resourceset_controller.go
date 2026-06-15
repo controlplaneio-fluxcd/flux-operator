@@ -29,6 +29,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
@@ -156,69 +157,49 @@ func (r *ResourceSetReconciler) reconcile(ctx context.Context,
 		return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
 	}
 
+	// Reject an invalid spec before the empty-inputs branch can trigger
+	// garbage collection. The rules are enforced here because they cannot
+	// be CRD CEL rules, see the notes on api/v1 ResourceSetSpec.
+	if err := builder.ValidateResourceSetSpec(obj.Spec); err != nil {
+		return r.stallWithTerminalError(ctx, obj, reconcileStart, "build failed", err)
+	}
+
 	// Compute the final inputs from providers and in-line inputs.
 	inputSet, err := r.getInputs(ctx, obj)
 	if err != nil {
-		// Mark the object as not ready and stalled due to input failure.
-		msg := fmt.Sprintf("failed to compute inputs: %s", err.Error())
-		conditions.MarkFalse(obj,
-			meta.ReadyCondition,
-			meta.BuildFailedReason,
-			"%s", msg)
-		conditions.MarkStalled(obj,
-			meta.BuildFailedReason,
-			"%s", msg)
-
-		// Track input failure in history using the spec digest.
-		specData, _ := json.Marshal(obj.Spec)
-		specDigest := digest.FromString(string(specData)).String()
-		obj.Status.History.Upsert(specDigest,
-			time.Now(),
-			time.Since(reconcileStart),
-			conditions.GetReason(obj, meta.ReadyCondition),
-			nil)
-
-		// Emit warning event and return a terminal error.
-		r.notify(ctx, obj, corev1.EventTypeWarning, meta.BuildFailedReason, msg)
-		return ctrl.Result{}, reconcile.TerminalError(err)
+		return r.stallWithTerminalError(ctx, obj, reconcileStart, "failed to compute inputs", err)
 	}
 
+	var steps []builder.StepBuildResult
 	var objects []*unstructured.Unstructured
 	if len(obj.Spec.InputsFrom) > 0 && len(inputSet) == 0 {
 		// If providers return no inputs, we should reconcile an empty set to trigger GC.
 		log.Info("No inputs returned from providers, reconciling an empty set")
 	} else {
-		// Build the resources using the inputs.
-		buildResult, err := builder.BuildResourceSet(obj.Spec.ResourcesTemplate, obj.Spec.Resources, inputSet)
-		if err != nil {
-			// Mark the object as not ready and stalled due to build failure.
-			msg := fmt.Sprintf("build failed: %s", err.Error())
-			conditions.MarkFalse(obj,
-				meta.ReadyCondition,
-				meta.BuildFailedReason,
-				"%s", msg)
-			conditions.MarkStalled(obj,
-				meta.BuildFailedReason,
-				"%s", msg)
-
-			// Track build failure in history using the spec digest.
-			specData, _ := json.Marshal(obj.Spec)
-			specDigest := digest.FromString(string(specData)).String()
-			obj.Status.History.Upsert(specDigest,
-				time.Now(),
-				time.Since(reconcileStart),
-				conditions.GetReason(obj, meta.ReadyCondition),
-				nil)
-
-			// Emit warning event and return a terminal error.
-			r.notify(ctx, obj, corev1.EventTypeWarning, meta.BuildFailedReason, msg)
-			return ctrl.Result{}, reconcile.TerminalError(err)
+		// Build the resources of each step using the inputs. A steps-less
+		// ResourceSet is reconciled as a single anonymous step.
+		var buildErr error
+		steps, buildErr = builder.BuildResourceSetFromSpec(obj.Spec, inputSet)
+		if buildErr != nil {
+			return r.stallWithTerminalError(ctx, obj, reconcileStart, "build failed", buildErr)
 		}
-		objects = buildResult
+
+		// Flatten the step objects sharing pointers with the step slices
+		// for tracking the applied resources digest in history.
+		objects = builder.FlattenSteps(steps)
+	}
+
+	// Compute the history metadata of the reconciliation.
+	historyMetadata := map[string]string{
+		"inputs":    fmt.Sprintf("%d", len(inputSet)),
+		"resources": fmt.Sprintf("%d", len(objects)),
+	}
+	if obj.HasSteps() {
+		historyMetadata["steps"] = fmt.Sprintf("%d", len(obj.Spec.Steps))
 	}
 
 	// Apply the resources to the cluster.
-	applySetDigest, err := r.apply(ctx, obj, objects)
+	applySetDigest, err := r.apply(ctx, obj, patcher, steps)
 	if err != nil {
 		if qesErr := new(controller.QueueEventSource); errors.As(err, &qesErr) {
 			return returnHealthChecksCanceled(ctx, obj, qesErr, r.EventRecorder)
@@ -237,10 +218,7 @@ func (r *ResourceSetReconciler) reconcile(ctx context.Context,
 			time.Now(),
 			time.Since(reconcileStart),
 			conditions.GetReason(obj, meta.ReadyCondition),
-			map[string]string{
-				"inputs":    fmt.Sprintf("%d", len(inputSet)),
-				"resources": fmt.Sprintf("%d", len(objects)),
-			})
+			historyMetadata)
 
 		// Emit warning event and return an error to retry with backoff the reconciliation.
 		r.notify(ctx, obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
@@ -260,10 +238,7 @@ func (r *ResourceSetReconciler) reconcile(ctx context.Context,
 		time.Now(),
 		time.Since(reconcileStart),
 		conditions.GetReason(obj, meta.ReadyCondition),
-		map[string]string{
-			"inputs":    fmt.Sprintf("%d", len(inputSet)),
-			"resources": fmt.Sprintf("%d", len(objects)),
-		})
+		historyMetadata)
 
 	// Log and emit the reconciliation success event.
 	log.Info(msg)
@@ -273,6 +248,39 @@ func (r *ResourceSetReconciler) reconcile(ctx context.Context,
 		msg)
 
 	return requeueAfter(obj), nil
+}
+
+// stallWithTerminalError marks the object as not ready and stalled with the
+// build failed reason and a message composed of the given prefix and error.
+// It tracks the failure in history using the spec digest, emits a warning
+// event and returns a terminal error to stop the retries until a spec change.
+func (r *ResourceSetReconciler) stallWithTerminalError(ctx context.Context,
+	obj *fluxcdv1.ResourceSet,
+	reconcileStart time.Time,
+	msgPrefix string,
+	err error) (ctrl.Result, error) {
+	// Mark the object as not ready and stalled due to the failure.
+	msg := fmt.Sprintf("%s: %s", msgPrefix, err.Error())
+	conditions.MarkFalse(obj,
+		meta.ReadyCondition,
+		meta.BuildFailedReason,
+		"%s", msg)
+	conditions.MarkStalled(obj,
+		meta.BuildFailedReason,
+		"%s", msg)
+
+	// Track the failure in history using the spec digest.
+	specData, _ := json.Marshal(obj.Spec)
+	specDigest := digest.FromString(string(specData)).String()
+	obj.Status.History.Upsert(specDigest,
+		time.Now(),
+		time.Since(reconcileStart),
+		conditions.GetReason(obj, meta.ReadyCondition),
+		nil)
+
+	// Emit warning event and return a terminal error.
+	r.notify(ctx, obj, corev1.EventTypeWarning, meta.BuildFailedReason, msg)
+	return ctrl.Result{}, reconcile.TerminalError(err)
 }
 
 func (r *ResourceSetReconciler) buildDependencyExpressions(obj *fluxcdv1.ResourceSet) ([]*cel.Expression, error) {
@@ -439,15 +447,30 @@ func (r *ResourceSetReconciler) getInputs(ctx context.Context,
 }
 
 // apply reconciles the resources in the cluster by performing
-// a server-side apply, pruning of stale resources and waiting
-// for the resources to become ready.
+// a server-side apply of each step in order, waiting for the
+// non-final step resources to become ready before starting the
+// next step, pruning of stale resources after all steps have
+// been applied, and waiting for the final step resources to
+// become ready when the wait option is enabled.
 // It returns an error if the apply operation fails, otherwise
 // it returns the sha256 digest of the applied resources.
 func (r *ResourceSetReconciler) apply(ctx context.Context,
 	obj *fluxcdv1.ResourceSet,
-	objects []*unstructured.Unstructured) (string, error) {
+	patcher *patch.SerialPatcher,
+	steps []builder.StepBuildResult) (string, error) {
 	log := ctrl.LoggerFrom(ctx)
 	var changeSetLog strings.Builder
+
+	// Guard against an empty step list to always reconcile at least
+	// the anonymous empty step which triggers garbage collection.
+	if len(steps) == 0 {
+		steps = []builder.StepBuildResult{{}}
+	}
+
+	// Flatten the steps into a single list of objects sharing pointers
+	// with the step slices, so the in-place mutations performed below
+	// are visible to the per-step apply.
+	objects := builder.FlattenSteps(steps)
 
 	// Create a snapshot of the current inventory.
 	oldInventory := inventory.New()
@@ -528,37 +551,87 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 		{Group: "rbac.authorization.k8s.io", Kind: "Role"}: {},
 	}
 
-	resultSet := ssa.NewChangeSet()
+	// Apply the resources of each step to the cluster and wait for the
+	// non-final step resources to become ready before starting the next step.
+	newInventory := inventory.New()
+	var finalChangeSet *ssa.ChangeSet
+	for i, step := range steps {
+		isFinalStep := i == len(steps)-1
 
-	// Apply the resources to the cluster.
-	changeSet, err := resourceManager.ApplyAllStaged(ctx, objects, applyOpts)
-	if err != nil {
-		return "", err
-	}
+		// Delete the failed Jobs annotated with recreateOnFailure so
+		// that the server-side apply can recreate them from scratch.
+		if err := r.deleteFailedJobs(ctx, kubeClient, resourceManager, obj, step); err != nil {
+			return "", stepError(step, "job recreation failed", err)
+		}
 
-	// Filter out the resources that have changed.
-	for _, change := range changeSet.Entries {
-		if hasChanged(change.Action) {
-			resultSet.Add(change)
-			changeSetLog.WriteString(change.String() + "\n")
+		// Apply the step resources to the cluster.
+		changeSet, err := resourceManager.ApplyAllStaged(ctx, step.Objects, applyOpts)
+		if err != nil {
+			// ApplyAllStaged returns the changeset of the already-completed
+			// stages together with the error; the partial apply results must
+			// enter the inventory so a failed step never orphans applied objects.
+			return "", stepError(step, "apply failed",
+				trackPartialApply(obj, oldInventory, newInventory, changeSet, err))
+		}
+
+		// Filter out the resources that have changed.
+		resultSet := ssa.NewChangeSet()
+		var stepLog strings.Builder
+		for _, change := range changeSet.Entries {
+			if hasChanged(change.Action) {
+				resultSet.Add(change)
+				stepLog.WriteString(change.String() + "\n")
+			}
+		}
+
+		// Log the changeset with the step name for named steps.
+		if len(resultSet.Entries) > 0 {
+			log.Info("Server-side apply completed",
+				stepLogValues(step, "output", resultSet.ToMap())...)
+		}
+
+		// Track the applied resources in the inventory and keep the union
+		// with the old inventory so a failure mid-sequence never orphans
+		// applied objects and never loses entries owned by later steps.
+		if err := inventory.AddChangeSet(newInventory, changeSet); err != nil {
+			return "", err
+		}
+		obj.Status.Inventory = inventory.Merge(oldInventory, newInventory)
+
+		if isFinalStep {
+			// The final step event and health check run after garbage
+			// collection to preserve the apply -> GC -> event -> wait order.
+			finalChangeSet = changeSet
+			changeSetLog.WriteString(stepLog.String())
+			break
+		}
+
+		// Patch the status with the step progress and the inventory
+		// before the long-running health check.
+		conditions.MarkReconciling(obj,
+			meta.ProgressingReason,
+			"Applying step %d/%d %q", i+1, len(steps), step.Name)
+		if err := r.patch(ctx, obj, patcher); err != nil {
+			return "", err
+		}
+
+		// Emit the step apply event only if the server-side apply resulted in changes.
+		if stepLog.Len() > 0 {
+			r.notify(ctx, obj,
+				corev1.EventTypeNormal,
+				"ApplySucceeded",
+				fmt.Sprintf("step %q: %s", step.Name, strings.TrimSuffix(stepLog.String(), "\n")))
+		}
+
+		// Wait for the step resources to become ready
+		// before starting the next step.
+		if len(changeSet.Entries) > 0 {
+			if err := r.waitForStep(ctx, kubeClient, resourceManager, obj, step, changeSet); err != nil {
+				return "", err
+			}
+			log.Info("Health check completed", stepLogValues(step)...)
 		}
 	}
-
-	// Log the changeset.
-	if len(resultSet.Entries) > 0 {
-		log.Info("Server-side apply completed",
-			"output", resultSet.ToMap())
-	}
-
-	// Create an inventory from the reconciled resources.
-	newInventory := inventory.New()
-	err = inventory.AddChangeSet(newInventory, changeSet)
-	if err != nil {
-		return "", err
-	}
-
-	// Set last applied inventory in status.
-	obj.Status.Inventory = newInventory
 
 	// Detect stale resources which are subject to garbage collection.
 	staleObjects, err := inventory.Diff(oldInventory, newInventory)
@@ -566,7 +639,8 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 		return "", err
 	}
 
-	// Garbage collect stale resources.
+	// Garbage collect stale resources after all the steps have been
+	// applied and all the inter-step health checks have passed.
 	if len(staleObjects) > 0 {
 		deleteOpts := ssa.DeleteOptions{
 			PropagationPolicy: metav1.DeletePropagationBackground,
@@ -578,6 +652,9 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 
 		deleteSet, err := r.deleteAllStaged(ctx, resourceManager, staleObjects, deleteOpts)
 		if err != nil {
+			// Keep the old and new inventory union in status so the
+			// undeleted stale objects stay tracked and their deletion
+			// is retried on the next reconciliation.
 			return "", err
 		}
 
@@ -590,6 +667,10 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 		}
 	}
 
+	// Drop the stale entries from the inventory only after
+	// the garbage collection has fully succeeded.
+	obj.Status.Inventory = newInventory
+
 	// Emit event only if the server-side apply resulted in changes.
 	applyLog := strings.TrimSuffix(changeSetLog.String(), "\n")
 	if applyLog != "" {
@@ -599,24 +680,166 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 			applyLog)
 	}
 
-	// Wait for the resources to become ready.
-	if obj.Spec.Wait && len(changeSet.Entries) > 0 {
-		healthCtx := controller.GetInterruptContext(ctx)
-		if err := resourceManager.WaitForSetWithContext(healthCtx, changeSet.ToObjMetadataSet(), ssa.WaitOptions{
-			Interval: 5 * time.Second,
-			Timeout:  obj.GetTimeout(),
-			FailFast: true,
-		}); err != nil {
-			if is, err := controller.IsObjectEnqueued(ctx); is {
-				return "", err
-			}
-			readyStatus := aggregateNotReadyStatus(ctx, kubeClient, objects)
-			return "", fmt.Errorf("%w\n%s", err, readyStatus)
+	// Wait for the final step resources to become ready. The loop above
+	// always runs at least one iteration and its final iteration either
+	// returns an error or sets the final changeset, so it is never nil here.
+	if obj.Spec.Wait && len(finalChangeSet.Entries) > 0 {
+		finalStep := steps[len(steps)-1]
+		if err := r.waitForStep(ctx, kubeClient, resourceManager, obj, finalStep, finalChangeSet); err != nil {
+			return "", err
 		}
-		log.Info("Health check completed")
+		log.Info("Health check completed", stepLogValues(finalStep)...)
 	}
 
 	return applySetDigest, nil
+}
+
+// waitForStep waits for the changeset resources of the given step to become
+// ready within the step timeout, using the interrupt context derived from
+// the given context to cancel the wait when a new event enqueues the object.
+// On failure, it returns the enqueued object error as-is, or the health check
+// error together with the aggregated not-ready status of the step's Flux resources.
+func (r *ResourceSetReconciler) waitForStep(ctx context.Context,
+	kubeClient client.Client,
+	rm *ssa.ResourceManager,
+	obj *fluxcdv1.ResourceSet,
+	step builder.StepBuildResult,
+	changeSet *ssa.ChangeSet) error {
+	healthCtx := controller.GetInterruptContext(ctx)
+	if err := rm.WaitForSetWithContext(healthCtx, changeSet.ToObjMetadataSet(), ssa.WaitOptions{
+		Interval: 5 * time.Second,
+		Timeout:  stepTimeout(obj, step),
+		FailFast: true,
+	}); err != nil {
+		if is, err := controller.IsObjectEnqueued(ctx); is {
+			return err
+		}
+		readyStatus := aggregateNotReadyStatus(ctx, kubeClient, step.Objects)
+		return stepError(step, "health check failed", fmt.Errorf("%w\n%s", err, readyStatus))
+	}
+	return nil
+}
+
+// trackPartialApply records the partial apply results returned by a failed
+// ApplyAllStaged call in the inventory, so that a failed step never orphans
+// the objects applied before the in-step failure. The merged inventory is
+// set on the object status, which is persisted by the deferred finalizeStatus.
+// It returns the apply error, joined with the inventory error if any.
+func trackPartialApply(obj *fluxcdv1.ResourceSet,
+	oldInventory, newInventory *fluxcdv1.ResourceInventory,
+	changeSet *ssa.ChangeSet, applyErr error) error {
+	if changeSet == nil || len(changeSet.Entries) == 0 {
+		return applyErr
+	}
+	if err := inventory.AddChangeSet(newInventory, changeSet); err != nil {
+		return errors.Join(applyErr, err)
+	}
+	obj.Status.Inventory = inventory.Merge(oldInventory, newInventory)
+	return applyErr
+}
+
+// stepLogValues appends the step name to the given log key-value pairs
+// for named steps. For the anonymous step of steps-less ResourceSets the
+// pairs are returned unchanged so the legacy log entries stay identical.
+func stepLogValues(step builder.StepBuildResult, kvs ...any) []any {
+	if step.IsAnonymous() {
+		return kvs
+	}
+	return append(kvs, "step", step.Name)
+}
+
+// stepError wraps the given error with the step name and action for named
+// steps. For the anonymous step of steps-less ResourceSets the error is
+// returned unchanged so the legacy error messages stay identical.
+func stepError(step builder.StepBuildResult, action string, err error) error {
+	if step.IsAnonymous() {
+		return err
+	}
+	return fmt.Errorf("step %q %s: %w", step.Name, action, err)
+}
+
+// stepTimeout returns the health check timeout carried by the given build
+// step, falling back to the ResourceSet reconciliation timeout when the
+// step does not set one.
+func stepTimeout(obj *fluxcdv1.ResourceSet, step builder.StepBuildResult) time.Duration {
+	if step.Timeout != nil {
+		return step.Timeout.Duration
+	}
+	return obj.GetTimeout()
+}
+
+// deleteFailedJobs deletes the failed Jobs of the given step which are
+// annotated with the recreateOnFailure annotation set to enabled, so that
+// the subsequent server-side apply can recreate them from scratch.
+// Only Jobs carrying this ResourceSet's owner labels are deleted, the
+// deletion uses foreground propagation with a UID precondition and waits
+// for the Jobs to be removed from the cluster before returning.
+func (r *ResourceSetReconciler) deleteFailedJobs(ctx context.Context,
+	kubeClient client.Client,
+	rm *ssa.ResourceManager,
+	obj *fluxcdv1.ResourceSet,
+	step builder.StepBuildResult) error {
+	log := ctrl.LoggerFrom(ctx)
+	ownerSelector := labels.SelectorFromSet(rm.GetOwnerLabels(obj.Name, obj.Namespace))
+
+	var deletedJobs []*unstructured.Unstructured
+	for _, desired := range step.Objects {
+		if desired.GetAPIVersion() != "batch/v1" || desired.GetKind() != "Job" ||
+			desired.GetAnnotations()[fluxcdv1.RecreateOnFailureAnnotation] != fluxcdv1.EnabledValue {
+			continue
+		}
+
+		// Read the Job from the cluster to inspect its status.
+		job := &unstructured.Unstructured{}
+		job.SetGroupVersionKind(desired.GroupVersionKind())
+		if err := kubeClient.Get(ctx, client.ObjectKeyFromObject(desired), job); err != nil {
+			if apierrors.IsNotFound(err) {
+				continue
+			}
+			return fmt.Errorf("failed to read Job %s status: %w", ssautil.FmtUnstructured(desired), err)
+		}
+
+		// Skip the Jobs which have not failed.
+		if !isJobFailed(job) {
+			continue
+		}
+
+		// Never delete a Job owned by another manager.
+		if !ownerSelector.Matches(labels.Set(job.GetLabels())) {
+			continue
+		}
+
+		// Delete the failed Job with foreground propagation so that its
+		// pods are removed as well, using the UID precondition to avoid
+		// deleting a Job recreated by an external actor in the meantime.
+		jobUID := job.GetUID()
+		if err := kubeClient.Delete(ctx, job,
+			client.PropagationPolicy(metav1.DeletePropagationForeground),
+			client.Preconditions{UID: &jobUID}); err != nil {
+			return fmt.Errorf("failed to delete failed Job %s: %w", ssautil.FmtUnstructured(desired), err)
+		}
+		log.Info("Failed Job deleted for recreation",
+			stepLogValues(step, "job", ssautil.FmtUnstructured(desired))...)
+		deletedJobs = append(deletedJobs, job)
+	}
+
+	// Wait for the deleted Jobs to be removed from the cluster
+	// so that the subsequent server-side apply can recreate them.
+	if len(deletedJobs) > 0 {
+		if err := rm.WaitForTermination(deletedJobs, ssa.DefaultWaitOptions()); err != nil {
+			return fmt.Errorf("failed to wait for Jobs termination: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// isJobFailed returns true if the given Job has failed according to its
+// kstatus computed status. A Job with a malformed status which fails the
+// kstatus computation is treated as not failed.
+func isJobFailed(job *unstructured.Unstructured) bool {
+	res, err := status.Compute(job)
+	return err == nil && res.Status == status.FailedStatus
 }
 
 // deleteAllStaged removes resources in stages, first the Flux resources and then the rest.

@@ -241,6 +241,7 @@ spec:
                 description: Resources contains the list of Kubernetes resources to
                   reconcile.
                 items:
+                  type: object
                   x-kubernetes-preserve-unknown-fields: true
                 type: array
               resourcesTemplate:
@@ -256,12 +257,69 @@ spec:
                   The name of the Kubernetes service account to impersonate
                   when reconciling the generated resources.
                 type: string
+              steps:
+                description: |-
+                  Steps contains an ordered list of named steps to reconcile in sequence.
+                  Each step's resources are applied and health-checked before the next
+                  step starts. Mutually exclusive with Resources and ResourcesTemplate.
+                items:
+                  description: |-
+                    ResourceSetStep defines a named step in the ResourceSet reconciliation
+                    sequence. The step's resources are applied and health-checked before
+                    the next step starts.
+                  properties:
+                    name:
+                      description: Name of the step, must be unique within the ResourceSet.
+                      maxLength: 63
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                      type: string
+                    resources:
+                      description: Resources contains the list of Kubernetes resources
+                        to reconcile.
+                      items:
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                      type: array
+                    resourcesTemplate:
+                      description: |-
+                        ResourcesTemplate is a Go template that generates the list of
+                        Kubernetes resources to reconcile. The template is rendered
+                        as multi-document YAML, the resources should be separated by '---'.
+                        When both Resources and ResourcesTemplate are set, the resulting
+                        objects are merged and deduplicated, with the ones from Resources taking precedence.
+                      type: string
+                    timeout:
+                      description: |-
+                        Timeout is the maximum time to wait for the step's resources to
+                        become ready. When not set, the ResourceSet reconciliation
+                        timeout is used.
+                      pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m|h))+$
+                      type: string
+                  required:
+                  - name
+                  type: object
+                  x-kubernetes-validations:
+                  - message: at least one of resources or resourcesTemplate must be
+                      set
+                    rule: has(self.resources) || has(self.resourcesTemplate)
+                maxItems: 20
+                minItems: 1
+                type: array
+                x-kubernetes-validations:
+                - message: step names must be unique
+                  rule: self.all(s, self.exists_one(t, t.name == s.name))
               wait:
                 description: |-
                   Wait instructs the controller to check the health
                   of all the reconciled resources.
                 type: boolean
             type: object
+            x-kubernetes-validations:
+            - message: steps is mutually exclusive with resources and resourcesTemplate
+              rule: '!has(self.steps) || (!has(self.resources) && !has(self.resourcesTemplate))'
+            - message: at least one of steps, resources or resourcesTemplate must
+                be set
+              rule: has(self.steps) || has(self.resources) || has(self.resourcesTemplate)
           status:
             description: ResourceSetStatus defines the observed state of ResourceSet.
             properties:

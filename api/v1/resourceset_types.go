@@ -29,6 +29,8 @@ var (
 )
 
 // ResourceSetSpec defines the desired state of ResourceSet
+// +kubebuilder:validation:XValidation:rule="!has(self.steps) || (!has(self.resources) && !has(self.resourcesTemplate))",message="steps is mutually exclusive with resources and resourcesTemplate"
+// +kubebuilder:validation:XValidation:rule="has(self.steps) || has(self.resources) || has(self.resourcesTemplate)",message="at least one of steps, resources or resourcesTemplate must be set"
 type ResourceSetSpec struct {
 	// CommonMetadata specifies the common labels and annotations that are
 	// applied to all resources. Any existing label or annotation will be
@@ -53,6 +55,7 @@ type ResourceSetSpec struct {
 	InputsFrom []InputProviderReference `json:"inputsFrom,omitempty"`
 
 	// Resources contains the list of Kubernetes resources to reconcile.
+	// +kubebuilder:validation:items:Type=object
 	// +optional
 	Resources []*apiextensionsv1.JSON `json:"resources,omitempty"`
 
@@ -63,6 +66,15 @@ type ResourceSetSpec struct {
 	// objects are merged and deduplicated, with the ones from Resources taking precedence.
 	// +optional
 	ResourcesTemplate string `json:"resourcesTemplate,omitempty"`
+
+	// Steps contains an ordered list of named steps to reconcile in sequence.
+	// Each step's resources are applied and health-checked before the next
+	// step starts. Mutually exclusive with Resources and ResourcesTemplate.
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=20
+	// +kubebuilder:validation:XValidation:rule="self.all(s, self.exists_one(t, t.name == s.name))",message="step names must be unique"
+	// +optional
+	Steps []ResourceSetStep `json:"steps,omitempty"`
 
 	// DependsOn specifies the list of Kubernetes resources that must
 	// exist on the cluster before the reconciliation process starts.
@@ -127,6 +139,39 @@ func (in *ResourceSet) GetIncludeEmptyProviders() bool {
 		return false
 	}
 	return in.Spec.InputStrategy.Name == InputStrategyPermute && in.Spec.InputStrategy.IncludeEmptyProviders
+}
+
+// ResourceSetStep defines a named step in the ResourceSet reconciliation
+// sequence. The step's resources are applied and health-checked before
+// the next step starts.
+// +kubebuilder:validation:XValidation:rule="has(self.resources) || has(self.resourcesTemplate)",message="at least one of resources or resourcesTemplate must be set"
+type ResourceSetStep struct {
+	// Name of the step, must be unique within the ResourceSet.
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+	// +kubebuilder:validation:MaxLength=63
+	// +required
+	Name string `json:"name"`
+
+	// Resources contains the list of Kubernetes resources to reconcile.
+	// +kubebuilder:validation:items:Type=object
+	// +optional
+	Resources []*apiextensionsv1.JSON `json:"resources,omitempty"`
+
+	// ResourcesTemplate is a Go template that generates the list of
+	// Kubernetes resources to reconcile. The template is rendered
+	// as multi-document YAML, the resources should be separated by '---'.
+	// When both Resources and ResourcesTemplate are set, the resulting
+	// objects are merged and deduplicated, with the ones from Resources taking precedence.
+	// +optional
+	ResourcesTemplate string `json:"resourcesTemplate,omitempty"`
+
+	// Timeout is the maximum time to wait for the step's resources to
+	// become ready. When not set, the ResourceSet reconciliation
+	// timeout is used.
+	// +kubebuilder:validation:Type=string
+	// +kubebuilder:validation:Pattern="^([0-9]+(\\.[0-9]+)?(ms|s|m|h))+$"
+	// +optional
+	Timeout *metav1.Duration `json:"timeout,omitempty"`
 }
 
 // InputProviderReference defines a reference to an input provider resource
@@ -296,6 +341,11 @@ func (in *ResourceSet) GetTimeout() time.Duration {
 		return defaultTimeout
 	}
 	return timeout
+}
+
+// HasSteps returns true if the ResourceSet has steps defined in the spec.
+func (in *ResourceSet) HasSteps() bool {
+	return len(in.Spec.Steps) > 0
 }
 
 // GetInputs returns the ResourceSet in-line inputs as a list of maps.
