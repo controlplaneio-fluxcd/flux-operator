@@ -26,7 +26,7 @@ const mockWorkloads = {
     containerImages: [
       'ghcr.io/fluxcd/source-controller:v1.7.4@sha256:16f21ac1795528df80ddef51ccbb14a57b78ea26e66dc8551636ef9a3cec71b3'
     ],
-    userActions: ['deletePods'],
+    userActions: ['deletePods', 'logs'],
     pods: [
       {
         name: 'source-controller-5f76f5c549-wz2gk',
@@ -46,7 +46,7 @@ const mockWorkloads = {
     containerImages: [
       'ghcr.io/fluxcd/kustomize-controller:v1.7.3@sha256:e8ca82d66dafdd8ef77e0917f4adec53478075130ac61264dc0f91eb0f8cb6ce'
     ],
-    userActions: ['deletePods'],
+    userActions: ['deletePods', 'logs'],
     pods: [
       {
         name: 'kustomize-controller-5fc57fb9cc-bhl8q',
@@ -66,7 +66,7 @@ const mockWorkloads = {
     containerImages: [
       'ghcr.io/fluxcd/helm-controller:v1.4.4@sha256:5eae73909e1471c0cd01bb23d87c9d4219a4f645134a23629c8708c72635398d'
     ],
-    userActions: ['deletePods'],
+    userActions: ['deletePods', 'logs'],
     pods: [
       {
         name: 'helm-controller-bf4685d7f-nxqsj',
@@ -85,7 +85,7 @@ const mockWorkloads = {
     containerImages: [
       'ghcr.io/fluxcd/notification-controller:v1.7.5@sha256:ba723a55f7c7c7feedd50bb5db0ff2dd9a3b0ae85b50f61a0457184025b38c54'
     ],
-    userActions: ['deletePods'],
+    userActions: ['deletePods', 'logs'],
     pods: [
       {
         name: 'notification-controller-58cfb55954-fcf6l',
@@ -106,7 +106,7 @@ const mockWorkloads = {
     containerImages: [
       'ghcr.io/fluxcd/image-automation-controller:v1.0.4@sha256:f9383dccb80ec65e274648941af623ce74084d25026e14389111c14b630efece'
     ],
-    userActions: ['deletePods'],
+    userActions: ['deletePods', 'logs'],
     pods: [
       {
         name: 'image-automation-controller-5c5fc5487b-w4458',
@@ -171,7 +171,7 @@ const mockWorkloads = {
     containerImages: [
       'ghcr.io/fluxcd/image-reflector-controller:v1.0.4@sha256:0bdc30aea2b7cdfea02d0f6d53c06b9df0ea1c6516b85ed523792e222329c039'
     ],
-    userActions: ['deletePods'],
+    userActions: ['deletePods', 'logs'],
     pods: [
       {
         name: 'image-reflector-controller-547c8dbffc-2gjhj',
@@ -190,7 +190,7 @@ const mockWorkloads = {
     containerImages: [
       'ghcr.io/fluxcd/source-watcher:v2.0.3@sha256:9cd46c3c958dcfcd8a3c857fa09989f9df5d8396eae165f219cbb472343371a9'
     ],
-    userActions: ['deletePods'],
+    userActions: ['deletePods', 'logs'],
     pods: [
       {
         name: 'source-watcher-85bcf4bd57-vfbs6',
@@ -209,7 +209,7 @@ const mockWorkloads = {
     containerImages: [
       'ghcr.io/controlplaneio-fluxcd/flux-operator:v0.34.0'
     ],
-    userActions: ['deletePods'],
+    userActions: ['deletePods', 'logs'],
     pods: [
       {
         name: 'flux-operator-67cdfc557d-h656w',
@@ -230,7 +230,7 @@ const mockWorkloads = {
     containerImages: [
       'quay.io/jetstack/cert-manager-controller:v1.19.1'
     ],
-    userActions: ['deletePods'],
+    userActions: ['deletePods', 'logs'],
     pods: [
       {
         name: 'cert-manager-6b7bcdbb84-cclfj',
@@ -249,7 +249,7 @@ const mockWorkloads = {
     containerImages: [
       'quay.io/jetstack/cert-manager-cainjector:v1.19.1'
     ],
-    userActions: ['deletePods'],
+    userActions: ['deletePods', 'logs'],
     pods: [
       {
         name: 'cert-manager-cainjector-d74c65ddb-6v869',
@@ -268,7 +268,7 @@ const mockWorkloads = {
     containerImages: [
       'quay.io/jetstack/cert-manager-webhook:v1.19.1'
     ],
-    userActions: ['deletePods'],
+    userActions: ['deletePods', 'logs'],
     pods: [
       {
         name: 'cert-manager-webhook-6bf5dfc659-w95d9',
@@ -289,7 +289,7 @@ const mockWorkloads = {
     containerImages: [
       'registry.k8s.io/metrics-server/metrics-server:v0.8.0'
     ],
-    userActions: ['deletePods'],
+    userActions: ['deletePods', 'logs'],
     pods: [
       {
         name: 'metrics-server-57b56685f4-59gn2',
@@ -308,7 +308,7 @@ const mockWorkloads = {
     containerImages: [
       'tailscale/k8s-operator:v1.90.8'
     ],
-    userActions: ['deletePods'],
+    userActions: ['deletePods', 'logs'],
     pods: [
       {
         name: 'operator-84ddf77c66-gjsxz',
@@ -328,7 +328,7 @@ const mockWorkloads = {
     containerImages: [
       'ghcr.io/project-zot/zot:v2.1.11'
     ],
-    userActions: ['deletePods'],
+    userActions: ['deletePods', 'logs'],
     pods: [
       {
         name: 'zot-registry-0',
@@ -350,7 +350,7 @@ const mockWorkloads = {
     containerImages: [
       'ghcr.io/fluxcd/flux-cli:v2.6.1'
     ],
-    userActions: ['deletePods'],
+    userActions: ['deletePods', 'logs'],
     pods: [
       {
         name: 'garbage-collection-28945678-xk9j2',
@@ -370,7 +370,7 @@ const mockWorkloads = {
     containerImages: [
       'prom/prometheus:v3.3.0'
     ],
-    userActions: ['deletePods'],
+    userActions: ['deletePods', 'logs'],
     pods: [
       {
         name: 'prometheus-backup-28945600-abc12',
@@ -389,7 +389,7 @@ const mockWorkloads = {
     containerImages: [
       'quay.io/jetstack/cert-manager-ctl:v1.19.1'
     ],
-    userActions: ['deletePods'],
+    userActions: ['deletePods', 'logs'],
     pods: [
       {
         name: 'cert-renewal-check-28945500-def34',
@@ -600,4 +600,40 @@ export function getMockWorkloads(body) {
   }
 
   return { workloads: results }
+}
+
+/**
+ * Get mock pod logs (GET /api/v1/workload/logs)
+ * This function is called by fetchWithMock when in mock mode
+ * @param {string} endpoint - The API endpoint with query parameters
+ * @returns {object} - Mock logs response matching WorkloadLogsResponse format
+ */
+export function getMockWorkloadLogs(endpoint) {
+  const queryString = endpoint.includes('?') ? endpoint.split('?')[1] : ''
+  const params = new URLSearchParams(queryString)
+  const name = params.get('name') || 'pod'
+  const container = params.get('container') || 'app'
+  const tailLines = Math.max(1, parseInt(params.get('tailLines'), 10) || 100)
+
+  // Generate up to tailLines entries, oldest first, each on its own line.
+  const messages = [
+    'no changes since last reconciliation: observed revision \'refs/heads/main@sha1:aa26680\'',
+    'artifact up-to-date with remote revision \'latest@sha256:fcf183b\'',
+    'reconciliation finished in 1.2s, next run in 1m0s',
+    'stored artifact for revision \'refs/heads/main@sha1:aa26680\'',
+    'serving metrics on :8080'
+  ]
+  const count = Math.min(tailLines, 200)
+  const lines = []
+  for (let i = count - 1; i >= 0; i--) {
+    const ts = getTimestamp(0, 0, i)
+    const msg = messages[i % messages.length]
+    lines.push(`${ts} {"level":"info","ts":"${ts}","msg":"${msg}","controller":"gitrepository","reconcileID":"id-${count - i}"}`)
+  }
+
+  return {
+    pod: name,
+    container,
+    logs: lines.join('\n') + '\n'
+  }
 }

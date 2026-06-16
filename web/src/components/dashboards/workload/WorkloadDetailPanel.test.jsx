@@ -26,6 +26,12 @@ vi.mock('../resource/WorkloadDeleteAction', () => ({
   )
 }))
 
+vi.mock('./WorkloadLogsViewer', () => ({
+  WorkloadLogsViewer: (props) => (
+    <div data-testid="logs-viewer-mock">Logs: {props.name}</div>
+  )
+}))
+
 describe('WorkloadDetailPanel component', () => {
   const mockWorkloadData = {
     apiVersion: 'apps/v1',
@@ -409,6 +415,54 @@ describe('WorkloadDetailPanel component', () => {
 
       const deleteActions = screen.getAllByTestId('workload-delete-action')
       expect(deleteActions).toHaveLength(2)
+    })
+
+    it('should render logs buttons when logs action is available and pod has podStatus', async () => {
+      const user = userEvent.setup()
+      const infoWithLogs = {
+        ...mockWorkloadInfo,
+        userActions: ['restart', 'deletePods', 'logs'],
+        pods: [{
+          name: 'nginx-abc-123',
+          status: 'Running',
+          createdAt: '2023-01-01T12:00:00Z',
+          podStatus: {
+            phase: 'Running',
+            containerStatuses: [{ name: 'nginx', ready: true, restartCount: 0, state: { running: {} } }]
+          }
+        }]
+      }
+
+      render(<WorkloadDetailPanel {...defaultProps} workloadInfo={infoWithLogs} />)
+      await user.click(screen.getByText('Pods'))
+
+      const logsButton = screen.getByTestId('logs-pod-button')
+      expect(logsButton).toBeInTheDocument()
+
+      await user.click(logsButton)
+      expect(screen.getByTestId('logs-viewer-mock')).toHaveTextContent('Logs: nginx-abc-123')
+    })
+
+    it('should not render logs buttons when logs action is unavailable', async () => {
+      const user = userEvent.setup()
+      const infoWithPodStatus = {
+        ...mockWorkloadInfo,
+        userActions: ['restart', 'deletePods'],
+        pods: [{
+          name: 'nginx-abc-123',
+          status: 'Running',
+          createdAt: '2023-01-01T12:00:00Z',
+          podStatus: {
+            phase: 'Running',
+            containerStatuses: [{ name: 'nginx', ready: true, restartCount: 0, state: { running: {} } }]
+          }
+        }]
+      }
+
+      render(<WorkloadDetailPanel {...defaultProps} workloadInfo={infoWithPodStatus} />)
+      await user.click(screen.getByText('Pods'))
+
+      expect(screen.queryByTestId('logs-pod-button')).not.toBeInTheDocument()
     })
 
     it('should show Terminating status for pending deletions', async () => {
