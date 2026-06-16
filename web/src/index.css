@@ -116,4 +116,19 @@
     }
   }
 
+  /* One-shot glow for the latest log line; color comes from --glow-color,
+     set per log level by the viewer. */
+  .log-glow {
+    animation: logGlowPulse 2.5s ease-out;
+  }
+
+  @keyframes logGlowPulse {
+    0% {
+      box-shadow: 0 0 7px 1px var(--glow-color);
+    }
+    100% {
+      box-shadow: 0 0 0 0 rgba(0, 0, 0, 0);
+    }
+  }
+
 }

@@ -206,19 +206,61 @@ describe('WorkloadLogsViewer component', () => {
     clickSpy.mockRestore()
   })
 
-  it('always shows the line count in the footer, with a loader while fetching', async () => {
+  it('shows a per-level count summary in the footer, with a loader while fetching', async () => {
     let resolveFetch
     fetchWithMock.mockReturnValue(new Promise((resolve) => { resolveFetch = resolve }))
     render(<WorkloadLogsViewer {...defaultProps} />)
 
-    // The footer always shows the line count; the loader shows alongside it
-    // while the fetch is pending.
-    expect(screen.getByTestId('logs-footer')).toHaveTextContent('0 lines')
+    // The loader shows while the fetch is pending.
     expect(screen.getByTestId('logs-loader')).toBeInTheDocument()
 
+    // Two plain lines default to info; the footer summary counts them.
     resolveFetch({ logs: 'line one\nline two\n' })
     await waitFor(() => expect(screen.queryByTestId('logs-loader')).not.toBeInTheDocument())
-    expect(screen.getByTestId('logs-footer')).toHaveTextContent('2 lines')
+    expect(screen.getByTestId('logs-level-summary')).toHaveTextContent('Info 2')
+  })
+
+  it('colors the timestamp pill by the detected log level', async () => {
+    fetchWithMock.mockResolvedValue({
+      logs: '2026-01-01T00:00:00Z {"level":"error","msg":"boom"}\n2026-01-01T00:00:01Z just some text\n'
+    })
+    render(<WorkloadLogsViewer {...defaultProps} />)
+    await waitFor(() => expect(screen.getAllByTestId('logs-timestamp')).toHaveLength(2))
+
+    const pills = screen.getAllByTestId('logs-timestamp')
+    expect(pills[0]).toHaveAttribute('data-level', 'error')
+    expect(pills[1]).toHaveAttribute('data-level', 'info')
+  })
+
+  it('filters lines to the exact selected level', async () => {
+    const user = userEvent.setup()
+    fetchWithMock.mockResolvedValue({
+      logs: '2026-01-01T00:00:00Z {"level":"error","msg":"boom"}\n'
+        + '2026-01-01T00:00:01Z {"level":"warn","msg":"slow"}\n'
+        + '2026-01-01T00:00:02Z {"level":"info","msg":"hi"}\n'
+    })
+    render(<WorkloadLogsViewer {...defaultProps} />)
+    await waitFor(() => expect(screen.getAllByTestId('logs-line')).toHaveLength(3))
+
+    // Selecting "warn" shows ONLY warn (not warn-and-above), proving exact match.
+    await user.click(screen.getByTestId('logs-level-filter'))
+    await user.click(screen.getByTestId('logs-level-option-warn'))
+
+    await waitFor(() => expect(screen.getAllByTestId('logs-line')).toHaveLength(1))
+    expect(screen.getByTestId('logs-line')).toHaveTextContent('slow')
+
+    // The level summary still counts all (it ignores the level filter).
+    expect(screen.getByTestId('logs-level-summary')).toHaveTextContent('Warn 1')
+    expect(screen.getByTestId('logs-level-summary')).toHaveTextContent('Error 1')
+    expect(screen.getByTestId('logs-level-summary')).toHaveTextContent('Info 1')
+  })
+
+  it('strips ANSI escape codes from rendered lines', async () => {
+     
+    fetchWithMock.mockResolvedValue({ logs: '2026-01-01T00:00:00Z \x1b[31mred error\x1b[0m text\n' })
+    render(<WorkloadLogsViewer {...defaultProps} />)
+    await waitFor(() => expect(screen.getByTestId('logs-line')).toBeInTheDocument())
+    expect(screen.getByTestId('logs-line').textContent).toBe('red error text')
   })
 
   it('renders JSON lines as highlighted code blocks when the JSON toggle is on, leaving plain lines intact', async () => {

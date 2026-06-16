@@ -632,20 +632,21 @@ export function getMockWorkloadLogs(endpoint) {
   const container = params.get('container') || 'app'
   const tailLines = Math.max(1, parseInt(params.get('tailLines'), 10) || 100)
 
-  // Generate up to tailLines entries, oldest first, each on its own line.
+  // Generate up to tailLines entries, oldest first, each on its own line. The
+  // levels are varied so the viewer's per-level coloring and filter are visible.
   const messages = [
-    'no changes since last reconciliation: observed revision \'refs/heads/main@sha1:aa26680\'',
-    'artifact up-to-date with remote revision \'latest@sha256:fcf183b\'',
-    'reconciliation finished in 1.2s, next run in 1m0s',
-    'stored artifact for revision \'refs/heads/main@sha1:aa26680\'',
-    'serving metrics on :8080'
+    { level: 'info', msg: 'no changes since last reconciliation: observed revision \'refs/heads/main@sha1:aa26680\'' },
+    { level: 'debug', msg: 'artifact up-to-date with remote revision \'latest@sha256:fcf183b\'' },
+    { level: 'info', msg: 'reconciliation finished in 1.2s, next run in 1m0s' },
+    { level: 'warn', msg: 'slow reconciliation: took 4.7s, exceeding the 2s target' },
+    { level: 'error', msg: 'failed to fetch artifact: connection reset by peer' }
   ]
   const count = Math.min(tailLines, 200)
   const lines = []
   for (let i = count - 1; i >= 0; i--) {
     const ts = getTimestamp(0, 0, i)
-    const msg = messages[i % messages.length]
-    lines.push(`${ts} {"level":"info","ts":"${ts}","msg":"${msg}","controller":"gitrepository","reconcileID":"id-${count - i}"}`)
+    const { level, msg } = messages[i % messages.length]
+    lines.push(`${ts} {"level":"${level}","ts":"${ts}","msg":"${msg}","controller":"gitrepository","reconcileID":"id-${count - i}"}`)
   }
 
   return {

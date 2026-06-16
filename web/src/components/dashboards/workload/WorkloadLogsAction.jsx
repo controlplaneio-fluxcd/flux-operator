@@ -1,8 +1,9 @@
 // Copyright 2026 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { useState, useEffect, useRef, useMemo } from 'preact/hooks'
+import { useState, useRef, useMemo } from 'preact/hooks'
 import { WorkloadLogsViewer } from './WorkloadLogsViewer'
+import { useDismiss } from '../../../utils/useDismiss'
 
 /**
  * WorkloadLogsAction - "View logs" dropdown for the workload dashboard action bar.
@@ -37,21 +38,7 @@ export function WorkloadLogsAction({ namespace, pods = [], userActions = [] }) {
   )
 
   // Close the dropdown on click outside or Escape.
-  useEffect(() => {
-    if (!open) return
-    const onClick = (e) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setOpen(false)
-    }
-    const onKey = (e) => {
-      if (e.key === 'Escape') setOpen(false)
-    }
-    document.addEventListener('mousedown', onClick)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onClick)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [open])
+  useDismiss(dropdownRef, () => setOpen(false), open)
 
   if (logsPods.length === 0) {
     return null

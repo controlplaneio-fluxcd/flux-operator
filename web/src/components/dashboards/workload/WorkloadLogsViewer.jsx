@@ -8,6 +8,8 @@ import 'prismjs/components/prism-json'
 import { fetchWithMock } from '../../../utils/fetch'
 import { downloadBlob } from '../../../utils/download'
 import { usePrismTheme } from '../common/yaml'
+import { LEVELS, LEVEL_META, DEFAULT_LEVEL, detectLevel, stripAnsi } from '../../../utils/logLevel'
+import { useDismiss } from '../../../utils/useDismiss'
 
 // Selectable limits for the number of log lines to fetch from the backend.
 const LINE_LIMITS = [100, 500, 1000, 5000]
@@ -82,16 +84,87 @@ function ToggleButton({ active, onClick, label, title, testid, children }) {
   )
 }
 
+// Button styled like the toolbar selects, but for a custom dropdown (a native
+// <select> can't render the per-level color swatches).
+const LEVEL_BUTTON_CLASS = `${FIELD_CLASS} px-2 inline-flex items-center gap-1.5`
+
+// Level filter options: "All levels" plus one entry per level. Constant.
+const LEVEL_OPTIONS = [
+  { value: 'all', label: 'All levels', swatch: null },
+  ...LEVELS.map((l) => ({ value: l, label: LEVEL_META[l].label, swatch: LEVEL_META[l].swatch }))
+]
+
+/**
+ * LevelMenu - log-level filter. A custom dropdown (not a native select) so each
+ * option can show its level color swatch. Selecting a level shows only entries
+ * of that exact level; "All levels" disables the filter.
+ *
+ * @param {Object} props
+ * @param {string} props.value - Current level, or 'all'
+ * @param {Function} props.onChange - Called with the chosen value
+ */
+function LevelMenu({ value, onChange }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+
+  useDismiss(ref, () => setOpen(false), open)
+
+  const current = LEVEL_OPTIONS.find(o => o.value === value) || LEVEL_OPTIONS[0]
+
+  return (
+    <div class="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        class={LEVEL_BUTTON_CLASS}
+        data-testid="logs-level-filter"
+        aria-label="Log level"
+        aria-expanded={open}
+        title="Show only logs of this level"
+      >
+        {current.swatch && <span class={`w-2 h-2 rounded-full ${current.swatch}`} />}
+        <span>{current.label}</span>
+        <svg class="w-3 h-3 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <div
+          class="absolute left-0 mt-1 w-36 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50"
+          data-testid="logs-level-menu"
+        >
+          {LEVEL_OPTIONS.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => { onChange(o.value); setOpen(false) }}
+              class={`w-full px-2 py-1 text-left text-xs inline-flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 ${
+                o.value === value ? 'font-semibold text-gray-900 dark:text-gray-100' : 'text-gray-700 dark:text-gray-300'
+              }`}
+              data-testid={`logs-level-option-${o.value}`}
+            >
+              <span class={`w-2 h-2 rounded-full flex-shrink-0 ${o.swatch || 'border border-gray-400 dark:border-gray-500'}`} />
+              {o.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /**
  * WorkloadLogsViewer - Modal that displays the logs of a pod container.
  *
  * Fetches logs from GET /api/v1/workload/logs for the selected container and
  * renders each log entry on its own row, with its timestamp shown as a pill on
- * the row separator. Supports following (live polling), pretty-printing JSON
- * lines, filtering by substring, choosing the number of lines, selecting a
- * container (restarted containers also expose a "(previous)" entry for the
- * prior instance's logs), downloading the logs as a <pod>.log file, and a
- * fullscreen mode.
+ * the row separator. The pill border and rule are colored by the detected log
+ * level (JSON/klog/logfmt/plain text), and the footer summarizes the per-level
+ * counts. Supports following (live polling), pretty-printing JSON lines,
+ * filtering by substring and minimum level, choosing the number of lines,
+ * selecting a container (restarted containers also expose a "(previous)" entry
+ * for the prior instance's logs), downloading the logs as a <pod>.log file, and
+ * a fullscreen mode.
  *
  * @param {Object} props
  * @param {string} props.namespace - Pod namespace
@@ -111,6 +184,7 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
   const [tailLines, setTailLines] = useState(DEFAULT_TAIL_LINES)
   const [follow, setFollow] = useState(true)
   const [filter, setFilter] = useState('')
+  const [levelFilter, setLevelFilter] = useState('all')
   const [prettyJson, setPrettyJson] = useState(false)
   const [fullScreen, setFullScreen] = useState(false)
   const [logs, setLogs] = useState('')
@@ -206,21 +280,22 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
     return () => clearTimeout(id)
   }, [logs])
 
-  // Split the raw payload into entries once, separating the leading timestamp
-  // from the message so the timestamp can be shown as a separator pill while
-  // the message occupies the row. Only re-runs when the payload changes, not on
-  // every filter keystroke.
+  // Split the raw payload into entries once: strip the leading timestamp (shown
+  // as a separator pill) and any ANSI escapes from the message, then detect the
+  // log level. Only re-runs when the payload changes, not on every keystroke.
   const baseLines = useMemo(() => {
     return logs.split('\n').filter(line => line.length > 0).map(line => {
       const m = line.match(TIMESTAMP_PREFIX)
-      return m ? { ts: m[1], text: line.slice(m[0].length) } : { ts: '', text: line }
+      const ts = m ? m[1] : ''
+      const text = stripAnsi(m ? line.slice(m[0].length) : line)
+      return { ts, text, level: detectLevel(text) }
     })
   }, [logs])
 
   // Apply the substring filter on the message text; cheap pass over the
   // already-split entries. A leading "!" negates the match, keeping only lines
   // that do NOT contain the text (e.g. "!debug" hides every line mentioning debug).
-  const logLines = useMemo(() => {
+  const containsLines = useMemo(() => {
     const raw = filter.trim()
     if (!raw) return baseLines
     const negate = raw.startsWith('!')
@@ -229,14 +304,29 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
     return baseLines.filter(entry => entry.text.toLowerCase().includes(needle) !== negate)
   }, [baseLines, filter])
 
+  // Per-level counts over the contains-filtered set, before the minimum-level
+  // threshold (so the footer summary shows how many errors exist even while
+  // viewing "error and above"). Doubles as the footer legend.
+  const levelCounts = useMemo(() => {
+    const counts = {}
+    for (const entry of containsLines) counts[entry.level] = (counts[entry.level] || 0) + 1
+    return counts
+  }, [containsLines])
+
+  // Apply the level filter on top of the contains filter (exact level match).
+  const logLines = useMemo(() => {
+    if (levelFilter === 'all') return containsLines
+    return containsLines.filter(entry => entry.level === levelFilter)
+  }, [containsLines, levelFilter])
+
   // When the JSON toggle is on, every line renders as a code block sharing the
   // same monospace font and size as the YAML blocks (`code: true`). Valid JSON
   // gets indented and Prism-highlighted (`html`); other lines keep their plain
   // text in the same styling. Filtering happens first on the raw text, so this
   // only transforms what is actually shown.
   const displayLines = useMemo(() => {
-    if (!prettyJson) return logLines.map(entry => ({ ...entry, code: false, html: null }))
     return logLines.map(entry => {
+      if (!prettyJson) return { ...entry, code: false, html: null }
       const json = formatJson(entry.text)
       if (json == null) return { ...entry, code: true, html: null }
       return { ...entry, text: json, code: true, html: Prism.highlight(json, Prism.languages.json, 'json') }
@@ -350,6 +440,9 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
             title="Keep lines containing this text; prefix with ! to exclude (e.g. !debug)"
           />
 
+          {/* Minimum level filter */}
+          <LevelMenu value={levelFilter} onChange={setLevelFilter} />
+
           {/* Lines select */}
           <select
             value={tailLines}
@@ -411,20 +504,27 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
             <div class="pb-2" data-testid="logs-content">
               {displayLines.map((entry, i) => {
                 const isLatest = flashLatest && i === displayLines.length - 1
+                const meta = LEVEL_META[entry.level] || LEVEL_META[DEFAULT_LEVEL]
                 return (
                   <Fragment key={i}>
                     {entry.ts && (
-                      <div class="flex items-center gap-2 px-3 pt-2 select-none" data-testid="logs-timestamp" data-latest={isLatest ? 'true' : undefined}>
+                      <div
+                        class="flex items-center gap-2 px-3 pt-2 select-none"
+                        data-testid="logs-timestamp"
+                        data-level={entry.level}
+                        data-latest={isLatest ? 'true' : undefined}
+                      >
                         <span
-                          class={`text-[10px] font-mono px-1.5 py-0.5 rounded-full transition-colors duration-1000 ${
-                            isLatest
-                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
-                              : 'bg-gray-200 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
-                          }`}
+                          class={`text-[10px] font-mono px-1.5 py-0.5 rounded-full border bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 ${meta.border} ${isLatest ? 'log-glow' : ''}`}
+                          style={isLatest ? `--glow-color: ${meta.glow}` : undefined}
+                          title={`${meta.label} level`}
                         >
                           {entry.ts}
                         </span>
-                        <span class="flex-1 border-t border-gray-200 dark:border-gray-800" />
+                        <span
+                          class={`flex-1 border-t ${meta.border} ${isLatest ? 'log-glow' : ''}`}
+                          style={isLatest ? `--glow-color: ${meta.glow}` : undefined}
+                        />
                       </div>
                     )}
                     {entry.code ? (
@@ -459,25 +559,32 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
             </div>
           ) : (
             <p class="p-3 text-xs text-gray-500 dark:text-gray-400" data-testid="logs-empty">
-              {filter.trim() ? 'No matching log entries' : 'No logs available'}
+              {filter.trim() || levelFilter !== 'all' ? 'No matching log entries' : 'No logs available'}
             </p>
           )}
         </div>
 
-        {/* Footer showing the current line count, with a loader to its left
-            while a fetch is in flight. */}
+        {/* Footer: a per-level count summary that doubles as the color legend,
+            with the loader trailing it while a fetch is in flight. */}
         <div
-          class="flex items-center justify-center gap-2 px-4 py-2 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800"
+          class="flex items-center justify-between gap-3 px-4 py-2 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800"
           data-testid="logs-footer"
         >
+          <div class="flex items-center gap-3 text-xs text-gray-600 dark:text-gray-400" data-testid="logs-level-summary">
+            {LEVELS.filter(l => levelCounts[l]).map((l) => (
+              <span key={l} class="inline-flex items-center gap-1" title={`${LEVEL_META[l].label}: ${levelCounts[l]}`}>
+                <span class={`w-2 h-2 rounded-full ${LEVEL_META[l].swatch}`} />
+                {LEVEL_META[l].label} {levelCounts[l]}
+              </span>
+            ))}
+          </div>
           {loading && (
             <div
-              class="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400"
+              class="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400 flex-shrink-0"
               data-testid="logs-loader"
               aria-label="Loading logs"
             />
           )}
-          <span class="text-xs text-gray-500 dark:text-gray-400">{logLines.length} lines</span>
         </div>
       </div>
     </div>

@@ -135,13 +135,24 @@ The viewer provides a container selector (including init containers; containers
 that have restarted also expose a "(previous)" entry for the prior instance's
 logs, useful for troubleshooting crash loops), a free-text filter to show only
 entries containing a given substring (prefix the text with `!` to instead hide
-entries containing it, e.g. `!debug`), a control to choose how many lines to
+entries containing it, e.g. `!debug`), a level filter to show only entries of a
+chosen severity, a control to choose how many lines to
 fetch, and toggles to follow the logs (polling for new entries, enabled by
 default), pretty-print JSON-formatted lines (rendering structured logs as
 syntax-highlighted code blocks, leaving plain-text lines untouched), and expand
-to fullscreen. Each log entry is rendered on its own row,
-with its timestamp shown as a pill on the row separator; the latest timestamp
-pill is briefly highlighted when new entries arrive while following.
+to fullscreen. Each log entry is rendered on its own row, with its timestamp
+shown as a pill on the row separator; the latest timestamp pill is briefly
+highlighted when new entries arrive while following.
+
+The viewer detects the log level of each entry across the common formats emitted
+by mainstream loggers (JSON `level`/`severity`/`level_name`/`@level`/`s` fields,
+including the numeric pino/bunyan and MongoDB single-character scales; klog
+`I/W/E/F` prefixes; logfmt `level=`; bracketed tokens such as nginx's `[error]`
+or Envoy's `[warning]`; leading `error:`-style console prefixes; and plain-text
+level tokens), defaulting to `info` when no level is found. The detected level colors the entry's timestamp pill and
+separator rule (faint blue for info, escalating through amber for warnings and
+red for errors), and the footer summarizes the per-level counts, which doubles
+as the color legend. ANSI color escape codes in the logs are stripped.
 
 On the workload dashboard the action is available per pod in the Pods list, and
 from the action bar as a "View logs" dropdown listing all the pods of the
