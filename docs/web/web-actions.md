@@ -132,7 +132,8 @@ is performed.
 
 The View Logs action opens a viewer that displays the logs of a pod container.
 The viewer provides a container selector (including init containers), a
-free-text filter to show only entries containing a given substring, a control
+free-text filter to show only entries containing a given substring (prefix the
+text with `!` to instead hide entries containing it, e.g. `!debug`), a control
 to choose how many lines to fetch, and toggles to follow the logs (polling for
 new entries, enabled by default), show or hide timestamps, switch to the
 previous container instance (useful for troubleshooting crash loops), and

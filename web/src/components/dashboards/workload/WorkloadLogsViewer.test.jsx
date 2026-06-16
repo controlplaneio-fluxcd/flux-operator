@@ -130,6 +130,16 @@ describe('WorkloadLogsViewer component', () => {
     expect(screen.getByTestId('logs-line')).toHaveTextContent('line two')
   })
 
+  it('excludes log entries when the filter is prefixed with "!"', async () => {
+    const user = userEvent.setup()
+    render(<WorkloadLogsViewer {...defaultProps} />)
+    await waitFor(() => expect(screen.getAllByTestId('logs-line')).toHaveLength(2))
+
+    await user.type(screen.getByTestId('logs-filter-input'), '!two')
+    await waitFor(() => expect(screen.getAllByTestId('logs-line')).toHaveLength(1))
+    expect(screen.getByTestId('logs-line')).toHaveTextContent('line one')
+  })
+
   it('hides timestamps by default and shows them when toggled', async () => {
     const user = userEvent.setup()
     fetchWithMock.mockResolvedValue({ logs: '2026-06-16T00:00:00Z hello world\n' })
@@ -220,9 +230,9 @@ describe('WorkloadLogsViewer component', () => {
     // No highlight on the initial load.
     expect(screen.getAllByTestId('logs-line').some(el => el.getAttribute('data-latest') === 'true')).toBe(false)
 
-    // A new entry arrives on the next fetch.
+    // A new entry arrives on the next fetch (triggered by toggling previous).
     fetchWithMock.mockResolvedValue({ logs: 'line one\nline two\nline three\n' })
-    await user.click(screen.getByTestId('logs-refresh-button'))
+    await user.click(screen.getByTestId('logs-previous-toggle'))
     await waitFor(() => {
       const rows = screen.getAllByTestId('logs-line')
       expect(rows).toHaveLength(3)

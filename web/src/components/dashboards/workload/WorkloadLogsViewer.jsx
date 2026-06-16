@@ -169,11 +169,16 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
     return showTimestamps ? lines : lines.map(line => line.replace(TIMESTAMP_PREFIX, ''))
   }, [logs, showTimestamps])
 
-  // Apply the substring filter; cheap pass over the already-split lines.
+  // Apply the substring filter; cheap pass over the already-split lines. A
+  // leading "!" negates the match, keeping only lines that do NOT contain the
+  // text (e.g. "!debug" hides every line mentioning debug).
   const logLines = useMemo(() => {
-    const needle = filter.trim().toLowerCase()
+    const raw = filter.trim()
+    if (!raw) return baseLines
+    const negate = raw.startsWith('!')
+    const needle = (negate ? raw.slice(1) : raw).trim().toLowerCase()
     if (!needle) return baseLines
-    return baseLines.filter(line => line.toLowerCase().includes(needle))
+    return baseLines.filter(line => line.toLowerCase().includes(needle) !== negate)
   }, [baseLines, filter])
 
   // Keep the most recent entry in view after each update.
@@ -243,6 +248,7 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
             class={`${SELECT_CLASS} w-28 sm:w-40 truncate`}
             data-testid="logs-container-select"
             aria-label="Container"
+            title="Select container"
           >
             {containers.map((c) => (
               <option key={c.name} value={c.name}>{c.isInit ? `init:${c.name}` : c.name}</option>
@@ -258,6 +264,7 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
             class={`${INPUT_CLASS} w-28 sm:w-40`}
             data-testid="logs-filter-input"
             aria-label="Filter log lines containing text"
+            title="Keep lines containing this text; prefix with ! to exclude (e.g. !debug)"
           />
 
           {/* Previous container instance */}
@@ -280,6 +287,7 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
             class={SELECT_CLASS}
             data-testid="logs-lines-select"
             aria-label="Number of lines"
+            title="Number of log lines to fetch"
           >
             {LINE_LIMITS.map((n) => (
               <option key={n} value={n}>{n} ln</option>
@@ -300,18 +308,6 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
 
           {/* Actions */}
           <div class="flex items-center gap-1 ml-auto">
-            <button
-              onClick={fetchLogs}
-              disabled={loading}
-              class={ACTION_CLASS}
-              title="Refresh logs"
-              aria-label="Refresh logs"
-              data-testid="logs-refresh-button"
-            >
-              <svg class={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-            </button>
             <button
               onClick={handleDownload}
               disabled={!logs}
