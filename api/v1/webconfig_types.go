@@ -49,6 +49,13 @@ const (
 	// pods of a workload. Should not be added to the userActions map.
 	UserActionDeletePods = "deletePods"
 
+	// UserActionViewLogs is the view-logs user action for pods of workloads
+	// managed by Flux. Like UserActionDeletePods, this constant is not a
+	// custom RBAC verb: it only signals to the frontend that the user is
+	// allowed to read pod logs (the native "get" verb on the "pods/log"
+	// subresource). It must not be added to the userActions map.
+	UserActionViewLogs = "logs"
+
 	// UserActionsAccessImpersonated configures GitOps actions to be performed
 	// by impersonating the user's Kubernetes RBAC identity. This is the default
 	// and requires the user to hold both the custom per-action verb and the

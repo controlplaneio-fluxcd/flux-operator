@@ -1620,7 +1620,9 @@ func TestWorkloadHandler_Success_WithParentReconciler(t *testing.T) {
 			Name:      "test-wh-parent",
 			Namespace: "default",
 		},
-		Spec: fluxcdv1.ResourceSetSpec{},
+		Spec: fluxcdv1.ResourceSetSpec{
+			ResourcesTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\n  namespace: default\n",
+		},
 	}
 	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
 	defer func() { g.Expect(testClient.Delete(ctx, resourceSet)).To(Succeed()) }()

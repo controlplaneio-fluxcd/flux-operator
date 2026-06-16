@@ -257,6 +257,16 @@ func (h *Handler) GetWorkloadStatus(ctx context.Context, kind, name, namespace s
 		} else if canDelete {
 			workload.UserActions = append(workload.UserActions, fluxcdv1.UserActionDeletePods)
 		}
+
+		// Check if the user can view pod logs in this namespace
+		// (native "get" on the "pods/log" subresource).
+		canViewLogs, err := h.kubeClient.CanViewPodLogs(ctx, namespace, "")
+		if err != nil {
+			log.FromContext(ctx).Error(err, "failed to check pod logs RBAC",
+				"namespace", namespace)
+		} else if canViewLogs {
+			workload.UserActions = append(workload.UserActions, fluxcdv1.UserActionViewLogs)
+		}
 	}
 
 	return workload, nil

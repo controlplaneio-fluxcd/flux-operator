@@ -334,3 +334,34 @@ func (c *Client) CanActOnResource(ctx context.Context, action, group, plural, na
 
 	return ssar.Status.Allowed, nil
 }
+
+// CanViewPodLogs checks if the user has permission to read pod logs in the
+// given namespace by performing a SelfSubjectAccessReview for the "get" verb
+// on the "pods/log" subresource. When name is empty, the check is performed
+// namespace-wide.
+//
+// Pod logs are exposed through a subresource, so the SelfSubjectAccessReview
+// must set Resource="pods" and Subresource="log" (unlike CanActOnResource,
+// which only sets Resource). This is the native RBAC verb Kubernetes enforces
+// when streaming logs; there is no custom action verb for log viewing.
+func (c *Client) CanViewPodLogs(ctx context.Context, namespace, name string) (bool, error) {
+	kubeClient := c.GetClient(ctx)
+
+	ssar := &authzv1.SelfSubjectAccessReview{
+		Spec: authzv1.SelfSubjectAccessReviewSpec{
+			ResourceAttributes: &authzv1.ResourceAttributes{
+				Verb:        "get",
+				Resource:    "pods",
+				Subresource: "log",
+				Namespace:   namespace,
+				Name:        name,
+			},
+		},
+	}
+
+	if err := kubeClient.Create(ctx, ssar); err != nil {
+		return false, fmt.Errorf("failed to create SelfSubjectAccessReview: %w", err)
+	}
+
+	return ssar.Status.Allowed, nil
+}
