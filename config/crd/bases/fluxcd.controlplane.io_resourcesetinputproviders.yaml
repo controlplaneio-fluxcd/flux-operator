@@ -273,12 +273,12 @@ spec:
             - message: cannot specify spec.certSecretRef when spec.type is one of
                 Static, AzureDevOps*, AWSCodeCommit*, ACRArtifactTag, ECRArtifactTag
                 or GARArtifactTag
-              rule: '!has(self.certSecretRef) || !(self.url == ''Static'' || self.type.startsWith(''AzureDevOps'')
+              rule: '!has(self.certSecretRef) || !(self.type == ''Static'' || self.type.startsWith(''AzureDevOps'')
                 || self.type.startsWith(''AWSCodeCommit'') || (self.type.endsWith(''ArtifactTag'')
                 && self.type != ''OCIArtifactTag''))'
             - message: cannot specify spec.secretRef when spec.type is one of Static,
                 AWSCodeCommit*, ACRArtifactTag, ECRArtifactTag or GARArtifactTag
-              rule: '!has(self.secretRef) || !(self.url == ''Static'' || self.type.startsWith(''AWSCodeCommit'')
+              rule: '!has(self.secretRef) || !(self.type == ''Static'' || self.type.startsWith(''AWSCodeCommit'')
                 || (self.type.endsWith(''ArtifactTag'') && self.type != ''OCIArtifactTag''))'
           status:
             description: ResourceSetInputProviderStatus defines the observed state

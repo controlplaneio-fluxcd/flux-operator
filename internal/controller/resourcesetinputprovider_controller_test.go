@@ -418,6 +418,7 @@ func TestResourceSetInputProviderReconciler_ProviderAuthAndSecretsCompatiblity(t
 				err = testEnv.Create(ctx, obj)
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(err.Error()).To(ContainSubstring(certErr))
+				g.Expect(err.Error()).NotTo(ContainSubstring("no such key"))
 			} else {
 				err = testEnv.Create(ctx, obj, client.DryRunAll, client.FieldOwner(controllerName))
 				if err != nil {
@@ -435,6 +436,7 @@ func TestResourceSetInputProviderReconciler_ProviderAuthAndSecretsCompatiblity(t
 				err = testEnv.Create(ctx, obj)
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(err.Error()).To(ContainSubstring(secretErr))
+				g.Expect(err.Error()).NotTo(ContainSubstring("no such key"))
 			} else {
 				err = testEnv.Create(ctx, obj, client.DryRunAll, client.FieldOwner(controllerName))
 				if err != nil {
