@@ -18,7 +18,7 @@ import { WorkloadLogsViewer } from './WorkloadLogsViewer'
  */
 export function WorkloadLogsAction({ namespace, pods = [], userActions = [] }) {
   const [open, setOpen] = useState(false)
-  const [logsPod, setLogsPod] = useState(null)
+  const [logsPodName, setLogsPodName] = useState(null)
   const dropdownRef = useRef(null)
 
   // Pods that can be inspected: the user is authorized to read logs and the pod
@@ -26,6 +26,14 @@ export function WorkloadLogsAction({ namespace, pods = [], userActions = [] }) {
   const logsPods = useMemo(
     () => (userActions.includes('logs') ? pods.filter(p => p.podStatus) : []),
     [pods, userActions]
+  )
+
+  // Live pod whose logs are displayed; looked up from the polled pods by name
+  // so its restart counts (and the viewer's "(previous)" options) stay current
+  // while the viewer is open. Resolves to null if the pod is gone, closing it.
+  const logsPod = useMemo(
+    () => (logsPodName ? logsPods.find(p => p.name === logsPodName) || null : null),
+    [logsPodName, logsPods]
   )
 
   // Close the dropdown on click outside or Escape.
@@ -49,15 +57,16 @@ export function WorkloadLogsAction({ namespace, pods = [], userActions = [] }) {
     return null
   }
 
-  // Build the container list for a pod (init containers first).
+  // Build the container list for a pod (init containers first). The restart
+  // count lets the viewer offer a "(previous)" entry for restarted containers.
   const containersOf = (pod) => [
-    ...(pod.podStatus.initContainerStatuses || []).map(cs => ({ name: cs.name, isInit: true })),
-    ...(pod.podStatus.containerStatuses || []).map(cs => ({ name: cs.name, isInit: false }))
+    ...(pod.podStatus.initContainerStatuses || []).map(cs => ({ name: cs.name, isInit: true, restartCount: cs.restartCount || 0 })),
+    ...(pod.podStatus.containerStatuses || []).map(cs => ({ name: cs.name, isInit: false, restartCount: cs.restartCount || 0 }))
   ]
 
   const handleSelect = (pod) => {
     setOpen(false)
-    setLogsPod(pod)
+    setLogsPodName(pod.name)
   }
 
   const baseButtonClass = 'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-gray-900'
@@ -110,7 +119,7 @@ export function WorkloadLogsAction({ namespace, pods = [], userActions = [] }) {
           namespace={namespace}
           name={logsPod.name}
           containers={containersOf(logsPod)}
-          onClose={() => setLogsPod(null)}
+          onClose={() => setLogsPodName(null)}
         />
       )}
     </div>

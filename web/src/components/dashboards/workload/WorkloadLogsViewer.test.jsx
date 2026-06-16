@@ -53,7 +53,7 @@ describe('WorkloadLogsViewer component', () => {
     await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
     const select = screen.getByTestId('logs-container-select')
     expect(select).toBeInTheDocument()
-    expect(select).toHaveValue('app')
+    expect(select).toHaveValue('app::false')
   })
 
   it('shows the container selector for multiple containers and refetches on change', async () => {
@@ -67,7 +67,7 @@ describe('WorkloadLogsViewer component', () => {
     const select = await screen.findByTestId('logs-container-select')
     expect(select).toBeInTheDocument()
 
-    await user.selectOptions(select, 'sidecar')
+    await user.selectOptions(select, 'sidecar::false')
     await waitFor(() => {
       const lastCall = fetchWithMock.mock.calls[fetchWithMock.mock.calls.length - 1][0]
       expect(lastCall.endpoint).toContain('container=sidecar')
@@ -140,32 +140,45 @@ describe('WorkloadLogsViewer component', () => {
     expect(screen.getByTestId('logs-line')).toHaveTextContent('line one')
   })
 
-  it('hides timestamps by default and shows them when toggled', async () => {
-    const user = userEvent.setup()
+  it('always shows the timestamp as a separator pill, separate from the message row', async () => {
     fetchWithMock.mockResolvedValue({ logs: '2026-06-16T00:00:00Z hello world\n' })
     render(<WorkloadLogsViewer {...defaultProps} />)
     await waitFor(() => expect(screen.getByTestId('logs-line')).toHaveTextContent('hello world'))
 
-    // Timestamps are hidden by default: the leading timestamp is stripped.
-    const toggle = screen.getByTestId('logs-timestamps-toggle')
-    expect(toggle).toHaveAttribute('aria-pressed', 'false')
+    // The timestamp lives in the pill; the message row carries only the message.
+    expect(screen.getByTestId('logs-timestamp')).toHaveTextContent('2026-06-16T00:00:00Z')
+    expect(screen.getByTestId('logs-line')).toHaveTextContent('hello world')
     expect(screen.getByTestId('logs-line')).not.toHaveTextContent('2026-06-16T00:00:00Z')
 
-    // Toggle on to reveal the timestamps.
-    await user.click(toggle)
-    expect(toggle).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByTestId('logs-line')).toHaveTextContent('2026-06-16T00:00:00Z')
+    // There is no timestamps toggle anymore.
+    expect(screen.queryByTestId('logs-timestamps-toggle')).not.toBeInTheDocument()
   })
 
-  it('toggles the previous container instance and refetches', async () => {
+  it('offers a "(previous)" entry only for restarted containers and refetches with previous=true', async () => {
     const user = userEvent.setup()
-    render(<WorkloadLogsViewer {...defaultProps} />)
+    const props = {
+      ...defaultProps,
+      containers: [
+        { name: 'app', isInit: false, restartCount: 2 },
+        { name: 'sidecar', isInit: false, restartCount: 0 }
+      ]
+    }
+    render(<WorkloadLogsViewer {...props} />)
     await waitFor(() => expect(fetchWithMock).toHaveBeenCalled())
     expect(fetchWithMock.mock.calls[0][0].endpoint).toContain('previous=false')
 
-    await user.click(screen.getByTestId('logs-previous-toggle'))
+    const select = screen.getByTestId('logs-container-select')
+    const values = [...select.querySelectorAll('option')].map(o => o.value)
+    // Restarted container gets a previous entry; the non-restarted one does not.
+    expect(values).toContain('app::false')
+    expect(values).toContain('app::true')
+    expect(values).toContain('sidecar::false')
+    expect(values).not.toContain('sidecar::true')
+
+    await user.selectOptions(select, 'app::true')
     await waitFor(() => {
       const lastCall = fetchWithMock.mock.calls[fetchWithMock.mock.calls.length - 1][0]
+      expect(lastCall.endpoint).toContain('container=app')
       expect(lastCall.endpoint).toContain('previous=true')
     })
   })
@@ -191,6 +204,21 @@ describe('WorkloadLogsViewer component', () => {
     expect(window.URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock')
 
     clickSpy.mockRestore()
+  })
+
+  it('always shows the line count in the footer, with a loader while fetching', async () => {
+    let resolveFetch
+    fetchWithMock.mockReturnValue(new Promise((resolve) => { resolveFetch = resolve }))
+    render(<WorkloadLogsViewer {...defaultProps} />)
+
+    // The footer always shows the line count; the loader shows alongside it
+    // while the fetch is pending.
+    expect(screen.getByTestId('logs-footer')).toHaveTextContent('0 lines')
+    expect(screen.getByTestId('logs-loader')).toBeInTheDocument()
+
+    resolveFetch({ logs: 'line one\nline two\n' })
+    await waitFor(() => expect(screen.queryByTestId('logs-loader')).not.toBeInTheDocument())
+    expect(screen.getByTestId('logs-footer')).toHaveTextContent('2 lines')
   })
 
   it('toggles fullscreen mode', async () => {
@@ -221,23 +249,23 @@ describe('WorkloadLogsViewer component', () => {
     setIntervalSpy.mockRestore()
   })
 
-  it('highlights the latest line when new logs arrive', async () => {
+  it('highlights the latest timestamp pill when new logs arrive', async () => {
     const user = userEvent.setup()
-    fetchWithMock.mockResolvedValue({ logs: 'line one\nline two\n' })
+    fetchWithMock.mockResolvedValue({ logs: '2026-01-01T00:00:00Z line one\n2026-01-01T00:00:01Z line two\n' })
     render(<WorkloadLogsViewer {...defaultProps} />)
     await waitFor(() => expect(screen.getAllByTestId('logs-line')).toHaveLength(2))
 
     // No highlight on the initial load.
-    expect(screen.getAllByTestId('logs-line').some(el => el.getAttribute('data-latest') === 'true')).toBe(false)
+    expect(screen.getAllByTestId('logs-timestamp').some(el => el.getAttribute('data-latest') === 'true')).toBe(false)
 
-    // A new entry arrives on the next fetch (triggered by toggling previous).
-    fetchWithMock.mockResolvedValue({ logs: 'line one\nline two\nline three\n' })
-    await user.click(screen.getByTestId('logs-previous-toggle'))
+    // A new entry arrives on the next fetch (triggered by changing the line count).
+    fetchWithMock.mockResolvedValue({ logs: '2026-01-01T00:00:00Z line one\n2026-01-01T00:00:01Z line two\n2026-01-01T00:00:02Z line three\n' })
+    await user.selectOptions(screen.getByTestId('logs-lines-select'), '500')
     await waitFor(() => {
-      const rows = screen.getAllByTestId('logs-line')
-      expect(rows).toHaveLength(3)
-      expect(rows[rows.length - 1]).toHaveAttribute('data-latest', 'true')
+      const pills = screen.getAllByTestId('logs-timestamp')
+      expect(pills).toHaveLength(3)
+      expect(pills[pills.length - 1]).toHaveAttribute('data-latest', 'true')
     })
-    expect(screen.getAllByTestId('logs-line')[0]).not.toHaveAttribute('data-latest')
+    expect(screen.getAllByTestId('logs-timestamp')[0]).not.toHaveAttribute('data-latest')
   })
 })

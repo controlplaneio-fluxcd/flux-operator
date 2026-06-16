@@ -107,18 +107,26 @@ export function WorkloadDetailPanel({
   // Expanded pods state (set of pod names)
   const [expandedPods, setExpandedPods] = useState(new Set())
 
-  // Pod whose logs are currently displayed in the logs viewer (null when closed)
-  const [logsPod, setLogsPod] = useState(null)
+  // Name of the pod whose logs are displayed in the viewer (null when closed)
+  const [logsPodName, setLogsPodName] = useState(null)
 
   // Whether the user is allowed to view pod logs
   const canViewLogs = workloadInfo?.userActions?.includes('logs')
+
+  // Live pod whose logs are displayed; looked up from the polled workload data
+  // by name so its restart counts (and the viewer's "(previous)" options) stay
+  // current while open. Resolves to null if the pod is gone, closing the viewer.
+  const logsPod = useMemo(
+    () => (logsPodName ? (workloadInfo?.pods || []).find(p => p.name === logsPodName) || null : null),
+    [logsPodName, workloadInfo]
+  )
 
   // Containers of the pod selected for log viewing (init containers first)
   const logsContainers = useMemo(() => {
     if (!logsPod?.podStatus) return []
     return [
-      ...(logsPod.podStatus.initContainerStatuses || []).map(cs => ({ name: cs.name, isInit: true })),
-      ...(logsPod.podStatus.containerStatuses || []).map(cs => ({ name: cs.name, isInit: false }))
+      ...(logsPod.podStatus.initContainerStatuses || []).map(cs => ({ name: cs.name, isInit: true, restartCount: cs.restartCount || 0 })),
+      ...(logsPod.podStatus.containerStatuses || []).map(cs => ({ name: cs.name, isInit: false, restartCount: cs.restartCount || 0 }))
     ]
   }, [logsPod])
 
@@ -437,7 +445,7 @@ export function WorkloadDetailPanel({
                         </span>
                         {canViewLogs && hasPodStatus && (
                           <button
-                            onClick={(e) => { e.stopPropagation(); setLogsPod(pod) }}
+                            onClick={(e) => { e.stopPropagation(); setLogsPodName(pod.name) }}
                             class="inline-flex items-center p-1 rounded transition-colors focus:outline-none text-gray-400 hover:text-blue-500 dark:text-gray-500 dark:hover:text-blue-400"
                             data-testid="logs-pod-button"
                             title={`View logs for pod ${pod.name}`}
@@ -589,7 +597,7 @@ export function WorkloadDetailPanel({
           namespace={namespace}
           name={logsPod.name}
           containers={logsContainers}
-          onClose={() => setLogsPod(null)}
+          onClose={() => setLogsPodName(null)}
         />
       )}
     </DashboardPanel>

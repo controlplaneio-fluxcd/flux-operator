@@ -131,14 +131,15 @@ is performed.
 ### View Logs
 
 The View Logs action opens a viewer that displays the logs of a pod container.
-The viewer provides a container selector (including init containers), a
-free-text filter to show only entries containing a given substring (prefix the
-text with `!` to instead hide entries containing it, e.g. `!debug`), a control
-to choose how many lines to fetch, and toggles to follow the logs (polling for
-new entries, enabled by default), show or hide timestamps, switch to the
-previous container instance (useful for troubleshooting crash loops), and
-expand to fullscreen. Each log entry is rendered on its own separated row, and
-newly arrived entries are briefly highlighted while following.
+The viewer provides a container selector (including init containers; containers
+that have restarted also expose a "(previous)" entry for the prior instance's
+logs, useful for troubleshooting crash loops), a free-text filter to show only
+entries containing a given substring (prefix the text with `!` to instead hide
+entries containing it, e.g. `!debug`), a control to choose how many lines to
+fetch, and toggles to follow the logs (polling for new entries, enabled by
+default) and expand to fullscreen. Each log entry is rendered on its own row,
+with its timestamp shown as a pill on the row separator; the latest timestamp
+pill is briefly highlighted when new entries arrive while following.
 
 On the workload dashboard the action is available per pod in the Pods list, and
 from the action bar as a "View logs" dropdown listing all the pods of the

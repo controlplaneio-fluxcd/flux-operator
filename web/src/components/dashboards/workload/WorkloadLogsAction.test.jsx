@@ -9,7 +9,11 @@ import { WorkloadLogsAction } from './WorkloadLogsAction'
 // Mock the logs viewer so these tests stay focused on the dropdown.
 vi.mock('./WorkloadLogsViewer', () => ({
   WorkloadLogsViewer: ({ namespace, name, containers }) => (
-    <div data-testid="logs-viewer-mock" data-containers={(containers || []).map(c => c.name).join(',')}>
+    <div
+      data-testid="logs-viewer-mock"
+      data-containers={(containers || []).map(c => c.name).join(',')}
+      data-restarts={(containers || []).map(c => c.restartCount).join(',')}
+    >
       {namespace}/{name}
     </div>
   )
@@ -68,6 +72,30 @@ describe('WorkloadLogsAction component', () => {
     const viewer = screen.getByTestId('logs-viewer-mock')
     expect(viewer).toHaveTextContent('flux-system/app-abc')
     expect(viewer).toHaveAttribute('data-containers', 'init,main')
+  })
+
+  it('reflects live pod updates (e.g. a container restart) in the open viewer', async () => {
+    const user = userEvent.setup()
+    const initial = [{
+      name: 'app-abc',
+      status: 'Running',
+      podStatus: { containerStatuses: [{ name: 'main', restartCount: 0 }] }
+    }]
+    const { rerender } = render(<WorkloadLogsAction {...defaultProps} pods={initial} />)
+
+    await user.click(screen.getByTestId('view-logs-dropdown-button'))
+    await user.click(screen.getByTestId('view-logs-pod-app-abc'))
+    expect(screen.getByTestId('logs-viewer-mock')).toHaveAttribute('data-restarts', '0')
+
+    // The container restarts and the parent polls fresh pod data; the open
+    // viewer picks up the new restart count without being reopened.
+    const updated = [{
+      name: 'app-abc',
+      status: 'Running',
+      podStatus: { containerStatuses: [{ name: 'main', restartCount: 1 }] }
+    }]
+    rerender(<WorkloadLogsAction {...defaultProps} pods={updated} />)
+    expect(screen.getByTestId('logs-viewer-mock')).toHaveAttribute('data-restarts', '1')
   })
 
   it('closes the dropdown on Escape', async () => {

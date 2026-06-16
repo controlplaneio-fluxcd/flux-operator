@@ -1,6 +1,7 @@
 // Copyright 2026 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
+import { Fragment } from 'preact'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'preact/hooks'
 import { fetchWithMock } from '../../../utils/fetch'
 import { downloadBlob } from '../../../utils/download'
@@ -17,10 +18,10 @@ const FOLLOW_INTERVAL = 5000
 // How long the most recent log line stays highlighted after new entries arrive.
 const HIGHLIGHT_DURATION = 2500
 
-// Matches the leading RFC3339 timestamp the API prepends to each log line.
+// Captures the leading RFC3339 timestamp the API prepends to each log line.
 // Anchored to a date so lines without a timestamp (e.g. stack-trace
-// continuations) are not mangled by stripping their first token.
-const TIMESTAMP_PREFIX = /^\d{4}-\d{2}-\d{2}T\S+\s+/
+// continuations) are not mangled by splitting off their first token.
+const TIMESTAMP_PREFIX = /^(\d{4}-\d{2}-\d{2}T\S+)\s+/
 
 // Shared styling for the toolbar controls. Selects deliberately omit a chevron
 // and right padding: those come from the global `select` rule in index.css.
@@ -64,15 +65,16 @@ function ToggleButton({ active, onClick, label, title, testid, children }) {
  * WorkloadLogsViewer - Modal that displays the logs of a pod container.
  *
  * Fetches logs from GET /api/v1/workload/logs for the selected container and
- * renders each log entry on its own separated row. Supports following (live
- * polling), filtering by substring, choosing the number of lines, viewing the
- * previous container instance, toggling timestamps, downloading the logs as a
- * <pod>.log file, and a fullscreen mode.
+ * renders each log entry on its own row, with its timestamp shown as a pill on
+ * the row separator. Supports following (live polling), filtering by substring,
+ * choosing the number of lines, selecting a container (restarted containers
+ * also expose a "(previous)" entry for the prior instance's logs), downloading
+ * the logs as a <pod>.log file, and a fullscreen mode.
  *
  * @param {Object} props
  * @param {string} props.namespace - Pod namespace
  * @param {string} props.name - Pod name
- * @param {Array<{name: string, isInit: boolean}>} props.containers - Pod containers
+ * @param {Array<{name: string, isInit: boolean, restartCount?: number}>} props.containers - Pod containers
  * @param {Function} props.onClose - Callback to close the viewer
  */
 export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }) {
@@ -84,7 +86,6 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
   const [tailLines, setTailLines] = useState(DEFAULT_TAIL_LINES)
   const [follow, setFollow] = useState(true)
   const [filter, setFilter] = useState('')
-  const [showTimestamps, setShowTimestamps] = useState(false)
   const [fullScreen, setFullScreen] = useState(false)
   const [logs, setLogs] = useState('')
   const [loading, setLoading] = useState(false)
@@ -94,10 +95,27 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
   const bodyRef = useRef(null)
   const prevLogsRef = useRef('')
 
-  const fetchLogs = useCallback(async () => {
+  // One option per container, plus a "(previous)" option for containers that
+  // have restarted (a previous instance only has logs after a restart). The
+  // value encodes both the container and whether to read the previous instance.
+  const containerOptions = useMemo(() => {
+    const opts = []
+    for (const c of containers) {
+      const base = c.isInit ? `init:${c.name}` : c.name
+      opts.push({ key: `${c.name}::false`, label: base, container: c.name, previous: false })
+      if ((c.restartCount || 0) > 0) {
+        opts.push({ key: `${c.name}::true`, label: `${base} (previous)`, container: c.name, previous: true })
+      }
+    }
+    return opts
+  }, [containers])
+
+  // Fetch the logs. Background follow-polls pass { silent: true } so they don't
+  // toggle the loading spinner, which would flicker on every poll; only the
+  // initial load and user-driven changes (container, line count) show it.
+  const fetchLogs = useCallback(async ({ silent = false } = {}) => {
     if (!container) return
-    setLoading(true)
-    setError(null)
+    if (!silent) setLoading(true)
     try {
       const params = new URLSearchParams({
         namespace,
@@ -112,11 +130,12 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
         mockExport: 'getMockWorkloadLogs'
       })
       setLogs(resp?.logs || '')
+      setError(null)
     } catch (err) {
       setError(err.message)
       setLogs('')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [namespace, name, container, tailLines, previous])
 
@@ -125,10 +144,10 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
     fetchLogs()
   }, [fetchLogs])
 
-  // Poll for new logs while following.
+  // Poll for new logs while following, silently so the spinner doesn't flicker.
   useEffect(() => {
     if (!follow) return
-    const id = setInterval(() => { fetchLogs() }, FOLLOW_INTERVAL)
+    const id = setInterval(() => { fetchLogs({ silent: true }) }, FOLLOW_INTERVAL)
     return () => clearInterval(id)
   }, [follow, fetchLogs])
 
@@ -161,24 +180,27 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
     return () => clearTimeout(id)
   }, [logs])
 
-  // Split the raw payload into entries once, stripping timestamps for display
-  // unless they are shown. This only re-runs when the payload or the timestamp
-  // toggle changes, not on every filter keystroke.
+  // Split the raw payload into entries once, separating the leading timestamp
+  // from the message so the timestamp can be shown as a separator pill while
+  // the message occupies the row. Only re-runs when the payload changes, not on
+  // every filter keystroke.
   const baseLines = useMemo(() => {
-    const lines = logs.split('\n').filter(line => line.length > 0)
-    return showTimestamps ? lines : lines.map(line => line.replace(TIMESTAMP_PREFIX, ''))
-  }, [logs, showTimestamps])
+    return logs.split('\n').filter(line => line.length > 0).map(line => {
+      const m = line.match(TIMESTAMP_PREFIX)
+      return m ? { ts: m[1], text: line.slice(m[0].length) } : { ts: '', text: line }
+    })
+  }, [logs])
 
-  // Apply the substring filter; cheap pass over the already-split lines. A
-  // leading "!" negates the match, keeping only lines that do NOT contain the
-  // text (e.g. "!debug" hides every line mentioning debug).
+  // Apply the substring filter on the message text; cheap pass over the
+  // already-split entries. A leading "!" negates the match, keeping only lines
+  // that do NOT contain the text (e.g. "!debug" hides every line mentioning debug).
   const logLines = useMemo(() => {
     const raw = filter.trim()
     if (!raw) return baseLines
     const negate = raw.startsWith('!')
     const needle = (negate ? raw.slice(1) : raw).trim().toLowerCase()
     if (!needle) return baseLines
-    return baseLines.filter(line => line.toLowerCase().includes(needle) !== negate)
+    return baseLines.filter(entry => entry.text.toLowerCase().includes(needle) !== negate)
   }, [baseLines, filter])
 
   // Keep the most recent entry in view after each update.
@@ -209,7 +231,7 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
         data-testid="logs-viewer"
       >
         {/* Header */}
-        <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+        <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
           <div class="min-w-0">
             <h2 class="text-sm font-semibold text-gray-900 dark:text-white truncate">Logs</h2>
             <p class="text-xs text-gray-500 dark:text-gray-400 truncate">{namespace}/{name}</p>
@@ -227,7 +249,7 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
         </div>
 
         {/* Toolbar */}
-        <div class="flex items-center flex-wrap gap-2 px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+        <div class="flex items-center flex-wrap gap-2 px-4 py-2 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
           {/* Follow logs */}
           <ToggleButton
             active={follow}
@@ -240,18 +262,26 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
             </svg>
           </ToggleButton>
 
-          {/* Container select (always shown). Fixed width so a long container
-              name is trimmed instead of pushing the rest of the toolbar. */}
+          {/* Container select (always shown). Containers that have restarted
+              also expose a "(previous)" entry for the prior instance's logs.
+              Fixed width so a long container name is trimmed instead of pushing
+              the rest of the toolbar. */}
           <select
-            value={container}
-            onChange={(e) => setContainer(e.target.value)}
+            value={`${container}::${previous}`}
+            onChange={(e) => {
+              const opt = containerOptions.find(o => o.key === e.target.value)
+              if (opt) {
+                setContainer(opt.container)
+                setPrevious(opt.previous)
+              }
+            }}
             class={`${SELECT_CLASS} w-28 sm:w-40 truncate`}
             data-testid="logs-container-select"
             aria-label="Container"
-            title="Select container"
+            title="Select container (a previous entry reads the prior instance's logs)"
           >
-            {containers.map((c) => (
-              <option key={c.name} value={c.name}>{c.isInit ? `init:${c.name}` : c.name}</option>
+            {containerOptions.map((o) => (
+              <option key={o.key} value={o.key}>{o.label}</option>
             ))}
           </select>
 
@@ -267,19 +297,6 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
             title="Keep lines containing this text; prefix with ! to exclude (e.g. !debug)"
           />
 
-          {/* Previous container instance */}
-          <ToggleButton
-            active={previous}
-            onClick={() => setPrevious(v => !v)}
-            label="Previous container instance"
-            title="Show logs from the previous container instance"
-            testid="logs-previous-toggle"
-          >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-            </svg>
-          </ToggleButton>
-
           {/* Lines select */}
           <select
             value={tailLines}
@@ -293,18 +310,6 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
               <option key={n} value={n}>{n} ln</option>
             ))}
           </select>
-
-          {/* Timestamps show/hide */}
-          <ToggleButton
-            active={showTimestamps}
-            onClick={() => setShowTimestamps(v => !v)}
-            label="Show or hide timestamps"
-            testid="logs-timestamps-toggle"
-          >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </ToggleButton>
 
           {/* Actions */}
           <div class="flex items-center gap-1 ml-auto">
@@ -342,7 +347,7 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
         </div>
 
         {/* Body */}
-        <div ref={bodyRef} class="flex-1 overflow-auto overscroll-contain bg-gray-50 dark:bg-gray-950" data-testid="logs-body">
+        <div ref={bodyRef} class="flex-1 overflow-auto overscroll-contain bg-white dark:bg-gray-950" data-testid="logs-body">
           {error ? (
             <div class="m-3 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-xs text-red-800 dark:text-red-200" data-testid="logs-error">
               {error}
@@ -350,22 +355,32 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
           ) : loading && !logs ? (
             <p class="p-3 text-xs text-gray-500 dark:text-gray-400" data-testid="logs-loading">Loading logs...</p>
           ) : logLines.length > 0 ? (
-            <div class="divide-y divide-gray-200 dark:divide-gray-800" data-testid="logs-content">
-              {logLines.map((line, i) => {
+            <div class="pb-2" data-testid="logs-content">
+              {logLines.map((entry, i) => {
                 const isLatest = flashLatest && i === logLines.length - 1
                 return (
-                  <div
-                    key={i}
-                    class={`px-3 py-1 text-sm font-mono whitespace-pre-wrap break-all transition-colors duration-1000 ${
-                      isLatest
-                        ? 'bg-blue-100 dark:bg-blue-900/40 text-gray-900 dark:text-gray-100'
-                        : 'text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-900'
-                    }`}
-                    data-testid="logs-line"
-                    data-latest={isLatest ? 'true' : undefined}
-                  >
-                    {line}
-                  </div>
+                  <Fragment key={i}>
+                    {entry.ts && (
+                      <div class="flex items-center gap-2 px-3 pt-2 select-none" data-testid="logs-timestamp" data-latest={isLatest ? 'true' : undefined}>
+                        <span
+                          class={`text-[10px] font-mono px-1.5 py-0.5 rounded-full transition-colors duration-1000 ${
+                            isLatest
+                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                              : 'bg-gray-200 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+                          }`}
+                        >
+                          {entry.ts}
+                        </span>
+                        <span class="flex-1 border-t border-gray-200 dark:border-gray-800" />
+                      </div>
+                    )}
+                    <div
+                      class="px-3 py-1 text-sm font-mono whitespace-pre-wrap break-all text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-900"
+                      data-testid="logs-line"
+                    >
+                      {entry.text}
+                    </div>
+                  </Fragment>
                 )
               })}
             </div>
@@ -374,6 +389,22 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
               {filter.trim() ? 'No matching log entries' : 'No logs available'}
             </p>
           )}
+        </div>
+
+        {/* Footer showing the current line count, with a loader to its left
+            while a fetch is in flight. */}
+        <div
+          class="flex items-center justify-center gap-2 px-4 py-2 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800"
+          data-testid="logs-footer"
+        >
+          {loading && (
+            <div
+              class="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400"
+              data-testid="logs-loader"
+              aria-label="Loading logs"
+            />
+          )}
+          <span class="text-xs text-gray-500 dark:text-gray-400">{logLines.length} lines</span>
         </div>
       </div>
     </div>
