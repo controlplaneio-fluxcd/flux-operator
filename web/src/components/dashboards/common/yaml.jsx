@@ -13,14 +13,36 @@ import prismDark from 'prismjs/themes/prism-tomorrow.css?url'
 
 const LINK_ID = 'prism-theme-link'
 
+// Number of mounted components currently relying on the Prism theme link. The
+// link is shared, so it is created on the first mount and removed only when the
+// last consumer unmounts — otherwise closing one consumer (e.g. a modal) would
+// strip highlighting from others still on screen.
+let prismThemeRefCount = 0
+
+// (Re)create the shared theme <link>, replacing any stale one, using the href
+// for the current theme.
+function setPrismThemeLink() {
+  const existingLink = document.getElementById(LINK_ID)
+  if (existingLink) {
+    existingLink.remove()
+  }
+  const link = document.createElement('link')
+  link.id = LINK_ID
+  link.rel = 'stylesheet'
+  link.href = appliedTheme.value === 'dark' ? prismDark : prismLight
+  document.head.appendChild(link)
+}
+
 /**
  * Hook that dynamically loads the appropriate Prism theme based on the current app theme.
  *
- * This hook manages a <link> element in the document head that loads either:
+ * This hook manages a shared <link> element in the document head that loads either:
  * - prism.css (light theme)
  * - prism-tomorrow.css (dark theme)
  *
- * The theme automatically updates when appliedTheme changes.
+ * The link is reference-counted so multiple components can use it concurrently;
+ * it is removed only when the last consumer unmounts. The theme automatically
+ * updates when appliedTheme changes.
  *
  * @example
  * function MyComponent() {
@@ -30,26 +52,30 @@ const LINK_ID = 'prism-theme-link'
  * }
  */
 export function usePrismTheme() {
+  // Manage the shared link on first mount / last unmount.
   useEffect(() => {
-    // Remove existing Prism theme link if present
-    const existingLink = document.getElementById(LINK_ID)
-    if (existingLink) {
-      existingLink.remove()
+    if (prismThemeRefCount === 0) {
+      setPrismThemeLink()
     }
+    prismThemeRefCount++
 
-    // Add new theme link based on current theme
-    const link = document.createElement('link')
-    link.id = LINK_ID
-    link.rel = 'stylesheet'
-    link.href = appliedTheme.value === 'dark' ? prismDark : prismLight
-    document.head.appendChild(link)
-
-    // Cleanup on unmount
     return () => {
-      const link = document.getElementById(LINK_ID)
-      if (link) {
-        link.remove()
+      prismThemeRefCount--
+      if (prismThemeRefCount === 0) {
+        const link = document.getElementById(LINK_ID)
+        if (link) {
+          link.remove()
+        }
       }
+    }
+  }, [])
+
+  // Update the href in place when the theme changes, without disturbing the
+  // reference count or removing the link other consumers still rely on.
+  useEffect(() => {
+    const link = document.getElementById(LINK_ID)
+    if (link) {
+      link.href = appliedTheme.value === 'dark' ? prismDark : prismLight
     }
   }, [appliedTheme.value])
 }

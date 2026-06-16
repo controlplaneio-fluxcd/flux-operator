@@ -137,7 +137,9 @@ logs, useful for troubleshooting crash loops), a free-text filter to show only
 entries containing a given substring (prefix the text with `!` to instead hide
 entries containing it, e.g. `!debug`), a control to choose how many lines to
 fetch, and toggles to follow the logs (polling for new entries, enabled by
-default) and expand to fullscreen. Each log entry is rendered on its own row,
+default), pretty-print JSON-formatted lines (rendering structured logs as
+syntax-highlighted code blocks, leaving plain-text lines untouched), and expand
+to fullscreen. Each log entry is rendered on its own row,
 with its timestamp shown as a pill on the row separator; the latest timestamp
 pill is briefly highlighted when new entries arrive while following.
 

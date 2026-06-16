@@ -221,6 +221,37 @@ describe('WorkloadLogsViewer component', () => {
     expect(screen.getByTestId('logs-footer')).toHaveTextContent('2 lines')
   })
 
+  it('renders JSON lines as highlighted code blocks when the JSON toggle is on, leaving plain lines intact', async () => {
+    const user = userEvent.setup()
+    fetchWithMock.mockResolvedValue({
+      logs: '2026-01-01T00:00:00Z {"level":"info","msg":"hello"}\n2026-01-01T00:00:01Z plain text line\n'
+    })
+    render(<WorkloadLogsViewer {...defaultProps} />)
+    await waitFor(() => expect(screen.getAllByTestId('logs-line')).toHaveLength(2))
+
+    const toggle = screen.getByTestId('logs-json-toggle')
+    expect(toggle).toHaveAttribute('aria-pressed', 'false')
+
+    // Off: the JSON line is shown compact, exactly as received, as a plain row.
+    expect(screen.getAllByTestId('logs-line')[0].tagName).toBe('DIV')
+    expect(screen.getAllByTestId('logs-line')[0].textContent).toBe('{"level":"info","msg":"hello"}')
+
+    // On: the JSON line becomes an indented, syntax-highlighted code block. The
+    // plain line also renders as a code block (so all lines share the same font
+    // and size) but with its text unchanged and no syntax highlighting.
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-pressed', 'true')
+    const rows = screen.getAllByTestId('logs-line')
+    expect(rows[0].tagName).toBe('PRE')
+    expect(rows[0].querySelector('code')).toHaveClass('language-json')
+    expect(rows[0].querySelector('.token')).not.toBeNull()
+    expect(rows[0].textContent).toBe('{\n  "level": "info",\n  "msg": "hello"\n}')
+    expect(rows[1].tagName).toBe('PRE')
+    expect(rows[1].querySelector('code')).toHaveClass('language-json')
+    expect(rows[1].querySelector('.token')).toBeNull()
+    expect(rows[1].textContent).toBe('plain text line')
+  })
+
   it('toggles fullscreen mode', async () => {
     const user = userEvent.setup()
     render(<WorkloadLogsViewer {...defaultProps} />)

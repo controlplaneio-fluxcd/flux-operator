@@ -3,8 +3,11 @@
 
 import { Fragment } from 'preact'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'preact/hooks'
+import Prism from 'prismjs'
+import 'prismjs/components/prism-json'
 import { fetchWithMock } from '../../../utils/fetch'
 import { downloadBlob } from '../../../utils/download'
+import { usePrismTheme } from '../common/yaml'
 
 // Selectable limits for the number of log lines to fetch from the backend.
 const LINE_LIMITS = [100, 500, 1000, 5000]
@@ -22,6 +25,24 @@ const HIGHLIGHT_DURATION = 2500
 // Anchored to a date so lines without a timestamp (e.g. stack-trace
 // continuations) are not mangled by splitting off their first token.
 const TIMESTAMP_PREFIX = /^(\d{4}-\d{2}-\d{2}T\S+)\s+/
+
+/**
+ * formatJson - indents a log line if it is a JSON object or array, otherwise
+ * returns null. The cheap first-character check avoids a try/catch on the
+ * common case of plain-text lines.
+ *
+ * @param {string} text - The log line text
+ * @returns {string|null} The indented JSON, or null if the line is not JSON
+ */
+function formatJson(text) {
+  const trimmed = text.trim()
+  if (trimmed[0] !== '{' && trimmed[0] !== '[') return null
+  try {
+    return JSON.stringify(JSON.parse(trimmed), null, 2)
+  } catch {
+    return null
+  }
+}
 
 // Shared styling for the toolbar controls. Selects deliberately omit a chevron
 // and right padding: those come from the global `select` rule in index.css.
@@ -66,10 +87,11 @@ function ToggleButton({ active, onClick, label, title, testid, children }) {
  *
  * Fetches logs from GET /api/v1/workload/logs for the selected container and
  * renders each log entry on its own row, with its timestamp shown as a pill on
- * the row separator. Supports following (live polling), filtering by substring,
- * choosing the number of lines, selecting a container (restarted containers
- * also expose a "(previous)" entry for the prior instance's logs), downloading
- * the logs as a <pod>.log file, and a fullscreen mode.
+ * the row separator. Supports following (live polling), pretty-printing JSON
+ * lines, filtering by substring, choosing the number of lines, selecting a
+ * container (restarted containers also expose a "(previous)" entry for the
+ * prior instance's logs), downloading the logs as a <pod>.log file, and a
+ * fullscreen mode.
  *
  * @param {Object} props
  * @param {string} props.namespace - Pod namespace
@@ -78,6 +100,9 @@ function ToggleButton({ active, onClick, label, title, testid, children }) {
  * @param {Function} props.onClose - Callback to close the viewer
  */
 export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }) {
+  // Load the Prism theme used to syntax-highlight JSON lines as code blocks.
+  usePrismTheme()
+
   // Default to the first regular container, falling back to the first entry.
   const defaultContainer = (containers.find(c => !c.isInit) || containers[0])?.name || ''
 
@@ -86,6 +111,7 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
   const [tailLines, setTailLines] = useState(DEFAULT_TAIL_LINES)
   const [follow, setFollow] = useState(true)
   const [filter, setFilter] = useState('')
+  const [prettyJson, setPrettyJson] = useState(false)
   const [fullScreen, setFullScreen] = useState(false)
   const [logs, setLogs] = useState('')
   const [loading, setLoading] = useState(false)
@@ -203,11 +229,25 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
     return baseLines.filter(entry => entry.text.toLowerCase().includes(needle) !== negate)
   }, [baseLines, filter])
 
+  // When the JSON toggle is on, every line renders as a code block sharing the
+  // same monospace font and size as the YAML blocks (`code: true`). Valid JSON
+  // gets indented and Prism-highlighted (`html`); other lines keep their plain
+  // text in the same styling. Filtering happens first on the raw text, so this
+  // only transforms what is actually shown.
+  const displayLines = useMemo(() => {
+    if (!prettyJson) return logLines.map(entry => ({ ...entry, code: false, html: null }))
+    return logLines.map(entry => {
+      const json = formatJson(entry.text)
+      if (json == null) return { ...entry, code: true, html: null }
+      return { ...entry, text: json, code: true, html: Prism.highlight(json, Prism.languages.json, 'json') }
+    })
+  }, [logLines, prettyJson])
+
   // Keep the most recent entry in view after each update.
   useEffect(() => {
     if (!bodyRef.current) return
     bodyRef.current.scrollTop = bodyRef.current.scrollHeight
-  }, [logLines])
+  }, [displayLines])
 
   // Download the current logs as a <pod>.log text file.
   const handleDownload = useCallback(() => {
@@ -259,6 +299,19 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 13l-7 7-7-7m14-6l-7 7-7-7" />
+            </svg>
+          </ToggleButton>
+
+          {/* Pretty-print JSON lines */}
+          <ToggleButton
+            active={prettyJson}
+            onClick={() => setPrettyJson(v => !v)}
+            label="Pretty-print JSON logs"
+            title="Format and syntax-highlight JSON log lines"
+            testid="logs-json-toggle"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1m8-18h1a2 2 0 0 1 2 2v5c0 1.1.9 2 2 2a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2h-1" />
             </svg>
           </ToggleButton>
 
@@ -354,10 +407,10 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
             </div>
           ) : loading && !logs ? (
             <p class="p-3 text-xs text-gray-500 dark:text-gray-400" data-testid="logs-loading">Loading logs...</p>
-          ) : logLines.length > 0 ? (
+          ) : displayLines.length > 0 ? (
             <div class="pb-2" data-testid="logs-content">
-              {logLines.map((entry, i) => {
-                const isLatest = flashLatest && i === logLines.length - 1
+              {displayLines.map((entry, i) => {
+                const isLatest = flashLatest && i === displayLines.length - 1
                 return (
                   <Fragment key={i}>
                     {entry.ts && (
@@ -374,12 +427,32 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
                         <span class="flex-1 border-t border-gray-200 dark:border-gray-800" />
                       </div>
                     )}
-                    <div
-                      class="px-3 py-1 text-sm font-mono whitespace-pre-wrap break-all text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-900"
-                      data-testid="logs-line"
-                    >
-                      {entry.text}
-                    </div>
+                    {entry.code ? (
+                      <pre
+                        class="overflow-x-auto language-json"
+                        style="margin: 0; padding: 0.25rem 0.75rem; background: transparent; text-shadow: none; font-size: 12px; line-height: 1.5;"
+                        data-testid="logs-line"
+                      >
+                        {entry.html != null ? (
+                          <code
+                            class="language-json"
+                            style="background: transparent; text-shadow: none;"
+                            dangerouslySetInnerHTML={{ __html: entry.html }}
+                          />
+                        ) : (
+                          <code class="language-json" style="background: transparent; text-shadow: none;">
+                            {entry.text}
+                          </code>
+                        )}
+                      </pre>
+                    ) : (
+                      <div
+                        class="px-3 py-1 text-sm font-mono whitespace-pre-wrap break-all text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-900"
+                        data-testid="logs-line"
+                      >
+                        {entry.text}
+                      </div>
+                    )}
                   </Fragment>
                 )
               })}
