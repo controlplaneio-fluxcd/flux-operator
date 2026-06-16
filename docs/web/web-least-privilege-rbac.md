@@ -21,6 +21,15 @@ sensitive data.
 By relying on the system to safely handle these internal operations,
 administrators can enforce a much stricter least-privilege posture.
 
+!!! note "Pod log viewing"
+
+    Reading pod logs from the workload detail page is **not** one of these
+    privileged operations. Logs are always streamed using the impersonated
+    user's identity, so Kubernetes enforces the user's own `get` permission on
+    the `pods/log` subresource. A user can only view the logs of pods they are
+    explicitly authorized to read, and the operation never escalates to the
+    operator's service-account privileges.
+
 ## Guiding Principles
 
 1. **Least privilege by default.** All resource reads and writes go through
