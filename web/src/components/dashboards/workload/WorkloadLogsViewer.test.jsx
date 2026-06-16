@@ -160,6 +160,29 @@ describe('WorkloadLogsViewer component', () => {
     })
   })
 
+  it('downloads the logs as a <pod>.log file', async () => {
+    const user = userEvent.setup()
+    fetchWithMock.mockResolvedValue({ logs: 'line one\nline two\n' })
+
+    let downloadName
+    window.URL.createObjectURL = vi.fn(() => 'blob:mock')
+    window.URL.revokeObjectURL = vi.fn()
+    const clickSpy = vi.spyOn(window.HTMLAnchorElement.prototype, 'click').mockImplementation(function () {
+      downloadName = this.download
+    })
+
+    render(<WorkloadLogsViewer {...defaultProps} />)
+    await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
+
+    await user.click(screen.getByTestId('logs-download-button'))
+    expect(window.URL.createObjectURL).toHaveBeenCalled()
+    expect(clickSpy).toHaveBeenCalled()
+    expect(downloadName).toBe('my-pod.log')
+    expect(window.URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock')
+
+    clickSpy.mockRestore()
+  })
+
   it('toggles fullscreen mode', async () => {
     const user = userEvent.setup()
     render(<WorkloadLogsViewer {...defaultProps} />)
@@ -170,7 +193,7 @@ describe('WorkloadLogsViewer component', () => {
     expect(toggle).toHaveAttribute('aria-pressed', 'true')
   })
 
-  it('does not follow by default and sets up polling once enabled', async () => {
+  it('follows by default, sets up polling and can be disabled', async () => {
     const user = userEvent.setup()
     const setIntervalSpy = vi.spyOn(globalThis, 'setInterval')
     const polls = () => setIntervalSpy.mock.calls.filter(c => c[1] === 5000).length
@@ -179,13 +202,32 @@ describe('WorkloadLogsViewer component', () => {
     await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
 
     const toggle = screen.getByTestId('logs-follow-toggle')
-    expect(toggle).toHaveAttribute('aria-pressed', 'false')
-    expect(polls()).toBe(0)
-
-    await user.click(toggle)
     expect(toggle).toHaveAttribute('aria-pressed', 'true')
     await waitFor(() => expect(polls()).toBe(1))
 
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-pressed', 'false')
+
     setIntervalSpy.mockRestore()
+  })
+
+  it('highlights the latest line when new logs arrive', async () => {
+    const user = userEvent.setup()
+    fetchWithMock.mockResolvedValue({ logs: 'line one\nline two\n' })
+    render(<WorkloadLogsViewer {...defaultProps} />)
+    await waitFor(() => expect(screen.getAllByTestId('logs-line')).toHaveLength(2))
+
+    // No highlight on the initial load.
+    expect(screen.getAllByTestId('logs-line').some(el => el.getAttribute('data-latest') === 'true')).toBe(false)
+
+    // A new entry arrives on the next fetch.
+    fetchWithMock.mockResolvedValue({ logs: 'line one\nline two\nline three\n' })
+    await user.click(screen.getByTestId('logs-refresh-button'))
+    await waitFor(() => {
+      const rows = screen.getAllByTestId('logs-line')
+      expect(rows).toHaveLength(3)
+      expect(rows[rows.length - 1]).toHaveAttribute('data-latest', 'true')
+    })
+    expect(screen.getAllByTestId('logs-line')[0]).not.toHaveAttribute('data-latest')
   })
 })

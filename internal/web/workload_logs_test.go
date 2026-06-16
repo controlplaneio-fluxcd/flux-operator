@@ -19,6 +19,26 @@ import (
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
 
+func TestTrimPartialLogLine(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{name: "empty", in: "", want: ""},
+		{name: "newline terminated", in: "line one\nline two\n", want: "line one\nline two\n"},
+		{name: "drops partial trailing line", in: "line one\nline two\npar", want: "line one\nline two\n"},
+		{name: "single partial line kept", in: "partial", want: "partial"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			g.Expect(trimPartialLogLine(tt.in)).To(Equal(tt.want))
+		})
+	}
+}
+
 func TestWorkloadLogsHandler_MethodNotAllowed(t *testing.T) {
 	g := NewWithT(t)
 

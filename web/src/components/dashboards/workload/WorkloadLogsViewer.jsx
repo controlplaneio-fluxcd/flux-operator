@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'preact/hooks'
 import { fetchWithMock } from '../../../utils/fetch'
+import { downloadBlob } from '../../../utils/download'
 
 // Selectable limits for the number of log lines to fetch from the backend.
 const LINE_LIMITS = [100, 500, 1000, 5000]
@@ -13,8 +14,51 @@ const DEFAULT_TAIL_LINES = 100
 // Follow polling interval in milliseconds.
 const FOLLOW_INTERVAL = 5000
 
+// How long the most recent log line stays highlighted after new entries arrive.
+const HIGHLIGHT_DURATION = 2500
+
 // Matches the leading RFC3339 timestamp the API prepends to each log line.
-const TIMESTAMP_PREFIX = /^\S+\s+/
+// Anchored to a date so lines without a timestamp (e.g. stack-trace
+// continuations) are not mangled by stripping their first token.
+const TIMESTAMP_PREFIX = /^\d{4}-\d{2}-\d{2}T\S+\s+/
+
+// Shared styling for the toolbar controls. Selects deliberately omit a chevron
+// and right padding: those come from the global `select` rule in index.css.
+const FIELD_CLASS = 'text-xs py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-flux-blue'
+const SELECT_CLASS = `${FIELD_CLASS} pl-2`
+const INPUT_CLASS = `${FIELD_CLASS} px-2 placeholder-gray-400 dark:placeholder-gray-500`
+// p-1 keeps the icon buttons the same height as the text-xs py-1 selects.
+const ICON_TOGGLE_CLASS = 'inline-flex items-center justify-center p-1 rounded-md border transition-colors focus:outline-none focus:ring-2 focus:ring-flux-blue'
+const INACTIVE_CLASS = 'border-gray-300 text-gray-600 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700'
+const ACTIVE_CLASS = 'border-flux-blue text-flux-blue bg-blue-50 dark:bg-blue-900/30'
+const ACTION_CLASS = 'inline-flex items-center p-1 rounded-md text-gray-400 hover:text-flux-blue dark:text-gray-500 dark:hover:text-flux-blue disabled:cursor-not-allowed'
+
+/**
+ * ToggleButton - square icon button in the logs toolbar that reflects an
+ * on/off state via aria-pressed and active styling.
+ *
+ * @param {Object} props
+ * @param {boolean} props.active - Whether the toggle is on
+ * @param {Function} props.onClick - Click handler
+ * @param {string} props.label - Accessible label (also the default tooltip)
+ * @param {string} [props.title] - Optional tooltip text, defaults to label
+ * @param {string} props.testid - data-testid value
+ * @param {any} props.children - The button icon
+ */
+function ToggleButton({ active, onClick, label, title, testid, children }) {
+  return (
+    <button
+      onClick={onClick}
+      class={`${ICON_TOGGLE_CLASS} ${active ? ACTIVE_CLASS : INACTIVE_CLASS}`}
+      data-testid={testid}
+      aria-pressed={active}
+      aria-label={label}
+      title={title || label}
+    >
+      {children}
+    </button>
+  )
+}
 
 /**
  * WorkloadLogsViewer - Modal that displays the logs of a pod container.
@@ -22,7 +66,8 @@ const TIMESTAMP_PREFIX = /^\S+\s+/
  * Fetches logs from GET /api/v1/workload/logs for the selected container and
  * renders each log entry on its own separated row. Supports following (live
  * polling), filtering by substring, choosing the number of lines, viewing the
- * previous container instance, toggling timestamps, and a fullscreen mode.
+ * previous container instance, toggling timestamps, downloading the logs as a
+ * <pod>.log file, and a fullscreen mode.
  *
  * @param {Object} props
  * @param {string} props.namespace - Pod namespace
@@ -37,16 +82,17 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
   const [container, setContainer] = useState(defaultContainer)
   const [previous, setPrevious] = useState(false)
   const [tailLines, setTailLines] = useState(DEFAULT_TAIL_LINES)
-  const [follow, setFollow] = useState(false)
+  const [follow, setFollow] = useState(true)
   const [filter, setFilter] = useState('')
   const [showTimestamps, setShowTimestamps] = useState(false)
   const [fullScreen, setFullScreen] = useState(false)
   const [logs, setLogs] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [copied, setCopied] = useState(false)
+  const [flashLatest, setFlashLatest] = useState(false)
 
   const bodyRef = useRef(null)
+  const prevLogsRef = useRef('')
 
   const fetchLogs = useCallback(async () => {
     if (!container) return
@@ -95,16 +141,40 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [onClose])
 
-  // Split the raw log payload into entries, apply the substring filter and
-  // optionally strip the leading timestamp for display.
-  const logLines = useMemo(() => {
-    let lines = logs.split('\n').filter(line => line.length > 0)
-    const needle = filter.trim().toLowerCase()
-    if (needle) {
-      lines = lines.filter(line => line.toLowerCase().includes(needle))
-    }
+  // Lock the background page scroll while the viewer is open so scrolling the
+  // logs does not bleed through to the dashboard behind the modal.
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = previousOverflow }
+  }, [])
+
+  // Briefly highlight the most recent line whenever a new batch of logs arrives
+  // (e.g. while following), skipping the very first load so the highlight only
+  // signals freshly appended entries.
+  useEffect(() => {
+    const prev = prevLogsRef.current
+    prevLogsRef.current = logs
+    if (prev === '' || logs === '' || prev === logs) return
+    setFlashLatest(true)
+    const id = setTimeout(() => setFlashLatest(false), HIGHLIGHT_DURATION)
+    return () => clearTimeout(id)
+  }, [logs])
+
+  // Split the raw payload into entries once, stripping timestamps for display
+  // unless they are shown. This only re-runs when the payload or the timestamp
+  // toggle changes, not on every filter keystroke.
+  const baseLines = useMemo(() => {
+    const lines = logs.split('\n').filter(line => line.length > 0)
     return showTimestamps ? lines : lines.map(line => line.replace(TIMESTAMP_PREFIX, ''))
-  }, [logs, filter, showTimestamps])
+  }, [logs, showTimestamps])
+
+  // Apply the substring filter; cheap pass over the already-split lines.
+  const logLines = useMemo(() => {
+    const needle = filter.trim().toLowerCase()
+    if (!needle) return baseLines
+    return baseLines.filter(line => line.toLowerCase().includes(needle))
+  }, [baseLines, filter])
 
   // Keep the most recent entry in view after each update.
   useEffect(() => {
@@ -112,38 +182,20 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
     bodyRef.current.scrollTop = bodyRef.current.scrollHeight
   }, [logLines])
 
-  const handleCopy = useCallback(async () => {
-    try {
-      await window.navigator.clipboard.writeText(logs)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      // Clipboard access can fail in insecure contexts; ignore silently.
-    }
-  }, [logs])
-
-  const fieldClass = 'text-xs px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-flux-blue'
-  // appearance-none removes the native caret; the @tailwindcss/forms plugin
-  // also injects a chevron via background-image which is suppressed with an
-  // inline style on each select (see noFormsChevron). pr-6 leaves room for the
-  // single custom chevron rendered alongside.
-  const selectClass = `${fieldClass} appearance-none pr-6`
-  const noFormsChevron = { backgroundImage: 'none' }
-  const inputClass = `${fieldClass} placeholder-gray-400 dark:placeholder-gray-500`
-  const iconToggleClass = 'inline-flex items-center justify-center p-1.5 rounded-md border transition-colors focus:outline-none focus:ring-2 focus:ring-flux-blue'
-  const inactiveClass = 'border-gray-300 text-gray-600 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700'
-  const activeClass = 'border-flux-blue text-flux-blue bg-blue-50 dark:bg-blue-900/30'
-  const actionClass = 'inline-flex items-center p-1.5 rounded-md text-gray-400 hover:text-flux-blue dark:text-gray-500 dark:hover:text-flux-blue disabled:cursor-not-allowed'
+  // Download the current logs as a <pod>.log text file.
+  const handleDownload = useCallback(() => {
+    downloadBlob(new window.Blob([logs], { type: 'text/plain' }), `${name}.log`)
+  }, [logs, name])
 
   return (
     <div
-      class={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 ${fullScreen ? 'p-0' : 'p-4'}`}
+      class={`fixed inset-0 z-50 flex justify-center bg-black/50 ${fullScreen ? 'items-center p-0' : 'items-start pt-16 px-4 pb-4'}`}
       onClick={onClose}
       data-testid="logs-viewer-overlay"
     >
       <div
-        class={`bg-white dark:bg-gray-900 shadow-xl flex flex-col border border-gray-200 dark:border-gray-700 ${
-          fullScreen ? 'w-full h-full max-w-full max-h-full rounded-none' : 'w-full max-w-4xl h-[85vh] rounded-lg'
+        class={`bg-white dark:bg-gray-900 shadow-xl flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700 ${
+          fullScreen ? 'w-full h-full max-w-full max-h-full rounded-none' : 'w-full max-w-7xl h-[calc(100vh-5rem)] rounded-lg'
         }`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
@@ -172,37 +224,30 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
         {/* Toolbar */}
         <div class="flex items-center flex-wrap gap-2 px-4 py-2 border-b border-gray-200 dark:border-gray-700">
           {/* Follow logs */}
-          <button
+          <ToggleButton
+            active={follow}
             onClick={() => setFollow(v => !v)}
-            class={`${iconToggleClass} ${follow ? activeClass : inactiveClass}`}
-            data-testid="logs-follow-toggle"
-            aria-pressed={follow}
-            aria-label="Follow logs"
-            title="Follow logs"
+            label="Follow logs"
+            testid="logs-follow-toggle"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 13l-7 7-7-7m14-6l-7 7-7-7" />
             </svg>
-          </button>
+          </ToggleButton>
 
-          {/* Container select (always shown) */}
-          <div class="relative inline-flex">
-            <select
-              value={container}
-              onChange={(e) => setContainer(e.target.value)}
-              class={selectClass}
-              style={noFormsChevron}
-              data-testid="logs-container-select"
-              aria-label="Container"
-            >
-              {containers.map((c) => (
-                <option key={c.name} value={c.name}>{c.isInit ? `init:${c.name}` : c.name}</option>
-              ))}
-            </select>
-            <svg class="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-            </svg>
-          </div>
+          {/* Container select (always shown). Fixed width so a long container
+              name is trimmed instead of pushing the rest of the toolbar. */}
+          <select
+            value={container}
+            onChange={(e) => setContainer(e.target.value)}
+            class={`${SELECT_CLASS} w-28 sm:w-40 truncate`}
+            data-testid="logs-container-select"
+            aria-label="Container"
+          >
+            {containers.map((c) => (
+              <option key={c.name} value={c.name}>{c.isInit ? `init:${c.name}` : c.name}</option>
+            ))}
+          </select>
 
           {/* Contains filter */}
           <input
@@ -210,64 +255,55 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
             value={filter}
             onInput={(e) => setFilter(e.target.value)}
             placeholder="contains…"
-            class={`${inputClass} w-28 sm:w-44`}
+            class={`${INPUT_CLASS} w-28 sm:w-40`}
             data-testid="logs-filter-input"
             aria-label="Filter log lines containing text"
           />
 
           {/* Previous container instance */}
-          <button
+          <ToggleButton
+            active={previous}
             onClick={() => setPrevious(v => !v)}
-            class={`${iconToggleClass} ${previous ? activeClass : inactiveClass}`}
-            data-testid="logs-previous-toggle"
-            aria-pressed={previous}
-            aria-label="Previous container instance"
+            label="Previous container instance"
             title="Show logs from the previous container instance"
+            testid="logs-previous-toggle"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
             </svg>
-          </button>
+          </ToggleButton>
 
           {/* Lines select */}
-          <div class="relative inline-flex">
-            <select
-              value={tailLines}
-              onChange={(e) => setTailLines(Number(e.target.value))}
-              class={selectClass}
-              style={noFormsChevron}
-              data-testid="logs-lines-select"
-              aria-label="Number of lines"
-            >
-              {LINE_LIMITS.map((n) => (
-                <option key={n} value={n}>{n} ln</option>
-              ))}
-            </select>
-            <svg class="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-            </svg>
-          </div>
+          <select
+            value={tailLines}
+            onChange={(e) => setTailLines(Number(e.target.value))}
+            class={SELECT_CLASS}
+            data-testid="logs-lines-select"
+            aria-label="Number of lines"
+          >
+            {LINE_LIMITS.map((n) => (
+              <option key={n} value={n}>{n} ln</option>
+            ))}
+          </select>
 
           {/* Timestamps show/hide */}
-          <button
+          <ToggleButton
+            active={showTimestamps}
             onClick={() => setShowTimestamps(v => !v)}
-            class={`${iconToggleClass} ${showTimestamps ? activeClass : inactiveClass}`}
-            data-testid="logs-timestamps-toggle"
-            aria-pressed={showTimestamps}
-            aria-label="Show or hide timestamps"
-            title="Show or hide timestamps"
+            label="Show or hide timestamps"
+            testid="logs-timestamps-toggle"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-          </button>
+          </ToggleButton>
 
           {/* Actions */}
           <div class="flex items-center gap-1 ml-auto">
             <button
               onClick={fetchLogs}
               disabled={loading}
-              class={actionClass}
+              class={ACTION_CLASS}
               title="Refresh logs"
               aria-label="Refresh logs"
               data-testid="logs-refresh-button"
@@ -277,25 +313,20 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
               </svg>
             </button>
             <button
-              onClick={handleCopy}
-              class={actionClass}
-              title="Copy logs to clipboard"
-              aria-label="Copy logs to clipboard"
-              data-testid="logs-copy-button"
+              onClick={handleDownload}
+              disabled={!logs}
+              class={ACTION_CLASS}
+              title="Download logs"
+              aria-label="Download logs"
+              data-testid="logs-download-button"
             >
-              {copied ? (
-                <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                </svg>
-              ) : (
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-              )}
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+              </svg>
             </button>
             <button
               onClick={() => setFullScreen(v => !v)}
-              class={actionClass}
+              class={ACTION_CLASS}
               aria-pressed={fullScreen}
               title={fullScreen ? 'Exit fullscreen' : 'Fullscreen'}
               aria-label={fullScreen ? 'Exit fullscreen' : 'Fullscreen'}
@@ -315,7 +346,7 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
         </div>
 
         {/* Body */}
-        <div ref={bodyRef} class="flex-1 overflow-auto bg-gray-50 dark:bg-gray-950" data-testid="logs-body">
+        <div ref={bodyRef} class="flex-1 overflow-auto overscroll-contain bg-gray-50 dark:bg-gray-950" data-testid="logs-body">
           {error ? (
             <div class="m-3 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-xs text-red-800 dark:text-red-200" data-testid="logs-error">
               {error}
@@ -324,15 +355,23 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
             <p class="p-3 text-xs text-gray-500 dark:text-gray-400" data-testid="logs-loading">Loading logs...</p>
           ) : logLines.length > 0 ? (
             <div class="divide-y divide-gray-200 dark:divide-gray-800" data-testid="logs-content">
-              {logLines.map((line, i) => (
-                <div
-                  key={i}
-                  class="px-3 py-1 text-sm font-mono text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-all hover:bg-gray-100 dark:hover:bg-gray-900"
-                  data-testid="logs-line"
-                >
-                  {line}
-                </div>
-              ))}
+              {logLines.map((line, i) => {
+                const isLatest = flashLatest && i === logLines.length - 1
+                return (
+                  <div
+                    key={i}
+                    class={`px-3 py-1 text-sm font-mono whitespace-pre-wrap break-all transition-colors duration-1000 ${
+                      isLatest
+                        ? 'bg-blue-100 dark:bg-blue-900/40 text-gray-900 dark:text-gray-100'
+                        : 'text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-900'
+                    }`}
+                    data-testid="logs-line"
+                    data-latest={isLatest ? 'true' : undefined}
+                  >
+                    {line}
+                  </div>
+                )
+              })}
             </div>
           ) : (
             <p class="p-3 text-xs text-gray-500 dark:text-gray-400" data-testid="logs-empty">

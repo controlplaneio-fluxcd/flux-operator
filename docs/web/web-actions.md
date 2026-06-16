@@ -134,9 +134,10 @@ The View Logs action opens a viewer that displays the logs of a pod container.
 The viewer provides a container selector (including init containers), a
 free-text filter to show only entries containing a given substring, a control
 to choose how many lines to fetch, and toggles to follow the logs (polling for
-new entries), show or hide timestamps, switch to the previous container
-instance (useful for troubleshooting crash loops), and expand to fullscreen.
-Each log entry is rendered on its own separated row.
+new entries, enabled by default), show or hide timestamps, switch to the
+previous container instance (useful for troubleshooting crash loops), and
+expand to fullscreen. Each log entry is rendered on its own separated row, and
+newly arrived entries are briefly highlighted while following.
 
 Unlike the GitOps and workload mutation actions, viewing logs is a read-only
 operation. The logs are always read using the authenticated user's identity,

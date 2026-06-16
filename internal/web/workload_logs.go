@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -41,6 +42,25 @@ type WorkloadLogsResponse struct {
 
 	// Logs is the plain-text log output of the container.
 	Logs string `json:"logs"`
+}
+
+// trimPartialLogLine drops a trailing partial log line from the payload.
+//
+// Container runtimes newline-terminate every emitted log line, so a payload
+// that does not end with a newline has been truncated mid-line, either because
+// the container was writing the line when the logs were read (common while
+// following) or because the LimitBytes cap cut the newest line. Returning that
+// fragment as the latest entry shows only a few characters, so it is dropped;
+// the complete line reappears on the next fetch. A payload with no newline at
+// all is returned unchanged so a single short line is not lost.
+func trimPartialLogLine(logs string) string {
+	if logs == "" || logs[len(logs)-1] == '\n' {
+		return logs
+	}
+	if i := strings.LastIndexByte(logs, '\n'); i >= 0 {
+		return logs[:i+1]
+	}
+	return logs
 }
 
 // WorkloadLogsHandler handles GET /api/v1/workload/logs requests and returns the
@@ -148,7 +168,7 @@ func (h *Handler) WorkloadLogsHandler(w http.ResponseWriter, req *http.Request) 
 	resp := WorkloadLogsResponse{
 		Pod:       name,
 		Container: container,
-		Logs:      buf.String(),
+		Logs:      trimPartialLogLine(buf.String()),
 	}
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
