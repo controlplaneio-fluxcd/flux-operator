@@ -23,7 +23,7 @@ administrators can enforce a much stricter least-privilege posture.
 
 !!! note "Pod log viewing"
 
-    Reading pod logs from the workload detail page is **not** one of these
+    Reading pod logs from the Web UI is **not** one of these
     privileged operations. Logs are always streamed using the impersonated
     user's identity, so Kubernetes enforces the user's own `get` permission on
     the `pods/log` subresource. A user can only view the logs of pods they are

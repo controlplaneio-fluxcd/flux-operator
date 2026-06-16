@@ -139,6 +139,10 @@ previous container instance (useful for troubleshooting crash loops), and
 expand to fullscreen. Each log entry is rendered on its own separated row, and
 newly arrived entries are briefly highlighted while following.
 
+On the workload dashboard the action is available per pod in the Pods list, and
+from the action bar as a "View logs" dropdown listing all the pods of the
+workload. Selecting a pod opens the viewer for that pod.
+
 Unlike the GitOps and workload mutation actions, viewing logs is a read-only
 operation. The logs are always read using the authenticated user's identity,
 so a user can only view the logs of pods they are explicitly authorized to read.

@@ -8,6 +8,7 @@ import { formatTime } from '../../../utils/time'
 import { usePageMeta } from '../../../utils/meta'
 import { ActionBar } from '../resource/ActionBar'
 import { WorkloadActionBar } from '../resource/WorkloadActionBar'
+import { WorkloadLogsAction } from './WorkloadLogsAction'
 import { WorkloadReconcilerPanel } from './WorkloadReconcilerPanel'
 import { WorkloadPipelinePanel } from './WorkloadPipelinePanel'
 import { WorkloadDetailPanel } from './WorkloadDetailPanel'
@@ -267,6 +268,8 @@ export function WorkloadPage({ kind, namespace, name }) {
   // Check if either action bar has actions to show
   const hasReconcilerActions = reconciler?.status?.userActions?.length > 0
   const hasWorkloadActions = workloadInfo?.userActions?.includes('restart')
+  const canViewLogs = workloadInfo?.userActions?.includes('logs') &&
+    (workloadInfo?.pods || []).some(p => p.podStatus)
 
   // Compute statusInfo based on display state
   let statusInfo
@@ -331,7 +334,7 @@ export function WorkloadPage({ kind, namespace, name }) {
         {isSuccess && (
           <>
             {/* Action Bars - Flux reconciler actions + workload actions on same line */}
-            {(hasReconcilerActions || hasWorkloadActions) && (
+            {(hasReconcilerActions || hasWorkloadActions || canViewLogs) && (
               <div class="flex flex-wrap items-center gap-2" data-testid="combined-action-bar">
                 {reconciler && (
                   <ActionBar
@@ -358,6 +361,13 @@ export function WorkloadPage({ kind, namespace, name }) {
                     userActions={workloadInfo?.userActions}
                     onActionStart={handleActionStart}
                     onActionComplete={fetchData}
+                  />
+                )}
+                {canViewLogs && (
+                  <WorkloadLogsAction
+                    namespace={namespace}
+                    pods={workloadInfo?.pods}
+                    userActions={workloadInfo?.userActions}
                   />
                 )}
               </div>

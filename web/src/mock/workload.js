@@ -32,7 +32,24 @@ const mockWorkloads = {
         name: 'source-controller-5f76f5c549-wz2gk',
         status: 'Running',
         statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
-        createdAt: getTimestamp(7, 2, 15) // 7 days, 2 hours, 15 minutes ago
+        createdAt: getTimestamp(7, 2, 15), // 7 days, 2 hours, 15 minutes ago
+        podStatus: {
+          phase: 'Running',
+          containerStatuses: [
+            {
+              name: 'manager',
+              ready: true,
+              restartCount: 0,
+              imageID: 'ghcr.io/fluxcd/source-controller:v1.7.4@sha256:16f21ac1795528df80ddef51ccbb14a57b78ea26e66dc8551636ef9a3cec71b3',
+              state: { running: { startedAt: getTimestamp(7, 2, 15) } }
+            }
+          ],
+          conditions: [
+            { type: 'Ready', status: 'True' },
+            { type: 'ContainersReady', status: 'True' },
+            { type: 'PodScheduled', status: 'True' }
+          ]
+        }
       }
     ]
   },
