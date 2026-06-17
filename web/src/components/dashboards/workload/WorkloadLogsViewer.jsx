@@ -23,6 +23,41 @@ const FOLLOW_INTERVAL = 5000
 // How long the most recent log line stays highlighted after new entries arrive.
 const HIGHLIGHT_DURATION = 2500
 
+// Distance in pixels from the bottom within which the view is still considered
+// pinned, so auto-scroll keeps following while allowing for sub-pixel rounding.
+const SCROLL_BOTTOM_THRESHOLD = 32
+
+// Upper bound on the number of accumulated log lines kept in the buffer while
+// following, so a long-running session does not grow without limit. Matches the
+// backend's maxLogTailLines cap.
+const MAX_BUFFER_LINES = 5000
+
+/**
+ * mergeLogs - appends incoming log lines to the accumulated buffer, dropping any
+ * that are already present and capping the result to MAX_BUFFER_LINES.
+ *
+ * Follow polls request everything since the last line's timestamp, which the
+ * API filters at second granularity, so the last second is re-sent on every
+ * poll. Each line carries a unique nanosecond timestamp prefix, so deduping by
+ * exact line text reliably drops those repeats. Returns the previous buffer
+ * unchanged when there is nothing new, so the state update is a no-op.
+ *
+ * @param {string} prev - The accumulated log payload
+ * @param {string} incoming - The newly fetched log payload
+ * @returns {string} The merged payload, newline-terminated
+ */
+function mergeLogs(prev, incoming) {
+  const add = incoming.split('\n').filter(Boolean)
+  if (add.length === 0) return prev
+  const prevLines = prev.split('\n').filter(Boolean)
+  const seen = new Set(prevLines)
+  const fresh = add.filter(line => !seen.has(line))
+  if (fresh.length === 0) return prev
+  const merged = prevLines.concat(fresh)
+  const capped = merged.length > MAX_BUFFER_LINES ? merged.slice(merged.length - MAX_BUFFER_LINES) : merged
+  return capped.join('\n') + '\n'
+}
+
 // Captures the leading RFC3339 timestamp the API prepends to each log line.
 // Anchored to a date so lines without a timestamp (e.g. stack-trace
 // continuations) are not mangled by splitting off their first token.
@@ -157,14 +192,19 @@ function LevelMenu({ value, onChange }) {
  * WorkloadLogsViewer - Modal that displays the logs of a pod container.
  *
  * Fetches logs from GET /api/v1/workload/logs for the selected container and
- * renders each log entry on its own row, with its timestamp shown as a pill on
- * the row separator. The pill border and rule are colored by the detected log
- * level (JSON/klog/logfmt/plain text), and the footer summarizes the per-level
- * counts. Supports following (live polling), pretty-printing JSON lines,
- * filtering by substring and minimum level, choosing the number of lines,
- * selecting a container (restarted containers also expose a "(previous)" entry
- * for the prior instance's logs), downloading the logs as a <pod>.log file, and
- * a fullscreen mode.
+ * renders each log entry on its own row. In the default formatted mode the
+ * timestamp is shown as a pill on the row separator, the pill border and rule
+ * are colored by the detected log level (JSON/klog/logfmt/plain text), and JSON
+ * lines are pretty-printed; the footer summarizes the per-level counts. The raw
+ * mode strips all of that styling, rendering each line as plain text without
+ * separators, timestamp pills, level coloring, or the new-entry highlight.
+ * Supports following (live polling, appending only new entries), toggling
+ * between formatted and raw output, filtering by substring and minimum level,
+ * choosing the number of lines, selecting a container (restarted containers
+ * also expose a "(previous)" entry for the prior instance's logs), downloading
+ * the logs as a <pod>.log file, and a fullscreen mode. A failed follow poll is
+ * shown inline at the tail of the feed, leaving the buffer on screen; an initial
+ * or post-reset failure (no buffer to keep) shows a full-pane error instead.
  *
  * @param {Object} props
  * @param {string} props.namespace - Pod namespace
@@ -185,15 +225,39 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
   const [follow, setFollow] = useState(true)
   const [filter, setFilter] = useState('')
   const [levelFilter, setLevelFilter] = useState('all')
-  const [prettyJson, setPrettyJson] = useState(false)
+  const [formatted, setFormatted] = useState(true)
   const [fullScreen, setFullScreen] = useState(false)
   const [logs, setLogs] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  // A failed follow poll, shown inline at the tail of the feed so the buffer
+  // stays visible. The full-pane `error` is used only when there is no buffer.
+  const [followError, setFollowError] = useState(null)
   const [flashLatest, setFlashLatest] = useState(false)
 
   const bodyRef = useRef(null)
   const prevLogsRef = useRef('')
+  // Identity (timestamp + text) of the most recent visible line, so the
+  // new-entry highlight fires only when that line actually changes.
+  const prevLatestKeyRef = useRef(null)
+  // Whether the log view is scrolled to the bottom; gates auto-follow scrolling.
+  const atBottomRef = useRef(true)
+  // Timestamp of the last buffered line, sent as sinceTime on follow polls so
+  // the server returns only newer entries to append.
+  const lastTsRef = useRef('')
+  // Monotonic id bumped by every reset (non-append) fetch. A fetch only applies
+  // its result if its id is still current, so an in-flight append poll from a
+  // previous container/params can't merge stale lines into a reset buffer.
+  const fetchGenRef = useRef(0)
+  // True while a reset (initial/param-change) fetch is in flight. Follow polls
+  // skip while it is set, so a poll started mid-reset can't append using the old
+  // buffer's cursor into the resetting buffer (the generation guard alone can't
+  // catch this, since a poll fired after the reset shares its generation).
+  const resettingRef = useRef(false)
+  // Memoizes the formatted (pretty-printed + Prism-highlighted) output per raw
+  // line text, so appends only format the new lines instead of re-highlighting
+  // the whole buffer on every poll. See displayLines for how it's pruned.
+  const formatCacheRef = useRef(new Map())
 
   // One option per container, plus a "(previous)" option for containers that
   // have restarted (a previous instance only has logs after a restart). The
@@ -213,29 +277,64 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
   // Fetch the logs. Background follow-polls pass { silent: true } so they don't
   // toggle the loading spinner, which would flicker on every poll; only the
   // initial load and user-driven changes (container, line count) show it.
-  const fetchLogs = useCallback(async ({ silent = false } = {}) => {
+  //
+  // Follow polls also pass { append: true }: once a buffer exists they request
+  // only the entries newer than the last line (sinceTime) and append them,
+  // instead of re-fetching the whole tail window and replacing it (which would
+  // make the visible lines shift on every poll). The initial load and any
+  // parameter change fetch the tail and replace the buffer.
+  const fetchLogs = useCallback(async ({ silent = false, append = false } = {}) => {
     if (!container) return
+    // Skip follow polls while a reset is in flight: appending now would use the
+    // old buffer's cursor (lastTsRef) and merge into the resetting buffer.
+    if (append && resettingRef.current) return
+    // A reset starts a new generation; appends ride on the current one. A fetch
+    // only applies its result if its generation is still current (checked on
+    // settle below), so an in-flight append poll from a previous container or
+    // a superseded reset can't write stale lines into the buffer.
+    const gen = append ? fetchGenRef.current : ++fetchGenRef.current
+    if (!append) resettingRef.current = true
     if (!silent) setLoading(true)
     try {
-      const params = new URLSearchParams({
-        namespace,
-        name,
-        container,
-        tailLines: String(tailLines),
-        previous: String(previous)
-      })
+      // tailLines is always sent so the backend caps every fetch (including a
+      // follow catch-up) to the user's selection; sinceTime narrows a follow
+      // poll to entries after the last buffered line.
+      const params = new URLSearchParams({ namespace, name, container, tailLines: String(tailLines), previous: String(previous) })
+      if (append && lastTsRef.current) {
+        params.set('sinceTime', lastTsRef.current)
+      }
       const resp = await fetchWithMock({
         endpoint: `/api/v1/workload/logs?${params.toString()}`,
         mockPath: '../mock/workload',
         mockExport: 'getMockWorkloadLogs'
       })
-      setLogs(resp?.logs || '')
+      if (fetchGenRef.current !== gen) return
+      const incoming = resp?.logs || ''
+      if (append) {
+        setLogs(prev => mergeLogs(prev, incoming))
+      } else {
+        setLogs(incoming)
+      }
       setError(null)
+      setFollowError(null)
     } catch (err) {
-      setError(err.message)
-      setLogs('')
+      if (fetchGenRef.current !== gen) return
+      if (append) {
+        // A follow poll failed: keep the buffer and surface the error inline at
+        // the tail of the feed rather than replacing the logs with a banner.
+        setFollowError(err.message)
+      } else {
+        setError(err.message)
+        setLogs('')
+        setFollowError(null)
+      }
     } finally {
-      if (!silent) setLoading(false)
+      // Only the still-current fetch clears the shared state, so a superseded
+      // reset settling first doesn't drop the loader or the resetting flag.
+      if (fetchGenRef.current === gen) {
+        if (!append) resettingRef.current = false
+        if (!silent) setLoading(false)
+      }
     }
   }, [namespace, name, container, tailLines, previous])
 
@@ -244,10 +343,15 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
     fetchLogs()
   }, [fetchLogs])
 
-  // Poll for new logs while following, silently so the spinner doesn't flicker.
+  // Poll for new logs while following, silently so the spinner doesn't flicker
+  // and appending so the visible lines stay put instead of shifting each poll.
   useEffect(() => {
-    if (!follow) return
-    const id = setInterval(() => { fetchLogs({ silent: true }) }, FOLLOW_INTERVAL)
+    if (!follow) {
+      // No more polls, so drop any stale inline follow error.
+      setFollowError(null)
+      return
+    }
+    const id = setInterval(() => { fetchLogs({ silent: true, append: true }) }, FOLLOW_INTERVAL)
     return () => clearInterval(id)
   }, [follow, fetchLogs])
 
@@ -268,18 +372,6 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
     return () => { document.body.style.overflow = previousOverflow }
   }, [])
 
-  // Briefly highlight the most recent line whenever a new batch of logs arrives
-  // (e.g. while following), skipping the very first load so the highlight only
-  // signals freshly appended entries.
-  useEffect(() => {
-    const prev = prevLogsRef.current
-    prevLogsRef.current = logs
-    if (prev === '' || logs === '' || prev === logs) return
-    setFlashLatest(true)
-    const id = setTimeout(() => setFlashLatest(false), HIGHLIGHT_DURATION)
-    return () => clearTimeout(id)
-  }, [logs])
-
   // Split the raw payload into entries once: strip the leading timestamp (shown
   // as a separator pill) and any ANSI escapes from the message, then detect the
   // log level. Only re-runs when the payload changes, not on every keystroke.
@@ -291,6 +383,20 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
       return { ts, text, level: detectLevel(text) }
     })
   }, [logs])
+
+  // Track the newest line's timestamp so the next follow poll can request only
+  // entries after it (sinceTime). This is authoritative over the current buffer:
+  // it clears to '' when the buffer has no timestamped lines (e.g. after a reset
+  // to a container with no logs yet), so a poll never reuses a stale timestamp
+  // from a previous stream. Trailing lines without a timestamp (stack-trace
+  // continuations) are skipped rather than clearing it.
+  useEffect(() => {
+    let ts = ''
+    for (let i = baseLines.length - 1; i >= 0; i--) {
+      if (baseLines[i].ts) { ts = baseLines[i].ts; break }
+    }
+    lastTsRef.current = ts
+  }, [baseLines])
 
   // Apply the substring filter on the message text; cheap pass over the
   // already-split entries. A leading "!" negates the match, keeping only lines
@@ -319,25 +425,80 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
     return containsLines.filter(entry => entry.level === levelFilter)
   }, [containsLines, levelFilter])
 
-  // When the JSON toggle is on, every line renders as a code block sharing the
-  // same monospace font and size as the YAML blocks (`code: true`). Valid JSON
-  // gets indented and Prism-highlighted (`html`); other lines keep their plain
-  // text in the same styling. Filtering happens first on the raw text, so this
-  // only transforms what is actually shown.
+  // In formatted mode every line renders as a code block sharing the same
+  // monospace font and size as the YAML blocks (`code: true`). Valid JSON gets
+  // indented and Prism-highlighted (`html`); other lines keep their plain text
+  // in the same styling. In raw mode lines render as unstyled plain text
+  // (`code: false`). Filtering happens first on the raw text, so this only
+  // transforms what is actually shown.
+  //
+  // The formatted output is cached by raw line text (formatCacheRef): since the
+  // pretty-printed/highlighted form depends only on the line text, an append
+  // reuses the cached result for every existing line and only runs formatJson +
+  // Prism over the genuinely new lines, instead of re-highlighting the whole
+  // buffer on every poll. The cache is rebuilt to hold only the lines currently
+  // shown, so it can't outgrow the buffer; raw mode leaves it untouched so it
+  // survives a round-trip back to formatted. Returning the same html string for
+  // unchanged lines also lets Preact skip re-applying their innerHTML.
   const displayLines = useMemo(() => {
-    return logLines.map(entry => {
-      if (!prettyJson) return { ...entry, code: false, html: null }
-      const json = formatJson(entry.text)
-      if (json == null) return { ...entry, code: true, html: null }
-      return { ...entry, text: json, code: true, html: Prism.highlight(json, Prism.languages.json, 'json') }
+    if (!formatted) {
+      return logLines.map(entry => ({ ...entry, code: false, html: null }))
+    }
+    const prev = formatCacheRef.current
+    const next = new Map()
+    const result = logLines.map(entry => {
+      let formattedEntry = next.get(entry.text) || prev.get(entry.text)
+      if (!formattedEntry) {
+        const json = formatJson(entry.text)
+        formattedEntry = json == null
+          ? { text: entry.text, code: true, html: null }
+          : { text: json, code: true, html: Prism.highlight(json, Prism.languages.json, 'json') }
+      }
+      next.set(entry.text, formattedEntry)
+      return { ...entry, ...formattedEntry }
     })
-  }, [logLines, prettyJson])
+    formatCacheRef.current = next
+    return result
+  }, [logLines, formatted])
 
-  // Keep the most recent entry in view after each update.
+  // Briefly highlight the most recent visible line whenever genuinely new
+  // entries arrive (e.g. while following). The highlight is gated on two
+  // conditions so it only signals fresh logs: the raw buffer must have grown
+  // (prevLogs !== logs, skipping the very first load), and the newest displayed
+  // line must have changed. The second gate is what keeps a follow poll that
+  // appends only lines filtered out of the view — or a filter change that
+  // reshuffles the view — from re-pulsing an unchanged last line.
   useEffect(() => {
-    if (!bodyRef.current) return
+    const prevLogs = prevLogsRef.current
+    prevLogsRef.current = logs
+    const latest = displayLines.length > 0 ? displayLines[displayLines.length - 1] : null
+    const latestKey = latest ? `${latest.ts}\n${latest.text}` : null
+    const prevKey = prevLatestKeyRef.current
+    prevLatestKeyRef.current = latestKey
+    if (prevLogs === '' || logs === '' || prevLogs === logs) return
+    if (latestKey === null || latestKey === prevKey) return
+    setFlashLatest(true)
+    const id = setTimeout(() => setFlashLatest(false), HIGHLIGHT_DURATION)
+    return () => clearTimeout(id)
+  }, [logs, displayLines])
+
+  // Track whether the view is pinned to the bottom. Updated on every user
+  // scroll so the auto-scroll below only follows new entries when the user is
+  // already at the bottom; scrolling up to read older logs stops the next poll
+  // from yanking the view back down.
+  const handleScroll = useCallback(() => {
+    const el = bodyRef.current
+    if (!el) return
+    atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_BOTTOM_THRESHOLD
+  }, [])
+
+  // Keep the most recent entry (or the inline follow error) in view after each
+  // update, but only while pinned to the bottom, so following doesn't fight a
+  // user scrolling through history.
+  useEffect(() => {
+    if (!bodyRef.current || !atBottomRef.current) return
     bodyRef.current.scrollTop = bodyRef.current.scrollHeight
-  }, [displayLines])
+  }, [displayLines, followError])
 
   // Download the current logs as a <pod>.log text file.
   const handleDownload = useCallback(() => {
@@ -392,13 +553,15 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
             </svg>
           </ToggleButton>
 
-          {/* Pretty-print JSON lines */}
+          {/* Toggle between formatted and raw output. Formatted (default)
+              pretty-prints structured lines and adds timestamp pills and
+              level coloring; raw strips all styling to plain text. */}
           <ToggleButton
-            active={prettyJson}
-            onClick={() => setPrettyJson(v => !v)}
-            label="Pretty-print JSON logs"
-            title="Format and syntax-highlight JSON log lines"
-            testid="logs-json-toggle"
+            active={formatted}
+            onClick={() => setFormatted(v => !v)}
+            label="Format logs"
+            title="Toggle between formatted and raw logs"
+            testid="logs-format-toggle"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1m8-18h1a2 2 0 0 1 2 2v5c0 1.1.9 2 2 2a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2h-1" />
@@ -493,21 +656,23 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
         </div>
 
         {/* Body */}
-        <div ref={bodyRef} class="flex-1 overflow-auto overscroll-contain bg-white dark:bg-gray-950" data-testid="logs-body">
+        <div ref={bodyRef} onScroll={handleScroll} class="flex-1 overflow-auto overscroll-contain bg-white dark:bg-gray-950" data-testid="logs-body">
           {error ? (
             <div class="m-3 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-xs text-red-800 dark:text-red-200" data-testid="logs-error">
               {error}
             </div>
           ) : loading && !logs ? (
             <p class="p-3 text-xs text-gray-500 dark:text-gray-400" data-testid="logs-loading">Loading logs...</p>
-          ) : displayLines.length > 0 ? (
+          ) : displayLines.length > 0 || followError ? (
             <div class="pb-2" data-testid="logs-content">
               {displayLines.map((entry, i) => {
-                const isLatest = flashLatest && i === displayLines.length - 1
+                // Raw mode strips all styling: no timestamp pill, no level
+                // coloring, and no highlight on the freshly appended entry.
+                const isLatest = formatted && flashLatest && i === displayLines.length - 1
                 const meta = LEVEL_META[entry.level] || LEVEL_META[DEFAULT_LEVEL]
                 return (
                   <Fragment key={i}>
-                    {entry.ts && (
+                    {formatted && entry.ts && (
                       <div
                         class="flex items-center gap-2 px-3 pt-2 select-none"
                         data-testid="logs-timestamp"
@@ -547,7 +712,7 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
                       </pre>
                     ) : (
                       <div
-                        class="px-3 py-1 text-sm font-mono whitespace-pre-wrap break-all text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-900"
+                        class="px-3 py-0.5 text-sm font-mono whitespace-pre-wrap break-all text-gray-800 dark:text-gray-200"
                         data-testid="logs-line"
                       >
                         {entry.text}
@@ -556,6 +721,18 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
                   </Fragment>
                 )
               })}
+              {followError && (
+                <div
+                  class="flex items-start gap-2 mx-3 mt-2 p-2 rounded border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 text-xs text-red-800 dark:text-red-200"
+                  data-testid="logs-follow-error"
+                  role="alert"
+                >
+                  <svg class="w-4 h-4 flex-shrink-0 mt-px" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                  </svg>
+                  <span class="break-all">{followError}</span>
+                </div>
+              )}
             </div>
           ) : (
             <p class="p-3 text-xs text-gray-500 dark:text-gray-400" data-testid="logs-empty">

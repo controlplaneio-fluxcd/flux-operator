@@ -631,9 +631,10 @@ export function getMockWorkloadLogs(endpoint) {
   const name = params.get('name') || 'pod'
   const container = params.get('container') || 'app'
   const tailLines = Math.max(1, parseInt(params.get('tailLines'), 10) || 100)
+  const sinceTime = params.get('sinceTime')
 
-  // Generate up to tailLines entries, oldest first, each on its own line. The
-  // levels are varied so the viewer's per-level coloring and filter are visible.
+  // The levels are varied so the viewer's per-level coloring and filter are
+  // visible, and so following appends a mix of levels.
   const messages = [
     { level: 'info', msg: 'no changes since last reconciliation: observed revision \'refs/heads/main@sha1:aa26680\'' },
     { level: 'debug', msg: 'artifact up-to-date with remote revision \'latest@sha256:fcf183b\'' },
@@ -641,12 +642,30 @@ export function getMockWorkloadLogs(endpoint) {
     { level: 'warn', msg: 'slow reconciliation: took 4.7s, exceeding the 2s target' },
     { level: 'error', msg: 'failed to fetch artifact: connection reset by peer' }
   ]
+  const entry = (ts, i) => {
+    const { level, msg } = messages[((i % messages.length) + messages.length) % messages.length]
+    return `${ts} {"level":"${level}","ts":"${ts}","msg":"${msg}","controller":"gitrepository","reconcileID":"id-${i}"}`
+  }
+
+  // Follow poll: emit a couple of fresh entries just after the last seen line so
+  // the viewer can demonstrate appending. Their timestamps advance past
+  // sinceTime, so each poll yields genuinely new lines.
+  const since = sinceTime ? new Date(sinceTime) : null
+  if (since && !Number.isNaN(since.getTime())) {
+    const lines = []
+    for (let i = 1; i <= 2; i++) {
+      const ts = new Date(since.getTime() + i * 1000).toISOString()
+      lines.push(entry(ts, since.getSeconds() + i))
+    }
+    return { pod: name, container, logs: lines.join('\n') + '\n' }
+  }
+
+  // Initial load: generate up to tailLines entries, oldest first.
   const count = Math.min(tailLines, 200)
   const lines = []
   for (let i = count - 1; i >= 0; i--) {
     const ts = getTimestamp(0, 0, i)
-    const { level, msg } = messages[i % messages.length]
-    lines.push(`${ts} {"level":"${level}","ts":"${ts}","msg":"${msg}","controller":"gitrepository","reconcileID":"id-${count - i}"}`)
+    lines.push(entry(ts, count - i))
   }
 
   return {

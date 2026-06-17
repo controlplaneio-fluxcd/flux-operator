@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/preact'
+import { render, screen, waitFor, act, fireEvent } from '@testing-library/preact'
 import userEvent from '@testing-library/user-event'
 import { WorkloadLogsViewer } from './WorkloadLogsViewer'
 
@@ -263,26 +263,20 @@ describe('WorkloadLogsViewer component', () => {
     expect(screen.getByTestId('logs-line').textContent).toBe('red error text')
   })
 
-  it('renders JSON lines as highlighted code blocks when the JSON toggle is on, leaving plain lines intact', async () => {
-    const user = userEvent.setup()
+  it('pretty-prints JSON lines as highlighted code blocks by default, leaving plain lines intact', async () => {
     fetchWithMock.mockResolvedValue({
       logs: '2026-01-01T00:00:00Z {"level":"info","msg":"hello"}\n2026-01-01T00:00:01Z plain text line\n'
     })
     render(<WorkloadLogsViewer {...defaultProps} />)
     await waitFor(() => expect(screen.getAllByTestId('logs-line')).toHaveLength(2))
 
-    const toggle = screen.getByTestId('logs-json-toggle')
-    expect(toggle).toHaveAttribute('aria-pressed', 'false')
-
-    // Off: the JSON line is shown compact, exactly as received, as a plain row.
-    expect(screen.getAllByTestId('logs-line')[0].tagName).toBe('DIV')
-    expect(screen.getAllByTestId('logs-line')[0].textContent).toBe('{"level":"info","msg":"hello"}')
-
-    // On: the JSON line becomes an indented, syntax-highlighted code block. The
-    // plain line also renders as a code block (so all lines share the same font
-    // and size) but with its text unchanged and no syntax highlighting.
-    await user.click(toggle)
+    // Formatted mode is the default and the toggle reflects it.
+    const toggle = screen.getByTestId('logs-format-toggle')
     expect(toggle).toHaveAttribute('aria-pressed', 'true')
+
+    // The JSON line is indented and syntax-highlighted. The plain line also
+    // renders as a code block (so all lines share the same font and size) but
+    // with its text unchanged and no syntax highlighting.
     const rows = screen.getAllByTestId('logs-line')
     expect(rows[0].tagName).toBe('PRE')
     expect(rows[0].querySelector('code')).toHaveClass('language-json')
@@ -292,6 +286,48 @@ describe('WorkloadLogsViewer component', () => {
     expect(rows[1].querySelector('code')).toHaveClass('language-json')
     expect(rows[1].querySelector('.token')).toBeNull()
     expect(rows[1].textContent).toBe('plain text line')
+  })
+
+  it('strips all styling in raw mode: plain rows, no timestamp pills or highlight', async () => {
+    const user = userEvent.setup()
+    fetchWithMock.mockResolvedValue({
+      logs: '2026-01-01T00:00:00Z {"level":"info","msg":"hello"}\n2026-01-01T00:00:01Z plain text line\n'
+    })
+    render(<WorkloadLogsViewer {...defaultProps} />)
+    await waitFor(() => expect(screen.getAllByTestId('logs-line')).toHaveLength(2))
+
+    // Switching off formatted mode enters raw mode.
+    const toggle = screen.getByTestId('logs-format-toggle')
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-pressed', 'false')
+
+    // Lines render as plain rows, JSON shown compact exactly as received.
+    const rows = screen.getAllByTestId('logs-line')
+    expect(rows[0].tagName).toBe('DIV')
+    expect(rows[0].textContent).toBe('{"level":"info","msg":"hello"}')
+    expect(rows[1].tagName).toBe('DIV')
+    expect(rows[1].textContent).toBe('plain text line')
+
+    // The timestamp pills (row separators) are gone in raw mode.
+    expect(screen.queryByTestId('logs-timestamp')).not.toBeInTheDocument()
+  })
+
+  it('does not highlight the latest line in raw mode when new logs arrive', async () => {
+    const user = userEvent.setup()
+    fetchWithMock.mockResolvedValue({ logs: '2026-01-01T00:00:00Z line one\n2026-01-01T00:00:01Z line two\n' })
+    render(<WorkloadLogsViewer {...defaultProps} />)
+    await waitFor(() => expect(screen.getAllByTestId('logs-line')).toHaveLength(2))
+
+    // Enter raw mode.
+    await user.click(screen.getByTestId('logs-format-toggle'))
+
+    // A new entry arrives on the next fetch (triggered by changing the line count).
+    fetchWithMock.mockResolvedValue({ logs: '2026-01-01T00:00:00Z line one\n2026-01-01T00:00:01Z line two\n2026-01-01T00:00:02Z line three\n' })
+    await user.selectOptions(screen.getByTestId('logs-lines-select'), '500')
+    await waitFor(() => expect(screen.getAllByTestId('logs-line')).toHaveLength(3))
+
+    // Raw mode has no timestamp pills, so nothing is ever highlighted.
+    expect(screen.queryByTestId('logs-timestamp')).not.toBeInTheDocument()
   })
 
   it('toggles fullscreen mode', async () => {
@@ -322,6 +358,131 @@ describe('WorkloadLogsViewer component', () => {
     setIntervalSpy.mockRestore()
   })
 
+  it('appends new lines on follow polls via sinceTime, deduping the overlap', async () => {
+    vi.useFakeTimers()
+    try {
+      const flush = async () => { await act(async () => { await Promise.resolve(); await Promise.resolve() }) }
+
+      // Initial load returns two timestamped lines.
+      fetchWithMock.mockResolvedValueOnce({ logs: '2026-01-01T00:00:00Z line one\n2026-01-01T00:00:01Z line two\n' })
+      // The follow poll re-sends the last line (sinceTime is second-granular) plus a new one.
+      fetchWithMock.mockResolvedValue({ logs: '2026-01-01T00:00:01Z line two\n2026-01-01T00:00:02Z line three\n' })
+
+      render(<WorkloadLogsViewer {...defaultProps} />)
+      await flush()
+      expect(screen.getAllByTestId('logs-line')).toHaveLength(2)
+
+      // The initial load asks for the tail, not a sinceTime window.
+      expect(fetchWithMock.mock.calls[0][0].endpoint).toContain('tailLines=100')
+      expect(fetchWithMock.mock.calls[0][0].endpoint).not.toContain('sinceTime')
+
+      // Advance to the first follow poll and let it resolve.
+      await act(async () => { vi.advanceTimersByTime(5000) })
+      await flush()
+
+      // The overlapping "line two" is deduped; only "line three" is appended.
+      const rows = screen.getAllByTestId('logs-line')
+      expect(rows.map(r => r.textContent)).toEqual(['line one', 'line two', 'line three'])
+
+      // The poll narrows to entries newer than the last seen line, and still
+      // sends tailLines so a catch-up stays bounded to the user's selection.
+      const pollCall = fetchWithMock.mock.calls[fetchWithMock.mock.calls.length - 1][0]
+      expect(pollCall.endpoint).toContain('sinceTime=2026-01-01T00%3A00%3A01Z')
+      expect(pollCall.endpoint).toContain('tailLines=100')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('skips follow polls while a reset fetch is still in flight', async () => {
+    vi.useFakeTimers()
+    try {
+      const flush = async () => { await act(async () => { await Promise.resolve(); await Promise.resolve() }) }
+
+      fetchWithMock.mockResolvedValueOnce({ logs: '2026-01-01T00:00:00Z line one\n2026-01-01T00:00:01Z line two\n' })
+      render(<WorkloadLogsViewer {...defaultProps} />)
+      await flush()
+      expect(fetchWithMock).toHaveBeenCalledTimes(1)
+
+      // Change the line count: this starts a reset fetch that never resolves,
+      // so the viewer stays in the "resetting" state.
+      fetchWithMock.mockReturnValueOnce(new Promise(() => {}))
+      await act(async () => { fireEvent.change(screen.getByTestId('logs-lines-select'), { target: { value: '500' } }) })
+      await flush()
+      expect(fetchWithMock).toHaveBeenCalledTimes(2)
+
+      // A follow tick while the reset is in flight must NOT fire an append poll.
+      await act(async () => { vi.advanceTimersByTime(5000) })
+      await flush()
+      expect(fetchWithMock).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('drops a stale in-flight append poll after a parameter reset', async () => {
+    vi.useFakeTimers()
+    try {
+      const flush = async () => { await act(async () => { await Promise.resolve(); await Promise.resolve() }) }
+
+      // Initial load for the first stream.
+      fetchWithMock.mockResolvedValueOnce({ logs: '2026-01-01T00:00:00Z app one\n2026-01-01T00:00:01Z app two\n' })
+      render(<WorkloadLogsViewer {...defaultProps} />)
+      await flush()
+      expect(screen.getAllByTestId('logs-line').map(r => r.textContent)).toEqual(['app one', 'app two'])
+
+      // The next follow poll is left in flight (its promise never resolves yet).
+      let resolveAppend
+      fetchWithMock.mockReturnValueOnce(new Promise((resolve) => { resolveAppend = resolve }))
+      await act(async () => { vi.advanceTimersByTime(5000) })
+
+      // Meanwhile the user changes the line count, which resets the buffer.
+      fetchWithMock.mockResolvedValueOnce({ logs: '2026-01-01T00:00:05Z reset one\n' })
+      await act(async () => { fireEvent.change(screen.getByTestId('logs-lines-select'), { target: { value: '500' } }) })
+      await flush()
+      expect(screen.getAllByTestId('logs-line').map(r => r.textContent)).toEqual(['reset one'])
+
+      // The stale append (from before the reset) now resolves; it must be ignored.
+      await act(async () => { resolveAppend({ logs: '2026-01-01T00:00:02Z app three\n' }) })
+      await flush()
+      expect(screen.getAllByTestId('logs-line').map(r => r.textContent)).toEqual(['reset one'])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('shows a failed follow poll inline at the tail without clearing the buffer', async () => {
+    vi.useFakeTimers()
+    try {
+      const flush = async () => { await act(async () => { await Promise.resolve(); await Promise.resolve() }) }
+
+      fetchWithMock.mockResolvedValueOnce({ logs: '2026-01-01T00:00:00Z line one\n2026-01-01T00:00:01Z line two\n' })
+      render(<WorkloadLogsViewer {...defaultProps} />)
+      await flush()
+      expect(screen.getAllByTestId('logs-line')).toHaveLength(2)
+
+      // The follow poll fails.
+      fetchWithMock.mockRejectedValueOnce(new Error('Pod default/my-pod not found'))
+      await act(async () => { vi.advanceTimersByTime(5000) })
+      await flush()
+
+      // The buffer stays on screen and the error is shown inline at the tail,
+      // not as the full-pane error banner.
+      expect(screen.getAllByTestId('logs-line')).toHaveLength(2)
+      expect(screen.getByTestId('logs-follow-error')).toHaveTextContent('Pod default/my-pod not found')
+      expect(screen.queryByTestId('logs-error')).not.toBeInTheDocument()
+
+      // The next poll succeeds: the inline error clears and the new line appends.
+      fetchWithMock.mockResolvedValueOnce({ logs: '2026-01-01T00:00:02Z line three\n' })
+      await act(async () => { vi.advanceTimersByTime(5000) })
+      await flush()
+      expect(screen.queryByTestId('logs-follow-error')).not.toBeInTheDocument()
+      expect(screen.getAllByTestId('logs-line').map(r => r.textContent)).toEqual(['line one', 'line two', 'line three'])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('highlights the latest timestamp pill when new logs arrive', async () => {
     const user = userEvent.setup()
     fetchWithMock.mockResolvedValue({ logs: '2026-01-01T00:00:00Z line one\n2026-01-01T00:00:01Z line two\n' })
@@ -340,5 +501,27 @@ describe('WorkloadLogsViewer component', () => {
       expect(pills[pills.length - 1]).toHaveAttribute('data-latest', 'true')
     })
     expect(screen.getAllByTestId('logs-timestamp')[0]).not.toHaveAttribute('data-latest')
+  })
+
+  it('does not highlight the last visible line when new logs are filtered out', async () => {
+    const user = userEvent.setup()
+    fetchWithMock.mockResolvedValue({ logs: '2026-01-01T00:00:00Z keep me\n2026-01-01T00:00:01Z keep me too\n' })
+    render(<WorkloadLogsViewer {...defaultProps} />)
+    await waitFor(() => expect(screen.getAllByTestId('logs-line')).toHaveLength(2))
+
+    // Keep only the lines containing "keep"; both current lines match.
+    await user.type(screen.getByTestId('logs-filter-input'), 'keep')
+    await waitFor(() => expect(screen.getAllByTestId('logs-line')).toHaveLength(2))
+
+    // A new entry arrives that does not match the filter, so the visible set is
+    // unchanged. The unchanged last line must not be highlighted as if it were new.
+    fetchWithMock.mockResolvedValue({ logs: '2026-01-01T00:00:00Z keep me\n2026-01-01T00:00:01Z keep me too\n2026-01-01T00:00:02Z noise\n' })
+    await user.selectOptions(screen.getByTestId('logs-lines-select'), '500')
+    await waitFor(() => {
+      const call = fetchWithMock.mock.calls.at(-1)[0]
+      expect(call.endpoint).toContain('tailLines=500')
+    })
+    expect(screen.getAllByTestId('logs-line')).toHaveLength(2)
+    expect(screen.getAllByTestId('logs-timestamp').some(el => el.getAttribute('data-latest') === 'true')).toBe(false)
   })
 })

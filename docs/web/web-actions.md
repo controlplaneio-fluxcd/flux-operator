@@ -138,11 +138,23 @@ entries containing a given substring (prefix the text with `!` to instead hide
 entries containing it, e.g. `!debug`), a level filter to show only entries of a
 chosen severity, a control to choose how many lines to
 fetch, and toggles to follow the logs (polling for new entries, enabled by
-default), pretty-print JSON-formatted lines (rendering structured logs as
-syntax-highlighted code blocks, leaving plain-text lines untouched), and expand
-to fullscreen. Each log entry is rendered on its own row, with its timestamp
-shown as a pill on the row separator; the latest timestamp pill is briefly
-highlighted when new entries arrive while following.
+default), switch between formatted and raw output, and expand to fullscreen.
+
+When following, each poll requests only the entries newer than the last one
+already shown and appends them, so the lines you are reading stay put instead of
+shifting on every refresh. Auto-scroll keeps the newest line in view only while
+the view is scrolled to the bottom, so scrolling up to read earlier entries is
+not interrupted by incoming logs. If a follow poll fails (for example because
+the pod was deleted), the error is shown inline at the tail of the feed and the
+already-fetched logs remain on screen; the viewer retries on the next poll.
+
+In the default formatted mode each log entry is rendered on its own row, with
+its timestamp shown as a pill on the row separator, JSON-formatted lines
+pretty-printed as syntax-highlighted code blocks (plain-text lines left
+untouched), and the latest timestamp pill briefly highlighted when new entries
+arrive while following. The raw mode strips all of that styling, rendering each
+line as plain text without separators, timestamp pills, level coloring, or the
+new-entry highlight.
 
 The viewer detects the log level of each entry across the common formats emitted
 by mainstream loggers (JSON `level`/`severity`/`level_name`/`@level`/`s` fields,

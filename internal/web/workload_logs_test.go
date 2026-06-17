@@ -7,6 +7,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -35,6 +36,54 @@ func TestTrimPartialLogLine(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 			g.Expect(trimPartialLogLine(tt.in)).To(Equal(tt.want))
+		})
+	}
+}
+
+func TestTrimPartialFirstLine(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{name: "empty", in: "", want: ""},
+		{name: "drops partial leading fragment", in: "tial\nline two\nline three\n", want: "line two\nline three\n"},
+		{name: "single line with no newline kept", in: "only-line", want: "only-line"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			g.Expect(trimPartialFirstLine(tt.in)).To(Equal(tt.want))
+		})
+	}
+}
+
+func TestTailLogBytes(t *testing.T) {
+	tests := []struct {
+		name             string
+		in               string
+		limit            int
+		want             string
+		wantPartialFirst bool
+	}{
+		{name: "under limit returns all", in: "line1\nline2\n", limit: 100, want: "line1\nline2\n", wantPartialFirst: false},
+		{name: "exact limit not truncated", in: "abcd", limit: 4, want: "abcd", wantPartialFirst: false},
+		// The cut lands exactly after "line1\n", so the first retained line is
+		// complete and must NOT be reported as partial (or the caller drops it).
+		{name: "over limit cut on line boundary keeps complete first line", in: "line1\nline2\nline3\n", limit: 12, want: "line2\nline3\n", wantPartialFirst: false},
+		{name: "over limit cutting mid-line", in: "line1\nline2\n", limit: 8, want: "1\nline2\n", wantPartialFirst: true},
+		{name: "empty stream", in: "", limit: 16, want: "", wantPartialFirst: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			// strings.Reader hands out small reads, exercising the chunked loop.
+			got, partialFirst, err := tailLogBytes(strings.NewReader(tt.in), tt.limit)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(string(got)).To(Equal(tt.want))
+			g.Expect(partialFirst).To(Equal(tt.wantPartialFirst))
 		})
 	}
 }
@@ -109,6 +158,7 @@ func TestWorkloadLogsHandler_InvalidParams(t *testing.T) {
 		{name: "invalid tailLines", query: "namespace=default&name=test-pod&tailLines=abc", message: "Invalid tailLines parameter"},
 		{name: "negative tailLines", query: "namespace=default&name=test-pod&tailLines=-5", message: "Invalid tailLines parameter"},
 		{name: "invalid previous", query: "namespace=default&name=test-pod&previous=maybe", message: "Invalid previous parameter"},
+		{name: "invalid sinceTime", query: "namespace=default&name=test-pod&sinceTime=not-a-time", message: "Invalid sinceTime parameter"},
 	}
 
 	for _, tc := range testCases {
