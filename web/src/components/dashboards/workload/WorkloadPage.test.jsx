@@ -5,6 +5,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, waitFor, act } from '@testing-library/preact'
 import { WorkloadPage } from './WorkloadPage'
 import { fetchWithMock } from '../../../utils/fetch'
+import { navHistory, clearNavHistory, getNavHistoryKey } from '../../../utils/navHistory'
 
 // Polling constants used by WorkloadPage
 const POLL_INTERVAL_MS = 10000
@@ -262,6 +263,26 @@ describe('WorkloadPage component', () => {
       const headerCard = screen.getByRole('heading', { name: 'nginx' }).closest('.card')
       expect(headerCard).toHaveClass('bg-yellow-50')
       expect(headerCard).toHaveClass('border-yellow-500')
+    })
+  })
+
+  describe('Navigation history', () => {
+    beforeEach(() => {
+      clearNavHistory()
+    })
+
+    it('should record the workload visit in navigation history', async () => {
+      fetchWithMock.mockResolvedValue(mockWorkloadData)
+
+      render(<WorkloadPage kind="Deployment" namespace="default" name="nginx" />)
+
+      await waitFor(() => {
+        expect(navHistory.value.length).toBe(1)
+      })
+
+      const entry = navHistory.value[0]
+      expect(getNavHistoryKey(entry.kind, entry.namespace, entry.name))
+        .toBe('Deployment/default/nginx')
     })
   })
 

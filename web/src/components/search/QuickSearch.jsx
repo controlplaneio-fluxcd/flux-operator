@@ -5,8 +5,10 @@ import { signal } from '@preact/signals'
 import { useEffect, useRef, useState } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
 import { fetchWithMock } from '../../utils/fetch'
+import { getStatusDotClass } from '../../utils/status'
+import { getDashboardUrl } from '../../utils/routing'
 import { reportData } from '../../app'
-import { fluxKinds } from '../../utils/constants'
+import { searchKinds, workloadKinds } from '../../utils/constants'
 import { userMenuOpen } from '../layout/UserMenu'
 import { navHistory, isHomePage } from '../../utils/navHistory'
 
@@ -106,7 +108,72 @@ export function parseSearchQuery(query) {
 }
 
 /**
- * Fetch search results from API
+ * Build the dashboard URL for a search result, routing workload kinds to the
+ * workload dashboard and everything else to the Flux resource dashboard.
+ * @param {{kind: string, namespace: string, name: string}} item - Result item
+ * @returns {string} Dashboard URL path
+ */
+export function getResultUrl(item) {
+  return getDashboardUrl(item.kind, item.namespace, item.name)
+}
+
+/**
+ * Build the query string suffix shared by the resource and workload search endpoints.
+ */
+function buildSearchQuery(name, namespace, kind) {
+  let query = `?name=${encodeURIComponent(name)}`
+  if (namespace) {
+    query += `&namespace=${encodeURIComponent(namespace)}`
+  }
+  if (kind) {
+    query += `&kind=${encodeURIComponent(kind)}`
+  }
+  return query
+}
+
+/**
+ * Fetch resource search results and normalize to the unified result shape.
+ */
+async function fetchResourceResults(name, namespace, kind) {
+  const data = await fetchWithMock({
+    endpoint: `/api/v1/search${buildSearchQuery(name, namespace, kind)}`,
+    mockPath: '../mock/resources',
+    mockExport: 'getMockSearchResults'
+  })
+  return (data.resources || []).map(r => ({
+    kind: r.kind,
+    namespace: r.namespace,
+    name: r.name,
+    status: r.status,
+    url: getResultUrl(r)
+  }))
+}
+
+/**
+ * Fetch workload search results and normalize to the unified result shape.
+ * Workload results leave `status` undefined so the result dot renders gray.
+ */
+async function fetchWorkloadResults(name, namespace, kind) {
+  const data = await fetchWithMock({
+    endpoint: `/api/v1/workloads/search${buildSearchQuery(name, namespace, kind)}`,
+    mockPath: '../mock/workloads',
+    mockExport: 'getMockWorkloadsSearch'
+  })
+  return (data.workloads || []).map(w => ({
+    kind: w.kind,
+    namespace: w.namespace,
+    name: w.name,
+    status: undefined,
+    url: getResultUrl(w)
+  }))
+}
+
+/**
+ * Fetch search results from both the resource and workload indexes.
+ *
+ * - With a `kind:` filter, query only the owning endpoint.
+ * - Otherwise, query both endpoints in parallel and merge results
+ *   (resources first, then workloads).
  */
 async function fetchSearchResults(name, namespace, kind) {
   if (!name || name.length < 2) {
@@ -118,19 +185,29 @@ async function fetchSearchResults(name, namespace, kind) {
   quickSearchLoading.value = true
 
   try {
-    let endpoint = `/api/v1/search?name=${encodeURIComponent(name)}`
-    if (namespace) {
-      endpoint += `&namespace=${encodeURIComponent(namespace)}`
-    }
+    let results
     if (kind) {
-      endpoint += `&kind=${encodeURIComponent(kind)}`
+      // A kind filter routes to a single owning endpoint.
+      results = workloadKinds.includes(kind)
+        ? await fetchWorkloadResults(name, namespace, kind)
+        : await fetchResourceResults(name, namespace, kind)
+    } else {
+      // No kind filter: query both indexes and merge (resources first). Use
+      // allSettled so a failure of one index still surfaces the other's results.
+      const [resourceOutcome, workloadOutcome] = await Promise.allSettled([
+        fetchResourceResults(name, namespace, kind),
+        fetchWorkloadResults(name, namespace, kind)
+      ])
+      for (const outcome of [resourceOutcome, workloadOutcome]) {
+        if (outcome.status === 'rejected') {
+          console.error('Failed to fetch search results:', outcome.reason)
+        }
+      }
+      const resourceResults = resourceOutcome.status === 'fulfilled' ? resourceOutcome.value : []
+      const workloadResults = workloadOutcome.status === 'fulfilled' ? workloadOutcome.value : []
+      results = [...resourceResults, ...workloadResults]
     }
-    const data = await fetchWithMock({
-      endpoint,
-      mockPath: '../mock/resources',
-      mockExport: 'getMockSearchResults'
-    })
-    quickSearchResults.value = data.resources || []
+    quickSearchResults.value = results
   } catch (error) {
     console.error('Failed to fetch search results:', error)
     quickSearchResults.value = []
@@ -175,28 +252,9 @@ function getNamespaceSuggestions(partial) {
  */
 function getKindSuggestions(partial) {
   const filtered = partial
-    ? fluxKinds.filter(k => k.toLowerCase().includes(partial.toLowerCase()))
-    : fluxKinds
+    ? searchKinds.filter(k => k.toLowerCase().includes(partial.toLowerCase()))
+    : searchKinds
   return filtered
-}
-
-/**
- * Get status dot color
- */
-function getStatusDotClass(status) {
-  switch (status) {
-  case 'Ready':
-    return 'bg-green-500'
-  case 'Failed':
-    return 'bg-red-500'
-  case 'Progressing':
-    return 'bg-blue-500'
-  case 'Suspended':
-    return 'bg-yellow-500'
-  case 'Unknown':
-  default:
-    return 'bg-gray-500'
-  }
 }
 
 /**
@@ -457,22 +515,17 @@ export function QuickSearch() {
     }
   }
 
-  // Build URL for a resource
-  const getResourceUrl = (kind, namespace, name) => {
-    return `/resource/${encodeURIComponent(kind)}/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}`
-  }
-
-  // Get URL for a history entry
+  // Get URL for a history entry (workload-aware via getResultUrl)
   const getHistoryUrl = (entry) => {
     if (isHomePage(entry.kind)) {
       return '/'
     }
-    return getResourceUrl(entry.kind, entry.namespace, entry.name)
+    return getResultUrl(entry)
   }
 
   // Handle result click via keyboard Enter (anchor will handle mouse clicks)
   const handleResultClick = (resource) => {
-    location.route(getResourceUrl(resource.kind, resource.namespace, resource.name))
+    location.route(getResultUrl(resource))
     handleClose()
   }
 
@@ -561,7 +614,7 @@ export function QuickSearch() {
               value={inputValue}
               onInput={handleInputChange}
               onKeyDown={handleKeyDown}
-              placeholder={(selectedNamespace || selectedKind) ? 'Search...' : 'Search appliers...'}
+              placeholder={(selectedNamespace || selectedKind) ? 'Search...' : 'Search appliers & workloads...'}
               class="flex-1 min-w-0 text-sm text-gray-900 dark:text-gray-100 bg-transparent placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none"
             />
 
@@ -654,7 +707,7 @@ export function QuickSearch() {
                 {quickSearchResults.value.map((resource, index) => (
                   <li key={`${resource.kind}-${resource.namespace}-${resource.name}-${index}`}>
                     <a
-                      href={getResourceUrl(resource.kind, resource.namespace, resource.name)}
+                      href={resource.url}
                       onClick={handleClose}
                       class={`block w-full text-left py-1 px-2 focus:outline-none transition-colors ${
                         index === selectedIndex
@@ -678,13 +731,22 @@ export function QuickSearch() {
             {panelState === 'empty' && (
               <div class="p-3 text-sm text-gray-500 dark:text-gray-400">
                 <p>No resources found</p>
-                <a
-                  href="/resources"
-                  onClick={handleClose}
-                  class="mt-2 inline-block text-flux-blue hover:underline focus:outline-none"
-                >
-                  Browse all resources →
-                </a>
+                <div class="mt-2 flex flex-col gap-1">
+                  <a
+                    href="/resources"
+                    onClick={handleClose}
+                    class="inline-block text-flux-blue hover:underline focus:outline-none"
+                  >
+                    Browse all resources →
+                  </a>
+                  <a
+                    href="/workloads"
+                    onClick={handleClose}
+                    class="inline-block text-flux-blue hover:underline focus:outline-none"
+                  >
+                    Browse all workloads →
+                  </a>
+                </div>
               </div>
             )}
 

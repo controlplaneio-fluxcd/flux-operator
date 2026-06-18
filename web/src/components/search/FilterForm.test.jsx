@@ -5,7 +5,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/preact'
 import { signal } from '@preact/signals'
 import { FilterForm } from './FilterForm'
-import { fluxKinds, eventSeverities, resourceStatuses } from '../../utils/constants'
+import { fluxKinds, eventSeverities, resourceStatuses, workloadKinds } from '../../utils/constants'
 
 describe('FilterForm', () => {
   let kindSignal
@@ -304,6 +304,61 @@ describe('FilterForm', () => {
       fireEvent.click(clearButton)
 
       expect(onClear).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('Flat kinds prop', () => {
+    it('should render a flat list of the provided kinds without optgroups', () => {
+      const { container } = render(
+        <FilterForm
+          kindSignal={kindSignal}
+          nameSignal={nameSignal}
+          namespaceSignal={namespaceSignal}
+          namespaces={mockNamespaces}
+          kinds={workloadKinds}
+          onClear={onClear}
+        />
+      )
+
+      // All workload kinds should be present as options
+      workloadKinds.forEach(kind => {
+        expect(screen.getByRole('option', { name: kind })).toBeInTheDocument()
+      })
+
+      // No optgroups should be rendered in flat mode
+      expect(container.querySelector('optgroup')).not.toBeInTheDocument()
+    })
+
+    it('should not render Flux kinds when a flat kinds prop is provided', () => {
+      render(
+        <FilterForm
+          kindSignal={kindSignal}
+          nameSignal={nameSignal}
+          namespaceSignal={namespaceSignal}
+          namespaces={mockNamespaces}
+          kinds={workloadKinds}
+          onClear={onClear}
+        />
+      )
+
+      // Flux-only kinds should not appear in the workload kind list
+      expect(screen.queryByRole('option', { name: 'FluxInstance' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('option', { name: 'GitRepository' })).not.toBeInTheDocument()
+    })
+
+    it('should render Flux optgroups by default when no kinds prop is provided', () => {
+      const { container } = render(
+        <FilterForm
+          kindSignal={kindSignal}
+          nameSignal={nameSignal}
+          namespaceSignal={namespaceSignal}
+          namespaces={mockNamespaces}
+          onClear={onClear}
+        />
+      )
+
+      expect(container.querySelector('optgroup')).toBeInTheDocument()
+      expect(screen.getByRole('option', { name: 'FluxInstance' })).toBeInTheDocument()
     })
   })
 

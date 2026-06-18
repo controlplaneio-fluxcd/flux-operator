@@ -6,9 +6,20 @@ import { fetchWithMock } from '../../utils/fetch'
 import { favorites, reorderFavorites, getFavoriteKey, removeFavorite } from '../../utils/favorites'
 import { POLL_INTERVAL_MS } from '../../utils/constants'
 import { usePageMeta } from '../../utils/meta'
+import { normalizeToFluxStatus } from '../../utils/status'
 import { FavoritesHeader } from './FavoritesHeader'
 import { FavoriteCard } from './FavoriteCard'
 import { FluxOperatorIcon } from '../layout/Icons'
+
+/**
+ * Normalize a favorite's status to the Flux vocabulary (Ready/Failed/Progressing/
+ * Suspended/Unknown) used by the status chart and status filter. Workload favorites
+ * carry kstatus values (Current/Idle/InProgress/Terminating/…) which normalizeToFluxStatus
+ * maps so they bucket and color consistently; Flux values pass through unchanged.
+ */
+function getChartStatus(fav) {
+  return normalizeToFluxStatus(fav.resourceData?.status || 'Unknown')
+}
 
 /**
  * FavoritesPage - Main page displaying favorite resources
@@ -144,7 +155,7 @@ export function FavoritesPage() {
     return favoritesWithData.filter(fav => {
       if (filter.namespace && fav.namespace !== filter.namespace) return false
       if (filter.kind && fav.kind !== filter.kind) return false
-      if (statusFilter && (fav.resourceData?.status || 'Unknown') !== statusFilter) return false
+      if (statusFilter && getChartStatus(fav) !== statusFilter) return false
       if (filter.name) {
         const searchLower = filter.name.toLowerCase()
         const matchesName = fav.name.toLowerCase().includes(searchLower)
@@ -173,7 +184,7 @@ export function FavoritesPage() {
         return true
       })
       .map(f => ({
-        status: f.resourceData?.status || 'Unknown'
+        status: getChartStatus(f)
       }))
   }, [favoritesWithData, filter])
 

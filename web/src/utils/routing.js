@@ -3,6 +3,22 @@
 
 import { useEffect, useRef } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
+import { workloadKinds } from './constants'
+
+/**
+ * Builds the dashboard URL for a Kubernetes object, routing workload kinds
+ * (Deployment/StatefulSet/DaemonSet/CronJob) to the workload dashboard and all
+ * other kinds to the resource dashboard.
+ *
+ * @param {string} kind - Object kind
+ * @param {string} namespace - Object namespace
+ * @param {string} name - Object name
+ * @returns {string} Dashboard path
+ */
+export function getDashboardUrl(kind, namespace, name) {
+  const base = workloadKinds.includes(kind) ? 'workload' : 'resource'
+  return `/${base}/${encodeURIComponent(kind)}/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}`
+}
 
 /**
  * Serializes filter object to URL query string

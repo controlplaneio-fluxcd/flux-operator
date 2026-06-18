@@ -15,6 +15,7 @@ import { LoginPage } from './components/auth/LoginPage'
 import { ClusterPage } from './components/dashboards/cluster/ClusterPage'
 import { EventList } from './components/search/EventList'
 import { ResourceList } from './components/search/ResourceList'
+import { WorkloadList } from './components/search/WorkloadList'
 import { ResourcePage } from './components/dashboards/resource/ResourcePage'
 import { WorkloadPage } from './components/dashboards/workload/WorkloadPage'
 import { FavoritesPage } from './components/favorites/FavoritesPage'
@@ -124,6 +125,16 @@ function TabNavigation() {
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm focus:outline-none transition-colors`}
           >
             Resources
+          </a>
+          <a
+            href="/workloads"
+            class={`${
+              currentPath === '/workloads'
+                ? 'border-flux-blue text-flux-blue dark:text-blue-400'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
+            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm focus:outline-none transition-colors`}
+          >
+            Workloads
           </a>
           <a
             href="/events"
@@ -292,7 +303,7 @@ export function App() {
 function AppContent({ spec, namespace }) {
   const location = useLocation()
   const currentPath = location.path
-  const isTabView = currentPath === '/favorites' || currentPath === '/events' || currentPath === '/resources'
+  const isTabView = currentPath === '/favorites' || currentPath === '/events' || currentPath === '/resources' || currentPath === '/workloads'
 
   return (
     <div class="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors flex flex-col">
@@ -311,6 +322,7 @@ function AppContent({ spec, namespace }) {
         <Route path="/favorites" component={FavoritesPage} />
         <Route path="/events" component={EventList} />
         <Route path="/resources" component={ResourceList} />
+        <Route path="/workloads" component={WorkloadList} />
         <Route path="/resource/:kind/:namespace/:name" component={ResourcePage} />
         <Route path="/workload/:kind/:namespace/:name" component={WorkloadPage} />
         <Route path="/user/profile" component={ProfilePage} />

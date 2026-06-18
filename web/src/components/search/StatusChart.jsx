@@ -104,7 +104,7 @@ export function StatusChart({ items, loading, mode = 'events', onBarClick }) {
   }, [loading, items, mode, itemsKey])
 
   return (
-    <div class="card p-4">
+    <div class="card p-4" data-testid="status-chart">
       <style>{`
         @keyframes fillRight {
           from {

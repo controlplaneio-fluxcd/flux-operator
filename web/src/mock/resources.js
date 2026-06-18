@@ -4,6 +4,8 @@
 // Mock data for resources endpoint (GET /api/v1/resources)
 // Generated from real cluster API responses
 
+import { mockWorkloads } from './workloads'
+
 // Helper to match name with wildcard pattern
 // Supports * (matches any characters). If no wildcards, does exact match.
 const matchesWildcard = (name, pattern) => {
@@ -487,8 +489,14 @@ export const getMockSearchResults = (endpoint) => {
   return { resources: limitedResources }
 }
 
+// Kubernetes workload kinds that resolve to the workloads index for favorites.
+const favoriteWorkloadKinds = ['CronJob', 'DaemonSet', 'Deployment', 'StatefulSet']
+
 // Export function that returns resources matching the favorites list (POST /api/v1/favorites)
 // The body parameter is { favorites: [{kind, namespace, name}, ...] }
+// Flux favorites resolve from mockResources; workload favorites resolve from the
+// workloads index and carry a workload status (kstatus vocab) derived from the
+// parent reconciler status, mirroring the backend's user-client lookup.
 export const getMockFavorites = (body) => {
   const favorites = body?.favorites
   if (!favorites || !Array.isArray(favorites) || favorites.length === 0) {
@@ -498,6 +506,24 @@ export const getMockFavorites = (body) => {
   // Find matching resources for each favorite
   const matchedResources = []
   for (const fav of favorites) {
+    if (favoriteWorkloadKinds.includes(fav.kind)) {
+      const match = mockWorkloads.workloads.find(
+        w => w.kind === fav.kind && w.namespace === fav.namespace && w.name === fav.name
+      )
+      if (match) {
+        // Workload favorites expose their own live status (kstatus vocab).
+        matchedResources.push({
+          kind: match.kind,
+          namespace: match.namespace,
+          name: match.name,
+          status: match.reconcilerStatus === 'Failed' ? 'Failed' : 'Current',
+          message: 'Replicas: 1',
+          lastReconciled: match.lastReconciled
+        })
+      }
+      continue
+    }
+
     const match = mockResources.resources.find(
       r => r.kind === fav.kind && r.namespace === fav.namespace && r.name === fav.name
     )

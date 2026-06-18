@@ -6,6 +6,7 @@ import { fetchWithMock } from '../../../utils/fetch'
 import { usePrismTheme } from '../common/yaml'
 import { formatTime } from '../../../utils/time'
 import { usePageMeta } from '../../../utils/meta'
+import { addToNavHistory } from '../../../utils/navHistory'
 import { ActionBar } from '../resource/ActionBar'
 import { WorkloadActionBar } from '../resource/WorkloadActionBar'
 import { WorkloadLogsAction } from './WorkloadLogsAction'
@@ -156,6 +157,11 @@ export function WorkloadPage({ kind, namespace, name }) {
 
   // Load Prism theme based on current app theme
   usePrismTheme()
+
+  // Track this workload visit in navigation history
+  useEffect(() => {
+    addToNavHistory(kind, namespace, name)
+  }, [kind, namespace, name])
 
   // Reset state when navigating to a different workload
   useEffect(() => {

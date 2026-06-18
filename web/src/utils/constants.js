@@ -175,6 +175,10 @@ export const workloadKinds = [
   'StatefulSet'
 ]
 
+// Combined list of Flux kinds and Kubernetes workload kinds, used for
+// dual-source search suggestions (resources + workloads).
+export const searchKinds = [...fluxKinds, ...workloadKinds]
+
 // Kubernetes workload API groups
 const workloadAPIGroups = ['apps/', 'batch/']
 

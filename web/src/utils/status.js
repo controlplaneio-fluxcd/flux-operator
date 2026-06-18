@@ -193,13 +193,61 @@ export function getEventBarColor(type) {
 }
 
 /**
+ * Normalize a status value to the Flux vocabulary (Ready/Failed/Progressing/
+ * Suspended/Unknown) used by status charts, filters, and borders. Kubernetes workload
+ * kstatus values are mapped to their Flux equivalents (Current/Idle -> Ready,
+ * InProgress -> Progressing, Terminating -> Suspended); Flux statuses and any
+ * unrecognized value pass through unchanged. Keep this in sync with
+ * getWorkloadStatusBadgeClass so badges, borders, and charts stay consistent.
+ * @param {string} status - Status value
+ * @returns {string} Status value in the Flux vocabulary
+ */
+export function normalizeToFluxStatus(status) {
+  switch (status) {
+  case 'Current':
+  case 'Idle':
+    return 'Ready'
+  case 'InProgress':
+    return 'Progressing'
+  case 'Terminating':
+    return 'Suspended'
+  default:
+    return status
+  }
+}
+
+/**
+ * Get dot color class for a Flux resource status.
+ * Aligns with resourceStatuses in constants.js; unknown/empty falls back to gray.
+ * @param {string} status - Status value (Ready, Failed, Progressing, Suspended, Unknown)
+ * @returns {string} Tailwind background color class for a status dot
+ */
+export function getStatusDotClass(status) {
+  switch (status) {
+  case 'Ready':
+    return 'bg-green-500'
+  case 'Failed':
+    return 'bg-red-500'
+  case 'Progressing':
+    return 'bg-blue-500'
+  case 'Suspended':
+    return 'bg-yellow-500'
+  default:
+    return 'bg-gray-500'
+  }
+}
+
+/**
  * Get border color class for resource status.
  * Uses semantic color classes (border-success, border-danger, etc.) for consistency.
- * @param {string} status - Status value (Ready, Failed, Progressing, Suspended, Unknown)
+ * Accepts both Flux resource statuses and Kubernetes workload kstatus values
+ * (normalized via normalizeToFluxStatus), so workload favorites render a border
+ * consistent with their status badge.
+ * @param {string} status - Status value
  * @returns {string} Tailwind CSS classes for the border
  */
 export function getStatusBorderClass(status) {
-  switch (status) {
+  switch (normalizeToFluxStatus(status)) {
   case 'Ready':
     return 'border-success'
   case 'Failed':

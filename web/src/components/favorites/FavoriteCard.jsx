@@ -1,16 +1,11 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { getStatusBadgeClass, getStatusBorderClass } from '../../utils/status'
+import { getStatusBadgeClass, getStatusBorderClass, getWorkloadStatusBadgeClass, formatWorkloadStatus } from '../../utils/status'
 import { formatTimestamp } from '../../utils/time'
 import { removeFavorite } from '../../utils/favorites'
-
-/**
- * Build URL path for a resource dashboard
- */
-function getResourceUrl(kind, namespace, name) {
-  return `/resource/${encodeURIComponent(kind)}/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}`
-}
+import { workloadKinds } from '../../utils/constants'
+import { getDashboardUrl } from '../../utils/routing'
 
 /**
  * FavoriteCard - Card displaying a favorite Flux resource
@@ -31,15 +26,21 @@ export function FavoriteCard({ favorite, resourceData }) {
     removeFavorite(kind, namespace, name)
   }
 
+  // Workload favorites carry kstatus vocab (Current/InProgress/…) and use a different
+  // badge helper than Flux resources.
+  const isWorkload = workloadKinds.includes(kind)
+
   // Resource may not be found (deleted from cluster)
   const notFound = resourceData?.status === 'NotFound'
   const status = notFound ? 'Not Found' : (resourceData?.status || 'Unknown')
+  const displayStatus = notFound ? status : (isWorkload ? formatWorkloadStatus(status) : status)
+  const badgeClass = isWorkload ? getWorkloadStatusBadgeClass(status) : getStatusBadgeClass(status)
   const lastReconciled = resourceData?.lastReconciled
   const message = resourceData?.message
 
   return (
     <a
-      href={getResourceUrl(kind, namespace, name)}
+      href={getDashboardUrl(kind, namespace, name)}
       class={`card border-l-4 p-4 hover:shadow-md transition-shadow dark:shadow-none cursor-pointer text-left w-full block ${getStatusBorderClass(status)} ${notFound ? 'opacity-60' : ''}`}
     >
       {/* Header row: star + kind + status badge */}
@@ -58,8 +59,8 @@ export function FavoriteCard({ favorite, resourceData }) {
           <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
             {kind}
           </span>
-          <span class={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${notFound ? 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400' : getStatusBadgeClass(status)}`}>
-            {status}
+          <span class={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${notFound ? 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400' : badgeClass}`}>
+            {displayStatus}
           </span>
         </div>
       </div>
