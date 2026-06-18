@@ -393,6 +393,7 @@ func TestGetReport_CachedAndPrivileged(t *testing.T) {
 		statusManager: "test-status-manager",
 		namespace:     "flux-system",
 		searchIndex:   &SearchIndex{},
+		workloadIndex: &WorkloadIndex{},
 	}
 
 	// Start report cache.

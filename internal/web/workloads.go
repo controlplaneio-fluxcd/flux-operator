@@ -11,6 +11,8 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
 )
 
 // WorkloadItem represents a single workload request.
@@ -116,4 +118,90 @@ func (h *Handler) GetWorkloadsStatus(ctx context.Context, workloads []WorkloadIt
 	wg.Wait()
 
 	return result
+}
+
+// WorkloadsListHandler handles GET /api/v1/workloads requests and returns the
+// Flux-managed workloads (Deployment, StatefulSet, DaemonSet, CronJob) from the
+// cached, inventory-derived workload index, filtered by the user's namespace
+// access. Supports optional query parameters: kind, name, namespace.
+// Example: /api/v1/workloads?kind=Deployment&namespace=flux-system
+func (h *Handler) WorkloadsListHandler(w http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodGet && req.Method != http.MethodHead {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse query parameters.
+	queryParams := req.URL.Query()
+	kind := queryParams.Get("kind")
+	name := queryParams.Get("name")
+	namespace := queryParams.Get("namespace")
+
+	// Query the cached workload index with RBAC filtering.
+	workloads := h.GetCachedWorkloads(req.Context(), kind, name, namespace, 2500)
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(map[string]any{"workloads": workloads}); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+// WorkloadsSearchHandler handles GET /api/v1/workloads/search requests and
+// returns Flux-managed workloads from the cached workload index for the global
+// quick-search. Results are filtered by name with wildcard support and capped at
+// a small limit. Supports optional query parameters: kind, name, namespace.
+// Example: /api/v1/workloads/search?name=podinfo
+func (h *Handler) WorkloadsSearchHandler(w http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodGet && req.Method != http.MethodHead {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse query parameters.
+	queryParams := req.URL.Query()
+	name := queryParams.Get("name")
+	namespace := queryParams.Get("namespace")
+	kind := queryParams.Get("kind")
+
+	// If name does not contain a wildcard, wrap it to perform a partial match.
+	if name != "" && !hasWildcard(name) {
+		name = "*" + name + "*"
+	}
+
+	// Query the cached workload index with RBAC filtering.
+	workloads := h.GetCachedWorkloads(req.Context(), kind, name, namespace, 10)
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(map[string]any{"workloads": workloads}); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+// GetCachedWorkloads returns workloads from the cached workload index filtered
+// by the given criteria and the user's namespace access. If name and namespace
+// filters are empty, it returns workloads across all namespaces the user can
+// access (subject to RBAC on the parent reconcilers via ListUserNamespaces).
+func (h *Handler) GetCachedWorkloads(ctx context.Context, kind, name, namespace string, limit int) []reporter.WorkloadRef {
+	// Get user-visible namespaces for RBAC filtering.
+	userNamespaces, allNamespaces, err := h.kubeClient.ListUserNamespaces(ctx)
+	if err != nil {
+		log.FromContext(ctx).Error(err, "failed to list user namespaces for cached workloads")
+		return []reporter.WorkloadRef{}
+	}
+
+	// If the user has no access to any namespace, return empty results.
+	if !allNamespaces && len(userNamespaces) == 0 {
+		return []reporter.WorkloadRef{}
+	}
+
+	// For cluster-wide access, pass nil (no RBAC filtering).
+	// Otherwise, pass the user's namespace list.
+	var allowedNamespaces []string
+	if !allNamespaces {
+		allowedNamespaces = userNamespaces
+	}
+
+	return h.workloadIndex.SearchWorkloads(allowedNamespaces, kind, name, namespace, limit)
 }

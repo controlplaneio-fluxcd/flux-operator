@@ -34,6 +34,9 @@ type Handler struct {
 
 	// Search index
 	searchIndex *SearchIndex
+
+	// Workload index
+	workloadIndex *WorkloadIndex
 }
 
 // NewHandler creates a new handler for the web server.
@@ -55,6 +58,7 @@ func NewHandler(ctx context.Context, conf *fluxcdv1.WebConfigSpec, spaHandler ht
 		statusManager: statusManager,
 		namespace:     namespace,
 		searchIndex:   &SearchIndex{},
+		workloadIndex: &WorkloadIndex{},
 	}
 
 	// Create HTTP request multiplexer.
@@ -75,6 +79,8 @@ func NewHandler(ctx context.Context, conf *fluxcdv1.WebConfigSpec, spaHandler ht
 	mux.HandleFunc("GET /api/v1/workload", h.WorkloadHandler)
 	mux.HandleFunc("GET /api/v1/workload/logs", h.WorkloadLogsHandler)
 	mux.HandleFunc("POST /api/v1/workload/action", h.WorkloadActionHandler)
+	mux.HandleFunc("GET /api/v1/workloads", h.WorkloadsListHandler)
+	mux.HandleFunc("GET /api/v1/workloads/search", h.WorkloadsSearchHandler)
 	mux.HandleFunc("POST /api/v1/workloads", h.WorkloadsHandler)
 
 	// Wrap the mux with middlewares to produce the final handler.

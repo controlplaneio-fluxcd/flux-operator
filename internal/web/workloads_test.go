@@ -4,6 +4,9 @@
 package web
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -12,6 +15,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
 
@@ -726,4 +730,200 @@ func TestGetWorkloadsStatus_DaemonSet(t *testing.T) {
 	g.Expect(results[0].Name).To(Equal("test-daemonset"))
 	g.Expect(results[0].Kind).To(Equal("DaemonSet"))
 	g.Expect(results[0].Status).NotTo(Equal("NotFound"))
+}
+
+func newWorkloadIndexHandler() *Handler {
+	return &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+		workloadIndex: &WorkloadIndex{},
+	}
+}
+
+func TestGetCachedWorkloads_Privileged(t *testing.T) {
+	g := NewWithT(t)
+
+	handler := newWorkloadIndexHandler()
+	handler.workloadIndex.Update([]reporter.WorkloadRef{
+		{Kind: "Deployment", Name: "web", Namespace: "default", ReconcilerKind: "Kustomization", ReconcilerName: "apps", ReconcilerNamespace: "flux-system", ReconcilerStatus: reporter.StatusReady, LastReconciled: metav1.Now()},
+		{Kind: "CronJob", Name: "backup", Namespace: "team-a", ReconcilerKind: "Kustomization", ReconcilerName: "apps", ReconcilerNamespace: "flux-system", ReconcilerStatus: reporter.StatusReady, LastReconciled: metav1.Now()},
+	})
+
+	// Privileged context (no user session) = cluster-wide access.
+	workloads := handler.GetCachedWorkloads(ctx, "", "", "", 100)
+	g.Expect(workloads).To(HaveLen(2))
+}
+
+func TestGetCachedWorkloads_UnprivilegedUser(t *testing.T) {
+	g := NewWithT(t)
+
+	handler := newWorkloadIndexHandler()
+	handler.workloadIndex.Update([]reporter.WorkloadRef{
+		{Kind: "Deployment", Name: "web", Namespace: "default", LastReconciled: metav1.Now()},
+	})
+
+	imp := user.Impersonation{
+		Username: "unprivileged-workload-list-user",
+		Groups:   []string{"unprivileged-group"},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile:       user.Profile{Name: "Unprivileged User"},
+		Impersonation: imp,
+	}, userClient)
+
+	workloads := handler.GetCachedWorkloads(userCtx, "", "", "", 100)
+	g.Expect(workloads).To(BeEmpty(), "unprivileged user should get empty result")
+}
+
+func TestGetCachedWorkloads_WithUserRBAC(t *testing.T) {
+	g := NewWithT(t)
+
+	// Grant the user get/list on resourcesets in the default namespace, which is
+	// what ListUserNamespaces uses to reveal namespaces.
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cached-workloads-reader",
+			Namespace: "default",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"fluxcd.controlplane.io"},
+				Resources: []string{"resourcesets"},
+				Verbs:     []string{"get", "list"},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, role)).To(Succeed())
+	defer func() { g.Expect(testClient.Delete(ctx, role)).To(Succeed()) }()
+
+	roleBinding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cached-workloads-reader-binding",
+			Namespace: "default",
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     role.Name,
+		},
+		Subjects: []rbacv1.Subject{
+			{Kind: "User", Name: "cached-workloads-user"},
+		},
+	}
+	g.Expect(testClient.Create(ctx, roleBinding)).To(Succeed())
+	defer func() { g.Expect(testClient.Delete(ctx, roleBinding)).To(Succeed()) }()
+
+	handler := newWorkloadIndexHandler()
+	handler.workloadIndex.Update([]reporter.WorkloadRef{
+		{Kind: "Deployment", Name: "web-default", Namespace: "default", LastReconciled: metav1.Now()},
+		{Kind: "Deployment", Name: "web-other", Namespace: "other-ns", LastReconciled: metav1.Now()},
+	})
+
+	imp := user.Impersonation{
+		Username: "cached-workloads-user",
+		Groups:   []string{"system:authenticated"},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile:       user.Profile{Name: "Cached Workloads User"},
+		Impersonation: imp,
+	}, userClient)
+
+	workloads := handler.GetCachedWorkloads(userCtx, "", "", "", 100)
+	g.Expect(workloads).To(HaveLen(1))
+	g.Expect(workloads[0].Name).To(Equal("web-default"))
+	g.Expect(workloads[0].Namespace).To(Equal("default"))
+}
+
+func TestWorkloadsListHandler_MethodNotAllowed(t *testing.T) {
+	g := NewWithT(t)
+
+	handler := newWorkloadIndexHandler()
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/workloads", nil)
+	rec := httptest.NewRecorder()
+	handler.WorkloadsListHandler(rec, req)
+
+	g.Expect(rec.Code).To(Equal(http.StatusMethodNotAllowed))
+}
+
+func TestWorkloadsListHandler_ReturnsWorkloads(t *testing.T) {
+	g := NewWithT(t)
+
+	handler := newWorkloadIndexHandler()
+	handler.workloadIndex.Update([]reporter.WorkloadRef{
+		{Kind: "Deployment", Name: "web", Namespace: "default", ReconcilerKind: "Kustomization", ReconcilerName: "apps", ReconcilerNamespace: "flux-system", ReconcilerStatus: reporter.StatusReady, LastReconciled: metav1.Now()},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/workloads", nil).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	handler.WorkloadsListHandler(rec, req)
+
+	g.Expect(rec.Code).To(Equal(http.StatusOK))
+
+	var response map[string]any
+	g.Expect(json.Unmarshal(rec.Body.Bytes(), &response)).To(Succeed())
+
+	workloads, ok := response["workloads"].([]any)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(workloads).To(HaveLen(1))
+
+	wl := workloads[0].(map[string]any)
+	g.Expect(wl["kind"]).To(Equal("Deployment"))
+	g.Expect(wl["name"]).To(Equal("web"))
+	g.Expect(wl["namespace"]).To(Equal("default"))
+	g.Expect(wl["reconcilerKind"]).To(Equal("Kustomization"))
+	g.Expect(wl["reconcilerName"]).To(Equal("apps"))
+	g.Expect(wl["reconcilerNamespace"]).To(Equal("flux-system"))
+	g.Expect(wl["reconcilerStatus"]).To(Equal(reporter.StatusReady))
+}
+
+func TestWorkloadsListHandler_EmptyIndex(t *testing.T) {
+	g := NewWithT(t)
+
+	handler := newWorkloadIndexHandler()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/workloads", nil).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	handler.WorkloadsListHandler(rec, req)
+
+	g.Expect(rec.Code).To(Equal(http.StatusOK))
+
+	var response map[string]any
+	g.Expect(json.Unmarshal(rec.Body.Bytes(), &response)).To(Succeed())
+
+	workloads, ok := response["workloads"].([]any)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(workloads).To(BeEmpty(), "empty index should return empty array, not null")
+}
+
+func TestWorkloadsSearchHandler_WildcardExpansion(t *testing.T) {
+	g := NewWithT(t)
+
+	handler := newWorkloadIndexHandler()
+	handler.workloadIndex.Update([]reporter.WorkloadRef{
+		{Kind: "Deployment", Name: "podinfo", Namespace: "default", LastReconciled: metav1.Now()},
+		{Kind: "Deployment", Name: "podinfo-cache", Namespace: "default", LastReconciled: metav1.Now()},
+		{Kind: "Deployment", Name: "other", Namespace: "default", LastReconciled: metav1.Now()},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/workloads/search?name=podinfo", nil).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	handler.WorkloadsSearchHandler(rec, req)
+
+	g.Expect(rec.Code).To(Equal(http.StatusOK))
+
+	var response map[string]any
+	g.Expect(json.Unmarshal(rec.Body.Bytes(), &response)).To(Succeed())
+
+	workloads, ok := response["workloads"].([]any)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(workloads).To(HaveLen(2), "should match both podinfo and podinfo-cache")
 }

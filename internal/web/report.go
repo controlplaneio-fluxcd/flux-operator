@@ -147,6 +147,9 @@ func (h *Handler) refreshReportCache(ctx context.Context) {
 
 	// Update the search index from the reporter's resource statuses.
 	h.searchIndex.Update(computeResult.Resources)
+
+	// Update the workload index from the reporter's inventory-derived workloads.
+	h.workloadIndex.Update(computeResult.Workloads)
 }
 
 // getCachedReport returns the cached report if available.
