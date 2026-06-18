@@ -14,6 +14,8 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
+
+	"github.com/fluxcd/pkg/apis/kustomize"
 )
 
 // requireEqualStrings compares two strings and fails the test with a
@@ -139,6 +141,13 @@ func TestPatchInstanceCmd_Mock(t *testing.T) {
 			extraArgs:    []string{"-c", "kustomize-controller"},
 		},
 		{
+			name:         "remove scoped to one component preserves others",
+			input:        "input-with-mixed-patches.yaml",
+			goldenOutput: "golden-mock-output-rm.txt",
+			goldenYAML:   "golden-rm-mixed.yaml",
+			extraArgs:    []string{"-c", "kustomize-controller", "--rm"},
+		},
+		{
 			name:         "version main",
 			input:        "input-no-kustomize.yaml",
 			goldenOutput: "golden-mock-output-main.txt",
@@ -213,6 +222,197 @@ func TestPatchInstanceCmd_Mock(t *testing.T) {
 			golden, err := os.ReadFile(filepath.Join("testdata/patch_instance", tt.goldenYAML))
 			g.Expect(err).ToNot(HaveOccurred())
 			requireEqualStrings(t, string(result), string(golden))
+		})
+	}
+}
+
+func TestIsGeneratedPatchForComponents(t *testing.T) {
+	const (
+		imageOp = "- op: replace\n  path: /spec/template/spec/containers/0/image\n  value: ghcr.io/fluxcd/kustomize-controller:v1.8.0\n"
+		argsOp  = "- op: add\n  path: /spec/template/spec/containers/0/args/-\n  value: --log-level=debug\n"
+		crdOp   = "- op: remove\n  path: /spec/versions/1\n"
+		crdName = "kustomizations.kustomize.toolkit.fluxcd.io"
+	)
+	components := []string{"kustomize-controller"}
+
+	tests := []struct {
+		name  string
+		patch kustomize.Patch
+		want  bool
+	}{
+		{
+			name:  "generated image patch",
+			patch: kustomize.Patch{Patch: imageOp, Target: &kustomize.Selector{Kind: "Deployment", Name: "kustomize-controller"}},
+			want:  true,
+		},
+		{
+			name:  "user args patch on same target is preserved",
+			patch: kustomize.Patch{Patch: argsOp, Target: &kustomize.Selector{Kind: "Deployment", Name: "kustomize-controller"}},
+			want:  false,
+		},
+		{
+			name:  "image patch for non-selected component",
+			patch: kustomize.Patch{Patch: imageOp, Target: &kustomize.Selector{Kind: "Deployment", Name: "source-controller"}},
+			want:  false,
+		},
+		{
+			name:  "image patch with extra namespace selector is user-authored",
+			patch: kustomize.Patch{Patch: imageOp, Target: &kustomize.Selector{Kind: "Deployment", Name: "kustomize-controller", Namespace: "flux-system"}},
+			want:  false,
+		},
+		{
+			name:  "image patch with extra label selector is user-authored",
+			patch: kustomize.Patch{Patch: imageOp, Target: &kustomize.Selector{Kind: "Deployment", Name: "kustomize-controller", LabelSelector: "app=foo"}},
+			want:  false,
+		},
+		{
+			name:  "image patch bundled with another op is user-authored",
+			patch: kustomize.Patch{Patch: imageOp + argsOp, Target: &kustomize.Selector{Kind: "Deployment", Name: "kustomize-controller"}},
+			want:  false,
+		},
+		{
+			name:  "generated CRD patch",
+			patch: kustomize.Patch{Patch: crdOp, Target: &kustomize.Selector{Kind: "CustomResourceDefinition", Name: crdName}},
+			want:  true,
+		},
+		{
+			name:  "user strategic-merge CRD patch is preserved",
+			patch: kustomize.Patch{Patch: "spec:\n  conversion:\n    strategy: None\n", Target: &kustomize.Selector{Kind: "CustomResourceDefinition", Name: crdName}},
+			want:  false,
+		},
+		{
+			name:  "CRD patch for CRD not owned by selected component",
+			patch: kustomize.Patch{Patch: crdOp, Target: &kustomize.Selector{Kind: "CustomResourceDefinition", Name: "alerts.notification.toolkit.fluxcd.io"}},
+			want:  false,
+		},
+		{
+			name:  "unrelated kind",
+			patch: kustomize.Patch{Patch: imageOp, Target: &kustomize.Selector{Kind: "ConfigMap", Name: "kustomize-controller"}},
+			want:  false,
+		},
+		{
+			name:  "nil target",
+			patch: kustomize.Patch{Patch: imageOp},
+			want:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			g.Expect(isGeneratedPatchForComponents(tt.patch, components)).To(Equal(tt.want))
+		})
+	}
+}
+
+func TestPatchInstanceCmd_Remove(t *testing.T) {
+	const header = `apiVersion: fluxcd.controlplane.io/v1
+kind: FluxInstance
+metadata:
+  name: flux
+  namespace: flux-system
+spec:
+  distribution:
+    version: "2.7.0"
+    registry: "ghcr.io/fluxcd"
+  components:
+    - kustomize-controller
+  kustomize:
+    patches:
+`
+	userArgsPatch := `    - patch: |
+        - op: add
+          path: /spec/template/spec/containers/0/args/-
+          value: --log-level=debug
+      target:
+        kind: Deployment
+        name: kustomize-controller
+`
+	generatedImagePatch := `    - patch: |
+        - op: replace
+          path: /spec/template/spec/containers/0/image
+          value: ghcr.io/fluxcd/kustomize-controller:v1.8.0
+      target:
+        kind: Deployment
+        name: kustomize-controller
+`
+	generatedCRDPatch := `    - patch: |
+        - op: remove
+          path: /spec/versions/1
+      target:
+        kind: CustomResourceDefinition
+        name: kustomizations.kustomize.toolkit.fluxcd.io
+`
+	userMergeCRDPatch := `    - patch: |
+        spec:
+          conversion:
+            strategy: None
+      target:
+        kind: CustomResourceDefinition
+        name: kustomizations.kustomize.toolkit.fluxcd.io
+`
+	noKustomize := `apiVersion: fluxcd.controlplane.io/v1
+kind: FluxInstance
+metadata:
+  name: flux
+  namespace: flux-system
+spec:
+  distribution:
+    version: "2.7.0"
+    registry: "ghcr.io/fluxcd"
+  components:
+    - kustomize-controller
+`
+
+	tests := []struct {
+		name       string
+		input      string
+		want       string // expected file content; empty means unchanged
+		wantOutput string
+	}{
+		{
+			name:       "removes generated patches but keeps user patch on same target",
+			input:      header + userArgsPatch + generatedImagePatch + generatedCRDPatch,
+			want:       header + userArgsPatch,
+			wantOutput: "Removed 2 patches",
+		},
+		{
+			name:       "keeps user strategic-merge CRD patch, removes generated image",
+			input:      header + userMergeCRDPatch + generatedImagePatch,
+			want:       header + userMergeCRDPatch,
+			wantOutput: "Removed 1 patches",
+		},
+		{
+			name:       "no generated patches found leaves file unchanged",
+			input:      header + userArgsPatch,
+			wantOutput: "No generated patches found",
+		},
+		{
+			name:       "no kustomize section",
+			input:      noKustomize,
+			wantOutput: "No patches to remove",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			validatePatchedInstance = func(_ string) error { return nil }
+
+			tmpFile := filepath.Join(t.TempDir(), "instance.yaml")
+			g.Expect(os.WriteFile(tmpFile, []byte(tt.input), 0644)).To(Succeed())
+
+			output, err := executeCommand([]string{"patch", "instance", "-f", tmpFile, "-c", "kustomize-controller", "--rm"})
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(output).To(ContainSubstring(tt.wantOutput))
+
+			result, err := os.ReadFile(tmpFile)
+			g.Expect(err).ToNot(HaveOccurred())
+			want := tt.want
+			if want == "" {
+				want = tt.input
+			}
+			requireEqualStrings(t, string(result), want)
 		})
 	}
 }

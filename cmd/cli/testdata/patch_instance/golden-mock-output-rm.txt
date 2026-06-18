@@ -1,0 +1,3 @@
+✔ Removed 2 patches from %s
+◎ Validating patched instance...
+✔ Validation passed
