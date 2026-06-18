@@ -210,6 +210,79 @@ Users do not need cluster-wide `list` permissions on namespaces just to populate
 
 ---
 
+## 9. Inventory-Derived Workloads Index
+
+**Where:** The Workloads page and the global quick-search workload results.
+
+**Internal operation:**
+The system extracts the Kubernetes workloads (Deployment, StatefulSet,
+DaemonSet, CronJob) managed by every Flux applier from the appliers'
+`status.inventory.entries`, during the same privileged background pass that
+builds the dashboard report. No additional cluster queries (and therefore no
+`apps`/`batch` RBAC on the operator) are performed.
+
+**How it works:**
+While building the `FluxReport`, the reporter already lists every applier
+reconciler (FluxInstance, Kustomization, HelmRelease, ResourceSet) as a full
+object. Each applier's inventory enumerates the objects it manages with their
+GVK and namespace/name. The reporter keeps the workload-kind entries, stamps
+each with the owning reconciler's reference and status, and caches them in a
+workload index. When a user requests the Workloads page, the cached index is
+served filtered to the namespaces the user can access — the same per-namespace
+`get resourcesets` gate used for the dashboard
+(see [Namespace Visibility](#8-namespace-visibility)). There is **no
+live-query fallback**: the page is served exclusively from this privileged,
+inventory-derived index.
+
+**Least privilege benefit:**
+A user with Flux read access in a namespace (can `get resourcesets`) can
+enumerate all Deployment/StatefulSet/DaemonSet/CronJob **names** managed by Flux
+in that namespace **without** holding any `apps`/`batch` RBAC. The index never
+exposes workload spec, status conditions, pod data, or secrets — only the
+workload identity (kind, namespace, name, apiVersion) and the parent
+reconciler reference.
+
+**Security consequences to be aware of:**
+
+- Each workload row exposes its parent reconciler's **name and status badge**
+  (`Ready`/`Failed`/`Progressing`/`Suspended`/`Unknown`) — never the reconciler
+  message — even when that reconciler lives in a namespace the user cannot
+  otherwise access. The workload itself carries no status in the index; per-workload
+  live status is only fetched on the workload detail page and in Favorites.
+- **Remote-cluster appliers are excluded.** Kustomizations and HelmReleases with
+  `spec.kubeConfig` set target a remote cluster, so their workloads do not exist
+  locally; they are skipped during extraction to avoid broken links and remote
+  metadata exposure.
+- **HelmRelease on Flux ≤ 2.7 caveat.** Older HelmReleases store their inventory
+  in a Helm storage secret rather than `status.inventory.entries`. The index does
+  **not** read that secret (doing so would defeat the inventory-only, no-extra-RBAC
+  design), so HelmRelease-managed workloads on Flux ≤ 2.7 are absent from the
+  Workloads list and quick-search. They remain visible on the resource
+  detail/inventory page, which does perform the storage-secret read on demand
+  using the user's own client.
+- **Favorites use the user's own client.** When a workload is marked as a
+  favorite, its live status is fetched with the user's impersonated client and a
+  lightweight `kstatus` computation on the fetched object alone. Real `apps`/`batch`
+  `get` RBAC therefore applies to favorites. The lightweight status path needs only
+  `get` on the workload — it does **not** list pods — so a user who can `get` the
+  workload but not `list pods` still sees a valid status instead of `NotFound`.
+
+**API endpoints:**
+
+- `GET /api/v1/workloads?kind=&name=&namespace=` — returns the inventory-derived,
+  namespace-filtered list of workloads as `{ "workloads": [WorkloadRef, ...] }`.
+  Each `WorkloadRef` has the shape:
+  `{ "kind", "name", "namespace", "apiVersion", "reconcilerKind",
+  "reconcilerNamespace", "reconcilerName", "reconcilerStatus", "lastReconciled" }`.
+  `name` supports wildcards (`*`); `kind` and `namespace` are exact matches.
+  This route is distinct from the existing `POST /api/v1/workloads`, which
+  returns live workload status for the detail/inventory views.
+- `GET /api/v1/workloads/search?name=&namespace=&kind=` — the quick-search
+  variant of the above. A `name` without a wildcard is wrapped as `*name*` for a
+  partial match and results are capped at a small limit. Same response shape.
+
+---
+
 ## Summary
 
 | # | Feature | Internal Operation | Data Exposed to User |
@@ -222,3 +295,4 @@ Users do not need cluster-wide `list` permissions on namespaces just to populate
 | 6 | Controller metrics | System reads metrics API | CPU/memory usage of Flux controllers |
 | 7 | Fine-Grained GitOps Actions | System patches resource | None (server-side mutation only) |
 | 8 | Namespace visibility | System lists namespaces | Visible namespace names |
+| 9 | Workloads index | System extracts workloads from applier inventories | Workload identity + parent reconciler name/status, filtered by user namespace |
