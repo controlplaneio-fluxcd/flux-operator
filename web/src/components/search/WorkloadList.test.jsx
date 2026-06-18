@@ -37,6 +37,19 @@ vi.mock('preact-iso', () => ({
   })
 }))
 
+// Mock WorkloadDetailsView component to simplify testing
+vi.mock('./WorkloadDetailsView', () => ({
+  WorkloadDetailsView: ({ kind, name, namespace, isExpanded }) => (
+    isExpanded ? (
+      <div data-testid="workload-details-view">
+        <span data-testid="workload-details-view-kind">{kind}</span>
+        <span data-testid="workload-details-view-name">{name}</span>
+        <span data-testid="workload-details-view-namespace">{namespace}</span>
+      </div>
+    ) : null
+  )
+}))
+
 // Mock FilterForm to capture props (no statusSignal, flat kinds)
 vi.mock('./FilterForm', () => ({
   FilterForm: ({ onClear, kindSignal, nameSignal, namespaceSignal, statusSignal, kinds }) => (
@@ -240,6 +253,46 @@ describe('WorkloadList', () => {
       })
 
       expect(screen.queryByText('should not appear')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('Details panel', () => {
+    it('should display a details toggle for every workload', async () => {
+      fetchWithMock.mockResolvedValue({ workloads: mockWorkloads })
+
+      render(<WorkloadList />)
+
+      await waitFor(() => {
+        expect(screen.getAllByText('Details')).toHaveLength(2)
+      })
+    })
+
+    it('should keep the details view collapsed by default', async () => {
+      fetchWithMock.mockResolvedValue({ workloads: mockWorkloads })
+
+      render(<WorkloadList />)
+
+      await waitFor(() => {
+        expect(screen.getByText('podinfo')).toBeInTheDocument()
+      })
+
+      expect(screen.queryByTestId('workload-details-view')).not.toBeInTheDocument()
+    })
+
+    it('should expand WorkloadDetailsView with the workload identity when toggled', async () => {
+      fetchWithMock.mockResolvedValue({ workloads: [mockWorkloads[0]] })
+
+      render(<WorkloadList />)
+
+      const detailsToggle = await screen.findByText('Details')
+      fireEvent.click(detailsToggle)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('workload-details-view')).toBeInTheDocument()
+      })
+      expect(screen.getByTestId('workload-details-view-kind')).toHaveTextContent('Deployment')
+      expect(screen.getByTestId('workload-details-view-name')).toHaveTextContent('podinfo')
+      expect(screen.getByTestId('workload-details-view-namespace')).toHaveTextContent('apps')
     })
   })
 

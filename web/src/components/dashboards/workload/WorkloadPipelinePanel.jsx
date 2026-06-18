@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { formatWorkloadStatus } from '../../../utils/status'
+import { summarizePods } from '../../../utils/pods'
 
 /**
  * Get border color class for pipeline node status.
@@ -25,60 +26,6 @@ function getStatusBorderClass(status) {
   default:
     return 'border border-gray-400 dark:border-gray-500'
   }
-}
-
-/**
- * Check if a pod is truly ready using the Kubernetes Ready condition.
- * Falls back to checking the pod phase when podStatus is not available.
- * @param {object} pod - Pod object with status and optional podStatus
- * @returns {boolean} true if the pod is ready
- */
-function isPodReady(pod) {
-  // Use the Ready condition from podStatus when available (detail endpoint)
-  if (pod.podStatus?.conditions) {
-    return pod.podStatus.conditions.some(c => c.type === 'Ready' && c.status === 'True')
-  }
-  // Fallback: treat Running as ready when podStatus is not available
-  return pod.status === 'Running' || pod.status === 'Succeeded'
-}
-
-/**
- * Compute the aggregated pod status for the Pods pipeline node.
- * For CronJobs, success means all pods succeeded (no failures).
- * For other workloads, uses the Kubernetes Ready condition to determine readiness.
- * @param {Array} pods - Array of pod objects with status field
- * @param {boolean} isCronJob - Whether the parent workload is a CronJob
- * @returns {string} Aggregated status: Ready, Failed, Progressing, or Unknown
- */
-function getPodAggregateStatus(pods, isCronJob) {
-  if (!pods || pods.length === 0) return 'Unknown'
-  const hasAnyFailed = pods.some(p => p.status === 'Failed')
-  if (hasAnyFailed) return 'Failed'
-  if (isCronJob) {
-    const allCompleted = pods.every(p => p.status === 'Succeeded')
-    if (allCompleted) return 'Ready'
-  } else {
-    if (pods.every(p => isPodReady(p))) return 'Ready'
-  }
-  return 'Progressing'
-}
-
-/**
- * Build a human-readable summary of pod phases (e.g. "2 running", "1 running, 1 pending").
- * Groups pods by lowercase phase and joins counts with commas.
- * @param {Array} pods - Array of pod objects with status field
- * @returns {string} Phase summary string
- */
-function getPodPhaseSummary(pods) {
-  if (!pods || pods.length === 0) return ''
-  const counts = {}
-  for (const pod of pods) {
-    const phase = (pod.status || 'Unknown').toLowerCase()
-    counts[phase] = (counts[phase] || 0) + 1
-  }
-  return Object.entries(counts)
-    .map(([phase, count]) => `${count} ${phase}`)
-    .join(', ')
 }
 
 /**
@@ -247,29 +194,14 @@ export function WorkloadPipelinePanel({ reconciler, kind, name, workloadStatus, 
   )
 
   // Pods node — CronJobs care about completion, other workloads care about readiness
-  const isCronJob = kind === 'CronJob'
-  const podCount = pods?.length || 0
-  const podStatus = getPodAggregateStatus(pods, isCronJob)
-  let podName, podSubtext
-  if (podCount === 0) {
-    podName = isCronJob ? 'No active pods' : 'Scaled to zero'
-    podSubtext = '0 pods'
-  } else if (isCronJob) {
-    const completedCount = pods.filter(p => p.status === 'Succeeded' || p.status === 'Failed').length
-    podName = `${completedCount}/${podCount} completed`
-    podSubtext = getPodPhaseSummary(pods)
-  } else {
-    const readyCount = pods.filter(p => isPodReady(p)).length
-    podName = `${readyCount}/${podCount} ready`
-    podSubtext = getPodPhaseSummary(pods)
-  }
-  nodeStatuses.push(podStatus)
+  const podSummary = summarizePods(pods, kind)
+  nodeStatuses.push(podSummary.status)
   nodes.push(
     <PipelineNode
       kind="Pods"
-      name={podName}
-      subtext={podSubtext}
-      status={podStatus}
+      name={podSummary.primary}
+      subtext={podSummary.detail}
+      status={podSummary.status}
     />
   )
 

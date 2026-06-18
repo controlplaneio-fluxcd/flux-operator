@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { signal } from '@preact/signals'
-import { useEffect } from 'preact/hooks'
+import { useEffect, useState } from 'preact/hooks'
 import { fetchWithMock } from '../../utils/fetch'
 import { formatTimestamp } from '../../utils/time'
 import { getStatusDotClass } from '../../utils/status'
@@ -10,6 +10,7 @@ import { usePageMeta } from '../../utils/meta'
 import { workloadKinds } from '../../utils/constants'
 import { reportData } from '../../app'
 import { FilterForm } from './FilterForm'
+import { WorkloadDetailsView } from './WorkloadDetailsView'
 import { useRestoreFiltersFromUrl, useSyncFiltersToUrl, getDashboardUrl } from '../../utils/routing'
 import { useInfiniteScroll } from '../../utils/scroll'
 import { isFavorite, toggleFavorite, favorites } from '../../utils/favorites'
@@ -64,6 +65,9 @@ export async function fetchWorkloadsStatus() {
  * - Favorite star button (writes via the kind-agnostic favorites store)
  */
 function WorkloadCard({ workload }) {
+  // Lazy-loaded inline details panel (collapsed by default)
+  const [isDetailsExpanded, setIsDetailsExpanded] = useState(false)
+
   // Check if workload is a favorite (reactive via favorites signal)
   const isFavorited = favorites.value && isFavorite(workload.kind, workload.namespace, workload.name)
 
@@ -129,6 +133,31 @@ function WorkloadCard({ workload }) {
         <span class={`w-2 h-2 rounded-full flex-shrink-0 ${getStatusDotClass(workload.reconcilerStatus)}`} />
         <span class="truncate min-w-0">{workload.reconcilerKind}/{workload.reconcilerNamespace}/{workload.reconcilerName}</span>
       </div>
+
+      {/* Details Panel - Overview/Spec/Status (lazy loaded on expand) */}
+      <div class="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+        <button
+          onClick={() => setIsDetailsExpanded(!isDetailsExpanded)}
+          class="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-300 hover:text-flux-blue dark:hover:text-blue-400 focus:outline-none transition-colors"
+        >
+          <svg
+            class={`w-4 h-4 transition-transform ${isDetailsExpanded ? 'rotate-90' : ''}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+          </svg>
+          <span class="font-medium">Details</span>
+        </button>
+      </div>
+
+      <WorkloadDetailsView
+        kind={workload.kind}
+        name={workload.name}
+        namespace={workload.namespace}
+        isExpanded={isDetailsExpanded}
+      />
     </div>
   )
 }

@@ -266,6 +266,14 @@ reconciler reference.
   `get` RBAC therefore applies to favorites. The lightweight status path needs only
   `get` on the workload — it does **not** list pods — so a user who can `get` the
   workload but not `list pods` still sees a valid status instead of `NotFound`.
+- **Inline details use the user's own client.** Each row on the Workloads list
+  offers an expandable, read-only detail panel (Overview / Specification /
+  Status) that lazy-loads on first expand from the existing RBAC-enforced
+  `GET /api/v1/workload` endpoint — the same endpoint the full workload dashboard
+  uses. It requires no new permissions: a user who cannot `get` the workload in
+  its namespace sees a not-found/forbidden state instead. Pod listing, events,
+  and actions are intentionally excluded from this inline panel and remain on the
+  full workload dashboard.
 
 **API endpoints:**
 
