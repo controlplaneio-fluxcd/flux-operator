@@ -132,6 +132,15 @@ const mockWorkloads = {
         createdAt: getTimestamp(5, 8, 45),
         podStatus: {
           phase: 'Running',
+          initContainerStatuses: [
+            {
+              name: 'setup',
+              ready: true,
+              restartCount: 0,
+              imageID: 'ghcr.io/fluxcd/flux-cli:v2.7.2@sha256:6e1c7c1a3a8f5b4d2e1f0a9c8b7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c9d8',
+              state: { terminated: { reason: 'Completed', exitCode: 0, startedAt: getTimestamp(5, 8, 46), finishedAt: getTimestamp(5, 8, 45) } }
+            }
+          ],
           containerStatuses: [
             {
               name: 'manager',
@@ -629,13 +638,23 @@ export function getMockWorkloadLogs(endpoint) {
   const queryString = endpoint.includes('?') ? endpoint.split('?')[1] : ''
   const params = new URLSearchParams(queryString)
   const name = params.get('name') || 'pod'
-  // The container param may be repeated for the "All containers" view; the
-  // mock returns a single merged stream, so the joined names are only echoed
-  // back in the response for parity with the backend.
+  // The primary name plus repeated `pod` params form the "All pods" view; with
+  // more than one pod the lines are tagged with their origin, matching the
+  // backend wire format ("<pod> <ts> <msg>").
+  const pods = [...new Set([name, ...params.getAll('pod').filter(Boolean)])]
+  const tagged = pods.length > 1
+  // The container param may be repeated for the "All containers" view; the joined
+  // names are echoed back for parity with the backend.
   const containers = params.getAll('container')
   const container = containers.length > 0 ? containers.join(',') : 'app'
   const tailLines = Math.max(1, parseInt(params.get('tailLines'), 10) || 100)
   const sinceTime = params.get('sinceTime')
+  // Per-pod follow cursors ("<pod>=<rfc3339>") for the all-pods view.
+  const sinceByPod = {}
+  for (const v of params.getAll('since')) {
+    const idx = v.indexOf('=')
+    if (idx > 0) sinceByPod[v.slice(0, idx)] = v.slice(idx + 1)
+  }
 
   // The levels are varied so the viewer's per-level coloring and filter are
   // visible, and so following appends a mix of levels.
@@ -646,35 +665,69 @@ export function getMockWorkloadLogs(endpoint) {
     { level: 'warn', msg: 'slow reconciliation: took 4.7s, exceeding the 2s target' },
     { level: 'error', msg: 'failed to fetch artifact: connection reset by peer' }
   ]
-  const entry = (ts, i) => {
-    const { level, msg } = messages[((i % messages.length) + messages.length) % messages.length]
-    return `${ts} {"level":"${level}","ts":"${ts}","msg":"${msg}","controller":"gitrepository","reconcileID":"id-${i}"}`
-  }
-
-  // Follow poll: emit a couple of fresh entries just after the last seen line so
-  // the viewer can demonstrate appending. Their timestamps advance past
-  // sinceTime, so each poll yields genuinely new lines.
-  const since = sinceTime ? new Date(sinceTime) : null
-  if (since && !Number.isNaN(since.getTime())) {
-    const lines = []
-    for (let i = 1; i <= 2; i++) {
-      const ts = new Date(since.getTime() + i * 1000).toISOString()
-      lines.push(entry(ts, since.getSeconds() + i))
+  // A line, tagged with its pod in the all-pods view. Every fifth line is a
+  // multi-line panic whose stack-trace continuation is identical across pods,
+  // exercising the continuation-grouping and dedup paths.
+  const entry = (ts, i, pod) => {
+    const tag = tagged ? `${pod} ` : ''
+    if (i % 5 === 0) {
+      return `${tag}${ts} panic: runtime error: invalid memory address\ngoroutine 1 [running]:\nmain.reconcile(0x0)`
     }
-    return { pod: name, container, logs: lines.join('\n') + '\n' }
+    const { level, msg } = messages[((i % messages.length) + messages.length) % messages.length]
+    return `${tag}${ts} {"level":"${level}","ts":"${ts}","msg":"${msg}","controller":"gitrepository","reconcileID":"id-${i}"}`
   }
 
-  // Initial load: generate up to tailLines entries, oldest first.
+  const respond = (logs) => {
+    const resp = { pod: pods.join(','), container, logs }
+    if (tagged) {
+      resp.tagged = true
+      resp.total = pods.length
+      resp.streamed = pods.length
+      resp.partial = false
+    }
+    return resp
+  }
+
+  // Follow poll: emit a couple of fresh entries per pod just after that pod's last
+  // seen line, interleaved chronologically, so the viewer can demonstrate
+  // appending. In single-pod mode there is one global sinceTime cursor.
+  const followLines = []
+  if (tagged) {
+    for (const pod of pods) {
+      const cur = sinceByPod[pod]
+      const base = cur ? new Date(cur) : null
+      if (!base || Number.isNaN(base.getTime())) continue
+      for (let i = 1; i <= 2; i++) {
+        const ts = new Date(base.getTime() + i * 1000).toISOString()
+        followLines.push({ ts, line: entry(ts, base.getSeconds() + i, pod) })
+      }
+    }
+    if (followLines.length > 0) {
+      followLines.sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0))
+      return respond(followLines.map(l => l.line).join('\n') + '\n')
+    }
+  } else {
+    const since = sinceTime ? new Date(sinceTime) : null
+    if (since && !Number.isNaN(since.getTime())) {
+      const lines = []
+      for (let i = 1; i <= 2; i++) {
+        const ts = new Date(since.getTime() + i * 1000).toISOString()
+        lines.push(entry(ts, since.getSeconds() + i, name))
+      }
+      return respond(lines.join('\n') + '\n')
+    }
+  }
+
+  // Initial load: generate up to tailLines entries per pod, interleaved oldest
+  // first so the all-pods view shows lines from every pod mixed by timestamp.
   const count = Math.min(tailLines, 200)
-  const lines = []
-  for (let i = count - 1; i >= 0; i--) {
-    const ts = getTimestamp(0, 0, i)
-    lines.push(entry(ts, count - i))
+  const all = []
+  for (const pod of pods) {
+    for (let i = count - 1; i >= 0; i--) {
+      const ts = getTimestamp(0, 0, i)
+      all.push({ ts, line: entry(ts, count - i, pod) })
+    }
   }
-
-  return {
-    pod: name,
-    container,
-    logs: lines.join('\n') + '\n'
-  }
+  all.sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0))
+  return respond(all.map(l => l.line).join('\n') + '\n')
 }

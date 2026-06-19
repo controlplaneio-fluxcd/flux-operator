@@ -5,6 +5,14 @@ import { useState, useRef, useMemo } from 'preact/hooks'
 import { WorkloadLogsViewer } from './WorkloadLogsViewer'
 import { useDismiss } from '../../../utils/useDismiss'
 
+// containersOf builds the viewer's container list for a pod (init containers
+// first). The restart count lets the viewer offer a "(previous)" entry for
+// restarted containers.
+const containersOf = (pod) => [
+  ...(pod.podStatus.initContainerStatuses || []).map(cs => ({ name: cs.name, isInit: true, restartCount: cs.restartCount || 0 })),
+  ...(pod.podStatus.containerStatuses || []).map(cs => ({ name: cs.name, isInit: false, restartCount: cs.restartCount || 0 }))
+]
+
 /**
  * WorkloadLogsAction - "View logs" dropdown for the workload dashboard action bar.
  *
@@ -21,7 +29,11 @@ import { useDismiss } from '../../../utils/useDismiss'
  */
 export function WorkloadLogsAction({ kind, namespace, name, pods = [], userActions = [] }) {
   const [open, setOpen] = useState(false)
-  const [logsPodName, setLogsPodName] = useState(null)
+  // Open log-viewing session: { key, pod } where pod is a pod name or null for the
+  // "All pods" view. key increments per open so the viewer remounts (re-initialising
+  // its pod selection from the new session). null when no viewer is open.
+  const [session, setSession] = useState(null)
+  const sessionKeyRef = useRef(0)
   const dropdownRef = useRef(null)
 
   // Pods that can be inspected: the user is authorized to read logs and the pod
@@ -31,12 +43,12 @@ export function WorkloadLogsAction({ kind, namespace, name, pods = [], userActio
     [pods, userActions]
   )
 
-  // Live pod whose logs are displayed; looked up from the polled pods by name
-  // so its restart counts (and the viewer's "(previous)" options) stay current
-  // while the viewer is open. Resolves to null if the pod is gone, closing it.
-  const logsPod = useMemo(
-    () => (logsPodName ? logsPods.find(p => p.name === logsPodName) || null : null),
-    [logsPodName, logsPods]
+  // The live pods passed to the viewer, each with its containers, so the viewer
+  // can build the "All pods" request and resolve a pod's containers (and restart
+  // counts) from the polled data while it is open.
+  const viewerPods = useMemo(
+    () => logsPods.map(p => ({ name: p.name, status: p.status, containers: containersOf(p) })),
+    [logsPods]
   )
 
   // Close the dropdown on click outside or Escape.
@@ -46,16 +58,10 @@ export function WorkloadLogsAction({ kind, namespace, name, pods = [], userActio
     return null
   }
 
-  // Build the container list for a pod (init containers first). The restart
-  // count lets the viewer offer a "(previous)" entry for restarted containers.
-  const containersOf = (pod) => [
-    ...(pod.podStatus.initContainerStatuses || []).map(cs => ({ name: cs.name, isInit: true, restartCount: cs.restartCount || 0 })),
-    ...(pod.podStatus.containerStatuses || []).map(cs => ({ name: cs.name, isInit: false, restartCount: cs.restartCount || 0 }))
-  ]
-
-  const handleSelect = (pod) => {
+  const openSession = (pod) => {
     setOpen(false)
-    setLogsPodName(pod.name)
+    sessionKeyRef.current += 1
+    setSession({ key: sessionKeyRef.current, pod })
   }
 
   const baseButtonClass = 'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-gray-900'
@@ -87,10 +93,19 @@ export function WorkloadLogsAction({ kind, namespace, name, pods = [], userActio
           class="absolute left-0 mt-1 w-72 max-h-80 overflow-auto bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50"
           data-testid="view-logs-dropdown-menu"
         >
+          {/* "All pods" leads: streams every pod merged, each line tagged with its
+              origin. The per-pod items open the viewer pre-selected on that pod. */}
+          <button
+            onClick={() => openSession(null)}
+            class="w-full px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            data-testid="view-logs-all-pods"
+          >
+            All pods
+          </button>
           {logsPods.map((pod) => (
             <button
               key={pod.name}
-              onClick={() => handleSelect(pod)}
+              onClick={() => openSession(pod.name)}
               class="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
               data-testid={`view-logs-pod-${pod.name}`}
             >
@@ -103,16 +118,15 @@ export function WorkloadLogsAction({ kind, namespace, name, pods = [], userActio
         </div>
       )}
 
-      {logsPod && (
+      {session && (
         <WorkloadLogsViewer
+          key={session.key}
           kind={kind}
           namespace={namespace}
-          name={logsPod.name}
           workloadName={name}
-          containers={containersOf(logsPod)}
-          pods={logsPods}
-          onSelectPod={setLogsPodName}
-          onClose={() => setLogsPodName(null)}
+          pods={viewerPods}
+          initialPodName={session.pod || undefined}
+          onClose={() => setSession(null)}
         />
       )}
     </div>

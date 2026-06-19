@@ -6,17 +6,25 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/preact'
 import userEvent from '@testing-library/user-event'
 import { WorkloadLogsAction } from './WorkloadLogsAction'
 
-// Mock the logs viewer so these tests stay focused on the dropdown.
+// Mock the logs viewer so these tests stay focused on the dropdown. It resolves
+// the pre-selected pod's containers from the live pods prop, mirroring how the
+// real viewer reads them (so a restart-count change flows through).
 vi.mock('./WorkloadLogsViewer', () => ({
-  WorkloadLogsViewer: ({ namespace, name, containers }) => (
-    <div
-      data-testid="logs-viewer-mock"
-      data-containers={(containers || []).map(c => c.name).join(',')}
-      data-restarts={(containers || []).map(c => c.restartCount).join(',')}
-    >
-      {namespace}/{name}
-    </div>
-  )
+  WorkloadLogsViewer: ({ namespace, workloadName, pods, initialPodName }) => {
+    const sel = (pods || []).find(p => p.name === initialPodName)
+    const containers = sel ? sel.containers : []
+    return (
+      <div
+        data-testid="logs-viewer-mock"
+        data-initialpod={initialPodName || ''}
+        data-pods={(pods || []).map(p => p.name).join(',')}
+        data-containers={containers.map(c => c.name).join(',')}
+        data-restarts={containers.map(c => c.restartCount).join(',')}
+      >
+        {namespace}/{workloadName}
+      </div>
+    )
+  }
 }))
 
 describe('WorkloadLogsAction component', () => {
@@ -34,7 +42,9 @@ describe('WorkloadLogsAction component', () => {
   ]
 
   const defaultProps = {
+    kind: 'Deployment',
     namespace: 'flux-system',
+    name: 'my-workload',
     pods,
     userActions: ['restart', 'logs']
   }
@@ -62,7 +72,7 @@ describe('WorkloadLogsAction component', () => {
     expect(screen.queryByTestId('view-logs-pod-app-pending')).not.toBeInTheDocument()
   })
 
-  it('opens the viewer for the selected pod with its containers (init first)', async () => {
+  it('opens the viewer pre-selected on the chosen pod, with its containers (init first)', async () => {
     const user = userEvent.setup()
     render(<WorkloadLogsAction {...defaultProps} />)
 
@@ -70,8 +80,22 @@ describe('WorkloadLogsAction component', () => {
     await user.click(screen.getByTestId('view-logs-pod-app-abc'))
 
     const viewer = screen.getByTestId('logs-viewer-mock')
-    expect(viewer).toHaveTextContent('flux-system/app-abc')
+    expect(viewer).toHaveTextContent('flux-system/my-workload')
+    expect(viewer).toHaveAttribute('data-initialpod', 'app-abc')
     expect(viewer).toHaveAttribute('data-containers', 'init,main')
+  })
+
+  it('opens the "All pods" view (no pre-selected pod) from the All pods item', async () => {
+    const user = userEvent.setup()
+    render(<WorkloadLogsAction {...defaultProps} />)
+
+    await user.click(screen.getByTestId('view-logs-dropdown-button'))
+    await user.click(screen.getByTestId('view-logs-all-pods'))
+
+    const viewer = screen.getByTestId('logs-viewer-mock')
+    expect(viewer).toHaveAttribute('data-initialpod', '')
+    // Only pods with container status are passed to the viewer.
+    expect(viewer).toHaveAttribute('data-pods', 'app-abc')
   })
 
   it('reflects live pod updates (e.g. a container restart) in the open viewer', async () => {
@@ -96,6 +120,21 @@ describe('WorkloadLogsAction component', () => {
     }]
     rerender(<WorkloadLogsAction {...defaultProps} pods={updated} />)
     expect(screen.getByTestId('logs-viewer-mock')).toHaveAttribute('data-restarts', '1')
+  })
+
+  it('re-initialises the viewer on each open (All pods, then a specific pod)', async () => {
+    const user = userEvent.setup()
+    render(<WorkloadLogsAction {...defaultProps} />)
+
+    await user.click(screen.getByTestId('view-logs-dropdown-button'))
+    await user.click(screen.getByTestId('view-logs-all-pods'))
+    expect(screen.getByTestId('logs-viewer-mock')).toHaveAttribute('data-initialpod', '')
+
+    // Reopening on a specific pod remounts the viewer pre-selected on that pod
+    // (the session key changes), rather than keeping the prior "All pods" session.
+    await user.click(screen.getByTestId('view-logs-dropdown-button'))
+    await user.click(screen.getByTestId('view-logs-pod-app-abc'))
+    expect(screen.getByTestId('logs-viewer-mock')).toHaveAttribute('data-initialpod', 'app-abc')
   })
 
   it('closes the dropdown on Escape', async () => {

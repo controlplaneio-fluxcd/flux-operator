@@ -107,33 +107,34 @@ export function WorkloadDetailPanel({
   // Expanded pods state (set of pod names)
   const [expandedPods, setExpandedPods] = useState(new Set())
 
-  // Name of the pod whose logs are displayed in the viewer (null when closed)
-  const [logsPodName, setLogsPodName] = useState(null)
+  // Open log-viewing session: { key, pod } where pod is a pod name to pre-select.
+  // key increments per open so the viewer remounts and re-initialises its pod
+  // selection. null when no viewer is open.
+  const [logsSession, setLogsSession] = useState(null)
+  const logsSessionKeyRef = useRef(0)
+  const openLogs = (podName) => {
+    logsSessionKeyRef.current += 1
+    setLogsSession({ key: logsSessionKeyRef.current, pod: podName })
+  }
 
   // Whether the user is allowed to view pod logs
   const canViewLogs = workloadInfo?.userActions?.includes('logs')
 
-  // Live pod whose logs are displayed; looked up from the polled workload data
-  // by name so its restart counts (and the viewer's "(previous)" options) stay
-  // current while open. Resolves to null if the pod is gone, closing the viewer.
-  const logsPod = useMemo(
-    () => (logsPodName ? (workloadInfo?.pods || []).find(p => p.name === logsPodName) || null : null),
-    [logsPodName, workloadInfo]
-  )
-
-  // Containers of the pod selected for log viewing (init containers first)
-  const logsContainers = useMemo(() => {
-    if (!logsPod?.podStatus) return []
-    return [
-      ...(logsPod.podStatus.initContainerStatuses || []).map(cs => ({ name: cs.name, isInit: true, restartCount: cs.restartCount || 0 })),
-      ...(logsPod.podStatus.containerStatuses || []).map(cs => ({ name: cs.name, isInit: false, restartCount: cs.restartCount || 0 }))
-    ]
-  }, [logsPod])
-
-  // Pods that can be inspected in the viewer's pod dropdown: those carrying
-  // container status. Kept live so the dropdown tracks the polled workload data.
+  // The live pods passed to the viewer, each with its containers, so the viewer
+  // can build the "All pods" request and resolve a pod's containers (and restart
+  // counts) from the polled data while open. Only pods carrying container status
+  // can be inspected.
   const logsPods = useMemo(
-    () => (workloadInfo?.pods || []).filter(p => p.podStatus),
+    () => (workloadInfo?.pods || [])
+      .filter(p => p.podStatus)
+      .map(p => ({
+        name: p.name,
+        status: p.status,
+        containers: [
+          ...(p.podStatus.initContainerStatuses || []).map(cs => ({ name: cs.name, isInit: true, restartCount: cs.restartCount || 0 })),
+          ...(p.podStatus.containerStatuses || []).map(cs => ({ name: cs.name, isInit: false, restartCount: cs.restartCount || 0 }))
+        ]
+      })),
     [workloadInfo]
   )
 
@@ -452,7 +453,7 @@ export function WorkloadDetailPanel({
                         </span>
                         {canViewLogs && hasPodStatus && (
                           <button
-                            onClick={(e) => { e.stopPropagation(); setLogsPodName(pod.name) }}
+                            onClick={(e) => { e.stopPropagation(); openLogs(pod.name) }}
                             class="inline-flex items-center p-1 rounded transition-colors focus:outline-none text-gray-400 hover:text-blue-500 dark:text-gray-500 dark:hover:text-blue-400"
                             data-testid="logs-pod-button"
                             title={`View logs for pod ${pod.name}`}
@@ -599,16 +600,15 @@ export function WorkloadDetailPanel({
       {workloadTab === 'status' && <YamlBlock data={workloadStatusYaml} />}
 
       {/* Pod logs viewer */}
-      {logsPod && (
+      {logsSession && logsPods.length > 0 && (
         <WorkloadLogsViewer
+          key={logsSession.key}
           kind={kind}
           namespace={namespace}
-          name={logsPod.name}
           workloadName={name}
-          containers={logsContainers}
           pods={logsPods}
-          onSelectPod={setLogsPodName}
-          onClose={() => setLogsPodName(null)}
+          initialPodName={logsSession.pod}
+          onClose={() => setLogsSession(null)}
         />
       )}
     </DashboardPanel>

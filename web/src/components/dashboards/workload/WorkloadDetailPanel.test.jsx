@@ -27,7 +27,7 @@ vi.mock('../resource/WorkloadDeleteAction', () => ({
 
 vi.mock('./WorkloadLogsViewer', () => ({
   WorkloadLogsViewer: (props) => (
-    <div data-testid="logs-viewer-mock">Logs: {props.name}</div>
+    <div data-testid="logs-viewer-mock">Logs: {props.initialPodName}</div>
   )
 }))
 
