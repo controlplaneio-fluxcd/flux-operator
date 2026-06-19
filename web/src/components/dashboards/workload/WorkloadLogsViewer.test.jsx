@@ -884,4 +884,51 @@ describe('WorkloadLogsViewer component', () => {
     expect(screen.getAllByTestId('logs-line')).toHaveLength(2)
     expect(screen.getAllByTestId('logs-timestamp').some(el => el.getAttribute('data-latest') === 'true')).toBe(false)
   })
+
+  it('reflows a structured klog entry into one logs-line holding stacked rows', async () => {
+    fetchWithMock.mockResolvedValue({
+      logs: '2026-01-01T00:00:00Z E0526 23:03:57.521582       1 leaderelection.go:452] "Error retrieving lease lock" err="i/o timeout" logger="cert-manager.controller"\n'
+    })
+    render(<WorkloadLogsViewer {...defaultProps} />)
+    await waitFor(() => expect(screen.getAllByTestId('logs-line')).toHaveLength(1))
+
+    // Still one logs-line per entry, but it now holds header + message + 2 field rows.
+    const rows = screen.getAllByTestId('logs-line-row').map(r => r.textContent)
+    expect(rows).toEqual([
+      'E0526 23:03:57.521582       1 leaderelection.go:452]',
+      'Error retrieving lease lock',
+      'err: i/o timeout',
+      'logger: cert-manager.controller'
+    ])
+  })
+
+  it('strips a trailing CR from a CRLF stream so it does not leak into a field', async () => {
+    fetchWithMock.mockResolvedValue({
+      logs: '2026-01-01T00:00:00Z level=info msg=hi controller=foo\r\n'
+    })
+    render(<WorkloadLogsViewer {...defaultProps} />)
+    await waitFor(() => expect(screen.getAllByTestId('logs-line-row').length).toBeGreaterThan(0))
+
+    const rows = screen.getAllByTestId('logs-line-row').map(r => r.textContent)
+    expect(rows).toContain('controller: foo')
+    expect(rows.some(t => t.includes('\r'))).toBe(false)
+  })
+
+  it('leaves a structured entry verbatim in raw mode', async () => {
+    const user = userEvent.setup()
+    fetchWithMock.mockResolvedValue({
+      logs: '2026-01-01T00:00:00Z level=info msg="reconcile complete" controller=gitrepository\n'
+    })
+    render(<WorkloadLogsViewer {...defaultProps} />)
+    await waitFor(() => expect(screen.getAllByTestId('logs-line-row')).toHaveLength(3))
+
+    // Toggling Format off renders the line byte-for-byte: one logs-line, no row
+    // splitting, exact text (toHaveTextContent normalizes whitespace, so assert
+    // the exact textContent to catch a tab/CR change or an accidental split).
+    await user.click(screen.getByTestId('logs-format-toggle'))
+    await waitFor(() => expect(screen.queryByTestId('logs-line-row')).toBeNull())
+    const lines = screen.getAllByTestId('logs-line')
+    expect(lines).toHaveLength(1)
+    expect(lines[0].textContent).toBe('level=info msg="reconcile complete" controller=gitrepository')
+  })
 })

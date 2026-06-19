@@ -134,6 +134,17 @@ describe('detectLevel', () => {
     expect(detectLevel('error handling middleware registered ok')).toBe('info')
   })
 
+  it('reads a zap console level from the 2nd tab field after a timestamp', () => {
+    // zap leads with its own ISO-8601 or epoch timestamp, so the level is hidden
+    // from the leading-token matcher; it is also lowercase, so the uppercase text
+    // matcher misses it. Read it from the 2nd tab field.
+    expect(detectLevel('2026-06-19T14:03:11.500Z\terror\tfoo.go:1\tboom\t{"a":1}')).toBe('error')
+    expect(detectLevel('2026-06-19T14:03:11.500Z\twarn\tcontroller\tfoo.go:1\tslow')).toBe('warn')
+    expect(detectLevel('1718805791.5\tinfo\tstarting manager')).toBe('info')
+    // A tabbed line whose 1st field is not a timestamp is not treated as zap.
+    expect(detectLevel('col1\terror\tcol3')).toBe('info')
+  })
+
   it('reads bracketed lowercase/mixed-case level tokens', () => {
     expect(detectLevel('[error] 1#1: *1 connect() failed')).toBe('error') // nginx error_log
     expect(detectLevel('[warn] 1#1: low on memory')).toBe('warn') // nginx

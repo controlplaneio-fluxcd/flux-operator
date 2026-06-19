@@ -78,6 +78,11 @@ const KLOG = /^([IWEF])\d{4}\s/
 // console formatters of winston (Node, "error: msg"), .NET
 // Microsoft.Extensions.Logging ("warn: Category[0]"), and zap's console encoder.
 const LEADING_LEVEL = /^([a-z]+)[:\t]/
+// zap console encoder: "<ts>\t<level>\t...". zap leads with its own timestamp
+// (so LEADING_LEVEL can't see the level) and defaults to a lowercase level (so
+// the uppercase TEXT_LEVEL misses it); read the level from the 2nd tab field when
+// the 1st is an ISO-8601 or epoch timestamp.
+const ZAP_TS = /^(?:\d{4}-\d{2}-\d{2}T[\d:.]+(?:Z|[+-]\d{2}:?\d{2})?|\d{9,}(?:\.\d+)?)$/
 // A bracketed level token, any case, e.g. nginx "[error]", Envoy/Istio
 // "[warning]", MySQL "[Warning]", structlog "[info     ]", Elasticsearch "[INFO ]".
 // Global so multi-bracket lines (Envoy "[16][warning][config]") are scanned.
@@ -160,11 +165,20 @@ export function detectLevel(text) {
   const k = KLOG.exec(text)
   if (k) return KLOG_CHAR[k[1]]
 
-  // Leading lowercase level token + ":"/tab (winston, .NET, zap console).
+  // Leading lowercase level token + ":"/tab (winston, .NET).
   const d = LEADING_LEVEL.exec(text)
   if (d) {
     const lvl = fromString(d[1])
     if (lvl) return lvl
+  }
+
+  // zap console encoder: timestamp-led, level in the 2nd tab field.
+  if (text.indexOf('\t') !== -1) {
+    const parts = text.split('\t')
+    if (parts.length >= 2 && ZAP_TS.test(parts[0])) {
+      const lvl = fromString(parts[1])
+      if (lvl) return lvl
+    }
   }
 
   // logfmt level=...

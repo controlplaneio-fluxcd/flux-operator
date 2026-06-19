@@ -9,6 +9,7 @@ import { fetchWithMock } from '../../../utils/fetch'
 import { downloadBlob } from '../../../utils/download'
 import { usePrismTheme } from '../common/yaml'
 import { LEVELS, LEVEL_META, DEFAULT_LEVEL, detectLevel, stripAnsi } from '../../../utils/logLevel'
+import { decorateLine } from '../../../utils/logFormat'
 import { useDismiss } from '../../../utils/useDismiss'
 
 // Selectable limits for the number of log lines to fetch from the backend.
@@ -573,7 +574,10 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
   // detected. Only re-runs when the payload (or tagging regime) changes.
   const baseLines = useMemo(() => {
     const podSet = tagged ? new Set(reqPodsStr ? reqPodsStr.split(',') : []) : null
-    const entries = logs.split('\n').filter(line => line.length > 0).map(line => {
+    // Strip a trailing CR up front so a CRLF stream doesn't leak `\r` into the
+    // message text, the decorated field values, or the filter. (The download uses
+    // the raw payload, so it stays byte-verbatim.)
+    const entries = logs.split('\n').map(line => line.replace(/\r$/, '')).filter(line => line.length > 0).map(line => {
       let rest = line
       let pod = ''
       if (podSet) {
@@ -691,19 +695,33 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
   // unchanged lines also lets Preact skip re-applying their innerHTML.
   const displayLines = useMemo(() => {
     if (!formatted) {
-      return logLines.map(entry => ({ ...entry, code: false, html: null }))
+      return logLines.map(entry => ({ ...entry, code: false, html: null, fmt: null }))
     }
     const prev = formatCacheRef.current
     const next = new Map()
     const result = logLines.map(entry => {
-      let formattedEntry = next.get(entry.text) || prev.get(entry.text)
+      // JSON formatting runs on every line (unchanged from before). Only the
+      // klog/zap/logfmt cascade is gated on a parsed timestamp, so a continuation
+      // line (stack frame, no timestamp) can never be mistaken for a structured
+      // entry. The cache key carries the head flag because the same stripped text
+      // may appear both as a head and as a continuation line.
+      const key = `${entry.ts ? 1 : 0} ${entry.text}`
+      let formattedEntry = next.get(key) || prev.get(key)
       if (!formattedEntry) {
         const json = formatJson(entry.text)
-        formattedEntry = json == null
-          ? { text: entry.text, code: true, html: null }
-          : { text: json, code: true, html: Prism.highlight(json, Prism.languages.json, 'json') }
+        if (json != null) {
+          formattedEntry = { text: json, code: true, html: Prism.highlight(json, Prism.languages.json, 'json'), fmt: null }
+        } else {
+          // klog → zap → logfmt → plain. The block/spans kinds render as decorated
+          // multi-line / single highlighted rows; plain keeps the existing code
+          // path so its output is byte-for-byte unchanged.
+          const d = entry.ts ? decorateLine(entry.text, entry.level) : { kind: 'plain' }
+          formattedEntry = d.kind === 'plain'
+            ? { text: entry.text, code: true, html: null, fmt: null }
+            : { text: entry.text, code: false, html: null, fmt: d }
+        }
       }
-      next.set(entry.text, formattedEntry)
+      next.set(key, formattedEntry)
       return { ...entry, ...formattedEntry }
     })
     formatCacheRef.current = next
@@ -968,7 +986,31 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
                         />
                       </div>
                     )}
-                    {entry.code ? (
+                    {entry.fmt && entry.fmt.kind === 'block' ? (
+                      // Structured entry: one container per entry (keeping the
+                      // per-entry logs-line invariant), one inner row per visual
+                      // line, all flush-left at full width.
+                      <div
+                        class="overflow-x-auto font-mono whitespace-pre-wrap break-all text-gray-800 dark:text-gray-200"
+                        style="padding: 0.25rem 0.75rem; font-size: 12px; line-height: 1.5;"
+                        data-testid="logs-line"
+                      >
+                        {entry.fmt.rows.map((row, r) => (
+                          <div key={r} data-testid="logs-line-row">
+                            {row.map((s, j) => (s.cls ? <span key={j} class={s.cls}>{s.text}</span> : s.text))}
+                          </div>
+                        ))}
+                      </div>
+                    ) : entry.fmt && entry.fmt.kind === 'spans' ? (
+                      // Unstructured entry highlighted in place: a single row.
+                      <div
+                        class="overflow-x-auto font-mono whitespace-pre-wrap break-all text-gray-800 dark:text-gray-200"
+                        style="padding: 0.25rem 0.75rem; font-size: 12px; line-height: 1.5;"
+                        data-testid="logs-line"
+                      >
+                        {entry.fmt.spans.map((s, j) => (s.cls ? <span key={j} class={s.cls}>{s.text}</span> : s.text))}
+                      </div>
+                    ) : entry.code ? (
                       <pre
                         class="overflow-x-auto language-json"
                         style="margin: 0; padding: 0.25rem 0.75rem; background: transparent; text-shadow: none; font-size: 12px; line-height: 1.5;"
