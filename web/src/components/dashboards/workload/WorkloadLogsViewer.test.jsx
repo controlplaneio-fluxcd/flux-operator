@@ -1,12 +1,11 @@
 // Copyright 2026 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, act, fireEvent } from '@testing-library/preact'
 import userEvent from '@testing-library/user-event'
 import { WorkloadLogsViewer } from './WorkloadLogsViewer'
 
-// Mock the fetchWithMock function
 vi.mock('../../../utils/fetch', () => ({
   fetchWithMock: vi.fn()
 }))
@@ -19,6 +18,11 @@ describe('WorkloadLogsViewer component', () => {
     // Each line carries a leading timestamp (as the API returns); timestamps are
     // hidden by default so the viewer strips it, leaving the message text.
     fetchWithMock.mockResolvedValue({ pod: 'my-pod', container: 'app', logs: '2026-01-01T00:00:00Z line one\n2026-01-01T00:00:01Z line two\n' })
+  })
+
+  afterEach(() => {
+    // Restore real timers so a leaked fake-timer interval can't bleed into the next test.
+    vi.useRealTimers()
   })
 
   const defaultProps = {
@@ -48,12 +52,16 @@ describe('WorkloadLogsViewer component', () => {
     expect(call.endpoint).toContain('container=app')
   })
 
-  it('always shows the container selector, even for a single container', async () => {
+  it('always shows the container selector, defaulting to "All containers"', async () => {
     render(<WorkloadLogsViewer {...defaultProps} />)
     await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
     const select = screen.getByTestId('logs-container-select')
     expect(select).toBeInTheDocument()
-    expect(select).toHaveValue('app::false')
+    // "All containers" is the default even for a single container; the container
+    // itself stays individually selectable.
+    expect(select).toHaveValue('all')
+    const values = [...select.querySelectorAll('option')].map(o => o.value)
+    expect(values).toEqual(['all', 'app::false'])
   })
 
   it('shows the container selector for multiple containers and refetches on change', async () => {
@@ -72,6 +80,182 @@ describe('WorkloadLogsViewer component', () => {
       const lastCall = fetchWithMock.mock.calls[fetchWithMock.mock.calls.length - 1][0]
       expect(lastCall.endpoint).toContain('container=sidecar')
     })
+  })
+
+  it('defaults to "All containers" for multiple regular containers and streams them all', async () => {
+    const props = {
+      ...defaultProps,
+      containers: [{ name: 'app', isInit: false }, { name: 'sidecar', isInit: false }]
+    }
+    render(<WorkloadLogsViewer {...props} />)
+    await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
+
+    // The selector defaults to the "All containers" option.
+    const select = screen.getByTestId('logs-container-select')
+    expect(select).toHaveValue('all')
+    const values = [...select.querySelectorAll('option')].map(o => o.value)
+    expect(values).toContain('all')
+    expect(values).toContain('app::false')
+    expect(values).toContain('sidecar::false')
+
+    // The initial request streams every regular container via repeated params.
+    const endpoint = fetchWithMock.mock.calls[0][0].endpoint
+    const containers = [...new URLSearchParams(endpoint.split('?')[1]).getAll('container')]
+    expect(containers).toEqual(['app', 'sidecar'])
+    expect(endpoint).toContain('previous=false')
+  })
+
+  it('excludes init containers from "All containers" but keeps them selectable', async () => {
+    const user = userEvent.setup()
+    const props = {
+      ...defaultProps,
+      containers: [
+        { name: 'setup', isInit: true },
+        { name: 'app', isInit: false },
+        { name: 'sidecar', isInit: false }
+      ]
+    }
+    render(<WorkloadLogsViewer {...props} />)
+    await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
+
+    // "All containers" streams only the regular containers, not the init one.
+    const containers = [...new URLSearchParams(fetchWithMock.mock.calls[0][0].endpoint.split('?')[1]).getAll('container')]
+    expect(containers).toEqual(['app', 'sidecar'])
+
+    // The init container is still individually selectable and fetched on its own.
+    const select = screen.getByTestId('logs-container-select')
+    const values = [...select.querySelectorAll('option')].map(o => o.value)
+    expect(values).toContain('setup::false')
+
+    await user.selectOptions(select, 'setup::false')
+    await waitFor(() => {
+      const last = fetchWithMock.mock.calls.at(-1)[0].endpoint
+      const c = [...new URLSearchParams(last.split('?')[1]).getAll('container')]
+      expect(c).toEqual(['setup'])
+    })
+  })
+
+  it('switches from "All containers" to a single container', async () => {
+    const user = userEvent.setup()
+    const props = {
+      ...defaultProps,
+      containers: [{ name: 'app', isInit: false }, { name: 'sidecar', isInit: false }]
+    }
+    render(<WorkloadLogsViewer {...props} />)
+    await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
+
+    await user.selectOptions(screen.getByTestId('logs-container-select'), 'sidecar::false')
+    await waitFor(() => {
+      const last = fetchWithMock.mock.calls.at(-1)[0].endpoint
+      const c = [...new URLSearchParams(last.split('?')[1]).getAll('container')]
+      expect(c).toEqual(['sidecar'])
+    })
+  })
+
+  it('defaults to "All containers" for a single regular container, streaming only it', async () => {
+    const props = {
+      ...defaultProps,
+      containers: [{ name: 'setup', isInit: true }, { name: 'app', isInit: false }]
+    }
+    render(<WorkloadLogsViewer {...props} />)
+    await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
+
+    // "All containers" is offered and is the default even with one regular
+    // container; the init container is not part of it.
+    const select = screen.getByTestId('logs-container-select')
+    expect(select).toHaveValue('all')
+    const containers = [...new URLSearchParams(fetchWithMock.mock.calls[0][0].endpoint.split('?')[1]).getAll('container')]
+    expect(containers).toEqual(['app'])
+  })
+
+  it('titles the modal "Log Viewer" over the workload kind/namespace/name', async () => {
+    const props = { ...defaultProps, kind: 'Deployment', workloadName: 'podinfo' }
+    render(<WorkloadLogsViewer {...props} />)
+    await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
+
+    expect(screen.getByTestId('logs-viewer')).toHaveTextContent('Log Viewer')
+    expect(screen.getByTestId('logs-title')).toHaveTextContent('Deployment/default/podinfo')
+  })
+
+  it('lists the workload pods and invokes onSelectPod when the pod changes', async () => {
+    const user = userEvent.setup()
+    const onSelectPod = vi.fn()
+    const props = {
+      ...defaultProps,
+      name: 'pod-a',
+      pods: [{ name: 'pod-a' }, { name: 'pod-b' }],
+      onSelectPod
+    }
+    render(<WorkloadLogsViewer {...props} />)
+    await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
+
+    const podSelect = screen.getByTestId('logs-pod-select')
+    expect(podSelect).toHaveValue('pod-a')
+    expect([...podSelect.querySelectorAll('option')].map(o => o.value)).toEqual(['pod-a', 'pod-b'])
+
+    await user.selectOptions(podSelect, 'pod-b')
+    expect(onSelectPod).toHaveBeenCalledWith('pod-b')
+  })
+
+  it('resets the container selection to "All containers" when the pod changes', async () => {
+    const user = userEvent.setup()
+    const props = {
+      ...defaultProps,
+      name: 'pod-a',
+      containers: [{ name: 'app', isInit: false }, { name: 'sidecar', isInit: false }],
+      pods: [{ name: 'pod-a' }, { name: 'pod-b' }],
+      onSelectPod: vi.fn()
+    }
+    const { rerender } = render(<WorkloadLogsViewer {...props} />)
+    await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
+
+    // Pick a specific container, away from the "All containers" default.
+    await user.selectOptions(screen.getByTestId('logs-container-select'), 'sidecar::false')
+    expect(screen.getByTestId('logs-container-select')).toHaveValue('sidecar::false')
+
+    // The parent switches the pod (the viewer is controlled): it re-renders with
+    // the new pod's name and containers, and the container dropdown snaps back to
+    // "All containers".
+    rerender(<WorkloadLogsViewer {...props} name="pod-b" containers={[{ name: 'web', isInit: false }]} />)
+    await waitFor(() => expect(screen.getByTestId('logs-container-select')).toHaveValue('all'))
+  })
+
+  it('appends and dedupes across merged streams while following "All containers"', async () => {
+    vi.useFakeTimers()
+    try {
+      const flush = async () => { await act(async () => { await Promise.resolve(); await Promise.resolve() }) }
+      const props = {
+        ...defaultProps,
+        containers: [{ name: 'app', isInit: false }, { name: 'sidecar', isInit: false }]
+      }
+      // Initial load: lines from both containers, already interleaved by the backend.
+      fetchWithMock.mockResolvedValueOnce({ logs: '2026-01-01T00:00:00Z app one\n2026-01-01T00:00:01Z side one\n' })
+      // Follow poll: the last line is re-sent (sinceTime is second-granular) plus a new one.
+      fetchWithMock.mockResolvedValue({ logs: '2026-01-01T00:00:01Z side one\n2026-01-01T00:00:02Z app two\n' })
+
+      render(<WorkloadLogsViewer {...props} />)
+      await flush()
+      expect(screen.getAllByTestId('logs-line').map(r => r.textContent)).toEqual(['app one', 'side one'])
+
+      // The initial load streams every regular container and asks for the tail.
+      const first = fetchWithMock.mock.calls[0][0].endpoint
+      expect([...new URLSearchParams(first.split('?')[1]).getAll('container')]).toEqual(['app', 'sidecar'])
+      expect(first).not.toContain('sinceTime')
+
+      await act(async () => { vi.advanceTimersByTime(5000) })
+      await flush()
+
+      // The overlapping "side one" is deduped across the merged result; only the
+      // genuinely new "app two" is appended.
+      expect(screen.getAllByTestId('logs-line').map(r => r.textContent)).toEqual(['app one', 'side one', 'app two'])
+
+      // The follow poll narrows by sinceTime yet still streams all containers.
+      const poll = fetchWithMock.mock.calls.at(-1)[0].endpoint
+      expect(poll).toContain('sinceTime=2026-01-01T00%3A00%3A01Z')
+      expect([...new URLSearchParams(poll.split('?')[1]).getAll('container')]).toEqual(['app', 'sidecar'])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('shows an error message when the fetch fails', async () => {
@@ -150,7 +334,7 @@ describe('WorkloadLogsViewer component', () => {
     expect(screen.getByTestId('logs-line')).toHaveTextContent('hello world')
     expect(screen.getByTestId('logs-line')).not.toHaveTextContent('2026-06-16T00:00:00Z')
 
-    // There is no timestamps toggle anymore.
+    // The timestamp is a separator pill, not a toggleable column.
     expect(screen.queryByTestId('logs-timestamps-toggle')).not.toBeInTheDocument()
   })
 
@@ -338,6 +522,36 @@ describe('WorkloadLogsViewer component', () => {
 
     await user.click(toggle)
     expect(toggle).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('shows the follow mode in the footer corner, toggling between Following and Snapshot', async () => {
+    const user = userEvent.setup()
+    render(<WorkloadLogsViewer {...defaultProps} />)
+    await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
+
+    // Follow is on by default, so the corner reads "Following".
+    const mode = screen.getByTestId('logs-mode')
+    expect(mode).toHaveTextContent('Following')
+
+    // Turning follow off switches the corner to "Snapshot".
+    await user.click(screen.getByTestId('logs-follow-toggle'))
+    expect(screen.getByTestId('logs-mode')).toHaveTextContent('Snapshot')
+  })
+
+  it('scrolls to the latest logs when the footer mode indicator is clicked', async () => {
+    const user = userEvent.setup()
+    render(<WorkloadLogsViewer {...defaultProps} />)
+    await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
+
+    // jsdom has no layout, so stub the scroll metrics to verify the handler pins
+    // the body to the bottom (scrollTop := scrollHeight).
+    const body = screen.getByTestId('logs-body')
+    let scrollTop = 0
+    Object.defineProperty(body, 'scrollHeight', { configurable: true, value: 4321 })
+    Object.defineProperty(body, 'scrollTop', { configurable: true, get: () => scrollTop, set: v => { scrollTop = v } })
+
+    await user.click(screen.getByTestId('logs-mode'))
+    expect(scrollTop).toBe(4321)
   })
 
   it('follows by default, sets up polling and can be disabled', async () => {

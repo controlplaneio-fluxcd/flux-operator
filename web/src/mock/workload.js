@@ -629,7 +629,11 @@ export function getMockWorkloadLogs(endpoint) {
   const queryString = endpoint.includes('?') ? endpoint.split('?')[1] : ''
   const params = new URLSearchParams(queryString)
   const name = params.get('name') || 'pod'
-  const container = params.get('container') || 'app'
+  // The container param may be repeated for the "All containers" view; the
+  // mock returns a single merged stream, so the joined names are only echoed
+  // back in the response for parity with the backend.
+  const containers = params.getAll('container')
+  const container = containers.length > 0 ? containers.join(',') : 'app'
   const tailLines = Math.max(1, parseInt(params.get('tailLines'), 10) || 100)
   const sinceTime = params.get('sinceTime')
 

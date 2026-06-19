@@ -7,7 +7,6 @@ import userEvent from '@testing-library/user-event'
 import { WorkloadDetailPanel } from './WorkloadDetailPanel'
 import { fetchWithMock } from '../../../utils/fetch'
 
-// Mock fetchWithMock
 vi.mock('../../../utils/fetch', () => ({
   fetchWithMock: vi.fn()
 }))
@@ -594,13 +593,10 @@ describe('WorkloadDetailPanel component', () => {
       render(<WorkloadDetailPanel {...defaultProps} workloadInfo={infoWithPodStatus} />)
       await user.click(screen.getByText('Pods'))
 
-      // Should not show expanded details initially
       expect(screen.queryByTestId('pod-expanded-details')).not.toBeInTheDocument()
 
-      // Click on the pod row to expand
       await user.click(screen.getByText('pod-1'))
 
-      // Should show expanded container details
       expect(screen.getByTestId('pod-expanded-details')).toBeInTheDocument()
       expect(screen.getByText('manager')).toBeInTheDocument()
       expect(screen.getByText('Waiting')).toBeInTheDocument()
@@ -627,11 +623,9 @@ describe('WorkloadDetailPanel component', () => {
       render(<WorkloadDetailPanel {...defaultProps} workloadInfo={infoWithPodStatus} />)
       await user.click(screen.getByText('Pods'))
 
-      // Click to expand
       await user.click(screen.getByText('pod-1'))
       expect(screen.getByTestId('pod-expanded-details')).toBeInTheDocument()
 
-      // Click again to collapse
       await user.click(screen.getByText('pod-1'))
       expect(screen.queryByTestId('pod-expanded-details')).not.toBeInTheDocument()
     })

@@ -139,7 +139,6 @@ function getWorkloadStatusInfo(status) {
  * WorkloadPage - Full page dashboard for a single Kubernetes workload
  */
 export function WorkloadPage({ kind, namespace, name }) {
-  // Set page title and description
   usePageMeta(name, `${kind}/${namespace}/${name} workload dashboard`)
 
   // State
@@ -395,7 +394,9 @@ export function WorkloadPage({ kind, namespace, name }) {
                 )}
                 {canViewLogs && (
                   <WorkloadLogsAction
+                    kind={kind}
                     namespace={namespace}
+                    name={name}
                     pods={workloadInfo?.pods}
                     userActions={workloadInfo?.userActions}
                   />

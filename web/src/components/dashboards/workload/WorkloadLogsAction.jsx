@@ -13,11 +13,13 @@ import { useDismiss } from '../../../utils/useDismiss'
  * and there is at least one pod with container status to view.
  *
  * @param {Object} props
+ * @param {string} props.kind - Workload kind (shown in the viewer title)
  * @param {string} props.namespace - Workload namespace
+ * @param {string} props.name - Workload name (shown in the viewer title)
  * @param {Array} props.pods - Pods of the workload (each with a podStatus)
  * @param {Array} props.userActions - Allowed user actions for the workload
  */
-export function WorkloadLogsAction({ namespace, pods = [], userActions = [] }) {
+export function WorkloadLogsAction({ kind, namespace, name, pods = [], userActions = [] }) {
   const [open, setOpen] = useState(false)
   const [logsPodName, setLogsPodName] = useState(null)
   const dropdownRef = useRef(null)
@@ -103,9 +105,13 @@ export function WorkloadLogsAction({ namespace, pods = [], userActions = [] }) {
 
       {logsPod && (
         <WorkloadLogsViewer
+          kind={kind}
           namespace={namespace}
           name={logsPod.name}
+          workloadName={name}
           containers={containersOf(logsPod)}
+          pods={logsPods}
+          onSelectPod={setLogsPodName}
           onClose={() => setLogsPodName(null)}
         />
       )}

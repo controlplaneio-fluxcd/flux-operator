@@ -4,12 +4,15 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -31,6 +34,12 @@ const (
 
 	// maxLogBytes caps the size of the log payload returned to the client.
 	maxLogBytes int64 = 512 * 1024 // 512 KiB
+
+	// maxLogContainers caps the number of containers streamed for the
+	// all-containers view, bounding the per-request log-stream fan-out. Real
+	// pods have only a handful of containers; this is a defensive ceiling for a
+	// request that names many directly.
+	maxLogContainers = 64
 )
 
 // WorkloadLogsResponse represents the response body for GET /api/v1/workload/logs.
@@ -118,6 +127,199 @@ func trimPartialFirstLine(logs string) string {
 	return logs
 }
 
+// fetchContainerLog streams the logs of a single container with the given
+// options and returns the payload trimmed of any partial first/last line. It is
+// shared by the single-container and all-containers paths of the handler.
+func fetchContainerLog(ctx context.Context, clientset kubernetes.Interface, namespace, name string, opts *corev1.PodLogOptions) (string, error) {
+	stream, err := clientset.CoreV1().Pods(namespace).GetLogs(name, opts).Stream(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer stream.Close()
+
+	// Read the stream, keeping only the newest maxLogBytes so the payload stays
+	// bounded while returning the most recent lines.
+	data, partialFirst, err := tailLogBytes(stream, int(maxLogBytes))
+	if err != nil {
+		return "", err
+	}
+
+	// Drop the partial first line only when the byte cap cut mid-line (a cut on
+	// a line boundary keeps a complete first line), and the partial last line
+	// when the container was mid-write.
+	logs := trimPartialLogLine(string(data))
+	if partialFirst {
+		logs = trimPartialFirstLine(logs)
+	}
+	return logs, nil
+}
+
+// writeLogStreamError maps a GetLogs stream error to an HTTP response: 403 for a
+// forbidden user, 404 for a missing pod, and 500 otherwise (logged).
+func writeLogStreamError(ctx context.Context, w http.ResponseWriter, err error, namespace, name, container string) {
+	switch {
+	case errors.IsForbidden(err):
+		perms := user.Permissions(ctx)
+		http.Error(w, fmt.Sprintf("Permission denied. User %s does not have access to read logs for pod %s/%s",
+			perms.Username, namespace, name), http.StatusForbidden)
+	case errors.IsNotFound(err):
+		http.Error(w, fmt.Sprintf("Pod %s/%s not found", namespace, name), http.StatusNotFound)
+	default:
+		log.FromContext(ctx).Error(err, "failed to stream pod logs",
+			"pod", name, "namespace", namespace, "container", container)
+		http.Error(w, fmt.Sprintf("Failed to read logs: %v", err), http.StatusInternalServerError)
+	}
+}
+
+// writeWorkloadLogs encodes the log payload as the JSON WorkloadLogsResponse.
+func writeWorkloadLogs(w http.ResponseWriter, pod, container, logs string) {
+	w.Header().Set("Content-Type", "application/json")
+	resp := WorkloadLogsResponse{
+		Pod:       pod,
+		Container: container,
+		Logs:      logs,
+	}
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// logEntry is one record used when interleaving multiple container streams: a
+// line carrying a leading RFC3339 timestamp plus any immediately following
+// continuation lines that lack their own timestamp (e.g. stack-trace frames).
+// The parsed timestamp is the sort key; text retains the original line(s),
+// including the timestamp prefix, since the frontend strips it for display.
+type logEntry struct {
+	ts   time.Time
+	text string
+}
+
+// parseLogTimestamp parses the leading RFC3339 timestamp token kubelet prepends
+// to each line when PodLogOptions.Timestamps is set. It reports false when the
+// line does not start with such a token (e.g. a stack-trace continuation).
+func parseLogTimestamp(line string) (time.Time, bool) {
+	tsStr, _, found := strings.Cut(line, " ")
+	if !found {
+		return time.Time{}, false
+	}
+	t, err := time.Parse(time.RFC3339Nano, tsStr)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return t, true
+}
+
+// parseLogEntries splits a timestamped log payload into entries. Each entry
+// begins at a line whose first token parses as an RFC3339 timestamp and absorbs
+// subsequent lines without such a prefix, so multi-line records (stack traces)
+// stay intact and ordered. A continuation line with no preceding entry becomes
+// its own zero-timestamped entry, which sorts to the front.
+func parseLogEntries(blob string) []logEntry {
+	var entries []logEntry
+	for line := range strings.SplitSeq(blob, "\n") {
+		if line == "" {
+			continue
+		}
+		if ts, ok := parseLogTimestamp(line); ok {
+			entries = append(entries, logEntry{ts: ts, text: line})
+			continue
+		}
+		if n := len(entries); n > 0 {
+			entries[n-1].text += "\n" + line
+		} else {
+			entries = append(entries, logEntry{text: line})
+		}
+	}
+	return entries
+}
+
+// mergeLogStreams interleaves the timestamped log payloads of multiple
+// containers into a single chronological stream. Entries are stable-sorted by
+// their timestamp (so records logged at the same instant keep a deterministic
+// order), capped to the newest tailLines entries, and finally to the newest
+// maxLogBytes bytes on a line boundary so the payload stays bounded.
+func mergeLogStreams(blobs []string, tailLines int) string {
+	var entries []logEntry
+	for _, b := range blobs {
+		entries = append(entries, parseLogEntries(b)...)
+	}
+	sort.SliceStable(entries, func(i, j int) bool {
+		return entries[i].ts.Before(entries[j].ts)
+	})
+	if tailLines > 0 && len(entries) > tailLines {
+		entries = entries[len(entries)-tailLines:]
+	}
+	var sb strings.Builder
+	for _, e := range entries {
+		sb.WriteString(e.text)
+		sb.WriteByte('\n')
+	}
+	return capLogBytes(sb.String(), int(maxLogBytes))
+}
+
+// dedupeContainers removes duplicate container names (keeping first occurrence)
+// and caps the result to limit, so a request naming the same container twice
+// does not stream it twice and a request naming many containers cannot fan out
+// without bound. Order is preserved so the merge input stays deterministic.
+func dedupeContainers(names []string, limit int) []string {
+	if len(names) == 0 {
+		return names
+	}
+	seen := make(map[string]struct{}, len(names))
+	out := make([]string, 0, len(names))
+	for _, n := range names {
+		if _, ok := seen[n]; ok {
+			continue
+		}
+		seen[n] = struct{}{}
+		out = append(out, n)
+		if len(out) == limit {
+			break
+		}
+	}
+	return out
+}
+
+// collectContainerLogs partitions the per-container fan-out results into the
+// successful log payloads and the first error encountered. It implements the
+// best-effort policy of the all-containers view: a container that failed (e.g.
+// is still waiting to start) is skipped as long as another succeeded, so the
+// returned error is only meaningful to the caller when no blob was collected.
+func collectContainerLogs(logs []string, errs []error) ([]string, error) {
+	var blobs []string
+	var firstErr error
+	for i := range logs {
+		if errs[i] != nil {
+			if firstErr == nil {
+				firstErr = errs[i]
+			}
+			continue
+		}
+		blobs = append(blobs, logs[i])
+	}
+	return blobs, firstErr
+}
+
+// capLogBytes keeps only the newest limit bytes of a newline-terminated log
+// payload, trimming any partial leading line so the result starts on a line
+// boundary.
+func capLogBytes(logs string, limit int) string {
+	if len(logs) <= limit {
+		return logs
+	}
+	cut := len(logs) - limit
+	// When the cut lands exactly on a line boundary (the preceding byte is a
+	// newline), the window already starts with a complete line and must not be
+	// trimmed further; otherwise drop the leading partial fragment.
+	if logs[cut-1] == '\n' {
+		return logs[cut:]
+	}
+	if i := strings.IndexByte(logs[cut:], '\n'); i >= 0 {
+		return logs[cut+i+1:]
+	}
+	return logs[cut:]
+}
+
 // WorkloadLogsHandler handles GET /api/v1/workload/logs requests and returns the
 // logs of a pod container managed by a Flux workload.
 //
@@ -132,6 +334,13 @@ func trimPartialFirstLine(logs string) string {
 // returned instead, so a following client can incrementally append new lines
 // rather than re-fetching and replacing the whole tail window on every poll.
 //
+// The container query parameter may be repeated to request the "All containers"
+// view: each named container's logs are streamed and interleaved chronologically
+// into a single payload (the previous-instance option is not offered there). A
+// single or absent container keeps the per-container behavior. The frontend
+// supplies the container names, so no pod read is required and access stays
+// governed solely by the pods/log RBAC, which is enforced per pod.
+//
 // Example: /api/v1/workload/logs?namespace=flux-system&name=source-controller-xx-yy&container=manager
 func (h *Handler) WorkloadLogsHandler(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodGet {
@@ -142,7 +351,6 @@ func (h *Handler) WorkloadLogsHandler(w http.ResponseWriter, req *http.Request) 
 	// Parse query parameters.
 	namespace := req.URL.Query().Get("namespace")
 	name := req.URL.Query().Get("name")
-	container := req.URL.Query().Get("container")
 
 	// Validate required fields.
 	if namespace == "" || name == "" {
@@ -201,67 +409,85 @@ func (h *Handler) WorkloadLogsHandler(w http.ResponseWriter, req *http.Request) 
 		return
 	}
 
+	// Collect the requested container names. Repeated container params request
+	// the "All containers" view; a single or absent container keeps the original
+	// per-container behavior. Empty values are dropped so an explicit container=
+	// does not select a phantom container, and the list is de-duplicated and
+	// capped so a direct caller cannot stream a container twice or fan out
+	// without bound.
+	var containers []string
+	for _, c := range req.URL.Query()["container"] {
+		if c != "" {
+			containers = append(containers, c)
+		}
+	}
+	containers = dedupeContainers(containers, maxLogContainers)
+
 	// TailLines is always set so the kubelet returns the newest lines (and
 	// bounds the read to at most tailLines lines). When following, SinceTime
 	// additionally restricts the range to entries after the last seen line, so
 	// the response is the newest lines since then. LimitBytes is deliberately
 	// not used: it keeps the oldest bytes of the range, dropping the most recent
-	// lines; the byte cap is enforced below by keeping the trailing bytes.
-	opts := &corev1.PodLogOptions{
-		Container:  container,
-		TailLines:  &tailLines,
-		Previous:   previous,
-		Timestamps: true,
-	}
-	if sinceTime != nil {
-		opts.SinceTime = sinceTime
-	}
-	stream, err := clientset.CoreV1().Pods(namespace).GetLogs(name, opts).Stream(ctx)
-	if err != nil {
-		switch {
-		case errors.IsForbidden(err):
-			perms := user.Permissions(ctx)
-			http.Error(w, fmt.Sprintf("Permission denied. User %s does not have access to read logs for pod %s/%s",
-				perms.Username, namespace, name), http.StatusForbidden)
-		case errors.IsNotFound(err):
-			http.Error(w, fmt.Sprintf("Pod %s/%s not found", namespace, name), http.StatusNotFound)
-		default:
-			log.FromContext(ctx).Error(err, "failed to stream pod logs",
-				"pod", name, "namespace", namespace, "container", container)
-			http.Error(w, fmt.Sprintf("Failed to read logs: %v", err), http.StatusInternalServerError)
+	// lines; the byte cap is enforced by keeping the trailing bytes.
+
+	// Single-container path (one or no container): preserves the previous-instance
+	// and follow semantics unchanged. An absent container lets the kubelet pick
+	// the pod's default container.
+	if len(containers) <= 1 {
+		container := ""
+		if len(containers) == 1 {
+			container = containers[0]
 		}
+		opts := &corev1.PodLogOptions{
+			Container:  container,
+			TailLines:  &tailLines,
+			Previous:   previous,
+			Timestamps: true,
+		}
+		if sinceTime != nil {
+			opts.SinceTime = sinceTime
+		}
+		logs, err := fetchContainerLog(ctx, clientset, namespace, name, opts)
+		if err != nil {
+			writeLogStreamError(ctx, w, err, namespace, name, container)
+			return
+		}
+		writeWorkloadLogs(w, name, container, logs)
 		return
 	}
-	defer stream.Close()
 
-	// Read the stream, keeping only the newest maxLogBytes so the payload stays
-	// bounded while returning the most recent lines.
-	data, partialFirst, err := tailLogBytes(stream, int(maxLogBytes))
-	if err != nil {
-		log.FromContext(ctx).Error(err, "failed to read pod logs stream",
-			"pod", name, "namespace", namespace, "container", container)
-		http.Error(w, "Failed to read logs", http.StatusInternalServerError)
+	// All-containers path: stream every named container concurrently and merge
+	// the results by timestamp. Previous-instance logs are not offered here, so
+	// Previous is always false. The fetch is best-effort: a container with no
+	// readable logs yet (e.g. waiting to start) is skipped, and an error is only
+	// returned to the client when every container fails.
+	logsByContainer := make([]string, len(containers))
+	errsByContainer := make([]error, len(containers))
+	var wg sync.WaitGroup
+	for i, c := range containers {
+		wg.Add(1)
+		go func(i int, c string) {
+			defer wg.Done()
+			opts := &corev1.PodLogOptions{
+				Container:  c,
+				TailLines:  &tailLines,
+				Timestamps: true,
+			}
+			if sinceTime != nil {
+				opts.SinceTime = sinceTime
+			}
+			logsByContainer[i], errsByContainer[i] = fetchContainerLog(ctx, clientset, namespace, name, opts)
+		}(i, c)
+	}
+	wg.Wait()
+
+	blobs, firstErr := collectContainerLogs(logsByContainer, errsByContainer)
+	// Only fail when no container produced logs; otherwise return what we have.
+	if len(blobs) == 0 && firstErr != nil {
+		writeLogStreamError(ctx, w, firstErr, namespace, name, strings.Join(containers, ","))
 		return
 	}
 
-	// Drop the partial first line only when the byte cap cut mid-line (a cut on
-	// a line boundary keeps a complete first line), and the partial last line
-	// when the container was mid-write.
-	logs := trimPartialLogLine(string(data))
-	if partialFirst {
-		logs = trimPartialFirstLine(logs)
-	}
-
-	// Return the logs as a JSON object so the frontend fetch utility can
-	// decode it consistently with the other API endpoints.
-	w.Header().Set("Content-Type", "application/json")
-	resp := WorkloadLogsResponse{
-		Pod:       name,
-		Container: container,
-		Logs:      logs,
-	}
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	merged := mergeLogStreams(blobs, int(tailLines))
+	writeWorkloadLogs(w, name, strings.Join(containers, ","), merged)
 }

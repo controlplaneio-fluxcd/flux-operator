@@ -7,7 +7,6 @@ import userEvent from '@testing-library/user-event'
 import { WorkloadReconcilerPanel } from './WorkloadReconcilerPanel'
 import { fetchWithMock } from '../../../utils/fetch'
 
-// Mock fetchWithMock
 vi.mock('../../../utils/fetch', () => ({
   fetchWithMock: vi.fn()
 }))

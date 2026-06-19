@@ -97,7 +97,7 @@ function getContainerStateBadge(state) {
  * Owns tab state, events lazy-loading, and pod sorting/highlighting.
  */
 export function WorkloadDetailPanel({
-  kind, namespace, workloadData, workloadInfo, workloadStatus,
+  kind, namespace, name, workloadData, workloadInfo, workloadStatus,
   pendingDeletions, onPodDeleteStart, onPodDeleteFailed,
   onActionStart, onActionComplete
 }) {
@@ -129,6 +129,13 @@ export function WorkloadDetailPanel({
       ...(logsPod.podStatus.containerStatuses || []).map(cs => ({ name: cs.name, isInit: false, restartCount: cs.restartCount || 0 }))
     ]
   }, [logsPod])
+
+  // Pods that can be inspected in the viewer's pod dropdown: those carrying
+  // container status. Kept live so the dropdown tracks the polled workload data.
+  const logsPods = useMemo(
+    () => (workloadInfo?.pods || []).filter(p => p.podStatus),
+    [workloadInfo]
+  )
 
   // Events data state (lazy-loaded)
   const [eventsData, setEventsData] = useState([])
@@ -594,9 +601,13 @@ export function WorkloadDetailPanel({
       {/* Pod logs viewer */}
       {logsPod && (
         <WorkloadLogsViewer
+          kind={kind}
           namespace={namespace}
           name={logsPod.name}
+          workloadName={name}
           containers={logsContainers}
+          pods={logsPods}
+          onSelectPod={setLogsPodName}
           onClose={() => setLogsPodName(null)}
         />
       )}

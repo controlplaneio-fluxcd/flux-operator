@@ -17,6 +17,10 @@ const LINE_LIMITS = [100, 500, 1000, 5000]
 // Default number of log lines requested from the backend.
 const DEFAULT_TAIL_LINES = 100
 
+// Sentinel option key for the "All containers" view, which streams every regular
+// container and interleaves the lines chronologically.
+const ALL_CONTAINERS = 'all'
+
 // Follow polling interval in milliseconds.
 const FOLLOW_INTERVAL = 5000
 
@@ -39,8 +43,10 @@ const MAX_BUFFER_LINES = 5000
  * Follow polls request everything since the last line's timestamp, which the
  * API filters at second granularity, so the last second is re-sent on every
  * poll. Each line carries a unique nanosecond timestamp prefix, so deduping by
- * exact line text reliably drops those repeats. Returns the previous buffer
- * unchanged when there is nothing new, so the state update is a no-op.
+ * exact line text reliably drops those repeats, including across the merged
+ * "All containers" streams where the distinct timestamps keep containers' lines
+ * apart. Returns the previous buffer unchanged when there is nothing new, so the
+ * state update is a no-op.
  *
  * @param {string} prev - The accumulated log payload
  * @param {string} incoming - The newly fetched log payload
@@ -83,11 +89,11 @@ function formatJson(text) {
 
 // Shared styling for the toolbar controls. Selects deliberately omit a chevron
 // and right padding: those come from the global `select` rule in index.css.
-const FIELD_CLASS = 'text-xs py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-flux-blue'
+const FIELD_CLASS = 'text-xs py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-flux-blue'
 const SELECT_CLASS = `${FIELD_CLASS} pl-2`
 const INPUT_CLASS = `${FIELD_CLASS} px-2 placeholder-gray-400 dark:placeholder-gray-500`
 // p-1 keeps the icon buttons the same height as the text-xs py-1 selects.
-const ICON_TOGGLE_CLASS = 'inline-flex items-center justify-center p-1 rounded-md border transition-colors focus:outline-none focus:ring-2 focus:ring-flux-blue'
+const ICON_TOGGLE_CLASS = 'inline-flex items-center justify-center p-1 rounded-md border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-flux-blue'
 const INACTIVE_CLASS = 'border-gray-300 text-gray-600 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700'
 const ACTIVE_CLASS = 'border-flux-blue text-flux-blue bg-blue-50 dark:bg-blue-900/30'
 const ACTION_CLASS = 'inline-flex items-center p-1 rounded-md text-gray-400 hover:text-flux-blue dark:text-gray-500 dark:hover:text-flux-blue disabled:cursor-not-allowed'
@@ -189,7 +195,11 @@ function LevelMenu({ value, onChange }) {
 }
 
 /**
- * WorkloadLogsViewer - Modal that displays the logs of a pod container.
+ * WorkloadLogsViewer - Modal that displays the logs of a workload's pods.
+ *
+ * The header titles the modal "Log Viewer" over the workload's kind/namespace/name,
+ * and a toolbar dropdown switches between the workload's pods. Selecting a pod
+ * resets the container dropdown back to "All containers".
  *
  * Fetches logs from GET /api/v1/workload/logs for the selected container and
  * renders each log entry on its own row. In the default formatted mode the
@@ -201,26 +211,50 @@ function LevelMenu({ value, onChange }) {
  * Supports following (live polling, appending only new entries), toggling
  * between formatted and raw output, filtering by substring and minimum level,
  * choosing the number of lines, selecting a container (restarted containers
- * also expose a "(previous)" entry for the prior instance's logs), downloading
- * the logs as a <pod>.log file, and a fullscreen mode. A failed follow poll is
- * shown inline at the tail of the feed, leaving the buffer on screen; an initial
- * or post-reset failure (no buffer to keep) shows a full-pane error instead.
+ * also expose a "(previous)" entry for the prior instance's logs), and an
+ * "All containers" option (the default) that streams every regular container and
+ * interleaves the lines chronologically. Init containers are excluded from
+ * "All containers" but remain individually selectable. The viewer also supports
+ * downloading the logs as a <pod>.log file and a fullscreen mode. A failed follow
+ * poll is shown inline at the tail of the feed, leaving the buffer on screen; an
+ * initial or post-reset failure (no buffer to keep) shows a full-pane error instead.
+ *
+ * Pod selection is owned by the parent: switching pods invokes onSelectPod, which
+ * re-renders the viewer with the new pod's name and containers.
  *
  * @param {Object} props
- * @param {string} props.namespace - Pod namespace
- * @param {string} props.name - Pod name
- * @param {Array<{name: string, isInit: boolean, restartCount?: number}>} props.containers - Pod containers
+ * @param {string} props.kind - Workload kind, shown in the title
+ * @param {string} props.namespace - Workload namespace
+ * @param {string} props.name - Name of the pod whose logs are shown
+ * @param {string} props.workloadName - Workload name, shown in the title
+ * @param {Array<{name: string, isInit: boolean, restartCount?: number}>} props.containers - Selected pod's containers
+ * @param {Array<{name: string, status?: string}>} props.pods - Pods of the workload, for the pod dropdown
+ * @param {Function} props.onSelectPod - Called with a pod name when the pod dropdown changes
  * @param {Function} props.onClose - Callback to close the viewer
  */
-export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }) {
+export function WorkloadLogsViewer({ kind, namespace, name, workloadName, containers = [], pods = [], onSelectPod, onClose }) {
   // Load the Prism theme used to syntax-highlight JSON lines as code blocks.
   usePrismTheme()
 
-  // Default to the first regular container, falling back to the first entry.
-  const defaultContainer = (containers.find(c => !c.isInit) || containers[0])?.name || ''
+  // Regular (non-init) container names, current instances only. These make up
+  // the "All containers" view; init containers are excluded from it but stay
+  // individually selectable.
+  const regularNames = useMemo(
+    () => containers.filter(c => !c.isInit).map(c => c.name),
+    [containers]
+  )
 
-  const [container, setContainer] = useState(defaultContainer)
-  const [previous, setPrevious] = useState(false)
+  // "All containers" is the default whenever the pod has at least one regular
+  // container (for a single one it streams just that container). It is omitted
+  // only for the degenerate case of no regular containers, where the default
+  // falls back to the first available container.
+  const defaultKey = useMemo(() => {
+    if (regularNames.length >= 1) return ALL_CONTAINERS
+    const c = containers[0]
+    return c ? `${c.name}::false` : ''
+  }, [containers, regularNames])
+
+  const [containerKey, setContainerKey] = useState(defaultKey)
   const [tailLines, setTailLines] = useState(DEFAULT_TAIL_LINES)
   const [follow, setFollow] = useState(true)
   const [filter, setFilter] = useState('')
@@ -259,20 +293,47 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
   // the whole buffer on every poll. See displayLines for how it's pruned.
   const formatCacheRef = useRef(new Map())
 
-  // One option per container, plus a "(previous)" option for containers that
-  // have restarted (a previous instance only has logs after a restart). The
-  // value encodes both the container and whether to read the previous instance.
+  // The dropdown options. "All containers" leads whenever the pod has a regular
+  // container. Each container then has a base entry, and restarted containers
+  // additionally expose a "(previous)" option for the prior instance's logs. The
+  // value encodes the container and whether to read the previous instance.
   const containerOptions = useMemo(() => {
     const opts = []
+    if (regularNames.length >= 1) {
+      opts.push({ key: ALL_CONTAINERS, label: 'All containers' })
+    }
     for (const c of containers) {
       const base = c.isInit ? `init:${c.name}` : c.name
-      opts.push({ key: `${c.name}::false`, label: base, container: c.name, previous: false })
+      opts.push({ key: `${c.name}::false`, label: base })
       if ((c.restartCount || 0) > 0) {
-        opts.push({ key: `${c.name}::true`, label: `${base} (previous)`, container: c.name, previous: true })
+        opts.push({ key: `${c.name}::true`, label: `${base} (previous)` })
       }
     }
     return opts
-  }, [containers])
+  }, [containers, regularNames])
+
+  // Resolve the selected option key into the request parameters: the container
+  // names to stream and whether to read the previous instance. "All containers"
+  // streams every regular container and never the previous instance; a specific
+  // selection encodes the container and previous flag in its key (name::previous).
+  // The container list is a comma-joined string (container names cannot contain
+  // commas) so the fetch dependencies stay primitive and value-stable across
+  // parent re-renders, preventing spurious buffer resets while following.
+  const { reqContainersStr, reqPrevious } = useMemo(() => {
+    if (containerKey === ALL_CONTAINERS) {
+      return { reqContainersStr: regularNames.join(','), reqPrevious: false }
+    }
+    const sep = containerKey.lastIndexOf('::')
+    const cname = sep >= 0 ? containerKey.slice(0, sep) : containerKey
+    const prev = sep >= 0 && containerKey.slice(sep + 2) === 'true'
+    // Guard the brief window after a pod switch where containerKey still holds the
+    // previous pod's container (before the reset effect runs): if it names a
+    // container the current pod doesn't have, fall back to the regular containers.
+    if (!containers.some(c => c.name === cname)) {
+      return { reqContainersStr: regularNames.join(','), reqPrevious: false }
+    }
+    return { reqContainersStr: cname, reqPrevious: prev }
+  }, [containerKey, containers, regularNames])
 
   // Fetch the logs. Background follow-polls pass { silent: true } so they don't
   // toggle the loading spinner, which would flicker on every poll; only the
@@ -284,7 +345,8 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
   // make the visible lines shift on every poll). The initial load and any
   // parameter change fetch the tail and replace the buffer.
   const fetchLogs = useCallback(async ({ silent = false, append = false } = {}) => {
-    if (!container) return
+    const reqContainers = reqContainersStr ? reqContainersStr.split(',') : []
+    if (reqContainers.length === 0) return
     // Skip follow polls while a reset is in flight: appending now would use the
     // old buffer's cursor (lastTsRef) and merge into the resetting buffer.
     if (append && resettingRef.current) return
@@ -298,8 +360,12 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
     try {
       // tailLines is always sent so the backend caps every fetch (including a
       // follow catch-up) to the user's selection; sinceTime narrows a follow
-      // poll to entries after the last buffered line.
-      const params = new URLSearchParams({ namespace, name, container, tailLines: String(tailLines), previous: String(previous) })
+      // poll to entries after the last buffered line. A repeated container param
+      // requests the merged "All containers" view.
+      const params = new URLSearchParams({ namespace, name, tailLines: String(tailLines), previous: String(reqPrevious) })
+      for (const c of reqContainers) {
+        params.append('container', c)
+      }
       if (append && lastTsRef.current) {
         params.set('sinceTime', lastTsRef.current)
       }
@@ -336,12 +402,21 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
         if (!silent) setLoading(false)
       }
     }
-  }, [namespace, name, container, tailLines, previous])
+  }, [namespace, name, reqContainersStr, reqPrevious, tailLines])
 
-  // Fetch logs whenever the container, line count or previous toggle changes.
+  // Re-fetch whenever the selected container(s), previous flag or line count changes.
   useEffect(() => {
     fetchLogs()
   }, [fetchLogs])
+
+  // Reset the container selection to the pod's default ("All containers") whenever
+  // the pod changes, so a container picked for the previous pod doesn't carry over.
+  // Keyed on the pod name only: poll-driven re-renders keep the same name and leave
+  // the selection untouched. On the initial mount this re-sets the already-default
+  // value, which Preact bails out of as a no-op.
+  useEffect(() => {
+    setContainerKey(defaultKey)
+  }, [name])
 
   // Poll for new logs while following, silently so the spinner doesn't flicker
   // and appending so the visible lines stay put instead of shifting each poll.
@@ -390,6 +465,12 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
   // to a container with no logs yet), so a poll never reuses a stale timestamp
   // from a previous stream. Trailing lines without a timestamp (stack-trace
   // continuations) are skipped rather than clearing it.
+  //
+  // For "All containers" this is a single global high-watermark across the merged
+  // streams, not a per-container cursor. The second-granular sinceTime re-sends
+  // the overlap so a lagging container's recent lines are still picked up; a line
+  // landing more than a second behind the watermark is only reconciled on the
+  // next full (non-append) refetch.
   useEffect(() => {
     let ts = ''
     for (let i = baseLines.length - 1; i >= 0; i--) {
@@ -492,6 +573,15 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
     atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_BOTTOM_THRESHOLD
   }, [])
 
+  // Jump to the latest log line and re-pin to the bottom so following resumes
+  // auto-scrolling. Wired to the footer mode indicator.
+  const scrollToBottom = useCallback(() => {
+    const el = bodyRef.current
+    if (!el) return
+    el.scrollTop = el.scrollHeight
+    atBottomRef.current = true
+  }, [])
+
   // Keep the most recent entry (or the inline follow error) in view after each
   // update, but only while pinned to the bottom, so following doesn't fight a
   // user scrolling through history.
@@ -507,7 +597,7 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
 
   return (
     <div
-      class={`fixed inset-0 z-50 flex justify-center bg-black/50 ${fullScreen ? 'items-center p-0' : 'items-start pt-16 px-4 pb-4'}`}
+      class={`fixed inset-0 z-50 flex justify-center bg-black/50 ${fullScreen ? 'items-center p-0' : 'items-start pt-16 px-4 sm:px-6 lg:px-8 pb-4'}`}
       onClick={onClose}
       data-testid="logs-viewer-overlay"
     >
@@ -524,8 +614,10 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
         {/* Header */}
         <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
           <div class="min-w-0">
-            <h2 class="text-sm font-semibold text-gray-900 dark:text-white truncate">Logs</h2>
-            <p class="text-xs text-gray-500 dark:text-gray-400 truncate">{namespace}/{name}</p>
+            <h2 class="text-sm font-semibold text-gray-900 dark:text-white truncate">Log Viewer</h2>
+            <p class="text-xs text-gray-500 dark:text-gray-400 truncate" data-testid="logs-title">
+              {[kind, namespace, workloadName].filter(Boolean).join('/')}
+            </p>
           </div>
           <button
             onClick={onClose}
@@ -568,19 +660,32 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
             </svg>
           </ToggleButton>
 
+          {/* Pod select. Shown only when there is more than one pod (nothing to
+              switch otherwise); switching pods resets the container dropdown to
+              "All containers". Fixed width so a long pod name is trimmed instead
+              of pushing the rest of the toolbar. */}
+          {pods.length > 1 && (
+            <select
+              value={name}
+              onChange={(e) => onSelectPod?.(e.target.value)}
+              class={`${SELECT_CLASS} w-28 sm:w-40 truncate`}
+              data-testid="logs-pod-select"
+              aria-label="Pod"
+              title="Select pod"
+            >
+              {pods.map((p) => (
+                <option key={p.name} value={p.name}>{p.name}</option>
+              ))}
+            </select>
+          )}
+
           {/* Container select (always shown). Containers that have restarted
               also expose a "(previous)" entry for the prior instance's logs.
               Fixed width so a long container name is trimmed instead of pushing
               the rest of the toolbar. */}
           <select
-            value={`${container}::${previous}`}
-            onChange={(e) => {
-              const opt = containerOptions.find(o => o.key === e.target.value)
-              if (opt) {
-                setContainer(opt.container)
-                setPrevious(opt.previous)
-              }
-            }}
+            value={containerKey}
+            onChange={(e) => setContainerKey(e.target.value)}
             class={`${SELECT_CLASS} w-28 sm:w-40 truncate`}
             data-testid="logs-container-select"
             aria-label="Container"
@@ -741,8 +846,9 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
           )}
         </div>
 
-        {/* Footer: a per-level count summary that doubles as the color legend,
-            with the loader trailing it while a fetch is in flight. */}
+        {/* Footer: a per-level count summary that doubles as the color legend.
+            The trailing corner shows the fetch loader while a request is in
+            flight, otherwise the live/snapshot mode reflecting the follow state. */}
         <div
           class="flex items-center justify-between gap-3 px-4 py-2 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800"
           data-testid="logs-footer"
@@ -755,12 +861,42 @@ export function WorkloadLogsViewer({ namespace, name, containers = [], onClose }
               </span>
             ))}
           </div>
-          {loading && (
+          {loading ? (
             <div
-              class="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400 flex-shrink-0"
+              class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 flex-shrink-0"
               data-testid="logs-loader"
+              role="status"
               aria-label="Loading logs"
-            />
+            >
+              <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400" />
+              <span>Loading…</span>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={scrollToBottom}
+              class="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400 hover:text-flux-blue dark:hover:text-flux-blue flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-flux-blue rounded"
+              data-testid="logs-mode"
+              title={`${follow ? 'Following live logs' : 'Snapshot'} — click to scroll to latest`}
+              aria-label="Scroll to latest logs"
+            >
+              {follow ? (
+                <>
+                  <svg class="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 13l-7 7-7-7m14-6l-7 7-7-7" />
+                  </svg>
+                  <span>Following</span>
+                </>
+              ) : (
+                <>
+                  <svg class="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" />
+                  </svg>
+                  <span>Snapshot</span>
+                </>
+              )}
+            </button>
           )}
         </div>
       </div>

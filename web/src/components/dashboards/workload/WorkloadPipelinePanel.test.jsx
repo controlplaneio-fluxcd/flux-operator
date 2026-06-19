@@ -124,12 +124,10 @@ describe('WorkloadPipelinePanel', () => {
     // 2 clickable nodes (source + reconciler) x 2 layouts = 4
     expect(links).toHaveLength(4)
 
-    // Check source link href
     const sourceLinks = links.filter(l => l.getAttribute('href').includes('GitRepository'))
     expect(sourceLinks.length).toBeGreaterThanOrEqual(1)
     expect(sourceLinks[0].getAttribute('href')).toBe('/resource/GitRepository/flux-system/flux-system')
 
-    // Check reconciler link href
     const reconcilerLinks = links.filter(l => l.getAttribute('href').includes('Kustomization'))
     expect(reconcilerLinks.length).toBeGreaterThanOrEqual(1)
     expect(reconcilerLinks[0].getAttribute('href')).toBe('/resource/Kustomization/flux-system/apps')
@@ -154,14 +152,13 @@ describe('WorkloadPipelinePanel', () => {
       />
     )
 
-    // Should have 3 nodes instead of 4 (no source) x 2 layouts = 6
+    // Without a source, the pipeline has 3 nodes x 2 layouts = 6
     const nodes = screen.getAllByTestId('pipeline-node')
     expect(nodes).toHaveLength(6)
 
-    // Source kind should not appear
     expect(screen.queryByText('GitRepository')).not.toBeInTheDocument()
 
-    // Reconciler, workload, and pods should still render
+    // Reconciler, workload, and pods still render without the source
     expect(screen.getAllByText('Kustomization').length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText('Deployment').length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText('Pods').length).toBeGreaterThanOrEqual(1)
@@ -258,7 +255,6 @@ describe('WorkloadPipelinePanel', () => {
       />
     )
 
-    // Pods node should show "1/2 ready" with phase breakdown
     expect(screen.getAllByText('1/2 ready').length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText('1 running, 1 failed').length).toBeGreaterThanOrEqual(1)
   })
