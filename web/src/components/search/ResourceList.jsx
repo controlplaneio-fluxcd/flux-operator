@@ -10,7 +10,7 @@ import { usePageMeta } from '../../utils/meta'
 import { reportData } from '../../app'
 import { FilterForm } from './FilterForm'
 import { ResourceDetailsView } from './ResourceDetailsView'
-import { useRestoreFiltersFromUrl, useSyncFiltersToUrl } from '../../utils/routing'
+import { getDashboardUrl, useRestoreFiltersFromUrl, useSyncFiltersToUrl } from '../../utils/routing'
 import { StatusChart } from './StatusChart'
 import { useInfiniteScroll } from '../../utils/scroll'
 import { isFavorite, toggleFavorite, favorites } from '../../utils/favorites'
@@ -53,13 +53,6 @@ export async function fetchResourcesStatus() {
   }
 }
 
-
-/**
- * Build URL path for a resource dashboard
- */
-function getResourceUrl(kind, namespace, name) {
-  return `/resource/${encodeURIComponent(kind)}/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}`
-}
 
 /**
  * ResourceCard - Individual card displaying a Flux resource with status and details
@@ -137,7 +130,7 @@ function ResourceCard({ resource }) {
       {/* Resource namespace/name - clickable link to dashboard */}
       <div class="mb-1 sm:mb-2">
         <a
-          href={getResourceUrl(resource.kind, resource.namespace, resource.name)}
+          href={getDashboardUrl(resource.kind, resource.namespace, resource.name)}
           class="text-sm text-left hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flux-blue rounded inline-block group"
         >
           <span class="text-gray-500 dark:text-gray-400">{resource.namespace}/</span><span class="font-semibold text-gray-900 dark:text-gray-100 group-hover:text-flux-blue dark:group-hover:text-blue-400">{resource.name}</span><svg class="w-3.5 h-3.5 text-gray-400 group-hover:text-flux-blue dark:group-hover:text-blue-400 transition-colors ml-1 inline-block align-middle" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>

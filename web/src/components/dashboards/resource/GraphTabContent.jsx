@@ -4,6 +4,7 @@
 import { useMemo, useState, useEffect } from 'preact/hooks'
 import { fluxKinds, isFluxInventoryItem, isWorkloadInventoryItem } from '../../../utils/constants'
 import { fetchWithMock } from '../../../utils/fetch'
+import { getDashboardUrl } from '../../../utils/routing'
 
 /**
  * Build graph data from resource data
@@ -251,13 +252,14 @@ function NodeCard({ kind, name, namespace, status, revision, version, url, messa
  * @param {array|object} items - Array of items (for itemList mode) or object of kind counts
  * @param {boolean} isItemList - If true, renders individual items; if false, renders grouped counts
  * @param {function} onItemClick - Click handler for individual items
+ * @param {function} getItemHref - Optional function returning a dashboard link for an item; when set, the item name renders as an anchor
  * @param {function} onTitleClick - Click handler for the title
  * @param {boolean} alwaysShow - If true, always render even with no items
  * @param {boolean} isProgressing - If true, applies blue border styling
  * @param {object} itemStatuses - Optional map of item key to status for displaying status dots
  * @param {string} defaultNamespace - Default namespace for items without explicit namespace
  */
-function GroupCard({ title, count, items, isItemList, onItemClick, onTitleClick, alwaysShow, isProgressing, itemStatuses, defaultNamespace }) {
+function GroupCard({ title, count, items, isItemList, onItemClick, getItemHref, onTitleClick, alwaysShow, isProgressing, itemStatuses, defaultNamespace }) {
   const hasItems = isItemList ? items.length > 0 : Object.keys(items).length > 0
 
   if (!hasItems && !alwaysShow) return null
@@ -288,6 +290,7 @@ function GroupCard({ title, count, items, isItemList, onItemClick, onTitleClick,
           items.map((item, idx) => {
             const isClickable = onItemClick && isFluxInventoryItem(item)
             const resolvedNamespace = item.namespace || defaultNamespace
+            const itemHref = getItemHref?.(item)
             const itemKey = `${item.kind}/${resolvedNamespace}/${item.name}`
             const itemData = itemStatuses?.[itemKey]
             const itemStatus = itemData?.status
@@ -304,12 +307,22 @@ function GroupCard({ title, count, items, isItemList, onItemClick, onTitleClick,
                 tabIndex={isClickable ? 0 : undefined}
               >
                 <div class="text-xs text-gray-500 dark:text-gray-400">{item.kind}</div>
-                <div
-                  class={`text-sm truncate ${isClickable ? 'hover:underline hover:text-flux-blue dark:hover:text-blue-400 cursor-pointer' : ''} font-medium`}
-                  title={`${item.namespace}/${item.name}`}
-                >
-                  {item.name}{isClickable && ' →'}
-                </div>
+                {itemHref ? (
+                  <a
+                    href={itemHref}
+                    class="block text-sm truncate hover:underline hover:text-flux-blue dark:hover:text-blue-400 cursor-pointer font-medium text-gray-900 dark:text-white"
+                    title={`${resolvedNamespace}/${item.name}`}
+                  >
+                    {item.name} →
+                  </a>
+                ) : (
+                  <div
+                    class={`text-sm truncate ${isClickable ? 'hover:underline hover:text-flux-blue dark:hover:text-blue-400 cursor-pointer' : ''} font-medium`}
+                    title={`${item.namespace}/${item.name}`}
+                  >
+                    {item.name}{isClickable && ' →'}
+                  </div>
+                )}
                 {itemStatusMessage && (
                   <div class="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5 flex items-center gap-1.5" title={itemStatusMessage} data-testid="workload-status-message">
                     {itemStatus !== undefined && (
@@ -768,7 +781,7 @@ export function GraphTabContent({ resourceData, namespace, onNavigate, setActive
                 count={workloadsCount}
                 items={workloads}
                 isItemList={true}
-                onTitleClick={setActiveTab ? () => setActiveTab('workloads') : undefined}
+                getItemHref={(item) => getDashboardUrl(item.kind, item.namespace || namespace, item.name)}
                 isProgressing={reconciler.status === 'Progressing'}
                 itemStatuses={workloadStatuses}
                 defaultNamespace={namespace}

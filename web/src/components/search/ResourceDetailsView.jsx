@@ -5,6 +5,7 @@ import { useState, useMemo, useEffect, useRef } from 'preact/hooks'
 import { fetchWithMock } from '../../utils/fetch'
 import { usePrismTheme, YamlBlock } from '../dashboards/common/yaml'
 import { isKindWithInventory, getKindAlias, isFluxInventoryItem, isWorkloadInventoryItem } from '../../utils/constants'
+import { getDashboardUrl } from '../../utils/routing'
 import { getStatusBadgeClass, cleanStatus } from '../../utils/status'
 import { FluxOperatorIcon } from '../layout/Icons'
 
@@ -56,16 +57,15 @@ function InventoryItem({ item }) {
   const isFluxResource = isFluxInventoryItem(item)
   const isWorkload = !isFluxResource && isWorkloadInventoryItem(item)
 
-  // Build resource URL
+  // Build the dashboard URL, routing workloads and Flux resources accordingly
   const ns = item.namespace || ''
-  const resourceUrl = `/resource/${encodeURIComponent(item.kind)}/${encodeURIComponent(ns)}/${encodeURIComponent(item.name)}`
-  const workloadUrl = `/workload/${encodeURIComponent(item.kind)}/${encodeURIComponent(ns)}/${encodeURIComponent(item.name)}`
+  const dashboardUrl = getDashboardUrl(item.kind, ns, item.name)
 
   if (isFluxResource || isWorkload) {
     return (
       <div class="py-1 px-2 text-xs break-all">
         <a
-          href={isFluxResource ? resourceUrl : workloadUrl}
+          href={dashboardUrl}
           class="text-left hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flux-blue rounded inline-block group"
         >
           <span class="text-gray-600 dark:text-gray-400">{item.kind}/</span>{item.namespace && <span class="text-gray-500 dark:text-gray-400">{item.namespace}/</span>}<span class="text-gray-900 dark:text-gray-100 group-hover:text-flux-blue dark:group-hover:text-blue-400">{item.name}</span><svg class="w-3 h-3 text-gray-400 group-hover:text-flux-blue dark:group-hover:text-blue-400 transition-colors ml-1 inline-block align-middle" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
@@ -350,7 +350,7 @@ export function ResourceDetailsView({ kind, name, namespace, isExpanded }) {
             <div class="space-y-4">
               {/* Resource Link */}
               <a
-                href={`/resource/${encodeURIComponent(resourceData.status.sourceRef.kind)}/${encodeURIComponent(resourceData.status.sourceRef.namespace)}/${encodeURIComponent(resourceData.status.sourceRef.name)}`}
+                href={getDashboardUrl(resourceData.status.sourceRef.kind, resourceData.status.sourceRef.namespace, resourceData.status.sourceRef.name)}
                 class="flex items-center gap-2 text-sm text-flux-blue dark:text-blue-400 hover:underline"
               >
                 <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">

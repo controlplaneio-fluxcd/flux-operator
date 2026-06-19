@@ -3,6 +3,7 @@
 
 import { formatWorkloadStatus } from '../../../utils/status'
 import { summarizePods } from '../../../utils/pods'
+import { getDashboardUrl } from '../../../utils/routing'
 
 /**
  * Get border color class for pipeline node status.
@@ -165,7 +166,7 @@ export function WorkloadPipelinePanel({ reconciler, kind, name, workloadStatus, 
         name={sourceRef.name}
         subtext={sourceRef.url}
         status={sourceStatus}
-        href={`/resource/${encodeURIComponent(sourceRef.kind)}/${encodeURIComponent(sourceNs)}/${encodeURIComponent(sourceRef.name)}`}
+        href={getDashboardUrl(sourceRef.kind, sourceNs, sourceRef.name)}
       />
     )
   }
@@ -178,7 +179,7 @@ export function WorkloadPipelinePanel({ reconciler, kind, name, workloadStatus, 
       name={reconciler.metadata?.name}
       subtext={revision}
       status={reconcilerStatus}
-      href={`/resource/${encodeURIComponent(reconciler.kind)}/${encodeURIComponent(reconciler.metadata?.namespace)}/${encodeURIComponent(reconciler.metadata?.name)}`}
+      href={getDashboardUrl(reconciler.kind, reconciler.metadata?.namespace, reconciler.metadata?.name)}
     />
   )
 

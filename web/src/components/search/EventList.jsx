@@ -10,7 +10,7 @@ import { getEventBadgeClass } from '../../utils/status'
 import { usePageMeta } from '../../utils/meta'
 import { reportData } from '../../app'
 import { FilterForm } from './FilterForm'
-import { useRestoreFiltersFromUrl, useSyncFiltersToUrl } from '../../utils/routing'
+import { getDashboardUrl, useRestoreFiltersFromUrl, useSyncFiltersToUrl } from '../../utils/routing'
 import { StatusChart } from './StatusChart'
 import { useInfiniteScroll } from '../../utils/scroll'
 
@@ -72,8 +72,8 @@ function EventCard({ event }) {
   // Parse involvedObject to get kind and name
   const [kind, name] = event.involvedObject.split('/')
 
-  // Build resource URL
-  const resourceUrl = `/resource/${encodeURIComponent(kind)}/${encodeURIComponent(event.namespace)}/${encodeURIComponent(name)}`
+  // Build the dashboard URL, routing workload-kind events to the workload dashboard
+  const resourceUrl = getDashboardUrl(kind, event.namespace, name)
 
   // Map event type to display status
   const displayStatus = event.type === 'Normal' ? 'Info' : 'Warning'

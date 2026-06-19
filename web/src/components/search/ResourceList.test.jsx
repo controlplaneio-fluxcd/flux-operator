@@ -22,8 +22,9 @@ vi.mock('../../utils/fetch', () => ({
   fetchWithMock: vi.fn()
 }))
 
-// Mock routing utilities
-vi.mock('../../utils/routing', () => ({
+// Mock routing utilities (stub the URL-sync hooks, keep the real getDashboardUrl)
+vi.mock('../../utils/routing', async (importActual) => ({
+  ...(await importActual()),
   useRestoreFiltersFromUrl: vi.fn(),
   useSyncFiltersToUrl: vi.fn()
 }))

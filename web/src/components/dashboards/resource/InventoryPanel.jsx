@@ -3,6 +3,7 @@
 
 import { useMemo } from 'preact/compat'
 import { isKindWithInventory, isFluxInventoryItem, isWorkloadInventoryItem } from '../../../utils/constants'
+import { getDashboardUrl } from '../../../utils/routing'
 import { DashboardPanel, TabButton } from '../common/panel'
 import { WorkloadsTabContent } from './WorkloadsTabContent'
 import { GraphTabContent } from './GraphTabContent'
@@ -116,17 +117,10 @@ export function InventoryPanel({ resourceData, onNavigate }) {
     return resourceData.status.inventory.filter(item => isWorkloadInventoryItem(item))
   }, [resourceData, hasInventory])
 
-  // Build URL for a Flux resource
-  const getResourceUrl = (item) => {
-    const ns = item.namespace || resourceData.metadata.namespace
-    return `/resource/${encodeURIComponent(item.kind)}/${encodeURIComponent(ns)}/${encodeURIComponent(item.name)}`
-  }
-
-  // Build URL for a workload
-  const getWorkloadUrl = (item) => {
-    const ns = item.namespace || resourceData.metadata.namespace
-    return `/workload/${encodeURIComponent(item.kind)}/${encodeURIComponent(ns)}/${encodeURIComponent(item.name)}`
-  }
+  // Build the dashboard URL for an inventory item, routing workloads to the
+  // workload dashboard and Flux resources to the resource dashboard.
+  const getItemUrl = (item) =>
+    getDashboardUrl(item.kind, item.namespace || resourceData.metadata.namespace, item.name)
 
   return (
     <DashboardPanel title="Managed Objects" id="inventory-panel">
@@ -262,16 +256,9 @@ export function InventoryPanel({ resourceData, onNavigate }) {
                 return (
                   <tr key={idx} class="hover:bg-gray-50 dark:hover:bg-gray-800">
                     <td class="px-3 py-2 text-sm">
-                      {isFluxResource ? (
+                      {(isFluxResource || isWorkload) ? (
                         <a
-                          href={getResourceUrl(item)}
-                          class="text-flux-blue dark:text-blue-400 hover:underline"
-                        >
-                          {item.name}
-                        </a>
-                      ) : isWorkload ? (
-                        <a
-                          href={getWorkloadUrl(item)}
+                          href={getItemUrl(item)}
                           class="text-flux-blue dark:text-blue-400 hover:underline"
                         >
                           {item.name}

@@ -699,8 +699,7 @@ describe('GraphTabContent component', () => {
     })
   })
 
-  it('should call setActiveTab when clicking Workloads title', async () => {
-    const user = userEvent.setup()
+  it('should not make the Workloads title clickable', () => {
     const setActiveTab = vi.fn()
 
     render(
@@ -711,11 +710,25 @@ describe('GraphTabContent component', () => {
       />
     )
 
-    // Find and click the Workloads title
-    const workloadsTitle = screen.getByText('Workloads (2) →')
-    await user.click(workloadsTitle)
+    // The Workloads title has no arrow and is not a navigation target
+    expect(screen.queryByText('Workloads (2) →')).not.toBeInTheDocument()
+    expect(screen.getByText(/Workloads \(2\)/)).toBeInTheDocument()
+  })
 
-    expect(setActiveTab).toHaveBeenCalledWith('workloads')
+  it('should link each workload item to its workload dashboard', () => {
+    render(
+      <GraphTabContent
+        resourceData={mockResourceData}
+        namespace="flux-system"
+      />
+    )
+
+    // Each workload name renders as a link to the workload dashboard
+    const app1Link = screen.getByText('app1 →').closest('a')
+    expect(app1Link).toHaveAttribute('href', '/workload/Deployment/default/app1')
+
+    const app2Link = screen.getByText('app2 →').closest('a')
+    expect(app2Link).toHaveAttribute('href', '/workload/Deployment/default/app2')
   })
 
   it('should call setActiveTab when clicking Resources title', async () => {
@@ -886,9 +899,9 @@ describe('GraphTabContent component', () => {
       />
     )
 
-    // Check workload items are rendered individually
-    expect(screen.getByText('app1')).toBeInTheDocument()
-    expect(screen.getByText('app2')).toBeInTheDocument()
+    // Check workload items are rendered individually as dashboard links
+    expect(screen.getByText('app1 →')).toBeInTheDocument()
+    expect(screen.getByText('app2 →')).toBeInTheDocument()
   })
 
   it('should display resource counts alphabetically', () => {
@@ -1479,8 +1492,8 @@ describe('GraphTabContent workload status fetching', () => {
       />
     )
 
-    // Workload name should be visible
-    expect(screen.getByText('app1')).toBeInTheDocument()
+    // Workload name should be visible as a dashboard link
+    expect(screen.getByText('app1 →')).toBeInTheDocument()
 
     // But no status dots should be rendered
     expect(screen.queryByTestId('workload-status-dot')).not.toBeInTheDocument()

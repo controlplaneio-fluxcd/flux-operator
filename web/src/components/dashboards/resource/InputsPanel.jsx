@@ -8,6 +8,7 @@ import { DashboardPanel, TabButton } from '../common/panel'
 import { YamlBlock } from '../common/yaml'
 import { FluxOperatorIcon } from '../../layout/Icons'
 import { useHashTab } from '../../../utils/hash'
+import { getDashboardUrl } from '../../../utils/routing'
 
 // Valid tabs for the InputsPanel
 const INPUTS_TABS = ['overview', 'values']
@@ -220,7 +221,7 @@ export function InputsPanel({ resourceData, namespace }) {
                       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 mb-1">
                         <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
                           <a
-                            href={`/resource/ResourceSetInputProvider/${provider.namespace}/${provider.name}`}
+                            href={getDashboardUrl('ResourceSetInputProvider', provider.namespace, provider.name)}
                             class="text-sm font-medium text-flux-blue hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 inline-flex items-center gap-1"
                           >
                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

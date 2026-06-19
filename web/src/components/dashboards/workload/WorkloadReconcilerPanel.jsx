@@ -5,6 +5,7 @@ import { useMemo, useEffect, useRef, useState } from 'preact/hooks'
 import { fetchWithMock } from '../../../utils/fetch'
 import { formatTimestamp } from '../../../utils/time'
 import { getControllerName, getKindAlias } from '../../../utils/constants'
+import { getDashboardUrl } from '../../../utils/routing'
 import { DashboardPanel, TabButton } from '../common/panel'
 import { getStatusBadgeClass, getEventBadgeClass } from '../../../utils/status'
 import { FluxOperatorIcon } from '../../layout/Icons'
@@ -154,7 +155,7 @@ export function WorkloadReconcilerPanel({ reconciler, workloadData }) {
               <div class="text-sm">
                 <span class="text-gray-500 dark:text-gray-400">Name</span>
                 <a
-                  href={`/resource/${encodeURIComponent(reconciler.kind)}/${encodeURIComponent(reconciler.metadata.namespace)}/${encodeURIComponent(reconciler.metadata.name)}`}
+                  href={getDashboardUrl(reconciler.kind, reconciler.metadata.namespace, reconciler.metadata.name)}
                   class="ml-1 text-flux-blue dark:text-blue-400 hover:underline"
                   data-testid="reconciler-link"
                 >
@@ -224,7 +225,7 @@ export function WorkloadReconcilerPanel({ reconciler, workloadData }) {
           <div class="text-sm">
             <span class="text-gray-500 dark:text-gray-400">Name</span>
             <a
-              href={`/resource/${encodeURIComponent(sourceRef.kind)}/${encodeURIComponent(sourceRef.namespace || reconciler.metadata.namespace)}/${encodeURIComponent(sourceRef.name)}`}
+              href={getDashboardUrl(sourceRef.kind, sourceRef.namespace || reconciler.metadata.namespace, sourceRef.name)}
               class="ml-1 text-flux-blue dark:text-blue-400 hover:underline"
             >
               <span class="hidden md:inline break-all">{sourceRef.kind}/{sourceRef.namespace || reconciler.metadata.namespace}/{sourceRef.name}</span>
