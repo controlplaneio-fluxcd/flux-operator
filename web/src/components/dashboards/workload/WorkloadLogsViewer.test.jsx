@@ -616,10 +616,15 @@ describe('WorkloadLogsViewer component', () => {
 
     const rows = screen.getAllByTestId('logs-line')
     expect(rows[0].tagName).toBe('PRE')
-    expect(rows[0].querySelector('code')).toHaveClass('language-json')
-    expect(rows[0].querySelector('.token')).not.toBeNull()
-    expect(rows[0].textContent).toBe('{\n  "level": "info",\n  "msg": "hello"\n}')
-    expect(rows[1].tagName).toBe('PRE')
+    // JSON is highlighted by our own span serializer (no Prism): keys carry the gray
+    // key class and the indented structure is preserved byte-for-byte.
+    const keySpan = [...rows[0].querySelectorAll('span')].find(s => s.textContent === '"level"')
+    expect(keySpan).toBeTruthy()
+    expect(keySpan).toHaveClass('text-gray-500')
+    expect(rows[0].textContent).toBe('"level": "info",\n"msg": "hello"')
+    // A line matching no formatter renders as a wrapping div, not the JSON <pre>.
+    expect(rows[1].tagName).toBe('DIV')
+    expect(rows[1]).toHaveClass('whitespace-pre-wrap')
     expect(rows[1].textContent).toBe('plain text line')
   })
 
@@ -892,11 +897,10 @@ describe('WorkloadLogsViewer component', () => {
     render(<WorkloadLogsViewer {...defaultProps} />)
     await waitFor(() => expect(screen.getAllByTestId('logs-line')).toHaveLength(1))
 
-    // Still one logs-line per entry, but it now holds header + message + 2 field rows.
+    // Still one logs-line per entry, but it now holds header+message + 2 field rows.
     const rows = screen.getAllByTestId('logs-line-row').map(r => r.textContent)
     expect(rows).toEqual([
-      'E0526 23:03:57.521582       1 leaderelection.go:452]',
-      'Error retrieving lease lock',
+      'E0526 23:03:57.521582 1 leaderelection.go:452] Error retrieving lease lock',
       'err: i/o timeout',
       'logger: cert-manager.controller'
     ])

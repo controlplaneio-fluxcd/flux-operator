@@ -83,6 +83,11 @@ const LEADING_LEVEL = /^([a-z]+)[:\t]/
 // the uppercase TEXT_LEVEL misses it); read the level from the 2nd tab field when
 // the 1st is an ISO-8601 or epoch timestamp.
 const ZAP_TS = /^(?:\d{4}-\d{2}-\d{2}T[\d:.]+(?:Z|[+-]\d{2}:?\d{2})?|\d{9,}(?:\.\d+)?)$/
+// NLog default layout "<longdate>|<LEVEL>|<logger>|<msg>": the level sits between
+// pipes, which TEXT_LEVEL's boundary classes exclude, so read it from the 2nd pipe
+// field. Anchored to a leading longdate so a free-form "result|ERROR|stack" (no
+// timestamp) is not misread as a level.
+const NLOG_LEVEL = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[.,]\d+\|([A-Za-z]+)\|/
 // A bracketed level token, any case, e.g. nginx "[error]", Envoy/Istio
 // "[warning]", MySQL "[Warning]", structlog "[info     ]", Elasticsearch "[INFO ]".
 // Global so multi-bracket lines (Envoy "[16][warning][config]") are scanned.
@@ -91,10 +96,20 @@ const BRACKET_LEVEL = /[[(]\s*([a-zA-Z]+)\s*[\])]/g
 // match. The leading `.` boundary catches Monolog's "channel.LEVEL:" prefix
 // (PHP); the trailing `/` catches Celery's "[ERROR/MainProcess]"; the short
 // codes (INF/WRN/ERR/FTL/DBG/VRB/TRC/PNC) catch Serilog/zerolog console output,
-// and FINE/FINER/FINEST cover java.util.logging.
-const TEXT_LEVEL = /(?:^|[\s[(.])(TRACE|TRC|DEBUG|DBG|INFO|INF|WARN(?:ING)?|WRN|ERROR|ERR|FATAL|FTL|SEVERE|CRITICAL|NOTICE|PANIC|PNC|VRB|FINEST|FINER|FINE)(?:[\s\]):/]|$)/
+// FINE/FINER/FINEST cover java.util.logging, and ALERT/EMERGENCY cover Monolog's
+// upper PSR-3 levels.
+const TEXT_LEVEL = /(?:^|[\s[(.])(TRACE|TRC|DEBUG|DBG|INFO|INF|WARN(?:ING)?|WRN|ERROR|ERR|FATAL|FTL|SEVERE|CRITICAL|NOTICE|PANIC|PNC|VRB|FINEST|FINER|FINE|ALERT|EMERGENCY)(?:[\s\]):/]|$)/
 
-function fromString(s) {
+/**
+ * fromString - normalize a logger's level word/short-code (any case) to one of
+ * LEVELS, or null when unrecognized. Backs both the pill's detection cascade and
+ * the in-body level tint in logFormat.js, so a level word maps the same way in
+ * both places.
+ *
+ * @param {string} s - The level token (e.g. "WARNING", "VRB", "crit")
+ * @returns {string|null} A value from LEVELS, or null
+ */
+export function fromString(s) {
   return STRING_ALIAS[s.toLowerCase()] || null
 }
 
@@ -177,6 +192,15 @@ export function detectLevel(text) {
     const parts = text.split('\t')
     if (parts.length >= 2 && ZAP_TS.test(parts[0])) {
       const lvl = fromString(parts[1])
+      if (lvl) return lvl
+    }
+  }
+
+  // NLog default layout: longdate-led, level in the 2nd pipe field.
+  if (text.indexOf('|') !== -1) {
+    const nl = NLOG_LEVEL.exec(text)
+    if (nl) {
+      const lvl = fromString(nl[1])
       if (lvl) return lvl
     }
   }

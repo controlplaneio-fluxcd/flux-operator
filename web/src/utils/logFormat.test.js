@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { describe, it, expect } from 'vitest'
-import { decorateLine, parseKlog, parseLogfmt, parseZap, tokenizeKV } from './logFormat'
+import { decorateLine, highlightJson, parseDotnet, parseJava, parseKlog, parseLogfmt, parseMonolog, parsePython, parseRuby, parseZap, tokenizeKV } from './logFormat'
 
 // rowsText flattens a block descriptor to one string per visual row (spans joined),
 // so a test can assert the rendered text without caring about span boundaries.
@@ -62,15 +62,14 @@ describe('tokenizeKV', () => {
 })
 
 describe('parseKlog', () => {
-  it('decorates a structured klog.ErrorS line into a block (header, message, fields)', () => {
+  it('decorates a structured klog.ErrorS line into a block (header+message, fields)', () => {
     const line = 'E0526 23:03:57.521582       1 leaderelection.go:452] "Error retrieving lease lock" err="Get \\"https://10.96.0.1:443\\": i/o timeout" logger="cert-manager.controller" lock="kube-system/cert-manager-controller"'
     const d = parseKlog(line, 'error')
     expect(d.kind).toBe('block')
     const rows = rowsText(d)
-    // Header rebuilt verbatim, including the original padding.
-    expect(rows[0]).toBe('E0526 23:03:57.521582       1 leaderelection.go:452]')
-    // Message unquoted on its own line.
-    expect(rows[1]).toBe('Error retrieving lease lock')
+    // Header rebuilt with klog's PID padding collapsed to a single space, and the
+    // unquoted message kept on the same row as the header.
+    expect(rows[0]).toBe('E0526 23:03:57.521582 1 leaderelection.go:452] Error retrieving lease lock')
     // Three fields, one per line, with the escaped-quote value kept intact.
     expect(kvRows(d)).toEqual([
       'err: Get "https://10.96.0.1:443": i/o timeout',
@@ -87,14 +86,16 @@ describe('parseKlog', () => {
     const line = 'I0612 14:03:11.123456   12 server.go:80] "GET /healthz" completed'
     const d = parseKlog(line, 'info')
     expect(d.kind).toBe('spans')
-    expect(spansText(d)).toBe('I0612 14:03:11.123456   12 server.go:80] "GET /healthz" completed')
+    // PID padding collapsed to a single space.
+    expect(spansText(d)).toBe('I0612 14:03:11.123456 12 server.go:80] "GET /healthz" completed')
   })
 
   it('decorates a classic klog line as a single highlighted row', () => {
     const line = 'I0612 14:03:11.123456   12 reflector.go:243] Watch close - watch chan closed'
     const d = parseKlog(line, 'info')
     expect(d.kind).toBe('spans')
-    expect(spansText(d)).toBe(line)
+    // PID padding collapsed to a single space.
+    expect(spansText(d)).toBe('I0612 14:03:11.123456 12 reflector.go:243] Watch close - watch chan closed')
     // Caller highlighted, severity tinted.
     expect(d.spans.some(s => s.text === 'reflector.go:243' && /violet/.test(s.cls))).toBe(true)
   })
@@ -201,12 +202,288 @@ describe('parseZap', () => {
   })
 })
 
+describe('parseJava', () => {
+  describe('Spring Boot', () => {
+    it('decorates a 3.x line with app + thread brackets, keeping the level and accenting the logger', () => {
+      const line = '2025-12-18T07:25:01.584Z  INFO 132568 --- [myapp] [           main] o.s.b.d.f.logexample.MyApplication       : Started in 3.1s'
+      const d = parseJava(line)
+      expect(d.kind).toBe('spans')
+      // Level kept, brackets trimmed (15-char thread padding collapsed), logger, message.
+      expect(spansText(d)).toBe('INFO  [myapp] [main]  o.s.b.d.f.logexample.MyApplication  Started in 3.1s')
+      // Level tinted blue (info), brackets muted, logger violet.
+      expect(d.spans.some(s => s.text === 'INFO' && /blue/.test(s.cls))).toBe(true)
+      expect(d.spans.some(s => s.text === '[myapp] [main]' && /gray-4/.test(s.cls))).toBe(true)
+      expect(d.spans.some(s => s.text === 'o.s.b.d.f.logexample.MyApplication' && /violet/.test(s.cls))).toBe(true)
+    })
+
+    it('handles a line with only the padded thread bracket (no app name)', () => {
+      const d = parseJava('2026-06-16T10:00:00.123Z  WARN 12345 --- [  scheduler-1] c.e.Scheduler : tick')
+      expect(spansText(d)).toBe('WARN  [scheduler-1]  c.e.Scheduler  tick')
+      expect(d.spans.some(s => s.text === 'WARN' && /amber/.test(s.cls))).toBe(true)
+    })
+
+    it('keeps a Micrometer correlation bracket', () => {
+      const d = parseJava('2026-06-16T10:00:00.123Z  INFO 7 --- [demo] [  main] [abc123-def456] c.e.Trace : handled')
+      expect(spansText(d)).toBe('INFO  [demo] [main] [abc123-def456]  c.e.Trace  handled')
+    })
+
+    it('matches a 2.x space-separated local timestamp with dot millis and no zone', () => {
+      const d = parseJava('2019-08-30 12:30:04.031  INFO 22174 --- [  nio-8080-exec-0] demo.Controller : handled')
+      expect(d.kind).toBe('spans')
+      expect(spansText(d)).toBe('INFO  [nio-8080-exec-0]  demo.Controller  handled')
+    })
+
+    it('matches when the PID is blank (${PID:- })', () => {
+      const d = parseJava('2026-06-16T10:00:00.123Z  INFO  --- [  main] c.e.App : up')
+      expect(d.kind).toBe('spans')
+      expect(spansText(d)).toBe('INFO  [main]  c.e.App  up')
+    })
+
+    it('matches the root logger (empty logger name), omitting the logger span', () => {
+      const d = parseJava('2026-06-16T10:00:00.123Z ERROR 1 --- [  main]  : boom')
+      expect(d.kind).toBe('spans')
+      expect(spansText(d)).toBe('ERROR  [main]  boom')
+    })
+
+    it('captures a logger that itself contains brackets (Tomcat) whole', () => {
+      const d = parseJava('2026-06-16T10:00:00.123Z  INFO 1 --- [  main] o.a.c.c.C.[Tomcat].[localhost].[/]       : init')
+      expect(d.kind).toBe('spans')
+      expect(d.spans.some(s => s.text === 'o.a.c.c.C.[Tomcat].[localhost].[/]' && /violet/.test(s.cls))).toBe(true)
+      expect(spansText(d)).toBe('INFO  [main]  o.a.c.c.C.[Tomcat].[localhost].[/]  init')
+    })
+  })
+
+  describe('Log4j2 / Logback', () => {
+    it('decorates a default time-only line (thread before level, " - " separator)', () => {
+      const d = parseJava('10:00:00.123 [main] INFO  com.example.Demo - Started')
+      expect(d.kind).toBe('spans')
+      expect(spansText(d)).toBe('[main]  INFO  com.example.Demo  Started')
+      expect(d.spans.some(s => s.text === '[main]' && /gray-4/.test(s.cls))).toBe(true)
+      expect(d.spans.some(s => s.text === 'com.example.Demo' && /violet/.test(s.cls))).toBe(true)
+    })
+
+    it('matches a Logback full date-time with comma millis and ERROR', () => {
+      const d = parseJava('2026-06-16 10:00:00,123 [main] ERROR com.example.Demo - boom')
+      expect(d.kind).toBe('spans')
+      expect(spansText(d)).toBe('[main]  ERROR  com.example.Demo  boom')
+      expect(d.spans.some(s => s.text === 'ERROR' && /red/.test(s.cls))).toBe(true)
+    })
+
+    it('matches the root logger (empty logger name)', () => {
+      const d = parseJava('10:00:00.123 [main] ERROR  - Root logger message')
+      expect(d.kind).toBe('spans')
+      expect(spansText(d)).toBe('[main]  ERROR  Root logger message')
+    })
+
+    it('does not mis-split a message containing " - "', () => {
+      const d = parseJava('10:00:00.123 [main] INFO com.example.Demo - task a - b done')
+      expect(spansText(d)).toBe('[main]  INFO  com.example.Demo  task a - b done')
+    })
+  })
+
+  describe('negatives', () => {
+    it('returns null for a tab-separated line (Java console is space-delimited)', () => {
+      expect(parseJava('2026-06-16 10:00:00.123\t[worker]\tERROR\tpayments\t-\tdeclined')).toBeNull()
+    })
+
+    it('returns null for a Go zap TSV line and a klog line', () => {
+      expect(parseJava('2026-06-19T14:03:11.500Z\tinfo\tfoo.go:1\thi')).toBeNull()
+      expect(parseJava('I0612 14:03:11.123456 12 reflector.go:243] watch closed')).toBeNull()
+    })
+
+    it('returns null for Java stack-trace continuation lines (routed to plain)', () => {
+      expect(parseJava('\tat com.example.Foo.bar(Foo.java:42)')).toBeNull()
+      expect(parseJava('Caused by: java.lang.NullPointerException: x')).toBeNull()
+      expect(parseJava('\t... 3 more')).toBeNull()
+      expect(parseJava('java.lang.IllegalStateException: bad')).toBeNull()
+    })
+
+    it('returns null for plain prose', () => {
+      expect(parseJava('just a plain sentence')).toBeNull()
+      expect(parseJava('2026 was a good year for logging')).toBeNull()
+    })
+  })
+})
+
+describe('parseDotnet', () => {
+  describe('Serilog', () => {
+    it('decorates the default no-date template, keeping and tinting the u3 code', () => {
+      const d = parseDotnet('[14:30:00 INF] Starting up')
+      expect(d.kind).toBe('spans')
+      expect(spansText(d)).toBe('INF  Starting up')
+      expect(d.spans.some(s => s.text === 'INF' && /blue/.test(s.cls))).toBe(true)
+    })
+
+    it('maps every u3 code to its tint', () => {
+      expect(parseDotnet('[14:30:00 ERR] x').spans.some(s => s.text === 'ERR' && /red/.test(s.cls))).toBe(true)
+      expect(parseDotnet('[14:30:00 WRN] x').spans.some(s => s.text === 'WRN' && /amber/.test(s.cls))).toBe(true)
+      expect(parseDotnet('[14:30:00 FTL] x').spans.some(s => s.text === 'FTL' && /red-6/.test(s.cls))).toBe(true)
+      expect(parseDotnet('[14:30:00 DBG] x').spans.some(s => s.text === 'DBG' && /slate/.test(s.cls))).toBe(true)
+      expect(parseDotnet('[14:30:00 VRB] x').spans.some(s => s.text === 'VRB' && /gray-5/.test(s.cls))).toBe(true)
+    })
+
+    it('tolerates an ISO timestamp variant (date + fractional + zone)', () => {
+      const d = parseDotnet('[2024-01-15T14:30:00.123Z INF] booted')
+      expect(d.kind).toBe('spans')
+      expect(spansText(d)).toBe('INF  booted')
+    })
+
+    it('returns null when the bracketed token is not a u3 level code', () => {
+      expect(parseDotnet('[12:00:00 ABC] not serilog')).toBeNull()
+    })
+  })
+
+  describe('NLog', () => {
+    it('decorates the default pipe layout: level tinted, logger accented, message', () => {
+      const d = parseDotnet('2024-01-15 10:30:00.0000|WARN|MyApp.Program|slow start')
+      expect(d.kind).toBe('spans')
+      expect(spansText(d)).toBe('WARN  MyApp.Program  slow start')
+      expect(d.spans.some(s => s.text === 'WARN' && /amber/.test(s.cls))).toBe(true)
+      expect(d.spans.some(s => s.text === 'MyApp.Program' && /violet/.test(s.cls))).toBe(true)
+    })
+
+    it('handles an empty logger field', () => {
+      const d = parseDotnet('2024-01-15 10:30:00.0000|ERROR||boom')
+      expect(d.kind).toBe('spans')
+      expect(spansText(d)).toBe('ERROR  boom')
+    })
+
+    it('keeps an exception riding the message field (first line)', () => {
+      const d = parseDotnet('2024-01-15 10:30:00.0000|ERROR|MyApp.Svc|failed: System.Exception: x')
+      expect(spansText(d)).toBe('ERROR  MyApp.Svc  failed: System.Exception: x')
+    })
+
+    it('does not match a free-form pipe line without a leading longdate', () => {
+      expect(parseDotnet('result|ERROR|stack trace follows')).toBeNull()
+    })
+  })
+
+  describe('negatives', () => {
+    it('returns null for zap, klog, and plain prose', () => {
+      expect(parseDotnet('2026-06-19T14:03:11.500Z\tinfo\tfoo.go:1\thi')).toBeNull()
+      expect(parseDotnet('I0612 14:03:11.123456 12 reflector.go:243] watch closed')).toBeNull()
+      expect(parseDotnet('just a plain sentence')).toBeNull()
+    })
+  })
+})
+
+describe('parsePython', () => {
+  it('decorates a common timestamped logging format (comma millis), level tinted, name accented', () => {
+    const d = parsePython('2024-01-15 10:30:00,123 - myapp.module - WARNING - disk almost full')
+    expect(d.kind).toBe('spans')
+    expect(spansText(d)).toBe('WARNING  myapp.module  disk almost full')
+    expect(d.spans.some(s => s.text === 'WARNING' && /amber/.test(s.cls))).toBe(true)
+    expect(d.spans.some(s => s.text === 'myapp.module' && /violet/.test(s.cls))).toBe(true)
+  })
+
+  it('keeps a hyphenated logger name and maps CRITICAL to fatal', () => {
+    const d = parsePython('2024-01-15 10:30:00.000 - my-app - CRITICAL - dead')
+    expect(spansText(d)).toBe('CRITICAL  my-app  dead')
+    expect(d.spans.some(s => s.text === 'CRITICAL' && /red-6/.test(s.cls))).toBe(true)
+  })
+
+  it('decorates a gunicorn line: pid muted, level tinted', () => {
+    const d = parsePython('[2024-01-15 10:30:00 +0000] [8] [ERROR] Worker (pid:8) was sent SIGKILL!')
+    expect(d.kind).toBe('spans')
+    expect(spansText(d)).toBe('[8]  ERROR  Worker (pid:8) was sent SIGKILL!')
+    expect(d.spans.some(s => s.text === '[8]' && /gray-4/.test(s.cls))).toBe(true)
+    expect(d.spans.some(s => s.text === 'ERROR' && /red/.test(s.cls))).toBe(true)
+  })
+
+  it('decorates uvicorn padded prefixes, including CRITICAL (one space)', () => {
+    expect(spansText(parsePython('INFO:     Started server process [1]'))).toBe('INFO  Started server process [1]')
+    expect(spansText(parsePython('CRITICAL: Application startup failed. Exiting.'))).toBe('CRITICAL  Application startup failed. Exiting.')
+    // TRACE (uvicorn --log-level trace): 5-char level → 4 spaces (still width 9).
+    expect(spansText(parsePython('TRACE:    ASGI [1] Started'))).toBe('TRACE  ASGI [1] Started')
+    // Access-log line with colons/dashes in the message stays intact.
+    expect(spansText(parsePython('INFO:     127.0.0.1:0 - "GET / HTTP/1.1" 200 OK'))).toBe('INFO  127.0.0.1:0 - "GET / HTTP/1.1" 200 OK')
+  })
+
+  it('rejects prose that is not uvicorn-padded (single space after the level colon)', () => {
+    expect(parsePython('INFO: just one space here')).toBeNull()
+    expect(parsePython('ERROR: see above')).toBeNull()
+  })
+
+  it('returns null for non-Python lines', () => {
+    expect(parsePython('[14:30:00 INF] serilog')).toBeNull()
+    expect(parsePython('a plain sentence')).toBeNull()
+  })
+})
+
+describe('parseRuby', () => {
+  it('decorates a line with an empty progname', () => {
+    const d = parseRuby('I, [2024-01-15T10:30:00.123456 #1]  INFO -- : Started')
+    expect(d.kind).toBe('spans')
+    expect(spansText(d)).toBe('INFO  Started')
+  })
+
+  it('accents the progname and tints the level when present', () => {
+    const d = parseRuby('F, [2024-01-15T10:30:00.123456 #1] FATAL -- MyApp: boom')
+    expect(spansText(d)).toBe('FATAL  MyApp  boom')
+    expect(d.spans.some(s => s.text === 'MyApp' && /violet/.test(s.cls))).toBe(true)
+    expect(d.spans.some(s => s.text === 'FATAL' && /red/.test(s.cls))).toBe(true)
+  })
+
+  it('tolerates the stdlib trailing-space datetime (two spaces before #)', () => {
+    const d = parseRuby('W, [2024-01-15T10:30:00.123456  #1]  WARN -- : careful')
+    expect(spansText(d)).toBe('WARN  careful')
+  })
+
+  it('formats the ANY (UNKNOWN) level, tinting it muted (unknown severity)', () => {
+    const d = parseRuby('A, [2024-01-15T10:30:00.123456 #1]  ANY -- : unknown-level')
+    expect(spansText(d)).toBe('ANY  unknown-level')
+    // ANY is not a recognized severity, so it renders muted — consistent with the
+    // info pill/filter (see logLevel.test for the matching detection assertion).
+    expect(d.spans.some(s => s.text === 'ANY' && /gray-4/.test(s.cls))).toBe(true)
+  })
+
+  it('returns null for non-Ruby lines', () => {
+    expect(parseRuby('Info, something happened')).toBeNull()
+    expect(parseRuby('a plain sentence')).toBeNull()
+  })
+})
+
+describe('parseMonolog', () => {
+  it('decorates an ISO+offset line, channel accented, context kept in the message', () => {
+    const d = parseMonolog('[2024-01-15T10:30:00.123456+00:00] app.ERROR: Something failed {"k":"v"} []')
+    expect(d.kind).toBe('spans')
+    expect(spansText(d)).toBe('ERROR  app  Something failed {"k":"v"} []')
+    expect(d.spans.some(s => s.text === 'app' && /violet/.test(s.cls))).toBe(true)
+    expect(d.spans.some(s => s.text === 'ERROR' && /red/.test(s.cls))).toBe(true)
+  })
+
+  it('maps the upper PSR-3 levels (NOTICE→info, EMERGENCY→fatal)', () => {
+    expect(parseMonolog('[2024-01-15 10:30:00] app.NOTICE: heads up [] []').spans.some(s => s.text === 'NOTICE' && /blue/.test(s.cls))).toBe(true)
+    expect(parseMonolog('[2024-01-15 10:30:00] app.EMERGENCY: down [] []').spans.some(s => s.text === 'EMERGENCY' && /red-6/.test(s.cls))).toBe(true)
+  })
+
+  it('returns null for non-Monolog bracketed lines', () => {
+    expect(parseMonolog('[14:30:00 INF] serilog')).toBeNull()
+    expect(parseMonolog('[2024-01-15 10:30:00 +0000] [1] [INFO] gunicorn')).toBeNull()
+  })
+})
+
 describe('decorateLine cascade', () => {
-  it('routes klog, zap, and logfmt to their parsers and prose to plain', () => {
+  it('routes klog, zap, java, dotnet, and logfmt to their parsers and prose to plain', () => {
     expect(decorateLine('I0612 14:03:11.123456 12 reflector.go:243] watch closed', 'info').kind).toBe('spans')
     expect(decorateLine('2026-06-19T14:03:11.5Z\tinfo\tfoo.go:1\thi\t{"a":1}', 'info').kind).toBe('block')
+    expect(decorateLine('2025-12-18T07:25:01.584Z  INFO 1 --- [  main] c.e.App : up', 'info').kind).toBe('spans')
+    expect(decorateLine('10:00:00.123 [main] INFO com.example.Demo - started', 'info').kind).toBe('spans')
+    expect(decorateLine('[14:30:00 INF] Starting up', 'info').kind).toBe('spans')
+    expect(decorateLine('2024-01-15 10:30:00.0000|WARN|MyApp.Program|slow', 'warn').kind).toBe('spans')
+    expect(decorateLine('2024-01-15 10:30:00,123 - app - INFO - up', 'info').kind).toBe('spans')
+    expect(decorateLine('[2024-01-15 10:30:00 +0000] [1] [INFO] gunicorn', 'info').kind).toBe('spans')
+    expect(decorateLine('INFO:     uvicorn', 'info').kind).toBe('spans')
+    expect(decorateLine('I, [2024-01-15T10:30:00.1 #1]  INFO -- : ruby', 'info').kind).toBe('spans')
+    expect(decorateLine('[2024-01-15T10:30:00+00:00] app.ERROR: monolog [] []', 'error').kind).toBe('spans')
     expect(decorateLine('level=info msg=hi controller=foo', 'info').kind).toBe('block')
     expect(decorateLine('a plain sentence with no structure', 'info').kind).toBe('plain')
+  })
+
+  it('routes a log4net log4j-style PatternLayout line via the Java Log4j2 branch', () => {
+    const d = decorateLine('2024-12-21 14:07:41,517 [main] WARN  Animals.Carnivora.Dog - Meow!', 'warn')
+    expect(d.kind).toBe('spans')
+    expect(d.spans.some(s => s.text === 'Animals.Carnivora.Dog' && /violet/.test(s.cls))).toBe(true)
   })
 
   it('leaves a stray = or [error] in prose as plain', () => {
@@ -299,5 +576,66 @@ describe('review regressions', () => {
     const d = parseLogfmt('level=info msg="" controller=foo')
     expect(d.kind).toBe('block')
     expect(rowsText(d)).toEqual(['level: info', 'controller: foo'])
+  })
+})
+
+describe('highlightJson', () => {
+  it('pretty-prints an object flush-left, dropping the outer braces', () => {
+    const d = highlightJson('{"level":"info","msg":"hello"}')
+    expect(d.kind).toBe('json')
+    expect(spansText(d)).toBe('"level": "info",\n"msg": "hello"')
+  })
+
+  it('colors keys gray and leaves scalars in the body color', () => {
+    const d = highlightJson('{"n":1}')
+    expect(d.spans.find(s => s.text === '"n"').cls).toMatch(/gray-5/)
+    expect(d.spans.find(s => s.text === '1').cls).toBe('') // CLS.val inherits body color
+  })
+
+  it('keeps nested objects and arrays indented, with only the outer braces dropped', () => {
+    const src = '{"a":{"b":[1,2,{"c":true}]},"d":null}'
+    expect(spansText(highlightJson(src))).toBe(
+      '"a": {\n  "b": [\n    1,\n    2,\n    {\n      "c": true\n    }\n  ]\n},\n"d": null'
+    )
+  })
+
+  it('renders a top-level array flush-left without the outer brackets', () => {
+    expect(spansText(highlightJson('[1,"x",false]'))).toBe('1,\n"x",\nfalse')
+  })
+
+  it('keeps an empty top-level object or array on one line', () => {
+    expect(spansText(highlightJson('{}'))).toBe('{}')
+    expect(spansText(highlightJson('[]'))).toBe('[]')
+  })
+
+  it('keeps nested empty objects/arrays inline', () => {
+    expect(spansText(highlightJson('{"a":{},"b":[]}'))).toBe('"a": {},\n"b": []')
+  })
+
+  it('escapes control characters in string values, keeping them on one line', () => {
+    expect(spansText(highlightJson('{"m":"a\\nb"}'))).toBe('"m": "a\\nb"')
+  })
+
+  it('renders a non-finite number (over-range literal) as null, like JSON.stringify', () => {
+    // 1e999 parses to Infinity; JSON.stringify emits null, not "Infinity".
+    expect(spansText(highlightJson('{"n":1e999}'))).toBe('"n": null')
+  })
+
+  it('does not throw on pathologically deep nesting, falling back to plain', () => {
+    const deep = '['.repeat(200000) + ']'.repeat(200000)
+    expect(() => highlightJson(deep)).not.toThrow()
+    expect(highlightJson(deep)).toBeNull()
+  })
+
+  it('ignores whitespace around the JSON', () => {
+    expect(spansText(highlightJson('  {"a":1}  '))).toBe('"a": 1')
+  })
+
+  it('returns null for non-JSON, a bare scalar, or malformed input', () => {
+    expect(highlightJson('plain text line')).toBeNull()
+    expect(highlightJson('42')).toBeNull() // parses, but not an object/array
+    expect(highlightJson('"hi"')).toBeNull()
+    expect(highlightJson('{not json}')).toBeNull()
+    expect(highlightJson('{"a":1')).toBeNull() // truncated
   })
 })

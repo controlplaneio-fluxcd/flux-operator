@@ -3,13 +3,10 @@
 
 import { Fragment } from 'preact'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'preact/hooks'
-import Prism from 'prismjs'
-import 'prismjs/components/prism-json'
 import { fetchWithMock } from '../../../utils/fetch'
 import { downloadBlob } from '../../../utils/download'
-import { usePrismTheme } from '../common/yaml'
 import { LEVELS, LEVEL_META, DEFAULT_LEVEL, detectLevel, stripAnsi } from '../../../utils/logLevel'
-import { decorateLine } from '../../../utils/logFormat'
+import { decorateLine, highlightJson } from '../../../utils/logFormat'
 import { useDismiss } from '../../../utils/useDismiss'
 
 // Selectable limits for the number of log lines to fetch from the backend.
@@ -105,24 +102,6 @@ function entryTimestamp(line) {
     if (am && !Number.isNaN(Date.parse(am[1]))) return am[1]
   }
   return null
-}
-
-/**
- * formatJson - indents a log line if it is a JSON object or array, otherwise
- * returns null. The cheap first-character check avoids a try/catch on the
- * common case of plain-text lines.
- *
- * @param {string} text - The log line text
- * @returns {string|null} The indented JSON, or null if the line is not JSON
- */
-function formatJson(text) {
-  const trimmed = text.trim()
-  if (trimmed[0] !== '{' && trimmed[0] !== '[') return null
-  try {
-    return JSON.stringify(JSON.parse(trimmed), null, 2)
-  } catch {
-    return null
-  }
 }
 
 // Shared styling for the toolbar controls. Selects deliberately omit a chevron
@@ -267,9 +246,6 @@ function LevelMenu({ value, onChange }) {
  * @param {Function} props.onClose - Callback to close the viewer
  */
 export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], initialPodName, onClose }) {
-  // Load the Prism theme used to syntax-highlight JSON lines as code blocks.
-  usePrismTheme()
-
   // Selected pod: a specific pod name or ALL_PODS. Initialised from initialPodName
   // (the parent remounts the viewer per open, so this re-inits on each open).
   const [podKey, setPodKey] = useState(initialPodName || ALL_PODS)
@@ -370,9 +346,9 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
   // buffer's cursor into the resetting buffer (the generation guard alone can't
   // catch this, since a poll fired after the reset shares its generation).
   const resettingRef = useRef(false)
-  // Memoizes the formatted (pretty-printed + Prism-highlighted) output per raw
-  // line text, so appends only format the new lines instead of re-highlighting
-  // the whole buffer on every poll. See displayLines for how it's pruned.
+  // Memoizes the formatted (pretty-printed, colored-span) output per raw line text,
+  // so appends only format the new lines instead of re-formatting the whole buffer
+  // on every poll. See displayLines for how it's pruned.
   const formatCacheRef = useRef(new Map())
 
   // Pod dropdown options: "All pods" leads, then each pod.
@@ -678,24 +654,22 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
     return containsLines.filter(entry => entry.level === levelFilter)
   }, [containsLines, levelFilter])
 
-  // In formatted mode every line renders as a code block sharing the same
-  // monospace font and size as the YAML blocks (`code: true`). Valid JSON gets
-  // indented and Prism-highlighted (`html`); other lines keep their plain text
-  // in the same styling. In raw mode lines render as unstyled plain text
+  // In formatted mode every line carries a descriptor (`fmt`) of colored spans:
+  // valid JSON is pretty-printed (`fmt.kind === 'json'`), structured loggers reflow
+  // to `block`/`spans`, and an unmatched line falls back to plain wrapping text
+  // (`code: true`). In raw mode lines render as unstyled plain text
   // (`code: false`). Filtering happens first on the raw text, so this only
   // transforms what is actually shown.
   //
   // The formatted output is cached by raw line text (formatCacheRef): since the
-  // pretty-printed/highlighted form depends only on the line text, an append
-  // reuses the cached result for every existing line and only runs formatJson +
-  // Prism over the genuinely new lines, instead of re-highlighting the whole
-  // buffer on every poll. The cache is rebuilt to hold only the lines currently
-  // shown, so it can't outgrow the buffer; raw mode leaves it untouched so it
-  // survives a round-trip back to formatted. Returning the same html string for
-  // unchanged lines also lets Preact skip re-applying their innerHTML.
+  // formatted form depends only on the line text, an append reuses the cached
+  // result for every existing line and only formats the genuinely new lines,
+  // instead of re-formatting the whole buffer on every poll. The cache is rebuilt
+  // to hold only the lines currently shown, so it can't outgrow the buffer; raw
+  // mode leaves it untouched so it survives a round-trip back to formatted.
   const displayLines = useMemo(() => {
     if (!formatted) {
-      return logLines.map(entry => ({ ...entry, code: false, html: null, fmt: null }))
+      return logLines.map(entry => ({ ...entry, code: false, fmt: null }))
     }
     const prev = formatCacheRef.current
     const next = new Map()
@@ -705,21 +679,16 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
       // line (stack frame, no timestamp) can never be mistaken for a structured
       // entry. The cache key carries the head flag because the same stripped text
       // may appear both as a head and as a continuation line.
-      const key = `${entry.ts ? 1 : 0} ${entry.text}`
+      const key = `${entry.ts ? 1 : 0}\n${entry.text}`
       let formattedEntry = next.get(key) || prev.get(key)
       if (!formattedEntry) {
-        const json = formatJson(entry.text)
-        if (json != null) {
-          formattedEntry = { text: json, code: true, html: Prism.highlight(json, Prism.languages.json, 'json'), fmt: null }
-        } else {
-          // klog → zap → logfmt → plain. The block/spans kinds render as decorated
-          // multi-line / single highlighted rows; plain keeps the existing code
-          // path so its output is byte-for-byte unchanged.
-          const d = entry.ts ? decorateLine(entry.text, entry.level) : { kind: 'plain' }
-          formattedEntry = d.kind === 'plain'
-            ? { text: entry.text, code: true, html: null, fmt: null }
-            : { text: entry.text, code: false, html: null, fmt: d }
-        }
+        // json then klog/zap/logfmt then plain. The json/block/spans kinds render as
+        // decorated rows; plain keeps a wrapping text div.
+        const json = highlightJson(entry.text)
+        const d = json || (entry.ts ? decorateLine(entry.text, entry.level) : { kind: 'plain' })
+        formattedEntry = d.kind === 'plain'
+          ? { text: entry.text, code: true, fmt: null }
+          : { text: entry.text, code: false, fmt: d }
       }
       next.set(key, formattedEntry)
       return { ...entry, ...formattedEntry }
@@ -1010,24 +979,28 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
                       >
                         {entry.fmt.spans.map((s, j) => (s.cls ? <span key={j} class={s.cls}>{s.text}</span> : s.text))}
                       </div>
-                    ) : entry.code ? (
+                    ) : entry.fmt && entry.fmt.kind === 'json' ? (
+                      // Pretty-printed JSON: a <pre> preserves the indentation/newlines
+                      // baked into the spans and scrolls long values horizontally,
+                      // keeping nested structures intact.
                       <pre
-                        class="overflow-x-auto language-json"
-                        style="margin: 0; padding: 0.25rem 0.75rem; background: transparent; text-shadow: none; font-size: 12px; line-height: 1.5;"
+                        class="overflow-x-auto font-mono text-gray-800 dark:text-gray-200"
+                        style="margin: 0; padding: 0.25rem 0.75rem; font-size: 12px; line-height: 1.5;"
                         data-testid="logs-line"
                       >
-                        {entry.html != null ? (
-                          <code
-                            class="language-json"
-                            style="background: transparent; text-shadow: none;"
-                            dangerouslySetInnerHTML={{ __html: entry.html }}
-                          />
-                        ) : (
-                          <code class="language-json" style="background: transparent; text-shadow: none;">
-                            {entry.text}
-                          </code>
-                        )}
+                        {entry.fmt.spans.map((s, j) => (s.cls ? <span key={j} class={s.cls}>{s.text}</span> : s.text))}
                       </pre>
+                    ) : entry.code ? (
+                      // Plain line that matched no formatter (or a continuation line
+                      // such as a stack frame): wrap it like the decorated rows rather
+                      // than the JSON <pre>, which scrolls horizontally and never wraps.
+                      <div
+                        class="overflow-x-auto font-mono whitespace-pre-wrap break-all text-gray-800 dark:text-gray-200"
+                        style="padding: 0.25rem 0.75rem; font-size: 12px; line-height: 1.5;"
+                        data-testid="logs-line"
+                      >
+                        {entry.text}
+                      </div>
                     ) : (
                       <div
                         class="px-3 py-0.5 text-sm font-mono whitespace-pre-wrap break-all text-gray-800 dark:text-gray-200"

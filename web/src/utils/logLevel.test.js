@@ -176,6 +176,92 @@ describe('detectLevel', () => {
   it('does not match the word "error" mid-message (lowercase)', () => {
     expect(detectLevel('handled the error gracefully and continued')).toBe('info')
   })
+
+  // The pill carries the level for Java console lines (parseJava keeps the level
+  // word in the body but the pill still drives the at-a-glance color), so these
+  // pin detection for the Spring Boot / Log4j2 / Logback default layouts.
+  describe('Java console (pill level)', () => {
+    it('detects the level word in a Spring Boot line', () => {
+      expect(detectLevel('2025-12-18T07:25:01.584Z  INFO 132568 --- [myapp] [  main] c.e.App : up')).toBe('info')
+      expect(detectLevel('2026-06-16T10:00:00.123Z  WARN 1 --- [  main] c.e.App : slow')).toBe('warn')
+      expect(detectLevel('2026-06-16T10:00:00.123Z ERROR 1 --- [  main] c.e.App : boom')).toBe('error')
+    })
+
+    it('detects the level word in a Log4j2 / Logback line', () => {
+      expect(detectLevel('10:00:00.123 [main] INFO  com.example.Demo - started')).toBe('info')
+      expect(detectLevel('2026-06-16 10:00:00,123 [main] ERROR com.example.Demo - boom')).toBe('error')
+    })
+
+    // Known, pre-existing detectLevel limitation: BRACKET_LEVEL scans the whole
+    // head and a `(error)`/`[warn]` token inside the message is read as the level,
+    // so the pill can be wrong. parseJava mitigates this by keeping the (correctly
+    // parsed) level word in the body. This locks the current behavior.
+    it('mis-detects a parenthesized level token in a Log4j2 message (pre-existing)', () => {
+      expect(detectLevel('10:00:00.123 [main] INFO  c.e.Proxy - downstream said (error) and bailed')).toBe('error')
+    })
+
+    it('reads the level from a logstash-logback-encoder JSON line', () => {
+      expect(detectLevel('{"@timestamp":"2026-06-16T10:00:00.123Z","level":"WARN","logger_name":"c.e.X","thread_name":"main","message":"slow","stack_trace":"java.lang.X\\n\\tat c.e.X"}')).toBe('warn')
+    })
+
+    it('reads the ECS flat log.level from a Log4j2 ECS-layout JSON line', () => {
+      expect(detectLevel('{"@timestamp":"2026-06-16T10:00:00.123Z","log.level":"ERROR","message":"boom"}')).toBe('error')
+    })
+  })
+
+  describe('.NET console (pill level)', () => {
+    it('detects the Serilog u3 code via TEXT_LEVEL', () => {
+      expect(detectLevel('[14:30:00 INF] starting')).toBe('info')
+      expect(detectLevel('[14:30:00 ERR] failed')).toBe('error')
+      expect(detectLevel('[14:30:00 VRB] trace it')).toBe('trace')
+      expect(detectLevel('[14:30:00 FTL] dead')).toBe('fatal')
+    })
+
+    it('detects the NLog level from the 2nd pipe field (dedicated branch)', () => {
+      expect(detectLevel('2024-01-15 10:30:00.0000|INFO|MyApp.Program|up')).toBe('info')
+      expect(detectLevel('2024-01-15 10:30:00.0000|ERROR|MyApp.Svc|boom')).toBe('error')
+      expect(detectLevel('2024-01-15 10:30:00.0000|FATAL|MyApp.Svc|dead')).toBe('fatal')
+    })
+
+    it('does not read a level from a free-form pipe line (no leading longdate)', () => {
+      expect(detectLevel('result|ERROR|stack trace follows')).toBe('info')
+    })
+
+    it('reads the Serilog CLEF level, defaulting to info when @l is omitted', () => {
+      expect(detectLevel('{"@t":"2026-06-16T10:00:00.123Z","@l":"Warning","@m":"slow"}')).toBe('warn')
+      // CLEF omits @l for Information, so an info-level event has no level field.
+      expect(detectLevel('{"@t":"2026-06-16T10:00:00.123Z","@m":"hello"}')).toBe('info')
+    })
+  })
+
+  describe('scripting console (pill level)', () => {
+    it('detects Python logging (custom format and gunicorn/uvicorn)', () => {
+      expect(detectLevel('2024-01-15 10:30:00,123 - myapp - WARNING - disk almost full')).toBe('warn')
+      expect(detectLevel('[2024-01-15 10:30:00 +0000] [8] [ERROR] Worker failed')).toBe('error')
+      expect(detectLevel('INFO:     Started server process [1]')).toBe('info')
+      expect(detectLevel('CRITICAL: Application startup failed. Exiting.')).toBe('fatal')
+    })
+
+    it('detects Ruby Logger severity labels', () => {
+      expect(detectLevel('I, [2024-01-15T10:30:00.123456 #1]  INFO -- : Started')).toBe('info')
+      expect(detectLevel('F, [2024-01-15T10:30:00.123456 #1] FATAL -- app: boom')).toBe('fatal')
+    })
+
+    it('treats Ruby ANY (UNKNOWN) as the default info — ANY is deliberately not a level token', () => {
+      // Intentional: adding ANY to TEXT_LEVEL would mis-detect the common word "ANY"
+      // in ordinary messages. The viewer renders the ANY level word muted to match.
+      expect(detectLevel('A, [2024-01-15T10:30:00.123456 #1]  ANY -- : unknown-level')).toBe('info')
+      expect(detectLevel('the query accepts ANY value as input')).toBe('info')
+    })
+
+    it('detects PHP Monolog levels, including ALERT/EMERGENCY', () => {
+      expect(detectLevel('[2024-01-15T10:30:00+00:00] app.ERROR: failed [] []')).toBe('error')
+      expect(detectLevel('[2024-01-15 10:30:00] app.CRITICAL: dead [] []')).toBe('fatal')
+      expect(detectLevel('[2024-01-15 10:30:00] app.ALERT: failover triggered [] []')).toBe('fatal')
+      expect(detectLevel('[2024-01-15 10:30:00] app.EMERGENCY: site is down [] []')).toBe('fatal')
+      expect(detectLevel('[2024-01-15 10:30:00] app.NOTICE: deprecation [] []')).toBe('info')
+    })
+  })
 })
 
 describe('stripAnsi', () => {

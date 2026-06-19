@@ -2,29 +2,37 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 // Pretty-printing for the workload log viewer's Formatted mode beyond JSON: the
-// three most common Go non-JSON loggers seen in Kubernetes workloads — klog/glog,
-// logfmt (logrus text, go-kit/log, Go slog TextHandler), and zap's console
-// encoder. `decorateLine` runs a cheap cascade and returns a serializable
-// descriptor (never a VNode), which the viewer caches per raw line and renders.
+// common non-JSON loggers seen in Kubernetes workloads. Go: klog/glog, logfmt
+// (logrus text, go-kit/log, Go slog TextHandler), and zap's console encoder. Java:
+// the Spring Boot, Log4j2 and Logback default console layouts. .NET: the Serilog
+// Console sink and NLog default layouts (log4net's log4j-style layout reuses the
+// Java Log4j2 matcher). Scripting: Python (a common `logging` format, gunicorn,
+// uvicorn), Ruby `Logger`, and PHP Monolog. `decorateLine` runs a cheap cascade and
+// returns a serializable descriptor (never a VNode), which the viewer caches.
 //
-// The JSON step of the cascade lives in the viewer (it owns the Prism highlight
-// and the formatJson helper); this module covers klog → zap → logfmt → plain. A
-// structured entry reflows onto multiple visual lines (a bare message line, then
-// one `key: value` field per line); an unstructured line is highlighted in place.
+// The JSON step of the cascade is `highlightJson` (below): it pretty-prints a JSON
+// object/array into colored spans, preserving nesting, and also covers the
+// JSON-encoded Java loggers (logstash-logback-encoder, Log4j2 ECS layout) and .NET
+// ones (Serilog CLEF, the MEL JSON console). `decorateLine` covers the rest:
+// klog → zap → java → dotnet → python → ruby → monolog → logfmt → plain. A structured
+// entry reflows onto multiple visual lines (a bare message line, then one
+// `key: value` field per line); an unstructured line is highlighted in place.
 //
 // Safety: descriptors are plain data and the viewer maps spans to auto-escaped
 // Preact text nodes, so there is no innerHTML path here.
 
-// Span classes. Field key/value/separator reuse Prism's global JSON token classes
-// (loaded by usePrismTheme), so they are pixel-identical to the JSON view and
-// inherit the active light/dark theme. The scaffolding kinds (caller, muted ts /
-// thread / logger, message) carry their own Tailwind utility classes. Each Prism
-// span must include the base `token` class for the global rule to apply.
+import { fromString } from './logLevel'
+
+// Span classes. Field keys and the `:` separator are a muted gray so they recede;
+// values inherit the container's default body color (CLS.val is empty), reading as
+// the high-contrast foreground — near-black on light, near-white on dark. Green is
+// deliberately avoided for values since it is the app's status-ready color. The
+// scaffolding kinds (caller, muted ts / thread / logger, message) carry their own
+// Tailwind utility classes.
 const CLS = {
-  key: 'token property',
-  str: 'token string',
-  num: 'token number',
-  op: 'token operator',
+  key: 'text-gray-500 dark:text-gray-400',
+  val: '', // empty: values inherit the container's default body color
+  op: 'text-gray-400 dark:text-gray-500',
   caller: 'font-semibold text-violet-600 dark:text-violet-300',
   muted: 'text-gray-400 dark:text-gray-500',
   msg: '' // empty: inherits the container's default body color
@@ -165,20 +173,21 @@ function fieldRows(fields) {
     sp(CLS.key, f.key),
     sp(CLS.op, ':'),
     sp(CLS.msg, ' '),
-    sp(f.kind === 'num' ? CLS.num : CLS.str, f.val)
+    sp(CLS.val, f.val)
   ])
 }
 
-// klog header: severity char + MMDD + time + thread + caller. The whitespace runs
-// are captured so the header line is rebuilt verbatim.
-const KLOG_HEADER = /^([IWEF])(\d{4}) (\d{2}:\d{2}:\d{2}(?:\.\d+)?)(\s+)(\d+)\s(\S+?:\d+)\]\s?/
+// klog header: severity char + MMDD + time + thread + caller. klog space-pads the
+// goroutine/PID to a fixed width (e.g. PID `1` becomes `      1`); that run is
+// collapsed to a single space since the formatted view has no columns to align.
+const KLOG_HEADER = /^([IWEF])(\d{4}) (\d{2}:\d{2}:\d{2}(?:\.\d+)?)\s+(\d+)\s(\S+?:\d+)\]\s?/
 
 /**
  * parseKlog - decorates a klog/glog line. Classic lines (`Immdd … file:line] msg`)
  * highlight in place as a single `spans` row; structured `klog.InfoS/ErrorS` lines
  * (`… ] "msg" key="val"`) reflow to a `block` only when the body is a quoted
- * message followed by at least one valid field. Returns null when the header does
- * not match.
+ * message followed by at least one valid field — the message stays on the header
+ * row and the fields stack beneath it. Returns null when the header does not match.
  *
  * @param {string} text - The log line (timestamp and ANSI already stripped)
  * @param {string} level - The normalized level, for the severity-char tint
@@ -187,10 +196,10 @@ const KLOG_HEADER = /^([IWEF])(\d{4}) (\d{2}:\d{2}:\d{2}(?:\.\d+)?)(\s+)(\d+)\s(
 export function parseKlog(text, level) {
   const m = KLOG_HEADER.exec(text)
   if (!m) return null
-  const [, sev, mmdd, time, gap, thread, caller] = m
+  const [, sev, mmdd, time, thread, caller] = m
   const header = [
     sp(SEV_CLS[level] || CLS.muted, sev),
-    sp(CLS.muted, `${mmdd} ${time}${gap}${thread} `),
+    sp(CLS.muted, `${mmdd} ${time} ${thread} `),
     sp(CLS.caller, caller),
     sp(CLS.muted, ']')
   ]
@@ -207,7 +216,7 @@ export function parseKlog(text, level) {
     if (pre === '' && fields.length > 0) {
       return {
         kind: 'block',
-        rows: [header, [sp(CLS.msg, q.val)], ...fieldRows(fields)]
+        rows: [[...header, sp(CLS.msg, ` ${q.val}`)], ...fieldRows(fields)]
       }
     }
   }
@@ -274,14 +283,12 @@ function zapIsBlob(p) {
   }
 }
 
-// zapField renders one expanded blob entry as a `key: value` row, typing the
-// value by its JSON type (objects/arrays as compact JSON). Control characters in
-// a scalar value (a `stacktrace`/`error` field's newlines and tabs) are escaped
-// so the field stays on one line.
+// zapField renders one expanded blob entry as a `key: value` row, compacting
+// objects/arrays to JSON. Control characters in a scalar value (a `stacktrace`/
+// `error` field's newlines and tabs) are escaped so the field stays on one line.
 function zapField(key, val) {
-  const kind = typeof val === 'number' ? 'num' : 'str'
   const text = val !== null && typeof val === 'object' ? JSON.stringify(val) : oneLine(String(val))
-  return [sp(CLS.key, key), sp(CLS.op, ':'), sp(CLS.msg, ' '), sp(kind === 'num' ? CLS.num : CLS.str, text)]
+  return [sp(CLS.key, key), sp(CLS.op, ':'), sp(CLS.msg, ' '), sp(CLS.val, text)]
 }
 
 /**
@@ -353,12 +360,341 @@ export function parseZap(text) {
   return { kind: 'block', rows }
 }
 
+// Java-family console patterns (Spring Boot / Log4j2 / Logback). After the kubelet
+// timestamp is stripped the line still leads with the app's own date/time, so both
+// shapes begin with a digit. The JSON-encoded Java loggers (logstash-logback-encoder,
+// Log4j2 ECS layout) are handled by the viewer's JSON path, not here.
+//
+// SPRING: <ts> LEVEL [PID] --- [brackets…] [logger] : msg. The PID is optional
+// (Spring's default `${PID:- }` is blank when undiscoverable) and the logger is
+// optional (the root logger renders empty). The bracket run requires `\]\s+`, so a
+// logger that itself contains brackets (Tomcat's `o.a.c.c.C.[Tomcat].[localhost].[/]`)
+// is captured whole by \S+ instead of being torn into the run.
+const SPRING = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}[.,]\d{3}(?:Z|[+-]\d{2}:?\d{2})?\s+(TRACE|DEBUG|INFO|WARN|ERROR|FATAL)\s+(?:\d+\s+)?---\s+((?:\[[^\]]*\]\s+)+)(?:(\S+)\s+)?:\s(.*)$/
+// LOG4J2: <time|datetime> [thread] LEVEL [logger] - msg. Thread precedes the level
+// and the separator is ` - ` (no PID, no `---`); logger optional (root logger empty).
+const LOG4J2 = /^(?:\d{2}:\d{2}:\d{2}[.,]\d{3}|\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}[.,]\d{3}(?:Z|[+-]\d{2}:?\d{2})?)\s+(\[[^\]]+\])\s+(TRACE|DEBUG|INFO|WARN|ERROR|FATAL)\s+(?:(\S+)\s+)?-\s+(.*)$/
+
+// levelSpan tints a parsed level token by its normalized level, falling back to
+// muted for an unrecognized token. Uses logLevel's fromString so a level word maps
+// the same way here (the in-body tint) as in the pill — one source of truth — while
+// still being driven by the word literally parsed from the line.
+function levelSpan(word) {
+  return sp(SEV_CLS[fromString(word)] || CLS.muted, word)
+}
+
+// trimBrackets normalizes a captured bracket run (`[demo] [           main] `) to a
+// compact muted form (`[demo] [main]`): each `[…]` content is trimmed and empty
+// brackets are dropped. Returns '' when nothing remains.
+function trimBrackets(run) {
+  const out = []
+  const re = /\[([^\]]*)\]/g
+  let m
+  while ((m = re.exec(run)) !== null) {
+    const inner = m[1].trim()
+    if (inner) out.push(`[${inner}]`)
+  }
+  return out.join(' ')
+}
+
+// decoratedRow assembles the rendered row from the ordered muted parts, the accented
+// logger, and the default message, joined by two spaces and skipping empties — the
+// same shape as parseZap's message line.
+function decoratedRow(muted, logger, msg) {
+  const spans = []
+  const push = (sp) => { if (spans.length) spans.push({ cls: CLS.msg, text: '  ' }); spans.push(sp) }
+  for (const m of muted) if (m && m.text) push(m)
+  if (logger) push(sp(CLS.caller, logger))
+  if (msg) push(sp(CLS.msg, oneLine(msg)))
+  return spans.length ? { kind: 'spans', spans } : null
+}
+
+/**
+ * parseJava - decorates a Java-family console line (Spring Boot, Log4j2, Logback).
+ * Drops the app's own timestamp (redundant with the pill), the PID and the
+ * `---`/`:` scaffolding, but keeps the level word (tinted by the parsed word, so
+ * the in-body level is authoritative even when the pill's heuristic misfires), the
+ * thread bracket(s) and the logger. Renders a single `spans` row in each format's
+ * natural field order. Returns null when the line is not a recognized Java shape.
+ *
+ * @param {string} text - The log line (timestamp and ANSI already stripped)
+ * @returns {object|null} A `spans` descriptor or null
+ */
+export function parseJava(text) {
+  // Gate: Java console layouts are space-delimited, so reject any tab (this also
+  // keeps a non-zap tab-separated line out of the \s+-tolerant regexes below); both
+  // shapes lead with the app date/time, so require a leading digit (which also
+  // routes stack frames and exception headers to plain).
+  if (text.indexOf('\t') !== -1) return null
+  const c = text.charCodeAt(0)
+  if (c < 48 || c > 57) return null
+
+  // Spring first, then Log4j2 — mutually exclusive (Spring needs `---`; Log4j2 needs
+  // a [thread] where Spring has the level), so the order is for clarity only.
+  const s = SPRING.exec(text)
+  if (s) {
+    const [, level, brackets, logger, msg] = s
+    const br = trimBrackets(brackets)
+    return decoratedRow([levelSpan(level), br ? sp(CLS.muted, br) : null], logger || '', msg)
+  }
+  const l = LOG4J2.exec(text)
+  if (l) {
+    const [, thread, level, logger, msg] = l
+    const br = trimBrackets(thread)
+    return decoratedRow([br ? sp(CLS.muted, br) : null, levelSpan(level)], logger || '', msg)
+  }
+  return null
+}
+
+// .NET-family console patterns. Two text loggers are covered here; the JSON ones
+// (Serilog CLEF, the MEL JSON console formatter) go through the viewer's JSON path,
+// and log4net's log4j-style PatternLayout is already matched by parseJava's LOG4J2
+// branch. Microsoft.Extensions.Logging's Simple console is intentionally NOT here:
+// its default output is two physical lines (a `level: Category[id]` header then the
+// message on the next, indented line), so it belongs to the future stack-trace
+// grouping phase, when the header and message can be joined.
+//
+// SERILOG: the Console sink default template `[{Timestamp:HH:mm:ss} {Level:u3}]
+// {Message:lj}`. The real default has no date and no fractional seconds; the
+// optional date/fractional/zone tolerate common ISO custom timestamps. The u3 code
+// is a fixed 3-char token and there is no logger in the default template.
+const SERILOG = /^\[(?:\d{4}-\d{2}-\d{2}[ T])?\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})? (VRB|DBG|INF|WRN|ERR|FTL)\] (.*)$/
+// NLOG: the default `TargetWithLayout` layout
+// `${longdate}|${level:uppercase=true}|${logger}|${message:withexception=true}`.
+// Pipe-delimited; the logger field may be empty. With an exception the 4th field
+// carries it on this physical line (continuations go plain).
+const NLOG = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[.,]\d+\|(TRACE|DEBUG|INFO|WARN|ERROR|FATAL)\|([^|]*)\|(.*)$/
+
+/**
+ * parseDotnet - decorates a .NET-family console line (Serilog Console sink, NLog
+ * default layout). Drops the app's own timestamp (redundant with the pill) but
+ * keeps the level token (tinted by the parsed token), the NLog logger, and the
+ * message. Renders a single `spans` row. Returns null when the line is not a
+ * recognized .NET shape.
+ *
+ * @param {string} text - The log line (timestamp and ANSI already stripped)
+ * @returns {object|null} A `spans` descriptor or null
+ */
+export function parseDotnet(text) {
+  // Serilog leads with `[`; NLog leads with a longdate and is pipe-delimited. The
+  // two shapes are disjoint by first token, so dispatch cheaply.
+  if (text[0] === '[') {
+    const s = SERILOG.exec(text)
+    if (s) {
+      const [, code, msg] = s
+      return decoratedRow([levelSpan(code)], '', msg)
+    }
+    return null
+  }
+  if (text.indexOf('|') !== -1) {
+    const n = NLOG.exec(text)
+    if (n) {
+      const [, level, logger, msg] = n
+      return decoratedRow([levelSpan(level)], logger || '', msg)
+    }
+  }
+  return null
+}
+
+// Scripting-language console patterns.
+//
+// Python logging, a common custom `format='%(asctime)s - %(name)s - %(levelname)s -
+// %(message)s'` (asctime default millis is a comma). Not the stdlib default (which is
+// the deferred `LEVEL:name:msg`), but the most common configured shape.
+const PY_BASIC = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:[.,]\d+)? - (\S+) - (DEBUG|INFO|WARNING|ERROR|CRITICAL) - (.*)$/
+// gunicorn glogging default `[%(asctime)s] [%(process)d] [%(levelname)s] %(message)s`
+// (the datefmt brackets the date, with a ` %z` zone inside).
+const GUNICORN = /^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[^\]]*\] \[(\d+)\] \[(DEBUG|INFO|WARNING|ERROR|CRITICAL)\] (.*)$/
+// uvicorn `%(levelprefix)s %(message)s`, where levelprefix is `LEVEL:` right-padded
+// so the message starts at a fixed column: spaces-after-colon = 9 - len(level)
+// (CRITICAL gets just one, TRACE four). The exact-width check (level.length + spaces
+// === 9) both admits those and rejects prose like `INFO: hi`. TRACE is uvicorn's
+// extra `--log-level trace` level.
+const UVICORN = /^(TRACE|DEBUG|INFO|WARNING|ERROR|CRITICAL):( +)(.*)$/
+
+/**
+ * parsePython - decorates a Python-ecosystem console line: the common timestamped
+ * `logging` format, gunicorn, and uvicorn. Keeps the level word (tinted), accents
+ * the logger name (when the format carries one), drops the app timestamp. Returns
+ * null when the line is not a recognized Python shape.
+ *
+ * @param {string} text - The log line (timestamp and ANSI already stripped)
+ * @returns {object|null} A `spans` descriptor or null
+ */
+export function parsePython(text) {
+  // gunicorn leads with `[`; the timestamped logging format leads with a digit;
+  // uvicorn leads with an uppercase level word.
+  if (text[0] === '[') {
+    const g = GUNICORN.exec(text)
+    if (g) {
+      const [, pid, level, msg] = g
+      return decoratedRow([sp(CLS.muted, `[${pid}]`), levelSpan(level)], '', msg)
+    }
+    return null
+  }
+  const c = text.charCodeAt(0)
+  if (c >= 48 && c <= 57) {
+    const b = PY_BASIC.exec(text)
+    if (b) {
+      const [, name, level, msg] = b
+      return decoratedRow([levelSpan(level)], name, msg)
+    }
+    return null
+  }
+  const u = UVICORN.exec(text)
+  if (u && u[1].length + u[2].length === 9) {
+    const [, level, , msg] = u
+    return decoratedRow([levelSpan(level)], '', msg)
+  }
+  return null
+}
+
+// Ruby Logger default `%.1s, [%s #%d] %5s -- %s: %s` (severityID, datetime, pid,
+// label, progname, message). Labels DEBUG/INFO/WARN/ERROR/FATAL/ANY (ANY = UNKNOWN,
+// an unknown severity). `\s+` before `#` tolerates the stdlib's trailing-space
+// datetime (which yields two spaces); progname is commonly empty.
+const RUBY = /^[DIWEFA], \[\d{4}-\d{2}-\d{2}T[\d:.]+\s+#\d+\]\s+(DEBUG|INFO|WARN|ERROR|FATAL|ANY)\s+-- ([^:]*): (.*)$/
+
+/**
+ * parseRuby - decorates a Ruby `Logger` default-format line. Keeps the level word
+ * (tinted; ANY → fatal), accents the progname (when present), drops the severity
+ * char, datetime and pid. Returns null when the line is not the Ruby shape.
+ *
+ * @param {string} text - The log line (timestamp and ANSI already stripped)
+ * @returns {object|null} A `spans` descriptor or null
+ */
+export function parseRuby(text) {
+  // Cheap gate on the "S, [" shape; the anchored regex validates the severity char
+  // (D/I/W/E/F/A — not a contiguous range, so left to the regex).
+  if (text[1] !== ',') return null
+  const m = RUBY.exec(text)
+  if (!m) return null
+  const [, level, progname, msg] = m
+  // DEBUG/INFO/WARN/ERROR/FATAL tint by their level; ANY (Ruby's UNKNOWN) is an
+  // unknown severity, so levelSpan renders it muted like any unrecognized token —
+  // which keeps it consistent with the pill and level filter (detectLevel also
+  // defaults it to info). Mapping ANY to a real level would require adding it to
+  // TEXT_LEVEL, which would mis-tint the common word "ANY" in ordinary messages.
+  return decoratedRow([levelSpan(level)], progname || '', msg)
+}
+
+// PHP Monolog default LineFormatter `[%datetime%] %channel%.%level_name%: %message%
+// %context% %extra%` (default datetime ISO-8601 with offset, optional microseconds).
+// The context/extra JSON ride along in the message — splitting them is the JSON
+// phase. PSR-3 level set.
+const MONOLOG = /^\[\d{4}-\d{2}-\d{2}[T ][\d:.+-]+\] (\S+)\.(DEBUG|INFO|NOTICE|WARNING|ERROR|CRITICAL|ALERT|EMERGENCY): (.*)$/
+
+/**
+ * parseMonolog - decorates a PHP Monolog default LineFormatter line. Keeps the level
+ * word (tinted), accents the channel, drops the datetime. The trailing context/extra
+ * stay in the message. Returns null when the line is not the Monolog shape.
+ *
+ * @param {string} text - The log line (timestamp and ANSI already stripped)
+ * @returns {object|null} A `spans` descriptor or null
+ */
+export function parseMonolog(text) {
+  if (text[0] !== '[') return null
+  const m = MONOLOG.exec(text)
+  if (!m) return null
+  const [, channel, level, msg] = m
+  return decoratedRow([levelSpan(level)], channel, msg)
+}
+
+// jsonScalar renders a JSON primitive as a single value-colored span (CLS.val, the
+// body color used for field values). JSON.stringify renders strings quoted/escaped,
+// finite numbers verbatim, booleans/null plainly, and non-finite numbers (Infinity/
+// NaN from over-range literals) as `null` — matching JSON.stringify(value, null, 2)
+// rather than String()'s `Infinity`.
+function jsonScalar(v) {
+  return sp(CLS.val, JSON.stringify(v))
+}
+
+// emitJson appends the pretty-printed spans for a parsed JSON value at the given
+// indent depth, mirroring JSON.stringify(value, null, 2) byte-for-byte but with each
+// token wrapped in a colored span: keys and structural punctuation (braces, brackets,
+// `:` and `,`) muted gray, scalars in the body color. Indentation and newlines are
+// emitted as plain spans so a <pre> lays the nesting out. Empty objects/arrays stay
+// on one line.
+function emitJson(spans, value, depth) {
+  if (value === null || typeof value !== 'object') { spans.push(jsonScalar(value)); return }
+  const isArr = Array.isArray(value)
+  const keys = isArr ? null : Object.keys(value)
+  const len = isArr ? value.length : keys.length
+  if (len === 0) { spans.push(sp(CLS.op, isArr ? '[]' : '{}')); return }
+  const pad = '  '.repeat(depth + 1)
+  spans.push(sp(CLS.op, isArr ? '[' : '{'))
+  for (let i = 0; i < len; i++) {
+    spans.push(sp(CLS.msg, `\n${pad}`))
+    if (!isArr) spans.push(sp(CLS.key, JSON.stringify(keys[i])), sp(CLS.op, ':'), sp(CLS.msg, ' '))
+    emitJson(spans, isArr ? value[i] : value[keys[i]], depth + 1)
+    if (i < len - 1) spans.push(sp(CLS.op, ','))
+  }
+  spans.push(sp(CLS.msg, `\n${'  '.repeat(depth)}`), sp(CLS.op, isArr ? ']' : '}'))
+}
+
+// emitMembers appends the members of the top-level object/array WITHOUT the wrapping
+// braces/brackets, flush-left, one per line — a lone `{`/`}` (or `[`/`]`) would waste
+// two lines per entry and the keys already give context. Nested values keep their own
+// braces via emitJson. The caller guarantees a non-empty object/array.
+function emitMembers(spans, value, depth) {
+  const isArr = Array.isArray(value)
+  const keys = isArr ? null : Object.keys(value)
+  const len = isArr ? value.length : keys.length
+  const pad = '  '.repeat(depth)
+  for (let i = 0; i < len; i++) {
+    if (i > 0) spans.push(sp(CLS.msg, `\n${pad}`))
+    if (!isArr) spans.push(sp(CLS.key, JSON.stringify(keys[i])), sp(CLS.op, ':'), sp(CLS.msg, ' '))
+    emitJson(spans, isArr ? value[i] : value[keys[i]], depth)
+    if (i < len - 1) spans.push(sp(CLS.op, ','))
+  }
+}
+
+/**
+ * highlightJson - pretty-prints a JSON object/array log line into colored spans,
+ * preserving nesting (indentation + newlines) so complex structures stay readable.
+ * The outer braces/brackets are dropped and the members sit flush-left so the entry
+ * does not waste a line on a lone `{` and `}`; nested structures keep their braces.
+ * Returns null for a non-JSON line or a bare scalar that merely parses (`42`,
+ * `"hi"`), leaving those to the text cascade. The descriptor is plain data with no
+ * innerHTML; the viewer renders the spans inside a <pre> so the layout survives.
+ *
+ * @param {string} text - The log line (timestamp and ANSI already stripped)
+ * @returns {{kind: 'json', spans: Array}|null} A descriptor or null
+ */
+export function highlightJson(text) {
+  const t = text.trim()
+  const c = t.charCodeAt(0)
+  if (c !== 123 && c !== 91) return null // fast gate: not '{' or '['
+  let parsed
+  try {
+    parsed = JSON.parse(t)
+  } catch {
+    return null
+  }
+  if (parsed === null || typeof parsed !== 'object') return null
+  // An empty top-level object/array keeps its braces on one line (emitMembers would
+  // render nothing, leaving a blank entry).
+  if ((Array.isArray(parsed) ? parsed.length : Object.keys(parsed).length) === 0) {
+    return { kind: 'json', spans: [sp(CLS.op, Array.isArray(parsed) ? '[]' : '{}')] }
+  }
+  const spans = []
+  try {
+    emitMembers(spans, parsed, 0)
+  } catch {
+    // Pathologically deep nesting overflows the recursion (RangeError). Fall back to
+    // the plain (raw text) renderer rather than crashing the viewer on one bad line.
+    return null
+  }
+  return { kind: 'json', spans }
+}
+
 /**
  * decorateLine - the non-JSON formatting cascade for one timestamped log line.
  * The viewer handles the JSON step (cascade position 1) and the continuation-line
- * gate before calling this; here the order is klog → zap → logfmt → plain. Returns
- * a serializable descriptor: `block` (multi-line structured), `spans` (single
- * highlighted line), or `plain` (unchanged).
+ * gate before calling this; here the order is klog → zap → java → dotnet → python →
+ * ruby → monolog → logfmt → plain. Returns a serializable descriptor: `block`
+ * (multi-line structured), `spans`
+ * (single highlighted line), or `plain` (unchanged).
  *
  * @param {string} text - The log line (timestamp and ANSI already stripped)
  * @param {string} level - The normalized level, for the klog severity-char tint
@@ -366,5 +702,10 @@ export function parseZap(text) {
  */
 export function decorateLine(text, level) {
   if (!text) return { kind: 'plain' }
-  return parseKlog(text, level) || parseZap(text) || parseLogfmt(text) || { kind: 'plain' }
+  // Three parsers sniff a leading `[`: parseDotnet (Serilog `[time u3]`), parsePython
+  // (gunicorn `[date] [pid] [LEVEL]`) and parseMonolog (`[date] chan.LEVEL:`). Each
+  // returns null for a `[`-line it does not own, so order among them only sets
+  // precedence; they are mutually disjoint by the tokens after the first bracket.
+  return parseKlog(text, level) || parseZap(text) || parseJava(text) || parseDotnet(text) ||
+    parsePython(text) || parseRuby(text) || parseMonolog(text) || parseLogfmt(text) || { kind: 'plain' }
 }
