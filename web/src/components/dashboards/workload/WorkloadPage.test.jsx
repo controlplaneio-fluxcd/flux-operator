@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { render, screen, waitFor, act } from '@testing-library/preact'
+import { render, screen, waitFor, act, fireEvent } from '@testing-library/preact'
 import { WorkloadPage } from './WorkloadPage'
 import { fetchWithMock } from '../../../utils/fetch'
 import { navHistory, clearNavHistory, getNavHistoryKey } from '../../../utils/navHistory'
+import { isFavorite, clearFavorites } from '../../../utils/favorites'
 
 // Polling constants used by WorkloadPage
 const POLL_INTERVAL_MS = 10000
@@ -111,6 +112,7 @@ describe('WorkloadPage component', () => {
     vi.clearAllMocks()
     capturedOnActionStart = null
     capturedActionBarProps = null
+    clearFavorites()
   })
 
   it('should render loading state with header card', () => {
@@ -187,6 +189,34 @@ describe('WorkloadPage component', () => {
 
     // ActionBar should receive reconciler props (not workload props)
     expect(screen.getByTestId('action-bar')).toHaveTextContent('ActionBar: Kustomization/flux-system/apps')
+  })
+
+  it('should toggle the workload favorite from the hero button', async () => {
+    fetchWithMock.mockResolvedValue(mockWorkloadData)
+
+    render(<WorkloadPage kind="Deployment" namespace="default" name="nginx" />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'nginx' })).toBeInTheDocument()
+    })
+
+    // Initially not favorited
+    expect(isFavorite('Deployment', 'default', 'nginx')).toBe(false)
+    const favoriteButton = screen.getByTitle('Add to favorites')
+
+    // Clicking adds the workload to favorites
+    await act(async () => {
+      fireEvent.click(favoriteButton)
+    })
+    expect(isFavorite('Deployment', 'default', 'nginx')).toBe(true)
+    expect(screen.getByTitle('Remove from favorites')).toBeInTheDocument()
+
+    // Clicking again removes it
+    await act(async () => {
+      fireEvent.click(screen.getByTitle('Remove from favorites'))
+    })
+    expect(isFavorite('Deployment', 'default', 'nginx')).toBe(false)
+    expect(screen.getByTitle('Add to favorites')).toBeInTheDocument()
   })
 
   it('should pass reconciler data to ActionBar', async () => {
