@@ -400,6 +400,9 @@ describe('WorkloadLogsViewer component', () => {
 
       render(<WorkloadLogsViewer {...allPodsProps} />)
       await flush()
+      // Turn off stack-trace grouping so the frames render as flat rows; this test
+      // asserts mergeLogs keeps both pods' frames, independent of the fold UI.
+      await act(async () => { fireEvent.click(screen.getByTestId('logs-group-toggle')) })
       await act(async () => { vi.advanceTimersByTime(5000) })
       await flush()
 
@@ -951,5 +954,170 @@ describe('WorkloadLogsViewer component', () => {
     const lines = screen.getAllByTestId('logs-line')
     expect(lines).toHaveLength(1)
     expect(lines[0].textContent).toBe('level=info msg="reconcile complete" controller=gitrepository')
+  })
+
+  describe('stack-trace grouping', () => {
+    // A Go panic followed by a flush-left line that closes the trace. Frames are
+    // timestamped (the CRI case), so each is its own entry the grouper folds.
+    const GO_PANIC_LOGS =
+      '2026-01-01T00:00:00.000000000Z panic: boom from c\n' +
+      '2026-01-01T00:00:00.000000001Z goroutine 1 [running]:\n' +
+      '2026-01-01T00:00:00.000000002Z main.c(...)\n' +
+      '2026-01-01T00:00:00.000000003Z \t/m.go:2\n' +
+      '2026-01-01T00:00:00.000000004Z after the panic\n'
+
+    it('folds a trace under its head and expands it on click', async () => {
+      const user = userEvent.setup()
+      fetchWithMock.mockResolvedValue({ logs: GO_PANIC_LOGS })
+      render(<WorkloadLogsViewer {...defaultProps} />)
+      await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
+
+      // Collapsed: the head shows, the frames are hidden behind the fold control.
+      expect(screen.getByTestId('logs-content')).toHaveTextContent('panic: boom from c')
+      expect(screen.queryByText('main.c(...)')).toBeNull()
+      expect(screen.getByTestId('logs-group-fold')).toHaveTextContent('3 frames')
+      // The flush-left line after the trace is a separate, always-visible entry.
+      expect(screen.getByText('after the panic')).toBeInTheDocument()
+
+      await user.click(screen.getByTestId('logs-group-fold'))
+      expect(screen.getByText('main.c(...)')).toBeInTheDocument()
+      expect(screen.getByText('goroutine 1 [running]:')).toBeInTheDocument()
+    })
+
+    it('renders every trace line flat when grouping is toggled off', async () => {
+      const user = userEvent.setup()
+      fetchWithMock.mockResolvedValue({ logs: GO_PANIC_LOGS })
+      render(<WorkloadLogsViewer {...defaultProps} />)
+      await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
+      expect(screen.queryByText('main.c(...)')).toBeNull()
+
+      await user.click(screen.getByTestId('logs-group-toggle'))
+      expect(screen.getByText('main.c(...)')).toBeInTheDocument()
+      expect(screen.queryByTestId('logs-group-fold')).toBeNull()
+    })
+
+    it('renders every trace line flat in raw mode', async () => {
+      const user = userEvent.setup()
+      fetchWithMock.mockResolvedValue({ logs: GO_PANIC_LOGS })
+      render(<WorkloadLogsViewer {...defaultProps} />)
+      await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
+
+      await user.click(screen.getByTestId('logs-format-toggle'))
+      expect(screen.getByText('main.c(...)')).toBeInTheDocument()
+      expect(screen.queryByTestId('logs-group-fold')).toBeNull()
+    })
+
+    it('keeps a whole trace on a frame match and drops it on a negated frame match', async () => {
+      const user = userEvent.setup()
+      fetchWithMock.mockResolvedValue({ logs: GO_PANIC_LOGS })
+      render(<WorkloadLogsViewer {...defaultProps} />)
+      await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
+
+      const filter = screen.getByTestId('logs-filter-input')
+      // A needle inside a folded frame keeps the whole trace (head stays visible).
+      await user.type(filter, 'main.c')
+      expect(screen.getByTestId('logs-content')).toHaveTextContent('panic: boom from c')
+
+      // The negated complement drops the whole trace, even though the needle is
+      // only in a buried frame.
+      await user.clear(filter)
+      await user.type(filter, '!main.c')
+      expect(screen.queryByText('panic: boom from c')).toBeNull()
+    })
+
+    it('surfaces a level-bumped trace when filtering on Error', async () => {
+      const user = userEvent.setup()
+      // The bare `Error:` head detects as info; the grouper bumps a recognized
+      // trace head to error so the level filter surfaces it.
+      fetchWithMock.mockResolvedValue({
+        logs:
+          '2026-01-01T00:00:00.000000000Z Error: boom from c\n' +
+          '2026-01-01T00:00:00.000000001Z     at c ([eval]:1:56)\n' +
+          '2026-01-01T00:00:00.000000002Z plain info line\n'
+      })
+      render(<WorkloadLogsViewer {...defaultProps} />)
+      await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
+
+      await user.click(screen.getByTestId('logs-level-filter'))
+      await user.click(screen.getByTestId('logs-level-option-error'))
+
+      expect(screen.getByTestId('logs-content')).toHaveTextContent('Error: boom from c')
+      expect(screen.queryByText('plain info line')).toBeNull()
+    })
+
+    it('keeps the pod id on a grouped trace head in the all-pods view', async () => {
+      fetchWithMock.mockResolvedValue({
+        pod: 'web-abc-gqh2x,web-abc-p8x2k', container: 'app', tagged: true, total: 2, streamed: 2,
+        logs:
+          'web-abc-gqh2x 2026-01-01T00:00:00.000000000Z panic: boom\n' +
+          '  goroutine 1 [running]:\n' +
+          '  main.crash()\n'
+      })
+      render(<WorkloadLogsViewer {...allPodsProps} />)
+      await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
+
+      // The trace folds (untimestamped frames included); its head pill keeps the pod id.
+      expect(screen.getByTestId('logs-pod-id')).toHaveTextContent('gqh2x')
+      expect(screen.getByTestId('logs-group-fold')).toBeInTheDocument()
+      expect(screen.queryByText('main.crash()')).toBeNull()
+    })
+
+    it('folds two pods\' interleaved timestamped traces per pod in the all-pods view', async () => {
+      const user = userEvent.setup()
+      // Both pods crash in the same window; with every frame timestamped (the CRI
+      // case) the backend interleaves them frame-by-frame. Per-pod folding must
+      // keep each trace intact instead of fragmenting around the other pod's lines.
+      fetchWithMock.mockResolvedValue({
+        pod: 'web-abc-gqh2x,web-abc-p8x2k', container: 'app', tagged: true, total: 2, streamed: 2,
+        logs:
+          'web-abc-gqh2x 2026-01-01T00:00:00.000000000Z panic: boom A\n' +
+          'web-abc-p8x2k 2026-01-01T00:00:00.000000001Z panic: boom B\n' +
+          'web-abc-gqh2x 2026-01-01T00:00:00.000000002Z goroutine 1 [running]:\n' +
+          'web-abc-p8x2k 2026-01-01T00:00:00.000000003Z goroutine 2 [running]:\n' +
+          'web-abc-gqh2x 2026-01-01T00:00:00.000000004Z main.a(...)\n' +
+          'web-abc-p8x2k 2026-01-01T00:00:00.000000005Z main.b(...)\n'
+      })
+      render(<WorkloadLogsViewer {...allPodsProps} />)
+      await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
+
+      // Two folded groups, each headed by its own pod id; all frames collapsed.
+      expect(screen.getAllByTestId('logs-group-fold')).toHaveLength(2)
+      expect(screen.getAllByTestId('logs-pod-id')).toHaveLength(2)
+      expect(screen.queryByText('main.a(...)')).toBeNull()
+      expect(screen.queryByText('main.b(...)')).toBeNull()
+
+      // Expanding pod A's trace reveals only its frame, never pod B's.
+      await user.click(screen.getAllByTestId('logs-group-fold')[0])
+      expect(screen.getByText('main.a(...)')).toBeInTheDocument()
+      expect(screen.queryByText('main.b(...)')).toBeNull()
+    })
+
+    it('keeps a folded group expanded across an append that adds a later entry', async () => {
+      vi.useFakeTimers()
+      try {
+        const flush = async () => { await act(async () => { await Promise.resolve(); await Promise.resolve() }) }
+        fetchWithMock.mockResolvedValueOnce({
+          logs:
+            '2026-01-01T00:00:00.000000000Z panic: boom from c\n' +
+            '2026-01-01T00:00:00.000000001Z goroutine 1 [running]:\n' +
+            '2026-01-01T00:00:00.000000002Z main.c(...)\n'
+        })
+        fetchWithMock.mockResolvedValue({ logs: '2026-01-01T00:00:05.000000000Z later line\n' })
+
+        render(<WorkloadLogsViewer {...defaultProps} />)
+        await flush()
+        await act(async () => { fireEvent.click(screen.getByTestId('logs-group-fold')) })
+        expect(screen.getByText('main.c(...)')).toBeInTheDocument()
+
+        // A follow poll appends a later line; the trace's identity key is unchanged,
+        // so its local expand state survives the re-render.
+        await act(async () => { vi.advanceTimersByTime(5000) })
+        await flush()
+        expect(screen.getByText('later line')).toBeInTheDocument()
+        expect(screen.getByText('main.c(...)')).toBeInTheDocument()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
   })
 })
