@@ -44,6 +44,29 @@ export function serializeFilters(filters) {
 }
 
 /**
+ * Returns the current URL (path + query string + hash) with a single query
+ * parameter set or, when value is falsy, removed. All other existing params, the
+ * path, and the hash are preserved (the hash carries the detail-panel tab state).
+ * Used to make a view's open state shareable via the address bar without disturbing
+ * other filters, e.g.
+ * `window.history.replaceState(null, '', urlWithParam('logs', podName))`.
+ *
+ * @param {string} name - Query parameter name
+ * @param {string} [value] - Value to set; when falsy the parameter is removed
+ * @returns {string} The relative URL (pathname + optional query string + hash)
+ */
+export function urlWithParam(name, value) {
+  const params = new URLSearchParams(window.location.search)
+  if (value) {
+    params.set(name, value)
+  } else {
+    params.delete(name)
+  }
+  const queryString = params.toString()
+  return `${window.location.pathname}${queryString ? `?${queryString}` : ''}${window.location.hash}`
+}
+
+/**
  * Custom hook that restores filter signals from URL query params on mount
  * Runs once on component mount, reads URL and sets signal values
  *

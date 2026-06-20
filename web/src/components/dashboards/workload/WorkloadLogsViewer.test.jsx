@@ -78,6 +78,23 @@ describe('WorkloadLogsViewer component', () => {
     expect(values).toEqual(['all', 'app::false'])
   })
 
+  it('reports the selected pod via onPodChange on mount and on switch', async () => {
+    const user = userEvent.setup()
+    const onPodChange = vi.fn()
+    render(<WorkloadLogsViewer {...allPodsProps} onPodChange={onPodChange} />)
+
+    // The initial selection (All pods → null) is reported on mount so the parent
+    // can put it in the URL.
+    await waitFor(() => expect(onPodChange).toHaveBeenCalledWith(null))
+
+    // Switching to a specific pod reports the pod name; switching back reports null.
+    const select = await screen.findByTestId('logs-pod-select')
+    await user.selectOptions(select, 'web-abc-gqh2x')
+    await waitFor(() => expect(onPodChange).toHaveBeenLastCalledWith('web-abc-gqh2x'))
+    await user.selectOptions(select, '__all_pods__')
+    await waitFor(() => expect(onPodChange).toHaveBeenLastCalledWith(null))
+  })
+
   it('shows the container selector for multiple containers and refetches on change', async () => {
     const user = userEvent.setup()
     const props = { ...defaultProps, pods: onePod([{ name: 'app', isInit: false }, { name: 'sidecar', isInit: false }]) }
@@ -260,9 +277,8 @@ describe('WorkloadLogsViewer component', () => {
   })
 
   it('orders the merged buffer chronologically when a lagging pod sends older lines', async () => {
-    // A pod can lag behind another's per-pod cursor, so the response (and thus the
-    // append order) is not globally chronological. The viewer must reorder by
-    // timestamp, keeping each entry's continuation lines attached.
+    // A lagging pod makes the append order non-chronological; the viewer must
+    // reorder by timestamp, keeping each entry's continuation lines attached.
     fetchWithMock.mockResolvedValue({
       pod: 'web-abc-gqh2x,web-abc-p8x2k',
       container: 'app',
@@ -852,11 +868,13 @@ describe('WorkloadLogsViewer component', () => {
     }
   })
 
-  it('shows the empty state and fires no request when there are no pods to stream', async () => {
+  it('stays open with an inline error and fires no request when there are no pods to stream', async () => {
     render(<WorkloadLogsViewer {...defaultProps} pods={[]} />)
     await new Promise(r => setTimeout(r, 0))
     expect(fetchWithMock).not.toHaveBeenCalled()
-    expect(screen.getByTestId('logs-empty')).toBeInTheDocument()
+    // Empty pod list surfaces an inline error, not the neutral empty state.
+    expect(screen.queryByTestId('logs-empty')).not.toBeInTheDocument()
+    expect(screen.getByTestId('logs-no-pods')).toHaveTextContent('The workload has no running pods to stream logs from.')
   })
 
   it('falls back to the regular containers when the selected container disappears', async () => {
@@ -926,9 +944,8 @@ describe('WorkloadLogsViewer component', () => {
     render(<WorkloadLogsViewer {...defaultProps} />)
     await waitFor(() => expect(screen.getAllByTestId('logs-line-row')).toHaveLength(3))
 
-    // Toggling Format off renders the line byte-for-byte: one logs-line, no row
-    // splitting, exact text (toHaveTextContent normalizes whitespace, so assert
-    // the exact textContent to catch a tab/CR change or an accidental split).
+    // Format off renders byte-for-byte: one logs-line, no row split. Assert exact
+    // textContent (toHaveTextContent normalizes whitespace) to catch a tab/CR change.
     await user.click(screen.getByTestId('logs-format-toggle'))
     await waitFor(() => expect(screen.queryByTestId('logs-line-row')).toBeNull())
     const lines = screen.getAllByTestId('logs-line')

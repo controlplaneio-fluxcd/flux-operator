@@ -139,6 +139,8 @@ entries containing it, e.g. `!debug`), a level filter to show only entries of a
 chosen severity, a control to choose how many lines to
 fetch, and toggles to follow the logs (polling for new entries, enabled by
 default), switch between formatted and raw output, and expand to fullscreen.
+On small screens the viewer opens full-screen with the toolbar laid out in a
+compact grid, and the fullscreen toggle is hidden.
 
 When following, each poll requests only the entries newer than the last one
 already shown and appends them, so the lines you are reading stay put instead of
@@ -166,9 +168,17 @@ separator rule (faint blue for info, escalating through amber for warnings and
 red for errors), and the footer summarizes the per-level counts, which doubles
 as the color legend. ANSI color escape codes in the logs are stripped.
 
-On the workload dashboard the action is available per pod in the Pods list, and
-from the action bar as a "View logs" dropdown listing all the pods of the
-workload. Selecting a pod opens the viewer for that pod.
+On the workload dashboard the action is available per pod in the Pods list (opening
+the viewer on that pod), and from the action bar as a "View logs" button that opens
+the viewer on the merged "All pods" view; the viewer's own pod selector then narrows
+it to a single pod.
+
+The viewer keeps the page URL pointed at the pod currently shown (`?logs=<pod>`, or
+`?logs=*` for the merged "All pods" view), updating it both when the viewer is
+opened and whenever the pod is changed with the viewer's own selector. The link can
+be copied or bookmarked and, when reopened, loads the workload dashboard with the
+logs viewer already showing that pod's logs (subject to the same authorization).
+Closing the viewer removes the parameter.
 
 Unlike the GitOps and workload mutation actions, viewing logs is a read-only
 operation. The logs are always read using the authenticated user's identity,

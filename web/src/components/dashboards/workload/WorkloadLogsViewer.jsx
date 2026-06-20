@@ -19,9 +19,9 @@ const DEFAULT_TAIL_LINES = 100
 // container (init and regular) and interleaves the lines chronologically.
 const ALL_CONTAINERS = 'all'
 
-// Sentinel option key for the "All pods" view, which streams every pod of the
-// workload and interleaves the lines chronologically, each tagged with its pod of
-// origin. Distinct from ALL_CONTAINERS so it can never collide with a pod name.
+// Sentinel option key for the "All pods" view: every pod streamed and interleaved
+// chronologically, each line tagged with its pod. Distinct from ALL_CONTAINERS so
+// it can never collide with a pod name.
 const ALL_PODS = '__all_pods__'
 
 // Follow polling interval in milliseconds.
@@ -39,20 +39,20 @@ const SCROLL_BOTTOM_THRESHOLD = 32
 // backend's maxLogTailLines cap.
 const MAX_BUFFER_LINES = 5000
 
+// Shown inline when the workload has lost every pod while the viewer is open.
+const NO_PODS_MESSAGE = 'The workload has no running pods to stream logs from.'
+
 /**
  * mergeLogs - appends the entries of an incoming payload to the accumulated
  * buffer, dropping whole entries already present and capping to MAX_BUFFER_LINES.
  *
- * Follow polls request everything since the last line's timestamp, which the API
- * filters at second granularity, so the last second of entries is re-sent on
- * every poll. Dedup is by the entry's timestamped HEAD line, which is unique (a
- * nanosecond timestamp, plus the pod tag in the all-pods view): a re-sent entry
- * whose head already sits in the buffer is dropped whole — head and all the
- * continuation lines under it. Continuation lines (stack frames, no timestamp)
- * are never deduped on their own, so a genuinely new entry keeps its full stack
- * even when a replica emitted a byte-identical frame earlier; deduping those by
- * text (the previous behaviour) truncated the new trace. Returns the previous
- * buffer unchanged when there is nothing new, so the state update is a no-op.
+ * Follow polls re-send the last second of entries (the API filters at second
+ * granularity). Dedup is by the timestamped HEAD line, unique per entry (nanosecond
+ * ts, plus pod tag in the all-pods view): a re-sent head already buffered drops the
+ * whole entry — head and its continuation lines. Continuation lines (stack frames,
+ * no ts) are never deduped alone, so a new entry keeps its full stack even when a
+ * replica emitted an identical frame earlier. Returns prev unchanged when nothing
+ * is new, so the state update is a no-op.
  *
  * @param {string} prev - The accumulated log payload
  * @param {string} incoming - The newly fetched log payload
@@ -67,13 +67,12 @@ function mergeLogs(prev, incoming) {
   let dropping = false
   for (const line of add) {
     if (entryTimestamp(line)) {
-      // Start of an entry: a re-send (head already buffered) is dropped whole, so
-      // its continuation lines are skipped until the next head arrives.
+      // Entry head: a re-send already buffered drops the entry and its
+      // continuation lines until the next head.
       dropping = seen.has(line)
       if (!dropping) { fresh.push(line); seen.add(line) }
     } else if (!dropping) {
-      // A continuation line of a kept entry (or a leading orphan before any head):
-      // appended verbatim, never deduped against an identical frame elsewhere.
+      // Continuation line of a kept entry (or a leading orphan): appended verbatim.
       fresh.push(line)
     }
   }
@@ -88,11 +87,10 @@ function mergeLogs(prev, incoming) {
 // continuations) are not mangled by splitting off their first token.
 const TIMESTAMP_PREFIX = /^(\d{4}-\d{2}-\d{2}T\S+)\s+/
 
-// entryTimestamp returns the RFC3339 timestamp that heads a log entry, or null
-// for a continuation line (a stack frame and the like) that carries none. A head
-// is either "<ts> msg" (single pod) or "<pod> <ts> msg" (all-pods, pod-tagged);
-// the timestamp must be a real instant, not merely date-shaped, so a frame
-// beginning with a word and a date-like token is not taken for a head.
+// entryTimestamp returns the RFC3339 timestamp heading a log entry, or null for a
+// continuation line (stack frame) that carries none. A head is "<ts> msg" (single
+// pod) or "<pod> <ts> msg" (all-pods); the ts must be a real instant, not merely
+// date-shaped, so a frame beginning with a word and date-like token isn't a head.
 function entryTimestamp(line) {
   const m = line.match(TIMESTAMP_PREFIX)
   if (m && !Number.isNaN(Date.parse(m[1]))) return m[1]
@@ -170,25 +168,25 @@ function LevelMenu({ value, onChange }) {
   const current = LEVEL_OPTIONS.find(o => o.value === value) || LEVEL_OPTIONS[0]
 
   return (
-    <div class="relative" ref={ref}>
+    <div class="relative w-full sm:w-auto" ref={ref}>
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
-        class={LEVEL_BUTTON_CLASS}
+        class={`${LEVEL_BUTTON_CLASS} w-full justify-between sm:w-auto`}
         data-testid="logs-level-filter"
         aria-label="Log level"
         aria-expanded={open}
         title="Show only logs of this level"
       >
         {current.swatch && <span class={`w-2 h-2 rounded-full ${current.swatch}`} />}
-        <span>{current.label}</span>
+        <span class="flex-1 text-left sm:flex-none">{current.label}</span>
         <svg class="w-3 h-3 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
         </svg>
       </button>
       {open && (
         <div
-          class="absolute left-0 mt-1 w-36 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50"
+          class="absolute left-0 mt-1 w-full sm:w-36 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50"
           data-testid="logs-level-menu"
         >
           {LEVEL_OPTIONS.map((o) => (
@@ -214,28 +212,25 @@ function LevelMenu({ value, onChange }) {
 /**
  * WorkloadLogsViewer - Modal that displays the logs of a workload's pods.
  *
- * The header titles the modal "Log Viewer" over the workload's kind/namespace/name.
- * Two toolbar dropdowns scope the stream: a pod dropdown ("All pods" plus each
- * pod) and a container dropdown ("All containers" plus each container). Switching
- * pods resets the container dropdown back to "All containers".
+ * Two toolbar dropdowns scope the stream: pods ("All pods" plus each pod) and
+ * containers ("All containers" plus each). Switching pods resets the container
+ * dropdown to "All containers".
  *
- * Fetches logs from GET /api/v1/workload/logs and renders each log entry on its
- * own row. In the default formatted mode the timestamp is shown as a pill on the
- * row separator (prefixed with the pod id in the "All pods" view), the pill
- * border and rule are colored by the detected log level (JSON/klog/logfmt/plain
- * text), and JSON lines are pretty-printed; the footer summarizes the per-level
- * counts. The raw mode strips all of that styling. Supports following (live
- * polling, appending only new entries), toggling formatted/raw, filtering by
- * substring and minimum level, choosing the number of lines, an "All containers"
- * option (the default) and an "All pods" option (the default) that interleave the
- * lines chronologically. In "All pods" the backend tags each line with its pod of
- * origin; the row pill shows that pod's id. The viewer downloads the logs as a
- * <pod>.log file and has a fullscreen mode. A failed follow poll is shown inline
- * at the tail; an initial/post-reset failure (no buffer) shows a full-pane error.
+ * Fetches from GET /api/v1/workload/logs, one entry per row. Formatted mode (the
+ * default) shows the timestamp as a level-colored pill on the row separator
+ * (prefixed with the pod id in "All pods"), pretty-prints JSON, and summarizes
+ * per-level counts in the footer; raw mode strips all styling. Supports following
+ * (live polling, appending only new entries), formatted/raw toggle, substring and
+ * minimum-level filters, line count, and the chronologically-interleaved "All
+ * containers" and "All pods" views (the latter tags each line with its pod id).
+ * Downloads as a <pod>.log file and has a fullscreen mode. A failed follow poll
+ * shows inline at the tail; an initial/post-reset failure (no buffer) shows a
+ * full-pane error. If all pods vanish while open (scaled to zero, deleted), the
+ * viewer stays open showing buffered logs and an inline notice, rather than closing.
  *
- * Pod selection is internal: the viewer is given every pod with its containers and
- * keeps the current pod in local state, so it can build the "All pods" request
- * (every pod's regular containers) and resolve the selected pod's containers live.
+ * Pod selection is internal: given every pod with its containers, the viewer keeps
+ * the current pod in local state to build the "All pods" request and resolve the
+ * selected pod's containers live.
  *
  * @param {Object} props
  * @param {string} props.kind - Workload kind, shown in the title
@@ -244,36 +239,53 @@ function LevelMenu({ value, onChange }) {
  * @param {Array<{name: string, status?: string, containers: Array<{name: string, isInit: boolean, restartCount?: number}>}>} props.pods - Pods of the workload, with their containers
  * @param {string} [props.initialPodName] - Pod to pre-select; defaults to "All pods" when absent
  * @param {Function} props.onClose - Callback to close the viewer
+ * @param {Function} [props.onPodChange] - Called with the selected pod name (or null
+ *   for the "All pods" view) whenever the selection changes, so the parent can keep
+ *   a shareable URL in sync with the pod currently shown.
  */
-export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], initialPodName, onClose }) {
-  // Selected pod: a specific pod name or ALL_PODS. Initialised from initialPodName
-  // (the parent remounts the viewer per open, so this re-inits on each open).
+export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], initialPodName, onClose, onPodChange }) {
+  // Selected pod: a specific pod name or ALL_PODS. Initialised from initialPodName;
+  // the parent remounts the viewer per open, so this re-inits on each open.
   const [podKey, setPodKey] = useState(initialPodName || ALL_PODS)
 
-  // Resolve the selection against the live pod list. If the selected specific pod
-  // has disappeared, fall back to "All pods" so the view keeps working.
+  // Resolve against the live pod list, falling back to "All pods" if the selected
+  // pod has disappeared.
   const effectivePodKey = (podKey === ALL_PODS || pods.some(p => p.name === podKey)) ? podKey : ALL_PODS
   const allPods = effectivePodKey === ALL_PODS
   const selectedPod = allPods ? null : (pods.find(p => p.name === effectivePodKey) || null)
 
-  // Commit the fallback when the selected pod disappears (scaled down, deleted).
-  // effectivePodKey already renders "All pods" in that case, but persisting it
-  // means a later pod that happens to reappear with the same name does not
-  // silently snap the view back to it without the user choosing it.
+  // No pods left to stream (scaled to zero, deleted): show an inline notice
+  // instead of closing.
+  const podsGone = pods.length === 0
+
+  // Commit the fallback when the selected pod disappears. effectivePodKey already
+  // renders "All pods", but persisting it stops a later pod reappearing with the
+  // same name from silently snapping the view back without the user choosing it.
   useEffect(() => {
     if (podKey !== ALL_PODS && !pods.some(p => p.name === podKey)) {
       setPodKey(ALL_PODS)
     }
   }, [podKey, pods])
 
-  // Sorted pod names: the request streams these (name = first, rest as repeated
-  // pod params) and the parser uses them as the set of valid pod tags. Sorting
-  // keeps the request stable if the backend returns the same pods reordered.
+  // Report the effective pod selection to the parent so it can keep the shareable
+  // URL pointed at the pod shown. Guarded by a ref so an unstable onPodChange
+  // identity doesn't trigger redundant writes.
+  const reportedPodRef = useRef(undefined)
+  useEffect(() => {
+    const pod = allPods ? null : effectivePodKey
+    if (onPodChange && reportedPodRef.current !== pod) {
+      reportedPodRef.current = pod
+      onPodChange(pod)
+    }
+  }, [allPods, effectivePodKey, onPodChange])
+
+  // Sorted pod names: streamed in the request (first as name, rest as repeated pod
+  // params) and used as the set of valid pod tags. Sorting keeps the request stable
+  // when the backend reorders the same pods.
   const podNames = useMemo(() => pods.map(p => p.name).sort(), [pods])
 
-  // Containers driving the container dropdown and the request. For "All pods" it
-  // is the union of containers across pods (pod templates are uniform, so this is
-  // just every container); for a specific pod it is that pod's live containers.
+  // Containers for the dropdown and request: the union across pods for "All pods"
+  // (templates are uniform, so every container), else the selected pod's live ones.
   const containers = useMemo(() => {
     if (!allPods) return selectedPod?.containers || []
     const seen = new Set()
@@ -286,9 +298,8 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
     return out
   }, [allPods, selectedPod, pods])
 
-  // Every container name (init and regular) — the set the "All containers" view
-  // streams and interleaves. Init containers run to completion before the app
-  // starts, so their lines sort to the front of the merged feed.
+  // Every container name (init and regular) streamed by "All containers". Init
+  // containers run to completion first, so their lines sort to the front.
   const streamNames = useMemo(
     () => containers.map(c => c.name),
     [containers]
@@ -333,22 +344,20 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
   // Timestamp of the last buffered line, sent as sinceTime on single-pod follow
   // polls so the server returns only newer entries to append.
   const lastTsRef = useRef('')
-  // Per-pod follow cursors (pod -> newest timestamp seen) for the "All pods" view,
-  // sent as repeated `since` params so each pod advances independently of clock
-  // skew between nodes. Kept in a ref so updating it doesn't re-create fetchLogs.
+  // Per-pod follow cursors (pod -> newest ts) for "All pods", sent as repeated
+  // `since` params so each pod advances independently of node clock skew. In a ref
+  // so updating it doesn't re-create fetchLogs.
   const cursorsRef = useRef(new Map())
-  // Monotonic id bumped by every reset (non-append) fetch. A fetch only applies
-  // its result if its id is still current, so an in-flight append poll from a
-  // previous container/params can't merge stale lines into a reset buffer.
+  // Monotonic id bumped by every reset (non-append) fetch. A fetch applies its
+  // result only if its id is still current, so an in-flight append poll from
+  // previous params can't merge stale lines into a reset buffer.
   const fetchGenRef = useRef(0)
-  // True while a reset (initial/param-change) fetch is in flight. Follow polls
-  // skip while it is set, so a poll started mid-reset can't append using the old
-  // buffer's cursor into the resetting buffer (the generation guard alone can't
-  // catch this, since a poll fired after the reset shares its generation).
+  // True while a reset fetch is in flight; follow polls skip so a poll started
+  // mid-reset can't append the old buffer's cursor into the resetting buffer (a
+  // poll fired after the reset shares its generation, so the guard alone misses it).
   const resettingRef = useRef(false)
-  // Memoizes the formatted (pretty-printed, colored-span) output per raw line text,
-  // so appends only format the new lines instead of re-formatting the whole buffer
-  // on every poll. See displayLines for how it's pruned.
+  // Memoizes formatted output per raw line text, so appends format only the new
+  // lines instead of the whole buffer each poll. See displayLines for pruning.
   const formatCacheRef = useRef(new Map())
 
   // Pod dropdown options: "All pods" leads, then each pod.
@@ -378,48 +387,38 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
     return opts
   }, [allPods, containers, streamNames])
 
-  // The pods to stream as a stable comma-joined string: every pod for "All pods",
-  // or the single selected pod. Pod names cannot contain commas, so this stays a
-  // primitive, value-stable fetch dependency (a pod-set change resets the buffer;
-  // a backend reorder of the same set does not, because podNames is sorted).
+  // Pods to stream as a comma-joined string: every pod for "All pods", else the
+  // selected one. Pod names hold no commas, so this is a value-stable fetch
+  // dependency (a pod-set change resets the buffer; a sorted-stable reorder doesn't).
   const reqPodsStr = useMemo(
     () => (allPods ? podNames : (selectedPod ? [selectedPod.name] : [])).join(','),
     [allPods, podNames, selectedPod]
   )
 
-  // Resolve the selected container option into the request parameters: the
-  // container names to stream and whether to read the previous instance. The
-  // previous flag applies only to a specific container of a single pod.
+  // Resolve the container option into request params: names to stream and whether
+  // to read the previous instance (only for a specific container of a single pod).
   const { reqContainersStr, reqPrevious } = useMemo(() => {
     if (containerKey === ALL_CONTAINERS) {
-      // Sort the streamed container names (as reqPodsStr sorts pods) so a backend
-      // reorder of the same set keeps the fetch dependency value-stable and does
-      // not reset the follow buffer.
+      // Sorted (like reqPodsStr) so a backend reorder of the same set keeps the
+      // fetch dependency stable and doesn't reset the follow buffer.
       return { reqContainersStr: [...streamNames].sort().join(','), reqPrevious: false }
     }
     const sep = containerKey.lastIndexOf('::')
     const cname = sep >= 0 ? containerKey.slice(0, sep) : containerKey
     const prev = !allPods && sep >= 0 && containerKey.slice(sep + 2) === 'true'
-    // Guard the brief window after a pod switch where containerKey still holds the
-    // previous pod's container (before the reset effect runs): if it names a
-    // container the current set doesn't have, fall back to all containers. Sorted
-    // to match the ALL_CONTAINERS branch so the value stays stable and the
-    // fallback does not trigger an extra buffer reset.
+    // Brief window after a pod switch where containerKey still holds the previous
+    // pod's container (before the reset effect runs): if absent from the current
+    // set, fall back to all containers. Sorted to match the ALL_CONTAINERS branch.
     if (!containers.some(c => c.name === cname)) {
       return { reqContainersStr: [...streamNames].sort().join(','), reqPrevious: false }
     }
     return { reqContainersStr: cname, reqPrevious: prev }
   }, [containerKey, containers, streamNames, allPods])
 
-  // Fetch the logs. Background follow-polls pass { silent: true } so they don't
-  // toggle the loading spinner, which would flicker on every poll; only the
-  // initial load and user-driven changes (container, line count) show it.
-  //
-  // Follow polls also pass { append: true }: once a buffer exists they request
-  // only the entries newer than the last line (sinceTime) and append them,
-  // instead of re-fetching the whole tail window and replacing it (which would
-  // make the visible lines shift on every poll). The initial load and any
-  // parameter change fetch the tail and replace the buffer.
+  // Fetch the logs. Follow polls pass { silent: true } to avoid spinner flicker and
+  // { append: true } to request only entries newer than the last line (sinceTime)
+  // and append them, so the visible lines don't shift each poll. The initial load
+  // and any parameter change fetch the tail and replace the buffer.
   const fetchLogs = useCallback(async ({ silent = false, append = false } = {}) => {
     const reqPodsList = reqPodsStr ? reqPodsStr.split(',') : []
     const reqContainers = reqContainersStr ? reqContainersStr.split(',') : []
@@ -428,18 +427,15 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
     // old buffer's cursor and merge into the resetting buffer.
     if (append && resettingRef.current) return
     // A reset starts a new generation; appends ride on the current one. A fetch
-    // only applies its result if its generation is still current (checked on
-    // settle below), so an in-flight append poll from a previous pod/container or
-    // a superseded reset can't write stale lines into the buffer.
+    // applies its result only if its generation is still current (checked on settle),
+    // so a stale append poll or superseded reset can't write into the buffer.
     const gen = append ? fetchGenRef.current : ++fetchGenRef.current
     if (!append) resettingRef.current = true
     if (!silent) setLoading(true)
     try {
-      // The required name is the first pod; additional pods are repeated `pod`
-      // params (the "All pods" view) and containers repeated `container` params.
-      // tailLines is always sent so the backend bounds every fetch to the user's
-      // selection. On a follow poll, single-pod mode narrows by a global sinceTime
-      // while all-pods mode narrows by a per-pod `since` cursor.
+      // First pod is `name`, the rest repeated `pod` params; containers repeated
+      // `container` params. tailLines always bounds the fetch. On a follow poll,
+      // single-pod narrows by a global sinceTime, all-pods by per-pod `since`.
       const params = new URLSearchParams({ namespace, name: reqPodsList[0], tailLines: String(tailLines), previous: String(reqPrevious) })
       for (let i = 1; i < reqPodsList.length; i++) {
         params.append('pod', reqPodsList[i])
@@ -469,10 +465,9 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
       } else {
         setLogs(incoming)
       }
-      // The response states whether its lines are pod-tagged and how many of the
-      // requested pods it covered, so the parser and the footer never have to
-      // guess. Both are refreshed on every fetch (they stay constant for a given
-      // pod set, but a pod becoming readable can clear a partial result).
+      // The response states whether its lines are pod-tagged and how many requested
+      // pods it covered, so the parser and footer don't guess. Refreshed every fetch
+      // (a pod becoming readable can clear a partial result).
       setTagged(!!resp?.tagged)
       setPartial(resp?.partial ? { streamed: resp.streamed || 0, total: resp.total || 0, forbidden: resp.forbidden || 0 } : null)
       setError(null)
@@ -480,8 +475,8 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
     } catch (err) {
       if (fetchGenRef.current !== gen) return
       if (append) {
-        // A follow poll failed: keep the buffer and surface the error inline at
-        // the tail of the feed rather than replacing the logs with a banner.
+        // Follow poll failed: keep the buffer, show the error inline at the tail
+        // rather than replacing the logs with a banner.
         setFollowError(err.message)
       } else {
         setError(err.message)
@@ -489,8 +484,8 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
         setFollowError(null)
       }
     } finally {
-      // Only the still-current fetch clears the shared state, so a superseded
-      // reset settling first doesn't drop the loader or the resetting flag.
+      // Only the still-current fetch clears shared state, so a superseded reset
+      // settling first doesn't drop the loader or the resetting flag.
       if (fetchGenRef.current === gen) {
         if (!append) resettingRef.current = false
         if (!silent) setLoading(false)
@@ -503,17 +498,15 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
     fetchLogs()
   }, [fetchLogs])
 
-  // Reset the container selection to the default ("All containers") whenever the
-  // selected pod changes, so a container picked for the previous pod doesn't carry
-  // over. Keyed on the pod selection only: poll-driven re-renders keep the same
-  // selection untouched. On the initial mount this re-sets the already-default
-  // value, which Preact bails out of as a no-op.
+  // Reset the container selection to "All containers" when the pod changes, so a
+  // container picked for the previous pod doesn't carry over. Keyed on the pod only;
+  // on mount this re-sets the already-default value, which Preact treats as a no-op.
   useEffect(() => {
     setContainerKey(defaultKey)
   }, [effectivePodKey])
 
-  // Poll for new logs while following, silently so the spinner doesn't flicker
-  // and appending so the visible lines stay put instead of shifting each poll.
+  // Poll for new logs while following: silent (no spinner flicker) and appending
+  // (visible lines stay put).
   useEffect(() => {
     if (!follow) {
       // No more polls, so drop any stale inline follow error.
@@ -550,9 +543,8 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
   // detected. Only re-runs when the payload (or tagging regime) changes.
   const baseLines = useMemo(() => {
     const podSet = tagged ? new Set(reqPodsStr ? reqPodsStr.split(',') : []) : null
-    // Strip a trailing CR up front so a CRLF stream doesn't leak `\r` into the
-    // message text, the decorated field values, or the filter. (The download uses
-    // the raw payload, so it stays byte-verbatim.)
+    // Strip a trailing CR so a CRLF stream doesn't leak `\r` into the text, fields,
+    // or filter. (Download uses the raw payload, so it stays byte-verbatim.)
     const entries = logs.split('\n').map(line => line.replace(/\r$/, '')).filter(line => line.length > 0).map(line => {
       let rest = line
       let pod = ''
@@ -561,9 +553,8 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
         if (sp > 0) {
           const first = line.slice(0, sp)
           const after = line.slice(sp + 1)
-          // Require a real timestamp, not merely a date-shaped token, so a message
-          // that happens to begin "<known-pod> 2026-13-45T.." is not mistaken for
-          // a tag and split apart.
+          // Require a real timestamp, not a date-shaped token, so a message
+          // beginning "<known-pod> 2026-13-45T.." isn't mistaken for a tag.
           const am = after.match(TIMESTAMP_PREFIX)
           if (podSet.has(first) && am && !Number.isNaN(Date.parse(am[1]))) {
             pod = first
@@ -580,15 +571,12 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
       return { ts, tsMs, text, level: detectLevel(text), pod, podId }
     })
 
-    // In the all-pods view each pod advances its own `since` cursor, so a pod
-    // that lags (slow or clock-skewed) can deliver a line older than another
-    // pod's already-buffered tail; appended in arrival order the buffer would no
-    // longer be chronological. Regroup each timestamped line with the
-    // continuation lines that follow it and stable-sort the groups by timestamp,
-    // so the merged view stays ordered while a multi-line entry and same-instant
-    // lines keep their original (backend-merged) order. The single-pod and
-    // all-containers paths arrive pre-merged from one cursor, so they are left
-    // untouched.
+    // In all-pods each pod advances its own `since` cursor, so a lagging pod can
+    // deliver a line older than another's buffered tail; in arrival order the buffer
+    // would lose chronology. Group each timestamped line with its continuation lines
+    // and stable-sort the groups by timestamp, keeping multi-line entries and
+    // same-instant lines in backend-merged order. Single-pod/all-containers arrive
+    // pre-merged from one cursor, so they're left untouched.
     if (!tagged) return entries
     const groups = []
     for (const entry of entries) {
@@ -604,22 +592,19 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
     return groups.flat()
   }, [logs, tagged, reqPodsStr])
 
-  // Track the follow cursors from the current buffer so the next poll requests
-  // only newer entries. lastTsRef is the global high-watermark for the single-pod
-  // path (sinceTime); cursorsRef holds the newest timestamp per pod for the
-  // all-pods path (repeated `since`). Both are authoritative over the buffer: they
-  // clear when it has no timestamped lines, so a poll never reuses a stale cursor
-  // from a previous stream. The second-granular cursor re-sends the last second of
-  // overlap, deduped on append; a per-pod cursor keeps a clock-skewed pod from
-  // being starved by another pod's faster-advancing watermark.
+  // Track the follow cursors from the buffer so the next poll requests only newer
+  // entries: lastTsRef is the single-pod high-watermark (sinceTime), cursorsRef the
+  // newest ts per pod for all-pods (repeated `since`). Both clear when the buffer
+  // has no timestamped lines, so a poll never reuses a stale cursor. A per-pod
+  // cursor keeps a clock-skewed pod from being starved by a faster watermark.
   useEffect(() => {
     let ts = ''
     for (let i = baseLines.length - 1; i >= 0; i--) {
       if (baseLines[i].ts) { ts = baseLines[i].ts; break }
     }
     lastTsRef.current = ts
-    // Newest timestamp per pod. The buffer is chronological, so the last occurrence
-    // of each pod is its newest; second-granular cursors make exact ordering moot.
+    // Newest ts per pod. The buffer is chronological, so each pod's last occurrence
+    // is its newest.
     const cursors = new Map()
     for (const entry of baseLines) {
       if (entry.pod && entry.ts) cursors.set(entry.pod, entry.ts)
@@ -627,8 +612,7 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
     cursorsRef.current = cursors
   }, [baseLines])
 
-  // Apply the substring filter on the message text; cheap pass over the
-  // already-split entries. A leading "!" negates the match, keeping only lines
+  // Substring filter on the message text. A leading "!" negates, keeping only lines
   // that do NOT contain the text (e.g. "!debug" hides every line mentioning debug).
   const containsLines = useMemo(() => {
     const raw = filter.trim()
@@ -639,9 +623,9 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
     return baseLines.filter(entry => entry.text.toLowerCase().includes(needle) !== negate)
   }, [baseLines, filter])
 
-  // Per-level counts over the contains-filtered set, before the minimum-level
-  // threshold (so the footer summary shows how many errors exist even while
-  // viewing "error and above"). Doubles as the footer legend.
+  // Per-level counts over the contains-filtered set, before the level filter (so the
+  // footer shows how many errors exist even while viewing one level). Doubles as the
+  // footer legend.
   const levelCounts = useMemo(() => {
     const counts = {}
     for (const entry of containsLines) counts[entry.level] = (counts[entry.level] || 0) + 1
@@ -654,19 +638,16 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
     return containsLines.filter(entry => entry.level === levelFilter)
   }, [containsLines, levelFilter])
 
-  // In formatted mode every line carries a descriptor (`fmt`) of colored spans:
-  // valid JSON is pretty-printed (`fmt.kind === 'json'`), structured loggers reflow
-  // to `block`/`spans`, and an unmatched line falls back to plain wrapping text
-  // (`code: true`). In raw mode lines render as unstyled plain text
-  // (`code: false`). Filtering happens first on the raw text, so this only
-  // transforms what is actually shown.
+  // In formatted mode every line carries a `fmt` descriptor of colored spans: JSON
+  // pretty-printed (`kind: 'json'`), structured loggers reflowed to `block`/`spans`,
+  // unmatched lines plain wrapping text (`code: true`). Raw mode renders unstyled
+  // (`code: false`). Filtering runs first on raw text, so this only transforms what
+  // is shown.
   //
-  // The formatted output is cached by raw line text (formatCacheRef): since the
-  // formatted form depends only on the line text, an append reuses the cached
-  // result for every existing line and only formats the genuinely new lines,
-  // instead of re-formatting the whole buffer on every poll. The cache is rebuilt
-  // to hold only the lines currently shown, so it can't outgrow the buffer; raw
-  // mode leaves it untouched so it survives a round-trip back to formatted.
+  // Formatted output is cached by raw line text (formatCacheRef): an append reuses
+  // cached results and only formats the new lines, not the whole buffer each poll.
+  // The cache is rebuilt to the shown lines so it can't outgrow the buffer; raw mode
+  // leaves it untouched so it survives a round-trip back to formatted.
   const displayLines = useMemo(() => {
     if (!formatted) {
       return logLines.map(entry => ({ ...entry, code: false, fmt: null }))
@@ -674,15 +655,14 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
     const prev = formatCacheRef.current
     const next = new Map()
     const result = logLines.map(entry => {
-      // JSON formatting runs on every line (unchanged from before). Only the
-      // klog/zap/logfmt cascade is gated on a parsed timestamp, so a continuation
-      // line (stack frame, no timestamp) can never be mistaken for a structured
-      // entry. The cache key carries the head flag because the same stripped text
-      // may appear both as a head and as a continuation line.
+      // JSON formatting runs on every line; the klog/zap/logfmt cascade is gated on
+      // a parsed timestamp, so a continuation line (no ts) can't be mistaken for a
+      // structured entry. The cache key carries the head flag since the same text
+      // may appear as both a head and a continuation line.
       const key = `${entry.ts ? 1 : 0}\n${entry.text}`
       let formattedEntry = next.get(key) || prev.get(key)
       if (!formattedEntry) {
-        // json then klog/zap/logfmt then plain. The json/block/spans kinds render as
+        // json, then klog/zap/logfmt, then plain. json/block/spans render as
         // decorated rows; plain keeps a wrapping text div.
         const json = highlightJson(entry.text)
         const d = json || (entry.ts ? decorateLine(entry.text, entry.level) : { kind: 'plain' })
@@ -697,13 +677,11 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
     return result
   }, [logLines, formatted])
 
-  // Briefly highlight the most recent visible line whenever genuinely new
-  // entries arrive (e.g. while following). The highlight is gated on two
-  // conditions so it only signals fresh logs: the raw buffer must have grown
-  // (prevLogs !== logs, skipping the very first load), and the newest displayed
-  // line must have changed. The second gate is what keeps a follow poll that
-  // appends only lines filtered out of the view — or a filter change that
-  // reshuffles the view — from re-pulsing an unchanged last line.
+  // Briefly highlight the most recent visible line when new entries arrive (e.g.
+  // while following). Gated on two conditions so it only signals fresh logs: the raw
+  // buffer grew (prevLogs !== logs, skipping the first load) and the newest displayed
+  // line changed. The second gate stops a poll that appends only filtered-out lines,
+  // or a filter change reshuffling the view, from re-pulsing an unchanged last line.
   useEffect(() => {
     const prevLogs = prevLogsRef.current
     prevLogsRef.current = logs
@@ -738,8 +716,8 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
   }, [])
 
   // Keep the most recent entry (or the inline follow error) in view after each
-  // update, but only while pinned to the bottom, so following doesn't fight a
-  // user scrolling through history.
+  // update, but only while pinned to the bottom, so following doesn't fight a user
+  // scrolling through history.
   useEffect(() => {
     if (!bodyRef.current || !atBottomRef.current) return
     bodyRef.current.scrollTop = bodyRef.current.scrollHeight
@@ -754,13 +732,15 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
 
   return (
     <div
-      class={`fixed inset-0 z-50 flex justify-center bg-black/50 ${fullScreen ? 'items-center p-0' : 'items-center px-4 sm:px-6 lg:px-8 py-16'}`}
+      class={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 ${fullScreen ? 'p-0' : 'p-0 sm:px-6 sm:py-16 lg:px-8'}`}
       onClick={onClose}
       data-testid="logs-viewer-overlay"
     >
       <div
         class={`bg-white dark:bg-gray-900 shadow-xl flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700 ${
-          fullScreen ? 'w-full h-full max-w-full max-h-full rounded-none' : 'w-full max-w-7xl h-[calc(100vh-8rem)] rounded-lg'
+          fullScreen
+            ? 'w-full h-full max-w-full max-h-full rounded-none'
+            : 'w-full h-full max-w-full rounded-none sm:max-w-7xl sm:h-[calc(100vh-8rem)] sm:rounded-lg'
         }`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
@@ -788,44 +768,47 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
           </button>
         </div>
 
-        {/* Toolbar */}
-        <div class="flex items-center flex-wrap gap-2 px-4 py-2 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
-          {/* Follow logs */}
-          <ToggleButton
-            active={follow}
-            onClick={() => setFollow(v => !v)}
-            label="Follow logs"
-            testid="logs-follow-toggle"
-          >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 13l-7 7-7-7m14-6l-7 7-7-7" />
-            </svg>
-          </ToggleButton>
+        {/* Toolbar. Mobile: a two-column grid of paired rows (the viewer is
+            full-screen there). From sm up: a single-row flex-wrap. */}
+        <div class="grid grid-cols-2 items-center gap-2 px-4 py-2 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 sm:flex sm:flex-wrap">
+          {/* Toggles share the full-width top row on mobile; `sm:contents` dissolves
+              the wrapper on desktop so each toggle is a direct flex item. */}
+          <div class="col-span-2 flex items-center gap-2 sm:contents">
+            {/* Follow logs */}
+            <ToggleButton
+              active={follow}
+              onClick={() => setFollow(v => !v)}
+              label="Follow logs"
+              testid="logs-follow-toggle"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 13l-7 7-7-7m14-6l-7 7-7-7" />
+              </svg>
+            </ToggleButton>
 
-          {/* Toggle between formatted and raw output. Formatted (default)
-              pretty-prints structured lines and adds timestamp pills and
-              level coloring; raw strips all styling to plain text. */}
-          <ToggleButton
-            active={formatted}
-            onClick={() => setFormatted(v => !v)}
-            label="Format logs"
-            title="Toggle between formatted and raw logs"
-            testid="logs-format-toggle"
-          >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1m8-18h1a2 2 0 0 1 2 2v5c0 1.1.9 2 2 2a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2h-1" />
-            </svg>
-          </ToggleButton>
+            {/* Formatted (default) pretty-prints structured lines and adds
+                timestamp pills and level coloring; raw strips all styling. */}
+            <ToggleButton
+              active={formatted}
+              onClick={() => setFormatted(v => !v)}
+              label="Format logs"
+              title="Toggle between formatted and raw logs"
+              testid="logs-format-toggle"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1m8-18h1a2 2 0 0 1 2 2v5c0 1.1.9 2 2 2a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2h-1" />
+              </svg>
+            </ToggleButton>
+          </div>
 
-          {/* Pod select. "All pods" leads and streams every pod merged, tagged
-              with its origin; selecting a specific pod narrows the view and
-              resets the container dropdown to "All containers". Fixed width so a
-              long pod name is trimmed instead of pushing the rest of the toolbar. */}
+          {/* Pod select. "All pods" leads (every pod merged, origin-tagged);
+              selecting one narrows the view and resets the container dropdown.
+              Fixed width so a long name is trimmed, not pushing the toolbar. */}
           {pods.length > 0 && (
             <select
               value={effectivePodKey}
               onChange={(e) => setPodKey(e.target.value)}
-              class={`${SELECT_CLASS} w-28 sm:w-40 truncate`}
+              class={`${SELECT_CLASS} w-full truncate sm:w-40`}
               data-testid="logs-pod-select"
               aria-label="Pod"
               title="Select pod"
@@ -836,14 +819,13 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
             </select>
           )}
 
-          {/* Container select (always shown). Containers that have restarted
-              also expose a "(previous)" entry for the prior instance's logs.
-              Fixed width so a long container name is trimmed instead of pushing
-              the rest of the toolbar. */}
+          {/* Container select (always shown). Restarted containers also expose a
+              "(previous)" entry for the prior instance's logs. Fixed width so a
+              long name is trimmed, not pushing the toolbar. */}
           <select
             value={containerKey}
             onChange={(e) => setContainerKey(e.target.value)}
-            class={`${SELECT_CLASS} w-28 sm:w-40 truncate`}
+            class={`${SELECT_CLASS} w-full truncate sm:w-40`}
             data-testid="logs-container-select"
             aria-label="Container"
             title="Select container (a previous entry reads the prior instance's logs)"
@@ -859,10 +841,10 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
             value={filter}
             onInput={(e) => setFilter(e.target.value)}
             placeholder="contains…"
-            class={`${INPUT_CLASS} w-28 sm:w-40`}
+            class={`${INPUT_CLASS} w-full sm:w-40`}
             data-testid="logs-filter-input"
             aria-label="Filter log lines containing text"
-            title="Keep lines containing this text; prefix with ! to exclude (e.g. !debug)"
+            title="Filter by keyword (prefix with ! to exclude e.g. !debug)"
           />
 
           {/* Minimum level filter */}
@@ -872,7 +854,7 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
           <select
             value={tailLines}
             onChange={(e) => setTailLines(Number(e.target.value))}
-            class={SELECT_CLASS}
+            class={`${SELECT_CLASS} w-full sm:w-auto`}
             data-testid="logs-lines-select"
             aria-label="Number of lines"
             title="Number of log lines to fetch"
@@ -882,8 +864,9 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
             ))}
           </select>
 
-          {/* Actions */}
-          <div class="flex items-center gap-1 ml-auto">
+          {/* Actions. Mobile: the last grid cell, right-aligned. Desktop: floats
+              to the far right of the row. */}
+          <div class="flex items-center justify-end gap-1 sm:ml-auto">
             <button
               onClick={handleDownload}
               disabled={!logs}
@@ -896,9 +879,11 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
               </svg>
             </button>
+            {/* Fullscreen hidden on mobile, where the viewer already fills the
+                screen. */}
             <button
               onClick={() => setFullScreen(v => !v)}
-              class={ACTION_CLASS}
+              class={`${ACTION_CLASS} hidden sm:inline-flex`}
               aria-pressed={fullScreen}
               title={fullScreen ? 'Exit fullscreen' : 'Fullscreen'}
               aria-label={fullScreen ? 'Exit fullscreen' : 'Fullscreen'}
@@ -925,11 +910,11 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
             </div>
           ) : loading && !logs ? (
             <p class="p-3 text-xs text-gray-500 dark:text-gray-400" data-testid="logs-loading">Loading logs...</p>
-          ) : displayLines.length > 0 || followError ? (
+          ) : displayLines.length > 0 || followError || podsGone ? (
             <div class="pb-2" data-testid="logs-content">
               {displayLines.map((entry, i) => {
-                // Raw mode strips all styling: no timestamp pill, no level
-                // coloring, and no highlight on the freshly appended entry.
+                // Raw mode strips styling: no timestamp pill, level coloring, or
+                // highlight on the freshly appended entry.
                 const isLatest = formatted && flashLatest && i === displayLines.length - 1
                 const meta = LEVEL_META[entry.level] || LEVEL_META[DEFAULT_LEVEL]
                 return (
@@ -956,9 +941,8 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
                       </div>
                     )}
                     {entry.fmt && entry.fmt.kind === 'block' ? (
-                      // Structured entry: one container per entry (keeping the
-                      // per-entry logs-line invariant), one inner row per visual
-                      // line, all flush-left at full width.
+                      // Structured entry: one container per entry (the per-entry
+                      // logs-line invariant), one inner row per visual line.
                       <div
                         class="overflow-x-auto font-mono whitespace-pre-wrap break-all text-gray-800 dark:text-gray-200"
                         style="padding: 0.25rem 0.75rem; font-size: 12px; line-height: 1.5;"
@@ -980,9 +964,8 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
                         {entry.fmt.spans.map((s, j) => (s.cls ? <span key={j} class={s.cls}>{s.text}</span> : s.text))}
                       </div>
                     ) : entry.fmt && entry.fmt.kind === 'json' ? (
-                      // Pretty-printed JSON: a <pre> preserves the indentation/newlines
-                      // baked into the spans and scrolls long values horizontally,
-                      // keeping nested structures intact.
+                      // Pretty-printed JSON: a <pre> preserves the baked-in
+                      // indentation/newlines and scrolls long values horizontally.
                       <pre
                         class="overflow-x-auto font-mono text-gray-800 dark:text-gray-200"
                         style="margin: 0; padding: 0.25rem 0.75rem; font-size: 12px; line-height: 1.5;"
@@ -991,9 +974,9 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
                         {entry.fmt.spans.map((s, j) => (s.cls ? <span key={j} class={s.cls}>{s.text}</span> : s.text))}
                       </pre>
                     ) : entry.code ? (
-                      // Plain line that matched no formatter (or a continuation line
-                      // such as a stack frame): wrap it like the decorated rows rather
-                      // than the JSON <pre>, which scrolls horizontally and never wraps.
+                      // Plain line (no formatter match, or a continuation line such
+                      // as a stack frame): wrap like the decorated rows, not the
+                      // non-wrapping JSON <pre>.
                       <div
                         class="overflow-x-auto font-mono whitespace-pre-wrap break-all text-gray-800 dark:text-gray-200"
                         style="padding: 0.25rem 0.75rem; font-size: 12px; line-height: 1.5;"
@@ -1024,6 +1007,18 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
                   <span class="break-all">{followError}</span>
                 </div>
               )}
+              {podsGone && (
+                <div
+                  class="flex items-start gap-2 mx-3 mt-2 p-2 rounded border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 text-xs text-red-800 dark:text-red-200"
+                  data-testid="logs-no-pods"
+                  role="alert"
+                >
+                  <svg class="w-4 h-4 flex-shrink-0 mt-px" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                  </svg>
+                  <span class="break-all">{NO_PODS_MESSAGE}</span>
+                </div>
+              )}
             </div>
           ) : (
             <p class="p-3 text-xs text-gray-500 dark:text-gray-400" data-testid="logs-empty">
@@ -1032,15 +1027,15 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
           )}
         </div>
 
-        {/* Footer: a per-level count summary that doubles as the color legend.
-            The trailing corner shows the fetch loader while a request is in
-            flight, otherwise the live/snapshot mode reflecting the follow state. */}
+        {/* Footer: a per-level count summary doubling as the color legend. The
+            trailing corner shows the fetch loader while a request is in flight,
+            else the live/snapshot mode. */}
         <div
           class="flex items-center justify-between gap-3 px-4 py-2 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800"
           data-testid="logs-footer"
         >
-          <div class="flex items-center gap-3 min-w-0">
-            <div class="flex items-center gap-3 text-xs text-gray-600 dark:text-gray-400" data-testid="logs-level-summary">
+          <div class="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0">
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-600 dark:text-gray-400" data-testid="logs-level-summary">
               {LEVELS.filter(l => levelCounts[l]).map((l) => (
                 <span key={l} class="inline-flex items-center gap-1" title={`${LEVEL_META[l].label}: ${levelCounts[l]}`}>
                   <span class={`w-2 h-2 rounded-full ${LEVEL_META[l].swatch}`} />
@@ -1048,11 +1043,10 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
                 </span>
               ))}
             </div>
-            {/* Partial-coverage note: the all-pods view did not cover every pod
-                (forbidden, missing) or the fan-out was capped. The pod-count
-                phrasing is shown only when pods were actually dropped; a pure cap
-                (every pod streamed, but the stream count was capped) reads as
-                "results truncated" instead, to avoid a misleading "N of N". */}
+            {/* Partial-coverage note: all-pods didn't cover every pod (forbidden,
+                missing) or the fan-out was capped. The pod-count phrasing shows only
+                when pods were dropped; a pure cap reads as "results truncated" to
+                avoid a misleading "N of N". */}
             {partial && (
               <span
                 class="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 flex-shrink-0"

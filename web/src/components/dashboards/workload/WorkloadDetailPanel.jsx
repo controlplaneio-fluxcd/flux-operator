@@ -1,7 +1,7 @@
 // Copyright 2026 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { useMemo, useEffect, useRef, useState } from 'preact/hooks'
+import { useMemo, useEffect, useRef, useState, useCallback } from 'preact/hooks'
 import { fetchWithMock } from '../../../utils/fetch'
 import { formatTimestamp } from '../../../utils/time'
 import { getWorkloadStatusBadgeClass, formatWorkloadStatus, getEventBadgeClass, getContainerStateBadgeClass } from '../../../utils/status'
@@ -10,8 +10,10 @@ import { DashboardPanel, TabButton } from '../common/panel'
 import { YamlBlock } from '../common/yaml'
 import { WorkloadDeleteAction } from '../resource/WorkloadDeleteAction'
 import { WorkloadLogsViewer } from './WorkloadLogsViewer'
+import { LOGS_QUERY_PARAM, ALL_PODS_VALUE } from './WorkloadLogsAction'
 import { FluxOperatorIcon } from '../../layout/Icons'
 import { useHashTab } from '../../../utils/hash'
+import { urlWithParam } from '../../../utils/routing'
 
 // Valid tabs for the WorkloadDetailPanel
 const WORKLOAD_TABS = ['overview', 'pods', 'events', 'spec', 'status']
@@ -107,23 +109,34 @@ export function WorkloadDetailPanel({
   // Expanded pods state (set of pod names)
   const [expandedPods, setExpandedPods] = useState(new Set())
 
-  // Open log-viewing session: { key, pod } where pod is a pod name to pre-select.
-  // key increments per open so the viewer remounts and re-initialises its pod
-  // selection. null when no viewer is open.
+  // Open session: { key, pod } where pod is a pod name to pre-select. key increments
+  // per open so the viewer remounts and re-inits its pod selection. null when closed.
   const [logsSession, setLogsSession] = useState(null)
   const logsSessionKeyRef = useRef(0)
+  // Keep the URL pointed at the pod shown (on open and every in-viewer switch via
+  // onPodChange) so the address bar is a shareable link. A null pod is "All pods".
+  // WorkloadLogsAction reads this param on load to re-open the viewer.
+  const syncLogFilterToUrl = useCallback((pod) => {
+    window.history.replaceState(null, '', urlWithParam(LOGS_QUERY_PARAM, pod || ALL_PODS_VALUE))
+  }, [])
+
   const openLogs = (podName) => {
     logsSessionKeyRef.current += 1
     setLogsSession({ key: logsSessionKeyRef.current, pod: podName })
+    syncLogFilterToUrl(podName)
+  }
+
+  const closeLogs = () => {
+    setLogsSession(null)
+    window.history.replaceState(null, '', urlWithParam(LOGS_QUERY_PARAM, null))
   }
 
   // Whether the user is allowed to view pod logs
   const canViewLogs = workloadInfo?.userActions?.includes('logs')
 
-  // The live pods passed to the viewer, each with its containers, so the viewer
-  // can build the "All pods" request and resolve a pod's containers (and restart
-  // counts) from the polled data while open. Only pods carrying container status
-  // can be inspected.
+  // Live pods passed to the viewer, each with its containers, so it can build the
+  // "All pods" request and resolve a pod's containers (and restart counts) from the
+  // polled data while open. Only pods carrying container status can be inspected.
   const logsPods = useMemo(
     () => (workloadInfo?.pods || [])
       .filter(p => p.podStatus)
@@ -599,8 +612,9 @@ export function WorkloadDetailPanel({
       {/* Workload Status Tab */}
       {workloadTab === 'status' && <YamlBlock data={workloadStatusYaml} />}
 
-      {/* Pod logs viewer */}
-      {logsSession && logsPods.length > 0 && (
+      {/* Pod logs viewer. Stays mounted even with no pods, showing an inline
+          notice instead of vanishing. */}
+      {logsSession && (
         <WorkloadLogsViewer
           key={logsSession.key}
           kind={kind}
@@ -608,7 +622,8 @@ export function WorkloadDetailPanel({
           workloadName={name}
           pods={logsPods}
           initialPodName={logsSession.pod}
-          onClose={() => setLogsSession(null)}
+          onClose={closeLogs}
+          onPodChange={syncLogFilterToUrl}
         />
       )}
     </DashboardPanel>

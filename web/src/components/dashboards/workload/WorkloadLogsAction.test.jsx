@@ -1,16 +1,17 @@
 // Copyright 2026 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/preact'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fireEvent } from '@testing-library/preact'
 import userEvent from '@testing-library/user-event'
 import { WorkloadLogsAction } from './WorkloadLogsAction'
 
-// Mock the logs viewer so these tests stay focused on the dropdown. It resolves
-// the pre-selected pod's containers from the live pods prop, mirroring how the
-// real viewer reads them (so a restart-count change flows through).
+// Mock the logs viewer to keep these tests on the action button. It resolves the
+// pre-selected pod's containers from the live pods prop (mirroring the real viewer,
+// so a restart-count change flows through) and exposes buttons for onClose and
+// onPodChange.
 vi.mock('./WorkloadLogsViewer', () => ({
-  WorkloadLogsViewer: ({ namespace, workloadName, pods, initialPodName }) => {
+  WorkloadLogsViewer: ({ namespace, workloadName, pods, initialPodName, onClose, onPodChange }) => {
     const sel = (pods || []).find(p => p.name === initialPodName)
     const containers = sel ? sel.containers : []
     return (
@@ -22,10 +23,20 @@ vi.mock('./WorkloadLogsViewer', () => ({
         data-restarts={containers.map(c => c.restartCount).join(',')}
       >
         {namespace}/{workloadName}
+        <button data-testid="logs-viewer-close" onClick={onClose}>close</button>
+        {/* Simulate the viewer's own pod selector reporting a switch. */}
+        <button data-testid="logs-viewer-switch-pod" onClick={() => onPodChange && onPodChange('app-abc')}>switch</button>
+        <button data-testid="logs-viewer-switch-all" onClick={() => onPodChange && onPodChange(null)}>switch all</button>
       </div>
     )
   }
 }))
+
+// The deep-link/share-link tests drive window.location; reset it before each test
+// so a session opened by one test does not leak into the next via the URL.
+beforeEach(() => {
+  window.history.replaceState(null, '', '/')
+})
 
 describe('WorkloadLogsAction component', () => {
   const pods = [
@@ -37,7 +48,7 @@ describe('WorkloadLogsAction component', () => {
         containerStatuses: [{ name: 'main' }]
       }
     },
-    // No podStatus: cannot view logs, must be excluded from the list.
+    // No podStatus: cannot view logs, must be excluded from the viewer's pod list.
     { name: 'app-pending', status: 'Pending' }
   ]
 
@@ -49,70 +60,67 @@ describe('WorkloadLogsAction component', () => {
     userActions: ['restart', 'logs']
   }
 
-  it('renders nothing without the logs user action', () => {
+  it('renders nothing without the logs user action (no RBAC)', () => {
     const { container } = render(
       <WorkloadLogsAction {...defaultProps} userActions={['restart']} />
     )
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('renders nothing when no pod has container status', () => {
-    const { container } = render(
-      <WorkloadLogsAction {...defaultProps} pods={[{ name: 'p', status: 'Pending' }]} />
-    )
-    expect(container).toBeEmptyDOMElement()
+  it('shows the button disabled when there are no inspectable pods (scaled to zero)', () => {
+    // A pod without container status cannot be inspected.
+    const { unmount } = render(<WorkloadLogsAction {...defaultProps} pods={[{ name: 'p', status: 'Pending' }]} />)
+    expect(screen.getByTestId('view-logs-button')).toBeDisabled()
+    unmount()
+
+    // An empty pod list (scaled to zero) too.
+    render(<WorkloadLogsAction {...defaultProps} pods={[]} />)
+    expect(screen.getByTestId('view-logs-button')).toBeDisabled()
   })
 
-  it('lists only pods with container status', async () => {
+  it('does not open the viewer when the disabled button is clicked', () => {
+    render(<WorkloadLogsAction {...defaultProps} pods={[]} />)
+    fireEvent.click(screen.getByTestId('view-logs-button'))
+    expect(screen.queryByTestId('logs-viewer-mock')).not.toBeInTheDocument()
+  })
+
+  it('does not deep-link open when there are no pods, leaving the button disabled', () => {
+    window.history.replaceState(null, '', '/workload/Deployment/flux-system/my-workload?logs=*')
+    render(<WorkloadLogsAction {...defaultProps} pods={[]} />)
+    expect(screen.getByTestId('view-logs-button')).toBeDisabled()
+    expect(screen.queryByTestId('logs-viewer-mock')).not.toBeInTheDocument()
+  })
+
+  it('opens the viewer on the All pods view when the button is clicked', async () => {
     const user = userEvent.setup()
     render(<WorkloadLogsAction {...defaultProps} />)
 
-    await user.click(screen.getByTestId('view-logs-dropdown-button'))
-    expect(screen.getByTestId('view-logs-pod-app-abc')).toBeInTheDocument()
-    expect(screen.queryByTestId('view-logs-pod-app-pending')).not.toBeInTheDocument()
-  })
-
-  it('opens the viewer pre-selected on the chosen pod, with its containers (init first)', async () => {
-    const user = userEvent.setup()
-    render(<WorkloadLogsAction {...defaultProps} />)
-
-    await user.click(screen.getByTestId('view-logs-dropdown-button'))
-    await user.click(screen.getByTestId('view-logs-pod-app-abc'))
+    // No dropdown: the button opens the viewer directly.
+    expect(screen.queryByTestId('logs-viewer-mock')).not.toBeInTheDocument()
+    await user.click(screen.getByTestId('view-logs-button'))
 
     const viewer = screen.getByTestId('logs-viewer-mock')
     expect(viewer).toHaveTextContent('flux-system/my-workload')
-    expect(viewer).toHaveAttribute('data-initialpod', 'app-abc')
-    expect(viewer).toHaveAttribute('data-containers', 'init,main')
-  })
-
-  it('opens the "All pods" view (no pre-selected pod) from the All pods item', async () => {
-    const user = userEvent.setup()
-    render(<WorkloadLogsAction {...defaultProps} />)
-
-    await user.click(screen.getByTestId('view-logs-dropdown-button'))
-    await user.click(screen.getByTestId('view-logs-all-pods'))
-
-    const viewer = screen.getByTestId('logs-viewer-mock')
+    // No pre-selected pod (All pods); only pods with container status are passed.
     expect(viewer).toHaveAttribute('data-initialpod', '')
-    // Only pods with container status are passed to the viewer.
     expect(viewer).toHaveAttribute('data-pods', 'app-abc')
+    // The All pods session is reflected in the URL.
+    expect(new URLSearchParams(window.location.search).get('logs')).toBe('*')
   })
 
   it('reflects live pod updates (e.g. a container restart) in the open viewer', async () => {
-    const user = userEvent.setup()
+    // Deep-link to a specific pod so the mock can surface its container restart count.
+    window.history.replaceState(null, '', '/workload/Deployment/flux-system/my-workload?logs=app-abc')
     const initial = [{
       name: 'app-abc',
       status: 'Running',
       podStatus: { containerStatuses: [{ name: 'main', restartCount: 0 }] }
     }]
     const { rerender } = render(<WorkloadLogsAction {...defaultProps} pods={initial} />)
+    expect(await screen.findByTestId('logs-viewer-mock')).toHaveAttribute('data-restarts', '0')
 
-    await user.click(screen.getByTestId('view-logs-dropdown-button'))
-    await user.click(screen.getByTestId('view-logs-pod-app-abc'))
-    expect(screen.getByTestId('logs-viewer-mock')).toHaveAttribute('data-restarts', '0')
-
-    // The container restarts and the parent polls fresh pod data; the open
-    // viewer picks up the new restart count without being reopened.
+    // The container restarts and the parent polls fresh pod data; the open viewer
+    // picks up the new restart count without being reopened.
     const updated = [{
       name: 'app-abc',
       status: 'Running',
@@ -122,28 +130,85 @@ describe('WorkloadLogsAction component', () => {
     expect(screen.getByTestId('logs-viewer-mock')).toHaveAttribute('data-restarts', '1')
   })
 
-  it('re-initialises the viewer on each open (All pods, then a specific pod)', async () => {
+  it('keeps the open viewer mounted and disables the button when the workload scales to zero', async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(<WorkloadLogsAction {...defaultProps} />)
+
+    await user.click(screen.getByTestId('view-logs-button'))
+    expect(screen.getByTestId('logs-viewer-mock')).toBeInTheDocument()
+
+    // Last pod goes away: viewer stays open (inline error), button disables.
+    rerender(<WorkloadLogsAction {...defaultProps} pods={[]} />)
+    expect(screen.getByTestId('logs-viewer-mock')).toBeInTheDocument()
+    expect(screen.getByTestId('view-logs-button')).toBeDisabled()
+  })
+
+  it('deep-links to a pod when loaded with ?logs=<pod>, without clicking the button', async () => {
+    window.history.replaceState(null, '', '/workload/Deployment/flux-system/my-workload?logs=app-abc')
+    render(<WorkloadLogsAction {...defaultProps} />)
+
+    const viewer = await screen.findByTestId('logs-viewer-mock')
+    expect(viewer).toHaveAttribute('data-initialpod', 'app-abc')
+  })
+
+  it('deep-links to the All pods view when loaded with ?logs=*', async () => {
+    window.history.replaceState(null, '', '/workload/Deployment/flux-system/my-workload?logs=*')
+    render(<WorkloadLogsAction {...defaultProps} />)
+
+    const viewer = await screen.findByTestId('logs-viewer-mock')
+    expect(viewer).toHaveAttribute('data-initialpod', '')
+  })
+
+  it('treats a deep-linked pod name as a pod, never the All pods sentinel', async () => {
+    // The All pods sentinel is `*`, which is not a valid pod name, so a real pod
+    // name in ?logs never collides with the merged view.
+    window.history.replaceState(null, '', '/workload/Deployment/flux-system/my-workload?logs=app-abc')
+    render(<WorkloadLogsAction {...defaultProps} />)
+    const viewer = await screen.findByTestId('logs-viewer-mock')
+    expect(viewer).toHaveAttribute('data-initialpod', 'app-abc')
+  })
+
+  it('does not open a viewer on mount without a ?logs param', () => {
+    render(<WorkloadLogsAction {...defaultProps} />)
+    expect(screen.queryByTestId('logs-viewer-mock')).not.toBeInTheDocument()
+  })
+
+  it('keeps the ?logs param in sync when the pod is switched inside the viewer', async () => {
     const user = userEvent.setup()
     render(<WorkloadLogsAction {...defaultProps} />)
 
-    await user.click(screen.getByTestId('view-logs-dropdown-button'))
-    await user.click(screen.getByTestId('view-logs-all-pods'))
-    expect(screen.getByTestId('logs-viewer-mock')).toHaveAttribute('data-initialpod', '')
+    await user.click(screen.getByTestId('view-logs-button'))
+    expect(new URLSearchParams(window.location.search).get('logs')).toBe('*')
 
-    // Reopening on a specific pod remounts the viewer pre-selected on that pod
-    // (the session key changes), rather than keeping the prior "All pods" session.
-    await user.click(screen.getByTestId('view-logs-dropdown-button'))
-    await user.click(screen.getByTestId('view-logs-pod-app-abc'))
-    expect(screen.getByTestId('logs-viewer-mock')).toHaveAttribute('data-initialpod', 'app-abc')
+    // Switching to a specific pod inside the viewer rewrites the share link.
+    await user.click(screen.getByTestId('logs-viewer-switch-pod'))
+    expect(new URLSearchParams(window.location.search).get('logs')).toBe('app-abc')
+
+    // Switching back to All pods rewrites it again.
+    await user.click(screen.getByTestId('logs-viewer-switch-all'))
+    expect(new URLSearchParams(window.location.search).get('logs')).toBe('*')
   })
 
-  it('closes the dropdown on Escape', async () => {
+  it('clears the ?logs param when the viewer is closed', async () => {
+    const user = userEvent.setup()
     render(<WorkloadLogsAction {...defaultProps} />)
 
-    fireEvent.click(screen.getByTestId('view-logs-dropdown-button'))
-    expect(screen.getByTestId('view-logs-dropdown-menu')).toBeInTheDocument()
+    await user.click(screen.getByTestId('view-logs-button'))
+    expect(new URLSearchParams(window.location.search).get('logs')).toBe('*')
 
-    fireEvent.keyDown(document, { key: 'Escape' })
-    await waitFor(() => expect(screen.queryByTestId('view-logs-dropdown-menu')).not.toBeInTheDocument())
+    await user.click(screen.getByTestId('logs-viewer-close'))
+    expect(screen.queryByTestId('logs-viewer-mock')).not.toBeInTheDocument()
+    expect(new URLSearchParams(window.location.search).get('logs')).toBeNull()
+  })
+
+  it('preserves other query params when writing the ?logs param', async () => {
+    const user = userEvent.setup()
+    window.history.replaceState(null, '', '/workload/Deployment/flux-system/my-workload?tab=pods')
+    render(<WorkloadLogsAction {...defaultProps} />)
+
+    await user.click(screen.getByTestId('view-logs-button'))
+    const params = new URLSearchParams(window.location.search)
+    expect(params.get('tab')).toBe('pods')
+    expect(params.get('logs')).toBe('*')
   })
 })

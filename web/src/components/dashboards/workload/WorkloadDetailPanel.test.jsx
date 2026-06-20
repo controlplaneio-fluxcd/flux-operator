@@ -27,7 +27,10 @@ vi.mock('../resource/WorkloadDeleteAction', () => ({
 
 vi.mock('./WorkloadLogsViewer', () => ({
   WorkloadLogsViewer: (props) => (
-    <div data-testid="logs-viewer-mock">Logs: {props.initialPodName}</div>
+    <div data-testid="logs-viewer-mock">
+      Logs: {props.initialPodName}
+      <button data-testid="logs-viewer-close" onClick={props.onClose}>close</button>
+    </div>
   )
 }))
 
@@ -85,6 +88,9 @@ describe('WorkloadDetailPanel component', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    // The logs button writes a ?logs=<pod> share param to the URL; reset it so a
+    // session opened by one test does not leak into the next.
+    window.history.replaceState(null, '', '/')
   })
 
   it('should render the panel title from kind', () => {
@@ -440,6 +446,13 @@ describe('WorkloadDetailPanel component', () => {
 
       await user.click(logsButton)
       expect(screen.getByTestId('logs-viewer-mock')).toHaveTextContent('Logs: nginx-abc-123')
+      // The pod is written to the URL so the logs session is shareable.
+      expect(new URLSearchParams(window.location.search).get('logs')).toBe('nginx-abc-123')
+
+      // Closing the viewer clears the share param.
+      await user.click(screen.getByTestId('logs-viewer-close'))
+      expect(screen.queryByTestId('logs-viewer-mock')).not.toBeInTheDocument()
+      expect(new URLSearchParams(window.location.search).get('logs')).toBeNull()
     })
 
     it('should not render logs buttons when logs action is unavailable', async () => {

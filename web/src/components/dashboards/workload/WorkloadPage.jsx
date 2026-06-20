@@ -284,8 +284,10 @@ export function WorkloadPage({ kind, namespace, name }) {
   // Check if either action bar has actions to show
   const hasReconcilerActions = reconciler?.status?.userActions?.length > 0
   const hasWorkloadActions = workloadInfo?.userActions?.includes('restart')
-  const canViewLogs = workloadInfo?.userActions?.includes('logs') &&
-    (workloadInfo?.pods || []).some(p => p.podStatus)
+  // Gated on the logs RBAC alone, not on pod presence: WorkloadLogsAction shows a
+  // disabled button when there are no inspectable pods (e.g. scaled to zero), so the
+  // capability stays visible.
+  const canViewLogs = workloadInfo?.userActions?.includes('logs')
 
   // Compute statusInfo based on display state
   let statusInfo
