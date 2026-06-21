@@ -663,7 +663,7 @@ func TestGetWorkloadStatus_ViewLogsCapability(t *testing.T) {
 		})
 		userCtx := bindWorkloadLogsUser(t, g, "logs-reader-user", rules)
 
-		workload, err := handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-logs", "default", false)
+		workload, err := handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-logs", "default", true)
 		g.Expect(err).NotTo(HaveOccurred())
 		g.Expect(workload.UserActions).To(ContainElement(fluxcdv1.UserActionViewLogs))
 	})
@@ -673,7 +673,7 @@ func TestGetWorkloadStatus_ViewLogsCapability(t *testing.T) {
 
 		userCtx := bindWorkloadLogsUser(t, g, "logs-noreader-user", baseRules)
 
-		workload, err := handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-logs", "default", false)
+		workload, err := handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-logs", "default", true)
 		g.Expect(err).NotTo(HaveOccurred())
 		g.Expect(workload.UserActions).NotTo(ContainElement(fluxcdv1.UserActionViewLogs))
 	})

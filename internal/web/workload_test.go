@@ -73,6 +73,137 @@ func TestGetWorkloadStatus_Privileged(t *testing.T) {
 	g.Expect(workload.UserActions).To(BeEmpty())
 }
 
+func TestGetWorkloadStatus_Lightweight_SkipsPodsAndActions(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a Deployment for testing
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-workload-lightweight",
+			Namespace: "default",
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: new(int32(1)),
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "test-workload-lightweight"},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"app": "test-workload-lightweight"},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "nginx", Image: "nginx:latest"},
+					},
+				},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, deployment)).To(Succeed())
+	defer testClient.Delete(ctx, deployment)
+
+	// Create a pod managed by the deployment (envtest has no controllers, so we
+	// create it explicitly) so a detailed call has a pod to list and the
+	// lightweight call can be shown to skip it.
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-workload-lightweight-pod",
+			Namespace: "default",
+			Labels:    map[string]string{"app": "test-workload-lightweight"},
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: "apps/v1",
+					Kind:       "ReplicaSet",
+					Name:       "test-workload-lightweight-abc123",
+					UID:        "test-lightweight-uid",
+				},
+			},
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{Name: "nginx", Image: "nginx:latest"},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, pod)).To(Succeed())
+	defer testClient.Delete(ctx, pod)
+
+	// RBAC granting the user restart on deployments and full pod access, so a
+	// detailed call would populate both UserActions and Pods.
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-lightweight-role",
+			Namespace: "default",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"apps"},
+				Resources: []string{"deployments"},
+				Verbs:     []string{"get", "list", "restart"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods"},
+				Verbs:     []string{"get", "list", "delete"},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, role)).To(Succeed())
+	defer testClient.Delete(ctx, role)
+
+	roleBinding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-lightweight-binding",
+			Namespace: "default",
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     role.Name,
+		},
+		Subjects: []rbacv1.Subject{
+			{Kind: "User", Name: "lightweight-user"},
+		},
+	}
+	g.Expect(testClient.Create(ctx, roleBinding)).To(Succeed())
+	defer testClient.Delete(ctx, roleBinding)
+
+	handler := &Handler{
+		conf:          oauthConfig(),
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	imp := user.Impersonation{
+		Username: "lightweight-user",
+		Groups:   []string{"system:authenticated"},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile:       user.Profile{Name: "Lightweight User"},
+		Impersonation: imp,
+	}, userClient)
+
+	// Lightweight (detailed=false): the status is computed but the pod listing
+	// and the per-action RBAC checks are skipped.
+	lightweight, err := handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-lightweight", "default", false)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(lightweight.Status).NotTo(BeEmpty())
+	g.Expect(lightweight.Pods).To(BeEmpty())
+	g.Expect(lightweight.UserActions).To(BeEmpty())
+
+	// Detailed (detailed=true): the managed pods and the user actions are computed.
+	detailed, err := handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-lightweight", "default", true)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(detailed.Pods).To(HaveLen(1))
+	g.Expect(detailed.Pods[0].Name).To(Equal("test-workload-lightweight-pod"))
+	g.Expect(detailed.UserActions).To(ContainElement(fluxcdv1.UserActionRestart))
+}
+
 func TestGetWorkloadStatus_UnprivilegedUser_Forbidden(t *testing.T) {
 	g := NewWithT(t)
 
@@ -641,7 +772,7 @@ func TestGetWorkloadStatus_WithDeploymentAccessButNoPodAccess_Forbidden(t *testi
 	}, userClient)
 
 	// Call GetWorkloadStatus - user can get deployment but not list pods
-	_, err = handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-no-pods", "default", false)
+	_, err = handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-no-pods", "default", true)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(apierrors.IsForbidden(err)).To(BeTrue(), "expected forbidden error when user cannot list pods, got: %v", err)
 }
@@ -983,7 +1114,7 @@ func TestGetWorkloadStatus_UserActions_WithRestartAndDeletePods(t *testing.T) {
 		Impersonation: imp,
 	}, userClient)
 
-	workload, err := handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-ua-both", "default", false)
+	workload, err := handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-ua-both", "default", true)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(workload).NotTo(BeNil())
 	g.Expect(workload.UserActions).To(ContainElement(fluxcdv1.UserActionRestart))
@@ -1078,7 +1209,7 @@ func TestGetWorkloadStatus_UserActions_RestartOnly(t *testing.T) {
 		Impersonation: imp,
 	}, userClient)
 
-	workload, err := handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-ua-restart", "default", false)
+	workload, err := handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-ua-restart", "default", true)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(workload).NotTo(BeNil())
 	g.Expect(workload.UserActions).To(ContainElement(fluxcdv1.UserActionRestart))
@@ -1173,7 +1304,7 @@ func TestGetWorkloadStatus_UserActions_DeletePodsOnly(t *testing.T) {
 		Impersonation: imp,
 	}, userClient)
 
-	workload, err := handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-ua-delpods", "default", false)
+	workload, err := handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-ua-delpods", "default", true)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(workload).NotTo(BeNil())
 	g.Expect(workload.UserActions).NotTo(ContainElement(fluxcdv1.UserActionRestart))
@@ -1268,7 +1399,7 @@ func TestGetWorkloadStatus_UserActions_NoActions(t *testing.T) {
 		Impersonation: imp,
 	}, userClient)
 
-	workload, err := handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-ua-none", "default", false)
+	workload, err := handler.GetWorkloadStatus(userCtx, "Deployment", "test-workload-ua-none", "default", true)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(workload).NotTo(BeNil())
 	g.Expect(workload.UserActions).To(BeEmpty())
@@ -1312,7 +1443,7 @@ func TestGetWorkloadStatus_UserActions_DisabledWithoutAuth(t *testing.T) {
 	}
 
 	// Call with privileged context (system:masters has all permissions)
-	workload, err := handler.GetWorkloadStatus(ctx, "Deployment", "test-workload-ua-disabled", "default", false)
+	workload, err := handler.GetWorkloadStatus(ctx, "Deployment", "test-workload-ua-disabled", "default", true)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(workload).NotTo(BeNil())
 	// Even though the privileged user has all permissions, UserActions should be empty
@@ -1409,7 +1540,7 @@ func TestGetWorkloadStatus_UserActions_StatefulSet(t *testing.T) {
 		Impersonation: imp,
 	}, userClient)
 
-	workload, err := handler.GetWorkloadStatus(userCtx, "StatefulSet", "test-workload-ua-sts", "default", false)
+	workload, err := handler.GetWorkloadStatus(userCtx, "StatefulSet", "test-workload-ua-sts", "default", true)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(workload).NotTo(BeNil())
 	g.Expect(workload.UserActions).To(ContainElement(fluxcdv1.UserActionRestart))
@@ -1511,7 +1642,7 @@ func TestGetWorkloadStatus_UserActions_CronJob(t *testing.T) {
 		Impersonation: imp,
 	}, userClient)
 
-	workload, err := handler.GetWorkloadStatus(userCtx, "CronJob", "test-workload-ua-cron", "default", false)
+	workload, err := handler.GetWorkloadStatus(userCtx, "CronJob", "test-workload-ua-cron", "default", true)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(workload).NotTo(BeNil())
 	g.Expect(workload.UserActions).To(ContainElement(fluxcdv1.UserActionRestart))
@@ -1604,7 +1735,7 @@ func TestGetWorkloadStatus_UserActions_DaemonSet(t *testing.T) {
 		Impersonation: imp,
 	}, userClient)
 
-	workload, err := handler.GetWorkloadStatus(userCtx, "DaemonSet", "test-workload-ua-ds", "default", false)
+	workload, err := handler.GetWorkloadStatus(userCtx, "DaemonSet", "test-workload-ua-ds", "default", true)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(workload).NotTo(BeNil())
 	g.Expect(workload.UserActions).To(ContainElement(fluxcdv1.UserActionRestart))

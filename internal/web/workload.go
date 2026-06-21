@@ -166,9 +166,10 @@ func getWorkloadGVK(kind string) schema.GroupVersionKind {
 	return schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: kind}
 }
 
-// GetWorkloadStatus should fetch the Deployment/StatefulSet/DaemonSet/CronJob and return the WorkloadStatus.
-// When includeFullStatus is true, the full Kubernetes PodStatus is included for each pod.
-func (h *Handler) GetWorkloadStatus(ctx context.Context, kind, name, namespace string, includeFullStatus bool) (*WorkloadStatus, error) {
+// GetWorkloadStatus returns the WorkloadStatus for the given workload.
+// When detailed is true, the managed pods (with their full Kubernetes PodStatus)
+// and the user-permitted actions are included.
+func (h *Handler) GetWorkloadStatus(ctx context.Context, kind, name, namespace string, detailed bool) (*WorkloadStatus, error) {
 	// Create an unstructured object to fetch the resource
 	obj := &unstructured.Unstructured{}
 	obj.SetGroupVersionKind(getWorkloadGVK(kind))
@@ -222,50 +223,52 @@ func (h *Handler) GetWorkloadStatus(ctx context.Context, kind, name, namespace s
 		workload.StatusMessage = getAppsWorkloadStatusMessage(obj, kind)
 	}
 
-	// Get the pods managed by the workload
-	podsStatus, err := h.GetWorkloadPods(ctx, obj, includeFullStatus)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get pods for workload %s/%s: %w", namespace, name, err)
-	}
-	workload.Pods = podsStatus
+	if detailed {
+		// Get the pods managed by the workload
+		podsStatus, err := h.GetWorkloadPods(ctx, obj, detailed)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get pods for workload %s/%s: %w", namespace, name, err)
+		}
+		workload.Pods = podsStatus
 
-	// Check which actions the user can perform on this workload
-	if h.conf.UserActionsEnabled() {
-		kindInfo, ok := supportedWorkloadKinds[kind]
-		if ok {
-			for _, action := range kindInfo.actions {
-				canAct, err := h.kubeClient.CanActOnResource(ctx, action, kindInfo.group, kindInfo.plural, namespace, name)
-				if err != nil {
-					log.FromContext(ctx).Error(err, "failed to check RBAC for action",
-						"action", action,
-						"kind", kind,
-						"name", name,
-						"namespace", namespace)
-					continue
-				}
-				if canAct {
-					workload.UserActions = append(workload.UserActions, action)
+		// Check which actions the user can perform on this workload
+		if h.conf.UserActionsEnabled() {
+			kindInfo, ok := supportedWorkloadKinds[kind]
+			if ok {
+				for _, action := range kindInfo.actions {
+					canAct, err := h.kubeClient.CanActOnResource(ctx, action, kindInfo.group, kindInfo.plural, namespace, name)
+					if err != nil {
+						log.FromContext(ctx).Error(err, "failed to check RBAC for action",
+							"action", action,
+							"kind", kind,
+							"name", name,
+							"namespace", namespace)
+						continue
+					}
+					if canAct {
+						workload.UserActions = append(workload.UserActions, action)
+					}
 				}
 			}
-		}
 
-		// Check if the user can delete pods in this namespace
-		canDelete, err := h.kubeClient.CanActOnResource(ctx, fluxcdv1.UserActionDelete, "", "pods", namespace, "")
-		if err != nil {
-			log.FromContext(ctx).Error(err, "failed to check delete pod RBAC",
-				"namespace", namespace)
-		} else if canDelete {
-			workload.UserActions = append(workload.UserActions, fluxcdv1.UserActionDeletePods)
-		}
+			// Check if the user can delete pods in this namespace
+			canDelete, err := h.kubeClient.CanActOnResource(ctx, fluxcdv1.UserActionDelete, "", "pods", namespace, "")
+			if err != nil {
+				log.FromContext(ctx).Error(err, "failed to check delete pod RBAC",
+					"namespace", namespace)
+			} else if canDelete {
+				workload.UserActions = append(workload.UserActions, fluxcdv1.UserActionDeletePods)
+			}
 
-		// Check if the user can view pod logs in this namespace
-		// (native "get" on the "pods/log" subresource).
-		canViewLogs, err := h.kubeClient.CanViewPodLogs(ctx, namespace, "")
-		if err != nil {
-			log.FromContext(ctx).Error(err, "failed to check pod logs RBAC",
-				"namespace", namespace)
-		} else if canViewLogs {
-			workload.UserActions = append(workload.UserActions, fluxcdv1.UserActionViewLogs)
+			// Check if the user can view pod logs in this namespace
+			// (native "get" on the "pods/log" subresource).
+			canViewLogs, err := h.kubeClient.CanViewPodLogs(ctx, namespace, "")
+			if err != nil {
+				log.FromContext(ctx).Error(err, "failed to check pod logs RBAC",
+					"namespace", namespace)
+			} else if canViewLogs {
+				workload.UserActions = append(workload.UserActions, fluxcdv1.UserActionViewLogs)
+			}
 		}
 	}
 
@@ -360,13 +363,13 @@ func (h *Handler) GetWorkloadDetails(ctx context.Context, kind, name, namespace 
 // GetWorkloadPods returns the pods managed by a workload (Deployment, StatefulSet, DaemonSet, or CronJob).
 // For apps/v1 workloads, it uses the selector labels to find pods.
 // For CronJobs, it delegates to getCronJobPods which traverses the CronJob -> Job -> Pod ownership chain.
-// When includeFullStatus is true, the full Kubernetes PodStatus is included for each pod.
-func (h *Handler) GetWorkloadPods(ctx context.Context, obj *unstructured.Unstructured, includeFullStatus bool) ([]WorkloadPodStatus, error) {
+// When detailed is true, the full Kubernetes PodStatus is included for each pod.
+func (h *Handler) GetWorkloadPods(ctx context.Context, obj *unstructured.Unstructured, detailed bool) ([]WorkloadPodStatus, error) {
 	podList := &corev1.PodList{}
 
 	// For CronJob, we need to find Jobs owned by the CronJob, then Pods owned by those Jobs
 	if obj.GetKind() == workloadKindCronJob {
-		return h.getCronJobPods(ctx, obj, includeFullStatus)
+		return h.getCronJobPods(ctx, obj, detailed)
 	}
 
 	selector, found, err := unstructured.NestedStringMap(obj.Object, "spec", "selector", "matchLabels")
@@ -407,7 +410,7 @@ func (h *Handler) GetWorkloadPods(ctx context.Context, obj *unstructured.Unstruc
 			StatusMessage: podMessage,
 			CreatedAt:     pod.GetCreationTimestamp().Time,
 		}
-		if includeFullStatus {
+		if detailed {
 			ps.PodStatus = &pod.Status
 		}
 		podsStatus = append(podsStatus, ps)
@@ -423,8 +426,8 @@ func (h *Handler) GetWorkloadPods(ctx context.Context, obj *unstructured.Unstruc
 
 // getCronJobPods returns the pods managed by a CronJob.
 // CronJob ownership is cascading: CronJob -> Job -> Pod.
-// When includeFullStatus is true, the full Kubernetes PodStatus is included for each pod.
-func (h *Handler) getCronJobPods(ctx context.Context, cronJob *unstructured.Unstructured, includeFullStatus bool) ([]WorkloadPodStatus, error) {
+// When detailed is true, the full Kubernetes PodStatus is included for each pod.
+func (h *Handler) getCronJobPods(ctx context.Context, cronJob *unstructured.Unstructured, detailed bool) ([]WorkloadPodStatus, error) {
 	// Query Jobs owned by this CronJob using the field index on the cluster's cached client.
 	// We use WithPrivileges() because the user already has access to the CronJob,
 	// and the index is only available on the privileged cache. This effectively results
@@ -477,7 +480,7 @@ func (h *Handler) getCronJobPods(ctx context.Context, cronJob *unstructured.Unst
 			CreatedAt:     pod.GetCreationTimestamp().Time,
 			CreatedBy:     pod.GetAnnotations()[fluxcdv1.CreatedByAnnotation],
 		}
-		if includeFullStatus {
+		if detailed {
 			ps.PodStatus = &pod.Status
 		}
 		podsStatus = append(podsStatus, ps)

@@ -608,6 +608,20 @@ describe('GraphTabContent component', () => {
     expect(screen.getByText(/^Resources \(2\)/)).toBeInTheDocument()
   })
 
+  it('should show a computing placeholder only for workloads until status resolves', () => {
+    render(
+      <GraphTabContent
+        resourceData={mockResourceData}
+        namespace="flux-system"
+      />
+    )
+
+    // Inventory has 2 Flux resources and 2 workloads; only the workloads group
+    // tracks live status, so exactly the 2 workload rows show the placeholder
+    // on first paint (Flux rows never do).
+    expect(screen.getAllByTestId('workload-status-computing')).toHaveLength(2)
+  })
+
   it('should render source URL as subtext', () => {
     render(
       <GraphTabContent
@@ -1440,79 +1454,57 @@ describe('formatWorkloadGraphMessage function', () => {
   })
 })
 
-describe('GraphTabContent workload status fetching', () => {
-  it('should not fetch workloads when isActive is false', () => {
-    const fetchSpy = vi.spyOn(global, 'fetch')
-
-    const resourceData = {
-      kind: 'Kustomization',
-      metadata: { name: 'test-ks', namespace: 'flux-system' },
-      status: {
-        reconcilerRef: { status: 'Ready' },
-        inventory: [
-          { apiVersion: 'apps/v1', kind: 'Deployment', name: 'app1', namespace: 'default' }
-        ]
-      }
+describe('GraphTabContent workload status', () => {
+  const resourceData = {
+    kind: 'Kustomization',
+    metadata: { name: 'test-ks', namespace: 'flux-system' },
+    status: {
+      reconcilerRef: { status: 'Ready' },
+      inventory: [
+        { apiVersion: 'apps/v1', kind: 'Deployment', name: 'app1', namespace: 'default' }
+      ]
     }
+  }
 
+  it('should show a computing placeholder for workloads when no statuses are provided', () => {
     render(
       <GraphTabContent
         resourceData={resourceData}
         namespace="flux-system"
-        isActive={false}
       />
     )
 
-    // Workloads group should still render
-    expect(screen.getByText(/Workloads \(1\)/)).toBeInTheDocument()
-
-    // But fetch should not have been called for workloads
-    expect(fetchSpy).not.toHaveBeenCalledWith('/api/v1/workloads', expect.anything())
-
-    fetchSpy.mockRestore()
-  })
-
-  it('should render workloads without status dots when no data fetched', () => {
-    const resourceData = {
-      kind: 'Kustomization',
-      metadata: { name: 'test-ks', namespace: 'flux-system' },
-      status: {
-        reconcilerRef: { status: 'Ready' },
-        inventory: [
-          { apiVersion: 'apps/v1', kind: 'Deployment', name: 'app1', namespace: 'default' }
-        ]
-      }
-    }
-
-    render(
-      <GraphTabContent
-        resourceData={resourceData}
-        namespace="flux-system"
-        isActive={false}
-      />
-    )
-
-    // Workload name should be visible as a dashboard link
+    // Workload name renders as a dashboard link with the placeholder, no real dot
     expect(screen.getByText('app1 →')).toBeInTheDocument()
-
-    // But no status dots should be rendered
+    expect(screen.getByTestId('workload-status-computing')).toBeInTheDocument()
     expect(screen.queryByTestId('workload-status-dot')).not.toBeInTheDocument()
   })
 
-  it('should default isActive to true', () => {
-    const resourceData = {
-      kind: 'Kustomization',
-      metadata: { name: 'test-ks', namespace: 'flux-system' },
-      status: {
-        reconcilerRef: { status: 'Ready' },
-        inventory: []
-      }
-    }
-
-    // Should render without error when isActive is not provided
+  it('should render a status dot when workloadStatuses is provided', () => {
     render(
       <GraphTabContent
         resourceData={resourceData}
+        namespace="flux-system"
+        workloadStatuses={{ 'Deployment/default/app1': { status: 'Current', statusMessage: 'Replicas: 3' } }}
+      />
+    )
+
+    expect(screen.getByTestId('workload-status-dot')).toBeInTheDocument()
+    expect(screen.getByText('Replicas: 3')).toBeInTheDocument()
+    // The placeholder is replaced by the real status
+    expect(screen.queryByTestId('workload-status-computing')).not.toBeInTheDocument()
+  })
+
+  it('should render without error when workloadStatuses is omitted', () => {
+    const emptyResource = {
+      kind: 'Kustomization',
+      metadata: { name: 'test-ks', namespace: 'flux-system' },
+      status: { reconcilerRef: { status: 'Ready' }, inventory: [] }
+    }
+
+    render(
+      <GraphTabContent
+        resourceData={emptyResource}
         namespace="flux-system"
       />
     )

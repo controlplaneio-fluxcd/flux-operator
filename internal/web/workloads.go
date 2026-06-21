@@ -88,7 +88,7 @@ func (h *Handler) GetWorkloadsStatus(ctx context.Context, workloads []WorkloadIt
 				case errors.IsNotFound(err):
 					statusMessage = "Workload not found in the cluster"
 				case errors.IsForbidden(err):
-					statusMessage = "User does not have access to the workload or for listing its pods"
+					statusMessage = "User does not have access to the workload"
 				default:
 					statusMessage = "Internal error while fetching workload"
 					log.FromContext(ctx).Error(err, "failed to get workload status",

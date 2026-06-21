@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { useMemo } from 'preact/compat'
+import { useState, useEffect } from 'preact/hooks'
 import { isKindWithInventory, isFluxInventoryItem, isWorkloadInventoryItem } from '../../../utils/constants'
+import { fetchWithMock } from '../../../utils/fetch'
 import { getDashboardUrl } from '../../../utils/routing'
 import { DashboardPanel, TabButton } from '../common/panel'
 import { WorkloadsTabContent } from './WorkloadsTabContent'
@@ -116,6 +118,55 @@ export function InventoryPanel({ resourceData, onNavigate }) {
     if (!hasInventory) return []
     return resourceData.status.inventory.filter(item => isWorkloadInventoryItem(item))
   }, [resourceData, hasInventory])
+
+  // Live workload status (status + statusMessage) shared by the Graph and
+  // Workloads tabs. Owned here, at the panel level — not inside the tab
+  // components — so it survives tab switches: re-entering a tab shows the
+  // last-known status immediately instead of refetching and flickering the
+  // badge in. It refreshes when the inventory changes, which the parent resource
+  // poll drives, so no dedicated polling loop is needed.
+  const [workloadStatuses, setWorkloadStatuses] = useState({})
+  const tracksWorkloadStatus = activeTab === 'graph' || activeTab === 'workloads'
+  useEffect(() => {
+    if (!tracksWorkloadStatus || workloadItems.length === 0) {
+      return
+    }
+
+    let cancelled = false
+
+    const fetchWorkloadStatuses = async () => {
+      try {
+        const workloads = workloadItems.map(item => ({
+          kind: item.kind,
+          name: item.name,
+          namespace: item.namespace || resourceData.metadata.namespace
+        }))
+
+        const response = await fetchWithMock({
+          endpoint: '/api/v1/workloads',
+          mockPath: '../mock/workload',
+          mockExport: 'getMockWorkloads',
+          method: 'POST',
+          body: { workloads }
+        })
+
+        const newStatuses = {}
+        for (const workload of (response.workloads || [])) {
+          const key = `${workload.kind}/${workload.namespace}/${workload.name}`
+          newStatuses[key] = {
+            status: workload.status,
+            statusMessage: workload.statusMessage
+          }
+        }
+        if (!cancelled) setWorkloadStatuses(newStatuses)
+      } catch (err) {
+        console.error('Failed to fetch workload statuses:', err)
+      }
+    }
+
+    fetchWorkloadStatuses()
+    return () => { cancelled = true }
+  }, [tracksWorkloadStatus, workloadItems, resourceData])
 
   // Build the dashboard URL for an inventory item, routing workloads to the
   // workload dashboard and Flux resources to the resource dashboard.
@@ -236,6 +287,7 @@ export function InventoryPanel({ resourceData, onNavigate }) {
           namespace={resourceData.metadata.namespace}
           onNavigate={onNavigate}
           setActiveTab={setActiveTab}
+          workloadStatuses={workloadStatuses}
         />
       )}
 
@@ -281,6 +333,7 @@ export function InventoryPanel({ resourceData, onNavigate }) {
         <WorkloadsTabContent
           workloadItems={workloadItems}
           namespace={resourceData.metadata.namespace}
+          workloadStatuses={workloadStatuses}
         />
       )}
     </DashboardPanel>

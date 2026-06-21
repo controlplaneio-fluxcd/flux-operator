@@ -161,7 +161,7 @@ func TestGetWorkloadsStatus_UnprivilegedUser_Forbidden(t *testing.T) {
 	g.Expect(results).To(HaveLen(1))
 	g.Expect(results[0].Name).To(Equal("test-workload-forbidden"))
 	g.Expect(results[0].Status).To(Equal("NotFound"))
-	g.Expect(results[0].StatusMessage).To(Equal("User does not have access to the workload or for listing its pods"))
+	g.Expect(results[0].StatusMessage).To(Equal("User does not have access to the workload"))
 }
 
 func TestGetWorkloadsStatus_WithUserRBAC_Success(t *testing.T) {
@@ -385,10 +385,10 @@ func TestGetWorkloadsStatus_WithNamespaceScopedRBAC_ForbiddenInOtherNamespace(t 
 	g.Expect(results).To(HaveLen(1))
 	g.Expect(results[0].Name).To(Equal("test-workload-other-ns"))
 	g.Expect(results[0].Status).To(Equal("NotFound"))
-	g.Expect(results[0].StatusMessage).To(Equal("User does not have access to the workload or for listing its pods"))
+	g.Expect(results[0].StatusMessage).To(Equal("User does not have access to the workload"))
 }
 
-func TestGetWorkloadsStatus_WithDeploymentAccessButNoPodAccess_Forbidden(t *testing.T) {
+func TestGetWorkloadsStatus_WithDeploymentAccessButNoPodAccess_Success(t *testing.T) {
 	g := NewWithT(t)
 
 	// Create a Deployment for testing
@@ -485,11 +485,14 @@ func TestGetWorkloadsStatus_WithDeploymentAccessButNoPodAccess_Forbidden(t *test
 	}
 	results := handler.GetWorkloadsStatus(userCtx, workloads)
 
-	// Should return forbidden message since pod listing fails
+	// The lightweight batch path does not list pods, so a user who can get the
+	// workload but not list its pods now receives the computed status (not the
+	// forbidden NotFound row).
 	g.Expect(results).To(HaveLen(1))
 	g.Expect(results[0].Name).To(Equal("test-workload-no-pod-access"))
-	g.Expect(results[0].Status).To(Equal("NotFound"))
-	g.Expect(results[0].StatusMessage).To(Equal("User does not have access to the workload or for listing its pods"))
+	g.Expect(results[0].Status).NotTo(Equal("NotFound"))
+	// A Deployment with no available replicas computes as InProgress via kstatus.
+	g.Expect(results[0].Status).To(Equal("InProgress"))
 }
 
 func TestGetWorkloadsStatus_MixedResults(t *testing.T) {

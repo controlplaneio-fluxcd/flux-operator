@@ -1,9 +1,8 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { useMemo, useState, useEffect } from 'preact/hooks'
+import { useMemo } from 'preact/hooks'
 import { fluxKinds, isFluxInventoryItem, isWorkloadInventoryItem } from '../../../utils/constants'
-import { fetchWithMock } from '../../../utils/fetch'
 import { getDashboardUrl } from '../../../utils/routing'
 
 /**
@@ -264,6 +263,11 @@ function GroupCard({ title, count, items, isItemList, onItemClick, getItemHref, 
 
   if (!hasItems && !alwaysShow) return null
 
+  // Only groups that carry live status (workloads) show a "computing..."
+  // placeholder while the status fetch is in flight, keeping the row structure
+  // stable from first paint instead of popping the status in.
+  const isStatusTracked = itemStatuses != null
+
   // Check if all items share the same namespace (for item lists)
   // Use resolved namespaces to account for items without explicit namespace
   const showNamespace = isItemList && items.length > 0 && (() => {
@@ -323,7 +327,12 @@ function GroupCard({ title, count, items, isItemList, onItemClick, getItemHref, 
                     {item.name}{isClickable && ' →'}
                   </div>
                 )}
-                {itemStatusMessage && (
+                {itemStatus === undefined && isStatusTracked ? (
+                  <div class="text-xs text-gray-400 dark:text-gray-500 truncate mt-0.5 flex items-center gap-1.5 animate-pulse" data-testid="workload-status-computing">
+                    <span class="inline-block w-2 h-2 rounded-full flex-shrink-0 bg-gray-300 dark:bg-gray-600" />
+                    computing...
+                  </div>
+                ) : itemStatusMessage ? (
                   <div class="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5 flex items-center gap-1.5" title={itemStatusMessage} data-testid="workload-status-message">
                     {itemStatus !== undefined && (
                       <span
@@ -334,7 +343,7 @@ function GroupCard({ title, count, items, isItemList, onItemClick, getItemHref, 
                     )}
                     {itemStatusMessage}
                   </div>
-                )}
+                ) : null}
                 {showNamespace && (
                   <div class="text-xs text-gray-400 dark:text-gray-500 truncate">{resolvedNamespace}</div>
                 )}
@@ -520,58 +529,12 @@ function SourcesConnector({ sourceCount }) {
  * @param {string} namespace - Default namespace for items without explicit namespace
  * @param {function} onNavigate - Callback for navigation to other resources
  * @param {function} setActiveTab - Callback to switch tabs
- * @param {boolean} isActive - Whether this tab is currently active (controls workload fetching)
+ * @param {object} workloadStatuses - Map of workload key to {status, statusMessage},
+ *   fetched and owned by InventoryPanel so it is shared with the Workloads tab and
+ *   survives tab switches
  */
-export function GraphTabContent({ resourceData, namespace, onNavigate, setActiveTab, isActive = true }) {
+export function GraphTabContent({ resourceData, namespace, onNavigate, setActiveTab, workloadStatuses = {} }) {
   const graphData = useMemo(() => buildGraphData(resourceData), [resourceData])
-  const [workloadStatuses, setWorkloadStatuses] = useState({})
-
-  // Fetch workload statuses when tab is active and resourceData changes
-  useEffect(() => {
-    // Skip if tab is not active or no workloads
-    if (!isActive || graphData.inventory.workloads.length === 0) {
-      return
-    }
-
-    let cancelled = false
-
-    const fetchWorkloadStatuses = async () => {
-      try {
-        // Build workloads array with resolved namespaces
-        const workloads = graphData.inventory.workloads.map(item => ({
-          kind: item.kind,
-          name: item.name,
-          namespace: item.namespace || namespace
-        }))
-
-        // Send all workloads in a single POST request
-        const response = await fetchWithMock({
-          endpoint: '/api/v1/workloads',
-          mockPath: '../mock/workload',
-          mockExport: 'getMockWorkloads',
-          method: 'POST',
-          body: { workloads }
-        })
-
-        // Build workloadStatuses map from response (includes status and statusMessage)
-        const newStatuses = {}
-        const returnedWorkloads = response.workloads || []
-        returnedWorkloads.forEach(workload => {
-          const key = `${workload.kind}/${workload.namespace}/${workload.name}`
-          newStatuses[key] = {
-            status: workload.status,
-            statusMessage: workload.statusMessage
-          }
-        })
-        if (!cancelled) setWorkloadStatuses(newStatuses)
-      } catch (err) {
-        console.error('Failed to fetch workload statuses:', err)
-      }
-    }
-
-    fetchWorkloadStatuses()
-    return () => { cancelled = true }
-  }, [isActive, resourceData, namespace, graphData.inventory.workloads])
 
   const { upstream, sources, helmChart, reconciler, inventory } = graphData
   const { flux, workloads, resources } = inventory
