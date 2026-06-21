@@ -91,6 +91,16 @@ Workload actions operate on Kubernetes workloads managed by Flux.
 These actions are available on the workload detail page for
 Deployments, StatefulSets, DaemonSets, CronJobs, and Pods.
 
+### View Logs
+
+The View Logs action streams a pod's container logs in a read-only viewer.
+It is available per pod from the Pods list and from the action bar as
+a "View logs" button that aggregates the logs of all the workload's pods.
+
+!!! note "RBAC"
+
+    Requires the `get` verb on the `pods/log` subresource in the core API group.
+
 ### Rollout Restart
 
 The Rollout Restart action triggers a rolling restart of a Deployment,
@@ -127,67 +137,6 @@ is performed.
 !!! note "RBAC"
 
     Requires the `delete` verb on `pods` in the core API group.
-
-### View Logs
-
-The View Logs action opens a viewer that displays the logs of a pod container.
-The viewer provides a container selector (including init containers; containers
-that have restarted also expose a "(previous)" entry for the prior instance's
-logs, useful for troubleshooting crash loops), a free-text filter to show only
-entries containing a given substring (prefix the text with `!` to instead hide
-entries containing it, e.g. `!debug`), a level filter to show only entries of a
-chosen severity, a control to choose how many lines to
-fetch, and toggles to follow the logs (polling for new entries, enabled by
-default), switch between formatted and raw output, and expand to fullscreen.
-On small screens the viewer opens full-screen with the toolbar laid out in a
-compact grid, and the fullscreen toggle is hidden.
-
-When following, each poll requests only the entries newer than the last one
-already shown and appends them, so the lines you are reading stay put instead of
-shifting on every refresh. Auto-scroll keeps the newest line in view only while
-the view is scrolled to the bottom, so scrolling up to read earlier entries is
-not interrupted by incoming logs. If a follow poll fails (for example because
-the pod was deleted), the error is shown inline at the tail of the feed and the
-already-fetched logs remain on screen; the viewer retries on the next poll.
-
-In the default formatted mode each log entry is rendered on its own row, with
-its timestamp shown as a pill on the row separator, JSON-formatted lines
-pretty-printed as syntax-highlighted code blocks (plain-text lines left
-untouched), and the latest timestamp pill briefly highlighted when new entries
-arrive while following. The raw mode strips all of that styling, rendering each
-line as plain text without separators, timestamp pills, level coloring, or the
-new-entry highlight.
-
-The viewer detects the log level of each entry across the common formats emitted
-by mainstream loggers (JSON `level`/`severity`/`level_name`/`@level`/`s` fields,
-including the numeric pino/bunyan and MongoDB single-character scales; klog
-`I/W/E/F` prefixes; logfmt `level=`; bracketed tokens such as nginx's `[error]`
-or Envoy's `[warning]`; leading `error:`-style console prefixes; and plain-text
-level tokens), defaulting to `info` when no level is found. The detected level colors the entry's timestamp pill and
-separator rule (faint blue for info, escalating through amber for warnings and
-red for errors), and the footer summarizes the per-level counts, which doubles
-as the color legend. ANSI color escape codes in the logs are stripped.
-
-On the workload dashboard the action is available per pod in the Pods list (opening
-the viewer on that pod), and from the action bar as a "View logs" button that opens
-the viewer on the merged "All pods" view; the viewer's own pod selector then narrows
-it to a single pod.
-
-The viewer keeps the page URL pointed at the pod currently shown (`?logs=<pod>`, or
-`?logs=*` for the merged "All pods" view), updating it both when the viewer is
-opened and whenever the pod is changed with the viewer's own selector. The link can
-be copied or bookmarked and, when reopened, loads the workload dashboard with the
-logs viewer already showing that pod's logs (subject to the same authorization).
-Closing the viewer removes the parameter.
-
-Unlike the GitOps and workload mutation actions, viewing logs is a read-only
-operation. The logs are always read using the authenticated user's identity,
-so a user can only view the logs of pods they are explicitly authorized to read.
-This action is not audited.
-
-!!! note "RBAC"
-
-    Requires the `get` verb on the `pods/log` subresource in the core API group.
 
 ## Audit
 

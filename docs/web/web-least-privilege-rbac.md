@@ -21,15 +21,6 @@ sensitive data.
 By relying on the system to safely handle these internal operations,
 administrators can enforce a much stricter least-privilege posture.
 
-!!! note "Pod log viewing"
-
-    Reading pod logs from the Web UI is **not** one of these
-    privileged operations. Logs are always streamed using the impersonated
-    user's identity, so Kubernetes enforces the user's own `get` permission on
-    the `pods/log` subresource. A user can only view the logs of pods they are
-    explicitly authorized to read, and the operation never escalates to the
-    operator's service-account privileges.
-
 ## Guiding Principles
 
 1. **Least privilege by default.** All resource reads and writes go through
@@ -212,7 +203,7 @@ Users do not need cluster-wide `list` permissions on namespaces just to populate
 
 ## 9. Inventory-Derived Workloads Index
 
-**Where:** The Workloads page and the global quick-search workload results.
+**Where:** The Workloads search page and the global quick-search workload results.
 
 **Internal operation:**
 The system extracts the Kubernetes workloads (Deployment, StatefulSet,
@@ -222,85 +213,32 @@ builds the dashboard report. No additional cluster queries (and therefore no
 `apps`/`batch` RBAC on the operator) are performed.
 
 **How it works:**
-While building the `FluxReport`, the reporter already lists every applier
-reconciler (FluxInstance, Kustomization, HelmRelease, ResourceSet) as a full
-object. Each applier's inventory enumerates the objects it manages with their
-GVK and namespace/name. The reporter keeps the workload-kind entries, stamps
-each with the owning reconciler's reference and status, and caches them in a
-workload index. When a user requests the Workloads page, the cached index is
-served filtered to the namespaces the user can access — the same per-namespace
-`get resourcesets` gate used for the dashboard
-(see [Namespace Visibility](#8-namespace-visibility)). There is **no
-live-query fallback**: the page is served exclusively from this privileged,
-inventory-derived index.
+While building the `FluxReport`, the reporter already reads every applier
+reconciler and its inventory. It keeps the workload-kind entries, stamps each
+with the owning reconciler's reference and status, and caches them in a workload
+index. The Workloads page is served from this cache, filtered to the namespaces
+the user can access via the same per-namespace `get resourcesets` gate used for
+the dashboard (see [Namespace Visibility](#8-namespace-visibility)).
 
 **Least privilege benefit:**
 A user with Flux read access in a namespace (can `get resourcesets`) can
-enumerate all Deployment/StatefulSet/DaemonSet/CronJob **names** managed by Flux
-in that namespace **without** holding any `apps`/`batch` RBAC. The index never
-exposes workload spec, status conditions, pod data, or secrets — only the
-workload identity (kind, namespace, name, apiVersion) and the parent
-reconciler reference.
-
-**Security consequences to be aware of:**
-
-- Each workload row exposes its parent reconciler's **name and status badge**
-  (`Ready`/`Failed`/`Progressing`/`Suspended`/`Unknown`) — never the reconciler
-  message — even when that reconciler lives in a namespace the user cannot
-  otherwise access. The workload itself carries no status in the index; per-workload
-  live status is only fetched on the workload detail page and in Favorites.
-- **Remote-cluster appliers are excluded.** Kustomizations and HelmReleases with
-  `spec.kubeConfig` set target a remote cluster, so their workloads do not exist
-  locally; they are skipped during extraction to avoid broken links and remote
-  metadata exposure.
-- **HelmRelease on Flux ≤ 2.7 caveat.** Older HelmReleases store their inventory
-  in a Helm storage secret rather than `status.inventory.entries`. The index does
-  **not** read that secret (doing so would defeat the inventory-only, no-extra-RBAC
-  design), so HelmRelease-managed workloads on Flux ≤ 2.7 are absent from the
-  Workloads list and quick-search. They remain visible on the resource
-  detail/inventory page, which does perform the storage-secret read on demand
-  using the user's own client.
-- **Favorites use the user's own client.** When a workload is marked as a
-  favorite, its live status is fetched with the user's impersonated client and a
-  lightweight `kstatus` computation on the fetched object alone. Real `apps`/`batch`
-  `get` RBAC therefore applies to favorites. The lightweight status path needs only
-  `get` on the workload — it does **not** list pods — so a user who can `get` the
-  workload but not `list pods` still sees a valid status instead of `NotFound`.
-- **Inline details use the user's own client.** Each row on the Workloads list
-  offers an expandable, read-only detail panel (Overview / Specification /
-  Status) that lazy-loads on first expand from the existing RBAC-enforced
-  `GET /api/v1/workload` endpoint — the same endpoint the full workload dashboard
-  uses. It requires no new permissions: a user who cannot `get` the workload in
-  its namespace sees a not-found/forbidden state instead. Pod listing, events,
-  and actions are intentionally excluded from this inline panel and remain on the
-  full workload dashboard.
-
-**API endpoints:**
-
-- `GET /api/v1/workloads?kind=&name=&namespace=` — returns the inventory-derived,
-  namespace-filtered list of workloads as `{ "workloads": [WorkloadRef, ...] }`.
-  Each `WorkloadRef` has the shape:
-  `{ "kind", "name", "namespace", "apiVersion", "reconcilerKind",
-  "reconcilerNamespace", "reconcilerName", "reconcilerStatus", "lastReconciled" }`.
-  `name` supports wildcards (`*`); `kind` and `namespace` are exact matches.
-  This route is distinct from the existing `POST /api/v1/workloads`, which
-  returns live workload status for the detail/inventory views.
-- `GET /api/v1/workloads/search?name=&namespace=&kind=` — the quick-search
-  variant of the above. A `name` without a wildcard is wrapped as `*name*` for a
-  partial match and results are capped at a small limit. Same response shape.
+enumerate all Flux-managed workload **names** in that namespace **without**
+holding any `apps`/`batch` RBAC. The index exposes only the workload identity
+(kind, namespace, name, apiVersion) and the parent reconciler reference — never
+workload spec, status conditions, pod data, or secrets.
 
 ---
 
 ## Summary
 
-| # | Feature | Internal Operation | Data Exposed to User |
-|---|---------|--------------------|----------------------|
-| 1 | CronJob pod listing | System reads Jobs/Pods | Pod name, phase, timestamps |
-| 2 | Flux GVK resolution | System API discovery | None (internal metadata only) |
-| 3 | Audit event recording | System writes event | None (server-side only) |
-| 4 | Audit pod-owner resolution | System reads owner chain | None (server-side only) |
-| 5 | Dashboard report | System scans cluster | Aggregated stats filtered by user namespace |
-| 6 | Controller metrics | System reads metrics API | CPU/memory usage of Flux controllers |
-| 7 | Fine-Grained GitOps Actions | System patches resource | None (server-side mutation only) |
-| 8 | Namespace visibility | System lists namespaces | Visible namespace names |
-| 9 | Workloads index | System extracts workloads from applier inventories | Workload identity + parent reconciler name/status, filtered by user namespace |
+| # | Feature                     | Internal Operation                                 | Data Exposed to User                                                          |
+|---|-----------------------------|----------------------------------------------------|-------------------------------------------------------------------------------|
+| 1 | CronJob pod listing         | System reads Jobs/Pods                             | Pod name, phase, timestamps                                                   |
+| 2 | Flux GVK resolution         | System API discovery                               | None (internal metadata only)                                                 |
+| 3 | Audit event recording       | System writes event                                | None (server-side only)                                                       |
+| 4 | Audit pod-owner resolution  | System reads owner chain                           | None (server-side only)                                                       |
+| 5 | Dashboard report            | System scans cluster                               | Aggregated stats filtered by user namespace                                   |
+| 6 | Controller metrics          | System reads metrics API                           | CPU/memory usage of Flux controllers                                          |
+| 7 | Fine-Grained GitOps Actions | System patches resource                            | None (server-side mutation only)                                              |
+| 8 | Namespace visibility        | System lists namespaces                            | Visible namespace names                                                       |
+| 9 | Workloads index             | System extracts workloads from applier inventories | Workload identity + parent reconciler name/status, filtered by user namespace |
