@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, act, fireEvent } from '@testing-library/preact'
 import userEvent from '@testing-library/user-event'
 import { WorkloadLogsViewer, reconcileEntries } from './WorkloadLogsViewer'
+import { logSettings, DEFAULT_LOG_SETTINGS, resetLogSettings } from '../../../utils/logSettings'
 
 vi.mock('../../../utils/fetch', () => ({
   fetchWithMock: vi.fn()
@@ -20,6 +21,9 @@ const lastCall = () => fetchWithMock.mock.calls.at(-1)[0]
 describe('WorkloadLogsViewer component', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // Reset the persisted log viewer settings (a module-level signal) so a case
+    // that toggles follow/format/lines can't leak its choice into the next.
+    logSettings.value = { ...DEFAULT_LOG_SETTINGS }
     // Each line carries a leading timestamp (as the API returns); timestamps are
     // shown as a pill so the viewer strips it from the message text.
     fetchWithMock.mockResolvedValue({ pod: 'my-pod', container: 'app', logs: '2026-01-01T00:00:00Z line one\n2026-01-01T00:00:01Z line two\n' })
@@ -1339,6 +1343,47 @@ describe('WorkloadLogsViewer component', () => {
       await user.click(folds[0])
       expect(screen.getByText('goroutine 1 [running]:')).toBeInTheDocument()
       expect(screen.getByText('main.crash()')).toBeInTheDocument()
+    })
+  })
+
+  describe('persisted settings', () => {
+    it('seeds follow, format and lines from the stored settings', async () => {
+      logSettings.value = { follow: false, formatted: false, tail: 500 }
+      render(<WorkloadLogsViewer {...defaultProps} />)
+      await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
+
+      expect(screen.getByTestId('logs-follow-toggle')).toHaveAttribute('aria-pressed', 'false')
+      expect(screen.getByTestId('logs-format-toggle')).toHaveAttribute('aria-pressed', 'false')
+      expect(screen.getByTestId('logs-lines-select')).toHaveValue('500')
+    })
+
+    it('persists follow, format and lines changes to the settings signal', async () => {
+      render(<WorkloadLogsViewer {...defaultProps} />)
+      await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
+
+      await act(async () => { fireEvent.change(screen.getByTestId('logs-lines-select'), { target: { value: '1000' } }) })
+      await act(async () => { fireEvent.click(screen.getByTestId('logs-follow-toggle')) })
+      await act(async () => { fireEvent.click(screen.getByTestId('logs-format-toggle')) })
+
+      expect(logSettings.value).toEqual({ follow: false, formatted: false, tail: 1000 })
+    })
+
+    it('does not change an already-open viewer when the settings are reset', async () => {
+      render(<WorkloadLogsViewer {...defaultProps} />)
+      await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
+
+      await act(async () => { fireEvent.change(screen.getByTestId('logs-lines-select'), { target: { value: '1000' } }) })
+      await act(async () => { fireEvent.click(screen.getByTestId('logs-format-toggle')) })
+
+      // Reset the persisted settings (as "Clear local storage" does) while the
+      // viewer is open. The signal resets, but the open viewer seeded via peek and
+      // never subscribed, so its live state is untouched — the reset only applies
+      // the next time the viewer is opened.
+      await act(async () => { resetLogSettings() })
+
+      expect(logSettings.value).toEqual(DEFAULT_LOG_SETTINGS)
+      expect(screen.getByTestId('logs-lines-select')).toHaveValue('1000')
+      expect(screen.getByTestId('logs-format-toggle')).toHaveAttribute('aria-pressed', 'false')
     })
   })
 })

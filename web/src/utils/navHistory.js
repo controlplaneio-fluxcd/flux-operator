@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { signal, effect } from '@preact/signals'
+import { writeLocalStorage } from './storage'
 
 // LocalStorage key for navigation history
 const STORAGE_KEY = 'nav-history'
@@ -48,7 +49,7 @@ export const navHistory = signal(getNavHistoryFromStorage())
 
 // Sync navigation history to localStorage whenever it changes
 effect(() => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(navHistory.value))
+  writeLocalStorage(STORAGE_KEY, JSON.stringify(navHistory.value))
 })
 
 /**

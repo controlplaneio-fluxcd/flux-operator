@@ -8,12 +8,7 @@ import { LEVELS, LEVEL_META, DEFAULT_LEVEL, detectLevel, stripAnsi } from '../..
 import { decorateLine, highlightJson } from '../../../utils/logFormat'
 import { groupEntries } from '../../../utils/logGroup'
 import { useDismiss } from '../../../utils/useDismiss'
-
-// Selectable limits for the number of log lines to fetch from the backend.
-const LINE_LIMITS = [100, 500, 1000, 5000]
-
-// Default number of log lines requested from the backend.
-const DEFAULT_TAIL_LINES = 100
+import { logSettings, LINE_LIMITS } from '../../../utils/logSettings'
 
 // Sentinel option key for the "All containers" view, which streams every
 // container (init and regular) and interleaves the lines chronologically.
@@ -272,7 +267,7 @@ function LevelMenu({ value, onChange }) {
   const current = LEVEL_OPTIONS.find(o => o.value === value) || LEVEL_OPTIONS[0]
 
   return (
-    <div class="relative w-full sm:w-auto" ref={ref}>
+    <div class="relative flex-1 min-w-0 sm:flex-none sm:w-auto" ref={ref}>
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
@@ -601,11 +596,14 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
   }, [containers, streamNames])
 
   const [containerKey, setContainerKey] = useState(defaultKey)
-  const [tailLines, setTailLines] = useState(DEFAULT_TAIL_LINES)
-  const [follow, setFollow] = useState(true)
+  // Follow, formatted and tailLines are seeded from the persisted log viewer
+  // settings (peek, so seeding doesn't subscribe the component) and written back
+  // by the effect below, so they carry across sessions.
+  const [tailLines, setTailLines] = useState(() => logSettings.peek().tail)
+  const [follow, setFollow] = useState(() => logSettings.peek().follow)
   const [filter, setFilter] = useState('')
   const [levelFilter, setLevelFilter] = useState('all')
-  const [formatted, setFormatted] = useState(true)
+  const [formatted, setFormatted] = useState(() => logSettings.peek().formatted)
   const [fullScreen, setFullScreen] = useState(false)
   const [logs, setLogs] = useState('')
   const [loading, setLoading] = useState(false)
@@ -809,6 +807,15 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
   useEffect(() => {
     if (!formatted) setLevelFilter('all')
   }, [formatted])
+
+  // Persist the follow/formatted/tailLines settings so they carry across sessions.
+  // The signal's own effect writes them to localStorage. On mount this writes the
+  // seeded values back (a redundant but harmless write of identical content). The
+  // component seeds via peek() and never reads the signal reactively, so writing it
+  // here cannot re-render the viewer or feed back into this effect.
+  useEffect(() => {
+    logSettings.value = { follow, formatted, tail: tailLines }
+  }, [follow, formatted, tailLines])
 
   // Poll for new logs while following: silent (no spinner flicker) and appending
   // (visible lines stay put).
@@ -1139,12 +1146,12 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
           </button>
         </div>
 
-        {/* Toolbar. Mobile: a two-column grid of paired rows (the viewer is
-            full-screen there). From sm up: a single-row flex-wrap. */}
-        <div class="grid grid-cols-2 items-center gap-2 px-4 py-2 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 sm:flex sm:flex-wrap">
-          {/* Toggles share the full-width top row on mobile; `sm:contents` dissolves
-              the wrapper on desktop so each toggle is a direct flex item. */}
-          <div class="col-span-2 flex items-center gap-2 sm:contents">
+        {/* Toolbar. Mobile: two stacked rows — controls+filter, then selectors
+            (the viewer is full-screen there). From sm up: a single-row flex-wrap.
+            Each row wrapper is `sm:contents` so it dissolves into that one row. */}
+        <div class="flex flex-col gap-2 px-4 py-2 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 sm:flex-row sm:flex-wrap sm:items-center">
+          {/* Row 1 (mobile): follow/format toggles, lines, and the contains filter. */}
+          <div class="flex items-center gap-2 sm:contents">
             {/* Follow logs */}
             <ToggleButton
               active={follow}
@@ -1170,75 +1177,83 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1m8-18h1a2 2 0 0 1 2 2v5c0 1.1.9 2 2 2a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2h-1" />
               </svg>
             </ToggleButton>
+
+            {/* Lines select — shares row 1 with the toggles and the filter. Sized to
+                its content (the contains filter takes the remaining width). */}
+            <select
+              value={tailLines}
+              onChange={(e) => setTailLines(Number(e.target.value))}
+              class={`${SELECT_CLASS} shrink-0 sm:w-auto`}
+              data-testid="logs-lines-select"
+              aria-label="Number of lines"
+              title="Number of log lines to fetch"
+            >
+              {LINE_LIMITS.map((n) => (
+                <option key={n} value={n}>{n} ln</option>
+              ))}
+            </select>
+
+            {/* Separator (desktop only) between the view controls and the filter. */}
+            <div class="hidden sm:block w-px h-5 bg-gray-300 dark:bg-gray-600" />
+
+            {/* Contains filter — takes the remaining width of row 1 on mobile. */}
+            <input
+              type="text"
+              value={filter}
+              onInput={(e) => setFilter(e.target.value)}
+              placeholder="contains…"
+              class={`${INPUT_CLASS} flex-1 min-w-0 sm:flex-none sm:w-40`}
+              data-testid="logs-filter-input"
+              aria-label="Filter log lines containing text"
+              title="Filter by keyword (prefix with ! to exclude e.g. !debug)"
+            />
           </div>
 
-          {/* Pod select. "All pods" leads (every pod merged, origin-tagged);
-              selecting one narrows the view and resets the container dropdown.
-              Fixed width so a long name is trimmed, not pushing the toolbar. */}
-          {pods.length > 0 && (
+          {/* Row 2 (mobile): the pod/container/level selectors, sharing the row in
+              equal parts. `sm:contents` dissolves the wrapper on desktop so they
+              rejoin the single wrapping toolbar row. */}
+          <div class="flex items-center gap-2 sm:contents">
+            {/* Pod select. "All pods" leads (every pod merged, origin-tagged);
+                selecting one narrows the view and resets the container dropdown. A
+                long name truncates instead of pushing the row. */}
+            {pods.length > 0 && (
+              <select
+                value={effectivePodKey}
+                onChange={(e) => setPodKey(e.target.value)}
+                class={`${SELECT_CLASS} flex-1 min-w-0 truncate sm:flex-none sm:w-40`}
+                data-testid="logs-pod-select"
+                aria-label="Pod"
+                title="Select pod"
+              >
+                {podOptions.map((o) => (
+                  <option key={o.key} value={o.key}>{o.label}</option>
+                ))}
+              </select>
+            )}
+
+            {/* Container select (always shown). Restarted containers also expose a
+                "(previous)" entry for the prior instance's logs. */}
             <select
-              value={effectivePodKey}
-              onChange={(e) => setPodKey(e.target.value)}
-              class={`${SELECT_CLASS} w-full truncate sm:w-40`}
-              data-testid="logs-pod-select"
-              aria-label="Pod"
-              title="Select pod"
+              value={containerKey}
+              onChange={(e) => setContainerKey(e.target.value)}
+              class={`${SELECT_CLASS} flex-1 min-w-0 truncate sm:flex-none sm:w-40`}
+              data-testid="logs-container-select"
+              aria-label="Container"
+              title="Select container (a previous entry reads the prior instance's logs)"
             >
-              {podOptions.map((o) => (
+              {containerOptions.map((o) => (
                 <option key={o.key} value={o.key}>{o.label}</option>
               ))}
             </select>
-          )}
 
-          {/* Container select (always shown). Restarted containers also expose a
-              "(previous)" entry for the prior instance's logs. Fixed width so a
-              long name is trimmed, not pushing the toolbar. */}
-          <select
-            value={containerKey}
-            onChange={(e) => setContainerKey(e.target.value)}
-            class={`${SELECT_CLASS} w-full truncate sm:w-40`}
-            data-testid="logs-container-select"
-            aria-label="Container"
-            title="Select container (a previous entry reads the prior instance's logs)"
-          >
-            {containerOptions.map((o) => (
-              <option key={o.key} value={o.key}>{o.label}</option>
-            ))}
-          </select>
+            {/* Minimum level filter. Formatted mode only — raw is verbatim with no
+                level semantics, so the filter is hidden (and reset to "all"). */}
+            {formatted && <LevelMenu value={levelFilter} onChange={setLevelFilter} />}
+          </div>
 
-          {/* Contains filter */}
-          <input
-            type="text"
-            value={filter}
-            onInput={(e) => setFilter(e.target.value)}
-            placeholder="contains…"
-            class={`${INPUT_CLASS} w-full sm:w-40`}
-            data-testid="logs-filter-input"
-            aria-label="Filter log lines containing text"
-            title="Filter by keyword (prefix with ! to exclude e.g. !debug)"
-          />
-
-          {/* Minimum level filter. Formatted mode only — raw is verbatim with no
-              level semantics, so the filter is hidden (and reset to "all"). */}
-          {formatted && <LevelMenu value={levelFilter} onChange={setLevelFilter} />}
-
-          {/* Lines select */}
-          <select
-            value={tailLines}
-            onChange={(e) => setTailLines(Number(e.target.value))}
-            class={`${SELECT_CLASS} w-full sm:w-auto`}
-            data-testid="logs-lines-select"
-            aria-label="Number of lines"
-            title="Number of log lines to fetch"
-          >
-            {LINE_LIMITS.map((n) => (
-              <option key={n} value={n}>{n} ln</option>
-            ))}
-          </select>
-
-          {/* Actions. Mobile: the last grid cell, right-aligned. Desktop: floats
-              to the far right of the row. */}
-          <div class="flex items-center justify-end gap-1 sm:ml-auto">
+          {/* Actions (desktop only): download + fullscreen are hidden on mobile,
+              where the viewer already fills the screen. */}
+          <div class="hidden sm:flex items-center justify-end gap-1 sm:ml-auto">
             <button
               onClick={handleDownload}
               disabled={!logs}

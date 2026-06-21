@@ -11,6 +11,7 @@ import { DashboardPanel, TabButton } from '../dashboards/common/panel'
 import { KubernetesIcon, OpenIDIcon } from '../layout/Icons'
 import { favorites } from '../../utils/favorites'
 import { navHistory } from '../../utils/navHistory'
+import { logSettings } from '../../utils/logSettings'
 import Prism from 'prismjs'
 import 'prismjs/components/prism-json'
 
@@ -54,14 +55,21 @@ export function ProfilePage() {
     try {
       const favoritesSize = (localStorage.getItem('favorites') || '').length * 2 // UTF-16
       const navHistorySize = (localStorage.getItem('nav-history') || '').length * 2
-      const totalBytes = favoritesSize + navHistorySize
+      const logSettingsSize = (localStorage.getItem('log-viewer') || '').length * 2
+      const totalBytes = favoritesSize + navHistorySize + logSettingsSize
       if (totalBytes < 1024) return `${totalBytes} B`
       if (totalBytes < 1024 * 1024) return `${(totalBytes / 1024).toFixed(1)} KB`
       return `${(totalBytes / (1024 * 1024)).toFixed(1)} MB`
     } catch {
       return '0 B'
     }
-  }, [favorites.value, navHistory.value])
+  }, [favorites.value, navHistory.value, logSettings.value])
+
+  // One-line summary of the persisted log viewer settings.
+  const logViewerSummary = useMemo(() => {
+    const { follow, formatted, tail } = logSettings.value
+    return `${follow ? 'Follow on' : 'Follow off'} · ${formatted ? 'Formatted' : 'Raw'} · ${tail} lines`
+  }, [logSettings.value])
 
   return (
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
@@ -192,6 +200,10 @@ export function ProfilePage() {
               <span class="ml-1 text-gray-900 dark:text-white">
                 {navHistory.value.length} {navHistory.value.length === 1 ? 'item' : 'items'}
               </span>
+            </div>
+            <div class="text-sm">
+              <span class="text-gray-500 dark:text-gray-400">Log Viewer</span>
+              <span class="ml-1 text-gray-900 dark:text-white">{logViewerSummary}</span>
             </div>
             <div class="text-sm">
               <span class="text-gray-500 dark:text-gray-400">Storage Size</span>

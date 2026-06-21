@@ -6,6 +6,7 @@ import { render, screen, fireEvent } from '@testing-library/preact'
 import { UserMenu, userMenuOpen } from './UserMenu'
 import { themeMode, appliedTheme, themes } from '../../utils/theme'
 import { clearFavorites } from '../../utils/favorites'
+import { logSettings, DEFAULT_LOG_SETTINGS } from '../../utils/logSettings'
 import { reportData } from '../../app'
 
 // Mock the favorites module
@@ -203,23 +204,26 @@ describe('UserMenu', () => {
       expect(screen.getByText('Clear local storage')).toBeInTheDocument()
     })
 
-    it('should show confirmation and call clearFavorites when confirmed', () => {
+    it('should show confirmation and reset favorites and log settings when confirmed', () => {
       const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+      logSettings.value = { follow: false, formatted: false, tail: 500 }
       userMenuOpen.value = true
       render(<UserMenu />)
 
       const button = screen.getByText('Clear local storage').closest('button')
       fireEvent.click(button)
 
-      expect(confirmSpy).toHaveBeenCalledWith('This will delete your favorites and navigation history from local storage. Continue?')
+      expect(confirmSpy).toHaveBeenCalledWith('This will delete your favorites, navigation history and log viewer settings from local storage. Continue?')
       expect(clearFavorites).toHaveBeenCalledTimes(1)
+      expect(logSettings.value).toEqual(DEFAULT_LOG_SETTINGS)
       expect(userMenuOpen.value).toBe(false)
 
       confirmSpy.mockRestore()
     })
 
-    it('should not call clearFavorites when confirmation is cancelled', () => {
+    it('should not clear favorites or log settings when confirmation is cancelled', () => {
       const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+      logSettings.value = { follow: false, formatted: false, tail: 500 }
       userMenuOpen.value = true
       render(<UserMenu />)
 
@@ -228,6 +232,7 @@ describe('UserMenu', () => {
 
       expect(confirmSpy).toHaveBeenCalled()
       expect(clearFavorites).not.toHaveBeenCalled()
+      expect(logSettings.value).toEqual({ follow: false, formatted: false, tail: 500 })
       expect(userMenuOpen.value).toBe(true)
 
       confirmSpy.mockRestore()

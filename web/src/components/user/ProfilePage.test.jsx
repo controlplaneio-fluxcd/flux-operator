@@ -7,6 +7,7 @@ import { ProfilePage } from './ProfilePage'
 import { reportData } from '../../app'
 import { favorites } from '../../utils/favorites'
 import { navHistory } from '../../utils/navHistory'
+import { logSettings, DEFAULT_LOG_SETTINGS } from '../../utils/logSettings'
 
 // Mock the favorites module
 vi.mock('../../utils/favorites', async () => {
@@ -29,9 +30,10 @@ describe('ProfilePage', () => {
     // Reset mocks
     vi.clearAllMocks()
 
-    // Reset favorites and navHistory signals
+    // Reset favorites, navHistory and log viewer settings signals
     favorites.value = []
     navHistory.value = []
+    logSettings.value = { ...DEFAULT_LOG_SETTINGS }
 
     // Set mock user info in reportData
     reportData.value = {
@@ -326,6 +328,21 @@ describe('ProfilePage', () => {
       render(<ProfilePage />)
 
       expect(screen.getByText('Local Storage')).toBeInTheDocument()
+    })
+
+    it('should show the default log viewer settings on one line', () => {
+      render(<ProfilePage />)
+
+      expect(screen.getByText('Log Viewer')).toBeInTheDocument()
+      expect(screen.getByText('Follow on · Formatted · 100 lines')).toBeInTheDocument()
+    })
+
+    it('should reflect non-default log viewer settings', () => {
+      logSettings.value = { follow: false, formatted: false, tail: 500 }
+
+      render(<ProfilePage />)
+
+      expect(screen.getByText('Follow off · Raw · 500 lines')).toBeInTheDocument()
     })
 
     it('should show Favorites label', () => {
