@@ -92,34 +92,38 @@ func TestTailLogBytes(t *testing.T) {
 }
 
 func TestParseLogEntries(t *testing.T) {
-	t.Run("groups continuation lines with their timestamped entry and stamps the pod", func(t *testing.T) {
+	t.Run("groups continuation lines with their timestamped entry and stamps the pod and container", func(t *testing.T) {
 		g := NewWithT(t)
 
 		blob := "2026-01-01T00:00:00Z panic: boom\ngoroutine 1 [running]:\nmain.main()\n" +
 			"2026-01-01T00:00:01Z next line\n"
-		entries := parseLogEntries(blob, "pod-a")
+		entries := parseLogEntries(blob, "pod-a", "app")
 
 		g.Expect(entries).To(HaveLen(2))
 		// The two non-timestamped lines stay attached to the first entry.
 		g.Expect(entries[0].text).To(Equal("2026-01-01T00:00:00Z panic: boom\ngoroutine 1 [running]:\nmain.main()"))
 		g.Expect(entries[0].pod).To(Equal("pod-a"))
+		g.Expect(entries[0].container).To(Equal("app"))
 		g.Expect(entries[1].text).To(Equal("2026-01-01T00:00:01Z next line"))
 		g.Expect(entries[1].pod).To(Equal("pod-a"))
+		g.Expect(entries[1].container).To(Equal("app"))
 	})
 
-	t.Run("a leading continuation with no preceding entry becomes its own entry", func(t *testing.T) {
+	t.Run("a leading continuation with no preceding entry becomes its own entry, stamped", func(t *testing.T) {
 		g := NewWithT(t)
 
-		entries := parseLogEntries("orphan continuation\n2026-01-01T00:00:00Z line\n", "pod-a")
+		entries := parseLogEntries("orphan continuation\n2026-01-01T00:00:00Z line\n", "pod-a", "app")
 		g.Expect(entries).To(HaveLen(2))
 		g.Expect(entries[0].ts.IsZero()).To(BeTrue())
 		g.Expect(entries[0].text).To(Equal("orphan continuation"))
+		g.Expect(entries[0].container).To(Equal("app"))
 		g.Expect(entries[1].text).To(Equal("2026-01-01T00:00:00Z line"))
+		g.Expect(entries[1].container).To(Equal("app"))
 	})
 
 	t.Run("empty payload yields no entries", func(t *testing.T) {
 		g := NewWithT(t)
-		g.Expect(parseLogEntries("", "pod-a")).To(BeEmpty())
+		g.Expect(parseLogEntries("", "pod-a", "app")).To(BeEmpty())
 	})
 }
 
@@ -130,7 +134,7 @@ func TestMergeLogStreams(t *testing.T) {
 		app := logStream{pod: "pod-a", blob: "2026-01-01T00:00:00Z app a\n2026-01-01T00:00:02Z app b\n"}
 		sidecar := logStream{pod: "pod-a", blob: "2026-01-01T00:00:01Z side a\n2026-01-01T00:00:03Z side b\n"}
 
-		got := mergeLogStreams([]logStream{app, sidecar}, 0, false)
+		got := mergeLogStreams([]logStream{app, sidecar}, 0, false, false)
 		g.Expect(got).To(Equal(
 			"2026-01-01T00:00:00Z app a\n" +
 				"2026-01-01T00:00:01Z side a\n" +
@@ -146,7 +150,7 @@ func TestMergeLogStreams(t *testing.T) {
 		a := logStream{pod: "pod-a", blob: "2026-01-01T00:00:00.1Z first\n"}
 		b := logStream{pod: "pod-a", blob: "2026-01-01T00:00:00.12Z second\n"}
 
-		got := mergeLogStreams([]logStream{b, a}, 0, false)
+		got := mergeLogStreams([]logStream{b, a}, 0, false, false)
 		g.Expect(got).To(Equal("2026-01-01T00:00:00.1Z first\n2026-01-01T00:00:00.12Z second\n"))
 	})
 
@@ -156,7 +160,7 @@ func TestMergeLogStreams(t *testing.T) {
 		app := logStream{pod: "pod-a", blob: "2026-01-01T00:00:00Z panic\nstack frame\n"}
 		sidecar := logStream{pod: "pod-a", blob: "2026-01-01T00:00:01Z side\n"}
 
-		got := mergeLogStreams([]logStream{app, sidecar}, 0, false)
+		got := mergeLogStreams([]logStream{app, sidecar}, 0, false, false)
 		g.Expect(got).To(Equal("2026-01-01T00:00:00Z panic\nstack frame\n2026-01-01T00:00:01Z side\n"))
 	})
 
@@ -166,14 +170,14 @@ func TestMergeLogStreams(t *testing.T) {
 		app := logStream{pod: "pod-a", blob: "2026-01-01T00:00:00Z app a\n2026-01-01T00:00:02Z app b\n"}
 		sidecar := logStream{pod: "pod-a", blob: "2026-01-01T00:00:01Z side a\n2026-01-01T00:00:03Z side b\n"}
 
-		got := mergeLogStreams([]logStream{app, sidecar}, 2, false)
+		got := mergeLogStreams([]logStream{app, sidecar}, 2, false, false)
 		g.Expect(got).To(Equal("2026-01-01T00:00:02Z app b\n2026-01-01T00:00:03Z side b\n"))
 	})
 
 	t.Run("empty streams yield an empty payload", func(t *testing.T) {
 		g := NewWithT(t)
-		g.Expect(mergeLogStreams(nil, 100, false)).To(BeEmpty())
-		g.Expect(mergeLogStreams([]logStream{{pod: "pod-a"}, {pod: "pod-b"}}, 100, false)).To(BeEmpty())
+		g.Expect(mergeLogStreams(nil, 100, false, false)).To(BeEmpty())
+		g.Expect(mergeLogStreams([]logStream{{pod: "pod-a"}, {pod: "pod-b"}}, 100, false, false)).To(BeEmpty())
 	})
 
 	t.Run("tagged mode prefixes each timestamped line with its pod, interleaved", func(t *testing.T) {
@@ -182,7 +186,7 @@ func TestMergeLogStreams(t *testing.T) {
 		a := logStream{pod: "frontend-abc-gqh2x", blob: "2026-01-01T00:00:00Z a one\n2026-01-01T00:00:02Z a two\n"}
 		b := logStream{pod: "frontend-abc-p8x2k", blob: "2026-01-01T00:00:01Z b one\n"}
 
-		got := mergeLogStreams([]logStream{a, b}, 0, true)
+		got := mergeLogStreams([]logStream{a, b}, 0, true, false)
 		g.Expect(got).To(Equal(
 			"frontend-abc-gqh2x 2026-01-01T00:00:00Z a one\n" +
 				"frontend-abc-p8x2k 2026-01-01T00:00:01Z b one\n" +
@@ -199,10 +203,39 @@ func TestMergeLogStreams(t *testing.T) {
 		// A leading orphan continuation (zero ts) is left untagged too.
 		b := logStream{pod: "pod-b", blob: "orphan line\n"}
 
-		got := mergeLogStreams([]logStream{a, b}, 0, true)
+		got := mergeLogStreams([]logStream{a, b}, 0, true, false)
 		g.Expect(got).To(Equal(
 			"orphan line\n" +
 				"pod-a 2026-01-01T00:00:01Z panic\nstack frame\n"))
+	})
+
+	t.Run("container-tagged mode prefixes each timestamped line with its container", func(t *testing.T) {
+		g := NewWithT(t)
+
+		// Single-pod all-containers view: tag the container, not the pod, so the
+		// client can scope folding per container.
+		app := logStream{pod: "pod-a", container: "app", blob: "2026-01-01T00:00:00Z a one\n2026-01-01T00:00:02Z a two\n"}
+		side := logStream{pod: "pod-a", container: "envoy", blob: "2026-01-01T00:00:01Z s one\n"}
+
+		got := mergeLogStreams([]logStream{app, side}, 0, false, true)
+		g.Expect(got).To(Equal(
+			"app 2026-01-01T00:00:00Z a one\n" +
+				"envoy 2026-01-01T00:00:01Z s one\n" +
+				"app 2026-01-01T00:00:02Z a two\n"))
+	})
+
+	t.Run("combined mode prefixes pod then container, in order", func(t *testing.T) {
+		g := NewWithT(t)
+
+		// All-pods and all-containers: both dimensions fan out, so each timestamped
+		// line carries "<pod> <container> <ts> <msg>"; orphans stay untagged.
+		a := logStream{pod: "p1", container: "app", blob: "2026-01-01T00:00:00Z a\nframe\n"}
+		b := logStream{pod: "p2", container: "side", blob: "2026-01-01T00:00:01Z b\n"}
+
+		got := mergeLogStreams([]logStream{a, b}, 0, true, true)
+		g.Expect(got).To(Equal(
+			"p1 app 2026-01-01T00:00:00Z a\nframe\n" +
+				"p2 side 2026-01-01T00:00:01Z b\n"))
 	})
 }
 
@@ -293,7 +326,7 @@ func TestCollectLogStreams(t *testing.T) {
 		g := NewWithT(t)
 		targets := []logTarget{{pod: "p1", container: "app"}, {pod: "p2", container: "app"}}
 		out := collectLogStreams(targets, []string{"x", "y"}, []error{nil, nil})
-		g.Expect(out.streams).To(Equal([]logStream{{pod: "p1", blob: "x"}, {pod: "p2", blob: "y"}}))
+		g.Expect(out.streams).To(Equal([]logStream{{pod: "p1", container: "app", blob: "x"}, {pod: "p2", container: "app", blob: "y"}}))
 		g.Expect(out.streamedSet).To(HaveLen(2))
 		g.Expect(out.forbidden).To(Equal(0))
 		g.Expect(out.firstErr).NotTo(HaveOccurred())
@@ -303,7 +336,7 @@ func TestCollectLogStreams(t *testing.T) {
 		g := NewWithT(t)
 		targets := []logTarget{{pod: "p1", container: "app"}, {pod: "p2", container: "app"}}
 		out := collectLogStreams(targets, []string{"x", ""}, []error{nil, forbidden})
-		g.Expect(out.streams).To(Equal([]logStream{{pod: "p1", blob: "x"}}))
+		g.Expect(out.streams).To(Equal([]logStream{{pod: "p1", container: "app", blob: "x"}}))
 		g.Expect(out.streamedSet).To(HaveLen(1))
 		g.Expect(out.forbidden).To(Equal(1))
 		g.Expect(out.firstErr).To(MatchError(forbidden))
@@ -337,9 +370,10 @@ func TestBuildWorkloadLogsResponse(t *testing.T) {
 		// report 200-style partial coverage with the per-pod counts the UI shows.
 		targets := []logTarget{{pod: "p1", container: "app"}, {pod: "p2", container: "app"}}
 		fanOut := collectLogStreams(targets, []string{"2026-01-01T00:00:00Z hi\n", ""}, []error{nil, forbidden})
-		resp := buildWorkloadLogsResponse([]string{"p1", "p2"}, []string{"app"}, fanOut, 2, 1000, true, false)
+		resp := buildWorkloadLogsResponse([]string{"p1", "p2"}, []string{"app"}, fanOut, 2, 1000, true, false, false)
 
 		g.Expect(resp.Tagged).To(BeTrue())
+		g.Expect(resp.ContainerTagged).To(BeFalse())
 		g.Expect(resp.Total).To(Equal(2))
 		g.Expect(resp.Streamed).To(Equal(1))
 		g.Expect(resp.Partial).To(BeTrue())
@@ -352,7 +386,7 @@ func TestBuildWorkloadLogsResponse(t *testing.T) {
 		g := NewWithT(t)
 		targets := []logTarget{{pod: "p1", container: "app"}, {pod: "p2", container: "app"}}
 		fanOut := collectLogStreams(targets, []string{"2026-01-01T00:00:00Z a\n", "2026-01-01T00:00:01Z b\n"}, []error{nil, nil})
-		resp := buildWorkloadLogsResponse([]string{"p1", "p2"}, []string{"app"}, fanOut, 2, 1000, true, false)
+		resp := buildWorkloadLogsResponse([]string{"p1", "p2"}, []string{"app"}, fanOut, 2, 1000, true, false, false)
 
 		g.Expect(resp.Streamed).To(Equal(2))
 		g.Expect(resp.Partial).To(BeFalse())
@@ -365,11 +399,24 @@ func TestBuildWorkloadLogsResponse(t *testing.T) {
 		// was capped, so the response must still flag the result as partial.
 		targets := []logTarget{{pod: "p1", container: "app"}}
 		fanOut := collectLogStreams(targets, []string{"2026-01-01T00:00:00Z x\n"}, []error{nil})
-		resp := buildWorkloadLogsResponse([]string{"p1"}, []string{"app"}, fanOut, 1, 1000, true, true)
+		resp := buildWorkloadLogsResponse([]string{"p1"}, []string{"app"}, fanOut, 1, 1000, true, false, true)
 
 		g.Expect(resp.Streamed).To(Equal(1))
 		g.Expect(resp.Total).To(Equal(1))
 		g.Expect(resp.Partial).To(BeTrue())
+	})
+
+	t.Run("all-containers single pod tags the container, not the pod", func(t *testing.T) {
+		g := NewWithT(t)
+		// One pod, two containers: ContainerTagged is set and each line is prefixed
+		// with its container so the client scopes folding per container.
+		targets := []logTarget{{pod: "p1", container: "app"}, {pod: "p1", container: "envoy"}}
+		fanOut := collectLogStreams(targets, []string{"2026-01-01T00:00:00Z a\n", "2026-01-01T00:00:01Z e\n"}, []error{nil, nil})
+		resp := buildWorkloadLogsResponse([]string{"p1"}, []string{"app", "envoy"}, fanOut, 1, 1000, false, true, false)
+
+		g.Expect(resp.Tagged).To(BeFalse())
+		g.Expect(resp.ContainerTagged).To(BeTrue())
+		g.Expect(resp.Logs).To(Equal("app 2026-01-01T00:00:00Z a\nenvoy 2026-01-01T00:00:01Z e\n"))
 	})
 }
 

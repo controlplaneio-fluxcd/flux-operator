@@ -59,6 +59,30 @@ describe('tokenizeKV', () => {
     expect(pre).toBe('some leading words')
     expect(fields).toEqual([{ key: 'key', val: 'val', kind: 'str' }])
   })
+
+  it('keeps internal multi-space runs in a bare value and stops at the next key=', () => {
+    const { fields } = tokenizeKV('msg=word1    word2     word3 next=ok')
+    expect(fields).toEqual([
+      { key: 'msg', val: 'word1    word2     word3', kind: 'str' },
+      { key: 'next', val: 'ok', kind: 'str' }
+    ])
+  })
+
+  it('parses a long consecutive-space run in a bare value in linear time', () => {
+    // Pre-fix, readValue rescanned the whole space run at every space (O(m²)): this
+    // size took several seconds. Post-fix it jumps past the run, so it is linear and
+    // returns the value intact. The tight time bound is the regression guard.
+    const spaces = ' '.repeat(120000)
+    const input = `msg=start${spaces}end tail=ok`
+    const t0 = Date.now()
+    const { fields } = tokenizeKV(input)
+    const elapsed = Date.now() - t0
+    expect(fields).toHaveLength(2)
+    expect(fields[0].key).toBe('msg')
+    expect(fields[0].val).toBe(`start${spaces}end`)
+    expect(fields[1]).toEqual({ key: 'tail', val: 'ok', kind: 'str' })
+    expect(elapsed).toBeLessThan(1000)
+  })
 })
 
 describe('parseKlog', () => {

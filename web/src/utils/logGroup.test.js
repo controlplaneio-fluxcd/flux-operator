@@ -285,6 +285,176 @@ describe('groupEntries', () => {
   })
 })
 
+describe('groupEntries — unstructured bursts', () => {
+  // be builds a timestamped entry at a ms offset from a base, with an explicit
+  // `structured` flag (the viewer sets this from the format layer before grouping).
+  const T0 = Date.parse('2026-06-20T11:00:00.000Z')
+  const be = (text, offsetMs, structured, pod = '') => {
+    const iso = new Date(T0 + offsetMs).toISOString()
+    return { ...parseLogLine(`${iso} ${text}`, null), pod, podId: pod, structured }
+  }
+
+  it('groups a co-timestamped curl -v dump into one unstructured run', () => {
+    const dump = [
+      be('* Host kubernetes.default.svc.cluster.local:443 was resolved.', 0, false),
+      be('*   Trying 10.96.0.1:443...', 1, false),
+      be('> GET /healthz HTTP/2', 2, false),
+      be('< HTTP/2 200', 3, false),
+      be('* shutting down connection #0', 4, false),
+    ]
+    const groups = groupEntries(dump, true)
+    expect(groups).toHaveLength(1)
+    expect(groups[0].unstructuredRun).toBe(true)
+    expect(groups[0].isTrace).toBe(false)
+    expect(groups[0].lines).toHaveLength(5)
+    expect(groups[0].head.text).toBe('* Host kubernetes.default.svc.cluster.local:443 was resolved.')
+  })
+
+  it('does not group structured lines milliseconds apart', () => {
+    const lines = [
+      be('2026-06-20 10:03:22.644 [main] DEBUG com.x - a', 0, true),
+      be('2026-06-20 10:03:22.646 [main] DEBUG com.x - b', 2, true),
+      be('2026-06-20 10:03:22.648 [main] DEBUG com.x - c', 4, true),
+    ]
+    const groups = groupEntries(lines, true)
+    expect(groups).toHaveLength(3)
+    expect(groups.every(g => g.unstructuredRun === false)).toBe(true)
+  })
+
+  it('does not group unstructured lines spaced beyond the burst window', () => {
+    const lines = [be('* line one', 0, false), be('* line two', 500, false)]
+    expect(groupEntries(lines, true)).toHaveLength(2)
+  })
+
+  it('caps a run at the total span even when every gap is within the window', () => {
+    // A continuous plain stream, each line 200 ms after the last (< 250 ms window)
+    // but running past the 1000 ms span: the run closes at the span boundary and a
+    // fresh group starts, so a steady stream never coalesces into one giant group.
+    const lines = [0, 200, 400, 600, 800, 1000, 1200].map(ms => be('* tick', ms, false))
+    const groups = groupEntries(lines, true)
+    expect(groups).toHaveLength(2)
+    expect(groups[0].lines).toHaveLength(5)   // offsets 0..800 (< 1000 ms span)
+    expect(groups[1].lines).toHaveLength(2)   // offsets 1000, 1200 (new run)
+  })
+
+  it('opens a trace (not a run) for a structure-less trace head', () => {
+    const lines = [
+      be('Error: boom from c', 0, false),
+      be('    at c (eval:1:2)', 1, false),
+      be('    at b (eval:3:4)', 2, false),
+    ]
+    const groups = groupEntries(lines, true)
+    expect(groups).toHaveLength(1)
+    expect(groups[0].isTrace).toBe(true)
+    expect(groups[0].unstructuredRun).toBe(false)
+    expect(groups[0].lines).toHaveLength(3)
+  })
+
+  it('closes the run on a lone structured line mid-burst (curl JSON body split)', () => {
+    const lines = [
+      be('* request begin', 0, false),
+      be('> GET /api/info', 1, false),
+      be('{"hostname":"frontend","version":"6.14"}', 2, true),  // valid JSON → structured
+      be('* request end', 3, false),
+    ]
+    const groups = groupEntries(lines, true)
+    expect(groups).toHaveLength(3)
+    expect(groups[0].lines).toHaveLength(2)   // pre-JSON run
+    expect(groups[1].lines).toHaveLength(1)   // the structured JSON line
+    expect(groups[1].unstructuredRun).toBe(false)
+    expect(groups[2].lines).toHaveLength(1)   // post-JSON run
+  })
+
+  it('never groups a burst across pods', () => {
+    const lines = [be('* a one', 0, false, 'pod-a'), be('* b one', 1, false, 'pod-b')]
+    expect(groupEntries(lines, true)).toHaveLength(2)
+  })
+
+  it('does not group when disabled', () => {
+    const lines = [be('* one', 0, false), be('* two', 1, false), be('* three', 2, false)]
+    const groups = groupEntries(lines, false)
+    expect(groups).toHaveLength(3)
+    expect(groups.every(g => g.unstructuredRun === false)).toBe(true)
+  })
+})
+
+describe('groupEntries — container scoping', () => {
+  // ce builds a timestamped entry tagged with a container (and optional pod), via
+  // the production parser, mirroring what the viewer builds in the all-containers
+  // view where each line carries its container of origin.
+  let cseq = 0
+  const ce = (text, container, pod = '') => {
+    const ts = `2026-06-20T12:00:${String(cseq++ % 60).padStart(2, '0')}.000000000Z`
+    return { ...parseLogLine(`${ts} ${text}`, null), container, pod, podId: pod }
+  }
+
+  it('folds a trace within one container', () => {
+    const groups = groupEntries([
+      ce('panic: boom', 'app'),
+      ce('goroutine 1 [running]:', 'app'),
+      ce('main.main()', 'app'),
+    ], true)
+    expect(groups).toHaveLength(1)
+    expect(groups[0].isTrace).toBe(true)
+    expect(groups[0].lines).toHaveLength(3)
+    expect(groups[0].container).toBe('app')
+  })
+
+  it('does not fold a continuation from a different container into an open trace', () => {
+    // app opens a Go panic; envoy emits a co-timestamped frame-shaped line — the
+    // container guard keeps it out of app's trace so two interleaved containers
+    // never merge.
+    const groups = groupEntries([
+      ce('panic: boom', 'app'),
+      ce('\t/main.go:2', 'envoy'),
+    ], true)
+    expect(groups).toHaveLength(2)
+    expect(groups[0].lines).toHaveLength(1)
+    expect(groups[1].container).toBe('envoy')
+  })
+
+  it('never merges containers across two interleaved traces', () => {
+    // app and side crash together; their frames interleave on the wire. No resulting
+    // group may mix containers.
+    const groups = groupEntries([
+      ce('panic: app boom', 'app'),
+      ce('Traceback (most recent call last):', 'side'),
+      ce('  File "x.py", line 1', 'side'),
+      ce('\tmain.main()', 'app'),
+    ], true)
+    for (const g of groups) {
+      const containers = new Set(g.lines.map(l => l.container).filter(Boolean))
+      expect(containers.size).toBeLessThanOrEqual(1)
+    }
+  })
+
+  it('an orphan continuation (no container) inherits its predecessor and folds in', () => {
+    const groups = groupEntries([
+      ce('panic: boom', 'app'),
+      { ...parseLogLine('  at frame', null), container: '', pod: '' },
+    ], true)
+    expect(groups).toHaveLength(1)
+    expect(groups[0].lines).toHaveLength(2)
+  })
+
+  it('does not group an unstructured burst across containers', () => {
+    // Two structure-less lines 1 ms apart (within the burst window) but from
+    // different containers must not join one run.
+    const T0 = Date.parse('2026-06-20T12:30:00.000Z')
+    const bc = (text, offsetMs, container) => ({
+      ...parseLogLine(`${new Date(T0 + offsetMs).toISOString()} ${text}`, null),
+      container, pod: '', podId: '', structured: false,
+    })
+    const groups = groupEntries([
+      bc('* app request', 0, 'app'),
+      bc('* envoy upstream', 1, 'envoy'),
+    ], true)
+    expect(groups).toHaveLength(2)
+    expect(groups[0].container).toBe('app')
+    expect(groups[1].container).toBe('envoy')
+  })
+})
+
 describe('parseLogLine', () => {
   it('preserves a frame\'s leading tab after stripping the timestamp', () => {
     const entry = parseLogLine('2026-06-20T10:00:00.000000000Z \t/m.go:2', null)
@@ -302,5 +472,40 @@ describe('parseLogLine', () => {
     const cont = parseLogLine('  some continuation', null)
     expect(cont.ts).toBe('')
     expect(cont.text).toBe('  some continuation')
+  })
+
+  it('peels a container tag when a real timestamp follows', () => {
+    const cset = new Set(['app', 'envoy'])
+    const entry = parseLogLine('app 2026-06-20T10:00:00.000000000Z hello', null, cset)
+    expect(entry.container).toBe('app')
+    expect(entry.ts).toBe('2026-06-20T10:00:00.000000000Z')
+    expect(entry.text).toBe('hello')
+  })
+
+  it('peels pod then container in order in the combined view', () => {
+    const pset = new Set(['frontend-abc-x1'])
+    const cset = new Set(['app'])
+    const entry = parseLogLine('frontend-abc-x1 app 2026-06-20T10:00:00.000000000Z hello', pset, cset)
+    expect(entry.pod).toBe('frontend-abc-x1')
+    expect(entry.podId).toBe('x1')
+    expect(entry.container).toBe('app')
+    expect(entry.text).toBe('hello')
+  })
+
+  it('does not treat a name-shaped token as a container tag without a following timestamp', () => {
+    const cset = new Set(['app'])
+    // A message that merely begins with a known container name and a date-shaped
+    // (but invalid) token keeps its full text and no container.
+    const entry = parseLogLine('app 2026-13-45Tnope started', null, cset)
+    expect(entry.container).toBe('')
+    expect(entry.ts).toBe('')
+    expect(entry.text).toBe('app 2026-13-45Tnope started')
+  })
+
+  it('leaves a container-shaped continuation line untagged', () => {
+    const cset = new Set(['app'])
+    const entry = parseLogLine('  at app (x:1)', null, cset)
+    expect(entry.container).toBe('')
+    expect(entry.text).toBe('  at app (x:1)')
   })
 })

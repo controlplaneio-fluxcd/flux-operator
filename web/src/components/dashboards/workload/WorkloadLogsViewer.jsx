@@ -89,56 +89,66 @@ function mergeLogs(prev, incoming) {
 const TIMESTAMP_PREFIX = /^(\d{4}-\d{2}-\d{2}T\S+) /
 
 // entryTimestamp returns the RFC3339 timestamp heading a log entry, or null for a
-// continuation line (stack frame) that carries none. A head is "<ts> msg" (single
-// pod) or "<pod> <ts> msg" (all-pods); the ts must be a real instant, not merely
-// date-shaped, so a frame beginning with a word and date-like token isn't a head.
+// continuation line (stack frame) that carries none. A head is "<ts> msg" or
+// carries up to two leading origin tags before the ts ("<pod> <ts> msg", "<container>
+// <ts> msg", or "<pod> <container> <ts> msg"), so the ts may sit after 0, 1, or 2
+// tokens. The ts must be a real instant, not merely date-shaped, so a frame
+// beginning with words and a date-like token isn't a head. The two-token cap bounds
+// misdetection; an indented continuation breaks on its leading space.
 function entryTimestamp(line) {
-  const m = line.match(TIMESTAMP_PREFIX)
-  if (m && !Number.isNaN(Date.parse(m[1]))) return m[1]
-  const sp = line.indexOf(' ')
-  if (sp > 0) {
-    const am = line.slice(sp + 1).match(TIMESTAMP_PREFIX)
-    if (am && !Number.isNaN(Date.parse(am[1]))) return am[1]
+  let s = line
+  for (let i = 0; i < 3; i++) {
+    const m = s.match(TIMESTAMP_PREFIX)
+    if (m && !Number.isNaN(Date.parse(m[1]))) return m[1]
+    const sp = s.indexOf(' ')
+    if (sp <= 0) break
+    s = s.slice(sp + 1)
   }
   return null
 }
 
 /**
- * parseLogLine - parse one raw payload line into a log entry. In the all-pods
- * (tagged) view a line is "<pod> <ts> <msg>"; the leading token is a pod tag only
- * when it is a requested pod AND the next token is a real timestamp (so a message
- * starting "<word> <date>" isn't mistaken for one). The timestamp and ANSI are
- * stripped and the level detected; a continuation line (no ts) keeps its
- * indentation (see TIMESTAMP_PREFIX). Exported so tests hit the real parse path.
+ * parseLogLine - parse one raw payload line into a log entry. A multi-stream line
+ * carries its origin tags before the timestamp: "<pod> <ts> <msg>" (all-pods),
+ * "<container> <ts> <msg>" (all-containers, one pod), or "<pod> <container> <ts>
+ * <msg>" (both). Each tag is peeled only when its token is one of the requested
+ * names AND a real timestamp follows the peels (so a message starting "<word>
+ * <date>" isn't mistaken for a tag, and a continuation line keeps its full text).
+ * The timestamp and ANSI are then stripped and the level detected; a continuation
+ * line (no ts) keeps its indentation (see TIMESTAMP_PREFIX). Exported so tests hit
+ * the real parse path.
  *
  * @param {string} line - One raw payload line (CR already stripped, non-empty)
- * @param {Set<string>|null} podSet - Requested pods in the tagged view, else null
- * @returns {{ts: string, tsMs: number, text: string, level: string, pod: string, podId: string}}
+ * @param {Set<string>|null} podSet - Requested pods in the pod-tagged view, else null
+ * @param {Set<string>|null} containerSet - Requested containers in the container-tagged view, else null
+ * @returns {{ts: string, tsMs: number, text: string, level: string, pod: string, podId: string, container: string}}
  */
-export function parseLogLine(line, podSet) {
-  let rest = line
-  let pod = ''
-  if (podSet) {
-    const sp = line.indexOf(' ')
-    if (sp > 0) {
-      const first = line.slice(0, sp)
-      const after = line.slice(sp + 1)
-      // Require a real timestamp, not a date-shaped token, so a message
-      // beginning "<known-pod> 2026-13-45T.." isn't mistaken for a tag.
-      const am = after.match(TIMESTAMP_PREFIX)
-      if (podSet.has(first) && am && !Number.isNaN(Date.parse(am[1]))) {
-        pod = first
-        rest = after
-      }
-    }
+export function parseLogLine(line, podSet, containerSet) {
+  // Peel pod then container, but commit the peel only if a real timestamp follows:
+  // a name-shaped first token is a tag only on an actual entry head.
+  const peel = (s, set) => {
+    const sp = s.indexOf(' ')
+    if (sp > 0 && set.has(s.slice(0, sp))) return [s.slice(0, sp), s.slice(sp + 1)]
+    return null
   }
+  let cursor = line
+  let pod = ''
+  let container = ''
+  if (podSet) { const r = peel(cursor, podSet); if (r) { pod = r[0]; cursor = r[1] } }
+  if (containerSet) { const r = peel(cursor, containerSet); if (r) { container = r[0]; cursor = r[1] } }
+  const am = cursor.match(TIMESTAMP_PREFIX)
+  // Require a real timestamp, not a date-shaped token, after the peels; otherwise
+  // the tokens weren't tags — restore the original line and drop the peeled names.
+  const tagged = !!am && !Number.isNaN(Date.parse(am[1]))
+  const rest = tagged ? cursor : line
+  if (!tagged) { pod = ''; container = '' }
   const m = rest.match(TIMESTAMP_PREFIX)
   const tsMs = m ? Date.parse(m[1]) : NaN
   const hasTs = !Number.isNaN(tsMs)
   const ts = hasTs ? m[1] : ''
   const text = stripAnsi(hasTs ? rest.slice(m[0].length) : rest)
   const podId = pod ? pod.slice(pod.lastIndexOf('-') + 1) : ''
-  return { ts, tsMs, text, level: detectLevel(text), pod, podId }
+  return { ts, tsMs, text, level: detectLevel(text), pod, podId, container }
 }
 
 // Shared styling for the toolbar controls. Selects deliberately omit a chevron
@@ -360,10 +370,18 @@ function LogSeparator({ entry, level, isLatest }) {
 const EXPANDED_LINE_CAP = 500
 
 /**
- * LogGroup - one logical log entry: a single line, or a folded trace that starts
- * collapsed (head + frame count), expands on click, and caps a long expansion with
- * a "show all" link. A headless group (head === null, a buffer opened mid-trace)
- * skips the separator pill and renders its lines through the same path.
+ * LogGroup - one logical log entry. Two multi-line shapes render differently:
+ *
+ *  - **stack trace** (`group.isTrace`) is *folded*: head visible, frames hidden
+ *    behind a click-to-expand control that caps a long expansion with a "show all"
+ *    link, so a multi-thousand-frame trace doesn't render at once.
+ *  - **unstructured burst** is *grouped but not folded*: every line renders under
+ *    the one timestamp pill, nothing hidden — a curl -v dump reads as a single
+ *    timestamped block.
+ *
+ * A single-line entry renders just its head. A headless group (head === null, a
+ * buffer opened mid-trace) skips the separator pill and renders its lines through
+ * the same path.
  *
  * @param {Object} props
  * @param {Object} props.group - A display group: head, formatted lines, and metadata
@@ -375,7 +393,9 @@ function LogGroup({ group, formatted, isLatest }) {
   const [showAll, setShowAll] = useState(false)
   const lines = group.lines
 
-  const folded = lines.length > 1
+  const multi = lines.length > 1
+  // A trace folds (head + click-to-expand); a burst groups without folding.
+  const foldable = group.isTrace && multi
   // Frames exclude folded blank lines (a Go panic's blank, a trailing Node blank)
   // so the "N frames" count isn't inflated.
   const frameCount = lines.slice(1).filter(l => l.text !== '').length
@@ -386,7 +406,7 @@ function LogGroup({ group, formatted, isLatest }) {
     <>
       {formatted && group.head && <LogSeparator entry={group.head} level={group.level} isLatest={isLatest} />}
       <LogLineBody entry={lines[0]} />
-      {folded && (
+      {foldable && (
         <>
           <button
             type="button"
@@ -396,7 +416,7 @@ function LogGroup({ group, formatted, isLatest }) {
             aria-expanded={expanded}
           >
             <span aria-hidden="true">{expanded ? '▾' : '▸'}</span>
-            {group.isTrace && frameCount > 0
+            {frameCount > 0
               ? `${frameCount} frame${frameCount === 1 ? '' : 's'}`
               : `+${hiddenCount} line${hiddenCount === 1 ? '' : 's'}`}
           </button>
@@ -417,6 +437,8 @@ function LogGroup({ group, formatted, isLatest }) {
           )}
         </>
       )}
+      {/* Burst: not folded — render every remaining line under the one pill. */}
+      {!group.isTrace && multi && lines.slice(1).map((l, j) => <LogLineBody key={j} entry={l} />)}
     </>
   )
 }
@@ -531,9 +553,6 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
   const [filter, setFilter] = useState('')
   const [levelFilter, setLevelFilter] = useState('all')
   const [formatted, setFormatted] = useState(true)
-  // Fold recognized multi-line stack traces under their head into one collapsible
-  // entry. On by default; a formatted-mode-only affordance (raw renders flat).
-  const [grouped, setGrouped] = useState(true)
   const [fullScreen, setFullScreen] = useState(false)
   const [logs, setLogs] = useState('')
   const [loading, setLoading] = useState(false)
@@ -542,9 +561,12 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
   // stays visible. The full-pane `error` is used only when there is no buffer.
   const [followError, setFollowError] = useState(null)
   const [flashLatest, setFlashLatest] = useState(false)
-  // Whether the current buffer's lines are pod-tagged (set from the response, so
-  // the parser never has to guess the wire format). Reset with the buffer.
+  // Whether the current buffer's lines are pod-tagged and/or container-tagged (set
+  // from the response, so the parser never has to guess the wire format). Pod
+  // tagging marks the all-pods view, container tagging the all-containers view;
+  // both can be set in the combined view. Reset with the buffer.
   const [tagged, setTagged] = useState(false)
+  const [containerTagged, setContainerTagged] = useState(false)
   // Coverage of the "All pods" view: { streamed, total, forbidden } when the
   // response did not cover every requested pod, else null.
   const [partial, setPartial] = useState(null)
@@ -572,7 +594,7 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
   // poll fired after the reset shares its generation, so the guard alone misses it).
   const resettingRef = useRef(false)
   // Memoizes formatted output per raw line text, so appends format only the new
-  // lines instead of the whole buffer each poll. See displayGroups for pruning.
+  // lines instead of the whole buffer each poll. See formattedLines for pruning.
   const formatCacheRef = useRef(new Map())
 
   // Pod dropdown options: "All pods" leads, then each pod.
@@ -684,6 +706,7 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
       // pods it covered, so the parser and footer don't guess. Refreshed every fetch
       // (a pod becoming readable can clear a partial result).
       setTagged(!!resp?.tagged)
+      setContainerTagged(!!resp?.containerTagged)
       setPartial(resp?.partial ? { streamed: resp.streamed || 0, total: resp.total || 0, forbidden: resp.forbidden || 0 } : null)
       setError(null)
       setFollowError(null)
@@ -758,9 +781,10 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
   // detected. Only re-runs when the payload (or tagging regime) changes.
   const baseLines = useMemo(() => {
     const podSet = tagged ? new Set(reqPodsStr ? reqPodsStr.split(',') : []) : null
+    const containerSet = containerTagged ? new Set(reqContainersStr ? reqContainersStr.split(',') : []) : null
     // Strip a trailing CR so a CRLF stream doesn't leak `\r` into the text, fields,
     // or filter. (Download uses the raw payload, so it stays byte-verbatim.)
-    const entries = logs.split('\n').map(line => line.replace(/\r$/, '')).filter(line => line.length > 0).map(line => parseLogLine(line, podSet))
+    const entries = logs.split('\n').map(line => line.replace(/\r$/, '')).filter(line => line.length > 0).map(line => parseLogLine(line, podSet, containerSet))
 
     // In all-pods each pod advances its own `since` cursor, so a lagging pod can
     // deliver a line older than another's buffered tail; in arrival order the buffer
@@ -781,7 +805,7 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
       return ta - tb
     })
     return groups.flat()
-  }, [logs, tagged, reqPodsStr])
+  }, [logs, tagged, reqPodsStr, containerTagged, reqContainersStr])
 
   // Track the follow cursors from the buffer so the next poll requests only newer
   // entries: lastTsRef is the single-pod high-watermark (sinceTime), cursorsRef the
@@ -803,29 +827,79 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
     cursorsRef.current = cursors
   }, [baseLines])
 
-  // Grouping is a formatted-mode affordance: raw mode renders every line flat, so
-  // it is bypassed when not formatted.
-  const grouping = grouped && formatted
+  // Grouping is a formatted-mode affordance: raw mode renders every line flat, so it
+  // is bypassed when not formatted. There is no separate toggle — a trace starts
+  // folded (click to expand), a burst renders all its lines under one timestamp pill.
+  const grouping = formatted
 
-  // Fold recognized stack traces into one collapsible entry each (off → one group
-  // per entry, keeping the chain uniform). In the all-pods view fold per pod then
-  // order groups by head ts: frames are timestamped, so two pods crashing together
-  // interleave frame-by-frame and folding the flat list would fragment each trace.
-  // A ts==='' orphan inherits the previous line's pod, so it buckets with its head.
+  // Format each base line once, before grouping, so a line's `fmt` descriptor and
+  // its `structured` flag (whether the format layer recognizes it) are known when
+  // groupEntries decides whether to join an unstructured burst. In formatted mode a
+  // line gains { code, fmt, structured }; raw mode passes baseLines through (no fmt,
+  // structured irrelevant — grouping is off, LogLineBody falls through to plain).
+  //
+  // Cached by raw line text (formatCacheRef): an append reuses cached results and
+  // only formats the new lines. The cache is rebuilt over the whole base buffer
+  // (≤ MAX_BUFFER_LINES), so it can't outgrow it; raw mode leaves it untouched so it
+  // survives a round-trip back to formatted.
+  const formattedLines = useMemo(() => {
+    if (!formatted) return baseLines
+    const prev = formatCacheRef.current
+    const next = new Map()
+    const result = baseLines.map(entry => {
+      // The cache key carries the head flag since the same text can appear as both a
+      // head and a continuation line. JSON runs on every line; the klog/zap/logfmt
+      // cascade only on a timestamped one (a frame's shape falls through to plain).
+      const key = `${entry.ts ? 1 : 0}\n${entry.text}`
+      let f = next.get(key) || prev.get(key)
+      if (!f) {
+        const json = highlightJson(entry.text)
+        const d = json || (entry.ts ? decorateLine(entry.text, entry.level) : { kind: 'plain' })
+        // `structured` (whether the burst grouper treats the line as a real log
+        // entry vs structure-less noise) is true when the format layer decorates it,
+        // OR when a level was detected even though decorateLine fell through to
+        // plain. The level catch closes the decorateLine gap: a date-less console
+        // line like `[main] DEBUG com.x - msg` renders plain (no leading digit for
+        // parseJava) but detectLevel finds `debug`, so it is not swept into a burst.
+        // A curl -v dump carries no level (default info), so it still groups.
+        const leveled = entry.level !== DEFAULT_LEVEL
+        f = d.kind === 'plain'
+          ? { code: true, fmt: null, structured: leveled }
+          : { code: false, fmt: d, structured: true }
+      }
+      next.set(key, f)
+      return { ...entry, ...f }
+    })
+    formatCacheRef.current = next
+    return result
+  }, [baseLines, formatted])
+
+  // Group recognized stack traces and unstructured bursts, one run per group (off →
+  // one group per entry, keeping the chain uniform). When the stream is tagged (more
+  // than one pod and/or container), partition by origin (pod + container) then order
+  // groups by head ts: every line is timestamped, so two streams crashing together
+  // interleave frame-by-frame and grouping the flat list would fragment each run. The
+  // partition keeps each origin's trace intact; groupEntries' samePod/sameContainer
+  // guard is then a backstop. A ts==='' orphan inherits the previous line's origin,
+  // so it buckets with its head. A single untagged stream skips the partition.
   const groups = useMemo(() => {
-    if (!tagged) return groupEntries(baseLines, grouping)
-    const byPod = new Map()
+    if (!tagged && !containerTagged) return groupEntries(formattedLines, grouping)
+    const byOrigin = new Map()
     let lastPod = ''
-    for (const e of baseLines) {
+    let lastContainer = ''
+    for (const e of formattedLines) {
       const pod = e.pod || lastPod
+      const container = e.container || lastContainer
       if (e.pod) lastPod = e.pod
-      let bucket = byPod.get(pod)
-      if (!bucket) { bucket = []; byPod.set(pod, bucket) }
+      if (e.container) lastContainer = e.container
+      const origin = `${pod}\n${container}`
+      let bucket = byOrigin.get(origin)
+      if (!bucket) { bucket = []; byOrigin.set(origin, bucket) }
       bucket.push(e)
     }
     // A group with no timestamped head inherits the previous group's ts so it stays
     // adjacent instead of floating to the front; a leading orphan keeps NaN (first).
-    const ordered = [...byPod.values()].flatMap(es => {
+    const ordered = [...byOrigin.values()].flatMap(es => {
       const gs = groupEntries(es, grouping)
       let sortTs = NaN
       for (const g of gs) {
@@ -839,7 +913,7 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
       if (Number.isNaN(b.sortTs)) return 1
       return a.sortTs - b.sortTs
     })
-  }, [baseLines, tagged, grouping])
+  }, [formattedLines, tagged, containerTagged, grouping])
 
   // Substring filter over each group's whole block. Positive: keep if any line has
   // the needle (a match keeps the whole trace). "!needle": keep only if no line has
@@ -863,50 +937,12 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
   }, [containsGroups])
 
   // Apply the level filter on top of the contains filter (exact group-level match).
+  // Lines already carry their fmt/code from formattedLines, so this is the final set
+  // the render maps — no separate formatting pass.
   const logGroups = useMemo(() => {
     if (levelFilter === 'all') return containsGroups
     return containsGroups.filter(g => g.level === levelFilter)
   }, [containsGroups, levelFilter])
-
-  // Format every line of every kept group. In formatted mode each line carries a
-  // `fmt` descriptor of colored spans: JSON pretty-printed (`kind: 'json'`),
-  // structured loggers reflowed to `block`/`spans`, unmatched lines plain wrapping
-  // text (`code: true`). Raw mode renders unstyled (`code: false`).
-  //
-  // Formatted output is cached by raw line text (formatCacheRef): an append reuses
-  // cached results and only formats the new lines, not the whole buffer each poll.
-  // The cache is rebuilt to the shown lines so it can't outgrow the buffer; raw mode
-  // leaves it untouched so it survives a round-trip back to formatted.
-  const displayGroups = useMemo(() => {
-    // Raw mode renders unstyled: each line has no fmt/code, so LogLineBody falls
-    // through to its plain branch. No per-line transform is needed, so the groups
-    // pass straight through (avoids spread-copying every line each poll).
-    if (!formatted) return logGroups
-    const prev = formatCacheRef.current
-    const next = new Map()
-    const formatLine = (entry) => {
-      // JSON runs on every line; the klog/zap/logfmt cascade only on a timestamped
-      // one. A CRI frame has a ts so it reaches the cascade, but its shape (leading
-      // indent, no anchor) falls through to plain. The cache key carries the head
-      // flag since the same text can appear as both a head and a continuation.
-      const key = `${entry.ts ? 1 : 0}\n${entry.text}`
-      let formattedEntry = next.get(key) || prev.get(key)
-      if (!formattedEntry) {
-        // json, then klog/zap/logfmt, then plain. json/block/spans render as
-        // decorated rows; plain keeps a wrapping text div.
-        const json = highlightJson(entry.text)
-        const d = json || (entry.ts ? decorateLine(entry.text, entry.level) : { kind: 'plain' })
-        formattedEntry = d.kind === 'plain'
-          ? { text: entry.text, code: true, fmt: null }
-          : { text: entry.text, code: false, fmt: d }
-      }
-      next.set(key, formattedEntry)
-      return { ...entry, ...formattedEntry }
-    }
-    const result = logGroups.map(g => ({ ...g, lines: g.lines.map(formatLine) }))
-    formatCacheRef.current = next
-    return result
-  }, [logGroups, formatted])
 
   // Briefly highlight the most recent visible entry when new entries arrive (e.g.
   // while following). Gated on two conditions so it only signals fresh logs: the raw
@@ -918,7 +954,7 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
   useEffect(() => {
     const prevLogs = prevLogsRef.current
     prevLogsRef.current = logs
-    const lastGroup = displayGroups.length > 0 ? displayGroups[displayGroups.length - 1] : null
+    const lastGroup = logGroups.length > 0 ? logGroups[logGroups.length - 1] : null
     const latest = lastGroup ? lastGroup.lines[lastGroup.lines.length - 1] : null
     const latestKey = latest ? `${latest.ts}\n${latest.text}` : null
     const prevKey = prevLatestKeyRef.current
@@ -928,7 +964,7 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
     setFlashLatest(true)
     const id = setTimeout(() => setFlashLatest(false), HIGHLIGHT_DURATION)
     return () => clearTimeout(id)
-  }, [logs, displayGroups])
+  }, [logs, logGroups])
 
   // Track whether the view is pinned to the bottom. Updated on every user
   // scroll so the auto-scroll below only follows new entries when the user is
@@ -955,7 +991,7 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
   useEffect(() => {
     if (!bodyRef.current || !atBottomRef.current) return
     bodyRef.current.scrollTop = bodyRef.current.scrollHeight
-  }, [displayGroups, followError])
+  }, [logGroups, followError])
 
   // Download the current logs as a text file, named after the pod for a single
   // pod or the workload for the all-pods view.
@@ -1031,22 +1067,6 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
             >
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1m8-18h1a2 2 0 0 1 2 2v5c0 1.1.9 2 2 2a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2h-1" />
-              </svg>
-            </ToggleButton>
-
-            {/* Fold a recognized multi-line trace into one collapsible entry.
-                Formatted mode only, so the toggle is disabled in raw mode rather
-                than silently flipping hidden state with no visible effect. */}
-            <ToggleButton
-              active={grouping}
-              onClick={() => setGrouped(v => !v)}
-              label="Group stack traces"
-              title={formatted ? 'Fold multi-line stack traces into collapsible entries' : 'Available in formatted mode'}
-              testid="logs-group-toggle"
-              disabled={!formatted}
-            >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.75 5.25h16.5M3.75 9.75h16.5M7.5 14.25h12.75M7.5 18.75h12.75M3.75 14.25h.008v.008H3.75v-.008zm0 4.5h.008v.008H3.75v-.008z" />
               </svg>
             </ToggleButton>
           </div>
@@ -1160,17 +1180,18 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
             </div>
           ) : loading && !logs ? (
             <p class="p-3 text-xs text-gray-500 dark:text-gray-400" data-testid="logs-loading">Loading logs...</p>
-          ) : displayGroups.length > 0 || followError || podsGone ? (
+          ) : logGroups.length > 0 || followError || podsGone ? (
             <div class="pb-2" data-testid="logs-content">
-              {displayGroups.map((group, i) => {
+              {logGroups.map((group, i) => {
                 // Content-identity key, not index: front-eviction and the all-pods
                 // re-sort shift indices, which would bleed a folded group's expand
-                // state onto another. Head text disambiguates a shared pod+ts; a
-                // headless run falls back to the index.
-                const key = group.head ? `${group.pod} ${group.ts} ${group.head.text}` : `orphan ${i}`
+                // state onto another. Container + head text disambiguate a shared
+                // pod+ts (two containers in one pod can emit the same line at the
+                // same instant); a headless run falls back to the index.
+                const key = group.head ? `${group.pod} ${group.container} ${group.ts} ${group.head.text}` : `orphan ${i}`
                 // Raw mode strips styling: the highlight on the freshly appended
                 // entry only fires in formatted mode.
-                const isLatest = formatted && flashLatest && i === displayGroups.length - 1
+                const isLatest = formatted && flashLatest && i === logGroups.length - 1
                 return (
                   <LogGroup
                     key={key}

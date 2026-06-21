@@ -76,6 +76,13 @@ type WorkloadLogsResponse struct {
 	// view (more than one pod streamed); absent for single-pod responses.
 	Tagged bool `json:"tagged,omitempty"`
 
+	// ContainerTagged reports whether each timestamped line in Logs is prefixed
+	// with its container of origin, after the optional pod tag ("<pod> <container>
+	// <timestamp> <message>", or "<container> <timestamp> <message>" for a single
+	// pod). Set only for the all-containers view (more than one container
+	// streamed), so the client can scope multi-line folding per container.
+	ContainerTagged bool `json:"containerTagged,omitempty"`
+
 	// Total is the number of distinct pods the client requested. Set only for the
 	// multi-stream (all-pods/all-containers) path.
 	Total int `json:"total,omitempty"`
@@ -249,11 +256,12 @@ type logTarget struct {
 }
 
 // logStream is one source blob in the fan-out: the raw timestamped log payload
-// of a single (pod, container) target plus the pod it came from, so the merge
-// can tag each line with its origin in the all-pods view.
+// of a single (pod, container) target plus the pod and container it came from, so
+// the merge can tag each line with its origin in the all-pods/all-containers view.
 type logStream struct {
-	pod  string
-	blob string
+	pod       string
+	container string
+	blob      string
 }
 
 // logEntry is one record used when interleaving multiple streams: a line
@@ -261,11 +269,12 @@ type logStream struct {
 // continuation lines that lack their own timestamp (e.g. stack-trace frames).
 // The parsed timestamp is the sort key; text retains the original line(s),
 // including the timestamp prefix, since the frontend strips it for display. pod
-// records the originating pod so the merge can prefix the line in tagged mode.
+// and container record the origin so the merge can prefix the line in tagged mode.
 type logEntry struct {
-	ts   time.Time
-	text string
-	pod  string
+	ts        time.Time
+	text      string
+	pod       string
+	container string
 }
 
 // parseLogTimestamp parses the leading RFC3339 timestamp token kubelet prepends
@@ -284,25 +293,25 @@ func parseLogTimestamp(line string) (time.Time, bool) {
 }
 
 // parseLogEntries splits a timestamped log payload into entries, stamping each
-// with pod. Each entry begins at a line whose first token parses as an RFC3339
-// timestamp and absorbs subsequent lines without such a prefix, so multi-line
-// records (stack traces) stay intact and ordered. A continuation line with no
-// preceding entry becomes its own zero-timestamped entry, which sorts to the
-// front.
-func parseLogEntries(blob, pod string) []logEntry {
+// with pod and container. Each entry begins at a line whose first token parses as
+// an RFC3339 timestamp and absorbs subsequent lines without such a prefix, so
+// multi-line records (stack traces) stay intact and ordered. A continuation line
+// with no preceding entry becomes its own zero-timestamped entry, which sorts to
+// the front.
+func parseLogEntries(blob, pod, container string) []logEntry {
 	var entries []logEntry
 	for line := range strings.SplitSeq(blob, "\n") {
 		if line == "" {
 			continue
 		}
 		if ts, ok := parseLogTimestamp(line); ok {
-			entries = append(entries, logEntry{ts: ts, text: line, pod: pod})
+			entries = append(entries, logEntry{ts: ts, text: line, pod: pod, container: container})
 			continue
 		}
 		if n := len(entries); n > 0 {
 			entries[n-1].text += "\n" + line
 		} else {
-			entries = append(entries, logEntry{text: line, pod: pod})
+			entries = append(entries, logEntry{text: line, pod: pod, container: container})
 		}
 	}
 	return entries
@@ -314,15 +323,18 @@ func parseLogEntries(blob, pod string) []logEntry {
 // the newest tailLines entries, and finally to the newest maxLogBytes bytes on a
 // line boundary so the payload stays bounded.
 //
-// When tagPod is set, each entry that carries a timestamp is prefixed with its
-// pod of origin ("<pod> <timestamp> <message>") so the client can attribute the
-// line; zero-timestamped orphan entries are left untagged so every tagged line
-// is uniformly "<pod> <timestamp> ..." and parses unambiguously. With tagPod
-// false the output is byte-for-byte the original single-pod merge.
-func mergeLogStreams(streams []logStream, tailLines int, tagPod bool) string {
+// Each entry that carries a timestamp is prefixed with its origin tags, in
+// pod-then-container order, for whichever dimensions fanned out: tagPod writes the
+// pod, tagContainer the container ("<pod> <container> <timestamp> <message>", or
+// just one token when only one dimension is tagged), so the client can attribute
+// the line and scope multi-line folding. Zero-timestamped orphan entries are left
+// untagged so every tagged line is uniformly "<tags...> <timestamp> ..." and
+// parses unambiguously. With both flags false the output is byte-for-byte the
+// original single-pod merge.
+func mergeLogStreams(streams []logStream, tailLines int, tagPod, tagContainer bool) string {
 	var entries []logEntry
 	for _, s := range streams {
-		entries = append(entries, parseLogEntries(s.blob, s.pod)...)
+		entries = append(entries, parseLogEntries(s.blob, s.pod, s.container)...)
 	}
 	sort.SliceStable(entries, func(i, j int) bool {
 		return entries[i].ts.Before(entries[j].ts)
@@ -332,9 +344,15 @@ func mergeLogStreams(streams []logStream, tailLines int, tagPod bool) string {
 	}
 	var sb strings.Builder
 	for _, e := range entries {
-		if tagPod && !e.ts.IsZero() {
-			sb.WriteString(e.pod)
-			sb.WriteByte(' ')
+		if !e.ts.IsZero() {
+			if tagPod {
+				sb.WriteString(e.pod)
+				sb.WriteByte(' ')
+			}
+			if tagContainer {
+				sb.WriteString(e.container)
+				sb.WriteByte(' ')
+			}
 		}
 		sb.WriteString(e.text)
 		sb.WriteByte('\n')
@@ -400,7 +418,7 @@ func collectLogStreams(targets []logTarget, logs []string, errs []error) logFanO
 			}
 			continue
 		}
-		out.streams = append(out.streams, logStream{pod: targets[i].pod, blob: logs[i]})
+		out.streams = append(out.streams, logStream{pod: targets[i].pod, container: targets[i].container, blob: logs[i]})
 		out.streamedSet[targets[i].pod] = struct{}{}
 	}
 	out.forbidden = len(forbiddenPods)
@@ -570,10 +588,13 @@ func (h *Handler) WorkloadLogsHandler(w http.ResponseWriter, req *http.Request) 
 	}
 	containers, containersTruncated := dedupeNames(containers, maxLogContainers)
 
-	// Tagging is decided from the client's request (more than one pod), before the
-	// stream cap, so the client and server agree on the wire format regardless of
-	// which streams survive truncation.
+	// Tagging is decided from the client's request, before the stream cap, so the
+	// client and server agree on the wire format regardless of which streams
+	// survive truncation. Each fanned-out dimension is tagged: the pod when more
+	// than one pod is streamed, the container when more than one container is, so
+	// the client can scope multi-line folding per (pod, container).
 	tagPod := total > 1
+	tagContainer := len(containers) > 1
 
 	// Build the (pod, container) targets as the product of the two dimensions,
 	// capped to maxLogStreams overall. An empty container list yields one target
@@ -594,7 +615,11 @@ func (h *Handler) WorkloadLogsHandler(w http.ResponseWriter, req *http.Request) 
 	// Single-stream path (one pod, one or no container, no pod tagging): preserves
 	// the previous-instance and follow semantics unchanged. An all-pods request
 	// (tagPod) always uses the fan-out path so it carries the tagged/partial
-	// metadata even if a cap collapsed it to a single surviving stream.
+	// metadata even if a cap collapsed it to a single surviving stream. An
+	// all-containers request (tagContainer) cannot reach here: it has >1 container,
+	// so buildLogTargets yields min(len(containers), maxLogStreams) > 1 targets
+	// (maxLogStreams is 50). Were a future cap to collapse it to one target, the
+	// response would report ContainerTagged=false, so client and server still agree.
 	if !tagPod && len(targets) <= 1 {
 		t := logTarget{pod: name}
 		if len(targets) == 1 {
@@ -666,7 +691,7 @@ func (h *Handler) WorkloadLogsHandler(w http.ResponseWriter, req *http.Request) 
 		return
 	}
 
-	writeWorkloadLogsResponse(w, buildWorkloadLogsResponse(pods, containers, fanOut, total, tailLines, tagPod, truncated))
+	writeWorkloadLogsResponse(w, buildWorkloadLogsResponse(pods, containers, fanOut, total, tailLines, tagPod, tagContainer, truncated))
 }
 
 // buildWorkloadLogsResponse assembles the multi-stream (all-pods/all-containers)
@@ -676,17 +701,18 @@ func (h *Handler) WorkloadLogsHandler(w http.ResponseWriter, req *http.Request) 
 // streamed than were requested (some forbidden, missing, or still starting) or
 // when a cap truncated the fan-out. Forbidden carries the count of pods skipped
 // for lack of pods/log access.
-func buildWorkloadLogsResponse(pods, containers []string, fanOut logFanOut, total, tailLines int, tagPod, truncated bool) WorkloadLogsResponse {
+func buildWorkloadLogsResponse(pods, containers []string, fanOut logFanOut, total, tailLines int, tagPod, tagContainer, truncated bool) WorkloadLogsResponse {
 	streamed := len(fanOut.streamedSet)
 	return WorkloadLogsResponse{
-		Pod:       strings.Join(pods, ","),
-		Container: strings.Join(containers, ","),
-		Logs:      mergeLogStreams(fanOut.streams, tailLines, tagPod),
-		Tagged:    tagPod,
-		Total:     total,
-		Streamed:  streamed,
-		Partial:   streamed < total || truncated,
-		Forbidden: fanOut.forbidden,
+		Pod:             strings.Join(pods, ","),
+		Container:       strings.Join(containers, ","),
+		Logs:            mergeLogStreams(fanOut.streams, tailLines, tagPod, tagContainer),
+		Tagged:          tagPod,
+		ContainerTagged: tagContainer,
+		Total:           total,
+		Streamed:        streamed,
+		Partial:         streamed < total || truncated,
+		Forbidden:       fanOut.forbidden,
 	}
 }
 

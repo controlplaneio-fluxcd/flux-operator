@@ -109,6 +109,10 @@ function readValue(s, i) {
       while (k < s.length && s[k] === ' ') k++
       const ke = matchKeyEnd(s, k)
       if (ke !== -1 && s[ke] === '=') break
+      // The space run is part of the value: jump past it in one step. Stepping by
+      // one would rescan the whole run at every space — O(m²) on a long run.
+      j = k
+      continue
     }
     j++
   }

@@ -400,9 +400,9 @@ describe('WorkloadLogsViewer component', () => {
 
       render(<WorkloadLogsViewer {...allPodsProps} />)
       await flush()
-      // Turn off stack-trace grouping so the frames render as flat rows; this test
-      // asserts mergeLogs keeps both pods' frames, independent of the fold UI.
-      await act(async () => { fireEvent.click(screen.getByTestId('logs-group-toggle')) })
+      // Switch to raw mode so the frames render as flat rows; this test asserts
+      // mergeLogs keeps both pods' frames, independent of the fold UI.
+      await act(async () => { fireEvent.click(screen.getByTestId('logs-format-toggle')) })
       await act(async () => { vi.advanceTimersByTime(5000) })
       await flush()
 
@@ -984,18 +984,6 @@ describe('WorkloadLogsViewer component', () => {
       expect(screen.getByText('goroutine 1 [running]:')).toBeInTheDocument()
     })
 
-    it('renders every trace line flat when grouping is toggled off', async () => {
-      const user = userEvent.setup()
-      fetchWithMock.mockResolvedValue({ logs: GO_PANIC_LOGS })
-      render(<WorkloadLogsViewer {...defaultProps} />)
-      await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
-      expect(screen.queryByText('main.c(...)')).toBeNull()
-
-      await user.click(screen.getByTestId('logs-group-toggle'))
-      expect(screen.getByText('main.c(...)')).toBeInTheDocument()
-      expect(screen.queryByTestId('logs-group-fold')).toBeNull()
-    })
-
     it('renders every trace line flat in raw mode', async () => {
       const user = userEvent.setup()
       fetchWithMock.mockResolvedValue({ logs: GO_PANIC_LOGS })
@@ -1118,6 +1106,111 @@ describe('WorkloadLogsViewer component', () => {
       } finally {
         vi.useRealTimers()
       }
+    })
+  })
+
+  describe('unstructured-run grouping', () => {
+    // A curl -v dump: co-timestamped, structure-less lines that the format layer
+    // leaves plain, so they group under one timestamp pill — rendered in full, not
+    // folded behind an expand control.
+    const CURL_LOGS =
+      '2026-01-01T00:00:00.000000000Z * Host frontend was resolved.\n' +
+      '2026-01-01T00:00:00.000000001Z *   Trying 10.0.0.1:80...\n' +
+      '2026-01-01T00:00:00.000000002Z > GET /api/info HTTP/1.1\n' +
+      '2026-01-01T00:00:00.000000003Z < HTTP/1.1 200 OK\n' +
+      '2026-01-01T00:00:00.000000004Z * Connection #0 to host frontend left intact\n'
+
+    it('groups a co-timestamped curl dump under one pill with every line visible', async () => {
+      fetchWithMock.mockResolvedValue({ logs: CURL_LOGS })
+      render(<WorkloadLogsViewer {...defaultProps} />)
+      await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
+
+      // Grouped, not folded: all lines render, nothing hidden, no expand control.
+      expect(screen.queryByTestId('logs-group-fold')).toBeNull()
+      expect(screen.getByText('* Host frontend was resolved.')).toBeInTheDocument()
+      expect(screen.getByText('> GET /api/info HTTP/1.1')).toBeInTheDocument()
+      expect(screen.getByText('< HTTP/1.1 200 OK')).toBeInTheDocument()
+      expect(screen.getByText('* Connection #0 to host frontend left intact')).toBeInTheDocument()
+
+      // One timestamp block heads the whole run (a single separator pill), default
+      // info level (not error-tinted).
+      const pills = screen.getAllByTestId('logs-timestamp')
+      expect(pills).toHaveLength(1)
+      expect(pills[0]).toHaveAttribute('data-level', 'info')
+    })
+
+    it('does not group structured logger lines emitted milliseconds apart', async () => {
+      // Leading app Logback date → parseJava recognizes each as structured, so they
+      // stay separate entries despite the tight timestamp window.
+      fetchWithMock.mockResolvedValue({
+        logs:
+          '2026-01-01T00:00:00.000000000Z 2026-01-01 00:00:00.000 [main] DEBUG com.x - one\n' +
+          '2026-01-01T00:00:00.000000002Z 2026-01-01 00:00:00.002 [main] DEBUG com.x - two\n'
+      })
+      render(<WorkloadLogsViewer {...defaultProps} />)
+      await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
+
+      // Each structured line is its own timestamp block.
+      expect(screen.getAllByTestId('logs-timestamp')).toHaveLength(2)
+      expect(screen.getByTestId('logs-content')).toHaveTextContent('one')
+      expect(screen.getByTestId('logs-content')).toHaveTextContent('two')
+    })
+
+    it('does not group a date-less leveled console line into a burst', async () => {
+      // `[main] DEBUG com.x - msg` renders plain (no leading digit for parseJava),
+      // but detectLevel finds DEBUG, so the level catch keeps it out of a burst even
+      // though decorateLine fell through to plain.
+      fetchWithMock.mockResolvedValue({
+        logs:
+          '2026-01-01T00:00:00.000000000Z [main] DEBUG com.x - one\n' +
+          '2026-01-01T00:00:00.000000002Z [main] DEBUG com.x - two\n' +
+          '2026-01-01T00:00:00.000000004Z [main] WARN com.x - three\n'
+      })
+      render(<WorkloadLogsViewer {...defaultProps} />)
+      await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
+
+      expect(screen.getAllByTestId('logs-timestamp')).toHaveLength(3)
+    })
+  })
+
+  describe('container-scoped grouping', () => {
+    // A pod running two containers; the all-containers view tags each line with its
+    // container of origin so folding can be scoped per container.
+    const twoContainerProps = {
+      ...defaultProps,
+      pods: onePod([{ name: 'app', isInit: false }, { name: 'envoy', isInit: false }]),
+    }
+
+    it('keeps an interleaved container\'s trace intact and never folds in another container', async () => {
+      const user = userEvent.setup()
+      // app panics while envoy logs a co-timestamped, frame-shaped line right in the
+      // middle of app's trace. Per-(pod, container) partitioning keeps app's trace
+      // whole (2 frames) and envoy's line a separate, visible entry — without the
+      // partition + guard, envoy's line would split or be swallowed by app's trace.
+      fetchWithMock.mockResolvedValue({
+        pod: 'my-pod', container: 'app,envoy', containerTagged: true,
+        logs:
+          'app 2026-01-01T00:00:00.000000000Z panic: boom from app\n' +
+          'app 2026-01-01T00:00:00.000000001Z goroutine 1 [running]:\n' +
+          'envoy 2026-01-01T00:00:00.000000002Z   at Envoy::drain (conn.cc:42)\n' +
+          'app 2026-01-01T00:00:00.000000003Z main.crash()\n'
+      })
+      render(<WorkloadLogsViewer {...twoContainerProps} />)
+      await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
+
+      // Exactly one fold (app's trace), holding both app frames; envoy's line is
+      // never folded into it.
+      const folds = screen.getAllByTestId('logs-group-fold')
+      expect(folds).toHaveLength(1)
+      expect(folds[0]).toHaveTextContent('2 frames')
+      expect(screen.getByTestId('logs-content')).toHaveTextContent('at Envoy::drain (conn.cc:42)')
+      expect(screen.queryByText('main.crash()')).toBeNull()
+
+      // Expanding app's trace reveals both its frames (the one that arrived after
+      // envoy's line included), never envoy's line.
+      await user.click(folds[0])
+      expect(screen.getByText('goroutine 1 [running]:')).toBeInTheDocument()
+      expect(screen.getByText('main.crash()')).toBeInTheDocument()
     })
   })
 })

@@ -30,36 +30,75 @@ function isCont(text, goTrace) {
   return text === '' || /^\s/.test(text) || MARKER.test(text) || (goTrace && GO_FRAME.test(text))
 }
 
+// Max gap between consecutive lines of an unstructured run. A real multi-line
+// write (a curl -v dump, a banner) lands within milliseconds; a primitive app
+// printing structure-less lines seconds apart stays separate entries.
+const BURST_WINDOW_MS = 250
+
+// Max total span of an unstructured run, from its head to the line being joined.
+// The per-gap window alone would let a steady plain stream (each line < 250 ms
+// after the last) coalesce without bound into one group under a single, ever more
+// stale timestamp. A genuine burst (curl dump, banner) lands well within a second;
+// past this span the run closes and a fresh group starts.
+const BURST_SPAN_MS = 1000
+
 /**
- * groupEntries - fold a multi-line stack trace into its head entry so it renders
- * as one collapsible group instead of N rows.
+ * groupEntries - collect a multi-line run into its head entry so it renders as one
+ * timestamp block instead of N rows. Two kinds of run group, each scoped to one
+ * (pod, container) — a line from a different non-empty pod or container never joins
+ * across, so streams interleaved in the all-pods/all-containers view can't merge:
  *
- * Content-driven (frames may or may not carry a timestamp): a line folds into
- * `prev` (same pod) only while a recognized trace is open — `prev.isTrace &&
- * isCont(e.text, prev.goTrace)` — and the first non-continuation line closes it.
- * A trace whose head isn't in TRACE_HEAD does not open, so its frames stay
- * separate rather than risk folding an unrelated indented/untimestamped line;
- * extend TRACE_HEAD as formats surface. The caller partitions by pod in the
- * all-pods view, so samePod is just a cross-pod backstop.
+ *  - **stack trace** (`isTrace`) — a recognized head opens it and each continuation
+ *    joins while `prev.isTrace && isCont(e.text, prev.goTrace)`. The renderer *folds*
+ *    a trace: head visible, frames hidden behind a click-to-expand control. A head
+ *    not in TRACE_HEAD does not open, so unknown-format frames stay separate;
+ *    extend TRACE_HEAD as needed.
+ *  - **unstructured burst** (`unstructuredRun`) — a structure-less line opens a run
+ *    and each following structure-less line joins while it lands within BURST_WINDOW_MS
+ *    of the previous line AND within BURST_SPAN_MS of the run's head; the first
+ *    structured line, a too-large gap, or an over-long total span closes it.
+ *    `e.structured` is set by the caller from the format layer (highlightJson/
+ *    decorateLine); a curl -v dump groups, a structured logger 1–3 ms apart does not,
+ *    and a continuous plain stream caps out instead of growing one group unbounded.
+ *    The renderer does NOT fold a burst: every line shows under the one timestamp
+ *    pill, nothing hidden. Mutually exclusive with a trace head (a bare `Error:`
+ *    opens a trace, not a run).
  *
- * @param {Array<{ts: string, tsMs: number, text: string, level: string, pod: string, podId: string}>} entries
- * @param {boolean} enabled - when false, every entry becomes its own group (no fold)
- * @returns {Array<{head: Object|null, lines: Array, ts: string, tsMs: number, pod: string, podId: string, level: string, isTrace: boolean, goTrace: boolean}>}
+ * Content-driven: a frame may or may not carry a timestamp. The caller also
+ * partitions by pod in the all-pods view, so samePod is a backstop; the container
+ * guard is the load-bearing scope within a single pod's interleaved containers.
+ *
+ * @param {Array<{ts: string, tsMs: number, text: string, level: string, pod: string, podId: string, container: string, structured?: boolean}>} entries
+ * @param {boolean} enabled - when false, every entry becomes its own group (no run)
+ * @returns {Array<{head: Object|null, lines: Array, ts: string, tsMs: number, lastTsMs: number, pod: string, podId: string, container: string, level: string, isTrace: boolean, goTrace: boolean, unstructuredRun: boolean}>}
  */
 export function groupEntries(entries, enabled) {
   const groups = []
   for (const e of entries) {
     const prev = groups[groups.length - 1]
-    // An untimestamped orphan (pod '') belongs to its predecessor; a frame from a
-    // different (non-empty) pod never folds across.
+    // An untimestamped orphan (pod/container '') belongs to its predecessor; a line
+    // from a different (non-empty) pod or container never joins across.
     const samePod = prev && (e.pod === prev.pod || e.pod === '')
-    if (enabled && prev && samePod && prev.isTrace && isCont(e.text, prev.goTrace)) {
+    const sameContainer = prev && (e.container === prev.container || e.container === '')
+    const scoped = prev && samePod && sameContainer
+    // isTrace labels the group and keeps the trace open for the following lines; a
+    // structure-less, non-trace head opens an unstructured run instead.
+    const isTrace = enabled && isTraceHead(e.text)
+    const joinTrace = scoped && prev.isTrace && isCont(e.text, prev.goTrace)
+    // A trace head is excluded from a burst (`!isTrace`) so it breaks the run and
+    // opens its own trace rather than joining as a plain line. Two timers bound a
+    // run: the per-gap window (close together) and the total span from the head
+    // (`prev.tsMs`), so a continuous plain stream doesn't grow one group unbounded.
+    const joinBurst = scoped && prev.unstructuredRun && !isTrace && !e.structured &&
+      !Number.isNaN(e.tsMs) && e.tsMs - prev.lastTsMs < BURST_WINDOW_MS &&
+      e.tsMs - prev.tsMs < BURST_SPAN_MS
+    if (enabled && (joinTrace || joinBurst)) {
       prev.lines.push(e)
+      if (!Number.isNaN(e.tsMs)) prev.lastTsMs = e.tsMs   // advance the burst cursor
       continue
     }
-    // isTrace labels the group and keeps the trace open for the following lines.
-    const isTrace = enabled && isTraceHead(e.text)
     const goTrace = isTrace && GO_HEAD.test(e.text)
+    const unstructuredRun = enabled && !isTrace && !e.structured
     // A bare exception head has no level word (detectLevel → default); bump a
     // trace head to error so the exact-match level filter surfaces it. (`panic:`
     // is already fatal, so the bump is a no-op.)
@@ -70,11 +109,14 @@ export function groupEntries(entries, enabled) {
       lines: [e],
       ts: e.ts,
       tsMs: e.tsMs,
+      lastTsMs: e.tsMs,
       pod: e.pod,
       podId: e.podId,
+      container: e.container,
       level,
       isTrace,
       goTrace,
+      unstructuredRun,
     })
   }
   return groups
