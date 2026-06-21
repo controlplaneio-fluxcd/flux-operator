@@ -4,6 +4,7 @@
 import { describe, it, expect } from 'vitest'
 import { groupEntries } from './logGroup'
 import { parseLogLine } from '../components/dashboards/workload/WorkloadLogsViewer'
+import { detectLevel } from './logLevel'
 
 // The fixtures below are verbatim `kubectl logs --timestamps` output captured from
 // throwaway pods on a containerd cluster (the same wire format the backend serves
@@ -94,15 +95,21 @@ const JAVA_TRACE = [
   '2026-06-20T10:31:05.434411215Z \tat jdk.compiler/com.sun.tools.javac.launcher.Main.main(Main.java:135)',
 ]
 
+// withLevel attaches the detected level to a parsed entry, mirroring what the
+// viewer's formattedLines does in production: parseLogLine no longer computes the
+// level (it's formatted-only now), so the unit tests — which feed groupEntries
+// directly, bypassing formattedLines — must supply it for the trace level bump.
+const withLevel = (e) => ({ ...e, level: detectLevel(e.text) })
+
 // parse turns a fixture (array of raw payload lines) into log entries via the
 // production parser, single-pod (no pod tags).
-const parse = (lines) => lines.map((l) => parseLogLine(l, null))
+const parse = (lines) => lines.map((l) => withLevel(parseLogLine(l, null)))
 
 // mk builds a single timestamped entry for the constructed (non-fixture) cases.
 let seq = 0
 const mk = (text, pod = '') => {
   const ts = `2026-06-20T11:00:${String(seq++ % 60).padStart(2, '0')}.000000000Z`
-  return { ...parseLogLine(`${ts} ${text}`, null), pod }
+  return { ...withLevel(parseLogLine(`${ts} ${text}`, null)), pod }
 }
 
 describe('groupEntries', () => {
@@ -237,7 +244,7 @@ describe('groupEntries', () => {
 
     it('does not swallow an unrelated untimestamped line', () => {
       // A lone untimestamped non-frame following a plain head is its own entry.
-      const groups = groupEntries([mk('ok'), { ...parseLogLine('retry later', null), pod: '' }], true)
+      const groups = groupEntries([mk('ok'), { ...withLevel(parseLogLine('retry later', null)), pod: '' }], true)
       expect(groups).toHaveLength(2)
     })
 
@@ -291,7 +298,7 @@ describe('groupEntries — unstructured bursts', () => {
   const T0 = Date.parse('2026-06-20T11:00:00.000Z')
   const be = (text, offsetMs, structured, pod = '') => {
     const iso = new Date(T0 + offsetMs).toISOString()
-    return { ...parseLogLine(`${iso} ${text}`, null), pod, podId: pod, structured }
+    return { ...withLevel(parseLogLine(`${iso} ${text}`, null)), pod, podId: pod, structured }
   }
 
   it('groups a co-timestamped curl -v dump into one unstructured run', () => {
@@ -385,7 +392,7 @@ describe('groupEntries — container scoping', () => {
   let cseq = 0
   const ce = (text, container, pod = '') => {
     const ts = `2026-06-20T12:00:${String(cseq++ % 60).padStart(2, '0')}.000000000Z`
-    return { ...parseLogLine(`${ts} ${text}`, null), container, pod, podId: pod }
+    return { ...withLevel(parseLogLine(`${ts} ${text}`, null)), container, pod, podId: pod }
   }
 
   it('folds a trace within one container', () => {
@@ -431,7 +438,7 @@ describe('groupEntries — container scoping', () => {
   it('an orphan continuation (no container) inherits its predecessor and folds in', () => {
     const groups = groupEntries([
       ce('panic: boom', 'app'),
-      { ...parseLogLine('  at frame', null), container: '', pod: '' },
+      { ...withLevel(parseLogLine('  at frame', null)), container: '', pod: '' },
     ], true)
     expect(groups).toHaveLength(1)
     expect(groups[0].lines).toHaveLength(2)
@@ -442,7 +449,7 @@ describe('groupEntries — container scoping', () => {
     // different containers must not join one run.
     const T0 = Date.parse('2026-06-20T12:30:00.000Z')
     const bc = (text, offsetMs, container) => ({
-      ...parseLogLine(`${new Date(T0 + offsetMs).toISOString()} ${text}`, null),
+      ...withLevel(parseLogLine(`${new Date(T0 + offsetMs).toISOString()} ${text}`, null)),
       container, pod: '', podId: '', structured: false,
     })
     const groups = groupEntries([

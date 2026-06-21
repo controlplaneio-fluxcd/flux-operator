@@ -116,12 +116,13 @@ function entryTimestamp(line) {
  * <date>" isn't mistaken for a tag, and a continuation line keeps its full text).
  * The timestamp and ANSI are then stripped and the level detected; a continuation
  * line (no ts) keeps its indentation (see TIMESTAMP_PREFIX). Exported so tests hit
- * the real parse path.
+ * the real parse path. Level is NOT detected here — it is formatted-mode only and
+ * computed lazily in formattedLines (raw mode is verbatim with no level semantics).
  *
  * @param {string} line - One raw payload line (CR already stripped, non-empty)
  * @param {Set<string>|null} podSet - Requested pods in the pod-tagged view, else null
  * @param {Set<string>|null} containerSet - Requested containers in the container-tagged view, else null
- * @returns {{ts: string, tsMs: number, text: string, level: string, pod: string, podId: string, container: string}}
+ * @returns {{ts: string, tsMs: number, text: string, pod: string, podId: string, container: string}}
  */
 export function parseLogLine(line, podSet, containerSet) {
   // Peel pod then container, but commit the peel only if a real timestamp follows:
@@ -148,7 +149,59 @@ export function parseLogLine(line, podSet, containerSet) {
   const ts = hasTs ? m[1] : ''
   const text = stripAnsi(hasTs ? rest.slice(m[0].length) : rest)
   const podId = pod ? pod.slice(pod.lastIndexOf('-') + 1) : ''
-  return { ts, tsMs, text, level: detectLevel(text), pod, podId, container }
+  return { ts, tsMs, text, pod, podId, container }
+}
+
+/**
+ * reconcileEntries - incrementally parse `lines` against the previously parsed
+ * buffer, reusing the cached entry objects for lines unchanged since the last
+ * poll and calling `parse` only on the appended tail. mergeLogs only appends and
+ * front-evicts, so `prevLines` is either an exact prefix of `lines` (the buffer
+ * grew) or, once the buffer is capped, a suffix of `prevLines` equals the head of
+ * `lines` (front-eviction dropped some heads).
+ *
+ * Two paths:
+ * - No eviction: `lines` starts with all of `prevLines`. The endpoint check is a
+ *   cheap guard, not the correctness basis — it is sound only because the caller
+ *   guarantees an append (mergeLogs is append-only and every non-append fetch
+ *   bumps fetchGenRef, which forces a full re-parse before this is ever reached).
+ * - Eviction: scan for the drop offset, then VERIFY the whole overlap and fall
+ *   back to a full parse on any divergence, so the result always equals
+ *   `lines.map(parse)` and the parsed mirror can never drift from the buffer.
+ *
+ * Exported so tests can prove the reuse mechanism (parse call count + object
+ * identity) directly, not just the end-to-end output.
+ *
+ * @param {string[]} prevLines - the previously parsed lines, in arrival order
+ * @param {Array} prevEntries - their parsed entries, 1:1 with prevLines
+ * @param {string[]} lines - the current buffer lines, in arrival order
+ * @param {(line: string) => object} parse - parses one raw line into an entry
+ * @returns {Array} entries, 1:1 with lines
+ */
+export function reconcileEntries(prevLines, prevEntries, lines, parse) {
+  const p = prevLines.length
+  if (p === 0) return lines.map(parse)
+  // No eviction: the buffer grew (or is unchanged), so prevLines is an exact
+  // prefix. Reuse every cached entry, parse only the appended tail.
+  if (lines.length >= p && lines[0] === prevLines[0] && lines[p - 1] === prevLines[p - 1]) {
+    return prevEntries.concat(lines.slice(p).map(parse))
+  }
+  // Front-eviction at the buffer cap dropped some head lines. Find the eviction
+  // offset (prevLines.slice(drop) == lines head), verify the overlap, then reuse
+  // the surviving entries and parse the appended tail. The verify loop (not just
+  // the offset match) makes this correct even when lines[0] also appears earlier
+  // as a duplicate; any divergence falls through to a full parse.
+  let drop = 1
+  while (drop < p && prevLines[drop] !== lines[0]) drop++
+  const reuse = p - drop
+  if (lines.length >= reuse) {
+    let ok = true
+    for (let i = 0; ok && i < reuse; i++) {
+      if (prevLines[drop + i] !== lines[i]) ok = false
+    }
+    if (ok) return prevEntries.slice(drop).concat(lines.slice(reuse).map(parse))
+  }
+  return lines.map(parse)
 }
 
 // Shared styling for the toolbar controls. Selects deliberately omit a chevron
@@ -596,6 +649,12 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
   // Memoizes formatted output per raw line text, so appends format only the new
   // lines instead of the whole buffer each poll. See formattedLines for pruning.
   const formatCacheRef = useRef(new Map())
+  // The parsed buffer, mirroring `logs` line-for-line in arrival order (pre-sort,
+  // pre-format), so a follow poll re-parses only the appended lines instead of the
+  // whole buffer. `key` is the tag regime and `gen` the reset-fetch id; a change in
+  // either forces a full re-parse (see baseLines). `logs` (the string) stays
+  // authoritative — this is a derived mirror that must never diverge from it.
+  const parsedRef = useRef({ key: null, gen: -1, lines: [], entries: [] })
 
   // Pod dropdown options: "All pods" leads, then each pod.
   const podOptions = useMemo(() => {
@@ -743,6 +802,14 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
     setContainerKey(defaultKey)
   }, [effectivePodKey])
 
+  // Raw mode is verbatim text with no level semantics: the level filter is hidden
+  // and reset to "all" so a filter set in formatted mode doesn't silently narrow the
+  // raw view (where the level pills/legend are gone). On mount formatted is true, so
+  // this is a no-op until the user switches to raw.
+  useEffect(() => {
+    if (!formatted) setLevelFilter('all')
+  }, [formatted])
+
   // Poll for new logs while following: silent (no spinner flicker) and appending
   // (visible lines stay put).
   useEffect(() => {
@@ -772,19 +839,44 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
     return () => { document.body.style.overflow = previousOverflow }
   }, [])
 
-  // Split the raw payload into entries once. In the "All pods" view each
-  // timestamped line is prefixed with its pod of origin ("<pod> <ts> <msg>"); a
-  // token is only treated as a pod tag when it is one of the pods we requested AND
-  // the next token parses as a timestamp, so a message that merely starts with a
-  // word + timestamp is never mistaken for a tag. The leading timestamp (shown as
-  // a separator pill) and any ANSI escapes are then stripped and the level
-  // detected. Only re-runs when the payload (or tagging regime) changes.
+  // Split the raw payload into entries. In the "All pods" view each timestamped
+  // line is prefixed with its pod of origin ("<pod> <ts> <msg>"); a token is only
+  // treated as a pod tag when it is one of the pods we requested AND the next token
+  // parses as a timestamp, so a message that merely starts with a word + timestamp
+  // is never mistaken for a tag. The leading timestamp (shown as a separator pill)
+  // and any ANSI escapes are then stripped.
+  //
+  // Parsing is incremental: a follow poll re-parses only the lines mergeLogs
+  // appended, reusing the cached entry objects for lines already parsed (parsedRef).
+  // A full re-parse is forced only when the tag regime changes (peeling differs) or
+  // a reset fetch replaced the buffer (fetchGenRef bumps on every non-append fetch).
+  // mergeLogs only appends and front-evicts, so on an append the surviving cached
+  // lines are a suffix of the previous buffer equal to the head of the new one.
   const baseLines = useMemo(() => {
     const podSet = tagged ? new Set(reqPodsStr ? reqPodsStr.split(',') : []) : null
     const containerSet = containerTagged ? new Set(reqContainersStr ? reqContainersStr.split(',') : []) : null
     // Strip a trailing CR so a CRLF stream doesn't leak `\r` into the text, fields,
     // or filter. (Download uses the raw payload, so it stays byte-verbatim.)
-    const entries = logs.split('\n').map(line => line.replace(/\r$/, '')).filter(line => line.length > 0).map(line => parseLogLine(line, podSet, containerSet))
+    const lines = logs.split('\n').map(line => line.replace(/\r$/, '')).filter(line => line.length > 0)
+    const parse = (line) => parseLogLine(line, podSet, containerSet)
+
+    // The parse regime is keyed by the tagging signals; `gen` (fetchGenRef, bumped
+    // only on a non-append fetch) is the replace signal. A change in either means
+    // the buffer was rebuilt, not appended, so the prior mirror can't be trusted
+    // and every line re-parses. Otherwise reconcileEntries reuses the cached
+    // entries for unchanged lines and parses only the appended tail. Reading the
+    // ref here (not via deps) is safe because Preact's useMemo recomputes only on a
+    // dep change, and an append is the only same-gen/same-key mutation of `logs`.
+    const cache = parsedRef.current
+    const gen = fetchGenRef.current
+    const key = `${tagged}|${reqPodsStr}|${containerTagged}|${reqContainersStr}`
+    const entries = (cache.key !== key || cache.gen !== gen)
+      ? lines.map(parse)
+      : reconcileEntries(cache.lines, cache.entries, lines, parse)
+    // Mirror the arrival-order parse before the derived sort below, so the next poll
+    // diffs against the unsorted buffer. The sort returns a fresh array and never
+    // mutates these entries.
+    parsedRef.current = { key, gen, lines, entries }
 
     // In all-pods each pod advances its own `since` cursor, so a lagging pod can
     // deliver a line older than another's buffered tail; in arrival order the buffer
@@ -832,16 +924,18 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
   // folded (click to expand), a burst renders all its lines under one timestamp pill.
   const grouping = formatted
 
-  // Format each base line once, before grouping, so a line's `fmt` descriptor and
-  // its `structured` flag (whether the format layer recognizes it) are known when
-  // groupEntries decides whether to join an unstructured burst. In formatted mode a
-  // line gains { code, fmt, structured }; raw mode passes baseLines through (no fmt,
-  // structured irrelevant — grouping is off, LogLineBody falls through to plain).
+  // Format each base line once, before grouping, so a line's `level`, `fmt`
+  // descriptor, and `structured` flag are known when groupEntries decides whether to
+  // join an unstructured burst. Level is detected HERE (formatted mode only), not in
+  // parseLogLine: raw mode is verbatim with no level semantics, so it skips
+  // detectLevel entirely. In formatted mode a line gains { level, code, fmt,
+  // structured }; raw mode passes baseLines through (no level/fmt — grouping is off,
+  // the level filter/legend are hidden, LogLineBody falls through to plain).
   //
   // Cached by raw line text (formatCacheRef): an append reuses cached results and
-  // only formats the new lines. The cache is rebuilt over the whole base buffer
-  // (≤ MAX_BUFFER_LINES), so it can't outgrow it; raw mode leaves it untouched so it
-  // survives a round-trip back to formatted.
+  // only parses+formats the new lines. The cache is rebuilt over the whole base
+  // buffer (≤ MAX_BUFFER_LINES), so it can't outgrow it; raw mode leaves it untouched
+  // so it survives a round-trip back to formatted.
   const formattedLines = useMemo(() => {
     if (!formatted) return baseLines
     const prev = formatCacheRef.current
@@ -853,8 +947,9 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
       const key = `${entry.ts ? 1 : 0}\n${entry.text}`
       let f = next.get(key) || prev.get(key)
       if (!f) {
+        const level = detectLevel(entry.text)
         const json = highlightJson(entry.text)
-        const d = json || (entry.ts ? decorateLine(entry.text, entry.level) : { kind: 'plain' })
+        const d = json || (entry.ts ? decorateLine(entry.text, level) : { kind: 'plain' })
         // `structured` (whether the burst grouper treats the line as a real log
         // entry vs structure-less noise) is true when the format layer decorates it,
         // OR when a level was detected even though decorateLine fell through to
@@ -862,10 +957,10 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
         // line like `[main] DEBUG com.x - msg` renders plain (no leading digit for
         // parseJava) but detectLevel finds `debug`, so it is not swept into a burst.
         // A curl -v dump carries no level (default info), so it still groups.
-        const leveled = entry.level !== DEFAULT_LEVEL
+        const leveled = level !== DEFAULT_LEVEL
         f = d.kind === 'plain'
-          ? { code: true, fmt: null, structured: leveled }
-          : { code: false, fmt: d, structured: true }
+          ? { level, code: true, fmt: null, structured: leveled }
+          : { level, code: false, fmt: d, structured: true }
       }
       next.set(key, f)
       return { ...entry, ...f }
@@ -938,11 +1033,17 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
 
   // Apply the level filter on top of the contains filter (exact group-level match).
   // Lines already carry their fmt/code from formattedLines, so this is the final set
-  // the render maps — no separate formatting pass.
+  // the render maps — no separate formatting pass. The filter is forced to "all" in
+  // raw mode (which carries no level): a setLevelFilter('all') effect resets the
+  // state, but deriving the effective level here too closes the one-frame window
+  // where the toggle has flipped to raw before that effect runs — otherwise a
+  // lingering 'warn' filter would blank the raw list for a frame (no group has a
+  // level), flashing "No matching log entries".
+  const effectiveLevel = formatted ? levelFilter : 'all'
   const logGroups = useMemo(() => {
-    if (levelFilter === 'all') return containsGroups
-    return containsGroups.filter(g => g.level === levelFilter)
-  }, [containsGroups, levelFilter])
+    if (effectiveLevel === 'all') return containsGroups
+    return containsGroups.filter(g => g.level === effectiveLevel)
+  }, [containsGroups, effectiveLevel])
 
   // Briefly highlight the most recent visible entry when new entries arrive (e.g.
   // while following). Gated on two conditions so it only signals fresh logs: the raw
@@ -1117,8 +1218,9 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
             title="Filter by keyword (prefix with ! to exclude e.g. !debug)"
           />
 
-          {/* Minimum level filter */}
-          <LevelMenu value={levelFilter} onChange={setLevelFilter} />
+          {/* Minimum level filter. Formatted mode only — raw is verbatim with no
+              level semantics, so the filter is hidden (and reset to "all"). */}
+          {formatted && <LevelMenu value={levelFilter} onChange={setLevelFilter} />}
 
           {/* Lines select */}
           <select
@@ -1233,7 +1335,8 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
           )}
         </div>
 
-        {/* Footer: a per-level count summary doubling as the color legend. The
+        {/* Footer: in formatted mode a per-level count summary doubling as the
+            color legend; in raw mode (no level semantics) a plain line count. The
             trailing corner shows the fetch loader while a request is in flight,
             else the live/snapshot mode. */}
         <div
@@ -1241,14 +1344,20 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
           data-testid="logs-footer"
         >
           <div class="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0">
-            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-600 dark:text-gray-400" data-testid="logs-level-summary">
-              {LEVELS.filter(l => levelCounts[l]).map((l) => (
-                <span key={l} class="inline-flex items-center gap-1" title={`${LEVEL_META[l].label}: ${levelCounts[l]}`}>
-                  <span class={`w-2 h-2 rounded-full ${LEVEL_META[l].swatch}`} />
-                  {LEVEL_META[l].label} {levelCounts[l]}
-                </span>
-              ))}
-            </div>
+            {formatted ? (
+              <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-600 dark:text-gray-400" data-testid="logs-level-summary">
+                {LEVELS.filter(l => levelCounts[l]).map((l) => (
+                  <span key={l} class="inline-flex items-center gap-1" title={`${LEVEL_META[l].label}: ${levelCounts[l]}`}>
+                    <span class={`w-2 h-2 rounded-full ${LEVEL_META[l].swatch}`} />
+                    {LEVEL_META[l].label} {levelCounts[l]}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <span class="text-xs text-gray-600 dark:text-gray-400" data-testid="logs-line-count">
+                {logGroups.length} log line{logGroups.length === 1 ? '' : 's'}
+              </span>
+            )}
             {/* Partial-coverage note: all-pods didn't cover every pod (forbidden,
                 missing) or the fan-out was capped. The pod-count phrasing shows only
                 when pods were dropped; a pure cap reads as "results truncated" to

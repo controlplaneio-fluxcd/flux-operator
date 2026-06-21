@@ -4,7 +4,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, act, fireEvent } from '@testing-library/preact'
 import userEvent from '@testing-library/user-event'
-import { WorkloadLogsViewer } from './WorkloadLogsViewer'
+import { WorkloadLogsViewer, reconcileEntries } from './WorkloadLogsViewer'
 
 vi.mock('../../../utils/fetch', () => ({
   fetchWithMock: vi.fn()
@@ -666,6 +666,38 @@ describe('WorkloadLogsViewer component', () => {
     expect(screen.queryByTestId('logs-timestamp')).not.toBeInTheDocument()
   })
 
+  it('hides the level filter and shows a line count in raw mode, resetting an active filter', async () => {
+    const user = userEvent.setup()
+    fetchWithMock.mockResolvedValue({
+      logs: '2026-01-01T00:00:00Z {"level":"error","msg":"boom"}\n'
+        + '2026-01-01T00:00:01Z {"level":"warn","msg":"slow"}\n'
+        + '2026-01-01T00:00:02Z {"level":"info","msg":"hi"}\n'
+    })
+    render(<WorkloadLogsViewer {...defaultProps} />)
+    await waitFor(() => expect(screen.getAllByTestId('logs-line')).toHaveLength(3))
+
+    // Formatted mode: the level filter and per-level legend are present. Narrow to warn.
+    expect(screen.getByTestId('logs-level-filter')).toBeInTheDocument()
+    expect(screen.getByTestId('logs-level-summary')).toBeInTheDocument()
+    await user.click(screen.getByTestId('logs-level-filter'))
+    await user.click(screen.getByTestId('logs-level-option-warn'))
+    await waitFor(() => expect(screen.getAllByTestId('logs-line')).toHaveLength(1))
+
+    // Raw mode: the filter is hidden and reset to "all" (all 3 lines return), and the
+    // per-level legend is replaced by a plain line count.
+    await user.click(screen.getByTestId('logs-format-toggle'))
+    expect(screen.queryByTestId('logs-level-filter')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('logs-level-summary')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getAllByTestId('logs-line')).toHaveLength(3))
+    expect(screen.getByTestId('logs-line-count')).toHaveTextContent('3 log lines')
+
+    // Back to formatted: the filter returns and stays "all" (the warn filter did not
+    // survive the round-trip), so all 3 lines remain visible.
+    await user.click(screen.getByTestId('logs-format-toggle'))
+    expect(screen.getByTestId('logs-level-filter')).toBeInTheDocument()
+    expect(screen.getAllByTestId('logs-line')).toHaveLength(3)
+  })
+
   it('toggles fullscreen mode', async () => {
     const user = userEvent.setup()
     render(<WorkloadLogsViewer {...defaultProps} />)
@@ -742,6 +774,102 @@ describe('WorkloadLogsViewer component', () => {
       const pollCall = lastCall()
       expect(pollCall.endpoint).toContain('sinceTime=2026-01-01T00%3A00%3A01Z')
       expect(pollCall.endpoint).toContain('tailLines=100')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // Part B: parsing is incremental — a follow poll re-parses only the appended
+  // lines and reuses the cached entries for the rest. These guard that the
+  // incrementally-built buffer is identical to a from-scratch parse across several
+  // polls, that the all-pods sort still runs over it, and that front-eviction at
+  // MAX_BUFFER_LINES keeps the parsed mirror in lock-step with the string buffer.
+  it('matches a from-scratch parse across several incremental follow polls', async () => {
+    vi.useFakeTimers()
+    try {
+      const flush = async () => { await act(async () => { await Promise.resolve(); await Promise.resolve() }) }
+
+      fetchWithMock.mockResolvedValueOnce({ logs: '2026-01-01T00:00:00Z one\n2026-01-01T00:00:01Z two\n' })
+      // Each poll re-sends the last buffered line (the overlap) plus a new one.
+      fetchWithMock.mockResolvedValueOnce({ logs: '2026-01-01T00:00:01Z two\n2026-01-01T00:00:02Z three\n' })
+      fetchWithMock.mockResolvedValueOnce({ logs: '2026-01-01T00:00:02Z three\n2026-01-01T00:00:03Z four\n' })
+
+      render(<WorkloadLogsViewer {...defaultProps} />)
+      await flush()
+
+      await act(async () => { vi.advanceTimersByTime(5000) })
+      await flush()
+      await act(async () => { vi.advanceTimersByTime(5000) })
+      await flush()
+
+      // The reused entries plus the freshly parsed tails reconstruct the exact
+      // ordered buffer a single fetch of the concatenation would have produced.
+      expect(screen.getAllByTestId('logs-line').map(r => r.textContent))
+        .toEqual(['one', 'two', 'three', 'four'])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('sorts a lagging pod\'s older line into place after an incremental append', async () => {
+    vi.useFakeTimers()
+    try {
+      const flush = async () => { await act(async () => { await Promise.resolve(); await Promise.resolve() }) }
+
+      fetchWithMock.mockResolvedValueOnce({
+        pod: 'web-abc-gqh2x,web-abc-p8x2k', container: 'app', tagged: true, total: 2, streamed: 2,
+        logs: 'web-abc-gqh2x 2026-01-01T00:00:00Z a one\nweb-abc-p8x2k 2026-01-01T00:00:02Z b one\n'
+      })
+      // The lagging pod delivers a line older than b one only on the follow poll, so
+      // the chronological re-sort must run over the incrementally-parsed buffer.
+      fetchWithMock.mockResolvedValue({
+        pod: 'web-abc-gqh2x,web-abc-p8x2k', container: 'app', tagged: true, total: 2, streamed: 2,
+        logs: 'web-abc-gqh2x 2026-01-01T00:00:01Z a two\n'
+      })
+
+      render(<WorkloadLogsViewer {...allPodsProps} />)
+      await flush()
+      expect(screen.getAllByTestId('logs-line').map(r => r.textContent)).toEqual(['a one', 'b one'])
+
+      await act(async () => { vi.advanceTimersByTime(5000) })
+      await flush()
+
+      // a two (ts 1) sorts between a one (ts 0) and b one (ts 2), not at the tail.
+      expect(screen.getAllByTestId('logs-line').map(r => r.textContent)).toEqual(['a one', 'a two', 'b one'])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps the parsed buffer in lock-step with the string buffer through front-eviction', async () => {
+    vi.useFakeTimers()
+    try {
+      const flush = async () => { await act(async () => { await Promise.resolve(); await Promise.resolve() }) }
+
+      // Fill the buffer to its MAX_BUFFER_LINES (5000) cap, then append two newer
+      // lines so the merge front-evicts the two oldest. The eviction branch must
+      // reuse the surviving entries and parse only the appended tail.
+      const initial = Array.from({ length: 5000 }, (_, i) =>
+        `2026-01-01T00:00:00.${String(i).padStart(4, '0')}Z line ${i}`).join('\n') + '\n'
+      fetchWithMock.mockResolvedValueOnce({ logs: initial })
+      fetchWithMock.mockResolvedValue({
+        logs: '2026-01-01T00:00:00.4999Z line 4999\n2026-01-01T00:00:01Z line 5000\n2026-01-01T00:00:02Z line 5001\n'
+      })
+
+      render(<WorkloadLogsViewer {...defaultProps} />)
+      await flush()
+      expect(screen.getAllByTestId('logs-line')).toHaveLength(5000)
+
+      await act(async () => { vi.advanceTimersByTime(5000) })
+      await flush()
+
+      // Still capped at 5000: the two oldest evicted, the two newest appended, and
+      // every surviving line still parsed (timestamp stripped from the message).
+      const rows = screen.getAllByTestId('logs-line')
+      expect(rows).toHaveLength(5000)
+      expect(rows[0].textContent).toBe('line 2')
+      expect(rows.at(-1).textContent).toBe('line 5001')
+      expect(rows.at(-2).textContent).toBe('line 5000')
     } finally {
       vi.useRealTimers()
     }
@@ -1212,5 +1340,86 @@ describe('WorkloadLogsViewer component', () => {
       expect(screen.getByText('goroutine 1 [running]:')).toBeInTheDocument()
       expect(screen.getByText('main.crash()')).toBeInTheDocument()
     })
+  })
+})
+
+// Part B mechanism: reconcileEntries is the pure incremental-parse core, so these
+// prove the reuse itself (parse-call count + object identity), not just that the
+// final output happens to be right — a full re-parse on every poll would pass the
+// component-level output tests but fail these.
+describe('reconcileEntries', () => {
+  // Distinct object per line so identity reuse is observable.
+  const mkEntries = (lines) => lines.map(l => ({ src: l }))
+
+  it('parses every line when there is no previous buffer', () => {
+    const parse = vi.fn(l => ({ p: l }))
+    const out = reconcileEntries([], [], ['a', 'b'], parse)
+    expect(parse).toHaveBeenCalledTimes(2)
+    expect(out).toEqual([{ p: 'a' }, { p: 'b' }])
+  })
+
+  it('reuses every cached entry and parses only the appended tail when the buffer grows', () => {
+    const prevLines = ['a', 'b']
+    const prevEntries = mkEntries(prevLines)
+    const parse = vi.fn(l => ({ p: l }))
+    const out = reconcileEntries(prevLines, prevEntries, ['a', 'b', 'c', 'd'], parse)
+    expect(parse.mock.calls.map(c => c[0])).toEqual(['c', 'd'])
+    expect(out[0]).toBe(prevEntries[0]) // same object, not re-parsed
+    expect(out[1]).toBe(prevEntries[1])
+    expect(out).toHaveLength(4)
+  })
+
+  it('parses nothing when the buffer is unchanged across a poll', () => {
+    const prevLines = ['a', 'b']
+    const prevEntries = mkEntries(prevLines)
+    const parse = vi.fn(l => ({ p: l }))
+    const out = reconcileEntries(prevLines, prevEntries, ['a', 'b'], parse)
+    expect(parse).not.toHaveBeenCalled()
+    expect(out).toEqual(prevEntries)
+  })
+
+  it('reuses the survivors and parses the tail through front-eviction', () => {
+    const prevLines = ['a', 'b', 'c', 'd']
+    const prevEntries = mkEntries(prevLines)
+    const parse = vi.fn(l => ({ p: l }))
+    const out = reconcileEntries(prevLines, prevEntries, ['c', 'd', 'e'], parse)
+    expect(parse.mock.calls.map(c => c[0])).toEqual(['e'])
+    expect(out[0]).toBe(prevEntries[2])
+    expect(out[1]).toBe(prevEntries[3])
+    expect(out).toHaveLength(3)
+  })
+
+  it('finds the eviction offset past an earlier duplicate of the new head line', () => {
+    // 'c' also appears at index 0, but the real overlap is the [c,d] suffix; the
+    // scan starts at 1 and the verify loop confirms the right offset.
+    const prevLines = ['c', 'a', 'c', 'd']
+    const prevEntries = mkEntries(prevLines)
+    const parse = vi.fn(l => ({ p: l }))
+    const out = reconcileEntries(prevLines, prevEntries, ['c', 'd', 'e'], parse)
+    expect(parse.mock.calls.map(c => c[0])).toEqual(['e'])
+    expect(out[0]).toBe(prevEntries[2])
+    expect(out[1]).toBe(prevEntries[3])
+  })
+
+  it('falls back to a full parse when the overlap diverges', () => {
+    // lines[0] matches at drop=1, but the next line differs, so the verify loop
+    // rejects the reuse and re-parses everything (the mirror can never drift).
+    const prevLines = ['a', 'b', 'c']
+    const prevEntries = mkEntries(prevLines)
+    const parse = vi.fn(l => ({ p: l }))
+    const out = reconcileEntries(prevLines, prevEntries, ['b', 'X', 'Y'], parse)
+    expect(parse.mock.calls.map(c => c[0])).toEqual(['b', 'X', 'Y'])
+    expect(out).toEqual([{ p: 'b' }, { p: 'X' }, { p: 'Y' }])
+  })
+
+  it('falls back to a full parse when the computed overlap exceeds the new buffer', () => {
+    // The offset scan lands on drop=3 (reuse=2), but only one line remains, so the
+    // reuse>lines.length guard forces a full parse rather than reading past the end.
+    const prevLines = ['a', 'b', 'c', 'd', 'e']
+    const prevEntries = mkEntries(prevLines)
+    const parse = vi.fn(l => ({ p: l }))
+    const out = reconcileEntries(prevLines, prevEntries, ['d'], parse)
+    expect(parse.mock.calls.map(c => c[0])).toEqual(['d'])
+    expect(out).toEqual([{ p: 'd' }])
   })
 })
