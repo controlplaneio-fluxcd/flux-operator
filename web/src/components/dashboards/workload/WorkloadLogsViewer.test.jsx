@@ -18,6 +18,15 @@ const containersOf = (endpoint) => [...new URLSearchParams(endpoint.split('?')[1
 const podsOf = (endpoint) => [...new URLSearchParams(endpoint.split('?')[1]).getAll('pod')]
 const lastCall = () => fetchWithMock.mock.calls.at(-1)[0]
 
+// setTailLines opens the settings panel (if closed) and clicks the tail-lines
+// toggle for the given value. Returns once the change is applied.
+const setTailLines = async (value) => {
+  if (!screen.queryByTestId('logs-settings-panel')) {
+    await act(async () => { fireEvent.click(screen.getByTestId('logs-settings-toggle')) })
+  }
+  await act(async () => { fireEvent.click(screen.getByTestId(`logs-tail-${value}`)) })
+}
+
 describe('WorkloadLogsViewer component', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -470,11 +479,10 @@ describe('WorkloadLogsViewer component', () => {
   })
 
   it('requests the selected number of lines', async () => {
-    const user = userEvent.setup()
     render(<WorkloadLogsViewer {...defaultProps} />)
     await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
 
-    await user.selectOptions(screen.getByTestId('logs-lines-select'), '500')
+    await setTailLines(500)
     await waitFor(() => expect(lastCall().endpoint).toContain('tailLines=500'))
   })
 
@@ -609,8 +617,7 @@ describe('WorkloadLogsViewer component', () => {
     render(<WorkloadLogsViewer {...defaultProps} />)
     await waitFor(() => expect(screen.getAllByTestId('logs-line')).toHaveLength(3))
 
-    await user.click(screen.getByTestId('logs-level-filter'))
-    await user.click(screen.getByTestId('logs-level-option-warn'))
+    await user.selectOptions(screen.getByTestId('logs-level-filter'), 'warn')
 
     await waitFor(() => expect(screen.getAllByTestId('logs-line')).toHaveLength(1))
     expect(screen.getByTestId('logs-line')).toHaveTextContent('slow')
@@ -683,8 +690,7 @@ describe('WorkloadLogsViewer component', () => {
     // Formatted mode: the level filter and per-level legend are present. Narrow to warn.
     expect(screen.getByTestId('logs-level-filter')).toBeInTheDocument()
     expect(screen.getByTestId('logs-level-summary')).toBeInTheDocument()
-    await user.click(screen.getByTestId('logs-level-filter'))
-    await user.click(screen.getByTestId('logs-level-option-warn'))
+    await user.selectOptions(screen.getByTestId('logs-level-filter'), 'warn')
     await waitFor(() => expect(screen.getAllByTestId('logs-line')).toHaveLength(1))
 
     // Raw mode: the filter is hidden and reset to "all" (all 3 lines return), and the
@@ -890,7 +896,7 @@ describe('WorkloadLogsViewer component', () => {
       expect(fetchWithMock).toHaveBeenCalledTimes(1)
 
       fetchWithMock.mockReturnValueOnce(new Promise(() => {}))
-      await act(async () => { fireEvent.change(screen.getByTestId('logs-lines-select'), { target: { value: '500' } }) })
+      await setTailLines(500)
       await flush()
       expect(fetchWithMock).toHaveBeenCalledTimes(2)
 
@@ -917,7 +923,7 @@ describe('WorkloadLogsViewer component', () => {
       await act(async () => { vi.advanceTimersByTime(5000) })
 
       fetchWithMock.mockResolvedValueOnce({ logs: '2026-01-01T00:00:05Z reset one\n' })
-      await act(async () => { fireEvent.change(screen.getByTestId('logs-lines-select'), { target: { value: '500' } }) })
+      await setTailLines(500)
       await flush()
       expect(screen.getAllByTestId('logs-line').map(r => r.textContent)).toEqual(['reset one'])
 
@@ -958,7 +964,6 @@ describe('WorkloadLogsViewer component', () => {
   })
 
   it('highlights the latest timestamp pill when new logs arrive', async () => {
-    const user = userEvent.setup()
     fetchWithMock.mockResolvedValue({ logs: '2026-01-01T00:00:00Z line one\n2026-01-01T00:00:01Z line two\n' })
     render(<WorkloadLogsViewer {...defaultProps} />)
     await waitFor(() => expect(screen.getAllByTestId('logs-line')).toHaveLength(2))
@@ -966,7 +971,7 @@ describe('WorkloadLogsViewer component', () => {
     expect(screen.getAllByTestId('logs-timestamp').some(el => el.getAttribute('data-latest') === 'true')).toBe(false)
 
     fetchWithMock.mockResolvedValue({ logs: '2026-01-01T00:00:00Z line one\n2026-01-01T00:00:01Z line two\n2026-01-01T00:00:02Z line three\n' })
-    await user.selectOptions(screen.getByTestId('logs-lines-select'), '500')
+    await setTailLines(500)
     await waitFor(() => {
       const pills = screen.getAllByTestId('logs-timestamp')
       expect(pills).toHaveLength(3)
@@ -998,6 +1003,63 @@ describe('WorkloadLogsViewer component', () => {
       expect(poll).toContain('sinceTime=2026-01-01T00%3A00%3A01Z')
       expect(poll).not.toContain('since=')
       expect(containersOf(poll)).toEqual(['app', 'sidecar'])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('shows a "+N new" indicator counting a follow poll\'s appends, until the next refresh', async () => {
+    vi.useFakeTimers()
+    try {
+      const flush = async () => { await act(async () => { await Promise.resolve(); await Promise.resolve() }) }
+      // Initial load: 2 entries. First poll re-sends the last one and adds two more,
+      // so 2 new entries are appended (the re-sent head is deduped, not counted).
+      fetchWithMock.mockResolvedValueOnce({ logs: '2026-01-01T00:00:00Z one\n2026-01-01T00:00:01Z two\n' })
+      fetchWithMock.mockResolvedValue({ logs: '2026-01-01T00:00:01Z two\n2026-01-01T00:00:02Z three\n2026-01-01T00:00:03Z four\n' })
+
+      render(<WorkloadLogsViewer {...defaultProps} />)
+      await flush()
+      // No indicator on the initial (non-append) load.
+      expect(screen.queryByTestId('logs-appended-count')).not.toBeInTheDocument()
+
+      await act(async () => { vi.advanceTimersByTime(5000) })
+      await flush()
+      expect(screen.getByTestId('logs-appended-count')).toHaveTextContent('+2 new')
+
+      // Clicking it scrolls to the latest line and re-pins to the bottom.
+      const body = screen.getByTestId('logs-body')
+      let scrollTop = 0
+      Object.defineProperty(body, 'scrollHeight', { configurable: true, value: 4321 })
+      Object.defineProperty(body, 'scrollTop', { configurable: true, get: () => scrollTop, set: v => { scrollTop = v } })
+      await act(async () => { fireEvent.click(screen.getByTestId('logs-appended-count')) })
+      expect(scrollTop).toBe(4321)
+
+      // It persists across the 2s mark (no auto-hide) — only the next refresh clears it.
+      await act(async () => { vi.advanceTimersByTime(2000) })
+      expect(screen.getByTestId('logs-appended-count')).toHaveTextContent('+2 new')
+
+      // The next poll appends nothing new (same payload, all buffered), so it hides.
+      await act(async () => { vi.advanceTimersByTime(3000) })
+      await flush()
+      expect(screen.queryByTestId('logs-appended-count')).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('does not show the "+N new" indicator when a follow poll appends nothing', async () => {
+    vi.useFakeTimers()
+    try {
+      const flush = async () => { await act(async () => { await Promise.resolve(); await Promise.resolve() }) }
+      fetchWithMock.mockResolvedValueOnce({ logs: '2026-01-01T00:00:00Z one\n2026-01-01T00:00:01Z two\n' })
+      // Poll re-sends only already-buffered entries: nothing new to append.
+      fetchWithMock.mockResolvedValue({ logs: '2026-01-01T00:00:01Z two\n' })
+
+      render(<WorkloadLogsViewer {...defaultProps} />)
+      await flush()
+      await act(async () => { vi.advanceTimersByTime(5000) })
+      await flush()
+      expect(screen.queryByTestId('logs-appended-count')).not.toBeInTheDocument()
     } finally {
       vi.useRealTimers()
     }
@@ -1037,7 +1099,7 @@ describe('WorkloadLogsViewer component', () => {
     await waitFor(() => expect(screen.getAllByTestId('logs-line')).toHaveLength(2))
 
     fetchWithMock.mockResolvedValue({ logs: '2026-01-01T00:00:00Z keep me\n2026-01-01T00:00:01Z keep me too\n2026-01-01T00:00:02Z noise\n' })
-    await user.selectOptions(screen.getByTestId('logs-lines-select'), '500')
+    await setTailLines(500)
     await waitFor(() => expect(lastCall().endpoint).toContain('tailLines=500'))
     expect(screen.getAllByTestId('logs-line')).toHaveLength(2)
     expect(screen.getAllByTestId('logs-timestamp').some(el => el.getAttribute('data-latest') === 'true')).toBe(false)
@@ -1158,8 +1220,7 @@ describe('WorkloadLogsViewer component', () => {
       render(<WorkloadLogsViewer {...defaultProps} />)
       await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
 
-      await user.click(screen.getByTestId('logs-level-filter'))
-      await user.click(screen.getByTestId('logs-level-option-error'))
+      await user.selectOptions(screen.getByTestId('logs-level-filter'), 'error')
 
       expect(screen.getByTestId('logs-content')).toHaveTextContent('Error: boom from c')
       expect(screen.queryByText('plain info line')).toBeNull()
@@ -1347,32 +1408,48 @@ describe('WorkloadLogsViewer component', () => {
   })
 
   describe('persisted settings', () => {
-    it('seeds follow, format and lines from the stored settings', async () => {
-      logSettings.value = { follow: false, formatted: false, tail: 500 }
+    it('seeds follow, format, lines and font size from the stored settings', async () => {
+      logSettings.value = { follow: false, formatted: false, tail: 500, fontSize: 'lg' }
       render(<WorkloadLogsViewer {...defaultProps} />)
       await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
 
       expect(screen.getByTestId('logs-follow-toggle')).toHaveAttribute('aria-pressed', 'false')
       expect(screen.getByTestId('logs-format-toggle')).toHaveAttribute('aria-pressed', 'false')
-      expect(screen.getByTestId('logs-lines-select')).toHaveValue('500')
+
+      await act(async () => { fireEvent.click(screen.getByTestId('logs-settings-toggle')) })
+      expect(screen.getByTestId('logs-tail-500')).toHaveAttribute('aria-pressed', 'true')
+      expect(screen.getByTestId('logs-fontsize-lg')).toHaveAttribute('aria-pressed', 'true')
     })
 
-    it('persists follow, format and lines changes to the settings signal', async () => {
+    it('persists follow, format, lines and font size changes to the settings signal', async () => {
       render(<WorkloadLogsViewer {...defaultProps} />)
       await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
 
-      await act(async () => { fireEvent.change(screen.getByTestId('logs-lines-select'), { target: { value: '1000' } }) })
+      await setTailLines(1000)
+      await act(async () => { fireEvent.click(screen.getByTestId('logs-fontsize-sm')) })
       await act(async () => { fireEvent.click(screen.getByTestId('logs-follow-toggle')) })
       await act(async () => { fireEvent.click(screen.getByTestId('logs-format-toggle')) })
 
-      expect(logSettings.value).toEqual({ follow: false, formatted: false, tail: 1000 })
+      expect(logSettings.value).toEqual({ follow: false, formatted: false, tail: 1000, fontSize: 'sm' })
+    })
+
+    it('applies the font size to the log body via a CSS variable', async () => {
+      render(<WorkloadLogsViewer {...defaultProps} />)
+      await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
+
+      // Default is medium (12px).
+      expect(screen.getByTestId('logs-body')).toHaveStyle({ '--logs-font-size': '12px' })
+
+      await act(async () => { fireEvent.click(screen.getByTestId('logs-settings-toggle')) })
+      await act(async () => { fireEvent.click(screen.getByTestId('logs-fontsize-lg')) })
+      expect(screen.getByTestId('logs-body')).toHaveStyle({ '--logs-font-size': '14px' })
     })
 
     it('does not change an already-open viewer when the settings are reset', async () => {
       render(<WorkloadLogsViewer {...defaultProps} />)
       await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
 
-      await act(async () => { fireEvent.change(screen.getByTestId('logs-lines-select'), { target: { value: '1000' } }) })
+      await setTailLines(1000)
       await act(async () => { fireEvent.click(screen.getByTestId('logs-format-toggle')) })
 
       // Reset the persisted settings (as "Clear local storage" does) while the
@@ -1382,7 +1459,7 @@ describe('WorkloadLogsViewer component', () => {
       await act(async () => { resetLogSettings() })
 
       expect(logSettings.value).toEqual(DEFAULT_LOG_SETTINGS)
-      expect(screen.getByTestId('logs-lines-select')).toHaveValue('1000')
+      expect(screen.getByTestId('logs-tail-1000')).toHaveAttribute('aria-pressed', 'true')
       expect(screen.getByTestId('logs-format-toggle')).toHaveAttribute('aria-pressed', 'false')
     })
   })

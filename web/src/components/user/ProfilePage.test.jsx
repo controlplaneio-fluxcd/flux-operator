@@ -334,15 +334,15 @@ describe('ProfilePage', () => {
       render(<ProfilePage />)
 
       expect(screen.getByText('Log Viewer')).toBeInTheDocument()
-      expect(screen.getByText('Follow on · Formatted · 100 lines')).toBeInTheDocument()
+      expect(screen.getByText('Follow on · Formatted · 100 lines · Medium font')).toBeInTheDocument()
     })
 
     it('should reflect non-default log viewer settings', () => {
-      logSettings.value = { follow: false, formatted: false, tail: 500 }
+      logSettings.value = { follow: false, formatted: false, tail: 500, fontSize: 'lg' }
 
       render(<ProfilePage />)
 
-      expect(screen.getByText('Follow off · Raw · 500 lines')).toBeInTheDocument()
+      expect(screen.getByText('Follow off · Raw · 500 lines · Large font')).toBeInTheDocument()
     })
 
     it('should show Favorites label', () => {

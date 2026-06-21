@@ -7,8 +7,7 @@ import { downloadBlob } from '../../../utils/download'
 import { LEVELS, LEVEL_META, DEFAULT_LEVEL, detectLevel, stripAnsi } from '../../../utils/logLevel'
 import { decorateLine, highlightJson } from '../../../utils/logFormat'
 import { groupEntries } from '../../../utils/logGroup'
-import { useDismiss } from '../../../utils/useDismiss'
-import { logSettings, LINE_LIMITS } from '../../../utils/logSettings'
+import { logSettings, TAIL_LINES, FONT_SIZES } from '../../../utils/logSettings'
 
 // Sentinel option key for the "All containers" view, which streams every
 // container (init and regular) and interleaves the lines chronologically.
@@ -75,6 +74,28 @@ function mergeLogs(prev, incoming) {
   const merged = prevLines.concat(fresh)
   const capped = merged.length > MAX_BUFFER_LINES ? merged.slice(merged.length - MAX_BUFFER_LINES) : merged
   return capped.join('\n') + '\n'
+}
+
+/**
+ * countNewEntries - counts how many logical log entries an incoming follow payload
+ * adds to the buffer. An entry is a timestamped HEAD line (continuation lines such
+ * as stack frames carry no timestamp and fold into their head, so they aren't
+ * counted). Dedup mirrors mergeLogs: a head already buffered is a re-send, not a
+ * new entry. Used to show a transient "+N new" indicator after a poll appends.
+ *
+ * @param {string} prev - The accumulated log payload before the append
+ * @param {string} incoming - The newly fetched log payload
+ * @returns {number} The number of new entries the append introduces
+ */
+function countNewEntries(prev, incoming) {
+  const add = incoming.split('\n').filter(Boolean)
+  if (add.length === 0) return 0
+  const seen = new Set(prev.split('\n').filter(Boolean))
+  let count = 0
+  for (const line of add) {
+    if (entryTimestamp(line) && !seen.has(line)) count++
+  }
+  return count
 }
 
 // Captures the leading RFC3339 timestamp the API prepends to each log line.
@@ -239,80 +260,65 @@ function ToggleButton({ active, onClick, label, title, testid, disabled, childre
   )
 }
 
-// Button styled like the toolbar selects, but for a custom dropdown (a native
-// <select> can't render the per-level color swatches).
-const LEVEL_BUTTON_CLASS = `${FIELD_CLASS} px-2 inline-flex items-center gap-1.5`
-
-// Level filter options: "All levels" plus one entry per level. Constant.
-const LEVEL_OPTIONS = [
-  { value: 'all', label: 'All levels', swatch: null },
-  ...LEVELS.map((l) => ({ value: l, label: LEVEL_META[l].label, swatch: LEVEL_META[l].swatch }))
-]
-
 /**
- * LevelMenu - log-level filter. A custom dropdown (not a native select) so each
- * option can show its level color swatch. Selecting a level shows only entries
- * of that exact level; "All levels" disables the filter.
+ * ToggleGroup - a labelled segmented control in the settings panel. One button
+ * per option, the selected one highlighted; clicking calls onChange with its
+ * value. Used for both the tail-lines and font-size settings.
  *
  * @param {Object} props
- * @param {string} props.value - Current level, or 'all'
+ * @param {string} props.label - Row label and group aria-label
+ * @param {Array<{value: any, label: string, testid: string}>} props.options - The choices
+ * @param {any} props.value - The currently selected option value
  * @param {Function} props.onChange - Called with the chosen value
+ * @param {string} props.testid - data-testid for the group container
  */
-function LevelMenu({ value, onChange }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef(null)
-
-  useDismiss(ref, () => setOpen(false), open)
-
-  const current = LEVEL_OPTIONS.find(o => o.value === value) || LEVEL_OPTIONS[0]
-
+function ToggleGroup({ label, options, value, onChange, testid }) {
   return (
-    <div class="relative flex-1 min-w-0 sm:flex-none sm:w-auto" ref={ref}>
-      <button
-        type="button"
-        onClick={() => setOpen(v => !v)}
-        class={`${LEVEL_BUTTON_CLASS} w-full justify-between sm:w-auto`}
-        data-testid="logs-level-filter"
-        aria-label="Log level"
-        aria-expanded={open}
-        title="Show only logs of this level"
+    <div class="flex items-center gap-3">
+      <span class="text-xs font-medium text-gray-600 dark:text-gray-300 w-20 flex-shrink-0">{label}</span>
+      <div
+        class="flex w-60 max-w-full rounded-md border border-gray-300 dark:border-gray-600 overflow-hidden"
+        role="group"
+        aria-label={label}
+        data-testid={testid}
       >
-        {current.swatch && <span class={`w-2 h-2 rounded-full ${current.swatch}`} />}
-        <span class="flex-1 text-left sm:flex-none">{current.label}</span>
-        <svg class="w-3 h-3 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
-      {open && (
-        <div
-          class="absolute left-0 mt-1 w-full sm:w-36 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50"
-          data-testid="logs-level-menu"
-        >
-          {LEVEL_OPTIONS.map((o) => (
-            <button
-              key={o.value}
-              type="button"
-              onClick={() => { onChange(o.value); setOpen(false) }}
-              class={`w-full px-2 py-1 text-left text-xs inline-flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 ${
-                o.value === value ? 'font-semibold text-gray-900 dark:text-gray-100' : 'text-gray-700 dark:text-gray-300'
-              }`}
-              data-testid={`logs-level-option-${o.value}`}
-            >
-              <span class={`w-2 h-2 rounded-full flex-shrink-0 ${o.swatch || 'border border-gray-400 dark:border-gray-500'}`} />
-              {o.label}
-            </button>
-          ))}
-        </div>
-      )}
+        {options.map((o, i) => (
+          <button
+            key={o.value}
+            type="button"
+            onClick={() => onChange(o.value)}
+            class={`flex-1 px-3 py-1 text-xs text-center focus:outline-none focus-visible:ring-2 focus-visible:ring-flux-blue focus-visible:ring-inset ${
+              i > 0 ? 'border-l border-gray-300 dark:border-gray-600' : ''
+            } ${
+              value === o.value
+                ? 'bg-flux-blue text-white'
+                : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600'
+            }`}
+            data-testid={o.testid}
+            aria-pressed={value === o.value}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
+
+// Level filter options for the native select: "All levels" plus one entry per
+// level. Constant.
+const LEVEL_OPTIONS = [
+  { value: 'all', label: 'All levels' },
+  ...LEVELS.map((l) => ({ value: l, label: LEVEL_META[l].label }))
+]
 
 // Shared monospace body styling for a formatted log line: a horizontally
 // scrollable, wrapping row. The block/spans/plain-code variants share it; the
 // JSON <pre> reuses the style with a margin reset.
 const LINE_CLASS = 'overflow-x-auto font-mono whitespace-pre-wrap break-all text-gray-800 dark:text-gray-200'
-const LINE_STYLE = 'padding: 0.25rem 0.75rem; font-size: 12px; line-height: 1.5;'
+// font-size is driven by the --logs-font-size CSS variable set on the log body
+// container from the persisted font-size setting, falling back to 12px.
+const LINE_STYLE = 'padding: 0.25rem 0.75rem; font-size: var(--logs-font-size, 12px); line-height: 1.5;'
 
 /**
  * LogLineBody - renders the formatted body of one log line: a structured block,
@@ -369,7 +375,8 @@ function LogLineBody({ entry }) {
   }
   return (
     <div
-      class="px-3 py-0.5 text-sm font-mono whitespace-pre-wrap break-all text-gray-800 dark:text-gray-200"
+      class="px-3 py-0.5 font-mono whitespace-pre-wrap break-all text-gray-800 dark:text-gray-200"
+      style="font-size: var(--logs-font-size, 12px); line-height: 1.5;"
       data-testid="logs-line"
     >
       {entry.text}
@@ -604,6 +611,12 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
   const [filter, setFilter] = useState('')
   const [levelFilter, setLevelFilter] = useState('all')
   const [formatted, setFormatted] = useState(() => logSettings.peek().formatted)
+  // Monospace font size for the log body, seeded from the persisted setting and
+  // applied via the --logs-font-size CSS variable on the body container.
+  const [fontSize, setFontSize] = useState(() => logSettings.peek().fontSize)
+  // Whether the settings panel (tail-lines slider, font size) is expanded below
+  // the toolbar. Local to the session, not persisted.
+  const [showSettings, setShowSettings] = useState(false)
   const [fullScreen, setFullScreen] = useState(false)
   const [logs, setLogs] = useState('')
   const [loading, setLoading] = useState(false)
@@ -612,6 +625,9 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
   // stays visible. The full-pane `error` is used only when there is no buffer.
   const [followError, setFollowError] = useState(null)
   const [flashLatest, setFlashLatest] = useState(false)
+  // Number of entries the most recent follow poll appended, shown as a clickable
+  // "+N new" indicator until the next poll replaces the count (zero hides it).
+  const [appendedCount, setAppendedCount] = useState(0)
   // Whether the current buffer's lines are pod-tagged and/or container-tagged (set
   // from the response, so the parser never has to guess the wire format). Pod
   // tagging marks the all-pods view, container tagging the all-containers view;
@@ -624,6 +640,9 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
 
   const bodyRef = useRef(null)
   const prevLogsRef = useRef('')
+  // Mirror of the current `logs` buffer, so a follow poll can count the entries it
+  // appends against the live buffer without listing `logs` in fetchLogs' deps.
+  const logsRef = useRef('')
   // Identity (timestamp + text) of the most recent visible line, so the
   // new-entry highlight fires only when that line actually changes.
   const prevLatestKeyRef = useRef(null)
@@ -755,8 +774,15 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
       if (fetchGenRef.current !== gen) return
       const incoming = resp?.logs || ''
       if (append) {
+        // Count the new entries against the live buffer before merging, so the
+        // "+N new" indicator reflects what this poll appended. It's set on every
+        // poll (0 hides it), so the count persists until the next refresh replaces it.
+        const added = countNewEntries(logsRef.current, incoming)
         setLogs(prev => mergeLogs(prev, incoming))
+        setAppendedCount(added)
       } else {
+        // A reset replaces the buffer; no "appended" count applies.
+        setAppendedCount(0)
         setLogs(incoming)
       }
       // The response states whether its lines are pod-tagged and how many requested
@@ -808,14 +834,14 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
     if (!formatted) setLevelFilter('all')
   }, [formatted])
 
-  // Persist the follow/formatted/tailLines settings so they carry across sessions.
-  // The signal's own effect writes them to localStorage. On mount this writes the
-  // seeded values back (a redundant but harmless write of identical content). The
-  // component seeds via peek() and never reads the signal reactively, so writing it
-  // here cannot re-render the viewer or feed back into this effect.
+  // Persist the follow/formatted/tailLines/fontSize settings so they carry across
+  // sessions. The signal's own effect writes them to localStorage. On mount this
+  // writes the seeded values back (a redundant but harmless write of identical
+  // content). The component seeds via peek() and never reads the signal reactively,
+  // so writing it here cannot re-render the viewer or feed back into this effect.
   useEffect(() => {
-    logSettings.value = { follow, formatted, tail: tailLines }
-  }, [follow, formatted, tailLines])
+    logSettings.value = { follow, formatted, tail: tailLines, fontSize }
+  }, [follow, formatted, tailLines, fontSize])
 
   // Poll for new logs while following: silent (no spinner flicker) and appending
   // (visible lines stay put).
@@ -1074,6 +1100,10 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
     return () => clearTimeout(id)
   }, [logs, logGroups])
 
+  // Keep logsRef in sync with the buffer so a follow poll can diff its append
+  // against the live buffer (fetchLogs intentionally omits `logs` from its deps).
+  useEffect(() => { logsRef.current = logs }, [logs])
+
   // Track whether the view is pinned to the bottom. Updated on every user
   // scroll so the auto-scroll below only follows new entries when the user is
   // already at the bottom; scrolling up to read older logs stops the next poll
@@ -1103,6 +1133,13 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
 
   // Download the current logs as a text file, named after the pod for a single
   // pod or the workload for the all-pods view.
+  // Resolve the selected font-size key to its pixel value for the CSS variable,
+  // defaulting to medium if a stale key somehow slips through.
+  const fontSizePx = useMemo(
+    () => (FONT_SIZES.find(f => f.key === fontSize) || FONT_SIZES[1]).px,
+    [fontSize]
+  )
+
   const downloadName = allPods ? (workloadName || 'workload') : effectivePodKey
   const handleDownload = useCallback(() => {
     downloadBlob(new window.Blob([logs], { type: 'text/plain' }), `${downloadName}.log`)
@@ -1178,20 +1215,20 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
               </svg>
             </ToggleButton>
 
-            {/* Lines select — shares row 1 with the toggles and the filter. Sized to
-                its content (the contains filter takes the remaining width). */}
-            <select
-              value={tailLines}
-              onChange={(e) => setTailLines(Number(e.target.value))}
-              class={`${SELECT_CLASS} shrink-0 sm:w-auto`}
-              data-testid="logs-lines-select"
-              aria-label="Number of lines"
-              title="Number of log lines to fetch"
+            {/* Settings — expands a panel below the toolbar with the tail-lines
+                slider and the font size toggle group. */}
+            <ToggleButton
+              active={showSettings}
+              onClick={() => setShowSettings(v => !v)}
+              label="Log settings"
+              title="Tail lines and font size"
+              testid="logs-settings-toggle"
             >
-              {LINE_LIMITS.map((n) => (
-                <option key={n} value={n}>{n} ln</option>
-              ))}
-            </select>
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.343 3.94c.09-.542.56-.94 1.11-.94h1.093c.55 0 1.02.398 1.11.94l.149.894c.07.424.384.764.78.93.398.164.855.142 1.205-.108l.737-.527a1.125 1.125 0 0 1 1.45.12l.773.774c.39.389.44 1.002.12 1.45l-.527.737c-.25.35-.272.806-.107 1.204.165.397.505.71.93.78l.893.15c.543.09.94.56.94 1.109v1.094c0 .55-.397 1.02-.94 1.11l-.894.149c-.424.07-.764.383-.929.78-.165.398-.143.854.107 1.204l.527.738c.32.447.27 1.06-.12 1.45l-.774.773a1.125 1.125 0 0 1-1.449.12l-.738-.527c-.35-.25-.806-.272-1.203-.107-.397.165-.71.505-.781.929l-.149.894c-.09.542-.56.94-1.11.94h-1.094c-.55 0-1.019-.398-1.11-.94l-.148-.894c-.071-.424-.384-.764-.781-.93-.398-.164-.854-.142-1.204.108l-.738.527c-.447.32-1.06.27-1.45-.12l-.773-.774a1.125 1.125 0 0 1-.12-1.45l.527-.737c.25-.35.273-.806.108-1.204-.165-.397-.505-.71-.93-.78l-.893-.15c-.543-.09-.94-.56-.94-1.109v-1.094c0-.55.397-1.02.94-1.11l.894-.149c.424-.07.764-.383.929-.78.165-.398.143-.854-.107-1.204l-.527-.738a1.125 1.125 0 0 1 .12-1.45l.773-.773a1.125 1.125 0 0 1 1.45-.12l.737.527c.35.25.807.272 1.204.107.397-.165.71-.505.78-.929l.15-.894Z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+              </svg>
+            </ToggleButton>
 
             {/* Separator (desktop only) between the view controls and the filter. */}
             <div class="hidden sm:block w-px h-5 bg-gray-300 dark:bg-gray-600" />
@@ -1248,7 +1285,20 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
 
             {/* Minimum level filter. Formatted mode only — raw is verbatim with no
                 level semantics, so the filter is hidden (and reset to "all"). */}
-            {formatted && <LevelMenu value={levelFilter} onChange={setLevelFilter} />}
+            {formatted && (
+              <select
+                value={levelFilter}
+                onChange={(e) => setLevelFilter(e.target.value)}
+                class={`${SELECT_CLASS} flex-1 min-w-0 truncate sm:flex-none sm:w-40`}
+                data-testid="logs-level-filter"
+                aria-label="Log level"
+                title="Show only logs of this level"
+              >
+                {LEVEL_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            )}
           </div>
 
           {/* Actions (desktop only): download + fullscreen are hidden on mobile,
@@ -1289,8 +1339,33 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
           </div>
         </div>
 
+        {/* Settings panel: expands below the toolbar with the tail-lines slider and
+            the font size toggle group. Both apply on the spot and persist via the
+            settings effect above. */}
+        {showSettings && (
+          <div
+            class="flex flex-col gap-3 px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800"
+            data-testid="logs-settings-panel"
+          >
+            <ToggleGroup
+              label="Tail lines"
+              testid="logs-tail-group"
+              value={tailLines}
+              onChange={setTailLines}
+              options={TAIL_LINES.map(n => ({ value: n, label: n >= 1000 ? `${n / 1000}K` : String(n), testid: `logs-tail-${n}` }))}
+            />
+            <ToggleGroup
+              label="Font size"
+              testid="logs-fontsize-group"
+              value={fontSize}
+              onChange={setFontSize}
+              options={FONT_SIZES.map(f => ({ value: f.key, label: f.label, testid: `logs-fontsize-${f.key}` }))}
+            />
+          </div>
+        )}
+
         {/* Body */}
-        <div ref={bodyRef} onScroll={handleScroll} class="flex-1 overflow-auto overscroll-contain bg-white dark:bg-gray-950" data-testid="logs-body">
+        <div ref={bodyRef} onScroll={handleScroll} style={`--logs-font-size: ${fontSizePx}px`} class="flex-1 overflow-auto overscroll-contain bg-white dark:bg-gray-950" data-testid="logs-body">
           {error ? (
             <div class="m-3 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-xs text-red-800 dark:text-red-200" data-testid="logs-error">
               {error}
@@ -1392,6 +1467,23 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
                   ? `showing ${partial.streamed} of ${partial.total} pods`
                   : 'results truncated'}
               </span>
+            )}
+            {/* Transient indicator of how many entries the last follow poll appended.
+                Clicking jumps to the latest line and re-pins the view to the bottom. */}
+            {appendedCount > 0 && (
+              <button
+                type="button"
+                onClick={scrollToBottom}
+                class="inline-flex items-center gap-1 text-xs font-medium text-flux-blue hover:underline flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-flux-blue rounded"
+                data-testid="logs-appended-count"
+                aria-live="polite"
+                title="Scroll to latest logs"
+              >
+                <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                </svg>
+                +{appendedCount} new
+              </button>
             )}
           </div>
           {loading ? (

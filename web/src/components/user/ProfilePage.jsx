@@ -11,7 +11,7 @@ import { DashboardPanel, TabButton } from '../dashboards/common/panel'
 import { KubernetesIcon, OpenIDIcon } from '../layout/Icons'
 import { favorites } from '../../utils/favorites'
 import { navHistory } from '../../utils/navHistory'
-import { logSettings } from '../../utils/logSettings'
+import { logSettings, FONT_SIZES } from '../../utils/logSettings'
 import Prism from 'prismjs'
 import 'prismjs/components/prism-json'
 
@@ -67,8 +67,9 @@ export function ProfilePage() {
 
   // One-line summary of the persisted log viewer settings.
   const logViewerSummary = useMemo(() => {
-    const { follow, formatted, tail } = logSettings.value
-    return `${follow ? 'Follow on' : 'Follow off'} · ${formatted ? 'Formatted' : 'Raw'} · ${tail} lines`
+    const { follow, formatted, tail, fontSize } = logSettings.value
+    const font = (FONT_SIZES.find(f => f.key === fontSize) || FONT_SIZES[1]).label
+    return `${follow ? 'Follow on' : 'Follow off'} · ${formatted ? 'Formatted' : 'Raw'} · ${tail} lines · ${font} font`
   }, [logSettings.value])
 
   return (
