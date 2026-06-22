@@ -11,12 +11,14 @@ by impersonating the authenticated user for every Kubernetes API call.
 However, a small number of operations intentionally bypass user impersonation
 and run with the operator's own service-account privileges instead.
 
-Every such internal operation is implemented by calling an internal `WithPrivileges()`
-option on the Kubernetes client. This page documents **every** call,
-explains how it leverages system privileges to minimize the amount of RBAC
-permissions administrators need to grant to users, and describes how the
-system fulfills these critical internal requirements without exposing
-sensitive data.
+Most such internal operations are implemented by calling an internal
+`WithPrivileges()` option on the Kubernetes client. The documented exception is
+namespace visibility: the kubeclient wrapper directly uses its privileged base
+client to enumerate namespaces before filtering the result through the user's
+RBAC checks. This page documents **every** elevated backend path, explains how
+it leverages system privileges to minimize the amount of RBAC permissions
+administrators need to grant to users, and describes how the system fulfills
+these critical internal requirements without exposing sensitive data.
 
 By relying on the system to safely handle these internal operations,
 administrators can enforce a much stricter least-privilege posture.
@@ -128,10 +130,13 @@ pipeline that manages them. The system handles this resolution internally withou
 
 ## 5. Cluster-Wide Report Building
 
-**Where:** The main dashboard and the periodic background report refresh.
+**Where:** The main dashboard, the periodic background report refresh,
+the Workloads search page, and the global quick-search workload results.
 
 **Internal operation:**
-The system scans all Flux custom resources across all namespaces to compute reconciler statistics and build the `FluxReport`.
+The system scans all Flux custom resources across all namespaces to compute
+reconciler statistics, build the `FluxReport`, and extract Kubernetes workload
+references from Flux applier inventories.
 
 **How it works:**
 The operator builds a `FluxReport` by scanning all Flux custom resources
@@ -141,11 +146,25 @@ single report object. This report is built periodically on a background
 goroutine and cached. When a user requests the report, the cached data
 is filtered to show only the namespaces the user has access to.
 
+During the same scan, the reporter also reads applier
+`status.inventory.entries`, keeps local Kubernetes workload entries
+(Deployment, StatefulSet, DaemonSet, CronJob), stamps them with the owning
+reconciler's reference and status, and caches them in a workload index.
+Appliers targeting remote clusters are skipped. The Workloads page and
+global quick-search workload results are served from this cache and filtered
+to the namespaces the user can access.
+
 **Least privilege benefit:**
 The report is the backbone of the Web UI dashboard. Building it requires
 cross-namespace visibility that no single user is guaranteed to have —
-especially in multi-tenant clusters. The privileged scan produces **aggregated statistics only**
-(counts, readiness percentages, status summaries). By handling this internally and filtering the response based on the user's namespace access, we avoid granting users cluster-wide read access while still delivering a meaningful, isolated dashboard experience.
+especially in multi-tenant clusters. The privileged scan exposes summarized
+reconciler data (counts, readiness percentages, status summaries) and
+inventory-derived workload reference (kind, namespace, name, apiVersion, and
+parent reconciler reference/status), never workload specs, workload status
+conditions, pod data, or secrets. By handling this internally and filtering the
+response based on the user's namespace access, we avoid granting users
+cluster-wide read access or `apps`/`batch` read permissions while still
+delivering a meaningful, isolated dashboard and workload search experience.
 
 ---
 
@@ -191,41 +210,21 @@ This feature is crucial for least-privilege security scenarios. If users were re
 **Where:** Namespace search filter dropdown and dashboard statistics filtering.
 
 **Internal operation:**
-The system lists all namespaces to determine which ones the user is permitted to view.
+The kubeclient wrapper lists all namespaces with its privileged base client to
+determine which ones the user is permitted to view.
 
 **How it works:**
-To populate the namespace filter dropdown and filter the main dashboard statistics, the backend needs to know which namespaces the user is allowed to see. It uses the system client to list all namespaces, and then performs a `SelfSubjectAccessReview` for the user to check if they have `get` permissions on `ResourceSets` in each namespace. If they do, the namespace's existence is revealed to the user in the UI.
+To populate the namespace filter dropdown and filter the main dashboard
+statistics, the backend needs to know which namespaces the user is allowed to
+see. This path does not call `WithPrivileges()` because it already runs inside
+the kubeclient wrapper: `ListUserNamespaces` uses the wrapper's privileged base
+client to list all namespaces, and then performs a `SelfSubjectAccessReview` for
+the user to check if they have `get` permissions on `ResourceSets` in each
+namespace. If they do, the namespace's existence is revealed to the user in the
+UI.
 
 **Least privilege benefit:**
 Users do not need cluster-wide `list` permissions on namespaces just to populate the UI dropdown. The system determines what the user is allowed to see internally, keeping user permissions tightly scoped to only the resources they actively manage. This preserves strict multi-tenant boundaries by removing the need for broad, cluster-level namespace access.
-
----
-
-## 9. Inventory-Derived Workloads Index
-
-**Where:** The Workloads search page and the global quick-search workload results.
-
-**Internal operation:**
-The system extracts the Kubernetes workloads (Deployment, StatefulSet,
-DaemonSet, CronJob) managed by every Flux applier from the appliers'
-`status.inventory.entries`, during the same privileged background pass that
-builds the dashboard report. No additional cluster queries (and therefore no
-`apps`/`batch` RBAC on the operator) are performed.
-
-**How it works:**
-While building the `FluxReport`, the reporter already reads every applier
-reconciler and its inventory. It keeps the workload-kind entries, stamps each
-with the owning reconciler's reference and status, and caches them in a workload
-index. The Workloads page is served from this cache, filtered to the namespaces
-the user can access via the same per-namespace `get resourcesets` gate used for
-the dashboard (see [Namespace Visibility](#8-namespace-visibility)).
-
-**Least privilege benefit:**
-A user with Flux read access in a namespace (can `get resourcesets`) can
-enumerate all Flux-managed workload **names** in that namespace **without**
-holding any `apps`/`batch` RBAC. The index exposes only the workload identity
-(kind, namespace, name, apiVersion) and the parent reconciler reference — never
-workload spec, status conditions, pod data, or secrets.
 
 ---
 
@@ -237,8 +236,7 @@ workload spec, status conditions, pod data, or secrets.
 | 2 | Flux GVK resolution         | System API discovery                               | None (internal metadata only)                                                 |
 | 3 | Audit event recording       | System writes event                                | None (server-side only)                                                       |
 | 4 | Audit pod-owner resolution  | System reads owner chain                           | None (server-side only)                                                       |
-| 5 | Dashboard report            | System scans cluster                               | Aggregated stats filtered by user namespace                                   |
+| 5 | Dashboard report and workloads index | System scans Flux resources and applier inventories | Aggregated stats and workload reference + parent reconciler status, filtered by user namespace |
 | 6 | Controller metrics          | System reads metrics API                           | CPU/memory usage of Flux controllers                                          |
 | 7 | Fine-Grained GitOps Actions | System patches resource                            | None (server-side mutation only)                                              |
-| 8 | Namespace visibility        | System lists namespaces                            | Visible namespace names                                                       |
-| 9 | Workloads index             | System extracts workloads from applier inventories | Workload identity + parent reconciler name/status, filtered by user namespace |
+| 8 | Namespace visibility        | Wrapper lists namespaces with privileged base client | Visible namespace names after RBAC filtering                                  |
