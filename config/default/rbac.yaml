@@ -117,3 +117,10 @@ rules:
       - pods
     verbs:
       - delete
+  # Allow action: view logs of Pods owned by workloads managed by Flux.
+  - apiGroups:
+      - ""
+    resources:
+      - pods/log
+    verbs:
+      - get

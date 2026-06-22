@@ -5,6 +5,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen } from '@testing-library/preact'
 import userEvent from '@testing-library/user-event'
 import { InventoryPanel } from './InventoryPanel'
+import { fetchWithMock } from '../../../utils/fetch'
 import { getPanelById } from '../common/panel.test'
 
 // Mock useHashTab to use simple useState instead
@@ -14,6 +15,11 @@ vi.mock('../../../utils/hash', async () => {
     useHashTab: (panel, defaultTab) => useState(defaultTab)
   }
 })
+
+// Mock the workload status fetch the panel issues for the Graph/Workloads tabs
+vi.mock('../../../utils/fetch', () => ({
+  fetchWithMock: vi.fn(() => Promise.resolve({ workloads: [] }))
+}))
 
 describe('InventoryPanel component', () => {
   const mockKustomizationData = {
@@ -746,6 +752,46 @@ describe('InventoryPanel component', () => {
 
     // Tab should be active
     expect(workloadsTab).toHaveClass('border-flux-blue')
+  })
+
+  it('fetches workload status at the panel level and propagates it to the Workloads tab', async () => {
+    const user = userEvent.setup()
+
+    // The panel owns the fetch; return a real status for the inventory's Deployment
+    fetchWithMock.mockResolvedValueOnce({
+      workloads: [
+        {
+          kind: 'Deployment',
+          namespace: 'production',
+          name: 'app',
+          status: 'Current',
+          statusMessage: 'Deployment has minimum availability.'
+        }
+      ]
+    })
+
+    render(
+      <InventoryPanel
+        resourceData={mockKustomizationData}
+        onNavigate={mockOnNavigate}
+      />
+    )
+
+    await user.click(screen.getByText('Workloads'))
+
+    // The fetched status renders as a badge in the tab row, replacing the placeholder
+    expect(await screen.findByText('Ready')).toBeInTheDocument()
+    expect(screen.queryByTestId('workload-status-computing')).not.toBeInTheDocument()
+
+    // The panel issued the batch POST with the resolved workload
+    expect(fetchWithMock).toHaveBeenCalledWith(expect.objectContaining({
+      endpoint: '/api/v1/workloads',
+      method: 'POST',
+      body: { workloads: [{ kind: 'Deployment', name: 'app', namespace: 'production' }] }
+    }))
+
+    // And the row links to the dedicated workload dashboard
+    expect(document.querySelector('a[href="/workload/Deployment/production/app"]')).not.toBeNull()
   })
 
   it('should not show Workloads tab when there are no workload items', () => {

@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -458,4 +460,210 @@ func TestGetFavoritesStatus_EmptyList(t *testing.T) {
 
 	// Should return empty result
 	g.Expect(resources).To(BeEmpty())
+}
+
+func TestGetFavoritesStatus_Workload_Privileged_Success(t *testing.T) {
+	g := NewWithT(t)
+
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-fav-workload",
+			Namespace: "default",
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: new(int32(1)),
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "test-fav-workload"},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"app": "test-fav-workload"},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{Name: "nginx", Image: "nginx:latest"}},
+				},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, deployment)).To(Succeed())
+	defer testClient.Delete(ctx, deployment)
+
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	favorites := []FavoriteItem{
+		{Kind: "Deployment", Namespace: "default", Name: "test-fav-workload"},
+	}
+	resources := handler.GetFavoritesStatus(ctx, favorites)
+
+	g.Expect(resources).To(HaveLen(1))
+	g.Expect(resources[0].Kind).To(Equal("Deployment"))
+	g.Expect(resources[0].Name).To(Equal("test-fav-workload"))
+	g.Expect(resources[0].Namespace).To(Equal("default"))
+	// kstatus vocabulary, not the Flux Ready/Failed set.
+	g.Expect(resources[0].Status).NotTo(Equal("NotFound"))
+	g.Expect(resources[0].Status).To(BeElementOf("Current", "InProgress", "Unknown"))
+	// LastReconciled is mapped from the workload's creation timestamp.
+	g.Expect(resources[0].LastReconciled.IsZero()).To(BeFalse())
+}
+
+func TestGetFavoritesStatus_Workload_NotFound(t *testing.T) {
+	g := NewWithT(t)
+
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	favorites := []FavoriteItem{
+		{Kind: "Deployment", Namespace: "default", Name: "nonexistent-workload-fav"},
+	}
+	resources := handler.GetFavoritesStatus(ctx, favorites)
+
+	g.Expect(resources).To(HaveLen(1))
+	g.Expect(resources[0].Status).To(Equal("NotFound"))
+	g.Expect(resources[0].Message).To(Equal("Workload not found in the cluster"))
+}
+
+func TestGetFavoritesStatus_Workload_CronJob(t *testing.T) {
+	g := NewWithT(t)
+
+	cronJob := &batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-fav-cronjob",
+			Namespace: "default",
+		},
+		Spec: batchv1.CronJobSpec{
+			Schedule: "*/5 * * * *",
+			JobTemplate: batchv1.JobTemplateSpec{
+				Spec: batchv1.JobSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							RestartPolicy: corev1.RestartPolicyOnFailure,
+							Containers:    []corev1.Container{{Name: "busybox", Image: "busybox:latest"}},
+						},
+					},
+				},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, cronJob)).To(Succeed())
+	defer testClient.Delete(ctx, cronJob)
+
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	favorites := []FavoriteItem{
+		{Kind: "CronJob", Namespace: "default", Name: "test-fav-cronjob"},
+	}
+	resources := handler.GetFavoritesStatus(ctx, favorites)
+
+	g.Expect(resources).To(HaveLen(1))
+	g.Expect(resources[0].Kind).To(Equal("CronJob"))
+	g.Expect(resources[0].Status).NotTo(Equal("NotFound"))
+	// CronJob override yields the schedule as the message when idle.
+	g.Expect(resources[0].Status).To(BeElementOf("Idle", "Progressing", "Suspended"))
+}
+
+func TestGetFavoritesStatus_Workload_GetButNoListPods(t *testing.T) {
+	g := NewWithT(t)
+
+	// The favorites workload path computes a lightweight status without listing
+	// pods. A user who can get the Deployment but not list pods must still see a
+	// valid status, never NotFound.
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-fav-workload-no-pods",
+			Namespace: "default",
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: new(int32(1)),
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "test-fav-workload-no-pods"},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"app": "test-fav-workload-no-pods"},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{Name: "nginx", Image: "nginx:latest"}},
+				},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, deployment)).To(Succeed())
+	defer testClient.Delete(ctx, deployment)
+
+	// Grant get on deployments only, deliberately omitting pods access.
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-fav-workload-no-pods-reader",
+			Namespace: "default",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"apps"},
+				Resources: []string{"deployments"},
+				Verbs:     []string{"get"},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, role)).To(Succeed())
+	defer testClient.Delete(ctx, role)
+
+	roleBinding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-fav-workload-no-pods-binding",
+			Namespace: "default",
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     role.Name,
+		},
+		Subjects: []rbacv1.Subject{
+			{Kind: "User", Name: "fav-workload-no-pods-user"},
+		},
+	}
+	g.Expect(testClient.Create(ctx, roleBinding)).To(Succeed())
+	defer testClient.Delete(ctx, roleBinding)
+
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	imp := user.Impersonation{
+		Username: "fav-workload-no-pods-user",
+		Groups:   []string{"system:authenticated"},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile:       user.Profile{Name: "No Pod Access User"},
+		Impersonation: imp,
+	}, userClient)
+
+	favorites := []FavoriteItem{
+		{Kind: "Deployment", Namespace: "default", Name: "test-fav-workload-no-pods"},
+	}
+	resources := handler.GetFavoritesStatus(userCtx, favorites)
+
+	g.Expect(resources).To(HaveLen(1))
+	g.Expect(resources[0].Kind).To(Equal("Deployment"))
+	g.Expect(resources[0].Status).NotTo(Equal("NotFound"),
+		"user with get on the workload but no list on pods must still see a valid status")
 }

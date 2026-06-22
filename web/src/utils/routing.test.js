@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/preact'
 import { signal } from '@preact/signals'
-import { serializeFilters } from './routing'
+import { serializeFilters, urlWithParam } from './routing'
 
 describe('serializeFilters', () => {
   it('should serialize simple filter object to query string', () => {
@@ -59,6 +59,52 @@ describe('serializeFilters', () => {
   it('should handle numeric string values', () => {
     const filters = { limit: '10', offset: '0' }
     expect(serializeFilters(filters)).toBe('limit=10&offset=0')
+  })
+})
+
+describe('urlWithParam', () => {
+  beforeEach(() => {
+    window.history.replaceState(null, '', '/')
+  })
+
+  it('adds a param to a path with no existing query', () => {
+    window.history.replaceState(null, '', '/workload/Deployment/apps/podinfo')
+    expect(urlWithParam('logs', 'podinfo-abc')).toBe('/workload/Deployment/apps/podinfo?logs=podinfo-abc')
+  })
+
+  it('preserves existing params when adding a new one', () => {
+    window.history.replaceState(null, '', '/workload/Deployment/apps/podinfo?tab=pods')
+    expect(urlWithParam('logs', 'all')).toBe('/workload/Deployment/apps/podinfo?tab=pods&logs=all')
+  })
+
+  it('overwrites an existing value for the same param', () => {
+    window.history.replaceState(null, '', '/p?logs=old')
+    expect(urlWithParam('logs', 'new')).toBe('/p?logs=new')
+  })
+
+  it('removes the param when the value is falsy, keeping others', () => {
+    window.history.replaceState(null, '', '/p?tab=pods&logs=podinfo-abc')
+    expect(urlWithParam('logs', null)).toBe('/p?tab=pods')
+  })
+
+  it('drops the query string entirely when removing the only param', () => {
+    window.history.replaceState(null, '', '/p?logs=podinfo-abc')
+    expect(urlWithParam('logs', null)).toBe('/p')
+  })
+
+  it('URL-encodes the value', () => {
+    window.history.replaceState(null, '', '/p')
+    expect(urlWithParam('q', 'a b&c')).toBe('/p?q=a+b%26c')
+  })
+
+  it('preserves the hash (detail-panel tab state) when setting a param', () => {
+    window.history.replaceState(null, '', '/p#workload-pods')
+    expect(urlWithParam('logs', 'app-abc')).toBe('/p?logs=app-abc#workload-pods')
+  })
+
+  it('preserves the hash when removing a param', () => {
+    window.history.replaceState(null, '', '/p?logs=app-abc#workload-pods')
+    expect(urlWithParam('logs', null)).toBe('/p#workload-pods')
   })
 })
 

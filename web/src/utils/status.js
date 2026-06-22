@@ -134,6 +134,27 @@ export function getEventBadgeClass(type) {
 }
 
 /**
+ * Get badge class for Kubernetes container states.
+ * Maps container state labels to appropriate badge styling.
+ * @param {string} stateLabel - Container state label (Running, Waiting, Terminated, Completed)
+ * @returns {string} Tailwind CSS classes for the badge
+ */
+export function getContainerStateBadgeClass(stateLabel) {
+  switch (stateLabel) {
+  case 'Running':
+    return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
+  case 'Waiting':
+    return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
+  case 'Completed':
+    return 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-400'
+  case 'Terminated':
+    return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+  default:
+    return 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400'
+  }
+}
+
+/**
  * Get solid background color class for resource status bars/charts.
  * @param {string} status - Status value (Ready, Failed, Progressing, Suspended, Unknown)
  * @returns {string} Tailwind CSS classes for the background
@@ -172,13 +193,61 @@ export function getEventBarColor(type) {
 }
 
 /**
+ * Normalize a status value to the Flux vocabulary (Ready/Failed/Progressing/
+ * Suspended/Unknown) used by status charts, filters, and borders. Kubernetes workload
+ * kstatus values are mapped to their Flux equivalents (Current/Idle -> Ready,
+ * InProgress -> Progressing, Terminating -> Suspended); Flux statuses and any
+ * unrecognized value pass through unchanged. Keep this in sync with
+ * getWorkloadStatusBadgeClass so badges, borders, and charts stay consistent.
+ * @param {string} status - Status value
+ * @returns {string} Status value in the Flux vocabulary
+ */
+export function normalizeToFluxStatus(status) {
+  switch (status) {
+  case 'Current':
+  case 'Idle':
+    return 'Ready'
+  case 'InProgress':
+    return 'Progressing'
+  case 'Terminating':
+    return 'Suspended'
+  default:
+    return status
+  }
+}
+
+/**
+ * Get dot color class for a Flux resource status.
+ * Aligns with resourceStatuses in constants.js; unknown/empty falls back to gray.
+ * @param {string} status - Status value (Ready, Failed, Progressing, Suspended, Unknown)
+ * @returns {string} Tailwind background color class for a status dot
+ */
+export function getStatusDotClass(status) {
+  switch (status) {
+  case 'Ready':
+    return 'bg-green-500'
+  case 'Failed':
+    return 'bg-red-500'
+  case 'Progressing':
+    return 'bg-blue-500'
+  case 'Suspended':
+    return 'bg-yellow-500'
+  default:
+    return 'bg-gray-500'
+  }
+}
+
+/**
  * Get border color class for resource status.
  * Uses semantic color classes (border-success, border-danger, etc.) for consistency.
- * @param {string} status - Status value (Ready, Failed, Progressing, Suspended, Unknown)
+ * Accepts both Flux resource statuses and Kubernetes workload kstatus values
+ * (normalized via normalizeToFluxStatus), so workload favorites render a border
+ * consistent with their status badge.
+ * @param {string} status - Status value
  * @returns {string} Tailwind CSS classes for the border
  */
 export function getStatusBorderClass(status) {
-  switch (status) {
+  switch (normalizeToFluxStatus(status)) {
   case 'Ready':
     return 'border-success'
   case 'Failed':

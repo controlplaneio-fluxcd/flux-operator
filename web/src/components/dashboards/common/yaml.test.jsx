@@ -77,6 +77,21 @@ describe('usePrismTheme', () => {
     expect(document.getElementById(LINK_ID)).toBeNull()
   })
 
+  it('keeps the link while another consumer is still mounted (reference counted)', () => {
+    // Two components use the shared theme link concurrently.
+    const first = renderHook(() => usePrismTheme())
+    const second = renderHook(() => usePrismTheme())
+    expect(document.getElementById(LINK_ID)).not.toBeNull()
+
+    // Unmounting one must NOT remove the link the other still relies on.
+    first.unmount()
+    expect(document.getElementById(LINK_ID)).not.toBeNull()
+
+    // Removed only once the last consumer unmounts.
+    second.unmount()
+    expect(document.getElementById(LINK_ID)).toBeNull()
+  })
+
   it('should recreate link when theme changes', async () => {
     appliedTheme.value = 'light'
 

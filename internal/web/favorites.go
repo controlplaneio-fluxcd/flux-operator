@@ -10,13 +10,25 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/fluxcd/cli-utils/pkg/kstatus/status"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
 )
+
+// favoriteWorkloadKinds is the set of Kubernetes workload kinds supported as
+// favorites. Unlike supportedWorkloadKinds, it does not include Pod, since pods
+// are not standalone favorites.
+var favoriteWorkloadKinds = map[string]struct{}{
+	workloadKindDeployment:  {},
+	workloadKindStatefulSet: {},
+	workloadKindDaemonSet:   {},
+	workloadKindCronJob:     {},
+}
 
 // FavoriteItem represents a single favorite resource request.
 type FavoriteItem struct {
@@ -96,6 +108,18 @@ func (h *Handler) GetFavoritesStatus(ctx context.Context, favorites []FavoriteIt
 				mu.Unlock()
 			}
 
+			// Workload favorites (Deployment, StatefulSet, DaemonSet, CronJob)
+			// are resolved with the user's own client and a lightweight status
+			// computed on the fetched object alone. This needs only get on the
+			// workload, not list on pods.
+			if _, ok := favoriteWorkloadKinds[fav.Kind]; ok {
+				rs := h.getWorkloadFavoriteStatus(ctx, fav)
+				mu.Lock()
+				result[i] = rs
+				mu.Unlock()
+				return
+			}
+
 			gvk, err := h.preferredFluxGVK(ctx, fav.Kind)
 			if err != nil {
 				var message string
@@ -151,4 +175,73 @@ func (h *Handler) GetFavoritesStatus(ctx context.Context, favorites []FavoriteIt
 	wg.Wait()
 
 	return result
+}
+
+// getWorkloadFavoriteStatus fetches a workload favorite with the user's own
+// client and computes a lightweight rollout status from the fetched object
+// alone, without listing pods, extracting images, or running SSARs. This means
+// a user who can get the workload but not list its pods still sees a valid
+// status instead of NotFound.
+//
+// It always returns a populated ResourceStatus: a "NotFound" status (with an
+// explanatory message) when the workload cannot be fetched, otherwise the
+// computed status. The returned Status uses the kstatus vocabulary
+// (Current/InProgress/...), which the client renders via the workload badge
+// helper based on the favorite's kind.
+func (h *Handler) getWorkloadFavoriteStatus(ctx context.Context, fav FavoriteItem) reporter.ResourceStatus {
+	notFound := func(message string) reporter.ResourceStatus {
+		return reporter.ResourceStatus{
+			Kind:      fav.Kind,
+			Name:      fav.Name,
+			Namespace: fav.Namespace,
+			Status:    "NotFound",
+			Message:   message,
+		}
+	}
+
+	obj := &unstructured.Unstructured{}
+	obj.SetGroupVersionKind(getWorkloadGVK(fav.Kind))
+
+	err := h.kubeClient.GetClient(ctx).Get(ctx, client.ObjectKey{
+		Namespace: fav.Namespace,
+		Name:      fav.Name,
+	}, obj)
+	if err != nil {
+		switch {
+		case errors.IsNotFound(err):
+			return notFound("Workload not found in the cluster")
+		case errors.IsForbidden(err):
+			return notFound("User does not have access to the workload")
+		default:
+			log.FromContext(ctx).Error(err, "failed to get favorite workload",
+				"kind", fav.Kind,
+				"name", fav.Name,
+				"namespace", fav.Namespace)
+			return notFound("Internal error while fetching workload")
+		}
+	}
+
+	// Compute the rollout status using kstatus on the object alone.
+	workloadStatus := string(status.UnknownStatus)
+	message := ""
+	if res, err := status.Compute(obj); err != nil {
+		message = "Failed to compute status"
+	} else {
+		workloadStatus = string(res.Status)
+		message = res.Message
+
+		// For CronJob, override the status based on suspend state and active jobs.
+		if fav.Kind == workloadKindCronJob {
+			workloadStatus, message = getCronJobWorkloadStatus(obj, res.Status, res.Message)
+		}
+	}
+
+	return reporter.ResourceStatus{
+		Kind:           fav.Kind,
+		Name:           fav.Name,
+		Namespace:      fav.Namespace,
+		Status:         workloadStatus,
+		Message:        message,
+		LastReconciled: metav1.Time{Time: obj.GetCreationTimestamp().Time},
+	}
 }

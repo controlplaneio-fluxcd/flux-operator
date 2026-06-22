@@ -3,6 +3,22 @@
 
 import { useEffect, useRef } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
+import { workloadKinds } from './constants'
+
+/**
+ * Builds the dashboard URL for a Kubernetes object, routing workload kinds
+ * (Deployment/StatefulSet/DaemonSet/CronJob) to the workload dashboard and all
+ * other kinds to the resource dashboard.
+ *
+ * @param {string} kind - Object kind
+ * @param {string} namespace - Object namespace
+ * @param {string} name - Object name
+ * @returns {string} Dashboard path
+ */
+export function getDashboardUrl(kind, namespace, name) {
+  const base = workloadKinds.includes(kind) ? 'workload' : 'resource'
+  return `/${base}/${encodeURIComponent(kind)}/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}`
+}
 
 /**
  * Serializes filter object to URL query string
@@ -25,6 +41,29 @@ export function serializeFilters(filters) {
   }
 
   return params.toString()
+}
+
+/**
+ * Returns the current URL (path + query string + hash) with a single query
+ * parameter set or, when value is falsy, removed. All other existing params, the
+ * path, and the hash are preserved (the hash carries the detail-panel tab state).
+ * Used to make a view's open state shareable via the address bar without disturbing
+ * other filters, e.g.
+ * `window.history.replaceState(null, '', urlWithParam('logs', podName))`.
+ *
+ * @param {string} name - Query parameter name
+ * @param {string} [value] - Value to set; when falsy the parameter is removed
+ * @returns {string} The relative URL (pathname + optional query string + hash)
+ */
+export function urlWithParam(name, value) {
+  const params = new URLSearchParams(window.location.search)
+  if (value) {
+    params.set(name, value)
+  } else {
+    params.delete(name)
+  }
+  const queryString = params.toString()
+  return `${window.location.pathname}${queryString ? `?${queryString}` : ''}${window.location.hash}`
 }
 
 /**

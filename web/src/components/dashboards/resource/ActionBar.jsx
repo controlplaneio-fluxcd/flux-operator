@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useRef } from 'preact/hooks'
 import { fetchWithMock } from '../../../utils/fetch'
+import { downloadBlob } from '../../../utils/download'
 
 /**
  * ActionBar - Action buttons for Flux resources (Reconcile, Reconcile Source, Suspend/Resume)
@@ -198,16 +199,7 @@ export function ActionBar({ kind, namespace, name, resourceData, onActionComplet
       }
 
       const blob = await response.blob()
-      const blobUrl = window.URL.createObjectURL(blob)
-
-      const a = document.createElement('a')
-      a.href = blobUrl
-      a.download = `${kind}-${namespace}-${name}.tar.gz`
-      document.body.appendChild(a)
-      a.click()
-
-      document.body.removeChild(a)
-      window.URL.revokeObjectURL(blobUrl)
+      downloadBlob(blob, `${kind}-${namespace}-${name}.tar.gz`)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -232,16 +224,7 @@ export function ActionBar({ kind, namespace, name, resourceData, onActionComplet
       }
 
       const blob = await response.blob()
-      const blobUrl = window.URL.createObjectURL(blob)
-
-      const a = document.createElement('a')
-      a.href = blobUrl
-      a.download = artifact.filename || `${artifact.name}.tar.gz`
-      document.body.appendChild(a)
-      a.click()
-
-      document.body.removeChild(a)
-      window.URL.revokeObjectURL(blobUrl)
+      downloadBlob(blob, artifact.filename || `${artifact.name}.tar.gz`)
     } catch (err) {
       setError(err.message)
     } finally {

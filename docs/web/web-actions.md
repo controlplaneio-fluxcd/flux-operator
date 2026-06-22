@@ -8,7 +8,8 @@ description: Guide for user actions in the Flux Web UI.
 The Flux Web UI provides interactive actions that allow users to manage
 Flux resources and Kubernetes workloads directly from the browser.
 Actions include triggering reconciliations, suspending and resuming resources,
-downloading artifacts, restarting workloads, running jobs, and deleting pods.
+downloading artifacts, restarting workloads, running jobs, deleting pods,
+and viewing pod logs.
 
 Actions are only available when [authentication](web-user-management.md) is configured.
 Each action requires specific RBAC permissions granted through Kubernetes
@@ -89,6 +90,16 @@ can be downloaded individually.
 Workload actions operate on Kubernetes workloads managed by Flux.
 These actions are available on the workload detail page for
 Deployments, StatefulSets, DaemonSets, CronJobs, and Pods.
+
+### View Logs
+
+The View Logs action streams a pod's container logs in a read-only viewer.
+It is available per pod from the Pods list and from the action bar as
+a "View logs" button that aggregates the logs of all the workload's pods.
+
+!!! note "RBAC"
+
+    Requires the `get` verb on the `pods/log` subresource in the core API group.
 
 ### Rollout Restart
 

@@ -22,6 +22,7 @@ on-call monitoring and Agentic AI incident response in production environments.
 - **Pinpoint Issues:** Quickly identify and troubleshoot failures within your app delivery pipelines.
 - **Navigate Efficiently:** Use advanced search and filtering to find specific resources instantly.
 - **Deep Dive:** Access dedicated dashboards for ResourceSets, HelmReleases, Kustomizations and Flux sources.
+- **Inspect Logs:** View the logs of workload pods directly from the browser, scoped to your RBAC permissions.
 - **Favorites:** Mark important resources as favorites for quick access and at-a-glance status monitoring.
 - **Mobile-Optimized:** Stay informed with a fully responsive interface designed for on-the-go checks.
 - **Adaptive Theming:** Toggle between dark and light modes to suit your environment and preference.

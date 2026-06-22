@@ -26,13 +26,30 @@ const mockWorkloads = {
     containerImages: [
       'ghcr.io/fluxcd/source-controller:v1.7.4@sha256:16f21ac1795528df80ddef51ccbb14a57b78ea26e66dc8551636ef9a3cec71b3'
     ],
-    userActions: ['deletePods'],
+    userActions: ['deletePods', 'logs'],
     pods: [
       {
         name: 'source-controller-5f76f5c549-wz2gk',
         status: 'Running',
         statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
-        createdAt: getTimestamp(7, 2, 15) // 7 days, 2 hours, 15 minutes ago
+        createdAt: getTimestamp(7, 2, 15), // 7 days, 2 hours, 15 minutes ago
+        podStatus: {
+          phase: 'Running',
+          containerStatuses: [
+            {
+              name: 'manager',
+              ready: true,
+              restartCount: 0,
+              imageID: 'ghcr.io/fluxcd/source-controller:v1.7.4@sha256:16f21ac1795528df80ddef51ccbb14a57b78ea26e66dc8551636ef9a3cec71b3',
+              state: { running: { startedAt: getTimestamp(7, 2, 15) } }
+            }
+          ],
+          conditions: [
+            { type: 'Ready', status: 'True' },
+            { type: 'ContainersReady', status: 'True' },
+            { type: 'PodScheduled', status: 'True' }
+          ]
+        }
       }
     ]
   },
@@ -46,7 +63,7 @@ const mockWorkloads = {
     containerImages: [
       'ghcr.io/fluxcd/kustomize-controller:v1.7.3@sha256:e8ca82d66dafdd8ef77e0917f4adec53478075130ac61264dc0f91eb0f8cb6ce'
     ],
-    userActions: ['deletePods'],
+    userActions: ['deletePods', 'logs'],
     pods: [
       {
         name: 'kustomize-controller-5fc57fb9cc-bhl8q',
@@ -66,7 +83,7 @@ const mockWorkloads = {
     containerImages: [
       'ghcr.io/fluxcd/helm-controller:v1.4.4@sha256:5eae73909e1471c0cd01bb23d87c9d4219a4f645134a23629c8708c72635398d'
     ],
-    userActions: ['deletePods'],
+    userActions: ['deletePods', 'logs'],
     pods: [
       {
         name: 'helm-controller-bf4685d7f-nxqsj',
@@ -85,7 +102,7 @@ const mockWorkloads = {
     containerImages: [
       'ghcr.io/fluxcd/notification-controller:v1.7.5@sha256:ba723a55f7c7c7feedd50bb5db0ff2dd9a3b0ae85b50f61a0457184025b38c54'
     ],
-    userActions: ['deletePods'],
+    userActions: ['deletePods', 'logs'],
     pods: [
       {
         name: 'notification-controller-58cfb55954-fcf6l',
@@ -106,19 +123,68 @@ const mockWorkloads = {
     containerImages: [
       'ghcr.io/fluxcd/image-automation-controller:v1.0.4@sha256:f9383dccb80ec65e274648941af623ce74084d25026e14389111c14b630efece'
     ],
-    userActions: ['deletePods'],
+    userActions: ['deletePods', 'logs'],
     pods: [
       {
         name: 'image-automation-controller-5c5fc5487b-w4458',
         status: 'Running',
         statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
-        createdAt: getTimestamp(5, 8, 45)
+        createdAt: getTimestamp(5, 8, 45),
+        podStatus: {
+          phase: 'Running',
+          initContainerStatuses: [
+            {
+              name: 'setup',
+              ready: true,
+              restartCount: 0,
+              imageID: 'ghcr.io/fluxcd/flux-cli:v2.7.2@sha256:6e1c7c1a3a8f5b4d2e1f0a9c8b7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c9d8',
+              state: { terminated: { reason: 'Completed', exitCode: 0, startedAt: getTimestamp(5, 8, 46), finishedAt: getTimestamp(5, 8, 45) } }
+            }
+          ],
+          containerStatuses: [
+            {
+              name: 'manager',
+              ready: true,
+              restartCount: 0,
+              imageID: 'ghcr.io/fluxcd/image-automation-controller:v1.0.4@sha256:f9383dccb80ec65e274648941af623ce74084d25026e14389111c14b630efece',
+              state: { running: { startedAt: getTimestamp(5, 8, 45) } }
+            }
+          ],
+          conditions: [
+            { type: 'Ready', status: 'True' },
+            { type: 'ContainersReady', status: 'True' },
+            { type: 'PodScheduled', status: 'True' }
+          ]
+        }
       },
       {
         name: 'image-automation-controller-dfcfc789b-9dtqk',
         status: 'Pending',
         statusMessage: 'Waiting: ImagePullBackOff',
-        createdAt: getTimestamp(0, 0, 5) // Recent pod with issue
+        createdAt: getTimestamp(0, 0, 5), // Recent pod with issue
+        podStatus: {
+          phase: 'Pending',
+          containerStatuses: [
+            {
+              name: 'manager',
+              ready: false,
+              restartCount: 3,
+              imageID: '',
+              state: {
+                waiting: {
+                  reason: 'ImagePullBackOff',
+                  message: 'Back-off pulling image "ghcr.io/fluxcd/image-automation-controller:v1.0.5"'
+                }
+              }
+            }
+          ],
+          conditions: [
+            { type: 'PodScheduled', status: 'True' },
+            { type: 'Initialized', status: 'True' },
+            { type: 'ContainersReady', status: 'False', reason: 'ContainersNotReady', message: 'containers with unready status: [manager]' },
+            { type: 'Ready', status: 'False', reason: 'ContainersNotReady', message: 'containers with unready status: [manager]' }
+          ]
+        }
       }
     ]
   },
@@ -131,7 +197,7 @@ const mockWorkloads = {
     containerImages: [
       'ghcr.io/fluxcd/image-reflector-controller:v1.0.4@sha256:0bdc30aea2b7cdfea02d0f6d53c06b9df0ea1c6516b85ed523792e222329c039'
     ],
-    userActions: ['deletePods'],
+    userActions: ['deletePods', 'logs'],
     pods: [
       {
         name: 'image-reflector-controller-547c8dbffc-2gjhj',
@@ -150,7 +216,7 @@ const mockWorkloads = {
     containerImages: [
       'ghcr.io/fluxcd/source-watcher:v2.0.3@sha256:9cd46c3c958dcfcd8a3c857fa09989f9df5d8396eae165f219cbb472343371a9'
     ],
-    userActions: ['deletePods'],
+    userActions: ['deletePods', 'logs'],
     pods: [
       {
         name: 'source-watcher-85bcf4bd57-vfbs6',
@@ -169,7 +235,7 @@ const mockWorkloads = {
     containerImages: [
       'ghcr.io/controlplaneio-fluxcd/flux-operator:v0.34.0'
     ],
-    userActions: ['deletePods'],
+    userActions: ['deletePods', 'logs'],
     pods: [
       {
         name: 'flux-operator-67cdfc557d-h656w',
@@ -190,7 +256,7 @@ const mockWorkloads = {
     containerImages: [
       'quay.io/jetstack/cert-manager-controller:v1.19.1'
     ],
-    userActions: ['deletePods'],
+    userActions: ['deletePods', 'logs'],
     pods: [
       {
         name: 'cert-manager-6b7bcdbb84-cclfj',
@@ -209,7 +275,7 @@ const mockWorkloads = {
     containerImages: [
       'quay.io/jetstack/cert-manager-cainjector:v1.19.1'
     ],
-    userActions: ['deletePods'],
+    userActions: ['deletePods', 'logs'],
     pods: [
       {
         name: 'cert-manager-cainjector-d74c65ddb-6v869',
@@ -228,7 +294,7 @@ const mockWorkloads = {
     containerImages: [
       'quay.io/jetstack/cert-manager-webhook:v1.19.1'
     ],
-    userActions: ['deletePods'],
+    userActions: ['deletePods', 'logs'],
     pods: [
       {
         name: 'cert-manager-webhook-6bf5dfc659-w95d9',
@@ -249,7 +315,7 @@ const mockWorkloads = {
     containerImages: [
       'registry.k8s.io/metrics-server/metrics-server:v0.8.0'
     ],
-    userActions: ['deletePods'],
+    userActions: ['deletePods', 'logs'],
     pods: [
       {
         name: 'metrics-server-57b56685f4-59gn2',
@@ -268,7 +334,7 @@ const mockWorkloads = {
     containerImages: [
       'tailscale/k8s-operator:v1.90.8'
     ],
-    userActions: ['deletePods'],
+    userActions: ['deletePods', 'logs'],
     pods: [
       {
         name: 'operator-84ddf77c66-gjsxz',
@@ -288,7 +354,7 @@ const mockWorkloads = {
     containerImages: [
       'ghcr.io/project-zot/zot:v2.1.11'
     ],
-    userActions: ['deletePods'],
+    userActions: ['deletePods', 'logs'],
     pods: [
       {
         name: 'zot-registry-0',
@@ -310,7 +376,7 @@ const mockWorkloads = {
     containerImages: [
       'ghcr.io/fluxcd/flux-cli:v2.6.1'
     ],
-    userActions: ['deletePods'],
+    userActions: ['deletePods', 'logs'],
     pods: [
       {
         name: 'garbage-collection-28945678-xk9j2',
@@ -330,7 +396,7 @@ const mockWorkloads = {
     containerImages: [
       'prom/prometheus:v3.3.0'
     ],
-    userActions: ['deletePods'],
+    userActions: ['deletePods', 'logs'],
     pods: [
       {
         name: 'prometheus-backup-28945600-abc12',
@@ -349,15 +415,151 @@ const mockWorkloads = {
     containerImages: [
       'quay.io/jetstack/cert-manager-ctl:v1.19.1'
     ],
-    userActions: ['deletePods'],
+    userActions: ['deletePods', 'logs'],
     pods: [
       {
         name: 'cert-renewal-check-28945500-def34',
         status: 'Failed',
         statusMessage: 'Reason: Error',
-        createdAt: getTimestamp(0, 12, 0) // 12 hours ago
+        createdAt: getTimestamp(0, 12, 0), // 12 hours ago
+        podStatus: {
+          phase: 'Failed',
+          containerStatuses: [
+            {
+              name: 'cert-check',
+              ready: false,
+              restartCount: 3,
+              imageID: 'quay.io/jetstack/cert-manager-ctl:v1.19.1@sha256:abc123def456',
+              state: {
+                terminated: {
+                  reason: 'Error',
+                  exitCode: 1,
+                  startedAt: getTimestamp(0, 12, 0),
+                  finishedAt: getTimestamp(0, 11, 55)
+                }
+              }
+            }
+          ],
+          conditions: [
+            { type: 'PodScheduled', status: 'True' },
+            { type: 'Initialized', status: 'True' },
+            { type: 'ContainersReady', status: 'False', reason: 'PodFailed' },
+            { type: 'Ready', status: 'False', reason: 'PodFailed' }
+          ]
+        }
       }
     ]
+  }
+}
+
+// Mock reconciler data for workload detail view.
+// Maps "ReconcilerKind/Namespace/Name" to the enriched Flux resource.
+const mockReconcilers = {
+  'Kustomization/flux-system/flux-controllers': {
+    apiVersion: 'kustomize.toolkit.fluxcd.io/v1',
+    kind: 'Kustomization',
+    metadata: { name: 'flux-controllers', namespace: 'flux-system' },
+    spec: { interval: '10m', prune: true },
+    status: {
+      reconcilerRef: { status: 'Ready', message: 'Applied revision: main@sha1:9b9218f' },
+      sourceRef: {
+        kind: 'GitRepository',
+        name: 'flux-system',
+        namespace: 'flux-system',
+        status: 'Ready',
+        url: 'https://github.com/example/fleet-infra'
+      },
+      lastAttemptedRevision: 'main@sha1:9b9218f'
+    }
+  },
+  'HelmRelease/cert-manager/cert-manager': {
+    apiVersion: 'helm.toolkit.fluxcd.io/v2',
+    kind: 'HelmRelease',
+    metadata: { name: 'cert-manager', namespace: 'cert-manager' },
+    spec: { interval: '30m' },
+    status: {
+      reconcilerRef: { status: 'Ready', message: 'Helm install succeeded' },
+      sourceRef: {
+        kind: 'HelmRepository',
+        name: 'jetstack',
+        namespace: 'cert-manager',
+        status: 'Ready',
+        url: 'https://charts.jetstack.io'
+      },
+      lastAttemptedRevision: 'v1.19.1'
+    }
+  },
+  'Kustomization/flux-system/monitoring': {
+    apiVersion: 'kustomize.toolkit.fluxcd.io/v1',
+    kind: 'Kustomization',
+    metadata: { name: 'monitoring', namespace: 'flux-system' },
+    spec: { interval: '15m', prune: true },
+    status: {
+      reconcilerRef: { status: 'Ready', message: 'Applied revision: main@sha1:03bba48' },
+      sourceRef: {
+        kind: 'GitRepository',
+        name: 'flux-system',
+        namespace: 'flux-system',
+        status: 'Ready',
+        url: 'https://github.com/example/fleet-infra'
+      },
+      lastAttemptedRevision: 'main@sha1:03bba48'
+    }
+  }
+}
+
+// Maps workload keys to their parent reconciler keys
+const workloadReconcilerMap = {
+  'Deployment/flux-system/source-controller': 'Kustomization/flux-system/flux-controllers',
+  'Deployment/flux-system/kustomize-controller': 'Kustomization/flux-system/flux-controllers',
+  'Deployment/flux-system/helm-controller': 'Kustomization/flux-system/flux-controllers',
+  'Deployment/flux-system/notification-controller': 'Kustomization/flux-system/flux-controllers',
+  'Deployment/flux-system/image-automation-controller': 'Kustomization/flux-system/flux-controllers',
+  'Deployment/flux-system/image-reflector-controller': 'Kustomization/flux-system/flux-controllers',
+  'Deployment/flux-system/source-watcher': 'Kustomization/flux-system/flux-controllers',
+  'Deployment/flux-system/flux-operator': 'Kustomization/flux-system/flux-controllers',
+  'Deployment/cert-manager/cert-manager': 'HelmRelease/cert-manager/cert-manager',
+  'Deployment/cert-manager/cert-manager-cainjector': 'HelmRelease/cert-manager/cert-manager',
+  'Deployment/cert-manager/cert-manager-webhook': 'HelmRelease/cert-manager/cert-manager',
+  'Deployment/monitoring/metrics-server': 'Kustomization/flux-system/monitoring',
+  'Deployment/tailscale/operator': 'Kustomization/flux-system/monitoring',
+  'StatefulSet/registry/zot-registry': 'Kustomization/flux-system/monitoring',
+  'CronJob/flux-system/garbage-collection': 'Kustomization/flux-system/flux-controllers',
+  'CronJob/monitoring/prometheus-backup': 'Kustomization/flux-system/monitoring',
+  'CronJob/cert-manager/cert-renewal-check': 'HelmRelease/cert-manager/cert-manager'
+}
+
+/**
+ * Build a mock API response for the workload detail endpoint (GET /api/v1/workload).
+ * Wraps the flat workload data into the shape returned by the Go backend:
+ * the full Kubernetes resource with workloadInfo (status, pods, reconciler) injected.
+ * @param {object} workload - Flat workload data from mockWorkloads
+ * @param {object|undefined} reconciler - Optional reconciler mock data
+ * @returns {object} - Mock API response matching GetWorkloadDetails format
+ */
+function buildWorkloadDetailResponse(workload, reconciler) {
+  const apiVersion = workload.kind === 'CronJob' ? 'batch/v1' : 'apps/v1'
+
+  return {
+    apiVersion,
+    kind: workload.kind,
+    metadata: {
+      name: workload.name,
+      namespace: workload.namespace,
+      creationTimestamp: workload.createdAt
+    },
+    spec: {},
+    status: {},
+    workloadInfo: {
+      status: workload.status,
+      statusMessage: workload.statusMessage,
+      createdAt: workload.createdAt,
+      restartedAt: workload.restartedAt,
+      containerImages: workload.containerImages,
+      userActions: workload.userActions,
+      pods: workload.pods,
+      reconciler: reconciler || undefined
+    }
   }
 }
 
@@ -365,7 +567,7 @@ const mockWorkloads = {
  * Get mock workload by kind, name, and namespace
  * This function is called by fetchWithMock when in mock mode
  * @param {string} endpoint - The API endpoint with query parameters
- * @returns {object} - Mock workload data
+ * @returns {object} - Mock workload data matching GetWorkloadDetails response format
  */
 export function getMockWorkload(endpoint) {
   // Parse query parameters from endpoint
@@ -388,7 +590,10 @@ export function getMockWorkload(endpoint) {
     return {}
   }
 
-  return workload
+  const reconcilerKey = workloadReconcilerMap[key]
+  const reconciler = reconcilerKey ? mockReconcilers[reconcilerKey] : undefined
+
+  return buildWorkloadDetailResponse(workload, reconciler)
 }
 
 /**
@@ -421,4 +626,108 @@ export function getMockWorkloads(body) {
   }
 
   return { workloads: results }
+}
+
+/**
+ * Get mock pod logs (GET /api/v1/workload/logs)
+ * This function is called by fetchWithMock when in mock mode
+ * @param {string} endpoint - The API endpoint with query parameters
+ * @returns {object} - Mock logs response matching WorkloadLogsResponse format
+ */
+export function getMockWorkloadLogs(endpoint) {
+  const queryString = endpoint.includes('?') ? endpoint.split('?')[1] : ''
+  const params = new URLSearchParams(queryString)
+  const name = params.get('name') || 'pod'
+  // The primary name plus repeated `pod` params form the "All pods" view; with
+  // more than one pod the lines are tagged with their origin, matching the
+  // backend wire format ("<pod> <ts> <msg>").
+  const pods = [...new Set([name, ...params.getAll('pod').filter(Boolean)])]
+  const tagged = pods.length > 1
+  // The container param may be repeated for the "All containers" view; the joined
+  // names are echoed back for parity with the backend.
+  const containers = params.getAll('container')
+  const container = containers.length > 0 ? containers.join(',') : 'app'
+  const tailLines = Math.max(1, parseInt(params.get('tailLines'), 10) || 100)
+  const sinceTime = params.get('sinceTime')
+  // Per-pod follow cursors ("<pod>=<rfc3339>") for the all-pods view.
+  const sinceByPod = {}
+  for (const v of params.getAll('since')) {
+    const idx = v.indexOf('=')
+    if (idx > 0) sinceByPod[v.slice(0, idx)] = v.slice(idx + 1)
+  }
+
+  // The levels are varied so the viewer's per-level coloring and filter are
+  // visible, and so following appends a mix of levels.
+  const messages = [
+    { level: 'info', msg: 'no changes since last reconciliation: observed revision \'refs/heads/main@sha1:aa26680\'' },
+    { level: 'debug', msg: 'artifact up-to-date with remote revision \'latest@sha256:fcf183b\'' },
+    { level: 'info', msg: 'reconciliation finished in 1.2s, next run in 1m0s' },
+    { level: 'warn', msg: 'slow reconciliation: took 4.7s, exceeding the 2s target' },
+    { level: 'error', msg: 'failed to fetch artifact: connection reset by peer' }
+  ]
+  // A line, tagged with its pod in the all-pods view. Every fifth line is a
+  // multi-line panic whose stack-trace continuation is identical across pods,
+  // exercising the continuation-grouping and dedup paths.
+  const entry = (ts, i, pod) => {
+    const tag = tagged ? `${pod} ` : ''
+    if (i % 5 === 0) {
+      return `${tag}${ts} panic: runtime error: invalid memory address\ngoroutine 1 [running]:\nmain.reconcile(0x0)`
+    }
+    const { level, msg } = messages[((i % messages.length) + messages.length) % messages.length]
+    return `${tag}${ts} {"level":"${level}","ts":"${ts}","msg":"${msg}","controller":"gitrepository","reconcileID":"id-${i}"}`
+  }
+
+  const respond = (logs) => {
+    const resp = { pod: pods.join(','), container, logs }
+    if (tagged) {
+      resp.tagged = true
+      resp.total = pods.length
+      resp.streamed = pods.length
+      resp.partial = false
+    }
+    return resp
+  }
+
+  // Follow poll: emit a couple of fresh entries per pod just after that pod's last
+  // seen line, interleaved chronologically, so the viewer can demonstrate
+  // appending. In single-pod mode there is one global sinceTime cursor.
+  const followLines = []
+  if (tagged) {
+    for (const pod of pods) {
+      const cur = sinceByPod[pod]
+      const base = cur ? new Date(cur) : null
+      if (!base || Number.isNaN(base.getTime())) continue
+      for (let i = 1; i <= 2; i++) {
+        const ts = new Date(base.getTime() + i * 1000).toISOString()
+        followLines.push({ ts, line: entry(ts, base.getSeconds() + i, pod) })
+      }
+    }
+    if (followLines.length > 0) {
+      followLines.sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0))
+      return respond(followLines.map(l => l.line).join('\n') + '\n')
+    }
+  } else {
+    const since = sinceTime ? new Date(sinceTime) : null
+    if (since && !Number.isNaN(since.getTime())) {
+      const lines = []
+      for (let i = 1; i <= 2; i++) {
+        const ts = new Date(since.getTime() + i * 1000).toISOString()
+        lines.push(entry(ts, since.getSeconds() + i, name))
+      }
+      return respond(lines.join('\n') + '\n')
+    }
+  }
+
+  // Initial load: generate up to tailLines entries per pod, interleaved oldest
+  // first so the all-pods view shows lines from every pod mixed by timestamp.
+  const count = Math.min(tailLines, 200)
+  const all = []
+  for (const pod of pods) {
+    for (let i = count - 1; i >= 0; i--) {
+      const ts = getTimestamp(0, 0, i)
+      all.push({ ts, line: entry(ts, count - i, pod) })
+    }
+  }
+  all.sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0))
+  return respond(all.map(l => l.line).join('\n') + '\n')
 }

@@ -16,9 +16,11 @@ const crdGroups = [...new Set(fluxCRDs.map(crd => crd.group))]
  * @param {Array<string>} props.namespaces - Array of namespace names from report
  * @param {Signal} [props.severitySignal] - Optional signal for event severity filter (Normal, Warning)
  * @param {Signal} [props.statusSignal] - Optional signal for resource status filter (Ready, Failed, etc.)
+ * @param {Array<string>} [props.kinds] - Optional flat list of kinds. When provided, the kind
+ *   dropdown renders a flat list instead of the Flux group-based optgroup layout.
  * @param {Function} props.onClear - Callback function to clear filters
  */
-export function FilterForm({ kindSignal, nameSignal, namespaceSignal, namespaces, severitySignal, statusSignal, onClear }) {
+export function FilterForm({ kindSignal, nameSignal, namespaceSignal, namespaces, severitySignal, statusSignal, kinds, onClear }) {
   return (
     <div class="flex flex-wrap gap-4 items-center">
       {/* Name Filter */}
@@ -60,13 +62,17 @@ export function FilterForm({ kindSignal, nameSignal, namespaceSignal, namespaces
           class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-flux-blue"
         >
           <option value="">All kinds</option>
-          {crdGroups.map(group => (
-            <optgroup key={group} label={group}>
-              {fluxCRDs.filter(crd => crd.group === group).map(crd => (
-                <option key={crd.kind} value={crd.kind}>{crd.kind}</option>
-              ))}
-            </optgroup>
-          ))}
+          {kinds
+            ? kinds.map(kind => (
+              <option key={kind} value={kind}>{kind}</option>
+            ))
+            : crdGroups.map(group => (
+              <optgroup key={group} label={group}>
+                {fluxCRDs.filter(crd => crd.group === group).map(crd => (
+                  <option key={crd.kind} value={crd.kind}>{crd.kind}</option>
+                ))}
+              </optgroup>
+            ))}
         </select>
       </div>
 

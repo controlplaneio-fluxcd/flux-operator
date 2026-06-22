@@ -280,6 +280,40 @@ describe('FavoritesPage component', () => {
       })
     })
 
+    it('should include workload favorites with kstatus when filtering by Flux vocab', async () => {
+      // Workload favorites return kstatus values (Current/Idle) but the chart/filter use
+      // Flux vocab (Ready); healthy workloads must survive a Ready status filter.
+      favorites.value = [
+        { kind: 'Deployment', namespace: 'default', name: 'web' },
+        { kind: 'CronJob', namespace: 'default', name: 'cron' },
+        { kind: 'Kustomization', namespace: 'default', name: 'app' }
+      ]
+
+      fetchWithMock.mockResolvedValue({
+        resources: [
+          { kind: 'Deployment', namespace: 'default', name: 'web', status: 'Current' },
+          { kind: 'CronJob', namespace: 'default', name: 'cron', status: 'Idle' },
+          { kind: 'Kustomization', namespace: 'default', name: 'app', status: 'Failed' }
+        ]
+      })
+
+      render(<FavoritesPage />)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('favorite-card-web')).toBeInTheDocument()
+      })
+
+      // Filter by Ready: Current/Idle workloads map to Ready and stay, Failed is dropped.
+      const statusFilterBtn = screen.getByTestId('status-filter-btn')
+      fireEvent.click(statusFilterBtn)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('favorite-card-web')).toBeInTheDocument()
+        expect(screen.getByTestId('favorite-card-cron')).toBeInTheDocument()
+        expect(screen.queryByTestId('favorite-card-app')).not.toBeInTheDocument()
+      })
+    })
+
     it('should show "No favorites match your search" when filter matches nothing', async () => {
       favorites.value = [
         { kind: 'FluxInstance', namespace: 'flux-system', name: 'flux' }

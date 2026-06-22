@@ -259,6 +259,12 @@ rules:
       - pods
     verbs:
       - delete
+  - apiGroups:
+      - ""
+    resources:
+      - pods/log
+    verbs:
+      - get
 ```
 
 Note that the `patch` verb is not enough to allow a user to perform actions in the Web UI.
@@ -274,3 +280,9 @@ The `restart` verb allows users to trigger a rollout restart on workloads
 
 The `delete` verb on pods allows users to delete individual pods,
 which will be recreated by their controller.
+
+The `get` verb on the `pods/log` subresource allows users to view the logs
+of pod containers from the workload detail page. This is a read-only
+capability performed under the user's own identity. The read-only
+`flux-web-user` role already grants this permission through its wildcard
+`get` rule.

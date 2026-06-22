@@ -4,6 +4,7 @@
 import { useState, useMemo, useEffect, useRef } from 'preact/hooks'
 import { fetchWithMock } from '../../../utils/fetch'
 import { getControllerName, getKindAlias } from '../../../utils/constants'
+import { getDashboardUrl } from '../../../utils/routing'
 import { formatTimestamp } from '../../../utils/time'
 import { DashboardPanel, TabButton } from '../common/panel'
 import { YamlBlock } from '../common/yaml'
@@ -299,7 +300,7 @@ export function SourcePanel({ resourceData }) {
             <div class="space-y-4">
               {/* Resource Link */}
               <a
-                href={`/resource/${encodeURIComponent(sourceRef.kind)}/${encodeURIComponent(sourceRef.namespace || namespace)}/${encodeURIComponent(sourceRef.name)}`}
+                href={getDashboardUrl(sourceRef.kind, sourceRef.namespace || namespace, sourceRef.name)}
                 class="flex items-center gap-2 text-sm text-flux-blue dark:text-blue-400 hover:underline"
               >
                 <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -424,7 +425,7 @@ export function SourcePanel({ resourceData }) {
                 <div class="space-y-4">
                   {/* Resource Link */}
                   <a
-                    href={`/resource/HelmChart/${encodeURIComponent(helmChartRef.namespace)}/${encodeURIComponent(helmChartRef.name)}`}
+                    href={getDashboardUrl('HelmChart', helmChartRef.namespace, helmChartRef.name)}
                     class="flex items-center gap-2 text-sm text-flux-blue dark:text-blue-400 hover:underline"
                   >
                     <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -6,6 +6,8 @@ import { signal } from '@preact/signals'
 import { themeMode, appliedTheme, cycleTheme, themes } from '../../utils/theme'
 import { clearFavorites } from '../../utils/favorites'
 import { clearNavHistory } from '../../utils/navHistory'
+import { resetLogSettings } from '../../utils/logSettings'
+import { writeSessionStorage } from '../../utils/storage'
 import { reportData } from '../../app'
 import { parseAuthProviderCookie } from '../../utils/cookies'
 import { OpenIDIcon, KubernetesIcon } from './Icons'
@@ -98,9 +100,10 @@ export function UserMenu() {
   }
 
   const handleClearLocalStorage = () => {
-    if (window.confirm('This will delete your favorites and navigation history from local storage. Continue?')) {
+    if (window.confirm('This will delete your favorites, navigation history and log viewer settings from local storage. Continue?')) {
       clearFavorites()
       clearNavHistory()
+      resetLogSettings()
       userMenuOpen.value = false
     }
   }
@@ -110,7 +113,7 @@ export function UserMenu() {
     // Store current path so LoginPage can redirect back after re-authentication
     const currentPath = window.location.pathname + window.location.search
     if (currentPath && currentPath !== '/') {
-      window.sessionStorage.setItem('flux-originalPath', currentPath)
+      writeSessionStorage('flux-originalPath', currentPath)
     }
     // Use POST to prevent CSRF attacks
     fetch('/logout', { method: 'POST' })

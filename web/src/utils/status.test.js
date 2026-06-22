@@ -9,9 +9,12 @@ import {
   getHistoryStatusBadgeClass,
   getHistoryDotClass,
   getEventBadgeClass,
+  getContainerStateBadgeClass,
   getStatusBarColor,
   getEventBarColor,
   getStatusBorderClass,
+  getStatusDotClass,
+  normalizeToFluxStatus,
   cleanStatus
 } from './status'
 
@@ -212,6 +215,40 @@ describe('status utilities', () => {
     })
   })
 
+  describe('getContainerStateBadgeClass', () => {
+    it('should return blue for Running state', () => {
+      expect(getContainerStateBadgeClass('Running')).toContain('bg-blue-100')
+      expect(getContainerStateBadgeClass('Running')).toContain('text-blue-800')
+    })
+
+    it('should return yellow for Waiting state', () => {
+      expect(getContainerStateBadgeClass('Waiting')).toContain('bg-yellow-100')
+      expect(getContainerStateBadgeClass('Waiting')).toContain('text-yellow-800')
+    })
+
+    it('should return red for Terminated state', () => {
+      expect(getContainerStateBadgeClass('Terminated')).toContain('bg-red-100')
+      expect(getContainerStateBadgeClass('Terminated')).toContain('text-red-800')
+    })
+
+    it('should return cyan for Completed state', () => {
+      expect(getContainerStateBadgeClass('Completed')).toContain('bg-cyan-100')
+      expect(getContainerStateBadgeClass('Completed')).toContain('text-cyan-800')
+    })
+
+    it('should return gray for unknown state', () => {
+      expect(getContainerStateBadgeClass('Unknown')).toContain('bg-gray-100')
+      expect(getContainerStateBadgeClass('Unknown')).toContain('text-gray-800')
+    })
+
+    it('should include dark mode classes', () => {
+      expect(getContainerStateBadgeClass('Running')).toContain('dark:bg-blue-900/30')
+      expect(getContainerStateBadgeClass('Waiting')).toContain('dark:bg-yellow-900/30')
+      expect(getContainerStateBadgeClass('Terminated')).toContain('dark:bg-red-900/30')
+      expect(getContainerStateBadgeClass('Completed')).toContain('dark:bg-cyan-900/30')
+    })
+  })
+
   describe('getStatusBarColor', () => {
     it('should return green for Ready status', () => {
       expect(getStatusBarColor('Ready')).toBe('bg-green-500 dark:bg-green-600')
@@ -256,6 +293,42 @@ describe('status utilities', () => {
     })
   })
 
+  describe('getStatusDotClass', () => {
+    it('should map Flux statuses to dot colors', () => {
+      expect(getStatusDotClass('Ready')).toBe('bg-green-500')
+      expect(getStatusDotClass('Failed')).toBe('bg-red-500')
+      expect(getStatusDotClass('Progressing')).toBe('bg-blue-500')
+      expect(getStatusDotClass('Suspended')).toBe('bg-yellow-500')
+    })
+
+    it('should fall back to gray for unknown or empty status', () => {
+      expect(getStatusDotClass('Unknown')).toBe('bg-gray-500')
+      expect(getStatusDotClass('')).toBe('bg-gray-500')
+      expect(getStatusDotClass(undefined)).toBe('bg-gray-500')
+    })
+  })
+
+  describe('normalizeToFluxStatus', () => {
+    it('should map healthy workload kstatus values to Ready', () => {
+      expect(normalizeToFluxStatus('Current')).toBe('Ready')
+      expect(normalizeToFluxStatus('Idle')).toBe('Ready')
+    })
+
+    it('should map InProgress to Progressing and Terminating to Suspended', () => {
+      expect(normalizeToFluxStatus('InProgress')).toBe('Progressing')
+      expect(normalizeToFluxStatus('Terminating')).toBe('Suspended')
+    })
+
+    it('should pass through Flux vocab and unrecognized values unchanged', () => {
+      expect(normalizeToFluxStatus('Ready')).toBe('Ready')
+      expect(normalizeToFluxStatus('Failed')).toBe('Failed')
+      expect(normalizeToFluxStatus('Progressing')).toBe('Progressing')
+      expect(normalizeToFluxStatus('Suspended')).toBe('Suspended')
+      expect(normalizeToFluxStatus('Unknown')).toBe('Unknown')
+      expect(normalizeToFluxStatus('SomethingElse')).toBe('SomethingElse')
+    })
+  })
+
   describe('getStatusBorderClass', () => {
     it('should return success border for Ready status', () => {
       expect(getStatusBorderClass('Ready')).toBe('border-success')
@@ -271,6 +344,13 @@ describe('status utilities', () => {
 
     it('should return info border for Progressing status', () => {
       expect(getStatusBorderClass('Progressing')).toBe('border-info')
+    })
+
+    it('should translate workload kstatus values to matching borders', () => {
+      expect(getStatusBorderClass('Current')).toBe('border-success')
+      expect(getStatusBorderClass('Idle')).toBe('border-success')
+      expect(getStatusBorderClass('InProgress')).toBe('border-info')
+      expect(getStatusBorderClass('Terminating')).toBe('border-warning')
     })
 
     it('should return gray border for Unknown status', () => {

@@ -21,6 +21,7 @@ export default [
         document: 'readonly',
         console: 'readonly',
         setTimeout: 'readonly',
+        clearTimeout: 'readonly',
         setInterval: 'readonly',
         clearInterval: 'readonly',
         fetch: 'readonly',

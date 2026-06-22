@@ -301,6 +301,62 @@ describe('FavoriteCard component', () => {
     })
   })
 
+  describe('workload favorites', () => {
+    const workloadFavorite = {
+      kind: 'Deployment',
+      namespace: 'apps',
+      name: 'podinfo'
+    }
+
+    it('should link to the workload dashboard for workload kinds', () => {
+      render(
+        <FavoriteCard
+          favorite={workloadFavorite}
+          resourceData={{ status: 'Current', lastReconciled: '2024-01-15T10:30:00Z' }}
+        />
+      )
+
+      const cardLink = screen.getByText('podinfo').closest('a')
+      expect(cardLink).toHaveAttribute('href', '/workload/Deployment/apps/podinfo')
+    })
+
+    it('should format workload kstatus into the display vocabulary', () => {
+      render(
+        <FavoriteCard
+          favorite={workloadFavorite}
+          resourceData={{ status: 'Current', lastReconciled: '2024-01-15T10:30:00Z' }}
+        />
+      )
+
+      // Current → Ready via formatWorkloadStatus
+      expect(screen.getByText('Ready')).toBeInTheDocument()
+      expect(screen.queryByText('Current')).not.toBeInTheDocument()
+    })
+
+    it('should format InProgress into Progressing', () => {
+      render(
+        <FavoriteCard
+          favorite={workloadFavorite}
+          resourceData={{ status: 'InProgress', lastReconciled: '2024-01-15T10:30:00Z' }}
+        />
+      )
+
+      expect(screen.getByText('Progressing')).toBeInTheDocument()
+    })
+
+    it('should still use the resource dashboard URL for Flux kinds', () => {
+      render(
+        <FavoriteCard
+          favorite={mockFavorite}
+          resourceData={mockResourceData}
+        />
+      )
+
+      const cardLink = screen.getByText('flux').closest('a')
+      expect(cardLink).toHaveAttribute('href', '/resource/FluxInstance/flux-system/flux')
+    })
+  })
+
   describe('timestamp handling', () => {
     it('should not show timestamp section when lastReconciled is missing', () => {
       render(

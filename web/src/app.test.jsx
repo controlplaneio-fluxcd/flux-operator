@@ -51,8 +51,16 @@ vi.mock('./components/search/ResourceList', () => ({
   ResourceList: () => <div data-testid="resource-list">ResourceList</div>
 }))
 
+vi.mock('./components/search/WorkloadList', () => ({
+  WorkloadList: () => <div data-testid="workload-list">WorkloadList</div>
+}))
+
 vi.mock('./components/dashboards/resource/ResourcePage', () => ({
   ResourcePage: () => <div data-testid="resource-page">ResourcePage</div>
+}))
+
+vi.mock('./components/dashboards/workload/WorkloadPage', () => ({
+  WorkloadPage: () => <div data-testid="workload-page">WorkloadPage</div>
 }))
 
 vi.mock('./components/common/NotFoundPage', () => ({

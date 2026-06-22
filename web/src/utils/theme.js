@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { signal, effect } from '@preact/signals'
+import { writeLocalStorage } from './storage'
 
 // Theme modes
 export const themes = {
@@ -42,7 +43,7 @@ effect(() => {
   }
 
   // Save to localStorage
-  localStorage.setItem('theme', mode)
+  writeLocalStorage('theme', mode)
 
   // Apply to document
   if (appliedTheme.value === themes.dark) {

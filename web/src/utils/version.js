@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { signal } from '@preact/signals'
+import { writeLocalStorage } from './storage'
 
 // localStorage keys
 const VERSION_STORAGE_KEY = 'flux-operator-version'
@@ -35,7 +36,7 @@ export function getOrCreateUUID() {
   let uuid = localStorage.getItem(UUID_STORAGE_KEY)
   if (!uuid) {
     uuid = crypto.randomUUID()
-    localStorage.setItem(UUID_STORAGE_KEY, uuid)
+    writeLocalStorage(UUID_STORAGE_KEY, uuid)
   }
   return uuid
 }
@@ -71,7 +72,7 @@ export async function checkForUpdates(version, fluxVersion, env = import.meta.en
     const data = await response.json()
 
     // Persist successful response to localStorage
-    localStorage.setItem(UPDATE_INFO_STORAGE_KEY, JSON.stringify(data))
+    writeLocalStorage(UPDATE_INFO_STORAGE_KEY, JSON.stringify(data))
 
     // Update the signal
     updateInfo.value = data
@@ -115,7 +116,7 @@ export function checkVersionChange(newVersion, fluxVersion) {
   const hasCachedInfoForVersion = cachedUpdateInfo?.current === newVersion
 
   // Store the new version
-  localStorage.setItem(VERSION_STORAGE_KEY, newVersion)
+  writeLocalStorage(VERSION_STORAGE_KEY, newVersion)
 
   // Check for updates if we don't have cached info for this specific version
   if (!hasCachedInfoForVersion) {

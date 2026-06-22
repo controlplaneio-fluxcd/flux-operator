@@ -72,10 +72,11 @@ func FilterReconcilerStatsByNamespaces(statsByNamespace []ReconcilerStatsByNames
 }
 
 func (r *FluxStatusReporter) getReconcilersStatus(ctx context.Context,
-	crds []metav1.GroupVersionKind) ([]fluxcdv1.FluxReconcilerStatus, []ReconcilerStatsByNamespace, []ResourceStatus, error) {
+	crds []metav1.GroupVersionKind) ([]fluxcdv1.FluxReconcilerStatus, []ReconcilerStatsByNamespace, []ResourceStatus, []WorkloadRef, error) {
 
 	var multiErr error
 	var resources []ResourceStatus
+	var workloads []WorkloadRef
 	metricList := make([]prometheus.Labels, 0)
 	resStats := make([]fluxcdv1.FluxReconcilerStatus, len(crds))
 	statsByNamespace := make([]ReconcilerStatsByNamespace, len(crds))
@@ -101,7 +102,17 @@ func (r *FluxStatusReporter) getReconcilersStatus(ctx context.Context,
 			globalStats.total = len(list.Items)
 			for _, item := range list.Items {
 				metricList = append(metricList, fluxLabelsToValues(item))
-				resources = append(resources, NewResourceStatus(item))
+				rs := NewResourceStatus(item)
+				resources = append(resources, rs)
+
+				// Extract the workloads managed by this applier from its
+				// inventory, skipping appliers that target a remote cluster.
+				// Only Kustomization and HelmRelease (the remote-capable kinds)
+				// appear in this loop and carry workload inventories; FluxInstance
+				// and ResourceSet are handled by getOperatorReconcilersStatus.
+				if isRemoteApplier(gvk.Kind) && !hasRemoteKubeConfig(item) {
+					workloads = append(workloads, extractWorkloads(item, rs)...)
+				}
 
 				ns := item.GetNamespace()
 				if _, exists := statsByNamespace[i].stats[ns]; !exists {
@@ -151,13 +162,14 @@ func (r *FluxStatusReporter) getReconcilersStatus(ctx context.Context,
 		metrics["FluxResource"].With(labels).Set(1)
 	}
 
-	opStats, opStatsByNamespace, opResources, err := r.getOperatorReconcilersStatus(ctx)
+	opStats, opStatsByNamespace, opResources, opWorkloads, err := r.getOperatorReconcilersStatus(ctx)
 	if err != nil {
 		multiErr = kerrors.NewAggregate([]error{multiErr, err})
 	} else {
 		resStats = append(resStats, opStats...)
 		statsByNamespace = append(statsByNamespace, opStatsByNamespace...)
 		resources = append(resources, opResources...)
+		workloads = append(workloads, opWorkloads...)
 	}
 
 	slices.SortStableFunc(resStats, func(i, j fluxcdv1.FluxReconcilerStatus) int {
@@ -167,14 +179,15 @@ func (r *FluxStatusReporter) getReconcilersStatus(ctx context.Context,
 		return cmp.Compare(i.apiVersion+i.kind, j.apiVersion+j.kind)
 	})
 
-	return resStats, statsByNamespace, resources, multiErr
+	return resStats, statsByNamespace, resources, workloads, multiErr
 }
 
 func (r *FluxStatusReporter) getOperatorReconcilersStatus(
-	ctx context.Context) ([]fluxcdv1.FluxReconcilerStatus, []ReconcilerStatsByNamespace, []ResourceStatus, error) {
+	ctx context.Context) ([]fluxcdv1.FluxReconcilerStatus, []ReconcilerStatsByNamespace, []ResourceStatus, []WorkloadRef, error) {
 
 	var multiErr error
 	var resources []ResourceStatus
+	var workloads []WorkloadRef
 	crds := []schema.GroupVersionKind{
 		fluxcdv1.GroupVersion.WithKind(fluxcdv1.FluxInstanceKind),
 		fluxcdv1.GroupVersion.WithKind(fluxcdv1.ResourceSetKind),
@@ -204,7 +217,15 @@ func (r *FluxStatusReporter) getOperatorReconcilersStatus(
 			globalStats.total = len(list.Items)
 
 			for _, item := range list.Items {
-				resources = append(resources, NewResourceStatus(item))
+				rs := NewResourceStatus(item)
+				resources = append(resources, rs)
+
+				// Extract the workloads managed by this operator reconciler
+				// from its inventory (FluxInstance and ResourceSet). Neither
+				// targets a remote cluster.
+				if reconcilerManagesWorkloads(gvk.Kind) {
+					workloads = append(workloads, extractWorkloads(item, rs)...)
+				}
 
 				ns := item.GetNamespace()
 				if _, exists := statsByNamespace[i].stats[ns]; !exists {
@@ -242,7 +263,7 @@ func (r *FluxStatusReporter) getOperatorReconcilersStatus(
 		}
 	}
 
-	return resStats, statsByNamespace, resources, multiErr
+	return resStats, statsByNamespace, resources, workloads, multiErr
 }
 
 func formatSize(b int64) string {

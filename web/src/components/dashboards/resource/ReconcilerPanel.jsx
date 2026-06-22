@@ -5,6 +5,7 @@ import { useMemo, useEffect, useRef, useState } from 'preact/hooks'
 import { fetchWithMock } from '../../../utils/fetch'
 import { formatTimestamp } from '../../../utils/time'
 import { getControllerName, getKindAlias } from '../../../utils/constants'
+import { getDashboardUrl } from '../../../utils/routing'
 import { DashboardPanel, TabButton } from '../common/panel'
 import { YamlBlock } from '../common/yaml'
 import { getStatusBadgeClass, getEventBadgeClass, cleanStatus } from '../../../utils/status'
@@ -265,7 +266,7 @@ export function ReconcilerPanel({ kind, name, namespace, resourceData }) {
                   const [refKind, refNamespace, refName] = reconcilerRef.managedBy.split('/')
                   return (
                     <a
-                      href={`/resource/${encodeURIComponent(refKind)}/${encodeURIComponent(refNamespace)}/${encodeURIComponent(refName)}`}
+                      href={getDashboardUrl(refKind, refNamespace, refName)}
                       class="ml-1 text-flux-blue dark:text-blue-400 hover:underline"
                     >
                       <span class="hidden md:inline break-all">{reconcilerRef.managedBy}</span>

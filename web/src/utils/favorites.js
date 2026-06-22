@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { signal, effect } from '@preact/signals'
+import { writeLocalStorage } from './storage'
 
 // LocalStorage key for favorites
 const STORAGE_KEY = 'favorites'
@@ -36,7 +37,7 @@ export const favorites = signal(getFavoritesFromStorage())
 
 // Sync favorites to localStorage whenever they change
 effect(() => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(favorites.value))
+  writeLocalStorage(STORAGE_KEY, JSON.stringify(favorites.value))
 })
 
 /**

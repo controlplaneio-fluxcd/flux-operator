@@ -22,6 +22,7 @@ type FluxStatusReport struct {
 	Spec             fluxcdv1.FluxReportSpec
 	StatsByNamespace []ReconcilerStatsByNamespace
 	Resources        []ResourceStatus
+	Workloads        []WorkloadRef
 }
 
 // FluxStatusReporter is responsible for computing
@@ -71,13 +72,14 @@ func (r *FluxStatusReporter) Compute(ctx context.Context) (*FluxStatusReport, er
 	}
 	result.Spec.ComponentsStatus = componentsStatus
 
-	reconcilersStatus, statsByNamespace, resources, err := r.getReconcilersStatus(ctx, crds)
+	reconcilersStatus, statsByNamespace, resources, workloads, err := r.getReconcilersStatus(ctx, crds)
 	if err != nil {
 		return result, fmt.Errorf("failed to compute reconcilers status: %w", err)
 	}
 	result.Spec.ReconcilersStatus = reconcilersStatus
 	result.StatsByNamespace = statsByNamespace
 	result.Resources = resources
+	result.Workloads = workloads
 
 	syncStatus, err := r.getSyncStatus(ctx, crds)
 	if err != nil {

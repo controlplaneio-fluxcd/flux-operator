@@ -37,7 +37,7 @@ vi.mock('../../app', async () => {
   }
 })
 
-import { QuickSearch, quickSearchOpen, quickSearchQuery, quickSearchResults, quickSearchLoading, parseSearchQuery } from './QuickSearch'
+import { QuickSearch, quickSearchOpen, quickSearchQuery, quickSearchResults, quickSearchLoading, parseSearchQuery, getResultUrl } from './QuickSearch'
 import { fetchWithMock } from '../../utils/fetch'
 import { navHistory, clearNavHistory } from '../../utils/navHistory'
 
@@ -94,7 +94,7 @@ describe('QuickSearch', () => {
       fireEvent.click(searchButtons[0])
 
       expect(quickSearchOpen.value).toBe(true)
-      expect(screen.getByPlaceholderText('Search appliers...')).toBeInTheDocument()
+      expect(screen.getByPlaceholderText('Search appliers & workloads...')).toBeInTheDocument()
     })
   })
 
@@ -106,7 +106,7 @@ describe('QuickSearch', () => {
     it('should render input when search is open', () => {
       render(<QuickSearch />)
 
-      expect(screen.getByPlaceholderText('Search appliers...')).toBeInTheDocument()
+      expect(screen.getByPlaceholderText('Search appliers & workloads...')).toBeInTheDocument()
     })
 
     it('should render close button', () => {
@@ -128,7 +128,7 @@ describe('QuickSearch', () => {
     it('should close search when Escape key is pressed', () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.keyDown(input, { key: 'Escape' })
 
       expect(quickSearchOpen.value).toBe(false)
@@ -137,7 +137,7 @@ describe('QuickSearch', () => {
     it('should update query signal on input', () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'flux' } })
 
       expect(quickSearchQuery.value).toBe('flux')
@@ -153,7 +153,7 @@ describe('QuickSearch', () => {
     it('should not call API for queries less than 2 characters', async () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'f' } })
 
       vi.advanceTimersByTime(500)
@@ -164,7 +164,7 @@ describe('QuickSearch', () => {
     it('should call API after debounce delay for valid queries', async () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'flux' } })
 
       // Should show loading immediately
@@ -183,7 +183,7 @@ describe('QuickSearch', () => {
     it('should debounce multiple rapid inputs', async () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
 
       // Type multiple times rapidly
       fireEvent.input(input, { target: { value: 'f' } })
@@ -197,12 +197,17 @@ describe('QuickSearch', () => {
       // Advance past debounce delay
       vi.advanceTimersByTime(400)
 
-      // Should only call API once with final value
-      expect(fetchWithMock).toHaveBeenCalledTimes(1)
+      // Dual-source search: queries both the resource and workload indexes once each
+      expect(fetchWithMock).toHaveBeenCalledTimes(2)
       expect(fetchWithMock).toHaveBeenCalledWith({
         endpoint: '/api/v1/search?name=flux',
         mockPath: '../mock/resources',
         mockExport: 'getMockSearchResults'
+      })
+      expect(fetchWithMock).toHaveBeenCalledWith({
+        endpoint: '/api/v1/workloads/search?name=flux',
+        mockPath: '../mock/workloads',
+        mockExport: 'getMockWorkloadsSearch'
       })
     })
   })
@@ -216,7 +221,7 @@ describe('QuickSearch', () => {
     it('should display loading state', () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'flux' } })
 
       expect(screen.getByText('Searching...')).toBeInTheDocument()
@@ -232,7 +237,7 @@ describe('QuickSearch', () => {
 
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'flux' } })
 
       vi.advanceTimersByTime(400)
@@ -250,7 +255,7 @@ describe('QuickSearch', () => {
 
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'flux' } })
 
       vi.advanceTimersByTime(400)
@@ -268,7 +273,7 @@ describe('QuickSearch', () => {
 
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'flux' } })
 
       vi.advanceTimersByTime(400)
@@ -287,7 +292,7 @@ describe('QuickSearch', () => {
 
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'flux' } })
 
       vi.advanceTimersByTime(400)
@@ -306,7 +311,7 @@ describe('QuickSearch', () => {
 
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'test' } })
 
       vi.advanceTimersByTime(400)
@@ -325,7 +330,7 @@ describe('QuickSearch', () => {
 
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'suspended' } })
 
       vi.advanceTimersByTime(400)
@@ -349,7 +354,7 @@ describe('QuickSearch', () => {
     it('should have correct href on search result links', async () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'flux' } })
 
       vi.advanceTimersByTime(400)
@@ -362,7 +367,7 @@ describe('QuickSearch', () => {
     it('should close search after clicking result link', async () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'flux' } })
 
       vi.advanceTimersByTime(400)
@@ -505,7 +510,7 @@ describe('QuickSearch', () => {
     it('should show namespace suggestions when typing ns:', () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'ns:' } })
 
       expect(screen.getByText('Type or select namespace')).toBeInTheDocument()
@@ -516,7 +521,7 @@ describe('QuickSearch', () => {
     it('should filter namespace suggestions based on partial input', () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'ns:flux' } })
 
       expect(screen.getByText('flux-system')).toBeInTheDocument()
@@ -526,7 +531,7 @@ describe('QuickSearch', () => {
     it('should show no matching namespaces message', () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'ns:nonexistent' } })
 
       expect(screen.getByText('No matching namespaces')).toBeInTheDocument()
@@ -535,7 +540,7 @@ describe('QuickSearch', () => {
     it('should select namespace on click', () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'ns:' } })
 
       const namespaceButton = screen.getByText('flux-system')
@@ -547,7 +552,7 @@ describe('QuickSearch', () => {
     it('should show namespace badge when namespace is selected', () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'ns:' } })
 
       const namespaceButton = screen.getByText('flux-system')
@@ -562,7 +567,7 @@ describe('QuickSearch', () => {
     it('should show different placeholder when namespace is selected', () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'ns:' } })
 
       const namespaceButton = screen.getByText('flux-system')
@@ -575,7 +580,7 @@ describe('QuickSearch', () => {
       render(<QuickSearch />)
 
       // First select a namespace
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'ns:' } })
 
       const namespaceButton = screen.getByText('flux-system')
@@ -598,7 +603,7 @@ describe('QuickSearch', () => {
       render(<QuickSearch />)
 
       // First select a namespace
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'ns:' } })
 
       const namespaceButton = screen.getByText('flux-system')
@@ -616,7 +621,7 @@ describe('QuickSearch', () => {
     it('should not call API when typing ns prefix', async () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'ns' } })
 
       vi.advanceTimersByTime(500)
@@ -627,7 +632,7 @@ describe('QuickSearch', () => {
     it('should not call API when typing ns: without completing namespace', async () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'ns:flux' } })
 
       vi.advanceTimersByTime(500)
@@ -638,7 +643,7 @@ describe('QuickSearch', () => {
     it('should limit namespace suggestions to 10 items', () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'ns:' } })
 
       // We have 7 namespaces in mock, so all should show
@@ -657,7 +662,7 @@ describe('QuickSearch', () => {
     it('should navigate namespace suggestions with arrow keys', () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'ns:' } })
 
       // Press ArrowDown to select first item
@@ -671,7 +676,7 @@ describe('QuickSearch', () => {
     it('should select namespace on Enter key', () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'ns:' } })
 
       // Navigate to first item and select
@@ -684,7 +689,7 @@ describe('QuickSearch', () => {
     it('should navigate up with ArrowUp', () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'ns:' } })
 
       // Navigate down twice then up once
@@ -706,7 +711,7 @@ describe('QuickSearch', () => {
     it('should show hint when typing 1 character', () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'f' } })
 
       expect(screen.getByText(/Type 2\+ chars/)).toBeInTheDocument()
@@ -717,7 +722,7 @@ describe('QuickSearch', () => {
     it('should not show hint when typing 2+ characters', () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'fl' } })
 
       expect(screen.queryByText(/Type 2\+ chars/)).not.toBeInTheDocument()
@@ -726,7 +731,7 @@ describe('QuickSearch', () => {
     it('should set ns: prefix when clicking hint link', () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'f' } })
 
       const nsLink = screen.getByText('ns:')
@@ -738,7 +743,7 @@ describe('QuickSearch', () => {
     it('should set kind: prefix when clicking hint link', () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'f' } })
 
       const kindLink = screen.getByText('kind:')
@@ -750,7 +755,7 @@ describe('QuickSearch', () => {
     it('should not show hint when typing ns prefix', () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'n' } })
 
       // Hint should appear for single char
@@ -771,7 +776,7 @@ describe('QuickSearch', () => {
     it('should show kind suggestions when typing kind:', () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'kind:' } })
 
       expect(screen.getByText('Type or select kind')).toBeInTheDocument()
@@ -782,7 +787,7 @@ describe('QuickSearch', () => {
     it('should select kind on click and show badge', () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'kind:' } })
 
       const kindButton = screen.getByText('HelmRelease')
@@ -797,7 +802,7 @@ describe('QuickSearch', () => {
       render(<QuickSearch />)
 
       // First select a kind
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'kind:' } })
 
       const kindButton = screen.getByText('HelmRelease')
@@ -820,7 +825,7 @@ describe('QuickSearch', () => {
       render(<QuickSearch />)
 
       // First select a namespace
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'ns:' } })
       fireEvent.click(screen.getByText('flux-system'))
 
@@ -845,7 +850,7 @@ describe('QuickSearch', () => {
     it('should filter kind suggestions based on partial input', () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'kind:Helm' } })
 
       expect(screen.getByText('HelmRelease')).toBeInTheDocument()
@@ -855,7 +860,7 @@ describe('QuickSearch', () => {
     it('should show no matching kinds message', () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'kind:nonexistent' } })
 
       expect(screen.getByText('No matching kinds')).toBeInTheDocument()
@@ -865,7 +870,7 @@ describe('QuickSearch', () => {
       render(<QuickSearch />)
 
       // First select a kind
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'kind:' } })
       fireEvent.click(screen.getByText('HelmRelease'))
 
@@ -886,7 +891,7 @@ describe('QuickSearch', () => {
     it('should navigate kind suggestions with arrow keys', () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'kind:' } })
 
       // Press ArrowDown to select first item
@@ -900,7 +905,7 @@ describe('QuickSearch', () => {
     it('should select kind on Enter key', () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'kind:' } })
 
       // Navigate to first item and select
@@ -913,7 +918,7 @@ describe('QuickSearch', () => {
     it('should navigate up with ArrowUp', () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'kind:' } })
 
       // Navigate down twice then up once
@@ -936,7 +941,7 @@ describe('QuickSearch', () => {
       render(<QuickSearch />)
 
       // First select a namespace
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'ns:' } })
       fireEvent.click(screen.getByText('flux-system'))
 
@@ -965,7 +970,7 @@ describe('QuickSearch', () => {
       render(<QuickSearch />)
 
       // First select a kind
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'kind:' } })
       fireEvent.click(screen.getByText('HelmRelease'))
 
@@ -997,7 +1002,7 @@ describe('QuickSearch', () => {
     it('should navigate results with arrow keys', async () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'flux' } })
 
       vi.advanceTimersByTime(400)
@@ -1013,7 +1018,7 @@ describe('QuickSearch', () => {
     it('should navigate to resource on Enter key', async () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'flux' } })
 
       vi.advanceTimersByTime(400)
@@ -1029,7 +1034,7 @@ describe('QuickSearch', () => {
     it('should navigate up with ArrowUp in results', async () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'flux' } })
 
       vi.advanceTimersByTime(400)
@@ -1054,7 +1059,7 @@ describe('QuickSearch', () => {
     it('should have correct href on browse resources link', async () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'nonexistent' } })
 
       vi.advanceTimersByTime(400)
@@ -1067,7 +1072,7 @@ describe('QuickSearch', () => {
     it('should close search when browse link is clicked', async () => {
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'nonexistent' } })
 
       vi.advanceTimersByTime(400)
@@ -1094,7 +1099,7 @@ describe('QuickSearch', () => {
 
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'test' } })
 
       vi.advanceTimersByTime(400)
@@ -1113,7 +1118,7 @@ describe('QuickSearch', () => {
 
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'test' } })
 
       vi.advanceTimersByTime(400)
@@ -1135,7 +1140,7 @@ describe('QuickSearch', () => {
 
       render(<QuickSearch />)
 
-      const input = screen.getByPlaceholderText('Search appliers...')
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
       fireEvent.input(input, { target: { value: 'flux' } })
 
       vi.advanceTimersByTime(400)
@@ -1143,6 +1148,33 @@ describe('QuickSearch', () => {
 
       expect(quickSearchResults.value).toEqual([])
       expect(quickSearchLoading.value).toBe(false)
+      expect(consoleError).toHaveBeenCalledWith('Failed to fetch search results:', expect.any(Error))
+
+      consoleError.mockRestore()
+    })
+
+    it('should surface resource results when the workloads index fails', async () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+      fetchWithMock.mockImplementation(({ endpoint }) =>
+        endpoint.startsWith('/api/v1/workloads/search')
+          ? Promise.reject(new Error('workloads down'))
+          : Promise.resolve({
+            resources: [{ kind: 'Kustomization', namespace: 'flux-system', name: 'app', status: 'Ready' }]
+          })
+      )
+
+      render(<QuickSearch />)
+
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
+      fireEvent.input(input, { target: { value: 'flux' } })
+
+      vi.advanceTimersByTime(400)
+      await vi.runAllTimersAsync()
+
+      // One source failing must not wipe the other's results.
+      expect(quickSearchResults.value).toEqual([
+        expect.objectContaining({ kind: 'Kustomization', name: 'app' })
+      ])
       expect(consoleError).toHaveBeenCalledWith('Failed to fetch search results:', expect.any(Error))
 
       consoleError.mockRestore()
@@ -1356,6 +1388,206 @@ describe('QuickSearch', () => {
       fireEvent.keyDown(input, { key: 'Enter' })
 
       expect(mockRoute).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('getResultUrl', () => {
+    it('should route Flux kinds to the resource dashboard', () => {
+      expect(getResultUrl({ kind: 'HelmRelease', namespace: 'flux-system', name: 'podinfo' }))
+        .toBe('/resource/HelmRelease/flux-system/podinfo')
+    })
+
+    it('should route workload kinds to the workload dashboard', () => {
+      expect(getResultUrl({ kind: 'Deployment', namespace: 'apps', name: 'podinfo' }))
+        .toBe('/workload/Deployment/apps/podinfo')
+    })
+
+    it('should encode special characters', () => {
+      expect(getResultUrl({ kind: 'CronJob', namespace: 'apps', name: 'a b' }))
+        .toBe('/workload/CronJob/apps/a%20b')
+    })
+  })
+
+  describe('Combined kind suggestions', () => {
+    beforeEach(() => {
+      quickSearchOpen.value = true
+      fetchWithMock.mockResolvedValue({ resources: [] })
+    })
+
+    it('should show both Flux kinds and workload kinds', () => {
+      render(<QuickSearch />)
+
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
+      fireEvent.input(input, { target: { value: 'kind:' } })
+
+      // Flux kind
+      expect(screen.getByText('HelmRelease')).toBeInTheDocument()
+      // Workload kinds
+      expect(screen.getByText('Deployment')).toBeInTheDocument()
+      expect(screen.getByText('StatefulSet')).toBeInTheDocument()
+    })
+
+    it('should filter to workload kinds on partial match', () => {
+      render(<QuickSearch />)
+
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
+      fireEvent.input(input, { target: { value: 'kind:Daemon' } })
+
+      expect(screen.getByText('DaemonSet')).toBeInTheDocument()
+      expect(screen.queryByText('HelmRelease')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('Dual-source search', () => {
+    beforeEach(() => {
+      quickSearchOpen.value = true
+    })
+
+    it('should query both indexes and merge results (resources first)', async () => {
+      fetchWithMock.mockImplementation(({ endpoint }) => {
+        if (endpoint.startsWith('/api/v1/workloads/search')) {
+          return Promise.resolve({
+            workloads: [{ kind: 'Deployment', namespace: 'apps', name: 'podinfo' }]
+          })
+        }
+        return Promise.resolve({
+          resources: [{ kind: 'HelmRelease', namespace: 'apps', name: 'podinfo', status: 'Ready' }]
+        })
+      })
+
+      render(<QuickSearch />)
+
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
+      fireEvent.input(input, { target: { value: 'podinfo' } })
+
+      vi.advanceTimersByTime(400)
+      await vi.runAllTimersAsync()
+
+      // Both endpoints queried
+      expect(fetchWithMock).toHaveBeenCalledWith({
+        endpoint: '/api/v1/search?name=podinfo',
+        mockPath: '../mock/resources',
+        mockExport: 'getMockSearchResults'
+      })
+      expect(fetchWithMock).toHaveBeenCalledWith({
+        endpoint: '/api/v1/workloads/search?name=podinfo',
+        mockPath: '../mock/workloads',
+        mockExport: 'getMockWorkloadsSearch'
+      })
+
+      // Merge: resource first, then workload
+      expect(quickSearchResults.value).toHaveLength(2)
+      expect(quickSearchResults.value[0].kind).toBe('HelmRelease')
+      expect(quickSearchResults.value[1].kind).toBe('Deployment')
+    })
+
+    it('should query only the workload endpoint when kind is a workload kind', async () => {
+      fetchWithMock.mockResolvedValue({
+        workloads: [{ kind: 'Deployment', namespace: 'apps', name: 'podinfo' }]
+      })
+
+      render(<QuickSearch />)
+
+      // Select a workload kind filter
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
+      fireEvent.input(input, { target: { value: 'kind:' } })
+      fireEvent.click(screen.getByText('Deployment'))
+
+      const searchInput = screen.getByPlaceholderText('Search...')
+      fireEvent.input(searchInput, { target: { value: 'podinfo' } })
+
+      vi.advanceTimersByTime(400)
+      await vi.runAllTimersAsync()
+
+      expect(fetchWithMock).toHaveBeenCalledTimes(1)
+      expect(fetchWithMock).toHaveBeenCalledWith({
+        endpoint: '/api/v1/workloads/search?name=podinfo&kind=Deployment',
+        mockPath: '../mock/workloads',
+        mockExport: 'getMockWorkloadsSearch'
+      })
+    })
+
+    it('should query only the resource endpoint when kind is a Flux kind', async () => {
+      fetchWithMock.mockResolvedValue({
+        resources: [{ kind: 'HelmRelease', namespace: 'apps', name: 'podinfo', status: 'Ready' }]
+      })
+
+      render(<QuickSearch />)
+
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
+      fireEvent.input(input, { target: { value: 'kind:' } })
+      fireEvent.click(screen.getByText('HelmRelease'))
+
+      const searchInput = screen.getByPlaceholderText('Search...')
+      fireEvent.input(searchInput, { target: { value: 'podinfo' } })
+
+      vi.advanceTimersByTime(400)
+      await vi.runAllTimersAsync()
+
+      expect(fetchWithMock).toHaveBeenCalledTimes(1)
+      expect(fetchWithMock).toHaveBeenCalledWith({
+        endpoint: '/api/v1/search?name=podinfo&kind=HelmRelease',
+        mockPath: '../mock/resources',
+        mockExport: 'getMockSearchResults'
+      })
+    })
+
+    it('should render a gray bullet for workload results (no status)', async () => {
+      fetchWithMock.mockImplementation(({ endpoint }) => {
+        if (endpoint.startsWith('/api/v1/workloads/search')) {
+          return Promise.resolve({
+            workloads: [{ kind: 'Deployment', namespace: 'apps', name: 'podinfo' }]
+          })
+        }
+        return Promise.resolve({ resources: [] })
+      })
+
+      render(<QuickSearch />)
+
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
+      fireEvent.input(input, { target: { value: 'podinfo' } })
+
+      vi.advanceTimersByTime(400)
+      await vi.runAllTimersAsync()
+
+      // Workload result link points to the workload dashboard
+      const link = screen.getByText('apps/podinfo').closest('a')
+      expect(link).toHaveAttribute('href', '/workload/Deployment/apps/podinfo')
+
+      // Status is undefined → default gray dot
+      const dot = document.querySelector('.bg-gray-500')
+      expect(dot).toBeInTheDocument()
+    })
+
+    it('should route workload history entries to the workload dashboard', () => {
+      navHistory.value = [
+        { kind: 'Deployment', namespace: 'apps', name: 'podinfo' }
+      ]
+      quickSearchOpen.value = true
+      render(<QuickSearch />)
+
+      const historyLink = screen.getByText('Deployment/').closest('a')
+      expect(historyLink).toHaveAttribute('href', '/workload/Deployment/apps/podinfo')
+    })
+  })
+
+  describe('Browse all workloads link', () => {
+    beforeEach(() => {
+      quickSearchOpen.value = true
+      fetchWithMock.mockResolvedValue({ resources: [] })
+    })
+
+    it('should have a browse all workloads link in the empty state', async () => {
+      render(<QuickSearch />)
+
+      const input = screen.getByPlaceholderText('Search appliers & workloads...')
+      fireEvent.input(input, { target: { value: 'nonexistent' } })
+
+      vi.advanceTimersByTime(400)
+      await vi.runAllTimersAsync()
+
+      const browseLink = screen.getByText('Browse all workloads →')
+      expect(browseLink).toHaveAttribute('href', '/workloads')
     })
   })
 })

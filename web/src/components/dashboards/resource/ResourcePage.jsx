@@ -17,6 +17,7 @@ import { ArtifactPanel } from './ArtifactPanel'
 import { ExportedInputsPanel } from './ExportedInputsPanel'
 import { InputsPanel } from './InputsPanel'
 import { isKindWithInventory, POLL_INTERVAL_MS, FAST_POLL_INTERVAL_MS, FAST_POLL_TIMEOUT_MS } from '../../../utils/constants'
+import { getDashboardUrl } from '../../../utils/routing'
 
 /**
  * Get loading status styling info with spinning refresh icon
@@ -266,7 +267,7 @@ export function ResourcePage({ kind, namespace, name }) {
   // Navigate to another resource
   const handleNavigate = (item) => {
     const ns = item.namespace || namespace
-    const basePath = `/resource/${encodeURIComponent(item.kind)}/${encodeURIComponent(ns)}/${encodeURIComponent(item.name)}`
+    const basePath = getDashboardUrl(item.kind, ns, item.name)
     // If navigating to a resource that has inventory (from Graph), deep link to its Graph tab
     const hash = isKindWithInventory(item.kind) ? '#inventory-graph' : ''
     location.route(basePath + hash)
