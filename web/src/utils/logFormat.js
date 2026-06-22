@@ -653,6 +653,88 @@ function emitMembers(spans, value, depth) {
   }
 }
 
+// globToTest compiles a `*`-glob pattern (the only wildcard) into a linear,
+// backtracking-free matcher. The pattern is split on `*` and matched as an ordered
+// sequence of case-insensitive literal segments — a required prefix, in-order middle
+// substrings, and a required suffix. This deliberately avoids a regex like
+// `^.*a.*b…$`, whose chained `.*` suffers catastrophic backtracking on crafted input
+// (a user could otherwise freeze the viewer by typing `*a*a*…*b`).
+function globToTest(pat) {
+  const parts = pat.toLowerCase().split('*')
+  const last = parts[parts.length - 1]
+  return (key) => {
+    const s = key.toLowerCase()
+    if (!s.startsWith(parts[0])) return false
+    if (!s.endsWith(last)) return false
+    const end = s.length - last.length // start index of the suffix region
+    let pos = parts[0].length
+    for (let i = 1; i < parts.length - 1; i++) {
+      const seg = parts[i]
+      if (seg === '') continue
+      const idx = s.indexOf(seg, pos)
+      if (idx === -1 || idx + seg.length > end) return false
+      pos = idx + seg.length
+    }
+    return pos <= end
+  }
+}
+
+/**
+ * fieldMatcher - compiles a field-selection expression into a predicate over field
+ * names, or null when the expression selects everything. The expression is a list of
+ * tokens separated by spaces, commas, or pipes (`msg error`, `msg, error`,
+ * `msg|message|error`). Matching is case-insensitive and exact by default; a `*`
+ * acts as a glob wildcard (`*id`, `controller*`). A token prefixed with `!` excludes
+ * the matching field. With only exclusions, every other field is kept; with any
+ * inclusion, the result is a whitelist (minus anything also excluded). An empty
+ * expression (or one with no usable tokens) returns null, meaning "all fields".
+ *
+ * @param {string} expr - The field-selection expression
+ * @returns {((key: string) => boolean)|null} A predicate, or null for "all fields"
+ */
+export function fieldMatcher(expr) {
+  const tokens = (expr || '').split(/[\s,|]+/).filter(Boolean)
+  const includes = []
+  const excludes = []
+  for (const t of tokens) {
+    if (t[0] === '!') { if (t.length > 1) excludes.push(t.slice(1)) }
+    else includes.push(t)
+  }
+  if (includes.length === 0 && excludes.length === 0) return null
+  const tester = (pat) => {
+    if (pat.includes('*')) return globToTest(pat)
+    const lower = pat.toLowerCase()
+    return (k) => k.toLowerCase() === lower
+  }
+  const inc = includes.map(tester)
+  const exc = excludes.map(tester)
+  return (key) => {
+    if (exc.some(t => t(key))) return false
+    return inc.length === 0 || inc.some(t => t(key))
+  }
+}
+
+/**
+ * topLevelJsonKeys - returns the top-level keys of a JSON object log line, or null
+ * when the line is not a JSON object (a scalar, an array — which has no keys — or
+ * non-JSON). Used to discover the set of structured fields a stream emits so the
+ * viewer can offer a field picker. Keys are returned in source order.
+ *
+ * @param {string} text - The log line (timestamp and ANSI already stripped)
+ * @returns {string[]|null} The object's top-level keys, or null
+ */
+export function topLevelJsonKeys(text) {
+  const t = text.trim()
+  if (t.charCodeAt(0) !== 123) return null // fast gate: only '{' (objects have keys)
+  try {
+    const parsed = JSON.parse(t)
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+    return Object.keys(parsed)
+  } catch {
+    return null
+  }
+}
+
 /**
  * highlightJson - pretty-prints a JSON object/array log line into colored spans,
  * preserving nesting (indentation + newlines) so complex structures stay readable.
@@ -662,10 +744,15 @@ function emitMembers(spans, value, depth) {
  * `"hi"`), leaving those to the text cascade. The descriptor is plain data with no
  * innerHTML; the viewer renders the spans inside a <pre> so the layout survives.
  *
+ * When `selected` is a Set, a top-level object is projected to only those keys (in
+ * source order) so the viewer can show a subset of fields; arrays and nested values
+ * are unaffected. A null/undefined `selected` shows every field.
+ *
  * @param {string} text - The log line (timestamp and ANSI already stripped)
+ * @param {Set<string>} [selected] - Top-level keys to keep, or null/undefined for all
  * @returns {{kind: 'json', spans: Array}|null} A descriptor or null
  */
-export function highlightJson(text) {
+export function highlightJson(text, selected) {
   const t = text.trim()
   const c = t.charCodeAt(0)
   if (c !== 123 && c !== 91) return null // fast gate: not '{' or '['
@@ -676,14 +763,23 @@ export function highlightJson(text) {
     return null
   }
   if (parsed === null || typeof parsed !== 'object') return null
-  // An empty top-level object/array keeps its braces on one line (emitMembers would
-  // render nothing, leaving a blank entry).
-  if ((Array.isArray(parsed) ? parsed.length : Object.keys(parsed).length) === 0) {
-    return { kind: 'json', spans: [sp(CLS.op, Array.isArray(parsed) ? '[]' : '{}')] }
+  // Project a top-level object to the selected fields (source order preserved). A
+  // selection never applies to a top-level array, which carries no field keys.
+  let value = parsed
+  if (selected && !Array.isArray(parsed)) {
+    // Null-prototype object so a literal "__proto__" field is kept as an own key
+    // (a plain {} would assign it to the prototype and drop it from Object.keys).
+    value = Object.create(null)
+    for (const k of Object.keys(parsed)) if (selected.has(k)) value[k] = parsed[k]
+  }
+  // An empty top-level object/array (or one projected empty by the field filter)
+  // keeps its braces on one line (emitMembers would render nothing, leaving a blank).
+  if ((Array.isArray(value) ? value.length : Object.keys(value).length) === 0) {
+    return { kind: 'json', spans: [sp(CLS.op, Array.isArray(value) ? '[]' : '{}')] }
   }
   const spans = []
   try {
-    emitMembers(spans, parsed, 0)
+    emitMembers(spans, value, 0)
   } catch {
     // Pathologically deep nesting overflows the recursion (RangeError). Fall back to
     // the plain (raw text) renderer rather than crashing the viewer on one bad line.

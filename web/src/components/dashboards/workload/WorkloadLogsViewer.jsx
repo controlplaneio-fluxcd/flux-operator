@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'preact/hooks'
 import { fetchWithMock } from '../../../utils/fetch'
 import { downloadBlob } from '../../../utils/download'
 import { LEVELS, LEVEL_META, DEFAULT_LEVEL, detectLevel, stripAnsi } from '../../../utils/logLevel'
-import { decorateLine, highlightJson } from '../../../utils/logFormat'
+import { decorateLine, highlightJson, topLevelJsonKeys, fieldMatcher } from '../../../utils/logFormat'
 import { groupEntries } from '../../../utils/logGroup'
 import { logSettings, TAIL_LINES, FONT_SIZES } from '../../../utils/logSettings'
 
@@ -617,6 +617,10 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
   // Whether the settings panel (tail-lines slider, font size) is expanded below
   // the toolbar. Local to the session, not persisted.
   const [showSettings, setShowSettings] = useState(false)
+  // Field-selection expression for the formatted JSON body (e.g. "msg|error",
+  // "!level ts", "*id"). Seeded from and persisted to the log settings so it carries
+  // across sessions. See fieldMatcher for the syntax; empty = all fields.
+  const [fieldExpr, setFieldExpr] = useState(() => logSettings.peek().fields)
   const [fullScreen, setFullScreen] = useState(false)
   const [logs, setLogs] = useState('')
   const [loading, setLoading] = useState(false)
@@ -666,6 +670,10 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
   // Memoizes formatted output per raw line text, so appends format only the new
   // lines instead of the whole buffer each poll. See formattedLines for pruning.
   const formatCacheRef = useRef(new Map())
+  // Memoizes each line's top-level JSON keys (string[] | null) by text, so the field
+  // discovery pass parses each unique line once. Rebuilt over the buffer like
+  // formatCacheRef, so it can't outgrow it.
+  const jsonKeysCacheRef = useRef(new Map())
   // The parsed buffer, mirroring `logs` line-for-line in arrival order (pre-sort,
   // pre-format), so a follow poll re-parses only the appended lines instead of the
   // whole buffer. `key` is the tag regime and `gen` the reset-fetch id; a change in
@@ -777,6 +785,10 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
         // Count the new entries against the live buffer before merging, so the
         // "+N new" indicator reflects what this poll appended. It's set on every
         // poll (0 hides it), so the count persists until the next refresh replaces it.
+        // The merge itself stays exact via the functional update against the real
+        // prev; the count is computed against logsRef (a render-synced mirror) and is
+        // best-effort: if two follow polls overlap (a fetch slower than the interval),
+        // it may briefly over-report, never corrupting the deduped buffer.
         const added = countNewEntries(logsRef.current, incoming)
         setLogs(prev => mergeLogs(prev, incoming))
         setAppendedCount(added)
@@ -803,6 +815,8 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
         setError(err.message)
         setLogs('')
         setFollowError(null)
+        // The buffer is gone, so a leftover "+N new" from a prior poll is stale.
+        setAppendedCount(0)
       }
     } finally {
       // Only the still-current fetch clears shared state, so a superseded reset
@@ -834,14 +848,14 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
     if (!formatted) setLevelFilter('all')
   }, [formatted])
 
-  // Persist the follow/formatted/tailLines/fontSize settings so they carry across
-  // sessions. The signal's own effect writes them to localStorage. On mount this
-  // writes the seeded values back (a redundant but harmless write of identical
+  // Persist the follow/formatted/tailLines/fontSize/fields settings so they carry
+  // across sessions. The signal's own effect writes them to localStorage. On mount
+  // this writes the seeded values back (a redundant but harmless write of identical
   // content). The component seeds via peek() and never reads the signal reactively,
   // so writing it here cannot re-render the viewer or feed back into this effect.
   useEffect(() => {
-    logSettings.value = { follow, formatted, tail: tailLines, fontSize }
-  }, [follow, formatted, tailLines, fontSize])
+    logSettings.value = { follow, formatted, tail: tailLines, fontSize, fields: fieldExpr }
+  }, [follow, formatted, tailLines, fontSize, fieldExpr])
 
   // Poll for new logs while following: silent (no spinner flicker) and appending
   // (visible lines stay put).
@@ -969,19 +983,62 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
   // only parses+formats the new lines. The cache is rebuilt over the whole base
   // buffer (≤ MAX_BUFFER_LINES), so it can't outgrow it; raw mode leaves it untouched
   // so it survives a round-trip back to formatted.
+  // Discover the JSON fields the buffer emits (union of top-level keys, in first-seen
+  // order), so the settings panel can offer a field picker. Independent of the field
+  // selection, so filtering never removes options. Scans every line that projection
+  // (highlightJson in formattedLines) sees — topLevelJsonKeys returns null for
+  // non-JSON lines, which contribute nothing — so a JSON line without a leading
+  // timestamp is still discovered, keeping the input visible and consistent with the
+  // projected body. Each unique line's keys are cached by text (jsonKeysCacheRef) to
+  // parse it once. Empty in raw mode (no field concept).
+  const availableFields = useMemo(() => {
+    if (!formatted) return []
+    const prev = jsonKeysCacheRef.current
+    const next = new Map()
+    const seen = new Set()
+    for (const entry of baseLines) {
+      let keys = next.get(entry.text)
+      if (keys === undefined) keys = prev.has(entry.text) ? prev.get(entry.text) : topLevelJsonKeys(entry.text)
+      next.set(entry.text, keys)
+      if (keys) for (const k of keys) seen.add(k)
+    }
+    jsonKeysCacheRef.current = next
+    return [...seen]
+  }, [baseLines, formatted])
+
+  // Resolve the field expression to the concrete set of top-level keys to show, or
+  // null for "all". Applying the matcher to the discovered fields (the union over the
+  // buffer) yields a stable set every JSON line is projected against; a pure-exclusion
+  // expression keeps newly seen fields once they enter availableFields.
+  const selectedFields = useMemo(() => {
+    const match = fieldMatcher(fieldExpr)
+    if (!match) return null
+    return new Set(availableFields.filter(match))
+  }, [fieldExpr, availableFields])
+
+  // Field-selection signature for the format cache key: 'all' when unfiltered, else a
+  // JSON-encoded array of the sorted selected keys (encoded so a key containing the
+  // delimiter can't make two different selections collide). A change busts only the
+  // JSON lines' cached formatting.
+  const fieldSig = useMemo(
+    () => (selectedFields === null ? 'all' : JSON.stringify([...selectedFields].sort())),
+    [selectedFields]
+  )
+
   const formattedLines = useMemo(() => {
     if (!formatted) return baseLines
     const prev = formatCacheRef.current
     const next = new Map()
     const result = baseLines.map(entry => {
       // The cache key carries the head flag since the same text can appear as both a
-      // head and a continuation line. JSON runs on every line; the klog/zap/logfmt
+      // head and a continuation line, and the field signature since the JSON body
+      // depends on the selected fields. JSON runs on every line; the klog/zap/logfmt
       // cascade only on a timestamped one (a frame's shape falls through to plain).
-      const key = `${entry.ts ? 1 : 0}\n${entry.text}`
+      const key = `${entry.ts ? 1 : 0}\n${fieldSig}\n${entry.text}`
       let f = next.get(key) || prev.get(key)
       if (!f) {
         const level = detectLevel(entry.text)
-        const json = highlightJson(entry.text)
+        const json = highlightJson(entry.text, selectedFields)
         const d = json || (entry.ts ? decorateLine(entry.text, level) : { kind: 'plain' })
         // `structured` (whether the burst grouper treats the line as a real log
         // entry vs structure-less noise) is true when the format layer decorates it,
@@ -1000,7 +1057,7 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
     })
     formatCacheRef.current = next
     return result
-  }, [baseLines, formatted])
+  }, [baseLines, formatted, selectedFields, fieldSig])
 
   // Group recognized stack traces and unstructured bursts, one run per group (off →
   // one group per entry, keeping the chain uniform). When the stream is tagged (more
@@ -1361,6 +1418,30 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
               onChange={setFontSize}
               options={FONT_SIZES.map(f => ({ value: f.key, label: f.label, testid: `logs-fontsize-${f.key}` }))}
             />
+            {/* JSON field filter. Formatted mode only, and only when the buffer emits
+                structured JSON fields. A list of field names (space/comma/pipe
+                separated) with `*` globs and `!` to exclude; empty shows all. The
+                placeholder shows example syntax; the expression persists via the log
+                settings (see fieldExpr). */}
+            {formatted && availableFields.length > 0 && (
+              <div class="flex items-center gap-3">
+                <label for="logs-fields-input" class="text-xs font-medium text-gray-600 dark:text-gray-300 w-20 flex-shrink-0">Fields</label>
+                <input
+                  id="logs-fields-input"
+                  type="text"
+                  value={fieldExpr}
+                  onInput={(e) => setFieldExpr(e.target.value)}
+                  placeholder="msg error !level *id"
+                  class={`${INPUT_CLASS} w-60 max-w-full font-mono`}
+                  data-testid="logs-fields-input"
+                  aria-label="Show only these JSON fields"
+                  title="Field names separated by space, comma or pipe. Use * to glob and ! to exclude (e.g. msg|error, !level, *id). Empty shows all."
+                  autocomplete="off"
+                  autocapitalize="off"
+                  spellcheck={false}
+                />
+              </div>
+            )}
           </div>
         )}
 

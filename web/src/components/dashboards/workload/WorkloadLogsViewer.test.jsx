@@ -658,6 +658,95 @@ describe('WorkloadLogsViewer component', () => {
     expect(rows[1].textContent).toBe('plain text line')
   })
 
+  describe('JSON field selection', () => {
+    const jsonProps = () => {
+      fetchWithMock.mockResolvedValue({
+        logs: '2026-01-01T00:00:00Z {"level":"info","ts":"t","msg":"hello","ns":"apps"}\n'
+      })
+      return defaultProps
+    }
+    const typeFields = async (expr) => {
+      if (!screen.queryByTestId('logs-settings-panel')) {
+        await act(async () => { fireEvent.click(screen.getByTestId('logs-settings-toggle')) })
+      }
+      await act(async () => { fireEvent.input(screen.getByTestId('logs-fields-input'), { target: { value: expr } }) })
+    }
+
+    it('offers a field filter in the settings panel and shows all fields by default', async () => {
+      render(<WorkloadLogsViewer {...jsonProps()} />)
+      await waitFor(() => expect(screen.getByTestId('logs-line')).toBeInTheDocument())
+
+      await act(async () => { fireEvent.click(screen.getByTestId('logs-settings-toggle')) })
+      const input = screen.getByTestId('logs-fields-input')
+      expect(input).toHaveValue('')
+      // The placeholder illustrates the syntax (a list with ! exclude and * glob).
+      expect(input.getAttribute('placeholder')).toMatch(/!\w.*\*/)
+      expect(screen.getByTestId('logs-line').textContent).toBe('"level": "info",\n"ts": "t",\n"msg": "hello",\n"ns": "apps"')
+    })
+
+    it('shows only the listed fields, in source order (pipe/space separated)', async () => {
+      render(<WorkloadLogsViewer {...jsonProps()} />)
+      await waitFor(() => expect(screen.getByTestId('logs-line')).toBeInTheDocument())
+
+      await typeFields('msg|ns')
+      expect(screen.getByTestId('logs-line').textContent).toBe('"msg": "hello",\n"ns": "apps"')
+    })
+
+    it('excludes fields with a ! prefix, keeping the rest', async () => {
+      render(<WorkloadLogsViewer {...jsonProps()} />)
+      await waitFor(() => expect(screen.getByTestId('logs-line')).toBeInTheDocument())
+
+      await typeFields('!level !ts')
+      expect(screen.getByTestId('logs-line').textContent).toBe('"msg": "hello",\n"ns": "apps"')
+    })
+
+    it('supports * glob matching on field names', async () => {
+      fetchWithMock.mockResolvedValue({
+        logs: '2026-01-01T00:00:00Z {"msg":"hi","reconcileID":"abc","controllerKind":"X"}\n'
+      })
+      render(<WorkloadLogsViewer {...defaultProps} />)
+      await waitFor(() => expect(screen.getByTestId('logs-line')).toBeInTheDocument())
+
+      await typeFields('*id')
+      expect(screen.getByTestId('logs-line').textContent).toBe('"reconcileID": "abc"')
+    })
+
+    it('clears the filter when the expression is emptied', async () => {
+      render(<WorkloadLogsViewer {...jsonProps()} />)
+      await waitFor(() => expect(screen.getByTestId('logs-line')).toBeInTheDocument())
+
+      await typeFields('msg')
+      expect(screen.getByTestId('logs-line').textContent).toBe('"msg": "hello"')
+      await typeFields('')
+      expect(screen.getByTestId('logs-line').textContent).toBe('"level": "info",\n"ts": "t",\n"msg": "hello",\n"ns": "apps"')
+    })
+
+    it('discovers fields from a JSON line that has no leading timestamp, keeping the input usable', async () => {
+      // A line without the kubelet RFC3339 prefix parses with ts==='' but is still
+      // projected; discovery must see it too so the input stays visible and the body
+      // stays consistent (no unclearable collapse-to-{}).
+      fetchWithMock.mockResolvedValue({ logs: '{"msg":"hi","level":"info"}\n' })
+      render(<WorkloadLogsViewer {...defaultProps} />)
+      await waitFor(() => expect(screen.getByTestId('logs-line')).toBeInTheDocument())
+
+      await act(async () => { fireEvent.click(screen.getByTestId('logs-settings-toggle')) })
+      const input = screen.getByTestId('logs-fields-input')
+      expect(input).toBeInTheDocument()
+      await act(async () => { fireEvent.input(input, { target: { value: 'msg' } }) })
+      expect(screen.getByTestId('logs-line').textContent).toBe('"msg": "hi"')
+    })
+
+    it('does not offer the field filter in raw mode', async () => {
+      const user = userEvent.setup()
+      render(<WorkloadLogsViewer {...jsonProps()} />)
+      await waitFor(() => expect(screen.getByTestId('logs-line')).toBeInTheDocument())
+
+      await user.click(screen.getByTestId('logs-format-toggle')) // to raw
+      await act(async () => { fireEvent.click(screen.getByTestId('logs-settings-toggle')) })
+      expect(screen.queryByTestId('logs-fields-input')).not.toBeInTheDocument()
+    })
+  })
+
   it('strips all styling in raw mode: plain rows, no timestamp pills or highlight', async () => {
     const user = userEvent.setup()
     fetchWithMock.mockResolvedValue({
@@ -1408,29 +1497,44 @@ describe('WorkloadLogsViewer component', () => {
   })
 
   describe('persisted settings', () => {
-    it('seeds follow, format, lines and font size from the stored settings', async () => {
-      logSettings.value = { follow: false, formatted: false, tail: 500, fontSize: 'lg' }
+    it('seeds follow, format, lines, font size and the field filter from the stored settings', async () => {
+      logSettings.value = { follow: false, formatted: false, tail: 500, fontSize: 'lg', fields: '' }
       render(<WorkloadLogsViewer {...defaultProps} />)
       await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
 
       expect(screen.getByTestId('logs-follow-toggle')).toHaveAttribute('aria-pressed', 'false')
       expect(screen.getByTestId('logs-format-toggle')).toHaveAttribute('aria-pressed', 'false')
 
+      // Back to formatted so the field input is available, then check the seeds.
+      await act(async () => { fireEvent.click(screen.getByTestId('logs-format-toggle')) })
       await act(async () => { fireEvent.click(screen.getByTestId('logs-settings-toggle')) })
       expect(screen.getByTestId('logs-tail-500')).toHaveAttribute('aria-pressed', 'true')
       expect(screen.getByTestId('logs-fontsize-lg')).toHaveAttribute('aria-pressed', 'true')
     })
 
-    it('persists follow, format, lines and font size changes to the settings signal', async () => {
+    it('seeds the field filter from the stored expression and applies it', async () => {
+      logSettings.value = { ...DEFAULT_LOG_SETTINGS, fields: 'msg' }
+      fetchWithMock.mockResolvedValue({ logs: '2026-01-01T00:00:00Z {"level":"info","msg":"hello"}\n' })
       render(<WorkloadLogsViewer {...defaultProps} />)
-      await waitFor(() => expect(screen.getByTestId('logs-content')).toBeInTheDocument())
+      await waitFor(() => expect(screen.getByTestId('logs-line')).toBeInTheDocument())
+
+      await act(async () => { fireEvent.click(screen.getByTestId('logs-settings-toggle')) })
+      expect(screen.getByTestId('logs-fields-input')).toHaveValue('msg')
+      expect(screen.getByTestId('logs-line').textContent).toBe('"msg": "hello"')
+    })
+
+    it('persists follow, format, lines, font size and the field filter to the settings signal', async () => {
+      fetchWithMock.mockResolvedValue({ logs: '2026-01-01T00:00:00Z {"level":"info","msg":"hi"}\n' })
+      render(<WorkloadLogsViewer {...defaultProps} />)
+      await waitFor(() => expect(screen.getByTestId('logs-line')).toBeInTheDocument())
 
       await setTailLines(1000)
       await act(async () => { fireEvent.click(screen.getByTestId('logs-fontsize-sm')) })
+      await act(async () => { fireEvent.input(screen.getByTestId('logs-fields-input'), { target: { value: 'msg|error' } }) })
       await act(async () => { fireEvent.click(screen.getByTestId('logs-follow-toggle')) })
       await act(async () => { fireEvent.click(screen.getByTestId('logs-format-toggle')) })
 
-      expect(logSettings.value).toEqual({ follow: false, formatted: false, tail: 1000, fontSize: 'sm' })
+      expect(logSettings.value).toEqual({ follow: false, formatted: false, tail: 1000, fontSize: 'sm', fields: 'msg|error' })
     })
 
     it('applies the font size to the log body via a CSS variable', async () => {

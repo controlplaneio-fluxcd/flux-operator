@@ -67,9 +67,11 @@ export function ProfilePage() {
 
   // One-line summary of the persisted log viewer settings.
   const logViewerSummary = useMemo(() => {
-    const { follow, formatted, tail, fontSize } = logSettings.value
+    const { follow, formatted, tail, fontSize, fields } = logSettings.value
     const font = (FONT_SIZES.find(f => f.key === fontSize) || FONT_SIZES[1]).label
-    return `${follow ? 'Follow on' : 'Follow off'} · ${formatted ? 'Formatted' : 'Raw'} · ${tail} lines · ${font} font`
+    let s = `${follow ? 'Follow on' : 'Follow off'} · ${formatted ? 'Formatted' : 'Raw'} · ${tail} lines · ${font} font`
+    if (fields) s += ` · fields: ${fields}`
+    return s
   }, [logSettings.value])
 
   return (

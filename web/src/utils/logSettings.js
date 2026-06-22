@@ -23,8 +23,9 @@ export const FONT_SIZES = [
 const FONT_SIZE_KEYS = FONT_SIZES.map((f) => f.key)
 
 // Default log viewer settings, used on first load and as the per-field fallback
-// when a stored value is missing or invalid.
-export const DEFAULT_LOG_SETTINGS = { follow: true, formatted: true, tail: 100, fontSize: 'md' }
+// when a stored value is missing or invalid. `fields` is the JSON field-selection
+// expression (see fieldMatcher); empty shows all fields.
+export const DEFAULT_LOG_SETTINGS = { follow: true, formatted: true, tail: 100, fontSize: 'md', fields: '' }
 
 /**
  * Read the log viewer settings from localStorage, validating each field and
@@ -43,7 +44,8 @@ export const getLogSettingsFromStorage = () => {
       follow: typeof o.follow === 'boolean' ? o.follow : DEFAULT_LOG_SETTINGS.follow,
       formatted: typeof o.formatted === 'boolean' ? o.formatted : DEFAULT_LOG_SETTINGS.formatted,
       tail: TAIL_LINES.includes(o.tail) ? o.tail : DEFAULT_LOG_SETTINGS.tail,
-      fontSize: FONT_SIZE_KEYS.includes(o.fontSize) ? o.fontSize : DEFAULT_LOG_SETTINGS.fontSize
+      fontSize: FONT_SIZE_KEYS.includes(o.fontSize) ? o.fontSize : DEFAULT_LOG_SETTINGS.fontSize,
+      fields: typeof o.fields === 'string' ? o.fields : DEFAULT_LOG_SETTINGS.fields
     }
   } catch {
     return { ...DEFAULT_LOG_SETTINGS }

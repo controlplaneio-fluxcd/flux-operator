@@ -338,11 +338,19 @@ describe('ProfilePage', () => {
     })
 
     it('should reflect non-default log viewer settings', () => {
-      logSettings.value = { follow: false, formatted: false, tail: 500, fontSize: 'lg' }
+      logSettings.value = { follow: false, formatted: false, tail: 500, fontSize: 'lg', fields: '' }
 
       render(<ProfilePage />)
 
       expect(screen.getByText('Follow off · Raw · 500 lines · Large font')).toBeInTheDocument()
+    })
+
+    it('should append the field filter to the summary when one is set', () => {
+      logSettings.value = { follow: true, formatted: true, tail: 100, fontSize: 'md', fields: 'msg|error' }
+
+      render(<ProfilePage />)
+
+      expect(screen.getByText('Follow on · Formatted · 100 lines · Medium font · fields: msg|error')).toBeInTheDocument()
     })
 
     it('should show Favorites label', () => {

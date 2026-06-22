@@ -18,8 +18,8 @@ describe('logSettings utilities', () => {
   })
 
   describe('exports', () => {
-    it('defaults to follow on, formatted, 100 lines, medium font', () => {
-      expect(DEFAULT_LOG_SETTINGS).toEqual({ follow: true, formatted: true, tail: 100, fontSize: 'md' })
+    it('defaults to follow on, formatted, 100 lines, medium font, no field filter', () => {
+      expect(DEFAULT_LOG_SETTINGS).toEqual({ follow: true, formatted: true, tail: 100, fontSize: 'md', fields: '' })
     })
 
     it('exposes the selectable tail line values', () => {
@@ -44,8 +44,13 @@ describe('logSettings utilities', () => {
     })
 
     it('reads a valid stored object', () => {
-      global.localStorageMock.getItem.mockReturnValue(JSON.stringify({ follow: false, formatted: false, tail: 500, fontSize: 'lg' }))
-      expect(getLogSettingsFromStorage()).toEqual({ follow: false, formatted: false, tail: 500, fontSize: 'lg' })
+      global.localStorageMock.getItem.mockReturnValue(JSON.stringify({ follow: false, formatted: false, tail: 500, fontSize: 'lg', fields: 'msg|error' }))
+      expect(getLogSettingsFromStorage()).toEqual({ follow: false, formatted: false, tail: 500, fontSize: 'lg', fields: 'msg|error' })
+    })
+
+    it('defaults a non-string fields to an empty filter', () => {
+      global.localStorageMock.getItem.mockReturnValue(JSON.stringify({ follow: true, formatted: true, tail: 100, fontSize: 'md', fields: 123 }))
+      expect(getLogSettingsFromStorage().fields).toBe('')
     })
 
     it('accepts the 2000 tail value', () => {
@@ -57,17 +62,17 @@ describe('logSettings utilities', () => {
       // tail 250 is not one of TAIL_LINES and fontSize 'xl' is unknown, so both
       // default; follow/formatted kept.
       global.localStorageMock.getItem.mockReturnValue(JSON.stringify({ follow: false, formatted: true, tail: 250, fontSize: 'xl' }))
-      expect(getLogSettingsFromStorage()).toEqual({ follow: false, formatted: true, tail: 100, fontSize: 'md' })
+      expect(getLogSettingsFromStorage()).toEqual({ follow: false, formatted: true, tail: 100, fontSize: 'md', fields: '' })
     })
 
     it('defaults a non-boolean follow/formatted', () => {
       global.localStorageMock.getItem.mockReturnValue(JSON.stringify({ follow: 'yes', formatted: 1, tail: 1000, fontSize: 'sm' }))
-      expect(getLogSettingsFromStorage()).toEqual({ follow: true, formatted: true, tail: 1000, fontSize: 'sm' })
+      expect(getLogSettingsFromStorage()).toEqual({ follow: true, formatted: true, tail: 1000, fontSize: 'sm', fields: '' })
     })
 
     it('defaults the missing fields of a partial object', () => {
       global.localStorageMock.getItem.mockReturnValue(JSON.stringify({ formatted: false }))
-      expect(getLogSettingsFromStorage()).toEqual({ follow: true, formatted: false, tail: 100, fontSize: 'md' })
+      expect(getLogSettingsFromStorage()).toEqual({ follow: true, formatted: false, tail: 100, fontSize: 'md', fields: '' })
     })
 
     it('drops unknown fields', () => {

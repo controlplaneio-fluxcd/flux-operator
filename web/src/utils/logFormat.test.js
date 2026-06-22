@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { describe, it, expect } from 'vitest'
-import { decorateLine, highlightJson, parseDotnet, parseJava, parseKlog, parseLogfmt, parseMonolog, parsePython, parseRuby, parseZap, tokenizeKV } from './logFormat'
+import { decorateLine, fieldMatcher, highlightJson, parseDotnet, parseJava, parseKlog, parseLogfmt, parseMonolog, parsePython, parseRuby, parseZap, tokenizeKV, topLevelJsonKeys } from './logFormat'
 
 // rowsText flattens a block descriptor to one string per visual row (spans joined),
 // so a test can assert the rendered text without caring about span boundaries.
@@ -661,5 +661,113 @@ describe('highlightJson', () => {
     expect(highlightJson('"hi"')).toBeNull()
     expect(highlightJson('{not json}')).toBeNull()
     expect(highlightJson('{"a":1')).toBeNull() // truncated
+  })
+
+  describe('field selection', () => {
+    it('projects a top-level object to the selected keys, in source order', () => {
+      const d = highlightJson('{"level":"info","ts":"t","msg":"hi","ns":"x"}', new Set(['msg', 'ns']))
+      expect(spansText(d)).toBe('"msg": "hi",\n"ns": "x"')
+    })
+
+    it('shows every field when the selection is null/undefined', () => {
+      expect(spansText(highlightJson('{"a":1,"b":2}'))).toBe('"a": 1,\n"b": 2')
+      expect(spansText(highlightJson('{"a":1,"b":2}', null))).toBe('"a": 1,\n"b": 2')
+    })
+
+    it('renders {} when the selection keeps none of the line\'s fields', () => {
+      expect(spansText(highlightJson('{"a":1}', new Set(['other'])))).toBe('{}')
+    })
+
+    it('keeps a selected nested value whole', () => {
+      const d = highlightJson('{"msg":"hi","obj":{"x":1}}', new Set(['obj']))
+      expect(spansText(d)).toBe('"obj": {\n  "x": 1\n}')
+    })
+
+    it('leaves a top-level array unaffected by a selection (no field keys)', () => {
+      expect(spansText(highlightJson('[1,2]', new Set(['msg'])))).toBe('1,\n2')
+    })
+
+    it('keeps a literal "__proto__" field when selected (no prototype mutation)', () => {
+      const d = highlightJson('{"__proto__":"x","msg":"hi"}', new Set(['__proto__']))
+      expect(spansText(d)).toBe('"__proto__": "x"')
+    })
+  })
+})
+
+describe('fieldMatcher', () => {
+  const keep = (expr, keys) => keys.filter(fieldMatcher(expr) || (() => true))
+
+  it('returns null for an empty or token-less expression (all fields)', () => {
+    expect(fieldMatcher('')).toBeNull()
+    expect(fieldMatcher('   ')).toBeNull()
+    expect(fieldMatcher('!')).toBeNull() // a lone "!" yields no usable token
+  })
+
+  it('matches exact field names, case-insensitively, not as substrings', () => {
+    const m = fieldMatcher('msg')
+    expect(m('msg')).toBe(true)
+    expect(m('MSG')).toBe(true)
+    expect(m('msgCount')).toBe(false)
+    expect(m('message')).toBe(false)
+  })
+
+  it('splits on spaces, commas, and pipes interchangeably', () => {
+    const keys = ['level', 'ts', 'msg', 'message', 'error']
+    expect(keep('msg message error', keys)).toEqual(['msg', 'message', 'error'])
+    expect(keep('msg, message, error', keys)).toEqual(['msg', 'message', 'error'])
+    expect(keep('msg|message|error', keys)).toEqual(['msg', 'message', 'error'])
+  })
+
+  it('treats * as a glob wildcard', () => {
+    const keys = ['reconcileID', 'controllerKind', 'controllerGroup', 'msg']
+    expect(keep('*id', keys)).toEqual(['reconcileID'])
+    expect(keep('controller*', keys)).toEqual(['controllerKind', 'controllerGroup'])
+    expect(keep('*o*', keys)).toEqual(['reconcileID', 'controllerKind', 'controllerGroup'])
+  })
+
+  it('excludes fields prefixed with !, keeping everything else', () => {
+    const keys = ['level', 'ts', 'msg', 'ns']
+    expect(keep('!level !ts', keys)).toEqual(['msg', 'ns'])
+    expect(keep('!controller*', ['controllerKind', 'msg', 'level'])).toEqual(['msg', 'level'])
+  })
+
+  it('lets an exclusion override an inclusion', () => {
+    const keys = ['msg', 'error', 'level']
+    expect(keep('msg error !error', keys)).toEqual(['msg'])
+  })
+
+  it('matches multi-* globs in order without catastrophic backtracking', () => {
+    const m = fieldMatcher('a*b*c')
+    expect(m('axxbxxc')).toBe(true)
+    expect(m('abc')).toBe(true)
+    expect(m('axbxd')).toBe(false) // no trailing c
+    expect(m('ac')).toBe(false)    // missing b between
+  })
+
+  it('resolves a pathological *-heavy pattern on a long key quickly (no ReDoS)', () => {
+    // A chained-.* regex would hang here; the linear matcher returns at once.
+    const m = fieldMatcher('*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*b')
+    const key = 'a'.repeat(2000)
+    const start = Date.now()
+    expect(m(key)).toBe(false) // no trailing b
+    expect(Date.now() - start).toBeLessThan(1000)
+  })
+})
+
+describe('topLevelJsonKeys', () => {
+  it('returns the top-level keys of a JSON object in source order', () => {
+    expect(topLevelJsonKeys('{"level":"info","msg":"hi","ns":"x"}')).toEqual(['level', 'msg', 'ns'])
+  })
+
+  it('ignores surrounding whitespace', () => {
+    expect(topLevelJsonKeys('  {"a":1}  ')).toEqual(['a'])
+  })
+
+  it('returns null for an array, a scalar, or non-JSON', () => {
+    expect(topLevelJsonKeys('[1,2]')).toBeNull()
+    expect(topLevelJsonKeys('42')).toBeNull()
+    expect(topLevelJsonKeys('"hi"')).toBeNull()
+    expect(topLevelJsonKeys('plain text')).toBeNull()
+    expect(topLevelJsonKeys('{"a":1')).toBeNull() // truncated
   })
 })
