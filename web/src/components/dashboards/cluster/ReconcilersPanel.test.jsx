@@ -48,7 +48,7 @@ describe('ReconcilersPanel', () => {
     it('should render component title', () => {
       render(<ReconcilersPanel reconcilers={mockReconcilers} />)
 
-      expect(screen.getByText('Flux Reconcilers')).toBeInTheDocument()
+      expect(screen.getByText('Flux Resources')).toBeInTheDocument()
     })
 
     it('should show total CRD count', () => {
@@ -89,7 +89,7 @@ describe('ReconcilersPanel', () => {
     it('should render expand/collapse toggle', () => {
       render(<ReconcilersPanel reconcilers={mockReconcilers} />)
 
-      const toggle = screen.getByRole('button', { name: /Flux Reconcilers/i })
+      const toggle = screen.getByRole('button', { name: /Flux Resources/i })
       expect(toggle).toBeInTheDocument()
     })
 
@@ -304,7 +304,7 @@ describe('ReconcilersPanel', () => {
       expect(screen.getByText('Kustomization')).toBeInTheDocument()
 
       // Click toggle to collapse
-      const toggle = screen.getByRole('button', { name: /Flux Reconcilers/i })
+      const toggle = screen.getByRole('button', { name: /Flux Resources/i })
       fireEvent.click(toggle)
 
       // Cards should be hidden
@@ -314,7 +314,7 @@ describe('ReconcilersPanel', () => {
     it('should toggle grid visibility when clicked multiple times', () => {
       render(<ReconcilersPanel reconcilers={mockReconcilers} />)
 
-      const toggle = screen.getByRole('button', { name: /Flux Reconcilers/i })
+      const toggle = screen.getByRole('button', { name: /Flux Resources/i })
 
       // Get initial state
       const initiallyVisible = screen.queryByText('Kustomization') !== null
@@ -337,7 +337,7 @@ describe('ReconcilersPanel', () => {
     it('should rotate chevron icon when toggled', () => {
       render(<ReconcilersPanel reconcilers={mockReconcilers} />)
 
-      const toggle = screen.getByRole('button', { name: /Flux Reconcilers/i })
+      const toggle = screen.getByRole('button', { name: /Flux Resources/i })
       const chevron = toggle.querySelector('svg')
 
       // Get initial rotation state
@@ -625,7 +625,7 @@ describe('ReconcilersPanel', () => {
     it('should handle empty reconcilers array', () => {
       render(<ReconcilersPanel reconcilers={[]} />)
 
-      expect(screen.getByText('Flux Reconcilers')).toBeInTheDocument()
+      expect(screen.getByText('Flux Resources')).toBeInTheDocument()
       // Shows 0 CRDs when none are installed, and 0 resources
       expect(screen.getByText(/0 CRDs/)).toBeInTheDocument()
       expect(screen.getByText(/0 resources/)).toBeInTheDocument()

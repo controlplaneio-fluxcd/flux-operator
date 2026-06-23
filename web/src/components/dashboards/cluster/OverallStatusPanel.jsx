@@ -85,7 +85,7 @@ export function OverallStatusPanel({ report }) {
         bgColor: 'bg-yellow-50',
         borderColor: 'border-warning',
         title: 'Degraded Performance',
-        message: `${failingReconcilers} reconciler${failingReconcilers !== 1 ? 's' : ''} failing`
+        message: `${failingReconcilers} resource${failingReconcilers !== 1 ? 's' : ''} failing`
       }
     }
 

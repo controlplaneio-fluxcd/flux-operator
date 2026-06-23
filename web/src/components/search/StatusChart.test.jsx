@@ -532,7 +532,7 @@ describe('StatusChart', () => {
       )
 
       // Should show total reconciliations count
-      expect(container.textContent).toContain('Reconcilers:')
+      expect(container.textContent).toContain('Resources:')
       expect(container.textContent).toContain('15')
     })
 

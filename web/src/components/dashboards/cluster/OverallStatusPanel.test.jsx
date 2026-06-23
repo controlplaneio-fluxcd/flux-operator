@@ -191,7 +191,7 @@ describe('OverallStatusPanel', () => {
 
       expect(screen.queryByText('Major Outage')).not.toBeInTheDocument()
       expect(screen.getByText('Degraded Performance')).toBeInTheDocument()
-      expect(screen.getByText('5 reconcilers failing')).toBeInTheDocument()
+      expect(screen.getByText('5 resources failing')).toBeInTheDocument()
     })
 
     it('should be clickable in major outage state', () => {
@@ -345,7 +345,7 @@ describe('OverallStatusPanel', () => {
       render(<OverallStatusPanel report={report} />)
 
       expect(screen.getByText('Degraded Performance')).toBeInTheDocument()
-      expect(screen.getByText('2 reconcilers failing')).toBeInTheDocument()
+      expect(screen.getByText('2 resources failing')).toBeInTheDocument()
     })
 
     it('should show correct singular for one failure', () => {
@@ -362,7 +362,7 @@ describe('OverallStatusPanel', () => {
 
       render(<OverallStatusPanel report={report} />)
 
-      expect(screen.getByText('1 reconciler failing')).toBeInTheDocument()
+      expect(screen.getByText('1 resource failing')).toBeInTheDocument()
     })
 
     it('should be clickable in degraded state', () => {
@@ -639,7 +639,7 @@ describe('OverallStatusPanel', () => {
 
       // Should count only the 2 from Kustomization
       expect(screen.getByText('Degraded Performance')).toBeInTheDocument()
-      expect(screen.getByText('2 reconcilers failing')).toBeInTheDocument()
+      expect(screen.getByText('2 resources failing')).toBeInTheDocument()
     })
 
     it('should handle reconcilers with null/undefined failing count', () => {
@@ -675,7 +675,7 @@ describe('OverallStatusPanel', () => {
 
       render(<OverallStatusPanel report={report} />)
 
-      expect(screen.getByText('5 reconcilers failing')).toBeInTheDocument()
+      expect(screen.getByText('5 resources failing')).toBeInTheDocument()
     })
 
     it('should correctly calculate when all reconcilers are completely broken', () => {
@@ -715,7 +715,7 @@ describe('OverallStatusPanel', () => {
 
       // Should be degraded with 3 failing
       expect(screen.getByText('Degraded Performance')).toBeInTheDocument()
-      expect(screen.getByText('3 reconcilers failing')).toBeInTheDocument()
+      expect(screen.getByText('3 resources failing')).toBeInTheDocument()
     })
   })
 })
