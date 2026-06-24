@@ -159,7 +159,7 @@ export function StatusChart({ items, loading, mode = 'events', onBarClick }) {
             <span>Loading...</span>
           ) : (
             <span>
-              {mode === 'events' ? 'Reconcile events: ' : 'Reconcilers: '}
+              {mode === 'events' ? 'Reconcile events: ' : 'Resources: '}
               <span class="font-semibold text-gray-900 dark:text-gray-100">
                 {items && items.length > 0 ? items.length : 0}
               </span>
