@@ -60,8 +60,9 @@ source-controller-shard1      1/1     1            1           77s
 source-controller-shard2      1/1     1            1           77s
 ```
 
-Note that only the `source-controller`, `kustomize-controller` and `helm-controller` controllers
-support sharding.
+The operator shards the installed controllers that support watch label selectors:
+`source-controller`, `kustomize-controller`, `helm-controller`, `image-reflector-controller`,
+`image-automation-controller`, and, with Flux v2.9.0 or later, `source-watcher`.
 
 It is recommended to use the main controller instances to reconcile the cluster add-ons and
 the sharded controllers to reconcile the application workloads belonging to tenants.
@@ -113,8 +114,11 @@ source-controller-shard2      Bound
 To assign a group of Flux resources to a particular shard, add the sharding key label to the resources,
 using the shard name as the value.
 
-Note that the Flux Kustomizations and HelmReleases must have the sharding key label set to the same shard name
-as their source GitRepository, OCIRepository, HelmRepository or HelmChart.
+Note that Flux resources that reference each other must have the sharding key label set to
+the same shard name. This includes `Kustomization` and `HelmRelease` resources with
+their source `GitRepository`, `OCIRepository`, `HelmRepository` or `HelmChart`,
+`ImagePolicy` resources with their `ImageRepository`, `ImageUpdateAutomation` resources
+with their source `GitRepository`, and `ArtifactGenerator` resources with their source objects.
 
 ### Examples
 

@@ -151,7 +151,7 @@ patches:
       value: --log-level=info
 - target:
     kind: Deployment
-    name: "(source-controller|kustomize-controller|helm-controller)"
+    name: "(source-controller|kustomize-controller|helm-controller|image-reflector-controller|image-automation-controller)"
     annotationSelector: "!sharding.fluxcd.io/role"
   patch: |
     - op: add

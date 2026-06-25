@@ -150,7 +150,11 @@ patches:
 {{- if gt (len .Shards) 0 }}
 - target:
     kind: Deployment
-    name: "(source-controller|kustomize-controller|helm-controller)"
+{{- if ge .VersionInfo.Minor 9 }}
+    name: "(source-controller|kustomize-controller|helm-controller|image-reflector-controller|image-automation-controller|source-watcher)"
+{{- else }}
+    name: "(source-controller|kustomize-controller|helm-controller|image-reflector-controller|image-automation-controller)"
+{{- end }}
     annotationSelector: "!sharding.fluxcd.io/role"
   patch: |
     - op: add
@@ -173,6 +177,12 @@ resources:
 {{- else if eq $component "kustomize-controller" }}
   - ../{{$component}}.yaml
 {{- else if eq $component "helm-controller" }}
+  - ../{{$component}}.yaml
+{{- else if eq $component "image-reflector-controller" }}
+  - ../{{$component}}.yaml
+{{- else if eq $component "image-automation-controller" }}
+  - ../{{$component}}.yaml
+{{- else if and (ge $.VersionInfo.Minor 9) (eq $component "source-watcher") }}
   - ../{{$component}}.yaml
 {{- end }}
 {{- end }}
@@ -198,6 +208,15 @@ patches:
       - op: replace
         path: /spec/selector/app
         value: source-controller-{{.ShardName}}
+{{- if ge .VersionInfo.Minor 9 }}
+  - target:
+      kind: Service
+      name: (source-watcher)
+    patch: |
+      - op: replace
+        path: /spec/selector/app
+        value: source-watcher-{{.ShardName}}
+{{- end }}
   - target:
       kind: Deployment
       name: (source-controller)
@@ -224,6 +243,21 @@ patches:
           name: persistent-data-{{.ShardName}}
           mountPath: /data
 {{- end }}
+{{- if ge .VersionInfo.Minor 9 }}
+  - target:
+      kind: Deployment
+      name: (source-watcher)
+    patch: |
+      - op: replace
+        path: /spec/selector/matchLabels/app
+        value: source-watcher-{{.ShardName}}
+      - op: replace
+        path: /spec/template/metadata/labels/app
+        value: source-watcher-{{.ShardName}}
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --storage-adv-addr=source-watcher-{{.ShardName}}.$(RUNTIME_NAMESPACE).svc.{{.ClusterDomain}}.
+{{- end }}
   - target:
       kind: Deployment
       name: (kustomize-controller)
@@ -246,7 +280,31 @@ patches:
         value: helm-controller-{{.ShardName}}
   - target:
       kind: Deployment
-      name: (source-controller|kustomize-controller|helm-controller)
+      name: (image-reflector-controller)
+    patch: |
+      - op: replace
+        path: /spec/selector/matchLabels/app
+        value: image-reflector-controller-{{.ShardName}}
+      - op: replace
+        path: /spec/template/metadata/labels/app
+        value: image-reflector-controller-{{.ShardName}}
+  - target:
+      kind: Deployment
+      name: (image-automation-controller)
+    patch: |
+      - op: replace
+        path: /spec/selector/matchLabels/app
+        value: image-automation-controller-{{.ShardName}}
+      - op: replace
+        path: /spec/template/metadata/labels/app
+        value: image-automation-controller-{{.ShardName}}
+  - target:
+      kind: Deployment
+{{- if ge .VersionInfo.Minor 9 }}
+      name: (source-controller|kustomize-controller|helm-controller|image-reflector-controller|image-automation-controller|source-watcher)
+{{- else }}
+      name: (source-controller|kustomize-controller|helm-controller|image-reflector-controller|image-automation-controller)
+{{- end }}
     patch: |
       - op: add
         path: /spec/template/spec/containers/0/args/-
