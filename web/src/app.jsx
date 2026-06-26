@@ -18,6 +18,7 @@ import { ResourceList } from './components/search/ResourceList'
 import { WorkloadList } from './components/search/WorkloadList'
 import { ResourcePage } from './components/dashboards/resource/ResourcePage'
 import { WorkloadPage } from './components/dashboards/workload/WorkloadPage'
+import { ObjectPage } from './components/dashboards/object/ObjectPage'
 import { FavoritesPage } from './components/favorites/FavoritesPage'
 import { ProfilePage } from './components/user/ProfilePage'
 import { NotFoundPage } from './components/layout/NotFoundPage'
@@ -325,6 +326,7 @@ function AppContent({ spec, namespace }) {
         <Route path="/workloads" component={WorkloadList} />
         <Route path="/resource/:kind/:namespace/:name" component={ResourcePage} />
         <Route path="/workload/:kind/:namespace/:name" component={WorkloadPage} />
+        <Route path="/object/:apiVersion/:kind/:namespace/:name" component={ObjectPage} />
         <Route path="/user/profile" component={ProfilePage} />
         <Route default component={NotFoundPage} />
       </Router>

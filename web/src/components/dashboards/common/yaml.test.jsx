@@ -1,9 +1,14 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { renderHook, cleanup } from '@testing-library/preact'
-import { usePrismTheme } from './yaml'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { render, renderHook, screen, fireEvent, waitFor, cleanup } from '@testing-library/preact'
+import { EditableYamlBlock, usePrismTheme } from './yaml'
+import { fetchWithMock } from '../../../utils/fetch'
+
+vi.mock('../../../utils/fetch', () => ({
+  fetchWithMock: vi.fn()
+}))
 import { appliedTheme } from '../../../utils/theme'
 
 describe('usePrismTheme', () => {
@@ -17,6 +22,7 @@ describe('usePrismTheme', () => {
     }
     // Reset theme to light
     appliedTheme.value = 'light'
+    fetchWithMock.mockReset()
   })
 
   afterEach(() => {
@@ -108,5 +114,69 @@ describe('usePrismTheme', () => {
     expect(updatedLink).not.toBeNull()
     // In test env we can't check actual CSS files, but link should be recreated
     expect(document.querySelectorAll(`#${LINK_ID}`).length).toBe(1)
+  })
+})
+
+describe('EditableYamlBlock', () => {
+  beforeEach(() => {
+    fetchWithMock.mockReset()
+    fetchWithMock.mockResolvedValue({ success: true, message: 'Updated ConfigMap default/app-config' })
+  })
+
+  afterEach(() => {
+    cleanup()
+  })
+
+  it('edits YAML and saves it through the object edit API', async () => {
+    const onSaved = vi.fn()
+    const data = {
+      apiVersion: 'v1',
+      kind: 'ConfigMap',
+      metadata: { name: 'app-config', namespace: 'default' },
+      data: { key: 'old-value' }
+    }
+
+    render(<EditableYamlBlock data={data} onSaved={onSaved} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit YAML' }))
+
+    const editor = screen.getByLabelText('YAML object editor')
+    expect(editor.value).toContain('old-value')
+
+    fireEvent.input(editor, {
+      target: { value: editor.value.replace('old-value', 'new-value') }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save YAML' }))
+
+    await waitFor(() => {
+      expect(fetchWithMock).toHaveBeenCalledWith({
+        endpoint: '/api/v1/object',
+        mockPath: '../mock/action',
+        mockExport: 'mockObjectEdit',
+        method: 'PUT',
+        body: expect.objectContaining({
+          yaml: expect.stringContaining('new-value'),
+          apiVersion: 'v1',
+          kind: 'ConfigMap',
+          namespace: 'default',
+          name: 'app-config'
+        })
+      })
+      expect(onSaved).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  it('shows save errors without leaving edit mode', async () => {
+    fetchWithMock.mockRejectedValue(new Error('forbidden'))
+
+    render(<EditableYamlBlock data={{ apiVersion: 'v1', kind: 'ConfigMap', metadata: { name: 'app-config' } }} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit YAML' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save YAML' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('forbidden')).toBeInTheDocument()
+      expect(screen.getByLabelText('YAML object editor')).toBeInTheDocument()
+    })
   })
 })

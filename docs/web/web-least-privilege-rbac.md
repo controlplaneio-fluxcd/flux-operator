@@ -228,6 +228,21 @@ Users do not need cluster-wide `list` permissions on namespaces just to populate
 
 ---
 
+## Non-elevated Live Object Editing
+
+**Where:** YAML editors on resource and workload specification tabs.
+
+**Internal operation:**
+The backend updates the submitted Kubernetes object using the authenticated user's impersonated client.
+
+**How it works:**
+The Web UI sends the edited YAML to `PUT /api/v1/object`. The backend parses the YAML, validates `apiVersion`, `kind`, and `metadata.name`, fetches the current object with the user's own Kubernetes identity, carries forward the current `resourceVersion`, strips the status subresource, and performs a normal Kubernetes `update` using that same impersonated identity. No `WithPrivileges()` path is used.
+
+**Least privilege benefit:**
+Live editing does not grant any additional capability beyond the user's native Kubernetes RBAC. Users who lack `update` permission on an object receive the Kubernetes authorization error, while users who already have update permission get an in-context editor without needing to leave the Flux Web UI.
+
+---
+
 ## Summary
 
 | # | Feature                     | Internal Operation                                 | Data Exposed to User                                                          |
@@ -240,3 +255,4 @@ Users do not need cluster-wide `list` permissions on namespaces just to populate
 | 6 | Controller metrics          | System reads metrics API                           | CPU/memory usage of Flux controllers                                          |
 | 7 | Fine-Grained GitOps Actions | System patches resource                            | None (server-side mutation only)                                              |
 | 8 | Namespace visibility        | Wrapper lists namespaces with privileged base client | Visible namespace names after RBAC filtering                                  |
+| 9 | Live object editing         | User's impersonated client updates submitted object fields | Editable YAML for objects the user can get/update                             |

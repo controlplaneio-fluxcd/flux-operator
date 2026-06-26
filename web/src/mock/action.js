@@ -21,3 +21,11 @@ export const mockWorkloadAction = (body) => {
     message: `${message} for ${body.namespace}/${body.name}`
   }
 }
+
+// Mock object edit response for PUT /api/v1/object
+export const mockObjectEdit = () => {
+  return {
+    success: true,
+    message: 'Object updated'
+  }
+}

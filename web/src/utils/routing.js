@@ -15,9 +15,28 @@ import { workloadKinds } from './constants'
  * @param {string} name - Object name
  * @returns {string} Dashboard path
  */
-export function getDashboardUrl(kind, namespace, name) {
-  const base = workloadKinds.includes(kind) ? 'workload' : 'resource'
-  return `/${base}/${encodeURIComponent(kind)}/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}`
+export function getDashboardUrl(kind, namespace, name, apiVersion = '') {
+  const isNativeWorkload = workloadKinds.includes(kind) && (!apiVersion || apiVersion === 'apps/v1' || apiVersion === 'batch/v1')
+  if (isNativeWorkload) {
+    return `/workload/${encodeURIComponent(kind)}/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}`
+  }
+  if (apiVersion) {
+    return getObjectDashboardUrl(apiVersion, kind, namespace, name)
+  }
+  return `/resource/${encodeURIComponent(kind)}/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}`
+}
+
+/**
+ * Builds the dashboard URL for an arbitrary Kubernetes object.
+ *
+ * @param {string} apiVersion - Object API version
+ * @param {string} kind - Object kind
+ * @param {string} namespace - Object namespace
+ * @param {string} name - Object name
+ * @returns {string} Dashboard path
+ */
+export function getObjectDashboardUrl(apiVersion, kind, namespace, name) {
+  return `/object/${encodeURIComponent(apiVersion)}/${encodeURIComponent(kind)}/${encodeURIComponent(namespace || '_')}/${encodeURIComponent(name)}`
 }
 
 /**

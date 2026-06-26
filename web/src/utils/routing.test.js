@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/preact'
 import { signal } from '@preact/signals'
-import { serializeFilters, urlWithParam } from './routing'
+import { serializeFilters, urlWithParam, getDashboardUrl, getObjectDashboardUrl } from './routing'
 
 describe('serializeFilters', () => {
   it('should serialize simple filter object to query string', () => {
@@ -59,6 +59,21 @@ describe('serializeFilters', () => {
   it('should handle numeric string values', () => {
     const filters = { limit: '10', offset: '0' }
     expect(serializeFilters(filters)).toBe('limit=10&offset=0')
+  })
+})
+
+describe('dashboard object routing', () => {
+  it('routes native workloads to workload dashboards', () => {
+    expect(getDashboardUrl('Deployment', 'apps', 'podinfo', 'apps/v1')).toBe('/workload/Deployment/apps/podinfo')
+    expect(getDashboardUrl('CronJob', 'apps', 'podinfo', 'batch/v1')).toBe('/workload/CronJob/apps/podinfo')
+  })
+
+  it('routes non-native workload-shaped objects to arbitrary object dashboards', () => {
+    expect(getDashboardUrl('Deployment', 'apps', 'podinfo', 'custom.example.io/v1')).toBe('/object/custom.example.io%2Fv1/Deployment/apps/podinfo')
+  })
+
+  it('encodes apiVersion and cluster-scoped namespace sentinel for arbitrary objects', () => {
+    expect(getObjectDashboardUrl('rbac.authorization.k8s.io/v1', 'ClusterRole', '', 'admin')).toBe('/object/rbac.authorization.k8s.io%2Fv1/ClusterRole/_/admin')
   })
 })
 

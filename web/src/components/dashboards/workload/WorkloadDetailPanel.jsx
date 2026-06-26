@@ -7,7 +7,7 @@ import { formatTimestamp } from '../../../utils/time'
 import { getWorkloadStatusBadgeClass, formatWorkloadStatus, getEventBadgeClass, getContainerStateBadgeClass } from '../../../utils/status'
 import { formatScheduleMessage } from '../../../utils/cron'
 import { DashboardPanel, TabButton } from '../common/panel'
-import { YamlBlock } from '../common/yaml'
+import { EditableYamlBlock, YamlBlock } from '../common/yaml'
 import { WorkloadDeleteAction } from '../resource/WorkloadDeleteAction'
 import { WorkloadLogsViewer } from './WorkloadLogsViewer'
 import { LOGS_QUERY_PARAM, ALL_PODS_VALUE } from './WorkloadLogsAction'
@@ -607,7 +607,9 @@ export function WorkloadDetailPanel({
       )}
 
       {/* Workload Specification Tab */}
-      {workloadTab === 'spec' && <YamlBlock data={workloadSpecYaml} />}
+      {workloadTab === 'spec' && (
+        <EditableYamlBlock data={workloadSpecYaml} onSaved={onActionComplete} />
+      )}
 
       {/* Workload Status Tab */}
       {workloadTab === 'status' && <YamlBlock data={workloadStatusYaml} />}

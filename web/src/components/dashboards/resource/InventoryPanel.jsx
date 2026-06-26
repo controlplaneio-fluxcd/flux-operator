@@ -170,8 +170,12 @@ export function InventoryPanel({ resourceData, onNavigate }) {
 
   // Build the dashboard URL for an inventory item, routing workloads to the
   // workload dashboard and Flux resources to the resource dashboard.
-  const getItemUrl = (item) =>
-    getDashboardUrl(item.kind, item.namespace || resourceData.metadata.namespace, item.name)
+  const getItemUrl = (item) => {
+    const isFluxResource = isFluxInventoryItem(item)
+    const isWorkload = !isFluxResource && isWorkloadInventoryItem(item)
+    const apiVersion = isFluxResource || isWorkload ? '' : item.apiVersion
+    return getDashboardUrl(item.kind, item.namespace || resourceData.metadata.namespace, item.name, apiVersion)
+  }
 
   return (
     <DashboardPanel title="Managed Objects" id="inventory-panel">
@@ -308,7 +312,7 @@ export function InventoryPanel({ resourceData, onNavigate }) {
                 return (
                   <tr key={idx} class="hover:bg-gray-50 dark:hover:bg-gray-800">
                     <td class="px-3 py-2 text-sm">
-                      {(isFluxResource || isWorkload) ? (
+                      {(isFluxResource || isWorkload || item.apiVersion) ? (
                         <a
                           href={getItemUrl(item)}
                           class="text-flux-blue dark:text-blue-400 hover:underline"

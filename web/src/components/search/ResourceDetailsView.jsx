@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect, useRef } from 'preact/hooks'
 import { fetchWithMock } from '../../utils/fetch'
-import { usePrismTheme, YamlBlock } from '../dashboards/common/yaml'
+import { usePrismTheme, YamlBlock, EditableYamlBlock } from '../dashboards/common/yaml'
 import { isKindWithInventory, getKindAlias, isFluxInventoryItem, isWorkloadInventoryItem } from '../../utils/constants'
 import { getDashboardUrl } from '../../utils/routing'
 import { getStatusBadgeClass, cleanStatus } from '../../utils/status'
@@ -59,9 +59,9 @@ function InventoryItem({ item }) {
 
   // Build the dashboard URL, routing workloads and Flux resources accordingly
   const ns = item.namespace || ''
-  const dashboardUrl = getDashboardUrl(item.kind, ns, item.name)
+  const dashboardUrl = getDashboardUrl(item.kind, ns, item.name, isFluxResource || isWorkload ? '' : item.apiVersion)
 
-  if (isFluxResource || isWorkload) {
+  if (isFluxResource || isWorkload || item.apiVersion) {
     return (
       <div class="py-1 px-2 text-xs break-all">
         <a
@@ -404,7 +404,13 @@ export function ResourceDetailsView({ kind, name, namespace, isExpanded }) {
 
           {/* Specification Tab */}
           {activeTab === 'specification' && (
-            <YamlBlock data={definitionData} />
+            <EditableYamlBlock
+              data={definitionData}
+              onSaved={() => {
+                fetchingRef.current = false
+                setResourceData(null)
+              }}
+            />
           )}
 
           {/* Status Tab */}

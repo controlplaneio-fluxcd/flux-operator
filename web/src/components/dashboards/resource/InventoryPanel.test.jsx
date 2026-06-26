@@ -448,7 +448,7 @@ describe('InventoryPanel component', () => {
     expect(kustomizationLink).toHaveAttribute('href', '/resource/Kustomization/production/backend')
   })
 
-  it('should not make non-Flux resources clickable in inventory', async () => {
+  it('should make API-versioned non-Flux resources clickable in inventory', async () => {
     const user = userEvent.setup()
 
     render(
@@ -462,10 +462,10 @@ describe('InventoryPanel component', () => {
     const inventoryTab = screen.getByText('Inventory')
     await user.click(inventoryTab)
 
-    // ConfigMap should not be in a link
-    const configMapElement = screen.getByText('app-config')
-    expect(configMapElement.tagName).toBe('SPAN')
-    expect(configMapElement.closest('a')).toBeNull()
+    // ConfigMap should link to the arbitrary object dashboard
+    const configMapLink = screen.getByText('app-config').closest('a')
+    expect(configMapLink).toBeInTheDocument()
+    expect(configMapLink).toHaveAttribute('href', '/object/v1/ConfigMap/production/app-config')
   })
 
   it('should toggle collapse/expand state', async () => {
@@ -570,7 +570,7 @@ describe('InventoryPanel component', () => {
     expect(textContent).toContain('Disabled')
   })
 
-  it('should not call onNavigate when clicking non-Flux resources', async () => {
+  it('should link non-Flux resources without calling onNavigate', async () => {
     const user = userEvent.setup()
 
     render(
@@ -584,13 +584,13 @@ describe('InventoryPanel component', () => {
     const inventoryTab = screen.getByText('Inventory')
     await user.click(inventoryTab)
 
-    // Check that there are no buttons in the table (all are non-Flux resources)
+    // Check that there are no buttons in the table
     const buttons = document.querySelectorAll('tbody button')
     expect(buttons.length).toBe(0)
 
-    // Check that spans are used instead
-    const spans = document.querySelectorAll('tbody td span')
-    expect(spans.length).toBeGreaterThan(0)
+    // Check that links are used for API-versioned objects
+    const links = document.querySelectorAll('tbody td a')
+    expect(links.length).toBeGreaterThan(0)
 
     // Verify onNavigate was not called
     expect(mockOnNavigate).not.toHaveBeenCalled()
