@@ -308,6 +308,84 @@ describe('ResourceList', () => {
     })
   })
 
+  describe('Bulk actions', () => {
+    it('selects visible resources and reconciles them in bulk', async () => {
+      fetchWithMock.mockImplementation(({ method }) => {
+        if (method === 'POST') return Promise.resolve({ success: true })
+        return Promise.resolve({ resources: mockResources })
+      })
+
+      render(<ResourceList />)
+
+      const selectAll = await screen.findByRole('checkbox', { name: 'Select all visible resources' })
+      fireEvent.click(selectAll)
+
+      expect(screen.getByText('2 selected')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Reconcile selected resources' }))
+
+      await waitFor(() => {
+        expect(fetchWithMock).toHaveBeenCalledWith(expect.objectContaining({
+          endpoint: '/api/v1/resource/action',
+          method: 'POST',
+          body: {
+            kind: 'GitRepository',
+            namespace: 'flux-system',
+            name: 'flux-system',
+            action: 'reconcile'
+          }
+        }))
+        expect(fetchWithMock).toHaveBeenCalledWith(expect.objectContaining({
+          endpoint: '/api/v1/resource/action',
+          method: 'POST',
+          body: {
+            kind: 'Kustomization',
+            namespace: 'flux-system',
+            name: 'apps',
+            action: 'reconcile'
+          }
+        }))
+      })
+    })
+
+    it('deletes only individually selected resources in bulk', async () => {
+      fetchWithMock.mockImplementation(({ method }) => {
+        if (method === 'POST') return Promise.resolve({ success: true })
+        return Promise.resolve({ resources: mockResources })
+      })
+
+      render(<ResourceList />)
+
+      const gitRepositoryCheckbox = await screen.findByRole('checkbox', {
+        name: 'Select GitRepository flux-system/flux-system'
+      })
+      fireEvent.click(gitRepositoryCheckbox)
+
+      expect(screen.getByText('1 selected')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Delete selected resources' }))
+
+      await waitFor(() => {
+        expect(fetchWithMock).toHaveBeenCalledWith(expect.objectContaining({
+          endpoint: '/api/v1/resource/action',
+          method: 'POST',
+          body: {
+            kind: 'GitRepository',
+            namespace: 'flux-system',
+            name: 'flux-system',
+            action: 'delete'
+          }
+        }))
+      })
+
+      expect(fetchWithMock).not.toHaveBeenCalledWith(expect.objectContaining({
+        endpoint: '/api/v1/resource/action',
+        method: 'POST',
+        body: expect.objectContaining({ name: 'apps', action: 'delete' })
+      }))
+    })
+  })
+
   describe('Filter interactions', () => {
     it('should re-fetch when kind filter changes', async () => {
       fetchWithMock.mockResolvedValue({ resources: [] })

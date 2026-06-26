@@ -192,16 +192,16 @@ memory utilization of Flux controllers helps users understand whether Flux itsel
 
 ## 7. Fine-Grained GitOps Actions
 
-**Where:** Any GitOps action (e.g. suspend, resume, reconcile, download) triggered via the Web UI when `.spec.userActions.access` is configured as `FineGrained`.
+**Where:** Any GitOps action (e.g. suspend, resume, reconcile, delete, download) triggered via the Web UI when `.spec.userActions.access` is configured as `FineGrained`.
 
 **Internal operation:**
-The system performs the actual `patch` operation on the target resource, as long as the user possesses the specific custom action verb (e.g. `suspend`).
+The system performs the actual resource mutation on the target resource, as long as the user possesses the specific custom action verb (e.g. `suspend` or `delete`).
 
 **How it works:**
-Normally, GitOps actions are executed by patching the object using the user's impersonated client, which requires the user to hold the native Kubernetes `patch` verb. When fine-grained access control is enabled, the backend verifies that the user holds the specific custom verb for the action, and if so, it uses the privileged client to perform the patch operation, removing the need for user impersonation during the patch.
+Normally, GitOps actions are executed using the user's impersonated client, which requires the user to hold native Kubernetes verbs such as `patch` for reconcile/suspend/resume or `delete` for resource deletion. When fine-grained access control is enabled, the backend verifies that the user holds the specific custom verb for the action, and if so, it uses the privileged client to perform the underlying patch or delete operation, removing the need for user impersonation during the mutation.
 
 **Least privilege benefit:**
-This feature is crucial for least-privilege security scenarios. If users were required to have the native `patch` verb to suspend or resume resources, they could potentially bypass the Web UI and perform unauthorized modifications via `kubectl` or other SSO-integrated tools. By handling the patch internally, cluster administrators can assign restrictive, fine-grained access policies ensuring tenants can solely perform permitted actions.
+This feature is crucial for least-privilege security scenarios. If users were required to have native `patch` or `delete` verbs to operate resources, they could potentially bypass the Web UI and perform unauthorized modifications via `kubectl` or other SSO-integrated tools. By handling the mutation internally, cluster administrators can assign restrictive, fine-grained access policies ensuring tenants can solely perform permitted actions.
 
 ---
 
@@ -238,5 +238,5 @@ Users do not need cluster-wide `list` permissions on namespaces just to populate
 | 4 | Audit pod-owner resolution  | System reads owner chain                           | None (server-side only)                                                       |
 | 5 | Dashboard report and workloads index | System scans Flux resources and applier inventories | Aggregated stats and workload reference + parent reconciler status, filtered by user namespace |
 | 6 | Controller metrics          | System reads metrics API                           | CPU/memory usage of Flux controllers                                          |
-| 7 | Fine-Grained GitOps Actions | System patches resource                            | None (server-side mutation only)                                              |
+| 7 | Fine-Grained GitOps Actions | System patches or deletes resource                 | None (server-side mutation only)                                              |
 | 8 | Namespace visibility        | Wrapper lists namespaces with privileged base client | Visible namespace names after RBAC filtering                                  |

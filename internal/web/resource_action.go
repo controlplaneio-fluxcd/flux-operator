@@ -65,9 +65,9 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Validate action type
-	if !fluxcdv1.IsUserAction(actionReq.Action) {
-		http.Error(w, "Invalid action. Must be one of: reconcile, suspend, resume", http.StatusBadRequest)
+	// Validate action type.
+	if !isResourceAction(actionReq.Action) {
+		http.Error(w, "Invalid action. Must be one of: reconcile, suspend, resume, delete", http.StatusBadRequest)
 		return
 	}
 
@@ -132,6 +132,10 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 	case fluxcdv1.UserActionResume:
 		obj, actionErr = h.setSuspension(ctx, *gvk, actionReq.Name, actionReq.Namespace, now, false)
 		message = fmt.Sprintf("Resumed %s/%s", actionReq.Namespace, actionReq.Name)
+
+	case fluxcdv1.UserActionDelete:
+		obj, actionErr = h.deleteResource(ctx, *gvk, actionReq.Name, actionReq.Namespace)
+		message = fmt.Sprintf("Deleted %s/%s", actionReq.Namespace, actionReq.Name)
 	}
 
 	if actionErr != nil {
@@ -164,6 +168,16 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+}
+
+// isResourceAction reports whether action is supported by the resource action endpoint.
+func isResourceAction(action string) bool {
+	switch action {
+	case fluxcdv1.UserActionReconcile, fluxcdv1.UserActionSuspend, fluxcdv1.UserActionResume, fluxcdv1.UserActionDelete:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -202,6 +216,30 @@ func (h *Handler) annotateResource(ctx context.Context, gvk schema.GroupVersionK
 		return nil
 	})
 	if err != nil {
+		return nil, err
+	}
+
+	return resource, nil
+}
+
+// deleteResource deletes a Flux resource and returns the object for auditing.
+func (h *Handler) deleteResource(ctx context.Context, gvk schema.GroupVersionKind,
+	name, namespace string) (client.Object, error) {
+	kubeClient := h.kubeClient.GetClient(ctx, h.actionClientOptions()...)
+
+	resource := &metav1.PartialObjectMetadata{}
+	resource.SetGroupVersionKind(gvk)
+	resource.SetName(name)
+	resource.SetNamespace(namespace)
+
+	objectKey := client.ObjectKey{
+		Namespace: namespace,
+		Name:      name,
+	}
+	if err := kubeClient.Get(ctx, objectKey, resource); err != nil {
+		return nil, err
+	}
+	if err := kubeClient.Delete(ctx, resource); err != nil {
 		return nil, err
 	}
 
