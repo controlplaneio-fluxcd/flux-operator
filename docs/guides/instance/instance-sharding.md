@@ -74,7 +74,8 @@ reduce the network traffic after a restart, as the controller will not need to
 re-download all the artifacts from the source repositories.
 
 To enable persistent storage for the source-controller shards,
-you can add the following configuration to the `FluxInstance`:
+you must set `.spec.storage` together with `.spec.sharding.storage: persistent`; otherwise Kubernetes admission rejects the `FluxInstance`.
+You can add the following configuration to the `FluxInstance`:
 
 ```yaml
 apiVersion: fluxcd.controlplane.io/v1

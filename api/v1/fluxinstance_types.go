@@ -21,6 +21,7 @@ const (
 )
 
 // FluxInstanceSpec defines the desired state of FluxInstance
+// +kubebuilder:validation:XValidation:rule="!has(self.sharding) || !has(self.sharding.storage) || self.sharding.storage != 'persistent' || has(self.storage)",message=".spec.storage must be set when .spec.sharding.storage is 'persistent'"
 type FluxInstanceSpec struct {
 	// Distribution specifies the version and container registry to pull images from.
 	// +required
@@ -224,7 +225,7 @@ type Sharding struct {
 	// Storage defines if the source-controller shards
 	// should use an emptyDir or a persistent volume claim for storage.
 	// Accepted values are 'ephemeral' or 'persistent', defaults to 'ephemeral'.
-	// For 'persistent' to take effect, the '.spec.storage' field must be set.
+	// When set to 'persistent', the '.spec.storage' field must be set.
 	// +kubebuilder:validation:Enum:=ephemeral;persistent
 	// +optional
 	Storage string `json:"storage,omitempty"`

@@ -576,6 +576,7 @@ for the source-controller shards.
 The supported values are `ephemeral` (default) and `persistent`.
 When set to `persistent`, the operator will create a persistent volume claim for each shard using
 the storage class and size specified in the `.spec.storage` field.
+The API rejects `persistent` sharding storage when `.spec.storage` is not set.
 
 ### Common metadata
 
