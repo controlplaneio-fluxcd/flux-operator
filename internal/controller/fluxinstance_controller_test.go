@@ -828,6 +828,8 @@ func TestFluxInstanceReconciler_Profiles(t *testing.T) {
 		"kustomize-controller",
 		"helm-controller",
 		"notification-controller",
+		"image-reflector-controller",
+		"image-automation-controller",
 		"source-watcher",
 	}
 	spec.Cluster = &fluxcdv1.Cluster{
@@ -903,15 +905,34 @@ func TestFluxInstanceReconciler_Profiles(t *testing.T) {
 	// Check custom patches.
 	g.Expect(*kc.Spec.Replicas).To(BeNumerically("==", 0))
 
-	// Check if the shards were installed.
+	// Check if the shards were installed. Source-watcher is installed for Flux v2.7,
+	// but it is not sharded until the Flux distribution includes source-watcher v2.2.
 	for _, shard := range spec.Sharding.Shards {
-		sc := &appsv1.Deployment{}
-		err = testClient.Get(ctx, types.NamespacedName{Name: "source-controller-" + shard, Namespace: ns.Name}, sc)
-		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(sc.Spec.Template.Spec.Containers[0].Args).To(ContainElements(
-			fmt.Sprintf("--watch-label-selector=sharding.fluxcd.io/key=%s", shard),
-			fmt.Sprintf("--storage-adv-addr=source-controller-%s.$(RUNTIME_NAMESPACE).svc.cluster.local.", shard),
-		))
+		for _, component := range []string{
+			"source-controller",
+			"kustomize-controller",
+			"helm-controller",
+			"image-reflector-controller",
+			"image-automation-controller",
+		} {
+			deployment := &appsv1.Deployment{}
+			name := fmt.Sprintf("%s-%s", component, shard)
+			err = testClient.Get(ctx, types.NamespacedName{Name: name, Namespace: ns.Name}, deployment)
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(deployment.Spec.Template.Spec.Containers[0].Args).To(ContainElement(
+				fmt.Sprintf("--watch-label-selector=sharding.fluxcd.io/key=%s", shard),
+			))
+
+			if component == "source-controller" {
+				g.Expect(deployment.Spec.Template.Spec.Containers[0].Args).To(ContainElement(
+					fmt.Sprintf("--storage-adv-addr=%s.$(RUNTIME_NAMESPACE).svc.cluster.local.", name),
+				))
+			}
+		}
+
+		sourceWatcherShard := &appsv1.Deployment{}
+		err = testClient.Get(ctx, types.NamespacedName{Name: "source-watcher-" + shard, Namespace: ns.Name}, sourceWatcherShard)
+		g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 	}
 
 	// Check the performance profile for sharding.

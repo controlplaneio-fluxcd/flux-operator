@@ -877,6 +877,338 @@ func TestBuild_Sharding(t *testing.T) {
 	g.Expect(foundPVCs).To(Equal(1))
 }
 
+func TestBuild_ShardingWithExtendedControllers(t *testing.T) {
+	g := NewWithT(t)
+	const version = "v2.9.0"
+	const srcVersion = "v2.7.0"
+	options := MakeDefaultOptions()
+	options.Version = version
+	options.Components = []string{
+		"source-controller",
+		"kustomize-controller",
+		"helm-controller",
+		"notification-controller",
+		"image-reflector-controller",
+		"image-automation-controller",
+		"source-watcher",
+	}
+	options.Shards = []string{"shard1"}
+
+	err := options.ValidateAndPatchComponents()
+	g.Expect(err).NotTo(HaveOccurred())
+
+	srcDir := filepath.Join("testdata", srcVersion)
+	dstDir, err := testTempDir(t)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	ci, err := ExtractComponentImages(srcDir, options)
+	g.Expect(err).NotTo(HaveOccurred())
+	options.ComponentImages = ci
+
+	result, err := Build(srcDir, dstDir, options)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(result.Objects).NotTo(BeEmpty())
+
+	shardableControllers := []string{
+		"source-controller",
+		"kustomize-controller",
+		"helm-controller",
+		"image-reflector-controller",
+		"image-automation-controller",
+		"source-watcher",
+	}
+
+	for _, controller := range shardableControllers {
+		mainDeployment := findObject(result.Objects, deploymentKind, controller)
+		g.Expect(mainDeployment).NotTo(BeNil(), "main deployment %s should exist", controller)
+		g.Expect(containerArgs(mainDeployment)).To(ContainElement("--watch-label-selector=!sharding.fluxcd.io/key"))
+
+		shardName := controller + "-shard1"
+		shardDeployment := findObject(result.Objects, deploymentKind, shardName)
+		g.Expect(shardDeployment).NotTo(BeNil(), "shard deployment %s should exist", shardName)
+		g.Expect(containerArgs(shardDeployment)).To(ContainElement("--watch-label-selector=sharding.fluxcd.io/key=shard1"))
+		g.Expect(nestedString(g, shardDeployment, "spec", "selector", "matchLabels", "app")).To(Equal(shardName))
+		g.Expect(nestedString(g, shardDeployment, "spec", "template", "metadata", "labels", "app")).To(Equal(shardName))
+	}
+
+	for _, controller := range []string{"source-controller", "source-watcher"} {
+		shardName := controller + "-shard1"
+		shardDeployment := findObject(result.Objects, deploymentKind, shardName)
+		g.Expect(containerArgs(shardDeployment)).To(ContainElement(
+			fmt.Sprintf("--storage-adv-addr=%s.$(RUNTIME_NAMESPACE).svc.cluster.local.", shardName),
+		))
+
+		shardService := findObject(result.Objects, "Service", shardName)
+		g.Expect(shardService).NotTo(BeNil(), "shard service %s should exist", shardName)
+		g.Expect(nestedString(g, shardService, "spec", "selector", "app")).To(Equal(shardName))
+	}
+}
+
+func TestBuild_ShardingWithSourceWatcherBefore29(t *testing.T) {
+	g := NewWithT(t)
+	const version = "v2.7.0"
+	options := MakeDefaultOptions()
+	options.Version = version
+	options.Components = []string{
+		"source-controller",
+		"kustomize-controller",
+		"helm-controller",
+		"notification-controller",
+		"image-reflector-controller",
+		"image-automation-controller",
+		"source-watcher",
+	}
+	options.Shards = []string{"shard1"}
+
+	err := options.ValidateAndPatchComponents()
+	g.Expect(err).NotTo(HaveOccurred())
+
+	srcDir := filepath.Join("testdata", version)
+	dstDir, err := testTempDir(t)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	ci, err := ExtractComponentImages(srcDir, options)
+	g.Expect(err).NotTo(HaveOccurred())
+	options.ComponentImages = ci
+
+	result, err := Build(srcDir, dstDir, options)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(result.Objects).NotTo(BeEmpty())
+
+	for _, controller := range []string{
+		"source-controller",
+		"kustomize-controller",
+		"helm-controller",
+		"image-reflector-controller",
+		"image-automation-controller",
+	} {
+		mainDeployment := findObject(result.Objects, deploymentKind, controller)
+		g.Expect(mainDeployment).NotTo(BeNil(), "main deployment %s should exist", controller)
+		g.Expect(containerArgs(mainDeployment)).To(ContainElement("--watch-label-selector=!sharding.fluxcd.io/key"))
+
+		shardName := controller + "-shard1"
+		shardDeployment := findObject(result.Objects, deploymentKind, shardName)
+		g.Expect(shardDeployment).NotTo(BeNil(), "shard deployment %s should exist", shardName)
+		g.Expect(containerArgs(shardDeployment)).To(ContainElement("--watch-label-selector=sharding.fluxcd.io/key=shard1"))
+	}
+
+	sourceWatcher := findObject(result.Objects, deploymentKind, "source-watcher")
+	g.Expect(sourceWatcher).NotTo(BeNil(), "main source-watcher deployment should exist")
+	g.Expect(containerArgs(sourceWatcher)).NotTo(ContainElement("--watch-label-selector=!sharding.fluxcd.io/key"))
+	g.Expect(findObject(result.Objects, deploymentKind, "source-watcher-shard1")).To(BeNil())
+	g.Expect(findObject(result.Objects, "Service", "source-watcher-shard1")).To(BeNil())
+}
+
+func TestBuild_ShardingKustomizationBranches(t *testing.T) {
+	const (
+		imageSelector         = `name: "(source-controller|kustomize-controller|helm-controller|image-reflector-controller|image-automation-controller)"`
+		sourceWatcherSelector = `name: "(source-controller|kustomize-controller|helm-controller|image-reflector-controller|image-automation-controller|source-watcher)"`
+		imageShardSelector    = `name: (source-controller|kustomize-controller|helm-controller|image-reflector-controller|image-automation-controller)`
+		watcherShardSelector  = `name: (source-controller|kustomize-controller|helm-controller|image-reflector-controller|image-automation-controller|source-watcher)`
+	)
+
+	testCases := []struct {
+		name             string
+		version          string
+		srcVersion       string
+		components       []string
+		mainContains     []string
+		mainNotContains  []string
+		shardContains    []string
+		shardNotContains []string
+	}{
+		{
+			name:       "pre 2.6 supports image controller sharding",
+			version:    "v2.3.0",
+			srcVersion: "v2.3.0",
+			components: []string{
+				"source-controller",
+				"kustomize-controller",
+				"helm-controller",
+				"notification-controller",
+				"image-reflector-controller",
+				"image-automation-controller",
+			},
+			mainContains: []string{
+				imageSelector,
+				`value: --watch-label-selector=!sharding.fluxcd.io/key`,
+			},
+			mainNotContains: []string{
+				sourceWatcherSelector,
+			},
+			shardContains: []string{
+				`- ../source-controller.yaml`,
+				`- ../kustomize-controller.yaml`,
+				`- ../helm-controller.yaml`,
+				`- ../image-reflector-controller.yaml`,
+				`- ../image-automation-controller.yaml`,
+				imageShardSelector,
+				`value: image-reflector-controller-shard1`,
+				`value: image-automation-controller-shard1`,
+				`value: --watch-label-selector=sharding.fluxcd.io/key=shard1`,
+			},
+			shardNotContains: []string{
+				`- ../source-watcher.yaml`,
+				`source-watcher-shard1`,
+				watcherShardSelector,
+			},
+		},
+		{
+			name:       "2.6 keeps image controller sharding",
+			version:    "v2.6.0",
+			srcVersion: "v2.6.0",
+			components: []string{
+				"source-controller",
+				"kustomize-controller",
+				"helm-controller",
+				"notification-controller",
+				"image-reflector-controller",
+				"image-automation-controller",
+			},
+			mainContains: []string{
+				imageSelector,
+				`value: --watch-label-selector=!sharding.fluxcd.io/key`,
+			},
+			mainNotContains: []string{
+				sourceWatcherSelector,
+			},
+			shardContains: []string{
+				`- ../source-controller.yaml`,
+				`- ../kustomize-controller.yaml`,
+				`- ../helm-controller.yaml`,
+				`- ../image-reflector-controller.yaml`,
+				`- ../image-automation-controller.yaml`,
+				imageShardSelector,
+				`value: image-reflector-controller-shard1`,
+				`value: image-automation-controller-shard1`,
+				`value: --watch-label-selector=sharding.fluxcd.io/key=shard1`,
+			},
+			shardNotContains: []string{
+				`- ../source-watcher.yaml`,
+				`source-watcher-shard1`,
+				watcherShardSelector,
+			},
+		},
+		{
+			name:       "source-watcher before 2.9 stays unsharded",
+			version:    "v2.7.0",
+			srcVersion: "v2.7.0",
+			components: []string{
+				"source-controller",
+				"kustomize-controller",
+				"helm-controller",
+				"notification-controller",
+				"image-reflector-controller",
+				"image-automation-controller",
+				"source-watcher",
+			},
+			mainContains: []string{
+				`- source-watcher.yaml`,
+				imageSelector,
+				`value: --watch-label-selector=!sharding.fluxcd.io/key`,
+			},
+			mainNotContains: []string{
+				sourceWatcherSelector,
+			},
+			shardContains: []string{
+				`- ../source-controller.yaml`,
+				`- ../kustomize-controller.yaml`,
+				`- ../helm-controller.yaml`,
+				`- ../image-reflector-controller.yaml`,
+				`- ../image-automation-controller.yaml`,
+				imageShardSelector,
+				`value: image-reflector-controller-shard1`,
+				`value: image-automation-controller-shard1`,
+				`value: --watch-label-selector=sharding.fluxcd.io/key=shard1`,
+			},
+			shardNotContains: []string{
+				`- ../source-watcher.yaml`,
+				`name: (source-watcher)`,
+				`source-watcher-shard1`,
+				watcherShardSelector,
+			},
+		},
+		{
+			name:       "2.9 adds source-watcher sharding",
+			version:    "v2.9.0",
+			srcVersion: "v2.7.0",
+			components: []string{
+				"source-controller",
+				"kustomize-controller",
+				"helm-controller",
+				"notification-controller",
+				"image-reflector-controller",
+				"image-automation-controller",
+				"source-watcher",
+			},
+			mainContains: []string{
+				`- source-watcher.yaml`,
+				sourceWatcherSelector,
+				`value: --watch-label-selector=!sharding.fluxcd.io/key`,
+			},
+			shardContains: []string{
+				`- ../source-controller.yaml`,
+				`- ../kustomize-controller.yaml`,
+				`- ../helm-controller.yaml`,
+				`- ../image-reflector-controller.yaml`,
+				`- ../image-automation-controller.yaml`,
+				`- ../source-watcher.yaml`,
+				`name: (source-watcher)`,
+				`value: source-watcher-shard1`,
+				`value: --storage-adv-addr=source-watcher-shard1.$(RUNTIME_NAMESPACE).svc.cluster.local.`,
+				watcherShardSelector,
+				`value: --watch-label-selector=sharding.fluxcd.io/key=shard1`,
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			g := NewWithT(t)
+			options := MakeDefaultOptions()
+			options.Version = tc.version
+			options.Components = tc.components
+			options.Shards = []string{"shard1"}
+
+			err := options.ValidateAndPatchComponents()
+			g.Expect(err).NotTo(HaveOccurred())
+
+			srcDir := filepath.Join("testdata", tc.srcVersion)
+			dstDir, err := testTempDir(t)
+			g.Expect(err).NotTo(HaveOccurred())
+
+			ci, err := ExtractComponentImages(srcDir, options)
+			g.Expect(err).NotTo(HaveOccurred())
+			options.ComponentImages = ci
+
+			result, err := Build(srcDir, dstDir, options)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(result.Objects).NotTo(BeEmpty())
+
+			mainKustomization, err := os.ReadFile(filepath.Join(dstDir, "kustomization.yaml"))
+			g.Expect(err).NotTo(HaveOccurred())
+			mainYAML := string(mainKustomization)
+
+			shardKustomization, err := os.ReadFile(filepath.Join(dstDir, "shard1", "kustomization.yaml"))
+			g.Expect(err).NotTo(HaveOccurred())
+			shardYAML := string(shardKustomization)
+
+			for _, expected := range tc.mainContains {
+				g.Expect(mainYAML).To(ContainSubstring(expected))
+			}
+			for _, unexpected := range tc.mainNotContains {
+				g.Expect(mainYAML).NotTo(ContainSubstring(unexpected))
+			}
+			for _, expected := range tc.shardContains {
+				g.Expect(shardYAML).To(ContainSubstring(expected))
+			}
+			for _, unexpected := range tc.shardNotContains {
+				g.Expect(shardYAML).NotTo(ContainSubstring(unexpected))
+			}
+		})
+	}
+}
+
 func TestBuild_ShardingWithStorage(t *testing.T) {
 	g := NewWithT(t)
 	const version = "v2.6.0"
@@ -1019,6 +1351,49 @@ func TestBuild_SourceWatcher(t *testing.T) {
 		}
 	}
 	g.Expect(found).To(BeTrue(), "source-watcher deployment should be present")
+}
+
+func findObject(objects []*unstructured.Unstructured, kind, name string) *unstructured.Unstructured {
+	for _, obj := range objects {
+		if obj.GetKind() == kind && obj.GetName() == name {
+			return obj
+		}
+	}
+
+	return nil
+}
+
+func containerArgs(obj *unstructured.Unstructured) []string {
+	containers, _, _ := unstructured.NestedSlice(obj.Object, "spec", "template", "spec", "containers")
+	if len(containers) == 0 {
+		return nil
+	}
+	container, ok := containers[0].(map[string]any)
+	if !ok {
+		return nil
+	}
+	args, ok := container["args"].([]any)
+	if !ok {
+		return nil
+	}
+
+	values := make([]string, 0, len(args))
+	for _, arg := range args {
+		value, ok := arg.(string)
+		if !ok {
+			continue
+		}
+		values = append(values, value)
+	}
+
+	return values
+}
+
+func nestedString(g *WithT, obj *unstructured.Unstructured, fields ...string) string {
+	value, ok, err := unstructured.NestedString(obj.Object, fields...)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(ok).To(BeTrue())
+	return value
 }
 
 func testTempDir(t *testing.T) (string, error) {

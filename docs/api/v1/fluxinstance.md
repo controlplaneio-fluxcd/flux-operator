@@ -549,11 +549,15 @@ helm-controller-shard1
 helm-controller-shard2
 ```
 
-Note that only the `source-controller`, `kustomize-controller` and `helm-controller` controllers
-support sharding.
+The operator shards the installed controllers that support watch label selectors:
+`source-controller`, `kustomize-controller`, `helm-controller`, `image-reflector-controller`,
+`image-automation-controller`, and, with Flux v2.9.0 or later, `source-watcher`.
 
 To assign a resource to a specific shard, add the `sharding.fluxcd.io/key` label with the shard value,
-e.g.: `sharding.fluxcd.io/key: shard1`.
+e.g.: `sharding.fluxcd.io/key: shard1`. Flux resources that reference each other should
+use the same shard value, including `ImagePolicy` resources with their `ImageRepository`,
+`ImageUpdateAutomation` resources with their source `GitRepository`, and `ArtifactGenerator`
+resources with their source objects.
 
 #### Sharding key
 

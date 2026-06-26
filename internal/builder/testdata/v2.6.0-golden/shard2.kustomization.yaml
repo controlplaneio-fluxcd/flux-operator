@@ -6,6 +6,8 @@ resources:
   - ../source-controller.yaml
   - ../kustomize-controller.yaml
   - ../helm-controller.yaml
+  - ../image-reflector-controller.yaml
+  - ../image-automation-controller.yaml
   - pvc.yaml
 nameSuffix: "-shard2"
 commonAnnotations:
@@ -72,7 +74,27 @@ patches:
         value: helm-controller-shard2
   - target:
       kind: Deployment
-      name: (source-controller|kustomize-controller|helm-controller)
+      name: (image-reflector-controller)
+    patch: |
+      - op: replace
+        path: /spec/selector/matchLabels/app
+        value: image-reflector-controller-shard2
+      - op: replace
+        path: /spec/template/metadata/labels/app
+        value: image-reflector-controller-shard2
+  - target:
+      kind: Deployment
+      name: (image-automation-controller)
+    patch: |
+      - op: replace
+        path: /spec/selector/matchLabels/app
+        value: image-automation-controller-shard2
+      - op: replace
+        path: /spec/template/metadata/labels/app
+        value: image-automation-controller-shard2
+  - target:
+      kind: Deployment
+      name: (source-controller|kustomize-controller|helm-controller|image-reflector-controller|image-automation-controller)
     patch: |
       - op: add
         path: /spec/template/spec/containers/0/args/-
