@@ -360,54 +360,6 @@ func TestActionHandler_Resume_Success(t *testing.T) {
 	g.Expect(updated.Annotations).NotTo(HaveKey(fluxcdv1.SuspendedByAnnotation))
 }
 
-func TestActionHandler_Delete_Success(t *testing.T) {
-	g := NewWithT(t)
-
-	// Create a ResourceSet for testing.
-	resourceSet := &fluxcdv1.ResourceSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-action-delete",
-			Namespace: "default",
-		},
-		Spec: fluxcdv1.ResourceSetSpec{
-			ResourcesTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\n  namespace: default\n",
-		},
-	}
-	g.Expect(testClient.Create(ctx, resourceSet)).To(Succeed())
-
-	handler := &Handler{
-		conf:          oauthConfig(),
-		kubeClient:    kubeClient,
-		version:       "v1.0.0",
-		statusManager: "test-status-manager",
-		namespace:     "flux-system",
-	}
-
-	actionReq := ActionRequest{
-		Kind:      "ResourceSet",
-		Namespace: "default",
-		Name:      "test-action-delete",
-		Action:    "delete",
-	}
-	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
-	req = req.WithContext(ctx)
-	rec := httptest.NewRecorder()
-
-	handler.ActionHandler(rec, req)
-
-	g.Expect(rec.Code).To(Equal(http.StatusOK))
-
-	var resp ActionResponse
-	err := json.NewDecoder(rec.Body).Decode(&resp)
-	g.Expect(err).NotTo(HaveOccurred())
-	g.Expect(resp.Success).To(BeTrue())
-	g.Expect(resp.Message).To(ContainSubstring("Deleted"))
-
-	var deleted fluxcdv1.ResourceSet
-	g.Expect(testClient.Get(ctx, client.ObjectKeyFromObject(resourceSet), &deleted)).ToNot(Succeed())
-}
-
 func TestActionHandler_ResourceNotFound(t *testing.T) {
 	g := NewWithT(t)
 

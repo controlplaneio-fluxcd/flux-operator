@@ -348,7 +348,7 @@ describe('ResourceList', () => {
       })
     })
 
-    it('deletes only individually selected resources in bulk', async () => {
+    it('resumes only individually selected resources in bulk', async () => {
       fetchWithMock.mockImplementation(({ method }) => {
         if (method === 'POST') return Promise.resolve({ success: true })
         return Promise.resolve({ resources: mockResources })
@@ -363,7 +363,7 @@ describe('ResourceList', () => {
 
       expect(screen.getByText('1 selected')).toBeInTheDocument()
 
-      fireEvent.click(screen.getByRole('button', { name: 'Delete selected resources' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Resume selected resources' }))
 
       await waitFor(() => {
         expect(fetchWithMock).toHaveBeenCalledWith(expect.objectContaining({
@@ -373,7 +373,7 @@ describe('ResourceList', () => {
             kind: 'GitRepository',
             namespace: 'flux-system',
             name: 'flux-system',
-            action: 'delete'
+            action: 'resume'
           }
         }))
       })
@@ -381,7 +381,7 @@ describe('ResourceList', () => {
       expect(fetchWithMock).not.toHaveBeenCalledWith(expect.objectContaining({
         endpoint: '/api/v1/resource/action',
         method: 'POST',
-        body: expect.objectContaining({ name: 'apps', action: 'delete' })
+        body: expect.objectContaining({ name: 'apps', action: 'resume' })
       }))
     })
   })

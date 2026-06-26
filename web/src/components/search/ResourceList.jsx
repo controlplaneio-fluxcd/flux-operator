@@ -62,8 +62,7 @@ function getBulkActionPastTense(action) {
   return {
     reconcile: 'reconciled',
     suspend: 'suspended',
-    resume: 'resumed',
-    delete: 'deleted'
+    resume: 'resumed'
   }[action]
 }
 
@@ -421,15 +420,6 @@ export function ResourceList() {
                 class="px-3 py-1.5 text-xs font-medium rounded border border-green-500 text-green-600 hover:bg-green-50 disabled:border-gray-300 disabled:text-gray-400 disabled:cursor-not-allowed dark:border-green-400 dark:text-green-400 dark:hover:bg-green-900/30 dark:disabled:border-gray-600 dark:disabled:text-gray-500"
               >
                 {bulkLoading === 'resume' ? 'Resuming…' : 'Resume'}
-              </button>
-              <button
-                type="button"
-                onClick={() => performBulkAction('delete')}
-                disabled={selectedCount === 0 || bulkLoading !== null}
-                aria-label="Delete selected resources"
-                class="px-3 py-1.5 text-xs font-medium rounded border border-red-500 text-red-600 hover:bg-red-50 disabled:border-gray-300 disabled:text-gray-400 disabled:cursor-not-allowed dark:border-red-400 dark:text-red-400 dark:hover:bg-red-900/30 dark:disabled:border-gray-600 dark:disabled:text-gray-500"
-              >
-                {bulkLoading === 'delete' ? 'Deleting…' : 'Delete'}
               </button>
             </div>
 
