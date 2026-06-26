@@ -8,6 +8,10 @@ metadata:
 spec:
   group: fluxcd.controlplane.io
   names:
+    categories:
+    - all
+    - fluxcd
+    - fluxcd-sources
     kind: ResourceSetInputProvider
     listKind: ResourceSetInputProviderList
     plural: resourcesetinputproviders
