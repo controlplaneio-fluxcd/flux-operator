@@ -8,6 +8,9 @@ metadata:
 spec:
   group: fluxcd.controlplane.io
   names:
+    categories:
+    - fluxcd
+    - fluxcd-appliers
     kind: FluxInstance
     listKind: FluxInstanceList
     plural: fluxinstances

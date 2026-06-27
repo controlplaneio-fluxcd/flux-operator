@@ -8,6 +8,8 @@ metadata:
 spec:
   group: fluxcd.controlplane.io
   names:
+    categories:
+    - fluxcd
     kind: FluxReport
     listKind: FluxReportList
     plural: fluxreports

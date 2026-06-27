@@ -187,6 +187,7 @@ type FluxReportStatus struct {
 // +kubebuilder:storageversion
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:categories=fluxcd
 // +kubebuilder:printcolumn:name="Entitlement",type="string",JSONPath=".spec.distribution.entitlement",description="",priority=10
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description=""
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""
