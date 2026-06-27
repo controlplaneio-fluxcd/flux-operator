@@ -65,8 +65,8 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Validate action type
-	if !fluxcdv1.IsUserAction(actionReq.Action) {
+	// Validate action type.
+	if !isResourceAction(actionReq.Action) {
 		http.Error(w, "Invalid action. Must be one of: reconcile, suspend, resume", http.StatusBadRequest)
 		return
 	}
@@ -164,6 +164,16 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+}
+
+// isResourceAction reports whether action is supported by the resource action endpoint.
+func isResourceAction(action string) bool {
+	switch action {
+	case fluxcdv1.UserActionReconcile, fluxcdv1.UserActionSuspend, fluxcdv1.UserActionResume:
+		return true
+	default:
+		return false
 	}
 }
 

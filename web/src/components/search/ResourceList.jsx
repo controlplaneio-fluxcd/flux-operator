@@ -54,6 +54,19 @@ export async function fetchResourcesStatus() {
 }
 
 
+function getResourceSelectionKey(resource) {
+  return `${resource.kind}|${resource.namespace}|${resource.name}`
+}
+
+function getBulkActionPastTense(action) {
+  return {
+    reconcile: 'reconciled',
+    suspend: 'suspended',
+    resume: 'resumed'
+  }[action]
+}
+
+
 /**
  * ResourceCard - Individual card displaying a Flux resource with status and details
  *
@@ -67,7 +80,7 @@ export async function fetchResourcesStatus() {
  * - Displays last reconciled timestamp
  * - Expandable details section showing spec and inventory (lazy-loaded via ResourceDetailsView)
  */
-function ResourceCard({ resource }) {
+function ResourceCard({ resource, selected = false, onSelectionChange }) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(false)
 
@@ -101,6 +114,16 @@ function ResourceCard({ resource }) {
       {/* Header row: star + kind + status badge + timestamp */}
       <div class="flex items-center justify-between mb-3">
         <div class="flex items-center gap-3">
+          {onSelectionChange && (
+            <input
+              type="checkbox"
+              checked={selected}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => onSelectionChange(resource, e.currentTarget.checked)}
+              aria-label={`Select ${resource.kind} ${resource.namespace}/${resource.name}`}
+              class="h-4 w-4 rounded border-gray-300 text-flux-blue focus:ring-flux-blue dark:border-gray-600 dark:bg-gray-800"
+            />
+          )}
           {/* Favorite star button */}
           <button
             onClick={handleFavoriteClick}
@@ -201,6 +224,10 @@ function ResourceCard({ resource }) {
  */
 export function ResourceList() {
   usePageMeta('Resources', 'Resources dashboard')
+  const [selectedResources, setSelectedResources] = useState({})
+  const [bulkLoading, setBulkLoading] = useState(null)
+  const [bulkError, setBulkError] = useState(null)
+  const [bulkSuccess, setBulkSuccess] = useState(null)
 
   // Restore filter signals from URL query params on mount
   useRestoreFiltersFromUrl({
@@ -232,12 +259,89 @@ export function ResourceList() {
 
   // Get visible resources (slice the array - already sorted by server)
   const visibleResources = resourcesData.value.slice(0, visibleCount)
+  const selectedResourceList = Object.values(selectedResources)
+  const selectedCount = selectedResourceList.length
+  const visibleSelectableCount = visibleResources.length
+  const allVisibleSelected = visibleSelectableCount > 0 && visibleResources.every((resource) => selectedResources[getResourceSelectionKey(resource)])
+
+  useEffect(() => {
+    setSelectedResources((current) => {
+      const availableKeys = new Set(resourcesData.value.map(getResourceSelectionKey))
+      const next = {}
+      for (const [key, resource] of Object.entries(current)) {
+        if (availableKeys.has(key)) {
+          next[key] = resource
+        }
+      }
+      return next
+    })
+  }, [resourcesData.value])
 
   const handleClearFilters = () => {
     selectedResourceKind.value = ''
     selectedResourceName.value = ''
     selectedResourceNamespace.value = ''
     selectedResourceStatus.value = ''
+  }
+
+  const handleResourceSelectionChange = (resource, checked) => {
+    const key = getResourceSelectionKey(resource)
+    setSelectedResources((current) => {
+      const next = { ...current }
+      if (checked) {
+        next[key] = resource
+      } else {
+        delete next[key]
+      }
+      return next
+    })
+  }
+
+  const handleSelectAllVisible = (checked) => {
+    setSelectedResources((current) => {
+      const next = { ...current }
+      for (const resource of visibleResources) {
+        const key = getResourceSelectionKey(resource)
+        if (checked) {
+          next[key] = resource
+        } else {
+          delete next[key]
+        }
+      }
+      return next
+    })
+  }
+
+  const performBulkAction = async (action) => {
+    if (selectedResourceList.length === 0 || bulkLoading) return
+
+    setBulkLoading(action)
+    setBulkError(null)
+    setBulkSuccess(null)
+
+    const results = await Promise.allSettled(selectedResourceList.map((resource) => fetchWithMock({
+      endpoint: '/api/v1/resource/action',
+      mockPath: '../mock/action',
+      mockExport: 'mockAction',
+      method: 'POST',
+      body: {
+        kind: resource.kind,
+        namespace: resource.namespace,
+        name: resource.name,
+        action
+      }
+    })))
+
+    const failures = results.filter((result) => result.status === 'rejected')
+    if (failures.length > 0) {
+      setBulkError(`${failures.length} of ${selectedResourceList.length} ${action} actions failed: ${failures[0].reason.message}`)
+    } else {
+      setBulkSuccess(`${selectedResourceList.length} ${selectedResourceList.length === 1 ? 'resource' : 'resources'} ${getBulkActionPastTense(action)}`)
+      setSelectedResources({})
+    }
+
+    await fetchResourcesStatus()
+    setBulkLoading(null)
   }
 
   return (
@@ -276,6 +380,57 @@ export function ResourceList() {
           }}
         />
 
+        {!resourcesLoading.value && resourcesData.value.length > 0 && (
+          <div class="card p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+              <input
+                type="checkbox"
+                checked={allVisibleSelected}
+                onChange={(e) => handleSelectAllVisible(e.currentTarget.checked)}
+                aria-label="Select all visible resources"
+                class="h-4 w-4 rounded border-gray-300 text-flux-blue focus:ring-flux-blue dark:border-gray-600 dark:bg-gray-800"
+              />
+              <span>{selectedCount > 0 ? `${selectedCount} selected` : 'Select visible resources'}</span>
+            </label>
+
+            <div class="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => performBulkAction('reconcile')}
+                disabled={selectedCount === 0 || bulkLoading !== null}
+                aria-label="Reconcile selected resources"
+                class="px-3 py-1.5 text-xs font-medium rounded border border-blue-500 text-blue-600 hover:bg-blue-50 disabled:border-gray-300 disabled:text-gray-400 disabled:cursor-not-allowed dark:border-blue-400 dark:text-blue-400 dark:hover:bg-blue-900/30 dark:disabled:border-gray-600 dark:disabled:text-gray-500"
+              >
+                {bulkLoading === 'reconcile' ? 'Reconciling…' : 'Reconcile'}
+              </button>
+              <button
+                type="button"
+                onClick={() => performBulkAction('suspend')}
+                disabled={selectedCount === 0 || bulkLoading !== null}
+                aria-label="Suspend selected resources"
+                class="px-3 py-1.5 text-xs font-medium rounded border border-amber-500 text-amber-600 hover:bg-amber-50 disabled:border-gray-300 disabled:text-gray-400 disabled:cursor-not-allowed dark:border-amber-400 dark:text-amber-400 dark:hover:bg-amber-900/30 dark:disabled:border-gray-600 dark:disabled:text-gray-500"
+              >
+                {bulkLoading === 'suspend' ? 'Suspending…' : 'Suspend'}
+              </button>
+              <button
+                type="button"
+                onClick={() => performBulkAction('resume')}
+                disabled={selectedCount === 0 || bulkLoading !== null}
+                aria-label="Resume selected resources"
+                class="px-3 py-1.5 text-xs font-medium rounded border border-green-500 text-green-600 hover:bg-green-50 disabled:border-gray-300 disabled:text-gray-400 disabled:cursor-not-allowed dark:border-green-400 dark:text-green-400 dark:hover:bg-green-900/30 dark:disabled:border-gray-600 dark:disabled:text-gray-500"
+              >
+                {bulkLoading === 'resume' ? 'Resuming…' : 'Resume'}
+              </button>
+            </div>
+
+            {(bulkError || bulkSuccess) && (
+              <div class={`text-xs ${bulkError ? 'text-red-700 dark:text-red-300' : 'text-green-700 dark:text-green-300'}`}>
+                {bulkError || bulkSuccess}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Error State */}
         {resourcesError.value && (
           <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-4">
@@ -311,7 +466,12 @@ export function ResourceList() {
         {!resourcesLoading.value && resourcesData.value.length > 0 && (
           <div class="space-y-4">
             {visibleResources.map((resource, index) => (
-              <ResourceCard key={`${resource.namespace}-${resource.kind}-${resource.name}-${index}`} resource={resource} />
+              <ResourceCard
+                key={`${resource.namespace}-${resource.kind}-${resource.name}-${index}`}
+                resource={resource}
+                selected={Boolean(selectedResources[getResourceSelectionKey(resource)])}
+                onSelectionChange={handleResourceSelectionChange}
+              />
             ))}
 
             {/* Sentinel element for infinite scroll */}
