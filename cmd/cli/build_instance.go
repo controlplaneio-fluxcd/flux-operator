@@ -282,6 +282,9 @@ func validateInstance(instance *fluxcdv1.FluxInstance) error {
 		if len(instance.Spec.Sharding.Shards) == 0 {
 			return fmt.Errorf(".spec.sharding.shards is required")
 		}
+		if instance.Spec.Sharding.Storage == "persistent" && instance.Spec.Storage == nil {
+			return fmt.Errorf(".spec.storage must be set when .spec.sharding.storage is 'persistent'")
+		}
 	}
 
 	if instance.Spec.Storage != nil {
