@@ -265,7 +265,10 @@ export function StatusChart({ items, loading, mode = 'events', onBarClick, compa
             positioned over the centre of the hovered segment. */}
         {hoveredBar !== null && statusBars[hoveredBar] && (
           <div
-            class="absolute bottom-full mb-2 z-10 -translate-x-1/2 pointer-events-none"
+            // In compact mode the chart lives in the sticky filter bar; popping the
+            // tooltip downward keeps it clear of the opaque sticky header/nav above,
+            // which would otherwise clip an upward tooltip. Non-compact keeps it above.
+            class={`absolute z-10 -translate-x-1/2 pointer-events-none ${compact ? 'top-full mt-2' : 'bottom-full mb-2'}`}
             style={{ left: `${statusBars.slice(0, hoveredBar).reduce((sum, b) => sum + b.percentage, 0) + statusBars[hoveredBar].percentage / 2}%` }}
           >
             <div class="bg-gray-900 dark:bg-gray-800 text-white text-xs rounded-lg py-2 px-3 shadow-lg whitespace-nowrap">
@@ -278,9 +281,10 @@ export function StatusChart({ items, loading, mode = 'events', onBarClick, compa
               <div class="text-gray-300">
                 Percentage: {statusBars[hoveredBar].percentage.toFixed(1)}%
               </div>
-              {/* Tooltip arrow */}
-              <div class="absolute top-full left-1/2 -translate-x-1/2 -mt-px">
-                <div class="border-4 border-transparent border-t-gray-900 dark:border-t-gray-800"></div>
+              {/* Tooltip arrow: points down toward the bar when the tooltip is
+                  above it, up toward the bar when below it (compact). */}
+              <div class={`absolute left-1/2 -translate-x-1/2 ${compact ? 'bottom-full -mb-px' : 'top-full -mt-px'}`}>
+                <div class={`border-4 border-transparent ${compact ? 'border-b-gray-900 dark:border-b-gray-800' : 'border-t-gray-900 dark:border-t-gray-800'}`}></div>
               </div>
             </div>
           </div>

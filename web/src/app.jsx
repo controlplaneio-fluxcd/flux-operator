@@ -309,15 +309,26 @@ function AppContent({ spec, namespace }) {
   const isTabView = currentPath === '/favorites' || currentPath === '/events' || currentPath === '/resources' || currentPath === '/workloads'
 
   return (
-    <div class="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors flex flex-col">
+    <div
+      class="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors flex flex-col"
+      // --chrome-h is the combined height of the sticky header (57px) + tab nav
+      // (46px). The filter bars stick just below it (sm:top-[var(--chrome-h)]),
+      // so there is a single source of truth for the offset.
+      style={{ '--chrome-h': '103px' }}
+    >
       {/* Connection status banner (only visible when disconnected) */}
       <ConnectionStatus />
 
-      {/* Header with navigation and refresh button */}
-      <Header />
+      {/* Sticky top chrome on desktop: the header and tab nav pin to the top so
+          the list scrolls behind them. On mobile they stay in normal flow. The
+          page background keeps the nav region opaque so rows don't show through. */}
+      <div class="sm:sticky sm:top-0 sm:z-30 bg-gray-50 dark:bg-gray-900">
+        {/* Header with navigation and refresh button */}
+        <Header />
 
-      {/* Tab Navigation - Show only in tab views */}
-      {isTabView && <TabNavigation />}
+        {/* Tab Navigation - Show only in tab views */}
+        {isTabView && <TabNavigation />}
+      </div>
 
       {/* Main content area: route-based navigation */}
       <Router>

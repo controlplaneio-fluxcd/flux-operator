@@ -81,7 +81,7 @@ export function FavoritesHeader({
   // Edit mode: show Save and Cancel icon buttons
   if (editMode) {
     return (
-      <div class="card px-3 py-2.5">
+      <div class="card px-3 py-2.5 sm:sticky sm:top-[var(--chrome-h)] sm:z-10">
         <div class="flex items-center justify-between">
           <div class="text-sm text-gray-600 dark:text-gray-400">
             Drag to reorder favorites
@@ -116,7 +116,7 @@ export function FavoritesHeader({
   // Search mode: show search input
   if (searchMode) {
     return (
-      <div class="card px-3 py-2.5">
+      <div class="card px-3 py-2.5 sm:sticky sm:top-[var(--chrome-h)] sm:z-10">
         <FavoritesSearch
           onFilter={onFilter}
           onClose={handleSearchClose}
@@ -131,7 +131,7 @@ export function FavoritesHeader({
   // Sized to match the shared compact FilterBar (px-3 py-2.5 + a 28px row) at every
   // breakpoint, so the favorites toolbar is no taller than the other search pages.
   return (
-    <div class="card px-3 py-2.5">
+    <div class="card px-3 py-2.5 sm:sticky sm:top-[var(--chrome-h)] sm:z-10">
       {/* Status bar with buttons on the right */}
       <div class="flex items-center gap-3">
         {/* Status bar - takes remaining space (28px, matching the FilterBar row) */}
@@ -161,16 +161,17 @@ export function FavoritesHeader({
                 >
                   <div class={`h-full ${colorClass} ${roundCls} cursor-pointer transition-opacity ${isFaded ? 'opacity-30' : 'hover:opacity-80'}`} />
 
-                  {/* Tooltip - hidden on mobile */}
+                  {/* Tooltip - hidden on mobile. Pops downward (top-full) so the
+                      sticky header/nav above the pinned filter bar can't clip it. */}
                   {hoveredBar === index && (
-                    <div class="hidden md:block absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-10 pointer-events-none">
+                    <div class="hidden md:block absolute top-full left-1/2 -translate-x-1/2 mt-2 z-10 pointer-events-none">
                       <div class="bg-gray-900 dark:bg-gray-800 text-white text-xs rounded-lg py-2 px-3 shadow-lg whitespace-nowrap">
                         <div class="font-semibold">{bar.status}</div>
                         <div class="text-gray-300 mt-1">Count: {bar.count}</div>
                         <div class="text-gray-300">Percentage: {bar.percentage.toFixed(1)}%</div>
                         {isActive && <div class="text-blue-300 mt-1">Click to clear filter</div>}
-                        <div class="absolute top-full left-1/2 -translate-x-1/2 -mt-px">
-                          <div class="border-4 border-transparent border-t-gray-900 dark:border-t-gray-800"></div>
+                        <div class="absolute bottom-full left-1/2 -translate-x-1/2 -mb-px">
+                          <div class="border-4 border-transparent border-b-gray-900 dark:border-b-gray-800"></div>
                         </div>
                       </div>
                     </div>

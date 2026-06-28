@@ -28,7 +28,10 @@ export function FilterBar({ count, label, loading, children, statusChart }) {
   const [showFilters, setShowFilters] = useState(false)
 
   return (
-    <div class="card px-3 py-2.5">
+    // Sticky below the header+nav on desktop so the filters stay in view while
+    // the list scrolls behind (the card background keeps it opaque). Normal flow
+    // on mobile.
+    <div class="card px-3 py-2.5 sm:sticky sm:top-[var(--chrome-h)] sm:z-10">
       {/* Mobile: a single row with the count (or loader) + a filter toggle. The
           full filter form (and status chart) opens on demand. */}
       <div class="sm:hidden flex items-center justify-between">
