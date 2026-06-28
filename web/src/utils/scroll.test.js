@@ -130,7 +130,7 @@ describe('useInfiniteScroll', () => {
     expect(result.current.visibleCount).toBe(100)
   })
 
-  it('should provide sentinelRef for IntersectionObserver', () => {
+  it('should provide a sentinelRef callback for the IntersectionObserver', () => {
     const { result } = renderHook(() =>
       useInfiniteScroll({
         totalItems: 500,
@@ -138,8 +138,9 @@ describe('useInfiniteScroll', () => {
       })
     )
 
-    expect(result.current.sentinelRef).toBeDefined()
-    expect(result.current.sentinelRef.current).toBeNull() // Ref is initially null until attached
+    // sentinelRef is a callback ref (a function), so the observer re-binds when
+    // the sentinel node mounts/remounts rather than holding a stale node.
+    expect(typeof result.current.sentinelRef).toBe('function')
   })
 
   it('should load more items when sentinel intersects viewport', () => {
@@ -152,14 +153,13 @@ describe('useInfiniteScroll', () => {
 
     expect(result.current.visibleCount).toBe(100)
 
-    // Create a mock sentinel element
+    // Attach the sentinel via the callback ref; the effect then observes it.
     const mockSentinel = document.createElement('div')
-    result.current.sentinelRef.current = mockSentinel
-
-    // Manually call observe to simulate the effect
     act(() => {
-      observeMock(mockSentinel)
+      result.current.sentinelRef(mockSentinel)
     })
+
+    expect(observeMock).toHaveBeenCalledWith(mockSentinel)
 
     // Simulate intersection
     act(() => {
@@ -174,6 +174,48 @@ describe('useInfiniteScroll', () => {
     expect(result.current.visibleCount).toBe(200)
   })
 
+  it('re-binds the observer when the sentinel node is replaced after a refetch', () => {
+    // Regression: navigating away and back unmounts the list (and its sentinel)
+    // while a refetch is in flight, then remounts a NEW sentinel node. The
+    // observer must re-bind to the live node, otherwise paging is stuck at one
+    // page. An object ref would leave the observer watching the detached node.
+    const { result } = renderHook(() =>
+      useInfiniteScroll({
+        totalItems: 500,
+        pageSize: 100
+      })
+    )
+
+    const first = document.createElement('div')
+    act(() => {
+      result.current.sentinelRef(first)
+    })
+    expect(observeMock).toHaveBeenCalledWith(first)
+
+    // Sentinel unmounts (list hidden during refetch), then a new node remounts.
+    act(() => {
+      result.current.sentinelRef(null)
+    })
+    expect(disconnectMock).toHaveBeenCalled()
+
+    const second = document.createElement('div')
+    act(() => {
+      result.current.sentinelRef(second)
+    })
+    expect(observeMock).toHaveBeenCalledWith(second)
+
+    // Intersecting the fresh node still pages.
+    act(() => {
+      intersectionObserverCallback([
+        {
+          isIntersecting: true,
+          target: second
+        }
+      ])
+    })
+    expect(result.current.visibleCount).toBe(200)
+  })
+
   it('should not observe when there are no more items', () => {
     const { result } = renderHook(() =>
       useInfiniteScroll({
@@ -184,6 +226,13 @@ describe('useInfiniteScroll', () => {
 
     // Already showing all items
     expect(result.current.hasMore).toBe(false)
+
+    // Attach a sentinel: the effect must still skip observing because the
+    // !hasMore guard short-circuits before creating the observer.
+    const mockSentinel = document.createElement('div')
+    act(() => {
+      result.current.sentinelRef(mockSentinel)
+    })
     expect(observeMock).not.toHaveBeenCalled()
   })
 
@@ -195,19 +244,22 @@ describe('useInfiniteScroll', () => {
       })
     )
 
-    // Create a mock sentinel element
+    // Attach a sentinel via the callback ref so an observer is created.
     const mockSentinel = document.createElement('div')
-    result.current.sentinelRef.current = mockSentinel
+    act(() => {
+      result.current.sentinelRef(mockSentinel)
+    })
 
     expect(result.current.hasMore).toBe(true)
 
-    // Load remaining items
+    // Load remaining items; hasMore flips false and the observer is torn down.
     act(() => {
       result.current.loadMore()
     })
 
     expect(result.current.visibleCount).toBe(150)
     expect(result.current.hasMore).toBe(false)
+    expect(disconnectMock).toHaveBeenCalled()
   })
 
   it('should not create IntersectionObserver if not supported', () => {
@@ -266,12 +318,19 @@ describe('useInfiniteScroll', () => {
   })
 
   it('should cleanup observer on unmount', () => {
-    const { unmount } = renderHook(() =>
+    const { result, unmount } = renderHook(() =>
       useInfiniteScroll({
         totalItems: 500,
         pageSize: 100
       })
     )
+
+    // Attach a sentinel so an observer is actually created.
+    const mockSentinel = document.createElement('div')
+    act(() => {
+      result.current.sentinelRef(mockSentinel)
+    })
+    expect(observeMock).toHaveBeenCalled()
 
     unmount()
 
