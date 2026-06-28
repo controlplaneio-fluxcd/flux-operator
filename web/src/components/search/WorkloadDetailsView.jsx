@@ -20,6 +20,9 @@ import { TabbedPanel, Field, ResourceLink, StatusBadge } from './detailPanel'
  * @param {boolean} props.isExpanded - Whether the view is expanded
  * @param {Function} [props.onReady] - Called once the fetch settles (success or
  *   error), so the parent row can swap its spinner for the revealed panel
+ * @param {Function} [props.onData] - Called with the fetched workload on success, so
+ *   the parent row can refresh its owning-reconciler summary (status + last
+ *   reconciled) from the detail's reconciler reference
  *
  * Features:
  * - Lazy loads workload data from the RBAC-enforced /api/v1/workload endpoint on
@@ -31,7 +34,7 @@ import { TabbedPanel, Field, ResourceLink, StatusBadge } from './detailPanel'
  *   events, and actions live on the full workload dashboard, not here.
  * - Handles loading, error, and not-found states (e.g. forbidden namespaces).
  */
-export function WorkloadDetailsView({ kind, name, namespace, reconcilerKind, reconcilerNamespace, reconcilerName, isExpanded, onReady }) {
+export function WorkloadDetailsView({ kind, name, namespace, reconcilerKind, reconcilerNamespace, reconcilerName, isExpanded, onReady, onData }) {
   const [workloadData, setWorkloadData] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -69,7 +72,12 @@ export function WorkloadDetailsView({ kind, name, namespace, reconcilerKind, rec
           mockPath: '../mock/workload',
           mockExport: 'getMockWorkload'
         })
-        if (!cancelled) setWorkloadData(data)
+        if (!cancelled) {
+          setWorkloadData(data)
+          // Hand the fresh payload back so the row can refresh its reconciler
+          // summary from the detail's enriched reconciler reference.
+          onData && onData(data)
+        }
       } catch (err) {
         console.error('Failed to fetch workload details:', err)
         if (!cancelled) setError(err.message)

@@ -43,13 +43,19 @@ vi.mock('preact-iso', () => ({
 // onReady automatically; instead the mock exposes a button the test clicks to
 // simulate the detail fetch settling.
 vi.mock('./WorkloadDetailsView', () => ({
-  WorkloadDetailsView: ({ kind, name, namespace, isExpanded, onReady }) => (
+  WorkloadDetailsView: ({ kind, name, namespace, isExpanded, onReady, onData }) => (
     isExpanded ? (
       <div data-testid="workload-details-view">
         <span data-testid="workload-details-view-kind">{kind}</span>
         <span data-testid="workload-details-view-name">{name}</span>
         <span data-testid="workload-details-view-namespace">{namespace}</span>
         <button data-testid="settle-details" onClick={onReady}>settle</button>
+        {/* Simulates the detail fetch landing with a fresher parent reconciler
+            summary, used to test the row write-back. */}
+        <button
+          data-testid="emit-details-data"
+          onClick={() => onData && onData({ workloadInfo: { status: 'Current', reconciler: { status: { reconcilerRef: { status: 'Ready', lastReconciled: '2025-11-18T11:10:59Z' } } } } })}
+        >emit</button>
       </div>
     ) : null
   )
@@ -343,6 +349,57 @@ describe('WorkloadList', () => {
       expect(screen.getByTestId('workload-details-view-kind')).toHaveTextContent('Deployment')
       expect(screen.getByTestId('workload-details-view-name')).toHaveTextContent('podinfo')
       expect(screen.getByTestId('workload-details-view-namespace')).toHaveTextContent('apps')
+    })
+
+    it('refreshes the row reconciler summary from the detail data (stale Failed -> Ready)', async () => {
+      const stale = {
+        kind: 'Deployment', namespace: 'apps', name: 'podinfo',
+        reconcilerKind: 'Kustomization', reconcilerNamespace: 'flux-system', reconcilerName: 'apps',
+        reconcilerStatus: 'Failed', lastReconciled: '2025-11-01T00:00:00Z'
+      }
+      fetchWithMock.mockResolvedValue({ workloads: [stale] })
+
+      render(<WorkloadList />)
+
+      const toggle = await screen.findByLabelText('Toggle details')
+      // The "managed by" label first reflects the stale Failed reconciler status.
+      expect(screen.getByTitle(/\(Failed\)$/)).toBeInTheDocument()
+
+      fireEvent.click(toggle)
+      // The panel lands with a fresher parent reconciler summary -> the row updates.
+      fireEvent.click(screen.getByTestId('emit-details-data'))
+
+      await waitFor(() => {
+        expect(screen.getByTitle(/\(Ready\)$/)).toBeInTheDocument()
+      })
+      expect(screen.queryByTitle(/\(Failed\)$/)).not.toBeInTheDocument()
+    })
+
+    it('colors the kind chip by the workload status while expanded, neutral when collapsed', async () => {
+      fetchWithMock.mockResolvedValue({ workloads: [mockWorkloads[0]] })
+      const { container } = render(<WorkloadList />)
+
+      const toggle = await screen.findByLabelText('Toggle details')
+      const chip = () => container.querySelector('span[class*="w-[74px]"]')
+
+      // Collapsed: the kind chip is neutral (gray).
+      expect(chip().className).toContain('bg-gray-100')
+
+      fireEvent.click(toggle)
+      fireEvent.click(screen.getByTestId('settle-details'))   // onReady -> open
+      fireEvent.click(screen.getByTestId('emit-details-data')) // onData -> workload status known
+
+      // Expanded: the chip takes the workload's own status color (Current -> green).
+      await waitFor(() => {
+        expect(chip().className).toContain('bg-green-100')
+      })
+      expect(chip().className).not.toContain('bg-gray-100')
+
+      // Collapse: the chip reverts to neutral.
+      fireEvent.click(toggle)
+      await waitFor(() => {
+        expect(chip().className).toContain('bg-gray-100')
+      })
     })
 
     it('should spin the toggle while the detail fetch is in flight', async () => {

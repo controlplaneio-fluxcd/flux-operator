@@ -108,24 +108,25 @@ describe('useDisclosure', () => {
     expect(result.current.mounted).toBe(true)
   })
 
-  it('collapses on toggle while keeping the content mounted', () => {
+  it('collapses and unmounts the content on toggle', () => {
     const { result } = renderHook(() => useDisclosure())
     act(() => result.current.toggle())
     act(() => result.current.onReady())
     act(() => result.current.toggle())
     expect(result.current.open).toBe(false)
-    expect(result.current.mounted).toBe(true)
+    expect(result.current.mounted).toBe(false)
     expect(result.current.loading).toBe(false)
   })
 
-  it('re-opens instantly without a second loading pass once loaded', () => {
+  it('re-mounts and re-fetches on each expand (no cached snapshot)', () => {
     const { result } = renderHook(() => useDisclosure())
-    act(() => result.current.toggle())
-    act(() => result.current.onReady())
-    act(() => result.current.toggle()) // collapse
-    act(() => result.current.toggle()) // re-open
-    expect(result.current.open).toBe(true)
-    expect(result.current.loading).toBe(false)
+    act(() => result.current.toggle())   // mount + load
+    act(() => result.current.onReady())  // reveal
+    act(() => result.current.toggle())   // collapse + unmount
+    act(() => result.current.toggle())   // re-expand
+    expect(result.current.mounted).toBe(true)
+    expect(result.current.loading).toBe(true)
+    expect(result.current.open).toBe(false)
   })
 
   it('cancels an in-flight fetch when toggled while still loading', () => {

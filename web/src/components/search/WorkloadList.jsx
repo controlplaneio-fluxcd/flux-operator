@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { signal } from '@preact/signals'
-import { useEffect } from 'preact/hooks'
+import { useEffect, useState } from 'preact/hooks'
 import { fetchWithMock } from '../../utils/fetch'
 import { formatTimestamp } from '../../utils/time'
-import { getStatusDotClass } from '../../utils/status'
+import { getStatusDotClass, getWorkloadStatusBadgeClass } from '../../utils/status'
 import { usePageMeta } from '../../utils/meta'
 import { workloadKinds } from '../../utils/constants'
 import { reportData } from '../../app'
@@ -75,6 +75,12 @@ function WorkloadRow({ workload }) {
   // fetches, then the panel animates open via Reveal.
   const d = useDisclosure()
 
+  // The workload's own status (Current/Idle/InProgress/…) is only known once the
+  // detail panel has fetched it; the list index carries no workload status. We
+  // capture it on expand to color the kind chip, and fall back to the neutral
+  // chip while collapsed.
+  const [liveStatus, setLiveStatus] = useState(null)
+
   // Check if workload is a favorite (reactive via favorites signal)
   const isFavorited = favorites.value && isFavorite(workload.kind, workload.namespace, workload.name)
 
@@ -87,13 +93,34 @@ function WorkloadRow({ workload }) {
   const dashboardUrl = getDashboardUrl(workload.kind, workload.namespace, workload.name)
   const reconcilerTitle = `Managed by ${workload.reconcilerKind} ${workload.reconcilerNamespace}/${workload.reconcilerName} (${workload.reconcilerStatus})`
 
+  // Color the kind chip by the workload's own status only while the panel is open
+  // (and once its status is known); collapsed rows keep the neutral chip.
+  const chipColor = d.open && liveStatus ? getWorkloadStatusBadgeClass(liveStatus) : NEUTRAL_CHIP
+
+  // When the detail panel finishes loading, refresh this row's owning-reconciler
+  // summary from the detail's enriched reconciler (its status.reconcilerRef is the
+  // same NewResourceStatus the workloads index uses), so a row that listed a stale
+  // reconciler status/time updates on expand. No-op when unchanged.
+  const handleData = (data) => {
+    // Capture the workload's own status to color the kind chip while expanded.
+    setLiveStatus(data?.workloadInfo?.status || null)
+    const ref = data?.workloadInfo?.reconciler?.status?.reconcilerRef
+    if (!ref) return
+    const cur = workloadsData.value.find(w =>
+      w.kind === workload.kind && w.namespace === workload.namespace && w.name === workload.name)
+    if (!cur || (cur.reconcilerStatus === ref.status && cur.lastReconciled === ref.lastReconciled)) return
+    workloadsData.value = workloadsData.value.map(w =>
+      w === cur ? { ...w, reconcilerStatus: ref.status, lastReconciled: ref.lastReconciled } : w)
+  }
+
   return (
     <div class="border-b border-gray-100 dark:border-gray-700/60 last:border-0">
       <div class="px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700/30">
         <div class="flex items-center gap-2.5">
           <Star active={isFavorited} onClick={handleFavoriteClick} />
-          {/* Neutral chip: workloads have no status of their own in the list. */}
-          <KindChip kind={workload.kind} colorClass={NEUTRAL_CHIP} title={`${workload.kind} · reconciler ${workload.reconcilerStatus}`} cls="hidden sm:inline-block" />
+          {/* Neutral chip in the list; colored by the workload's own status once
+              expanded (see chipColor). */}
+          <KindChip kind={workload.kind} colorClass={chipColor} title={`${workload.kind} · reconciler ${workload.reconcilerStatus}`} cls="hidden sm:inline-block" />
           <NameLink href={dashboardUrl} namespace={workload.namespace} name={workload.name} />
           {/* Desktop: parent reconciler reference with a status dot. The status
               belongs to the reconciler, never the workload itself. */}
@@ -109,7 +136,7 @@ function WorkloadRow({ workload }) {
             has no status of its own in the list, so we state the reconcile time
             instead of a (reconciler) status word. */}
         <div class="sm:hidden mt-1 pl-[30px] flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
-          <KindChip kind={workload.kind} colorClass={NEUTRAL_CHIP} title={`${workload.kind} · reconciler ${workload.reconcilerStatus}`} />
+          <KindChip kind={workload.kind} colorClass={chipColor} title={`${workload.kind} · reconciler ${workload.reconcilerStatus}`} />
           <span class="whitespace-nowrap">Reconciled {formatTimestamp(workload.lastReconciled)}</span>
         </div>
       </div>
@@ -127,6 +154,7 @@ function WorkloadRow({ workload }) {
               reconcilerName={workload.reconcilerName}
               isExpanded
               onReady={d.onReady}
+              onData={handleData}
             />
           )}
         </div>

@@ -127,9 +127,10 @@ export function KindChip({ kind, colorClass, title, cls = '' }) {
 /**
  * useDisclosure - disclosure state for a row whose panel fetches before it
  * reveals: the expand button spins while the lazily mounted content loads, then
- * the panel animates open. The content stays mounted after the first load so
- * re-opening is instant. The fetching child must call the returned `onReady`
- * when its data has loaded (success or error).
+ * the panel animates open. Collapsing unmounts the panel, so each expand
+ * re-mounts and re-fetches fresh data rather than replaying a cached snapshot.
+ * The fetching child must call the returned `onReady` when its data has loaded
+ * (success or error).
  *
  * @returns {{open: boolean, mounted: boolean, loading: boolean, toggle: Function, onReady: Function}}
  */
@@ -137,14 +138,17 @@ export function useDisclosure() {
   const [open, setOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [loaded, setLoaded] = useState(false)
 
-  const onReady = () => { setLoaded(true); setLoading(false); setOpen(true) }
+  // Reveal the panel once its fetch settles (success or error).
+  const onReady = () => { setLoading(false); setOpen(true) }
+
+  // First click mounts the panel and starts its fetch (reveal happens via
+  // onReady). Any later click — while still loading, or while revealed —
+  // discards the panel, so the next expand re-mounts and re-fetches instead of
+  // showing stale data.
   const toggle = () => {
-    if (open) { setOpen(false); return }                          // collapse
-    if (loading) { setLoading(false); setMounted(false); return } // cancel in-flight fetch
-    if (loaded) { setOpen(true); return }                         // already fetched, reveal now
-    setMounted(true); setLoading(true)                            // mount + fetch, reveal on ready
+    if (mounted) { setOpen(false); setLoading(false); setMounted(false); return }
+    setMounted(true); setLoading(true)
   }
   return { open, mounted, loading, toggle, onReady }
 }
