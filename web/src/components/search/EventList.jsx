@@ -2,14 +2,15 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { signal } from '@preact/signals'
-import { useEffect } from 'preact/hooks'
-import { useState } from 'preact/hooks'
+import { useEffect, useState } from 'preact/hooks'
 import { fetchWithMock } from '../../utils/fetch'
 import { formatTimestamp } from '../../utils/time'
 import { getEventBadgeClass } from '../../utils/status'
 import { usePageMeta } from '../../utils/meta'
 import { reportData } from '../../app'
 import { FilterForm } from './FilterForm'
+import { FilterBar } from './FilterBar'
+import { Chevron, KindChip, NameLink, Reveal } from './compactRow'
 import { getDashboardUrl, useRestoreFiltersFromUrl, useSyncFiltersToUrl } from '../../utils/routing'
 import { StatusChart } from './StatusChart'
 import { useInfiniteScroll } from '../../utils/scroll'
@@ -54,94 +55,59 @@ export async function fetchEvents() {
 
 
 /**
- * EventCard - Individual card displaying a Kubernetes event
+ * EventRow - compact list row for a single Kubernetes event.
  *
  * @param {Object} props
- * @param {Object} props.event - Event object with type, message, involvedObject, timestamp
+ * @param {Object} props.event - Event with type, involvedObject, namespace, message, lastTimestamp
  *
- * Features:
- * - Shows resource kind and name from involvedObject
- * - Displays event severity badge (Info for Normal, Warning for Warning)
- * - Shows event message with expand/collapse for long messages
- * - Displays namespace and timestamp
- * - Clickable resource name that navigates to resources page with filters
+ * The kind chip is colored by event severity (Normal -> Info, Warning). On
+ * desktop the row shows the namespace/name link, the truncated message and the
+ * timestamp on one line; on mobile the link sits on the top row and a second
+ * line repeats the colored chip beside the severity word and timestamp. The
+ * namespace/name link routes to the involved object's dashboard. Events already
+ * carry their full message in the list, so expanding reveals it inline (a dark
+ * rounded block, newlines preserved) instantly with a plain chevron and no
+ * spinner — there is nothing to fetch.
  */
-function EventCard({ event }) {
-  const [isExpanded, setIsExpanded] = useState(false)
+function EventRow({ event }) {
+  const [open, setOpen] = useState(false)
 
-  // Parse involvedObject to get kind and name
+  // Parse involvedObject "Kind/name" into kind and name.
   const [kind, name] = event.involvedObject.split('/')
 
-  // Build the dashboard URL, routing workload-kind events to the workload dashboard
+  // Build the dashboard URL, routing workload-kind events to the workload dashboard.
   const resourceUrl = getDashboardUrl(kind, event.namespace, name)
 
-  // Map event type to display status
-  const displayStatus = event.type === 'Normal' ? 'Info' : 'Warning'
-
-  // Check if message is long or contains newlines
-  const isLongMessage = event.message.length > 150 || event.message.includes('\n')
-  const shouldTruncate = isLongMessage && !isExpanded
-
-  // Truncate to first line or 150 chars
-  const getTruncatedMessage = () => {
-    const firstLine = event.message.split('\n')[0]
-    if (firstLine.length > 150) {
-      return firstLine.substring(0, 150) + '...'
-    }
-    return firstLine
-  }
-
-  const displayMessage = shouldTruncate ? getTruncatedMessage() : event.message
+  // One-word severity label for the chip tooltip and the mobile second line.
+  const severity = event.type === 'Warning' ? 'Warning' : 'Info'
 
   return (
-    <div class="card p-4 hover:shadow-md transition-shadow">
-      {/* Header row: kind + status badge + timestamp */}
-      <div class="flex items-center justify-between mb-3">
-        <div class="flex items-center gap-3">
-          <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
-            {kind}
-          </span>
-          <span class={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getEventBadgeClass(event.type)}`}>
-            {displayStatus}
-          </span>
+    <div class="border-b border-gray-100 dark:border-gray-700/60 last:border-0">
+      <div class="px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700/30">
+        <div class="flex items-center gap-2.5">
+          <KindChip kind={kind} colorClass={getEventBadgeClass(event.type)} title={`${kind} · ${severity}`} cls="hidden sm:inline-block" />
+          <NameLink href={resourceUrl} namespace={event.namespace} name={name} cls="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flux-blue" />
+          <span class="hidden sm:block flex-1 min-w-0 truncate text-xs text-gray-500 dark:text-gray-400">{event.message}</span>
+          <span class="hidden sm:block shrink-0 text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap tabular-nums">{formatTimestamp(event.lastTimestamp)}</span>
+          <button onClick={() => setOpen(!open)} class="shrink-0 rounded p-0.5 text-gray-400 hover:text-flux-blue" title="Details" aria-label="Toggle event details"><Chevron open={open} /></button>
         </div>
-        <span class="hidden sm:inline text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap ml-4">
-          {formatTimestamp(event.lastTimestamp)}
-        </span>
+        {/* Mobile-only second line: colored kind pill + severity word + timestamp. */}
+        <div class="sm:hidden mt-1 flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
+          <KindChip kind={kind} colorClass={getEventBadgeClass(event.type)} title={`${kind} · ${severity}`} />
+          <span class="whitespace-nowrap"><span class="capitalize">{severity}</span> {formatTimestamp(event.lastTimestamp)}</span>
+        </div>
       </div>
-
-      {/* Resource namespace/name - clickable link */}
-      <div class="mb-1 sm:mb-2">
-        <a
-          href={resourceUrl}
-          class="text-sm text-left hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flux-blue rounded inline-block group"
-        >
-          <span class="text-gray-500 dark:text-gray-400">{event.namespace}/</span><span class="font-semibold text-gray-900 dark:text-gray-100 group-hover:text-flux-blue dark:group-hover:text-blue-400">{name}</span><svg class="w-3.5 h-3.5 text-gray-400 group-hover:text-flux-blue dark:group-hover:text-blue-400 transition-colors ml-1 inline-block align-middle" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
-        </a>
-      </div>
-
-      {/* Mobile timestamp - below namespace/name */}
-      <div class="flex sm:hidden items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 mb-2">
-        <svg class="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-        </svg>
-        {formatTimestamp(event.lastTimestamp)}
-      </div>
-
-      {/* Message */}
-      <div class="text-sm text-gray-700 dark:text-gray-300">
-        <pre class="whitespace-pre-wrap break-words font-sans">
-          {displayMessage}
-        </pre>
-        {isLongMessage && (
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            class="text-flux-blue dark:text-blue-400 text-xs mt-1 hover:underline focus:outline-none"
-          >
-            {isExpanded ? 'Show less' : 'Show more'}
-          </button>
-        )}
-      </div>
+      {/* Events carry the full message in the list, so there is nothing to fetch:
+          the panel reveals instantly (no spinner) with the same animation. */}
+      <Reveal open={open}>
+        <div class="px-3 pt-1 pb-4">
+          {/* A long event message is capped at 60vh and scrolls inside, matching
+              the resource/workload detail panels. */}
+          <div class="bg-gray-100 dark:bg-gray-900/70 rounded-md px-3 py-2 text-xs text-gray-700 dark:text-gray-300 max-h-[60vh] overflow-y-auto">
+            <pre class="whitespace-pre-wrap break-words font-sans leading-relaxed">{event.message}</pre>
+          </div>
+        </div>
+      </Reveal>
     </div>
   )
 }
@@ -152,7 +118,7 @@ function EventCard({ event }) {
  * Features:
  * - Fetches events from the API with optional filters (kind, name, namespace, severity)
  * - Auto-refetches when filter signals change
- * - Displays events in card format with expandable messages
+ * - Displays events as compact, expandable rows with the full message inline
  * - Shows loading, error, and empty states
  */
 export function EventList() {
@@ -197,21 +163,25 @@ export function EventList() {
   }
 
   return (
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
-      <div class="space-y-6">
-        {/* Page Title */}
-        <div class="flex items-center justify-between">
-          <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Flux Events</h2>
-          {/* Event count */}
-          {!eventsLoading.value && eventsData.value.length > 0 && (
-            <span class="text-sm text-gray-600 dark:text-gray-400">
-              {eventsData.value.length} events
-            </span>
-          )}
-        </div>
-
-        {/* Filters */}
-        <div class="card p-4">
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8 flex-grow w-full">
+      <div class="space-y-3">
+        {/* Filters + status chart toolbar */}
+        <FilterBar
+          count={eventsData.value.length}
+          label="events"
+          loading={eventsLoading.value}
+          statusChart={
+            <StatusChart
+              items={eventsData.value}
+              loading={eventsLoading.value}
+              mode="events"
+              compact
+              onBarClick={(status) => {
+                selectedEventSeverity.value = selectedEventSeverity.value === status ? '' : status
+              }}
+            />
+          }
+        >
           <FilterForm
             kindSignal={selectedEventKind}
             nameSignal={selectedEventName}
@@ -219,18 +189,9 @@ export function EventList() {
             severitySignal={selectedEventSeverity}
             namespaces={reportData.value?.spec?.namespaces || []}
             onClear={handleClearFilters}
+            onRefresh={fetchEvents}
           />
-        </div>
-
-        {/* Status Chart */}
-        <StatusChart
-          items={eventsData.value}
-          loading={eventsLoading.value}
-          mode="events"
-          onBarClick={(status) => {
-            selectedEventSeverity.value = selectedEventSeverity.value === status ? '' : status
-          }}
-        />
+        </FilterBar>
 
         {/* Error State */}
         {eventsError.value && (
@@ -248,7 +209,6 @@ export function EventList() {
           </div>
         )}
 
-        {/* Events List */}
         {/* Empty State */}
         {!eventsLoading.value && eventsData.value.length === 0 && (
           <div class="card py-12">
@@ -263,11 +223,12 @@ export function EventList() {
           </div>
         )}
 
-        {/* Events Cards */}
+        {/* Events List — rows provide their own padding, so drop the card's
+            heavy padding on mobile (keep it on desktop). */}
         {!eventsLoading.value && eventsData.value.length > 0 && (
-          <div class="space-y-4">
+          <div class="card overflow-hidden p-0 sm:p-2">
             {visibleEvents.map((event, index) => (
-              <EventCard key={`${event.involvedObject}-${event.lastTimestamp}-${index}`} event={event} />
+              <EventRow key={`${event.involvedObject}-${event.lastTimestamp}-${index}`} event={event} />
             ))}
 
             {/* Sentinel element for infinite scroll */}

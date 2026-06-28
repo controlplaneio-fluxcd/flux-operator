@@ -9,7 +9,6 @@ import { usePageMeta } from '../../utils/meta'
 import { normalizeToFluxStatus } from '../../utils/status'
 import { FavoritesHeader } from './FavoritesHeader'
 import { FavoriteCard } from './FavoriteCard'
-import { FluxOperatorIcon } from '../layout/Icons'
 
 /**
  * Normalize a favorite's status to the Flux vocabulary (Ready/Failed/Progressing/
@@ -37,7 +36,6 @@ export function FavoritesPage() {
   // State
   const [resourcesData, setResourcesData] = useState({}) // Map of key -> resource data
   const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false) // Delayed refresh indicator
   const [error, setError] = useState(null)
   const [editMode, setEditMode] = useState(false)
   const [editOrder, setEditOrder] = useState([]) // Temporary order during edit
@@ -47,7 +45,6 @@ export function FavoritesPage() {
 
   // Track if initial load has completed (to avoid showing loading on refresh)
   const initialLoadDone = useRef(false)
-  const refreshTimeoutRef = useRef(null)
 
   // Get current favorites from signal
   const currentFavorites = favorites.value
@@ -75,14 +72,9 @@ export function FavoritesPage() {
         return
       }
 
-      // Only show loading on initial load, not on refresh
+      // Only show loading on initial load; refreshes update silently in place.
       if (!initialLoadDone.current) {
         if (!cancelled) setLoading(true)
-      } else {
-        // For refreshes, show spinner after 300ms delay
-        refreshTimeoutRef.current = window.setTimeout(() => {
-          if (!cancelled) setRefreshing(true)
-        }, 300)
       }
       if (!cancelled) setError(null)
 
@@ -118,13 +110,7 @@ export function FavoritesPage() {
         }
         // Don't clear existing data on error - keep showing stale data
       } finally {
-        // Always clear timeout (no cancelled guard)
-        if (refreshTimeoutRef.current) {
-          window.clearTimeout(refreshTimeoutRef.current)
-          refreshTimeoutRef.current = null
-        }
         if (!cancelled) {
-          setRefreshing(false)
           setLoading(false)
         }
         initialLoadDone.current = true
@@ -292,13 +278,12 @@ export function FavoritesPage() {
     setStatusFilter(status)
   }, [])
 
-  // Empty state
-  if (!loading && currentFavorites.length === 0) {
+  // Empty state — favorites come from local storage synchronously, so this is
+  // accurate on the very first render without waiting for the status fetch.
+  if (currentFavorites.length === 0) {
     return (
-      <main data-testid="favorites-page" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
+      <main data-testid="favorites-page" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8 flex-grow w-full">
         <div class="space-y-6">
-          <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Favorites</h2>
-
           <div class="card py-12">
             <div class="text-center">
               <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -327,22 +312,8 @@ export function FavoritesPage() {
   }
 
   return (
-    <main data-testid="favorites-page" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
+    <main data-testid="favorites-page" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8 flex-grow w-full">
       <div class="space-y-6">
-        {/* Page Title */}
-        <div class="flex items-center justify-between">
-          <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Favorites</h2>
-          {/* Favorites count with refresh indicator */}
-          {!loading && filteredFavorites.length > 0 && (
-            <span class="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-2">
-              {refreshing && (
-                <div class="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-400"></div>
-              )}
-              {filteredFavorites.length} resources
-            </span>
-          )}
-        </div>
-
         {/* Header with status bar and controls */}
         <FavoritesHeader
           resources={resourcesForChart}
@@ -421,35 +392,30 @@ export function FavoritesPage() {
           </div>
         )}
 
-        {/* Normal Mode: Favorite cards grid */}
-        {!editMode && !loading && filteredFavorites.length > 0 && (
+        {/* Normal Mode: favorite cards grid. Rendered straight from local storage
+            so the cards appear instantly; each card's live status fills in once
+            the status fetch settles (until then the badge reads "Unknown"). */}
+        {!editMode && filteredFavorites.length > 0 && (
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredFavorites.map((fav) => (
               <FavoriteCard
                 key={getFavoriteKey(fav.kind, fav.namespace, fav.name)}
                 favorite={fav}
                 resourceData={fav.resourceData}
+                loading={loading}
               />
             ))}
           </div>
         )}
 
         {/* No results after filtering */}
-        {!editMode && !loading && filteredFavorites.length === 0 && currentFavorites.length > 0 && (
+        {!editMode && filteredFavorites.length === 0 && currentFavorites.length > 0 && (
           <div class="card py-8">
             <div class="text-center">
               <p class="text-sm text-gray-600 dark:text-gray-400">
                 No favorites match your search
               </p>
             </div>
-          </div>
-        )}
-
-        {/* Loading state */}
-        {loading && (
-          <div class="flex items-center justify-center p-8">
-            <FluxOperatorIcon className="animate-spin h-8 w-8 text-flux-blue" />
-            <span class="ml-3 text-gray-600 dark:text-gray-400">Loading favorites...</span>
           </div>
         )}
       </div>

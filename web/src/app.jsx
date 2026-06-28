@@ -13,15 +13,17 @@ import { ConnectionStatus } from './components/layout/ConnectionStatus'
 import { Header } from './components/layout/Header'
 import { LoginPage } from './components/auth/LoginPage'
 import { ClusterPage } from './components/dashboards/cluster/ClusterPage'
-import { EventList } from './components/search/EventList'
-import { ResourceList } from './components/search/ResourceList'
-import { WorkloadList } from './components/search/WorkloadList'
+import { EventList, eventsData, eventsLoading } from './components/search/EventList'
+import { ResourceList, resourcesData, resourcesLoading } from './components/search/ResourceList'
+import { WorkloadList, workloadsData, workloadsLoading } from './components/search/WorkloadList'
 import { ResourcePage } from './components/dashboards/resource/ResourcePage'
 import { WorkloadPage } from './components/dashboards/workload/WorkloadPage'
 import { FavoritesPage } from './components/favorites/FavoritesPage'
+import { favorites } from './utils/favorites'
 import { ProfilePage } from './components/user/ProfilePage'
 import { NotFoundPage } from './components/layout/NotFoundPage'
 import { FluxOperatorIcon } from './components/layout/Icons'
+import { Spinner } from './components/search/compactRow'
 
 // Global signals for FluxReport data and application state
 // These signals are exported and used by child components throughout the app
@@ -98,55 +100,63 @@ export async function fetchFluxReport() {
 /**
  * TabNavigation - Tab navigation for switching between Favorites, Resources, and Events views
  */
+// Section tabs rendered as classic underline tabs: the active tab gets a
+// flux-blue bottom border and label.
+const NAV_TABS = [
+  { href: '/favorites', label: 'Favorites' },
+  { href: '/resources', label: 'Resources' },
+  { href: '/workloads', label: 'Workloads' },
+  { href: '/events', label: 'Events' },
+]
+
+// Result count + loading signals per section, folded into the active tab.
+// Keyed by path so the nav reflects the active list. Favorites are read straight
+// from local storage, so there is no loading signal — just the favorite count.
+const TAB_META = {
+  '/favorites': { data: favorites, label: 'favorites' },
+  '/resources': { data: resourcesData, loading: resourcesLoading, label: 'resources' },
+  '/workloads': { data: workloadsData, loading: workloadsLoading, label: 'workloads' },
+  '/events': { data: eventsData, loading: eventsLoading, label: 'events' },
+}
+
 function TabNavigation() {
   const location = useLocation()
   const currentPath = location.path
+  const meta = TAB_META[currentPath]
 
   return (
-    <div class="border-b border-gray-200 dark:border-gray-700 transition-colors">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <nav class="-mb-px flex space-x-8">
-          <a
-            href="/favorites"
-            class={`${
-              currentPath === '/favorites'
-                ? 'border-flux-blue text-flux-blue dark:text-blue-400'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm focus:outline-none transition-colors`}
-          >
-            Favorites
-          </a>
-          <a
-            href="/resources"
-            class={`${
-              currentPath === '/resources'
-                ? 'border-flux-blue text-flux-blue dark:text-blue-400'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm focus:outline-none transition-colors`}
-          >
-            Resources
-          </a>
-          <a
-            href="/workloads"
-            class={`${
-              currentPath === '/workloads'
-                ? 'border-flux-blue text-flux-blue dark:text-blue-400'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm focus:outline-none transition-colors`}
-          >
-            Workloads
-          </a>
-          <a
-            href="/events"
-            class={`${
-              currentPath === '/events'
-                ? 'border-flux-blue text-flux-blue dark:text-blue-400'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm focus:outline-none transition-colors`}
-          >
-            Events
-          </a>
+    <div class="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8">
+      <div class="flex items-end justify-between gap-3 border-b border-gray-200 dark:border-gray-700">
+        <nav class="flex gap-6 sm:gap-8">
+          {NAV_TABS.map(tab => (
+            <a
+              key={tab.href}
+              href={tab.href}
+              class={`${
+                currentPath === tab.href
+                  ? 'border-flux-blue text-flux-blue dark:text-blue-400'
+                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
+              } -mb-px whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm focus:outline-none transition-colors`}
+            >
+              {tab.label}
+            </a>
+          ))}
         </nav>
+
+        {/* Active section count / loader on the right (desktop; on mobile the
+            toolbar shows it). */}
+        {meta && (
+          <div class="hidden sm:flex items-center gap-2 pb-3 text-sm text-gray-600 dark:text-gray-400">
+            {meta.loading?.value ? (
+              <>
+                <Spinner cls="w-4 h-4" />
+                <span>Loading…</span>
+              </>
+            ) : (
+              meta.data?.value?.length > 0 && <span>{meta.data.value.length} {meta.label}</span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

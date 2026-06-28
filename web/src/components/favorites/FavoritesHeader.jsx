@@ -127,13 +127,15 @@ export function FavoritesHeader({
     )
   }
 
-  // Normal mode: show status bar with edit and search buttons on the same line
+  // Normal mode: show status bar with edit and search buttons on the same line.
+  // On mobile the card is compacted to the same collapsed height as the Resources
+  // filter bar (px-3 py-2.5 + a 28px row); on desktop it keeps the roomier layout.
   return (
-    <div class="card p-4">
+    <div class="card px-3 py-2.5 sm:p-4">
       {/* Status bar with buttons on the right */}
       <div class="flex items-center gap-3">
-        {/* Status bar - takes remaining space */}
-        <div class="relative flex gap-0 flex-1" style={{ height: '32px' }}>
+        {/* Status bar - takes remaining space (28px on mobile, 32px on desktop) */}
+        <div class="relative flex gap-0 flex-1 h-7 sm:h-8">
           {loading ? (
             <div class="w-full h-full bg-gray-200 dark:bg-gray-700 animate-pulse" />
           ) : statusBars.length === 0 ? (
@@ -180,9 +182,8 @@ export function FavoritesHeader({
           {/* Edit order button */}
           <button
             onClick={onEditModeToggle}
-            class="inline-flex items-center justify-center p-2 text-gray-600 dark:text-gray-400 hover:text-flux-blue dark:hover:text-blue-400 transition-colors focus:outline-none focus:ring-2 focus:ring-flux-blue rounded-md"
+            class="inline-flex items-center justify-center p-1 sm:p-2 text-gray-600 dark:text-gray-400 hover:text-flux-blue dark:hover:text-blue-400 transition-colors focus:outline-none focus:ring-2 focus:ring-flux-blue rounded-md"
             title="Edit order"
-            disabled={!resources || resources.length === 0}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4.5h14.25M3 9h9.75M3 13.5h9.75m4.5-4.5v12m0 0-3.75-3.75M17.25 21 21 17.25" />
@@ -192,7 +193,7 @@ export function FavoritesHeader({
           {/* Search button */}
           <button
             onClick={handleSearchOpen}
-            class="inline-flex items-center justify-center p-2 text-gray-600 dark:text-gray-400 hover:text-flux-blue dark:hover:text-blue-400 transition-colors focus:outline-none focus:ring-2 focus:ring-flux-blue rounded-md"
+            class="inline-flex items-center justify-center p-1 sm:p-2 text-gray-600 dark:text-gray-400 hover:text-flux-blue dark:hover:text-blue-400 transition-colors focus:outline-none focus:ring-2 focus:ring-flux-blue rounded-md"
             title="Search favorites"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

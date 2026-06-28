@@ -13,6 +13,7 @@ import {
   connectionStatus
 } from './app'
 import { POLL_INTERVAL_MS } from './utils/constants'
+import { favorites } from './utils/favorites'
 
 // Mock location state that can be modified in tests
 let mockLocationPath = '/'
@@ -44,15 +45,21 @@ vi.mock('./components/dashboards/cluster/ClusterPage', () => ({
 }))
 
 vi.mock('./components/search/EventList', () => ({
-  EventList: () => <div data-testid="event-list">EventList</div>
+  EventList: () => <div data-testid="event-list">EventList</div>,
+  eventsData: { value: [] },
+  eventsLoading: { value: false }
 }))
 
 vi.mock('./components/search/ResourceList', () => ({
-  ResourceList: () => <div data-testid="resource-list">ResourceList</div>
+  ResourceList: () => <div data-testid="resource-list">ResourceList</div>,
+  resourcesData: { value: [] },
+  resourcesLoading: { value: false }
 }))
 
 vi.mock('./components/search/WorkloadList', () => ({
-  WorkloadList: () => <div data-testid="workload-list">WorkloadList</div>
+  WorkloadList: () => <div data-testid="workload-list">WorkloadList</div>,
+  workloadsData: { value: [] },
+  workloadsLoading: { value: false }
 }))
 
 vi.mock('./components/dashboards/resource/ResourcePage', () => ({
@@ -63,7 +70,7 @@ vi.mock('./components/dashboards/workload/WorkloadPage', () => ({
   WorkloadPage: () => <div data-testid="workload-page">WorkloadPage</div>
 }))
 
-vi.mock('./components/common/NotFoundPage', () => ({
+vi.mock('./components/layout/NotFoundPage', () => ({
   NotFoundPage: () => <div data-testid="not-found-page">NotFoundPage</div>
 }))
 
@@ -598,9 +605,10 @@ describe('app.jsx', () => {
       const resourcesTab = screen.getByRole('link', { name: 'Resources' })
       const eventsTab = screen.getByRole('link', { name: 'Events' })
 
+      // Active tab gets a flux-blue underline + label; inactive tabs are muted.
       expect(resourcesTab.className).toContain('border-flux-blue')
       expect(resourcesTab.className).toContain('text-flux-blue')
-      expect(eventsTab.className).toContain('border-transparent')
+      expect(eventsTab.className).not.toContain('border-flux-blue')
     })
 
     it('should highlight Events tab when on /events path', () => {
@@ -613,9 +621,10 @@ describe('app.jsx', () => {
       const resourcesTab = screen.getByRole('link', { name: 'Resources' })
       const eventsTab = screen.getByRole('link', { name: 'Events' })
 
+      // Active tab gets a flux-blue underline + label; inactive tabs are muted.
       expect(eventsTab.className).toContain('border-flux-blue')
       expect(eventsTab.className).toContain('text-flux-blue')
-      expect(resourcesTab.className).toContain('border-transparent')
+      expect(resourcesTab.className).not.toContain('border-flux-blue')
     })
 
     it('should have correct href on Resources tab', async () => {
@@ -638,6 +647,23 @@ describe('app.jsx', () => {
 
       const eventsTab = screen.getByRole('link', { name: 'Events' })
       expect(eventsTab).toHaveAttribute('href', '/events')
+    })
+
+    it('should show the favorites count in the tab nav on /favorites path', () => {
+      mockLocationPath = '/favorites'
+      reportLoading.value = false
+      reportData.value = mockReport
+      favorites.value = [
+        { kind: 'Kustomization', namespace: 'flux-system', name: 'apps' },
+        { kind: 'HelmRelease', namespace: 'default', name: 'podinfo' }
+      ]
+
+      render(<App />)
+
+      // The count moved out of the page body into the section tab bar.
+      expect(screen.getByText('2 favorites')).toBeInTheDocument()
+
+      favorites.value = []
     })
   })
 
@@ -671,8 +697,8 @@ describe('app.jsx', () => {
       render(<App />)
 
       // Tab navigation should not be visible for unknown routes
-      expect(screen.queryByRole('button', { name: 'Resources' })).not.toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: 'Events' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: 'Resources' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: 'Events' })).not.toBeInTheDocument()
     })
   })
 

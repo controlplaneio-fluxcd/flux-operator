@@ -3,11 +3,14 @@
 
 import { useState, useMemo, useEffect, useRef } from 'preact/hooks'
 import { fetchWithMock } from '../../utils/fetch'
+import { formatTimestamp } from '../../utils/time'
 import { usePrismTheme, YamlBlock } from '../dashboards/common/yaml'
-import { isKindWithInventory, getKindAlias, isFluxInventoryItem, isWorkloadInventoryItem } from '../../utils/constants'
+import { isKindWithInventory, getControllerName, isFluxInventoryItem, isWorkloadInventoryItem } from '../../utils/constants'
 import { getDashboardUrl } from '../../utils/routing'
-import { getStatusBadgeClass, cleanStatus } from '../../utils/status'
+import { cleanStatus } from '../../utils/status'
+import { getReconcileInterval, getReconcileTimeout } from '../../utils/reconciler'
 import { FluxOperatorIcon } from '../layout/Icons'
+import { TabbedPanel, Field, ResourceLink, StatusBadge } from './detailPanel'
 
 /**
  * Helper to group inventory items by apiVersion
@@ -119,23 +122,33 @@ function InventoryGroupByApiVersion({ apiVersion, items }) {
  * @param {string} props.name - Resource name
  * @param {string} props.namespace - Resource namespace
  * @param {boolean} props.isExpanded - Whether the view is expanded
+ * @param {string} [props.status] - Display status for the Overview badge, used as a
+ *   fallback when the resource has no reconcilerRef status yet
+ * @param {Function} [props.onReady] - Called once the data fetch settles (success or
+ *   error), so the parent row can swap its spinner for the revealed panel
+ * @param {Function} [props.onData] - Called with the fetched resource on success, so
+ *   the parent row can refresh its collapsed summary (status/message/lastReconciled)
+ *   from the server-computed reconcilerRef and not contradict the open panel
  *
  * Features:
  * - Lazy loads complete resource data on expand
- * - Tabbed interface with up to four sections (in order):
- *   1. Inventory: Grouped list of managed resources (if present, shown first)
- *   2. Source: Details about the resource's source (if present)
- *   3. Specification: Complete resource definition as syntax-highlighted YAML
- *   4. Status: YAML display of apiVersion, kind, metadata, and status (without inventory)
+ * - Tabbed interface with up to five sections (in order):
+ *   1. Overview: Reconciler status, controller, interval, owner and last action (default)
+ *   2. Inventory: Grouped list of managed resources (if present)
+ *   3. Source: Details about the resource's source (if present)
+ *   4. Specification: Complete resource definition as syntax-highlighted YAML
+ *   5. Status: YAML display of apiVersion, kind, metadata, and status (without inventory)
+ * - Renders the tab chrome through the shared compact TabbedPanel (mobile segmented
+ *   control, desktop vertical right-rail merging into a cohesive panel)
  * - Dynamically switches Prism theme (light/dark) based on app theme
  * - Caches data to avoid redundant fetches
  * - Handles loading and error states
  */
-export function ResourceDetailsView({ kind, name, namespace, isExpanded }) {
+export function ResourceDetailsView({ kind, name, namespace, isExpanded, status, onReady, onData }) {
   const [resourceData, setResourceData] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [activeTab, setActiveTab] = useState('inventory')
+  const [activeTab, setActiveTab] = useState('overview')
   const fetchingRef = useRef(false)
 
   // Load Prism theme based on current app theme
@@ -145,7 +158,7 @@ export function ResourceDetailsView({ kind, name, namespace, isExpanded }) {
   useEffect(() => {
     setResourceData(null)
     setError(null)
-    setActiveTab('inventory')
+    setActiveTab('overview')
   }, [kind, name, namespace])
 
   // Fetch resource details when expanded
@@ -169,25 +182,25 @@ export function ResourceDetailsView({ kind, name, namespace, isExpanded }) {
           mockPath: '../mock/resource',
           mockExport: 'getMockResource'
         })
+        // Overview is the default tab and is always available (set on mount and on
+        // identity change), so the active tab needs no adjustment once data lands.
         if (!cancelled) {
           setResourceData(data)
-
-          // Set default active tab: inventory > source > specification
-          const hasInventory = data.status?.inventory && data.status.inventory.length > 0
-          if (isKindWithInventory(data.kind) || hasInventory) {
-            setActiveTab('inventory')
-          } else if (data.status?.sourceRef) {
-            setActiveTab('source')
-          } else {
-            setActiveTab('specification')
-          }
+          // Hand the fresh, server-computed summary back to the row so the collapsed
+          // list entry can't contradict the panel that just opened.
+          onData && onData(data)
         }
       } catch (err) {
         console.error('Failed to fetch resource details:', err)
         if (!cancelled) setError(err.message)
       } finally {
         fetchingRef.current = false
-        if (!cancelled) setLoading(false)
+        if (!cancelled) {
+          setLoading(false)
+          // Signal the parent row that the fetch settled (success or error) so it
+          // can swap its spinner for the revealed panel.
+          onReady && onReady()
+        }
       }
     }
 
@@ -249,6 +262,26 @@ export function ResourceDetailsView({ kind, name, namespace, isExpanded }) {
   // Get inventory count
   const inventoryCount = resourceData?.status?.inventory?.length || 0
 
+  // Overview derivations (mirror the Resource dashboard Reconciler panel). All use
+  // optional chaining so they are safe before the data lands.
+  const reconcilerRef = resourceData?.status?.reconcilerRef
+  const rStatus = reconcilerRef?.status || status || 'Unknown'
+  const rMessage = reconcilerRef?.message || resourceData?.status?.conditions?.[0]?.message || ''
+  const rLast = reconcilerRef?.lastReconciled || resourceData?.status?.conditions?.[0]?.lastTransitionTime
+  const interval = getReconcileInterval(resourceData)
+  const timeout = getReconcileTimeout(resourceData)
+  const managedBy = reconcilerRef?.managedBy
+
+  // Build the ordered tab list, including Inventory/Source only when they apply.
+  const tabs = useMemo(() => {
+    const list = [{ id: 'overview', label: 'Overview' }]
+    if (shouldShowInventoryTab) list.push({ id: 'inventory', label: 'Inventory' })
+    if (resourceData?.status?.sourceRef) list.push({ id: 'source', label: 'Source' })
+    list.push({ id: 'specification', label: 'Spec' })
+    list.push({ id: 'status', label: 'Status' })
+    return list
+  }, [shouldShowInventoryTab, resourceData])
+
   if (!isExpanded) return null
 
   return (
@@ -274,57 +307,35 @@ export function ResourceDetailsView({ kind, name, namespace, isExpanded }) {
 
       {/* Tabs + Content */}
       {!loading && !error && resourceData && (
-        <>
-          {/* Tab Navigation */}
-          <div class="border-b border-gray-200 dark:border-gray-700 mb-4">
-            <nav class="flex space-x-4 overflow-x-auto" aria-label="Tabs">
-              {shouldShowInventoryTab && (
-                <button
-                  onClick={() => setActiveTab('inventory')}
-                  class={`py-2 px-1 text-sm font-medium border-b-2 transition-colors ${
-                    activeTab === 'inventory'
-                      ? 'border-flux-blue text-flux-blue dark:text-blue-400'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-                  }`}
-                >
-                  Inventory ({inventoryCount})
-                </button>
+        <TabbedPanel tabs={tabs} active={activeTab} onSelect={setActiveTab}>
+          {/* Overview Tab — metadata fields left, last action + message right */}
+          {activeTab === 'overview' && (
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-xs">
+              {/* Left: reconciler metadata, evenly stacked */}
+              <div class="space-y-2.5 self-start">
+                <Field label="Resource"><ResourceLink kind={kind} namespace={namespace} name={name} /></Field>
+                <Field label={kind}><StatusBadge status={rStatus} /></Field>
+                <Field label="Reconciled by">{getControllerName(kind)}</Field>
+                <Field label="Reconcile every">{interval ? (timeout ? `${interval} (timeout ${timeout})` : interval) : null}</Field>
+                <Field label="Managed by">
+                  {managedBy ? (() => {
+                    const [rk, rn, rnm] = managedBy.split('/')
+                    return <ResourceLink kind={rk} namespace={rn} name={rnm} />
+                  })() : null}
+                </Field>
+              </div>
+
+              {/* Right: last action + reconciler message */}
+              {rMessage && (
+                <div class="space-y-1.5 self-start md:border-l md:border-gray-200 md:dark:border-gray-700 md:pl-8">
+                  {rLast && (
+                    <div class="text-gray-500 dark:text-gray-400">Last action <span class="text-gray-900 dark:text-gray-100">{formatTimestamp(rLast)}</span></div>
+                  )}
+                  <pre class="whitespace-pre-wrap break-words font-sans leading-relaxed text-gray-700 dark:text-gray-300">{rMessage}</pre>
+                </div>
               )}
-              {resourceData.status?.sourceRef && (
-                <button
-                  onClick={() => setActiveTab('source')}
-                  class={`py-2 px-1 text-sm font-medium border-b-2 transition-colors ${
-                    activeTab === 'source'
-                      ? 'border-flux-blue text-flux-blue dark:text-blue-400'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-                  }`}
-                >
-                  Source
-                </button>
-              )}
-              <button
-                onClick={() => setActiveTab('specification')}
-                class={`py-2 px-1 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === 'specification'
-                    ? 'border-flux-blue text-flux-blue dark:text-blue-400'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-                }`}
-              >
-                <span class="inline sm:hidden">Spec</span>
-                <span class="hidden sm:inline">Specification</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('status')}
-                class={`py-2 px-1 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === 'status'
-                    ? 'border-flux-blue text-flux-blue dark:text-blue-400'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-                }`}
-              >
-                Status
-              </button>
-            </nav>
-          </div>
+            </div>
+          )}
 
           {/* Inventory Tab */}
           {activeTab === 'inventory' && shouldShowInventoryTab && (
@@ -345,73 +356,35 @@ export function ResourceDetailsView({ kind, name, namespace, isExpanded }) {
             </div>
           )}
 
-          {/* Source Tab */}
+          {/* Source Tab — same "Resource: ns/name link" + "<kind>: status"
+              layout and link style as the Overview tab. */}
           {activeTab === 'source' && resourceData.status?.sourceRef && (
-            <div class="space-y-4">
-              {/* Resource Link */}
-              <a
-                href={getDashboardUrl(resourceData.status.sourceRef.kind, resourceData.status.sourceRef.namespace, resourceData.status.sourceRef.name)}
-                class="flex items-center gap-2 text-sm text-flux-blue dark:text-blue-400 hover:underline"
-              >
-                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                </svg>
-                <span class="hidden md:inline break-all">{resourceData.status.sourceRef.kind}/{resourceData.status.sourceRef.namespace}/{resourceData.status.sourceRef.name}</span>
-                <span class="md:hidden break-all">{getKindAlias(resourceData.status.sourceRef.kind)}/{resourceData.status.sourceRef.name}</span>
-              </a>
-
-              {/* Status Badge */}
-              {resourceData.status.sourceRef.status && (
-                <div class="text-sm">
-                  <span class="text-gray-500 dark:text-gray-400">Status</span>
-                  <span class={`ml-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeClass(resourceData.status.sourceRef.status)}`}>
-                    {resourceData.status.sourceRef.status}
-                  </span>
-                </div>
-              )}
-
-              {/* URL */}
-              <div class="text-sm">
-                <span class="text-gray-500 dark:text-gray-400">URL</span>
-                <span class="ml-1 text-gray-900 dark:text-white break-words">{resourceData.status.sourceRef.url}</span>
-              </div>
-
-              {/* Origin URL (if present) */}
-              {resourceData.status.sourceRef.originURL && (
-                <div class="text-sm">
-                  <span class="text-gray-500 dark:text-gray-400">Origin URL</span>
-                  <span class="ml-1 text-gray-900 dark:text-white break-words">{resourceData.status.sourceRef.originURL}</span>
-                </div>
-              )}
-
-              {/* Origin Revision (if present) */}
-              {resourceData.status.sourceRef.originRevision && (
-                <div class="text-sm">
-                  <span class="text-gray-500 dark:text-gray-400">Origin Revision</span>
-                  <span class="ml-1 text-gray-900 dark:text-white break-words">{resourceData.status.sourceRef.originRevision}</span>
-                </div>
-              )}
-
-              {/* Fetch result */}
-              {resourceData.status.sourceRef.message && (
-                <div class="text-sm">
-                  <span class="text-gray-500 dark:text-gray-400">Fetch result</span>
-                  <span class="ml-1 text-gray-900 dark:text-white break-words">{resourceData.status.sourceRef.message}</span>
-                </div>
-              )}
+            <div class="space-y-2.5 text-xs">
+              <Field label="Resource">
+                <ResourceLink
+                  kind={resourceData.status.sourceRef.kind}
+                  namespace={resourceData.status.sourceRef.namespace}
+                  name={resourceData.status.sourceRef.name}
+                />
+              </Field>
+              <Field label={resourceData.status.sourceRef.kind}><StatusBadge status={resourceData.status.sourceRef.status} /></Field>
+              <Field label="URL">{resourceData.status.sourceRef.url}</Field>
+              <Field label="Origin URL">{resourceData.status.sourceRef.originURL}</Field>
+              <Field label="Origin Revision">{resourceData.status.sourceRef.originRevision}</Field>
+              <Field label="Fetch result">{resourceData.status.sourceRef.message}</Field>
             </div>
           )}
 
           {/* Specification Tab */}
           {activeTab === 'specification' && (
-            <YamlBlock data={definitionData} />
+            <YamlBlock data={definitionData} nested />
           )}
 
           {/* Status Tab */}
           {activeTab === 'status' && (
-            <YamlBlock data={statusData} />
+            <YamlBlock data={statusData} nested />
           )}
-        </>
+        </TabbedPanel>
       )}
     </div>
   )

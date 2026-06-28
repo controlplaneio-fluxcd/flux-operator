@@ -6,6 +6,7 @@ import { fetchWithMock } from '../../../utils/fetch'
 import { formatTimestamp } from '../../../utils/time'
 import { getControllerName, getKindAlias } from '../../../utils/constants'
 import { getDashboardUrl } from '../../../utils/routing'
+import { getReconcileInterval, getReconcileTimeout } from '../../../utils/reconciler'
 import { DashboardPanel, TabButton } from '../common/panel'
 import { YamlBlock } from '../common/yaml'
 import { getStatusBadgeClass, getEventBadgeClass, cleanStatus } from '../../../utils/status'
@@ -40,66 +41,8 @@ export function ReconcilerPanel({ kind, name, namespace, resourceData }) {
   const message = reconcilerRef?.message || resourceData?.status?.conditions?.[0]?.message || ''
   const lastReconciled = reconcilerRef?.lastReconciled || resourceData?.status?.conditions?.[0]?.lastTransitionTime
 
-  const reconcileInterval = useMemo(() => {
-    if (!resourceData) return null
-
-    // Check spec.interval first
-    if (resourceData.spec?.interval) {
-      return resourceData.spec.interval
-    }
-
-    // Check annotation
-    const annotation = resourceData.metadata?.annotations?.['fluxcd.controlplane.io/reconcileEvery']
-    if (annotation) {
-      return annotation
-    }
-
-    // Apply defaults based on kind
-    const k = resourceData.kind
-    if (k === 'FluxInstance' || k === 'ResourceSet') {
-      return '60m'
-    }
-    if (k === 'ResourceSetInputProvider') {
-      return '10m'
-    }
-
-    return null
-  }, [resourceData])
-
-  const reconcileTimeout = useMemo(() => {
-    if (!resourceData) return null
-
-    const k = resourceData.kind
-    const spec = resourceData.spec || {}
-    const annotations = resourceData.metadata?.annotations || {}
-
-    // Any resource with spec.timeout field, use that value if set
-    if (spec.timeout) {
-      return spec.timeout
-    }
-
-    // Source types
-    if (resourceData.apiVersion && resourceData.apiVersion.startsWith('source.toolkit.fluxcd.io')) {
-      return '1m'
-    }
-
-    // Kustomization
-    if (k === 'Kustomization') {
-      return spec.interval || null
-    }
-
-    // HelmRelease
-    if (k === 'HelmRelease') {
-      return '5m'
-    }
-
-    // FluxInstance, ResourceSet, ResourceSetInputProvider
-    if (k === 'FluxInstance' || k === 'ResourceSet' || k === 'ResourceSetInputProvider') {
-      return annotations['fluxcd.controlplane.io/reconcileTimeout'] || '5m'
-    }
-
-    return null
-  }, [resourceData])
+  const reconcileInterval = useMemo(() => getReconcileInterval(resourceData), [resourceData])
+  const reconcileTimeout = useMemo(() => getReconcileTimeout(resourceData), [resourceData])
 
   // Memoized YAML data
   const specYaml = useMemo(() => {

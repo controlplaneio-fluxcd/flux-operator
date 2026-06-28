@@ -224,17 +224,20 @@ describe('EventList', () => {
       })
     })
 
-    it('should display event cards when data loads', async () => {
+    it('should display event rows when data loads', async () => {
       fetchWithMock.mockResolvedValue({ events: mockEvents })
 
       render(<EventList />)
 
+      // Each row renders the involved-object link twice (mobile + desktop layouts),
+      // so the name appears in two links.
       await waitFor(() => {
-        expect(screen.getAllByText(/flux-system/)).toHaveLength(3) // namespace + name in both cards
+        expect(screen.getAllByRole('link', { name: 'flux-system/flux-system' })).toHaveLength(2)
       })
-      expect(screen.getByText(/Fetched revision/)).toBeInTheDocument()
-      expect(screen.getByText('apps')).toBeInTheDocument()
-      expect(screen.getByText('Health check failed')).toBeInTheDocument()
+      expect(screen.getAllByText('apps')).toHaveLength(2)
+      // The message shows in the desktop one-line summary and again in the inline reveal.
+      expect(screen.getAllByText(/Fetched revision/).length).toBeGreaterThan(0)
+      expect(screen.getAllByText('Health check failed').length).toBeGreaterThan(0)
     })
 
     it('should show empty state when no events match filters', async () => {
@@ -262,18 +265,22 @@ describe('EventList', () => {
 
       render(<EventList />)
 
+      // The count renders once, in the FilterBar toolbar. (The desktop section
+      // count lives in the App tab nav, not this component.)
       await waitFor(() => {
-        expect(screen.getByText('2 events')).toBeInTheDocument()
+        expect(screen.getAllByText('2 events')).toHaveLength(1)
       })
     })
 
-    it('should not display event count when loading', async () => {
-      eventsData.value = []
+    it('should show a loading indicator instead of the count while loading', async () => {
+      eventsData.value = mockEvents
       eventsLoading.value = true
 
       render(<EventList />)
 
-      expect(screen.queryByText(/events$/)).not.toBeInTheDocument()
+      // While loading the FilterBar shows "Loading…" rather than a (stale) count.
+      expect(screen.getByText('Loading…')).toBeInTheDocument()
+      expect(screen.queryByText('2 events')).not.toBeInTheDocument()
     })
   })
 
@@ -361,8 +368,37 @@ describe('EventList', () => {
     })
   })
 
-  describe('EventCard rendering', () => {
-    it('should display event type badge as "Info" for Normal events', async () => {
+  describe('EventRow rendering', () => {
+    it('should render a severity-colored kind chip for Normal events', async () => {
+      fetchWithMock.mockResolvedValue({ events: [mockEvents[0]] })
+
+      render(<EventList />)
+
+      // GitRepository shortens to "gitrepo"; the chip is rendered for both the
+      // desktop top row and the mobile second line.
+      await waitFor(() => {
+        expect(screen.getAllByText('gitrepo').length).toBeGreaterThan(0)
+      })
+      screen.getAllByText('gitrepo').forEach((chip) => {
+        expect(chip.className).toContain('bg-green-100')
+      })
+    })
+
+    it('should render a severity-colored kind chip for Warning events', async () => {
+      fetchWithMock.mockResolvedValue({ events: [mockEvents[1]] })
+
+      render(<EventList />)
+
+      // Kustomization shortens to "ks"; Warning events get the red chip palette.
+      await waitFor(() => {
+        expect(screen.getAllByText('ks').length).toBeGreaterThan(0)
+      })
+      screen.getAllByText('ks').forEach((chip) => {
+        expect(chip.className).toContain('bg-red-100')
+      })
+    })
+
+    it('should display the severity word "Info" for Normal events', async () => {
       fetchWithMock.mockResolvedValue({ events: [mockEvents[0]] })
 
       render(<EventList />)
@@ -372,7 +408,7 @@ describe('EventList', () => {
       })
     })
 
-    it('should display event type badge as "Warning" for Warning events', async () => {
+    it('should display the severity word "Warning" for Warning events', async () => {
       fetchWithMock.mockResolvedValue({ events: [mockEvents[1]] })
 
       render(<EventList />)
@@ -381,46 +417,81 @@ describe('EventList', () => {
         expect(screen.getByText('Warning')).toBeInTheDocument()
       })
     })
+  })
 
-    it('should show expand button for long messages', async () => {
-      const longMessage = 'a'.repeat(200)
-      fetchWithMock.mockResolvedValue({ events: [{
-        ...mockEvents[0],
-        message: longMessage
-      }] })
+  describe('Inline message reveal', () => {
+    it('should render a details toggle for each event', async () => {
+      fetchWithMock.mockResolvedValue({ events: mockEvents })
 
       render(<EventList />)
 
       await waitFor(() => {
-        expect(screen.getByText('Show more')).toBeInTheDocument()
+        expect(screen.getAllByLabelText('Toggle event details')).toHaveLength(2)
       })
     })
 
-    it('should expand message when show more is clicked', async () => {
-      const longMessage = 'a'.repeat(200)
-      fetchWithMock.mockResolvedValue({ events: [{
-        ...mockEvents[0],
-        message: longMessage
-      }] })
+    it('should reveal the full message inline when expanded, with no spinner or fetch', async () => {
+      const fullMessage = 'Line one of the event\nLine two with more detail'
+      fetchWithMock.mockResolvedValue({ events: [{ ...mockEvents[0], message: fullMessage }] })
 
-      render(<EventList />)
+      const { container } = render(<EventList />)
 
-      const showMoreButton = await screen.findByText('Show more')
-      fireEvent.click(showMoreButton)
+      const toggle = await screen.findByLabelText('Toggle event details')
 
-      expect(screen.getByText('Show less')).toBeInTheDocument()
+      // Collapsed before expanding, and only the mount fetch has run.
+      const reveal = container.querySelector('[class*="grid-rows-"]')
+      expect(reveal.className).toContain('grid-rows-[0fr]')
+      expect(fetchWithMock).toHaveBeenCalledTimes(1)
+
+      fireEvent.click(toggle)
+
+      // Expanded: the animated reveal opens and shows the full message verbatim.
+      await waitFor(() => {
+        expect(container.querySelector('[class*="grid-rows-"]').className).toContain('grid-rows-[1fr]')
+      })
+      const pre = container.querySelector('pre')
+      expect(pre).toBeInTheDocument()
+      expect(pre.textContent).toBe(fullMessage)
+
+      // Events carry their message in the list, so expanding triggers no extra
+      // fetch and shows no loading spinner.
+      expect(fetchWithMock).toHaveBeenCalledTimes(1)
+      expect(container.querySelector('.animate-spin')).not.toBeInTheDocument()
+    })
+
+    it('should collapse the reveal again when the toggle is clicked twice', async () => {
+      fetchWithMock.mockResolvedValue({ events: [mockEvents[0]] })
+
+      const { container } = render(<EventList />)
+
+      const toggle = await screen.findByLabelText('Toggle event details')
+
+      fireEvent.click(toggle)
+      await waitFor(() => {
+        expect(container.querySelector('[class*="grid-rows-"]').className).toContain('grid-rows-[1fr]')
+      })
+
+      fireEvent.click(toggle)
+      await waitFor(() => {
+        expect(container.querySelector('[class*="grid-rows-"]').className).toContain('grid-rows-[0fr]')
+      })
     })
   })
 
   describe('Navigation to resource dashboard', () => {
-    it('should have correct href on resource name link', async () => {
+    it('should link the involved object to its dashboard', async () => {
       fetchWithMock.mockResolvedValue({ events: [mockEvents[0]] })
 
       render(<EventList />)
 
-      // Wait for events to load and find the resource name link
-      const resourceLink = await screen.findByRole('link', { name: /flux-system\/flux-system/ })
-      expect(resourceLink).toHaveAttribute('href', '/resource/GitRepository/flux-system/flux-system')
+      // The name link is rendered twice (mobile + desktop); both point at the
+      // involved object's dashboard.
+      await waitFor(() => {
+        expect(screen.getAllByRole('link', { name: 'flux-system/flux-system' })).toHaveLength(2)
+      })
+      screen.getAllByRole('link', { name: 'flux-system/flux-system' }).forEach((link) => {
+        expect(link).toHaveAttribute('href', '/resource/GitRepository/flux-system/flux-system')
+      })
     })
 
     it('should have correct href for different resource', async () => {
@@ -428,20 +499,12 @@ describe('EventList', () => {
 
       render(<EventList />)
 
-      const resourceLink = await screen.findByRole('link', { name: /flux-system\/apps/ })
-      expect(resourceLink).toHaveAttribute('href', '/resource/Kustomization/flux-system/apps')
-    })
-
-    it('should display navigation icon in resource link', async () => {
-      fetchWithMock.mockResolvedValue({ events: [mockEvents[0]] })
-
-      render(<EventList />)
-
-      const resourceLink = await screen.findByRole('link', { name: /flux-system\/flux-system/ })
-      const svg = resourceLink.querySelector('svg')
-
-      expect(svg).toBeInTheDocument()
-      expect(svg).toHaveAttribute('viewBox', '0 0 24 24')
+      await waitFor(() => {
+        expect(screen.getAllByRole('link', { name: 'flux-system/apps' })).toHaveLength(2)
+      })
+      screen.getAllByRole('link', { name: 'flux-system/apps' }).forEach((link) => {
+        expect(link).toHaveAttribute('href', '/resource/Kustomization/flux-system/apps')
+      })
     })
   })
 })

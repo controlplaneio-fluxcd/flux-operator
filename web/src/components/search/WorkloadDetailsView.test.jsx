@@ -96,13 +96,14 @@ describe('WorkloadDetailsView component', () => {
       <WorkloadDetailsView kind="Deployment" name="podinfo" namespace="apps" isExpanded={true} />
     )
 
-    expect(screen.getByText('Loading details...')).toBeInTheDocument()
-    expect(document.querySelector('.animate-spin')).toBeInTheDocument()
+    // The inline panel renders a plain loading line; the spinner lives on the
+    // parent row and is swapped out via the onReady callback once the fetch settles.
+    expect(screen.getByText('Loading details…')).toBeInTheDocument()
 
     resolvePromise(mockWorkloadData)
 
     await waitFor(() => {
-      expect(screen.queryByText('Loading details...')).not.toBeInTheDocument()
+      expect(screen.queryByText('Loading details…')).not.toBeInTheDocument()
     })
   })
 
@@ -110,19 +111,32 @@ describe('WorkloadDetailsView component', () => {
     fetchWithMock.mockResolvedValue(mockWorkloadData)
 
     render(
-      <WorkloadDetailsView kind="Deployment" name="podinfo" namespace="apps" isExpanded={true} />
+      <WorkloadDetailsView
+        kind="Deployment"
+        name="podinfo"
+        namespace="apps"
+        reconcilerKind="Kustomization"
+        reconcilerNamespace="flux-system"
+        reconcilerName="apps"
+        isExpanded={true}
+      />
     )
 
     await waitFor(() => {
       expect(screen.getByText('Service account')).toBeInTheDocument()
     })
 
+    // Overview is the default tab in the TabbedPanel: kind badge + metadata fields.
+    expect(screen.getByRole('button', { name: 'Overview' })).toBeInTheDocument()
     expect(screen.getByText('Service account')).toBeInTheDocument()
     expect(screen.getByText('podinfo')).toBeInTheDocument()
-    expect(screen.getByText('Ports')).toBeInTheDocument()
-    expect(screen.getByText('9797, 9898')).toBeInTheDocument()
+    // Managed-by renders a namespace/name link to the parent reconciler.
+    expect(screen.getByText('Managed by')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'flux-system/apps' })).toHaveAttribute('href', '/resource/Kustomization/flux-system/apps')
     expect(screen.getByText('Pods')).toBeInTheDocument()
-    expect(screen.getByText('2/2 ready')).toBeInTheDocument()
+    // Primary readiness plus the phase breakdown in parentheses.
+    expect(screen.getByText('2/2 ready (2 running)')).toBeInTheDocument()
+    // YAML-only fields are not surfaced on the Overview tab.
     expect(screen.queryByText('Strategy')).not.toBeInTheDocument()
   })
 
@@ -134,11 +148,12 @@ describe('WorkloadDetailsView component', () => {
       <WorkloadDetailsView kind="Deployment" name="podinfo" namespace="apps" isExpanded={true} />
     )
 
+    // The compact rail uses a short "Spec" label for the specification tab.
     await waitFor(() => {
-      expect(screen.getByText('Specification')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Spec' })).toBeInTheDocument()
     })
 
-    await user.click(screen.getByText('Specification'))
+    await user.click(screen.getByRole('button', { name: 'Spec' }))
 
     await waitFor(() => {
       const codeElement = document.querySelector('.language-yaml')
@@ -159,10 +174,10 @@ describe('WorkloadDetailsView component', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('Specification')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Spec' })).toBeInTheDocument()
     })
 
-    // The Status tab button is disambiguated from the Overview "Status" label by role.
+    // Select the Status tab from the rail (a button, not the Overview field label).
     await user.click(screen.getByRole('button', { name: 'Status' }))
 
     await waitFor(() => {
@@ -212,6 +227,32 @@ describe('WorkloadDetailsView component', () => {
     expect(screen.queryByRole('button', { name: 'Events' })).not.toBeInTheDocument()
     expect(screen.queryByTestId('logs-pod-button')).not.toBeInTheDocument()
     expect(screen.queryByTestId('workload-delete-action')).not.toBeInTheDocument()
+  })
+
+  it('should call onReady once the fetch settles successfully', async () => {
+    fetchWithMock.mockResolvedValue(mockWorkloadData)
+    const onReady = vi.fn()
+
+    render(
+      <WorkloadDetailsView kind="Deployment" name="podinfo" namespace="apps" isExpanded={true} onReady={onReady} />
+    )
+
+    await waitFor(() => {
+      expect(onReady).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  it('should call onReady even when the fetch fails', async () => {
+    fetchWithMock.mockRejectedValue(new Error('forbidden'))
+    const onReady = vi.fn()
+
+    render(
+      <WorkloadDetailsView kind="Deployment" name="podinfo" namespace="apps" isExpanded={true} onReady={onReady} />
+    )
+
+    await waitFor(() => {
+      expect(onReady).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('should fetch only once across collapse and re-expand', async () => {

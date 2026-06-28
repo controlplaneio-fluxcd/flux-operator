@@ -13,9 +13,17 @@ import { getDashboardUrl } from '../../utils/routing'
  * @param {Object} props
  * @param {Object} props.favorite - Favorite object with kind, namespace, name
  * @param {Object} props.resourceData - Resource data with status, lastReconciled (may be null if not found)
+ * @param {boolean} [props.loading] - True while the initial status fetch is in flight.
+ *   The favorite itself comes from local storage and renders instantly; this only
+ *   gates the per-card status placeholders.
  */
-export function FavoriteCard({ favorite, resourceData }) {
+export function FavoriteCard({ favorite, resourceData, loading = false }) {
   const { kind, namespace, name } = favorite
+
+  // Until the first status fetch settles, resourceData is null. Show skeleton
+  // placeholders (instead of an "Unknown" badge and a shorter card) so the card
+  // keeps its final height and the live status fills in without a layout jump.
+  const isLoading = loading && !resourceData
 
   // Handle unfavorite - need both preventDefault and stopPropagation
   // preventDefault: prevents the anchor's default navigation
@@ -41,7 +49,7 @@ export function FavoriteCard({ favorite, resourceData }) {
   return (
     <a
       href={getDashboardUrl(kind, namespace, name)}
-      class={`card border-l-4 p-4 hover:shadow-md transition-shadow dark:shadow-none cursor-pointer text-left w-full block ${getStatusBorderClass(status)} ${notFound ? 'opacity-60' : ''}`}
+      class={`card border-l-4 p-4 hover:shadow-md transition-shadow dark:shadow-none cursor-pointer text-left w-full block ${isLoading ? 'border-gray-200 dark:border-gray-700' : getStatusBorderClass(status)} ${notFound ? 'opacity-60' : ''}`}
     >
       {/* Header row: star + kind + status badge */}
       <div class="flex items-center justify-between mb-2">
@@ -59,9 +67,13 @@ export function FavoriteCard({ favorite, resourceData }) {
           <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
             {kind}
           </span>
-          <span class={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${notFound ? 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400' : badgeClass}`}>
-            {displayStatus}
-          </span>
+          {isLoading ? (
+            <span class="inline-block h-5 w-16 rounded-full bg-gray-200 dark:bg-gray-700 animate-pulse" />
+          ) : (
+            <span class={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${notFound ? 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400' : badgeClass}`}>
+              {displayStatus}
+            </span>
+          )}
         </div>
       </div>
 
@@ -102,8 +114,25 @@ export function FavoriteCard({ favorite, resourceData }) {
             <span class="truncate">{namespace}</span>
           </div>
 
+          {/* While the initial status fetch is in flight, hold the card's height
+              with skeleton rows that stand in for the timestamp and message. */}
+          {isLoading && (
+            <>
+              {/* h-5 matches the text-sm line height of the real rows below, so the
+                  card height is identical loading vs loaded (no jump on settle). */}
+              <div class="flex items-center gap-1.5 h-5">
+                <div class="w-4 h-4 rounded bg-gray-200 dark:bg-gray-700 animate-pulse flex-shrink-0" />
+                <div class="h-3.5 w-24 rounded bg-gray-200 dark:bg-gray-700 animate-pulse" />
+              </div>
+              <div class="flex items-center gap-1.5 h-5">
+                <div class="w-4 h-4 rounded bg-gray-200 dark:bg-gray-700 animate-pulse flex-shrink-0" />
+                <div class="h-3.5 w-32 rounded bg-gray-200 dark:bg-gray-700 animate-pulse" />
+              </div>
+            </>
+          )}
+
           {/* Last reconciled timestamp */}
-          {lastReconciled && (
+          {!isLoading && lastReconciled && (
             <div class="flex items-center gap-1.5 text-sm text-gray-700 dark:text-gray-300">
               <svg class="w-4 h-4 text-gray-400 dark:text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />

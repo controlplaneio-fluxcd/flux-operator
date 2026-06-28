@@ -197,15 +197,8 @@ describe('FavoritesPage component', () => {
       })
     })
 
-    it('should show favorites count in title section', async () => {
-      favorites.value = mockFavorites
-
-      render(<FavoritesPage />)
-
-      await waitFor(() => {
-        expect(screen.getByText('3 resources')).toBeInTheDocument()
-      })
-    })
+    // The favorites count now lives in the section tab bar (see app.test.jsx),
+    // not in the page body, so it is asserted there rather than here.
   })
 
   describe('filtering', () => {
@@ -412,16 +405,6 @@ describe('FavoritesPage component', () => {
         const card = screen.getByTestId('favorite-card-deleted-resource')
         expect(card.querySelector('[data-testid="card-status"]')).toHaveTextContent('null')
       })
-    })
-  })
-
-  describe('page title', () => {
-    it('should display "Favorites" title', () => {
-      favorites.value = mockFavorites
-
-      render(<FavoritesPage />)
-
-      expect(screen.getByText('Favorites')).toBeInTheDocument()
     })
   })
 
