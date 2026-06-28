@@ -22,7 +22,9 @@ import { fluxCRDs } from '../../../utils/constants'
  * - Docs icon link opens documentation in new tab
  */
 function ReconcilerCard({ crd, stats, isInstalled }) {
-  const total = (stats.failing || 0) + (stats.running || 0) + (stats.suspended || 0)
+  // Running already includes failing resources (failing is a subset of running),
+  // so the total is running + suspended to avoid double-counting failures.
+  const total = (stats.running || 0) + (stats.suspended || 0)
 
   // Determine status color - gray for not installed CRDs
   const getStatusColor = () => {
@@ -201,8 +203,10 @@ export function ReconcilersPanel({ reconcilers }) {
   // Track which CRDs are installed (have data from the API)
   const installedKinds = new Set(reconcilers.map(r => r.kind))
 
+  // Running already includes failing resources (failing is a subset of running),
+  // so the total is running + suspended to avoid double-counting failures.
   const totalResources = reconcilers.reduce((sum, r) => {
-    return sum + (r.stats.failing || 0) + (r.stats.running || 0) + (r.stats.suspended || 0)
+    return sum + (r.stats.running || 0) + (r.stats.suspended || 0)
   }, 0)
 
   const totalFailing = reconcilers.reduce((sum, r) => sum + (r.stats.failing || 0), 0)
