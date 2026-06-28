@@ -8,7 +8,7 @@ import { usePrismTheme, YamlBlock } from '../dashboards/common/yaml'
 import { isKindWithInventory, getControllerName, isFluxInventoryItem, isWorkloadInventoryItem } from '../../utils/constants'
 import { getDashboardUrl } from '../../utils/routing'
 import { cleanStatus } from '../../utils/status'
-import { getReconcileInterval, getReconcileTimeout } from '../../utils/reconciler'
+import { getReconcileInterval, getReconcileTimeout, getReconcilerSummary } from '../../utils/reconciler'
 import { FluxOperatorIcon } from '../layout/Icons'
 import { TabbedPanel, Field, ResourceLink, StatusBadge } from './detailPanel'
 
@@ -262,12 +262,11 @@ export function ResourceDetailsView({ kind, name, namespace, isExpanded, status,
   // Get inventory count
   const inventoryCount = resourceData?.status?.inventory?.length || 0
 
-  // Overview derivations (mirror the Resource dashboard Reconciler panel). All use
-  // optional chaining so they are safe before the data lands.
-  const reconcilerRef = resourceData?.status?.reconcilerRef
+  // Overview derivations (mirror the Resource dashboard Reconciler panel). The
+  // shared summary falls back to the first status condition; rStatus additionally
+  // folds in the row's listed `status` prop before the detail data lands.
+  const { ref: reconcilerRef, message: rMessage, lastReconciled: rLast } = getReconcilerSummary(resourceData)
   const rStatus = reconcilerRef?.status || status || 'Unknown'
-  const rMessage = reconcilerRef?.message || resourceData?.status?.conditions?.[0]?.message || ''
-  const rLast = reconcilerRef?.lastReconciled || resourceData?.status?.conditions?.[0]?.lastTransitionTime
   const interval = getReconcileInterval(resourceData)
   const timeout = getReconcileTimeout(resourceData)
   const managedBy = reconcilerRef?.managedBy

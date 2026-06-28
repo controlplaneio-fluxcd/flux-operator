@@ -6,7 +6,7 @@ import { fetchWithMock } from '../../../utils/fetch'
 import { formatTimestamp } from '../../../utils/time'
 import { getControllerName, getKindAlias } from '../../../utils/constants'
 import { getDashboardUrl } from '../../../utils/routing'
-import { getReconcileInterval, getReconcileTimeout } from '../../../utils/reconciler'
+import { getReconcileInterval, getReconcileTimeout, getReconcilerSummary } from '../../../utils/reconciler'
 import { DashboardPanel, TabButton } from '../common/panel'
 import { YamlBlock } from '../common/yaml'
 import { getStatusBadgeClass, getEventBadgeClass, cleanStatus } from '../../../utils/status'
@@ -36,10 +36,7 @@ export function ReconcilerPanel({ kind, name, namespace, resourceData }) {
   }, [kind, namespace, name])
 
   // Derived data
-  const reconcilerRef = resourceData?.status?.reconcilerRef
-  const status = reconcilerRef?.status || 'Unknown'
-  const message = reconcilerRef?.message || resourceData?.status?.conditions?.[0]?.message || ''
-  const lastReconciled = reconcilerRef?.lastReconciled || resourceData?.status?.conditions?.[0]?.lastTransitionTime
+  const { ref: reconcilerRef, status, message, lastReconciled } = getReconcilerSummary(resourceData)
 
   const reconcileInterval = useMemo(() => getReconcileInterval(resourceData), [resourceData])
   const reconcileTimeout = useMemo(() => getReconcileTimeout(resourceData), [resourceData])

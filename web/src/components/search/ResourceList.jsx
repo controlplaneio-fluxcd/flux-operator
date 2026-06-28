@@ -15,7 +15,7 @@ import { getDashboardUrl, useRestoreFiltersFromUrl, useSyncFiltersToUrl } from '
 import { StatusChart } from './StatusChart'
 import { useInfiniteScroll } from '../../utils/scroll'
 import { isFavorite, toggleFavorite, favorites } from '../../utils/favorites'
-import { Star, KindChip, NameLink, Chevron, Spinner, useDisclosure, Reveal } from './compactRow'
+import { Star, KindChip, NameLink, Chevron, Spinner, useDisclosure, Reveal, patchRowInSignal } from './compactRow'
 
 // Resources data signals
 export const resourcesData = signal([])
@@ -71,7 +71,7 @@ export async function fetchResourcesStatus() {
  *
  * Expanding the row lazily mounts {@link ResourceDetailsView}: the expand button
  * spins while the panel fetches, then the panel animates open once `onReady`
- * fires. The panel stays mounted after the first load so re-opening is instant.
+ * fires. Collapsing unmounts the panel, so each expand re-fetches fresh data.
  */
 function ResourceRow({ resource }) {
   const d = useDisclosure()
@@ -87,6 +87,8 @@ function ResourceRow({ resource }) {
   }
 
   const dashboardUrl = getDashboardUrl(resource.kind, resource.namespace, resource.name)
+  const chipColor = getStatusBadgeClass(resource.status)
+  const chipTitle = `${resource.kind} · ${resource.status}`
 
   // When the detail panel finishes loading, refresh this row's summary from the
   // detail's reconcilerRef (computed by the same server NewResourceStatus the list
@@ -95,11 +97,7 @@ function ResourceRow({ resource }) {
   const handleData = (data) => {
     const ref = data?.status?.reconcilerRef
     if (!ref) return
-    const cur = resourcesData.value.find(r =>
-      r.kind === resource.kind && r.namespace === resource.namespace && r.name === resource.name)
-    if (!cur || (cur.status === ref.status && cur.message === ref.message && cur.lastReconciled === ref.lastReconciled)) return
-    resourcesData.value = resourcesData.value.map(r =>
-      r === cur ? { ...r, status: ref.status, message: ref.message, lastReconciled: ref.lastReconciled } : r)
+    patchRowInSignal(resourcesData, resource, { status: ref.status, message: ref.message, lastReconciled: ref.lastReconciled })
   }
 
   return (
@@ -107,7 +105,7 @@ function ResourceRow({ resource }) {
       <div class="px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700/30">
         <div class="flex items-center gap-2.5">
           <Star active={isFavorited} onClick={handleFavoriteClick} />
-          <KindChip kind={resource.kind} colorClass={getStatusBadgeClass(resource.status)} title={`${resource.kind} · ${resource.status}`} cls="hidden sm:inline-block" />
+          <KindChip kind={resource.kind} colorClass={chipColor} title={chipTitle} cls="hidden sm:inline-block" />
           <NameLink href={dashboardUrl} namespace={resource.namespace} name={resource.name} />
           <span class="hidden sm:block flex-1 min-w-0 truncate text-xs text-gray-500 dark:text-gray-400">{resource.message}</span>
           <span class="hidden sm:block shrink-0 text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap tabular-nums">{formatTimestamp(resource.lastReconciled)}</span>
@@ -115,7 +113,7 @@ function ResourceRow({ resource }) {
         </div>
         {/* Mobile-only second line: colored kind pill + status word + timestamp. */}
         <div class="sm:hidden mt-1 pl-[30px] flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
-          <KindChip kind={resource.kind} colorClass={getStatusBadgeClass(resource.status)} title={`${resource.kind} · ${resource.status}`} />
+          <KindChip kind={resource.kind} colorClass={chipColor} title={chipTitle} />
           <span class="whitespace-nowrap"><span class="capitalize">{resource.status}</span> {formatTimestamp(resource.lastReconciled)}</span>
         </div>
       </div>
@@ -192,7 +190,7 @@ export function ResourceList() {
 
   return (
     <main data-testid="resource-list" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8 flex-grow w-full">
-      <div class="space-y-6">
+      <div class="space-y-3">
         {/* Toolbar: count + mobile Filters toggle, FilterForm, desktop StatusChart */}
         <FilterBar
           count={resourcesData.value.length}

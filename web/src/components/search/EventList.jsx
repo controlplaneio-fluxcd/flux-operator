@@ -80,12 +80,14 @@ function EventRow({ event }) {
 
   // One-word severity label for the chip tooltip and the mobile second line.
   const severity = event.type === 'Warning' ? 'Warning' : 'Info'
+  const chipColor = getEventBadgeClass(event.type)
+  const chipTitle = `${kind} · ${severity}`
 
   return (
     <div class="border-b border-gray-100 dark:border-gray-700/60 last:border-0">
       <div class="px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700/30">
         <div class="flex items-center gap-2.5">
-          <KindChip kind={kind} colorClass={getEventBadgeClass(event.type)} title={`${kind} · ${severity}`} cls="hidden sm:inline-block" />
+          <KindChip kind={kind} colorClass={chipColor} title={chipTitle} cls="hidden sm:inline-block" />
           <NameLink href={resourceUrl} namespace={event.namespace} name={name} cls="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flux-blue" />
           <span class="hidden sm:block flex-1 min-w-0 truncate text-xs text-gray-500 dark:text-gray-400">{event.message}</span>
           <span class="hidden sm:block shrink-0 text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap tabular-nums">{formatTimestamp(event.lastTimestamp)}</span>
@@ -93,7 +95,7 @@ function EventRow({ event }) {
         </div>
         {/* Mobile-only second line: colored kind pill + severity word + timestamp. */}
         <div class="sm:hidden mt-1 flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
-          <KindChip kind={kind} colorClass={getEventBadgeClass(event.type)} title={`${kind} · ${severity}`} />
+          <KindChip kind={kind} colorClass={chipColor} title={chipTitle} />
           <span class="whitespace-nowrap"><span class="capitalize">{severity}</span> {formatTimestamp(event.lastTimestamp)}</span>
         </div>
       </div>

@@ -7,6 +7,26 @@
 // panel, so the two never drift.
 
 /**
+ * getReconcilerSummary - the reconciler status/message/lastReconciled triple for a
+ * resource, preferring the server-computed status.reconcilerRef and falling back to
+ * the first status condition. Shared by the resource dashboard Reconciler panel and
+ * the compact resource detail panel so the two never drift.
+ *
+ * @param {Object} resourceData - The full resource object (status.reconcilerRef, status.conditions)
+ * @returns {{ref: Object|undefined, status: string, message: string, lastReconciled: string|undefined}}
+ */
+export function getReconcilerSummary(resourceData) {
+  const ref = resourceData?.status?.reconcilerRef
+  const firstCondition = resourceData?.status?.conditions?.[0]
+  return {
+    ref,
+    status: ref?.status || 'Unknown',
+    message: ref?.message || firstCondition?.message || '',
+    lastReconciled: ref?.lastReconciled || firstCondition?.lastTransitionTime
+  }
+}
+
+/**
  * getReconcileInterval - the effective reconcile interval for a resource:
  * spec.interval, else the reconcileEvery annotation, else the per-kind default
  * (60m for FluxInstance/ResourceSet, 10m for ResourceSetInputProvider), else null.

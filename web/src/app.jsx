@@ -101,34 +101,27 @@ export async function fetchFluxReport() {
  * TabNavigation - Tab navigation for switching between Favorites, Resources, and Events views
  */
 // Section tabs rendered as classic underline tabs: the active tab gets a
-// flux-blue bottom border and label.
-const NAV_TABS = [
-  { href: '/favorites', label: 'Favorites' },
-  { href: '/resources', label: 'Resources' },
-  { href: '/workloads', label: 'Workloads' },
-  { href: '/events', label: 'Events' },
+// flux-blue bottom border and label. Each entry also carries the result-count
+// `data` signal (and `loading` signal, where the list fetches) folded into the
+// active tab's count on the right. Favorites are read straight from local storage,
+// so there is no loading signal — just the favorite count.
+const SECTION_TABS = [
+  { href: '/favorites', label: 'Favorites', countLabel: 'favorites', data: favorites },
+  { href: '/resources', label: 'Resources', countLabel: 'resources', data: resourcesData, loading: resourcesLoading },
+  { href: '/workloads', label: 'Workloads', countLabel: 'workloads', data: workloadsData, loading: workloadsLoading },
+  { href: '/events', label: 'Events', countLabel: 'events', data: eventsData, loading: eventsLoading },
 ]
-
-// Result count + loading signals per section, folded into the active tab.
-// Keyed by path so the nav reflects the active list. Favorites are read straight
-// from local storage, so there is no loading signal — just the favorite count.
-const TAB_META = {
-  '/favorites': { data: favorites, label: 'favorites' },
-  '/resources': { data: resourcesData, loading: resourcesLoading, label: 'resources' },
-  '/workloads': { data: workloadsData, loading: workloadsLoading, label: 'workloads' },
-  '/events': { data: eventsData, loading: eventsLoading, label: 'events' },
-}
 
 function TabNavigation() {
   const location = useLocation()
   const currentPath = location.path
-  const meta = TAB_META[currentPath]
+  const meta = SECTION_TABS.find(tab => tab.href === currentPath)
 
   return (
     <div class="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8">
       <div class="flex items-end justify-between gap-3 border-b border-gray-200 dark:border-gray-700">
         <nav class="flex gap-6 sm:gap-8">
-          {NAV_TABS.map(tab => (
+          {SECTION_TABS.map(tab => (
             <a
               key={tab.href}
               href={tab.href}
@@ -153,7 +146,7 @@ function TabNavigation() {
                 <span>Loading…</span>
               </>
             ) : (
-              meta.data?.value?.length > 0 && <span>{meta.data.value.length} {meta.label}</span>
+              meta.data?.value?.length > 0 && <span>{meta.data.value.length} {meta.countLabel}</span>
             )}
           </div>
         )}

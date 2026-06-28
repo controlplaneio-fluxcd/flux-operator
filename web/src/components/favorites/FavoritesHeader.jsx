@@ -81,7 +81,7 @@ export function FavoritesHeader({
   // Edit mode: show Save and Cancel icon buttons
   if (editMode) {
     return (
-      <div class="card p-4">
+      <div class="card px-3 py-2.5">
         <div class="flex items-center justify-between">
           <div class="text-sm text-gray-600 dark:text-gray-400">
             Drag to reorder favorites
@@ -90,7 +90,7 @@ export function FavoritesHeader({
             {/* Cancel button */}
             <button
               onClick={onCancelEdit}
-              class="inline-flex items-center justify-center p-2 text-gray-600 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors focus:outline-none focus:ring-2 focus:ring-flux-blue rounded-md"
+              class="inline-flex items-center justify-center p-1 text-gray-600 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors focus:outline-none focus:ring-2 focus:ring-flux-blue rounded-md"
               title="Cancel"
             >
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -100,7 +100,7 @@ export function FavoritesHeader({
             {/* Save button */}
             <button
               onClick={onSaveOrder}
-              class="inline-flex items-center justify-center p-2 text-gray-600 dark:text-gray-400 hover:text-green-500 dark:hover:text-green-400 transition-colors focus:outline-none focus:ring-2 focus:ring-flux-blue rounded-md"
+              class="inline-flex items-center justify-center p-1 text-gray-600 dark:text-gray-400 hover:text-green-500 dark:hover:text-green-400 transition-colors focus:outline-none focus:ring-2 focus:ring-flux-blue rounded-md"
               title="Save"
             >
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -116,7 +116,7 @@ export function FavoritesHeader({
   // Search mode: show search input
   if (searchMode) {
     return (
-      <div class="card p-4">
+      <div class="card px-3 py-2.5">
         <FavoritesSearch
           onFilter={onFilter}
           onClose={handleSearchClose}
@@ -128,23 +128,27 @@ export function FavoritesHeader({
   }
 
   // Normal mode: show status bar with edit and search buttons on the same line.
-  // On mobile the card is compacted to the same collapsed height as the Resources
-  // filter bar (px-3 py-2.5 + a 28px row); on desktop it keeps the roomier layout.
+  // Sized to match the shared compact FilterBar (px-3 py-2.5 + a 28px row) at every
+  // breakpoint, so the favorites toolbar is no taller than the other search pages.
   return (
-    <div class="card px-3 py-2.5 sm:p-4">
+    <div class="card px-3 py-2.5">
       {/* Status bar with buttons on the right */}
       <div class="flex items-center gap-3">
-        {/* Status bar - takes remaining space (28px on mobile, 32px on desktop) */}
-        <div class="relative flex gap-0 flex-1 h-7 sm:h-8">
+        {/* Status bar - takes remaining space (28px, matching the FilterBar row) */}
+        <div class="relative flex gap-0 flex-1 h-7">
           {loading ? (
-            <div class="w-full h-full bg-gray-200 dark:bg-gray-700 animate-pulse" />
+            <div class="w-full h-full bg-gray-200 dark:bg-gray-700 rounded-full animate-pulse" />
           ) : statusBars.length === 0 ? (
-            <div class="w-full h-full bg-gray-200 dark:bg-gray-700" />
+            <div class="w-full h-full bg-gray-200 dark:bg-gray-700 rounded-full" />
           ) : (
             statusBars.map((bar, index) => {
               const colorClass = getStatusBarColor(bar.status)
               const isActive = statusFilter === bar.status
               const isFaded = statusFilter && !isActive
+              // Round only the outer ends so the whole bar reads as a single pill
+              // (like the Resources status chart). Done per-segment instead of
+              // clipping the row with overflow-hidden, which would crop the tooltip.
+              const roundCls = `${index === 0 ? 'rounded-l-full' : ''} ${index === statusBars.length - 1 ? 'rounded-r-full' : ''}`
 
               return (
                 <div
@@ -155,7 +159,7 @@ export function FavoritesHeader({
                   onMouseLeave={() => setHoveredBar(null)}
                   onClick={() => onStatusFilter(statusFilter === bar.status ? null : bar.status)}
                 >
-                  <div class={`h-full ${colorClass} cursor-pointer transition-opacity ${isFaded ? 'opacity-30' : 'hover:opacity-80'}`} />
+                  <div class={`h-full ${colorClass} ${roundCls} cursor-pointer transition-opacity ${isFaded ? 'opacity-30' : 'hover:opacity-80'}`} />
 
                   {/* Tooltip - hidden on mobile */}
                   {hoveredBar === index && (
@@ -182,7 +186,7 @@ export function FavoritesHeader({
           {/* Edit order button */}
           <button
             onClick={onEditModeToggle}
-            class="inline-flex items-center justify-center p-1 sm:p-2 text-gray-600 dark:text-gray-400 hover:text-flux-blue dark:hover:text-blue-400 transition-colors focus:outline-none focus:ring-2 focus:ring-flux-blue rounded-md"
+            class="inline-flex items-center justify-center p-1 text-gray-600 dark:text-gray-400 hover:text-flux-blue dark:hover:text-blue-400 transition-colors focus:outline-none focus:ring-2 focus:ring-flux-blue rounded-md"
             title="Edit order"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -193,7 +197,7 @@ export function FavoritesHeader({
           {/* Search button */}
           <button
             onClick={handleSearchOpen}
-            class="inline-flex items-center justify-center p-1 sm:p-2 text-gray-600 dark:text-gray-400 hover:text-flux-blue dark:hover:text-blue-400 transition-colors focus:outline-none focus:ring-2 focus:ring-flux-blue rounded-md"
+            class="inline-flex items-center justify-center p-1 text-gray-600 dark:text-gray-400 hover:text-flux-blue dark:hover:text-blue-400 transition-colors focus:outline-none focus:ring-2 focus:ring-flux-blue rounded-md"
             title="Search favorites"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -154,6 +154,27 @@ export function useDisclosure() {
 }
 
 /**
+ * patchRowInSignal - refresh a single row inside a list signal in place. Finds the
+ * row matching `kind/namespace/name`, and if any field in `patch` differs, replaces
+ * just that row with a `{ ...row, ...patch }` copy (new array, same identity for the
+ * untouched rows). No-op when the row is gone or every patched field already matches,
+ * so an unchanged detail fetch triggers no re-render.
+ *
+ * Used by the list rows to write a row's summary back from its expanded detail
+ * panel (the detail's reconcilerRef is computed by the same server status the list
+ * uses), so a row that listed a stale status updates when expanded.
+ *
+ * @param {import('@preact/signals').Signal} sig - Signal holding the row array
+ * @param {{kind: string, namespace: string, name: string}} id - Row identity
+ * @param {Object} patch - Fields to overwrite on the matched row
+ */
+export function patchRowInSignal(sig, { kind, namespace, name }, patch) {
+  const cur = sig.value.find(r => r.kind === kind && r.namespace === namespace && r.name === name)
+  if (!cur || Object.keys(patch).every(k => cur[k] === patch[k])) return
+  sig.value = sig.value.map(r => r === cur ? { ...r, ...patch } : r)
+}
+
+/**
  * Reveal - animated disclosure: collapses to zero height via an animatable grid
  * row while fading and sliding the content in. Children stay in the DOM when
  * collapsed so a lazily mounted detail panel can fetch before the panel opens.

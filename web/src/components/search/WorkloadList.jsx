@@ -12,7 +12,7 @@ import { reportData } from '../../app'
 import { FilterForm } from './FilterForm'
 import { FilterBar } from './FilterBar'
 import { WorkloadDetailsView } from './WorkloadDetailsView'
-import { Star, KindChip, NEUTRAL_CHIP, NameLink, Chevron, Spinner, useDisclosure, Reveal } from './compactRow'
+import { Star, KindChip, NEUTRAL_CHIP, NameLink, Chevron, Spinner, useDisclosure, Reveal, patchRowInSignal } from './compactRow'
 import { useRestoreFiltersFromUrl, useSyncFiltersToUrl, getDashboardUrl } from '../../utils/routing'
 import { useInfiniteScroll } from '../../utils/scroll'
 import { isFavorite, toggleFavorite, favorites } from '../../utils/favorites'
@@ -92,6 +92,7 @@ function WorkloadRow({ workload }) {
 
   const dashboardUrl = getDashboardUrl(workload.kind, workload.namespace, workload.name)
   const reconcilerTitle = `Managed by ${workload.reconcilerKind} ${workload.reconcilerNamespace}/${workload.reconcilerName} (${workload.reconcilerStatus})`
+  const chipTitle = `${workload.kind} · reconciler ${workload.reconcilerStatus}`
 
   // Color the kind chip by the workload's own status only while the panel is open
   // (and once its status is known); collapsed rows keep the neutral chip.
@@ -106,11 +107,7 @@ function WorkloadRow({ workload }) {
     setLiveStatus(data?.workloadInfo?.status || null)
     const ref = data?.workloadInfo?.reconciler?.status?.reconcilerRef
     if (!ref) return
-    const cur = workloadsData.value.find(w =>
-      w.kind === workload.kind && w.namespace === workload.namespace && w.name === workload.name)
-    if (!cur || (cur.reconcilerStatus === ref.status && cur.lastReconciled === ref.lastReconciled)) return
-    workloadsData.value = workloadsData.value.map(w =>
-      w === cur ? { ...w, reconcilerStatus: ref.status, lastReconciled: ref.lastReconciled } : w)
+    patchRowInSignal(workloadsData, workload, { reconcilerStatus: ref.status, lastReconciled: ref.lastReconciled })
   }
 
   return (
@@ -120,7 +117,7 @@ function WorkloadRow({ workload }) {
           <Star active={isFavorited} onClick={handleFavoriteClick} />
           {/* Neutral chip in the list; colored by the workload's own status once
               expanded (see chipColor). */}
-          <KindChip kind={workload.kind} colorClass={chipColor} title={`${workload.kind} · reconciler ${workload.reconcilerStatus}`} cls="hidden sm:inline-block" />
+          <KindChip kind={workload.kind} colorClass={chipColor} title={chipTitle} cls="hidden sm:inline-block" />
           <NameLink href={dashboardUrl} namespace={workload.namespace} name={workload.name} />
           {/* Desktop: parent reconciler reference with a status dot. The status
               belongs to the reconciler, never the workload itself. */}
@@ -136,14 +133,14 @@ function WorkloadRow({ workload }) {
             has no status of its own in the list, so we state the reconcile time
             instead of a (reconciler) status word. */}
         <div class="sm:hidden mt-1 pl-[30px] flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
-          <KindChip kind={workload.kind} colorClass={chipColor} title={`${workload.kind} · reconciler ${workload.reconcilerStatus}`} />
+          <KindChip kind={workload.kind} colorClass={chipColor} title={chipTitle} />
           <span class="whitespace-nowrap">Reconciled {formatTimestamp(workload.lastReconciled)}</span>
         </div>
       </div>
       <Reveal open={d.open}>
         <div class="pl-3 sm:pl-[42px] pr-3 pt-1 pb-4">
-          {/* Lazily mounted on first expand; stays mounted afterwards so re-opening
-              is instant. onReady flips the disclosure once the fetch settles. */}
+          {/* Lazily mounted on expand; unmounted on collapse so each expand
+              re-fetches. onReady flips the disclosure once the fetch settles. */}
           {d.mounted && (
             <WorkloadDetailsView
               kind={workload.kind}

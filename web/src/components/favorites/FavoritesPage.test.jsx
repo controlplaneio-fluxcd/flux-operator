@@ -3,7 +3,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/preact'
-import { FavoritesPage } from './FavoritesPage'
+import { FavoritesPage, favoritesData, favoritesFetching } from './FavoritesPage'
 import { favorites, reorderFavorites, removeFavorite } from '../../utils/favorites'
 import { fetchWithMock } from '../../utils/fetch'
 import { POLL_INTERVAL_MS } from '../../utils/constants'
@@ -90,6 +90,12 @@ describe('FavoritesPage component', () => {
     vi.clearAllMocks()
     // Clear favorites
     favorites.value = []
+    // Reset the module-level status cache so warm state from one test doesn't
+    // leak into the next (a cached map would skip the first-load skeleton path).
+    // favoritesFetching mirrors a cold page load (true until the first fetch
+    // settles), matching the module default.
+    favoritesData.value = {}
+    favoritesFetching.value = true
 
     // Setup default mock response for POST /api/v1/favorites
     // Returns only the resources that match the requested favorites
@@ -167,6 +173,26 @@ describe('FavoritesPage component', () => {
       await waitFor(() => {
         expect(screen.getByTestId('header-loading')).toHaveTextContent('loaded')
       })
+    })
+
+    it('renders cached status instantly on a return visit without a loading pass', async () => {
+      favorites.value = mockFavorites
+
+      // First visit warms the module-level cache.
+      const { unmount } = render(<FavoritesPage />)
+      await waitFor(() => {
+        expect(screen.getByTestId('header-loading')).toHaveTextContent('loaded')
+      })
+      unmount()
+
+      // Navigate away and back: the second mount reads the warm cache, so cards
+      // render their status immediately and the header never enters the loading
+      // (pulse) state even though a background refresh is in flight.
+      render(<FavoritesPage />)
+
+      expect(screen.getByTestId('header-loading')).toHaveTextContent('loaded')
+      const fluxCard = screen.getByTestId('favorite-card-flux')
+      expect(fluxCard.querySelector('[data-testid="card-status"]')).toHaveTextContent('Ready')
     })
   })
 
