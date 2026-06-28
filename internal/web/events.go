@@ -145,9 +145,9 @@ func (h *Handler) GetEvents(ctx context.Context, kind, name, namespace, excludeR
 				fields.OneTermEqualSelector("involvedObject.kind", kind),
 			}
 
-			// Add name filter if provided and doesn't contain wildcards
-			// For exact match, use field selector (faster)
-			if name != "" && !hasWildcard(name) {
+			// Add an exact-match field selector for a plain name (faster); wildcard
+			// and negated ("!") patterns are matched in memory below.
+			if name != "" && !isNamePattern(name) {
 				selectors = append(selectors, fields.OneTermEqualSelector("involvedObject.name", name))
 			}
 
@@ -186,9 +186,9 @@ func (h *Handler) GetEvents(ctx context.Context, kind, name, namespace, excludeR
 					continue
 				}
 
-				// Filter by name using wildcard matching if needed
+				// Filter by name using wildcard/negation matching if needed
 				filteredEvents := el.Items
-				if hasWildcard(name) {
+				if isNamePattern(name) {
 					filteredEvents = []corev1.Event{}
 					for _, event := range el.Items {
 						if matchesWildcard(event.InvolvedObject.Name, name) {

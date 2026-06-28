@@ -61,7 +61,7 @@ export function FilterForm({ kindSignal, nameSignal, namespaceSignal, namespaces
             type="text"
             value={nameSignal.value}
             onChange={(e) => nameSignal.value = e.target.value}
-            placeholder="Resource name (* for wildcard)"
+            placeholder="Resource name (* wildcard, ! exclude)"
             class={FIELD}
           />
         </div>

@@ -54,6 +54,47 @@ func TestGetResourcesStatus_Privileged(t *testing.T) {
 	g.Expect(found).To(BeTrue(), "should find the test resource")
 }
 
+func TestGetLiveResources_Negation(t *testing.T) {
+	g := NewWithT(t)
+
+	// Two ResourceSets; the negated query must drop one and keep the other. This
+	// exercises the live resources.go path where a "!" name skips the exact-match
+	// field selector (isNamePattern) and is excluded by in-memory matchesWildcard.
+	keep := &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "neg-keep", Namespace: "default"},
+		Spec: fluxcdv1.ResourceSetSpec{
+			ResourcesTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm-keep\n  namespace: default\n",
+		},
+	}
+	exclude := &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "neg-exclude", Namespace: "default"},
+		Spec: fluxcdv1.ResourceSetSpec{
+			ResourcesTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm-exclude\n  namespace: default\n",
+		},
+	}
+	g.Expect(testClient.Create(ctx, keep)).To(Succeed())
+	defer testClient.Delete(ctx, keep)
+	g.Expect(testClient.Create(ctx, exclude)).To(Succeed())
+	defer testClient.Delete(ctx, exclude)
+
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	resources, err := handler.GetLiveResources(ctx, "ResourceSet", "!neg-exclude", "", "", 100)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	names := make(map[string]bool, len(resources))
+	for _, r := range resources {
+		names[r.Name] = true
+	}
+	g.Expect(names).To(HaveKey("neg-keep"), "non-matching resource should be kept")
+	g.Expect(names).NotTo(HaveKey("neg-exclude"), "negated resource should be excluded")
+}
+
 func TestGetResourcesStatus_UnprivilegedUser_EmptyResult(t *testing.T) {
 	g := NewWithT(t)
 

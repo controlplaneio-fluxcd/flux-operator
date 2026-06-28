@@ -172,8 +172,9 @@ func (h *Handler) GetLiveResources(ctx context.Context, kind, name, namespace, s
 					listOpts = append(listOpts, client.InNamespace(ns))
 				}
 
-				// Add name filter if provided and doesn't contain wildcards
-				if name != "" && !hasWildcard(name) {
+				// Add an exact-match field selector for a plain name; wildcard and
+				// negated ("!") patterns are matched in memory below.
+				if name != "" && !isNamePattern(name) {
 					listOpts = append(listOpts, client.MatchingFields{"metadata.name": name})
 				}
 
@@ -187,8 +188,8 @@ func (h *Handler) GetLiveResources(ctx context.Context, kind, name, namespace, s
 				}
 
 				for _, obj := range list.Items {
-					// Filter by name using wildcard matching if needed
-					if hasWildcard(name) {
+					// Filter by name using wildcard/negation matching if needed
+					if isNamePattern(name) {
 						objName, _, _ := unstructured.NestedString(obj.Object, "metadata", "name")
 						if !matchesWildcard(objName, name) {
 							continue

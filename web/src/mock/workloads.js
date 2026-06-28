@@ -10,8 +10,14 @@
 // reconciler message. Workloads have no status of their own in the index.
 
 // Helper to match name with wildcard pattern.
-// Supports * (matches any characters). If no wildcards, does exact match.
+// Supports * (matches any characters) and a leading ! that negates the match
+// (e.g. "!foo" excludes "foo"). If no wildcards, does exact match.
 const matchesWildcard = (name, pattern) => {
+  // A leading "!" negates the result of matching the rest of the pattern.
+  if (pattern.startsWith('!')) {
+    return !matchesWildcard(name, pattern.slice(1))
+  }
+
   name = name.toLowerCase()
   pattern = pattern.toLowerCase()
 
@@ -27,6 +33,20 @@ const matchesWildcard = (name, pattern) => {
 
   const regex = new RegExp(`^${regexPattern}$`, 'i')
   return regex.test(name)
+}
+
+// Wrap a plain search term as a substring pattern ("foo" -> "*foo*"), preserving
+// a leading ! negation ("!foo" -> "!*foo*"). Mirrors the backend's wrapPartialMatch.
+const wrapPartialMatch = (pattern) => {
+  let neg = ''
+  if (pattern.startsWith('!')) {
+    neg = '!'
+    pattern = pattern.slice(1)
+  }
+  if (pattern === '' || pattern.includes('*')) {
+    return neg + pattern
+  }
+  return `${neg}*${pattern}*`
 }
 
 // Generate timestamps relative to now (same pattern as resources.js)
@@ -122,9 +142,9 @@ const filterWorkloads = (params, { wildcard }) => {
     }
     if (nameFilter) {
       if (wildcard) {
-        // Quick-search wraps the term, matching by contains (** matches all)
-        const term = nameFilter.toLowerCase()
-        if (term !== '**' && !workload.name.toLowerCase().includes(term)) {
+        // Quick-search wraps a plain term to a substring pattern, supporting *
+        // wildcards and ! negation (** matches all).
+        if (!matchesWildcard(workload.name, wrapPartialMatch(nameFilter))) {
           return false
         }
       } else if (!matchesWildcard(workload.name, nameFilter)) {

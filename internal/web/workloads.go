@@ -164,9 +164,9 @@ func (h *Handler) WorkloadsSearchHandler(w http.ResponseWriter, req *http.Reques
 	namespace := queryParams.Get("namespace")
 	kind := queryParams.Get("kind")
 
-	// If name does not contain a wildcard, wrap it to perform a partial match.
-	if name != "" && !hasWildcard(name) {
-		name = "*" + name + "*"
+	// Wrap a plain term so it matches as a substring (preserving "!" negation).
+	if name != "" {
+		name = wrapPartialMatch(name)
 	}
 
 	// Query the cached workload index with RBAC filtering.
