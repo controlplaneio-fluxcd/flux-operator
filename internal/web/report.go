@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"net/http"
 	goruntime "runtime"
-	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -249,65 +248,6 @@ func uninitialisedReport() *unstructured.Unstructured {
 
 	rawMap, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
 	return &unstructured.Unstructured{Object: rawMap}
-}
-
-// cleanObjectForExport removes fields that shouldn't be included in exports
-func cleanObjectForExport(obj *unstructured.Unstructured, keepStatus bool) {
-	// Remove status subresource
-	if !keepStatus {
-		unstructured.RemoveNestedField(obj.Object, "status")
-	}
-
-	// Remove runtime metadata - keep only name, namespace, labels, and annotations
-	metadata := obj.Object["metadata"].(map[string]any)
-	cleanMetadata := make(map[string]any)
-
-	// Preserve essential fields
-	if name, exists := metadata["name"]; exists {
-		cleanMetadata["name"] = name
-	}
-	if namespace, exists := metadata["namespace"]; exists {
-		cleanMetadata["namespace"] = namespace
-	}
-	if lb, exists := metadata["labels"]; exists {
-		cleanMetadata["labels"] = lb
-	}
-
-	if annotations, exists := metadata["annotations"]; exists {
-		cleanMetadata["annotations"] = annotations
-	}
-
-	// Remove Flux ownership labels
-	if lb, exists := cleanMetadata["labels"]; exists {
-		if labelMap, ok := lb.(map[string]any); ok {
-			for key := range labelMap {
-				if fluxcdv1.IsFluxAPI(key) &&
-					(strings.HasSuffix(key, "/name") || strings.HasSuffix(key, "/namespace")) {
-					delete(labelMap, key)
-				}
-			}
-			// Remove labels map if empty after cleanup
-			if len(labelMap) == 0 {
-				delete(cleanMetadata, "labels")
-			}
-		}
-	}
-
-	// Remove kubectl and Flux CLI annotations from clean metadata
-	if annotations, exists := cleanMetadata["annotations"]; exists {
-		if annotationMap, ok := annotations.(map[string]any); ok {
-			delete(annotationMap, "kubectl.kubernetes.io/last-applied-configuration")
-			delete(annotationMap, "reconcile.fluxcd.io/requestedAt")
-			delete(annotationMap, "reconcile.fluxcd.io/forceAt")
-			// Remove annotations map if empty after cleanup
-			if len(annotationMap) == 0 {
-				delete(cleanMetadata, "annotations")
-			}
-		}
-	}
-
-	// Replace metadata with the clean version
-	obj.Object["metadata"] = cleanMetadata
 }
 
 // GetMetrics retrieves the CPU and Memory metrics for a list of pods in the given namespace.
