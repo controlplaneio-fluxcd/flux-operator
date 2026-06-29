@@ -10,11 +10,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/fluxcd/cli-utils/pkg/kstatus/status"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
 
@@ -54,7 +57,8 @@ func TestGetInventoryObjects_StatusAndManifest(t *testing.T) {
 	// Results keep request order and carry status + sanitized manifest.
 	g.Expect(results[0].Kind).To(Equal("ConfigMap"))
 	g.Expect(results[0].Error).To(BeEmpty())
-	g.Expect(results[0].Status).NotTo(BeEmpty())
+	// A ConfigMap has no status, so kstatus reports it as Current (applied).
+	g.Expect(results[0].Status).To(Equal("Current"))
 	g.Expect(results[0].Object).NotTo(BeNil())
 
 	g.Expect(results[1].Kind).To(Equal("Deployment"))
@@ -138,6 +142,55 @@ func TestGetInventoryObjects_ForbiddenPerItem(t *testing.T) {
 	g.Expect(results).To(HaveLen(1))
 	g.Expect(results[0].Error).To(Equal("Forbidden"))
 	g.Expect(results[0].Object).To(BeNil())
+}
+
+func TestComputeObjectStatus(t *testing.T) {
+	g := NewWithT(t)
+
+	// Flux kind with Ready=True → NewResourceStatus reports Ready.
+	fluxObj := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "kustomize.toolkit.fluxcd.io/v1",
+		"kind":       "Kustomization",
+		"metadata":   map[string]any{"name": "apps", "namespace": "flux-system"},
+		"status": map[string]any{
+			"conditions": []any{
+				map[string]any{"type": "Ready", "status": "True", "message": "Applied revision"},
+			},
+		},
+	}}
+	st, msg := computeObjectStatus(fluxObj)
+	g.Expect(st).To(Equal(reporter.StatusReady))
+	g.Expect(msg).To(Equal("Applied revision"))
+
+	// Non-Flux object with no status → kstatus reports Current.
+	cm := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "v1",
+		"kind":       "ConfigMap",
+		"metadata":   map[string]any{"name": "cfg", "namespace": "default"},
+	}}
+	st, _ = computeObjectStatus(cm)
+	g.Expect(st).To(Equal(string(status.CurrentStatus)))
+
+	// CronJob → workload logic reports Idle with the schedule (not raw kstatus).
+	cronJob := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "batch/v1",
+		"kind":       "CronJob",
+		"metadata":   map[string]any{"name": "backup", "namespace": "default"},
+		"spec":       map[string]any{"schedule": "0 0 * * *"},
+	}}
+	st, msg = computeObjectStatus(cronJob)
+	g.Expect(st).To(Equal("Idle"))
+	g.Expect(msg).To(Equal("0 0 * * *"))
+
+	// Suspended CronJob → Suspended.
+	suspendedCronJob := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "batch/v1",
+		"kind":       "CronJob",
+		"metadata":   map[string]any{"name": "backup", "namespace": "default"},
+		"spec":       map[string]any{"schedule": "0 0 * * *", "suspend": true},
+	}}
+	st, _ = computeObjectStatus(suspendedCronJob)
+	g.Expect(st).To(Equal("Suspended"))
 }
 
 func TestInventoryObjectsHandler(t *testing.T) {

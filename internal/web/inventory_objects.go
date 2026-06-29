@@ -6,15 +6,18 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sync"
 
+	"github.com/fluxcd/cli-utils/pkg/kstatus/status"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
 )
 
@@ -95,9 +98,7 @@ func (h *Handler) GetInventoryObjects(ctx context.Context, items []InventoryObje
 			obj, err := h.getInventoryObject(ctx, item)
 			switch {
 			case err == nil:
-				st := reporter.NewResourceStatus(*obj)
-				res.Status = st.Status
-				res.StatusMessage = st.Message
+				res.Status, res.StatusMessage = computeObjectStatus(obj)
 				cleanObjectForExport(obj, true)
 				res.Object = obj.Object
 			case errors.IsNotFound(err):
@@ -124,8 +125,8 @@ func (h *Handler) GetInventoryObjects(ctx context.Context, items []InventoryObje
 	return result
 }
 
-// getInventoryObject fetches a single object identified by its apiVersion, kind,
-// name and namespace.
+// getInventoryObject fetches a single object identified by its
+// apiVersion, kind, name, and namespace.
 func (h *Handler) getInventoryObject(ctx context.Context, item InventoryObjectItem) (*unstructured.Unstructured, error) {
 	gv, err := schema.ParseGroupVersion(item.APIVersion)
 	if err != nil {
@@ -140,4 +141,25 @@ func (h *Handler) getInventoryObject(ctx context.Context, item InventoryObjectIt
 	}
 
 	return obj, nil
+}
+
+// computeObjectStatus returns an object's status and message, never failing:
+//   - Flux and Flux Operator kinds use the Ready-condition reader.
+//   - Workloads (Deployment/StatefulSet/DaemonSet/CronJob) use the workload status
+//     logic (kstatus + CronJob/apps refinements), matching the Workloads tab.
+//   - Every other kind uses kstatus; an object it cannot assess yields "Unknown".
+func computeObjectStatus(obj *unstructured.Unstructured) (string, string) {
+	switch {
+	case fluxcdv1.IsFluxAPI(obj.GetAPIVersion()):
+		rs := reporter.NewResourceStatus(*obj)
+		return rs.Status, rs.Message
+	case isWorkloadObject(obj):
+		return computeWorkloadStatus(obj, obj.GetKind())
+	default:
+		res, err := status.Compute(obj)
+		if err != nil {
+			return reporter.StatusUnknown, fmt.Sprintf("Failed to compute status: %s", err.Error())
+		}
+		return string(res.Status), res.Message
+	}
 }
