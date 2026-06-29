@@ -39,40 +39,70 @@ export function Spinner({ cls = 'w-3.5 h-3.5' }) {
   )
 }
 
-// Inner two-tone "namespace/name" label shared by both NameLink variants: muted
-// namespace, emphasized name, both turning flux-blue on row hover (the row sets
-// the `group` class).
-function NameSpans({ namespace, name }) {
+/**
+ * NameSpans - inner two-tone "namespace/name" label shared by both NameLink
+ * variants and by grid layouts that compose their own name cell: muted namespace,
+ * emphasized name. When `linked`, both turn flux-blue on row hover (the wrapping
+ * `<a>` must carry the `group` class); plain (unlinked) labels skip the hover tint
+ * so they don't imply clickability. The `namespace/` prefix is omitted when there
+ * is no namespace (cluster-scoped objects).
+ *
+ * @param {Object} props
+ * @param {string} [props.namespace] - Resource namespace; prefix omitted when falsy
+ * @param {string} props.name - Resource name
+ * @param {boolean} props.linked - Whether to apply the hover tint
+ */
+export function NameSpans({ namespace, name, linked }) {
+  const hover = linked ? ' group-hover:text-flux-blue dark:group-hover:text-blue-400' : ''
   return (
     <>
-      <span class="text-gray-500 dark:text-gray-400 group-hover:text-flux-blue dark:group-hover:text-blue-400">{namespace}/</span><span class="font-semibold text-gray-900 dark:text-gray-100 group-hover:text-flux-blue dark:group-hover:text-blue-400">{name}</span>
+      {namespace ? <span class={`text-gray-500 dark:text-gray-400${hover}`}>{namespace}/</span> : null}<span class={`font-semibold text-gray-900 dark:text-gray-100${hover}`}>{name}</span>
     </>
   )
 }
 
 /**
- * NameLink - the row's "namespace/name" dashboard link. Rendered twice so the
- * label can be full-width on mobile (grows to fill the row) and fixed-width on
- * desktop (capped so the message/timestamp columns get room); one of the pair is
- * always hidden by the breakpoint.
+ * NameLink - the row's "namespace/name" label. Rendered twice so the label can be
+ * full-width on mobile (grows to fill the row) and fixed-width on desktop (capped
+ * so the message/timestamp columns get room); one of the pair is always hidden by
+ * the breakpoint.
+ *
+ * With an `href` it renders an `<a>` dashboard link; without one it renders a plain
+ * `<span>` (for kinds that have no dashboard). A falsy `namespace` omits the
+ * `namespace/` prefix, rendering the name only (cluster-scoped objects).
  *
  * @param {Object} props
- * @param {string} props.href - Dashboard URL
- * @param {string} props.namespace - Resource namespace
+ * @param {string} [props.href] - Dashboard URL; when absent renders plain text
+ * @param {string} [props.namespace] - Resource namespace; omitted when falsy
  * @param {string} props.name - Resource name
  * @param {string} [props.cls] - Extra classes applied to both variants (e.g. a
  *   focus ring)
  */
 export function NameLink({ href, namespace, name, cls = '' }) {
+  // Plain text when there is no dashboard to link to.
+  if (!href) {
+    return (
+      <>
+        {/* Mobile: full-width, grows to fill the row */}
+        <span class={`sm:hidden min-w-0 flex-1 truncate text-sm ${cls}`}>
+          <NameSpans namespace={namespace} name={name} linked={false} />
+        </span>
+        {/* Desktop: fixed-width, capped at 40% */}
+        <span class={`hidden sm:block sm:shrink-0 truncate text-sm sm:max-w-[40%] ${cls}`}>
+          <NameSpans namespace={namespace} name={name} linked={false} />
+        </span>
+      </>
+    )
+  }
   return (
     <>
       {/* Mobile: full-width, grows to fill the row */}
       <a href={href} class={`sm:hidden min-w-0 flex-1 truncate text-sm group ${cls}`}>
-        <NameSpans namespace={namespace} name={name} />
+        <NameSpans namespace={namespace} name={name} linked={true} />
       </a>
       {/* Desktop: fixed-width, capped at 40% */}
       <a href={href} class={`hidden sm:block sm:shrink-0 truncate text-sm sm:max-w-[40%] group ${cls}`}>
-        <NameSpans namespace={namespace} name={name} />
+        <NameSpans namespace={namespace} name={name} linked={true} />
       </a>
     </>
   )

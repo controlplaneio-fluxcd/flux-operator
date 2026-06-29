@@ -8,6 +8,7 @@ import { LEVELS, LEVEL_META, DEFAULT_LEVEL, detectLevel, stripAnsi } from '../..
 import { decorateLine, highlightJson, topLevelJsonKeys, fieldMatcher } from '../../../utils/logFormat'
 import { groupEntries } from '../../../utils/logGroup'
 import { logSettings, TAIL_LINES, FONT_SIZES } from '../../../utils/logSettings'
+import { ToggleGroup } from '../../common/ToggleGroup'
 
 // Sentinel option key for the "All containers" view, which streams every
 // container (init and regular) and interleaves the lines chronologically.
@@ -257,51 +258,6 @@ function ToggleButton({ active, onClick, label, title, testid, disabled, childre
     >
       {children}
     </button>
-  )
-}
-
-/**
- * ToggleGroup - a labelled segmented control in the settings panel. One button
- * per option, the selected one highlighted; clicking calls onChange with its
- * value. Used for both the tail-lines and font-size settings.
- *
- * @param {Object} props
- * @param {string} props.label - Row label and group aria-label
- * @param {Array<{value: any, label: string, testid: string}>} props.options - The choices
- * @param {any} props.value - The currently selected option value
- * @param {Function} props.onChange - Called with the chosen value
- * @param {string} props.testid - data-testid for the group container
- */
-function ToggleGroup({ label, options, value, onChange, testid }) {
-  return (
-    <div class="flex items-center gap-3">
-      <span class="text-xs font-medium text-gray-600 dark:text-gray-300 w-20 flex-shrink-0">{label}</span>
-      <div
-        class="flex w-60 max-w-full rounded-md border border-gray-300 dark:border-gray-600 overflow-hidden"
-        role="group"
-        aria-label={label}
-        data-testid={testid}
-      >
-        {options.map((o, i) => (
-          <button
-            key={o.value}
-            type="button"
-            onClick={() => onChange(o.value)}
-            class={`flex-1 px-3 py-1 text-xs text-center focus:outline-none focus-visible:ring-2 focus-visible:ring-flux-blue focus-visible:ring-inset ${
-              i > 0 ? 'border-l border-gray-300 dark:border-gray-600' : ''
-            } ${
-              value === o.value
-                ? 'bg-flux-blue text-white'
-                : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600'
-            }`}
-            data-testid={o.testid}
-            aria-pressed={value === o.value}
-          >
-            {o.label}
-          </button>
-        ))}
-      </div>
-    </div>
   )
 }
 

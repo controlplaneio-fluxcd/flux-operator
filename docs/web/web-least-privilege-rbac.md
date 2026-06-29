@@ -27,8 +27,12 @@ administrators can enforce a much stricter least-privilege posture.
 
 1. **Least privilege by default.** All resource reads and writes go through
    the impersonated user client unless there is a documented reason not to.
-2. **No sensitive data exposure.** System calls never return Secret values,
-   ConfigMap data, or any other sensitive content to the user.
+2. **No sensitive data exposure.** System (privileged) calls never return Secret
+   values, ConfigMap data, or any other sensitive content to the user. User-facing
+   reads that do return object manifests run through the impersonated client, so
+   the user only sees objects their own RBAC already permits; as defense-in-depth,
+   Secret `data` values are always masked before a manifest leaves the server (see
+   the managed-object detail note below).
 3. **RBAC Minimization.** Each usage of elevated system privileges exists because it enables a
    specific, high-value feature that significantly decreases the permissions
    that users would otherwise require, improving support for the principle of least privilege.
@@ -240,3 +244,29 @@ Users do not need cluster-wide `list` permissions on namespaces just to populate
 | 6 | Controller metrics          | System reads metrics API                           | CPU/memory usage of Flux controllers                                          |
 | 7 | Fine-Grained GitOps Actions | System patches resource                            | None (server-side mutation only)                                              |
 | 8 | Namespace visibility        | Wrapper lists namespaces with privileged base client | Visible namespace names after RBAC filtering                                  |
+
+---
+
+## Note: Managed Object Detail View
+
+**Where:** The "Managed Objects" panel inventory list — expanding a row, and the
+per-row status badges (`POST /api/v1/inventory/objects`).
+
+**Internal operation:**
+The system fetches the requested inventory objects (any GVK: ConfigMap, Secret,
+RBAC, CRD, workloads, Flux kinds, …) and returns each object's computed status and
+a sanitized manifest.
+
+**How it works:**
+This route uses the **impersonated user client**, not a privileged one, so each
+object is fetched under the caller's own RBAC — a per-object `Forbidden`/`NotFound`
+is reported in that item without failing the batch. Before any manifest leaves the
+server it is sanitized (`cleanObjectForExport`): runtime metadata and Flux/kubectl
+annotations are stripped, and **Secret `data` values are masked** (`maskSecretValues`,
+keys preserved, values replaced with `***redacted***`). This is not an elevated-
+privilege exception — it is listed here only because it returns object bodies
+(including ConfigMap data and masked Secret data) and so is relevant to Principle 2.
+
+**Least privilege benefit:**
+Users inspect the objects they already have permission to read, with no broadened
+RBAC, and never receive raw Secret values even for Secrets they can read.

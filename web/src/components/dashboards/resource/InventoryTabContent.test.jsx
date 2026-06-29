@@ -1,129 +1,153 @@
 // Copyright 2026 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/preact'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/preact'
 import { InventoryTabContent } from './InventoryTabContent'
+import { fetchWithMock } from '../../../utils/fetch'
 
-describe('InventoryTabContent component', () => {
-  const mockInventory = [
-    { kind: 'Deployment', name: 'podinfo', namespace: 'apps', apiVersion: 'apps/v1' },
-    { kind: 'Kustomization', name: 'apps', namespace: 'flux-system', apiVersion: 'kustomize.toolkit.fluxcd.io/v1' },
-    { kind: 'ConfigMap', name: 'settings', namespace: 'apps', apiVersion: 'v1' },
-    { kind: 'ClusterRole', name: 'reader', apiVersion: 'rbac.authorization.k8s.io/v1' }
-  ]
+// The batch status fetch is stubbed so the tab test is deterministic and offline.
+vi.mock('../../../utils/fetch', () => ({
+  fetchWithMock: vi.fn(() => Promise.resolve({ objects: [] }))
+}))
 
-  it('should render a row for each inventory item with name, namespace and kind', () => {
-    render(<InventoryTabContent inventory={mockInventory} namespace="flux-system" />)
+// Stub the detail view so expansion is observable without a second fetch. The stub
+// echoes the object name so we can assert which row is expanded.
+vi.mock('./ObjectDetailsView', () => ({
+  ObjectDetailsView: ({ isExpanded, name }) => (isExpanded ? <div data-testid={`details-${name}`}>details</div> : null)
+}))
 
+const inventory = [
+  { kind: 'Deployment', name: 'podinfo', namespace: 'apps', apiVersion: 'apps/v1' },
+  { kind: 'Kustomization', name: 'apps', namespace: 'flux-system', apiVersion: 'kustomize.toolkit.fluxcd.io/v1' },
+  { kind: 'ConfigMap', name: 'settings', namespace: 'apps', apiVersion: 'v1' },
+  { kind: 'ClusterRole', name: 'reader', namespace: '', apiVersion: 'rbac.authorization.k8s.io/v1' },
+]
+
+const rows = (container) => container.querySelectorAll('.card > div')
+// A non-dashboard row (e.g. ConfigMap) is itself the toggle button; the whole row
+// is the click target. Returns that row's button.
+const rowToggle = (name) => {
+  const row = screen.getAllByText(name)[0].closest('.border-b')
+  return within(row).getByRole('button')
+}
+
+describe('InventoryTabContent', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('renders a row for each item with kind shown as plain text', () => {
+    render(<InventoryTabContent inventory={inventory} />)
     const body = document.body.textContent
     expect(body).toContain('podinfo')
-    expect(body).toContain('apps')
-    expect(body).toContain('Deployment')
     expect(body).toContain('Kustomization')
     expect(body).toContain('ConfigMap')
     expect(body).toContain('ClusterRole')
   })
 
-  it('should show a dash for items without a namespace', () => {
-    render(<InventoryTabContent inventory={[{ kind: 'ClusterRole', name: 'reader' }]} namespace="flux-system" />)
-
-    expect(screen.getByText('-')).toBeInTheDocument()
+  it('sorts cluster-scoped first, then by namespace, kind, name', () => {
+    const { container } = render(<InventoryTabContent inventory={inventory} />)
+    const r = rows(container)
+    expect(r[0].textContent).toContain('reader')      // cluster-scoped
+    expect(r[1].textContent).toContain('settings')    // apps/ConfigMap
+    expect(r[2].textContent).toContain('podinfo')     // apps/Deployment
+    expect(r[3].textContent).toContain('apps')        // flux-system/Kustomization
   })
 
-  it('should sort cluster-scoped items first, then by namespace, kind and name', () => {
-    render(<InventoryTabContent inventory={mockInventory} namespace="flux-system" />)
-
-    const rows = document.querySelectorAll('tbody tr')
-    const firstCells = Array.from(rows).map(r => r.querySelector('td').textContent)
-
-    // Cluster-scoped (no namespace) sorts first
-    expect(firstCells[0]).toBe('reader')
-    // Then namespaced items: 'apps' namespace before 'flux-system',
-    // within 'apps' ConfigMap before Deployment by kind
-    expect(firstCells[1]).toBe('settings')
-    expect(firstCells[2]).toBe('podinfo')
-    expect(firstCells[3]).toBe('apps')
+  it('shows an error pill (not perpetual "computing…") for objects the user cannot read', async () => {
+    fetchWithMock.mockResolvedValue({
+      objects: [{ apiVersion: 'v1', kind: 'ConfigMap', namespace: 'apps', name: 'settings', error: 'Forbidden' }]
+    })
+    render(<InventoryTabContent inventory={[{ kind: 'ConfigMap', name: 'settings', namespace: 'apps', apiVersion: 'v1' }]} />)
+    await waitFor(() => expect(screen.getAllByText('Forbidden').length).toBeGreaterThan(0))
+    expect(screen.queryByTestId('inventory-status-computing')).toBeNull()
   })
 
-  it('should sort multiple cluster-scoped items by kind then name', () => {
-    const inventory = [
-      { apiVersion: 'v1', kind: 'Namespace', name: 'production' },
-      { apiVersion: 'v1', kind: 'Namespace', name: 'development' },
-      { apiVersion: 'rbac.authorization.k8s.io/v1', kind: 'ClusterRole', name: 'admin' },
-      { apiVersion: 'rbac.authorization.k8s.io/v1', kind: 'ClusterRole', name: 'reader' }
-    ]
-
-    render(<InventoryTabContent inventory={inventory} namespace="flux-system" />)
-
-    const rows = document.querySelectorAll('tbody tr')
-
-    // Sorted by kind first (ClusterRole before Namespace), then by name
-    expect(rows[0].querySelectorAll('td')[0].textContent).toBe('admin')
-    expect(rows[0].querySelectorAll('td')[2].textContent).toBe('ClusterRole')
-    expect(rows[1].querySelectorAll('td')[0].textContent).toBe('reader')
-    expect(rows[1].querySelectorAll('td')[2].textContent).toBe('ClusterRole')
-    expect(rows[2].querySelectorAll('td')[0].textContent).toBe('development')
-    expect(rows[2].querySelectorAll('td')[2].textContent).toBe('Namespace')
-    expect(rows[3].querySelectorAll('td')[0].textContent).toBe('production')
-    expect(rows[3].querySelectorAll('td')[2].textContent).toBe('Namespace')
+  it('fetches the batch status for the whole inventory on mount', () => {
+    render(<InventoryTabContent inventory={inventory} />)
+    expect(fetchWithMock).toHaveBeenCalledTimes(1)
+    const call = fetchWithMock.mock.calls[0][0]
+    expect(call.endpoint).toBe('/api/v1/inventory/objects')
+    expect(call.method).toBe('POST')
+    expect(call.body.objects).toHaveLength(4)
   })
 
-  it('should sort namespaced items by namespace then kind then name', () => {
-    const inventory = [
-      { apiVersion: 'v1', kind: 'ConfigMap', namespace: 'production', name: 'config-b' },
-      { apiVersion: 'v1', kind: 'ConfigMap', namespace: 'production', name: 'config-a' },
-      { apiVersion: 'v1', kind: 'ConfigMap', namespace: 'development', name: 'config-c' },
-      { apiVersion: 'v1', kind: 'Secret', namespace: 'development', name: 'secret-a' }
-    ]
-
-    render(<InventoryTabContent inventory={inventory} namespace="flux-system" />)
-
-    const rows = document.querySelectorAll('tbody tr')
-
-    // Sorted by namespace (development first), then kind (ConfigMap before Secret), then name
-    expect(rows[0].querySelectorAll('td')[0].textContent).toBe('config-c')
-    expect(rows[0].querySelectorAll('td')[1].textContent).toBe('development')
-    expect(rows[1].querySelectorAll('td')[0].textContent).toBe('secret-a')
-    expect(rows[1].querySelectorAll('td')[1].textContent).toBe('development')
-    expect(rows[2].querySelectorAll('td')[0].textContent).toBe('config-a')
-    expect(rows[2].querySelectorAll('td')[1].textContent).toBe('production')
-    expect(rows[3].querySelectorAll('td')[0].textContent).toBe('config-b')
-    expect(rows[3].querySelectorAll('td')[1].textContent).toBe('production')
+  it('filters by the Flux category', () => {
+    const { container } = render(<InventoryTabContent inventory={inventory} />)
+    fireEvent.click(screen.getByTestId('inventory-cat-flux'))
+    const r = rows(container)
+    expect(r).toHaveLength(1)
+    expect(r[0].textContent).toContain('Kustomization')
   })
 
-  it('should render Flux resources as links and other kinds as plain text', () => {
-    render(<InventoryTabContent inventory={mockInventory} namespace="flux-system" />)
-
-    // Flux resources link to the resource dashboard
-    expect(screen.getByRole('link', { name: 'apps' }))
-      .toHaveAttribute('href', '/resource/Kustomization/flux-system/apps')
-
-    // Workloads link to the workload dashboard
-    expect(screen.getByRole('link', { name: 'podinfo' }))
-      .toHaveAttribute('href', '/workload/Deployment/apps/podinfo')
-
-    // A non-Flux, non-workload kind (ConfigMap) is plain text
-    const configMap = screen.getByText('settings')
-    expect(configMap.tagName).toBe('SPAN')
-    expect(configMap.closest('a')).toBeNull()
+  it('filters by the Workloads category', () => {
+    const { container } = render(<InventoryTabContent inventory={inventory} />)
+    fireEvent.click(screen.getByTestId('inventory-cat-workloads'))
+    const r = rows(container)
+    expect(r).toHaveLength(1)
+    expect(r[0].textContent).toContain('Deployment')
   })
 
-  it('should fall back to the provided namespace when an item has none for link routing', () => {
-    render(
-      <InventoryTabContent
-        inventory={[{ kind: 'Kustomization', name: 'infra', apiVersion: 'kustomize.toolkit.fluxcd.io/v1' }]}
-        namespace="flux-system"
-      />
-    )
-
-    const link = screen.getByRole('link', { name: 'infra' })
-    expect(link.getAttribute('href')).toContain('flux-system')
+  it('filters by the Other category (neither Flux nor workload)', () => {
+    const { container } = render(<InventoryTabContent inventory={inventory} />)
+    fireEvent.click(screen.getByTestId('inventory-cat-other'))
+    const r = rows(container)
+    expect(r).toHaveLength(2) // ConfigMap + ClusterRole
+    expect(container.textContent).toContain('ConfigMap')
+    expect(container.textContent).toContain('ClusterRole')
+    expect(container.textContent).not.toContain('Kustomization')
   })
 
-  it('should render an empty table when inventory is undefined', () => {
-    render(<InventoryTabContent namespace="flux-system" />)
+  it('searches across fields and composes with the category', () => {
+    const { container } = render(<InventoryTabContent inventory={inventory} />)
+    // Search alone: "podinfo" matches the Deployment by name.
+    fireEvent.input(screen.getByTestId('inventory-search'), { target: { value: 'podinfo' } })
+    expect(rows(container)).toHaveLength(1)
+    // Compose with a category that excludes it → empty.
+    fireEvent.click(screen.getByTestId('inventory-cat-flux'))
+    expect(screen.getByTestId('inventory-empty')).toBeInTheDocument()
+  })
 
-    expect(document.querySelectorAll('tbody tr')).toHaveLength(0)
+  it('clears both filters with the clear button', () => {
+    const { container } = render(<InventoryTabContent inventory={inventory} />)
+    fireEvent.click(screen.getByTestId('inventory-cat-flux'))
+    fireEvent.input(screen.getByTestId('inventory-search'), { target: { value: 'nomatch' } })
+    expect(screen.getByTestId('inventory-empty')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('inventory-clear'))
+    expect(rows(container)).toHaveLength(4)
+    expect(screen.getByTestId('inventory-search')).toHaveValue('')
+  })
+
+  it('shows the empty state when filters exclude everything', () => {
+    render(<InventoryTabContent inventory={inventory} />)
+    fireEvent.input(screen.getByTestId('inventory-search'), { target: { value: 'zzz-no-match' } })
+    expect(screen.getByTestId('inventory-empty')).toHaveTextContent('No objects match the filters')
+  })
+
+  it('keeps an expanded row mounted across an inventory prop change (stable keys)', () => {
+    const { rerender } = render(<InventoryTabContent inventory={inventory} />)
+    fireEvent.click(rowToggle('settings'))
+    expect(screen.getByTestId('details-settings')).toBeInTheDocument()
+
+    // New array (poll), same items plus an added one — settings stays expanded.
+    const added = [...inventory, { kind: 'Service', name: 'svc', namespace: 'apps', apiVersion: 'v1' }]
+    rerender(<InventoryTabContent inventory={added} />)
+    expect(screen.getByTestId('details-settings')).toBeInTheDocument()
+  })
+
+  it('unmounts a row (and its detail) when its item is pruned', () => {
+    const { rerender } = render(<InventoryTabContent inventory={inventory} />)
+    fireEvent.click(rowToggle('settings'))
+    expect(screen.getByTestId('details-settings')).toBeInTheDocument()
+
+    // settings removed from the inventory → its row and open detail disappear.
+    const pruned = inventory.filter(i => i.name !== 'settings')
+    rerender(<InventoryTabContent inventory={pruned} />)
+    expect(screen.queryByTestId('details-settings')).toBeNull()
+    expect(screen.queryByText('settings')).toBeNull()
+  })
+
+  it('renders the empty state for an undefined inventory', () => {
+    render(<InventoryTabContent />)
+    expect(screen.getByTestId('inventory-empty')).toBeInTheDocument()
   })
 })

@@ -1,9 +1,9 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { getWorkloadStatusBadgeClass, formatWorkloadStatus } from '../../../utils/status'
 import { formatScheduleMessage } from '../../../utils/cron'
 import { getDashboardUrl } from '../../../utils/routing'
+import { StatusPill } from '../../common/StatusPill'
 
 /**
  * WorkloadsTabContent - Launchpad list of the Kubernetes workloads managed by a
@@ -41,17 +41,9 @@ export function WorkloadsTabContent({ workloadItems, namespace, workloadStatuses
                 <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
                   {item.kind}
                 </span>
-                {status ? (
-                  <span class={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getWorkloadStatusBadgeClass(status.status)}`}>
-                    {formatWorkloadStatus(status.status)}
-                  </span>
-                ) : (
-                  // Placeholder until live status arrives, so the row keeps its
-                  // shape from first paint instead of flickering the badge in.
-                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 animate-pulse" data-testid="workload-status-computing">
-                    computing...
-                  </span>
-                )}
+                {/* Colored badge once live status arrives, else a pulsing
+                    placeholder so the row keeps its shape from first paint. */}
+                <StatusPill status={status?.status} computingTestid="workload-status-computing" />
               </div>
               {/* Line 2: Namespace/Name */}
               <div class="text-sm truncate">

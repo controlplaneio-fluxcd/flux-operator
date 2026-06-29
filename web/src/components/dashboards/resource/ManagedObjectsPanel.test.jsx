@@ -25,10 +25,9 @@ vi.mock('../../../utils/fetch', () => ({
 // (tab visibility, switching, and the props handed to the list) rather than the
 // list's DOM, which is owned and tested by InventoryTabContent.test.jsx.
 vi.mock('./InventoryTabContent', () => ({
-  InventoryTabContent: ({ inventory, namespace }) => (
+  InventoryTabContent: ({ inventory }) => (
     <div
       data-testid="inventory-tab-content"
-      data-namespace={namespace}
       data-count={inventory?.length ?? 0}
     >
       InventoryTabContent
@@ -409,7 +408,6 @@ describe('ManagedObjectsPanel component', () => {
     const list = screen.getByTestId('inventory-tab-content')
     expect(list).toBeInTheDocument()
     expect(list).toHaveAttribute('data-count', '5')
-    expect(list).toHaveAttribute('data-namespace', 'flux-system')
   })
 
   it('should toggle collapse/expand state', async () => {

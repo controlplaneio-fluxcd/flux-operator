@@ -23,7 +23,7 @@ import { favorites } from './utils/favorites'
 import { ProfilePage } from './components/user/ProfilePage'
 import { NotFoundPage } from './components/layout/NotFoundPage'
 import { FluxOperatorIcon } from './components/layout/Icons'
-import { Spinner } from './components/search/compactRow'
+import { Spinner } from './components/common/rowKit'
 
 // Global signals for FluxReport data and application state
 // These signals are exported and used by child components throughout the app

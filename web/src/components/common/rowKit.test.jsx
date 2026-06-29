@@ -7,10 +7,11 @@ import {
   Spinner,
   Star,
   KindChip,
+  NameLink,
   Reveal,
   useDisclosure,
   NEUTRAL_CHIP,
-} from './compactRow'
+} from './rowKit'
 
 describe('Spinner', () => {
   it('renders an animated spinner svg', () => {
@@ -61,6 +62,31 @@ describe('KindChip', () => {
     const chip = screen.getByText('deploy')
     expect(chip).toHaveClass('hidden')
     expect(chip).toHaveAttribute('title', 'custom')
+  })
+})
+
+describe('NameLink', () => {
+  it('renders anchor links to the dashboard when href is set', () => {
+    render(<NameLink href="/dash" namespace="flux-system" name="podinfo" />)
+    const links = screen.getAllByRole('link')
+    expect(links.length).toBe(2) // mobile + desktop variant
+    links.forEach((a) => expect(a).toHaveAttribute('href', '/dash'))
+    // Two-tone label: namespace prefix + name.
+    expect(screen.getAllByText('flux-system/').length).toBe(2)
+    expect(screen.getAllByText('podinfo').length).toBe(2)
+  })
+
+  it('renders plain text (no link) when href is absent', () => {
+    render(<NameLink namespace="default" name="my-config" />)
+    expect(screen.queryByRole('link')).toBeNull()
+    expect(screen.getAllByText('default/').length).toBe(2)
+    expect(screen.getAllByText('my-config').length).toBe(2)
+  })
+
+  it('omits the namespace prefix for cluster-scoped objects', () => {
+    render(<NameLink name="cluster-reader" />)
+    expect(screen.queryByText('/', { exact: false })).toBeNull()
+    expect(screen.getAllByText('cluster-reader').length).toBe(2)
   })
 })
 

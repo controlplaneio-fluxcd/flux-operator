@@ -259,7 +259,6 @@ export function ManagedObjectsPanel({ resourceData, onNavigate }) {
       {activeTab === 'inventory' && (
         <InventoryTabContent
           inventory={resourceData.status?.inventory}
-          namespace={resourceData.metadata.namespace}
         />
       )}
 

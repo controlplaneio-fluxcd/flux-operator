@@ -15,7 +15,7 @@ import { getDashboardUrl, useRestoreFiltersFromUrl, useSyncFiltersToUrl } from '
 import { StatusChart } from './StatusChart'
 import { useInfiniteScroll } from '../../utils/scroll'
 import { isFavorite, toggleFavorite, favorites } from '../../utils/favorites'
-import { Star, KindChip, NameLink, Chevron, Spinner, useDisclosure, Reveal, patchRowInSignal } from './compactRow'
+import { Star, KindChip, NameLink, Chevron, Spinner, useDisclosure, Reveal, patchRowInSignal } from '../common/rowKit'
 
 // Resources data signals
 export const resourcesData = signal([])
