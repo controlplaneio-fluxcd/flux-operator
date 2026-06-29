@@ -19,8 +19,6 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
 // EventsHandler handles GET /api/v1/events requests and returns Kubernetes events for Flux resources.
@@ -76,20 +74,10 @@ func (h *Handler) GetEvents(ctx context.Context, kind, name, namespace, excludeR
 	if kind != "" {
 		kinds = []string{kind}
 	} else {
-		// Default kinds
-		kinds = []string{
-			// Appliers
-			fluxcdv1.ResourceSetKind,
-			fluxcdv1.FluxKustomizationKind,
-			fluxcdv1.FluxHelmReleaseKind,
-			// Sources
-			fluxcdv1.FluxGitRepositoryKind,
-			fluxcdv1.FluxOCIRepositoryKind,
-			fluxcdv1.FluxHelmChartKind,
-			fluxcdv1.FluxHelmRepositoryKind,
-			fluxcdv1.FluxBucketKind,
-			fluxcdv1.FluxArtifactGeneratorKind,
-			fluxcdv1.ResourceSetInputProviderKind,
+		// Default to all Flux kinds present in the search index
+		kinds = h.searchIndex.Kinds()
+		if len(kinds) == 0 {
+			kinds = defaultFluxKinds()
 		}
 	}
 
@@ -107,11 +95,6 @@ func (h *Handler) GetEvents(ctx context.Context, kind, name, namespace, excludeR
 		// If the user has no access to any namespaces, return empty result
 		if len(userNamespaces) == 0 {
 			return []Event{}, nil
-		}
-
-		// If the user has cluster-wide access, we can add FluxInstance to kinds
-		if all && kind == "" {
-			kinds = append(kinds, fluxcdv1.FluxInstanceKind)
 		}
 
 		// If the user does not have access to all namespaces, limit search to their namespaces

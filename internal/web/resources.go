@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -64,6 +65,25 @@ func (h *Handler) ResourcesHandler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
+// defaultFluxKinds returns the set of Flux kinds queried by default when no
+// kind filter is provided and the search index has not been populated yet.
+// It is derived from the canonical operator and Flux kind lists so it stays in
+// sync as kinds are added, excluding FluxReport which is the report object
+// itself rather than a reconciled resource shown on the Status Page. Kinds
+// whose CRDs are not installed are skipped at query time, so listing them here
+// is harmless.
+func defaultFluxKinds() []string {
+	infos := slices.Concat(fluxcdv1.FluxOperatorKinds, fluxcdv1.FluxKinds)
+	kinds := make([]string, 0, len(infos))
+	for _, info := range infos {
+		if info.Name == fluxcdv1.FluxReportKind {
+			continue
+		}
+		kinds = append(kinds, info.Name)
+	}
+	return kinds
+}
+
 // GetLiveResources returns a list of ResourceStatus for the specified filters by querying the cluster directly.
 // If name and namespace filters are empty, it will return resources across all namespaces (subject to RBAC).
 func (h *Handler) GetLiveResources(ctx context.Context, kind, name, namespace, status string,
@@ -74,20 +94,10 @@ func (h *Handler) GetLiveResources(ctx context.Context, kind, name, namespace, s
 	if kind != "" {
 		kinds = []string{kind}
 	} else {
-		// Default kinds
-		kinds = []string{
-			// Appliers
-			fluxcdv1.ResourceSetKind,
-			fluxcdv1.FluxKustomizationKind,
-			fluxcdv1.FluxHelmReleaseKind,
-			// Sources
-			fluxcdv1.FluxGitRepositoryKind,
-			fluxcdv1.FluxOCIRepositoryKind,
-			fluxcdv1.FluxHelmChartKind,
-			fluxcdv1.FluxHelmRepositoryKind,
-			fluxcdv1.FluxBucketKind,
-			fluxcdv1.FluxArtifactGeneratorKind,
-			fluxcdv1.ResourceSetInputProviderKind,
+		// Default to all Flux kinds present in the search index
+		kinds = h.searchIndex.Kinds()
+		if len(kinds) == 0 {
+			kinds = defaultFluxKinds()
 		}
 	}
 
@@ -105,11 +115,6 @@ func (h *Handler) GetLiveResources(ctx context.Context, kind, name, namespace, s
 		// If the user has no access to any namespaces, return empty result
 		if len(userNamespaces) == 0 {
 			return []reporter.ResourceStatus{}, nil
-		}
-
-		// If the user has cluster-wide access, we can add FluxInstance to kinds
-		if all && kind == "" {
-			kinds = append(kinds, fluxcdv1.FluxInstanceKind)
 		}
 
 		// If the user does not have access to all namespaces, limit search to their namespaces
