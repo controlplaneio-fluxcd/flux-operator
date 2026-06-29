@@ -28,10 +28,10 @@ vi.mock('./ReconcilerPanel', () => ({
   )
 }))
 
-vi.mock('./InventoryPanel', () => ({
-  InventoryPanel: ({ resourceData }) => (
+vi.mock('./ManagedObjectsPanel', () => ({
+  ManagedObjectsPanel: ({ resourceData }) => (
     <div data-testid="inventory-panel">
-      InventoryPanel: {resourceData?.metadata?.name}
+      ManagedObjectsPanel: {resourceData?.metadata?.name}
     </div>
   )
 }))
@@ -198,7 +198,7 @@ describe('ResourcePage component', () => {
 
     // Check Child Panels using mocked components
     expect(screen.getByTestId('reconciler-panel')).toHaveTextContent('ReconcilerPanel: FluxInstance/flux-system/flux')
-    expect(screen.getByTestId('inventory-panel')).toHaveTextContent('InventoryPanel: flux')
+    expect(screen.getByTestId('inventory-panel')).toHaveTextContent('ManagedObjectsPanel: flux')
     expect(screen.getByTestId('source-panel')).toHaveTextContent('SourcePanel: flux-system/flux-system')
   })
 

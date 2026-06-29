@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen } from '@testing-library/preact'
 import userEvent from '@testing-library/user-event'
-import { InventoryPanel } from './InventoryPanel'
+import { ManagedObjectsPanel } from './ManagedObjectsPanel'
 import { fetchWithMock } from '../../../utils/fetch'
 import { getPanelById } from '../common/panel.test'
 
@@ -21,7 +21,22 @@ vi.mock('../../../utils/fetch', () => ({
   fetchWithMock: vi.fn(() => Promise.resolve({ workloads: [] }))
 }))
 
-describe('InventoryPanel component', () => {
+// Mock the inventory list so this test asserts the panel's integration contract
+// (tab visibility, switching, and the props handed to the list) rather than the
+// list's DOM, which is owned and tested by InventoryTabContent.test.jsx.
+vi.mock('./InventoryTabContent', () => ({
+  InventoryTabContent: ({ inventory, namespace }) => (
+    <div
+      data-testid="inventory-tab-content"
+      data-namespace={namespace}
+      data-count={inventory?.length ?? 0}
+    >
+      InventoryTabContent
+    </div>
+  )
+}))
+
+describe('ManagedObjectsPanel component', () => {
   const mockKustomizationData = {
     apiVersion: 'kustomize.toolkit.fluxcd.io/v1',
     kind: 'Kustomization',
@@ -101,7 +116,7 @@ describe('InventoryPanel component', () => {
     }
 
     const { container } = render(
-      <InventoryPanel
+      <ManagedObjectsPanel
         resourceData={noInventoryData}
         onNavigate={mockOnNavigate}
       />
@@ -129,7 +144,7 @@ describe('InventoryPanel component', () => {
     }
 
     const { container } = render(
-      <InventoryPanel
+      <ManagedObjectsPanel
         resourceData={emptyInventoryData}
         onNavigate={mockOnNavigate}
       />
@@ -166,7 +181,7 @@ describe('InventoryPanel component', () => {
     }
 
     const { container } = render(
-      <InventoryPanel
+      <ManagedObjectsPanel
         resourceData={gitRepoData}
         onNavigate={mockOnNavigate}
       />
@@ -177,7 +192,7 @@ describe('InventoryPanel component', () => {
 
   it('should render the managed objects section when inventory exists', () => {
     const { container } = render(
-      <InventoryPanel
+      <ManagedObjectsPanel
         resourceData={mockKustomizationData}
         onNavigate={mockOnNavigate}
       />
@@ -189,7 +204,7 @@ describe('InventoryPanel component', () => {
 
   it('should display overview tab by default', () => {
     render(
-      <InventoryPanel
+      <ManagedObjectsPanel
         resourceData={mockKustomizationData}
         onNavigate={mockOnNavigate}
       />
@@ -208,7 +223,7 @@ describe('InventoryPanel component', () => {
 
   it('should calculate total resources count correctly', () => {
     render(
-      <InventoryPanel
+      <ManagedObjectsPanel
         resourceData={mockKustomizationData}
         onNavigate={mockOnNavigate}
       />
@@ -221,7 +236,7 @@ describe('InventoryPanel component', () => {
 
   it('should calculate flux resources count correctly', () => {
     render(
-      <InventoryPanel
+      <ManagedObjectsPanel
         resourceData={mockKustomizationData}
         onNavigate={mockOnNavigate}
       />
@@ -234,7 +249,7 @@ describe('InventoryPanel component', () => {
 
   it('should calculate workloads count correctly', () => {
     render(
-      <InventoryPanel
+      <ManagedObjectsPanel
         resourceData={mockKustomizationData}
         onNavigate={mockOnNavigate}
       />
@@ -247,7 +262,7 @@ describe('InventoryPanel component', () => {
 
   it('should calculate secrets count correctly', () => {
     render(
-      <InventoryPanel
+      <ManagedObjectsPanel
         resourceData={mockKustomizationData}
         onNavigate={mockOnNavigate}
       />
@@ -260,7 +275,7 @@ describe('InventoryPanel component', () => {
 
   it('should show garbage collection as enabled for Kustomization with prune=true', () => {
     render(
-      <InventoryPanel
+      <ManagedObjectsPanel
         resourceData={mockKustomizationData}
         onNavigate={mockOnNavigate}
       />
@@ -281,7 +296,7 @@ describe('InventoryPanel component', () => {
     }
 
     render(
-      <InventoryPanel
+      <ManagedObjectsPanel
         resourceData={dataWithoutPrune}
         onNavigate={mockOnNavigate}
       />
@@ -294,7 +309,7 @@ describe('InventoryPanel component', () => {
 
   it('should show garbage collection as enabled for HelmRelease', () => {
     render(
-      <InventoryPanel
+      <ManagedObjectsPanel
         resourceData={mockHelmReleaseData}
         onNavigate={mockOnNavigate}
       />
@@ -307,7 +322,7 @@ describe('InventoryPanel component', () => {
 
   it('should show health checking as enabled for Kustomization with wait=true', () => {
     render(
-      <InventoryPanel
+      <ManagedObjectsPanel
         resourceData={mockKustomizationData}
         onNavigate={mockOnNavigate}
       />
@@ -328,7 +343,7 @@ describe('InventoryPanel component', () => {
     }
 
     render(
-      <InventoryPanel
+      <ManagedObjectsPanel
         resourceData={dataWithoutWait}
         onNavigate={mockOnNavigate}
       />
@@ -341,7 +356,7 @@ describe('InventoryPanel component', () => {
 
   it('should show secret decryption as enabled for Kustomization with decryption', () => {
     render(
-      <InventoryPanel
+      <ManagedObjectsPanel
         resourceData={mockKustomizationData}
         onNavigate={mockOnNavigate}
       />
@@ -364,7 +379,7 @@ describe('InventoryPanel component', () => {
     }
 
     render(
-      <InventoryPanel
+      <ManagedObjectsPanel
         resourceData={dataWithoutDecryption}
         onNavigate={mockOnNavigate}
       />
@@ -379,7 +394,7 @@ describe('InventoryPanel component', () => {
     const user = userEvent.setup()
 
     render(
-      <InventoryPanel
+      <ManagedObjectsPanel
         resourceData={mockKustomizationData}
         onNavigate={mockOnNavigate}
       />
@@ -389,90 +404,19 @@ describe('InventoryPanel component', () => {
     const inventoryTab = screen.getByText('Inventory')
     await user.click(inventoryTab)
 
-    // Check that inventory tab is active
+    // Tab is active and the inventory list renders with the resource's inventory
     expect(inventoryTab).toHaveClass('border-flux-blue')
-
-    // Check that inventory table is displayed
-    const table = document.querySelector('table')
-    expect(table).toBeInTheDocument()
-
-    // Check table headers
-    const headers = document.querySelectorAll('th')
-    expect(headers[0].textContent).toBe('Name')
-    expect(headers[1].textContent).toBe('Namespace')
-    expect(headers[2].textContent).toBe('Kind')
-  })
-
-  it('should display all inventory items in the table', async () => {
-    const user = userEvent.setup()
-
-    render(
-      <InventoryPanel
-        resourceData={mockKustomizationData}
-        onNavigate={mockOnNavigate}
-      />
-    )
-
-    // Switch to inventory tab
-    const inventoryTab = screen.getByText('Inventory')
-    await user.click(inventoryTab)
-
-    // Check that all items are displayed
-    const textContent = document.body.textContent
-    expect(textContent).toContain('production')
-    expect(textContent).toContain('app-config')
-    expect(textContent).toContain('app-secret')
-    expect(textContent).toContain('app')
-    expect(textContent).toContain('backend')
-  })
-
-  it('should make Flux resources clickable in inventory', async () => {
-    const user = userEvent.setup()
-
-    render(
-      <InventoryPanel
-        resourceData={mockKustomizationData}
-        onNavigate={mockOnNavigate}
-      />
-    )
-
-    // Switch to inventory tab
-    const inventoryTab = screen.getByText('Inventory')
-    await user.click(inventoryTab)
-
-    // Find the Kustomization link (Flux resource)
-    const kustomizationLink = screen.getByText('backend').closest('a')
-    expect(kustomizationLink).toBeInTheDocument()
-
-    // Check that it has the correct href
-    expect(kustomizationLink).toHaveAttribute('href', '/resource/Kustomization/production/backend')
-  })
-
-  it('should not make non-Flux resources clickable in inventory', async () => {
-    const user = userEvent.setup()
-
-    render(
-      <InventoryPanel
-        resourceData={mockKustomizationData}
-        onNavigate={mockOnNavigate}
-      />
-    )
-
-    // Switch to inventory tab
-    const inventoryTab = screen.getByText('Inventory')
-    await user.click(inventoryTab)
-
-    // ConfigMap should not be in a link
-    const configMapElement = screen.getByText('app-config')
-    expect(configMapElement.tagName).toBe('SPAN')
-    expect(configMapElement.closest('a')).toBeNull()
+    const list = screen.getByTestId('inventory-tab-content')
+    expect(list).toBeInTheDocument()
+    expect(list).toHaveAttribute('data-count', '5')
+    expect(list).toHaveAttribute('data-namespace', 'flux-system')
   })
 
   it('should toggle collapse/expand state', async () => {
     const user = userEvent.setup()
 
     render(
-      <InventoryPanel
+      <ManagedObjectsPanel
         resourceData={mockKustomizationData}
         onNavigate={mockOnNavigate}
       />
@@ -495,61 +439,31 @@ describe('InventoryPanel component', () => {
     expect(screen.getByText('Overview')).toBeInTheDocument()
   })
 
-  it('should display namespace or dash for inventory items', async () => {
-    const user = userEvent.setup()
-
-    render(
-      <InventoryPanel
-        resourceData={mockKustomizationData}
-        onNavigate={mockOnNavigate}
-      />
-    )
-
-    // Switch to inventory tab
-    const inventoryTab = screen.getByText('Inventory')
-    await user.click(inventoryTab)
-
-    // Check that namespace is displayed for namespaced resources
-    const rows = document.querySelectorAll('tbody tr')
-    expect(rows.length).toBe(5)
-
-    // First row is Namespace (no namespace)
-    const firstRowCells = rows[0].querySelectorAll('td')
-    expect(firstRowCells[1].textContent).toBe('-')
-
-    // Second row is ConfigMap (has namespace)
-    const secondRowCells = rows[1].querySelectorAll('td')
-    expect(secondRowCells[1].textContent).toBe('production')
-  })
-
   it('should switch back to overview tab', async () => {
     const user = userEvent.setup()
 
     render(
-      <InventoryPanel
+      <ManagedObjectsPanel
         resourceData={mockKustomizationData}
         onNavigate={mockOnNavigate}
       />
     )
 
     // Switch to inventory tab
-    const inventoryTab = screen.getByText('Inventory')
-    await user.click(inventoryTab)
-
-    expect(screen.getByText('Name')).toBeInTheDocument()
+    await user.click(screen.getByText('Inventory'))
+    expect(screen.getByTestId('inventory-tab-content')).toBeInTheDocument()
 
     // Switch back to overview
-    const overviewTab = screen.getByText('Overview')
-    await user.click(overviewTab)
+    await user.click(screen.getByText('Overview'))
 
-    // Check overview content is displayed again
+    // Check overview content is displayed again and the list is gone
     expect(screen.getByText('Garbage collection')).toBeInTheDocument()
-    expect(screen.queryByText('Name')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('inventory-tab-content')).not.toBeInTheDocument()
   })
 
   it('should handle FluxInstance with correct feature flags', () => {
     render(
-      <InventoryPanel
+      <ManagedObjectsPanel
         resourceData={mockFluxInstanceData}
         onNavigate={mockOnNavigate}
       />
@@ -570,174 +484,11 @@ describe('InventoryPanel component', () => {
     expect(textContent).toContain('Disabled')
   })
 
-  it('should not call onNavigate when clicking non-Flux resources', async () => {
-    const user = userEvent.setup()
-
-    render(
-      <InventoryPanel
-        resourceData={mockHelmReleaseData}
-        onNavigate={mockOnNavigate}
-      />
-    )
-
-    // Switch to inventory tab
-    const inventoryTab = screen.getByText('Inventory')
-    await user.click(inventoryTab)
-
-    // Check that there are no buttons in the table (all are non-Flux resources)
-    const buttons = document.querySelectorAll('tbody button')
-    expect(buttons.length).toBe(0)
-
-    // Check that spans are used instead
-    const spans = document.querySelectorAll('tbody td span')
-    expect(spans.length).toBeGreaterThan(0)
-
-    // Verify onNavigate was not called
-    expect(mockOnNavigate).not.toHaveBeenCalled()
-  })
-
-  it('should sort inventory items correctly', async () => {
-    const user = userEvent.setup()
-
-    render(
-      <InventoryPanel
-        resourceData={mockKustomizationData}
-        onNavigate={mockOnNavigate}
-      />
-    )
-
-    // Switch to inventory tab
-    const inventoryTab = screen.getByText('Inventory')
-    await user.click(inventoryTab)
-
-    // Get all rows in the table
-    const rows = document.querySelectorAll('tbody tr')
-
-    // Expected order based on mock data:
-    // 1. Namespace (non-namespaced, kind: Namespace)
-    // 2. ConfigMap (namespaced: production, kind: ConfigMap)
-    // 3. Deployment (namespaced: production, kind: Deployment)
-    // 4. Kustomization (namespaced: production, kind: Kustomization)
-    // 5. Secret (namespaced: production, kind: Secret)
-
-    // Check first row is Namespace (non-namespaced)
-    expect(rows[0].querySelectorAll('td')[0].textContent).toBe('production')
-    expect(rows[0].querySelectorAll('td')[1].textContent).toBe('-')
-    expect(rows[0].querySelectorAll('td')[2].textContent).toBe('Namespace')
-
-    // Check second row is ConfigMap (namespaced, production)
-    expect(rows[1].querySelectorAll('td')[0].textContent).toBe('app-config')
-    expect(rows[1].querySelectorAll('td')[1].textContent).toBe('production')
-    expect(rows[1].querySelectorAll('td')[2].textContent).toBe('ConfigMap')
-
-    // Check third row is Deployment (namespaced, production)
-    expect(rows[2].querySelectorAll('td')[0].textContent).toBe('app')
-    expect(rows[2].querySelectorAll('td')[1].textContent).toBe('production')
-    expect(rows[2].querySelectorAll('td')[2].textContent).toBe('Deployment')
-
-    // Check fourth row is Kustomization (namespaced, production)
-    expect(rows[3].querySelectorAll('td')[0].textContent).toBe('backend')
-    expect(rows[3].querySelectorAll('td')[1].textContent).toBe('production')
-    expect(rows[3].querySelectorAll('td')[2].textContent).toBe('Kustomization')
-
-    // Check fifth row is Secret (namespaced, production)
-    expect(rows[4].querySelectorAll('td')[0].textContent).toBe('app-secret')
-    expect(rows[4].querySelectorAll('td')[1].textContent).toBe('production')
-    expect(rows[4].querySelectorAll('td')[2].textContent).toBe('Secret')
-  })
-
-  it('should sort multiple non-namespaced items by kind then name', async () => {
-    const user = userEvent.setup()
-
-    const dataWithMultipleNonNamespaced = {
-      ...mockKustomizationData,
-      status: {
-        inventory: [
-          { apiVersion: 'v1', kind: 'Namespace', name: 'production' },
-          { apiVersion: 'v1', kind: 'Namespace', name: 'development' },
-          { apiVersion: 'rbac.authorization.k8s.io/v1', kind: 'ClusterRole', name: 'admin' },
-          { apiVersion: 'rbac.authorization.k8s.io/v1', kind: 'ClusterRole', name: 'reader' }
-        ]
-      }
-    }
-
-    render(
-      <InventoryPanel
-        resourceData={dataWithMultipleNonNamespaced}
-        onNavigate={mockOnNavigate}
-      />
-    )
-
-    const inventoryTab = screen.getByText('Inventory')
-    await user.click(inventoryTab)
-
-    const rows = document.querySelectorAll('tbody tr')
-
-    // Should be sorted by kind first, then by name
-    // ClusterRole comes before Namespace alphabetically
-    expect(rows[0].querySelectorAll('td')[0].textContent).toBe('admin')
-    expect(rows[0].querySelectorAll('td')[2].textContent).toBe('ClusterRole')
-
-    expect(rows[1].querySelectorAll('td')[0].textContent).toBe('reader')
-    expect(rows[1].querySelectorAll('td')[2].textContent).toBe('ClusterRole')
-
-    expect(rows[2].querySelectorAll('td')[0].textContent).toBe('development')
-    expect(rows[2].querySelectorAll('td')[2].textContent).toBe('Namespace')
-
-    expect(rows[3].querySelectorAll('td')[0].textContent).toBe('production')
-    expect(rows[3].querySelectorAll('td')[2].textContent).toBe('Namespace')
-  })
-
-  it('should sort namespaced items by namespace then kind then name', async () => {
-    const user = userEvent.setup()
-
-    const dataWithMultipleNamespaces = {
-      ...mockKustomizationData,
-      status: {
-        inventory: [
-          { apiVersion: 'v1', kind: 'ConfigMap', namespace: 'production', name: 'config-b' },
-          { apiVersion: 'v1', kind: 'ConfigMap', namespace: 'production', name: 'config-a' },
-          { apiVersion: 'v1', kind: 'ConfigMap', namespace: 'development', name: 'config-c' },
-          { apiVersion: 'v1', kind: 'Secret', namespace: 'development', name: 'secret-a' }
-        ]
-      }
-    }
-
-    render(
-      <InventoryPanel
-        resourceData={dataWithMultipleNamespaces}
-        onNavigate={mockOnNavigate}
-      />
-    )
-
-    const inventoryTab = screen.getByText('Inventory')
-    await user.click(inventoryTab)
-
-    const rows = document.querySelectorAll('tbody tr')
-
-    // Sorted by namespace (development first), then kind (ConfigMap before Secret), then name
-    expect(rows[0].querySelectorAll('td')[0].textContent).toBe('config-c')
-    expect(rows[0].querySelectorAll('td')[1].textContent).toBe('development')
-    expect(rows[0].querySelectorAll('td')[2].textContent).toBe('ConfigMap')
-
-    expect(rows[1].querySelectorAll('td')[0].textContent).toBe('secret-a')
-    expect(rows[1].querySelectorAll('td')[1].textContent).toBe('development')
-    expect(rows[1].querySelectorAll('td')[2].textContent).toBe('Secret')
-
-    expect(rows[2].querySelectorAll('td')[0].textContent).toBe('config-a')
-    expect(rows[2].querySelectorAll('td')[1].textContent).toBe('production')
-    expect(rows[2].querySelectorAll('td')[2].textContent).toBe('ConfigMap')
-
-    expect(rows[3].querySelectorAll('td')[0].textContent).toBe('config-b')
-    expect(rows[3].querySelectorAll('td')[1].textContent).toBe('production')
-    expect(rows[3].querySelectorAll('td')[2].textContent).toBe('ConfigMap')
-  })
-
   it('should show Workloads tab when there are workload items', async () => {
     const user = userEvent.setup()
 
     render(
-      <InventoryPanel
+      <ManagedObjectsPanel
         resourceData={mockKustomizationData}
         onNavigate={mockOnNavigate}
       />
@@ -771,7 +522,7 @@ describe('InventoryPanel component', () => {
     })
 
     render(
-      <InventoryPanel
+      <ManagedObjectsPanel
         resourceData={mockKustomizationData}
         onNavigate={mockOnNavigate}
       />
@@ -806,7 +557,7 @@ describe('InventoryPanel component', () => {
     }
 
     render(
-      <InventoryPanel
+      <ManagedObjectsPanel
         resourceData={dataWithNoWorkloads}
         onNavigate={mockOnNavigate}
       />
@@ -828,7 +579,7 @@ describe('InventoryPanel component', () => {
     }
 
     render(
-      <InventoryPanel
+      <ManagedObjectsPanel
         resourceData={helmReleaseWithDisabledWait}
         onNavigate={mockOnNavigate}
       />
@@ -858,7 +609,7 @@ describe('InventoryPanel component', () => {
     }
 
     render(
-      <InventoryPanel
+      <ManagedObjectsPanel
         resourceData={resourceSetData}
         onNavigate={mockOnNavigate}
       />
@@ -886,7 +637,7 @@ describe('InventoryPanel component', () => {
     }
 
     render(
-      <InventoryPanel
+      <ManagedObjectsPanel
         resourceData={artifactGeneratorData}
         onNavigate={mockOnNavigate}
       />
@@ -901,25 +652,15 @@ describe('InventoryPanel component', () => {
     const user = userEvent.setup()
 
     render(
-      <InventoryPanel
+      <ManagedObjectsPanel
         resourceData={mockKustomizationData}
         onNavigate={undefined}
       />
     )
 
-    // Switch to inventory tab
-    const inventoryTab = screen.getByText('Inventory')
-    await user.click(inventoryTab)
-
-    // Find the Kustomization link (Flux resource)
-    const kustomizationLink = screen.getByText('backend').closest('a')
-
-    // Click it - should not throw
-    await user.click(kustomizationLink)
-
-    // No error should occur - link should have correct href
-    expect(kustomizationLink).toBeInTheDocument()
-    expect(kustomizationLink).toHaveAttribute('href', '/resource/Kustomization/production/backend')
+    // Panel renders and switches tabs without throwing when onNavigate is omitted
+    await user.click(screen.getByText('Inventory'))
+    expect(screen.getByTestId('inventory-tab-content')).toBeInTheDocument()
   })
 
   it('should show garbage collection as disabled for unknown kind without prune spec', () => {
@@ -945,7 +686,7 @@ describe('InventoryPanel component', () => {
     }
 
     render(
-      <InventoryPanel
+      <ManagedObjectsPanel
         resourceData={kustomizationWithoutPrune}
         onNavigate={mockOnNavigate}
       />
@@ -959,7 +700,7 @@ describe('InventoryPanel component', () => {
   describe('Graph tab', () => {
     it('should show Graph tab when inventory exists', () => {
       render(
-        <InventoryPanel
+        <ManagedObjectsPanel
           resourceData={mockKustomizationData}
           onNavigate={mockOnNavigate}
         />
@@ -975,7 +716,7 @@ describe('InventoryPanel component', () => {
       }
 
       render(
-        <InventoryPanel
+        <ManagedObjectsPanel
           resourceData={noInventoryData}
           onNavigate={mockOnNavigate}
         />
@@ -989,7 +730,7 @@ describe('InventoryPanel component', () => {
       const user = userEvent.setup()
 
       render(
-        <InventoryPanel
+        <ManagedObjectsPanel
           resourceData={mockKustomizationData}
           onNavigate={mockOnNavigate}
         />
@@ -1010,7 +751,7 @@ describe('InventoryPanel component', () => {
       const user = userEvent.setup()
 
       render(
-        <InventoryPanel
+        <ManagedObjectsPanel
           resourceData={mockKustomizationData}
           onNavigate={mockOnNavigate}
         />
@@ -1029,7 +770,7 @@ describe('InventoryPanel component', () => {
       const user = userEvent.setup()
 
       render(
-        <InventoryPanel
+        <ManagedObjectsPanel
           resourceData={mockKustomizationData}
           onNavigate={mockOnNavigate}
         />
@@ -1051,7 +792,7 @@ describe('InventoryPanel component', () => {
   describe('inventoryError', () => {
     it('should not display error when inventoryError is not present', () => {
       render(
-        <InventoryPanel
+        <ManagedObjectsPanel
           resourceData={mockKustomizationData}
           onNavigate={mockOnNavigate}
         />
@@ -1070,7 +811,7 @@ describe('InventoryPanel component', () => {
       }
 
       render(
-        <InventoryPanel
+        <ManagedObjectsPanel
           resourceData={dataWithError}
           onNavigate={mockOnNavigate}
         />
@@ -1096,7 +837,7 @@ describe('InventoryPanel component', () => {
       }
 
       render(
-        <InventoryPanel
+        <ManagedObjectsPanel
           resourceData={dataWithErrorAndInventory}
           onNavigate={mockOnNavigate}
         />
@@ -1115,8 +856,8 @@ describe('InventoryPanel component', () => {
       // Error should still be visible
       expect(screen.getByTestId('inventory-error')).toBeInTheDocument()
 
-      // Inventory data should also be visible
-      expect(screen.getByText('app-config')).toBeInTheDocument()
+      // Inventory list should also be visible alongside the error
+      expect(screen.getByTestId('inventory-tab-content')).toBeInTheDocument()
     })
 
     it('should display error when there is no inventory data', () => {
@@ -1128,7 +869,7 @@ describe('InventoryPanel component', () => {
       }
 
       render(
-        <InventoryPanel
+        <ManagedObjectsPanel
           resourceData={dataWithErrorNoInventory}
           onNavigate={mockOnNavigate}
         />

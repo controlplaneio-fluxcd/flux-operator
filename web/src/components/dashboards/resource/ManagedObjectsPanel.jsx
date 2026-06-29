@@ -5,20 +5,20 @@ import { useMemo } from 'preact/compat'
 import { useState, useEffect } from 'preact/hooks'
 import { isKindWithInventory, isFluxInventoryItem, isWorkloadInventoryItem } from '../../../utils/constants'
 import { fetchWithMock } from '../../../utils/fetch'
-import { getDashboardUrl } from '../../../utils/routing'
 import { DashboardPanel, TabButton } from '../common/panel'
+import { InventoryTabContent } from './InventoryTabContent'
 import { WorkloadsTabContent } from './WorkloadsTabContent'
 import { GraphTabContent } from './GraphTabContent'
 import { useHashTab } from '../../../utils/hash'
 
-// Valid tabs for the InventoryPanel
+// Valid tabs for the ManagedObjectsPanel
 const INVENTORY_TABS = ['overview', 'graph', 'inventory', 'workloads']
 
 /**
- * InventoryPanel - Displays managed objects inventory for a Flux resource
+ * ManagedObjectsPanel - Displays the managed objects for a Flux resource
  * Handles its own state management and statistics calculations
  */
-export function InventoryPanel({ resourceData, onNavigate }) {
+export function ManagedObjectsPanel({ resourceData, onNavigate }) {
   // Tab state synced with URL hash (e.g., #inventory-graph)
   const [activeTab, setActiveTab] = useHashTab('inventory', 'overview', INVENTORY_TABS, 'inventory-panel')
 
@@ -83,36 +83,6 @@ export function InventoryPanel({ resourceData, onNavigate }) {
     return false
   }, [resourceData])
 
-  // Sort inventory items
-  const sortedInventory = useMemo(() => {
-    if (!hasInventory) return []
-    return [...resourceData.status.inventory].sort((a, b) => {
-      // Non-namespaced items first
-      const aHasNamespace = !!a.namespace
-      const bHasNamespace = !!b.namespace
-
-      if (!aHasNamespace && bHasNamespace) return -1
-      if (aHasNamespace && !bHasNamespace) return 1
-
-      // Both non-namespaced: sort by kind, then name
-      if (!aHasNamespace && !bHasNamespace) {
-        if (a.kind !== b.kind) {
-          return a.kind.localeCompare(b.kind)
-        }
-        return a.name.localeCompare(b.name)
-      }
-
-      // Both namespaced: sort by namespace, then kind, then name
-      if (a.namespace !== b.namespace) {
-        return a.namespace.localeCompare(b.namespace)
-      }
-      if (a.kind !== b.kind) {
-        return a.kind.localeCompare(b.kind)
-      }
-      return a.name.localeCompare(b.name)
-    })
-  }, [resourceData, hasInventory])
-
   // Filter workload items
   const workloadItems = useMemo(() => {
     if (!hasInventory) return []
@@ -167,11 +137,6 @@ export function InventoryPanel({ resourceData, onNavigate }) {
     fetchWorkloadStatuses()
     return () => { cancelled = true }
   }, [tracksWorkloadStatus, workloadItems, resourceData])
-
-  // Build the dashboard URL for an inventory item, routing workloads to the
-  // workload dashboard and Flux resources to the resource dashboard.
-  const getItemUrl = (item) =>
-    getDashboardUrl(item.kind, item.namespace || resourceData.metadata.namespace, item.name)
 
   return (
     <DashboardPanel title="Managed Objects" id="inventory-panel">
@@ -292,41 +257,10 @@ export function InventoryPanel({ resourceData, onNavigate }) {
       )}
 
       {activeTab === 'inventory' && (
-        <div class="overflow-x-auto">
-          <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-            <thead>
-              <tr>
-                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Name</th>
-                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Namespace</th>
-                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Kind</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-              {sortedInventory.map((item, idx) => {
-                const isFluxResource = isFluxInventoryItem(item)
-                const isWorkload = !isFluxResource && isWorkloadInventoryItem(item)
-                return (
-                  <tr key={idx} class="hover:bg-gray-50 dark:hover:bg-gray-800">
-                    <td class="px-3 py-2 text-sm">
-                      {(isFluxResource || isWorkload) ? (
-                        <a
-                          href={getItemUrl(item)}
-                          class="text-flux-blue dark:text-blue-400 hover:underline"
-                        >
-                          {item.name}
-                        </a>
-                      ) : (
-                        <span class="text-gray-900 dark:text-gray-100">{item.name}</span>
-                      )}
-                    </td>
-                    <td class="px-3 py-2 text-sm text-gray-900 dark:text-gray-100">{item.namespace || '-'}</td>
-                    <td class="px-3 py-2 text-sm text-gray-900 dark:text-gray-100">{item.kind}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+        <InventoryTabContent
+          inventory={resourceData.status?.inventory}
+          namespace={resourceData.metadata.namespace}
+        />
       )}
 
       {activeTab === 'workloads' && (

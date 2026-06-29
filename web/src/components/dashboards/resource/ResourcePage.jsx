@@ -12,7 +12,7 @@ import { addToNavHistory } from '../../../utils/navHistory'
 import { ActionBar } from './ActionBar'
 import { ReconcilerPanel } from './ReconcilerPanel'
 import { SourcePanel } from './SourcePanel'
-import { InventoryPanel } from './InventoryPanel'
+import { ManagedObjectsPanel } from './ManagedObjectsPanel'
 import { ArtifactPanel } from './ArtifactPanel'
 import { ExportedInputsPanel } from './ExportedInputsPanel'
 import { InputsPanel } from './InputsPanel'
@@ -373,7 +373,7 @@ export function ResourcePage({ kind, namespace, name }) {
             )}
 
             {/* Managed Objects Section */}
-            <InventoryPanel
+            <ManagedObjectsPanel
               resourceData={resourceData}
               onNavigate={handleNavigate}
             />

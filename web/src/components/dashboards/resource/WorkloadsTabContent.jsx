@@ -12,7 +12,7 @@ import { getDashboardUrl } from '../../../utils/routing'
  * actions live.
  *
  * Status (status + statusMessage only — not pods, images, or actions) is fetched
- * and owned by InventoryPanel and passed in via workloadStatuses, so it is shared
+ * and owned by ManagedObjectsPanel and passed in via workloadStatuses, so it is shared
  * with the Graph tab and survives tab switches without refetching.
  *
  * @param {array} workloadItems - Inventory items of workload kinds

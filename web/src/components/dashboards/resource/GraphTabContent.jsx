@@ -530,7 +530,7 @@ function SourcesConnector({ sourceCount }) {
  * @param {function} onNavigate - Callback for navigation to other resources
  * @param {function} setActiveTab - Callback to switch tabs
  * @param {object} workloadStatuses - Map of workload key to {status, statusMessage},
- *   fetched and owned by InventoryPanel so it is shared with the Workloads tab and
+ *   fetched and owned by ManagedObjectsPanel so it is shared with the Workloads tab and
  *   survives tab switches
  */
 export function GraphTabContent({ resourceData, namespace, onNavigate, setActiveTab, workloadStatuses = {} }) {
