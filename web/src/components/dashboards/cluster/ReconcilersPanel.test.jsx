@@ -61,8 +61,9 @@ describe('ReconcilersPanel', () => {
     it('should show total resource count', () => {
       render(<ReconcilersPanel reconcilers={mockReconcilers} />)
 
-      // Total: 5+2+1 + 3 + 4+1 + 2 + 1 + 1+1 = 21
-      expect(screen.getByText(/21 resources/)).toBeInTheDocument()
+      // Running already includes failing, so total = running + suspended per card:
+      // (5+1) + 3 + 4 + 2 + 1 + 1 = 17
+      expect(screen.getByText(/17 resources/)).toBeInTheDocument()
     })
 
     it('should show failing count when there are failures', () => {
@@ -145,9 +146,10 @@ describe('ReconcilersPanel', () => {
     it('should display total resource count for each reconciler', () => {
       render(<ReconcilersPanel reconcilers={mockReconcilers} />)
 
-      // Find the Kustomization card and check its total (5+2+1 = 8)
+      // Find the Kustomization card and check its total (running 5 + suspended 1 = 6;
+      // failing 2 is a subset of running and not added again)
       const kustomizationCard = screen.getByText('Kustomization').closest('a')
-      expect(kustomizationCard).toHaveTextContent('8')
+      expect(kustomizationCard).toHaveTextContent('6')
     })
 
     it('should show running badge when stats.running > 0', () => {

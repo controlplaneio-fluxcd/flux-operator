@@ -9,9 +9,10 @@ import { clearFavorites } from '../../utils/favorites'
 import { logSettings, DEFAULT_LOG_SETTINGS } from '../../utils/logSettings'
 import { reportData } from '../../app'
 
-// Mock the favorites module
+// Mock the favorites module (app.jsx reads the favorites signal for the tab count)
 vi.mock('../../utils/favorites', () => ({
-  clearFavorites: vi.fn()
+  clearFavorites: vi.fn(),
+  favorites: { value: [] }
 }))
 
 describe('UserMenu', () => {

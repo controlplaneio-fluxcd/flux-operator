@@ -21,8 +21,14 @@ const parseInvolvedObject = (involvedObject) => {
 }
 
 // Helper to match name with wildcard pattern
-// Supports * (matches any characters). If no wildcards, does exact match.
+// Supports * (matches any characters) and a leading ! that negates the match
+// (e.g. "!foo" excludes "foo"). If no wildcards, does exact match.
 const matchesWildcard = (name, pattern) => {
+  // A leading "!" negates the result of matching the rest of the pattern.
+  if (pattern.startsWith('!')) {
+    return !matchesWildcard(name, pattern.slice(1))
+  }
+
   name = name.toLowerCase()
   pattern = pattern.toLowerCase()
 

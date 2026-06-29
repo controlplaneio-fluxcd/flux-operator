@@ -29,9 +29,9 @@ func (h *Handler) SearchHandler(w http.ResponseWriter, req *http.Request) {
 	namespace := queryParams.Get("namespace")
 	kind := queryParams.Get("kind")
 
-	// if name does not contain wildcard, append * to perform partial match
-	if name != "" && !hasWildcard(name) {
-		name = "*" + name + "*"
+	// Wrap a plain term so it matches as a substring (preserving "!" negation).
+	if name != "" {
+		name = wrapPartialMatch(name)
 	}
 
 	// Query the cached search index with RBAC filtering.
@@ -83,10 +83,40 @@ func hasWildcard(pattern string) bool {
 	return pattern != "" && strings.Contains(pattern, "*")
 }
 
+// isNamePattern reports whether name is a match pattern that must be evaluated
+// in memory — a "*" wildcard or a leading "!" negation — as opposed to a plain
+// name that can use an indexed exact-match field selector. A negated name cannot
+// use a positive field selector, so it has to go through matchesWildcard.
+func isNamePattern(name string) bool {
+	return strings.HasPrefix(name, "!") || hasWildcard(name)
+}
+
+// wrapPartialMatch turns a plain search term into a substring pattern
+// ("foo" -> "*foo*") so it matches anywhere in the name, preserving a leading
+// "!" negation ("!foo" -> "!*foo*"). Terms that already contain a "*" wildcard
+// (after the optional "!") are returned unchanged.
+func wrapPartialMatch(name string) string {
+	neg := ""
+	if strings.HasPrefix(name, "!") {
+		neg, name = "!", name[1:]
+	}
+	if name == "" || strings.Contains(name, "*") {
+		return neg + name
+	}
+	return neg + "*" + name + "*"
+}
+
 // matchesWildcard checks if a name matches a pattern with wildcard support.
-// Supports * (matches any characters). If no wildcards present, does exact match.
-// Matching is case-insensitive.
+// Supports * (matches any characters) and a leading "!" that negates the match
+// (e.g. "!foo" matches everything except "foo", "!*foo*" everything that does
+// not contain "foo"). If no wildcards present, does exact match. Matching is
+// case-insensitive.
 func matchesWildcard(name, pattern string) bool {
+	// A leading "!" negates the result of matching the rest of the pattern.
+	if strings.HasPrefix(pattern, "!") {
+		return !matchesWildcard(name, pattern[1:])
+	}
+
 	name = strings.ToLower(name)
 	pattern = strings.ToLower(pattern)
 

@@ -1,7 +1,7 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { useState, useEffect, useRef } from 'preact/hooks'
+import { useState, useEffect, useCallback } from 'preact/hooks'
 
 /**
  * useInfiniteScroll - Hook for implementing infinite scroll functionality
@@ -40,8 +40,15 @@ export function useInfiniteScroll({
   deps = []
 }) {
   const [visibleCount, setVisibleCount] = useState(pageSize)
-  const sentinelRef = useRef(null)
-  const observerRef = useRef(null)
+  // The sentinel DOM node, tracked as state (via a callback ref) rather than a
+  // ref object: the lists unmount their sentinel while a refetch is in flight
+  // and remount a *new* node afterwards. A callback ref makes that swap a state
+  // change, so the observer effect below re-binds to the live node. With a plain
+  // ref object the effect would not re-run (its other deps are unchanged) and
+  // would keep observing the detached node — leaving the list stuck at page one
+  // after navigating away and back.
+  const [sentinelNode, setSentinelNode] = useState(null)
+  const sentinelRef = useCallback((node) => setSentinelNode(node), [])
 
   // Reset visible count when dependencies change (filters, data refetch, etc.)
   useEffect(() => {
@@ -58,29 +65,18 @@ export function useInfiniteScroll({
     }
   }
 
-  // Set up IntersectionObserver to detect when sentinel enters viewport
+  // Set up IntersectionObserver to detect when the sentinel enters the viewport.
+  // Re-binds whenever the sentinel node changes (remount after a refetch) or when
+  // more items load, so re-observing a still-visible sentinel keeps paging.
   useEffect(() => {
-    // Check if IntersectionObserver is supported
-    if (!window.IntersectionObserver) {
+    if (!window.IntersectionObserver || !hasMore || !sentinelNode) {
       return
     }
 
-    // Don't observe if no more items to load
-    if (!hasMore) {
-      return
-    }
-
-    // Clean up previous observer
-    if (observerRef.current) {
-      observerRef.current.disconnect()
-    }
-
-    // Create new observer
     // eslint-disable-next-line no-undef
-    observerRef.current = new IntersectionObserver(
+    const observer = new IntersectionObserver(
       (entries) => {
-        const entry = entries[0]
-        if (entry.isIntersecting) {
+        if (entries[0].isIntersecting) {
           loadMore()
         }
       },
@@ -90,18 +86,10 @@ export function useInfiniteScroll({
       }
     )
 
-    // Start observing the sentinel element
-    if (sentinelRef.current) {
-      observerRef.current.observe(sentinelRef.current)
-    }
+    observer.observe(sentinelNode)
 
-    // Cleanup on unmount
-    return () => {
-      if (observerRef.current) {
-        observerRef.current.disconnect()
-      }
-    }
-  }, [hasMore, visibleCount, totalItems])
+    return () => observer.disconnect()
+  }, [hasMore, visibleCount, totalItems, sentinelNode, threshold])
 
   return {
     visibleCount,

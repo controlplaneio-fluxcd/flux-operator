@@ -2,18 +2,20 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { signal } from '@preact/signals'
-import { useEffect, useState } from 'preact/hooks'
+import { useEffect } from 'preact/hooks'
 import { fetchWithMock } from '../../utils/fetch'
 import { formatTimestamp } from '../../utils/time'
 import { getStatusBadgeClass } from '../../utils/status'
 import { usePageMeta } from '../../utils/meta'
 import { reportData } from '../../app'
 import { FilterForm } from './FilterForm'
+import { FilterBar } from './FilterBar'
 import { ResourceDetailsView } from './ResourceDetailsView'
 import { getDashboardUrl, useRestoreFiltersFromUrl, useSyncFiltersToUrl } from '../../utils/routing'
 import { StatusChart } from './StatusChart'
 import { useInfiniteScroll } from '../../utils/scroll'
 import { isFavorite, toggleFavorite, favorites } from '../../utils/favorites'
+import { Star, KindChip, NameLink, Chevron, Spinner, useDisclosure, Reveal, patchRowInSignal } from './compactRow'
 
 // Resources data signals
 export const resourcesData = signal([])
@@ -55,136 +57,81 @@ export async function fetchResourcesStatus() {
 
 
 /**
- * ResourceCard - Individual card displaying a Flux resource with status and details
+ * ResourceRow - Compact two-line responsive row for a Flux resource.
  *
  * @param {Object} props
- * @param {Object} props.resource - Resource object with kind, name, status, message
+ * @param {Object} props.resource - Resource object with kind, namespace, name,
+ *   status, message and lastReconciled
  *
- * Features:
- * - Shows resource kind, namespace, and name
- * - Displays status badge (Ready, Failed, Progressing, Suspended, Unknown)
- * - Shows status message with expand/collapse for long messages
- * - Displays last reconciled timestamp
- * - Expandable details section showing spec and inventory (lazy-loaded via ResourceDetailsView)
+ * Layout:
+ * - Line 1: favorite star, desktop colored kind chip, namespace/name dashboard
+ *   link (full-width on mobile, fixed-width NameLink on desktop), desktop status
+ *   message, desktop timestamp, and the expand button.
+ * - Line 2 (mobile only): colored kind chip, status word and timestamp.
+ *
+ * Expanding the row lazily mounts {@link ResourceDetailsView}: the expand button
+ * spins while the panel fetches, then the panel animates open once `onReady`
+ * fires. Collapsing unmounts the panel, so each expand re-fetches fresh data.
  */
-function ResourceCard({ resource }) {
-  const [isExpanded, setIsExpanded] = useState(false)
-  const [isDetailsExpanded, setIsDetailsExpanded] = useState(false)
+function ResourceRow({ resource }) {
+  const d = useDisclosure()
 
-  // Check if resource is a favorite (reactive via favorites signal)
-  // Access favorites.value to subscribe to changes and trigger re-renders
+  // Check if resource is a favorite (reactive via favorites signal).
+  // Access favorites.value to subscribe to changes and trigger re-renders.
   const isFavorited = favorites.value && isFavorite(resource.kind, resource.namespace, resource.name)
 
-  // Handle favorite toggle
+  // Toggle favorite without expanding the row.
   const handleFavoriteClick = (e) => {
     e.stopPropagation()
     toggleFavorite(resource.kind, resource.namespace, resource.name)
   }
 
-  // Check if message is long or contains newlines
-  const isLongMessage = resource.message.length > 150 || resource.message.includes('\n')
-  const shouldTruncate = isLongMessage && !isExpanded
+  const dashboardUrl = getDashboardUrl(resource.kind, resource.namespace, resource.name)
+  const chipColor = getStatusBadgeClass(resource.status)
+  const chipTitle = `${resource.kind} · ${resource.status}`
 
-  // Truncate to first line or 150 chars
-  const getTruncatedMessage = () => {
-    const firstLine = resource.message.split('\n')[0]
-    if (firstLine.length > 150) {
-      return firstLine.substring(0, 150) + '...'
-    }
-    return firstLine
+  // When the detail panel finishes loading, refresh this row's summary from the
+  // detail's reconcilerRef (computed by the same server NewResourceStatus the list
+  // uses), so a row that listed as e.g. Failed updates if the resource is now Ready
+  // by the time it is expanded. No-op when the summary is unchanged.
+  const handleData = (data) => {
+    const ref = data?.status?.reconcilerRef
+    if (!ref) return
+    patchRowInSignal(resourcesData, resource, { status: ref.status, message: ref.message, lastReconciled: ref.lastReconciled })
   }
 
-  const displayMessage = shouldTruncate ? getTruncatedMessage() : resource.message
-
   return (
-    <div class="card p-4 hover:shadow-md transition-shadow">
-      {/* Header row: star + kind + status badge + timestamp */}
-      <div class="flex items-center justify-between mb-3">
-        <div class="flex items-center gap-3">
-          {/* Favorite star button */}
-          <button
-            onClick={handleFavoriteClick}
-            class={`p-0.5 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-flux-blue focus:ring-offset-1 ${
-              isFavorited
-                ? 'text-yellow-500 hover:text-yellow-600'
-                : 'text-gray-400 hover:text-flux-blue dark:hover:text-blue-400'
-            }`}
-            title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
-          >
-            <svg class="w-4 h-4" fill={isFavorited ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-            </svg>
-          </button>
-          <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
-            {resource.kind}
-          </span>
-          <span class={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeClass(resource.status)}`}>
-            {resource.status}
-          </span>
+    <div class="border-b border-gray-100 dark:border-gray-700/60 last:border-0">
+      <div class="px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700/30">
+        <div class="flex items-center gap-2.5">
+          <Star active={isFavorited} onClick={handleFavoriteClick} />
+          <KindChip kind={resource.kind} colorClass={chipColor} title={chipTitle} cls="hidden sm:inline-block" />
+          <NameLink href={dashboardUrl} namespace={resource.namespace} name={resource.name} />
+          <span class="hidden sm:block flex-1 min-w-0 truncate text-xs text-gray-500 dark:text-gray-400">{resource.message}</span>
+          <span class="hidden sm:block shrink-0 text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap tabular-nums">{formatTimestamp(resource.lastReconciled)}</span>
+          <button onClick={d.toggle} class="shrink-0 rounded p-0.5 text-gray-400 hover:text-flux-blue" title="Details" aria-label="Toggle details">{d.loading ? <Spinner /> : <Chevron open={d.open} />}</button>
         </div>
-        <span class="hidden sm:inline text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap ml-4">
-          {formatTimestamp(resource.lastReconciled)}
-        </span>
+        {/* Mobile-only second line: colored kind pill + status word + timestamp. */}
+        <div class="sm:hidden mt-1 pl-[30px] flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
+          <KindChip kind={resource.kind} colorClass={chipColor} title={chipTitle} />
+          <span class="whitespace-nowrap"><span class="capitalize">{resource.status}</span> {formatTimestamp(resource.lastReconciled)}</span>
+        </div>
       </div>
-
-      {/* Resource namespace/name - clickable link to dashboard */}
-      <div class="mb-1 sm:mb-2">
-        <a
-          href={getDashboardUrl(resource.kind, resource.namespace, resource.name)}
-          class="text-sm text-left hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flux-blue rounded inline-block group"
-        >
-          <span class="text-gray-500 dark:text-gray-400">{resource.namespace}/</span><span class="font-semibold text-gray-900 dark:text-gray-100 group-hover:text-flux-blue dark:group-hover:text-blue-400">{resource.name}</span><svg class="w-3.5 h-3.5 text-gray-400 group-hover:text-flux-blue dark:group-hover:text-blue-400 transition-colors ml-1 inline-block align-middle" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
-        </a>
-      </div>
-
-      {/* Mobile timestamp - below namespace/name */}
-      <div class="flex sm:hidden items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 mb-2">
-        <svg class="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-        </svg>
-        {formatTimestamp(resource.lastReconciled)}
-      </div>
-
-      {/* Message */}
-      <div class="text-sm text-gray-700 dark:text-gray-300">
-        <pre class="whitespace-pre-wrap break-words font-sans">
-          {displayMessage}
-        </pre>
-        {isLongMessage && (
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            class="text-flux-blue dark:text-blue-400 text-xs mt-1 hover:underline focus:outline-none"
-          >
-            {isExpanded ? 'Show less' : 'Show more'}
-          </button>
-        )}
-      </div>
-
-      {/* Details Panel - Spec + Inventory (Lazy Loaded) */}
-      <div class="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-        <button
-          onClick={() => setIsDetailsExpanded(!isDetailsExpanded)}
-          class="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-300 hover:text-flux-blue dark:hover:text-blue-400 focus:outline-none transition-colors"
-        >
-          <svg
-            class={`w-4 h-4 transition-transform ${isDetailsExpanded ? 'rotate-90' : ''}`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-          </svg>
-          <span class="font-medium">Details</span>
-        </button>
-      </div>
-
-      {/* ResourceDetailsView Component */}
-      <ResourceDetailsView
-        kind={resource.kind}
-        name={resource.name}
-        namespace={resource.namespace}
-        isExpanded={isDetailsExpanded}
-      />
+      <Reveal open={d.open}>
+        <div class="pl-3 sm:pl-[42px] pr-3 pt-1 pb-4">
+          {d.mounted && (
+            <ResourceDetailsView
+              kind={resource.kind}
+              name={resource.name}
+              namespace={resource.namespace}
+              status={resource.status}
+              isExpanded
+              onReady={d.onReady}
+              onData={handleData}
+            />
+          )}
+        </div>
+      </Reveal>
     </div>
   )
 }
@@ -195,7 +142,8 @@ function ResourceCard({ resource }) {
  * Features:
  * - Fetches resource statuses from the API with optional filters (kind, name, namespace, status)
  * - Auto-refetches when filter signals change
- * - Displays resources in card format with status badges and expandable inventory
+ * - Displays resources as compact two-line responsive rows with a colored kind
+ *   chip and an expandable, lazily loaded detail panel
  * - Sorts resources by last reconciled timestamp (newest first)
  * - Shows loading, error, and empty states
  */
@@ -241,21 +189,25 @@ export function ResourceList() {
   }
 
   return (
-    <main data-testid="resource-list" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
-      <div class="space-y-6">
-        {/* Page Title */}
-        <div class="flex items-center justify-between">
-          <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Flux Resources</h2>
-          {/* Resource count */}
-          {!resourcesLoading.value && resourcesData.value.length > 0 && (
-            <span class="text-sm text-gray-600 dark:text-gray-400">
-              {resourcesData.value.length} resources
-            </span>
-          )}
-        </div>
-
-        {/* Filters */}
-        <div class="card p-4">
+    <main data-testid="resource-list" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8 flex-grow w-full">
+      <div class="space-y-3">
+        {/* Toolbar: count + mobile Filters toggle, FilterForm, desktop StatusChart */}
+        <FilterBar
+          count={resourcesData.value.length}
+          label="resources"
+          loading={resourcesLoading.value}
+          statusChart={
+            <StatusChart
+              items={resourcesData.value}
+              loading={resourcesLoading.value}
+              mode="resources"
+              compact
+              onBarClick={(status) => {
+                selectedResourceStatus.value = selectedResourceStatus.value === status ? '' : status
+              }}
+            />
+          }
+        >
           <FilterForm
             kindSignal={selectedResourceKind}
             nameSignal={selectedResourceName}
@@ -263,18 +215,9 @@ export function ResourceList() {
             statusSignal={selectedResourceStatus}
             namespaces={reportData.value?.spec?.namespaces || []}
             onClear={handleClearFilters}
+            onRefresh={fetchResourcesStatus}
           />
-        </div>
-
-        {/* Status Chart */}
-        <StatusChart
-          items={resourcesData.value}
-          loading={resourcesLoading.value}
-          mode="resources"
-          onBarClick={(status) => {
-            selectedResourceStatus.value = selectedResourceStatus.value === status ? '' : status
-          }}
-        />
+        </FilterBar>
 
         {/* Error State */}
         {resourcesError.value && (
@@ -307,11 +250,12 @@ export function ResourceList() {
           </div>
         )}
 
-        {/* Resource Cards */}
+        {/* Resource Rows — dense list; rows provide their own padding, so drop the
+            card's heavy padding on mobile and keep a light inset on desktop. */}
         {!resourcesLoading.value && resourcesData.value.length > 0 && (
-          <div class="space-y-4">
+          <div class="card overflow-hidden p-0 sm:p-2">
             {visibleResources.map((resource, index) => (
-              <ResourceCard key={`${resource.namespace}-${resource.kind}-${resource.name}-${index}`} resource={resource} />
+              <ResourceRow key={`${resource.namespace}-${resource.kind}-${resource.name}-${index}`} resource={resource} />
             ))}
 
             {/* Sentinel element for infinite scroll */}

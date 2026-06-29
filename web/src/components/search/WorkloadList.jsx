@@ -5,12 +5,14 @@ import { signal } from '@preact/signals'
 import { useEffect, useState } from 'preact/hooks'
 import { fetchWithMock } from '../../utils/fetch'
 import { formatTimestamp } from '../../utils/time'
-import { getStatusDotClass } from '../../utils/status'
+import { getStatusDotClass, getWorkloadStatusBadgeClass } from '../../utils/status'
 import { usePageMeta } from '../../utils/meta'
 import { workloadKinds } from '../../utils/constants'
 import { reportData } from '../../app'
 import { FilterForm } from './FilterForm'
+import { FilterBar } from './FilterBar'
 import { WorkloadDetailsView } from './WorkloadDetailsView'
+import { Star, KindChip, NEUTRAL_CHIP, NameLink, Chevron, Spinner, useDisclosure, Reveal, patchRowInSignal } from './compactRow'
 import { useRestoreFiltersFromUrl, useSyncFiltersToUrl, getDashboardUrl } from '../../utils/routing'
 import { useInfiniteScroll } from '../../utils/scroll'
 import { isFavorite, toggleFavorite, favorites } from '../../utils/favorites'
@@ -52,112 +54,108 @@ export async function fetchWorkloadsStatus() {
 }
 
 /**
- * WorkloadCard - Individual card displaying a Kubernetes workload and its parent reconciler
+ * WorkloadRow - Compact list row for a Kubernetes workload and its parent reconciler
  *
  * @param {Object} props
  * @param {Object} props.workload - WorkloadRef object with kind, name, namespace, reconciler ref
  *   fields (reconcilerKind, reconcilerNamespace, reconcilerName, reconcilerStatus) and lastReconciled
  *
  * Features:
- * - Shows workload kind, namespace, and name (links to the workload dashboard)
- * - Displays the parent reconciler reference with a small status badge reflecting the
- *   reconciler's status (never the reconciler message)
- * - Favorite star button (writes via the kind-agnostic favorites store)
+ * - A neutral kind chip: a workload carries no status of its own in the list (the
+ *   index only knows the reconciler's status), so the chip is never colored by status.
+ * - Desktop: a "managed by" line referencing the parent reconciler, with a small
+ *   status dot that reflects the reconciler's status (never the reconciler message).
+ * - Mobile: a second line with the neutral chip and the reconcile time (a workload
+ *   has no status word of its own to show).
+ * - Favorite star (kind-agnostic favorites store) and an expand chevron that lazily
+ *   mounts {@link WorkloadDetailsView}, spinning until the detail fetch settles.
  */
-function WorkloadCard({ workload }) {
-  // Lazy-loaded inline details panel (collapsed by default)
-  const [isDetailsExpanded, setIsDetailsExpanded] = useState(false)
+function WorkloadRow({ workload }) {
+  // Disclosure state: the chevron spins while the lazily mounted detail panel
+  // fetches, then the panel animates open via Reveal.
+  const d = useDisclosure()
+
+  // The workload's own status (Current/Idle/InProgress/…) is only known once the
+  // detail panel has fetched it; the list index carries no workload status. We
+  // capture it on expand to color the kind chip, and fall back to the neutral
+  // chip while collapsed.
+  const [liveStatus, setLiveStatus] = useState(null)
 
   // Check if workload is a favorite (reactive via favorites signal)
   const isFavorited = favorites.value && isFavorite(workload.kind, workload.namespace, workload.name)
 
-  // Handle favorite toggle
+  // Handle favorite toggle (stop propagation so the row click is unaffected)
   const handleFavoriteClick = (e) => {
     e.stopPropagation()
     toggleFavorite(workload.kind, workload.namespace, workload.name)
   }
 
+  const dashboardUrl = getDashboardUrl(workload.kind, workload.namespace, workload.name)
+  const reconcilerTitle = `Managed by ${workload.reconcilerKind} ${workload.reconcilerNamespace}/${workload.reconcilerName} (${workload.reconcilerStatus})`
+  const chipTitle = `${workload.kind} · reconciler ${workload.reconcilerStatus}`
+
+  // Color the kind chip by the workload's own status only while the panel is open
+  // (and once its status is known); collapsed rows keep the neutral chip.
+  const chipColor = d.open && liveStatus ? getWorkloadStatusBadgeClass(liveStatus) : NEUTRAL_CHIP
+
+  // When the detail panel finishes loading, refresh this row's owning-reconciler
+  // summary from the detail's enriched reconciler (its status.reconcilerRef is the
+  // same NewResourceStatus the workloads index uses), so a row that listed a stale
+  // reconciler status/time updates on expand. No-op when unchanged.
+  const handleData = (data) => {
+    // Capture the workload's own status to color the kind chip while expanded.
+    setLiveStatus(data?.workloadInfo?.status || null)
+    const ref = data?.workloadInfo?.reconciler?.status?.reconcilerRef
+    if (!ref) return
+    patchRowInSignal(workloadsData, workload, { reconcilerStatus: ref.status, lastReconciled: ref.lastReconciled })
+  }
+
   return (
-    <div class="card p-4 hover:shadow-md transition-shadow">
-      {/* Header row: star + kind + timestamp */}
-      <div class="flex items-center justify-between mb-3">
-        <div class="flex items-center gap-3">
-          {/* Favorite star button */}
-          <button
-            onClick={handleFavoriteClick}
-            class={`p-0.5 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-flux-blue focus:ring-offset-1 ${
-              isFavorited
-                ? 'text-yellow-500 hover:text-yellow-600'
-                : 'text-gray-400 hover:text-flux-blue dark:hover:text-blue-400'
-            }`}
-            title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
-          >
-            <svg class="w-4 h-4" fill={isFavorited ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-            </svg>
-          </button>
-          <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
-            {workload.kind}
+    <div class="border-b border-gray-100 dark:border-gray-700/60 last:border-0">
+      <div class="px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700/30">
+        <div class="flex items-center gap-2.5">
+          <Star active={isFavorited} onClick={handleFavoriteClick} />
+          {/* Neutral chip in the list; colored by the workload's own status once
+              expanded (see chipColor). */}
+          <KindChip kind={workload.kind} colorClass={chipColor} title={chipTitle} cls="hidden sm:inline-block" />
+          <NameLink href={dashboardUrl} namespace={workload.namespace} name={workload.name} />
+          {/* Desktop: parent reconciler reference with a status dot. The status
+              belongs to the reconciler, never the workload itself. */}
+          <span class="hidden sm:flex flex-1 min-w-0 items-center gap-1.5 truncate text-xs text-gray-500 dark:text-gray-400" title={reconcilerTitle}>
+            <span class="text-gray-400 dark:text-gray-500 flex-shrink-0">managed by</span>
+            <span class={`w-2 h-2 rounded-full flex-shrink-0 ${getStatusDotClass(workload.reconcilerStatus)}`} />
+            <span class="truncate min-w-0">{workload.reconcilerKind}/{workload.reconcilerNamespace}/{workload.reconcilerName}</span>
           </span>
+          <span class="hidden sm:block shrink-0 text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap tabular-nums">{formatTimestamp(workload.lastReconciled)}</span>
+          <button onClick={d.toggle} class="shrink-0 rounded p-0.5 text-gray-400 hover:text-flux-blue" title="Details" aria-label="Toggle details">{d.loading ? <Spinner /> : <Chevron open={d.open} />}</button>
         </div>
-        <span class="hidden sm:inline text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap ml-4">
-          {formatTimestamp(workload.lastReconciled)}
-        </span>
+        {/* Mobile-only second line: neutral kind pill + reconciled time. A workload
+            has no status of its own in the list, so we state the reconcile time
+            instead of a (reconciler) status word. */}
+        <div class="sm:hidden mt-1 pl-[30px] flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
+          <KindChip kind={workload.kind} colorClass={chipColor} title={chipTitle} />
+          <span class="whitespace-nowrap">Reconciled {formatTimestamp(workload.lastReconciled)}</span>
+        </div>
       </div>
-
-      {/* Workload namespace/name - clickable link to dashboard */}
-      <div class="mb-1 sm:mb-2">
-        <a
-          href={getDashboardUrl(workload.kind, workload.namespace, workload.name)}
-          class="text-sm text-left hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flux-blue rounded inline-block group"
-        >
-          <span class="text-gray-500 dark:text-gray-400">{workload.namespace}/</span><span class="font-semibold text-gray-900 dark:text-gray-100 group-hover:text-flux-blue dark:group-hover:text-blue-400">{workload.name}</span><svg class="w-3.5 h-3.5 text-gray-400 group-hover:text-flux-blue dark:group-hover:text-blue-400 transition-colors ml-1 inline-block align-middle" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
-        </a>
-      </div>
-
-      {/* Mobile timestamp - below namespace/name */}
-      <div class="flex sm:hidden items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 mb-2">
-        <svg class="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-        </svg>
-        {formatTimestamp(workload.lastReconciled)}
-      </div>
-
-      {/* Parent reconciler reference: a muted "Managed by" line with a small status
-          dot. The status belongs to the reconciler, never the workload itself. */}
-      <div
-        class="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400"
-        title={`Managed by ${workload.reconcilerKind} ${workload.reconcilerNamespace}/${workload.reconcilerName} (${workload.reconcilerStatus})`}
-      >
-        <span class="flex-shrink-0">Managed by</span>
-        <span class={`w-2 h-2 rounded-full flex-shrink-0 ${getStatusDotClass(workload.reconcilerStatus)}`} />
-        <span class="truncate min-w-0">{workload.reconcilerKind}/{workload.reconcilerNamespace}/{workload.reconcilerName}</span>
-      </div>
-
-      {/* Details Panel - Overview/Spec/Status (lazy loaded on expand) */}
-      <div class="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-        <button
-          onClick={() => setIsDetailsExpanded(!isDetailsExpanded)}
-          class="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-300 hover:text-flux-blue dark:hover:text-blue-400 focus:outline-none transition-colors"
-        >
-          <svg
-            class={`w-4 h-4 transition-transform ${isDetailsExpanded ? 'rotate-90' : ''}`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-          </svg>
-          <span class="font-medium">Details</span>
-        </button>
-      </div>
-
-      <WorkloadDetailsView
-        kind={workload.kind}
-        name={workload.name}
-        namespace={workload.namespace}
-        isExpanded={isDetailsExpanded}
-      />
+      <Reveal open={d.open}>
+        <div class="pl-3 sm:pl-[42px] pr-3 pt-1 pb-4">
+          {/* Lazily mounted on expand; unmounted on collapse so each expand
+              re-fetches. onReady flips the disclosure once the fetch settles. */}
+          {d.mounted && (
+            <WorkloadDetailsView
+              kind={workload.kind}
+              name={workload.name}
+              namespace={workload.namespace}
+              reconcilerKind={workload.reconcilerKind}
+              reconcilerNamespace={workload.reconcilerNamespace}
+              reconcilerName={workload.reconcilerName}
+              isExpanded
+              onReady={d.onReady}
+              onData={handleData}
+            />
+          )}
+        </div>
+      </Reveal>
     </div>
   )
 }
@@ -168,7 +166,7 @@ function WorkloadCard({ workload }) {
  * Features:
  * - Fetches workloads from the API with optional filters (kind, name, namespace)
  * - Auto-refetches when filter signals change
- * - Displays workloads in card format with the parent reconciler status badge
+ * - Renders workloads as compact rows that expand into an inline detail panel
  * - Shows loading, error, and empty states
  * - No status filter and no status chart (workloads have no status of their own)
  */
@@ -211,21 +209,10 @@ export function WorkloadList() {
   }
 
   return (
-    <main data-testid="workload-list" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
-      <div class="space-y-6">
-        {/* Page Title */}
-        <div class="flex items-center justify-between">
-          <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Flux Workloads</h2>
-          {/* Workload count */}
-          {!workloadsLoading.value && workloadsData.value.length > 0 && (
-            <span class="text-sm text-gray-600 dark:text-gray-400">
-              {workloadsData.value.length} workloads
-            </span>
-          )}
-        </div>
-
-        {/* Filters */}
-        <div class="card p-4">
+    <main data-testid="workload-list" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8 flex-grow w-full">
+      <div class="space-y-3">
+        {/* Filters - mobile-collapsing toolbar; no status chart for workloads */}
+        <FilterBar count={workloadsData.value.length} label="workloads" loading={workloadsLoading.value}>
           <FilterForm
             kindSignal={selectedWorkloadKind}
             nameSignal={selectedWorkloadName}
@@ -233,8 +220,9 @@ export function WorkloadList() {
             namespaces={reportData.value?.spec?.namespaces || []}
             kinds={workloadKinds}
             onClear={handleClearFilters}
+            onRefresh={fetchWorkloadsStatus}
           />
-        </div>
+        </FilterBar>
 
         {/* Error State */}
         {workloadsError.value && (
@@ -266,11 +254,12 @@ export function WorkloadList() {
           </div>
         )}
 
-        {/* Workload Cards */}
+        {/* Workload Rows - dense list; rows provide their own padding, so drop the
+            card's heavy padding on mobile (keep a little on desktop). */}
         {!workloadsLoading.value && workloadsData.value.length > 0 && (
-          <div class="space-y-4">
+          <div class="card overflow-hidden p-0 sm:p-2">
             {visibleWorkloads.map((workload, index) => (
-              <WorkloadCard key={`${workload.namespace}-${workload.kind}-${workload.name}-${index}`} workload={workload} />
+              <WorkloadRow key={`${workload.namespace}-${workload.kind}-${workload.name}-${index}`} workload={workload} />
             ))}
 
             {/* Sentinel element for infinite scroll */}

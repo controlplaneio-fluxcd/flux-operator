@@ -63,6 +63,9 @@ function getBarColor(status, mode) {
  * @param {Array} props.items - Array of event or resource objects
  * @param {boolean} props.loading - Whether data is currently loading
  * @param {string} props.mode - 'events' or 'resources'
+ * @param {boolean} [props.compact] - When true, renders a thin rounded bar with no
+ *   card wrapper and no count/stats header (the count lives in the toolbar). The
+ *   hover tooltip and click-to-filter behavior are preserved.
  *
  * Features:
  * - Displays one bar per status type (Ready, Failed, Progressing, etc.)
@@ -72,7 +75,7 @@ function getBarColor(status, mode) {
  * - Shows placeholder bar during loading
  * - Tooltip on hover with count and percentage
  */
-export function StatusChart({ items, loading, mode = 'events', onBarClick }) {
+export function StatusChart({ items, loading, mode = 'events', onBarClick, compact = false }) {
   const [hoveredBar, setHoveredBar] = useState(null)
   const [animationComplete, setAnimationComplete] = useState(false)
 
@@ -104,7 +107,7 @@ export function StatusChart({ items, loading, mode = 'events', onBarClick }) {
   }, [loading, items, mode, itemsKey])
 
   return (
-    <div class="card p-4" data-testid="status-chart">
+    <div class={compact ? '' : 'card p-4'} data-testid="status-chart">
       <style>{`
         @keyframes fillRight {
           from {
@@ -151,121 +154,140 @@ export function StatusChart({ items, loading, mode = 'events', onBarClick }) {
         }
       `}</style>
 
-      {/* Header with total count and stats */}
-      <div class="flex items-center justify-between mb-2">
-        {/* Left: Total count */}
-        <div class="text-sm text-gray-600 dark:text-gray-400">
-          {loading ? (
-            <span>Loading...</span>
-          ) : (
-            <span>
-              {mode === 'events' ? 'Reconcile events: ' : 'Resources: '}
-              <span class="font-semibold text-gray-900 dark:text-gray-100">
-                {items && items.length > 0 ? items.length : 0}
+      {/* Header with total count and stats (omitted in compact mode, where the
+          count is shown by the toolbar instead) */}
+      {!compact && (
+        <div class="flex items-center justify-between mb-2">
+          {/* Left: Total count */}
+          <div class="text-sm text-gray-600 dark:text-gray-400">
+            {loading ? (
+              <span>Loading...</span>
+            ) : (
+              <span>
+                {mode === 'events' ? 'Reconcile events: ' : 'Resources: '}
+                <span class="font-semibold text-gray-900 dark:text-gray-100">
+                  {items && items.length > 0 ? items.length : 0}
+                </span>
               </span>
-            </span>
-          )}
-        </div>
+            )}
+          </div>
 
-        {/* Right: Status/Severity stats (hidden on mobile, only shown when multiple statuses) */}
-        <div class="hidden md:block text-sm text-gray-600 dark:text-gray-400">
-          {!loading && items && items.length > 0 && statusBars.length > 1 && (
-            <span class="space-x-3">
-              {statusBars.map((bar) => {
+          {/* Right: Status/Severity stats (hidden on mobile, only shown when multiple statuses) */}
+          <div class="hidden md:block text-sm text-gray-600 dark:text-gray-400">
+            {!loading && items && items.length > 0 && statusBars.length > 1 && (
+              <span class="space-x-3">
+                {statusBars.map((bar) => {
                 // Get text color class based on status type
-                let textColorClass
-                if (mode === 'events') {
-                  textColorClass = bar.status === 'Normal'
-                    ? 'text-green-600 dark:text-green-400'
-                    : 'text-red-600 dark:text-red-400'
-                } else {
+                  let textColorClass
+                  if (mode === 'events') {
+                    textColorClass = bar.status === 'Normal'
+                      ? 'text-green-600 dark:text-green-400'
+                      : 'text-red-600 dark:text-red-400'
+                  } else {
                   // resources mode
-                  if (bar.status === 'Ready') {
-                    textColorClass = 'text-green-600 dark:text-green-400'
-                  } else if (bar.status === 'Failed') {
-                    textColorClass = 'text-red-600 dark:text-red-400'
-                  } else if (bar.status === 'Progressing') {
-                    textColorClass = 'text-blue-600 dark:text-blue-400'
-                  } else if (bar.status === 'Suspended') {
-                    textColorClass = 'text-yellow-600 dark:text-yellow-400'
-                  } else if (bar.status === 'Unknown') {
-                    textColorClass = 'text-gray-600 dark:text-gray-400'
+                    if (bar.status === 'Ready') {
+                      textColorClass = 'text-green-600 dark:text-green-400'
+                    } else if (bar.status === 'Failed') {
+                      textColorClass = 'text-red-600 dark:text-red-400'
+                    } else if (bar.status === 'Progressing') {
+                      textColorClass = 'text-blue-600 dark:text-blue-400'
+                    } else if (bar.status === 'Suspended') {
+                      textColorClass = 'text-yellow-600 dark:text-yellow-400'
+                    } else if (bar.status === 'Unknown') {
+                      textColorClass = 'text-gray-600 dark:text-gray-400'
+                    }
                   }
-                }
 
-                // Map Normal to Info for display
-                const displayName = mode === 'events' && bar.status === 'Normal' ? 'Info' : bar.status
+                  // Map Normal to Info for display
+                  const displayName = mode === 'events' && bar.status === 'Normal' ? 'Info' : bar.status
 
-                return (
-                  <span key={bar.status}>
-                    {displayName}: <span class={textColorClass}>{bar.count}</span>
-                  </span>
-                )
-              })}
-            </span>
+                  return (
+                    <span key={bar.status}>
+                      {displayName}: <span class={textColorClass}>{bar.count}</span>
+                    </span>
+                  )
+                })}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Horizontal bar chart - status distribution. The bar lives in a
+          non-clipped relative wrapper so the hover tooltip can overflow above
+          it even in compact mode, where the bar itself uses overflow-hidden to
+          get its rounded ends. */}
+      <div class="relative">
+        <div
+          class={`relative flex gap-0 ${compact ? 'h-2.5 rounded-full overflow-hidden' : ''}`}
+          style={compact ? undefined : { height: '32px' }}
+        >
+          {loading ? (
+            /* Single loading bar with shimmer */
+            <div class="w-full h-full bg-gray-200 dark:bg-gray-700 loading-shimmer" />
+          ) : statusBars.length === 0 ? (
+            /* No data - gray bar */
+            <div class="w-full h-full bg-gray-200 dark:bg-gray-700" />
+          ) : (
+            statusBars.map((bar, index) => {
+              const colorClass = getBarColor(bar.status, mode)
+              const grayClass = 'bg-gray-200 dark:bg-gray-700'
+
+              return (
+                <div
+                  key={bar.status}
+                  class="relative group"
+                  style={{ flex: `0 0 ${bar.percentage}%` }}
+                  onMouseEnter={() => setHoveredBar(index)}
+                  onMouseLeave={() => setHoveredBar(null)}
+                  onClick={() => onBarClick?.(bar.status)}
+                  role={onBarClick ? 'button' : undefined}
+                >
+                  {/* Gray background */}
+                  <div class={`h-full ${grayClass}`}>
+                    {/* Colored fill overlay - animates from left to right on initial load */}
+                    <div
+                      class={`h-full transition-opacity duration-200 ${colorClass}${onBarClick ? ' hover:opacity-80 cursor-pointer' : ''}`}
+                      style={{
+                        width: '100%',
+                        animation: !animationComplete ? 'fillRight 0.8s ease-out both' : 'none',
+                        clipPath: animationComplete ? 'none' : undefined
+                      }}
+                    />
+                  </div>
+                </div>
+              )
+            })
           )}
         </div>
-      </div>
 
-      {/* Horizontal bar chart - status distribution */}
-      <div class="relative flex gap-0" style={{ height: '32px' }}>
-        {loading ? (
-          /* Single loading bar with shimmer */
-          <div class="w-full h-full bg-gray-200 dark:bg-gray-700 loading-shimmer" />
-        ) : statusBars.length === 0 ? (
-          /* No data - gray bar */
-          <div class="w-full h-full bg-gray-200 dark:bg-gray-700" />
-        ) : (
-          statusBars.map((bar, index) => {
-            const colorClass = getBarColor(bar.status, mode)
-            const grayClass = 'bg-gray-200 dark:bg-gray-700'
-
-            return (
-              <div
-                key={bar.status}
-                class="relative group"
-                style={{ flex: `0 0 ${bar.percentage}%` }}
-                onMouseEnter={() => setHoveredBar(index)}
-                onMouseLeave={() => setHoveredBar(null)}
-                onClick={() => onBarClick?.(bar.status)}
-                role={onBarClick ? 'button' : undefined}
-              >
-                {/* Gray background */}
-                <div class={`h-full ${grayClass}`}>
-                  {/* Colored fill overlay - animates from left to right on initial load */}
-                  <div
-                    class={`h-full transition-opacity duration-200 ${colorClass}${onBarClick ? ' hover:opacity-80 cursor-pointer' : ''}`}
-                    style={{
-                      width: '100%',
-                      animation: !animationComplete ? 'fillRight 0.8s ease-out both' : 'none',
-                      clipPath: animationComplete ? 'none' : undefined
-                    }}
-                  />
-                </div>
-
-                {/* Tooltip */}
-                {hoveredBar === index && (
-                  <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-10 pointer-events-none">
-                    <div class="bg-gray-900 dark:bg-gray-800 text-white text-xs rounded-lg py-2 px-3 shadow-lg whitespace-nowrap">
-                      <div class="font-semibold">
-                        {bar.status}
-                      </div>
-                      <div class="text-gray-300 mt-1">
-                        Count: {bar.count}
-                      </div>
-                      <div class="text-gray-300">
-                        Percentage: {bar.percentage.toFixed(1)}%
-                      </div>
-                      {/* Tooltip arrow */}
-                      <div class="absolute top-full left-1/2 -translate-x-1/2 -mt-px">
-                        <div class="border-4 border-transparent border-t-gray-900 dark:border-t-gray-800"></div>
-                      </div>
-                    </div>
-                  </div>
-                )}
+        {/* Tooltip overlay - rendered outside the (possibly clipped) bar and
+            positioned over the centre of the hovered segment. */}
+        {hoveredBar !== null && statusBars[hoveredBar] && (
+          <div
+            // In compact mode the chart lives in the sticky filter bar; popping the
+            // tooltip downward keeps it clear of the opaque sticky header/nav above,
+            // which would otherwise clip an upward tooltip. Non-compact keeps it above.
+            class={`absolute z-10 -translate-x-1/2 pointer-events-none ${compact ? 'top-full mt-2' : 'bottom-full mb-2'}`}
+            style={{ left: `${statusBars.slice(0, hoveredBar).reduce((sum, b) => sum + b.percentage, 0) + statusBars[hoveredBar].percentage / 2}%` }}
+          >
+            <div class="bg-gray-900 dark:bg-gray-800 text-white text-xs rounded-lg py-2 px-3 shadow-lg whitespace-nowrap">
+              <div class="font-semibold">
+                {statusBars[hoveredBar].status}
               </div>
-            )
-          })
+              <div class="text-gray-300 mt-1">
+                Count: {statusBars[hoveredBar].count}
+              </div>
+              <div class="text-gray-300">
+                Percentage: {statusBars[hoveredBar].percentage.toFixed(1)}%
+              </div>
+              {/* Tooltip arrow: points down toward the bar when the tooltip is
+                  above it, up toward the bar when below it (compact). */}
+              <div class={`absolute left-1/2 -translate-x-1/2 ${compact ? 'bottom-full -mb-px' : 'top-full -mt-px'}`}>
+                <div class={`border-4 border-transparent ${compact ? 'border-b-gray-900 dark:border-b-gray-800' : 'border-t-gray-900 dark:border-t-gray-800'}`}></div>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>

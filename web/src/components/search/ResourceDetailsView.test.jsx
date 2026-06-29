@@ -131,6 +131,192 @@ describe('ResourceDetailsView component', () => {
     })
   })
 
+  it('should call onReady once the fetch settles successfully', async () => {
+    fetchWithMock.mockResolvedValue(mockResourceData)
+    const onReady = vi.fn()
+
+    render(
+      <ResourceDetailsView
+        kind="Kustomization"
+        name="apps"
+        namespace="flux-system"
+        isExpanded={true}
+        onReady={onReady}
+      />
+    )
+
+    await waitFor(() => {
+      expect(onReady).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  it('should call onReady even when the fetch fails', async () => {
+    fetchWithMock.mockRejectedValue(new Error('boom'))
+    const onReady = vi.fn()
+
+    render(
+      <ResourceDetailsView
+        kind="Kustomization"
+        name="apps"
+        namespace="flux-system"
+        isExpanded={true}
+        onReady={onReady}
+      />
+    )
+
+    await waitFor(() => {
+      expect(onReady).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('Overview tab', () => {
+    const mockResourceWithReconciler = {
+      apiVersion: 'kustomize.toolkit.fluxcd.io/v1',
+      kind: 'Kustomization',
+      metadata: {
+        name: 'apps',
+        namespace: 'flux-system'
+      },
+      spec: {
+        interval: '10m'
+      },
+      status: {
+        reconcilerRef: {
+          status: 'Ready',
+          message: 'Applied revision: main@sha1:abc123def456',
+          lastReconciled: '2025-01-15T10:00:00Z',
+          managedBy: 'Kustomization/flux-system/flux-system'
+        },
+        inventory: [
+          { apiVersion: 'v1', kind: 'Namespace', name: 'production' }
+        ]
+      }
+    }
+
+    it('should default to the Overview tab and mark it active', async () => {
+      fetchWithMock.mockResolvedValue(mockResourceWithReconciler)
+
+      render(
+        <ResourceDetailsView
+          kind="Kustomization"
+          name="apps"
+          namespace="flux-system"
+          isExpanded={true}
+        />
+      )
+
+      // The Overview tab is rendered and selected by default, even though the
+      // resource also has an Inventory tab available.
+      const overviewTab = await screen.findByText('Overview')
+      expect(overviewTab).toBeInTheDocument()
+      // Active tab merges into the content panel by sharing its background.
+      expect(overviewTab).toHaveClass('bg-gray-100')
+
+      // Inventory tab is present but not active.
+      const inventoryTab = screen.getByText('Inventory')
+      expect(inventoryTab).not.toHaveClass('bg-gray-100')
+    })
+
+    it('should show the reconciler status badge', async () => {
+      fetchWithMock.mockResolvedValue(mockResourceWithReconciler)
+
+      render(
+        <ResourceDetailsView
+          kind="Kustomization"
+          name="apps"
+          namespace="flux-system"
+          isExpanded={true}
+        />
+      )
+
+      // The Overview badge is labelled with the resource kind and shows the
+      // reconciler status with the corresponding badge styling.
+      await waitFor(() => {
+        expect(screen.getByText('Kustomization')).toBeInTheDocument()
+      })
+      const badge = screen.getByText('Ready')
+      expect(badge).toBeInTheDocument()
+      expect(badge).toHaveClass('bg-green-100')
+    })
+
+    it('should show the controller, interval and managed-by link', async () => {
+      fetchWithMock.mockResolvedValue(mockResourceWithReconciler)
+
+      render(
+        <ResourceDetailsView
+          kind="Kustomization"
+          name="apps"
+          namespace="flux-system"
+          isExpanded={true}
+        />
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText('Reconciled by')).toBeInTheDocument()
+      })
+
+      // Controller name derived from the kind.
+      expect(screen.getByText('kustomize-controller')).toBeInTheDocument()
+
+      // Reconcile interval field with the spec interval.
+      expect(screen.getByText('Reconcile every')).toBeInTheDocument()
+      expect(document.body.textContent).toContain('10m')
+
+      // Managed-by renders a namespace/name link to the owning resource dashboard.
+      expect(screen.getByText('Managed by')).toBeInTheDocument()
+      const managedByLink = screen.getByRole('link', { name: 'flux-system/flux-system' })
+      expect(managedByLink).toHaveAttribute('href', '/resource/Kustomization/flux-system/flux-system')
+    })
+
+    it('should show the last action timestamp and reconciler message', async () => {
+      fetchWithMock.mockResolvedValue(mockResourceWithReconciler)
+
+      render(
+        <ResourceDetailsView
+          kind="Kustomization"
+          name="apps"
+          namespace="flux-system"
+          isExpanded={true}
+        />
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText(/Last action/)).toBeInTheDocument()
+      })
+
+      expect(screen.getByText('Applied revision: main@sha1:abc123def456')).toBeInTheDocument()
+    })
+
+    it('should fall back to the status prop for the Overview badge', async () => {
+      const resourceWithoutReconciler = {
+        apiVersion: 'kustomize.toolkit.fluxcd.io/v1',
+        kind: 'Kustomization',
+        metadata: { name: 'apps', namespace: 'flux-system' },
+        spec: { interval: '10m' },
+        status: {}
+      }
+
+      fetchWithMock.mockResolvedValue(resourceWithoutReconciler)
+
+      render(
+        <ResourceDetailsView
+          kind="Kustomization"
+          name="apps"
+          namespace="flux-system"
+          isExpanded={true}
+          status="Suspended"
+        />
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText('Overview')).toBeInTheDocument()
+      })
+
+      // With no reconcilerRef status, the Overview badge uses the status prop.
+      expect(screen.getByText('Suspended')).toBeInTheDocument()
+    })
+  })
+
   it('should display specification tab as highlighted YAML after loading', async () => {
     fetchWithMock.mockResolvedValue(mockResourceData)
     const user = userEvent.setup()
@@ -145,11 +331,11 @@ describe('ResourceDetailsView component', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('Specification')).toBeInTheDocument()
+      expect(screen.getByText('Spec')).toBeInTheDocument()
     })
 
-    // Click on Specification tab (Inventory is default when present)
-    const specTab = screen.getByText('Specification')
+    // Overview is the default tab, switch to the Spec tab to see the YAML.
+    const specTab = screen.getByText('Spec')
     await user.click(specTab)
 
     // Check that specification content is present
@@ -221,7 +407,7 @@ describe('ResourceDetailsView component', () => {
     )
 
     // Wait for inventory tab to appear
-    const inventoryTab = await screen.findByText(/Inventory \(3\)/)
+    const inventoryTab = await screen.findByText('Inventory')
     expect(inventoryTab).toBeInTheDocument()
 
     // Click on Inventory tab
@@ -253,14 +439,15 @@ describe('ResourceDetailsView component', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('Specification')).toBeInTheDocument()
+      expect(screen.getByText('Spec')).toBeInTheDocument()
     })
 
     // Inventory tab should not be present
-    expect(screen.queryByText(/Inventory/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Inventory')).not.toBeInTheDocument()
 
-    // Only Specification and Status tabs should be visible
-    expect(screen.getByText('Specification')).toBeInTheDocument()
+    // Overview, Specification and Status tabs should be visible
+    expect(screen.getByText('Overview')).toBeInTheDocument()
+    expect(screen.getByText('Spec')).toBeInTheDocument()
     expect(screen.getByText('Status')).toBeInTheDocument()
   })
 
@@ -306,7 +493,7 @@ describe('ResourceDetailsView component', () => {
 
     // Data should still be displayed with tabs
     await waitFor(() => {
-      expect(screen.getByText('Specification')).toBeInTheDocument()
+      expect(screen.getByText('Spec')).toBeInTheDocument()
       expect(screen.getByText('Status')).toBeInTheDocument()
     })
   })
@@ -346,6 +533,7 @@ describe('ResourceDetailsView component', () => {
     }
 
     fetchWithMock.mockResolvedValue(resourceWithEmptySpec)
+    const user = userEvent.setup()
 
     render(
       <ResourceDetailsView
@@ -357,12 +545,16 @@ describe('ResourceDetailsView component', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('Specification')).toBeInTheDocument()
+      expect(screen.getByText('Spec')).toBeInTheDocument()
     })
 
-    // Should show specification with empty spec in YAML
-    const codeElement = document.querySelector('.language-yaml')
-    expect(codeElement).toBeInTheDocument()
+    // Switch to the Spec tab and confirm the empty spec renders as YAML.
+    await user.click(screen.getByText('Spec'))
+
+    await waitFor(() => {
+      const codeElement = document.querySelector('.language-yaml')
+      expect(codeElement).toBeInTheDocument()
+    })
   })
 
   it('should sort inventory by apiVersion with priorities', async () => {
@@ -398,7 +590,7 @@ describe('ResourceDetailsView component', () => {
     )
 
     // Wait for inventory tab to appear
-    const inventoryTab = await screen.findByText(/Inventory \(5\)/)
+    const inventoryTab = await screen.findByText('Inventory')
     expect(inventoryTab).toBeInTheDocument()
 
     // Click on Inventory tab
@@ -445,7 +637,7 @@ describe('ResourceDetailsView component', () => {
     )
 
     // Wait for inventory tab to appear
-    const inventoryTab = await screen.findByText(/Inventory \(2\)/)
+    const inventoryTab = await screen.findByText('Inventory')
     expect(inventoryTab).toBeInTheDocument()
 
     // Click on Inventory tab
@@ -529,13 +721,13 @@ describe('ResourceDetailsView component', () => {
       expect(screen.getByText('Source')).toBeInTheDocument()
     })
 
-    // Source tab should be visible along with Specification and Status
+    // Source tab should be visible along with Spec and Status
     expect(screen.getByText('Source')).toBeInTheDocument()
-    expect(screen.getByText('Specification')).toBeInTheDocument()
+    expect(screen.getByText('Spec')).toBeInTheDocument()
     expect(screen.getByText('Status')).toBeInTheDocument()
   })
 
-  it('should show Inventory tab as default for Kustomization even when empty', async () => {
+  it('should show an Inventory tab for Kustomization even when empty', async () => {
     const resourceWithSourceRef = {
       apiVersion: 'kustomize.toolkit.fluxcd.io/v1',
       kind: 'Kustomization',
@@ -565,6 +757,7 @@ describe('ResourceDetailsView component', () => {
     }
 
     fetchWithMock.mockResolvedValue(resourceWithSourceRef)
+    const user = userEvent.setup()
 
     render(
       <ResourceDetailsView
@@ -575,21 +768,20 @@ describe('ResourceDetailsView component', () => {
       />
     )
 
-    // Wait for Inventory tab to appear and be active (even though empty)
-    await waitFor(() => {
-      const inventoryTab = screen.getByText('Inventory (0)')
-      expect(inventoryTab).toBeInTheDocument()
-      expect(inventoryTab).toHaveClass('border-flux-blue')
-    })
+    // Inventory tab is present (kinds with inventory always expose it), even
+    // though the inventory is empty. Overview remains the default tab.
+    const inventoryTab = await screen.findByText('Inventory')
+    expect(inventoryTab).toBeInTheDocument()
 
-    // Should show empty inventory message
+    // Switching to it shows the empty inventory message.
+    await user.click(inventoryTab)
     expect(screen.getByText('Empty inventory, no managed objects')).toBeInTheDocument()
 
     // Source tab should also be visible
     expect(screen.getByText('Source')).toBeInTheDocument()
   })
 
-  it('should show Inventory tab as default for ResourceSet even when empty', async () => {
+  it('should show an Inventory tab for ResourceSet even when empty', async () => {
     const resourceSet = {
       apiVersion: 'fluxcd.controlplane.io/v1',
       kind: 'ResourceSet',
@@ -614,6 +806,7 @@ describe('ResourceDetailsView component', () => {
     }
 
     fetchWithMock.mockResolvedValue(resourceSet)
+    const user = userEvent.setup()
 
     render(
       <ResourceDetailsView
@@ -624,14 +817,12 @@ describe('ResourceDetailsView component', () => {
       />
     )
 
-    // Wait for Inventory tab to appear and be active (even though empty)
-    await waitFor(() => {
-      const inventoryTab = screen.getByText('Inventory (0)')
-      expect(inventoryTab).toBeInTheDocument()
-      expect(inventoryTab).toHaveClass('border-flux-blue')
-    })
+    // Inventory tab is present even though the inventory is empty.
+    const inventoryTab = await screen.findByText('Inventory')
+    expect(inventoryTab).toBeInTheDocument()
 
-    // Should show empty inventory message
+    // Switching to it shows the empty inventory message.
+    await user.click(inventoryTab)
     expect(screen.getByText('Empty inventory, no managed objects')).toBeInTheDocument()
   })
 
@@ -684,8 +875,9 @@ describe('ResourceDetailsView component', () => {
     await waitFor(() => {
       const textContent = document.body.textContent
 
-      // Check resource link: kind/namespace/name (now as clickable link without ID: prefix)
-      expect(textContent).toContain('OCIRepository/cert-manager/cert-manager')
+      // Resource link shows namespace/name; the kind labels the status field.
+      expect(textContent).toContain('cert-manager/cert-manager')
+      expect(textContent).toContain('OCIRepository')
 
       // Check URL
       expect(textContent).toContain('URL')
@@ -749,9 +941,10 @@ describe('ResourceDetailsView component', () => {
     // Check that Origin URL is not displayed when empty
     await waitFor(() => {
       const textContent = document.body.textContent
-      expect(textContent).toContain('GitRepository/flux-system/flux-system')
+      // Resource link shows namespace/name; the kind labels the status field.
+      expect(textContent).toContain('flux-system/flux-system')
+      expect(textContent).toContain('GitRepository')
       expect(textContent).toContain('URL')
-      expect(textContent).toContain('Status')
       expect(textContent).toContain('Fetch result')
 
       // Origin URL should not appear when empty
@@ -773,7 +966,7 @@ describe('ResourceDetailsView component', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('Specification')).toBeInTheDocument()
+      expect(screen.getByText('Spec')).toBeInTheDocument()
     })
 
     // Source tab should not be present when sourceRef is missing
@@ -811,7 +1004,7 @@ describe('ResourceDetailsView component', () => {
       )
 
       // Wait for inventory tab to appear and click it
-      const inventoryTab = await screen.findByText(/Inventory \(2\)/)
+      const inventoryTab = await screen.findByText('Inventory')
       await user.click(inventoryTab)
 
       // Find the GitRepository link
@@ -852,7 +1045,7 @@ describe('ResourceDetailsView component', () => {
       )
 
       // Wait for inventory tab and click it
-      const inventoryTab = await screen.findByText(/Inventory \(2\)/)
+      const inventoryTab = await screen.findByText('Inventory')
       await user.click(inventoryTab)
 
       // ConfigMap and Deployment should not be buttons
@@ -898,7 +1091,7 @@ describe('ResourceDetailsView component', () => {
       )
 
       // Wait for inventory tab and click it
-      const inventoryTab = await screen.findByText(/Inventory \(1\)/)
+      const inventoryTab = await screen.findByText('Inventory')
       await user.click(inventoryTab)
 
       // Find the FluxInstance link
@@ -937,7 +1130,7 @@ describe('ResourceDetailsView component', () => {
       )
 
       // Wait for inventory tab and click it
-      const inventoryTab = await screen.findByText(/Inventory \(1\)/)
+      const inventoryTab = await screen.findByText('Inventory')
       await user.click(inventoryTab)
 
       // Find the link and check for icon

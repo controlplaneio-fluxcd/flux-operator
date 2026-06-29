@@ -3,11 +3,12 @@
 
 import { useState, useMemo, useEffect, useRef } from 'preact/hooks'
 import { fetchWithMock } from '../../utils/fetch'
+import { formatTimestamp } from '../../utils/time'
 import { getWorkloadStatusBadgeClass, formatWorkloadStatus } from '../../utils/status'
 import { summarizePods } from '../../utils/pods'
 import { formatScheduleMessage } from '../../utils/cron'
 import { usePrismTheme, YamlBlock } from '../dashboards/common/yaml'
-import { FluxOperatorIcon } from '../layout/Icons'
+import { TabbedPanel, Field, ResourceLink, StatusBadge } from './detailPanel'
 
 /**
  * WorkloadDetailsView - Read-only inline detail panel for a Kubernetes workload
@@ -17,16 +18,23 @@ import { FluxOperatorIcon } from '../layout/Icons'
  * @param {string} props.name - Workload name
  * @param {string} props.namespace - Workload namespace
  * @param {boolean} props.isExpanded - Whether the view is expanded
+ * @param {Function} [props.onReady] - Called once the fetch settles (success or
+ *   error), so the parent row can swap its spinner for the revealed panel
+ * @param {Function} [props.onData] - Called with the fetched workload on success, so
+ *   the parent row can refresh its owning-reconciler summary (status + last
+ *   reconciled) from the detail's reconciler reference
  *
  * Features:
  * - Lazy loads workload data from the RBAC-enforced /api/v1/workload endpoint on
  *   first expand and caches it to avoid redundant fetches.
  * - Tabbed interface with three read-only sections: Overview, Specification, Status.
+ *   Tabs render through the shared TabbedPanel (mobile segmented control / desktop
+ *   vertical rail merging into a cohesive dark content panel).
  * - Mirrors the Resources list detail panel (ResourceDetailsView). Pod listing,
  *   events, and actions live on the full workload dashboard, not here.
  * - Handles loading, error, and not-found states (e.g. forbidden namespaces).
  */
-export function WorkloadDetailsView({ kind, name, namespace, isExpanded }) {
+export function WorkloadDetailsView({ kind, name, namespace, reconcilerKind, reconcilerNamespace, reconcilerName, isExpanded, onReady, onData }) {
   const [workloadData, setWorkloadData] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -64,13 +72,25 @@ export function WorkloadDetailsView({ kind, name, namespace, isExpanded }) {
           mockPath: '../mock/workload',
           mockExport: 'getMockWorkload'
         })
-        if (!cancelled) setWorkloadData(data)
+        if (!cancelled) {
+          setWorkloadData(data)
+          // Hand the fresh payload back so the row can refresh its reconciler
+          // summary from the detail's enriched reconciler reference.
+          onData && onData(data)
+        }
       } catch (err) {
         console.error('Failed to fetch workload details:', err)
         if (!cancelled) setError(err.message)
       } finally {
         fetchingRef.current = false
-        if (!cancelled) setLoading(false)
+        if (!cancelled) {
+          setLoading(false)
+          // Signal the parent row once the fetch settles (success or error) so it
+          // can swap its spinner for the revealed panel. Skipped when cancelled
+          // (the row was collapsed mid-fetch and unmounted us), otherwise the
+          // disclosure would be marked loaded+open with no panel mounted.
+          if (onReady) onReady()
+        }
       }
     }
 
@@ -98,19 +118,6 @@ export function WorkloadDetailsView({ kind, name, namespace, isExpanded }) {
       ? workloadData.spec.jobTemplate?.spec?.template?.spec
       : workloadData.spec.template?.spec
   }, [workloadData, kind])
-
-  // Extract and sort unique container ports from the spec
-  const containerPorts = useMemo(() => {
-    if (!podSpec) return []
-    const containers = [...(podSpec.containers || []), ...(podSpec.initContainers || [])]
-    const ports = new Set()
-    for (const c of containers) {
-      for (const p of c.ports || []) {
-        if (p.containerPort) ports.add(p.containerPort)
-      }
-    }
-    return [...ports].sort((a, b) => a - b)
-  }, [podSpec])
 
   // Last action timestamp: conditions for apps/v1, lastScheduleTime for CronJob
   const lastActionTime = useMemo(() => {
@@ -149,150 +156,86 @@ export function WorkloadDetailsView({ kind, name, namespace, isExpanded }) {
 
   if (!isExpanded) return null
 
+  // Tab definitions for the shared TabbedPanel (short labels for the compact rail).
+  const tabs = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'specification', label: 'Spec' },
+    { id: 'status', label: 'Status' }
+  ]
+
   return (
     <div class="mt-3 space-y-4">
       {/* Loading State */}
       {loading && (
-        <div class="flex items-center justify-center p-4">
-          <FluxOperatorIcon className="animate-spin h-6 w-6 text-flux-blue" />
-          <span class="ml-2 text-sm text-gray-600 dark:text-gray-400">
-            Loading details...
-          </span>
+        <div class="py-3 text-xs text-gray-500 dark:text-gray-400">
+          Loading details…
         </div>
       )}
 
       {/* Error State */}
       {error && (
-        <div class="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
-          <p class="text-sm text-red-800 dark:text-red-200">
-            Failed to load details: {error}
-          </p>
+        <div class="py-3 text-xs text-red-600 dark:text-red-400">
+          Failed to load details: {error}
         </div>
       )}
 
       {/* Not Found State (deleted or not visible to the user) */}
       {!loading && !error && isNotFound && (
-        <div class="p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-md">
-          <p class="text-sm text-gray-600 dark:text-gray-400">
-            Workload not found in the cluster.
-          </p>
+        <div class="py-3 text-xs text-gray-500 dark:text-gray-400">
+          Workload not found in the cluster.
         </div>
       )}
 
       {/* Tabs + Content */}
       {!loading && !error && workloadData && !isNotFound && (
-        <>
-          {/* Tab Navigation */}
-          <div class="border-b border-gray-200 dark:border-gray-700 mb-4">
-            <nav class="flex space-x-4 overflow-x-auto" aria-label="Tabs">
-              <button
-                onClick={() => setActiveTab('overview')}
-                class={`py-2 px-1 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === 'overview'
-                    ? 'border-flux-blue text-flux-blue dark:text-blue-400'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-                }`}
-              >
-                <span class="inline sm:hidden">Info</span>
-                <span class="hidden sm:inline">Overview</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('specification')}
-                class={`py-2 px-1 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === 'specification'
-                    ? 'border-flux-blue text-flux-blue dark:text-blue-400'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-                }`}
-              >
-                <span class="inline sm:hidden">Spec</span>
-                <span class="hidden sm:inline">Specification</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('status')}
-                class={`py-2 px-1 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === 'status'
-                    ? 'border-flux-blue text-flux-blue dark:text-blue-400'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-                }`}
-              >
-                Status
-              </button>
-            </nav>
-          </div>
-
-          {/* Overview Tab */}
+        <TabbedPanel tabs={tabs} active={activeTab} onSelect={setActiveTab}>
+          {/* Overview — two columns: metadata fields left, last action + message right */}
           {activeTab === 'overview' && (
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Left column: status and metadata */}
-              <div class="space-y-4">
-                {/* Status Badge */}
-                <div class="text-sm">
-                  <span class="text-gray-500 dark:text-gray-400">{kind}</span>
-                  <span class={`ml-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getWorkloadStatusBadgeClass(workloadStatus)}`}>
-                    {formatWorkloadStatus(workloadStatus)}
-                  </span>
-                </div>
-
-                {/* Created At */}
-                {workloadInfo?.createdAt && (
-                  <div class="text-sm">
-                    <span class="text-gray-500 dark:text-gray-400">Created</span>
-                    <span class="ml-1 text-gray-900 dark:text-white">{new Date(workloadInfo.createdAt).toLocaleString().replace(',', '')}</span>
-                  </div>
-                )}
-
-                {/* Pods readiness / phase summary */}
-                <div class="text-sm">
-                  <span class="text-gray-500 dark:text-gray-400">Pods</span>
-                  <span class="ml-1 text-gray-900 dark:text-white">{podSummary.primary}</span>
-                  {podSummary.detail && podSummary.total > 0 && (
-                    <span class="text-gray-500 dark:text-gray-400"> ({podSummary.detail})</span>
-                  )}
-                </div>
-
-                {/* Service Account */}
-                {podSpec?.serviceAccountName && (
-                  <div class="text-sm">
-                    <span class="text-gray-500 dark:text-gray-400">Service account</span>
-                    <span class="ml-1 text-gray-900 dark:text-white">{podSpec.serviceAccountName}</span>
-                  </div>
-                )}
-
-                {/* Container Ports */}
-                {containerPorts.length > 0 && (
-                  <div class="text-sm">
-                    <span class="text-gray-500 dark:text-gray-400">Ports</span>
-                    <span class="ml-1 text-gray-900 dark:text-white">{containerPorts.join(', ')}</span>
-                  </div>
-                )}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-xs">
+              {/* Left: metadata fields, evenly stacked. Leads with the same
+                  "Resource: ns/name link" + "<kind>: status" pair as the
+                  resource Overview/Source tabs. */}
+              <div class="space-y-2.5 self-start">
+                <Field label="Workload"><ResourceLink kind={kind} namespace={namespace} name={name} /></Field>
+                <Field label={kind}>
+                  <StatusBadge status={formatWorkloadStatus(workloadStatus)} colorClass={getWorkloadStatusBadgeClass(workloadStatus)} />
+                </Field>
+                <Field label="Pods">
+                  {podSummary
+                    ? `${podSummary.primary}${podSummary.detail && podSummary.total > 0 ? ` (${podSummary.detail})` : ''}`
+                    : null}
+                </Field>
+                <Field label="Service account">{podSpec?.serviceAccountName || 'default'}</Field>
+                {reconcilerName ? (
+                  <Field label="Managed by">
+                    <ResourceLink kind={reconcilerKind} namespace={reconcilerNamespace} name={reconcilerName} />
+                  </Field>
+                ) : null}
               </div>
 
-              {/* Right column: last action and status message */}
-              {workloadInfo?.statusMessage && (
-                <div class="space-y-2 border-gray-200 dark:border-gray-700 border-t pt-4 md:border-t-0 md:border-l md:pt-0 md:pl-6">
-                  {lastActionTime && (
-                    <div class="text-sm text-gray-500 dark:text-gray-400">
-                      Last action <span class="text-gray-900 dark:text-white">{new Date(lastActionTime).toLocaleString().replace(',', '')}</span>
-                    </div>
+              {/* Right: created + last action + message */}
+              {(workloadInfo?.createdAt || lastActionTime || workloadInfo?.statusMessage) && (
+                <div class="space-y-2.5 self-start md:border-l md:border-gray-200 md:dark:border-gray-700 md:pl-8">
+                  <Field label="Created">{workloadInfo?.createdAt ? formatTimestamp(workloadInfo.createdAt) : null}</Field>
+                  <Field label="Last action">{lastActionTime ? formatTimestamp(lastActionTime) : null}</Field>
+                  {workloadInfo?.statusMessage && (
+                    <pre class="whitespace-pre-wrap break-words font-sans leading-relaxed text-gray-700 dark:text-gray-300">{formatScheduleMessage(workloadInfo.statusMessage)}</pre>
                   )}
-                  <div class="text-sm text-gray-700 dark:text-gray-300">
-                    <pre class="whitespace-pre-wrap break-all font-sans">{formatScheduleMessage(workloadInfo.statusMessage)}</pre>
-                  </div>
                 </div>
               )}
             </div>
           )}
 
-          {/* Specification Tab */}
-          {activeTab === 'specification' && (
-            <YamlBlock data={workloadSpecYaml} />
+          {/* Specification Tab — height is capped/scrolled by the TabbedPanel. */}
+          {activeTab === 'specification' && workloadSpecYaml && (
+            <YamlBlock data={workloadSpecYaml} nested />
           )}
 
-          {/* Status Tab */}
-          {activeTab === 'status' && (
-            <YamlBlock data={workloadStatusYaml} />
+          {/* Status Tab — height is capped/scrolled by the TabbedPanel. */}
+          {activeTab === 'status' && workloadStatusYaml && (
+            <YamlBlock data={workloadStatusYaml} nested />
           )}
-        </>
+        </TabbedPanel>
       )}
     </div>
   )

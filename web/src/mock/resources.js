@@ -7,8 +7,14 @@
 import { mockWorkloads } from './workloads'
 
 // Helper to match name with wildcard pattern
-// Supports * (matches any characters). If no wildcards, does exact match.
+// Supports * (matches any characters) and a leading ! that negates the match
+// (e.g. "!foo" excludes "foo"). If no wildcards, does exact match.
 const matchesWildcard = (name, pattern) => {
+  // A leading "!" negates the result of matching the rest of the pattern.
+  if (pattern.startsWith('!')) {
+    return !matchesWildcard(name, pattern.slice(1))
+  }
+
   name = name.toLowerCase()
   pattern = pattern.toLowerCase()
 
@@ -25,6 +31,21 @@ const matchesWildcard = (name, pattern) => {
 
   const regex = new RegExp(`^${regexPattern}$`, 'i')
   return regex.test(name)
+}
+
+// Wrap a plain search term as a substring pattern ("foo" -> "*foo*"), preserving
+// a leading ! negation ("!foo" -> "!*foo*"). Terms that already contain a *
+// wildcard are returned unchanged. Mirrors the backend's wrapPartialMatch.
+const wrapPartialMatch = (pattern) => {
+  let neg = ''
+  if (pattern.startsWith('!')) {
+    neg = '!'
+    pattern = pattern.slice(1)
+  }
+  if (pattern === '' || pattern.includes('*')) {
+    return neg + pattern
+  }
+  return `${neg}*${pattern}*`
 }
 
 // Generate timestamps relative to now (same pattern as events.js)
@@ -457,9 +478,11 @@ export const getMockSearchResults = (endpoint) => {
   // Applier kinds that the search endpoint returns (matches search.go)
   const defaultSearchKinds = ['FluxInstance', 'ResourceSet', 'Kustomization', 'HelmRelease']
 
-  const searchTerm = nameFilter.toLowerCase()
+  // Wrap the term for a substring match, supporting * wildcards and ! negation
+  // (** matches all). Mirrors the backend search handler's wrapPartialMatch.
+  const namePattern = wrapPartialMatch(nameFilter)
 
-  // Filter resources: match name (contains) and limit to applier kinds (or specific kind)
+  // Filter resources: match name and limit to applier kinds (or specific kind)
   const filteredResources = mockResources.resources.filter(resource => {
     // If kind filter specified, use it; otherwise limit to default search kinds
     if (kindFilter) {
@@ -475,8 +498,8 @@ export const getMockSearchResults = (endpoint) => {
       return false
     }
 
-    // Filter by name with case-insensitive contains (** matches all)
-    if (searchTerm !== '**' && !resource.name.toLowerCase().includes(searchTerm)) {
+    // Filter by name (substring + * wildcard + ! negation)
+    if (!matchesWildcard(resource.name, namePattern)) {
       return false
     }
 

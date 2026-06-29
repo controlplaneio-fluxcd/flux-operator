@@ -70,6 +70,28 @@ func TestSearchIndex_Update(t *testing.T) {
 	g.Expect(idx.resources).To(HaveLen(1))
 }
 
+func TestSearchIndex_Kinds(t *testing.T) {
+	g := NewWithT(t)
+
+	// A nil index returns no kinds instead of panicking.
+	var nilIdx *SearchIndex
+	g.Expect(nilIdx.Kinds()).To(BeNil())
+
+	// An empty index returns no kinds.
+	idx := &SearchIndex{}
+	g.Expect(idx.Kinds()).To(BeEmpty())
+
+	// Distinct kinds are returned sorted alphabetically, with duplicates removed.
+	idx.Update([]reporter.ResourceStatus{
+		{Name: "app-1", Kind: "Kustomization", Namespace: "default", Status: reporter.StatusReady},
+		{Name: "app-2", Kind: "HelmRelease", Namespace: "default", Status: reporter.StatusReady},
+		{Name: "app-3", Kind: "Kustomization", Namespace: "team-a", Status: reporter.StatusFailed},
+		{Name: "repo-1", Kind: "ImageRepository", Namespace: "default", Status: reporter.StatusReady},
+	})
+
+	g.Expect(idx.Kinds()).To(Equal([]string{"HelmRelease", "ImageRepository", "Kustomization"}))
+}
+
 func TestSearchIndex_SearchResources_NameFilter(t *testing.T) {
 	g := NewWithT(t)
 

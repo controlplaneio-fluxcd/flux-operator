@@ -73,11 +73,14 @@ describe('FavoritesHeader component', () => {
       expect(mockOnEditModeToggle).toHaveBeenCalled()
     })
 
-    it('should disable edit button when no resources', () => {
+    it('should keep edit button enabled when the filtered set is empty', () => {
+      // The header only renders when favorites exist, and reordering operates on
+      // all favorites — so a search that filters the visible set down to nothing
+      // must not disable "Edit order".
       render(<FavoritesHeader {...defaultProps} resources={[]} />)
 
       const editButton = screen.getByTitle('Edit order')
-      expect(editButton).toBeDisabled()
+      expect(editButton).toBeEnabled()
     })
   })
 

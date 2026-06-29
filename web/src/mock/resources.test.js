@@ -123,6 +123,21 @@ describe('getMockResources', () => {
     expect(result.resources.every(r => r.name.toLowerCase().startsWith('flux'))).toBe(true)
     expect(result.resources.length).toBeGreaterThan(0)
   })
+
+  it('should exclude resources whose name matches a negated wildcard', () => {
+    const matching = getMockResources('/api/v1/resources?name=*configs')
+    const excluded = getMockResources('/api/v1/resources?name=!*configs')
+    expect(matching.resources.length).toBeGreaterThan(0)
+    expect(excluded.resources.length).toBeGreaterThan(0)
+    // Nothing ending in "configs" survives the negation.
+    expect(excluded.resources.every(r => !r.name.toLowerCase().endsWith('configs'))).toBe(true)
+  })
+
+  it('should exclude an exact name with negation', () => {
+    const excluded = getMockResources('/api/v1/resources?name=!flux-system')
+    expect(excluded.resources.some(r => r.name === 'flux-system')).toBe(false)
+    expect(excluded.resources.length).toBeGreaterThan(0)
+  })
 })
 
 describe('getMockSearchResults', () => {
@@ -185,6 +200,15 @@ describe('getMockSearchResults', () => {
   it('should limit results to 40 (10 per kind)', () => {
     const result = getMockSearchResults('/api/v1/search?name=**')
     expect(result.resources.length).toBeLessThanOrEqual(40)
+  })
+
+  it('should exclude matches in quick-search with negation', () => {
+    const matching = getMockSearchResults('/api/v1/search?name=flux')
+    const excluded = getMockSearchResults('/api/v1/search?name=!flux')
+    expect(matching.resources.length).toBeGreaterThan(0)
+    expect(excluded.resources.length).toBeGreaterThan(0)
+    // Nothing containing "flux" survives the negation.
+    expect(excluded.resources.every(r => !r.name.toLowerCase().includes('flux'))).toBe(true)
   })
 
   it('should return empty array when no resources match search term', () => {

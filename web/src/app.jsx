@@ -13,15 +13,17 @@ import { ConnectionStatus } from './components/layout/ConnectionStatus'
 import { Header } from './components/layout/Header'
 import { LoginPage } from './components/auth/LoginPage'
 import { ClusterPage } from './components/dashboards/cluster/ClusterPage'
-import { EventList } from './components/search/EventList'
-import { ResourceList } from './components/search/ResourceList'
-import { WorkloadList } from './components/search/WorkloadList'
+import { EventList, eventsData, eventsLoading } from './components/search/EventList'
+import { ResourceList, resourcesData, resourcesLoading } from './components/search/ResourceList'
+import { WorkloadList, workloadsData, workloadsLoading } from './components/search/WorkloadList'
 import { ResourcePage } from './components/dashboards/resource/ResourcePage'
 import { WorkloadPage } from './components/dashboards/workload/WorkloadPage'
 import { FavoritesPage } from './components/favorites/FavoritesPage'
+import { favorites } from './utils/favorites'
 import { ProfilePage } from './components/user/ProfilePage'
 import { NotFoundPage } from './components/layout/NotFoundPage'
 import { FluxOperatorIcon } from './components/layout/Icons'
+import { Spinner } from './components/search/compactRow'
 
 // Global signals for FluxReport data and application state
 // These signals are exported and used by child components throughout the app
@@ -98,55 +100,56 @@ export async function fetchFluxReport() {
 /**
  * TabNavigation - Tab navigation for switching between Favorites, Resources, and Events views
  */
+// Section tabs rendered as classic underline tabs: the active tab gets a
+// flux-blue bottom border and label. Each entry also carries the result-count
+// `data` signal (and `loading` signal, where the list fetches) folded into the
+// active tab's count on the right. Favorites are read straight from local storage,
+// so there is no loading signal — just the favorite count.
+const SECTION_TABS = [
+  { href: '/favorites', label: 'Favorites', countLabel: 'favorites', data: favorites },
+  { href: '/resources', label: 'Resources', countLabel: 'resources', data: resourcesData, loading: resourcesLoading },
+  { href: '/workloads', label: 'Workloads', countLabel: 'workloads', data: workloadsData, loading: workloadsLoading },
+  { href: '/events', label: 'Events', countLabel: 'events', data: eventsData, loading: eventsLoading },
+]
+
 function TabNavigation() {
   const location = useLocation()
   const currentPath = location.path
+  const meta = SECTION_TABS.find(tab => tab.href === currentPath)
 
   return (
-    <div class="border-b border-gray-200 dark:border-gray-700 transition-colors">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <nav class="-mb-px flex space-x-8">
-          <a
-            href="/favorites"
-            class={`${
-              currentPath === '/favorites'
-                ? 'border-flux-blue text-flux-blue dark:text-blue-400'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm focus:outline-none transition-colors`}
-          >
-            Favorites
-          </a>
-          <a
-            href="/resources"
-            class={`${
-              currentPath === '/resources'
-                ? 'border-flux-blue text-flux-blue dark:text-blue-400'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm focus:outline-none transition-colors`}
-          >
-            Resources
-          </a>
-          <a
-            href="/workloads"
-            class={`${
-              currentPath === '/workloads'
-                ? 'border-flux-blue text-flux-blue dark:text-blue-400'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm focus:outline-none transition-colors`}
-          >
-            Workloads
-          </a>
-          <a
-            href="/events"
-            class={`${
-              currentPath === '/events'
-                ? 'border-flux-blue text-flux-blue dark:text-blue-400'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm focus:outline-none transition-colors`}
-          >
-            Events
-          </a>
+    <div class="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8">
+      <div class="flex items-end justify-between gap-3 border-b border-gray-200 dark:border-gray-700">
+        <nav class="flex gap-6 sm:gap-8">
+          {SECTION_TABS.map(tab => (
+            <a
+              key={tab.href}
+              href={tab.href}
+              class={`${
+                currentPath === tab.href
+                  ? 'border-flux-blue text-flux-blue dark:text-blue-400'
+                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
+              } -mb-px whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm focus:outline-none transition-colors`}
+            >
+              {tab.label}
+            </a>
+          ))}
         </nav>
+
+        {/* Active section count / loader on the right (desktop; on mobile the
+            toolbar shows it). */}
+        {meta && (
+          <div class="hidden sm:flex items-center gap-2 pb-3 text-sm text-gray-600 dark:text-gray-400">
+            {meta.loading?.value ? (
+              <>
+                <Spinner cls="w-4 h-4" />
+                <span>Loading…</span>
+              </>
+            ) : (
+              meta.data?.value?.length > 0 && <span>{meta.data.value.length} {meta.countLabel}</span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -306,15 +309,26 @@ function AppContent({ spec, namespace }) {
   const isTabView = currentPath === '/favorites' || currentPath === '/events' || currentPath === '/resources' || currentPath === '/workloads'
 
   return (
-    <div class="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors flex flex-col">
+    <div
+      class="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors flex flex-col"
+      // --chrome-h is the combined height of the sticky header (57px) + tab nav
+      // (46px). The filter bars stick just below it (sm:top-[var(--chrome-h)]),
+      // so there is a single source of truth for the offset.
+      style={{ '--chrome-h': '103px' }}
+    >
       {/* Connection status banner (only visible when disconnected) */}
       <ConnectionStatus />
 
-      {/* Header with navigation and refresh button */}
-      <Header />
+      {/* Sticky top chrome on desktop: the header and tab nav pin to the top so
+          the list scrolls behind them. On mobile they stay in normal flow. The
+          page background keeps the nav region opaque so rows don't show through. */}
+      <div class="sm:sticky sm:top-0 sm:z-30 bg-gray-50 dark:bg-gray-900">
+        {/* Header with navigation and refresh button */}
+        <Header />
 
-      {/* Tab Navigation - Show only in tab views */}
-      {isTabView && <TabNavigation />}
+        {/* Tab Navigation - Show only in tab views */}
+        {isTabView && <TabNavigation />}
+      </div>
 
       {/* Main content area: route-based navigation */}
       <Router>

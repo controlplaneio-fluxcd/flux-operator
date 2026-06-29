@@ -615,4 +615,44 @@ describe('StatusChart', () => {
       expect(container.textContent).toContain('0')
     })
   })
+
+  describe('Compact mode', () => {
+    it('renders a thin rounded bar without a card wrapper', () => {
+      const { getByTestId } = render(
+        <StatusChart items={createMockResources(4, 'Ready')} loading={false} mode="resources" compact />
+      )
+
+      const root = getByTestId('status-chart')
+      // No card box in compact mode.
+      expect(root.className).not.toContain('card')
+      // The bar itself is the thin rounded variant.
+      expect(root.querySelector('.h-2\\.5.rounded-full')).toBeTruthy()
+    })
+
+    it('omits the count/stats header in compact mode', () => {
+      const resources = [
+        ...createMockResources(3, 'Ready'),
+        ...createMockResources(1, 'Failed')
+      ]
+      const { container } = render(
+        <StatusChart items={resources} loading={false} mode="resources" compact />
+      )
+
+      // The header (count + per-status stats) lives in the toolbar instead.
+      expect(container.textContent).not.toContain('Resources:')
+      expect(container.textContent).not.toContain('Ready:')
+    })
+
+    it('still calls onBarClick when a bar is clicked in compact mode', () => {
+      const onBarClick = vi.fn()
+      const { container } = render(
+        <StatusChart items={createMockResources(4, 'Ready')} loading={false} mode="resources" compact onBarClick={onBarClick} />
+      )
+
+      const bar = container.querySelector('[role="button"]')
+      expect(bar).toBeTruthy()
+      fireEvent.click(bar)
+      expect(onBarClick).toHaveBeenCalledWith('Ready')
+    })
+  })
 })

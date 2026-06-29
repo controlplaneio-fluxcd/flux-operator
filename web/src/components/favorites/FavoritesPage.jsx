@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'preact/hooks'
+import { signal } from '@preact/signals'
 import { fetchWithMock } from '../../utils/fetch'
 import { favorites, reorderFavorites, getFavoriteKey, removeFavorite } from '../../utils/favorites'
 import { POLL_INTERVAL_MS } from '../../utils/constants'
@@ -9,7 +10,17 @@ import { usePageMeta } from '../../utils/meta'
 import { normalizeToFluxStatus } from '../../utils/status'
 import { FavoritesHeader } from './FavoritesHeader'
 import { FavoriteCard } from './FavoriteCard'
-import { FluxOperatorIcon } from '../layout/Icons'
+
+// Cached favorite status map (favoriteKey -> { status, lastReconciled, message }),
+// held at module scope so leaving and returning to the page renders the last-known
+// status instantly from cache while a background refresh updates it. Mirrors the
+// module signals used by the Resources/Workloads lists.
+export const favoritesData = signal({})
+// True while a /api/v1/favorites request is in flight. Initialized true so the
+// very first (cold) page load paints the skeleton state immediately, rather than
+// flashing an "Unknown" badge for one frame before the mount effect starts the
+// fetch. On warm return visits hasCachedData suppresses the pulse regardless.
+export const favoritesFetching = signal(true)
 
 /**
  * Normalize a favorite's status to the Flux vocabulary (Ready/Failed/Progressing/
@@ -34,10 +45,13 @@ function getChartStatus(fav) {
 export function FavoritesPage() {
   usePageMeta('Favorites', 'Favorites dashboard')
 
+  // Cached status map + in-flight flag, read from the module signals so a return
+  // visit renders the warm cache immediately. Reading `.value` here subscribes the
+  // component, so it re-renders when a fetch updates either signal.
+  const resourcesData = favoritesData.value
+  const loading = favoritesFetching.value
+
   // State
-  const [resourcesData, setResourcesData] = useState({}) // Map of key -> resource data
-  const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false) // Delayed refresh indicator
   const [error, setError] = useState(null)
   const [editMode, setEditMode] = useState(false)
   const [editOrder, setEditOrder] = useState([]) // Temporary order during edit
@@ -45,9 +59,9 @@ export function FavoritesPage() {
   const [filter, setFilter] = useState({ namespace: null, kind: null, name: '' })
   const [statusFilter, setStatusFilter] = useState(null)
 
-  // Track if initial load has completed (to avoid showing loading on refresh)
-  const initialLoadDone = useRef(false)
-  const refreshTimeoutRef = useRef(null)
+  // True once we have any cached status. Drives whether a fetch counts as a
+  // first-load (skeletons + chart pulse) or a silent background refresh.
+  const hasCachedData = Object.keys(resourcesData).length > 0
 
   // Get current favorites from signal
   const currentFavorites = favorites.value
@@ -67,23 +81,14 @@ export function FavoritesPage() {
 
     const fetchData = async () => {
       if (currentFavorites.length === 0) {
-        if (!cancelled) {
-          setResourcesData({})
-          setLoading(false)
-        }
-        initialLoadDone.current = true
+        // Reset the cache so deleting every favorite doesn't resurrect stale
+        // statuses on the next add.
+        favoritesData.value = {}
+        favoritesFetching.value = false
         return
       }
 
-      // Only show loading on initial load, not on refresh
-      if (!initialLoadDone.current) {
-        if (!cancelled) setLoading(true)
-      } else {
-        // For refreshes, show spinner after 300ms delay
-        refreshTimeoutRef.current = window.setTimeout(() => {
-          if (!cancelled) setRefreshing(true)
-        }, 300)
-      }
+      favoritesFetching.value = true
       if (!cancelled) setError(null)
 
       try {
@@ -110,24 +115,16 @@ export function FavoritesPage() {
           }
         })
 
-        if (!cancelled) setResourcesData(results)
+        if (!cancelled) favoritesData.value = results
       } catch (err) {
-        // Only show error panel on initial load, not on refresh
-        if (!initialLoadDone.current && !cancelled) {
+        // Surface the error panel only when there is no cached status to fall
+        // back on; background refreshes (and any visit with a warm cache) fail
+        // silently and keep showing the last-known status.
+        if (!cancelled && Object.keys(favoritesData.value).length === 0) {
           setError(err.message)
         }
-        // Don't clear existing data on error - keep showing stale data
       } finally {
-        // Always clear timeout (no cancelled guard)
-        if (refreshTimeoutRef.current) {
-          window.clearTimeout(refreshTimeoutRef.current)
-          refreshTimeoutRef.current = null
-        }
-        if (!cancelled) {
-          setRefreshing(false)
-          setLoading(false)
-        }
-        initialLoadDone.current = true
+        if (!cancelled) favoritesFetching.value = false
       }
     }
 
@@ -292,13 +289,12 @@ export function FavoritesPage() {
     setStatusFilter(status)
   }, [])
 
-  // Empty state
-  if (!loading && currentFavorites.length === 0) {
+  // Empty state — favorites come from local storage synchronously, so this is
+  // accurate on the very first render without waiting for the status fetch.
+  if (currentFavorites.length === 0) {
     return (
-      <main data-testid="favorites-page" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
+      <main data-testid="favorites-page" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8 flex-grow w-full">
         <div class="space-y-6">
-          <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Favorites</h2>
-
           <div class="card py-12">
             <div class="text-center">
               <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -327,26 +323,12 @@ export function FavoritesPage() {
   }
 
   return (
-    <main data-testid="favorites-page" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
-      <div class="space-y-6">
-        {/* Page Title */}
-        <div class="flex items-center justify-between">
-          <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Favorites</h2>
-          {/* Favorites count with refresh indicator */}
-          {!loading && filteredFavorites.length > 0 && (
-            <span class="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-2">
-              {refreshing && (
-                <div class="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-400"></div>
-              )}
-              {filteredFavorites.length} resources
-            </span>
-          )}
-        </div>
-
+    <main data-testid="favorites-page" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8 flex-grow w-full">
+      <div class="space-y-3">
         {/* Header with status bar and controls */}
         <FavoritesHeader
           resources={resourcesForChart}
-          loading={loading}
+          loading={loading && !hasCachedData}
           editMode={editMode}
           onEditModeToggle={handleEditModeToggle}
           onSaveOrder={handleSaveOrder}
@@ -421,35 +403,34 @@ export function FavoritesPage() {
           </div>
         )}
 
-        {/* Normal Mode: Favorite cards grid */}
-        {!editMode && !loading && filteredFavorites.length > 0 && (
+        {/* Normal Mode: favorite cards grid. Rendered straight from local storage
+            so the cards appear instantly; each card's live status fills in once
+            the status fetch settles (until then the badge reads "Unknown"). */}
+        {!editMode && filteredFavorites.length > 0 && (
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredFavorites.map((fav) => (
               <FavoriteCard
                 key={getFavoriteKey(fav.kind, fav.namespace, fav.name)}
                 favorite={fav}
                 resourceData={fav.resourceData}
+                /* Pass raw `loading` (not gated by hasCachedData like the header):
+                   the card skeletons only when loading AND it has no cached status
+                   of its own, so on a warm return visit cached cards never skeleton
+                   while a brand-new favorite still does. */
+                loading={loading}
               />
             ))}
           </div>
         )}
 
         {/* No results after filtering */}
-        {!editMode && !loading && filteredFavorites.length === 0 && currentFavorites.length > 0 && (
+        {!editMode && filteredFavorites.length === 0 && currentFavorites.length > 0 && (
           <div class="card py-8">
             <div class="text-center">
               <p class="text-sm text-gray-600 dark:text-gray-400">
                 No favorites match your search
               </p>
             </div>
-          </div>
-        )}
-
-        {/* Loading state */}
-        {loading && (
-          <div class="flex items-center justify-center p-8">
-            <FluxOperatorIcon className="animate-spin h-8 w-8 text-flux-blue" />
-            <span class="ml-3 text-gray-600 dark:text-gray-400">Loading favorites...</span>
           </div>
         )}
       </div>

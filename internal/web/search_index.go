@@ -102,6 +102,31 @@ func (idx *SearchIndex) SearchResources(allowedNamespaces []string, kind, name, 
 	return result
 }
 
+// Kinds returns the distinct resource kinds present in the index,
+// sorted alphabetically.
+func (idx *SearchIndex) Kinds() []string {
+	if idx == nil {
+		return nil
+	}
+
+	idx.mu.RLock()
+	resources := idx.resources
+	idx.mu.RUnlock()
+
+	seen := make(map[string]struct{}, len(resources))
+	kinds := make([]string, 0)
+	for _, rs := range resources {
+		if _, ok := seen[rs.Kind]; ok {
+			continue
+		}
+		seen[rs.Kind] = struct{}{}
+		kinds = append(kinds, rs.Kind)
+	}
+
+	sort.Strings(kinds)
+	return kinds
+}
+
 // buildSearchIndex normalises resource names for case-insensitive matching
 // and returns a stable-sorted copy suitable for the SearchIndex.
 func buildSearchIndex(resources []reporter.ResourceStatus) []reporter.ResourceStatus {

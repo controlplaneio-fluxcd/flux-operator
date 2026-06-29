@@ -74,6 +74,51 @@ func TestGetEvents_Privileged(t *testing.T) {
 	g.Expect(found).To(BeTrue(), "should find the test event")
 }
 
+func TestGetEvents_Negation(t *testing.T) {
+	g := NewWithT(t)
+
+	// Two events for differently-named involved objects; the negated query must
+	// drop one and keep the other. Exercises the live events.go path where a "!"
+	// name skips the exact-match field selector (isNamePattern) and is excluded
+	// by in-memory matchesWildcard.
+	for _, n := range []string{"neg-evt-keep", "neg-evt-exclude"} {
+		event := &corev1.Event{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      n + "-event",
+				Namespace: "default",
+			},
+			InvolvedObject: corev1.ObjectReference{
+				Kind:      fluxcdv1.ResourceSetKind,
+				Name:      n,
+				Namespace: "default",
+			},
+			Type:          "Normal",
+			Reason:        "TestReason",
+			Message:       "Test event message",
+			LastTimestamp: metav1.Now(),
+		}
+		g.Expect(testClient.Create(ctx, event)).To(Succeed())
+		defer testClient.Delete(ctx, event)
+	}
+
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	events, err := handler.GetEvents(ctx, "ResourceSet", "!neg-evt-exclude", "default", "", "")
+	g.Expect(err).NotTo(HaveOccurred())
+
+	involved := make(map[string]bool, len(events))
+	for _, e := range events {
+		involved[e.InvolvedObject] = true
+	}
+	g.Expect(involved).To(HaveKey("ResourceSet/neg-evt-keep"), "non-matching event should be kept")
+	g.Expect(involved).NotTo(HaveKey("ResourceSet/neg-evt-exclude"), "negated event should be excluded")
+}
+
 func TestGetEvents_UnprivilegedUser_EmptyResult(t *testing.T) {
 	g := NewWithT(t)
 

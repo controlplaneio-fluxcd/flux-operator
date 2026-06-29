@@ -296,11 +296,94 @@ func TestMatchesWildcard(t *testing.T) {
 			pattern:  "*kustomize*",
 			expected: true,
 		},
+
+		// Negation (leading "!")
+		{
+			name:     "negation excludes exact match",
+			input:    "flux-system",
+			pattern:  "!flux-system",
+			expected: false,
+		},
+		{
+			name:     "negation keeps non-match",
+			input:    "other-app",
+			pattern:  "!flux-system",
+			expected: true,
+		},
+		{
+			name:     "negation with contains excludes match",
+			input:    "my-flux-app",
+			pattern:  "!*flux*",
+			expected: false,
+		},
+		{
+			name:     "negation with contains keeps non-match",
+			input:    "other-app",
+			pattern:  "!*flux*",
+			expected: true,
+		},
+		{
+			name:     "negation with prefix excludes match",
+			input:    "test-service",
+			pattern:  "!test*",
+			expected: false,
+		},
+		{
+			name:     "negation case insensitive",
+			input:    "Flux-System",
+			pattern:  "!flux-system",
+			expected: false,
+		},
+		{
+			name:     "bang only excludes nothing",
+			input:    "anything",
+			pattern:  "!",
+			expected: true,
+		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 			result := matchesWildcard(tt.input, tt.pattern)
 			g.Expect(result).To(Equal(tt.expected), "matchesWildcard(%q, %q)", tt.input, tt.pattern)
+		})
+	}
+}
+
+func TestIsNamePattern(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		pattern  string
+		expected bool
+	}{
+		{name: "empty", pattern: "", expected: false},
+		{name: "plain name", pattern: "test", expected: false},
+		{name: "wildcard", pattern: "*test*", expected: true},
+		{name: "negation", pattern: "!test", expected: true},
+		{name: "negation with wildcard", pattern: "!*test*", expected: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			g.Expect(isNamePattern(tt.pattern)).To(Equal(tt.expected))
+		})
+	}
+}
+
+func TestWrapPartialMatch(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{name: "empty stays empty", input: "", expected: ""},
+		{name: "plain name wrapped", input: "flux", expected: "*flux*"},
+		{name: "existing wildcard unchanged", input: "*flux", expected: "*flux"},
+		{name: "negated plain name wrapped inside", input: "!flux", expected: "!*flux*"},
+		{name: "negated wildcard unchanged", input: "!*flux*", expected: "!*flux*"},
+		{name: "bang only stays", input: "!", expected: "!"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			g.Expect(wrapPartialMatch(tt.input)).To(Equal(tt.expected))
 		})
 	}
 }
@@ -501,6 +584,39 @@ func TestSearchHandler_WildcardExpansion(t *testing.T) {
 	resources, ok := response["resources"].([]any)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(resources).To(HaveLen(2), "should match both flux-system and my-flux-app")
+}
+
+func TestSearchHandler_Negation(t *testing.T) {
+	g := NewWithT(t)
+
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+		searchIndex:   &SearchIndex{},
+	}
+
+	handler.searchIndex.Update([]reporter.ResourceStatus{
+		{Name: "flux-system", Kind: "Kustomization", Namespace: "default", Status: reporter.StatusReady, LastReconciled: metav1.Now()},
+		{Name: "my-flux-app", Kind: "HelmRelease", Namespace: "default", Status: reporter.StatusReady, LastReconciled: metav1.Now()},
+		{Name: "other-app", Kind: "Kustomization", Namespace: "default", Status: reporter.StatusReady, LastReconciled: metav1.Now()},
+	})
+
+	// "!flux" wraps to "!*flux*" and should exclude anything containing "flux".
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/search?name=%21flux", nil).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	handler.SearchHandler(rec, req)
+
+	g.Expect(rec.Code).To(Equal(http.StatusOK))
+
+	var response map[string]any
+	g.Expect(json.Unmarshal(rec.Body.Bytes(), &response)).To(Succeed())
+
+	resources, ok := response["resources"].([]any)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(resources).To(HaveLen(1), "should exclude flux-system and my-flux-app, keeping other-app")
+	g.Expect(resources[0].(map[string]any)["name"]).To(Equal("other-app"))
 }
 
 func TestSearchHandler_MessageStripped(t *testing.T) {

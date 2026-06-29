@@ -81,18 +81,38 @@ export function usePrismTheme() {
 }
 
 /**
- * YAML code block with syntax highlighting
+ * YAML code block with syntax highlighting.
+ *
+ * @param {Object} props
+ * @param {*} props.data - The object to render as YAML
+ * @param {boolean} [props.nested] - When true, drops the block's own padding,
+ *   background and rounding so it flows inside an already-padded container (e.g.
+ *   the compact list detail panel) instead of nesting a second padded box.
  */
-export function YamlBlock({ data }) {
+export function YamlBlock({ data, nested = false }) {
   const highlighted = useMemo(() => {
     if (!data) return ''
     const yamlStr = yaml.dump(data, { indent: 2, lineWidth: -1 })
     return Prism.highlight(yamlStr, Prism.languages.yaml, 'yaml')
   }, [data])
 
+  // Inline styles win over the Prism theme stylesheet, whose
+  // `pre[class*="language-"]` rule sets its own background, padding, margin and
+  // radius. In nested mode we strip all of that so the YAML flows inside the
+  // already-padded detail panel instead of nesting a second padded box. The
+  // monospace YAML also reads visually larger than the surrounding 12px sans
+  // text, so nested mode shrinks it to 11px to match the compact detail panel.
+  const fontSize = nested ? '11px' : '12px'
+  const preStyle = nested
+    ? `font-size: ${fontSize}; line-height: 1.5; background: transparent; padding: 0; margin: 0;`
+    : `font-size: ${fontSize}; line-height: 1.5;`
+
   return (
-    <pre class="p-3 bg-gray-50 dark:bg-gray-900 rounded-md overflow-x-auto language-yaml" style="font-size: 12px; line-height: 1.5;">
-      <code class="language-yaml" style="font-size: 12px;" dangerouslySetInnerHTML={{ __html: highlighted }} />
+    <pre
+      class={`overflow-x-auto language-yaml${nested ? '' : ' p-3 bg-gray-50 dark:bg-gray-900 rounded-md'}`}
+      style={preStyle}
+    >
+      <code class="language-yaml" style={`font-size: ${fontSize}; background: transparent;`} dangerouslySetInnerHTML={{ __html: highlighted }} />
     </pre>
   )
 }

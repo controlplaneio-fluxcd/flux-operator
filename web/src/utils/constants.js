@@ -16,7 +16,7 @@ export const fluxCRDs = [
   {
     kind: 'FluxInstance',
     apiVersion: 'fluxcd.controlplane.io/v1',
-    alias: 'fluxinstance',
+    alias: 'instance',
     group: 'Appliers',
     docUrl: 'https://fluxoperator.dev/docs/crd/fluxinstance/',
   },
@@ -242,4 +242,19 @@ export function isKindWithInventory(kind) {
 export function getKindAlias(kind) {
   const crd = fluxCRDs.find(c => c.kind === kind)
   return crd?.alias || kind.toLowerCase()
+}
+
+// kubectl-style short names for Kubernetes workload kinds (Flux kinds carry their
+// own alias in fluxCRDs).
+const workloadKindAliases = { Deployment: 'deploy', StatefulSet: 'sts', DaemonSet: 'ds', CronJob: 'cj' }
+
+/**
+ * Get the short display name for a kind chip: the Flux CRD alias (rset, ks, hr,
+ * instance…), then the workload short name (deploy, sts…), falling back to the
+ * full kind when neither applies.
+ * @param {string} kind - The resource or workload kind
+ * @returns {string} - The chip alias or the original kind
+ */
+export function getKindChipAlias(kind) {
+  return fluxCRDs.find(c => c.kind === kind)?.alias || workloadKindAliases[kind] || kind
 }

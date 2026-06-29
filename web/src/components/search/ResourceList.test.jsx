@@ -16,6 +16,7 @@ import {
 } from './ResourceList'
 import { reportData } from '../../app'
 import { fetchWithMock } from '../../utils/fetch'
+import { favorites } from '../../utils/favorites'
 
 // Mock the fetch utility
 vi.mock('../../utils/fetch', () => ({
@@ -51,14 +52,24 @@ vi.mock('./FilterForm', () => ({
   )
 }))
 
-// Mock ResourceDetailsView component to simplify testing
+// Mock ResourceDetailsView component to simplify testing.
+// Exposes a "details-ready" button so tests can drive the disclosure's `onReady`
+// callback (which the real panel fires once its data has loaded), letting us
+// assert the spinner -> reveal transition deterministically.
 vi.mock('./ResourceDetailsView', () => ({
-  ResourceDetailsView: ({ kind, name, namespace, isExpanded }) => (
+  ResourceDetailsView: ({ kind, name, namespace, isExpanded, onReady, onData }) => (
     isExpanded ? (
       <div data-testid="resource-details-view">
         <span data-testid="resource-details-view-kind">{kind}</span>
         <span data-testid="resource-details-view-name">{name}</span>
         <span data-testid="resource-details-view-namespace">{namespace}</span>
+        <button data-testid="details-ready" onClick={onReady}>ready</button>
+        {/* Simulates the detail fetch landing with a fresher server-computed
+            reconcilerRef summary, used to test the row write-back. */}
+        <button
+          data-testid="details-emit-data"
+          onClick={() => onData && onData({ status: { reconcilerRef: { status: 'Ready', message: 'now reconciled', lastReconciled: '2025-11-18T11:10:59Z' } } })}
+        >emit</button>
       </div>
     ) : null
   )
@@ -105,6 +116,9 @@ describe('ResourceList', () => {
         namespaces: ['flux-system', 'default']
       }
     }
+
+    // Reset favorites (persisted in localStorage across tests in this file)
+    favorites.value = []
 
     // Reset mocks
     vi.clearAllMocks()
@@ -242,17 +256,20 @@ describe('ResourceList', () => {
       })
     })
 
-    it('should display resource cards when data loads', async () => {
+    it('should display resource rows when data loads', async () => {
       fetchWithMock.mockResolvedValue({ resources: mockResources })
 
       render(<ResourceList />)
 
+      // Each row renders the namespace/name link twice (mobile + desktop variants).
       await waitFor(() => {
-        expect(screen.getAllByText(/flux-system/)).toHaveLength(3) // namespace + name in both cards
+        expect(screen.getAllByText(/flux-system/).length).toBeGreaterThan(0)
       })
+      // The status message is desktop-only, so it appears exactly once per row.
       expect(screen.getByText(/Stored artifact/)).toBeInTheDocument()
-      expect(screen.getByText('apps')).toBeInTheDocument()
       expect(screen.getByText('Health check failed')).toBeInTheDocument()
+      // The Kustomization name is rendered in both the mobile and desktop links.
+      expect(screen.getAllByText('apps').length).toBeGreaterThan(0)
     })
 
     it('should show empty state when no resources match filters', async () => {
@@ -280,18 +297,22 @@ describe('ResourceList', () => {
 
       render(<ResourceList />)
 
+      // The count renders once, in the FilterBar toolbar. (The desktop section
+      // count lives in the App tab nav, not this component.)
       await waitFor(() => {
-        expect(screen.getByText('2 resources')).toBeInTheDocument()
+        expect(screen.getAllByText('2 resources')).toHaveLength(1)
       })
     })
 
-    it('should not display resource count when loading', async () => {
-      resourcesData.value = []
+    it('should show a loading indicator instead of the count while loading', async () => {
+      resourcesData.value = mockResources
       resourcesLoading.value = true
 
       render(<ResourceList />)
 
-      expect(screen.queryByText(/resources$/)).not.toBeInTheDocument()
+      // While loading the FilterBar shows "Loading…" rather than a (stale) count.
+      expect(screen.getByText('Loading…')).toBeInTheDocument()
+      expect(screen.queryByText('2 resources')).not.toBeInTheDocument()
     })
 
     it('should sort resources by lastReconciled (newest first)', async () => {
@@ -299,11 +320,14 @@ describe('ResourceList', () => {
 
       render(<ResourceList />)
 
+      // Rows render their dashboard links in list order; the GitRepository
+      // (10:00:00) must come before the Kustomization (09:00:00).
       await waitFor(() => {
-        const cards = screen.getAllByText(/GitRepository|Kustomization/i)
-        // First card should be GitRepository (10:00:00), second should be Kustomization (09:00:00)
-        expect(cards[0].textContent).toBe('GitRepository')
-        expect(cards[1].textContent).toBe('Kustomization')
+        const hrefs = screen.getAllByRole('link').map((a) => a.getAttribute('href'))
+        const gitIdx = hrefs.findIndex((h) => h.includes('GitRepository'))
+        const ksIdx = hrefs.findIndex((h) => h.includes('Kustomization'))
+        expect(gitIdx).toBeGreaterThanOrEqual(0)
+        expect(gitIdx).toBeLessThan(ksIdx)
       })
     })
   })
@@ -391,7 +415,7 @@ describe('ResourceList', () => {
     })
   })
 
-  describe('ResourceCard rendering', () => {
+  describe('Compact row rendering', () => {
     it('should display status badges correctly', async () => {
       fetchWithMock.mockResolvedValue({ resources: mockResources })
 
@@ -426,55 +450,71 @@ describe('ResourceList', () => {
       })
     })
 
-    it('should show expand button for long messages', async () => {
-      const longMessage = 'a'.repeat(200)
-      fetchWithMock.mockResolvedValue({ resources: [{
-        ...mockResources[0],
-        message: longMessage
-      }] })
-
-      render(<ResourceList />)
-
-      await waitFor(() => {
-        expect(screen.getByText('Show more')).toBeInTheDocument()
-      })
-    })
-
-    it('should expand message when show more is clicked', async () => {
-      const longMessage = 'a'.repeat(200)
-      fetchWithMock.mockResolvedValue({ resources: [{
-        ...mockResources[0],
-        message: longMessage
-      }] })
-
-      render(<ResourceList />)
-
-      const showMoreButton = await screen.findByText('Show more')
-      fireEvent.click(showMoreButton)
-
-      expect(screen.getByText('Show less')).toBeInTheDocument()
-    })
-
-    it('should display details toggle for all resources', async () => {
+    it('should display a details toggle for every resource', async () => {
       fetchWithMock.mockResolvedValue({ resources: mockResources })
 
       render(<ResourceList />)
 
+      // The expand affordance is now an icon button labelled "Toggle details".
       await waitFor(() => {
-        const detailsButtons = screen.getAllByText('Details')
-        expect(detailsButtons).toHaveLength(2) // One for each resource
+        expect(screen.getAllByLabelText('Toggle details')).toHaveLength(2)
       })
     })
 
-    it('should expand ResourceDetailsView when details toggle is clicked', async () => {
+    it('should expose the namespace/name dashboard link and favorite star', async () => {
       fetchWithMock.mockResolvedValue({ resources: [mockResources[0]] })
 
       render(<ResourceList />)
 
-      const detailsToggle = await screen.findByText('Details')
-      fireEvent.click(detailsToggle)
+      // The row links the namespace/name to the resource dashboard (mobile +
+      // desktop variants share the same href).
+      await waitFor(() => {
+        const hrefs = screen.getAllByRole('link').map((a) => a.getAttribute('href'))
+        expect(hrefs).toContain('/resource/GitRepository/flux-system/flux-system')
+      })
 
-      // Check that ResourceDetailsView is rendered with correct props
+      // The favorite star toggles the resource in/out of favorites.
+      const star = screen.getByTitle('Add to favorites')
+      fireEvent.click(star)
+      expect(screen.getByTitle('Remove from favorites')).toBeInTheDocument()
+    })
+  })
+
+  describe('Row disclosure', () => {
+    it('should spin, mount ResourceDetailsView, then reveal it on expand', async () => {
+      fetchWithMock.mockResolvedValue({ resources: [mockResources[0]] })
+
+      render(<ResourceList />)
+
+      const toggle = await screen.findByLabelText('Toggle details')
+
+      // Collapsed: the panel is not mounted and the button shows no spinner.
+      expect(screen.queryByTestId('resource-details-view')).not.toBeInTheDocument()
+      expect(toggle.querySelector('.animate-spin')).not.toBeInTheDocument()
+
+      // Expand: the panel mounts (still collapsed) and the button spins while it
+      // "loads".
+      fireEvent.click(toggle)
+      expect(screen.getByTestId('resource-details-view')).toBeInTheDocument()
+      expect(toggle.querySelector('.animate-spin')).toBeInTheDocument()
+
+      // The panel signals readiness via onReady -> the spinner is replaced by the
+      // open chevron and the row is revealed.
+      fireEvent.click(screen.getByTestId('details-ready'))
+      await waitFor(() => {
+        expect(toggle.querySelector('.animate-spin')).not.toBeInTheDocument()
+      })
+      expect(toggle.querySelector('.rotate-90')).toBeInTheDocument()
+    })
+
+    it('should mount ResourceDetailsView with the resource identity', async () => {
+      fetchWithMock.mockResolvedValue({ resources: [mockResources[0]] })
+
+      render(<ResourceList />)
+
+      const toggle = await screen.findByLabelText('Toggle details')
+      fireEvent.click(toggle)
+
       await waitFor(() => {
         expect(screen.getByTestId('resource-details-view')).toBeInTheDocument()
       })
@@ -482,79 +522,56 @@ describe('ResourceList', () => {
       expect(screen.getByTestId('resource-details-view-name')).toHaveTextContent('flux-system')
       expect(screen.getByTestId('resource-details-view-namespace')).toHaveTextContent('flux-system')
     })
+
+    it('refreshes the row summary from the detail data (stale Failed -> Ready)', async () => {
+      const stale = {
+        kind: 'Kustomization', namespace: 'flux-system', name: 'apps',
+        status: 'Failed', message: 'reconciliation failed', lastReconciled: '2025-11-01T00:00:00Z'
+      }
+      fetchWithMock.mockResolvedValue({ resources: [stale] })
+
+      render(<ResourceList />)
+
+      const toggle = await screen.findByLabelText('Toggle details')
+      // The row first shows the stale list summary.
+      expect(screen.getByText('reconciliation failed')).toBeInTheDocument()
+
+      fireEvent.click(toggle)
+      // The panel lands with a fresher reconcilerRef summary -> the row updates.
+      fireEvent.click(screen.getByTestId('details-emit-data'))
+
+      await waitFor(() => {
+        expect(screen.getByText('now reconciled')).toBeInTheDocument()
+      })
+      expect(screen.queryByText('reconciliation failed')).not.toBeInTheDocument()
+    })
   })
 
-  describe('Message truncation', () => {
-    it('should not truncate short single-line messages', async () => {
-      const resourceWithShortMessage = {
-        kind: 'GitRepository',
-        name: 'repo',
-        namespace: 'default',
-        status: 'Ready',
-        message: 'Short message under 150 characters',
-        lastReconciled: new Date('2025-01-15T10:00:00Z'),
-        inventory: []
-      }
-
-      fetchWithMock.mockResolvedValue({ resources: [resourceWithShortMessage] })
+  describe('FilterBar', () => {
+    it('should show the result count header', async () => {
+      fetchWithMock.mockResolvedValue({ resources: mockResources })
 
       render(<ResourceList />)
 
+      // The FilterBar always renders the count, even on mobile where the desktop
+      // page header is hidden.
       await waitFor(() => {
-        expect(screen.getByText('Short message under 150 characters')).toBeInTheDocument()
+        expect(screen.getAllByText('2 resources').length).toBeGreaterThan(0)
       })
-
-      // Should not show "Show more" button for short messages
-      expect(screen.queryByText(/Show more/)).not.toBeInTheDocument()
     })
 
-    it('should show first line without truncation when it is short but message has multiple lines', async () => {
-      const resourceWithMultilineMessage = {
-        kind: 'GitRepository',
-        name: 'repo',
-        namespace: 'default',
-        status: 'Failed',
-        message: 'First line is short\nSecond line contains more details\nThird line with even more information',
-        lastReconciled: new Date('2025-01-15T10:00:00Z'),
-        inventory: []
-      }
-
-      fetchWithMock.mockResolvedValue({ resources: [resourceWithMultilineMessage] })
+    it('should toggle the mobile filters form', async () => {
+      fetchWithMock.mockResolvedValue({ resources: mockResources })
 
       render(<ResourceList />)
 
-      // Should show truncated to first line
-      await waitFor(() => {
-        expect(screen.getByText(/First line is short/)).toBeInTheDocument()
-      })
+      const filtersToggle = await screen.findByLabelText('Toggle filters')
+      expect(filtersToggle).toBeInTheDocument()
 
-      // Should show "Show more" button for multiline messages
-      expect(screen.getByText(/Show more/)).toBeInTheDocument()
-    })
-
-    it('should truncate first line when it exceeds 150 characters', async () => {
-      const longFirstLine = 'This is a very long message that exceeds one hundred and fifty characters and should be truncated at exactly that length with ellipsis added to indicate continuation'
-
-      const resourceWithLongFirstLine = {
-        kind: 'Kustomization',
-        name: 'apps',
-        namespace: 'default',
-        status: 'Failed',
-        message: longFirstLine,
-        lastReconciled: new Date('2025-01-15T10:00:00Z'),
-        inventory: []
-      }
-
-      fetchWithMock.mockResolvedValue({ resources: [resourceWithLongFirstLine] })
-
-      render(<ResourceList />)
-
-      // Should show truncated message with ellipsis
-      await waitFor(() => {
-        const messageElement = screen.getByText(/This is a very long message/)
-        expect(messageElement.textContent).toContain('...')
-        expect(messageElement.textContent.length).toBeLessThan(longFirstLine.length)
-      })
+      // The FilterForm is always present in the DOM (CSS controls mobile
+      // visibility); pressing the toggle is a no-throw interaction.
+      fireEvent.click(filtersToggle)
+      expect(screen.getByTestId('filter-form')).toBeInTheDocument()
     })
   })
 })

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/preact'
+import { render, screen, fireEvent, waitFor } from '@testing-library/preact'
 import { signal } from '@preact/signals'
 import { FilterForm } from './FilterForm'
 import { fluxKinds, eventSeverities, resourceStatuses, workloadKinds } from '../../utils/constants'
@@ -381,6 +381,82 @@ describe('FilterForm', () => {
       expect(screen.getByPlaceholderText(/Resource name/)).toHaveValue('apps')
       expect(document.querySelector('#filter-kind')).toHaveValue('Kustomization')
       expect(document.querySelector('#filter-namespace')).toHaveValue('default')
+    })
+  })
+
+  describe('Refresh button', () => {
+    it('should not render a refresh button when onRefresh is not provided', () => {
+      render(
+        <FilterForm
+          kindSignal={kindSignal}
+          nameSignal={nameSignal}
+          namespaceSignal={namespaceSignal}
+          namespaces={mockNamespaces}
+          onClear={onClear}
+        />
+      )
+
+      expect(screen.queryByRole('button', { name: /refresh/i })).not.toBeInTheDocument()
+    })
+
+    it('should render a refresh button when onRefresh is provided', () => {
+      render(
+        <FilterForm
+          kindSignal={kindSignal}
+          nameSignal={nameSignal}
+          namespaceSignal={namespaceSignal}
+          namespaces={mockNamespaces}
+          onClear={onClear}
+          onRefresh={vi.fn()}
+        />
+      )
+
+      expect(screen.getByRole('button', { name: /refresh/i })).toBeInTheDocument()
+    })
+
+    it('should call onRefresh when the refresh button is clicked', () => {
+      const onRefresh = vi.fn().mockResolvedValue(undefined)
+      render(
+        <FilterForm
+          kindSignal={kindSignal}
+          nameSignal={nameSignal}
+          namespaceSignal={namespaceSignal}
+          namespaces={mockNamespaces}
+          onClear={onClear}
+          onRefresh={onRefresh}
+        />
+      )
+
+      fireEvent.click(screen.getByRole('button', { name: /refresh/i }))
+
+      expect(onRefresh).toHaveBeenCalledTimes(1)
+    })
+
+    it('should disable and spin the refresh button while refreshing, then restore', async () => {
+      let resolveRefresh
+      const onRefresh = vi.fn(() => new Promise(resolve => { resolveRefresh = resolve }))
+      render(
+        <FilterForm
+          kindSignal={kindSignal}
+          nameSignal={nameSignal}
+          namespaceSignal={namespaceSignal}
+          namespaces={mockNamespaces}
+          onClear={onClear}
+          onRefresh={onRefresh}
+        />
+      )
+
+      const refreshButton = screen.getByRole('button', { name: /refresh/i })
+      fireEvent.click(refreshButton)
+
+      // While the refresh promise is pending the button is disabled and spins.
+      await waitFor(() => expect(refreshButton).toBeDisabled())
+      expect(refreshButton.querySelector('svg').getAttribute('class')).toMatch(/animate-spin/)
+
+      // Once it settles the button is re-enabled and stops spinning.
+      resolveRefresh()
+      await waitFor(() => expect(refreshButton).not.toBeDisabled())
+      expect(refreshButton.querySelector('svg').getAttribute('class')).not.toMatch(/animate-spin/)
     })
   })
 })
