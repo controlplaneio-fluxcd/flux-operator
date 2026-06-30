@@ -482,9 +482,7 @@ describe('ManagedObjectsPanel component', () => {
     expect(textContent).toContain('Disabled')
   })
 
-  it('should show Workloads tab when there are workload items', async () => {
-    const user = userEvent.setup()
-
+  it('never shows a Workloads tab; workloads live in the Inventory tab', () => {
     render(
       <ManagedObjectsPanel
         resourceData={mockKustomizationData}
@@ -492,18 +490,13 @@ describe('ManagedObjectsPanel component', () => {
       />
     )
 
-    // Workloads tab should be visible (mockKustomizationData has 1 Deployment)
-    expect(screen.getByText('Workloads')).toBeInTheDocument()
-
-    // Click on Workloads tab
-    const workloadsTab = screen.getByText('Workloads')
-    await user.click(workloadsTab)
-
-    // Tab should be active
-    expect(workloadsTab).toHaveClass('border-flux-blue')
+    // The Inventory tab is the home for workloads (filterable by category);
+    // there is no dedicated Workloads tab.
+    expect(screen.getByText('Inventory')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Workloads' })).not.toBeInTheDocument()
   })
 
-  it('fetches workload status at the panel level and propagates it to the Workloads tab', async () => {
+  it('fetches workload status at the panel level and propagates it to the Graph tab', async () => {
     const user = userEvent.setup()
 
     // The panel owns the fetch; return a real status for the inventory's Deployment
@@ -526,10 +519,11 @@ describe('ManagedObjectsPanel component', () => {
       />
     )
 
-    await user.click(screen.getByText('Workloads'))
+    await user.click(screen.getByText('Graph'))
 
-    // The fetched status renders as a badge in the tab row, replacing the placeholder
-    expect(await screen.findByText('Ready')).toBeInTheDocument()
+    // The fetched status renders as a message + dot in the Graph's Workloads group,
+    // replacing the "computing..." placeholder
+    expect(await screen.findByText('Deployment has minimum availability.')).toBeInTheDocument()
     expect(screen.queryByTestId('workload-status-computing')).not.toBeInTheDocument()
 
     // The panel issued the batch POST with the resolved workload
@@ -541,28 +535,6 @@ describe('ManagedObjectsPanel component', () => {
 
     // And the row links to the dedicated workload dashboard
     expect(document.querySelector('a[href="/workload/Deployment/production/app"]')).not.toBeNull()
-  })
-
-  it('should not show Workloads tab when there are no workload items', () => {
-    const dataWithNoWorkloads = {
-      ...mockKustomizationData,
-      status: {
-        inventory: [
-          { apiVersion: 'v1', kind: 'ConfigMap', namespace: 'production', name: 'config' },
-          { apiVersion: 'v1', kind: 'Secret', namespace: 'production', name: 'secret' }
-        ]
-      }
-    }
-
-    render(
-      <ManagedObjectsPanel
-        resourceData={dataWithNoWorkloads}
-        onNavigate={mockOnNavigate}
-      />
-    )
-
-    // Workloads tab should not be visible
-    expect(screen.queryByText('Workloads')).not.toBeInTheDocument()
   })
 
   it('should show health checking as disabled for HelmRelease with disableWait=true', () => {

@@ -7,12 +7,11 @@ import { isKindWithInventory, isFluxInventoryItem, isWorkloadInventoryItem } fro
 import { fetchWithMock } from '../../../utils/fetch'
 import { DashboardPanel, TabButton } from '../common/panel'
 import { InventoryTabContent } from './InventoryTabContent'
-import { WorkloadsTabContent } from './WorkloadsTabContent'
 import { GraphTabContent } from './GraphTabContent'
 import { useHashTab } from '../../../utils/hash'
 
 // Valid tabs for the ManagedObjectsPanel
-const INVENTORY_TABS = ['overview', 'graph', 'inventory', 'workloads']
+const INVENTORY_TABS = ['overview', 'graph', 'inventory']
 
 /**
  * ManagedObjectsPanel - Displays the managed objects for a Flux resource
@@ -89,14 +88,14 @@ export function ManagedObjectsPanel({ resourceData, onNavigate }) {
     return resourceData.status.inventory.filter(item => isWorkloadInventoryItem(item))
   }, [resourceData, hasInventory])
 
-  // Live workload status (status + statusMessage) shared by the Graph and
-  // Workloads tabs. Owned here, at the panel level — not inside the tab
-  // components — so it survives tab switches: re-entering a tab shows the
+  // Live workload status (status + statusMessage) used by the Graph tab's
+  // Workloads group. Owned here, at the panel level — not inside the tab
+  // component — so it survives tab switches: re-entering the Graph tab shows the
   // last-known status immediately instead of refetching and flickering the
   // badge in. It refreshes when the inventory changes, which the parent resource
   // poll drives, so no dedicated polling loop is needed.
   const [workloadStatuses, setWorkloadStatuses] = useState({})
-  const tracksWorkloadStatus = activeTab === 'graph' || activeTab === 'workloads'
+  const tracksWorkloadStatus = activeTab === 'graph'
   useEffect(() => {
     if (!tracksWorkloadStatus || workloadItems.length === 0) {
       return
@@ -153,11 +152,6 @@ export function ManagedObjectsPanel({ resourceData, onNavigate }) {
           {hasInventory && (
             <TabButton active={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')}>
               Inventory
-            </TabButton>
-          )}
-          {workloadsCount > 0 && (
-            <TabButton active={activeTab === 'workloads'} onClick={() => setActiveTab('workloads')}>
-              Workloads
             </TabButton>
           )}
         </nav>
@@ -259,14 +253,6 @@ export function ManagedObjectsPanel({ resourceData, onNavigate }) {
       {activeTab === 'inventory' && (
         <InventoryTabContent
           inventory={resourceData.status?.inventory}
-        />
-      )}
-
-      {activeTab === 'workloads' && (
-        <WorkloadsTabContent
-          workloadItems={workloadItems}
-          namespace={resourceData.metadata.namespace}
-          workloadStatuses={workloadStatuses}
         />
       )}
     </DashboardPanel>
