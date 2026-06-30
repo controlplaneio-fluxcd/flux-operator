@@ -183,8 +183,8 @@ describe('WorkloadPage component', () => {
     expect(deploymentTexts.length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText('Namespace: default')).toBeInTheDocument()
 
-    // Current status → green
-    const iconContainer = screen.getByRole('heading', { name: 'nginx' }).closest('.card').querySelector('.bg-green-50')
+    // Current status → green; the icon disc uses the darker shade (bg-green-100).
+    const iconContainer = screen.getByRole('heading', { name: 'nginx' }).closest('.card').querySelector('.bg-green-100')
     expect(iconContainer).toBeInTheDocument()
 
     // ActionBar should receive reconciler props (not workload props)

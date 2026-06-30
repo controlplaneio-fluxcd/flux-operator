@@ -192,8 +192,9 @@ describe('ResourcePage component', () => {
     expect(screen.getByText('FluxInstance')).toBeInTheDocument()
     expect(screen.getByText('Namespace: flux-system')).toBeInTheDocument()
 
-    // Check Status Icon presence (Ready status)
-    const iconContainer = screen.getByText('flux').closest('.card').querySelector('.bg-green-50')
+    // Check Status Icon presence (Ready status): the icon disc uses the darker
+    // shade (bg-green-100) of the card's green tint.
+    const iconContainer = screen.getByText('flux').closest('.card').querySelector('.bg-green-100')
     expect(iconContainer).toBeInTheDocument()
 
     // Check Child Panels using mocked components
