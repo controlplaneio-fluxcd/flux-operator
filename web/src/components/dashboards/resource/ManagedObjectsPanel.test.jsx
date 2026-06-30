@@ -25,11 +25,15 @@ vi.mock('../../../utils/fetch', () => ({
 // (tab visibility, switching, and the props handed to the list) rather than the
 // list's DOM, which is owned and tested by InventoryTabContent.test.jsx.
 vi.mock('./InventoryTabContent', () => ({
-  InventoryTabContent: ({ inventory }) => (
+  InventoryTabContent: ({ inventory, category, onCategoryChange }) => (
     <div
       data-testid="inventory-tab-content"
       data-count={inventory?.length ?? 0}
+      data-category={category}
     >
+      <button data-testid="set-category-workloads" onClick={() => onCategoryChange('workloads')}>
+        set workloads
+      </button>
       InventoryTabContent
     </div>
   )
@@ -408,6 +412,29 @@ describe('ManagedObjectsPanel component', () => {
     const list = screen.getByTestId('inventory-tab-content')
     expect(list).toBeInTheDocument()
     expect(list).toHaveAttribute('data-count', '5')
+  })
+
+  it('persists the inventory filter across tab switches', async () => {
+    const user = userEvent.setup()
+
+    render(
+      <ManagedObjectsPanel
+        resourceData={mockKustomizationData}
+        onNavigate={mockOnNavigate}
+      />
+    )
+
+    // Open the Inventory tab and change the category filter.
+    await user.click(screen.getByText('Inventory'))
+    expect(screen.getByTestId('inventory-tab-content')).toHaveAttribute('data-category', 'all')
+    await user.click(screen.getByTestId('set-category-workloads'))
+    expect(screen.getByTestId('inventory-tab-content')).toHaveAttribute('data-category', 'workloads')
+
+    // Switch away to another tab and back: the lifted filter state is preserved.
+    await user.click(screen.getByText('Graph'))
+    expect(screen.queryByTestId('inventory-tab-content')).not.toBeInTheDocument()
+    await user.click(screen.getByText('Inventory'))
+    expect(screen.getByTestId('inventory-tab-content')).toHaveAttribute('data-category', 'workloads')
   })
 
   it('should toggle collapse/expand state', async () => {

@@ -21,6 +21,11 @@ export function ManagedObjectsPanel({ resourceData, onNavigate }) {
   // Tab state synced with URL hash (e.g., #inventory-graph)
   const [activeTab, setActiveTab] = useHashTab('inventory', 'overview', INVENTORY_TABS, 'inventory-panel')
 
+  // Inventory tab filter state, lifted to the panel so the category and search
+  // query survive tab switches (the tab content unmounts while inactive).
+  const [inventoryCategory, setInventoryCategory] = useState('all')
+  const [inventoryQuery, setInventoryQuery] = useState('')
+
   // Check if inventory exists
   const hasInventory = resourceData?.status?.inventory && resourceData.status.inventory.length > 0
 
@@ -263,6 +268,10 @@ export function ManagedObjectsPanel({ resourceData, onNavigate }) {
       {activeTab === 'inventory' && (
         <InventoryTabContent
           inventory={resourceData.status?.inventory}
+          category={inventoryCategory}
+          onCategoryChange={setInventoryCategory}
+          query={inventoryQuery}
+          onQueryChange={setInventoryQuery}
         />
       )}
     </DashboardPanel>

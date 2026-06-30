@@ -97,6 +97,31 @@ describe('InventoryTabContent', () => {
     expect(container.textContent).not.toContain('Kustomization')
   })
 
+  it('uses controlled filter props when the parent provides them', () => {
+    const onCategoryChange = vi.fn()
+    const { container, rerender } = render(
+      <InventoryTabContent inventory={inventory} category="flux" onCategoryChange={onCategoryChange} query="" onQueryChange={() => {}} />
+    )
+
+    // The list reflects the controlled category, not internal state.
+    let r = rows(container)
+    expect(r).toHaveLength(1)
+    expect(r[0].textContent).toContain('Kustomization')
+
+    // Clicking a category delegates to the parent's handler and does not mutate
+    // local state, so the view stays on the controlled value until the parent updates.
+    fireEvent.click(screen.getByTestId('inventory-cat-workloads'))
+    expect(onCategoryChange).toHaveBeenCalledWith('workloads')
+    expect(rows(container)).toHaveLength(1)
+    expect(rows(container)[0].textContent).toContain('Kustomization')
+
+    // When the parent updates the prop, the list follows.
+    rerender(<InventoryTabContent inventory={inventory} category="workloads" onCategoryChange={onCategoryChange} query="" onQueryChange={() => {}} />)
+    r = rows(container)
+    expect(r).toHaveLength(1)
+    expect(r[0].textContent).toContain('Deployment')
+  })
+
   it('searches across fields and composes with the category', () => {
     const { container } = render(<InventoryTabContent inventory={inventory} />)
     // Search alone: "podinfo" matches the Deployment by name.

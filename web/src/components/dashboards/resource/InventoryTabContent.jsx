@@ -57,18 +57,39 @@ function sortInventory(items) {
 
 /**
  * InventoryTabContent - Filterable list of the Kubernetes objects managed by a Flux
- * resource. Owns the category filter and search query (local state), the filtered
- * and sorted list, and the batch status fetch that feeds each row's live status
- * pill. Rows render immediately from the inventory prop; only the status pills are
- * async, mirroring the Workloads tab (no blocking loader).
+ * resource. Renders the category filter and search query, the filtered and sorted
+ * list, and the batch status fetch that feeds each row's live status pill. Rows
+ * render immediately from the inventory prop; only the status pills are async,
+ * mirroring the Workloads tab (no blocking loader).
+ *
+ * The filter state is controlled-or-uncontrolled: when the parent passes
+ * category/query (and their change handlers) the filters are lifted up so they
+ * persist across tab switches; otherwise the component keeps its own local state.
  *
  * @param {array} inventory - The resource's status.inventory items (each carries
  *   its own namespace, empty for cluster-scoped objects)
+ * @param {string} [category] - Controlled category filter value
+ * @param {function} [onCategoryChange] - Controlled category setter
+ * @param {string} [query] - Controlled search query value
+ * @param {function} [onQueryChange] - Controlled search query setter
  */
-export function InventoryTabContent({ inventory }) {
+export function InventoryTabContent({
+  inventory,
+  category: categoryProp,
+  onCategoryChange,
+  query: queryProp,
+  onQueryChange
+}) {
   const items = inventory || EMPTY_INVENTORY
-  const [category, setCategory] = useState('all')
-  const [query, setQuery] = useState('')
+
+  // Fall back to local state when the parent does not control the filters, so the
+  // component still works standalone (e.g. in tests).
+  const [categoryLocal, setCategoryLocal] = useState('all')
+  const [queryLocal, setQueryLocal] = useState('')
+  const category = categoryProp ?? categoryLocal
+  const setCategory = onCategoryChange ?? setCategoryLocal
+  const query = queryProp ?? queryLocal
+  const setQuery = onQueryChange ?? setQueryLocal
 
   // Live status per object, keyed by statusKey. Fetched in one batch over the whole
   // inventory and refreshed whenever the inventory array changes (the parent poll
