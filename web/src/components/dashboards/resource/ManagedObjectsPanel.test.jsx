@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen } from '@testing-library/preact'
+import { render, screen, waitFor } from '@testing-library/preact'
 import userEvent from '@testing-library/user-event'
 import { ManagedObjectsPanel } from './ManagedObjectsPanel'
 import { fetchWithMock } from '../../../utils/fetch'
@@ -576,6 +576,47 @@ describe('ManagedObjectsPanel component', () => {
 
     // And the row links to the dedicated workload dashboard
     expect(document.querySelector('a[href="/workload/Deployment/production/app"]')).not.toBeNull()
+  })
+
+  it('resets Graph statuses when the panel is reused for a different resource', async () => {
+    const user = userEvent.setup()
+
+    // First resource: the fetch resolves with a status for the Deployment.
+    fetchWithMock.mockResolvedValueOnce({
+      objects: [
+        {
+          apiVersion: 'apps/v1',
+          kind: 'Deployment',
+          namespace: 'production',
+          name: 'app',
+          status: 'Current',
+          statusMessage: 'Deployment has minimum availability.'
+        }
+      ]
+    })
+
+    const { rerender } = render(
+      <ManagedObjectsPanel resourceData={mockKustomizationData} onNavigate={mockOnNavigate} />
+    )
+
+    await user.click(screen.getByText('Graph'))
+    expect(await screen.findByText('Deployment has minimum availability.')).toBeInTheDocument()
+
+    // The route reuses this component instance across resource navigations. Make
+    // the next fetch never resolve so we can observe the map was cleared rather
+    // than showing the previous resource's status under the reused key.
+    fetchWithMock.mockReturnValueOnce(new Promise(() => {}))
+    const otherResource = {
+      ...mockKustomizationData,
+      metadata: { ...mockKustomizationData.metadata, name: 'apps-2' }
+    }
+    rerender(<ManagedObjectsPanel resourceData={otherResource} onNavigate={mockOnNavigate} />)
+
+    // The previous resource's status is gone; rows fall back to the placeholder.
+    await waitFor(() => {
+      expect(screen.queryByText('Deployment has minimum availability.')).not.toBeInTheDocument()
+    })
+    expect(screen.getAllByTestId('workload-status-computing').length).toBeGreaterThan(0)
   })
 
   it('should show health checking as disabled for HelmRelease with disableWait=true', () => {

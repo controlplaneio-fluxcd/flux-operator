@@ -106,6 +106,17 @@ export function ManagedObjectsPanel({ resourceData, onNavigate }) {
   // polling loop is needed. Uses the inventory/objects endpoint in statusOnly mode
   // so the response carries status without the sanitized manifest.
   const [itemStatuses, setItemStatuses] = useState({})
+
+  // The route reuses this component across resource navigations, so reset the
+  // status map when the resource identity changes — otherwise a reused
+  // kind/namespace/name key could briefly show the previous resource's status
+  // until the new fetch resolves. Keyed on identity (stable across polls and tab
+  // switches) so it never reintroduces the badge flicker those cases avoid.
+  const resourceId = `${resourceData.kind}/${resourceData.metadata?.namespace || ''}/${resourceData.metadata?.name}`
+  useEffect(() => {
+    setItemStatuses({})
+  }, [resourceId])
+
   const tracksStatus = activeTab === 'graph'
   useEffect(() => {
     if (!tracksStatus || statusItems.length === 0) {

@@ -96,7 +96,12 @@ export function InventoryTabContent({
   // pushes a fresh array), so badges update without a dedicated polling loop.
   const [statuses, setStatuses] = useState({})
   useEffect(() => {
-    if (items.length === 0) return
+    // Clear stale entries when the inventory empties so nothing lingers if it
+    // later repopulates with different objects.
+    if (items.length === 0) {
+      setStatuses({})
+      return
+    }
     let cancelled = false
 
     const fetchStatuses = async () => {
@@ -112,7 +117,9 @@ export function InventoryTabContent({
           mockPath: '../mock/inventory',
           mockExport: 'getMockInventoryObjects',
           method: 'POST',
-          body: { objects }
+          // Rows only render the status pill; the full manifest is fetched lazily
+          // by ObjectDetailsView on expand, so skip it here.
+          body: { objects, statusOnly: true }
         })
         const next = {}
         for (const o of (data?.objects || [])) {
