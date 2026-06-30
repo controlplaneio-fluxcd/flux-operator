@@ -75,63 +75,98 @@ func (h *Handler) InventoryObjectsHandler(w http.ResponseWriter, req *http.Reque
 	}
 }
 
+const (
+	// maxInventoryObjects bounds the number of objects a single request may
+	// query, so an oversized POST body cannot fan out into excessive API calls.
+	// Objects beyond the limit are dropped rather than queried.
+	maxInventoryObjects = 2000
+
+	// inventoryObjectsWorkers is the number of concurrent object fetches.
+	inventoryObjectsWorkers = 4
+)
+
 // GetInventoryObjects fetches the status and sanitized manifest for each object,
-// scoped to the caller's RBAC. Objects are queried in parallel with a concurrency
-// limit of 4; a per-object failure is reported in its Error field instead of
-// failing the whole batch. When statusOnly is true, the sanitized manifest is
-// omitted and only the status and message are returned.
+// scoped to the caller's RBAC. Objects are queried by a fixed pool of
+// inventoryObjectsWorkers, so the number of goroutines stays constant regardless
+// of the request size. A per-object failure is reported in its Error field
+// instead of failing the whole batch. When statusOnly is true, the sanitized
+// manifest is omitted and only the status and message are returned.
 func (h *Handler) GetInventoryObjects(ctx context.Context, items []InventoryObjectItem, statusOnly bool) []InventoryObjectResult {
-	result := make([]InventoryObjectResult, len(items))
-
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-	sem := make(chan struct{}, 4)
-
-	for i, item := range items {
-		wg.Add(1)
-		go func(i int, item InventoryObjectItem) {
-			defer wg.Done()
-
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
-			res := InventoryObjectResult{
-				APIVersion: item.APIVersion,
-				Kind:       item.Kind,
-				Namespace:  item.Namespace,
-				Name:       item.Name,
-			}
-
-			obj, err := h.getInventoryObject(ctx, item)
-			switch {
-			case err == nil:
-				res.Status, res.StatusMessage = computeObjectStatus(obj)
-				if !statusOnly {
-					cleanObjectForExport(obj, true)
-					res.Object = obj.Object
-				}
-			case errors.IsNotFound(err):
-				res.Error = "NotFound"
-			case errors.IsForbidden(err):
-				res.Error = "Forbidden"
-			default:
-				res.Error = "Error"
-				log.FromContext(ctx).Error(err, "failed to get inventory object",
-					"apiVersion", item.APIVersion,
-					"kind", item.Kind,
-					"name", item.Name,
-					"namespace", item.Namespace)
-			}
-
-			mu.Lock()
-			result[i] = res
-			mu.Unlock()
-		}(i, item)
+	// Cap the batch size so a large request cannot fan out into excessive API
+	// calls; the surplus items are dropped rather than queried.
+	if len(items) > maxInventoryObjects {
+		log.FromContext(ctx).Info("inventory objects request truncated to the maximum batch size",
+			"requested", len(items), "limit", maxInventoryObjects)
+		items = items[:maxInventoryObjects]
 	}
 
+	result := make([]InventoryObjectResult, len(items))
+
+	// Fixed worker pool: each index is handled by exactly one worker, so the
+	// writes to result[i] need no locking.
+	work := make(chan int)
+	var wg sync.WaitGroup
+	for range inventoryObjectsWorkers {
+		wg.Go(func() {
+			for i := range work {
+				result[i] = h.inventoryObjectResult(ctx, items[i], statusOnly)
+			}
+		})
+	}
+	for i := range items {
+		work <- i
+	}
+	close(work)
 	wg.Wait()
 
 	return result
+}
+
+// inventoryObjectResult fetches and assembles the result for a single inventory
+// item, scoped to the caller's RBAC. A fetch failure is reported in the Error
+// field; a panic during status computation or sanitization is recovered.
+func (h *Handler) inventoryObjectResult(ctx context.Context, item InventoryObjectItem, statusOnly bool) (res InventoryObjectResult) {
+	res = InventoryObjectResult{
+		APIVersion: item.APIVersion,
+		Kind:       item.Kind,
+		Namespace:  item.Namespace,
+		Name:       item.Name,
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			res.Object = nil
+			res.Error = "Error"
+			log.FromContext(ctx).Error(fmt.Errorf("panic: %v", r), "recovered while processing inventory object",
+				"apiVersion", item.APIVersion,
+				"kind", item.Kind,
+				"name", item.Name,
+				"namespace", item.Namespace)
+		}
+	}()
+
+	obj, err := h.getInventoryObject(ctx, item)
+	switch {
+	case err == nil:
+		res.Status, res.StatusMessage = computeObjectStatus(obj)
+		if !statusOnly {
+			cleanObjectForExport(obj, true)
+			res.Object = obj.Object
+		}
+	case errors.IsNotFound(err):
+		res.Error = "NotFound"
+	case errors.IsForbidden(err):
+		res.Error = "Forbidden"
+	default:
+		res.Error = "Error"
+		log.FromContext(ctx).Error(err, "failed to get inventory object",
+			"apiVersion", item.APIVersion,
+			"kind", item.Kind,
+			"name", item.Name,
+			"namespace", item.Namespace)
+	}
+
+	return res
 }
 
 // getInventoryObject fetches a single object identified by its

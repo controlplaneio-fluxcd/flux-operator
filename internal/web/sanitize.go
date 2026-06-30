@@ -24,8 +24,13 @@ func cleanObjectForExport(obj *unstructured.Unstructured, keepStatus bool) {
 		unstructured.RemoveNestedField(obj.Object, "status")
 	}
 
-	// Remove runtime metadata - keep only name, namespace, labels, and annotations
-	metadata := obj.Object["metadata"].(map[string]any)
+	// Remove runtime metadata - keep only name, namespace, labels, and annotations.
+	// A Get result always carries a metadata map, but guard against a malformed
+	// object so a bad type assertion cannot panic the caller.
+	metadata, ok := obj.Object["metadata"].(map[string]any)
+	if !ok {
+		return
+	}
 	cleanMetadata := make(map[string]any)
 
 	// Preserve essential fields
