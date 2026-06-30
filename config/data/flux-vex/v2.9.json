@@ -1,0 +1,10 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://openvex.dev/docs/public/vex-b9c3d5e7f10426384a6b8c0d2e4f6a8b9c1d3e5f708192a4b6c8d0e2f4a6b8c0",
+  "author": "flux-enterprise@control-plane.io",
+  "role": "Enterprise Flux Maintainers",
+  "timestamp": "2026-06-30T12:00:00.000000+00:00",
+  "last_updated": "2026-06-30T12:00:00.000000+00:00",
+  "version": 1,
+  "statements": []
+}

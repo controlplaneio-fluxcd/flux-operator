@@ -474,9 +474,11 @@ var notificationPatchTmpl = `
     - op: add
       path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
       value: FluxInstance
+{{- if le .VersionInfo.Minor 8 }}
     - op: add
       path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
       value: FluxInstance
+{{- end }}
 {{- if le .VersionInfo.Minor 6 }}
     - op: add
       path: /spec/versions/2/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
@@ -485,9 +487,11 @@ var notificationPatchTmpl = `
     - op: add
       path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
       value: ResourceSet
+{{- if le .VersionInfo.Minor 8 }}
     - op: add
       path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
       value: ResourceSet
+{{- end }}
 {{- if le .VersionInfo.Minor 6 }}
     - op: add
       path: /spec/versions/2/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
@@ -496,9 +500,11 @@ var notificationPatchTmpl = `
     - op: add
       path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
       value: ResourceSetInputProvider
+{{- if le .VersionInfo.Minor 8 }}
     - op: add
       path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
       value: ResourceSetInputProvider
+{{- end }}
 {{- if le .VersionInfo.Minor 6 }}
     - op: add
       path: /spec/versions/2/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
@@ -511,9 +517,11 @@ var notificationPatchTmpl = `
     - op: add
       path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
       value: FluxInstance
+{{- if le .VersionInfo.Minor 8 }}
     - op: add
       path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
       value: FluxInstance
+{{- end }}
 {{- if le .VersionInfo.Minor 6 }}
     - op: add
       path: /spec/versions/2/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
@@ -522,9 +530,11 @@ var notificationPatchTmpl = `
     - op: add
       path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
       value: ResourceSet
+{{- if le .VersionInfo.Minor 8 }}
     - op: add
       path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
       value: ResourceSet
+{{- end }}
 {{- if le .VersionInfo.Minor 6 }}
     - op: add
       path: /spec/versions/2/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
@@ -533,9 +543,11 @@ var notificationPatchTmpl = `
     - op: add
       path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
       value: ResourceSetInputProvider
+{{- if le .VersionInfo.Minor 8 }}
     - op: add
       path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
       value: ResourceSetInputProvider
+{{- end }}
 {{- if le .VersionInfo.Minor 6 }}
     - op: add
       path: /spec/versions/2/schema/openAPIV3Schema/properties/spec/properties/resources/items/properties/kind/enum/-
