@@ -96,10 +96,11 @@ The following commands are available:
   The command modifies the FluxInstance YAML manifest file in-place, appending patches to `.spec.kustomize.patches`.
   For each controller, the command fetches the CRD schemas for both the current and target controller versions
   from GitHub, computes a JSON patch for each changed CRD, and generates Deployment image patches pointing to
-  the target controller version. Previously generated patches (CRD and image) are automatically replaced on
-  subsequent runs.
+  the target controller version. Released Flux versions are mapped to controller minors and resolved to the
+  latest stable patch release in that controller minor. Previously generated patches (CRD and image) are
+  automatically replaced on subsequent runs.
     - `-f, --filename`: Path to the FluxInstance YAML manifest (required, use `-` for stdin).
-    - `-v, --version`: Target Flux version (default `main`). Accepts: `main`, `v2.<minor>`, or `<minor>`.
+    - `-v, --version`: Target Flux version (default `main`). Accepts: `main`, branch names such as `release/v2.8.x`, `v2.<minor>`, or `<minor>`.
     - `-r, --registry`: Override the container registry for image patches (defaults to `.spec.distribution.registry`).
     - `-c, --components`: Comma-separated list of controllers to patch (defaults to `.spec.components`).
 

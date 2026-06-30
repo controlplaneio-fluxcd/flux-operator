@@ -51,6 +51,50 @@ func requireEqualStrings(t *testing.T, got, want string) {
 	t.Fatalf("string mismatch:\n%s", b.String())
 }
 
+func TestResolveControllerVersion(t *testing.T) {
+	tests := []struct {
+		name    string
+		tags    []string
+		want    string
+		wantErr string
+	}{
+		{
+			name: "latest stable patch in mapped minor",
+			tags: []string{"v1.7.9", "v1.8.0", "v1.8.2", "v1.8.3-rc.1", "v1.9.0", "not-semver"},
+			want: "v1.8.2",
+		},
+		{
+			name:    "no matching controller minor",
+			tags:    []string{"v1.7.9", "v1.9.0"},
+			wantErr: "no kustomize-controller tags match semver",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			orig := listRepositoryTags
+			defer func() { listRepositoryTags = orig }()
+
+			listRepositoryTags = func(_ context.Context, owner, repo string) ([]string, error) {
+				g.Expect(owner).To(Equal("fluxcd"))
+				g.Expect(repo).To(Equal("kustomize-controller"))
+				return tt.tags, nil
+			}
+
+			got, err := resolveControllerVersion(context.Background(), "kustomize-controller", 8)
+			if tt.wantErr != "" {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr))
+				return
+			}
+
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(got).To(Equal(tt.want))
+		})
+	}
+}
+
 func TestPatchInstanceCmd_Mock(t *testing.T) {
 	g := NewWithT(t)
 
@@ -61,9 +105,9 @@ func TestPatchInstanceCmd_Mock(t *testing.T) {
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case strings.Contains(r.URL.Path, "/v1.7.0/"):
+		case strings.Contains(r.URL.Path, "/v1.7."):
 			_, _ = w.Write(sourceData)
-		case strings.Contains(r.URL.Path, "/v1.8.0/"):
+		case strings.Contains(r.URL.Path, "/v1.8."):
 			_, _ = w.Write(targetData)
 		case strings.Contains(r.URL.Path, "/main/"):
 			_, _ = w.Write(targetData)
@@ -179,6 +223,17 @@ func TestPatchInstanceCmd_Mock(t *testing.T) {
 			fluxControllerBaseURL = ts.URL
 			resolveBranchSHA = func(_ context.Context, _, _ string) (string, error) {
 				return "abc1234567890def", nil
+			}
+			listRepositoryTags = func(_ context.Context, owner, repo string) ([]string, error) {
+				if owner != "fluxcd" {
+					return nil, fmt.Errorf("unexpected owner %q", owner)
+				}
+				switch repo {
+				case "kustomize-controller", "notification-controller":
+					return []string{"v1.7.1", "v1.7.2", "v1.8.0", "v1.8.3-rc.1", "v1.8.3", "v1.9.0", "not-semver"}, nil
+				default:
+					return nil, fmt.Errorf("unexpected repo %q", repo)
+				}
 			}
 			validatePatchedInstance = func(_ string) error { return nil }
 
