@@ -257,8 +257,11 @@ function NodeCard({ kind, name, namespace, status, revision, version, url, messa
  * @param {boolean} isProgressing - If true, applies blue border styling
  * @param {object} itemStatuses - Optional map of item key to status for displaying status dots
  * @param {string} defaultNamespace - Default namespace for items without explicit namespace
+ * @param {boolean} statusAsLabel - If true, the row label is the status word (e.g.
+ *   "Ready", "Progressing") instead of the status message; the full message moves to
+ *   the hover title. Used for Flux resources whose messages are too long for the graph.
  */
-function GroupCard({ title, count, items, isItemList, onItemClick, getItemHref, onTitleClick, alwaysShow, isProgressing, itemStatuses, defaultNamespace }) {
+function GroupCard({ title, count, items, isItemList, onItemClick, getItemHref, onTitleClick, alwaysShow, isProgressing, itemStatuses, defaultNamespace, statusAsLabel }) {
   const hasItems = isItemList ? items.length > 0 : Object.keys(items).length > 0
 
   if (!hasItems && !alwaysShow) return null
@@ -299,6 +302,14 @@ function GroupCard({ title, count, items, isItemList, onItemClick, getItemHref, 
             const itemData = itemStatuses?.[itemKey]
             const itemStatus = itemData?.status
             const itemStatusMessage = formatWorkloadGraphMessage(itemStatus, itemData?.statusMessage)
+            // Flux rows show the status word; workloads show the message. The label
+            // falls back across the two so a row never goes blank when one is absent.
+            const itemStatusLabel = statusAsLabel
+              ? (itemStatus || itemStatusMessage)
+              : (itemStatusMessage || itemStatus)
+            const itemStatusTitle = statusAsLabel
+              ? (itemStatusMessage || itemStatus)
+              : itemStatusMessage
             return (
               <div
                 key={idx}
@@ -332,8 +343,8 @@ function GroupCard({ title, count, items, isItemList, onItemClick, getItemHref, 
                     <span class="inline-block w-2 h-2 rounded-full flex-shrink-0 bg-gray-300 dark:bg-gray-600" />
                     computing...
                   </div>
-                ) : itemStatusMessage ? (
-                  <div class="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5 flex items-center gap-1.5" title={itemStatusMessage} data-testid="workload-status-message">
+                ) : itemStatusLabel ? (
+                  <div class="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5 flex items-center gap-1.5" title={itemStatusTitle} data-testid="workload-status-message">
                     {itemStatus !== undefined && (
                       <span
                         class={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${getWorkloadDotClass(itemStatus)}`}
@@ -341,7 +352,7 @@ function GroupCard({ title, count, items, isItemList, onItemClick, getItemHref, 
                         data-testid="workload-status-dot"
                       />
                     )}
-                    {itemStatusMessage}
+                    {itemStatusLabel}
                   </div>
                 ) : null}
                 {showNamespace && (
@@ -529,11 +540,11 @@ function SourcesConnector({ sourceCount }) {
  * @param {string} namespace - Default namespace for items without explicit namespace
  * @param {function} onNavigate - Callback for navigation to other resources
  * @param {function} setActiveTab - Callback to switch tabs
- * @param {object} workloadStatuses - Map of workload key to {status, statusMessage},
- *   fetched and owned by InventoryPanel so it is shared with the Workloads tab and
- *   survives tab switches
+ * @param {object} itemStatuses - Map of `${kind}/${namespace}/${name}` to
+ *   {status, statusMessage} for the Flux and Workload groups, fetched and owned by
+ *   ManagedObjectsPanel so it survives tab switches
  */
-export function GraphTabContent({ resourceData, namespace, onNavigate, setActiveTab, workloadStatuses = {} }) {
+export function GraphTabContent({ resourceData, namespace, onNavigate, setActiveTab, itemStatuses = {} }) {
   const graphData = useMemo(() => buildGraphData(resourceData), [resourceData])
 
   const { upstream, sources, helmChart, reconciler, inventory } = graphData
@@ -736,6 +747,9 @@ export function GraphTabContent({ resourceData, namespace, onNavigate, setActive
                 isItemList={true}
                 onItemClick={handleFluxItemClick}
                 isProgressing={reconciler.status === 'Progressing'}
+                itemStatuses={itemStatuses}
+                defaultNamespace={namespace}
+                statusAsLabel={true}
               />
             )}
             {workloadsCount > 0 && (
@@ -746,7 +760,7 @@ export function GraphTabContent({ resourceData, namespace, onNavigate, setActive
                 isItemList={true}
                 getItemHref={(item) => getDashboardUrl(item.kind, item.namespace || namespace, item.name)}
                 isProgressing={reconciler.status === 'Progressing'}
-                itemStatuses={workloadStatuses}
+                itemStatuses={itemStatuses}
                 defaultNamespace={namespace}
               />
             )}

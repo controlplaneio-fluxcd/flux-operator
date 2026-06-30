@@ -529,7 +529,7 @@ export function WorkloadDetailPanel({
                             const stateInfo = getContainerStateBadge(cs.state)
                             const rawImage = cs.image && !cs.image.startsWith('sha256:') ? cs.image : (cs.imageID || '').replace(/^docker-pullable:\/\//, '')
                             return (
-                              <div key={cs.name} class="bg-white dark:bg-gray-900 rounded px-3 py-2 text-xs" data-testid="container-status">
+                              <div key={cs.name} class="bg-gray-50 dark:bg-gray-900 rounded px-3 py-2 text-xs" data-testid="container-status">
                                 <div class="flex items-center justify-between">
                                   <div class="flex items-center gap-1.5 min-w-0">
                                     <span class="text-gray-900 dark:text-white font-medium truncate">

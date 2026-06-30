@@ -5,22 +5,26 @@ import { useMemo } from 'preact/compat'
 import { useState, useEffect } from 'preact/hooks'
 import { isKindWithInventory, isFluxInventoryItem, isWorkloadInventoryItem } from '../../../utils/constants'
 import { fetchWithMock } from '../../../utils/fetch'
-import { getDashboardUrl } from '../../../utils/routing'
 import { DashboardPanel, TabButton } from '../common/panel'
-import { WorkloadsTabContent } from './WorkloadsTabContent'
+import { InventoryTabContent } from './InventoryTabContent'
 import { GraphTabContent } from './GraphTabContent'
 import { useHashTab } from '../../../utils/hash'
 
-// Valid tabs for the InventoryPanel
-const INVENTORY_TABS = ['overview', 'graph', 'inventory', 'workloads']
+// Valid tabs for the ManagedObjectsPanel
+const INVENTORY_TABS = ['overview', 'graph', 'inventory']
 
 /**
- * InventoryPanel - Displays managed objects inventory for a Flux resource
+ * ManagedObjectsPanel - Displays the managed objects for a Flux resource
  * Handles its own state management and statistics calculations
  */
-export function InventoryPanel({ resourceData, onNavigate }) {
+export function ManagedObjectsPanel({ resourceData, onNavigate }) {
   // Tab state synced with URL hash (e.g., #inventory-graph)
   const [activeTab, setActiveTab] = useHashTab('inventory', 'overview', INVENTORY_TABS, 'inventory-panel')
+
+  // Inventory tab filter state, lifted to the panel so the category and search
+  // query survive tab switches (the tab content unmounts while inactive).
+  const [inventoryCategory, setInventoryCategory] = useState('all')
+  const [inventoryQuery, setInventoryQuery] = useState('')
 
   // Check if inventory exists
   const hasInventory = resourceData?.status?.inventory && resourceData.status.inventory.length > 0
@@ -83,95 +87,81 @@ export function InventoryPanel({ resourceData, onNavigate }) {
     return false
   }, [resourceData])
 
-  // Sort inventory items
-  const sortedInventory = useMemo(() => {
+  // Inventory items whose live status the Graph tab renders: the Flux resources
+  // and the Kubernetes workloads. The "Resources" bucket has no per-item status,
+  // so it is excluded to keep the batch small.
+  const statusItems = useMemo(() => {
     if (!hasInventory) return []
-    return [...resourceData.status.inventory].sort((a, b) => {
-      // Non-namespaced items first
-      const aHasNamespace = !!a.namespace
-      const bHasNamespace = !!b.namespace
-
-      if (!aHasNamespace && bHasNamespace) return -1
-      if (aHasNamespace && !bHasNamespace) return 1
-
-      // Both non-namespaced: sort by kind, then name
-      if (!aHasNamespace && !bHasNamespace) {
-        if (a.kind !== b.kind) {
-          return a.kind.localeCompare(b.kind)
-        }
-        return a.name.localeCompare(b.name)
-      }
-
-      // Both namespaced: sort by namespace, then kind, then name
-      if (a.namespace !== b.namespace) {
-        return a.namespace.localeCompare(b.namespace)
-      }
-      if (a.kind !== b.kind) {
-        return a.kind.localeCompare(b.kind)
-      }
-      return a.name.localeCompare(b.name)
-    })
+    return resourceData.status.inventory.filter(
+      item => isFluxInventoryItem(item) || isWorkloadInventoryItem(item)
+    )
   }, [resourceData, hasInventory])
 
-  // Filter workload items
-  const workloadItems = useMemo(() => {
-    if (!hasInventory) return []
-    return resourceData.status.inventory.filter(item => isWorkloadInventoryItem(item))
-  }, [resourceData, hasInventory])
+  // Live status (status + statusMessage) for the Graph tab's Flux and Workloads
+  // groups, keyed by `${kind}/${namespace}/${name}` to match the Graph item keys.
+  // Owned here, at the panel level — not inside the tab component — so it survives
+  // tab switches: re-entering the Graph tab shows the last-known status immediately
+  // instead of refetching and flickering the badge in. It refreshes when the
+  // inventory changes, which the parent resource poll drives, so no dedicated
+  // polling loop is needed. Uses the inventory/objects endpoint in statusOnly mode
+  // so the response carries status without the sanitized manifest.
+  const [itemStatuses, setItemStatuses] = useState({})
 
-  // Live workload status (status + statusMessage) shared by the Graph and
-  // Workloads tabs. Owned here, at the panel level — not inside the tab
-  // components — so it survives tab switches: re-entering a tab shows the
-  // last-known status immediately instead of refetching and flickering the
-  // badge in. It refreshes when the inventory changes, which the parent resource
-  // poll drives, so no dedicated polling loop is needed.
-  const [workloadStatuses, setWorkloadStatuses] = useState({})
-  const tracksWorkloadStatus = activeTab === 'graph' || activeTab === 'workloads'
+  // The route reuses this component across resource navigations, so reset the
+  // status map when the resource identity changes — otherwise a reused
+  // kind/namespace/name key could briefly show the previous resource's status
+  // until the new fetch resolves. Keyed on identity (stable across polls and tab
+  // switches) so it never reintroduces the badge flicker those cases avoid.
+  const resourceId = `${resourceData.kind}/${resourceData.metadata?.namespace || ''}/${resourceData.metadata?.name}`
   useEffect(() => {
-    if (!tracksWorkloadStatus || workloadItems.length === 0) {
+    setItemStatuses({})
+  }, [resourceId])
+
+  const tracksStatus = activeTab === 'graph'
+  useEffect(() => {
+    if (!tracksStatus || statusItems.length === 0) {
       return
     }
 
     let cancelled = false
 
-    const fetchWorkloadStatuses = async () => {
+    const fetchItemStatuses = async () => {
       try {
-        const workloads = workloadItems.map(item => ({
+        const objects = statusItems.map(item => ({
+          apiVersion: item.apiVersion,
           kind: item.kind,
-          name: item.name,
-          namespace: item.namespace || resourceData.metadata.namespace
+          namespace: item.namespace || resourceData.metadata.namespace,
+          name: item.name
         }))
 
         const response = await fetchWithMock({
-          endpoint: '/api/v1/workloads',
-          mockPath: '../mock/workload',
-          mockExport: 'getMockWorkloads',
+          endpoint: '/api/v1/inventory/objects',
+          mockPath: '../mock/inventory',
+          mockExport: 'getMockInventoryObjects',
           method: 'POST',
-          body: { workloads }
+          body: { objects, statusOnly: true }
         })
 
         const newStatuses = {}
-        for (const workload of (response.workloads || [])) {
-          const key = `${workload.kind}/${workload.namespace}/${workload.name}`
-          newStatuses[key] = {
-            status: workload.status,
-            statusMessage: workload.statusMessage
-          }
+        for (const obj of (response.objects || [])) {
+          const key = `${obj.kind}/${obj.namespace}/${obj.name}`
+          // Error items (Forbidden/NotFound) surface the error as both status and
+          // message: the Graph row is message-driven, so without a message it would
+          // render blank. Mirroring the error into the message keeps the dot + label
+          // visible, consistent with the Inventory tab's status pill.
+          newStatuses[key] = obj.error
+            ? { status: obj.error, statusMessage: obj.error }
+            : { status: obj.status, statusMessage: obj.statusMessage }
         }
-        if (!cancelled) setWorkloadStatuses(newStatuses)
+        if (!cancelled) setItemStatuses(newStatuses)
       } catch (err) {
-        console.error('Failed to fetch workload statuses:', err)
+        console.error('Failed to fetch inventory statuses:', err)
       }
     }
 
-    fetchWorkloadStatuses()
+    fetchItemStatuses()
     return () => { cancelled = true }
-  }, [tracksWorkloadStatus, workloadItems, resourceData])
-
-  // Build the dashboard URL for an inventory item, routing workloads to the
-  // workload dashboard and Flux resources to the resource dashboard.
-  const getItemUrl = (item) =>
-    getDashboardUrl(item.kind, item.namespace || resourceData.metadata.namespace, item.name)
+  }, [tracksStatus, statusItems, resourceData])
 
   return (
     <DashboardPanel title="Managed Objects" id="inventory-panel">
@@ -188,11 +178,6 @@ export function InventoryPanel({ resourceData, onNavigate }) {
           {hasInventory && (
             <TabButton active={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')}>
               Inventory
-            </TabButton>
-          )}
-          {workloadsCount > 0 && (
-            <TabButton active={activeTab === 'workloads'} onClick={() => setActiveTab('workloads')}>
-              Workloads
             </TabButton>
           )}
         </nav>
@@ -287,53 +272,17 @@ export function InventoryPanel({ resourceData, onNavigate }) {
           namespace={resourceData.metadata.namespace}
           onNavigate={onNavigate}
           setActiveTab={setActiveTab}
-          workloadStatuses={workloadStatuses}
+          itemStatuses={itemStatuses}
         />
       )}
 
       {activeTab === 'inventory' && (
-        <div class="overflow-x-auto">
-          <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-            <thead>
-              <tr>
-                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Name</th>
-                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Namespace</th>
-                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Kind</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-              {sortedInventory.map((item, idx) => {
-                const isFluxResource = isFluxInventoryItem(item)
-                const isWorkload = !isFluxResource && isWorkloadInventoryItem(item)
-                return (
-                  <tr key={idx} class="hover:bg-gray-50 dark:hover:bg-gray-800">
-                    <td class="px-3 py-2 text-sm">
-                      {(isFluxResource || isWorkload) ? (
-                        <a
-                          href={getItemUrl(item)}
-                          class="text-flux-blue dark:text-blue-400 hover:underline"
-                        >
-                          {item.name}
-                        </a>
-                      ) : (
-                        <span class="text-gray-900 dark:text-gray-100">{item.name}</span>
-                      )}
-                    </td>
-                    <td class="px-3 py-2 text-sm text-gray-900 dark:text-gray-100">{item.namespace || '-'}</td>
-                    <td class="px-3 py-2 text-sm text-gray-900 dark:text-gray-100">{item.kind}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {activeTab === 'workloads' && (
-        <WorkloadsTabContent
-          workloadItems={workloadItems}
-          namespace={resourceData.metadata.namespace}
-          workloadStatuses={workloadStatuses}
+        <InventoryTabContent
+          inventory={resourceData.status?.inventory}
+          category={inventoryCategory}
+          onCategoryChange={setInventoryCategory}
+          query={inventoryQuery}
+          onQueryChange={setInventoryQuery}
         />
       )}
     </DashboardPanel>

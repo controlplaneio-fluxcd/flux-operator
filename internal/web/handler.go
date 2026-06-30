@@ -71,6 +71,7 @@ func NewHandler(ctx context.Context, conf *fluxcdv1.WebConfigSpec, spaHandler ht
 	mux.HandleFunc("GET /api/v1/artifact/download", h.DownloadHandler)
 	mux.HandleFunc("GET /api/v1/events", h.EventsHandler)
 	mux.HandleFunc("POST /api/v1/favorites", h.FavoritesHandler)
+	mux.HandleFunc("POST /api/v1/inventory/objects", h.InventoryObjectsHandler)
 	mux.HandleFunc("GET /api/v1/report", h.ReportHandler)
 	mux.HandleFunc("GET /api/v1/resource", h.ResourceHandler)
 	mux.HandleFunc("POST /api/v1/resource/action", h.ActionHandler)

@@ -6,7 +6,7 @@
 // container, and an optional status chart shown only on desktop.
 
 import { useState } from 'preact/hooks'
-import { Spinner } from './compactRow'
+import { Spinner } from '../common/rowKit'
 
 /**
  * FilterBar - presentational toolbar that wraps a FilterForm. On mobile it

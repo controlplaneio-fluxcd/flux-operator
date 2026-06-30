@@ -203,25 +203,8 @@ func (h *Handler) GetWorkloadStatus(ctx context.Context, kind, name, namespace s
 	// Extract container images
 	workload.ContainerImages = extractContainerImages(obj)
 
-	// Compute the workload status using kstatus
-	res, err := status.Compute(obj)
-	if err != nil {
-		workload.Status = string(status.UnknownStatus)
-		workload.StatusMessage = fmt.Sprintf("Failed to compute status: %s", err.Error())
-		return workload, nil
-	}
-	workload.Status = string(res.Status)
-	workload.StatusMessage = res.Message
-
-	// For CronJob, override status based on suspend state and active jobs
-	if kind == workloadKindCronJob {
-		workload.Status, workload.StatusMessage = getCronJobWorkloadStatus(obj, res.Status, res.Message)
-	}
-
-	// For apps/v1 workloads, show replicas count when ready
-	if kind != workloadKindCronJob && res.Status == status.CurrentStatus {
-		workload.StatusMessage = getAppsWorkloadStatusMessage(obj, kind)
-	}
+	// Compute the workload status (kstatus + CronJob/apps refinements).
+	workload.Status, workload.StatusMessage = computeWorkloadStatus(obj, kind)
 
 	if detailed {
 		// Get the pods managed by the workload
@@ -554,47 +537,56 @@ func extractRestartedAt(obj *unstructured.Unstructured) string {
 	return annotations["kubectl.kubernetes.io/restartedAt"]
 }
 
-// getCronJobWorkloadStatus returns the status and message for a CronJob workload.
-// It checks if the CronJob is suspended, has active jobs, or is idle.
-func getCronJobWorkloadStatus(obj *unstructured.Unstructured, kstatus status.Status, kstatusMessage string) (string, string) {
-	suspended, _, _ := unstructured.NestedBool(obj.Object, "spec", "suspend")
-	if suspended {
-		return "Suspended", "CronJob is suspended"
+// computeWorkloadStatus derives a workload's status and message from its object
+// using kstatus, refined for CronJobs (Idle/Suspended/active jobs) and apps
+// workloads (ready replica count).
+func computeWorkloadStatus(obj *unstructured.Unstructured, kind string) (string, string) {
+	res, err := status.Compute(obj)
+	if err != nil {
+		return string(status.UnknownStatus), fmt.Sprintf("Failed to compute status: %s", err.Error())
 	}
 
-	activeJobs, _, _ := unstructured.NestedSlice(obj.Object, "status", "active")
-	if len(activeJobs) > 0 {
-		return "Progressing", fmt.Sprintf("Active jobs: %d", len(activeJobs))
-	}
-
-	if kstatus == status.CurrentStatus {
-		schedule, _, _ := unstructured.NestedString(obj.Object, "spec", "schedule")
-		if schedule == "" {
-			return "Idle", "CronJob is ready"
+	// CronJob: refine the status from the suspend state and active jobs.
+	if kind == workloadKindCronJob {
+		if suspended, _, _ := unstructured.NestedBool(obj.Object, "spec", "suspend"); suspended {
+			return "Suspended", "CronJob is suspended"
 		}
-		return "Idle", schedule
+		if activeJobs, _, _ := unstructured.NestedSlice(obj.Object, "status", "active"); len(activeJobs) > 0 {
+			return "Progressing", fmt.Sprintf("Active jobs: %d", len(activeJobs))
+		}
+		if res.Status == status.CurrentStatus {
+			schedule, _, _ := unstructured.NestedString(obj.Object, "spec", "schedule")
+			if schedule == "" {
+				return "Idle", "CronJob is ready"
+			}
+			return "Idle", schedule
+		}
+		return string(res.Status), res.Message
 	}
 
-	return string(kstatus), kstatusMessage
+	// apps workloads: show the ready replica count when the rollout is complete.
+	if res.Status == status.CurrentStatus {
+		var replicas int64
+		switch kind {
+		case workloadKindDeployment, workloadKindStatefulSet:
+			replicas, _, _ = unstructured.NestedInt64(obj.Object, "status", "readyReplicas")
+		case workloadKindDaemonSet:
+			replicas, _, _ = unstructured.NestedInt64(obj.Object, "status", "numberReady")
+		}
+		return string(res.Status), fmt.Sprintf("Replicas: %d", replicas)
+	}
+	return string(res.Status), res.Message
 }
 
-// getAppsWorkloadStatusMessage returns a status message showing replicas for apps/v1 workloads.
-func getAppsWorkloadStatusMessage(obj *unstructured.Unstructured, kind string) string {
-	var replicas int64
-	var found bool
-
-	switch kind {
-	case workloadKindDeployment, workloadKindStatefulSet:
-		replicas, found, _ = unstructured.NestedInt64(obj.Object, "status", "readyReplicas")
-	case workloadKindDaemonSet:
-		replicas, found, _ = unstructured.NestedInt64(obj.Object, "status", "numberReady")
+// isWorkloadObject reports whether the object is a supported
+// apps/batch workload (Deployment, StatefulSet, DaemonSet, CronJob).
+func isWorkloadObject(obj *unstructured.Unstructured) bool {
+	info, ok := supportedWorkloadKinds[obj.GetKind()]
+	if !ok || info.group == "" {
+		return false
 	}
-
-	if !found {
-		replicas = 0
-	}
-
-	return fmt.Sprintf("Replicas: %d", replicas)
+	gv, err := schema.ParseGroupVersion(obj.GetAPIVersion())
+	return err == nil && gv.Group == info.group
 }
 
 // getPodStatusMessage returns a human-readable message based on the pod phase and container statuses.

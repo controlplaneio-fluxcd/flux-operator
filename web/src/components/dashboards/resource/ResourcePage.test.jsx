@@ -28,10 +28,10 @@ vi.mock('./ReconcilerPanel', () => ({
   )
 }))
 
-vi.mock('./InventoryPanel', () => ({
-  InventoryPanel: ({ resourceData }) => (
+vi.mock('./ManagedObjectsPanel', () => ({
+  ManagedObjectsPanel: ({ resourceData }) => (
     <div data-testid="inventory-panel">
-      InventoryPanel: {resourceData?.metadata?.name}
+      ManagedObjectsPanel: {resourceData?.metadata?.name}
     </div>
   )
 }))
@@ -192,13 +192,14 @@ describe('ResourcePage component', () => {
     expect(screen.getByText('FluxInstance')).toBeInTheDocument()
     expect(screen.getByText('Namespace: flux-system')).toBeInTheDocument()
 
-    // Check Status Icon presence (Ready status)
-    const iconContainer = screen.getByText('flux').closest('.card').querySelector('.bg-green-50')
+    // Check Status Icon presence (Ready status): the icon disc uses the darker
+    // shade (bg-green-100) of the card's green tint.
+    const iconContainer = screen.getByText('flux').closest('.card').querySelector('.bg-green-100')
     expect(iconContainer).toBeInTheDocument()
 
     // Check Child Panels using mocked components
     expect(screen.getByTestId('reconciler-panel')).toHaveTextContent('ReconcilerPanel: FluxInstance/flux-system/flux')
-    expect(screen.getByTestId('inventory-panel')).toHaveTextContent('InventoryPanel: flux')
+    expect(screen.getByTestId('inventory-panel')).toHaveTextContent('ManagedObjectsPanel: flux')
     expect(screen.getByTestId('source-panel')).toHaveTextContent('SourcePanel: flux-system/flux-system')
   })
 

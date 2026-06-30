@@ -5,14 +5,14 @@ import { useState, useEffect, useRef } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
 import { fetchWithMock } from '../../../utils/fetch'
 import { usePrismTheme } from '../common/yaml'
-import { formatTime } from '../../../utils/time'
 import { usePageMeta } from '../../../utils/meta'
 import { isFavorite, toggleFavorite, favorites } from '../../../utils/favorites'
 import { addToNavHistory } from '../../../utils/navHistory'
+import { StatusHeroCard } from '../common/StatusHeroCard'
 import { ActionBar } from './ActionBar'
 import { ReconcilerPanel } from './ReconcilerPanel'
 import { SourcePanel } from './SourcePanel'
-import { InventoryPanel } from './InventoryPanel'
+import { ManagedObjectsPanel } from './ManagedObjectsPanel'
 import { ArtifactPanel } from './ArtifactPanel'
 import { ExportedInputsPanel } from './ExportedInputsPanel'
 import { InputsPanel } from './InputsPanel'
@@ -278,42 +278,30 @@ export function ResourcePage({ kind, namespace, name }) {
       <div class="space-y-6">
 
         {/* Header */}
-        <div class={`card ${statusInfo.bgColor} dark:bg-opacity-20 border-2 ${statusInfo.borderColor}`}>
-          <div class="flex items-center space-x-4">
-            <div class="flex-shrink-0">
-              <div class={`w-16 h-16 rounded-full ${statusInfo.bgColor} dark:bg-opacity-30 flex items-center justify-center`}>
-                {statusInfo.icon}
-              </div>
-            </div>
-            <div class="flex-grow min-w-0">
-              <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">{kind}</span>
-              <h1 class="text-lg sm:text-2xl font-semibold text-gray-900 dark:text-white break-all flex items-center gap-2">
-                {name}
-                <button
-                  onClick={handleFavoriteClick}
-                  class={`flex-shrink-0 transition-colors focus:outline-none focus:ring-2 focus:ring-flux-blue focus:ring-offset-1 rounded ${
-                    isFavorited
-                      ? 'text-yellow-500 hover:text-yellow-600'
-                      : 'text-gray-300 dark:text-gray-600 hover:text-yellow-500'
-                  }`}
-                  title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
-                >
-                  <svg class="w-5 h-5 sm:w-6 sm:h-6" fill={isFavorited ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                  </svg>
-                </button>
-              </h1>
-              <span class="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Namespace: {namespace}</span>
-            </div>
-            {/* Last Updated - only show when we have data */}
-            {isSuccess && (
-              <div class="hidden md:block text-right flex-shrink-0">
-                <div class="text-sm text-gray-600 dark:text-gray-400">Last Updated</div>
-                <div class="text-lg font-semibold text-gray-900 dark:text-white">{formatTime(lastUpdatedAt)}</div>
-              </div>
-            )}
-          </div>
-        </div>
+        <StatusHeroCard
+          bgColor={statusInfo.bgColor}
+          borderColor={statusInfo.borderColor}
+          icon={statusInfo.icon}
+          kind={kind}
+          name={name}
+          namespace={namespace}
+          lastUpdatedAt={isSuccess ? lastUpdatedAt : undefined}
+          titleAction={
+            <button
+              onClick={handleFavoriteClick}
+              class={`flex-shrink-0 transition-colors focus:outline-none focus:ring-2 focus:ring-flux-blue focus:ring-offset-1 rounded ${
+                isFavorited
+                  ? 'text-yellow-500 hover:text-yellow-600'
+                  : 'text-gray-300 dark:text-gray-600 hover:text-yellow-500'
+              }`}
+              title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
+            >
+              <svg class="w-5 h-5 sm:w-6 sm:h-6" fill={isFavorited ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+              </svg>
+            </button>
+          }
+        />
 
         {/* Loading message */}
         {isInitialLoading && (
@@ -373,7 +361,7 @@ export function ResourcePage({ kind, namespace, name }) {
             )}
 
             {/* Managed Objects Section */}
-            <InventoryPanel
+            <ManagedObjectsPanel
               resourceData={resourceData}
               onNavigate={handleNavigate}
             />

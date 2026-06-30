@@ -11,6 +11,13 @@ vi.mock('../../../utils/fetch', () => ({
   fetchWithMock: vi.fn()
 }))
 
+// Mock downloadBlob so the synthetic anchor click it performs never triggers
+// jsdom's "navigation to another Document" warning. These tests assert that the
+// download was requested, not that the browser navigated to the blob URL.
+vi.mock('../../../utils/download', () => ({
+  downloadBlob: vi.fn()
+}))
+
 import { fetchWithMock } from '../../../utils/fetch'
 
 describe('ActionBar component', () => {

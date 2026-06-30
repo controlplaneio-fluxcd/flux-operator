@@ -10,7 +10,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/fluxcd/cli-utils/pkg/kstatus/status"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -221,20 +220,8 @@ func (h *Handler) getWorkloadFavoriteStatus(ctx context.Context, fav FavoriteIte
 		}
 	}
 
-	// Compute the rollout status using kstatus on the object alone.
-	workloadStatus := string(status.UnknownStatus)
-	message := ""
-	if res, err := status.Compute(obj); err != nil {
-		message = "Failed to compute status"
-	} else {
-		workloadStatus = string(res.Status)
-		message = res.Message
-
-		// For CronJob, override the status based on suspend state and active jobs.
-		if fav.Kind == workloadKindCronJob {
-			workloadStatus, message = getCronJobWorkloadStatus(obj, res.Status, res.Message)
-		}
-	}
+	// Compute the rollout status (kstatus + CronJob/apps refinements).
+	workloadStatus, message := computeWorkloadStatus(obj, fav.Kind)
 
 	return reporter.ResourceStatus{
 		Kind:           fav.Kind,

@@ -180,8 +180,12 @@ describe('SyncPanel', () => {
       // Content is visible by default
       expect(screen.getByText(baseProps.sync.source)).toBeInTheDocument()
 
-      // Click the Kustomization link
+      // Click the Kustomization link. The preventDefault listener avoids jsdom
+      // attempting a real navigation to the link's href (which it cannot
+      // implement); the test only cares that the click does not propagate to the
+      // panel toggle.
       const link = screen.getByText('Kustomization/flux-system/flux-cluster')
+      link.addEventListener('click', (e) => e.preventDefault())
       await fireEvent.click(link)
 
       // Content should still be visible (click should not propagate to toggle)
