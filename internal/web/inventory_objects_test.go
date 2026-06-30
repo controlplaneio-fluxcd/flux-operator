@@ -50,7 +50,7 @@ func TestGetInventoryObjects_StatusAndManifest(t *testing.T) {
 	results := handler.GetInventoryObjects(ctx, []InventoryObjectItem{
 		{APIVersion: "v1", Kind: "ConfigMap", Namespace: "default", Name: "inv-config"},
 		{APIVersion: "apps/v1", Kind: "Deployment", Namespace: "default", Name: "inv-deploy"},
-	})
+	}, false)
 
 	g.Expect(results).To(HaveLen(2))
 
@@ -73,6 +73,29 @@ func TestGetInventoryObjects_StatusAndManifest(t *testing.T) {
 	g.Expect(meta).NotTo(HaveKey("uid"))
 }
 
+func TestGetInventoryObjects_StatusOnly(t *testing.T) {
+	g := NewWithT(t)
+
+	configMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "inv-status-only", Namespace: "default"},
+		Data:       map[string]string{"key": "value"},
+	}
+	g.Expect(testClient.Create(ctx, configMap)).To(Succeed())
+	defer testClient.Delete(ctx, configMap)
+
+	handler := &Handler{kubeClient: kubeClient, version: "v1.0.0", statusManager: "test", namespace: "flux-system"}
+
+	results := handler.GetInventoryObjects(ctx, []InventoryObjectItem{
+		{APIVersion: "v1", Kind: "ConfigMap", Namespace: "default", Name: "inv-status-only"},
+	}, true)
+
+	g.Expect(results).To(HaveLen(1))
+	g.Expect(results[0].Error).To(BeEmpty())
+	// Status is still computed, but the sanitized manifest is omitted.
+	g.Expect(results[0].Status).To(Equal("Current"))
+	g.Expect(results[0].Object).To(BeNil())
+}
+
 func TestGetInventoryObjects_ClusterScoped(t *testing.T) {
 	g := NewWithT(t)
 
@@ -84,7 +107,7 @@ func TestGetInventoryObjects_ClusterScoped(t *testing.T) {
 
 	results := handler.GetInventoryObjects(ctx, []InventoryObjectItem{
 		{APIVersion: "v1", Kind: "Namespace", Name: "inv-cluster-scoped"},
-	})
+	}, false)
 
 	g.Expect(results).To(HaveLen(1))
 	g.Expect(results[0].Error).To(BeEmpty())
@@ -105,7 +128,7 @@ func TestGetInventoryObjects_NotFoundPerItem(t *testing.T) {
 	results := handler.GetInventoryObjects(ctx, []InventoryObjectItem{
 		{APIVersion: "v1", Kind: "ConfigMap", Namespace: "default", Name: "inv-present"},
 		{APIVersion: "v1", Kind: "ConfigMap", Namespace: "default", Name: "inv-missing"},
-	})
+	}, false)
 
 	g.Expect(results).To(HaveLen(2))
 
@@ -137,7 +160,7 @@ func TestGetInventoryObjects_ForbiddenPerItem(t *testing.T) {
 
 	results := handler.GetInventoryObjects(userCtx, []InventoryObjectItem{
 		{APIVersion: "v1", Kind: "ConfigMap", Namespace: "default", Name: "inv-forbidden"},
-	})
+	}, false)
 
 	g.Expect(results).To(HaveLen(1))
 	g.Expect(results[0].Error).To(Equal("Forbidden"))

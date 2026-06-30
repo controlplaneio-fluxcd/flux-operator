@@ -32,6 +32,12 @@ type InventoryObjectItem struct {
 // InventoryObjectsRequest is the request body for POST /api/v1/inventory/objects.
 type InventoryObjectsRequest struct {
 	Objects []InventoryObjectItem `json:"objects"`
+
+	// StatusOnly, when true, makes the handler return each object's status and
+	// message only, omitting the sanitized manifest. Callers that render status
+	// without the object body (e.g. the Graph tab) use this to avoid the manifest
+	// fetch overhead and payload.
+	StatusOnly bool `json:"statusOnly,omitempty"`
 }
 
 // InventoryObjectResult holds the status and sanitized manifest of one object,
@@ -61,7 +67,7 @@ func (h *Handler) InventoryObjectsHandler(w http.ResponseWriter, req *http.Reque
 		return
 	}
 
-	objects := h.GetInventoryObjects(req.Context(), oReq.Objects)
+	objects := h.GetInventoryObjects(req.Context(), oReq.Objects, oReq.StatusOnly)
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(map[string]any{"objects": objects}); err != nil {
@@ -72,8 +78,9 @@ func (h *Handler) InventoryObjectsHandler(w http.ResponseWriter, req *http.Reque
 // GetInventoryObjects fetches the status and sanitized manifest for each object,
 // scoped to the caller's RBAC. Objects are queried in parallel with a concurrency
 // limit of 4; a per-object failure is reported in its Error field instead of
-// failing the whole batch.
-func (h *Handler) GetInventoryObjects(ctx context.Context, items []InventoryObjectItem) []InventoryObjectResult {
+// failing the whole batch. When statusOnly is true, the sanitized manifest is
+// omitted and only the status and message are returned.
+func (h *Handler) GetInventoryObjects(ctx context.Context, items []InventoryObjectItem, statusOnly bool) []InventoryObjectResult {
 	result := make([]InventoryObjectResult, len(items))
 
 	var wg sync.WaitGroup
@@ -99,8 +106,10 @@ func (h *Handler) GetInventoryObjects(ctx context.Context, items []InventoryObje
 			switch {
 			case err == nil:
 				res.Status, res.StatusMessage = computeObjectStatus(obj)
-				cleanObjectForExport(obj, true)
-				res.Object = obj.Object
+				if !statusOnly {
+					cleanObjectForExport(obj, true)
+					res.Object = obj.Object
+				}
 			case errors.IsNotFound(err):
 				res.Error = "NotFound"
 			case errors.IsForbidden(err):

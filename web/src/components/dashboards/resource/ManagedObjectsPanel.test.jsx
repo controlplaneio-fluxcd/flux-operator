@@ -16,9 +16,9 @@ vi.mock('../../../utils/hash', async () => {
   }
 })
 
-// Mock the workload status fetch the panel issues for the Graph/Workloads tabs
+// Mock the inventory status fetch the panel issues for the Graph tab
 vi.mock('../../../utils/fetch', () => ({
-  fetchWithMock: vi.fn(() => Promise.resolve({ workloads: [] }))
+  fetchWithMock: vi.fn(() => Promise.resolve({ objects: [] }))
 }))
 
 // Mock the inventory list so this test asserts the panel's integration contract
@@ -496,18 +496,27 @@ describe('ManagedObjectsPanel component', () => {
     expect(screen.queryByRole('button', { name: 'Workloads' })).not.toBeInTheDocument()
   })
 
-  it('fetches workload status at the panel level and propagates it to the Graph tab', async () => {
+  it('fetches inventory status at the panel level and propagates it to the Graph tab', async () => {
     const user = userEvent.setup()
 
     // The panel owns the fetch; return a real status for the inventory's Deployment
     fetchWithMock.mockResolvedValueOnce({
-      workloads: [
+      objects: [
         {
+          apiVersion: 'apps/v1',
           kind: 'Deployment',
           namespace: 'production',
           name: 'app',
           status: 'Current',
           statusMessage: 'Deployment has minimum availability.'
+        },
+        {
+          apiVersion: 'kustomize.toolkit.fluxcd.io/v1',
+          kind: 'Kustomization',
+          namespace: 'production',
+          name: 'backend',
+          status: 'Ready',
+          statusMessage: 'Applied revision: main@sha1:9b9218f'
         }
       ]
     })
@@ -526,11 +535,16 @@ describe('ManagedObjectsPanel component', () => {
     expect(await screen.findByText('Deployment has minimum availability.')).toBeInTheDocument()
     expect(screen.queryByTestId('workload-status-computing')).not.toBeInTheDocument()
 
-    // The panel issued the batch POST with the resolved workload
+    // The panel issued the batch POST in statusOnly mode over the Flux + workload items
     expect(fetchWithMock).toHaveBeenCalledWith(expect.objectContaining({
-      endpoint: '/api/v1/workloads',
+      endpoint: '/api/v1/inventory/objects',
       method: 'POST',
-      body: { workloads: [{ kind: 'Deployment', name: 'app', namespace: 'production' }] }
+      body: expect.objectContaining({
+        statusOnly: true,
+        objects: expect.arrayContaining([
+          { apiVersion: 'apps/v1', kind: 'Deployment', name: 'app', namespace: 'production' }
+        ])
+      })
     }))
 
     // And the row links to the dedicated workload dashboard

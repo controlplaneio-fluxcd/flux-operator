@@ -608,7 +608,7 @@ describe('GraphTabContent component', () => {
     expect(screen.getByText(/^Resources \(2\)/)).toBeInTheDocument()
   })
 
-  it('should show a computing placeholder only for workloads until status resolves', () => {
+  it('should show a computing placeholder for Flux and workload rows until status resolves', () => {
     render(
       <GraphTabContent
         resourceData={mockResourceData}
@@ -616,10 +616,10 @@ describe('GraphTabContent component', () => {
       />
     )
 
-    // Inventory has 2 Flux resources and 2 workloads; only the workloads group
-    // tracks live status, so exactly the 2 workload rows show the placeholder
-    // on first paint (Flux rows never do).
-    expect(screen.getAllByTestId('workload-status-computing')).toHaveLength(2)
+    // Inventory has 2 Flux resources and 2 workloads; both groups track live
+    // status, so all 4 rows show the placeholder on first paint (the Resources
+    // bucket carries no per-item status).
+    expect(screen.getAllByTestId('workload-status-computing')).toHaveLength(4)
   })
 
   it('should render source URL as subtext', () => {
@@ -1480,12 +1480,12 @@ describe('GraphTabContent workload status', () => {
     expect(screen.queryByTestId('workload-status-dot')).not.toBeInTheDocument()
   })
 
-  it('should render a status dot when workloadStatuses is provided', () => {
+  it('should render a status dot when itemStatuses is provided', () => {
     render(
       <GraphTabContent
         resourceData={resourceData}
         namespace="flux-system"
-        workloadStatuses={{ 'Deployment/default/app1': { status: 'Current', statusMessage: 'Replicas: 3' } }}
+        itemStatuses={{ 'Deployment/default/app1': { status: 'Current', statusMessage: 'Replicas: 3' } }}
       />
     )
 
@@ -1495,7 +1495,53 @@ describe('GraphTabContent workload status', () => {
     expect(screen.queryByTestId('workload-status-computing')).not.toBeInTheDocument()
   })
 
-  it('should render without error when workloadStatuses is omitted', () => {
+  it('should render status for Flux resources from itemStatuses', () => {
+    const withFlux = {
+      kind: 'Kustomization',
+      metadata: { name: 'test-ks', namespace: 'flux-system' },
+      status: {
+        reconcilerRef: { status: 'Ready' },
+        inventory: [
+          { apiVersion: 'source.toolkit.fluxcd.io/v1', kind: 'GitRepository', name: 'repo1', namespace: 'flux-system' }
+        ]
+      }
+    }
+
+    render(
+      <GraphTabContent
+        resourceData={withFlux}
+        namespace="flux-system"
+        itemStatuses={{ 'GitRepository/flux-system/repo1': { status: 'Ready', statusMessage: 'stored artifact for revision main@sha1:abc' } }}
+      />
+    )
+
+    // The Flux group shows the status word as the label (the message is too long
+    // for the graph and moves to the hover title), with a status dot.
+    expect(screen.getByTestId('workload-status-dot')).toBeInTheDocument()
+    expect(screen.getByText('Ready')).toBeInTheDocument()
+    expect(screen.queryByText('stored artifact for revision main@sha1:abc')).not.toBeInTheDocument()
+    const label = screen.getByTestId('workload-status-message')
+    expect(label).toHaveAttribute('title', 'stored artifact for revision main@sha1:abc')
+    expect(screen.queryByTestId('workload-status-computing')).not.toBeInTheDocument()
+  })
+
+  it('should render a dot and label for error statuses (NotFound/Forbidden)', () => {
+    render(
+      <GraphTabContent
+        resourceData={resourceData}
+        namespace="flux-system"
+        itemStatuses={{ 'Deployment/default/app1': { status: 'NotFound', statusMessage: 'NotFound' } }}
+      />
+    )
+
+    // Error rows are message-driven too: the panel mirrors the error into the
+    // message so the row stays visible instead of rendering blank.
+    expect(screen.getByTestId('workload-status-dot')).toBeInTheDocument()
+    expect(screen.getByText('NotFound')).toBeInTheDocument()
+    expect(screen.queryByTestId('workload-status-computing')).not.toBeInTheDocument()
+  })
+
+  it('should render without error when itemStatuses is omitted', () => {
     const emptyResource = {
       kind: 'Kustomization',
       metadata: { name: 'test-ks', namespace: 'flux-system' },

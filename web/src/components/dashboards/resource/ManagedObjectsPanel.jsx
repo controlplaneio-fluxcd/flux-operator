@@ -82,60 +82,70 @@ export function ManagedObjectsPanel({ resourceData, onNavigate }) {
     return false
   }, [resourceData])
 
-  // Filter workload items
-  const workloadItems = useMemo(() => {
+  // Inventory items whose live status the Graph tab renders: the Flux resources
+  // and the Kubernetes workloads. The "Resources" bucket has no per-item status,
+  // so it is excluded to keep the batch small.
+  const statusItems = useMemo(() => {
     if (!hasInventory) return []
-    return resourceData.status.inventory.filter(item => isWorkloadInventoryItem(item))
+    return resourceData.status.inventory.filter(
+      item => isFluxInventoryItem(item) || isWorkloadInventoryItem(item)
+    )
   }, [resourceData, hasInventory])
 
-  // Live workload status (status + statusMessage) used by the Graph tab's
-  // Workloads group. Owned here, at the panel level — not inside the tab
-  // component — so it survives tab switches: re-entering the Graph tab shows the
-  // last-known status immediately instead of refetching and flickering the
-  // badge in. It refreshes when the inventory changes, which the parent resource
-  // poll drives, so no dedicated polling loop is needed.
-  const [workloadStatuses, setWorkloadStatuses] = useState({})
-  const tracksWorkloadStatus = activeTab === 'graph'
+  // Live status (status + statusMessage) for the Graph tab's Flux and Workloads
+  // groups, keyed by `${kind}/${namespace}/${name}` to match the Graph item keys.
+  // Owned here, at the panel level — not inside the tab component — so it survives
+  // tab switches: re-entering the Graph tab shows the last-known status immediately
+  // instead of refetching and flickering the badge in. It refreshes when the
+  // inventory changes, which the parent resource poll drives, so no dedicated
+  // polling loop is needed. Uses the inventory/objects endpoint in statusOnly mode
+  // so the response carries status without the sanitized manifest.
+  const [itemStatuses, setItemStatuses] = useState({})
+  const tracksStatus = activeTab === 'graph'
   useEffect(() => {
-    if (!tracksWorkloadStatus || workloadItems.length === 0) {
+    if (!tracksStatus || statusItems.length === 0) {
       return
     }
 
     let cancelled = false
 
-    const fetchWorkloadStatuses = async () => {
+    const fetchItemStatuses = async () => {
       try {
-        const workloads = workloadItems.map(item => ({
+        const objects = statusItems.map(item => ({
+          apiVersion: item.apiVersion,
           kind: item.kind,
-          name: item.name,
-          namespace: item.namespace || resourceData.metadata.namespace
+          namespace: item.namespace || resourceData.metadata.namespace,
+          name: item.name
         }))
 
         const response = await fetchWithMock({
-          endpoint: '/api/v1/workloads',
-          mockPath: '../mock/workload',
-          mockExport: 'getMockWorkloads',
+          endpoint: '/api/v1/inventory/objects',
+          mockPath: '../mock/inventory',
+          mockExport: 'getMockInventoryObjects',
           method: 'POST',
-          body: { workloads }
+          body: { objects, statusOnly: true }
         })
 
         const newStatuses = {}
-        for (const workload of (response.workloads || [])) {
-          const key = `${workload.kind}/${workload.namespace}/${workload.name}`
-          newStatuses[key] = {
-            status: workload.status,
-            statusMessage: workload.statusMessage
-          }
+        for (const obj of (response.objects || [])) {
+          const key = `${obj.kind}/${obj.namespace}/${obj.name}`
+          // Error items (Forbidden/NotFound) surface the error as both status and
+          // message: the Graph row is message-driven, so without a message it would
+          // render blank. Mirroring the error into the message keeps the dot + label
+          // visible, consistent with the Inventory tab's status pill.
+          newStatuses[key] = obj.error
+            ? { status: obj.error, statusMessage: obj.error }
+            : { status: obj.status, statusMessage: obj.statusMessage }
         }
-        if (!cancelled) setWorkloadStatuses(newStatuses)
+        if (!cancelled) setItemStatuses(newStatuses)
       } catch (err) {
-        console.error('Failed to fetch workload statuses:', err)
+        console.error('Failed to fetch inventory statuses:', err)
       }
     }
 
-    fetchWorkloadStatuses()
+    fetchItemStatuses()
     return () => { cancelled = true }
-  }, [tracksWorkloadStatus, workloadItems, resourceData])
+  }, [tracksStatus, statusItems, resourceData])
 
   return (
     <DashboardPanel title="Managed Objects" id="inventory-panel">
@@ -246,7 +256,7 @@ export function ManagedObjectsPanel({ resourceData, onNavigate }) {
           namespace={resourceData.metadata.namespace}
           onNavigate={onNavigate}
           setActiveTab={setActiveTab}
-          workloadStatuses={workloadStatuses}
+          itemStatuses={itemStatuses}
         />
       )}
 
