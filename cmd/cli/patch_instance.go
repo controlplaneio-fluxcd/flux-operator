@@ -57,6 +57,8 @@ The command performs the following steps:
 The controller version mapping is derived from the fluxcd/pkg/version package, which
 maps each Flux distribution minor version to the corresponding controller versions
 (e.g. Flux v2.7 maps to source-controller v1.7, helm-controller v1.4, etc.).
+For released Flux versions, controller refs are resolved to the latest patch
+release in the mapped controller minor series.
 
 When --version is set to 'main' or any other branch name (e.g. 'release/v2.8.x'),
 the command targets that branch by fetching CRDs from it. Image tags are set to
@@ -127,6 +129,38 @@ func init() {
 type patchTarget struct {
 	branch    string
 	fluxMinor int
+}
+
+// controllerVersionResolver resolves and caches controller release tags for a
+// Flux distribution minor version.
+type controllerVersionResolver struct {
+	ctx      context.Context
+	versions map[string]string
+}
+
+// newControllerVersionResolver returns a request-scoped resolver for
+// controller release tags.
+func newControllerVersionResolver(ctx context.Context) *controllerVersionResolver {
+	return &controllerVersionResolver{
+		ctx:      ctx,
+		versions: make(map[string]string),
+	}
+}
+
+// resolve returns the latest patch release tag for the controller minor that
+// corresponds to the given Flux distribution minor.
+func (r *controllerVersionResolver) resolve(controller string, fluxMinor int) (string, error) {
+	key := fmt.Sprintf("%s/%d", controller, fluxMinor)
+	if v, ok := r.versions[key]; ok {
+		return v, nil
+	}
+
+	v, err := resolveControllerVersion(r.ctx, controller, fluxMinor)
+	if err != nil {
+		return "", err
+	}
+	r.versions[key] = v
+	return v, nil
 }
 
 func patchInstanceCmdRun(cmd *cobra.Command, args []string) error {
@@ -317,12 +351,13 @@ func computeAllPatches(
 	registry string,
 ) ([]kustomize.Patch, error) {
 	var imagePatches, crdPatches []kustomize.Patch
+	resolver := newControllerVersionResolver(ctx)
 
 	for _, component := range components {
 		rootCmd.PrintErrln(`◎`, fmt.Sprintf("Processing %s...", component))
 
 		// Image patch for this controller's Deployment.
-		imgPatch, err := computeImagePatch(ctx, component, target, registry)
+		imgPatch, err := computeImagePatch(ctx, resolver, component, target, registry)
 		if err != nil {
 			return nil, fmt.Errorf("computing image patch for %s: %w", component, err)
 		}
@@ -337,7 +372,7 @@ func computeAllPatches(
 			continue
 		}
 		for _, kind := range crdKinds {
-			patch, err := computeCRDPatchForKind(ctx, component, kind, fromMinor, target)
+			patch, err := computeCRDPatchForKind(ctx, resolver, component, kind, fromMinor, target)
 			if err != nil {
 				continue
 			}
@@ -354,6 +389,7 @@ func computeAllPatches(
 // computes the diff patch. Returns nil if the CRD is unchanged.
 func computeCRDPatchForKind(
 	ctx context.Context,
+	resolver *controllerVersionResolver,
 	controller string,
 	kind string,
 	fromMinor int,
@@ -371,7 +407,7 @@ func computeCRDPatchForKind(
 	crdName := kindInfo.Plural + "." + gk.Group
 	rootCmd.PrintErrln(`◎`, fmt.Sprintf("  Diffing CRD %s", crdName))
 
-	sourceURL, targetURL, err := buildCRDURLs(controller, gk.Group, kindInfo.Plural, fromMinor, target)
+	sourceURL, targetURL, err := buildCRDURLs(resolver, controller, gk.Group, kindInfo.Plural, fromMinor, target)
 	if err != nil {
 		return nil, fmt.Errorf("building CRD URLs for %s: %w", kind, err)
 	}
@@ -798,6 +834,52 @@ func resolveToTarget(vFlag string) (patchTarget, error) {
 	return patchTarget{fluxMinor: minor}, nil
 }
 
+// resolveControllerVersion returns the latest stable patch release tag for the
+// controller minor version mapped from the given Flux distribution minor.
+func resolveControllerVersion(ctx context.Context, controller string, fluxMinor int) (string, error) {
+	major, err := version.RepoMajor(controller)
+	if err != nil {
+		return "", err
+	}
+
+	ctrlMinor, err := version.RepoMinorForFluxMinor(controller, fluxMinor)
+	if err != nil {
+		return "", err
+	}
+
+	semverRange := fmt.Sprintf("%d.%d.x", major, ctrlMinor)
+	constraint, err := semver.NewConstraint(semverRange)
+	if err != nil {
+		return "", fmt.Errorf("semver %q parse error: %w", semverRange, err)
+	}
+
+	tags, err := listRepositoryTags(ctx, "fluxcd", controller)
+	if err != nil {
+		return "", fmt.Errorf("listing %s tags: %w", controller, err)
+	}
+
+	var matching []*semver.Version
+	for _, tag := range tags {
+		tv, err := semver.NewVersion(tag)
+		if err != nil {
+			continue
+		}
+		if tv.Prerelease() != "" {
+			continue
+		}
+		if constraint.Check(tv) {
+			matching = append(matching, tv)
+		}
+	}
+
+	if len(matching) == 0 {
+		return "", fmt.Errorf("no %s tags match semver %q", controller, semverRange)
+	}
+
+	sort.Sort(sort.Reverse(semver.Collection(matching)))
+	return matching[0].Original(), nil
+}
+
 // looksLikeVersion reports whether v is a release version expression
 // ("<minor>", "v<minor>", "2.<minor>", "v2.<minor>") as opposed to a branch
 // name. It returns true only for an optional 'v' prefix followed by one or two
@@ -825,27 +907,21 @@ func looksLikeVersion(v string) bool {
 	return true
 }
 
-// buildCRDURLs constructs the source and target URLs for a CRD file
-// based on the controller name, version information, and target.
+// buildCRDURLs constructs the source and target URLs for a CRD file based on
+// the controller name, resolved latest patch versions, and target.
 func buildCRDURLs(
+	resolver *controllerVersionResolver,
 	controller string,
 	group string,
 	plural string,
 	fromMinor int,
 	target patchTarget,
 ) (string, string, error) {
-	major, err := version.RepoMajor(controller)
-	if err != nil {
-		return "", "", err
-	}
-
-	ctrlFromMinor, err := version.RepoMinorForFluxMinor(controller, fromMinor)
-	if err != nil {
-		return "", "", err
-	}
-
 	crdFile := fmt.Sprintf("%s_%s.yaml", group, plural)
-	fromRef := fmt.Sprintf("v%d.%d.0", major, ctrlFromMinor)
+	fromRef, err := resolver.resolve(controller, fromMinor)
+	if err != nil {
+		return "", "", fmt.Errorf("resolving source controller version: %w", err)
+	}
 	sourceURL := fmt.Sprintf("%s/%s/blob/%s/config/crd/bases/%s",
 		fluxControllerBaseURL, controller, fromRef, crdFile)
 
@@ -854,11 +930,10 @@ func buildCRDURLs(
 		targetURL = fmt.Sprintf("%s/%s/blob/%s/config/crd/bases/%s",
 			fluxControllerBaseURL, controller, target.branch, crdFile)
 	} else {
-		ctrlToMinor, err := version.RepoMinorForFluxMinor(controller, target.fluxMinor)
+		toRef, err := resolver.resolve(controller, target.fluxMinor)
 		if err != nil {
-			return "", "", err
+			return "", "", fmt.Errorf("resolving target controller version: %w", err)
 		}
-		toRef := fmt.Sprintf("v%d.%d.0", major, ctrlToMinor)
 		targetURL = fmt.Sprintf("%s/%s/blob/%s/config/crd/bases/%s",
 			fluxControllerBaseURL, controller, toRef, crdFile)
 	}
@@ -899,9 +974,11 @@ func computeCRDPatch(
 }
 
 // computeImagePatch generates a kustomize patch that sets the controller
-// Deployment image to the target version.
+// Deployment image to the target version. Released targets use the latest
+// controller patch release in the mapped minor series.
 func computeImagePatch(
 	ctx context.Context,
+	resolver *controllerVersionResolver,
 	controller string,
 	target patchTarget,
 	registry string,
@@ -917,15 +994,11 @@ func computeImagePatch(
 		rootCmd.PrintErrln(`✔`, fmt.Sprintf("  Using image tag %s", imageTag))
 		registry = "ghcr.io/fluxcd"
 	} else {
-		major, err := version.RepoMajor(controller)
+		var err error
+		imageTag, err = resolver.resolve(controller, target.fluxMinor)
 		if err != nil {
 			return nil, err
 		}
-		ctrlToMinor, err := version.RepoMinorForFluxMinor(controller, target.fluxMinor)
-		if err != nil {
-			return nil, err
-		}
-		imageTag = fmt.Sprintf("v%d.%d.0", major, ctrlToMinor)
 	}
 
 	image := fmt.Sprintf("%s/%s:%s", registry, controller, imageTag)
@@ -977,13 +1050,23 @@ var resolveBranchSHA = func(ctx context.Context, controller, branch string) (str
 	return b.GetCommit().GetSHA(), nil
 }
 
+// listRepositoryTags fetches all tags from a GitHub repository.
+var listRepositoryTags = func(ctx context.Context, owner, repo string) ([]string, error) {
+	return listGitHubRepositoryTags(ctx, newGitHubClient(ctx), owner, repo)
+}
+
 // listFlux2Tags fetches all tags from the fluxcd/flux2 GitHub repository.
 func listFlux2Tags(ctx context.Context, client *github.Client) ([]string, error) {
+	return listGitHubRepositoryTags(ctx, client, "fluxcd", "flux2")
+}
+
+// listGitHubRepositoryTags fetches all tags from the given GitHub repository.
+func listGitHubRepositoryTags(ctx context.Context, client *github.Client, owner, repo string) ([]string, error) {
 	opts := &github.ListOptions{PerPage: 100}
 	var allTags []string
 
 	for {
-		tags, resp, err := client.Repositories.ListTags(ctx, "fluxcd", "flux2", opts)
+		tags, resp, err := client.Repositories.ListTags(ctx, owner, repo, opts)
 		if err != nil {
 			return nil, err
 		}

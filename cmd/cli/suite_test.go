@@ -5,6 +5,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -189,6 +190,9 @@ func resetCmdArgs() {
 	// Patch commands
 	patchInstanceArgs = patchInstanceFlags{version: "main", components: nil}
 	fluxControllerBaseURL = "https://github.com/fluxcd"
+	listRepositoryTags = func(ctx context.Context, owner, repo string) ([]string, error) {
+		return listGitHubRepositoryTags(ctx, newGitHubClient(ctx), owner, repo)
+	}
 
 	// Distro commands
 	distroKeygenSigArgs = distroKeygenSigFlags{}

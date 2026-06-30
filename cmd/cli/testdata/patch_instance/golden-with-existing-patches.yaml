@@ -21,7 +21,7 @@ spec:
     - patch: |
         - op: replace
           path: /spec/template/spec/containers/0/image
-          value: ghcr.io/fluxcd/kustomize-controller:v1.8.0
+          value: ghcr.io/fluxcd/kustomize-controller:v1.8.3
       target:
         kind: Deployment
         name: kustomize-controller
