@@ -27,8 +27,8 @@ administrators can enforce a much stricter least-privilege posture.
 
 1. **Least privilege by default.** All resource reads and writes go through
    the impersonated user client unless there is a documented reason not to.
-2. **No sensitive data exposure.** System (privileged) calls never return Secret
-   values, ConfigMap data, or any other sensitive content to the user.
+2. **No sensitive data exposure.** System calls never return Secret values,
+   ConfigMap data, or any other sensitive content to the user.
 3. **RBAC Minimization.** Each usage of elevated system privileges exists because it enables a
    specific, high-value feature that significantly decreases the permissions
    that users would otherwise require, improving support for the principle of least privilege.
@@ -240,4 +240,3 @@ Users do not need cluster-wide `list` permissions on namespaces just to populate
 | 6 | Controller metrics          | System reads metrics API                           | CPU/memory usage of Flux controllers                                          |
 | 7 | Fine-Grained GitOps Actions | System patches resource                            | None (server-side mutation only)                                              |
 | 8 | Namespace visibility        | Wrapper lists namespaces with privileged base client | Visible namespace names after RBAC filtering                                  |
-
