@@ -49,11 +49,12 @@ we adapt to new features and/or find better ways to facilitate what it does.`,
 }
 
 type rootFlags struct {
-	timeout     time.Duration
-	maskSecrets bool
-	readOnly    bool
-	transport   string
-	port        int
+	timeout         time.Duration
+	maskSecrets     bool
+	readOnly        bool
+	transport       string
+	port            int
+	toolCallLogFile string
 }
 
 var (
@@ -74,6 +75,8 @@ func init() {
 		"The transport protocol to use for the MCP server. Options: [stdio, http, sse].")
 	rootCmd.PersistentFlags().IntVar(&rootArgs.port, "port", 8080,
 		"The port to use for the MCP server. This is only used when the transport is not 'stdio'.")
+	rootCmd.PersistentFlags().StringVar(&rootArgs.toolCallLogFile, "tool-call-log-file", "",
+		"Path to a JSONL file for appending MCP tool call inputs and outputs.")
 	addKubeConfigFlags(rootCmd)
 	rootCmd.SetOut(os.Stdout)
 	rootCmd.AddCommand(serveCmd)
@@ -177,6 +180,9 @@ func serveCmdRun(cmd *cobra.Command, args []string) error {
 		HasTools:   true,
 		HasPrompts: true,
 	})
+	if rootArgs.toolCallLogFile != "" {
+		mcpServer.AddReceivingMiddleware(toolCallLogMiddleware(rootArgs.toolCallLogFile))
+	}
 
 	// Register tools and prompts
 	kubeClient := k8s.NewClientFactory(kubeconfigArgs)
