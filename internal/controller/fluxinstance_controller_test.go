@@ -636,6 +636,58 @@ func TestFluxInstanceReconciler_BuildFail(t *testing.T) {
 	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 }
 
+func TestFluxInstanceReconciler_BuildUsesArtifactForEmbeddedVersion(t *testing.T) {
+	g := NewWithT(t)
+	const fakeDigest = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+	baseDir := t.TempDir()
+	artifactDir := filepath.Join(baseDir, "artifact")
+	storageDir := filepath.Join(baseDir, "storage")
+	copyDir(t, filepath.Join("..", "..", "config", "data", "flux", "v2.3.0"), filepath.Join(artifactDir, "flux", "v2.3.0"))
+	copyDir(t, filepath.Join("..", "..", "config", "data", "flux", "v2.9.0"), filepath.Join(artifactDir, "flux", "v2.9.0"))
+	copyDir(t, filepath.Join("..", "..", "config", "data", "flux", "v2.3.0"), filepath.Join(storageDir, "flux", "v2.3.0"))
+	writeSourceControllerImagePatch(t, filepath.Join(artifactDir, "flux-images", "v2.3.0", "upstream-alpine.yaml"), fakeDigest)
+
+	reconciler := getFluxInstanceReconciler(t)
+	reconciler.StoragePath = storageDir
+	spec := getDefaultFluxSpec(t)
+	spec.Distribution.Version = "2.x"
+	spec.Components = []fluxcdv1.Component{"source-controller"}
+	spec.Sync = nil
+	obj := &fluxcdv1.FluxInstance{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "flux",
+			Namespace: fluxcdv1.DefaultNamespace,
+		},
+		Spec: spec,
+	}
+
+	result, err := reconciler.build(context.Background(), obj, artifactDir)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(result.Version).To(Equal("v2.3.0"))
+	var sourceControllerDigest string
+	for _, img := range result.ComponentImages {
+		if img.Name == "source-controller" {
+			sourceControllerDigest = img.Digest
+			break
+		}
+	}
+	g.Expect(sourceControllerDigest).To(Equal(fakeDigest))
+
+	var sourceControllerImage string
+	for _, obj := range result.Objects {
+		if obj.GetKind() != "Deployment" || obj.GetName() != "source-controller" {
+			continue
+		}
+		containers, ok, err := unstructured.NestedSlice(obj.Object, "spec", "template", "spec", "containers")
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(ok).To(BeTrue())
+		sourceControllerImage = containers[0].(map[string]any)["image"].(string)
+		break
+	}
+	g.Expect(sourceControllerImage).To(ContainSubstring("@" + fakeDigest))
+}
+
 func TestFluxInstanceReconciler_Downgrade(t *testing.T) {
 	g := NewWithT(t)
 	reconciler := getFluxInstanceReconciler(t)
@@ -1122,6 +1174,28 @@ $patch: delete
 
 	// Wait for CRDs to be fully deleted to prevent race conditions with subsequent tests.
 	waitForFluxCRDsDeletion(ctx, g)
+}
+
+func copyDir(t *testing.T, src, dst string) {
+	t.Helper()
+	if err := os.CopyFS(dst, os.DirFS(src)); err != nil {
+		t.Fatalf("failed to copy %s to %s: %v", src, dst, err)
+	}
+}
+
+func writeSourceControllerImagePatch(t *testing.T, filename, digest string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
+		t.Fatalf("failed to create image patch dir: %v", err)
+	}
+	data := fmt.Sprintf(`images:
+  - name: ghcr.io/fluxcd/source-controller
+    newTag: v1.3.0
+    digest: %s
+`, digest)
+	if err := os.WriteFile(filename, []byte(data), 0644); err != nil {
+		t.Fatalf("failed to write image patch: %v", err)
+	}
 }
 
 func getDefaultFluxSpec(t *testing.T) fluxcdv1.FluxInstanceSpec {

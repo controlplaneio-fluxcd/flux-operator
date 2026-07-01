@@ -325,7 +325,10 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 		}
 	}()
 
-	ver, err := builder.MatchVersion(fluxManifestsDir, obj.Spec.Distribution.Version)
+	// Resolve versions from the candidate manifests, constrained by the
+	// versions embedded in the running operator image.
+	embeddedFluxManifestsDir := filepath.Join(r.StoragePath, "flux")
+	ver, err := builder.MatchVersionWithEmbedded(fluxManifestsDir, embeddedFluxManifestsDir, obj.Spec.Distribution.Version)
 	if err != nil {
 		return nil, err
 	}
@@ -336,7 +339,7 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 		}
 	}
 
-	latestVer, err := builder.MatchVersion(fluxManifestsDir, "2.x")
+	latestVer, err := builder.MatchVersionWithEmbedded(fluxManifestsDir, embeddedFluxManifestsDir, "2.x")
 	if err != nil {
 		return nil, err
 	}
