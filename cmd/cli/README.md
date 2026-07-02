@@ -14,7 +14,13 @@ and perform various operations.
 The Flux Operator CLI is available as a binary executable for Linux, macOS, and Windows. The binaries
 can be downloaded from GitHub [releases page](https://github.com/controlplaneio-fluxcd/flux-operator/releases).
 
-If you are using macOS or Linux, you can install the CLI using Homebrew:
+Install as a Flux plugin:
+
+```shell
+flux plugin install operator
+```
+
+Or you can install the CLI standalone using Homebrew (macOS and Linux):
 
 ```shell
 brew install controlplaneio-fluxcd/tap/flux-operator
