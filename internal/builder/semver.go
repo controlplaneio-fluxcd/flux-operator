@@ -71,13 +71,51 @@ func IsMinorUpgrade(fromVer, toVer string) (bool, error) {
 
 // MatchVersion returns the latest version dir path that matches the given semver range.
 func MatchVersion(dataDir, semverRange string) (string, error) {
+	matchingVersions, err := matchVersions(dataDir, semverRange, nil)
+	if err != nil {
+		return "", err
+	}
+
+	if len(matchingVersions) == 0 {
+		return "", fmt.Errorf("no match found for semver: %s", semverRange)
+	}
+
+	sort.Sort(sort.Reverse(semver.Collection(matchingVersions)))
+	return matchingVersions[0].Original(), nil
+}
+
+// MatchVersionWithEmbedded returns the latest version dir that matches the
+// given semver range and is also present in the embedded version directory
+// bundled with the running operator image.
+func MatchVersionWithEmbedded(dataDir, embeddedDataDir, semverRange string) (string, error) {
+	embeddedVersions, err := getVersionSet(embeddedDataDir)
+	if err != nil {
+		return "", err
+	}
+
+	matchingVersions, err := matchVersions(dataDir, semverRange, embeddedVersions)
+	if err != nil {
+		return "", err
+	}
+
+	if len(matchingVersions) == 0 {
+		return "", fmt.Errorf("no match found for semver: %s in %s matching embedded versions in %s",
+			semverRange, dataDir, embeddedDataDir)
+	}
+
+	sort.Sort(sort.Reverse(semver.Collection(matchingVersions)))
+	return matchingVersions[0].Original(), nil
+}
+
+// matchVersions returns all version directories matching the semver range and optional allowed version set.
+func matchVersions(dataDir, semverRange string, allowedVersions map[string]struct{}) ([]*semver.Version, error) {
 	if _, err := os.Stat(dataDir); os.IsNotExist(err) {
-		return "", fmt.Errorf("%s directory not found", dataDir)
+		return nil, fmt.Errorf("%s directory not found", dataDir)
 	}
 
 	matches, err := filepath.Glob(dataDir + "/*")
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	var dirs []string
@@ -90,7 +128,7 @@ func MatchVersion(dataDir, semverRange string) (string, error) {
 
 	constraint, err := semver.NewConstraint(semverRange)
 	if err != nil {
-		return "", fmt.Errorf("semver '%s' parse error: %w", semverRange, err)
+		return nil, fmt.Errorf("semver '%s' parse error: %w", semverRange, err)
 	}
 
 	var matchingVersions []*semver.Version
@@ -101,16 +139,31 @@ func MatchVersion(dataDir, semverRange string) (string, error) {
 		}
 
 		if constraint.Check(v) {
+			if allowedVersions != nil {
+				if _, ok := allowedVersions[v.String()]; !ok {
+					continue
+				}
+			}
 			matchingVersions = append(matchingVersions, v)
 		}
 	}
 
-	if len(matchingVersions) == 0 {
-		return "", fmt.Errorf("no match found for semver: %s", semverRange)
+	return matchingVersions, nil
+}
+
+// getVersionSet returns the normalized semver versions present in a directory.
+func getVersionSet(dataDir string) (map[string]struct{}, error) {
+	versions, err := matchVersions(dataDir, "*", nil)
+	if err != nil {
+		return nil, err
 	}
 
-	sort.Sort(sort.Reverse(semver.Collection(matchingVersions)))
-	return matchingVersions[0].Original(), nil
+	result := make(map[string]struct{}, len(versions))
+	for _, v := range versions {
+		result[v.String()] = struct{}{}
+	}
+
+	return result, nil
 }
 
 // getSourceAPIVersion determines the API version of the source based on the provided Flux version.

@@ -4,6 +4,7 @@
 package builder
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -28,6 +29,49 @@ func TestMatchVersion(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 			ver, err := MatchVersion(fluxDir, tt.exp)
+			if tt.expected != "" {
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(ver).To(Equal(tt.expected))
+			} else {
+				g.Expect(err).To(HaveOccurred())
+			}
+		})
+	}
+}
+
+func TestMatchVersionWithEmbedded(t *testing.T) {
+	g := NewWithT(t)
+	baseDir := t.TempDir()
+	candidateDir := filepath.Join(baseDir, "candidate")
+	embeddedDir := filepath.Join(baseDir, "embedded")
+
+	for _, dir := range []string{
+		filepath.Join(candidateDir, "v2.2.0"),
+		filepath.Join(candidateDir, "v2.2.1"),
+		filepath.Join(candidateDir, "v2.3.0"),
+		filepath.Join(candidateDir, "v2.4.0"),
+		filepath.Join(embeddedDir, "v2.2.1"),
+		filepath.Join(embeddedDir, "v2.3.0"),
+	} {
+		g.Expect(os.MkdirAll(dir, 0755)).To(Succeed())
+	}
+
+	tests := []struct {
+		name     string
+		exp      string
+		expected string
+	}{
+		{name: "exact embedded", exp: "v2.3.0", expected: "v2.3.0"},
+		{name: "patch embedded", exp: "2.2.x", expected: "v2.2.1"},
+		{name: "minor ignores non-embedded newer candidate", exp: "2.x", expected: "v2.3.0"},
+		{name: "latest ignores non-embedded newer candidate", exp: "*", expected: "v2.3.0"},
+		{name: "exact not embedded", exp: "v2.4.0", expected: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			ver, err := MatchVersionWithEmbedded(candidateDir, embeddedDir, tt.exp)
 			if tt.expected != "" {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(ver).To(Equal(tt.expected))

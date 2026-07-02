@@ -32,6 +32,8 @@ administrators can enforce a much stricter least-privilege posture.
 3. **RBAC Minimization.** Each usage of elevated system privileges exists because it enables a
    specific, high-value feature that significantly decreases the permissions
    that users would otherwise require, improving support for the principle of least privilege.
+4. **Web UI scope.** Operator reconciliation paths outside the Web UI backend
+   are documented here only when they change Web UI RBAC requirements.
 
 ---
 
