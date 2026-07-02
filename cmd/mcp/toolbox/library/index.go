@@ -275,6 +275,14 @@ var conciseDocsMetadata = []DocumentMetadata{
 		},
 	},
 	{
+		Title: "Flux CLI Reference",
+		URL:   conciseDocsBaseURL + "/flux-cli.md",
+		Keywords: []string{
+			"CLI", "plugin", "flux-schema", "schema", "discover", "validate", "extract",
+			"envsubst", "OpenAPI", "fluxschema", "skip-missing-schemas", "schema-location",
+		},
+	},
+	{
 		Title: "Flux Operator Reference",
 		URL:   conciseDocsBaseURL + "/flux-operator.md",
 		Keywords: []string{
