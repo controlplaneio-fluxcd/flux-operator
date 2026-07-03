@@ -113,6 +113,7 @@ The following types are supported:
 - `ECRArtifactTag`: fetches input values from Elastic Container Registry OCI artifact tags.
 - `GARArtifactTag`: fetches input values from Google Artifact Registry OCI artifact tags.
 - `ExternalService`: fetches input values from a 3rd-party orchestrator API via HTTP/S.
+- `ExternalArtifact`: fetches input values from matching `ExternalArtifact` custom resources in-cluster.
 
 Throughout this document, the term **change request** is used to refer collectively to
 GitHub Pull Requests, GitLab Merge Requests, Azure DevOps Pull Requests, and
@@ -167,6 +168,15 @@ The ACR, ECR and GAR Artifact Tag providers export the same inputs as the OCI Ar
 with the difference on the authentication method used to connect to the registry. For these providers,
 [secret-less](#secret-less) authentication is used.
 
+For ExternalArtifact the [exported inputs](#exported-inputs-status) structure is:
+
+- `id`: the Adler-32 checksum of the ExternalArtifact's namespaced name in the format `<namespace>/<name>` (type string).
+- `name`: the name of the ExternalArtifact (type string).
+- `namespace`: the namespace of the ExternalArtifact (type string).
+- `revision`: the revision of the artifact as defined in the status `.status.artifact.revision` (type string, optional).
+
+Additionally, all labels defined on the matched `ExternalArtifact` resource are exported as key-value pairs at the root of the input.
+
 For ExternalService the [exported inputs](#exported-inputs-status) structure is user-defined.
 The external service API must return a JSON object with an `inputs` array, where each element
 is an object containing at least an `id` field (type string). All other fields are arbitrary
@@ -194,7 +204,7 @@ for basic authentication. TLS certificates can be configured via `.spec.certSecr
 
 ### URL
 
-The `.spec.url` field is required for external providers.
+The `.spec.url` field is required for external providers. It must not be set when `.spec.type` is `Static` or `ExternalArtifact`.
 For Git services, the URL should contain the GitHub repository, GitLab project,
 or Gitea/Forgejo repository address, including the HTTP/S scheme (`(http|https)://`).
 For OCI services, the URL should contain the OCI repository address,
@@ -294,6 +304,47 @@ spec:
       - "tenant2"
 ```
 
+### Selectors
+
+The `.spec.selectors` field specifies a list of selectors used to discover `ExternalArtifact` objects in the cluster.
+This field is required when `.spec.type` is `ExternalArtifact`, and must not be set for any other provider type.
+
+Each selector can specify:
+- `matchLabels` and `matchExpressions`: standard Kubernetes label selectors.
+- `name`: selects a single `ExternalArtifact` by its metadata name (mutually exclusive with `matchLabels` and `matchExpressions`).
+- `namespace`: scopes discovery to a specific namespace.
+  - When empty/omitted, discovery is scoped to the `ResourceSetInputProvider`'s namespace.
+  - When set to `*`, discovery is scoped across all namespaces in the cluster.
+  - Otherwise, discovery is scoped only to the specified namespace.
+
+> [!IMPORTANT]
+> When using `namespace: "*"` (all namespaces), the ServiceAccount used by the operator (or the one specified via `.spec.serviceAccountName`) must have cluster-wide list permissions on `ExternalArtifact` resources. Otherwise, reconciliation will fail with a forbidden error.
+
+Example:
+
+```yaml
+spec:
+  type: ExternalArtifact
+  selectors:
+    # Match by label in the same namespace
+    - matchLabels:
+        env: dev
+        team: platform
+    # Match by label expression in a specific namespace
+    - namespace: apps
+      matchExpressions:
+        - key: team
+          operator: In
+          values: [platform, backend]
+    # Match a specific ExternalArtifact by name in a specific namespace
+    - namespace: apps
+      name: auth-prod
+    # Match across all namespaces in the cluster
+    - namespace: "*"
+      matchLabels:
+        generated-by: source-watcher
+```
+
 ### Authentication configuration
 
 #### Secret-based
@@ -305,6 +356,7 @@ Note that the secret must be created in the same namespace as the ResourceSetInp
 This field is not supported by the following provider [types](#type):
 
 - `Static`
+- `ExternalArtifact`
 - `AWSCodeCommitPullRequest`
 - `AWSCodeCommitBranch`
 - `AWSCodeCommitTag`
@@ -405,6 +457,7 @@ The `.spec.serviceAccountName` field can only be used with the following provide
 - `ACRArtifactTag`
 - `ECRArtifactTag`
 - `GARArtifactTag`
+- `ExternalArtifact` (for impersonation while listing/getting custom resources)
 
 When this field is not present and one of the types above is specified (and, in the case of Azure
 DevOps, [`.spec.secretRef`](#secret-based) is also not specified), the operator will attempt
@@ -496,6 +549,7 @@ Note that the secret must be created in the same namespace as the ResourceSetInp
 This field is not supported by the following provider [types](#type):
 
 - `Static`
+- `ExternalArtifact`
 - `AzureDevOpsPullRequest`
 - `AzureDevOpsBranch`
 - `AzureDevOpsTag`
@@ -753,6 +807,25 @@ status:
   - id: "48955639"
     tag: "6.0.4"
     sha: sha256:d4ec9861522d4961b2acac5a070ef4f92d732480dff2062c2f3a1dcf9a5d1e91
+```
+
+Example for ExternalArtifact:
+
+```yaml
+status:
+  exportedInputs:
+  - app: auth
+    env: dev
+    id: "354921615"
+    name: dev-apps-auth
+    namespace: flux-system
+    revision: sha256:abc1234567890def
+  - app: payments
+    env: dev
+    id: "123456789"
+    name: dev-apps-payments
+    namespace: flux-system
+    revision: sha256:def4567890abc123
 ```
 
 Example for ExternalService:

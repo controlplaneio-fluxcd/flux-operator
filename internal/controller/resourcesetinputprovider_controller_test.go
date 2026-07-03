@@ -6,6 +6,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -276,6 +277,12 @@ func TestResourceSetInputProviderReconciler_ProviderAuthAndSecretsCompatiblity(t
 			secretRef:          false,
 		},
 		{
+			provider:           fluxcdv1.InputProviderExternalArtifact,
+			serviceAccountName: true,
+			certSecretRef:      false,
+			secretRef:          false,
+		},
+		{
 			provider:           fluxcdv1.InputProviderGitHubBranch,
 			serviceAccountName: false,
 			certSecretRef:      true,
@@ -389,12 +396,21 @@ func TestResourceSetInputProviderReconciler_ProviderAuthAndSecretsCompatiblity(t
 			if strings.HasPrefix(tt.provider, "Git") || strings.HasPrefix(tt.provider, "AzureDevOps") || strings.HasPrefix(tt.provider, "AWSCodeCommit") {
 				urlScheme = "https"
 			}
-			if tt.provider != fluxcdv1.InputProviderStatic {
+			if tt.provider != fluxcdv1.InputProviderStatic && tt.provider != fluxcdv1.InputProviderExternalArtifact {
 				spec.URL = fmt.Sprintf("%s://example.com/owner/repo", urlScheme)
+			}
+			if tt.provider == fluxcdv1.InputProviderExternalArtifact {
+				spec.Selectors = []fluxcdv1.ExternalArtifactSelector{
+					{
+						LabelSelector: metav1.LabelSelector{
+							MatchLabels: map[string]string{"env": "dev"},
+						},
+					},
+				}
 			}
 
 			// Validate serviceAccountName.
-			const saErr = "cannot specify spec.serviceAccountName when spec.type is not one of AzureDevOps*, AWSCodeCommit* or *ArtifactTag"
+			const saErr = "cannot specify spec.serviceAccountName when spec.type is not one of AzureDevOps*, AWSCodeCommit*, *ArtifactTag or ExternalArtifact"
 			obj.Spec = spec
 			obj.Spec.ServiceAccountName = "test-sa"
 			if !tt.serviceAccountName {
@@ -409,7 +425,7 @@ func TestResourceSetInputProviderReconciler_ProviderAuthAndSecretsCompatiblity(t
 			}
 
 			// Validate certSecretRef.
-			const certErr = "cannot specify spec.certSecretRef when spec.type is one of Static, AzureDevOps*, AWSCodeCommit*, ACRArtifactTag, ECRArtifactTag or GARArtifactTag"
+			const certErr = "cannot specify spec.certSecretRef when spec.type is one of Static, ExternalArtifact, AzureDevOps*, AWSCodeCommit*, ACRArtifactTag, ECRArtifactTag or GARArtifactTag"
 			obj.Spec = spec
 			obj.Spec.CertSecretRef = &meta.LocalObjectReference{
 				Name: "test-cert-secret",
@@ -427,7 +443,7 @@ func TestResourceSetInputProviderReconciler_ProviderAuthAndSecretsCompatiblity(t
 			}
 
 			// Validate secretRef.
-			const secretErr = "cannot specify spec.secretRef when spec.type is one of Static, AWSCodeCommit*, ACRArtifactTag, ECRArtifactTag or GARArtifactTag"
+			const secretErr = "cannot specify spec.secretRef when spec.type is one of Static, ExternalArtifact, AWSCodeCommit*, ACRArtifactTag, ECRArtifactTag or GARArtifactTag"
 			obj.Spec = spec
 			obj.Spec.SecretRef = &meta.LocalObjectReference{
 				Name: "test-secret",
@@ -633,6 +649,15 @@ func TestRequeueAfterResourceSetInputProvider(t *testing.T) {
 // getResourceSetInputProviderReconciler returns a new ResourceSetInputProviderReconciler
 // configured for testing purposes, with notifications disabled and a test event recorder.
 func getResourceSetInputProviderReconciler(t *testing.T) *ResourceSetInputProviderReconciler {
+	tmpDir := t.TempDir()
+	err := os.WriteFile(fmt.Sprintf("%s/kubeconfig", tmpDir), testKubeConfig, 0644)
+	if err != nil {
+		panic(fmt.Sprintf("failed to create the testenv-admin user kubeconfig: %v", err))
+	}
+
+	// Set the kubeconfig environment variable for the impersonator.
+	t.Setenv("KUBECONFIG", fmt.Sprintf("%s/kubeconfig", tmpDir))
+
 	// Disable notifications for the tests as no pod is running.
 	// This is required to avoid the 30s retry loop performed by the HTTP client.
 	t.Setenv("NOTIFICATIONS_DISABLED", "yes")
