@@ -276,6 +276,12 @@ func TestResourceSetInputProviderReconciler_ProviderAuthAndSecretsCompatiblity(t
 			secretRef:          false,
 		},
 		{
+			provider:           fluxcdv1.InputProviderExternalArtifact,
+			serviceAccountName: false,
+			certSecretRef:      false,
+			secretRef:          false,
+		},
+		{
 			provider:           fluxcdv1.InputProviderGitHubBranch,
 			serviceAccountName: false,
 			certSecretRef:      true,
@@ -389,8 +395,13 @@ func TestResourceSetInputProviderReconciler_ProviderAuthAndSecretsCompatiblity(t
 			if strings.HasPrefix(tt.provider, "Git") || strings.HasPrefix(tt.provider, "AzureDevOps") || strings.HasPrefix(tt.provider, "AWSCodeCommit") {
 				urlScheme = "https"
 			}
-			if tt.provider != fluxcdv1.InputProviderStatic {
+			if tt.provider != fluxcdv1.InputProviderStatic && tt.provider != fluxcdv1.InputProviderExternalArtifact {
 				spec.URL = fmt.Sprintf("%s://example.com/owner/repo", urlScheme)
+			}
+			if tt.provider == fluxcdv1.InputProviderExternalArtifact {
+				spec.Selector = &metav1.LabelSelector{
+					MatchLabels: map[string]string{"env": "dev"},
+				}
 			}
 
 			// Validate serviceAccountName.
@@ -409,7 +420,7 @@ func TestResourceSetInputProviderReconciler_ProviderAuthAndSecretsCompatiblity(t
 			}
 
 			// Validate certSecretRef.
-			const certErr = "cannot specify spec.certSecretRef when spec.type is one of Static, AzureDevOps*, AWSCodeCommit*, ACRArtifactTag, ECRArtifactTag or GARArtifactTag"
+			const certErr = "cannot specify spec.certSecretRef when spec.type is one of Static, ExternalArtifact, AzureDevOps*, AWSCodeCommit*, ACRArtifactTag, ECRArtifactTag or GARArtifactTag"
 			obj.Spec = spec
 			obj.Spec.CertSecretRef = &meta.LocalObjectReference{
 				Name: "test-cert-secret",
@@ -427,7 +438,7 @@ func TestResourceSetInputProviderReconciler_ProviderAuthAndSecretsCompatiblity(t
 			}
 
 			// Validate secretRef.
-			const secretErr = "cannot specify spec.secretRef when spec.type is one of Static, AWSCodeCommit*, ACRArtifactTag, ECRArtifactTag or GARArtifactTag"
+			const secretErr = "cannot specify spec.secretRef when spec.type is one of Static, ExternalArtifact, AWSCodeCommit*, ACRArtifactTag, ECRArtifactTag or GARArtifactTag"
 			obj.Spec = spec
 			obj.Spec.SecretRef = &meta.LocalObjectReference{
 				Name: "test-secret",
