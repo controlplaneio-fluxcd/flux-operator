@@ -186,55 +186,74 @@ spec:
                 required:
                 - name
                 type: object
-              selector:
+              selectors:
                 description: |-
-                  Selector specifies the label selector used to discover ExternalArtifact objects
-                  in the same namespace as the ResourceSetInputProvider.
-                  This field is required when spec.type is 'ExternalArtifact' and must not be set otherwise.
-                properties:
-                  matchExpressions:
-                    description: matchExpressions is a list of label selector requirements.
-                      The requirements are ANDed.
-                    items:
-                      description: |-
-                        A label selector requirement is a selector that contains values, a key, and an operator that
-                        relates the key and values.
-                      properties:
-                        key:
-                          description: key is the label key that the selector applies
-                            to.
-                          type: string
-                        operator:
-                          description: |-
-                            operator represents a key's relationship to a set of values.
-                            Valid operators are In, NotIn, Exists and DoesNotExist.
-                          type: string
-                        values:
-                          description: |-
-                            values is an array of string values. If the operator is In or NotIn,
-                            the values array must be non-empty. If the operator is Exists or DoesNotExist,
-                            the values array must be empty. This array is replaced during a strategic
-                            merge patch.
-                          items:
+                  Selectors specifies label selectors used to discover ExternalArtifact objects.
+                  Required when spec.type is 'ExternalArtifact' and must not be set otherwise.
+                items:
+                  description: ExternalArtifactSelector defines a selector for discovering
+                    ExternalArtifact objects.
+                  properties:
+                    matchExpressions:
+                      description: matchExpressions is a list of label selector requirements.
+                        The requirements are ANDed.
+                      items:
+                        description: |-
+                          A label selector requirement is a selector that contains values, a key, and an operator that
+                          relates the key and values.
+                        properties:
+                          key:
+                            description: key is the label key that the selector applies
+                              to.
                             type: string
-                          type: array
-                          x-kubernetes-list-type: atomic
-                      required:
-                      - key
-                      - operator
+                          operator:
+                            description: |-
+                              operator represents a key's relationship to a set of values.
+                              Valid operators are In, NotIn, Exists and DoesNotExist.
+                            type: string
+                          values:
+                            description: |-
+                              values is an array of string values. If the operator is In or NotIn,
+                              the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                              the values array must be empty. This array is replaced during a strategic
+                              merge patch.
+                            items:
+                              type: string
+                            type: array
+                            x-kubernetes-list-type: atomic
+                        required:
+                        - key
+                        - operator
+                        type: object
+                      type: array
+                      x-kubernetes-list-type: atomic
+                    matchLabels:
+                      additionalProperties:
+                        type: string
+                      description: |-
+                        matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                        map is equivalent to an element of matchExpressions, whose key field is "key", the
+                        operator is "In", and the values array contains only "value". The requirements are ANDed.
                       type: object
-                    type: array
-                    x-kubernetes-list-type: atomic
-                  matchLabels:
-                    additionalProperties:
+                    name:
+                      description: |-
+                        Name selects a single ExternalArtifact by metadata.name.
+                        This field is mutually exclusive with matchLabels and matchExpressions.
                       type: string
-                    description: |-
-                      matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
-                      map is equivalent to an element of matchExpressions, whose key field is "key", the
-                      operator is "In", and the values array contains only "value". The requirements are ANDed.
-                    type: object
-                type: object
-                x-kubernetes-map-type: atomic
+                    namespace:
+                      description: |-
+                        Namespace scopes ExternalArtifact discovery.
+                        When empty, ExternalArtifacts are listed in the ResourceSetInputProvider namespace.
+                        When set to "*", ExternalArtifacts are listed across all namespaces by
+                        omitting the namespace option from List().
+                        Otherwise, ExternalArtifacts are listed only in the specified namespace.
+                      type: string
+                  type: object
+                  x-kubernetes-map-type: atomic
+                  x-kubernetes-validations:
+                  - message: name is mutually exclusive with matchLabels and matchExpressions
+                    rule: '!has(self.name) || (!has(self.matchLabels) && !has(self.matchExpressions))'
+                type: array
               serviceAccountName:
                 description: |-
                   ServiceAccountName specifies the name of the Kubernetes ServiceAccount
@@ -324,9 +343,10 @@ spec:
               rule: self.type != 'ExternalService' || !self.url.startsWith('http://')
                 || (has(self.insecure) && self.insecure)
             - message: cannot specify spec.serviceAccountName when spec.type is not
-                one of AzureDevOps*, AWSCodeCommit* or *ArtifactTag
+                one of AzureDevOps*, AWSCodeCommit*, *ArtifactTag or ExternalArtifact
               rule: '!has(self.serviceAccountName) || self.type.startsWith(''AzureDevOps'')
-                || self.type.startsWith(''AWSCodeCommit'') || self.type.endsWith(''ArtifactTag'')'
+                || self.type.startsWith(''AWSCodeCommit'') || self.type.endsWith(''ArtifactTag'')
+                || self.type == ''ExternalArtifact'''
             - message: cannot specify spec.certSecretRef when spec.type is one of
                 Static, ExternalArtifact, AzureDevOps*, AWSCodeCommit*, ACRArtifactTag,
                 ECRArtifactTag or GARArtifactTag
@@ -340,10 +360,10 @@ spec:
               rule: '!has(self.secretRef) || !(self.type == ''Static'' || self.type
                 == ''ExternalArtifact'' || self.type.startsWith(''AWSCodeCommit'')
                 || (self.type.endsWith(''ArtifactTag'') && self.type != ''OCIArtifactTag''))'
-            - message: spec.selector must be set when spec.type is 'ExternalArtifact'
-              rule: self.type != 'ExternalArtifact' || has(self.selector)
-            - message: spec.selector must not be set when spec.type is not 'ExternalArtifact'
-              rule: self.type == 'ExternalArtifact' || !has(self.selector)
+            - message: spec.selectors must be set when spec.type is 'ExternalArtifact'
+              rule: self.type != 'ExternalArtifact' || has(self.selectors)
+            - message: spec.selectors must not be set when spec.type is not 'ExternalArtifact'
+              rule: self.type == 'ExternalArtifact' || !has(self.selectors)
           status:
             description: ResourceSetInputProviderStatus defines the observed state
               of ResourceSetInputProvider.

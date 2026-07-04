@@ -6,6 +6,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -277,7 +278,7 @@ func TestResourceSetInputProviderReconciler_ProviderAuthAndSecretsCompatiblity(t
 		},
 		{
 			provider:           fluxcdv1.InputProviderExternalArtifact,
-			serviceAccountName: false,
+			serviceAccountName: true,
 			certSecretRef:      false,
 			secretRef:          false,
 		},
@@ -399,13 +400,17 @@ func TestResourceSetInputProviderReconciler_ProviderAuthAndSecretsCompatiblity(t
 				spec.URL = fmt.Sprintf("%s://example.com/owner/repo", urlScheme)
 			}
 			if tt.provider == fluxcdv1.InputProviderExternalArtifact {
-				spec.Selector = &metav1.LabelSelector{
-					MatchLabels: map[string]string{"env": "dev"},
+				spec.Selectors = []fluxcdv1.ExternalArtifactSelector{
+					{
+						LabelSelector: metav1.LabelSelector{
+							MatchLabels: map[string]string{"env": "dev"},
+						},
+					},
 				}
 			}
 
 			// Validate serviceAccountName.
-			const saErr = "cannot specify spec.serviceAccountName when spec.type is not one of AzureDevOps*, AWSCodeCommit* or *ArtifactTag"
+			const saErr = "cannot specify spec.serviceAccountName when spec.type is not one of AzureDevOps*, AWSCodeCommit*, *ArtifactTag or ExternalArtifact"
 			obj.Spec = spec
 			obj.Spec.ServiceAccountName = "test-sa"
 			if !tt.serviceAccountName {
@@ -644,6 +649,15 @@ func TestRequeueAfterResourceSetInputProvider(t *testing.T) {
 // getResourceSetInputProviderReconciler returns a new ResourceSetInputProviderReconciler
 // configured for testing purposes, with notifications disabled and a test event recorder.
 func getResourceSetInputProviderReconciler(t *testing.T) *ResourceSetInputProviderReconciler {
+	tmpDir := t.TempDir()
+	err := os.WriteFile(fmt.Sprintf("%s/kubeconfig", tmpDir), testKubeConfig, 0644)
+	if err != nil {
+		panic(fmt.Sprintf("failed to create the testenv-admin user kubeconfig: %v", err))
+	}
+
+	// Set the kubeconfig environment variable for the impersonator.
+	t.Setenv("KUBECONFIG", fmt.Sprintf("%s/kubeconfig", tmpDir))
+
 	// Disable notifications for the tests as no pod is running.
 	// This is required to avoid the 30s retry loop performed by the HTTP client.
 	t.Setenv("NOTIFICATIONS_DISABLED", "yes")

@@ -59,11 +59,11 @@ const (
 // +kubebuilder:validation:XValidation:rule="self.type != 'ExternalService' || self.url.startsWith('http')", message="spec.url must start with 'http://' or 'https://' when spec.type is 'ExternalService'"
 // +kubebuilder:validation:XValidation:rule="!has(self.insecure) || !self.insecure || self.type == 'ExternalService' || self.type == 'OCIArtifactTag'", message="spec.insecure can only be set when spec.type is 'ExternalService' or 'OCIArtifactTag'"
 // +kubebuilder:validation:XValidation:rule="self.type != 'ExternalService' || !self.url.startsWith('http://') || (has(self.insecure) && self.insecure)", message="spec.url must use 'https://' unless spec.insecure is true"
-// +kubebuilder:validation:XValidation:rule="!has(self.serviceAccountName) || self.type.startsWith('AzureDevOps') || self.type.startsWith('AWSCodeCommit') || self.type.endsWith('ArtifactTag')", message="cannot specify spec.serviceAccountName when spec.type is not one of AzureDevOps*, AWSCodeCommit* or *ArtifactTag"
+// +kubebuilder:validation:XValidation:rule="!has(self.serviceAccountName) || self.type.startsWith('AzureDevOps') || self.type.startsWith('AWSCodeCommit') || self.type.endsWith('ArtifactTag') || self.type == 'ExternalArtifact'", message="cannot specify spec.serviceAccountName when spec.type is not one of AzureDevOps*, AWSCodeCommit*, *ArtifactTag or ExternalArtifact"
 // +kubebuilder:validation:XValidation:rule="!has(self.certSecretRef) || !(self.type == 'Static' || self.type == 'ExternalArtifact' || self.type.startsWith('AzureDevOps') || self.type.startsWith('AWSCodeCommit') || (self.type.endsWith('ArtifactTag') && self.type != 'OCIArtifactTag'))", message="cannot specify spec.certSecretRef when spec.type is one of Static, ExternalArtifact, AzureDevOps*, AWSCodeCommit*, ACRArtifactTag, ECRArtifactTag or GARArtifactTag"
 // +kubebuilder:validation:XValidation:rule="!has(self.secretRef) || !(self.type == 'Static' || self.type == 'ExternalArtifact' || self.type.startsWith('AWSCodeCommit') || (self.type.endsWith('ArtifactTag') && self.type != 'OCIArtifactTag'))", message="cannot specify spec.secretRef when spec.type is one of Static, ExternalArtifact, AWSCodeCommit*, ACRArtifactTag, ECRArtifactTag or GARArtifactTag"
-// +kubebuilder:validation:XValidation:rule="self.type != 'ExternalArtifact' || has(self.selector)", message="spec.selector must be set when spec.type is 'ExternalArtifact'"
-// +kubebuilder:validation:XValidation:rule="self.type == 'ExternalArtifact' || !has(self.selector)", message="spec.selector must not be set when spec.type is not 'ExternalArtifact'"
+// +kubebuilder:validation:XValidation:rule="self.type != 'ExternalArtifact' || has(self.selectors)", message="spec.selectors must be set when spec.type is 'ExternalArtifact'"
+// +kubebuilder:validation:XValidation:rule="self.type == 'ExternalArtifact' || !has(self.selectors)", message="spec.selectors must not be set when spec.type is not 'ExternalArtifact'"
 type ResourceSetInputProviderSpec struct {
 	// Type specifies the type of the input provider.
 	// +kubebuilder:validation:Enum=Static;GitHubBranch;GitHubTag;GitHubPullRequest;GitLabBranch;GitLabTag;GitLabMergeRequest;GitLabEnvironment;AzureDevOpsBranch;AzureDevOpsTag;AzureDevOpsPullRequest;AWSCodeCommitBranch;AWSCodeCommitTag;AWSCodeCommitPullRequest;GiteaBranch;GiteaTag;GiteaPullRequest;OCIArtifactTag;ACRArtifactTag;ECRArtifactTag;GARArtifactTag;ExternalService;ExternalArtifact
@@ -133,11 +133,29 @@ type ResourceSetInputProviderSpec struct {
 	// +optional
 	Schedule []Schedule `json:"schedule,omitempty"`
 
-	// Selector specifies the label selector used to discover ExternalArtifact objects
-	// in the same namespace as the ResourceSetInputProvider.
-	// This field is required when spec.type is 'ExternalArtifact' and must not be set otherwise.
+	// Selectors specifies label selectors used to discover ExternalArtifact objects.
+	// Required when spec.type is 'ExternalArtifact' and must not be set otherwise.
 	// +optional
-	Selector *metav1.LabelSelector `json:"selector,omitempty"`
+	Selectors []ExternalArtifactSelector `json:"selectors,omitempty"`
+}
+
+// ExternalArtifactSelector defines a selector for discovering ExternalArtifact objects.
+// +kubebuilder:validation:XValidation:rule="!has(self.name) || (!has(self.matchLabels) && !has(self.matchExpressions))", message="name is mutually exclusive with matchLabels and matchExpressions"
+type ExternalArtifactSelector struct {
+	metav1.LabelSelector `json:",inline"`
+
+	// Name selects a single ExternalArtifact by metadata.name.
+	// This field is mutually exclusive with matchLabels and matchExpressions.
+	// +optional
+	Name string `json:"name,omitempty"`
+
+	// Namespace scopes ExternalArtifact discovery.
+	// When empty, ExternalArtifacts are listed in the ResourceSetInputProvider namespace.
+	// When set to "*", ExternalArtifacts are listed across all namespaces by
+	// omitting the namespace option from List().
+	// Otherwise, ExternalArtifacts are listed only in the specified namespace.
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
 }
 
 // ResourceSetInputFilter defines the filter to apply to the input provider response.

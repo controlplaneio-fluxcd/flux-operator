@@ -57,6 +57,7 @@ import (
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/notifier"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/schedule"
+	runtimeClient "github.com/fluxcd/pkg/runtime/client"
 )
 
 // ResourceSetInputProviderReconciler reconciles a ResourceSetInputProvider object
@@ -64,10 +65,11 @@ type ResourceSetInputProviderReconciler struct {
 	client.Client
 	kuberecorder.EventRecorder
 
-	Scheme        *runtime.Scheme
-	StatusManager string
-	TokenCache    *cache.TokenCache
-	Version       string
+	Scheme                *runtime.Scheme
+	StatusManager         string
+	TokenCache            *cache.TokenCache
+	Version               string
+	DefaultServiceAccount string
 }
 
 // +kubebuilder:rbac:groups=fluxcd.controlplane.io,resources=resourcesetinputproviders,verbs=get;list;watch;create;update;patch;delete
@@ -201,8 +203,8 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 			return ctrl.Result{}, nil
 		}
 	} else if obj.Spec.Type == fluxcdv1.InputProviderExternalArtifact {
-		if obj.Spec.Selector == nil {
-			err := fmt.Errorf("spec.selector must be set when spec.type is 'ExternalArtifact'")
+		if len(obj.Spec.Selectors) == 0 {
+			err := fmt.Errorf("spec.selectors must be set when spec.type is 'ExternalArtifact'")
 			errMsg := fmt.Sprintf("%s: %v", msgTerminalError, err)
 			conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
 			conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
@@ -1017,8 +1019,8 @@ func (r *ResourceSetInputProviderReconciler) callExternalServiceProvider(
 	return res, nil
 }
 
-// callExternalArtifactProvider lists ExternalArtifact resources in the same
-// namespace matching spec.selector and converts them into ResourceSetInput objects.
+// callExternalArtifactProvider lists ExternalArtifact resources in-cluster
+// matching spec.selectors and converts them into ResourceSetInput objects.
 // It uses the unstructured client to avoid importing source-controller/api as a
 // module dependency.
 func (r *ResourceSetInputProviderReconciler) callExternalArtifactProvider(
@@ -1027,30 +1029,112 @@ func (r *ResourceSetInputProviderReconciler) callExternalArtifactProvider(
 	defaults map[string]any,
 ) ([]fluxcdv1.ResourceSetInput, error) {
 
-	selector, err := metav1.LabelSelectorAsSelector(obj.Spec.Selector)
-	if err != nil {
-		return nil, fmt.Errorf("invalid spec.selector: %w", err)
+	kubeClient := r.Client
+	if r.DefaultServiceAccount != "" || obj.Spec.ServiceAccountName != "" {
+		impersonatorOpts := make([]runtimeClient.ImpersonatorOption, 0, 1)
+		impersonatorOpts = append(impersonatorOpts,
+			runtimeClient.WithServiceAccount(r.DefaultServiceAccount, obj.Spec.ServiceAccountName, obj.GetNamespace()))
+		impersonation := runtimeClient.NewImpersonator(r.Client, impersonatorOpts...)
+		if impersonation.CanImpersonate(ctx) {
+			var err error
+			kubeClient, _, err = impersonation.GetClient(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create impersonated client: %w", err)
+			}
+		}
 	}
 
-	// List ExternalArtifact objects using the unstructured client.
-	list := &unstructured.UnstructuredList{}
-	list.SetGroupVersionKind(externalArtifactListGVK)
-	if err := r.Client.List(ctx, list,
-		client.InNamespace(obj.GetNamespace()),
-		client.MatchingLabelsSelector{Selector: selector},
-	); err != nil {
-		return nil, fmt.Errorf("failed to list ExternalArtifacts: %w", err)
+	var matches []*unstructured.Unstructured
+
+	for _, sel := range obj.Spec.Selectors {
+		ns := sel.Namespace
+		if ns == "" {
+			ns = obj.GetNamespace()
+		}
+
+		if sel.Name != "" {
+			if ns == "*" {
+				// List all namespaces and filter by name in Go
+				list := &unstructured.UnstructuredList{}
+				list.SetGroupVersionKind(externalArtifactListGVK)
+				if err := kubeClient.List(ctx, list); err != nil {
+					if apierrors.IsForbidden(err) {
+						return nil, fmt.Errorf("impersonated service account '%s' lacks permissions to list ExternalArtifacts across all namespaces: %w",
+							obj.Spec.ServiceAccountName, err)
+					}
+					return nil, fmt.Errorf("failed to list ExternalArtifacts across all namespaces for selector %s: %w", sel.Name, err)
+				}
+				for i := range list.Items {
+					if list.Items[i].GetName() == sel.Name {
+						matches = append(matches, &list.Items[i])
+					}
+				}
+			} else {
+				// Single namespace Get
+				ea := &unstructured.Unstructured{}
+				ea.SetGroupVersionKind(schema.GroupVersionKind{
+					Group:   "source.toolkit.fluxcd.io",
+					Version: "v1",
+					Kind:    "ExternalArtifact",
+				})
+				err := kubeClient.Get(ctx, client.ObjectKey{Namespace: ns, Name: sel.Name}, ea)
+				if err != nil {
+					if apierrors.IsNotFound(err) {
+						continue
+					}
+					if apierrors.IsForbidden(err) {
+						return nil, fmt.Errorf("impersonated service account '%s' lacks permissions to get ExternalArtifact '%s/%s': %w",
+							obj.Spec.ServiceAccountName, ns, sel.Name, err)
+					}
+					return nil, fmt.Errorf("failed to get ExternalArtifact '%s/%s': %w", ns, sel.Name, err)
+				}
+				matches = append(matches, ea)
+			}
+		} else {
+			// Label selector search
+			labelSel, err := metav1.LabelSelectorAsSelector(&sel.LabelSelector)
+			if err != nil {
+				return nil, fmt.Errorf("invalid label selector: %w", err)
+			}
+			list := &unstructured.UnstructuredList{}
+			list.SetGroupVersionKind(externalArtifactListGVK)
+			var listOpts []client.ListOption
+			if ns != "*" {
+				listOpts = append(listOpts, client.InNamespace(ns))
+			}
+			listOpts = append(listOpts, client.MatchingLabelsSelector{Selector: labelSel})
+			if err := kubeClient.List(ctx, list, listOpts...); err != nil {
+				if apierrors.IsForbidden(err) {
+					return nil, fmt.Errorf("impersonated service account '%s' lacks permissions to list ExternalArtifacts in namespace '%s': %w",
+						obj.Spec.ServiceAccountName, ns, err)
+				}
+				return nil, fmt.Errorf("failed to list ExternalArtifacts in namespace '%s': %w", ns, err)
+			}
+			for i := range list.Items {
+				matches = append(matches, &list.Items[i])
+			}
+		}
+	}
+
+	// Deduplicate matches by namespace/name
+	uniqueMatches := make([]*unstructured.Unstructured, 0, len(matches))
+	seen := make(map[string]bool)
+	for _, ea := range matches {
+		key := fmt.Sprintf("%s/%s", ea.GetNamespace(), ea.GetName())
+		if !seen[key] {
+			seen[key] = true
+			uniqueMatches = append(uniqueMatches, ea)
+		}
 	}
 
 	// Apply filter limit.
-	items := list.Items
 	limit := obj.GetFilterLimit()
-	if len(items) > limit {
-		items = items[:limit]
+	if len(uniqueMatches) > limit {
+		uniqueMatches = uniqueMatches[:limit]
 	}
 
-	res := make([]fluxcdv1.ResourceSetInput, 0, len(items))
-	for _, ea := range items {
+	res := make([]fluxcdv1.ResourceSetInput, 0, len(uniqueMatches))
+	for _, ea := range uniqueMatches {
 		artifactName := ea.GetName()
 		artifactNamespace := ea.GetNamespace()
 
@@ -1065,7 +1149,7 @@ func (r *ResourceSetInputProviderReconciler) callExternalArtifactProvider(
 			inputMap[k] = v
 		}
 
-		inputMap["id"] = inputs.ID(fmt.Sprintf("%s+%s", artifactNamespace, artifactName))
+		inputMap["id"] = inputs.ID(fmt.Sprintf("%s/%s", artifactNamespace, artifactName))
 		inputMap["name"] = artifactName
 		inputMap["namespace"] = artifactNamespace
 		if revision != "" {

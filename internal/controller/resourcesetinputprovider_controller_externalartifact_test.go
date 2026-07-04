@@ -111,7 +111,7 @@ func TestResourceSetInputProviderReconciler_ExternalArtifact_CELValidation(t *te
 	ns, err := testEnv.CreateNamespace(ctx, "test-ea-cel")
 	g.Expect(err).ToNot(HaveOccurred())
 
-	// ExternalArtifact without selector must be rejected.
+	// ExternalArtifact without selectors must be rejected.
 	objDef := fmt.Sprintf(`
 apiVersion: fluxcd.controlplane.io/v1
 kind: ResourceSetInputProvider
@@ -127,9 +127,9 @@ spec:
 	g.Expect(err).NotTo(HaveOccurred())
 	err = testEnv.Create(ctx, obj)
 	g.Expect(err).To(HaveOccurred())
-	g.Expect(err.Error()).To(ContainSubstring("spec.selector must be set when spec.type is 'ExternalArtifact'"))
+	g.Expect(err.Error()).To(ContainSubstring("spec.selectors must be set when spec.type is 'ExternalArtifact'"))
 
-	// Non-ExternalArtifact type with selector must be rejected.
+	// Non-ExternalArtifact type with selectors must be rejected.
 	objDefWithSel := fmt.Sprintf(`
 apiVersion: fluxcd.controlplane.io/v1
 kind: ResourceSetInputProvider
@@ -138,8 +138,8 @@ metadata:
   namespace: "%[1]s"
 spec:
   type: Static
-  selector:
-    matchLabels:
+  selectors:
+  - matchLabels:
       env: dev
 `, ns.Name)
 	objWithSel := &fluxcdv1.ResourceSetInputProvider{}
@@ -147,9 +147,9 @@ spec:
 	g.Expect(err).NotTo(HaveOccurred())
 	err = testEnv.Create(ctx, objWithSel)
 	g.Expect(err).To(HaveOccurred())
-	g.Expect(err.Error()).To(ContainSubstring("spec.selector must not be set when spec.type is not 'ExternalArtifact'"))
+	g.Expect(err.Error()).To(ContainSubstring("spec.selectors must not be set when spec.type is not 'ExternalArtifact'"))
 
-	// ExternalArtifact with selector must be accepted.
+	// ExternalArtifact with selectors must be accepted.
 	objDefOK := fmt.Sprintf(`
 apiVersion: fluxcd.controlplane.io/v1
 kind: ResourceSetInputProvider
@@ -158,8 +158,8 @@ metadata:
   namespace: "%[1]s"
 spec:
   type: ExternalArtifact
-  selector:
-    matchLabels:
+  selectors:
+  - matchLabels:
       env: dev
 `, ns.Name)
 	objOK := &fluxcdv1.ResourceSetInputProvider{}
@@ -178,8 +178,8 @@ metadata:
 spec:
   type: ExternalArtifact
   url: https://example.com
-  selector:
-    matchLabels:
+  selectors:
+  - matchLabels:
       env: dev
 `, ns.Name)
 	objWithURL := &fluxcdv1.ResourceSetInputProvider{}
@@ -198,8 +198,8 @@ metadata:
   namespace: "%[1]s"
 spec:
   type: ExternalArtifact
-  selector:
-    matchLabels:
+  selectors:
+  - matchLabels:
       env: dev
   secretRef:
     name: my-secret
@@ -220,8 +220,8 @@ metadata:
   namespace: "%[1]s"
 spec:
   type: ExternalArtifact
-  selector:
-    matchLabels:
+  selectors:
+  - matchLabels:
       env: dev
   certSecretRef:
     name: my-cert
@@ -232,6 +232,27 @@ spec:
 	err = testEnv.Create(ctx, objWithCert)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("cannot specify spec.certSecretRef"))
+
+	// Selector with Name and matchLabels at same time must be rejected (mutual exclusivity).
+	objDefMutEx := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSetInputProvider
+metadata:
+  name: test-ea-mut-ex
+  namespace: "%[1]s"
+spec:
+  type: ExternalArtifact
+  selectors:
+  - name: auth-prod
+    matchLabels:
+      team: platform
+`, ns.Name)
+	objMutEx := &fluxcdv1.ResourceSetInputProvider{}
+	err = yaml.Unmarshal([]byte(objDefMutEx), objMutEx)
+	g.Expect(err).NotTo(HaveOccurred())
+	err = testEnv.Create(ctx, objMutEx)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("name is mutually exclusive with matchLabels and matchExpressions"))
 }
 
 func TestResourceSetInputProviderReconciler_ExternalArtifact_RuntimeGuard(t *testing.T) {
@@ -240,7 +261,7 @@ func TestResourceSetInputProviderReconciler_ExternalArtifact_RuntimeGuard(t *tes
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	// Reconcile with nil selector should stall.
+	// Reconcile with nil/empty selectors should stall.
 	obj := &fluxcdv1.ResourceSetInputProvider{
 		Spec: fluxcdv1.ResourceSetInputProviderSpec{
 			Type: fluxcdv1.InputProviderExternalArtifact,
@@ -252,7 +273,7 @@ func TestResourceSetInputProviderReconciler_ExternalArtifact_RuntimeGuard(t *tes
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(conditions.IsStalled(obj)).To(BeTrue())
 	g.Expect(conditions.GetReason(obj, meta.StalledCondition)).To(Equal(fluxcdv1.ReasonInvalidSpec))
-	g.Expect(conditions.GetMessage(obj, meta.StalledCondition)).To(ContainSubstring("spec.selector must be set"))
+	g.Expect(conditions.GetMessage(obj, meta.StalledCondition)).To(ContainSubstring("spec.selectors must be set"))
 }
 
 func TestResourceSetInputProviderReconciler_ExternalArtifact_Reconcile(t *testing.T) {
@@ -285,8 +306,8 @@ metadata:
   namespace: "%[1]s"
 spec:
   type: ExternalArtifact
-  selector:
-    matchLabels:
+  selectors:
+  - matchLabels:
       env: dev
 `, ns.Name)
 
@@ -336,7 +357,7 @@ spec:
 		g.Expect(input["namespace"]).To(Equal(ns.Name))
 		g.Expect(input["env"]).To(Equal("dev"))
 		g.Expect(input).To(HaveKey("revision"))
-		g.Expect(input["id"]).To(Equal(inputs.ID(fmt.Sprintf("%s+%s", ns.Name, artifactName))))
+		g.Expect(input["id"]).To(Equal(inputs.ID(fmt.Sprintf("%s/%s", ns.Name, artifactName))))
 	}
 	g.Expect(exportedMap["dev-apps-auth"]["app"]).To(Equal("auth"))
 	g.Expect(exportedMap["dev-apps-payments"]["app"]).To(Equal("payments"))
@@ -383,8 +404,12 @@ func TestResourceSetInputProviderReconciler_ExternalArtifact_EdgeCases(t *testin
 		},
 		Spec: fluxcdv1.ResourceSetInputProviderSpec{
 			Type: fluxcdv1.InputProviderExternalArtifact,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{"env": "dev"},
+			Selectors: []fluxcdv1.ExternalArtifactSelector{
+				{
+					LabelSelector: metav1.LabelSelector{
+						MatchLabels: map[string]string{"env": "dev"},
+					},
+				},
 			},
 			Filter: &fluxcdv1.ResourceSetInputFilter{
 				Limit: 2,
@@ -413,8 +438,12 @@ func TestResourceSetInputProviderReconciler_ExternalArtifact_EdgeCases(t *testin
 		},
 		Spec: fluxcdv1.ResourceSetInputProviderSpec{
 			Type: fluxcdv1.InputProviderExternalArtifact,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{"env": "dev"},
+			Selectors: []fluxcdv1.ExternalArtifactSelector{
+				{
+					LabelSelector: metav1.LabelSelector{
+						MatchLabels: map[string]string{"env": "dev"},
+					},
+				},
 			},
 		},
 	}
@@ -453,8 +482,12 @@ func TestResourceSetInputProviderReconciler_ExternalArtifact_EdgeCases(t *testin
 		},
 		Spec: fluxcdv1.ResourceSetInputProviderSpec{
 			Type: fluxcdv1.InputProviderExternalArtifact,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{"env": "non-existent"},
+			Selectors: []fluxcdv1.ExternalArtifactSelector{
+				{
+					LabelSelector: metav1.LabelSelector{
+						MatchLabels: map[string]string{"env": "non-existent"},
+					},
+				},
 			},
 		},
 	}
@@ -490,8 +523,12 @@ func TestResourceSetInputProviderReconciler_ExternalArtifact_Watch(t *testing.T)
 		},
 		Spec: fluxcdv1.ResourceSetInputProviderSpec{
 			Type: fluxcdv1.InputProviderExternalArtifact,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{"env": "dev", "team": "platform"},
+			Selectors: []fluxcdv1.ExternalArtifactSelector{
+				{
+					LabelSelector: metav1.LabelSelector{
+						MatchLabels: map[string]string{"env": "dev", "team": "platform"},
+					},
+				},
 			},
 		},
 	}
@@ -519,4 +556,79 @@ func TestResourceSetInputProviderReconciler_ExternalArtifact_Watch(t *testing.T)
 
 	reqsNonMatching := reconciler.requestsForExternalArtifacts(ctx, nonMatchingArtifact)
 	g.Expect(reqsNonMatching).To(BeEmpty())
+}
+
+func TestResourceSetInputProviderReconciler_ExternalArtifact_MultiSelector_Reconcile(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceSetInputProviderReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ensureExternalArtifactCRD(ctx, t)
+
+	ns, err := testEnv.CreateNamespace(ctx, "test-ea-multi-ns")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	nsOther, err := testEnv.CreateNamespace(ctx, "test-ea-multi-ns-other")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Create ExternalArtifact objects in both namespaces.
+	g.Expect(testClient.Create(ctx, newExternalArtifact("auth-dev", ns.Name, map[string]string{"team": "platform", "env": "dev"}, "sha256:111"))).To(Succeed())
+	g.Expect(testClient.Create(ctx, newExternalArtifact("pay-prod", nsOther.Name, map[string]string{"team": "platform", "env": "prod"}, "sha256:222"))).To(Succeed())
+	g.Expect(testClient.Create(ctx, newExternalArtifact("auth-prod", nsOther.Name, map[string]string{"team": "platform", "env": "prod"}, "sha256:333"))).To(Succeed())
+
+	objDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSetInputProvider
+metadata:
+  name: test-ea-multi
+  namespace: "%[1]s"
+spec:
+  type: ExternalArtifact
+  selectors:
+  # Selector 1: in-namespace matching labels env:dev
+  - matchLabels:
+      env: dev
+  # Selector 2: specific namespace matching labels env:prod
+  - namespace: "%[2]s"
+    matchLabels:
+      env: prod
+  # Selector 3: specific namespace select by Name (auth-prod, also matched by selector 2, tests dedup)
+  - namespace: "%[2]s"
+    name: auth-prod
+`, ns.Name, nsOther.Name)
+
+	obj := &fluxcdv1.ResourceSetInputProvider{}
+	err = yaml.Unmarshal([]byte(objDef), obj)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(testEnv.Create(ctx, obj)).To(Succeed())
+
+	// Reconcile
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(obj)})
+	g.Expect(err).NotTo(HaveOccurred())
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(obj)})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	result := &fluxcdv1.ResourceSetInputProvider{}
+	g.Expect(testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)).To(Succeed())
+	g.Expect(conditions.IsReady(result)).To(BeTrue())
+
+	// Should have exactly 3 inputs: auth-dev (ns), pay-prod (nsOther), auth-prod (nsOther).
+	g.Expect(result.Status.ExportedInputs).To(HaveLen(3))
+
+	exportedMap := make(map[string]map[string]any)
+	for _, ei := range result.Status.ExportedInputs {
+		raw, merr := yaml.Marshal(ei)
+		g.Expect(merr).NotTo(HaveOccurred())
+		var parsed map[string]any
+		g.Expect(yaml.Unmarshal(raw, &parsed)).To(Succeed())
+		exportedMap[fmt.Sprintf("%s/%s", parsed["namespace"], parsed["name"])] = parsed
+	}
+
+	g.Expect(exportedMap).To(HaveKey(fmt.Sprintf("%s/auth-dev", ns.Name)))
+	g.Expect(exportedMap).To(HaveKey(fmt.Sprintf("%s/pay-prod", nsOther.Name)))
+	g.Expect(exportedMap).To(HaveKey(fmt.Sprintf("%s/auth-prod", nsOther.Name)))
+
+	// Check ID format namespace/name Adler-32
+	g.Expect(exportedMap[fmt.Sprintf("%s/auth-dev", ns.Name)]["id"]).To(Equal(inputs.ID(fmt.Sprintf("%s/auth-dev", ns.Name))))
 }

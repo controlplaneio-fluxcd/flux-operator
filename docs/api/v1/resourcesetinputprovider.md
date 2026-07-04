@@ -170,7 +170,7 @@ with the difference on the authentication method used to connect to the registry
 
 For ExternalArtifact the [exported inputs](#exported-inputs-status) structure is:
 
-- `id`: the Adler-32 checksum of the ExternalArtifact's namespaced name in the format `<namespace>+<name>` (type string).
+- `id`: the Adler-32 checksum of the ExternalArtifact's namespaced name in the format `<namespace>/<name>` (type string).
 - `name`: the name of the ExternalArtifact (type string).
 - `namespace`: the namespace of the ExternalArtifact (type string).
 - `revision`: the revision of the artifact as defined in the status `.status.artifact.revision` (type string, optional).
@@ -304,20 +304,45 @@ spec:
       - "tenant2"
 ```
 
-### Selector
+### Selectors
 
-The `.spec.selector` field specifies the label selector used to discover `ExternalArtifact` objects in the same namespace as the `ResourceSetInputProvider`.
+The `.spec.selectors` field specifies a list of selectors used to discover `ExternalArtifact` objects in the cluster.
 This field is required when `.spec.type` is `ExternalArtifact`, and must not be set for any other provider type.
+
+Each selector can specify:
+- `matchLabels` and `matchExpressions`: standard Kubernetes label selectors.
+- `name`: selects a single `ExternalArtifact` by its metadata name (mutually exclusive with `matchLabels` and `matchExpressions`).
+- `namespace`: scopes discovery to a specific namespace.
+  - When empty/omitted, discovery is scoped to the `ResourceSetInputProvider`'s namespace.
+  - When set to `*`, discovery is scoped across all namespaces in the cluster.
+  - Otherwise, discovery is scoped only to the specified namespace.
+
+> [!IMPORTANT]
+> When using `namespace: "*"` (all namespaces), the ServiceAccount used by the operator (or the one specified via `.spec.serviceAccountName`) must have cluster-wide list permissions on `ExternalArtifact` resources. Otherwise, reconciliation will fail with a forbidden error.
 
 Example:
 
 ```yaml
 spec:
   type: ExternalArtifact
-  selector:
-    matchLabels:
-      env: dev
-      team: platform
+  selectors:
+    # Match by label in the same namespace
+    - matchLabels:
+        env: dev
+        team: platform
+    # Match by label expression in a specific namespace
+    - namespace: apps
+      matchExpressions:
+        - key: team
+          operator: In
+          values: [platform, backend]
+    # Match a specific ExternalArtifact by name in a specific namespace
+    - namespace: apps
+      name: auth-prod
+    # Match across all namespaces in the cluster
+    - namespace: "*"
+      matchLabels:
+        generated-by: source-watcher
 ```
 
 ### Authentication configuration
@@ -432,6 +457,7 @@ The `.spec.serviceAccountName` field can only be used with the following provide
 - `ACRArtifactTag`
 - `ECRArtifactTag`
 - `GARArtifactTag`
+- `ExternalArtifact` (for impersonation while listing/getting custom resources)
 
 When this field is not present and one of the types above is specified (and, in the case of Azure
 DevOps, [`.spec.secretRef`](#secret-based) is also not specified), the operator will attempt
