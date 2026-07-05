@@ -5,14 +5,18 @@ package controller
 
 import (
 	"context"
+	cryptotls "crypto/tls"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
+	"github.com/fluxcd/pkg/runtime/secrets"
 	"github.com/google/go-containerregistry/pkg/authn"
 	kauth "github.com/google/go-containerregistry/pkg/authn/kubernetes"
+	"github.com/google/go-containerregistry/pkg/v1/remote"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	kuberecorder "k8s.io/client-go/tools/record"
@@ -132,4 +136,51 @@ func requeueArtifactAfter(obj *fluxcdv1.FluxInstance) ctrl.Result {
 		result.RequeueAfter = d
 	}
 	return result
+}
+
+// GetDistributionTransport clones the default transport from remote and when a certSecretRef is specified,
+// the returned transport will include the TLS client and/or CA certificates.
+// If the insecure flag is set, the transport will skip the verification of the server's certificate.
+// based off: https://github.com/fluxcd/source-controller/blob/39b711b111fa906c3db0a424e252a5d12e48646d/internal/controller/ocirepository_controller.go#L1010-L1014
+func GetDistributionTransport(ctx context.Context, kubeClient client.Client, obj *fluxcdv1.FluxInstance) (http.RoundTripper, error) {
+	transport := remote.DefaultTransport.(*http.Transport).Clone()
+
+	tlsConfig, err := getTLSConfig(ctx, obj, kubeClient)
+	if err != nil {
+		return nil, err
+	}
+	if tlsConfig != nil {
+		transport.TLSClientConfig = tlsConfig
+	}
+
+	return transport, nil
+}
+
+// getTLSConfig gets the TLS configuration for the transport based on the
+// specified secret reference in the FluxInstance object, or the insecure flag.
+// based off: https://github.com/fluxcd/source-controller/blob/39b711b111fa906c3db0a424e252a5d12e48646d/internal/controller/ocirepository_controller.go#L1032-L1034
+func getTLSConfig(ctx context.Context, obj *fluxcdv1.FluxInstance, kubeClient client.Client) (*cryptotls.Config, error) {
+	if obj.Spec.Distribution.CertSecretRef == nil || obj.Spec.Distribution.CertSecretRef.Name == "" {
+		if obj.Spec.Distribution.Insecure {
+			// NOTE: This is the only place in Flux where InsecureSkipVerify is allowed.
+			// This exception is made for OCIRepository to maintain backward compatibility
+			// with tools like crane that require insecure connections without certificates.
+			// This only applies when no CertSecretRef is provided AND insecure is explicitly set.
+			// All other controllers must NOT allow InsecureSkipVerify per our security policy.
+			return &cryptotls.Config{
+				InsecureSkipVerify: true,
+			}, nil
+		}
+		return nil, nil
+	}
+
+	secretName := types.NamespacedName{
+		Namespace: obj.Namespace,
+		Name:      obj.Spec.Distribution.CertSecretRef.Name,
+	}
+	// NOTE: Use WithSystemCertPool to maintain backward compatibility with the existing
+	// extend approach (system CAs + user CA) rather than the default replace approach (user CA only).
+	// This ensures source-controller continues to work with both system and user-provided CA certificates.
+	var tlsOpts = []secrets.TLSConfigOption{secrets.WithSystemCertPool()}
+	return secrets.TLSConfigFromSecretRef(ctx, kubeClient, secretName, tlsOpts...)
 }

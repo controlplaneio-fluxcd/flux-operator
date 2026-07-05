@@ -114,6 +114,25 @@ type Distribution struct {
 	// to use for pulling the Kubernetes manifests for the distribution specified in the Artifact field.
 	// +optional
 	ArtifactPullSecret string `json:"artifactPullSecret,omitempty"`
+
+	// CertSecretRef can be given the name of a Secret containing
+	// either or both of
+	//
+	// - a PEM-encoded client certificate (`tls.crt`) and private
+	// key (`tls.key`);
+	// - a PEM-encoded CA certificate (`ca.crt`)
+	//
+	// and whichever are supplied, will be used for connecting to the
+	// registry. The client cert and key are useful if you are
+	// authenticating with a certificate; the CA cert is useful if
+	// you are using a self-signed server certificate. The Secret must
+	// be of type `Opaque` or `kubernetes.io/tls`.
+	// +optional
+	CertSecretRef *meta.LocalObjectReference `json:"certSecretRef,omitempty"`
+
+	// Insecure allows connecting to a non-TLS HTTP container registry.
+	// +optional
+	Insecure bool `json:"insecure,omitempty"`
 }
 
 // Component is the name of a controller to install.

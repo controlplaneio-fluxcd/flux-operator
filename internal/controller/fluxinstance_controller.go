@@ -291,7 +291,11 @@ func (r *FluxInstanceReconciler) fetch(ctx context.Context,
 		if err != nil {
 			return "", "", err
 		}
-		artifactDigest, err := builder.PullArtifact(ctxPull, artifactURL, tmpDir, keyChain)
+		transport, err := GetDistributionTransport(ctxPull, r.Client, obj)
+		if err != nil {
+			return "", "", err
+		}
+		artifactDigest, err := builder.PullArtifact(ctxPull, artifactURL, tmpDir, keyChain, transport)
 		if err != nil {
 			return "", "", err
 		}
