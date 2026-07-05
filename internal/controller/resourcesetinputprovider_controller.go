@@ -1035,12 +1035,10 @@ func (r *ResourceSetInputProviderReconciler) callExternalArtifactProvider(
 		impersonatorOpts = append(impersonatorOpts,
 			runtimeClient.WithServiceAccount(r.DefaultServiceAccount, obj.Spec.ServiceAccountName, obj.GetNamespace()))
 		impersonation := runtimeClient.NewImpersonator(r.Client, impersonatorOpts...)
-		if impersonation.CanImpersonate(ctx) {
-			var err error
-			kubeClient, _, err = impersonation.GetClient(ctx)
-			if err != nil {
-				return nil, fmt.Errorf("failed to create impersonated client: %w", err)
-			}
+		var err error
+		kubeClient, _, err = impersonation.GetClient(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create impersonated client: %w", err)
 		}
 	}
 
@@ -1057,7 +1055,7 @@ func (r *ResourceSetInputProviderReconciler) callExternalArtifactProvider(
 				// List all namespaces and filter by name in Go
 				list := &unstructured.UnstructuredList{}
 				list.SetGroupVersionKind(externalArtifactListGVK)
-				if err := kubeClient.List(ctx, list); err != nil {
+				if err := kubeClient.List(ctx, list, client.UnsafeDisableDeepCopy); err != nil {
 					if apierrors.IsForbidden(err) {
 						return nil, fmt.Errorf("impersonated service account '%s' lacks permissions to list ExternalArtifacts across all namespaces: %w",
 							obj.Spec.ServiceAccountName, err)
@@ -1102,7 +1100,7 @@ func (r *ResourceSetInputProviderReconciler) callExternalArtifactProvider(
 			if ns != "*" {
 				listOpts = append(listOpts, client.InNamespace(ns))
 			}
-			listOpts = append(listOpts, client.MatchingLabelsSelector{Selector: labelSel})
+			listOpts = append(listOpts, client.MatchingLabelsSelector{Selector: labelSel}, client.UnsafeDisableDeepCopy)
 			if err := kubeClient.List(ctx, list, listOpts...); err != nil {
 				if apierrors.IsForbidden(err) {
 					return nil, fmt.Errorf("impersonated service account '%s' lacks permissions to list ExternalArtifacts in namespace '%s': %w",
