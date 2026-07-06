@@ -157,7 +157,6 @@ func GetDistributionTransport(ctx context.Context, kubeClient client.Client, obj
 
 // getTLSConfig gets the TLS configuration for the transport based on the
 // specified secret reference in the FluxInstance object, or the insecure flag.
-// based off: https://github.com/fluxcd/source-controller/blob/39b711b111fa906c3db0a424e252a5d12e48646d/internal/controller/ocirepository_controller.go#L1032-L1034
 func getTLSConfig(ctx context.Context, obj *fluxcdv1.FluxInstance, kubeClient client.Client) (*cryptotls.Config, error) {
 	if obj.Spec.Distribution.CertSecretRef == nil || obj.Spec.Distribution.CertSecretRef.Name == "" {
 		if obj.Spec.Distribution.Insecure {
