@@ -141,7 +141,6 @@ func requeueArtifactAfter(obj *fluxcdv1.FluxInstance) ctrl.Result {
 // GetDistributionTransport clones the default transport from remote and when a certSecretRef is specified,
 // the returned transport will include the TLS client and/or CA certificates.
 // If the insecure flag is set, the transport will skip the verification of the server's certificate.
-// based off: https://github.com/fluxcd/source-controller/blob/39b711b111fa906c3db0a424e252a5d12e48646d/internal/controller/ocirepository_controller.go#L1010-L1014
 func GetDistributionTransport(ctx context.Context, kubeClient client.Client, obj *fluxcdv1.FluxInstance) (http.RoundTripper, error) {
 	transport := remote.DefaultTransport.(*http.Transport).Clone()
 
