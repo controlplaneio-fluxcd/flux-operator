@@ -49,6 +49,7 @@ func TestMatchVersionWithEmbedded(t *testing.T) {
 		filepath.Join(candidateDir, "v2.2.0"),
 		filepath.Join(candidateDir, "v2.2.1"),
 		filepath.Join(candidateDir, "v2.3.0"),
+		filepath.Join(candidateDir, "v2.3.1"),
 		filepath.Join(candidateDir, "v2.4.0"),
 		filepath.Join(embeddedDir, "v2.2.1"),
 		filepath.Join(embeddedDir, "v2.3.0"),
@@ -63,9 +64,11 @@ func TestMatchVersionWithEmbedded(t *testing.T) {
 	}{
 		{name: "exact embedded", exp: "v2.3.0", expected: "v2.3.0"},
 		{name: "patch embedded", exp: "2.2.x", expected: "v2.2.1"},
-		{name: "minor ignores non-embedded newer candidate", exp: "2.x", expected: "v2.3.0"},
-		{name: "latest ignores non-embedded newer candidate", exp: "*", expected: "v2.3.0"},
-		{name: "exact not embedded", exp: "v2.4.0", expected: ""},
+		{name: "exact embedded minor", exp: "v2.3.1", expected: "v2.3.1"},
+		{name: "patch embedded minor", exp: "2.3.x", expected: "v2.3.1"},
+		{name: "minor ignores non-embedded newer minor", exp: "2.x", expected: "v2.3.1"},
+		{name: "latest ignores non-embedded newer minor", exp: "*", expected: "v2.3.1"},
+		{name: "exact unsupported minor", exp: "v2.4.0", expected: ""},
 	}
 
 	for _, tt := range tests {

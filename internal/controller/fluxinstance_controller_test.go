@@ -636,17 +636,17 @@ func TestFluxInstanceReconciler_BuildFail(t *testing.T) {
 	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 }
 
-func TestFluxInstanceReconciler_BuildUsesArtifactForEmbeddedVersion(t *testing.T) {
+func TestFluxInstanceReconciler_BuildUsesArtifactPatchForEmbeddedMinor(t *testing.T) {
 	g := NewWithT(t)
 	const fakeDigest = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
 	baseDir := t.TempDir()
 	artifactDir := filepath.Join(baseDir, "artifact")
 	storageDir := filepath.Join(baseDir, "storage")
-	copyDir(t, filepath.Join("..", "..", "config", "data", "flux", "v2.3.0"), filepath.Join(artifactDir, "flux", "v2.3.0"))
+	copyDir(t, filepath.Join("..", "..", "config", "data", "flux", "v2.3.0"), filepath.Join(artifactDir, "flux", "v2.3.1"))
 	copyDir(t, filepath.Join("..", "..", "config", "data", "flux", "v2.9.0"), filepath.Join(artifactDir, "flux", "v2.9.0"))
 	copyDir(t, filepath.Join("..", "..", "config", "data", "flux", "v2.3.0"), filepath.Join(storageDir, "flux", "v2.3.0"))
-	writeSourceControllerImagePatch(t, filepath.Join(artifactDir, "flux-images", "v2.3.0", "upstream-alpine.yaml"), fakeDigest)
+	writeSourceControllerImagePatch(t, filepath.Join(artifactDir, "flux-images", "v2.3.1", "upstream-alpine.yaml"), fakeDigest)
 
 	reconciler := getFluxInstanceReconciler(t)
 	reconciler.StoragePath = storageDir
@@ -664,7 +664,7 @@ func TestFluxInstanceReconciler_BuildUsesArtifactForEmbeddedVersion(t *testing.T
 
 	result, err := reconciler.build(context.Background(), obj, artifactDir)
 	g.Expect(err).NotTo(HaveOccurred())
-	g.Expect(result.Version).To(Equal("v2.3.0"))
+	g.Expect(result.Version).To(Equal("v2.3.1"))
 	var sourceControllerDigest string
 	for _, img := range result.ComponentImages {
 		if img.Name == "source-controller" {
