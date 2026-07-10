@@ -115,6 +115,34 @@ Install the Flux Operator and a Flux instance from a configuration file:
 flux-operator install -f flux-instance.yaml
 ```
 
+For air-gapped bootstrap with the Flux Operator CLI container image, mount a
+FluxInstance YAML that omits `spec.distribution.artifact`, use the install
+manifest embedded in the image, and provide a local OCIRepository manifest when
+the auto-update source needs custom fields such as `insecure` or `certSecretRef`:
+
+```shell
+flux-operator install \
+  --install-file=/install-file.yaml \
+  --auto-update-oci-repository-file=/etc/flux-config/auto-update-oci-repository.yaml \
+  -f /etc/flux-config/flux-instance.yaml
+```
+
+Example content for `auto-update-oci-repository.yaml`:
+
+```yaml
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: flux-operator
+  namespace: flux-system
+spec:
+  interval: 1h
+  url: oci://registry.internal/flux-operator-manifests
+  ref:
+    tag: latest
+  insecure: true
+```
+
 ### Kubectl
 
 The Flux Operator can be installed with `kubectl` by

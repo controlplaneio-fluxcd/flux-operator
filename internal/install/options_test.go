@@ -25,6 +25,7 @@ func TestMakeOptions_Defaults(t *testing.T) {
 	g.Expect(opts.Namespace()).To(Equal(DefaultNamespace))
 	g.Expect(opts.TerminationTimeout()).To(Equal(DefaultTerminationTimeout))
 	g.Expect(opts.Credentials()).To(BeEmpty())
+	g.Expect(opts.AutoUpdateOCIRepository()).To(BeEmpty())
 }
 
 func TestMakeOptions_CustomValues(t *testing.T) {
@@ -35,10 +36,12 @@ func TestMakeOptions_CustomValues(t *testing.T) {
 	owner := "my-cli"
 	ns := "custom-ns"
 	timeout := 60 * time.Second
+	autoUpdateOCIRepository := "apiVersion: source.toolkit.fluxcd.io/v1\nkind: OCIRepository\n"
 
 	opts, err := MakeOptions(
 		WithArtifactURL(url),
 		WithCredentials(creds),
+		WithAutoUpdateOCIRepository(autoUpdateOCIRepository),
 		WithOwner(owner),
 		WithNamespace(ns),
 		WithTerminationTimeout(timeout),
@@ -46,6 +49,7 @@ func TestMakeOptions_CustomValues(t *testing.T) {
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(opts.ArtifactURL()).To(Equal(url))
 	g.Expect(opts.Credentials()).To(Equal(creds))
+	g.Expect(opts.AutoUpdateOCIRepository()).To(Equal(autoUpdateOCIRepository))
 	g.Expect(opts.Owner()).To(Equal(owner))
 	g.Expect(opts.Namespace()).To(Equal(ns))
 	g.Expect(opts.TerminationTimeout()).To(Equal(timeout))
