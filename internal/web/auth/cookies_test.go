@@ -132,7 +132,7 @@ func TestSetAuthProviderCookie(t *testing.T) {
 	g := NewWithT(t)
 
 	rec := httptest.NewRecorder()
-	setAuthProviderCookie(rec, "OIDC", "/oauth2/authorize", true)
+	setAuthProviderCookie(rec, "OIDC", "/oauth2/authorize", true, false)
 
 	cookies := rec.Result().Cookies()
 	g.Expect(cookies).To(HaveLen(1))
@@ -152,16 +152,68 @@ func TestSetAuthProviderCookie(t *testing.T) {
 	g.Expect(result["authenticated"]).To(BeTrue())
 }
 
+func TestSetAuthProviderCookie_AutoLogin(t *testing.T) {
+	g := NewWithT(t)
+
+	rec := httptest.NewRecorder()
+	setAuthProviderCookie(rec, "OIDC", "/oauth2/authorize", false, true)
+
+	cookies := rec.Result().Cookies()
+	g.Expect(cookies).To(HaveLen(1))
+
+	decoded, err := base64.RawURLEncoding.DecodeString(cookies[0].Value)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	var result map[string]any
+	err = json.Unmarshal(decoded, &result)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(result["autoLogin"]).To(BeTrue())
+}
+
+func TestSetAuthProviderCookie_AutoLoginFalse(t *testing.T) {
+	g := NewWithT(t)
+
+	rec := httptest.NewRecorder()
+	setAuthProviderCookie(rec, "OIDC", "/oauth2/authorize", false, false)
+
+	decoded, err := base64.RawURLEncoding.DecodeString(rec.Result().Cookies()[0].Value)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	var result map[string]any
+	err = json.Unmarshal(decoded, &result)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(result["autoLogin"]).To(BeFalse())
+}
+
+func TestSetAuthLogoutCookie(t *testing.T) {
+	g := NewWithT(t)
+
+	rec := httptest.NewRecorder()
+	setAuthLogoutCookie(rec)
+
+	cookies := rec.Result().Cookies()
+	g.Expect(cookies).To(HaveLen(1))
+	g.Expect(cookies[0].Name).To(Equal(cookieNameAuthLogout))
+
+	decoded, err := base64.RawURLEncoding.DecodeString(cookies[0].Value)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	var result map[string]any
+	err = json.Unmarshal(decoded, &result)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(result["suppressAutoLogin"]).To(BeTrue())
+}
+
 func TestSetAuthProviderCookie_ClearsExisting(t *testing.T) {
 	g := NewWithT(t)
 
 	rec := httptest.NewRecorder()
 
 	// Set first cookie
-	setAuthProviderCookie(rec, "First", "/first", false)
+	setAuthProviderCookie(rec, "First", "/first", false, false)
 
 	// Set second cookie (should clear first)
-	setAuthProviderCookie(rec, "Second", "/second", true)
+	setAuthProviderCookie(rec, "Second", "/second", true, false)
 
 	cookies := rec.Result().Cookies()
 	// Should only have one auth-provider cookie

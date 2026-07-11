@@ -16,6 +16,7 @@ import (
 
 const (
 	cookieNameAuthError        = "auth-error"
+	cookieNameAuthLogout       = "auth-logout"
 	cookieNameAuthProvider     = "auth-provider"
 	cookieNameAuthStorage      = "auth-storage"
 	cookieNameOAuth2LoginState = "oauth2-state"
@@ -80,20 +81,29 @@ func setAuthErrorCookie(w http.ResponseWriter, err error) {
 	})
 }
 
+// setAuthLogoutCookie sets a cookie that tells the login page to skip auto-login
+// after an explicit user logout.
+func setAuthLogoutCookie(w http.ResponseWriter) {
+	setCookie(w, cookieNameAuthLogout, map[string]any{
+		"suppressAutoLogin": true,
+	})
+}
+
 // setAuthProviderCookie sets the auth provider cookie in the response.
 // It first clears any existing auth provider cookie to avoid duplicates.
-func setAuthProviderCookie(w http.ResponseWriter, provider, loginURL string, authenticated bool) {
+func setAuthProviderCookie(w http.ResponseWriter, provider, loginURL string, authenticated, autoLogin bool) {
 	clearCookieFromResponse(w, cookieNameAuthProvider)
 	setCookie(w, cookieNameAuthProvider, map[string]any{
 		"provider":      provider,
 		"url":           loginURL,
 		"authenticated": authenticated,
+		"autoLogin":     autoLogin,
 	})
 }
 
 // SetAnonymousAuthProviderCookie sets the anonymous auth provider cookie in the response.
 func SetAnonymousAuthProviderCookie(w http.ResponseWriter) {
-	setAuthProviderCookie(w, fluxcdv1.AuthenticationTypeAnonymous, "", true)
+	setAuthProviderCookie(w, fluxcdv1.AuthenticationTypeAnonymous, "", true, false)
 }
 
 // authStorage holds the authentication information stored in cookies.

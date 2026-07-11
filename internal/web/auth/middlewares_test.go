@@ -76,6 +76,7 @@ func TestLogoutHandling(t *testing.T) {
 						return
 					}
 					deleteAuthStorage(w)
+					setAuthLogoutCookie(w)
 					http.Redirect(w, r, "/", http.StatusSeeOther)
 				default:
 					next.ServeHTTP(w, r)
@@ -107,6 +108,22 @@ func TestLogoutHandling(t *testing.T) {
 			}
 		}
 		g.Expect(storageDeleted).To(BeTrue())
+
+		var logoutCookie *http.Cookie
+		for _, c := range cookies {
+			if c.Name == cookieNameAuthLogout {
+				logoutCookie = c
+				break
+			}
+		}
+		g.Expect(logoutCookie).NotTo(BeNil())
+
+		decoded, err := base64.RawURLEncoding.DecodeString(logoutCookie.Value)
+		g.Expect(err).NotTo(HaveOccurred())
+		var result map[string]any
+		err = json.Unmarshal(decoded, &result)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(result["suppressAutoLogin"]).To(BeTrue())
 	})
 
 	t.Run("GET /logout returns 405 Method Not Allowed", func(t *testing.T) {
@@ -121,6 +138,7 @@ func TestLogoutHandling(t *testing.T) {
 						return
 					}
 					deleteAuthStorage(w)
+					setAuthLogoutCookie(w)
 					http.Redirect(w, r, "/", http.StatusSeeOther)
 				default:
 					next.ServeHTTP(w, r)

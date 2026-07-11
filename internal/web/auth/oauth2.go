@@ -481,7 +481,8 @@ func (o *oauth2Authenticator) setAuthProvider(w http.ResponseWriter, authenticat
 	setAuthProviderCookie(w,
 		o.conf.Authentication.OAuth2.Provider,
 		o.conf.BaseURL+oauth2PathAuthorize,
-		authenticated)
+		authenticated,
+		o.conf.Authentication.OAuth2.AutoLogin)
 }
 
 // oauth2LoginState holds the OAuth2 login state information.

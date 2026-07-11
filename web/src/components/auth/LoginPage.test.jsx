@@ -10,6 +10,7 @@ import * as cookies from '../../utils/cookies'
 vi.mock('../../utils/cookies', () => ({
   parseAuthProviderCookie: vi.fn(),
   parseAuthErrorCookie: vi.fn(),
+  parseAuthLogoutCookie: vi.fn(),
   deleteCookie: vi.fn()
 }))
 
@@ -50,6 +51,7 @@ describe('LoginPage', () => {
       authenticated: false
     })
     cookies.parseAuthErrorCookie.mockReturnValue(null)
+    cookies.parseAuthLogoutCookie.mockReturnValue(null)
   })
 
   afterEach(() => {
@@ -384,6 +386,119 @@ describe('LoginPage', () => {
         const loginIcon = document.querySelector('button svg[viewBox="0 0 20 20"]')
         expect(loginIcon).toBeInTheDocument()
       })
+    })
+  })
+
+  describe('Auto Login', () => {
+    it('should redirect automatically when autoLogin is enabled', async () => {
+      cookies.parseAuthProviderCookie.mockReturnValue({
+        provider: 'oidc',
+        url: 'http://localhost:9080/oauth2/authorize',
+        authenticated: false,
+        autoLogin: true
+      })
+      window.location.pathname = '/favorites'
+      window.location.search = ''
+
+      render(<LoginPage />)
+
+      await waitFor(() => {
+        expect(window.location.href).toContain('http://localhost:9080/oauth2/authorize')
+        expect(window.location.href).toContain('originalPath=%2Ffavorites')
+      })
+    })
+
+    it('should not redirect automatically when autoLogin is disabled', async () => {
+      cookies.parseAuthProviderCookie.mockReturnValue({
+        provider: 'oidc',
+        url: 'http://localhost:9080/oauth2/authorize',
+        authenticated: false,
+        autoLogin: false
+      })
+
+      render(<LoginPage />)
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Continue with SSO/ })).toBeInTheDocument()
+      })
+      expect(window.location.href).toBe('')
+    })
+
+    it('should not redirect automatically when auth-error cookie is present', async () => {
+      cookies.parseAuthProviderCookie.mockReturnValue({
+        provider: 'oidc',
+        url: 'http://localhost:9080/oauth2/authorize',
+        authenticated: false,
+        autoLogin: true
+      })
+      cookies.parseAuthErrorCookie.mockReturnValue({
+        msg: 'Access denied'
+      })
+
+      render(<LoginPage />)
+
+      await waitFor(() => {
+        expect(screen.getByText('Access denied')).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /Continue with SSO/ })).toBeInTheDocument()
+      })
+      expect(window.location.href).toBe('')
+    })
+
+    it('should not redirect automatically after explicit logout', async () => {
+      cookies.parseAuthProviderCookie.mockReturnValue({
+        provider: 'oidc',
+        url: 'http://localhost:9080/oauth2/authorize',
+        authenticated: false,
+        autoLogin: true
+      })
+      cookies.parseAuthLogoutCookie.mockReturnValue({ suppressAutoLogin: true })
+
+      render(<LoginPage />)
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Continue with SSO/ })).toBeInTheDocument()
+      })
+      expect(cookies.deleteCookie).not.toHaveBeenCalledWith('auth-logout')
+      expect(window.location.href).toBe('')
+    })
+
+    it('should keep suppressing auto-login across remounts until sign in', async () => {
+      cookies.parseAuthProviderCookie.mockReturnValue({
+        provider: 'oidc',
+        url: 'http://localhost:9080/oauth2/authorize',
+        authenticated: false,
+        autoLogin: true
+      })
+      cookies.parseAuthLogoutCookie.mockReturnValue({ suppressAutoLogin: true })
+
+      const { unmount } = render(<LoginPage />)
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Continue with SSO/ })).toBeInTheDocument()
+      })
+      unmount()
+
+      render(<LoginPage />)
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Continue with SSO/ })).toBeInTheDocument()
+      })
+      expect(window.location.href).toBe('')
+    })
+
+    it('should clear auth-logout cookie when user clicks sign in', async () => {
+      cookies.parseAuthProviderCookie.mockReturnValue({
+        provider: 'oidc',
+        url: 'http://localhost:9080/oauth2/authorize',
+        authenticated: false,
+        autoLogin: true
+      })
+      cookies.parseAuthLogoutCookie.mockReturnValue({ suppressAutoLogin: true })
+
+      render(<LoginPage />)
+
+      const button = await screen.findByRole('button', { name: /Continue with SSO/ })
+      fireEvent.click(button)
+
+      expect(cookies.deleteCookie).toHaveBeenCalledWith('auth-logout')
     })
   })
 
