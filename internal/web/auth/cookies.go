@@ -93,13 +93,12 @@ func setAuthLogoutCookie(w http.ResponseWriter) {
 // It first clears any existing auth provider cookie to avoid duplicates.
 func setAuthProviderCookie(w http.ResponseWriter, provider, loginURL string, authenticated, autoLogin bool) {
 	clearCookieFromResponse(w, cookieNameAuthProvider)
-	payload := map[string]any{
+	setCookie(w, cookieNameAuthProvider, map[string]any{
 		"provider":      provider,
 		"url":           loginURL,
 		"authenticated": authenticated,
 		"autoLogin":     autoLogin,
-	}
-	setCookie(w, cookieNameAuthProvider, payload)
+	})
 }
 
 // SetAnonymousAuthProviderCookie sets the anonymous auth provider cookie in the response.
