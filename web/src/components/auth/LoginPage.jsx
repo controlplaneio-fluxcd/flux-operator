@@ -2,9 +2,29 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { useEffect, useState } from 'preact/hooks'
-import { parseAuthProviderCookie, parseAuthErrorCookie, deleteCookie } from '../../utils/cookies'
+import { parseAuthProviderCookie, parseAuthErrorCookie, parseAuthLogoutCookie, deleteCookie } from '../../utils/cookies'
 import { usePageMeta } from '../../utils/meta'
 import { FluxOperatorIcon, OpenIDIcon } from '../layout/Icons'
+
+/**
+ * Build the OAuth2 authorize URL with the original path preserved for post-login redirect.
+ * @param {string} providerURL - Absolute or relative authorize URL from the auth-provider cookie
+ * @param {string} path - Path to return to after authentication
+ * @returns {string|null}
+ */
+function buildLoginUrl(providerURL, path) {
+  if (!providerURL || !path) return null
+  try {
+    // Try as absolute URL first (external IDP), fall back to relative (local proxy)
+    const loginUrl = providerURL.startsWith('http')
+      ? new window.URL(providerURL)
+      : new window.URL(providerURL, window.location.origin)
+    loginUrl.searchParams.set('originalPath', path)
+    return loginUrl.toString()
+  } catch {
+    return null
+  }
+}
 
 /**
  * LoginPage component - Authentication required page
@@ -16,6 +36,10 @@ import { FluxOperatorIcon, OpenIDIcon } from '../layout/Icons'
  * - Error messages from auth-error cookie (if any)
  * - Login button that redirects to OIDC provider
  * - Link to documentation
+ *
+ * When autoLogin is enabled in the auth-provider cookie, unauthenticated users
+ * are redirected straight to the OIDC provider (same as clicking the button),
+ * except after an explicit logout (auth-logout cookie) or auth error.
  */
 export function LoginPage() {
   usePageMeta('Login', 'Sign in to monitor your GitOps pipelines')
@@ -29,11 +53,6 @@ export function LoginPage() {
   useEffect(() => {
     // Parse auth-provider cookie
     const provider = parseAuthProviderCookie()
-    setAuthProvider(provider)
-
-    if (!provider) {
-      setCookieError('Authentication configuration unavailable. Please contact your administrator.')
-    }
 
     // Parse and clear auth-error cookie
     const error = parseAuthErrorCookie()
@@ -41,6 +60,16 @@ export function LoginPage() {
       setAuthError(error)
       deleteCookie('auth-error')
     }
+
+    // Parse auth-logout cookie (set after explicit user logout).
+    // Keep it until the user explicitly chooses to sign in.
+    const logout = parseAuthLogoutCookie()
+
+    if (!provider) {
+      setCookieError('Authentication configuration unavailable. Please contact your administrator.')
+      return
+    }
+    setAuthProvider(provider)
 
     // Get original path from sessionStorage (set by logout) or current location
     let storedPath = window.sessionStorage.getItem('flux-originalPath')
@@ -50,26 +79,24 @@ export function LoginPage() {
       storedPath = window.location.pathname + window.location.search
     }
     setOriginalPath(storedPath)
+
+    // Auto-login: skip the login page when configured and there is no auth error
+    // or explicit logout (user must click the button to sign in again).
+    if (provider.autoLogin === true && provider.url && storedPath && !error && !logout) {
+      const loginUrl = buildLoginUrl(provider.url, storedPath)
+      if (loginUrl) {
+        setIsLoading(true)
+        window.location.href = loginUrl
+      }
+    }
   }, [])
 
-  // Build login URL with originalPath
-  const getLoginUrl = () => {
-    if (!authProvider?.url || !originalPath) return null
-    try {
-      // Try as absolute URL first (external IDP), fall back to relative (local proxy)
-      const loginUrl = authProvider.url.startsWith('http')
-        ? new window.URL(authProvider.url)
-        : new window.URL(authProvider.url, window.location.origin)
-      loginUrl.searchParams.set('originalPath', originalPath)
-      return loginUrl.toString()
-    } catch {
-      return null
-    }
-  }
+  const getLoginUrl = () => buildLoginUrl(authProvider?.url, originalPath)
 
   const handleLogin = () => {
     const loginUrl = getLoginUrl()
     if (loginUrl) {
+      deleteCookie('auth-logout')
       setIsLoading(true)
       window.location.href = loginUrl
     }

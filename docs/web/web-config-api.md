@@ -91,6 +91,10 @@ spec:
         access_type: offline
         prompt: consent
 
+      # Optional: redirect unauthenticated users straight to the OIDC provider
+      # instead of showing the login page. Default: false.
+      autoLogin: false
+
       # CEL expressions to extract information from the ID token claims
       # into named variables that can be reused in other expressions.
       variables: # Optional
@@ -209,6 +213,10 @@ spec:
       authURLParams:
         access_type: offline
         prompt: consent
+
+      # Optional: skip the login page and redirect to the OIDC provider
+      # immediately. Useful for SSO-only setups. Default: false.
+      autoLogin: false
 ```
 
 The default scopes requested are `openid`, `offline_access`, `profile`, `email` and `groups`.

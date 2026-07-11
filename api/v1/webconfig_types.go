@@ -241,6 +241,11 @@ type OAuth2AuthenticationSpec struct {
 	// +optional
 	AuthURLParams map[string]string `json:"authURLParams"`
 
+	// AutoLogin redirects unauthenticated users straight to the OAuth2
+	// provider instead of showing the login page. Default: false.
+	// +optional
+	AutoLogin bool `json:"autoLogin,omitempty"`
+
 	// IssuerURL is used for OIDC provider discovery.
 	// Required for the OIDC provider.
 	// Used only by the OIDC provider.

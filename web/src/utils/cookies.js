@@ -44,7 +44,7 @@ export function deleteCookie(name) {
 /**
  * Parse the auth-provider cookie
  * @returns {Object|null} - Parsed auth provider object or null if invalid
- * Expected format: { provider: string, url: string, authenticated: boolean }
+ * Expected format: { provider: string, url: string, authenticated: boolean, autoLogin?: boolean }
  */
 export function parseAuthProviderCookie() {
   const value = getCookie('auth-provider')
@@ -57,6 +57,9 @@ export function parseAuthProviderCookie() {
     const parsed = JSON.parse(decoded)
     // Validate required fields
     if (typeof parsed.provider !== 'string' || typeof parsed.url !== 'string' || typeof parsed.authenticated !== 'boolean') {
+      return null
+    }
+    if (parsed.autoLogin !== undefined && typeof parsed.autoLogin !== 'boolean') {
       return null
     }
     return parsed
@@ -81,6 +84,28 @@ export function parseAuthErrorCookie() {
     const parsed = JSON.parse(decoded)
     // Validate required fields
     if (typeof parsed.msg !== 'string') {
+      return null
+    }
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Parse the auth-logout cookie set after an explicit user logout.
+ * @returns {Object|null} - Parsed logout object or null if invalid
+ * Expected format: { suppressAutoLogin: true }
+ */
+export function parseAuthLogoutCookie() {
+  const value = getCookie('auth-logout')
+  if (!value) {
+    return null
+  }
+  try {
+    const decoded = decodeBase64Url(value)
+    const parsed = JSON.parse(decoded)
+    if (parsed.suppressAutoLogin !== true) {
       return null
     }
     return parsed

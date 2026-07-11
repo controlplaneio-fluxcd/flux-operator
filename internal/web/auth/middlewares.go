@@ -77,6 +77,7 @@ func NewMiddleware(conf *fluxcdv1.WebConfigSpec, kubeClient *kubeclient.Client,
 					return
 				}
 				deleteAuthStorage(w)
+				setAuthLogoutCookie(w)
 				http.Redirect(w, r, "/", http.StatusSeeOther)
 			default:
 				// Inject logger into context.

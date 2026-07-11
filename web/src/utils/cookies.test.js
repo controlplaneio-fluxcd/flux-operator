@@ -6,6 +6,7 @@ import {
   deleteCookie,
   parseAuthProviderCookie,
   parseAuthErrorCookie,
+  parseAuthLogoutCookie,
   isOIDCProvider
 } from './cookies'
 
@@ -158,6 +159,32 @@ describe('cookies utilities', () => {
       expect(result.authenticated).toBe(false)
     })
 
+    it('should parse optional autoLogin field', () => {
+      const payload = {
+        provider: 'oidc',
+        url: 'https://auth.example.com/login',
+        authenticated: false,
+        autoLogin: true
+      }
+      const encoded = encodeBase64Url(JSON.stringify(payload))
+      document.cookie = `auth-provider=${encoded}`
+
+      expect(parseAuthProviderCookie()).toEqual(payload)
+    })
+
+    it('should return null when autoLogin is not a boolean', () => {
+      const payload = {
+        provider: 'oidc',
+        url: 'https://auth.example.com/login',
+        authenticated: false,
+        autoLogin: 'yes'
+      }
+      const encoded = encodeBase64Url(JSON.stringify(payload))
+      document.cookie = `auth-provider=${encoded}`
+
+      expect(parseAuthProviderCookie()).toBeNull()
+    })
+
     it('should handle base64url special characters (- and _)', () => {
       // Create a payload that produces base64 with + and / characters
       const payload = { provider: 'oidc', url: 'https://auth.example.com/login?redirect=/', authenticated: true }
@@ -209,6 +236,29 @@ describe('cookies utilities', () => {
       document.cookie = `auth-error=${encoded}`
 
       expect(parseAuthErrorCookie()).toBeNull()
+    })
+  })
+
+  describe('parseAuthLogoutCookie', () => {
+    it('should return null when cookie does not exist', () => {
+      document.cookie = ''
+      expect(parseAuthLogoutCookie()).toBeNull()
+    })
+
+    it('should parse valid auth-logout cookie', () => {
+      const payload = { suppressAutoLogin: true }
+      const encoded = encodeBase64Url(JSON.stringify(payload))
+      document.cookie = `auth-logout=${encoded}`
+
+      expect(parseAuthLogoutCookie()).toEqual(payload)
+    })
+
+    it('should return null when suppressAutoLogin is not true', () => {
+      const payload = { suppressAutoLogin: false }
+      const encoded = encodeBase64Url(JSON.stringify(payload))
+      document.cookie = `auth-logout=${encoded}`
+
+      expect(parseAuthLogoutCookie()).toBeNull()
     })
   })
 
