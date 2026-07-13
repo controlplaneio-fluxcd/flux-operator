@@ -72,9 +72,9 @@ jobs:
           go-version: 1.26.x
           cache: false
       - name: Setup Flux CLI
-        uses: fluxcd/flux2/action@dcc7def046cba2fe8d15d9737a4c250100f62fe0 #v2.9.0
+        uses: fluxcd/flux2/action@f05a280b876a3a1d35a76a91f701e605777853aa #v2.9.1
       - name: Setup Flux Schema CLI
-        uses: fluxcd/flux-schema/actions/setup@57f8dc73de6e689cd661a55a74ca94542843480a # v0.7.2
+        uses: fluxcd/flux-schema/actions/setup@e630a8b9e7f7113849a74c1167e9fb4357f3318d # v0.9.0
       - name: Setup Syft
         uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
       - name: Prepare
