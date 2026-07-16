@@ -158,7 +158,7 @@ to the namespaces the user can access.
 
 **Least privilege benefit:**
 The report is the backbone of the Web UI dashboard. Building it requires
-cross-namespace visibility that no single user is guaranteed to have —
+cross-namespace visibility that no single user is guaranteed to have -
 especially in multi-tenant clusters. The privileged scan exposes summarized
 reconciler data (counts, readiness percentages, status summaries) and
 inventory-derived workload reference (kind, namespace, name, apiVersion, and
@@ -230,6 +230,36 @@ Users do not need cluster-wide `list` permissions on namespaces just to populate
 
 ---
 
+## 9. User Action Visibility
+
+**Where:** Flux resource and workload detail pages - reconcile, suspend/resume, download, restart, run job, and view-logs action buttons.
+
+**Internal operation:**
+The backend exposes whether user actions are globally available and which specific verbs the authenticated user may perform. No new elevated paths are introduced; this section documents UI discoverability only.
+
+**How it works:**
+When `.spec.authentication` is configured, the Web UI enables user actions and evaluates RBAC per verb via `SelfSubjectAccessReview`. API responses include:
+
+- `status.userActionsEnabled` on Flux resources (`GET /api/v1/resource`)
+- `workloadInfo.userActionsEnabled` on workloads (`GET /api/v1/workload`)
+- `spec.userInfo.userActionsEnabled` on the cluster report (`GET /api/v1/report`)
+
+When authentication is **not** configured, `userActionsEnabled` is `false` and `userActions` is omitted. When authentication is configured, `userActionsEnabled` is `true` and `userActions` lists only the verbs the user is allowed to perform (omitted when empty).
+
+The frontend shows all kind-applicable action buttons even when the user cannot execute them. Buttons are **disabled** (not hidden) with tooltips:
+
+- `"Authentication is not configured"` when `userActionsEnabled` is `false`
+- `"You don't have permission to <action>"` when auth is enabled but the verb is missing from `userActions`
+
+Resource state (for example reconciliation in progress or suspended) can also disable buttons when the user has permission; auth-not-configured tooltips take priority over state-specific messages so demo deployments can advertise capabilities consistently.
+
+Action execution remains gated server-side: `POST /api/v1/resource/action`, `POST /api/v1/workload/action`, and artifact download endpoints re-check RBAC and return `403` when denied.
+
+**Least privilege benefit:**
+Disabled buttons improve discoverability without weakening enforcement. Users see what the Web UI can do before authentication and RBAC are fully configured, while administrators still assign only the custom action verbs each tenant needs.
+
+---
+
 ## Summary
 
 | # | Feature                     | Internal Operation                                 | Data Exposed to User                                                          |
@@ -242,3 +272,4 @@ Users do not need cluster-wide `list` permissions on namespaces just to populate
 | 6 | Controller metrics          | System reads metrics API                           | CPU/memory usage of Flux controllers                                          |
 | 7 | Fine-Grained GitOps Actions | System patches resource                            | None (server-side mutation only)                                              |
 | 8 | Namespace visibility        | Wrapper lists namespaces with privileged base client | Visible namespace names after RBAC filtering                                  |
+| 9 | User action visibility      | None (UI reads `userActionsEnabled` and `userActions` from API) | Disabled action buttons with auth/permission tooltips; no extra cluster data |

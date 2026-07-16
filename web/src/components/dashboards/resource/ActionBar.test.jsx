@@ -4,7 +4,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/preact'
 import userEvent from '@testing-library/user-event'
-import { ActionBar } from './ActionBar'
+import { ActionBar, hasResourceActionBarContent } from './ActionBar'
 
 // Mock the fetchWithMock function
 vi.mock('../../../utils/fetch', () => ({
@@ -761,5 +761,27 @@ describe('ActionBar component', () => {
 
       expect(screen.getByTestId('reconcile-button')).not.toBeDisabled()
     })
+  })
+})
+
+describe('hasResourceActionBarContent', () => {
+  it('returns true for kinds with reconcile and suspend support', () => {
+    expect(hasResourceActionBarContent('Kustomization', { status: {} })).toBe(true)
+  })
+
+  it('returns true for ExternalArtifact because reconcile is supported', () => {
+    expect(hasResourceActionBarContent('ExternalArtifact', { status: {} })).toBe(true)
+  })
+
+  it('returns true for source kinds with an artifact URL', () => {
+    expect(hasResourceActionBarContent('GitRepository', {
+      status: { artifact: { url: 'http://example/artifact.tar.gz' } }
+    })).toBe(true)
+  })
+
+  it('returns true for ArtifactGenerator with inventory entries', () => {
+    expect(hasResourceActionBarContent('ArtifactGenerator', {
+      status: { inventory: [{ name: 'artifact-1', namespace: 'flux-system' }] }
+    })).toBe(true)
   })
 })

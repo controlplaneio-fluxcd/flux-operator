@@ -100,6 +100,22 @@ describe('WorkloadLogsAction component', () => {
     expect(screen.queryByTestId('logs-viewer-mock')).not.toBeInTheDocument()
   })
 
+  it('opens deep link after pods arrive on a later render', async () => {
+    window.history.replaceState(null, '', '/workload/Deployment/flux-system/my-workload?logs=*')
+    const podsLater = [{
+      name: 'app-abc',
+      status: 'Running',
+      podStatus: { containerStatuses: [{ name: 'main' }] }
+    }]
+    const { rerender } = render(<WorkloadLogsAction {...defaultProps} pods={[]} />)
+
+    expect(screen.queryByTestId('logs-viewer-mock')).not.toBeInTheDocument()
+
+    rerender(<WorkloadLogsAction {...defaultProps} pods={podsLater} />)
+
+    expect(await screen.findByTestId('logs-viewer-mock')).toBeInTheDocument()
+  })
+
   it('opens the viewer on the All pods view when the button is clicked', async () => {
     const user = userEvent.setup()
     render(<WorkloadLogsAction {...defaultProps} />)

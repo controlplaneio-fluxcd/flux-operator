@@ -45,6 +45,8 @@ export function getActionTooltip({
   stateReason,
   enabledTitle
 }) {
+  // Auth-not-configured takes priority over permission and state tooltips so
+  // demo/staging deployments can advertise capabilities consistently (#959).
   if (!userActionsEnabled) {
     return AUTH_NOT_CONFIGURED_TOOLTIP
   }

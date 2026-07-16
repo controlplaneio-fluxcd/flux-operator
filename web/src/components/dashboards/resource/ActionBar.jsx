@@ -11,6 +11,30 @@ import {
   isUserActionsEnabled
 } from '../../../utils/userActions'
 
+const DOWNLOADABLE_KINDS = ['Bucket', 'GitRepository', 'OCIRepository', 'HelmChart', 'ExternalArtifact']
+
+/**
+ * Returns whether the given resource kind/data has action buttons to render.
+ * Permission and auth are not considered - only kind support and resource shape.
+ *
+ * @param {string} kind - Flux resource kind
+ * @param {Object} [resourceData] - Resource payload with status fields
+ * @returns {boolean}
+ */
+export function hasResourceActionBarContent(kind, resourceData) {
+  const canReconcile = kind !== 'Alert' && kind !== 'Provider'
+  const canSuspendResume = kind !== 'ExternalArtifact'
+  const sourceRef = resourceData?.status?.sourceRef
+  const canReconcileSource = (kind === 'Kustomization' || kind === 'HelmRelease') && sourceRef && sourceRef.kind !== 'ExternalArtifact'
+  const hasArtifact = resourceData?.status?.artifact?.url
+  const showDownload = DOWNLOADABLE_KINDS.includes(kind) && hasArtifact
+  const isArtifactGenerator = kind === 'ArtifactGenerator'
+  const inventoryArtifacts = isArtifactGenerator ? (resourceData?.status?.inventory || []) : []
+  const showDownloadArtifacts = isArtifactGenerator && inventoryArtifacts.length > 0
+
+  return canReconcile || canSuspendResume || canReconcileSource || showDownload || showDownloadArtifacts
+}
+
 /**
  * ActionBar - Action buttons for Flux resources (Reconcile, Reconcile Source, Suspend/Resume)
  *
@@ -113,7 +137,7 @@ export function ActionBar({ kind, namespace, name, resourceData, onActionComplet
   const canReconcileSource = (kind === 'Kustomization' || kind === 'HelmRelease') && sourceRef && sourceRef.kind !== 'ExternalArtifact'
 
   // Source kinds that have downloadable artifacts
-  const downloadableKinds = ['Bucket', 'GitRepository', 'OCIRepository', 'HelmChart', 'ExternalArtifact']
+  const downloadableKinds = DOWNLOADABLE_KINDS
 
   // Check if this is a source kind with a downloadable artifact
   const hasArtifact = resourceData?.status?.artifact?.url
@@ -202,7 +226,7 @@ export function ActionBar({ kind, namespace, name, resourceData, onActionComplet
       : 'border-purple-500 text-purple-600 hover:bg-purple-50 dark:border-purple-400 dark:text-purple-400 dark:hover:bg-purple-900/30 focus:ring-purple-500'
   })
 
-  const hasAnyAction = canReconcile || canSuspendResume || canReconcileSource || showDownload || showDownloadArtifacts
+  const hasAnyAction = hasResourceActionBarContent(kind, resourceData)
   if (!hasAnyAction) {
     return null
   }

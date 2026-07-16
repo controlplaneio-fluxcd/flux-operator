@@ -8,7 +8,7 @@ import { StatusHeroCard } from '../common/StatusHeroCard'
 import { usePageMeta } from '../../../utils/meta'
 import { isFavorite, toggleFavorite, favorites } from '../../../utils/favorites'
 import { addToNavHistory } from '../../../utils/navHistory'
-import { ActionBar } from '../resource/ActionBar'
+import { ActionBar, hasResourceActionBarContent } from '../resource/ActionBar'
 import { WorkloadActionBar } from '../resource/WorkloadActionBar'
 import { WorkloadLogsAction } from './WorkloadLogsAction'
 import { WorkloadReconcilerPanel } from './WorkloadReconcilerPanel'
@@ -281,10 +281,13 @@ export function WorkloadPage({ kind, namespace, name }) {
     }, null)
   }, [workloadInfo])
 
-  // Check if either action bar has actions to show
-  const hasReconciler = Boolean(reconciler)
+  // Determine which action-bar sections have content to render
   const supportsWorkloadActions = kind === 'Deployment' || kind === 'StatefulSet' || kind === 'DaemonSet' || kind === 'CronJob'
   const userActionsEnabled = Boolean(workloadInfo?.userActionsEnabled)
+  const showReconcilerBar = Boolean(reconciler && hasResourceActionBarContent(reconciler.kind, reconciler))
+  const showWorkloadBar = supportsWorkloadActions
+  const showLogsBar = true
+  const showCombinedBar = showReconcilerBar || showWorkloadBar || showLogsBar
 
   // Compute statusInfo based on display state
   let statusInfo
@@ -351,9 +354,9 @@ export function WorkloadPage({ kind, namespace, name }) {
         {isSuccess && (
           <>
             {/* Action Bars - Flux reconciler actions + workload actions on same line */}
-            {(hasReconciler || supportsWorkloadActions) && (
+            {showCombinedBar && (
               <div class="flex flex-wrap items-center gap-2" data-testid="combined-action-bar">
-                {reconciler && (
+                {showReconcilerBar && (
                   <ActionBar
                     kind={reconciler.kind}
                     namespace={reconciler.metadata.namespace}
@@ -363,10 +366,10 @@ export function WorkloadPage({ kind, namespace, name }) {
                     onActionStart={handleActionStart}
                   />
                 )}
-                {hasReconciler && supportsWorkloadActions && (
+                {showReconcilerBar && (showWorkloadBar || showLogsBar) && (
                   <div class="w-px h-5 bg-gray-300 dark:bg-gray-600" data-testid="action-bar-separator" />
                 )}
-                {supportsWorkloadActions && (
+                {showWorkloadBar && (
                   <WorkloadActionBar
                     kind={kind}
                     namespace={namespace}
@@ -381,7 +384,7 @@ export function WorkloadPage({ kind, namespace, name }) {
                     onActionComplete={fetchData}
                   />
                 )}
-                {(hasReconciler || supportsWorkloadActions) && (
+                {showLogsBar && (
                   <WorkloadLogsAction
                     kind={kind}
                     namespace={namespace}

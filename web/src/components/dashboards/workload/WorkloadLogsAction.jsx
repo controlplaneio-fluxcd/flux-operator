@@ -86,19 +86,19 @@ export function WorkloadLogsAction({
   }, [])
 
   // Deep link: a `?logs=<pod|*>` param opens the viewer on that pod (or "All pods")
-  // so a shared link lands in the logs. Runs once on mount. An unknown pod still
-  // opens the viewer, which falls back to "All pods" when the pod is gone.
+  // so a shared link lands in the logs. Waits until pods and logs permission are
+  // available so async workload fetches do not drop the deep link.
   const deepLinked = useRef(false)
   useEffect(() => {
-    if (deepLinked.current) return
-    deepLinked.current = true
-    // Nothing to show for a workload with no inspectable pods, even with a ?logs link.
-    if (logsPods.length === 0) return
+    if (session || deepLinked.current) return
     const logs = new URLSearchParams(window.location.search).get(LOGS_QUERY_PARAM)
     if (!logs) return
+    if (!canViewLogs || logsPods.length === 0) return
+
+    deepLinked.current = true
     sessionKeyRef.current += 1
     setSession({ key: sessionKeyRef.current, pod: logs === ALL_PODS_VALUE ? null : logs })
-  }, [])
+  }, [canViewLogs, logsPods, session])
 
   // Open the viewer on "All pods"; its pod selector narrows from there.
   const openAllPods = () => {
