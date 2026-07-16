@@ -282,12 +282,9 @@ export function WorkloadPage({ kind, namespace, name }) {
   }, [workloadInfo])
 
   // Check if either action bar has actions to show
-  const hasReconcilerActions = reconciler?.status?.userActions?.length > 0
-  const hasWorkloadActions = workloadInfo?.userActions?.includes('restart')
-  // Gated on the logs RBAC alone, not on pod presence: WorkloadLogsAction shows a
-  // disabled button when there are no inspectable pods (e.g. scaled to zero), so the
-  // capability stays visible.
-  const canViewLogs = workloadInfo?.userActions?.includes('logs')
+  const hasReconciler = Boolean(reconciler)
+  const supportsWorkloadActions = kind === 'Deployment' || kind === 'StatefulSet' || kind === 'DaemonSet' || kind === 'CronJob'
+  const userActionsEnabled = Boolean(workloadInfo?.userActionsEnabled)
 
   // Compute statusInfo based on display state
   let statusInfo
@@ -354,7 +351,7 @@ export function WorkloadPage({ kind, namespace, name }) {
         {isSuccess && (
           <>
             {/* Action Bars - Flux reconciler actions + workload actions on same line */}
-            {(hasReconcilerActions || hasWorkloadActions || canViewLogs) && (
+            {(hasReconciler || supportsWorkloadActions) && (
               <div class="flex flex-wrap items-center gap-2" data-testid="combined-action-bar">
                 {reconciler && (
                   <ActionBar
@@ -366,10 +363,10 @@ export function WorkloadPage({ kind, namespace, name }) {
                     onActionStart={handleActionStart}
                   />
                 )}
-                {hasReconcilerActions && hasWorkloadActions && (
+                {hasReconciler && supportsWorkloadActions && (
                   <div class="w-px h-5 bg-gray-300 dark:bg-gray-600" data-testid="action-bar-separator" />
                 )}
-                {hasWorkloadActions && (
+                {supportsWorkloadActions && (
                   <WorkloadActionBar
                     kind={kind}
                     namespace={namespace}
@@ -379,17 +376,19 @@ export function WorkloadPage({ kind, namespace, name }) {
                     lastTriggeredAt={triggeredPod?.createdAt}
                     lastTriggeredPodStatus={triggeredPod?.status}
                     userActions={workloadInfo?.userActions}
+                    userActionsEnabled={userActionsEnabled}
                     onActionStart={handleActionStart}
                     onActionComplete={fetchData}
                   />
                 )}
-                {canViewLogs && (
+                {(hasReconciler || supportsWorkloadActions) && (
                   <WorkloadLogsAction
                     kind={kind}
                     namespace={namespace}
                     name={name}
                     pods={workloadInfo?.pods}
                     userActions={workloadInfo?.userActions}
+                    userActionsEnabled={userActionsEnabled}
                   />
                 )}
               </div>

@@ -1086,6 +1086,11 @@ func TestGetResource_UserActions_NoActions(t *testing.T) {
 	_, found, err := unstructured.NestedStringSlice(resource.Object, "status", "userActions")
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(found).To(BeFalse(), "userActions should NOT be present when user has no action permissions")
+
+	enabled, found, err := unstructured.NestedBool(resource.Object, "status", "userActionsEnabled")
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(found).To(BeTrue(), "userActionsEnabled should be present in status")
+	g.Expect(enabled).To(BeTrue(), "userActionsEnabled should be true when auth is configured")
 }
 
 func TestGetResource_UserActions_Disabled(t *testing.T) {
@@ -1125,6 +1130,11 @@ func TestGetResource_UserActions_Disabled(t *testing.T) {
 	_, found, err := unstructured.NestedStringSlice(resource.Object, "status", "userActions")
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(found).To(BeFalse(), "userActions should NOT be present when user actions are disabled")
+
+	enabled, found, err := unstructured.NestedBool(resource.Object, "status", "userActionsEnabled")
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(found).To(BeTrue(), "userActionsEnabled should be present in status")
+	g.Expect(enabled).To(BeFalse(), "userActionsEnabled should be false when auth is not configured")
 }
 
 // Suppress unused import warning

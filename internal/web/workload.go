@@ -333,6 +333,7 @@ func (h *Handler) GetWorkloadDetails(ctx context.Context, kind, name, namespace 
 	if len(ws.UserActions) > 0 {
 		workloadInfo["userActions"] = ws.UserActions
 	}
+	workloadInfo["userActionsEnabled"] = h.conf.UserActionsEnabled()
 
 	// Inject workloadInfo at the root of the object
 	obj.Object["workloadInfo"] = workloadInfo

@@ -34,6 +34,7 @@ describe('ActionBar component', () => {
       status: {
         reconcilerRef: { status: 'Ready' },
         userActions: ['reconcile', 'suspend', 'resume'],
+        userActionsEnabled: true,
         sourceRef: {
           kind: 'GitRepository',
           namespace: 'flux-system',
@@ -54,17 +55,41 @@ describe('ActionBar component', () => {
       expect(screen.getByTestId('suspend-resume-button')).toBeInTheDocument()
     })
 
-    it('should not render when userActions is empty', () => {
+    it('should render disabled buttons when userActions is empty but actions are supported', () => {
       const props = {
         ...defaultProps,
         resourceData: {
           ...defaultProps.resourceData,
-          status: { ...defaultProps.resourceData.status, userActions: [] }
+          status: {
+            ...defaultProps.resourceData.status,
+            userActions: [],
+            userActionsEnabled: true
+          }
         }
       }
       render(<ActionBar {...props} />)
 
-      expect(screen.queryByTestId('action-bar')).not.toBeInTheDocument()
+      expect(screen.getByTestId('action-bar')).toBeInTheDocument()
+      expect(screen.getByTestId('reconcile-button')).toBeDisabled()
+      expect(screen.getByTestId('suspend-resume-button')).toBeDisabled()
+      expect(screen.getByTestId('reconcile-button').parentElement).toHaveAttribute('title', "You don't have permission to reconcile")
+    })
+
+    it('should show authentication tooltip when user actions are disabled', () => {
+      const props = {
+        ...defaultProps,
+        resourceData: {
+          ...defaultProps.resourceData,
+          status: {
+            ...defaultProps.resourceData.status,
+            userActions: [],
+            userActionsEnabled: false
+          }
+        }
+      }
+      render(<ActionBar {...props} />)
+
+      expect(screen.getByTestId('reconcile-button').parentElement).toHaveAttribute('title', 'Authentication is not configured')
     })
 
     it('should render Reconcile Source button for Kustomization with sourceRef', () => {
@@ -125,20 +150,24 @@ describe('ActionBar component', () => {
   })
 
   describe('Disabled states', () => {
-    it('should not render when userActions is empty', () => {
+    it('should disable all buttons when userActions is empty', () => {
       const props = {
         ...defaultProps,
         resourceData: {
           status: {
             reconcilerRef: { status: 'Ready' },
-            userActions: []
+            userActions: [],
+            userActionsEnabled: true,
+            sourceRef: defaultProps.resourceData.status.sourceRef
           }
         }
       }
       render(<ActionBar {...props} />)
 
-      // Component should not render at all when no actions allowed
-      expect(screen.queryByTestId('action-bar')).not.toBeInTheDocument()
+      expect(screen.getByTestId('action-bar')).toBeInTheDocument()
+      expect(screen.getByTestId('reconcile-button')).toBeDisabled()
+      expect(screen.getByTestId('reconcile-source-button')).toBeDisabled()
+      expect(screen.getByTestId('suspend-resume-button')).toBeDisabled()
     })
 
     it('should only disable Reconcile button when status is Progressing', () => {
@@ -148,6 +177,7 @@ describe('ActionBar component', () => {
           status: {
             reconcilerRef: { status: 'Progressing' },
             userActions: ['reconcile', 'suspend', 'resume'],
+            userActionsEnabled: true,
             sourceRef: defaultProps.resourceData.status.sourceRef
           }
         }
@@ -287,7 +317,8 @@ describe('ActionBar component', () => {
         resourceData: {
           status: {
             reconcilerRef: { status: 'Suspended' },
-            userActions: ['reconcile', 'suspend', 'resume']
+            userActions: ['reconcile', 'suspend', 'resume'],
+            userActionsEnabled: true
           }
         }
       }
@@ -385,6 +416,7 @@ describe('ActionBar component', () => {
         status: {
           reconcilerRef: { status: 'Ready' },
           userActions: ['reconcile', 'suspend', 'resume', 'download'],
+          userActionsEnabled: true,
           artifact: {
             url: 'http://source-controller.flux-system.svc/artifact.tar.gz'
           }
@@ -432,13 +464,14 @@ describe('ActionBar component', () => {
       expect(screen.queryByTestId('download-button')).not.toBeInTheDocument()
     })
 
-    it('should not render Download button without download permission', () => {
+    it('should render disabled Download button without download permission', () => {
       const props = {
         ...downloadableProps,
         resourceData: {
           status: {
             reconcilerRef: { status: 'Ready' },
-            userActions: ['reconcile', 'suspend', 'resume'], // No download permission
+            userActions: ['reconcile', 'suspend', 'resume'],
+            userActionsEnabled: true,
             artifact: {
               url: 'http://source-controller.flux-system.svc/artifact.tar.gz'
             }
@@ -447,7 +480,8 @@ describe('ActionBar component', () => {
       }
       render(<ActionBar {...props} />)
 
-      expect(screen.queryByTestId('download-button')).not.toBeInTheDocument()
+      expect(screen.getByTestId('download-button')).toBeDisabled()
+      expect(screen.getByTestId('download-button').parentElement).toHaveAttribute('title', "You don't have permission to download artifacts")
     })
 
     it('should trigger download via fetch/blob when clicked', async () => {
@@ -499,6 +533,7 @@ describe('ActionBar component', () => {
         status: {
           reconcilerRef: { status: 'Ready' },
           userActions: ['reconcile', 'suspend', 'resume', 'download'],
+          userActionsEnabled: true,
           inventory: [
             { name: 'artifact-1', namespace: 'flux-system', filename: 'config.tar.gz', digest: 'sha256:abc123' },
             { name: 'artifact-2', namespace: 'default', filename: 'data.tar.gz', digest: 'sha256:def456' }
@@ -531,13 +566,14 @@ describe('ActionBar component', () => {
       expect(screen.queryByTestId('download-dropdown-button')).not.toBeInTheDocument()
     })
 
-    it('should not render download dropdown without download permission', () => {
+    it('should render disabled download dropdown without download permission', () => {
       const props = {
         ...artifactGeneratorProps,
         resourceData: {
           status: {
             reconcilerRef: { status: 'Ready' },
-            userActions: ['reconcile', 'suspend', 'resume'], // No download permission
+            userActions: ['reconcile', 'suspend', 'resume'],
+            userActionsEnabled: true,
             inventory: [
               { name: 'artifact-1', namespace: 'flux-system', filename: 'config.tar.gz', digest: 'sha256:abc123' }
             ]
@@ -546,7 +582,8 @@ describe('ActionBar component', () => {
       }
       render(<ActionBar {...props} />)
 
-      expect(screen.queryByTestId('download-dropdown-button')).not.toBeInTheDocument()
+      expect(screen.getByTestId('download-dropdown-button')).toBeDisabled()
+      expect(screen.getByTestId('download-dropdown-button').parentElement).toHaveAttribute('title', "You don't have permission to download artifacts")
     })
 
     it('should open dropdown menu on click', async () => {
@@ -665,7 +702,8 @@ describe('ActionBar component', () => {
           resourceData={{
             status: {
               reconcilerRef: { status: 'Progressing' },
-              userActions: ['reconcile', 'suspend', 'resume']
+              userActions: ['reconcile', 'suspend', 'resume'],
+              userActionsEnabled: true
             }
           }}
         />
@@ -681,7 +719,8 @@ describe('ActionBar component', () => {
           resourceData={{
             status: {
               reconcilerRef: { status: 'Ready' },
-              userActions: ['reconcile', 'suspend', 'resume']
+              userActions: ['reconcile', 'suspend', 'resume'],
+              userActionsEnabled: true
             }
           }}
         />
@@ -698,7 +737,8 @@ describe('ActionBar component', () => {
           resourceData={{
             status: {
               reconcilerRef: { status: 'Progressing' },
-              userActions: ['reconcile', 'suspend', 'resume']
+              userActions: ['reconcile', 'suspend', 'resume'],
+              userActionsEnabled: true
             }
           }}
         />
@@ -712,7 +752,8 @@ describe('ActionBar component', () => {
           resourceData={{
             status: {
               reconcilerRef: { status: 'Failed' },
-              userActions: ['reconcile', 'suspend', 'resume']
+              userActions: ['reconcile', 'suspend', 'resume'],
+              userActionsEnabled: true
             }
           }}
         />

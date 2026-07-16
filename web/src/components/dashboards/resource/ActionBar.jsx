@@ -4,6 +4,12 @@
 import { useState, useEffect, useRef } from 'preact/hooks'
 import { fetchWithMock } from '../../../utils/fetch'
 import { downloadBlob } from '../../../utils/download'
+import { ActionButton } from '../../common/ActionButton'
+import {
+  getActionTooltip,
+  isActionBlockedByAccess,
+  isUserActionsEnabled
+} from '../../../utils/userActions'
 
 /**
  * ActionBar - Action buttons for Flux resources (Reconcile, Reconcile Source, Suspend/Resume)
@@ -32,6 +38,7 @@ export function ActionBar({ kind, namespace, name, resourceData, onActionComplet
   // Extract status information
   const status = resourceData?.status?.reconcilerRef?.status || 'Unknown'
   const userActions = resourceData?.status?.userActions || []
+  const userActionsEnabled = isUserActionsEnabled(resourceData)
   const sourceRef = resourceData?.status?.sourceRef
   const sourceStatus = sourceRef?.status
 
@@ -110,7 +117,7 @@ export function ActionBar({ kind, namespace, name, resourceData, onActionComplet
 
   // Check if this is a source kind with a downloadable artifact
   const hasArtifact = resourceData?.status?.artifact?.url
-  const canDownload = canDoDownload && downloadableKinds.includes(kind) && hasArtifact
+  const showDownload = downloadableKinds.includes(kind) && hasArtifact
 
   // Check if this is an ArtifactGenerator with ExternalArtifacts in inventory
   // Inventory items have: name, namespace, digest, filename
@@ -118,12 +125,87 @@ export function ActionBar({ kind, namespace, name, resourceData, onActionComplet
   const inventoryArtifacts = isArtifactGenerator
     ? (resourceData?.status?.inventory || [])
     : []
-  const canDownloadArtifacts = canDoDownload && isArtifactGenerator && inventoryArtifacts.length > 0
+  const showDownloadArtifacts = isArtifactGenerator && inventoryArtifacts.length > 0
 
-  // Determine button disabled states
-  const reconcileDisabled = !canDoReconcile || isProgressing || isSuspended
-  const reconcileSourceDisabled = !canDoReconcile || isSuspended || sourceStatus === 'Suspended'
-  const suspendResumeDisabled = isSuspended ? !canDoResume : !canDoSuspend
+  // Base button styles
+  const baseButtonClass = 'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-gray-900'
+  const disabledClass = 'border-gray-300 text-gray-400 cursor-not-allowed dark:border-gray-600 dark:text-gray-500'
+
+  const getButtonPresentation = ({
+    hasPermission,
+    stateDisabled,
+    stateReason,
+    actionLabel,
+    enabledTitle,
+    activeClass
+  }) => {
+    const accessBlocked = isActionBlockedByAccess(userActionsEnabled, hasPermission)
+    const disabled = accessBlocked || stateDisabled || loading !== null
+    const title = getActionTooltip({
+      userActionsEnabled,
+      hasPermission,
+      actionLabel,
+      stateReason: !accessBlocked && stateDisabled ? stateReason : undefined,
+      enabledTitle
+    })
+
+    return {
+      disabled,
+      title,
+      class: `${baseButtonClass} ${disabled ? disabledClass : activeClass}`
+    }
+  }
+
+  const reconcilePresentation = getButtonPresentation({
+    hasPermission: canDoReconcile,
+    stateDisabled: isProgressing || isSuspended,
+    stateReason: isProgressing ? 'Reconciliation in progress' : 'Resource is suspended',
+    actionLabel: 'reconcile',
+    enabledTitle: 'Trigger a reconciliation',
+    activeClass: 'border-blue-500 text-blue-600 hover:bg-blue-50 dark:border-blue-400 dark:text-blue-400 dark:hover:bg-blue-900/30 focus:ring-blue-500'
+  })
+
+  const reconcileSourcePresentation = getButtonPresentation({
+    hasPermission: canDoReconcile,
+    stateDisabled: isSuspended || sourceStatus === 'Suspended',
+    stateReason: isSuspended ? 'Resource is suspended' : 'Source is suspended',
+    actionLabel: 'pull changes from source',
+    enabledTitle: 'Pull changes from upstream source',
+    activeClass: 'border-purple-500 text-purple-600 hover:bg-purple-50 dark:border-purple-400 dark:text-purple-400 dark:hover:bg-purple-900/30 focus:ring-purple-500'
+  })
+
+  const suspendResumePresentation = getButtonPresentation({
+    hasPermission: isSuspended ? canDoResume : canDoSuspend,
+    stateDisabled: false,
+    actionLabel: isSuspended ? 'resume reconciliation' : 'suspend reconciliation',
+    enabledTitle: isSuspended ? 'Resume reconciliation' : 'Suspend reconciliation',
+    activeClass: isSuspended
+      ? 'border-green-500 text-green-600 hover:bg-green-50 dark:border-green-400 dark:text-green-400 dark:hover:bg-green-900/30 focus:ring-green-500'
+      : 'border-amber-500 text-amber-600 hover:bg-amber-50 dark:border-amber-400 dark:text-amber-400 dark:hover:bg-amber-900/30 focus:ring-amber-500'
+  })
+
+  const downloadPresentation = getButtonPresentation({
+    hasPermission: canDoDownload,
+    stateDisabled: false,
+    actionLabel: 'download artifacts',
+    enabledTitle: 'Download artifact',
+    activeClass: 'border-purple-500 text-purple-600 hover:bg-purple-50 dark:border-purple-400 dark:text-purple-400 dark:hover:bg-purple-900/30 focus:ring-purple-500'
+  })
+
+  const downloadArtifactsPresentation = getButtonPresentation({
+    hasPermission: canDoDownload,
+    stateDisabled: false,
+    actionLabel: 'download artifacts',
+    enabledTitle: 'Download artifacts',
+    activeClass: dropdownOpen
+      ? 'border-purple-500 text-purple-600 bg-purple-50 dark:border-purple-400 dark:text-purple-400 dark:bg-purple-900/30 ring-0'
+      : 'border-purple-500 text-purple-600 hover:bg-purple-50 dark:border-purple-400 dark:text-purple-400 dark:hover:bg-purple-900/30 focus:ring-purple-500'
+  })
+
+  const hasAnyAction = canReconcile || canSuspendResume || canReconcileSource || showDownload || showDownloadArtifacts
+  if (!hasAnyAction) {
+    return null
+  }
 
   // Perform an action
   const performAction = async (action, targetKind, targetNamespace, targetName, loadingId = action) => {
@@ -247,29 +329,16 @@ export function ActionBar({ kind, namespace, name, resourceData, onActionComplet
     </svg>
   )
 
-  // Don't render if no actions are allowed (no permissions)
-  if (userActions.length === 0) {
-    return null
-  }
-
-  // Base button styles
-  const baseButtonClass = 'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-gray-900'
-  const disabledClass = 'border-gray-300 text-gray-400 cursor-not-allowed dark:border-gray-600 dark:text-gray-500'
-
   return (
     <div class="flex flex-wrap items-center gap-2" data-testid="action-bar">
       {/* Reconcile button (hidden for Alert and Provider) */}
       {canReconcile && (
-        <button
+        <ActionButton
           onClick={handleReconcile}
-          disabled={reconcileDisabled || loading !== null}
-          class={`${baseButtonClass} ${
-            reconcileDisabled || loading !== null
-              ? disabledClass
-              : 'border-blue-500 text-blue-600 hover:bg-blue-50 dark:border-blue-400 dark:text-blue-400 dark:hover:bg-blue-900/30 focus:ring-blue-500'
-          }`}
+          disabled={reconcilePresentation.disabled}
+          class={reconcilePresentation.class}
           data-testid="reconcile-button"
-          title="Trigger a reconciliation"
+          title={reconcilePresentation.title}
         >
           {(loading === 'reconcile' || isProgressing) ? <LoadingSpinner /> : showSuccess === 'reconcile' ? <SuccessCheck /> : (
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -277,21 +346,17 @@ export function ActionBar({ kind, namespace, name, resourceData, onActionComplet
             </svg>
           )}
           Reconcile
-        </button>
+        </ActionButton>
       )}
 
       {/* Download button (only for source kinds with artifacts) */}
-      {canDownload && (
-        <button
+      {showDownload && (
+        <ActionButton
           onClick={handleDownload}
-          disabled={loading !== null}
-          class={`${baseButtonClass} ${
-            loading !== null
-              ? disabledClass
-              : 'border-purple-500 text-purple-600 hover:bg-purple-50 dark:border-purple-400 dark:text-purple-400 dark:hover:bg-purple-900/30 focus:ring-purple-500'
-          }`}
+          disabled={downloadPresentation.disabled}
+          class={downloadPresentation.class}
           data-testid="download-button"
-          title="Download artifact"
+          title={downloadPresentation.title}
         >
           {loading === 'download' ? <LoadingSpinner /> : (
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -299,24 +364,22 @@ export function ActionBar({ kind, namespace, name, resourceData, onActionComplet
             </svg>
           )}
           Download
-        </button>
+        </ActionButton>
       )}
 
       {/* Download dropdown for ArtifactGenerator */}
-      {canDownloadArtifacts && (
+      {showDownloadArtifacts && (
         <div class="relative" ref={dropdownRef}>
-          <button
-            onClick={() => setDropdownOpen(!dropdownOpen)}
-            disabled={loading !== null}
-            class={`${baseButtonClass} ${
-              loading !== null
-                ? disabledClass
-                : dropdownOpen
-                  ? 'border-purple-500 text-purple-600 bg-purple-50 dark:border-purple-400 dark:text-purple-400 dark:bg-purple-900/30 ring-0'
-                  : 'border-purple-500 text-purple-600 hover:bg-purple-50 dark:border-purple-400 dark:text-purple-400 dark:hover:bg-purple-900/30 focus:ring-purple-500'
-            }`}
+          <ActionButton
+            onClick={() => {
+              if (!downloadArtifactsPresentation.disabled) {
+                setDropdownOpen(!dropdownOpen)
+              }
+            }}
+            disabled={downloadArtifactsPresentation.disabled}
+            class={downloadArtifactsPresentation.class}
             data-testid="download-dropdown-button"
-            title="Download artifacts"
+            title={downloadArtifactsPresentation.title}
           >
             {loading === 'download' ? <LoadingSpinner /> : (
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -327,9 +390,9 @@ export function ActionBar({ kind, namespace, name, resourceData, onActionComplet
             <svg class="w-3 h-3 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
             </svg>
-          </button>
+          </ActionButton>
 
-          {dropdownOpen && (
+          {dropdownOpen && !downloadArtifactsPresentation.disabled && (
             <div
               class="absolute left-0 mt-1 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50"
               data-testid="download-dropdown-menu"
@@ -352,16 +415,12 @@ export function ActionBar({ kind, namespace, name, resourceData, onActionComplet
 
       {/* Reconcile Source button (only for Kustomization/HelmRelease with sourceRef) */}
       {canReconcileSource && (
-        <button
+        <ActionButton
           onClick={handleReconcileSource}
-          disabled={reconcileSourceDisabled || loading !== null}
-          class={`${baseButtonClass} ${
-            reconcileSourceDisabled || loading !== null
-              ? disabledClass
-              : 'border-purple-500 text-purple-600 hover:bg-purple-50 dark:border-purple-400 dark:text-purple-400 dark:hover:bg-purple-900/30 focus:ring-purple-500'
-          }`}
+          disabled={reconcileSourcePresentation.disabled}
+          class={reconcileSourcePresentation.class}
           data-testid="reconcile-source-button"
-          title="Pull changes from upstream source"
+          title={reconcileSourcePresentation.title}
         >
           {(loading === 'reconcile-source' || isSourceProgressing) ? <LoadingSpinner /> : showSuccess === 'reconcile-source' ? <SuccessCheck /> : (
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -369,23 +428,17 @@ export function ActionBar({ kind, namespace, name, resourceData, onActionComplet
             </svg>
           )}
           Pull
-        </button>
+        </ActionButton>
       )}
 
       {/* Suspend/Resume button (hidden for ExternalArtifact) */}
       {canSuspendResume && (
-        <button
+        <ActionButton
           onClick={handleSuspendResume}
-          disabled={suspendResumeDisabled || loading !== null}
-          class={`${baseButtonClass} ${
-            suspendResumeDisabled || loading !== null
-              ? disabledClass
-              : isSuspended
-                ? 'border-green-500 text-green-600 hover:bg-green-50 dark:border-green-400 dark:text-green-400 dark:hover:bg-green-900/30 focus:ring-green-500'
-                : 'border-amber-500 text-amber-600 hover:bg-amber-50 dark:border-amber-400 dark:text-amber-400 dark:hover:bg-amber-900/30 focus:ring-amber-500'
-          }`}
+          disabled={suspendResumePresentation.disabled}
+          class={suspendResumePresentation.class}
           data-testid="suspend-resume-button"
-          title={isSuspended ? 'Resume reconciliation' : 'Suspend reconciliation'}
+          title={suspendResumePresentation.title}
         >
           {(loading === 'suspend' || loading === 'resume') ? <LoadingSpinner /> : (
             isSuspended ? (
@@ -399,7 +452,7 @@ export function ActionBar({ kind, namespace, name, resourceData, onActionComplet
             )
           )}
           {isSuspended ? 'Resume' : 'Suspend'}
-        </button>
+        </ActionButton>
       )}
 
       {/* Error message */}

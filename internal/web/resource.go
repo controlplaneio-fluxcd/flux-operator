@@ -240,6 +240,9 @@ func (h *Handler) GetResource(ctx context.Context, kind, name, namespace string)
 			}
 		}
 	}
+	if err := unstructured.SetNestedField(obj.Object, h.conf.UserActionsEnabled(), "status", "userActionsEnabled"); err != nil {
+		return nil, fmt.Errorf("unable to set userActionsEnabled in status: %w", err)
+	}
 
 	cleanObjectForExport(obj, true)
 	return obj, nil

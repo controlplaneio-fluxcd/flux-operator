@@ -57,14 +57,23 @@ describe('WorkloadLogsAction component', () => {
     namespace: 'flux-system',
     name: 'my-workload',
     pods,
-    userActions: ['restart', 'logs']
+    userActions: ['restart', 'logs'],
+    userActionsEnabled: true
   }
 
-  it('renders nothing without the logs user action (no RBAC)', () => {
-    const { container } = render(
-      <WorkloadLogsAction {...defaultProps} userActions={['restart']} />
+  it('shows a disabled button without the logs user action', () => {
+    render(
+      <WorkloadLogsAction {...defaultProps} userActions={['restart']} userActionsEnabled={true} />
     )
-    expect(container).toBeEmptyDOMElement()
+    expect(screen.getByTestId('view-logs-button')).toBeDisabled()
+    expect(screen.getByTestId('view-logs-button').parentElement).toHaveAttribute('title', "You don't have permission to view pod logs")
+  })
+
+  it('shows authentication tooltip when user actions are disabled', () => {
+    render(
+      <WorkloadLogsAction {...defaultProps} userActions={[]} userActionsEnabled={false} />
+    )
+    expect(screen.getByTestId('view-logs-button').parentElement).toHaveAttribute('title', 'Authentication is not configured')
   })
 
   it('shows the button disabled when there are no inspectable pods (scaled to zero)', () => {

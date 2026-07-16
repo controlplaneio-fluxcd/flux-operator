@@ -72,6 +72,7 @@ describe('WorkloadPage component', () => {
       createdAt: '2023-01-01T00:00:00Z',
       containerImages: ['nginx:1.25.0'],
       userActions: ['restart', 'deletePods'],
+      userActionsEnabled: true,
       pods: [
         { name: 'nginx-abc-123', status: 'Running', statusMessage: 'Started at 2023-01-01 12:00:00 UTC', createdAt: '2023-01-01T12:00:00Z' },
         { name: 'nginx-abc-456', status: 'Running', statusMessage: 'Started at 2023-01-01 12:00:00 UTC', createdAt: '2023-01-01T12:00:00Z' }
@@ -102,7 +103,8 @@ describe('WorkloadPage component', () => {
             url: 'https://github.com/example/repo',
             message: 'stored artifact for revision main@sha1:abc123'
           },
-          userActions: ['reconcile', 'suspend', 'resume']
+          userActions: ['reconcile', 'suspend', 'resume'],
+          userActionsEnabled: true
         }
       }
     }

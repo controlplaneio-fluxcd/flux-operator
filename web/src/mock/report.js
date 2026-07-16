@@ -261,7 +261,8 @@ export const mockReport = {
           "fluxcd/maintainers",
           "fluxcd/developers"
         ]
-      }
+      },
+      userActionsEnabled: true
     }
   }
 }
