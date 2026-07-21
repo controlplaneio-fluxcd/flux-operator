@@ -16,6 +16,7 @@ The `Config` API supports:
 - **Authentication** - User authentication and authorization
     - **Anonymous** - All users share a single identity for Kubernetes RBAC
     - **OAuth2/OIDC** - Users authenticate via an OpenID Connect provider
+    - **Reverse Proxy** - Users are pre-authenticated by an upstream reverse proxy
 - **User Actions** - Optional auditing of user actions
 - **Search Configuration** - Option to enable cached search results for improved performance
 
@@ -55,7 +56,7 @@ spec:
 
   # Authentication configuration (optional)
   authentication:
-    type: OAuth2 # Anonymous | OAuth2
+    type: OAuth2 # Anonymous | OAuth2 | ReverseProxy
 
     # Duration of user sessions. Default: One week.
     sessionDuration: 24h # Optional
@@ -118,6 +119,27 @@ spec:
         username: "claims.email"
         groups: "claims.groups"
 
+    # Reverse Proxy authentication settings (when type=ReverseProxy)
+    reverseProxy:
+      # Required: HTTP headers used to extract user identity
+      headers:
+        username: X-Remote-User
+        name: X-Remote-Name # Optional, falls back to username if unset
+        groups: X-Remote-Groups # Optional
+
+      # Optional: how to split multi-value group header entries. Default: ","
+      groups:
+        separator: ","
+
+      # Optional: groups assigned when the proxy sends no groups header
+      defaultGroups: # Optional
+        - flux-viewers
+
+      # Required: only requests whose TCP peer IP matches one of these
+      # IPs/CIDRs are trusted to assert identity via headers.
+      trustedProxies:
+        - 10.0.0.0/8
+
   # User actions (optional)
   userActions:
     # Send audit events to Kubernetes and Flux's notification-controller.
@@ -164,6 +186,43 @@ spec:
 Note that anyone who can access the web UI will have the same permissions, so this
 mode is only suitable for environments where the UI is accessible to trusted users
 in a secure network.
+
+### Reverse Proxy Authentication
+
+Reverse Proxy authentication delegates authentication to an upstream reverse proxy
+(such as oauth2-proxy, Envoy, or Nginx) that has already authenticated the user and
+asserts their identity via HTTP headers on the forwarded request.
+
+```yaml
+spec:
+  authentication:
+    type: ReverseProxy
+    reverseProxy:
+      headers:
+        username: X-Remote-User
+        name: X-Remote-Name
+        groups: X-Remote-Groups
+      groups:
+        separator: ","
+      defaultGroups:
+        - flux-viewers
+      trustedProxies:
+        - 10.0.0.0/8
+```
+
+- `headers.username` (required): name of the HTTP header carrying the authenticated username.
+- `headers.name` (optional): name of the HTTP header carrying the user's display name. Falls back to the username if unset or blank.
+- `headers.groups` (optional): name of the HTTP header carrying the user's groups. Supports multiple header instances.
+- `groups.separator` (optional): delimiter used to split group header values. Default: `,`.
+- `defaultGroups` (optional): groups assigned when the proxy sends no groups header.
+- `trustedProxies` (required): list of IP addresses or CIDR ranges (IPv4 or IPv6) allowed to assert identity.
+
+Only the direct TCP peer IP of the incoming request is checked against `trustedProxies` —
+forwardable headers such as `X-Forwarded-For` or `Forwarded` are never trusted for this
+purpose, to prevent spoofing. This means the reverse proxy must connect directly to the
+web UI (no intermediate untrusted hop), and `trustedProxies` must be scoped as tightly as
+possible: anyone who can set these headers and reach the web UI directly can impersonate
+any user.
 
 ### OAuth2 Authentication
 
@@ -396,6 +455,28 @@ spec:
       username: flux-viewer
       groups:
         - flux-readonly
+```
+
+### Reverse Proxy Authentication
+
+```yaml
+apiVersion: web.fluxcd.controlplane.io/v1
+kind: Config
+spec:
+  authentication:
+    type: ReverseProxy
+    reverseProxy:
+      headers:
+        username: X-Remote-User
+        name: X-Remote-Name
+        groups: X-Remote-Groups
+      groups:
+        separator: ","
+      defaultGroups:
+        - flux-viewers
+      trustedProxies:
+        - 10.0.0.0/8
+        - 192.168.1.10/32
 ```
 
 ### Basic OIDC Authentication

@@ -20,6 +20,9 @@ const (
 	// AuthenticationTypeOAuth2 is the name of the OAuth2 authentication type.
 	AuthenticationTypeOAuth2 = "OAuth2"
 
+	// AuthenticationTypeReverseProxy is the name of the Reverse Proxy authentication type.
+	AuthenticationTypeReverseProxy = "ReverseProxy"
+
 	// OAuth2ProviderOIDC is the name of the OIDC OAuth2 provider.
 	OAuth2ProviderOIDC = "OIDC"
 
@@ -173,7 +176,7 @@ func (c *WebConfigSpec) FineGrainedAccessEnabled() bool {
 // AuthenticationSpec holds the Flux Status Page authentication configuration.
 type AuthenticationSpec struct {
 	// Type is the authentication type.
-	// +kubebuilder:validation:Enum=Anonymous;OAuth2
+	// +kubebuilder:validation:Enum=Anonymous;OAuth2;ReverseProxy
 	// +required
 	Type string `json:"type"`
 
@@ -184,6 +187,10 @@ type AuthenticationSpec struct {
 	// OAuth2 holds the OAuth2 authentication configuration.
 	// +optional
 	OAuth2 *OAuth2AuthenticationSpec `json:"oauth2"`
+
+	// ReverseProxy holds the Reverse Proxy authentication configuration.
+	// +optional
+	ReverseProxy *ReverseProxyAuthenticationSpec `json:"reverseProxy"`
 
 	// SessionDuration is the duration of the user session.
 	// Defaults to one week.
@@ -260,6 +267,45 @@ type OAuth2AuthenticationSpec struct {
 
 // Configured checks if the OAuth2AuthenticationSpec is configured.
 func (o *OAuth2AuthenticationSpec) Configured() bool { return o != nil }
+
+// ReverseProxyAuthenticationSpec holds the Reverse Proxy authentication configuration.
+type ReverseProxyAuthenticationSpec struct {
+	// Headers is the configuration for extracting user information from HTTP headers.
+	// +required
+	Headers ReverseProxyHeadersSpec `json:"headers"`
+	// DefaultGroups is a list of default groups to assign to users authenticated via the reverse proxy.
+	// These groups are added to any groups extracted from the HTTP headers.
+	// +optional
+	DefaultGroups []string `json:"defaultGroups,omitempty"`
+	// Groups is the configuration for extracting user groups from HTTP headers.
+	// +optional
+	Groups *HeaderListSpec `json:"groups,omitempty"`
+	// TrustedProxies is a list of trusted proxy IP addresses or CIDR ranges.
+	// Requests from untrusted proxies will be rejected.
+	// +optional
+	TrustedProxies []string `json:"trustedProxies,omitempty"`
+}
+
+// ReverseProxyHeadersSpec holds the configuration for extracting user information from HTTP headers.
+type ReverseProxyHeadersSpec struct {
+	// Username is the name of the HTTP header that contains the username.
+	// +required
+	Username string `json:"username"`
+	// Groups is the name of the HTTP header that contains the user groups.
+	// +optional
+	Groups string `json:"groups,omitempty"`
+	// Name is the name of the HTTP header that contains the user's full name.
+	// +optional
+	Name string `json:"name,omitempty"`
+}
+
+// HeaderListSpec holds the configuration for parsing a list of values from a header.
+type HeaderListSpec struct {
+	Separator string `json:"separator,omitempty"`
+}
+
+// Configured checks if the ReverseProxyAuthenticationSpec is configured.
+func (r *ReverseProxyAuthenticationSpec) Configured() bool { return r != nil }
 
 // ClaimsProcessorSpec holds the configuration for processing claims with CEL expressions.
 type ClaimsProcessorSpec struct {
