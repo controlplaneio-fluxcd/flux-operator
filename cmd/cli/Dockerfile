@@ -3,6 +3,14 @@ FROM ghcr.io/fluxcd/flux-cli:v2.9.2@sha256:816466603e4b2e30b4fce6ecc0df49c255660
 FROM ghcr.io/fluxcd/flux-schema:v0.10.2@sha256:4283d470c8c1777722266f96e3c5bd5daad2751ea4102dfed7e99fcec21d554c AS flux-schema
 FROM ghcr.io/fluxcd/flux-mirror:v0.8.0@sha256:432117c67f83ae3c78d2fd63a4023876b51eaeafbde6e9efb0b42788d86e7695 AS flux-mirror
 FROM registry.k8s.io/kubectl:v1.36.2@sha256:b0d792e0d8dfb9bb1b922b78b23137e2a34bb6f9667640353a9d2aadd1fd7761 AS kubectl
+FROM --platform=${BUILDPLATFORM} registry.k8s.io/kubectl:v1.36.2@sha256:b0d792e0d8dfb9bb1b922b78b23137e2a34bb6f9667640353a9d2aadd1fd7761 AS kubectl-build
+
+# Generate the Flux Operator install manifest for offline bootstrap.
+FROM --platform=${BUILDPLATFORM} golang:1.26 AS manifests
+WORKDIR /workspace
+COPY --from=kubectl-build /bin/kubectl /usr/local/bin/kubectl
+COPY config/ config/
+RUN kubectl kustomize config/default > /install-file.yaml
 
 # Build the Flux Operator CLI binary using Docker's Debian image.
 FROM --platform=${BUILDPLATFORM} golang:1.26 AS builder
@@ -41,6 +49,9 @@ COPY LICENSE /licenses/LICENSE
 
 # Copy the catalog for offline schema validation.
 COPY --from=flux-schema --chown=nonroot:nonroot /catalog /catalog
+
+# Copy the Flux Operator install manifest for offline bootstrap.
+COPY --from=manifests --chown=nonroot:nonroot /install-file.yaml /install-file.yaml
 
 # Copy the binaries.
 COPY --from=builder --chown=nonroot:nonroot /usr/local/bin/flux-operator /usr/local/bin/flux-operator

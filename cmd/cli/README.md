@@ -420,17 +420,19 @@ The `flux-operator install` command provides a quick way to bootstrap a Kubernet
 
 This command performs the following steps:
 
-1. Downloads the Flux Operator distribution artifact from `oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests`.
+1. Downloads the Flux Operator distribution artifact from `oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests`, or reads the Flux Operator install manifest from a local file when `--install-file` is set.
 2. Installs the Flux Operator in the `flux-system` namespace and waits for it to become ready.
 3. Installs the Flux instance in the `flux-system` namespace according to the provided configuration.
 4. Configures the pull secret for the instance sync source if credentials are provided.
 5. Configures Flux to bootstrap the cluster from a Git repository or OCI repository if a sync URL is provided.
-6. Configures automatic updates of the Flux Operator from the distribution artifact.
+6. Configures automatic updates of the Flux Operator from the generated or supplied OCIRepository.
 
 This command is intended for development and testing purposes. On production environments,
 it is recommended to follow the [installation guide](https://fluxcd.control-plane.io/operator/install/).
 
 - `flux-operator install`: Installs the Flux Operator and a Flux instance in the cluster.
+    - `--install-file`: Path to a local Flux Operator install manifest. When set, the command skips pulling the distribution artifact for the operator install manifest. The CLI image includes this file at `/install-file.yaml`.
+    - `--auto-update-oci-repository-file`: Path to a local Flux OCIRepository manifest that replaces the generated auto-update OCIRepository.
     - `--instance-file, -f`: Path to FluxInstance YAML file (local file, OCI or HTTPS URL).
     - `--instance-distribution-version`: Flux distribution version.
     - `--instance-distribution-registry`: Container registry to pull Flux images from.
@@ -451,11 +453,36 @@ it is recommended to follow the [installation guide](https://fluxcd.control-plan
     - `--instance-sync-gha-installation-owner`: GitHub App Installation Owner (optional).
     - `--instance-sync-gha-private-key-file`: Path to GitHub App private key file.
     - `--instance-sync-gha-base-url`: GitHub base URL for GitHub Enterprise Server (optional).
-    - `--auto-update`: Enable automatic updates of the Flux Operator from the distribution artifact.
+    - `--auto-update`: Enable automatic updates of the Flux Operator.
     - `--verify`: Verify the cosign signature of the distribution artifact before installing.
     - `--certificate-identity-regexp`: Certificate identity regexp for signature verification.
     - `--certificate-oidc-issuer`: OIDC issuer for signature verification.
     - `--trusted-root`: Path to a `trusted_root.json` file for offline signature verification.
+
+For air-gapped bootstrap with the CLI container image, mount the FluxInstance YAML into the Job, use the embedded install manifest, omit `spec.distribution.artifact`, and provide a local OCIRepository manifest when the auto-update source needs custom fields such as `insecure` or `certSecretRef`:
+
+```shell
+flux-operator install \
+  --install-file=/install-file.yaml \
+  --auto-update-oci-repository-file=/etc/flux-config/auto-update-oci-repository.yaml \
+  -f /etc/flux-config/flux-instance.yaml
+```
+
+Example content for `auto-update-oci-repository.yaml`:
+
+```yaml
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: flux-operator
+  namespace: flux-system
+spec:
+  interval: 1h
+  url: oci://registry.internal/flux-operator-manifests
+  ref:
+    tag: latest
+  insecure: true
+```
 
 ### Uninstall Command
 

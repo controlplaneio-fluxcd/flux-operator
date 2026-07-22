@@ -26,6 +26,8 @@ import (
 	// +kubebuilder:scaffold:imports
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/cosign"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/install"
 )
 
 var (
@@ -131,6 +133,22 @@ func resetCmdArgs() {
 
 	// Version command
 	versionArgs = versionFlags{}
+
+	// Install command
+	installArgs = installFlags{
+		components:           []string{"source-controller", "kustomize-controller", "helm-controller", "notification-controller"},
+		distributionVersion:  "2.x",
+		distributionRegistry: "ghcr.io/fluxcd",
+		distributionArtifact: install.DefaultArtifactURL,
+		clusterType:          "kubernetes",
+		clusterSize:          "medium",
+		clusterDomain:        "cluster.local",
+		clusterNetworkPolicy: true,
+		syncPath:             "./",
+		autoUpdate:           true,
+		certIdentityRegexp:   cosign.DefaultCertIdentityRegexp,
+		certOIDCIssuer:       cosign.DefaultCertOIDCIssuer,
+	}
 
 	// Build commands
 	buildInstanceArgs = buildInstanceFlags{}

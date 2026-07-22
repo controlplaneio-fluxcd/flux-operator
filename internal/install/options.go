@@ -34,6 +34,9 @@ type Options struct {
 	// These are used to create a Kubernetes secret for authenticating to Git or OCI repositories.
 	credentials string
 
+	// autoUpdateOCIRepository is the OCIRepository manifest used by the auto-update ResourceSet.
+	autoUpdateOCIRepository string
+
 	// gitHubApp holds the GitHub App credentials for the sync source.
 	// When set, a GitHub App secret is created instead of basic auth/registry secret.
 	gitHubApp *GitHubAppCredentials
@@ -80,6 +83,13 @@ func WithArtifactURL(url string) Option {
 func WithCredentials(credentials string) Option {
 	return func(o *Options) {
 		o.credentials = credentials
+	}
+}
+
+// WithAutoUpdateOCIRepository sets the OCIRepository manifest used by the auto-update ResourceSet.
+func WithAutoUpdateOCIRepository(manifest string) Option {
+	return func(o *Options) {
+		o.autoUpdateOCIRepository = manifest
 	}
 }
 
@@ -161,6 +171,11 @@ func (o *Options) ArtifactURL() string {
 // Credentials returns the sync credentials.
 func (o *Options) Credentials() string {
 	return o.credentials
+}
+
+// AutoUpdateOCIRepository returns the OCIRepository manifest used by the auto-update ResourceSet.
+func (o *Options) AutoUpdateOCIRepository() string {
+	return o.autoUpdateOCIRepository
 }
 
 // Owner returns the field manager name.

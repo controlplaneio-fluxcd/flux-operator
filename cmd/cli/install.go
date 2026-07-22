@@ -31,12 +31,13 @@ var installCmd = &cobra.Command{
 	Long: `The install command provides a quick way to bootstrap a Kubernetes cluster with the Flux Operator and a Flux instance.
 
 The install command performs the following steps:
-  1. Downloads the Flux Operator distribution artifact from 'oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests'.
+  1. Downloads the Flux Operator distribution artifact from 'oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests',
+     or reads the Flux Operator install manifest from a local file when --install-file is set.
   2. Installs the Flux Operator in the 'flux-system' namespace and waits for it to become ready.
   3. Installs the Flux instance in the 'flux-system' namespace according to the provided configuration.
   4. Configures the pull secret for the instance sync source if credentials are provided.
-  4. Configures Flux to bootstrap the cluster from a Git repository or OCI repository if a sync URL is provided.
-  5. Configures automatic updates of the Flux Operator from the distribution artifact.
+  5. Configures Flux to bootstrap the cluster from a Git repository or OCI repository if a sync URL is provided.
+  6. Configures automatic updates of the Flux Operator from the configured OCIRepository.
 
 This command is intended for development and testing purposes. For production installations,
 it is recommended to follow the installation guide at https://fluxcd.control-plane.io/operator/install/
@@ -73,6 +74,12 @@ it is recommended to follow the installation guide at https://fluxcd.control-pla
   # Install using a Flux instance YAML file
   flux-operator install -f flux-instance.yaml
 
+  # Install in air-gapped mode using the embedded install manifest and a custom auto-update OCIRepository
+  flux-operator install \
+    --install-file=/install-file.yaml \
+    --auto-update-oci-repository-file=/etc/flux-config/auto-update-oci-repository.yaml \
+    -f /etc/flux-config/flux-instance.yaml
+
   # Install using a Flux instance from a GitHub URL
   flux-operator install \
     --instance-sync-creds=git:${GITHUB_TOKEN} \
@@ -95,36 +102,40 @@ it is recommended to follow the installation guide at https://fluxcd.control-pla
 }
 
 type installFlags struct {
-	instanceFile             string
-	components               []string
-	componentsExtra          []string
-	distributionVersion      string
-	distributionRegistry     string
-	distributionArtifact     string
-	clusterType              string
-	clusterSize              string
-	clusterDomain            string
-	clusterMultitenant       bool
-	clusterNetworkPolicy     bool
-	syncURL                  string
-	syncRef                  string
-	syncPath                 string
-	syncCreds                string
-	syncGHAAppID             string
-	syncGHAInstallationID    string
-	syncGHAInstallationOwner string
-	syncGHAPrivateKeyFile    string
-	syncGHABaseURL           string
-	autoUpdate               bool
-	verify                   bool
-	certIdentityRegexp       string
-	certOIDCIssuer           string
-	trustedRoot              string
+	installFile                 string
+	instanceFile                string
+	components                  []string
+	componentsExtra             []string
+	distributionVersion         string
+	distributionRegistry        string
+	distributionArtifact        string
+	clusterType                 string
+	clusterSize                 string
+	clusterDomain               string
+	clusterMultitenant          bool
+	clusterNetworkPolicy        bool
+	syncURL                     string
+	syncRef                     string
+	syncPath                    string
+	syncCreds                   string
+	syncGHAAppID                string
+	syncGHAInstallationID       string
+	syncGHAInstallationOwner    string
+	syncGHAPrivateKeyFile       string
+	syncGHABaseURL              string
+	autoUpdate                  bool
+	verify                      bool
+	certIdentityRegexp          string
+	certOIDCIssuer              string
+	trustedRoot                 string
+	autoUpdateOCIRepositoryFile string
 }
 
 var installArgs installFlags
 
 func init() {
+	installCmd.Flags().StringVar(&installArgs.installFile, "install-file", "",
+		"path to a local Flux Operator install manifest; when set, skips pulling the artifact for the operator install manifest")
 	installCmd.Flags().StringVarP(&installArgs.instanceFile, "instance-file", "f", "",
 		"path to Flux instance YAML file (local file or HTTPS URL)")
 	installCmd.Flags().StringSliceVar(&installArgs.components, "instance-components",
@@ -167,7 +178,9 @@ func init() {
 	installCmd.Flags().StringVar(&installArgs.syncGHABaseURL, "instance-sync-gha-base-url", "",
 		"GitHub base URL for GitHub Enterprise Server (optional)")
 	installCmd.Flags().BoolVar(&installArgs.autoUpdate, "auto-update", true,
-		"enable automatic updates of the Flux Operator from the distribution artifact")
+		"enable automatic updates of the Flux Operator")
+	installCmd.Flags().StringVar(&installArgs.autoUpdateOCIRepositoryFile, "auto-update-oci-repository-file", "",
+		"path to a local Flux OCIRepository manifest that replaces the generated auto-update OCIRepository")
 	installCmd.Flags().BoolVar(&installArgs.verify, "verify", false,
 		"verify the cosign signature of the distribution artifact before installing")
 	installCmd.Flags().StringVar(&installArgs.certIdentityRegexp, "certificate-identity-regexp", cosign.DefaultCertIdentityRegexp,
@@ -186,6 +199,10 @@ func installCmdRun(cmd *cobra.Command, args []string) error {
 		rootArgs.timeout = 5 * time.Minute
 	}
 
+	if err := validateInstallFlags(); err != nil {
+		return err
+	}
+
 	now := time.Now()
 
 	timeout := rootArgs.timeout - time.Minute
@@ -194,7 +211,7 @@ func installCmdRun(cmd *cobra.Command, args []string) error {
 
 	// Step 1: Generate Flux instance from file, URL or flags
 
-	rootCmd.Println(`◎`, "Downloading artifacts...")
+	printManifestLoadStart()
 	instance, artifactURL, err := makeFluxInstance(ctx)
 	if err != nil {
 		return err
@@ -214,13 +231,13 @@ func installCmdRun(cmd *cobra.Command, args []string) error {
 		rootCmd.Println(`✔`, "Artifact signature verified successfully")
 	}
 
-	// Step 3: Download the distribution artifact and extract the manifests
+	// Step 3: Download or read the operator install manifest
 
-	objects, err := fetchOperatorManifests(artifactURL)
+	objects, err := loadOperatorManifests(artifactURL)
 	if err != nil {
 		return err
 	}
-	rootCmd.Println(`✔`, "Download completed in", time.Since(now).Round(time.Second).String())
+	printManifestLoadComplete(now)
 
 	// Step 4: Install or upgrade the Flux Operator
 
@@ -229,23 +246,9 @@ func installCmdRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("loading kubeconfig failed: %w", err)
 	}
 
-	installerOpts := []install.Option{
-		install.WithArtifactURL(artifactURL),
-		install.WithCredentials(installArgs.syncCreds),
-	}
-
-	if installArgs.hasSyncGHA() {
-		privateKey, err := os.ReadFile(installArgs.syncGHAPrivateKeyFile)
-		if err != nil {
-			return fmt.Errorf("unable to read GitHub App private key file: %w", err)
-		}
-		installerOpts = append(installerOpts, install.WithGitHubAppCredentials(&install.GitHubAppCredentials{
-			AppID:             installArgs.syncGHAAppID,
-			InstallationID:    installArgs.syncGHAInstallationID,
-			InstallationOwner: installArgs.syncGHAInstallationOwner,
-			PrivateKey:        string(privateKey),
-			BaseURL:           installArgs.syncGHABaseURL,
-		}))
+	installerOpts, err := makeInstallerOptions(artifactURL)
+	if err != nil {
+		return err
 	}
 
 	installer, err := install.NewInstaller(ctx, cfg, installerOpts...)
@@ -366,6 +369,22 @@ func installCmdRun(cmd *cobra.Command, args []string) error {
 // makeFluxInstance creates a FluxInstance object from the provided file or command-line flags.
 // If a file is provided, it takes precedence over the flags.
 // It also returns the artifact URL to be used for downloading the Flux Operator manifests.
+func printManifestLoadStart() {
+	if installArgs.installFile != "" {
+		rootCmd.Println(`◎`, "Loading manifests...")
+		return
+	}
+	rootCmd.Println(`◎`, "Downloading artifacts...")
+}
+
+func printManifestLoadComplete(start time.Time) {
+	if installArgs.installFile != "" {
+		rootCmd.Println(`✔`, "Manifests loaded in", time.Since(start).Round(time.Second).String())
+		return
+	}
+	rootCmd.Println(`✔`, "Download completed in", time.Since(start).Round(time.Second).String())
+}
+
 func makeFluxInstance(ctx context.Context) (instance *fluxcdv1.FluxInstance, artifactURL string, err error) {
 	instance = &fluxcdv1.FluxInstance{}
 	artifactURL = installArgs.distributionArtifact
@@ -468,6 +487,117 @@ func makeFluxInstance(ctx context.Context) (instance *fluxcdv1.FluxInstance, art
 	}
 
 	return instance, artifactURL, nil
+}
+
+// validateInstallFlags validates flag combinations for the install command.
+func validateInstallFlags() error {
+	if installArgs.installFile != "" && installArgs.verify {
+		return fmt.Errorf("--verify cannot be used with --install-file")
+	}
+
+	if installArgs.autoUpdateOCIRepositoryFile != "" && !installArgs.autoUpdate {
+		return fmt.Errorf("--auto-update-oci-repository-file cannot be set when --auto-update=false")
+	}
+
+	return nil
+}
+
+// makeInstallerOptions returns installer options from the install command flags.
+func makeInstallerOptions(artifactURL string) ([]install.Option, error) {
+	autoUpdateOCIRepository, err := loadAutoUpdateOCIRepository()
+	if err != nil {
+		return nil, err
+	}
+
+	installerOpts := []install.Option{
+		install.WithArtifactURL(artifactURL),
+		install.WithCredentials(installArgs.syncCreds),
+	}
+	if autoUpdateOCIRepository != "" {
+		installerOpts = append(installerOpts, install.WithAutoUpdateOCIRepository(autoUpdateOCIRepository))
+	}
+
+	if installArgs.hasSyncGHA() {
+		privateKey, err := os.ReadFile(installArgs.syncGHAPrivateKeyFile)
+		if err != nil {
+			return nil, fmt.Errorf("unable to read GitHub App private key file: %w", err)
+		}
+		installerOpts = append(installerOpts, install.WithGitHubAppCredentials(&install.GitHubAppCredentials{
+			AppID:             installArgs.syncGHAAppID,
+			InstallationID:    installArgs.syncGHAInstallationID,
+			InstallationOwner: installArgs.syncGHAInstallationOwner,
+			PrivateKey:        string(privateKey),
+			BaseURL:           installArgs.syncGHABaseURL,
+		}))
+	}
+
+	return installerOpts, nil
+}
+
+// loadAutoUpdateOCIRepository returns the custom OCIRepository manifest for the auto-update ResourceSet.
+func loadAutoUpdateOCIRepository() (string, error) {
+	if installArgs.autoUpdateOCIRepositoryFile == "" {
+		return "", nil
+	}
+	return readAutoUpdateOCIRepository(installArgs.autoUpdateOCIRepositoryFile)
+}
+
+// readAutoUpdateOCIRepository reads and validates a Flux OCIRepository manifest from a local file.
+func readAutoUpdateOCIRepository(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("failed to read auto-update OCIRepository file: %w", err)
+	}
+
+	objects, err := ssautil.ReadObjects(bytes.NewReader(data))
+	if err != nil {
+		return "", fmt.Errorf("unable to parse auto-update OCIRepository file %s: %w", path, err)
+	}
+
+	if len(objects) == 0 {
+		return "", fmt.Errorf("no Kubernetes objects found in auto-update OCIRepository file %s", path)
+	}
+	if len(objects) != 1 {
+		return "", fmt.Errorf("expected exactly one Kubernetes object in auto-update OCIRepository file %s, got %d", path, len(objects))
+	}
+	if objects[0].GetKind() != "OCIRepository" {
+		return "", fmt.Errorf("expected auto-update OCIRepository file %s to contain kind OCIRepository, got %s", path, objects[0].GetKind())
+	}
+
+	manifest, err := yaml.Marshal(objects[0].Object)
+	if err != nil {
+		return "", fmt.Errorf("unable to encode auto-update OCIRepository file %s: %w", path, err)
+	}
+
+	return strings.TrimSpace(string(manifest)), nil
+}
+
+// loadOperatorManifests returns the Flux Operator install manifest objects from
+// a local file when --install-file is set, otherwise from the distribution artifact.
+func loadOperatorManifests(artifactURL string) ([]*unstructured.Unstructured, error) {
+	if installArgs.installFile != "" {
+		return readOperatorManifests(installArgs.installFile)
+	}
+	return fetchOperatorManifests(artifactURL)
+}
+
+// readOperatorManifests reads the Flux Operator install manifest from a local file.
+func readOperatorManifests(path string) ([]*unstructured.Unstructured, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read install file: %w", err)
+	}
+
+	objects, err := ssautil.ReadObjects(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse install file %s: %w", path, err)
+	}
+
+	if len(objects) == 0 {
+		return nil, fmt.Errorf("no Kubernetes objects found in install file %s", path)
+	}
+
+	return objects, nil
 }
 
 // fetchOperatorManifests downloads the Flux Operator distribution artifact
