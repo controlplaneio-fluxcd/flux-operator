@@ -22,6 +22,8 @@ import { FavoritesPage } from './components/favorites/FavoritesPage'
 import { favorites } from './utils/favorites'
 import { ProfilePage } from './components/user/ProfilePage'
 import { NotFoundPage } from './components/layout/NotFoundPage'
+import { KeyboardShortcutsModal } from './components/layout/KeyboardShortcutsModal'
+import { useKeyboardShortcuts } from './utils/useKeyboardShortcuts'
 import { FluxOperatorIcon } from './components/layout/Icons'
 import { Spinner } from './components/common/rowKit'
 
@@ -308,6 +310,8 @@ function AppContent({ spec, namespace }) {
   const currentPath = location.path
   const isTabView = currentPath === '/favorites' || currentPath === '/events' || currentPath === '/resources' || currentPath === '/workloads'
 
+  useKeyboardShortcuts()
+
   return (
     <div
       class="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors flex flex-col"
@@ -318,6 +322,8 @@ function AppContent({ spec, namespace }) {
     >
       {/* Connection status banner (only visible when disconnected) */}
       <ConnectionStatus />
+
+      <KeyboardShortcutsModal />
 
       {/* Sticky top chrome on desktop: the header and tab nav pin to the top so
           the list scrolls behind them. On mobile they stay in normal flow. The

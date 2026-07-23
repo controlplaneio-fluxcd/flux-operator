@@ -14,6 +14,7 @@ import { LOGS_QUERY_PARAM, ALL_PODS_VALUE } from './WorkloadLogsAction'
 import { FluxOperatorIcon } from '../../layout/Icons'
 import { useHashTab } from '../../../utils/hash'
 import { urlWithParam } from '../../../utils/routing'
+import { useWorkloadLogsOverlay } from '../../../utils/useWorkloadLogsOverlay'
 
 // Valid tabs for the WorkloadDetailPanel
 const WORKLOAD_TABS = ['overview', 'pods', 'events', 'spec', 'status']
@@ -130,6 +131,8 @@ export function WorkloadDetailPanel({
     setLogsSession(null)
     window.history.replaceState(null, '', urlWithParam(LOGS_QUERY_PARAM, null))
   }
+
+  useWorkloadLogsOverlay(!!logsSession)
 
   // Whether the user is allowed to view pod logs
   const canViewLogs = workloadInfo?.userActions?.includes('logs')

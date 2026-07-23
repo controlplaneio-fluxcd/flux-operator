@@ -10,6 +10,7 @@ import { resetLogSettings } from '../../utils/logSettings'
 import { writeSessionStorage } from '../../utils/storage'
 import { reportData } from '../../app'
 import { parseAuthProviderCookie } from '../../utils/cookies'
+import { openKeyboardShortcuts } from '../../utils/keyboardShortcuts'
 import { OpenIDIcon, KubernetesIcon } from './Icons'
 
 // Exported signal to track menu open state
@@ -196,6 +197,17 @@ export function UserMenu() {
               {getThemeIcon()}
             </span>
             <span>Theme: {getThemeLabel()}</span>
+          </button>
+
+          {/* Keyboard shortcuts */}
+          <button
+            onClick={openKeyboardShortcuts}
+            class="w-full px-4 py-2 flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+          >
+            <svg class="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+            </svg>
+            <span>Keyboard shortcuts</span>
           </button>
 
           {/* Separator */}

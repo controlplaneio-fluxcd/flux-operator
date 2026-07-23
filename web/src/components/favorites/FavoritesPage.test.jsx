@@ -3,7 +3,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/preact'
-import { FavoritesPage, favoritesData, favoritesFetching } from './FavoritesPage'
+import { FavoritesPage, favoritesData, favoritesFetching, fetchFavoritesData } from './FavoritesPage'
 import { favorites, reorderFavorites, removeFavorite } from '../../utils/favorites'
 import { fetchWithMock } from '../../utils/fetch'
 import { POLL_INTERVAL_MS } from '../../utils/constants'
@@ -682,5 +682,60 @@ describe('FavoritesPage component', () => {
 
       expect(clearIntervalSpy).toHaveBeenCalled()
     })
+  })
+})
+
+describe('fetchFavoritesData race handling', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    favorites.value = [
+      { kind: 'FluxInstance', namespace: 'flux-system', name: 'flux' }
+    ]
+    favoritesData.value = {}
+    favoritesFetching.value = false
+  })
+
+  it('discards a stale response when a newer fetch completes first', async () => {
+    let resolveSlow
+    const slow = new Promise((resolve) => {
+      resolveSlow = resolve
+    })
+
+    fetchWithMock
+      .mockImplementationOnce(() => slow)
+      .mockImplementationOnce(() => Promise.resolve({
+        resources: [{
+          kind: 'FluxInstance',
+          namespace: 'flux-system',
+          name: 'flux',
+          status: 'Ready',
+          lastReconciled: '2024-01-15T10:00:00Z',
+          message: 'latest'
+        }]
+      }))
+
+    const slowPromise = fetchFavoritesData()
+    const fastPromise = fetchFavoritesData()
+
+    await fastPromise
+    expect(favoritesData.value['FluxInstance/flux-system/flux'].status).toBe('Ready')
+    expect(favoritesData.value['FluxInstance/flux-system/flux'].message).toBe('latest')
+    expect(favoritesFetching.value).toBe(false)
+
+    resolveSlow({
+      resources: [{
+        kind: 'FluxInstance',
+        namespace: 'flux-system',
+        name: 'flux',
+        status: 'Failed',
+        lastReconciled: '2024-01-15T09:00:00Z',
+        message: 'stale'
+      }]
+    })
+    await slowPromise
+
+    expect(favoritesData.value['FluxInstance/flux-system/flux'].status).toBe('Ready')
+    expect(favoritesData.value['FluxInstance/flux-system/flux'].message).toBe('latest')
+    expect(favoritesFetching.value).toBe(false)
   })
 })

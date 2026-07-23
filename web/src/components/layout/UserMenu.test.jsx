@@ -8,6 +8,7 @@ import { themeMode, appliedTheme, themes } from '../../utils/theme'
 import { clearFavorites } from '../../utils/favorites'
 import { logSettings, DEFAULT_LOG_SETTINGS } from '../../utils/logSettings'
 import { reportData } from '../../app'
+import { keyboardShortcutsOpen } from '../../utils/keyboardShortcuts'
 
 // Mock the favorites module (app.jsx reads the favorites signal for the tab count)
 vi.mock('../../utils/favorites', () => ({
@@ -19,6 +20,7 @@ describe('UserMenu', () => {
   beforeEach(() => {
     // Reset signals
     userMenuOpen.value = false
+    keyboardShortcutsOpen.value = false
     themeMode.value = themes.light
     appliedTheme.value = themes.light
 
@@ -157,6 +159,18 @@ describe('UserMenu', () => {
 
       // auto -> dark
       expect(themeMode.value).toBe(themes.dark)
+    })
+  })
+
+  describe('Keyboard shortcuts', () => {
+    it('should open the keyboard shortcuts modal and close the menu', () => {
+      userMenuOpen.value = true
+      render(<UserMenu />)
+
+      fireEvent.click(screen.getByText('Keyboard shortcuts'))
+
+      expect(userMenuOpen.value).toBe(false)
+      expect(keyboardShortcutsOpen.value).toBe(true)
     })
   })
 
