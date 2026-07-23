@@ -12,9 +12,6 @@ import { getStatusBadgeClass, getEventBadgeClass } from '../../../utils/status'
 import { FluxOperatorIcon } from '../../layout/Icons'
 import { useHashTab } from '../../../utils/hash'
 
-// Valid tabs for the SourcePanel
-const SOURCE_TABS = ['overview', 'chart', 'events', 'spec', 'status']
-
 /**
  * SourcePanel - Displays source information for a Flux resource
  * Handles its own data fetching and state management
@@ -39,8 +36,22 @@ export function SourcePanel({ resourceData }) {
   // Track initial mount to avoid refetching on first render
   const isInitialMount = useRef(true)
 
+  const hasHelmChart = resourceData?.kind === 'HelmRelease' && resourceData?.status?.helmChart
+
+  const visibleTabs = useMemo(() => {
+    const tabs = ['overview']
+    if (hasHelmChart) {
+      tabs.push('chart')
+    }
+    tabs.push('events')
+    if (sourceData) {
+      tabs.push('spec', 'status')
+    }
+    return tabs
+  }, [hasHelmChart, sourceData])
+
   // Tab state synced with URL hash (e.g., #source-events)
-  const [sourceTab, setSourceTab] = useHashTab('source', 'overview', SOURCE_TABS, 'source-panel')
+  const [sourceTab, setSourceTab] = useHashTab('source', 'overview', visibleTabs, 'source-panel')
 
   // Fetch source data when component mounts (initial fetch only)
   useEffect(() => {
@@ -164,9 +175,6 @@ export function SourcePanel({ resourceData }) {
 
     refetchSourceData()
   }, [resourceData])
-
-  // Determine if HelmChart info is available
-  const hasHelmChart = resourceData?.kind === 'HelmRelease' && resourceData?.status?.helmChart
 
   // Parse HelmChart reference (format: "namespace/name")
   const helmChartRef = useMemo(() => {
