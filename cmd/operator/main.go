@@ -93,6 +93,7 @@ func main() {
 		defaultWorkloadIdentityServiceAccount string
 		overrideFieldManagers                 []string
 		watchOptions                          runtimeCtrl.WatchOptions
+		watchNamespaces                       []string
 		webServerPort                         int
 		webServerOnly                         bool
 		webConfigFile                         string
@@ -119,6 +120,11 @@ func main() {
 		"Field manager disallowed to perform changes on managed resources.")
 	flag.CommandLine.StringVar(&watchOptions.ConfigsLabelSelector, "watch-configs-label-selector", meta.LabelKeyWatch+"="+meta.LabelValueWatchEnabled,
 		"Watch for ConfigMaps and Secrets with matching labels.")
+	flag.StringArrayVar(&watchNamespaces, "watch-namespaces", nil,
+		"Restrict ResourceSet and ResourceSetInputProvider reconciliation to these namespaces. "+
+			"May be set multiple times and/or comma-separated (e.g. --watch-namespaces=a,b). "+
+			"The operator's own runtime namespace is always included. "+
+			"Empty (default) preserves the upstream cluster-wide behaviour.")
 	flag.IntVar(&webServerPort, "web-server-port", 9080,
 		"The port for the web server to listen on. If set to 0, the web server is disabled.")
 	flag.BoolVar(&webServerOnly, "web-server-only", false,
@@ -207,6 +213,58 @@ func main() {
 		reporter.MustRegisterMetrics()
 	}
 
+	// Build the cache options. By default only FluxInstance/FluxReport are
+	// narrowed (to the singleton named 'flux' in the runtime namespace) while
+	// ResourceSet/ResourceSetInputProvider are cached cluster-wide.
+	cacheOptions := ctrlcache.Options{
+		ByObject: map[ctrlclient.Object]ctrlcache.ByObject{
+			&fluxcdv1.FluxInstance{}: {
+				// Only the FluxInstance with the name 'flux' can be reconciled.
+				Field: fields.SelectorFromSet(fields.Set{
+					"metadata.name":      fluxcdv1.DefaultInstanceName,
+					"metadata.namespace": runtimeNamespace,
+				}),
+			},
+			&fluxcdv1.FluxReport{}: {
+				// Only the FluxReport with the name 'flux' can be reconciled.
+				Field: fields.SelectorFromSet(fields.Set{
+					"metadata.name":      fluxcdv1.DefaultInstanceName,
+					"metadata.namespace": runtimeNamespace,
+				}),
+			},
+		},
+	}
+
+	// When --watch-namespaces is set, scope the ResourceSet and
+	// ResourceSetInputProvider caches to the given namespaces so a per-tenant
+	// operator only sees and reconciles its own objects instead of the whole
+	// cluster. The operator's own runtime namespace is always included so that
+	// RS/RSIP co-located with the operator are still reconciled. Other kinds are
+	// left untouched. Empty preserves the upstream cluster-wide behaviour.
+	//
+	// NOTE: only the RS/RSIP *caches* are scoped. The ConfigMap/Secret metadata
+	// watches set up by the ResourceSet controller stay cluster-wide (a
+	// ResourceSet may reference config inputs in any namespace), and the
+	// controller's RS/RSIP RBAC (+kubebuilder:rbac markers) is also cluster-wide.
+	// So a scoped operator still needs cluster-wide list/watch on RS, RSIP and
+	// ConfigMap/Secret metadata; revisit both axes if the operator's RBAC is ever
+	// tightened to the watched namespace set.
+	scopedNamespaces, err := resolveWatchNamespaces(runtimeNamespace, watchNamespaces)
+	if err != nil {
+		setupLog.Error(err, "invalid --watch-namespaces value")
+		os.Exit(1)
+	}
+	if len(scopedNamespaces) > 0 {
+		nsConfigs := make(map[string]ctrlcache.Config, len(scopedNamespaces))
+		for _, ns := range scopedNamespaces {
+			nsConfigs[ns] = ctrlcache.Config{}
+		}
+		cacheOptions.ByObject[&fluxcdv1.ResourceSet{}] = ctrlcache.ByObject{Namespaces: nsConfigs}
+		cacheOptions.ByObject[&fluxcdv1.ResourceSetInputProvider{}] = ctrlcache.ByObject{Namespaces: nsConfigs}
+		setupLog.Info("ResourceSet/ResourceSetInputProvider reconciliation scoped to namespaces",
+			"namespaces", scopedNamespaces)
+	}
+
 	ctx := ctrl.SetupSignalHandler()
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,
@@ -230,24 +288,7 @@ func main() {
 				DisableFor: []ctrlclient.Object{&corev1.Secret{}, &corev1.ConfigMap{}},
 			},
 		},
-		Cache: ctrlcache.Options{
-			ByObject: map[ctrlclient.Object]ctrlcache.ByObject{
-				&fluxcdv1.FluxInstance{}: {
-					// Only the FluxInstance with the name 'flux' can be reconciled.
-					Field: fields.SelectorFromSet(fields.Set{
-						"metadata.name":      fluxcdv1.DefaultInstanceName,
-						"metadata.namespace": runtimeNamespace,
-					}),
-				},
-				&fluxcdv1.FluxReport{}: {
-					// Only the FluxReport with the name 'flux' can be reconciled.
-					Field: fields.SelectorFromSet(fields.Set{
-						"metadata.name":      fluxcdv1.DefaultInstanceName,
-						"metadata.namespace": runtimeNamespace,
-					}),
-				},
-			},
-		},
+		Cache: cacheOptions,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
