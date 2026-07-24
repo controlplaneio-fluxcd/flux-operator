@@ -63,6 +63,10 @@ func ValidateAuthenticationSpec(a *fluxcdv1.AuthenticationSpec) error {
 		if !a.OAuth2.Configured() {
 			return fmt.Errorf("authentication type '%s' is not configured", a.Type)
 		}
+	case fluxcdv1.AuthenticationTypeReverseProxy:
+		if !a.ReverseProxy.Configured() {
+			return fmt.Errorf("authentication type '%s' is not configured", a.Type)
+		}
 	default:
 		return fmt.Errorf("invalid authentication type '%s'", a.Type)
 	}
@@ -84,6 +88,14 @@ func ValidateAuthenticationSpec(a *fluxcdv1.AuthenticationSpec) error {
 				fluxcdv1.AuthenticationTypeOAuth2, err)
 		}
 		authConfigTypes = append(authConfigTypes, fluxcdv1.AuthenticationTypeOAuth2)
+	}
+
+	if a.ReverseProxy.Configured() {
+		if err := ValidateReverseProxyAuthenticationSpec(a.ReverseProxy); err != nil {
+			return fmt.Errorf("invalid %s authentication configuration: %w",
+				fluxcdv1.AuthenticationTypeReverseProxy, err)
+		}
+		authConfigTypes = append(authConfigTypes, fluxcdv1.AuthenticationTypeReverseProxy)
 	}
 
 	// Validate that only a single authentication configuration is provided.
@@ -138,6 +150,45 @@ func ValidateOAuth2AuthenticationSpec(o *fluxcdv1.OAuth2AuthenticationSpec) erro
 	}
 
 	return nil
+}
+
+// ValidateReverseProxyAuthenticationSpec validates the ReverseProxyAuthenticationSpec configuration.
+func ValidateReverseProxyAuthenticationSpec(
+	r *fluxcdv1.ReverseProxyAuthenticationSpec,
+) error {
+	if r.Headers.Username == "" {
+		return fmt.Errorf("username header must be set")
+	}
+
+	if len(r.TrustedProxies) == 0 {
+		return fmt.Errorf("at least one trusted proxy must be configured")
+	}
+
+	groups, err := sanitizeGroups(r.DefaultGroups)
+	if err != nil {
+		return fmt.Errorf("invalid defaultGroups: %w", err)
+	}
+
+	r.DefaultGroups = groups
+
+	return nil
+}
+
+// sanitizeGroups trims whitespace from each group in the list, removes empty groups, and sorts the list.
+func sanitizeGroups(groups []string) ([]string, error) {
+	groups = slices.Clone(groups)
+
+	for i := range groups {
+		groups[i] = strings.TrimSpace(groups[i])
+		if groups[i] == "" {
+			return nil, fmt.Errorf("group[%d] is empty", i)
+		}
+	}
+
+	slices.Sort(groups)
+	groups = slices.Compact(groups)
+
+	return groups, nil
 }
 
 // ValidateClaimsProcessorSpec validates the ClaimsProcessorSpec configuration.
