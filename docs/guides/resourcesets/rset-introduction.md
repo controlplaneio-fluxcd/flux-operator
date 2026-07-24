@@ -44,6 +44,16 @@ Another use-case is to automate the provisioning of new environments for feature
 and for long-lived branches to deploy to dedicated namespaces and/or clusters, effectively
 enabling Namespace-as-a-Service to developers securely in a GitOps manner.
 
+### Monorepo deployments
+
+The ResourceSet controller integrates with the Flux source-watcher to automatically
+generate deployment pipelines for every application directory found in a monorepo.
+Onboarding a new application or environment is as simple as adding a directory to
+the repository, and removing the directory tears the deployment down.
+
+To get started with monorepo deployments see the
+[Using ResourceSets for Monorepo Deployments](rset-monorepo.md) guide.
+
 ### Time-based Delivery
 
 The ResourceSet API also supports time-based delivery, allowing platform teams to define

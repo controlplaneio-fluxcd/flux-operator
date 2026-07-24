@@ -270,12 +270,16 @@ spec:
             name: << inputs.cluster >>-kubeconfig
 ```
 
-## Monorepo example
+## Microservices example
 
 When an application is composed of multiple microservices, the ResourceSet API can be used
 to define the deployment of each component and the rollout order based on dependencies.
 
-Assuming the following directory structure in a monorepo where the Kubernetes resources
+Note that for automatically generating deployment pipelines for every application
+directory found in a monorepo, see the
+[Using ResourceSets for Monorepo Deployments](rset-monorepo.md) guide.
+
+Assuming the following directory structure in a repository where the Kubernetes resources
 are templated using Flux variables:
 
 ```text
