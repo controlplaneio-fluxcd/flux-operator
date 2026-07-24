@@ -192,18 +192,41 @@ memory utilization of Flux controllers helps users understand whether Flux itsel
 
 ---
 
-## 7. Fine-Grained GitOps Actions
+## 7. Fine-Grained User Actions
 
-**Where:** Any GitOps action (e.g. suspend, resume, reconcile, download) triggered via the Web UI when `.spec.userActions.access` is configured as `FineGrained`.
+**Where:** Flux resource actions, artifact downloads, workload restarts, CronJob
+job runs, and Pod deletions triggered through the Web UI when
+`.spec.userActions.access` is configured as `FineGrained`. Pod log viewing is a
+Web UI user action and is disabled when authentication is not configured, but
+it is not part of this elevated path: it has no custom RBAC verb and always uses
+the user's native `get` permission on `pods/log`.
 
 **Internal operation:**
-The system performs the actual `patch` operation on the target resource, as long as the user possesses the specific custom action verb (e.g. `suspend`).
+The system performs the native Kubernetes reads and mutations required by an
+action after confirming that the user possesses its specific action verb, such
+as `suspend`, `download`, or `restart`.
 
 **How it works:**
-Normally, GitOps actions are executed by patching the object using the user's impersonated client, which requires the user to hold the native Kubernetes `patch` verb. When fine-grained access control is enabled, the backend verifies that the user holds the specific custom verb for the action, and if so, it uses the privileged client to perform the patch operation, removing the need for user impersonation during the patch.
+In the default `Impersonated` mode, the backend verifies the action verb and
+performs the operation using the user's impersonated client. The user must
+therefore hold both the action verb and all native verbs used by the operation,
+such as `get`, `patch`, or `create`. In `FineGrained` mode, the action verb is
+still checked against the user's identity, but the backend uses its privileged
+client for the supporting reads and the action itself. For artifact downloads,
+only the requested artifact is returned to the authorized user; data from other
+privileged reads is not exposed.
+
+Pod deletion is a special case: its action verb, `delete`, is also the native
+Kubernetes verb. Granting that action therefore permits direct Pod deletion in
+either access mode.
 
 **Least privilege benefit:**
-This feature is crucial for least-privilege security scenarios. If users were required to have the native `patch` verb to suspend or resume resources, they could potentially bypass the Web UI and perform unauthorized modifications via `kubectl` or other SSO-integrated tools. By handling the patch internally, cluster administrators can assign restrictive, fine-grained access policies ensuring tenants can solely perform permitted actions.
+Without fine-grained access, native verbs such as `patch` can let users bypass
+the action boundaries enforced by the Web UI and make unrelated changes with
+`kubectl` or other SSO-integrated tools. Moving those native operations to the
+Web UI service account lets administrators grant individual action verbs while
+keeping users' direct Kubernetes access read-only, except where the action verb
+is itself native, as with Pod deletion.
 
 ---
 
@@ -270,6 +293,6 @@ Disabled buttons improve discoverability without weakening enforcement. Users se
 | 4 | Audit pod-owner resolution  | System reads owner chain                           | None (server-side only)                                                       |
 | 5 | Dashboard report and workloads index | System scans Flux resources and applier inventories | Aggregated stats and workload reference + parent reconciler status, filtered by user namespace |
 | 6 | Controller metrics          | System reads metrics API                           | CPU/memory usage of Flux controllers                                          |
-| 7 | Fine-Grained GitOps Actions | System patches resource                            | None (server-side mutation only)                                              |
+| 7 | Fine-grained user actions   | System performs native action operations           | Requested artifact for downloads; action result only otherwise                |
 | 8 | Namespace visibility        | Wrapper lists namespaces with privileged base client | Visible namespace names after RBAC filtering                                  |
 | 9 | User action visibility      | None (UI reads `userActionsEnabled` and `userActions` from API) | Disabled action buttons with auth/permission tooltips; no extra cluster data |

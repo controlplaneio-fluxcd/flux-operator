@@ -22,6 +22,71 @@ export const favoritesData = signal({})
 // fetch. On warm return visits hasCachedData suppresses the pulse regardless.
 export const favoritesFetching = signal(true)
 
+// Monotonic generation so overlapping polls / Shift+R refreshes discard stale
+// responses instead of overwriting newer favoritesData or clearing favoritesFetching
+// while a later request is still in flight.
+let favoritesFetchGeneration = 0
+
+/**
+ * Fetches current status for all favorites from the API.
+ * Used by the page poll interval and the Shift+R keyboard shortcut.
+ */
+export async function fetchFavoritesData() {
+  const generation = ++favoritesFetchGeneration
+  const currentFavorites = favorites.value
+
+  if (currentFavorites.length === 0) {
+    if (generation === favoritesFetchGeneration) {
+      favoritesData.value = {}
+      favoritesFetching.value = false
+    }
+    return
+  }
+
+  if (generation === favoritesFetchGeneration) {
+    favoritesFetching.value = true
+  }
+
+  try {
+    const data = await fetchWithMock({
+      endpoint: '/api/v1/favorites',
+      mockPath: '../mock/resources',
+      mockExport: 'getMockFavorites',
+      method: 'POST',
+      body: { favorites: currentFavorites }
+    })
+
+    if (generation !== favoritesFetchGeneration) {
+      return
+    }
+
+    const results = {}
+    const resources = data.resources || []
+
+    resources.forEach(resource => {
+      const key = getFavoriteKey(resource.kind, resource.namespace, resource.name)
+      results[key] = {
+        status: resource.status,
+        lastReconciled: resource.lastReconciled,
+        message: resource.message
+      }
+    })
+
+    favoritesData.value = results
+  } catch (err) {
+    if (generation !== favoritesFetchGeneration) {
+      return
+    }
+    if (Object.keys(favoritesData.value).length === 0) {
+      throw err
+    }
+  } finally {
+    if (generation === favoritesFetchGeneration) {
+      favoritesFetching.value = false
+    }
+  }
+}
+
 /**
  * Normalize a favorite's status to the Flux vocabulary (Ready/Failed/Progressing/
  * Suspended/Unknown) used by the status chart and status filter. Workload favorites
@@ -75,47 +140,17 @@ export function FavoritesPage() {
     return [...new Set(currentFavorites.map(f => f.kind))].sort()
   }, [currentFavorites])
 
-  // Fetch data on mount, when favorites change, and auto-refresh
+  // Fetch data on mount, when favorites change, and auto-refresh.
+  // Signal writes live in fetchFavoritesData (generation-guarded); cancelled only
+  // protects local error state after unmount / favorites change.
   useEffect(() => {
     let cancelled = false
 
     const fetchData = async () => {
-      if (currentFavorites.length === 0) {
-        // Reset the cache so deleting every favorite doesn't resurrect stale
-        // statuses on the next add.
-        favoritesData.value = {}
-        favoritesFetching.value = false
-        return
-      }
-
-      favoritesFetching.value = true
       if (!cancelled) setError(null)
 
       try {
-        // Send all favorites in a single POST request
-        const data = await fetchWithMock({
-          endpoint: '/api/v1/favorites',
-          mockPath: '../mock/resources',
-          mockExport: 'getMockFavorites',
-          method: 'POST',
-          body: { favorites: currentFavorites }
-        })
-
-        // Build results map from returned resources
-        const results = {}
-        const resources = data.resources || []
-
-        // Then, update with found resources
-        resources.forEach(resource => {
-          const key = getFavoriteKey(resource.kind, resource.namespace, resource.name)
-          results[key] = {
-            status: resource.status,
-            lastReconciled: resource.lastReconciled,
-            message: resource.message
-          }
-        })
-
-        if (!cancelled) favoritesData.value = results
+        await fetchFavoritesData()
       } catch (err) {
         // Surface the error panel only when there is no cached status to fall
         // back on; background refreshes (and any visit with a warm cache) fail
@@ -123,8 +158,6 @@ export function FavoritesPage() {
         if (!cancelled && Object.keys(favoritesData.value).length === 0) {
           setError(err.message)
         }
-      } finally {
-        if (!cancelled) favoritesFetching.value = false
       }
     }
 

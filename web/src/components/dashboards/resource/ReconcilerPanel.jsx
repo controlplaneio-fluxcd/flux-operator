@@ -14,12 +14,34 @@ import { HistoryTimeline } from './HistoryTimeline'
 import { FluxOperatorIcon } from '../../layout/Icons'
 import { useHashTab } from '../../../utils/hash'
 
-// Valid tabs for the ReconcilerPanel
-const RECONCILER_TABS = ['overview', 'history', 'events', 'values', 'spec', 'status']
-
 export function ReconcilerPanel({ kind, name, namespace, resourceData }) {
+  const valuesYaml = useMemo(() => {
+    if (kind !== 'HelmRelease' || !resourceData) return null
+    if (resourceData.status?.helmValues) return resourceData.status.helmValues
+    if (resourceData.spec?.values) return resourceData.spec.values
+    return null
+  }, [resourceData, kind])
+
+  const valuesError = useMemo(() => {
+    if (kind !== 'HelmRelease' || !resourceData) return null
+    return resourceData.status?.helmValuesError || null
+  }, [resourceData, kind])
+
+  const visibleTabs = useMemo(() => {
+    const tabs = ['overview']
+    if (resourceData?.status?.history?.length > 0) {
+      tabs.push('history')
+    }
+    tabs.push('events')
+    if (kind === 'HelmRelease' && (valuesError || valuesYaml)) {
+      tabs.push('values')
+    }
+    tabs.push('spec', 'status')
+    return tabs
+  }, [resourceData, kind, valuesError, valuesYaml])
+
   // Tab state synced with URL hash (e.g., #reconciler-events)
-  const [reconcilerTab, setReconcilerTab] = useHashTab('reconciler', 'overview', RECONCILER_TABS, 'reconciler-panel')
+  const [reconcilerTab, setReconcilerTab] = useHashTab('reconciler', 'overview', visibleTabs, 'reconciler-panel')
 
   // Events data state
   const [eventsData, setEventsData] = useState([])
@@ -51,18 +73,6 @@ export function ReconcilerPanel({ kind, name, namespace, resourceData }) {
       spec: resourceData.spec
     }
   }, [resourceData])
-
-  const valuesYaml = useMemo(() => {
-    if (kind !== 'HelmRelease' || !resourceData) return null
-    if (resourceData.status?.helmValues) return resourceData.status.helmValues
-    if (resourceData.spec?.values) return resourceData.spec.values
-    return null
-  }, [resourceData, kind])
-
-  const valuesError = useMemo(() => {
-    if (kind !== 'HelmRelease' || !resourceData) return null
-    return resourceData.status?.helmValuesError || null
-  }, [resourceData, kind])
 
   const statusYaml = useMemo(() => {
     if (!resourceData?.status) return null
