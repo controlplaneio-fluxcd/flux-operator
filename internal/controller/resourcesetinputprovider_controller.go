@@ -38,8 +38,10 @@ import (
 	"github.com/opencontainers/go-digest"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
 	kuberecorder "k8s.io/client-go/tools/record"
@@ -55,6 +57,7 @@ import (
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/notifier"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/schedule"
+	runtimeClient "github.com/fluxcd/pkg/runtime/client"
 )
 
 // ResourceSetInputProviderReconciler reconciles a ResourceSetInputProvider object
@@ -62,15 +65,17 @@ type ResourceSetInputProviderReconciler struct {
 	client.Client
 	kuberecorder.EventRecorder
 
-	Scheme        *runtime.Scheme
-	StatusManager string
-	TokenCache    *cache.TokenCache
-	Version       string
+	Scheme                *runtime.Scheme
+	StatusManager         string
+	TokenCache            *cache.TokenCache
+	Version               string
+	DefaultServiceAccount string
 }
 
 // +kubebuilder:rbac:groups=fluxcd.controlplane.io,resources=resourcesetinputproviders,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=fluxcd.controlplane.io,resources=resourcesetinputproviders/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=fluxcd.controlplane.io,resources=resourcesetinputproviders/finalizers,verbs=update
+// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=externalartifacts,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -190,6 +195,25 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 		}
 		if strings.HasPrefix(obj.Spec.URL, "http://") && !obj.Spec.Insecure {
 			err := fmt.Errorf("spec.url must use 'https://' unless spec.insecure is true")
+			errMsg := fmt.Sprintf("%s: %v", msgTerminalError, err)
+			conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
+			conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
+			log.Error(err, msgTerminalError)
+			r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSpec, errMsg)
+			return ctrl.Result{}, nil
+		}
+	} else if obj.Spec.Type == fluxcdv1.InputProviderExternalArtifact {
+		if len(obj.Spec.Selectors) == 0 {
+			err := fmt.Errorf("spec.selectors must be set when spec.type is 'ExternalArtifact'")
+			errMsg := fmt.Sprintf("%s: %v", msgTerminalError, err)
+			conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
+			conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
+			log.Error(err, msgTerminalError)
+			r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSpec, errMsg)
+			return ctrl.Result{}, nil
+		}
+		if obj.Spec.URL != "" {
+			err := fmt.Errorf("spec.url must be empty when spec.type is 'ExternalArtifact'")
 			errMsg := fmt.Sprintf("%s: %v", msgTerminalError, err)
 			conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
 			conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
@@ -358,6 +382,13 @@ func (r *ResourceSetInputProviderReconciler) callExternalProvider(
 		exportedInputs, err = r.callExternalServiceProvider(providerCtx, obj, tlsConfig, authData, defaults)
 		if err != nil {
 			return nil, fmt.Errorf("failed to call ExternalService provider: %w", err)
+		}
+	// Handle ExternalArtifact provider.
+	case obj.Spec.Type == fluxcdv1.InputProviderExternalArtifact:
+		var err error
+		exportedInputs, err = r.callExternalArtifactProvider(providerCtx, obj, defaults)
+		if err != nil {
+			return nil, fmt.Errorf("failed to call ExternalArtifact provider: %w", err)
 		}
 	}
 
@@ -986,6 +1017,169 @@ func (r *ResourceSetInputProviderReconciler) callExternalServiceProvider(
 	}
 
 	return res, nil
+}
+
+// callExternalArtifactProvider lists ExternalArtifact resources in-cluster
+// matching spec.selectors and converts them into ResourceSetInput objects.
+// It uses the unstructured client to avoid importing source-controller/api as a
+// module dependency.
+func (r *ResourceSetInputProviderReconciler) callExternalArtifactProvider(
+	ctx context.Context,
+	obj *fluxcdv1.ResourceSetInputProvider,
+	defaults map[string]any,
+) ([]fluxcdv1.ResourceSetInput, error) {
+
+	kubeClient := r.Client
+	if r.DefaultServiceAccount != "" || obj.Spec.ServiceAccountName != "" {
+		impersonatorOpts := make([]runtimeClient.ImpersonatorOption, 0, 1)
+		impersonatorOpts = append(impersonatorOpts,
+			runtimeClient.WithServiceAccount(r.DefaultServiceAccount, obj.Spec.ServiceAccountName, obj.GetNamespace()))
+		impersonation := runtimeClient.NewImpersonator(r.Client, impersonatorOpts...)
+		var err error
+		kubeClient, _, err = impersonation.GetClient(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create impersonated client: %w", err)
+		}
+	}
+
+	var matches []*unstructured.Unstructured
+
+	for _, sel := range obj.Spec.Selectors {
+		ns := sel.Namespace
+		if ns == "" {
+			ns = obj.GetNamespace()
+		}
+
+		if sel.Name != "" {
+			if ns == "*" {
+				// List all namespaces and filter by name in Go
+				list := &unstructured.UnstructuredList{}
+				list.SetGroupVersionKind(externalArtifactListGVK)
+				if err := kubeClient.List(ctx, list, client.UnsafeDisableDeepCopy); err != nil {
+					if apierrors.IsForbidden(err) {
+						return nil, fmt.Errorf("impersonated service account '%s' lacks permissions to list ExternalArtifacts across all namespaces: %w",
+							obj.Spec.ServiceAccountName, err)
+					}
+					return nil, fmt.Errorf("failed to list ExternalArtifacts across all namespaces for selector %s: %w", sel.Name, err)
+				}
+				for i := range list.Items {
+					if list.Items[i].GetName() == sel.Name {
+						matches = append(matches, &list.Items[i])
+					}
+				}
+			} else {
+				// Single namespace Get
+				ea := &unstructured.Unstructured{}
+				ea.SetGroupVersionKind(schema.GroupVersionKind{
+					Group:   "source.toolkit.fluxcd.io",
+					Version: "v1",
+					Kind:    "ExternalArtifact",
+				})
+				err := kubeClient.Get(ctx, client.ObjectKey{Namespace: ns, Name: sel.Name}, ea)
+				if err != nil {
+					if apierrors.IsNotFound(err) {
+						continue
+					}
+					if apierrors.IsForbidden(err) {
+						return nil, fmt.Errorf("impersonated service account '%s' lacks permissions to get ExternalArtifact '%s/%s': %w",
+							obj.Spec.ServiceAccountName, ns, sel.Name, err)
+					}
+					return nil, fmt.Errorf("failed to get ExternalArtifact '%s/%s': %w", ns, sel.Name, err)
+				}
+				matches = append(matches, ea)
+			}
+		} else {
+			// Label selector search
+			labelSel, err := metav1.LabelSelectorAsSelector(&sel.LabelSelector)
+			if err != nil {
+				return nil, fmt.Errorf("invalid label selector: %w", err)
+			}
+			list := &unstructured.UnstructuredList{}
+			list.SetGroupVersionKind(externalArtifactListGVK)
+			var listOpts []client.ListOption
+			if ns != "*" {
+				listOpts = append(listOpts, client.InNamespace(ns))
+			}
+			listOpts = append(listOpts, client.MatchingLabelsSelector{Selector: labelSel}, client.UnsafeDisableDeepCopy)
+			if err := kubeClient.List(ctx, list, listOpts...); err != nil {
+				if apierrors.IsForbidden(err) {
+					return nil, fmt.Errorf("impersonated service account '%s' lacks permissions to list ExternalArtifacts in namespace '%s': %w",
+						obj.Spec.ServiceAccountName, ns, err)
+				}
+				return nil, fmt.Errorf("failed to list ExternalArtifacts in namespace '%s': %w", ns, err)
+			}
+			for i := range list.Items {
+				matches = append(matches, &list.Items[i])
+			}
+		}
+	}
+
+	// Deduplicate matches by namespace/name
+	uniqueMatches := make([]*unstructured.Unstructured, 0, len(matches))
+	seen := make(map[string]bool)
+	for _, ea := range matches {
+		key := fmt.Sprintf("%s/%s", ea.GetNamespace(), ea.GetName())
+		if !seen[key] {
+			seen[key] = true
+			uniqueMatches = append(uniqueMatches, ea)
+		}
+	}
+
+	// Sort uniqueMatches by <namespace>/<name> to ensure a stable ordering
+	// before applying filter limit, preventing flapping.
+	slices.SortFunc(uniqueMatches, func(a, b *unstructured.Unstructured) int {
+		if a.GetNamespace() != b.GetNamespace() {
+			return strings.Compare(a.GetNamespace(), b.GetNamespace())
+		}
+		return strings.Compare(a.GetName(), b.GetName())
+	})
+
+	// Apply filter limit.
+	limit := obj.GetFilterLimit()
+	if len(uniqueMatches) > limit {
+		uniqueMatches = uniqueMatches[:limit]
+	}
+
+	res := make([]fluxcdv1.ResourceSetInput, 0, len(uniqueMatches))
+	for _, ea := range uniqueMatches {
+		artifactName := ea.GetName()
+		artifactNamespace := ea.GetNamespace()
+
+		// Extract status.artifact.revision via unstructured helpers.
+		revision, _, _ := unstructured.NestedString(ea.Object,
+			"status", "artifact", "revision")
+
+		// Build the base input map. Start with all labels on the ExternalArtifact
+		// so named captures (e.g. app, env) become template variables.
+		inputMap := make(map[string]any, len(ea.GetLabels())+4)
+		for k, v := range ea.GetLabels() {
+			inputMap[k] = v
+		}
+
+		inputMap["id"] = inputs.ID(fmt.Sprintf("%s/%s", artifactNamespace, artifactName))
+		inputMap["name"] = artifactName
+		inputMap["namespace"] = artifactNamespace
+		if revision != "" {
+			inputMap["revision"] = revision
+		}
+
+		input, err := fluxcdv1.NewResourceSetInput(defaults, inputMap)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create ResourceSetInput for ExternalArtifact '%s/%s': %w",
+				artifactNamespace, artifactName, err)
+		}
+		res = append(res, input)
+	}
+
+	return res, nil
+}
+
+// externalArtifactListGVK is the GVK for the ExternalArtifact list resource.
+// Using a package-level var avoids allocating on every reconcile.
+var externalArtifactListGVK = schema.GroupVersionKind{
+	Group:   "source.toolkit.fluxcd.io",
+	Version: "v1",
+	Kind:    "ExternalArtifactList",
 }
 
 var inputProviderToCloudProvider = map[string]string{
