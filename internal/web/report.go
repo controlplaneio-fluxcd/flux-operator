@@ -86,6 +86,7 @@ func (h *Handler) GetReport(ctx context.Context) (*unstructured.Unstructured, er
 	if s := user.SessionStart(ctx); s != nil {
 		userInfo["sessionStart"] = s.Format(time.RFC3339)
 	}
+	userInfo["userActionsEnabled"] = h.conf.UserActionsEnabled()
 	spec["userInfo"] = userInfo
 
 	// Inject user-visible namespaces

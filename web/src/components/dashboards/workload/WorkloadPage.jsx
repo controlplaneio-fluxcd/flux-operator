@@ -8,7 +8,7 @@ import { StatusHeroCard } from '../common/StatusHeroCard'
 import { usePageMeta } from '../../../utils/meta'
 import { isFavorite, toggleFavorite, favorites } from '../../../utils/favorites'
 import { addToNavHistory } from '../../../utils/navHistory'
-import { ActionBar } from '../resource/ActionBar'
+import { ActionBar, hasResourceActionBarContent } from '../resource/ActionBar'
 import { WorkloadActionBar } from '../resource/WorkloadActionBar'
 import { WorkloadLogsAction } from './WorkloadLogsAction'
 import { WorkloadReconcilerPanel } from './WorkloadReconcilerPanel'
@@ -284,13 +284,13 @@ export function WorkloadPage({ kind, namespace, name }) {
     }, null)
   }, [workloadInfo])
 
-  // Check if either action bar has actions to show
-  const hasReconcilerActions = reconciler?.status?.userActions?.length > 0
-  const hasWorkloadActions = workloadInfo?.userActions?.includes('restart')
-  // Gated on the logs RBAC alone, not on pod presence: WorkloadLogsAction shows a
-  // disabled button when there are no inspectable pods (e.g. scaled to zero), so the
-  // capability stays visible.
-  const canViewLogs = workloadInfo?.userActions?.includes('logs')
+  // Determine which action-bar sections have content to render
+  const supportsWorkloadActions = kind === 'Deployment' || kind === 'StatefulSet' || kind === 'DaemonSet' || kind === 'CronJob'
+  const userActionsEnabled = Boolean(workloadInfo?.userActionsEnabled)
+  const showReconcilerBar = Boolean(reconciler && hasResourceActionBarContent(reconciler.kind, reconciler))
+  const showWorkloadBar = supportsWorkloadActions
+  const showLogsBar = true
+  const showCombinedBar = showReconcilerBar || showWorkloadBar || showLogsBar
 
   // Compute statusInfo based on display state
   let statusInfo
@@ -357,9 +357,9 @@ export function WorkloadPage({ kind, namespace, name }) {
         {isSuccess && (
           <>
             {/* Action Bars - Flux reconciler actions + workload actions on same line */}
-            {(hasReconcilerActions || hasWorkloadActions || canViewLogs) && (
+            {showCombinedBar && (
               <div class="flex flex-wrap items-center gap-2" data-testid="combined-action-bar">
-                {reconciler && (
+                {showReconcilerBar && (
                   <ActionBar
                     kind={reconciler.kind}
                     namespace={reconciler.metadata.namespace}
@@ -369,10 +369,10 @@ export function WorkloadPage({ kind, namespace, name }) {
                     onActionStart={handleActionStart}
                   />
                 )}
-                {hasReconcilerActions && hasWorkloadActions && (
+                {showReconcilerBar && (showWorkloadBar || showLogsBar) && (
                   <div class="w-px h-5 bg-gray-300 dark:bg-gray-600" data-testid="action-bar-separator" />
                 )}
-                {hasWorkloadActions && (
+                {showWorkloadBar && (
                   <WorkloadActionBar
                     kind={kind}
                     namespace={namespace}
@@ -382,17 +382,19 @@ export function WorkloadPage({ kind, namespace, name }) {
                     lastTriggeredAt={triggeredPod?.createdAt}
                     lastTriggeredPodStatus={triggeredPod?.status}
                     userActions={workloadInfo?.userActions}
+                    userActionsEnabled={userActionsEnabled}
                     onActionStart={handleActionStart}
                     onActionComplete={fetchData}
                   />
                 )}
-                {canViewLogs && (
+                {showLogsBar && (
                   <WorkloadLogsAction
                     kind={kind}
                     namespace={namespace}
                     name={name}
                     pods={workloadInfo?.pods}
                     userActions={workloadInfo?.userActions}
+                    userActionsEnabled={userActionsEnabled}
                   />
                 )}
               </div>

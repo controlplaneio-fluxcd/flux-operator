@@ -4,6 +4,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, waitFor, act, fireEvent } from '@testing-library/preact'
 import { WorkloadPage } from './WorkloadPage'
+import * as actionBar from '../resource/ActionBar'
 import { fetchWithMock } from '../../../utils/fetch'
 import { navHistory, clearNavHistory, getNavHistoryKey } from '../../../utils/navHistory'
 import { isFavorite, clearFavorites } from '../../../utils/favorites'
@@ -22,13 +23,17 @@ vi.mock('../../../utils/fetch', () => ({
 let capturedOnActionStart = null
 let capturedActionBarProps = null
 
-vi.mock('../resource/ActionBar', () => ({
-  ActionBar: (props) => {
-    capturedOnActionStart = props.onActionStart
-    capturedActionBarProps = props
-    return <div data-testid="action-bar">ActionBar: {props.kind}/{props.namespace}/{props.name}</div>
+vi.mock('../resource/ActionBar', async (importOriginal) => {
+  const actual = await importOriginal()
+  return {
+    ...actual,
+    ActionBar: (props) => {
+      capturedOnActionStart = props.onActionStart
+      capturedActionBarProps = props
+      return <div data-testid="action-bar">ActionBar: {props.kind}/{props.namespace}/{props.name}</div>
+    }
   }
-}))
+})
 
 vi.mock('../resource/WorkloadActionBar', () => ({
   WorkloadActionBar: (props) => (
@@ -72,6 +77,7 @@ describe('WorkloadPage component', () => {
       createdAt: '2023-01-01T00:00:00Z',
       containerImages: ['nginx:1.25.0'],
       userActions: ['restart', 'deletePods'],
+      userActionsEnabled: true,
       pods: [
         { name: 'nginx-abc-123', status: 'Running', statusMessage: 'Started at 2023-01-01 12:00:00 UTC', createdAt: '2023-01-01T12:00:00Z' },
         { name: 'nginx-abc-456', status: 'Running', statusMessage: 'Started at 2023-01-01 12:00:00 UTC', createdAt: '2023-01-01T12:00:00Z' }
@@ -102,7 +108,8 @@ describe('WorkloadPage component', () => {
             url: 'https://github.com/example/repo',
             message: 'stored artifact for revision main@sha1:abc123'
           },
-          userActions: ['reconcile', 'suspend', 'resume']
+          userActions: ['reconcile', 'suspend', 'resume'],
+          userActionsEnabled: true
         }
       }
     }
@@ -246,6 +253,24 @@ describe('WorkloadPage component', () => {
     expect(screen.getByTestId('action-bar')).toBeInTheDocument()
     expect(screen.getByTestId('workload-action-bar')).toBeInTheDocument()
     expect(screen.getByTestId('action-bar-separator')).toBeInTheDocument()
+  })
+
+  it('should not render reconciler ActionBar or separator when reconciler has no supported actions', async () => {
+    const spy = vi.spyOn(actionBar, 'hasResourceActionBarContent').mockReturnValue(false)
+    fetchWithMock.mockResolvedValueOnce(mockWorkloadData)
+
+    render(<WorkloadPage kind="Deployment" namespace="default" name="nginx" />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('combined-action-bar')).toBeInTheDocument()
+    })
+
+    expect(screen.queryByTestId('action-bar')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('action-bar-separator')).not.toBeInTheDocument()
+    expect(screen.getByTestId('workload-action-bar')).toBeInTheDocument()
+    expect(screen.getByTestId('workload-logs-action')).toBeInTheDocument()
+
+    spy.mockRestore()
   })
 
   it('should render correct status colors for Failed workload', async () => {

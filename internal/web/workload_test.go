@@ -1838,6 +1838,12 @@ func TestWorkloadHandler_Success_WithParentReconciler(t *testing.T) {
 	g.Expect(ok).To(BeTrue())
 	g.Expect(reconcilerMeta["name"]).To(Equal("test-wh-parent"))
 	g.Expect(reconcilerMeta["namespace"]).To(Equal("default"))
+
+	g.Expect(workloadInfo["userActionsEnabled"]).To(BeFalse(), "userActionsEnabled should be false when auth is not configured")
+
+	reconcilerStatus, ok := reconciler["status"].(map[string]any)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(reconcilerStatus["userActionsEnabled"]).To(BeFalse(), "reconciler status should include userActionsEnabled")
 }
 
 func TestWorkloadHandler_NotFluxManaged_ReturnsError(t *testing.T) {

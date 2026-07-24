@@ -599,6 +599,35 @@ func TestGetReport_NoAuthConfigured_UserInfoOnlyContainsUsername(t *testing.T) {
 	// Verify provider is NOT present (since auth is not configured, Provider() returns nil)
 	_, hasProvider := userInfo["provider"]
 	g.Expect(hasProvider).To(BeFalse(), "userInfo should NOT contain 'provider' when auth is not configured")
+
+	g.Expect(userInfo["userActionsEnabled"]).To(BeFalse(), "userActionsEnabled should be false when auth is not configured")
+}
+
+func TestGetReport_UserActionsEnabledWithAuth(t *testing.T) {
+	g := NewWithT(t)
+
+	handler := &Handler{
+		conf: &fluxcdv1.WebConfigSpec{
+			Authentication: &fluxcdv1.AuthenticationSpec{
+				Type: fluxcdv1.AuthenticationTypeOAuth2,
+			},
+			UserActions: &fluxcdv1.UserActionsSpec{},
+		},
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	report, err := handler.GetReport(ctx)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(report).NotTo(BeNil())
+
+	spec, found := report.Object["spec"].(map[string]any)
+	g.Expect(found).To(BeTrue())
+	userInfo, found := spec["userInfo"].(map[string]any)
+	g.Expect(found).To(BeTrue())
+	g.Expect(userInfo["userActionsEnabled"]).To(BeTrue(), "userActionsEnabled should be true when auth is configured")
 }
 
 func TestGetReport_InjectsUserInfoWithSessionStart(t *testing.T) {

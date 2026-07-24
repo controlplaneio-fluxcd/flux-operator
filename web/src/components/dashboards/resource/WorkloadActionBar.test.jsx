@@ -24,6 +24,7 @@ describe('WorkloadActionBar component', () => {
     namespace: 'default',
     name: 'my-app',
     userActions: ['restart'],
+    userActionsEnabled: true,
     onActionComplete: vi.fn(),
     onActionStart: vi.fn()
   }
@@ -58,16 +59,24 @@ describe('WorkloadActionBar component', () => {
       expect(screen.queryByTestId('restart-button')).not.toBeInTheDocument()
     })
 
-    it('should not render when userActions does not include restart', () => {
+    it('should render disabled restart button when userActions does not include restart', () => {
       render(<WorkloadActionBar {...defaultProps} userActions={[]} />)
 
-      expect(screen.queryByTestId('workload-action-bar')).not.toBeInTheDocument()
+      expect(screen.getByTestId('workload-action-bar')).toBeInTheDocument()
+      expect(screen.getByTestId('restart-button')).toBeDisabled()
+      expect(screen.getByTestId('restart-button').parentElement).toHaveAttribute('title', "You don't have permission to restart this workload")
     })
 
-    it('should not render when userActions is undefined', () => {
+    it('should render disabled restart button when userActions is undefined', () => {
       render(<WorkloadActionBar {...defaultProps} userActions={undefined} />)
 
-      expect(screen.queryByTestId('workload-action-bar')).not.toBeInTheDocument()
+      expect(screen.getByTestId('restart-button')).toBeDisabled()
+    })
+
+    it('should show authentication tooltip when user actions are disabled', () => {
+      render(<WorkloadActionBar {...defaultProps} userActions={[]} userActionsEnabled={false} />)
+
+      expect(screen.getByTestId('restart-button').parentElement).toHaveAttribute('title', 'Authentication is not configured')
     })
   })
 

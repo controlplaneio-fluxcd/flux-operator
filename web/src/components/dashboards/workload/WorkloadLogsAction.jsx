@@ -4,6 +4,8 @@
 import { useState, useRef, useMemo, useEffect, useCallback } from 'preact/hooks'
 import { WorkloadLogsViewer } from './WorkloadLogsViewer'
 import { urlWithParam } from '../../../utils/routing'
+import { ActionButton } from '../../common/ActionButton'
+import { getActionTooltip, isActionBlockedByAccess } from '../../../utils/userActions'
 import { useRegisterPageShortcuts } from '../../../utils/useRegisterPageShortcuts'
 import { useWorkloadLogsOverlay } from '../../../utils/useWorkloadLogsOverlay'
 
@@ -26,9 +28,8 @@ const containersOf = (pod) => [
  * WorkloadLogsAction - "View logs" button for the workload dashboard action bar.
  *
  * Opens the viewer on "All pods"; its pod selector then narrows to one pod. Renders
- * nothing without the 'logs' user action. With the action but no inspectable pods
- * (e.g. scaled to zero), the button is shown disabled rather than hidden, so the
- * capability stays visible.
+ * a disabled button when the user lacks permission, auth is not configured, or there
+ * are no inspectable pods, so the capability stays visible.
  *
  * @param {Object} props
  * @param {string} props.kind - Workload kind (shown in the viewer title)
@@ -36,23 +37,41 @@ const containersOf = (pod) => [
  * @param {string} props.name - Workload name (shown in the viewer title)
  * @param {Array} props.pods - Pods of the workload (each with a podStatus)
  * @param {Array} props.userActions - Allowed user actions for the workload
+ * @param {boolean} [props.userActionsEnabled] - Whether authentication is configured for user actions
  */
-export function WorkloadLogsAction({ kind, namespace, name, pods = [], userActions = [] }) {
+export function WorkloadLogsAction({
+  kind,
+  namespace,
+  name,
+  pods = [],
+  userActions = [],
+  userActionsEnabled = false
+}) {
   // Open session: { key, pod } where pod is a pod name or null for "All pods". key
   // increments per open so the viewer remounts and re-inits its pod selection. null
   // when no viewer is open.
   const [session, setSession] = useState(null)
   const sessionKeyRef = useRef(0)
 
-  // RBAC gate: only users authorized to read logs see the button at all.
   const canViewLogs = userActions.includes('logs')
 
-  // Pods that can be inspected: those carrying container status (needed to populate
-  // the viewer's container list). Empty for a scaled-to-zero workload.
+  // Pods that can be inspected when the user has logs permission.
   const logsPods = useMemo(
     () => (canViewLogs ? pods.filter(p => p.podStatus) : []),
     [pods, canViewLogs]
   )
+
+  const hasPods = logsPods.length > 0
+  const accessBlocked = isActionBlockedByAccess(userActionsEnabled, canViewLogs)
+  const disabled = accessBlocked || !hasPods
+
+  const title = getActionTooltip({
+    userActionsEnabled,
+    hasPermission: canViewLogs,
+    actionLabel: 'view pod logs',
+    stateReason: !accessBlocked && !hasPods ? 'No running pods to view logs' : undefined,
+    enabledTitle: 'View pod logs'
+  })
 
   // Live pods passed to the viewer, each with its containers, so it can build the
   // "All pods" request and resolve a pod's containers (and restart counts) from the
@@ -69,22 +88,19 @@ export function WorkloadLogsAction({ kind, namespace, name, pods = [], userActio
   }, [])
 
   // Deep link: a `?logs=<pod|*>` param opens the viewer on that pod (or "All pods")
-  // so a shared link lands in the logs. Runs once on mount. An unknown pod still
-  // opens the viewer, which falls back to "All pods" when the pod is gone.
+  // so a shared link lands in the logs. Waits until pods and logs permission are
+  // available so async workload fetches do not drop the deep link.
   const deepLinked = useRef(false)
   useEffect(() => {
-    if (deepLinked.current) return
-    deepLinked.current = true
-    // Nothing to show for a workload with no inspectable pods, even with a ?logs link.
-    if (logsPods.length === 0) return
+    if (session || deepLinked.current) return
     const logs = new URLSearchParams(window.location.search).get(LOGS_QUERY_PARAM)
     if (!logs) return
+    if (!canViewLogs || logsPods.length === 0) return
+
+    deepLinked.current = true
     sessionKeyRef.current += 1
     setSession({ key: sessionKeyRef.current, pod: logs === ALL_PODS_VALUE ? null : logs })
-  }, [])
-
-  // No pods to inspect (e.g. scaled to zero): the button is shown but disabled.
-  const hasPods = logsPods.length > 0
+  }, [canViewLogs, logsPods, session])
 
   // Open the viewer on "All pods"; its pod selector narrows from there.
   const openAllPods = useCallback(() => {
@@ -96,13 +112,9 @@ export function WorkloadLogsAction({ kind, namespace, name, pods = [], userActio
     syncLogFilterToUrl(null)
   }, [syncLogFilterToUrl, logsPods.length])
 
-  useRegisterPageShortcuts({ onOpenLogs: canViewLogs && hasPods ? openAllPods : undefined })
+  useRegisterPageShortcuts({ onOpenLogs: !disabled ? openAllPods : undefined })
 
   useWorkloadLogsOverlay(!!session)
-
-  if (!canViewLogs) {
-    return null
-  }
 
   const closeSession = () => {
     setSession(null)
@@ -110,24 +122,24 @@ export function WorkloadLogsAction({ kind, namespace, name, pods = [], userActio
   }
 
   const baseButtonClass = 'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border transition-colors focus:outline-none'
-  const buttonClass = hasPods
-    ? `${baseButtonClass} border-teal-500 text-teal-600 hover:bg-teal-50 dark:border-teal-400 dark:text-teal-400 dark:hover:bg-teal-900/30 focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-gray-900 focus:ring-teal-500`
-    : `${baseButtonClass} border-gray-300 text-gray-400 cursor-not-allowed dark:border-gray-600 dark:text-gray-500`
+  const buttonClass = disabled
+    ? `${baseButtonClass} border-gray-300 text-gray-400 cursor-not-allowed dark:border-gray-600 dark:text-gray-500`
+    : `${baseButtonClass} border-teal-500 text-teal-600 hover:bg-teal-50 dark:border-teal-400 dark:text-teal-400 dark:hover:bg-teal-900/30 focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-gray-900 focus:ring-teal-500`
 
   return (
     <div class="relative" data-testid="workload-logs-action">
-      <button
-        onClick={hasPods ? openAllPods : undefined}
-        disabled={!hasPods}
+      <ActionButton
+        onClick={openAllPods}
+        disabled={disabled}
         class={buttonClass}
         data-testid="view-logs-button"
-        title={hasPods ? 'View pod logs' : 'No running pods to view logs'}
+        title={title}
       >
         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
         </svg>
         View logs
-      </button>
+      </ActionButton>
 
       {/* Stays mounted even with no pods, showing an inline notice instead of
           vanishing; the button above still disables when there are no pods. */}
