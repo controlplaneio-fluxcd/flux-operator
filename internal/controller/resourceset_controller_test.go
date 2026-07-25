@@ -326,6 +326,195 @@ spec:
 	g.Expect(r.IsZero()).To(BeTrue())
 }
 
+func TestResourceSetReconciler_DependsOnLastAppliedConfig(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceSetReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Create the dependency with the kubectl last-applied-configuration
+	// annotation set next to a regular one.
+	dep := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: ns.Name,
+			Annotations: map[string]string{
+				corev1.LastAppliedConfigAnnotation: `{"apiVersion":"v1","kind":"ServiceAccount","metadata":{"name":"test"}}`,
+				"fluxcd.controlplane.io/test":      "value",
+			},
+		},
+	}
+
+	err = testClient.Create(ctx, dep)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	objDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: tenants
+  namespace: "%[1]s"
+spec:
+  dependsOn:
+    - apiVersion: v1
+      kind: ServiceAccount
+      name: test
+      namespace: "%[1]s"
+      ready: true
+      readyExpr: |
+        !('kubectl.kubernetes.io/last-applied-configuration' in metadata.annotations) &&
+        'fluxcd.controlplane.io/test' in metadata.annotations
+  resources:
+    - apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: readonly
+        namespace: "%[1]s"
+`, ns.Name)
+
+	obj := &fluxcdv1.ResourceSet{}
+	err = yaml.Unmarshal([]byte(objDef), obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize the instance.
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Reconcile with the annotation stripped from the dependency object.
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Check that the expression evaluated to true and the instance was installed.
+	result := &fluxcdv1.ResourceSet{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	testutils.LogObjectStatus(t, result)
+	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
+}
+
+func TestResourceSetReconciler_DependsOnSecretData(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceSetReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	otherNs, err := testEnv.CreateNamespace(ctx, "other")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Create the same Secret in the ResourceSet namespace and in another one.
+	for _, secretNs := range []string{ns.Name, otherNs.Name} {
+		dep := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "gate",
+				Namespace: secretNs,
+			},
+			StringData: map[string]string{"gate": "opened"},
+		}
+
+		err = testClient.Create(ctx, dep)
+		g.Expect(err).ToNot(HaveOccurred())
+	}
+
+	// The expression reads the Secret data, which is only exposed for
+	// a Secret in the same namespace as the ResourceSet.
+	objDefTmpl := `
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: "%[1]s"
+  namespace: "%[2]s"
+spec:
+  dependsOn:
+    - apiVersion: v1
+      kind: Secret
+      name: gate
+      namespace: "%[3]s"
+      ready: true
+      readyExpr: |
+        string(base64.decode(data.gate)) == 'opened'
+  resources:
+    - apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: "%[1]s"
+        namespace: "%[2]s"
+`
+
+	tests := []struct {
+		name           string
+		resourceSet    string
+		depNamespace   string
+		expectedReason string
+	}{
+		{
+			name:           "same namespace",
+			resourceSet:    "tenants-local",
+			depNamespace:   ns.Name,
+			expectedReason: meta.ReconciliationSucceededReason,
+		},
+		{
+			name:           "other namespace",
+			resourceSet:    "tenants-remote",
+			depNamespace:   otherNs.Name,
+			expectedReason: meta.DependencyNotReadyReason,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			objDef := fmt.Sprintf(objDefTmpl, tt.resourceSet, ns.Name, tt.depNamespace)
+			obj := &fluxcdv1.ResourceSet{}
+			err := yaml.Unmarshal([]byte(objDef), obj)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			// Initialize the instance.
+			err = testEnv.Create(ctx, obj)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			r, err := reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: client.ObjectKeyFromObject(obj),
+			})
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(r.Requeue).To(BeTrue())
+
+			// Reconcile with the dependency in place.
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: client.ObjectKeyFromObject(obj),
+			})
+			g.Expect(err).ToNot(HaveOccurred())
+
+			result := &fluxcdv1.ResourceSet{}
+			err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			testutils.LogObjectStatus(t, result)
+			g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(tt.expectedReason))
+
+			// The expression fails to evaluate when the data is not exposed.
+			if tt.expectedReason == meta.DependencyNotReadyReason {
+				g.Expect(conditions.GetMessage(result, meta.ReadyCondition)).To(ContainSubstring("data"))
+			}
+		})
+	}
+}
+
 func TestResourceSetReconciler_DependsOnInvalidExpression(t *testing.T) {
 	g := NewWithT(t)
 	reconciler := getResourceSetReconciler(t)

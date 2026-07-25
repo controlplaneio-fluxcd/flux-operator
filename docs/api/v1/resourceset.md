@@ -957,6 +957,12 @@ The expression is evaluated in the context of the referred object and has access
 including the status conditions and the status subfields. The expression must evaluate to a boolean value, any syntax
 or runtime errors will be reported in the ResourceSet status conditions.
 
+Two exceptions apply to the fields exposed to the expression:
+
+- The `kubectl.kubernetes.io/last-applied-configuration` annotation is removed before the expression
+  is evaluated, for objects of any kind.
+- The `data` of a Kubernetes Secret is only available when the object is in the same namespace as the ResourceSet.
+
 Example readiness expression:
 
 ```yaml
@@ -971,12 +977,12 @@ spec:
         metadata.generation == status.observedGeneration &&
         status.controlPlaneReady == true
     - apiVersion: v1
-      kind: Secret
+      kind: ConfigMap
       name: my-gate
       namespace: dev
       ready: true
       readyExpr: |
-        string(base64.decode(data.gate)) == 'opened'
+        data.gate == 'opened'
 ```
 
 For testing the CEL expressions, you can use the [CEL playground](https://playcel.undistro.io/).
