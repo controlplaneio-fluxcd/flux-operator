@@ -244,7 +244,7 @@ func verifySource(ctx context.Context, src fluxcdv1.AgentCatalogSource, pinnedUR
 	}
 
 	rootCmd.Println(`◎`, fmt.Sprintf("Verifying %s...", ociURL))
-	if err := cosign.VerifyArtifact(ctx, pinnedURL, oidcSubjectRegex, oidcIssuer, skillsUpdateArgs.verifyTrustedRoot, authn.DefaultKeychain); err != nil {
+	if _, err := cosign.VerifyArtifact(ctx, pinnedURL, oidcSubjectRegex, oidcIssuer, skillsUpdateArgs.verifyTrustedRoot, authn.DefaultKeychain); err != nil {
 		return fmt.Errorf("signature verification failed for %s: %w", ociURL, err)
 	}
 	rootCmd.Println(`✔`, "Artifact signature verified")

@@ -25,14 +25,15 @@ func TestVerifyArtifact(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
-		err := cosign.VerifyArtifact(ctx,
-			"ghcr.io/stefanprodan/podinfo:6.11.0",
+		verifiedRef, err := cosign.VerifyArtifact(ctx,
+			"oci://ghcr.io/stefanprodan/podinfo:6.11.0",
 			ghActionsIdentity,
 			ghActionsIssuer,
 			"",
 			nil,
 		)
 		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(verifiedRef).To(MatchRegexp(`^oci://ghcr\.io/stefanprodan/podinfo@sha256:[a-f0-9]{64}$`))
 	})
 
 	t.Run("verifies Helm chart signed with GH Actions", func(t *testing.T) {
@@ -41,7 +42,7 @@ func TestVerifyArtifact(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
-		err := cosign.VerifyArtifact(ctx,
+		_, err := cosign.VerifyArtifact(ctx,
 			"ghcr.io/stefanprodan/charts/podinfo:6.11.0",
 			ghActionsIdentity,
 			ghActionsIssuer,
@@ -60,7 +61,7 @@ func TestVerifyArtifact(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
-		err := cosign.VerifyArtifact(ctx,
+		_, err := cosign.VerifyArtifact(ctx,
 			"ghcr.io/stefanprodan/podinfo:6.11.0",
 			ghActionsIdentity,
 			ghActionsIssuer,
@@ -76,7 +77,7 @@ func TestVerifyArtifact(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
-		err := cosign.VerifyArtifact(ctx,
+		_, err := cosign.VerifyArtifact(ctx,
 			"ghcr.io/stefanprodan/podinfo:6.11.0",
 			`^wrong-identity@example\.com$`,
 			ghActionsIssuer,
@@ -93,7 +94,7 @@ func TestVerifyArtifact(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
-		err := cosign.VerifyArtifact(ctx,
+		_, err := cosign.VerifyArtifact(ctx,
 			"ghcr.io/stefanprodan/podinfo:6.11.0",
 			ghActionsIdentity,
 			"https://wrong-issuer.example.com",
@@ -110,7 +111,7 @@ func TestVerifyArtifact(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
-		err := cosign.VerifyArtifact(ctx,
+		_, err := cosign.VerifyArtifact(ctx,
 			"ghcr.io/stefanprodan/podinfo:6.11.0",
 			"",
 			ghActionsIssuer,
@@ -127,7 +128,7 @@ func TestVerifyArtifact(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
-		err := cosign.VerifyArtifact(ctx,
+		_, err := cosign.VerifyArtifact(ctx,
 			"ghcr.io/stefanprodan/podinfo:6.11.0",
 			ghActionsIdentity,
 			"",
@@ -144,7 +145,7 @@ func TestVerifyArtifact(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
-		err := cosign.VerifyArtifact(ctx,
+		_, err := cosign.VerifyArtifact(ctx,
 			"ghcr.io/stefanprodan/podinfo:6.11.0",
 			ghActionsIdentity,
 			ghActionsIssuer,
@@ -161,7 +162,7 @@ func TestVerifyArtifact(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
-		err := cosign.VerifyArtifact(ctx,
+		_, err := cosign.VerifyArtifact(ctx,
 			"oci://invalid:ref:with:too:many:colons",
 			cosign.DefaultCertIdentityRegexp,
 			cosign.DefaultCertOIDCIssuer,

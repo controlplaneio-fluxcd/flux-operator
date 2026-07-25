@@ -125,9 +125,11 @@ func skillsInstallCmdRun(cmd *cobra.Command, args []string) error {
 	// Verify the artifact signature using the digest-pinned reference.
 	if skillsInstallArgs.verify {
 		rootCmd.Println(`◎`, "Verifying artifact signature...")
-		if err := cosign.VerifyArtifact(ctx, pinnedURL, oidcSubjectRegex, oidcIssuer, skillsInstallArgs.verifyTrustedRoot, authn.DefaultKeychain); err != nil {
+		verifiedURL, err := cosign.VerifyArtifact(ctx, pinnedURL, oidcSubjectRegex, oidcIssuer, skillsInstallArgs.verifyTrustedRoot, authn.DefaultKeychain)
+		if err != nil {
 			return fmt.Errorf("signature verification failed: %w", err)
 		}
+		pinnedURL = verifiedURL
 		rootCmd.Println(`✔`, "Artifact signature verified")
 	}
 

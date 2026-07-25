@@ -34,7 +34,8 @@ const (
 
 // VerifyArtifact verifies the cosign signature on an OCI artifact using Sigstore's
 // public good instance (Fulcio + Rekor). It checks that the signing certificate
-// matches the given identity regexp and OIDC issuer.
+// matches the given identity regexp and OIDC issuer, and returns the immutable
+// digest reference bound to the verified signature.
 // The verification process is compatible with cosign v3's default keyless
 // verification and requires a minimum sigstore bundle version of v0.3.
 // When trustedRootPath is set, the trusted root is loaded from the given file
@@ -43,65 +44,69 @@ const (
 // When keychain is nil, authn.DefaultKeychain is used to resolve registry
 // credentials for fetching the artifact descriptor, referrers index, and
 // sigstore bundle.
-func VerifyArtifact(ctx context.Context, ociRef string, certIdentityRegexp string, certOIDCIssuer string, trustedRootPath string, keychain authn.Keychain) error {
+func VerifyArtifact(ctx context.Context, ociRef string, certIdentityRegexp string, certOIDCIssuer string, trustedRootPath string, keychain authn.Keychain) (string, error) {
 	if certIdentityRegexp == "" {
-		return fmt.Errorf("certificate identity regexp must not be empty")
+		return "", fmt.Errorf("certificate identity regexp must not be empty")
 	}
 	if certOIDCIssuer == "" {
-		return fmt.Errorf("certificate OIDC issuer must not be empty")
+		return "", fmt.Errorf("certificate OIDC issuer must not be empty")
 	}
 	if keychain == nil {
 		keychain = authn.DefaultKeychain
 	}
 
-	// Strip oci:// prefix if present.
+	hasOCIScheme := strings.HasPrefix(ociRef, "oci://")
 	ociRef = strings.TrimPrefix(ociRef, "oci://")
 
 	// Resolve the image reference to a digest.
 	ref, err := name.ParseReference(ociRef)
 	if err != nil {
-		return fmt.Errorf("parsing reference %q: %w", ociRef, err)
+		return "", fmt.Errorf("parsing reference %q: %w", ociRef, err)
 	}
 
 	desc, err := remote.Get(ref, remote.WithAuthFromKeychain(keychain), remote.WithContext(ctx))
 	if err != nil {
-		return fmt.Errorf("fetching descriptor for %q: %w", ociRef, err)
+		return "", fmt.Errorf("fetching descriptor for %q: %w", ociRef, err)
 	}
 
 	repo := ref.Context()
 	digest := repo.Digest(desc.Digest.String())
+	verifiedRef := digest.Name()
+	if hasOCIScheme {
+		verifiedRef = "oci://" + verifiedRef
+	}
 	remoteOpts := []remote.Option{remote.WithAuthFromKeychain(keychain), remote.WithContext(ctx)}
 
 	// Query referrers for sigstore bundles.
 	idx, err := remote.Referrers(digest, remoteOpts...)
 	if err != nil {
-		return fmt.Errorf("querying referrers for %s: %w", digest, err)
+		return "", fmt.Errorf("querying referrers for %s: %w", digest, err)
 	}
 
 	manifest, err := idx.IndexManifest()
 	if err != nil {
-		return fmt.Errorf("reading referrers index: %w", err)
+		return "", fmt.Errorf("reading referrers index: %w", err)
 	}
 
 	// Find the first sigstore bundle among the referrers.
 	bundleBytes, err := findSigstoreBundle(repo, manifest, remoteOpts...)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// Parse the sigstore bundle and check minimum version.
 	var b bundle.Bundle
 	if err := b.UnmarshalJSON(bundleBytes); err != nil {
-		return fmt.Errorf("parsing sigstore bundle: %w", err)
+		return "", fmt.Errorf("parsing sigstore bundle: %w", err)
 	}
 	if !b.MinVersion("v0.3") {
-		return fmt.Errorf("unsupported sigstore bundle version (minimum v0.3 required)")
+		return "", fmt.Errorf("unsupported sigstore bundle version (minimum v0.3 required)")
 	}
 
 	// Load the trusted root either from a local file or from TUF.
 	trustedRoot, err := loadTrustedRoot(trustedRootPath)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// Create the verifier with SCT, integrated timestamps, and tlog requirements.
@@ -112,20 +117,20 @@ func VerifyArtifact(ctx context.Context, ociRef string, certIdentityRegexp strin
 		verify.WithTransparencyLog(1),
 	)
 	if err != nil {
-		return fmt.Errorf("creating verifier: %w", err)
+		return "", fmt.Errorf("creating verifier: %w", err)
 	}
 
 	// Create the identity policy.
 	certID, err := verify.NewShortCertificateIdentity(certOIDCIssuer, "", "", certIdentityRegexp)
 	if err != nil {
-		return fmt.Errorf("creating certificate identity: %w", err)
+		return "", fmt.Errorf("creating certificate identity: %w", err)
 	}
 
 	// Create the artifact digest policy using the resolved image digest.
 	digestHex := desc.Digest.Hex
 	digestBytes, err := hex.DecodeString(digestHex)
 	if err != nil {
-		return fmt.Errorf("decoding digest hex: %w", err)
+		return "", fmt.Errorf("decoding digest hex: %w", err)
 	}
 
 	policy := verify.NewPolicy(
@@ -136,10 +141,10 @@ func VerifyArtifact(ctx context.Context, ociRef string, certIdentityRegexp strin
 	// Verify the bundle against the policy.
 	_, err = sev.Verify(&b, policy)
 	if err != nil {
-		return fmt.Errorf("signature verification failed: %w", err)
+		return "", fmt.Errorf("signature verification failed: %w", err)
 	}
 
-	return nil
+	return verifiedRef, nil
 }
 
 // loadTrustedRoot loads the Sigstore trusted root material. When trustedRootPath
