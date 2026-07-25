@@ -440,6 +440,27 @@ func TestWorkloadLogsHandler_MethodNotAllowed(t *testing.T) {
 	g.Expect(rec.Body.String()).To(ContainSubstring("Method not allowed"))
 }
 
+func TestWorkloadLogsHandler_UserActionsDisabled(t *testing.T) {
+	g := NewWithT(t)
+
+	handler := &Handler{
+		conf:          &fluxcdv1.WebConfigSpec{},
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/v1/workload/logs?namespace=kube-system&name=sensitive-pod&container=app", nil)
+	rec := httptest.NewRecorder()
+
+	handler.WorkloadLogsHandler(rec, req)
+
+	g.Expect(rec.Code).To(Equal(http.StatusMethodNotAllowed))
+	g.Expect(rec.Body.String()).To(ContainSubstring("User actions are disabled"))
+}
+
 func TestWorkloadLogsHandler_MissingParams(t *testing.T) {
 	handler := &Handler{
 		conf:          oauthConfig(),
