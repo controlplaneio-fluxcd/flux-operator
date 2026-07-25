@@ -6,7 +6,6 @@ package gitprovider
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
@@ -17,11 +16,13 @@ import (
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/inputs"
 )
 
+// GitLabProvider implements Interface for a GitLab project.
 type GitLabProvider struct {
 	Client  *gitlab.Client
 	Project string
 }
 
+// NewGitLabProvider creates a GitLab provider from the given options.
 func NewGitLabProvider(ctx context.Context, opts Options) (*GitLabProvider, error) {
 	var client *gitlab.Client
 	var glOpts []gitlab.ClientOptionFunc
@@ -32,12 +33,7 @@ func NewGitLabProvider(ctx context.Context, opts Options) (*GitLabProvider, erro
 	}
 
 	rtClient := retryablehttp.NewClient()
-	if opts.TLSConfig != nil {
-		tr := &http.Transport{
-			TLSClientConfig: opts.TLSConfig,
-		}
-		rtClient.HTTPClient.Transport = tr
-	}
+	rtClient.HTTPClient = newGitProviderHTTPClient(opts.TLSConfig)
 	glOpts = append(glOpts, gitlab.WithHTTPClient(rtClient.HTTPClient))
 
 	if host != "https://gitlab.com" {
@@ -55,68 +51,62 @@ func NewGitLabProvider(ctx context.Context, opts Options) (*GitLabProvider, erro
 	}, nil
 }
 
+// ListTags returns filtered tags from the GitLab project.
 func (p *GitLabProvider) ListTags(ctx context.Context, opts Options) ([]Result, error) {
-	glOpts := &gitlab.ListTagsOptions{
-		ListOptions: gitlab.ListOptions{
-			PerPage: 100,
-		},
+	selector, err := newTagSelector(opts.Filters)
+	if err != nil {
+		return nil, err
 	}
+	glOpts := &gitlab.ListTagsOptions{
+		ListOptions: gitlab.ListOptions{PerPage: gitProviderPageSize},
+	}
+	guard := newGitProviderPaginationGuard("GitLab tags")
 
-	gitlabTags := make([]*gitlab.Tag, 0)
 	for {
-		page, resp, err := p.Client.Tags.ListTags(p.Project, glOpts)
+		if err := guard.Visit(int(glOpts.Page)); err != nil {
+			return nil, err
+		}
+		page, resp, err := p.Client.Tags.ListTags(p.Project, glOpts, gitlab.WithContext(ctx))
 		if err != nil {
 			return nil, fmt.Errorf("could not list tags: %v", err)
 		}
-		gitlabTags = append(gitlabTags, page...)
+		for _, tag := range page {
+			selector.Add(tag.Name, Result{
+				ID:   inputs.ID(tag.Name),
+				SHA:  tag.Commit.ID,
+				Tag:  tag.Name,
+				Slug: gitlabSlugify(tag.Name),
+			})
+		}
 
 		if resp.NextPage == 0 {
 			break
 		}
 		glOpts.Page = resp.NextPage
 	}
-
-	tagMap := make(map[string]*gitlab.Tag, len(gitlabTags))
-	tags := make([]string, 0, len(gitlabTags))
-	for _, tag := range gitlabTags {
-		tags = append(tags, tag.Name)
-		tagMap[tag.Name] = tag
-	}
-
-	results := make([]Result, 0)
-	for _, version := range opts.Filters.Tags(tags) {
-		tag, ok := tagMap[version]
-		if !ok {
-			return nil, fmt.Errorf("could not find tag %s", version)
-		}
-
-		results = append(results, Result{
-			ID:   inputs.ID(tag.Name),
-			SHA:  tag.Commit.ID,
-			Tag:  tag.Name,
-			Slug: gitlabSlugify(tag.Name),
-		})
-
-		if opts.Filters.Limit > 0 && len(results) >= opts.Filters.Limit {
-			return results, nil
-		}
-	}
-	return results, nil
+	return selector.Results(), nil
 }
 
+// ListBranches returns filtered branches from the GitLab project.
 func (p *GitLabProvider) ListBranches(ctx context.Context, opts Options) ([]Result, error) {
+	resultLimit, err := gitProviderResultLimit(opts.Filters)
+	if err != nil {
+		return nil, err
+	}
 	glOpts := &gitlab.ListBranchesOptions{
-		ListOptions: gitlab.ListOptions{
-			PerPage: 100,
-		},
+		ListOptions: gitlab.ListOptions{PerPage: gitProviderPageSize},
 	}
 	if opts.Filters.Include != nil {
 		glOpts.Regex = new(opts.Filters.Include.String())
 	}
 
-	results := make([]Result, 0)
+	guard := newGitProviderPaginationGuard("GitLab branches")
+	results := make([]Result, 0, resultLimit)
 	for {
-		branches, resp, err := p.Client.Branches.ListBranches(p.Project, glOpts)
+		if err := guard.Visit(int(glOpts.Page)); err != nil {
+			return nil, err
+		}
+		branches, resp, err := p.Client.Branches.ListBranches(p.Project, glOpts, gitlab.WithContext(ctx))
 		if err != nil {
 			return nil, fmt.Errorf("could not list branches: %v", err)
 		}
@@ -133,7 +123,7 @@ func (p *GitLabProvider) ListBranches(ctx context.Context, opts Options) ([]Resu
 				Slug:   gitlabSlugify(branch.Name),
 			})
 
-			if opts.Filters.Limit > 0 && len(results) >= opts.Filters.Limit {
+			if len(results) >= resultLimit {
 				return results, nil
 			}
 		}
@@ -147,7 +137,12 @@ func (p *GitLabProvider) ListBranches(ctx context.Context, opts Options) ([]Resu
 	return results, nil
 }
 
+// ListRequests returns filtered merge requests from the GitLab project.
 func (p *GitLabProvider) ListRequests(ctx context.Context, opts Options) ([]Result, error) {
+	resultLimit, err := gitProviderResultLimit(opts.Filters)
+	if err != nil {
+		return nil, err
+	}
 	var labels *gitlab.LabelOptions
 	if len(opts.Filters.Labels) > 0 {
 		var lo gitlab.LabelOptions = opts.Filters.Labels
@@ -155,16 +150,18 @@ func (p *GitLabProvider) ListRequests(ctx context.Context, opts Options) ([]Resu
 	}
 
 	glOpts := &gitlab.ListProjectMergeRequestsOptions{
-		State:  new("opened"),
-		Labels: labels,
-		ListOptions: gitlab.ListOptions{
-			PerPage: 100,
-		},
+		State:       new("opened"),
+		Labels:      labels,
+		ListOptions: gitlab.ListOptions{PerPage: gitProviderPageSize},
 	}
 
-	results := make([]Result, 0)
+	guard := newGitProviderPaginationGuard("GitLab merge requests")
+	results := make([]Result, 0, resultLimit)
 	for {
-		msrs, resp, err := p.Client.MergeRequests.ListProjectMergeRequests(p.Project, glOpts)
+		if err := guard.Visit(int(glOpts.Page)); err != nil {
+			return nil, err
+		}
+		msrs, resp, err := p.Client.MergeRequests.ListProjectMergeRequests(p.Project, glOpts, gitlab.WithContext(ctx))
 		if err != nil {
 			return nil, fmt.Errorf("could not list merge requests: %v", err)
 		}
@@ -184,7 +181,7 @@ func (p *GitLabProvider) ListRequests(ctx context.Context, opts Options) ([]Resu
 				Labels: mr.Labels,
 			})
 
-			if opts.Filters.Limit > 0 && len(results) >= opts.Filters.Limit {
+			if len(results) >= resultLimit {
 				return results, nil
 			}
 		}
@@ -198,16 +195,23 @@ func (p *GitLabProvider) ListRequests(ctx context.Context, opts Options) ([]Resu
 	return results, nil
 }
 
+// ListEnvironments returns filtered deployment environments from the GitLab project.
 func (p *GitLabProvider) ListEnvironments(ctx context.Context, opts Options) ([]Result, error) {
-	glOpts := &gitlab.ListEnvironmentsOptions{
-		ListOptions: gitlab.ListOptions{
-			PerPage: 100,
-		},
+	resultLimit, err := gitProviderResultLimit(opts.Filters)
+	if err != nil {
+		return nil, err
 	}
+	glOpts := &gitlab.ListEnvironmentsOptions{
+		ListOptions: gitlab.ListOptions{PerPage: gitProviderPageSize},
+	}
+	guard := newGitProviderPaginationGuard("GitLab environments")
 
-	results := make([]Result, 0)
+	results := make([]Result, 0, resultLimit)
 	for {
-		envs, resp, err := p.Client.Environments.ListEnvironments(p.Project, glOpts)
+		if err := guard.Visit(int(glOpts.Page)); err != nil {
+			return nil, err
+		}
+		envs, resp, err := p.Client.Environments.ListEnvironments(p.Project, glOpts, gitlab.WithContext(ctx))
 		if err != nil {
 			return nil, fmt.Errorf("could not list environments: %v", err)
 		}
@@ -224,7 +228,7 @@ func (p *GitLabProvider) ListEnvironments(ctx context.Context, opts Options) ([]
 				OrderBy:     new("created_at"),
 				Sort:        new("desc"),
 				Environment: new(env.Name),
-			})
+			}, gitlab.WithContext(ctx))
 			if err != nil {
 				return nil, fmt.Errorf(`could not list deployments for environment "%s": %v`, env.Name, err)
 			}
@@ -258,7 +262,7 @@ func (p *GitLabProvider) ListEnvironments(ctx context.Context, opts Options) ([]
 				Author: author,
 			})
 
-			if opts.Filters.Limit > 0 && len(results) >= opts.Filters.Limit {
+			if len(results) >= resultLimit {
 				return results, nil
 			}
 		}
@@ -272,7 +276,7 @@ func (p *GitLabProvider) ListEnvironments(ctx context.Context, opts Options) ([]
 	return results, nil
 }
 
-// parseGitHubURL parses a GitLab URL and returns the host and project.
+// parseGitLabURL parses a GitLab URL and returns the host and project.
 func parseGitLabURL(glURL string) (string, string, error) {
 	u, err := url.Parse(glURL)
 	if err != nil {
@@ -292,6 +296,7 @@ const gitLabSlugMaxLength = 63
 var nonGitLabSlugCharactersRegexp = regexp.MustCompile(`[^a-z0-9-]`)
 
 // gitlabSlugify matches GitLab's slugification scheme, cf. https://gitlab.com/gitlab-org/gitlab/-/blob/0fd5cad2e2a2dc8ccc4ba359c4fdcdcf7a38ace8/gems/gitlab-utils/lib/gitlab/utils.rb#L65
+// gitlabSlugify converts a GitLab ref into its CI_COMMIT_REF_SLUG form.
 func gitlabSlugify(value string) string {
 	value = strings.ToLower(value)
 	value = nonGitLabSlugCharactersRegexp.ReplaceAllString(value, "-")

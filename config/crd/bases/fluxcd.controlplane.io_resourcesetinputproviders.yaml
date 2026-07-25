@@ -128,6 +128,7 @@ spec:
                     description: |-
                       Limit specifies the maximum number of input sets to return.
                       When not set, the default limit is 100.
+                    maximum: 10000
                     type: integer
                   semver:
                     description: |-

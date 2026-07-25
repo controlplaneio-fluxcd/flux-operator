@@ -197,6 +197,7 @@ type ResourceSetInputFilter struct {
 	// Limit specifies the maximum number of input sets to return.
 	// When not set, the default limit is 100.
 	// +kubebuilder:default:=100
+	// +kubebuilder:validation:Maximum:=10000
 	// +optional
 	Limit int `json:"limit,omitempty"`
 
