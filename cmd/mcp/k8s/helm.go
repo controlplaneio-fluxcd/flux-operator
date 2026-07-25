@@ -4,13 +4,8 @@
 package k8s
 
 import (
-	"bytes"
-	"compress/gzip"
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
-	"io"
 	"slices"
 	"strings"
 
@@ -22,13 +17,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	inventoryreader "github.com/controlplaneio-fluxcd/flux-operator/internal/inventory"
 )
-
-// HelmStorage is a struct used to decode the Helm storage secret.
-type HelmStorage struct {
-	Name     string `json:"name,omitempty"`
-	Manifest string `json:"manifest,omitempty"`
-}
 
 // HelmHistory is a struct used to decode the release
 // history from the HelmRelease status.
@@ -105,29 +95,8 @@ func (k *Client) GetHelmInventory(ctx context.Context, apiVersion string, object
 		return nil, fmt.Errorf("failed to decode the Helm storage object for HelmRelease '%s'", objectKey.String())
 	}
 
-	// adapted from https://github.com/helm/helm/blob/02685e94bd3862afcb44f6cd7716dbeb69743567/pkg/storage/driver/util.go
-	var b64 = base64.StdEncoding
-	b, err := b64.DecodeString(string(releaseData))
+	rls, err := inventoryreader.DecodeHelmStorage(releaseData)
 	if err != nil {
-		return nil, err
-	}
-	var magicGzip = []byte{0x1f, 0x8b, 0x08}
-	if bytes.Equal(b[0:3], magicGzip) {
-		r, err := gzip.NewReader(bytes.NewReader(b))
-		if err != nil {
-			return nil, err
-		}
-		defer r.Close()
-		b2, err := io.ReadAll(r)
-		if err != nil {
-			return nil, err
-		}
-		b = b2
-	}
-
-	// extract objects from Helm storage
-	var rls HelmStorage
-	if err := json.Unmarshal(b, &rls); err != nil {
 		return nil, fmt.Errorf("failed to decode the Helm storage object for HelmRelease '%s': %w", objectKey.String(), err)
 	}
 

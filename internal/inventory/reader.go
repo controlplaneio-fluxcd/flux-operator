@@ -235,26 +235,41 @@ func FromHelmRelease(
 	return result, nil
 }
 
-// DecodeHelmStorage decodes the Helm storage secret data into a HelmStorage struct.
+const (
+	maxHelmStorageEncodedSize = 1 << 20  // 1 MiB
+	maxHelmStorageDecodedSize = 32 << 20 // 32 MiB
+)
+
+// DecodeHelmStorage decodes bounded Helm storage secret data into a HelmStorage
+// struct. It rejects base64-encoded input larger than 1 MiB and decoded content
+// larger than 32 MiB to prevent excessive memory use during gzip decompression.
 // Adapted from https://github.com/helm/helm/blob/02685e94bd3862afcb44f6cd7716dbeb69743567/pkg/storage/driver/util.go
 func DecodeHelmStorage(releaseData []byte) (*HelmStorage, error) {
-	var b64 = base64.StdEncoding
-	b, err := b64.DecodeString(string(releaseData))
+	if len(releaseData) > maxHelmStorageEncodedSize {
+		return nil, fmt.Errorf("helm storage data exceeds maximum encoded size of %d bytes", maxHelmStorageEncodedSize)
+	}
+
+	b, err := base64.StdEncoding.DecodeString(string(releaseData))
 	if err != nil {
 		return nil, err
 	}
+
 	var magicGzip = []byte{0x1f, 0x8b, 0x08}
-	if len(b) >= 3 && bytes.Equal(b[0:3], magicGzip) {
+	if len(b) >= len(magicGzip) && bytes.Equal(b[:len(magicGzip)], magicGzip) {
 		r, err := gzip.NewReader(bytes.NewReader(b))
 		if err != nil {
 			return nil, err
 		}
 		defer r.Close()
-		b2, err := io.ReadAll(r)
+
+		b, err = io.ReadAll(io.LimitReader(r, maxHelmStorageDecodedSize+1))
 		if err != nil {
 			return nil, err
 		}
-		b = b2
+	}
+
+	if len(b) > maxHelmStorageDecodedSize {
+		return nil, fmt.Errorf("helm storage data exceeds maximum decoded size of %d bytes", maxHelmStorageDecodedSize)
 	}
 
 	var rls HelmStorage
