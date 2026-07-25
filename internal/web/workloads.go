@@ -137,6 +137,11 @@ func (h *Handler) WorkloadsListHandler(w http.ResponseWriter, req *http.Request)
 	name := queryParams.Get("name")
 	namespace := queryParams.Get("namespace")
 
+	if err := validateNameFilter(name); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	// Query the cached workload index with RBAC filtering.
 	workloads := h.GetCachedWorkloads(req.Context(), kind, name, namespace, 2500)
 
@@ -163,6 +168,11 @@ func (h *Handler) WorkloadsSearchHandler(w http.ResponseWriter, req *http.Reques
 	name := queryParams.Get("name")
 	namespace := queryParams.Get("namespace")
 	kind := queryParams.Get("kind")
+
+	if err := validateNameFilter(name); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	// Wrap a plain term so it matches as a substring (preserving "!" negation).
 	if name != "" {

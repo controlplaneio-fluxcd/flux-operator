@@ -39,6 +39,11 @@ func (h *Handler) ResourcesHandler(w http.ResponseWriter, req *http.Request) {
 	namespace := queryParams.Get("namespace")
 	status := queryParams.Get("status")
 
+	if err := validateNameFilter(name); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	var resources []reporter.ResourceStatus
 	if h.conf.Search != nil && h.conf.Search.Cached {
 		// Use the cached search index instead of realtime cluster queries.
@@ -88,6 +93,10 @@ func defaultFluxKinds() []string {
 // If name and namespace filters are empty, it will return resources across all namespaces (subject to RBAC).
 func (h *Handler) GetLiveResources(ctx context.Context, kind, name, namespace, status string,
 	matchLimit int) ([]reporter.ResourceStatus, error) {
+
+	if err := validateNameFilter(name); err != nil {
+		return nil, err
+	}
 
 	// Build kinds array based on query parameter
 	var kinds []string
@@ -144,6 +153,10 @@ func (h *Handler) GetLiveResources(ctx context.Context, kind, name, namespace, s
 		go func(kind string) {
 			defer wg.Done()
 
+			if ctx.Err() != nil {
+				return
+			}
+
 			gvk, err := h.preferredFluxGVK(ctx, kind)
 			if err != nil {
 				if strings.Contains(err.Error(), "no matches for kind") {
@@ -163,6 +176,10 @@ func (h *Handler) GetLiveResources(ctx context.Context, kind, name, namespace, s
 
 			var byKindResult []reporter.ResourceStatus
 			for _, ns := range namespacesToQuery {
+				if ctx.Err() != nil {
+					return
+				}
+
 				list := unstructured.UnstructuredList{
 					Object: map[string]any{
 						"apiVersion": gvk.Group + "/" + gvk.Version,
@@ -193,6 +210,10 @@ func (h *Handler) GetLiveResources(ctx context.Context, kind, name, namespace, s
 				}
 
 				for _, obj := range list.Items {
+					if ctx.Err() != nil {
+						return
+					}
+
 					// Filter by name using wildcard/negation matching if needed
 					if isNamePattern(name) {
 						objName, _, _ := unstructured.NestedString(obj.Object, "metadata", "name")
@@ -204,6 +225,10 @@ func (h *Handler) GetLiveResources(ctx context.Context, kind, name, namespace, s
 					rs := reporter.NewResourceStatus(obj)
 					byKindResult = append(byKindResult, rs)
 				}
+			}
+
+			if ctx.Err() != nil {
+				return
 			}
 
 			mu.Lock()
@@ -220,6 +245,9 @@ func (h *Handler) GetLiveResources(ctx context.Context, kind, name, namespace, s
 	}
 
 	wg.Wait()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	// Filter by status if specified
 	if status != "" {

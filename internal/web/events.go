@@ -37,6 +37,11 @@ func (h *Handler) EventsHandler(w http.ResponseWriter, req *http.Request) {
 	namespace := queryParams.Get("namespace")
 	eventType := queryParams.Get("type")
 
+	if err := validateNameFilter(name); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	// Get events from the cluster using the request context
 	events, err := h.GetEvents(req.Context(), kind, name, namespace, "", eventType)
 	if err != nil {
@@ -69,6 +74,10 @@ type Event struct {
 // Returns at most 500 events per kind (100 if multiple kinds are specified), sorted by timestamp descending.
 // Filters by eventType (Normal, Warning) if provided.
 func (h *Handler) GetEvents(ctx context.Context, kind, name, namespace, excludeReason, eventType string) ([]Event, error) {
+	if err := validateNameFilter(name); err != nil {
+		return nil, err
+	}
+
 	// Build kinds array based on query parameter
 	var kinds []string
 	if kind != "" {
@@ -124,6 +133,10 @@ func (h *Handler) GetEvents(ctx context.Context, kind, name, namespace, excludeR
 		go func(kind string) {
 			defer wg.Done()
 
+			if ctx.Err() != nil {
+				return
+			}
+
 			selectors := []fields.Selector{
 				fields.OneTermEqualSelector("involvedObject.kind", kind),
 			}
@@ -149,6 +162,10 @@ func (h *Handler) GetEvents(ctx context.Context, kind, name, namespace, excludeR
 
 			var byKindEvents []corev1.Event
 			for _, ns := range namespacesToQuery {
+				if ctx.Err() != nil {
+					return
+				}
+
 				el := &corev1.EventList{}
 
 				listOpts := []client.ListOption{
@@ -174,6 +191,9 @@ func (h *Handler) GetEvents(ctx context.Context, kind, name, namespace, excludeR
 				if isNamePattern(name) {
 					filteredEvents = []corev1.Event{}
 					for _, event := range el.Items {
+						if ctx.Err() != nil {
+							return
+						}
 						if matchesWildcard(event.InvolvedObject.Name, name) {
 							filteredEvents = append(filteredEvents, event)
 						}
@@ -183,6 +203,10 @@ func (h *Handler) GetEvents(ctx context.Context, kind, name, namespace, excludeR
 				byKindEvents = append(byKindEvents, filteredEvents...)
 			}
 
+			if ctx.Err() != nil {
+				return
+			}
+
 			mu.Lock()
 			allEvents = append(allEvents, byKindEvents...)
 			mu.Unlock()
@@ -190,6 +214,9 @@ func (h *Handler) GetEvents(ctx context.Context, kind, name, namespace, excludeR
 	}
 
 	wg.Wait()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	// Sort all events by timestamp
 	sort.Sort(SortableEvents(allEvents))

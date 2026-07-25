@@ -6,6 +6,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -28,6 +29,11 @@ func (h *Handler) SearchHandler(w http.ResponseWriter, req *http.Request) {
 	name := queryParams.Get("name")
 	namespace := queryParams.Get("namespace")
 	kind := queryParams.Get("kind")
+
+	if err := validateNameFilter(name); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	// Wrap a plain term so it matches as a substring (preserving "!" negation).
 	if name != "" {
@@ -78,6 +84,17 @@ func (h *Handler) GetCachedResources(ctx context.Context, kind, name, namespace,
 	return h.searchIndex.SearchResources(allowedNamespaces, kind, name, namespace, status, limit)
 }
 
+const maxNameFilterLength = 253
+
+// validateNameFilter rejects filters longer than the maximum Kubernetes object
+// name length before they reach per-item matching loops.
+func validateNameFilter(name string) error {
+	if len(name) > maxNameFilterLength {
+		return fmt.Errorf("name filter exceeds maximum length of %d bytes", maxNameFilterLength)
+	}
+	return nil
+}
+
 // hasWildcard returns true if the pattern contains wildcard characters.
 func hasWildcard(pattern string) bool {
 	return pattern != "" && strings.Contains(pattern, "*")
@@ -107,25 +124,34 @@ func wrapPartialMatch(name string) string {
 }
 
 // matchesWildcard checks if a name matches a pattern with wildcard support.
-// Supports * (matches any characters) and a leading "!" that negates the match
-// (e.g. "!foo" matches everything except "foo", "!*foo*" everything that does
-// not contain "foo"). If no wildcards present, does exact match. Matching is
-// case-insensitive.
+// Supports * (matches any characters) and leading "!" characters that negate
+// the match. An odd number of leading negations inverts the result; an even
+// number preserves it. If no wildcards are present, matching is exact. Matching
+// is case-insensitive. Negations are processed iteratively with constant stack
+// usage.
 func matchesWildcard(name, pattern string) bool {
-	// A leading "!" negates the result of matching the rest of the pattern.
-	if strings.HasPrefix(pattern, "!") {
-		return !matchesWildcard(name, pattern[1:])
+	negated := false
+	for len(pattern) > 0 && pattern[0] == '!' {
+		negated = !negated
+		pattern = pattern[1:]
 	}
 
-	name = strings.ToLower(name)
-	pattern = strings.ToLower(pattern)
+	matched := matchesWildcardPattern(strings.ToLower(name), strings.ToLower(pattern))
+	if negated {
+		return !matched
+	}
+	return matched
+}
 
-	// If no wildcards, do exact match
+// matchesWildcardPattern matches a lower-cased name against a lower-cased
+// wildcard pattern without processing negation.
+func matchesWildcardPattern(name, pattern string) bool {
+	// If no wildcards, do exact match.
 	if !strings.Contains(pattern, "*") {
 		return name == pattern
 	}
 
-	// Split pattern by * and check each segment appears in order
+	// Split pattern by * and check each segment appears in order.
 	segments := strings.Split(pattern, "*")
 	pos := 0
 
@@ -139,7 +165,7 @@ func matchesWildcard(name, pattern string) bool {
 			return false
 		}
 
-		// First segment must be at the start (unless pattern starts with *)
+		// First segment must be at the start (unless pattern starts with *).
 		if i == 0 && idx != 0 {
 			return false
 		}
@@ -147,7 +173,7 @@ func matchesWildcard(name, pattern string) bool {
 		pos += idx + len(segment)
 	}
 
-	// Last segment must be at the end (unless pattern ends with *)
+	// Last segment must be at the end (unless pattern ends with *).
 	if len(segments) > 0 && segments[len(segments)-1] != "" && pos != len(name) {
 		return false
 	}
