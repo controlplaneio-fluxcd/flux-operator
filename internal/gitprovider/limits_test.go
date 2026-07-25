@@ -97,6 +97,7 @@ func TestGitProviderResponseBodyLimit(t *testing.T) {
 	var maxBytesErr *http.MaxBytesError
 	g.Expect(errors.As(err, &maxBytesErr)).To(BeTrue())
 	g.Expect(maxBytesErr.Limit).To(Equal(int64(maxGitProviderResponseBodySize)))
+	g.Expect(err.Error()).To(ContainSubstring("response body exceeds the maximum allowed size"))
 }
 
 func TestProvidersRejectRepeatedTagPages(t *testing.T) {

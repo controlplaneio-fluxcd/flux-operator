@@ -10,7 +10,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/hashicorp/go-retryablehttp"
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/inputs"
@@ -32,9 +31,9 @@ func NewGitLabProvider(ctx context.Context, opts Options) (*GitLabProvider, erro
 		return nil, err
 	}
 
-	rtClient := retryablehttp.NewClient()
-	rtClient.HTTPClient = newGitProviderHTTPClient(opts.TLSConfig)
-	glOpts = append(glOpts, gitlab.WithHTTPClient(rtClient.HTTPClient))
+	// The GitLab SDK wraps the HTTP client in its own retryablehttp client,
+	// so requests are retried while response bodies stay bounded.
+	glOpts = append(glOpts, gitlab.WithHTTPClient(newGitProviderHTTPClient(opts.TLSConfig)))
 
 	if host != "https://gitlab.com" {
 		glOpts = append(glOpts, gitlab.WithBaseURL(host))

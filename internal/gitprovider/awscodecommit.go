@@ -80,8 +80,8 @@ func NewAWSCodeCommitProvider(opts Options, credsProvider awssdk.CredentialsProv
 }
 
 // ListBranches returns a list of branches from the AWSCodeCommit repository.
-// It uses go-git's remote.List() to perform a lightweight ls-remote operation
-// with SigV4-signed Git credentials, avoiding per-branch API calls.
+// It performs a lightweight ls-remote operation via listRefs with SigV4-signed
+// Git credentials over a response-limited HTTP client, avoiding per-branch API calls.
 func (p *AWSCodeCommitProvider) ListBranches(ctx context.Context, opts Options) ([]Result, error) {
 	if _, err := gitProviderResultLimit(opts.Filters); err != nil {
 		return nil, err
@@ -95,8 +95,8 @@ func (p *AWSCodeCommitProvider) ListBranches(ctx context.Context, opts Options) 
 }
 
 // ListTags returns a list of Git tags from the AWSCodeCommit repository.
-// It uses go-git's remote.List() to perform a lightweight ls-remote operation
-// with SigV4-signed Git credentials.
+// It performs a lightweight ls-remote operation via listRefs with SigV4-signed
+// Git credentials over a response-limited HTTP client.
 func (p *AWSCodeCommitProvider) ListTags(ctx context.Context, opts Options) ([]Result, error) {
 	if _, err := gitProviderResultLimit(opts.Filters); err != nil {
 		return nil, err

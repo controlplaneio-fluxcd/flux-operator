@@ -5,7 +5,9 @@ package gitprovider
 
 import (
 	"crypto/tls"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/filtering"
@@ -50,9 +52,28 @@ func (t *responseLimitRoundTripper) RoundTrip(req *http.Request) (*http.Response
 		return nil, err
 	}
 	if resp.Body != nil {
-		resp.Body = http.MaxBytesReader(nil, resp.Body, t.maxBytes)
+		resp.Body = &responseLimitReader{
+			ReadCloser: http.MaxBytesReader(nil, resp.Body, t.maxBytes),
+			maxBytes:   t.maxBytes,
+		}
 	}
 	return resp, nil
+}
+
+// responseLimitReader wraps a size-limited response body so that the limiter's
+// request-oriented error surfaces the response size cap instead.
+type responseLimitReader struct {
+	io.ReadCloser
+	maxBytes int64
+}
+
+// Read prefixes the http.MaxBytesReader error with the response body limit.
+func (r *responseLimitReader) Read(p []byte) (int, error) {
+	n, err := r.ReadCloser.Read(p)
+	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+		err = fmt.Errorf("response body exceeds the maximum allowed size of %d bytes: %w", r.maxBytes, err)
+	}
+	return n, err
 }
 
 // newGitProviderHTTPClient returns an HTTP client with standard transport
@@ -68,67 +89,50 @@ func newGitProviderHTTPClient(tlsConfig *tls.Config) *http.Client {
 	}}
 }
 
-// paginationGuard bounds remote pagination and detects repeated pages.
-type paginationGuard struct {
+// paginationGuard bounds remote pagination and detects repeated page numbers
+// or continuation tokens.
+type paginationGuard[T comparable] struct {
 	operation string
+	keyKind   string
 	maxPages  int
 	pages     int
-	seen      map[int]struct{}
+	seen      map[T]struct{}
 }
 
 // newPaginationGuard creates a page-number guard with the given maximum.
-func newPaginationGuard(operation string, maxPages int) *paginationGuard {
-	return &paginationGuard{
+func newPaginationGuard(operation string, maxPages int) *paginationGuard[int] {
+	return &paginationGuard[int]{
 		operation: operation,
+		keyKind:   "page",
 		maxPages:  maxPages,
 		seen:      make(map[int]struct{}, maxPages),
 	}
 }
 
 // newGitProviderPaginationGuard creates a page-number guard using the standard maximum.
-func newGitProviderPaginationGuard(operation string) *paginationGuard {
+func newGitProviderPaginationGuard(operation string) *paginationGuard[int] {
 	return newPaginationGuard(operation, maxGitProviderPages)
 }
 
-// Visit records a page before it is requested.
-func (g *paginationGuard) Visit(page int) error {
-	if g.pages >= g.maxPages {
-		return fmt.Errorf("%s pagination exceeds maximum of %d pages", g.operation, g.maxPages)
-	}
-	if _, ok := g.seen[page]; ok {
-		return fmt.Errorf("%s pagination returned repeated page %d", g.operation, page)
-	}
-	g.seen[page] = struct{}{}
-	g.pages++
-	return nil
-}
-
-// paginationTokenGuard bounds token-based pagination and detects repeated tokens.
-type paginationTokenGuard struct {
-	operation string
-	maxPages  int
-	pages     int
-	seen      map[string]struct{}
-}
-
-// newGitProviderPaginationTokenGuard creates a token guard using the standard maximum.
-func newGitProviderPaginationTokenGuard(operation string) *paginationTokenGuard {
-	return &paginationTokenGuard{
+// newGitProviderPaginationTokenGuard creates a continuation-token guard using the standard maximum.
+func newGitProviderPaginationTokenGuard(operation string) *paginationGuard[string] {
+	return &paginationGuard[string]{
 		operation: operation,
+		keyKind:   "continuation token",
 		maxPages:  maxGitProviderPages,
 		seen:      make(map[string]struct{}, maxGitProviderPages),
 	}
 }
 
-// Visit records a continuation token before its page is requested.
-func (g *paginationTokenGuard) Visit(token string) error {
+// Visit records a page number or continuation token before its page is requested.
+func (g *paginationGuard[T]) Visit(key T) error {
 	if g.pages >= g.maxPages {
 		return fmt.Errorf("%s pagination exceeds maximum of %d pages", g.operation, g.maxPages)
 	}
-	if _, ok := g.seen[token]; ok {
-		return fmt.Errorf("%s pagination returned a repeated continuation token", g.operation)
+	if _, ok := g.seen[key]; ok {
+		return fmt.Errorf("%s pagination returned a repeated %s", g.operation, g.keyKind)
 	}
-	g.seen[token] = struct{}{}
+	g.seen[key] = struct{}{}
 	g.pages++
 	return nil
 }
