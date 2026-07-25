@@ -37,7 +37,7 @@ func (h *Handler) EventsHandler(w http.ResponseWriter, req *http.Request) {
 	namespace := queryParams.Get("namespace")
 	eventType := queryParams.Get("type")
 
-	if err := validateNameFilter(name); err != nil {
+	if err := validateSearchFilters(kind, name, namespace); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -74,9 +74,12 @@ type Event struct {
 // Returns at most 500 events per kind (100 if multiple kinds are specified), sorted by timestamp descending.
 // Filters by eventType (Normal, Warning) if provided.
 func (h *Handler) GetEvents(ctx context.Context, kind, name, namespace, excludeReason, eventType string) ([]Event, error) {
-	if err := validateNameFilter(name); err != nil {
+	if err := validateSearchFilters(kind, name, namespace); err != nil {
 		return nil, err
 	}
+
+	nameIsPattern := isNamePattern(name)
+	nameMatcher := compileWildcardMatcher(name)
 
 	// Build kinds array based on query parameter
 	var kinds []string
@@ -143,7 +146,7 @@ func (h *Handler) GetEvents(ctx context.Context, kind, name, namespace, excludeR
 
 			// Add an exact-match field selector for a plain name (faster); wildcard
 			// and negated ("!") patterns are matched in memory below.
-			if name != "" && !isNamePattern(name) {
+			if name != "" && !nameIsPattern {
 				selectors = append(selectors, fields.OneTermEqualSelector("involvedObject.name", name))
 			}
 
@@ -188,13 +191,13 @@ func (h *Handler) GetEvents(ctx context.Context, kind, name, namespace, excludeR
 
 				// Filter by name using wildcard/negation matching if needed
 				filteredEvents := el.Items
-				if isNamePattern(name) {
+				if nameIsPattern {
 					filteredEvents = []corev1.Event{}
 					for _, event := range el.Items {
 						if ctx.Err() != nil {
 							return
 						}
-						if matchesWildcard(event.InvolvedObject.Name, name) {
+						if nameMatcher.matches(event.InvolvedObject.Name) {
 							filteredEvents = append(filteredEvents, event)
 						}
 					}

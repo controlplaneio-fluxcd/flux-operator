@@ -30,7 +30,7 @@ func (h *Handler) SearchHandler(w http.ResponseWriter, req *http.Request) {
 	namespace := queryParams.Get("namespace")
 	kind := queryParams.Get("kind")
 
-	if err := validateNameFilter(name); err != nil {
+	if err := validateSearchFilters(kind, name, namespace); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -84,13 +84,31 @@ func (h *Handler) GetCachedResources(ctx context.Context, kind, name, namespace,
 	return h.searchIndex.SearchResources(allowedNamespaces, kind, name, namespace, status, limit)
 }
 
-const maxNameFilterLength = 253
+const maxSearchFilterLength = 253
 
-// validateNameFilter rejects filters longer than the maximum Kubernetes object
-// name length before they reach per-item matching loops.
-func validateNameFilter(name string) error {
-	if len(name) > maxNameFilterLength {
-		return fmt.Errorf("name filter exceeds maximum length of %d bytes", maxNameFilterLength)
+// validateSearchFilter rejects a search filter longer than the maximum
+// Kubernetes object name length before it reaches lookup or matching code.
+func validateSearchFilter(field, value string) error {
+	if len(value) > maxSearchFilterLength {
+		return fmt.Errorf("%s filter exceeds maximum length of %d bytes", field, maxSearchFilterLength)
+	}
+	return nil
+}
+
+// validateSearchFilters validates all resource identity filters accepted by
+// search, list, and event handlers.
+func validateSearchFilters(kind, name, namespace string) error {
+	for _, filter := range []struct {
+		field string
+		value string
+	}{
+		{field: "name", value: name},
+		{field: "namespace", value: namespace},
+		{field: "kind", value: kind},
+	} {
+		if err := validateSearchFilter(filter.field, filter.value); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -103,7 +121,7 @@ func hasWildcard(pattern string) bool {
 // isNamePattern reports whether name is a match pattern that must be evaluated
 // in memory — a "*" wildcard or a leading "!" negation — as opposed to a plain
 // name that can use an indexed exact-match field selector. A negated name cannot
-// use a positive field selector, so it has to go through matchesWildcard.
+// use a positive field selector, so it has to go through wildcard matching.
 func isNamePattern(name string) bool {
 	return strings.HasPrefix(name, "!") || hasWildcard(name)
 }
@@ -123,39 +141,54 @@ func wrapPartialMatch(name string) string {
 	return neg + "*" + name + "*"
 }
 
-// matchesWildcard checks if a name matches a pattern with wildcard support.
-// Supports * (matches any characters) and leading "!" characters that negate
-// the match. An odd number of leading negations inverts the result; an even
-// number preserves it. If no wildcards are present, matching is exact. Matching
-// is case-insensitive. Negations are processed iteratively with constant stack
-// usage.
-func matchesWildcard(name, pattern string) bool {
+// wildcardMatcher holds a normalized wildcard pattern that can be reused
+// across all candidate names in one search operation.
+type wildcardMatcher struct {
+	negated  bool
+	pattern  string
+	segments []string
+}
+
+// compileWildcardMatcher normalizes and splits a wildcard pattern once.
+func compileWildcardMatcher(pattern string) wildcardMatcher {
 	negated := false
 	for len(pattern) > 0 && pattern[0] == '!' {
 		negated = !negated
 		pattern = pattern[1:]
 	}
 
-	matched := matchesWildcardPattern(strings.ToLower(name), strings.ToLower(pattern))
-	if negated {
+	pattern = strings.ToLower(pattern)
+	matcher := wildcardMatcher{negated: negated, pattern: pattern}
+	if strings.Contains(pattern, "*") {
+		matcher.segments = strings.Split(pattern, "*")
+	}
+	return matcher
+}
+
+// matches performs a case-insensitive match against the compiled pattern.
+func (m wildcardMatcher) matches(name string) bool {
+	return m.matchesLower(strings.ToLower(name))
+}
+
+// matchesLower matches an already lower-cased name against the compiled
+// pattern, avoiding repeated normalization for cached index entries.
+func (m wildcardMatcher) matchesLower(name string) bool {
+	matched := false
+	if m.segments == nil {
+		matched = name == m.pattern
+	} else {
+		matched = m.matchesSegments(name)
+	}
+	if m.negated {
 		return !matched
 	}
 	return matched
 }
 
-// matchesWildcardPattern matches a lower-cased name against a lower-cased
-// wildcard pattern without processing negation.
-func matchesWildcardPattern(name, pattern string) bool {
-	// If no wildcards, do exact match.
-	if !strings.Contains(pattern, "*") {
-		return name == pattern
-	}
-
-	// Split pattern by * and check each segment appears in order.
-	segments := strings.Split(pattern, "*")
+// matchesSegments checks that compiled wildcard segments occur in order.
+func (m wildcardMatcher) matchesSegments(name string) bool {
 	pos := 0
-
-	for i, segment := range segments {
+	for i, segment := range m.segments {
 		if segment == "" {
 			continue
 		}
@@ -165,18 +198,23 @@ func matchesWildcardPattern(name, pattern string) bool {
 			return false
 		}
 
-		// First segment must be at the start (unless pattern starts with *).
+		// First segment must be at the start unless the pattern starts with *.
 		if i == 0 && idx != 0 {
 			return false
 		}
-
 		pos += idx + len(segment)
 	}
 
-	// Last segment must be at the end (unless pattern ends with *).
-	if len(segments) > 0 && segments[len(segments)-1] != "" && pos != len(name) {
-		return false
-	}
+	// Last segment must be at the end unless the pattern ends with *.
+	return len(m.segments) == 0 || m.segments[len(m.segments)-1] == "" || pos == len(name)
+}
 
-	return true
+// matchesWildcard checks if a name matches a pattern with wildcard support.
+// Supports * (matches any characters) and leading "!" characters that negate
+// the match. An odd number of leading negations inverts the result; an even
+// number preserves it. If no wildcards are present, matching is exact. Matching
+// is case-insensitive. Callers matching multiple names should compile once and
+// reuse wildcardMatcher directly.
+func matchesWildcard(name, pattern string) bool {
+	return compileWildcardMatcher(pattern).matches(name)
 }

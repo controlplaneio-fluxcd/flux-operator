@@ -137,7 +137,7 @@ func (h *Handler) WorkloadsListHandler(w http.ResponseWriter, req *http.Request)
 	name := queryParams.Get("name")
 	namespace := queryParams.Get("namespace")
 
-	if err := validateNameFilter(name); err != nil {
+	if err := validateSearchFilters(kind, name, namespace); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -169,7 +169,7 @@ func (h *Handler) WorkloadsSearchHandler(w http.ResponseWriter, req *http.Reques
 	namespace := queryParams.Get("namespace")
 	kind := queryParams.Get("kind")
 
-	if err := validateNameFilter(name); err != nil {
+	if err := validateSearchFilters(kind, name, namespace); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}

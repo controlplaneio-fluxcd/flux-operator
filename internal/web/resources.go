@@ -39,7 +39,7 @@ func (h *Handler) ResourcesHandler(w http.ResponseWriter, req *http.Request) {
 	namespace := queryParams.Get("namespace")
 	status := queryParams.Get("status")
 
-	if err := validateNameFilter(name); err != nil {
+	if err := validateSearchFilters(kind, name, namespace); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -94,9 +94,12 @@ func defaultFluxKinds() []string {
 func (h *Handler) GetLiveResources(ctx context.Context, kind, name, namespace, status string,
 	matchLimit int) ([]reporter.ResourceStatus, error) {
 
-	if err := validateNameFilter(name); err != nil {
+	if err := validateSearchFilters(kind, name, namespace); err != nil {
 		return nil, err
 	}
+
+	nameIsPattern := isNamePattern(name)
+	nameMatcher := compileWildcardMatcher(name)
 
 	// Build kinds array based on query parameter
 	var kinds []string
@@ -196,7 +199,7 @@ func (h *Handler) GetLiveResources(ctx context.Context, kind, name, namespace, s
 
 				// Add an exact-match field selector for a plain name; wildcard and
 				// negated ("!") patterns are matched in memory below.
-				if name != "" && !isNamePattern(name) {
+				if name != "" && !nameIsPattern {
 					listOpts = append(listOpts, client.MatchingFields{"metadata.name": name})
 				}
 
@@ -215,9 +218,9 @@ func (h *Handler) GetLiveResources(ctx context.Context, kind, name, namespace, s
 					}
 
 					// Filter by name using wildcard/negation matching if needed
-					if isNamePattern(name) {
+					if nameIsPattern {
 						objName, _, _ := unstructured.NestedString(obj.Object, "metadata", "name")
-						if !matchesWildcard(objName, name) {
+						if !nameMatcher.matches(objName) {
 							continue
 						}
 					}

@@ -372,17 +372,35 @@ func TestMatchesWildcardDeepNegation(t *testing.T) {
 	g.Expect(matchesWildcard("flux-system", "!"+evenPattern)).To(BeFalse())
 }
 
-func TestNameFilterLengthLimit(t *testing.T) {
+func TestWildcardMatcherReuse(t *testing.T) {
 	g := NewWithT(t)
-	g.Expect(validateNameFilter(strings.Repeat("a", 253))).To(Succeed())
-	g.Expect(validateNameFilter(strings.Repeat("a", 254))).To(MatchError(ContainSubstring("253 bytes")))
+	matcher := compileWildcardMatcher("!*FLUX*")
+
+	g.Expect(matcher.matches("app")).To(BeTrue())
+	g.Expect(matcher.matches("Flux-System")).To(BeFalse())
+	g.Expect(matcher.matches("flux-monitoring")).To(BeFalse())
 }
 
-func TestNameFilterHandlersRejectLongInput(t *testing.T) {
-	handler := &Handler{conf: &fluxcdv1.WebConfigSpec{}}
-	longFilter := strings.Repeat("!", 254)
+func TestSearchFilterLengthLimit(t *testing.T) {
+	for _, field := range []string{"name", "namespace", "kind"} {
+		t.Run(field, func(t *testing.T) {
+			g := NewWithT(t)
+			g.Expect(validateSearchFilter(field, strings.Repeat("a", 253))).To(Succeed())
+			g.Expect(validateSearchFilter(field, strings.Repeat("a", 254))).To(
+				MatchError(ContainSubstring(field + " filter exceeds maximum length of 253 bytes")))
+		})
+	}
+}
 
-	tests := []struct {
+func TestSearchFilterHandlersEnforceLengthLimit(t *testing.T) {
+	handler := &Handler{
+		conf:          &fluxcdv1.WebConfigSpec{},
+		kubeClient:    kubeClient,
+		searchIndex:   &SearchIndex{},
+		workloadIndex: &WorkloadIndex{},
+	}
+
+	handlers := []struct {
 		name    string
 		path    string
 		handler http.HandlerFunc
@@ -394,17 +412,34 @@ func TestNameFilterHandlersRejectLongInput(t *testing.T) {
 		{name: "workloads search", path: "/api/v1/workloads/search", handler: handler.WorkloadsSearchHandler},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			g := NewWithT(t)
-			req := httptest.NewRequest(http.MethodGet, tt.path+"?name="+longFilter, nil)
-			rec := httptest.NewRecorder()
+	for _, handlerTest := range handlers {
+		for _, field := range []string{"name", "namespace", "kind"} {
+			for _, boundary := range []struct {
+				name       string
+				length     int
+				statusCode int
+			}{
+				{name: "maximum", length: 253, statusCode: http.StatusOK},
+				{name: "over maximum", length: 254, statusCode: http.StatusBadRequest},
+			} {
+				t.Run(handlerTest.name+"/"+field+"/"+boundary.name, func(t *testing.T) {
+					g := NewWithT(t)
+					value := strings.Repeat("a", boundary.length)
+					req := httptest.NewRequest(http.MethodGet, handlerTest.path+"?"+field+"="+value, nil)
+					ctx, cancel := context.WithCancel(req.Context())
+					cancel()
+					req = req.WithContext(ctx)
+					rec := httptest.NewRecorder()
 
-			tt.handler(rec, req)
+					handlerTest.handler(rec, req)
 
-			g.Expect(rec.Code).To(Equal(http.StatusBadRequest))
-			g.Expect(rec.Body.String()).To(ContainSubstring("name filter"))
-		})
+					g.Expect(rec.Code).To(Equal(boundary.statusCode))
+					if boundary.statusCode == http.StatusBadRequest {
+						g.Expect(rec.Body.String()).To(ContainSubstring(field + " filter"))
+					}
+				})
+			}
+		}
 	}
 }
 
