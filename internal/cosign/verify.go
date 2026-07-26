@@ -30,6 +30,9 @@ const (
 
 	// sigstoreBundleMediaTypePrefix is the common prefix for all sigstore bundle media types.
 	sigstoreBundleMediaTypePrefix = "application/vnd.dev.sigstore.bundle"
+
+	// maxSigstoreBundleSize is the maximum compressed or uncompressed bundle size.
+	maxSigstoreBundleSize int64 = 4 * 1024 * 1024
 )
 
 // VerifyArtifact verifies the cosign signature on an OCI artifact using Sigstore's
@@ -187,36 +190,79 @@ func NewTUFClient() (*tuf.Client, error) {
 
 // findSigstoreBundle searches through all OCI referrers for a sigstore bundle.
 // Following the same approach as cosign v3, it iterates all referrers, fetches
-// each one, and checks the layer media type to identify sigstore bundles.
-// Non-bundle referrers are silently skipped.
+// each manifest, and checks its layer descriptor before accessing bundle data.
+// Non-bundle and unreadable referrers are silently skipped.
 func findSigstoreBundle(repo name.Repository, manifest *v1.IndexManifest, opts ...remote.Option) ([]byte, error) {
+	var bundleErr error
 	for _, m := range manifest.Manifests {
 		ref := repo.Digest(m.Digest.String())
 		img, err := remote.Image(ref, opts...)
 		if err != nil {
 			continue
 		}
-		layers, err := img.Layers()
-		if err != nil || len(layers) != 1 {
+
+		bundleManifest, err := img.Manifest()
+		if err != nil || len(bundleManifest.Layers) != 1 {
 			continue
 		}
-		mediaType, err := layers[0].MediaType()
-		if err != nil || !strings.HasPrefix(string(mediaType), sigstoreBundleMediaTypePrefix) {
+		desc := bundleManifest.Layers[0]
+		if !strings.HasPrefix(string(desc.MediaType), sigstoreBundleMediaTypePrefix) {
 			continue
 		}
-		reader, err := layers[0].Uncompressed()
+		if err := validateSigstoreBundleDescriptor(desc); err != nil {
+			bundleErr = err
+			continue
+		}
+
+		layer, err := img.LayerByDigest(desc.Digest)
 		if err != nil {
 			continue
 		}
-		data, err := io.ReadAll(reader)
-		if closeErr := reader.Close(); closeErr != nil {
-			return nil, fmt.Errorf("closing bundle layer reader: %w", closeErr)
-		}
+		data, err := readSigstoreBundleLayer(layer)
 		if err != nil {
-			return nil, fmt.Errorf("reading bundle content: %w", err)
+			bundleErr = err
+			continue
 		}
 		return data, nil
 	}
 
+	if bundleErr != nil {
+		return nil, bundleErr
+	}
 	return nil, fmt.Errorf("no sigstore bundle found in referrers")
+}
+
+// validateSigstoreBundleDescriptor rejects invalid and oversized compressed
+// layer descriptors before the corresponding blob is accessed.
+func validateSigstoreBundleDescriptor(desc v1.Descriptor) error {
+	if desc.Size < 0 {
+		return fmt.Errorf("invalid sigstore bundle layer size %d", desc.Size)
+	}
+	if desc.Size > maxSigstoreBundleSize {
+		return fmt.Errorf("sigstore bundle layer size %d exceeds maximum %d", desc.Size, maxSigstoreBundleSize)
+	}
+	return nil
+}
+
+// readSigstoreBundleLayer reads and closes an uncompressed bundle layer while
+// enforcing the expanded-size limit.
+func readSigstoreBundleLayer(layer v1.Layer) ([]byte, error) {
+	reader, err := layer.Uncompressed()
+	if err != nil {
+		return nil, fmt.Errorf("opening bundle content: %w", err)
+	}
+
+	data, readErr := io.ReadAll(io.LimitReader(reader, maxSigstoreBundleSize+1))
+	closeErr := reader.Close()
+	if readErr != nil {
+		return nil, fmt.Errorf("reading bundle content: %w", readErr)
+	}
+	if closeErr != nil {
+		return nil, fmt.Errorf("closing bundle layer reader: %w", closeErr)
+	}
+	if int64(len(data)) > maxSigstoreBundleSize {
+		return nil, fmt.Errorf("uncompressed sigstore bundle exceeds maximum size %d", maxSigstoreBundleSize)
+	}
+
+	return data, nil
 }
