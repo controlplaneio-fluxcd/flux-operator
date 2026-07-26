@@ -231,6 +231,19 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 		return ctrl.Result{}, nil
 	}
 
+	// Validate the OCI providers spec fields.
+	// This mirrors the CEL validation rules for clusters that don't support CEL.
+	if strings.HasSuffix(obj.Spec.Type, "ArtifactTag") &&
+		!strings.Contains(strings.TrimPrefix(obj.Spec.URL, "oci://"), "/") {
+		err := fmt.Errorf("spec.url must include the repository path after the registry host when spec.type is an OCI provider")
+		errMsg := fmt.Sprintf("%s: %v", msgTerminalError, err)
+		conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
+		conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
+		log.Error(err, msgTerminalError)
+		r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSpec, errMsg)
+		return ctrl.Result{}, nil
+	}
+
 	// Mark the object as reconciling.
 	conditions.MarkReconciling(obj, meta.ProgressingReason, "%s", msgInProgress)
 

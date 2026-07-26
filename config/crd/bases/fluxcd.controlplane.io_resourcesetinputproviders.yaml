@@ -333,6 +333,10 @@ spec:
             - message: spec.url must start with 'oci://' when spec.type is an OCI
                 provider
               rule: '!self.type.endsWith(''ArtifactTag'') || self.url.startsWith(''oci'')'
+            - message: spec.url must include the repository path after the registry
+                host when spec.type is an OCI provider
+              rule: '!self.type.endsWith(''ArtifactTag'') || !self.url.startsWith(''oci://'')
+                || self.url.substring(6).contains(''/'')'
             - message: spec.url must start with 'http://' or 'https://' when spec.type
                 is 'ExternalService'
               rule: self.type != 'ExternalService' || self.url.startsWith('http')
