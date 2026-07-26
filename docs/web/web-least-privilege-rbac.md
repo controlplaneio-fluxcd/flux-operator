@@ -220,6 +220,19 @@ Pod deletion is a special case: its action verb, `delete`, is also the native
 Kubernetes verb. Granting that action therefore permits direct Pod deletion in
 either access mode.
 
+**Artifact fetch hardening:**
+The artifact download action retrieves the artifact from the URL advertised in
+the source's status over plain HTTP. This fetch is not a Kubernetes API call,
+so it runs with the backend pod's own network identity in either access mode.
+To keep the fetch scoped to Flux artifact servers, the backend does not follow
+redirects and requires DNS hostnames; literal IPv4 and IPv6 hostnames are
+rejected. It resolves every destination address, rejects the request if any
+address is loopback, link-local, or the IPv6 instance metadata service address
+(`fd00:ec2::254`), and connects directly to a validated address to prevent DNS
+rebinding between validation and connection. Other private addresses remain
+reachable through DNS names so artifacts can be served by in-cluster Flux
+controllers.
+
 **Least privilege benefit:**
 Without fine-grained access, native verbs such as `patch` can let users bypass
 the action boundaries enforced by the Web UI and make unrelated changes with
@@ -255,13 +268,13 @@ Users do not need cluster-wide `list` permissions on namespaces just to populate
 
 ## Summary
 
-| # | Feature                     | Internal Operation                                 | Data Exposed to User                                                          |
-|---|-----------------------------|----------------------------------------------------|-------------------------------------------------------------------------------|
-| 1 | CronJob pod listing         | System reads Jobs/Pods                             | Pod name, phase, timestamps                                                   |
-| 2 | Flux GVK resolution         | System API discovery                               | None (internal metadata only)                                                 |
-| 3 | Audit event recording       | System writes event                                | None (server-side only)                                                       |
-| 4 | Audit pod-owner resolution  | System reads owner chain                           | None (server-side only)                                                       |
-| 5 | Dashboard report and workloads index | System scans Flux resources and applier inventories | Aggregated stats and workload reference + parent reconciler status, filtered by user namespace |
-| 6 | Controller metrics          | System reads metrics API                           | CPU/memory usage of Flux controllers                                          |
-| 7 | Fine-grained user actions   | System performs native action operations           | Requested artifact for downloads; action result only otherwise                |
-| 8 | Namespace visibility        | Wrapper lists namespaces with privileged base client | Visible namespace names after RBAC filtering                                  |
+| # | Feature                              | Internal Operation                                   | Data Exposed to User                                                                           |
+|---|--------------------------------------|------------------------------------------------------|------------------------------------------------------------------------------------------------|
+| 1 | CronJob pod listing                  | System reads Jobs/Pods                               | Pod name, phase, timestamps                                                                    |
+| 2 | Flux GVK resolution                  | System API discovery                                 | None (internal metadata only)                                                                  |
+| 3 | Audit event recording                | System writes event                                  | None (server-side only)                                                                        |
+| 4 | Audit pod-owner resolution           | System reads owner chain                             | None (server-side only)                                                                        |
+| 5 | Dashboard report and workloads index | System scans Flux resources and applier inventories  | Aggregated stats and workload reference + parent reconciler status, filtered by user namespace |
+| 6 | Controller metrics                   | System reads metrics API                             | CPU/memory usage of Flux controllers                                                           |
+| 7 | Fine-grained user actions            | System performs native action operations             | Requested artifact for downloads; action result only otherwise                                 |
+| 8 | Namespace visibility                 | Wrapper lists namespaces with privileged base client | Visible namespace names after RBAC filtering                                                   |

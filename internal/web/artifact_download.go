@@ -4,10 +4,12 @@
 package web
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"slices"
 	"time"
 
@@ -34,19 +36,84 @@ func isDownloadableKind(kind string) bool {
 	return slices.Contains(DownloadableKinds, kind)
 }
 
-// artifactHTTPClient is a dedicated HTTP client for fetching artifacts from source-controller.
+// artifactIPResolver resolves artifact hostnames to IP addresses.
+type artifactIPResolver interface {
+	LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error)
+}
+
+// artifactDialContextFunc establishes an artifact network connection.
+type artifactDialContextFunc func(ctx context.Context, network, address string) (net.Conn, error)
+
+// artifactHTTPClient is a dedicated HTTP client for fetching artifacts from Flux artifact servers.
 // The timeout is set to 59 seconds, just under the web server's 60 second write timeout.
 var artifactHTTPClient = &http.Client{
 	Timeout: 59 * time.Second,
 	Transport: &http.Transport{
-		DialContext: (&net.Dialer{
+		DialContext: newArtifactDialContext(net.DefaultResolver, (&net.Dialer{
 			Timeout:   10 * time.Second,
 			KeepAlive: 30 * time.Second,
-		}).DialContext,
+		}).DialContext),
 		TLSHandshakeTimeout:   10 * time.Second,
 		ResponseHeaderTimeout: 30 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 	},
+	CheckRedirect: rejectArtifactRedirect,
+}
+
+// rejectArtifactRedirect prevents an artifact URL from redirecting to another destination.
+func rejectArtifactRedirect(_ *http.Request, _ []*http.Request) error {
+	return http.ErrUseLastResponse
+}
+
+// newArtifactDialContext returns a dialer that requires a DNS hostname, resolves and
+// validates every destination address, then connects to the validated IP to prevent
+// DNS rebinding between checks.
+func newArtifactDialContext(resolver artifactIPResolver, dialContext artifactDialContextFunc) artifactDialContextFunc {
+	return func(ctx context.Context, network, address string) (net.Conn, error) {
+		host, port, err := net.SplitHostPort(address)
+		if err != nil {
+			return nil, fmt.Errorf("invalid artifact destination %q: %w", address, err)
+		}
+		if _, err := netip.ParseAddr(host); err == nil {
+			return nil, fmt.Errorf("artifact destination %q must use a DNS hostname", host)
+		}
+
+		addrs, err := resolver.LookupIPAddr(ctx, host)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve artifact destination %q: %w", host, err)
+		}
+		if len(addrs) == 0 {
+			return nil, fmt.Errorf("artifact destination %q resolved to no addresses", host)
+		}
+
+		for _, addr := range addrs {
+			if isBlockedArtifactAddress(addr.IP) {
+				return nil, fmt.Errorf("artifact destination %q resolves to blocked address %s", host, addr.IP)
+			}
+		}
+
+		var dialErr error
+		for _, addr := range addrs {
+			conn, err := dialContext(ctx, network, net.JoinHostPort(addr.String(), port))
+			if err == nil {
+				return conn, nil
+			}
+			dialErr = err
+		}
+
+		return nil, fmt.Errorf("failed to connect to artifact destination %q: %w", host, dialErr)
+	}
+}
+
+// ipv6InstanceMetadataAddress is the well-known IPv6 address of the cloud
+// instance metadata service, which is unique-local rather than link-local.
+var ipv6InstanceMetadataAddress = net.ParseIP("fd00:ec2::254")
+
+// isBlockedArtifactAddress reports whether an address is loopback, link-local,
+// or the instance metadata service address.
+func isBlockedArtifactAddress(ip net.IP) bool {
+	return ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.Equal(ipv6InstanceMetadataAddress)
 }
 
 // DownloadHandler handles GET /api/v1/artifact/download requests to download artifacts from Flux sources.
