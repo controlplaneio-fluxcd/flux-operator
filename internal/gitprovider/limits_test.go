@@ -11,12 +11,11 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"sync/atomic"
 	"testing"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/google/go-github/v81/github"
+	"github.com/google/go-github/v87/github"
 	. "github.com/onsi/gomega"
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 
@@ -113,10 +112,11 @@ func TestProvidersRejectRepeatedTagPages(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		client := github.NewClient(newGitProviderHTTPClient(nil))
-		baseURL, err := url.Parse(srv.URL + "/")
+		client, err := github.NewClient(
+			github.WithHTTPClient(newGitProviderHTTPClient(nil)),
+			github.WithEnterpriseURLs(srv.URL, srv.URL),
+		)
 		g.Expect(err).NotTo(HaveOccurred())
-		client.BaseURL = baseURL
 		provider := &GitHubProvider{Client: client, Owner: "owner", Repo: "repo"}
 
 		_, err = provider.ListTags(context.Background(), Options{})

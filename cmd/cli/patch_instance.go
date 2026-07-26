@@ -15,7 +15,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	ghauth "github.com/cli/go-gh/v2/pkg/auth"
-	"github.com/google/go-github/v81/github"
+	"github.com/google/go-github/v87/github"
 	"github.com/spf13/cobra"
 	"golang.org/x/oauth2"
 	"sigs.k8s.io/yaml"
@@ -779,7 +779,11 @@ func resolveFromMinor(ctx context.Context, versionExpr string) (int, error) {
 		return 0, fmt.Errorf("invalid version expression %q: not a valid semver or constraint", versionExpr)
 	}
 
-	ghClient := newGitHubClient(ctx)
+	ghClient, err := newGitHubClient(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("creating GitHub client: %w", err)
+	}
+
 	tags, err := listFlux2Tags(ctx, ghClient)
 	if err != nil {
 		return 0, fmt.Errorf("listing flux2 tags: %w", err)
@@ -1028,21 +1032,24 @@ func computeImagePatch(
 // newGitHubClient creates a GitHub client with optional authentication.
 // It uses the go-gh auth package which supports GITHUB_TOKEN, GH_TOKEN
 // environment variables and credentials stored by 'gh auth login'.
-func newGitHubClient(ctx context.Context) *github.Client {
+func newGitHubClient(ctx context.Context) (*github.Client, error) {
 	token, _ := ghauth.TokenForHost("github.com")
 	if token == "" {
-		return github.NewClient(nil)
+		return github.NewClient()
 	}
 
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
-	return github.NewClient(oauth2.NewClient(ctx, ts))
+	return github.NewClient(github.WithHTTPClient(oauth2.NewClient(ctx, ts)))
 }
 
 // resolveBranchSHA returns the HEAD commit SHA of the given branch
 // for the given controller repository under the fluxcd GitHub org.
 // It is a variable so tests can override it.
 var resolveBranchSHA = func(ctx context.Context, controller, branch string) (string, error) {
-	ghClient := newGitHubClient(ctx)
+	ghClient, err := newGitHubClient(ctx)
+	if err != nil {
+		return "", err
+	}
 	b, _, err := ghClient.Repositories.GetBranch(ctx, "fluxcd", controller, branch, 0)
 	if err != nil {
 		return "", err
@@ -1052,7 +1059,11 @@ var resolveBranchSHA = func(ctx context.Context, controller, branch string) (str
 
 // listRepositoryTags fetches all tags from a GitHub repository.
 var listRepositoryTags = func(ctx context.Context, owner, repo string) ([]string, error) {
-	return listGitHubRepositoryTags(ctx, newGitHubClient(ctx), owner, repo)
+	ghClient, err := newGitHubClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return listGitHubRepositoryTags(ctx, ghClient, owner, repo)
 }
 
 // listFlux2Tags fetches all tags from the fluxcd/flux2 GitHub repository.

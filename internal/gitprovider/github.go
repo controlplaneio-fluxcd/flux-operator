@@ -10,7 +10,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/google/go-github/v81/github"
+	"github.com/google/go-github/v87/github"
 	"golang.org/x/oauth2"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/inputs"
@@ -25,7 +25,6 @@ type GitHubProvider struct {
 
 // NewGitHubProvider creates a GitHub provider from the given options.
 func NewGitHubProvider(ctx context.Context, opts Options) (*GitHubProvider, error) {
-	var client *github.Client
 	var ts oauth2.TokenSource
 
 	if opts.Token != "" {
@@ -39,12 +38,16 @@ func NewGitHubProvider(ctx context.Context, opts Options) (*GitHubProvider, erro
 
 	httpClient := newGitProviderHTTPClient(opts.TLSConfig)
 	httpCtx := context.WithValue(ctx, oauth2.HTTPClient, httpClient)
-	client = github.NewClient(oauth2.NewClient(httpCtx, ts))
+	clientOpts := []github.ClientOptionsFunc{
+		github.WithHTTPClient(oauth2.NewClient(httpCtx, ts)),
+	}
 	if host != "https://github.com" {
-		client, err = client.WithEnterpriseURLs(host, host)
-		if err != nil {
-			return nil, fmt.Errorf("could not create enterprise GitHub client: %v", err)
-		}
+		clientOpts = append(clientOpts, github.WithEnterpriseURLs(host, host))
+	}
+
+	client, err := github.NewClient(clientOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("could not create GitHub client: %w", err)
 	}
 
 	return &GitHubProvider{
