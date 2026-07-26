@@ -179,6 +179,46 @@ func TestNormalizeGitURL(t *testing.T) {
 			input:    "https://github.com/my-org/repo",
 			expected: "https://github.com/my-org/repo",
 		},
+		{
+			name:     "strip HTTPS credentials",
+			input:    "https://x-access-token:ghp_secret@github.com/my-org/repo.git",
+			expected: "https://github.com/my-org/repo",
+		},
+		{
+			name:     "strip HTTPS credentials with host port",
+			input:    "https://user:secret@git.example.com:8443/my-org/repo.git",
+			expected: "https://git.example.com:8443/my-org/repo",
+		},
+		{
+			name:     "strip SSH userinfo",
+			input:    "ssh://git@github.com/my-org/repo.git",
+			expected: "ssh://github.com/my-org/repo",
+		},
+		{
+			name:     "reject malformed credential URL",
+			input:    "https://user:secret@github.com/%zz",
+			expected: "",
+		},
+		{
+			name:     "reject opaque credential URL",
+			input:    "https:user:secret@github.com/my-org/repo.git",
+			expected: "",
+		},
+		{
+			name:     "reject hostless credential URL",
+			input:    "https:///user:secret@github.com/my-org/repo.git",
+			expected: "",
+		},
+		{
+			name:     "reject hostless git SSH credential URL",
+			input:    "git+ssh:///user:secret@git.example.com/my-org/repo.git",
+			expected: "",
+		},
+		{
+			name:     "reject path-like credential URL",
+			input:    "https/user:secret@git.example.com/my-org/repo.git",
+			expected: "",
+		},
 	}
 
 	for _, tt := range tests {
