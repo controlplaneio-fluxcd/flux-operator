@@ -217,3 +217,40 @@ func RunServer(ctx context.Context, c cluster.Cluster,
 		}
 	}
 }
+
+// processBatch processes at most maxItems with a fixed number of workers.
+// At least one worker is always started, as a pool of none would never drain
+// the work channel. Results preserve the input order regardless of worker
+// completion order.
+func processBatch[Item, Result any](items []Item, maxItems, workers int, process func(Item) Result) []Result {
+	if len(items) > maxItems {
+		items = items[:maxItems]
+	}
+
+	result := make([]Result, len(items))
+	if len(items) == 0 {
+		return result
+	}
+
+	if workers < 1 {
+		workers = 1
+	}
+
+	work := make(chan int)
+	var wg sync.WaitGroup
+	for range min(workers, len(items)) {
+		wg.Go(func() {
+			for i := range work {
+				result[i] = process(items[i])
+			}
+		})
+	}
+
+	for i := range items {
+		work <- i
+	}
+	close(work)
+	wg.Wait()
+
+	return result
+}

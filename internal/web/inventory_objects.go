@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"sync"
 
 	"github.com/fluxcd/cli-utils/pkg/kstatus/status"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -97,29 +96,11 @@ func (h *Handler) GetInventoryObjects(ctx context.Context, items []InventoryObje
 	if len(items) > maxInventoryObjects {
 		log.FromContext(ctx).Info("inventory objects request truncated to the maximum batch size",
 			"requested", len(items), "limit", maxInventoryObjects)
-		items = items[:maxInventoryObjects]
 	}
 
-	result := make([]InventoryObjectResult, len(items))
-
-	// Fixed worker pool: each index is handled by exactly one worker, so the
-	// writes to result[i] need no locking.
-	work := make(chan int)
-	var wg sync.WaitGroup
-	for range inventoryObjectsWorkers {
-		wg.Go(func() {
-			for i := range work {
-				result[i] = h.inventoryObjectResult(ctx, items[i], statusOnly)
-			}
-		})
-	}
-	for i := range items {
-		work <- i
-	}
-	close(work)
-	wg.Wait()
-
-	return result
+	return processBatch(items, maxInventoryObjects, inventoryObjectsWorkers, func(item InventoryObjectItem) InventoryObjectResult {
+		return h.inventoryObjectResult(ctx, item, statusOnly)
+	})
 }
 
 // inventoryObjectResult fetches and assembles the result for a single inventory

@@ -6,9 +6,9 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
-	"sync"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -17,6 +17,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
+)
+
+const (
+	// maxFavorites bounds the number of favorite statuses in a single request.
+	maxFavorites = 1000
+
+	// favoritesWorkers is the number of concurrent favorite status fetches.
+	favoritesWorkers = 4
 )
 
 // favoriteWorkloadKinds is the set of Kubernetes workload kinds supported as
@@ -42,7 +50,7 @@ type FavoritesRequest struct {
 }
 
 // FavoritesHandler handles POST /api/v1/favorites requests and returns the status
-// of the specified favorite resources.
+// of the specified favorite resources. Requests are limited to maxFavorites items.
 func (h *Handler) FavoritesHandler(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -53,6 +61,12 @@ func (h *Handler) FavoritesHandler(w http.ResponseWriter, req *http.Request) {
 	var favReq FavoritesRequest
 	if err := json.NewDecoder(req.Body).Decode(&favReq); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if len(favReq.Favorites) > maxFavorites {
+		http.Error(w, fmt.Sprintf("Favorites request exceeds the maximum of %d items", maxFavorites),
+			http.StatusRequestEntityTooLarge)
 		return
 	}
 
@@ -75,105 +89,85 @@ func (h *Handler) FavoritesHandler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-// GetFavoritesStatus fetches the status for the specified favorite resources.
-// Resources are queried in parallel with a concurrency limit of 4.
+// GetFavoritesStatus fetches the status for at most maxFavorites resources.
+// Resources are queried by a fixed pool of favoritesWorkers, so the number of
+// goroutines stays constant regardless of the request size. Results preserve
+// the input order.
 func (h *Handler) GetFavoritesStatus(ctx context.Context, favorites []FavoriteItem) []reporter.ResourceStatus {
-	result := make([]reporter.ResourceStatus, len(favorites))
-
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-
-	// Semaphore to limit concurrent requests to 4
-	sem := make(chan struct{}, 4)
-
-	for i, fav := range favorites {
-		wg.Add(1)
-		go func(i int, fav FavoriteItem) {
-			defer wg.Done()
-
-			// Acquire semaphore
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
-			storeNotFound := func(message string) {
-				mu.Lock()
-				result[i] = reporter.ResourceStatus{
-					Kind:      fav.Kind,
-					Name:      fav.Name,
-					Namespace: fav.Namespace,
-					Status:    "NotFound",
-					Message:   message,
-				}
-				mu.Unlock()
-			}
-
-			// Workload favorites (Deployment, StatefulSet, DaemonSet, CronJob)
-			// are resolved with the user's own client and a lightweight status
-			// computed on the fetched object alone. This needs only get on the
-			// workload, not list on pods.
-			if _, ok := favoriteWorkloadKinds[fav.Kind]; ok {
-				rs := h.getWorkloadFavoriteStatus(ctx, fav)
-				mu.Lock()
-				result[i] = rs
-				mu.Unlock()
-				return
-			}
-
-			gvk, err := h.preferredFluxGVK(ctx, fav.Kind)
-			if err != nil {
-				var message string
-				switch {
-				case strings.Contains(err.Error(), "no matches for kind"):
-					message = "Resource kind not found in the cluster"
-				default:
-					message = "Internal error while fetching resource kind"
-					log.FromContext(ctx).Error(err, "failed to get favorite resource kind",
-						"kind", fav.Kind,
-						"name", fav.Name,
-						"namespace", fav.Namespace)
-				}
-
-				storeNotFound(message)
-				return
-			}
-
-			obj := unstructured.Unstructured{}
-			obj.SetGroupVersionKind(*gvk)
-
-			err = h.kubeClient.GetClient(ctx).Get(ctx, client.ObjectKey{
-				Namespace: fav.Namespace,
-				Name:      fav.Name,
-			}, &obj)
-
-			if err != nil {
-				var message string
-				switch {
-				case errors.IsNotFound(err):
-					message = "Resource not found in the cluster"
-				case errors.IsForbidden(err):
-					message = "User does not have access to the resource"
-				default:
-					message = "Internal error while fetching resource"
-					log.FromContext(ctx).Error(err, "failed to get favorite resource",
-						"kind", fav.Kind,
-						"name", fav.Name,
-						"namespace", fav.Namespace)
-				}
-
-				storeNotFound(message)
-				return
-			}
-
-			rs := reporter.NewResourceStatus(obj)
-			mu.Lock()
-			result[i] = rs
-			mu.Unlock()
-		}(i, fav)
+	if len(favorites) > maxFavorites {
+		log.FromContext(ctx).Info("favorites request truncated to the maximum batch size",
+			"requested", len(favorites), "limit", maxFavorites)
 	}
 
-	wg.Wait()
+	return processBatch(favorites, maxFavorites, favoritesWorkers, func(fav FavoriteItem) reporter.ResourceStatus {
+		return h.favoriteStatus(ctx, fav)
+	})
+}
 
-	return result
+// favoriteStatus fetches and assembles the status for one favorite item.
+func (h *Handler) favoriteStatus(ctx context.Context, fav FavoriteItem) reporter.ResourceStatus {
+	notFound := func(message string) reporter.ResourceStatus {
+		return reporter.ResourceStatus{
+			Kind:      fav.Kind,
+			Name:      fav.Name,
+			Namespace: fav.Namespace,
+			Status:    "NotFound",
+			Message:   message,
+		}
+	}
+
+	// Workload favorites (Deployment, StatefulSet, DaemonSet, CronJob)
+	// are resolved with the user's own client and a lightweight status
+	// computed on the fetched object alone. This needs only get on the
+	// workload, not list on pods.
+	if _, ok := favoriteWorkloadKinds[fav.Kind]; ok {
+		return h.getWorkloadFavoriteStatus(ctx, fav)
+	}
+
+	gvk, err := h.preferredFluxGVK(ctx, fav.Kind)
+	if err != nil {
+		var message string
+		switch {
+		case strings.Contains(err.Error(), "no matches for kind"):
+			message = "Resource kind not found in the cluster"
+		default:
+			message = "Internal error while fetching resource kind"
+			log.FromContext(ctx).Error(err, "failed to get favorite resource kind",
+				"kind", fav.Kind,
+				"name", fav.Name,
+				"namespace", fav.Namespace)
+		}
+
+		return notFound(message)
+	}
+
+	obj := unstructured.Unstructured{}
+	obj.SetGroupVersionKind(*gvk)
+
+	err = h.kubeClient.GetClient(ctx).Get(ctx, client.ObjectKey{
+		Namespace: fav.Namespace,
+		Name:      fav.Name,
+	}, &obj)
+
+	if err != nil {
+		var message string
+		switch {
+		case errors.IsNotFound(err):
+			message = "Resource not found in the cluster"
+		case errors.IsForbidden(err):
+			message = "User does not have access to the resource"
+		default:
+			message = "Internal error while fetching resource"
+			log.FromContext(ctx).Error(err, "failed to get favorite resource",
+				"kind", fav.Kind,
+				"name", fav.Name,
+				"namespace", fav.Namespace)
+		}
+
+		return notFound(message)
+	}
+
+	return reporter.NewResourceStatus(obj)
 }
 
 // getWorkloadFavoriteStatus fetches a workload favorite with the user's own
