@@ -301,10 +301,11 @@ data:
 	}
 
 	tests := []struct {
-		name        string
-		setupData   func() []byte
-		expectError bool
-		validate    func(result *HelmStorage)
+		name          string
+		setupData     func() []byte
+		expectError   bool
+		errorContains string
+		validate      func(result *HelmStorage)
 	}{
 		{
 			name: "decode uncompressed base64 data",
@@ -361,6 +362,29 @@ data:
 			},
 			expectError: true,
 		},
+		{
+			name: "oversized base64 data should return error",
+			setupData: func() []byte {
+				return bytes.Repeat([]byte("AAAA"), (1<<20)/4+1)
+			},
+			expectError:   true,
+			errorContains: "exceeds maximum encoded size",
+		},
+		{
+			name: "oversized gzip content should return error",
+			setupData: func() []byte {
+				var buf bytes.Buffer
+				gzipWriter := gzip.NewWriter(&buf)
+				chunk := bytes.Repeat([]byte("a"), 1<<20)
+				for i := 0; i < 33; i++ {
+					_, _ = gzipWriter.Write(chunk)
+				}
+				_ = gzipWriter.Close()
+				return []byte(base64.StdEncoding.EncodeToString(buf.Bytes()))
+			},
+			expectError:   true,
+			errorContains: "exceeds maximum decoded size",
+		},
 	}
 
 	for _, tt := range tests {
@@ -373,6 +397,9 @@ data:
 			if tt.expectError {
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(result).To(BeNil())
+				if tt.errorContains != "" {
+					g.Expect(err.Error()).To(ContainSubstring(tt.errorContains))
+				}
 			} else {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(result).NotTo(BeNil())

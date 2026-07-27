@@ -36,7 +36,7 @@ func (idx *WorkloadIndex) Update(workloads []reporter.WorkloadRef) {
 // nil means no RBAC filtering (cluster-wide access),
 // non-nil (including empty) means only return workloads in those namespaces.
 // kind filters by exact match (empty means all kinds).
-// name filters by wildcard match using matchesWildcard() (empty means all names).
+// name filters by a compiled wildcard match (empty means all names).
 // namespace filters by exact match (empty means all namespaces).
 // limit caps the number of returned results (0 means unlimited).
 // Results are sorted by LastReconciled (newest first), with a (namespace, name,
@@ -57,9 +57,8 @@ func (idx *WorkloadIndex) SearchWorkloads(allowedNamespaces []string, kind, name
 		}
 	}
 
-	// Lowercase the name pattern once before the loop so that
-	// matchesWildcard's per-item ToLower is a no-op on pre-normalized index data.
-	name = strings.ToLower(name)
+	// Compile the name pattern once; indexed names are already lower-cased.
+	nameMatcher := compileWildcardMatcher(name)
 
 	result := []reporter.WorkloadRef{}
 	for _, wl := range workloads {
@@ -81,7 +80,7 @@ func (idx *WorkloadIndex) SearchWorkloads(allowedNamespaces []string, kind, name
 		}
 
 		// Filter by name (wildcard match).
-		if name != "" && !matchesWildcard(wl.Name, name) {
+		if name != "" && !nameMatcher.matchesLower(wl.Name) {
 			continue
 		}
 

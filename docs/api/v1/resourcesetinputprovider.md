@@ -226,7 +226,7 @@ The `.spec.filter` field is optional and specifies the filter criteria for the i
 
 The following filters are supported:
 
-- `limit`: limit the number of input values fetched (default is 100).
+- `limit`: limit the number of input values fetched (default is 100, maximum is 10,000).
 - `labels`: filter change requests by labels.
 - `includeBranch`: regular expression to include branches by name.
 - `excludeBranch`: regular expression to exclude branches by name.

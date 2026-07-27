@@ -16,15 +16,64 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/crane"
+	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/hashicorp/go-retryablehttp"
 )
 
-// DownloadFileFromArtifact downloads an artifact from an OCI repository and
-// returns the content of a specific file from its first layer.
+// ResolveArtifactURL resolves an OCI tag to an immutable digest reference. An
+// already digest-pinned reference is returned without a registry request. The
+// returned URL preserves the optional oci:// prefix from the input.
+func ResolveArtifactURL(ctx context.Context, ociURL string, keyChain authn.Keychain) (string, error) {
+	hasOCIScheme := strings.HasPrefix(ociURL, "oci://")
+	rawURL := strings.TrimPrefix(ociURL, "oci://")
+	ref, err := name.ParseReference(rawURL)
+	if err != nil {
+		return "", fmt.Errorf("parsing artifact reference %q: %w", ociURL, err)
+	}
+
+	if digest, ok := ref.(name.Digest); ok {
+		pinnedURL := digest.Name()
+		if hasOCIScheme {
+			pinnedURL = "oci://" + pinnedURL
+		}
+		return pinnedURL, nil
+	}
+
+	if keyChain == nil {
+		keyChain = authn.DefaultKeychain
+	}
+	digest, err := crane.Digest(rawURL, crane.WithContext(ctx), crane.WithAuthFromKeychain(keyChain))
+	if err != nil {
+		return "", fmt.Errorf("resolving artifact digest for %s failed: %w", ociURL, err)
+	}
+
+	pinnedURL := ref.Context().Digest(digest).Name()
+	if hasOCIScheme {
+		pinnedURL = "oci://" + pinnedURL
+	}
+	return pinnedURL, nil
+}
+
+// DownloadFileFromArtifact downloads a file from the first layer of a
+// digest-pinned OCI artifact. Mutable tag references are rejected so callers
+// cannot accidentally pull content different from an artifact they verified.
 // The operation is performed in-memory without writing to the filesystem.
 func DownloadFileFromArtifact(ctx context.Context, ociURL, filepath string, keyChain authn.Keychain) ([]byte, error) {
-	// Pull the OCI image/artifact from the repository.
-	img, err := crane.Pull(strings.TrimPrefix(ociURL, "oci://"), crane.WithContext(ctx), crane.WithAuthFromKeychain(keyChain))
+	rawURL := strings.TrimPrefix(ociURL, "oci://")
+	ref, err := name.ParseReference(rawURL)
+	if err != nil {
+		return nil, fmt.Errorf("parsing artifact reference %q: %w", ociURL, err)
+	}
+	digest, ok := ref.(name.Digest)
+	if !ok {
+		return nil, fmt.Errorf("artifact reference %q must be digest-pinned", ociURL)
+	}
+	if keyChain == nil {
+		keyChain = authn.DefaultKeychain
+	}
+
+	// Pull the exact OCI image/artifact identified by the digest.
+	img, err := crane.Pull(digest.Name(), crane.WithContext(ctx), crane.WithAuthFromKeychain(keyChain))
 	if err != nil {
 		return nil, fmt.Errorf("pulling artifact %s failed: %w", ociURL, err)
 	}
@@ -85,7 +134,8 @@ func DownloadFileFromArtifact(ctx context.Context, ociURL, filepath string, keyC
 
 // DownloadManifestFromURL downloads a YAML file from the given URL and returns its content.
 // It supports GitHub Gist, GitHub repository and GitLab project URLs, converting them to raw content URLs as needed.
-// It also supports OCI URLs in the format: oci://registry/repository:tag@digest#filepath
+// OCI URLs may use a tag or digest followed by a file fragment; tags are resolved
+// once and the file is downloaded from the resulting immutable digest reference.
 func DownloadManifestFromURL(ctx context.Context, rawURL string, keyChain authn.Keychain) ([]byte, error) {
 	parsedURL, err := url.Parse(rawURL)
 	if err != nil {
@@ -100,9 +150,13 @@ func DownloadManifestFromURL(ctx context.Context, rawURL string, keyChain authn.
 			return nil, fmt.Errorf("OCI URL must include a fragment with the file path, e.g., oci://registry/repository:tag@digest#filepath")
 		}
 
-		// Reconstruct the OCI URL without the fragment.
+		// Resolve once and pull the immutable artifact reference.
 		ociURL := fmt.Sprintf("oci://%s%s", parsedURL.Host, parsedURL.Path)
-		return DownloadFileFromArtifact(ctx, ociURL, filepath, keyChain)
+		pinnedURL, err := ResolveArtifactURL(ctx, ociURL, keyChain)
+		if err != nil {
+			return nil, err
+		}
+		return DownloadFileFromArtifact(ctx, pinnedURL, filepath, keyChain)
 	}
 
 	// Transform HTTP/S URL for specific providers to get raw content.

@@ -6,6 +6,7 @@ package web
 import (
 	"compress/gzip"
 	"io"
+	"mime"
 	"net/http"
 	"strings"
 	"time"
@@ -127,6 +128,55 @@ func MaxBodySizeMiddleware(maxBytes int64) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// unsafeMethods are the HTTP methods that may change server state and are
+// therefore subject to the cross-origin checks.
+var unsafeMethods = map[string]struct{}{
+	http.MethodPost:   {},
+	http.MethodPut:    {},
+	http.MethodPatch:  {},
+	http.MethodDelete: {},
+}
+
+// CrossOriginMiddleware restricts state-changing requests to same-origin
+// callers and to clients that are not browsers.
+//
+// Requests are screened in two steps. First, the Sec-Fetch-Site header, which
+// browsers set themselves and page scripts cannot override, must not report a
+// cross-site or same-site initiator. Clients that do not send the header, such
+// as command line tools, fall through to the second step: a request carrying a
+// body must declare application/json. No cross-origin HTML form can produce
+// that media type, and a script that sets it turns the request into a CORS
+// preflight, which this server does not answer.
+//
+// Requests without a body, such as POST /logout, are covered by the first step
+// alone. Read-only methods are not screened.
+func CrossOriginMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, unsafe := unsafeMethods[r.Method]; !unsafe {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		switch r.Header.Get("Sec-Fetch-Site") {
+		case "cross-site", "same-site":
+			http.Error(w, "Cross-origin requests are not allowed", http.StatusForbidden)
+			return
+		}
+
+		// A negative length means the body size is unknown, which still counts
+		// as a body and must therefore declare its media type.
+		if r.ContentLength != 0 {
+			mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+			if err != nil || mediaType != "application/json" {
+				http.Error(w, "Content-Type must be application/json", http.StatusUnsupportedMediaType)
+				return
+			}
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 // LoggingMiddleware logs HTTP requests and responses.

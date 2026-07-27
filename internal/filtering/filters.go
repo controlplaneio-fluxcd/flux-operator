@@ -6,6 +6,7 @@ package filtering
 import (
 	"regexp"
 	"slices"
+	"sort"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/fluxcd/pkg/version"
@@ -73,10 +74,28 @@ func (f *Filters) Tags(tags []string) []string {
 		}
 	}
 
-	// Apply semver or sort in reverse alphabetical order.
+	// Apply semver or sort in reverse alphabetical order. Keep input order
+	// stable for tags with equal semantic-version precedence.
 	switch {
 	case f.SemVer != nil:
-		filtered = version.Sort(f.SemVer, filtered)
+		type parsedTag struct {
+			name    string
+			version *semver.Version
+		}
+		parsed := make([]parsedTag, 0, len(filtered))
+		for _, tag := range filtered {
+			parsedVersion, err := version.ParseVersion(tag)
+			if err == nil && f.SemVer.Check(parsedVersion) {
+				parsed = append(parsed, parsedTag{name: tag, version: parsedVersion})
+			}
+		}
+		sort.SliceStable(parsed, func(i, j int) bool {
+			return parsed[i].version.GreaterThan(parsed[j].version)
+		})
+		filtered = filtered[:0]
+		for _, tag := range parsed {
+			filtered = append(filtered, tag.name)
+		}
 	default:
 		slices.Sort(filtered)
 		slices.Reverse(filtered)

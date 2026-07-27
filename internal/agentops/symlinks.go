@@ -12,10 +12,16 @@ import (
 
 // SyncAgentSymlinks creates per-skill symlinks for each agent that uses a
 // custom skills directory. TargetAgents using the default skills directory are
-// silently skipped. The symlinks are relative so they remain valid across
-// machines. Existing correct symlinks are left in place; wrong targets are
-// replaced. Returns an error if a target path exists as a non-symlink.
+// silently skipped. All skill names are validated before any filesystem
+// mutation, and every link path is required to remain inside the agent skills
+// directory. The symlinks are relative so they remain valid across machines.
+// Existing correct symlinks are left in place; wrong targets are replaced.
+// Returns an error if a target path exists as a non-symlink.
 func SyncAgentSymlinks(projectRoot string, agents []string, skillNames []string) error {
+	if err := validateAgentSkillNames(skillNames); err != nil {
+		return err
+	}
+
 	for _, agentID := range agents {
 		info := FindAgent(agentID)
 		if info == nil || UsesDefaultSkillsDir(info) {
@@ -29,7 +35,10 @@ func SyncAgentSymlinks(projectRoot string, agents []string, skillNames []string)
 
 		targetPrefix := agentSymlinkPrefix(info.ProjectPath)
 		for _, skillName := range skillNames {
-			linkPath := filepath.Join(agentSkillsDir, skillName)
+			linkPath, err := containedAgentSkillPath(agentSkillsDir, skillName)
+			if err != nil {
+				return err
+			}
 			target := filepath.Join(targetPrefix, skillName)
 
 			fi, err := os.Lstat(linkPath)
@@ -59,9 +68,15 @@ func SyncAgentSymlinks(projectRoot string, agents []string, skillNames []string)
 	return nil
 }
 
-// RemoveAgentSymlinks removes per-skill symlinks for each agent and cleans
-// up empty agent skill directories and their parents.
+// RemoveAgentSymlinks removes per-skill symlinks for each agent and cleans up
+// empty agent skill directories and their parents. All skill names are
+// validated before any filesystem mutation, and every removal path is required
+// to remain inside the agent skills directory.
 func RemoveAgentSymlinks(projectRoot string, agents []string, skillNames []string) error {
+	if err := validateAgentSkillNames(skillNames); err != nil {
+		return err
+	}
+
 	for _, agentID := range agents {
 		info := FindAgent(agentID)
 		if info == nil || UsesDefaultSkillsDir(info) {
@@ -70,7 +85,10 @@ func RemoveAgentSymlinks(projectRoot string, agents []string, skillNames []strin
 
 		agentSkillsDir := filepath.Join(projectRoot, info.ProjectPath)
 		for _, skillName := range skillNames {
-			linkPath := filepath.Join(agentSkillsDir, skillName)
+			linkPath, err := containedAgentSkillPath(agentSkillsDir, skillName)
+			if err != nil {
+				return err
+			}
 			fi, err := os.Lstat(linkPath)
 			if err != nil {
 				if os.IsNotExist(err) {
@@ -90,6 +108,33 @@ func RemoveAgentSymlinks(projectRoot string, agents []string, skillNames []strin
 		RemoveEmptyDir(filepath.Dir(agentSkillsDir))
 	}
 	return nil
+}
+
+// validateAgentSkillNames validates the complete skill-name list before any
+// caller can mutate the filesystem.
+func validateAgentSkillNames(skillNames []string) error {
+	for _, skillName := range skillNames {
+		if err := ValidateSkillName(skillName); err != nil {
+			return fmt.Errorf("invalid skill name: %w", err)
+		}
+	}
+	return nil
+}
+
+// containedAgentSkillPath constructs a link path and verifies lexical
+// containment within agentSkillsDir. Skill-name validation is the primary
+// boundary; this check provides defense in depth against future validation
+// changes that might allow path separators.
+func containedAgentSkillPath(agentSkillsDir, skillName string) (string, error) {
+	linkPath := filepath.Join(agentSkillsDir, skillName)
+	rel, err := filepath.Rel(agentSkillsDir, linkPath)
+	if err != nil {
+		return "", fmt.Errorf("checking containment for skill %q: %w", skillName, err)
+	}
+	if rel == ".." || filepath.IsAbs(rel) || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("skill path %q escapes agent skills directory %s", skillName, agentSkillsDir)
+	}
+	return linkPath, nil
 }
 
 // RemoveEmptyDir removes a directory if it is empty. Errors are silently ignored.

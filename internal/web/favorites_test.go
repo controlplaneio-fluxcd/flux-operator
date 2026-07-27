@@ -4,6 +4,10 @@
 package web
 
 import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -666,4 +670,18 @@ func TestGetFavoritesStatus_Workload_GetButNoListPods(t *testing.T) {
 	g.Expect(resources[0].Kind).To(Equal("Deployment"))
 	g.Expect(resources[0].Status).NotTo(Equal("NotFound"),
 		"user with get on the workload but no list on pods must still see a valid status")
+}
+
+func TestFavoritesHandlerRejectsOversizedBatch(t *testing.T) {
+	g := NewWithT(t)
+	body, err := json.Marshal(FavoritesRequest{
+		Favorites: make([]FavoriteItem, maxFavorites+1),
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/favorites", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	new(Handler).FavoritesHandler(rec, req)
+
+	g.Expect(rec.Code).To(Equal(http.StatusRequestEntityTooLarge))
 }

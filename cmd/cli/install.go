@@ -25,6 +25,12 @@ import (
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/install"
 )
 
+var (
+	verifyInstallArtifact   = cosign.VerifyArtifact
+	resolveInstallArtifact  = install.ResolveArtifactURL
+	downloadInstallArtifact = install.DownloadFileFromArtifact
+)
+
 var installCmd = &cobra.Command{
 	Use:   "install",
 	Short: "Install Flux Operator and deploy a Flux instance",
@@ -200,23 +206,9 @@ func installCmdRun(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Step 2: Verify the artifact signature if requested
+	// Steps 2-3: Resolve or verify the artifact once, then download that exact digest.
 
-	if installArgs.verify {
-		rootCmd.Println(`◎`, "Verifying artifact signature...")
-		if err := cosign.VerifyArtifact(ctx, artifactURL,
-			installArgs.certIdentityRegexp,
-			installArgs.certOIDCIssuer,
-			installArgs.trustedRoot,
-			authn.DefaultKeychain); err != nil {
-			return fmt.Errorf("artifact signature verification failed: %w", err)
-		}
-		rootCmd.Println(`✔`, "Artifact signature verified successfully")
-	}
-
-	// Step 3: Download the distribution artifact and extract the manifests
-
-	objects, err := fetchOperatorManifests(artifactURL)
+	objects, err := prepareOperatorManifests(ctx, artifactURL)
 	if err != nil {
 		return err
 	}
@@ -470,13 +462,36 @@ func makeFluxInstance(ctx context.Context) (instance *fluxcdv1.FluxInstance, art
 	return instance, artifactURL, nil
 }
 
-// fetchOperatorManifests downloads the Flux Operator distribution artifact
-// and returns the list of Kubernetes objects from the install manifest.
-func fetchOperatorManifests(artifactURL string) ([]*unstructured.Unstructured, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
-	defer cancel()
+// prepareOperatorManifests resolves or verifies the distribution artifact and
+// passes only the resulting digest-pinned reference to the downloader.
+func prepareOperatorManifests(ctx context.Context, artifactURL string) ([]*unstructured.Unstructured, error) {
+	var pinnedURL string
+	var err error
+	if installArgs.verify {
+		rootCmd.Println(`◎`, "Verifying artifact signature...")
+		pinnedURL, err = verifyInstallArtifact(ctx, artifactURL,
+			installArgs.certIdentityRegexp,
+			installArgs.certOIDCIssuer,
+			installArgs.trustedRoot,
+			authn.DefaultKeychain)
+		if err != nil {
+			return nil, fmt.Errorf("artifact signature verification failed: %w", err)
+		}
+		rootCmd.Println(`✔`, "Artifact signature verified successfully")
+	} else {
+		pinnedURL, err = resolveInstallArtifact(ctx, artifactURL, authn.DefaultKeychain)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve distribution artifact: %w", err)
+		}
+	}
 
-	data, err := install.DownloadFileFromArtifact(
+	return fetchOperatorManifests(ctx, pinnedURL)
+}
+
+// fetchOperatorManifests downloads a digest-pinned Flux Operator distribution
+// artifact and returns the Kubernetes objects from the install manifest.
+func fetchOperatorManifests(ctx context.Context, artifactURL string) ([]*unstructured.Unstructured, error) {
+	data, err := downloadInstallArtifact(
 		ctx,
 		artifactURL,
 		"flux-operator/install.yaml",

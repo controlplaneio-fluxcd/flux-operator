@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/fluxcd/pkg/apis/meta"
+	authutils "github.com/fluxcd/pkg/auth/utils"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	kauth "github.com/google/go-containerregistry/pkg/authn/kubernetes"
 	"github.com/google/go-containerregistry/pkg/crane"
@@ -180,19 +181,19 @@ func TestResourceSetInputProviderReconciler_buildOCIOptions(t *testing.T) {
 
 	for _, tt := range []struct {
 		provider string
-		err      string
+		cloud    bool
 	}{
 		{
 			provider: fluxcdv1.InputProviderACRArtifactTag,
-			err:      "provider 'azure': invalid Azure registry",
+			cloud:    true,
 		},
 		{
 			provider: fluxcdv1.InputProviderECRArtifactTag,
-			err:      "provider 'aws': invalid AWS registry",
+			cloud:    true,
 		},
 		{
 			provider: fluxcdv1.InputProviderGARArtifactTag,
-			err:      "provider 'gcp': invalid GCP registry",
+			cloud:    true,
 		},
 		{
 			provider: fluxcdv1.InputProviderOCIArtifactTag,
@@ -233,16 +234,19 @@ func TestResourceSetInputProviderReconciler_buildOCIOptions(t *testing.T) {
 			}
 
 			opts, err := r.buildOCIOptions(ctx, obj, repo, tlsConfig, authSecret)
-
-			// Check provider errors (or not).
-			if tt.err != "" {
-				g.Expect(err).To(HaveOccurred())
-				g.Expect(err.Error()).To(ContainSubstring(tt.err))
-				return
-			}
 			g.Expect(err).NotTo(HaveOccurred())
 
 			o := crane.GetOptions(opts...)
+
+			// The cloud providers authenticate with the workload identity of
+			// the operator, so the pull secrets do not apply to them.
+			if tt.cloud {
+				pullKeychain, err := kauth.NewFromPullSecrets(ctx,
+					[]corev1.Secret{*authSecret, *anotherAuthSecret})
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(o.Keychain).NotTo(Equal(pullKeychain))
+				return
+			}
 
 			// Validate TLS config.
 			g.Expect(o.Transport).NotTo(BeNil())
@@ -259,6 +263,81 @@ func TestResourceSetInputProviderReconciler_buildOCIOptions(t *testing.T) {
 	}
 }
 
+func TestResourceSetInputProviderReconciler_OCIRepositoryPath_RuntimeGuard(t *testing.T) {
+	reconciler := getResourceSetInputProviderReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	for _, provider := range []string{
+		fluxcdv1.InputProviderOCIArtifactTag,
+		fluxcdv1.InputProviderACRArtifactTag,
+		fluxcdv1.InputProviderECRArtifactTag,
+		fluxcdv1.InputProviderGARArtifactTag,
+	} {
+		t.Run(provider, func(t *testing.T) {
+			g := NewWithT(t)
+
+			// Reconcile with a registry host and no repository path should stall.
+			obj := &fluxcdv1.ResourceSetInputProvider{
+				Spec: fluxcdv1.ResourceSetInputProviderSpec{
+					Type: provider,
+					URL:  "oci://ghcr.io",
+				},
+			}
+
+			r, err := reconciler.reconcile(ctx, obj, nil)
+			g.Expect(r).To(Equal(reconcile.Result{}))
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(conditions.IsStalled(obj)).To(BeTrue())
+			g.Expect(conditions.GetReason(obj, meta.StalledCondition)).To(Equal(fluxcdv1.ReasonInvalidSpec))
+			g.Expect(conditions.GetMessage(obj, meta.StalledCondition)).To(
+				ContainSubstring("spec.url must include the repository path"))
+		})
+	}
+}
+
+func TestResourceSetInputProviderReconciler_OCICloudRegistryHost(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	for _, tt := range []struct {
+		provider string
+		repo     string
+		err      string
+	}{
+		{
+			provider: fluxcdv1.InputProviderACRArtifactTag,
+			repo:     "registry.azurecr.io.example.com/podinfo",
+			err:      "invalid Azure registry",
+		},
+		{
+			provider: fluxcdv1.InputProviderECRArtifactTag,
+			repo:     "012345678901.dkr.ecr.us-east-1.amazonaws.com.example.com/podinfo",
+			err:      "invalid AWS registry",
+		},
+		{
+			provider: fluxcdv1.InputProviderGARArtifactTag,
+			repo:     "europe-docker.pkg.dev.example.com/project/podinfo",
+			err:      "invalid GCP registry",
+		},
+	} {
+		t.Run(tt.provider, func(t *testing.T) {
+			g := NewWithT(t)
+
+			// The credentials are resolved lazily, so the registry host is
+			// validated when the registry client calls the authenticator.
+			authenticator, err := authutils.GetArtifactRegistryCredentials(ctx,
+				inputProviderToCloudProvider[tt.provider], tt.repo)
+			g.Expect(err).NotTo(HaveOccurred())
+
+			config, err := authenticator.Authorization()
+			g.Expect(err).To(HaveOccurred())
+			g.Expect(err.Error()).To(ContainSubstring(tt.err))
+			g.Expect(config).To(BeNil())
+		})
+	}
+}
+
 func TestResourceSetInputProviderReconciler_InvalidOCIURL(t *testing.T) {
 	g := NewWithT(t)
 
@@ -268,33 +347,47 @@ func TestResourceSetInputProviderReconciler_InvalidOCIURL(t *testing.T) {
 	ns, err := testEnv.CreateNamespace(ctx, "test-invalid-oci-url")
 	g.Expect(err).ToNot(HaveOccurred())
 
-	for _, tt := range []struct {
-		provider string
-	}{
-		{provider: fluxcdv1.InputProviderOCIArtifactTag},
-		{provider: fluxcdv1.InputProviderACRArtifactTag},
-		{provider: fluxcdv1.InputProviderECRArtifactTag},
-		{provider: fluxcdv1.InputProviderGARArtifactTag},
+	for _, provider := range []string{
+		fluxcdv1.InputProviderOCIArtifactTag,
+		fluxcdv1.InputProviderACRArtifactTag,
+		fluxcdv1.InputProviderECRArtifactTag,
+		fluxcdv1.InputProviderGARArtifactTag,
 	} {
-		t.Run(tt.provider, func(t *testing.T) {
-			g := NewWithT(t)
+		for _, tt := range []struct {
+			name string
+			url  string
+			err  string
+		}{
+			{
+				name: "missing scheme",
+				url:  "ghcr.io/stefanprodan/podinfo",
+				err:  "spec.url must start with 'oci://' when spec.type is an OCI provider",
+			},
+			{
+				name: "missing repository path",
+				url:  "oci://ghcr.io",
+				err:  "spec.url must include the repository path after the registry host when spec.type is an OCI provider",
+			},
+		} {
+			t.Run(fmt.Sprintf("%s/%s", provider, tt.name), func(t *testing.T) {
+				g := NewWithT(t)
 
-			obj := &fluxcdv1.ResourceSetInputProvider{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test",
-					Namespace: ns.Name,
-				},
-				Spec: fluxcdv1.ResourceSetInputProviderSpec{
-					Type: tt.provider,
-					URL:  "ghcr.io/stefanprodan/podinfo",
-				},
-			}
+				obj := &fluxcdv1.ResourceSetInputProvider{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: ns.Name,
+					},
+					Spec: fluxcdv1.ResourceSetInputProviderSpec{
+						Type: provider,
+						URL:  tt.url,
+					},
+				}
 
-			err = testEnv.Create(ctx, obj)
-			g.Expect(err).To(HaveOccurred())
-			g.Expect(err.Error()).To(ContainSubstring(
-				"spec.url must start with 'oci://' when spec.type is an OCI provider"))
-		})
+				err = testEnv.Create(ctx, obj)
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.err))
+			})
+		}
 	}
 }
 

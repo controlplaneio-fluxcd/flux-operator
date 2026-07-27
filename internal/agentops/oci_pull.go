@@ -53,7 +53,7 @@ func PullArtifact(ctx context.Context, ociURL, dstDir string) (*ArtifactInfo, er
 		return nil, fmt.Errorf("extracting layer from %s: %w", ociURL, err)
 	}
 
-	if err := untar.Untar(blob, dstDir, untar.WithMaxUntarSize(-1), untar.WithSkipSymlinks()); err != nil {
+	if err := untar.Untar(blob, dstDir, untar.WithMaxUntarSize(untar.DefaultMaxUntarSize), untar.WithSkipSymlinks()); err != nil {
 		return nil, fmt.Errorf("extracting artifact %s: %w", ociURL, err)
 	}
 

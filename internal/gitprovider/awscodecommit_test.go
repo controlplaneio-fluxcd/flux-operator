@@ -4,15 +4,35 @@
 package gitprovider
 
 import (
+	"context"
 	"regexp"
 	"testing"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/aws/aws-sdk-go-v2/service/codecommit"
 	"github.com/go-git/go-git/v5/plumbing"
 	. "github.com/onsi/gomega"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/filtering"
 )
+
+// fakeAWSCodeCommitClient provides configurable CodeCommit responses for tests.
+type fakeAWSCodeCommitClient struct {
+	listPullRequests func(context.Context, *codecommit.ListPullRequestsInput) (*codecommit.ListPullRequestsOutput, error)
+	getPullRequest   func(context.Context, *codecommit.GetPullRequestInput) (*codecommit.GetPullRequestOutput, error)
+}
+
+// ListPullRequests calls the configured pull-request list test function.
+func (f *fakeAWSCodeCommitClient) ListPullRequests(ctx context.Context, input *codecommit.ListPullRequestsInput,
+	_ ...func(*codecommit.Options)) (*codecommit.ListPullRequestsOutput, error) {
+	return f.listPullRequests(ctx, input)
+}
+
+// GetPullRequest calls the configured pull-request detail test function.
+func (f *fakeAWSCodeCommitClient) GetPullRequest(ctx context.Context, input *codecommit.GetPullRequestInput,
+	_ ...func(*codecommit.Options)) (*codecommit.GetPullRequestOutput, error) {
+	return f.getPullRequest(ctx, input)
+}
 
 func TestParseAWSCodeCommitURL(t *testing.T) {
 	for _, tt := range []struct {
@@ -116,7 +136,8 @@ func TestParseGoGitTags(t *testing.T) {
 		SemVer: newConstraint(">= 1.0.0"),
 	}
 
-	results := parseGoGitTags(refs, filters)
+	results, err := parseGoGitTags(refs, filters)
+	g.Expect(err).NotTo(HaveOccurred())
 
 	g.Expect(results).To(HaveLen(2))
 
@@ -141,7 +162,8 @@ func TestParseGoGitBranches(t *testing.T) {
 	}
 
 	// No filters: all branches returned.
-	results := parseGoGitBranches(refs, filtering.Filters{})
+	results, err := parseGoGitBranches(refs, filtering.Filters{})
+	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(results).To(HaveLen(3))
 	g.Expect(results[0].Branch).To(Equal("main"))
 	g.Expect(results[0].SHA).To(Equal("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
@@ -150,14 +172,47 @@ func TestParseGoGitBranches(t *testing.T) {
 
 	// With include filter.
 	includeRx := regexp.MustCompile(`^feature-`)
-	filteredResults := parseGoGitBranches(refs, filtering.Filters{Include: includeRx})
+	filteredResults, err := parseGoGitBranches(refs, filtering.Filters{Include: includeRx})
+	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(filteredResults).To(HaveLen(2))
 	g.Expect(filteredResults[0].Branch).To(Equal("feature-x"))
 	g.Expect(filteredResults[1].Branch).To(Equal("feature-y"))
 
 	// With limit.
-	limitResults := parseGoGitBranches(refs, filtering.Filters{Limit: 2})
+	limitResults, err := parseGoGitBranches(refs, filtering.Filters{Limit: 2})
+	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(limitResults).To(HaveLen(2))
+}
+
+func TestAWSCodeCommitProviderRejectsExcessiveResultLimits(t *testing.T) {
+	g := NewWithT(t)
+	provider := &AWSCodeCommitProvider{}
+	opts := Options{Filters: filtering.Filters{Limit: maxGitProviderResults + 1}}
+
+	_, err := provider.ListTags(t.Context(), opts)
+	g.Expect(err).To(MatchError(ContainSubstring("exceeds maximum")))
+	_, err = provider.ListBranches(t.Context(), opts)
+	g.Expect(err).To(MatchError(ContainSubstring("exceeds maximum")))
+	_, err = provider.ListRequests(t.Context(), opts)
+	g.Expect(err).To(MatchError(ContainSubstring("exceeds maximum")))
+}
+
+func TestAWSCodeCommitProviderRejectsRepeatedPullRequestTokens(t *testing.T) {
+	g := NewWithT(t)
+	var calls int
+	client := &fakeAWSCodeCommitClient{
+		listPullRequests: func(_ context.Context, input *codecommit.ListPullRequestsInput) (*codecommit.ListPullRequestsOutput, error) {
+			calls++
+			g.Expect(input.MaxResults).NotTo(BeNil())
+			g.Expect(*input.MaxResults).To(Equal(int32(gitProviderPageSize)))
+			return &codecommit.ListPullRequestsOutput{NextToken: new("same")}, nil
+		},
+	}
+	provider := &AWSCodeCommitProvider{Client: client, RepoName: "repo"}
+
+	_, err := provider.ListRequests(t.Context(), Options{})
+	g.Expect(err).To(MatchError(ContainSubstring("repeated continuation token")))
+	g.Expect(calls).To(Equal(2))
 }
 
 func newConstraint(s string) *semver.Constraints {

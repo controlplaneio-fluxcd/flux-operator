@@ -11,6 +11,7 @@ import (
 
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 	gitlabtesting "gitlab.com/gitlab-org/api/client-go/testing"
+	"go.uber.org/mock/gomock"
 
 	"github.com/Masterminds/semver/v3"
 	. "github.com/onsi/gomega"
@@ -137,7 +138,7 @@ func TestGitLabProvider_ListTags(t *testing.T) {
 					ListOptions: gitlab.ListOptions{
 						PerPage: 100,
 					},
-				}).
+				}, gomock.Any()).
 				Return(tt.tags, &gitlab.Response{}, tt.listError)
 
 			provider := GitLabProvider{Client: mockClient.Client, Project: project}
@@ -259,7 +260,7 @@ func TestGitLabProvider_ListBranches(t *testing.T) {
 						PerPage: 100,
 					},
 					Regex: tt.expectedRegex,
-				}).
+				}, gomock.Any()).
 				Return(tt.branches, &gitlab.Response{}, tt.listError)
 
 			provider := GitLabProvider{Client: mockClient.Client, Project: project}
@@ -512,7 +513,7 @@ func TestGitLabProvider_ListRequests(t *testing.T) {
 					ListOptions: gitlab.ListOptions{
 						PerPage: 100,
 					},
-				}).
+				}, gomock.Any()).
 				Return(tt.mergeRequests, &gitlab.Response{}, tt.listError)
 
 			provider := GitLabProvider{Client: mockClient.Client, Project: project}
@@ -871,7 +872,7 @@ func TestGitLabProvider_ListEnvironments(t *testing.T) {
 						OrderBy:     new("created_at"),
 						Sort:        new("desc"),
 						Environment: new(env.Name),
-					}).
+					}, gomock.Any()).
 					Return(env.deployments, &gitlab.Response{}, env.deploymentListError)
 			}
 			mockClient.MockEnvironments.EXPECT().
@@ -879,7 +880,7 @@ func TestGitLabProvider_ListEnvironments(t *testing.T) {
 					ListOptions: gitlab.ListOptions{
 						PerPage: 100,
 					},
-				}).
+				}, gomock.Any()).
 				Return(envResponses, &gitlab.Response{}, tt.listError)
 
 			provider := GitLabProvider{Client: mockClient.Client, Project: project}

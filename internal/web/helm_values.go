@@ -160,6 +160,7 @@ func helmValuesFromReferences(ctx context.Context, c client.Reader, namespace st
 // Quoted values (single or double) are always set as strings.
 // Unquoted values undergo type coercion matching Helm's strvals behavior.
 // Supports array index syntax (e.g. "a[0].b") and escaped dots.
+// Array indices and the aggregate number of array elements are bounded.
 func replacePathValue(values map[string]any, path string, value string) error {
 	const (
 		singleQuote = "'"
@@ -172,7 +173,10 @@ func replacePathValue(values map[string]any, path string, value string) error {
 		value = strings.Trim(value, singleQuote+doubleQuote)
 	}
 
-	segments := parsePathSegments(path)
+	segments, err := parsePathSegments(path)
+	if err != nil {
+		return err
+	}
 	if len(segments) == 0 {
 		return fmt.Errorf("empty path")
 	}
@@ -296,6 +300,11 @@ func replacePathValue(values map[string]any, path string, value string) error {
 	return nil
 }
 
+const (
+	maxTargetPathArrayIndex    = 1000
+	maxTargetPathArrayElements = 10_000
+)
+
 // pathSegment represents a parsed segment of a dot-notation path.
 type pathSegment struct {
 	key   string
@@ -305,7 +314,7 @@ type pathSegment struct {
 // parsePathSegments parses a dot-notation path into segments,
 // handling escaped dots, array index syntax (e.g. "a.b[0].c"),
 // and nested array indices (e.g. "a[0][1]").
-func parsePathSegments(path string) []pathSegment {
+func parsePathSegments(path string) ([]pathSegment, error) {
 	var segments []pathSegment
 	var current strings.Builder
 	escaped := false
@@ -323,7 +332,11 @@ func parsePathSegments(path string) []pathSegment {
 		}
 		if c == '.' {
 			if current.Len() > 0 {
-				segments = append(segments, parseSegmentKeys(current.String())...)
+				parsed, err := parseSegmentKeys(current.String())
+				if err != nil {
+					return nil, err
+				}
+				segments = append(segments, parsed...)
 				current.Reset()
 			}
 			continue
@@ -331,9 +344,23 @@ func parsePathSegments(path string) []pathSegment {
 		current.WriteByte(c)
 	}
 	if current.Len() > 0 {
-		segments = append(segments, parseSegmentKeys(current.String())...)
+		parsed, err := parseSegmentKeys(current.String())
+		if err != nil {
+			return nil, err
+		}
+		segments = append(segments, parsed...)
 	}
-	return segments
+
+	arrayElements := 0
+	for _, segment := range segments {
+		if segment.index >= 0 {
+			arrayElements += segment.index + 1
+			if arrayElements > maxTargetPathArrayElements {
+				return nil, fmt.Errorf("array elements exceed maximum %d", maxTargetPathArrayElements)
+			}
+		}
+	}
+	return segments, nil
 }
 
 // parseSegmentKeys parses a single dot-separated token into one or more
@@ -341,10 +368,10 @@ func parsePathSegments(path string) []pathSegment {
 // "key" → [{key:"key", index:-1}]
 // "key[0]" → [{key:"key", index:0}]
 // "key[0][1]" → [{key:"key", index:0}, {key:"", index:1}]
-func parseSegmentKeys(s string) []pathSegment {
+func parseSegmentKeys(s string) ([]pathSegment, error) {
 	idx := strings.IndexByte(s, '[')
 	if idx < 0 {
-		return []pathSegment{{key: s, index: -1}}
+		return []pathSegment{{key: s, index: -1}}, nil
 	}
 
 	var segments []pathSegment
@@ -358,7 +385,13 @@ func parseSegmentKeys(s string) []pathSegment {
 		}
 		n, err := strconv.Atoi(rest[1:end])
 		if err != nil {
-			break
+			return nil, fmt.Errorf("invalid array index %q: %w", rest[1:end], err)
+		}
+		if n < 0 {
+			return nil, fmt.Errorf("array index %d must not be negative", n)
+		}
+		if n > maxTargetPathArrayIndex {
+			return nil, fmt.Errorf("array index %d exceeds maximum %d", n, maxTargetPathArrayIndex)
 		}
 		segments = append(segments, pathSegment{key: key, index: n})
 		key = "" // subsequent indices have no key
@@ -366,9 +399,9 @@ func parseSegmentKeys(s string) []pathSegment {
 	}
 
 	if len(segments) == 0 {
-		return []pathSegment{{key: s, index: -1}}
+		return []pathSegment{{key: s, index: -1}}, nil
 	}
-	return segments
+	return segments, nil
 }
 
 // setSliceIndex sets the value at the given index in the slice,

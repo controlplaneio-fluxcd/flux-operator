@@ -4,9 +4,12 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -335,6 +338,18 @@ func TestMatchesWildcard(t *testing.T) {
 			expected: false,
 		},
 		{
+			name:     "double negation preserves match",
+			input:    "flux-system",
+			pattern:  "!!flux-system",
+			expected: true,
+		},
+		{
+			name:     "triple negation excludes match",
+			input:    "flux-system",
+			pattern:  "!!!flux-system",
+			expected: false,
+		},
+		{
 			name:     "bang only excludes nothing",
 			input:    "anything",
 			pattern:  "!",
@@ -347,6 +362,98 @@ func TestMatchesWildcard(t *testing.T) {
 			g.Expect(result).To(Equal(tt.expected), "matchesWildcard(%q, %q)", tt.input, tt.pattern)
 		})
 	}
+}
+
+func TestMatchesWildcardDeepNegation(t *testing.T) {
+	g := NewWithT(t)
+
+	evenPattern := strings.Repeat("!", 1<<20) + "flux-system"
+	g.Expect(matchesWildcard("flux-system", evenPattern)).To(BeTrue())
+	g.Expect(matchesWildcard("flux-system", "!"+evenPattern)).To(BeFalse())
+}
+
+func TestWildcardMatcherReuse(t *testing.T) {
+	g := NewWithT(t)
+	matcher := compileWildcardMatcher("!*FLUX*")
+
+	g.Expect(matcher.matches("app")).To(BeTrue())
+	g.Expect(matcher.matches("Flux-System")).To(BeFalse())
+	g.Expect(matcher.matches("flux-monitoring")).To(BeFalse())
+}
+
+func TestSearchFilterLengthLimit(t *testing.T) {
+	for _, field := range []string{"name", "namespace", "kind"} {
+		t.Run(field, func(t *testing.T) {
+			g := NewWithT(t)
+			g.Expect(validateSearchFilter(field, strings.Repeat("a", 253))).To(Succeed())
+			g.Expect(validateSearchFilter(field, strings.Repeat("a", 254))).To(
+				MatchError(ContainSubstring(field + " filter exceeds maximum length of 253 bytes")))
+		})
+	}
+}
+
+func TestSearchFilterHandlersEnforceLengthLimit(t *testing.T) {
+	handler := &Handler{
+		conf:          &fluxcdv1.WebConfigSpec{},
+		kubeClient:    kubeClient,
+		searchIndex:   &SearchIndex{},
+		workloadIndex: &WorkloadIndex{},
+	}
+
+	handlers := []struct {
+		name    string
+		path    string
+		handler http.HandlerFunc
+	}{
+		{name: "resources", path: "/api/v1/resources", handler: handler.ResourcesHandler},
+		{name: "events", path: "/api/v1/events", handler: handler.EventsHandler},
+		{name: "search", path: "/api/v1/search", handler: handler.SearchHandler},
+		{name: "workloads", path: "/api/v1/workloads", handler: handler.WorkloadsListHandler},
+		{name: "workloads search", path: "/api/v1/workloads/search", handler: handler.WorkloadsSearchHandler},
+	}
+
+	for _, handlerTest := range handlers {
+		for _, field := range []string{"name", "namespace", "kind"} {
+			for _, boundary := range []struct {
+				name       string
+				length     int
+				statusCode int
+			}{
+				{name: "maximum", length: 253, statusCode: http.StatusOK},
+				{name: "over maximum", length: 254, statusCode: http.StatusBadRequest},
+			} {
+				t.Run(handlerTest.name+"/"+field+"/"+boundary.name, func(t *testing.T) {
+					g := NewWithT(t)
+					value := strings.Repeat("a", boundary.length)
+					req := httptest.NewRequest(http.MethodGet, handlerTest.path+"?"+field+"="+value, nil)
+					ctx, cancel := context.WithCancel(req.Context())
+					cancel()
+					req = req.WithContext(ctx)
+					rec := httptest.NewRecorder()
+
+					handlerTest.handler(rec, req)
+
+					g.Expect(rec.Code).To(Equal(boundary.statusCode))
+					if boundary.statusCode == http.StatusBadRequest {
+						g.Expect(rec.Body.String()).To(ContainSubstring(field + " filter"))
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestLiveFiltersHonorCanceledContext(t *testing.T) {
+	g := NewWithT(t)
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	handler := &Handler{}
+	_, err := handler.GetLiveResources(canceledCtx, "ResourceSet", "*", "default", "", 10)
+	g.Expect(errors.Is(err, context.Canceled)).To(BeTrue())
+
+	_, err = handler.GetEvents(canceledCtx, "ResourceSet", "*", "default", "", "")
+	g.Expect(errors.Is(err, context.Canceled)).To(BeTrue())
 }
 
 func TestIsNamePattern(t *testing.T) {

@@ -73,3 +73,22 @@ func TestDownloadManifestFromURL_OCI_MissingFragment(t *testing.T) {
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("fragment with the file path"))
 }
+
+func TestResolveArtifactURL_DigestPinned(t *testing.T) {
+	g := NewWithT(t)
+
+	ref := "oci://ghcr.io/example/manifests@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	resolved, err := ResolveArtifactURL(context.Background(), ref, authn.DefaultKeychain)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(resolved).To(Equal(ref))
+}
+
+func TestDownloadFileFromArtifact_RejectsMutableTag(t *testing.T) {
+	g := NewWithT(t)
+
+	_, err := DownloadFileFromArtifact(context.Background(),
+		"oci://ghcr.io/example/manifests:latest",
+		"flux-operator/install.yaml",
+		authn.DefaultKeychain)
+	g.Expect(err).To(MatchError(ContainSubstring("must be digest-pinned")))
+}

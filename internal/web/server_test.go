@@ -163,3 +163,61 @@ spec:
 		t.Fatal("timed out waiting for web server configuration watcher to stop")
 	}
 }
+
+func TestProcessBatchBoundsConcurrencyAndPreservesOrder(t *testing.T) {
+	g := NewWithT(t)
+	items := []int{0, 1, 2, 3, 4, 5, 6, 7}
+	started := make(chan struct{}, len(items))
+	release := make(chan struct{})
+	done := make(chan []int, 1)
+
+	go func() {
+		done <- processBatch(items, 6, 4, func(item int) int {
+			started <- struct{}{}
+			<-release
+			return item * 10
+		})
+	}()
+
+	for range 4 {
+		select {
+		case <-started:
+		case <-time.After(5 * time.Second):
+			close(release)
+			t.Fatal("timed out waiting for the four workers to start")
+		}
+	}
+
+	select {
+	case <-started:
+		close(release)
+		t.Fatal("more than four items were processed concurrently")
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(release)
+
+	select {
+	case result := <-done:
+		g.Expect(result).To(Equal([]int{0, 10, 20, 30, 40, 50}))
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for batch processing to finish")
+	}
+}
+
+func TestProcessBatchStartsAtLeastOneWorker(t *testing.T) {
+	g := NewWithT(t)
+	done := make(chan []int, 1)
+
+	go func() {
+		done <- processBatch([]int{1, 2, 3}, 3, 0, func(item int) int {
+			return item * 10
+		})
+	}()
+
+	select {
+	case result := <-done:
+		g.Expect(result).To(Equal([]int{10, 20, 30}))
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for batch processing with a worker count below one")
+	}
+}

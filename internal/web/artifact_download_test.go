@@ -4,6 +4,8 @@
 package web
 
 import (
+	"context"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -15,6 +17,169 @@ import (
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
+
+// artifactResolverFunc adapts a function to the artifactIPResolver interface.
+type artifactResolverFunc func(context.Context, string) ([]net.IPAddr, error)
+
+// LookupIPAddr resolves an artifact hostname for tests.
+func (f artifactResolverFunc) LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error) {
+	return f(ctx, host)
+}
+
+func TestArtifactHTTPClientRejectsRedirects(t *testing.T) {
+	g := NewWithT(t)
+
+	g.Expect(artifactHTTPClient.CheckRedirect(nil, nil)).To(Equal(http.ErrUseLastResponse))
+}
+
+func TestArtifactDialContextRejectsLiteralIPHostnames(t *testing.T) {
+	testCases := []struct {
+		name    string
+		address string
+	}{
+		{name: "IPv4", address: "10.0.0.10:80"},
+		{name: "IPv6", address: "[2001:db8::1]:443"},
+		{name: "IPv6 zone", address: "[fe80::1%eth0]:80"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			g := NewWithT(t)
+			resolverCalled := false
+			dialCalled := false
+			resolver := artifactResolverFunc(func(context.Context, string) ([]net.IPAddr, error) {
+				resolverCalled = true
+				return nil, nil
+			})
+			dial := newArtifactDialContext(resolver, func(context.Context, string, string) (net.Conn, error) {
+				dialCalled = true
+				return nil, nil
+			})
+
+			conn, err := dial(t.Context(), "tcp", tc.address)
+			g.Expect(err).To(MatchError(ContainSubstring("must use a DNS hostname")))
+			g.Expect(conn).To(BeNil())
+			g.Expect(resolverCalled).To(BeFalse())
+			g.Expect(dialCalled).To(BeFalse())
+		})
+	}
+}
+
+func TestIsBlockedArtifactAddress(t *testing.T) {
+	testCases := []struct {
+		name    string
+		address string
+		blocked bool
+	}{
+		{name: "IPv4 loopback", address: "127.0.0.1", blocked: true},
+		{name: "IPv6 loopback", address: "::1", blocked: true},
+		{name: "IPv4 link-local unicast", address: "169.254.169.254", blocked: true},
+		{name: "IPv6 link-local unicast", address: "fe80::1", blocked: true},
+		{name: "IPv4 link-local multicast", address: "224.0.0.1", blocked: true},
+		{name: "IPv6 link-local multicast", address: "ff02::1", blocked: true},
+		{name: "IPv6 instance metadata", address: "fd00:ec2::254", blocked: true},
+		{name: "IPv6 unique-local", address: "fd00::1", blocked: false},
+		{name: "private IPv4", address: "10.0.0.10", blocked: false},
+		{name: "public IPv4", address: "192.0.2.1", blocked: false},
+		{name: "public IPv6", address: "2001:db8::1", blocked: false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			g := NewWithT(t)
+			g.Expect(isBlockedArtifactAddress(net.ParseIP(tc.address))).To(Equal(tc.blocked))
+		})
+	}
+}
+
+func TestArtifactDialContextRejectsBlockedDNSAnswers(t *testing.T) {
+	testCases := []struct {
+		name  string
+		addrs []net.IPAddr
+	}{
+		{
+			name:  "loopback",
+			addrs: []net.IPAddr{{IP: net.ParseIP("127.0.0.1")}},
+		},
+		{
+			name:  "link-local",
+			addrs: []net.IPAddr{{IP: net.ParseIP("169.254.169.254")}},
+		},
+		{
+			name: "mixed public and loopback",
+			addrs: []net.IPAddr{
+				{IP: net.ParseIP("192.0.2.1")},
+				{IP: net.ParseIP("127.0.0.1")},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			g := NewWithT(t)
+			dialCalled := false
+			resolver := artifactResolverFunc(func(context.Context, string) ([]net.IPAddr, error) {
+				return tc.addrs, nil
+			})
+			dial := newArtifactDialContext(resolver, func(context.Context, string, string) (net.Conn, error) {
+				dialCalled = true
+				return nil, nil
+			})
+
+			conn, err := dial(t.Context(), "tcp", "artifact.example.com:80")
+			g.Expect(err).To(MatchError(ContainSubstring("resolves to blocked address")))
+			g.Expect(conn).To(BeNil())
+			g.Expect(dialCalled).To(BeFalse())
+		})
+	}
+}
+
+func TestArtifactDialContextDialsValidatedPrivateAddress(t *testing.T) {
+	testCases := []struct {
+		name string
+		host string
+	}{
+		{
+			name: "hostname",
+			host: "artifact-server.flux-system.svc.cluster.local",
+		},
+		{
+			// Flux controllers advertise their storage address as a rooted FQDN,
+			// e.g. source-controller.flux-system.svc.cluster.local.
+			name: "rooted FQDN",
+			host: "artifact-server.flux-system.svc.cluster.local.",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			var resolvedHost string
+			resolver := artifactResolverFunc(func(_ context.Context, host string) ([]net.IPAddr, error) {
+				resolvedHost = host
+				return []net.IPAddr{{IP: net.ParseIP("10.0.0.10")}}, nil
+			})
+
+			var dialedAddress string
+			var peer net.Conn
+			dial := newArtifactDialContext(resolver, func(_ context.Context, _, address string) (net.Conn, error) {
+				dialedAddress = address
+				conn, server := net.Pipe()
+				peer = server
+				return conn, nil
+			})
+
+			conn, err := dial(t.Context(), "tcp", net.JoinHostPort(tc.host, "80"))
+			g.Expect(err).NotTo(HaveOccurred())
+			defer conn.Close()
+			defer peer.Close()
+
+			g.Expect(resolvedHost).To(Equal(tc.host))
+			g.Expect(dialedAddress).To(Equal("10.0.0.10:80"))
+		})
+	}
+}
 
 func TestDownloadHandler_MethodNotAllowed(t *testing.T) {
 	g := NewWithT(t)

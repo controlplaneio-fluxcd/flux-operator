@@ -327,6 +327,20 @@ func (r *ResourceSetReconciler) checkDependencies(ctx context.Context,
 			return fmt.Errorf("dependency %s/%s not found: %w", dep.APIVersion, ssautil.FmtObjMetadata(depMd), err)
 		}
 
+		// The kubectl last-applied-configuration annotation is not
+		// exposed to readiness expressions.
+		unstructured.RemoveNestedField(depObj.Object,
+			"metadata", "annotations", corev1.LastAppliedConfigAnnotation)
+
+		// Dependencies are read with the operator client, which is not bound by
+		// the ResourceSet service account permissions. Secret data is therefore
+		// only available to readiness expressions when the Secret is in the same
+		// namespace as the ResourceSet.
+		if dep.Namespace != obj.GetNamespace() &&
+			depObj.GetAPIVersion() == "v1" && depObj.GetKind() == kindSecret {
+			unstructured.RemoveNestedField(depObj.Object, "data")
+		}
+
 		if dep.Ready {
 			switch {
 			// Custom CEL ready expression.

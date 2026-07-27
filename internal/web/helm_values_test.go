@@ -5,6 +5,7 @@ package web
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/fluxcd/pkg/apis/meta"
@@ -521,5 +522,60 @@ func mockConfigMap(name string, data map[string]string) *corev1.ConfigMap {
 		},
 		ObjectMeta: metav1.ObjectMeta{Name: name},
 		Data:       data,
+	}
+}
+
+func Test_replacePathValueArrayLimits(t *testing.T) {
+	t.Run("accepts maximum array index", func(t *testing.T) {
+		g := NewWithT(t)
+		values := map[string]any{}
+
+		err := replacePathValue(values, "items[1000]", "value")
+
+		g.Expect(err).ToNot(HaveOccurred())
+		items, ok := values["items"].([]any)
+		g.Expect(ok).To(BeTrue())
+		g.Expect(items).To(HaveLen(1001))
+		g.Expect(items[1000]).To(Equal("value"))
+	})
+
+	t.Run("accepts maximum aggregate array elements", func(t *testing.T) {
+		g := NewWithT(t)
+		values := map[string]any{}
+		path := "items" + strings.Repeat("[1000]", 9) + "[990]"
+
+		err := replacePathValue(values, path, "value")
+
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(values).ToNot(BeEmpty())
+	})
+
+	tests := []struct {
+		name string
+		path string
+	}{
+		{
+			name: "rejects negative array index",
+			path: "items[-2]",
+		},
+		{
+			name: "rejects array index above maximum",
+			path: "items[1001]",
+		},
+		{
+			name: "rejects first aggregate array element above maximum",
+			path: "items" + strings.Repeat("[1000]", 9) + "[991]",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			values := map[string]any{}
+
+			err := replacePathValue(values, tt.path, "value")
+
+			g.Expect(err).To(HaveOccurred())
+			g.Expect(values).To(BeEmpty())
+		})
 	}
 }

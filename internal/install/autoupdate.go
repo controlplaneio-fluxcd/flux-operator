@@ -12,14 +12,31 @@ import (
 
 	"github.com/fluxcd/pkg/ssa"
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
+	"github.com/google/go-containerregistry/pkg/name"
 )
+
+// artifactRepositoryURL strips the tag or digest from an OCI artifact URL
+// (e.g., "oci://registry/image:tag" -> "oci://registry/image"), preserving
+// the optional oci:// scheme prefix.
+func artifactRepositoryURL(artifactURL string) (string, error) {
+	hasOCIScheme := strings.HasPrefix(artifactURL, "oci://")
+	ref, err := name.ParseReference(strings.TrimPrefix(artifactURL, "oci://"))
+	if err != nil {
+		return "", fmt.Errorf("parsing artifact reference %q: %w", artifactURL, err)
+	}
+	repoURL := ref.Context().Name()
+	if hasOCIScheme {
+		repoURL = "oci://" + repoURL
+	}
+	return repoURL, nil
+}
 
 // ApplyAutoUpdate configures automatic updates of the Flux Operator from the distribution artifact.
 func (in *Installer) ApplyAutoUpdate(ctx context.Context, multitenant bool) (*ssa.ChangeSet, error) {
-	// Strip tag from artifact URL (e.g., "oci://registry/image:tag" -> "oci://registry/image")
-	artifactURL := in.options.artifactURL
-	if idx := strings.LastIndex(artifactURL, ":"); idx > 6 {
-		artifactURL = artifactURL[:idx]
+	// Strip the tag or digest so the OCIRepository tracks the latest tag.
+	artifactURL, err := artifactRepositoryURL(in.options.artifactURL)
+	if err != nil {
+		return nil, err
 	}
 
 	// Build template data

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net/http"
 	"net/url"
 	"strings"
 
@@ -15,11 +16,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/codecommit"
 	cctypes "github.com/aws/aws-sdk-go-v2/service/codecommit/types"
 	"github.com/fluxcd/pkg/auth"
-	gogit "github.com/go-git/go-git/v5"
-	gogitconfig "github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/transport"
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
-	"github.com/go-git/go-git/v5/storage/memory"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/filtering"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/inputs"
@@ -27,12 +26,18 @@ import (
 
 // AWSCodeCommitProvider implements the gitprovider.Interface for AWS AWSCodeCommit.
 type AWSCodeCommitProvider struct {
-	Client   *codecommit.Client
-	Remote   *gogit.Remote
+	Client   awsCodeCommitClient
+	HTTP     *http.Client
 	Auth     *githttp.BasicAuth
 	Region   string
 	RepoName string
 	RepoURL  string
+}
+
+// awsCodeCommitClient defines the CodeCommit API operations used by the provider.
+type awsCodeCommitClient interface {
+	ListPullRequests(context.Context, *codecommit.ListPullRequestsInput, ...func(*codecommit.Options)) (*codecommit.ListPullRequestsOutput, error)
+	GetPullRequest(context.Context, *codecommit.GetPullRequestInput, ...func(*codecommit.Options)) (*codecommit.GetPullRequestOutput, error)
 }
 
 // NewAWSCodeCommitProvider creates a new AWSCodeCommit provider from the given options.
@@ -53,12 +58,14 @@ func NewAWSCodeCommitProvider(opts Options, credsProvider awssdk.CredentialsProv
 		Region:   region,
 		RepoName: repo,
 		RepoURL:  opts.URL,
+		HTTP:     newGitProviderHTTPClient(opts.TLSConfig),
 	}
 
 	if credsProvider != nil {
 		provider.Client = codecommit.New(codecommit.Options{
 			Region:      region,
 			Credentials: awssdk.NewCredentialsCache(credsProvider),
+			HTTPClient:  provider.HTTP,
 		})
 	}
 
@@ -67,45 +74,48 @@ func NewAWSCodeCommitProvider(opts Options, credsProvider awssdk.CredentialsProv
 			Username: gitCreds.Username,
 			Password: gitCreds.Password,
 		}
-		provider.Remote = gogit.NewRemote(memory.NewStorage(), &gogitconfig.RemoteConfig{
-			Name: "origin",
-			URLs: []string{opts.URL},
-		})
 	}
 
 	return provider, nil
 }
 
 // ListBranches returns a list of branches from the AWSCodeCommit repository.
-// It uses go-git's remote.List() to perform a lightweight ls-remote operation
-// with SigV4-signed Git credentials, avoiding per-branch API calls.
+// It performs a lightweight ls-remote operation via listRefs with SigV4-signed
+// Git credentials over a response-limited HTTP client, avoiding per-branch API calls.
 func (p *AWSCodeCommitProvider) ListBranches(ctx context.Context, opts Options) ([]Result, error) {
-	refs, err := p.Remote.ListContext(ctx, &gogit.ListOptions{
-		Auth: p.Auth,
-	})
+	if _, err := gitProviderResultLimit(opts.Filters); err != nil {
+		return nil, err
+	}
+	refs, err := p.listRefs(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("could not list branches: %w", err)
 	}
 
-	return parseGoGitBranches(refs, opts.Filters), nil
+	return parseGoGitBranches(refs, opts.Filters)
 }
 
 // ListTags returns a list of Git tags from the AWSCodeCommit repository.
-// It uses go-git's remote.List() to perform a lightweight ls-remote operation
-// with SigV4-signed Git credentials.
+// It performs a lightweight ls-remote operation via listRefs with SigV4-signed
+// Git credentials over a response-limited HTTP client.
 func (p *AWSCodeCommitProvider) ListTags(ctx context.Context, opts Options) ([]Result, error) {
-	refs, err := p.Remote.ListContext(ctx, &gogit.ListOptions{
-		Auth: p.Auth,
-	})
+	if _, err := gitProviderResultLimit(opts.Filters); err != nil {
+		return nil, err
+	}
+	refs, err := p.listRefs(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("could not list tags: %w", err)
 	}
 
-	return parseGoGitTags(refs, opts.Filters), nil
+	return parseGoGitTags(refs, opts.Filters)
 }
 
 // parseGoGitTags extracts tags and their underlying commit SHAs from a slice of go-git references.
-func parseGoGitTags(refs []*plumbing.Reference, filters filtering.Filters) []Result {
+func parseGoGitTags(refs []*plumbing.Reference, filters filtering.Filters) ([]Result, error) {
+	selector, err := newTagSelector(filters)
+	if err != nil {
+		return nil, err
+	}
+
 	// Collect tag names and their SHAs.
 	tagMap := make(map[string]string)
 	peeledMap := make(map[string]string)
@@ -130,21 +140,24 @@ func parseGoGitTags(refs []*plumbing.Reference, filters filtering.Filters) []Res
 	maps.Copy(tagMap, peeledMap)
 
 	// Apply tag filters (semver, include/exclude regex).
-	results := make([]Result, 0, len(tags))
-	for _, tagName := range filters.Tags(tags) {
-		results = append(results, Result{
+	for _, tagName := range tags {
+		selector.Add(tagName, Result{
 			ID:  inputs.ID(tagName),
 			SHA: tagMap[tagName],
 			Tag: tagName,
 		})
 	}
 
-	return results
+	return selector.Results(), nil
 }
 
 // parseGoGitBranches extracts branches and their commit SHAs from a slice of go-git references.
-func parseGoGitBranches(refs []*plumbing.Reference, filters filtering.Filters) []Result {
-	results := make([]Result, 0)
+func parseGoGitBranches(refs []*plumbing.Reference, filters filtering.Filters) ([]Result, error) {
+	resultLimit, err := gitProviderResultLimit(filters)
+	if err != nil {
+		return nil, err
+	}
+	results := make([]Result, 0, resultLimit)
 	for _, ref := range refs {
 		if !ref.Name().IsBranch() {
 			continue
@@ -161,24 +174,38 @@ func parseGoGitBranches(refs []*plumbing.Reference, filters filtering.Filters) [
 			Branch: branchName,
 		})
 
-		if filters.Limit > 0 && len(results) >= filters.Limit {
-			return results
+		if len(results) >= resultLimit {
+			return results, nil
 		}
 	}
 
-	return results
+	return results, nil
 }
 
 // ListRequests returns a list of open pull requests from the AWSCodeCommit repository.
 func (p *AWSCodeCommitProvider) ListRequests(ctx context.Context, opts Options) ([]Result, error) {
-	var results []Result
+	resultLimit, err := gitProviderResultLimit(opts.Filters)
+	if err != nil {
+		return nil, err
+	}
+	results := make([]Result, 0, resultLimit)
 	var nextToken *string
+	guard := newGitProviderPaginationTokenGuard("AWS CodeCommit pull requests")
 
 	for {
+		token := ""
+		if nextToken != nil {
+			token = *nextToken
+		}
+		if err := guard.Visit(token); err != nil {
+			return nil, err
+		}
+		maxResults := int32(gitProviderPageSize)
 		out, err := p.Client.ListPullRequests(ctx, &codecommit.ListPullRequestsInput{
 			RepositoryName:    &p.RepoName,
 			PullRequestStatus: cctypes.PullRequestStatusEnumOpen,
 			NextToken:         nextToken,
+			MaxResults:        &maxResults,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("could not list pull requests: %w", err)
@@ -228,18 +255,57 @@ func (p *AWSCodeCommitProvider) ListRequests(ctx context.Context, opts Options) 
 				Author: author,
 			})
 
-			if opts.Filters.Limit > 0 && len(results) >= opts.Filters.Limit {
+			if len(results) >= resultLimit {
 				return results, nil
 			}
 		}
 
-		if out.NextToken == nil {
+		if out.NextToken == nil || *out.NextToken == "" {
 			break
 		}
 		nextToken = out.NextToken
 	}
 
 	return results, nil
+}
+
+// listRefs returns remote refs using a response-limited Git smart HTTP client.
+func (p *AWSCodeCommitProvider) listRefs(ctx context.Context) (results []*plumbing.Reference, err error) {
+	endpoint, err := transport.NewEndpoint(p.RepoURL)
+	if err != nil {
+		return nil, err
+	}
+	httpClient := p.HTTP
+	if httpClient == nil {
+		httpClient = newGitProviderHTTPClient(nil)
+	}
+	session, err := githttp.NewClient(httpClient).NewUploadPackSession(endpoint, p.Auth)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if closeErr := session.Close(); err == nil {
+			err = closeErr
+		}
+	}()
+
+	advertised, err := session.AdvertisedReferencesContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	allRefs, err := advertised.AllReferences()
+	if err != nil {
+		return nil, err
+	}
+	iter, err := allRefs.IterReferences()
+	if err != nil {
+		return nil, err
+	}
+	err = iter.ForEach(func(ref *plumbing.Reference) error {
+		results = append(results, ref)
+		return nil
+	})
+	return results, err
 }
 
 // ListEnvironments returns an error as environments are not supported by AWSCodeCommit.

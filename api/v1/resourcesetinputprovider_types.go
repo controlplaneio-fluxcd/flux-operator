@@ -56,6 +56,7 @@ const (
 // +kubebuilder:validation:XValidation:rule="!self.type.startsWith('AzureDevOps') || self.url.startsWith('http://') || self.url.startsWith('https://')", message="spec.url must start with 'http://' or 'https://' when spec.type is an AzureDevOps provider"
 // +kubebuilder:validation:XValidation:rule="!self.type.startsWith('AWSCodeCommit') || self.url.startsWith('https://')", message="spec.url must start with 'https://' when spec.type is a AWSCodeCommit provider"
 // +kubebuilder:validation:XValidation:rule="!self.type.endsWith('ArtifactTag') || self.url.startsWith('oci')", message="spec.url must start with 'oci://' when spec.type is an OCI provider"
+// +kubebuilder:validation:XValidation:rule="!self.type.endsWith('ArtifactTag') || !self.url.startsWith('oci://') || self.url.substring(6).contains('/')", message="spec.url must include the repository path after the registry host when spec.type is an OCI provider"
 // +kubebuilder:validation:XValidation:rule="self.type != 'ExternalService' || self.url.startsWith('http')", message="spec.url must start with 'http://' or 'https://' when spec.type is 'ExternalService'"
 // +kubebuilder:validation:XValidation:rule="!has(self.insecure) || !self.insecure || self.type == 'ExternalService' || self.type == 'OCIArtifactTag'", message="spec.insecure can only be set when spec.type is 'ExternalService' or 'OCIArtifactTag'"
 // +kubebuilder:validation:XValidation:rule="self.type != 'ExternalService' || !self.url.startsWith('http://') || (has(self.insecure) && self.insecure)", message="spec.url must use 'https://' unless spec.insecure is true"
@@ -197,6 +198,7 @@ type ResourceSetInputFilter struct {
 	// Limit specifies the maximum number of input sets to return.
 	// When not set, the default limit is 100.
 	// +kubebuilder:default:=100
+	// +kubebuilder:validation:Maximum:=10000
 	// +optional
 	Limit int `json:"limit,omitempty"`
 

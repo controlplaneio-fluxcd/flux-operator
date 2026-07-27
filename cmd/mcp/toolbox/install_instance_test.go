@@ -6,13 +6,16 @@ package toolbox
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
+	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	. "github.com/onsi/gomega"
 	cli "k8s.io/cli-runtime/pkg/genericclioptions"
 
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/k8s"
 )
 
@@ -80,4 +83,64 @@ func TestManager_HandleInstallFluxInstance(t *testing.T) {
 			_ = content
 		})
 	}
+}
+
+func TestFetchOperatorManifest_DigestPinnedHandoff(t *testing.T) {
+	g := NewWithT(t)
+	const (
+		mutableRef = "oci://ghcr.io/example/manifests:latest"
+		pinnedRef  = "oci://ghcr.io/example/manifests@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	)
+	instance := &fluxcdv1.FluxInstance{
+		Spec: fluxcdv1.FluxInstanceSpec{
+			Distribution: fluxcdv1.Distribution{Artifact: mutableRef},
+		},
+	}
+
+	originalResolve := resolveMCPInstallArtifact
+	originalDownload := downloadMCPInstallArtifact
+	defer func() {
+		resolveMCPInstallArtifact = originalResolve
+		downloadMCPInstallArtifact = originalDownload
+	}()
+
+	resolveMCPInstallArtifact = func(_ context.Context, ref string, _ authn.Keychain) (string, error) {
+		g.Expect(ref).To(Equal(mutableRef))
+		return pinnedRef, nil
+	}
+	downloadMCPInstallArtifact = func(_ context.Context, ref, path string, _ authn.Keychain) ([]byte, error) {
+		g.Expect(ref).To(Equal(pinnedRef))
+		g.Expect(path).To(Equal("flux-operator/install.yaml"))
+		return []byte("apiVersion: v1\nkind: Namespace\nmetadata:\n  name: flux-system\n"), nil
+	}
+
+	objects, err := (&Manager{}).fetchOperatorManifest(context.Background(), instance)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(objects).To(HaveLen(1))
+	g.Expect(operatorArtifactURL(instance)).To(Equal(mutableRef))
+}
+
+func TestFetchOperatorManifest_ResolveFailurePreventsDownload(t *testing.T) {
+	g := NewWithT(t)
+	instance := &fluxcdv1.FluxInstance{}
+
+	originalResolve := resolveMCPInstallArtifact
+	originalDownload := downloadMCPInstallArtifact
+	defer func() {
+		resolveMCPInstallArtifact = originalResolve
+		downloadMCPInstallArtifact = originalDownload
+	}()
+
+	downloadCalled := false
+	resolveMCPInstallArtifact = func(context.Context, string, authn.Keychain) (string, error) {
+		return "", errors.New("digest resolution failed")
+	}
+	downloadMCPInstallArtifact = func(context.Context, string, string, authn.Keychain) ([]byte, error) {
+		downloadCalled = true
+		return nil, nil
+	}
+
+	_, err := (&Manager{}).fetchOperatorManifest(context.Background(), instance)
+	g.Expect(err).To(MatchError(ContainSubstring("digest resolution failed")))
+	g.Expect(downloadCalled).To(BeFalse())
 }
