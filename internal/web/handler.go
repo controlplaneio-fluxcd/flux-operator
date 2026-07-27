@@ -86,8 +86,11 @@ func NewHandler(ctx context.Context, conf *fluxcdv1.WebConfigSpec, spaHandler ht
 
 	// Wrap the mux with middlewares to produce the final handler.
 	// Limit request body size to 1MB to prevent abuse on POST endpoints.
+	// The cross-origin checks wrap the auth middleware so that they also
+	// cover the logout endpoint it serves.
 	handler := LoggingMiddleware(l, SecurityHeadersMiddleware(
-		GzipMiddleware(CacheControlMiddleware(MaxBodySizeMiddleware(1<<20)(authMiddleware(mux))))))
+		GzipMiddleware(CacheControlMiddleware(MaxBodySizeMiddleware(1<<20)(
+			CrossOriginMiddleware(authMiddleware(mux)))))))
 
 	// The report cache is the only goroutine.
 	stopped := h.startReportCache(ctx, reportInterval)
