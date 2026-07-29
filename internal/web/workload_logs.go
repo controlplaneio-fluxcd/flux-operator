@@ -558,7 +558,7 @@ func (h *Handler) WorkloadLogsHandler(w http.ResponseWriter, req *http.Request) 
 	// Build a typed clientset using the impersonated user's REST config so
 	// that Kubernetes enforces the user's RBAC on the pods/log subresource.
 	// The controller-runtime client cannot read the logs subresource, hence
-	// the dedicated clientset (see GetMetrics for the same pattern).
+	// the dedicated clientset (the metrics collector uses the same pattern).
 	clientset, err := kubernetes.NewForConfig(h.kubeClient.GetConfig(ctx))
 	if err != nil {
 		log.FromContext(ctx).Error(err, "failed to create clientset for pod logs",

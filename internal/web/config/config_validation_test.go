@@ -5,6 +5,7 @@ package config
 
 import (
 	"testing"
+	"time"
 
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -301,6 +302,47 @@ func TestWebConfigSpec_FineGrainedAccessEnabled(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 			g.Expect(tt.spec.FineGrainedAccessEnabled()).To(Equal(tt.expected))
+		})
+	}
+}
+
+func TestValidateMetricsSpec(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		spec    fluxcdv1.MetricsSpec
+		wantErr string
+	}{
+		{
+			name: "empty spec is valid",
+			spec: fluxcdv1.MetricsSpec{},
+		},
+		{
+			name: "disabled with no interval is valid",
+			spec: fluxcdv1.MetricsSpec{Disabled: true},
+		},
+		{
+			name: "positive interval is valid",
+			spec: fluxcdv1.MetricsSpec{ScrapeInterval: &metav1.Duration{Duration: 30 * time.Second}},
+		},
+		{
+			name: "out-of-range positive interval is valid (clamped at runtime)",
+			spec: fluxcdv1.MetricsSpec{ScrapeInterval: &metav1.Duration{Duration: time.Hour}},
+		},
+		{
+			name:    "negative interval is rejected",
+			spec:    fluxcdv1.MetricsSpec{ScrapeInterval: &metav1.Duration{Duration: -5 * time.Second}},
+			wantErr: "scrapeInterval must be a positive duration",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			err := ValidateWebConfigSpec(&fluxcdv1.WebConfigSpec{Metrics: &tt.spec})
+			if tt.wantErr == "" {
+				g.Expect(err).NotTo(HaveOccurred())
+			} else {
+				g.Expect(err).To(MatchError(ContainSubstring(tt.wantErr)))
+			}
 		})
 	}
 }

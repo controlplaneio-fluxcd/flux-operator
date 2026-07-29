@@ -155,6 +155,45 @@ type WorkloadPodStatus struct {
 	// PodStatus is the full Kubernetes PodStatus.
 	// Only populated for the workload detail endpoint.
 	PodStatus *corev1.PodStatus `json:"podStatus,omitempty"`
+
+	// Metrics is the current CPU/Memory usage of the pod summed across
+	// its containers. Only populated for the workload detail endpoint
+	// when the Metrics API is available.
+	Metrics *MetricsSample `json:"metrics,omitempty"`
+
+	// resources holds the CPU/Memory requests and limits summed from
+	// the pod spec, used to compute the workload-level metrics.
+	resources podResources
+}
+
+// podResources holds the resource requests and limits of a pod
+// summed across its containers.
+type podResources struct {
+	// cpuRequests and cpuLimits are expressed in cores.
+	cpuRequests float64
+	cpuLimits   float64
+
+	// memoryRequests and memoryLimits are expressed in bytes.
+	memoryRequests int64
+	memoryLimits   int64
+}
+
+// WorkloadMetrics represents the aggregated CPU/Memory usage of a
+// workload, computed from the usage series of its pods.
+type WorkloadMetrics struct {
+	// Samples is the usage time series summed across the workload pods
+	// at each scrape timestamp.
+	Samples []MetricsSample `json:"samples"`
+
+	// CPURequests and CPULimits are the pod spec resources summed across
+	// the running pods, expressed in cores. Zero means not set.
+	CPURequests float64 `json:"cpuRequests"`
+	CPULimits   float64 `json:"cpuLimits"`
+
+	// MemoryRequests and MemoryLimits are the pod spec resources summed
+	// across the running pods, expressed in bytes. Zero means not set.
+	MemoryRequests int64 `json:"memoryRequests"`
+	MemoryLimits   int64 `json:"memoryLimits"`
 }
 
 // getWorkloadGVK returns the GroupVersionKind for a given workload kind.
@@ -326,12 +365,20 @@ func (h *Handler) GetWorkloadDetails(ctx context.Context, kind, name, namespace 
 			if pod.PodStatus != nil {
 				podMap["podStatus"] = pod.PodStatus
 			}
+			if pod.Metrics != nil {
+				podMap["metrics"] = pod.Metrics
+			}
 			pods = append(pods, podMap)
 		}
 		workloadInfo["pods"] = pods
 	}
 	if len(ws.UserActions) > 0 {
 		workloadInfo["userActions"] = ws.UserActions
+	}
+
+	// Attach the workload usage metrics when the Metrics API is available.
+	if wm := h.buildWorkloadMetrics(obj, ws.Pods); wm != nil {
+		workloadInfo["metrics"] = wm
 	}
 
 	// Inject workloadInfo at the root of the object
@@ -355,14 +402,16 @@ func (h *Handler) GetWorkloadPods(ctx context.Context, obj *unstructured.Unstruc
 		return h.getCronJobPods(ctx, obj, detailed)
 	}
 
-	selector, found, err := unstructured.NestedStringMap(obj.Object, "spec", "selector", "matchLabels")
-	if err != nil || !found {
+	// Match pods on the full workload selector (matchLabels and
+	// matchExpressions), so expression-only selectors are supported.
+	selector := workloadPodSelector(obj)
+	if selector == nil || selector.Empty() {
 		return nil, nil
 	}
 
 	listOpts := []client.ListOption{
 		client.InNamespace(obj.GetNamespace()),
-		client.MatchingLabels(selector),
+		client.MatchingLabelsSelector{Selector: selector},
 	}
 
 	if err := h.kubeClient.GetClient(ctx).List(ctx, podList, listOpts...); err != nil {
@@ -392,9 +441,11 @@ func (h *Handler) GetWorkloadPods(ctx context.Context, obj *unstructured.Unstruc
 			Status:        podStatus,
 			StatusMessage: podMessage,
 			CreatedAt:     pod.GetCreationTimestamp().Time,
+			resources:     sumPodResources(&pod),
 		}
 		if detailed {
 			ps.PodStatus = &pod.Status
+			ps.Metrics = h.currentPodMetrics(pod.GetNamespace(), pod.GetName())
 		}
 		podsStatus = append(podsStatus, ps)
 	}
@@ -462,9 +513,11 @@ func (h *Handler) getCronJobPods(ctx context.Context, cronJob *unstructured.Unst
 			StatusMessage: podMessage,
 			CreatedAt:     pod.GetCreationTimestamp().Time,
 			CreatedBy:     pod.GetAnnotations()[fluxcdv1.CreatedByAnnotation],
+			resources:     sumPodResources(&pod),
 		}
 		if detailed {
 			ps.PodStatus = &pod.Status
+			ps.Metrics = h.currentPodMetrics(pod.GetNamespace(), pod.GetName())
 		}
 		podsStatus = append(podsStatus, ps)
 	}
