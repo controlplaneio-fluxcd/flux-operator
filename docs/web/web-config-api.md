@@ -136,6 +136,17 @@ spec:
     # refreshed in-memory cache instead of querying the Kubernetes API in realtime.
     # This reduces API server load and improves response latency for large clusters.
     cached: false # Optional, default is false.
+
+  # Pod metrics collection configuration (optional)
+  metrics:
+    # If true, pod metrics collection is turned off: no Kubernetes Metrics API
+    # queries are made and the resource usage charts are hidden in the UI.
+    disabled: false # Optional, default is false.
+    # Interval at which pod metrics are collected from the Kubernetes Metrics API.
+    # Lower values produce finer-grained usage charts at the cost of memory and
+    # API traffic; values below the metrics-server resolution (15s by default)
+    # add no information. Clamped to [15s, 10m].
+    scrapeInterval: 60s # Optional, default is 60s.
 ```
 
 ## Authentication
@@ -381,6 +392,24 @@ but can lead to increased latency and API server load, especially in large clust
 When enabling the `cached` option, search queries are served from the cache instead of hitting the
 Kubernetes API server directly. This can significantly reduce response times and API server load
 for search operations, at the cost of potentially serving slightly stale data (`20s`).
+
+## Metrics Configuration
+
+The workload dashboard displays CPU and memory usage charts covering the last 30 minutes,
+sourced from the Kubernetes Metrics API ([metrics-server](https://github.com/kubernetes-sigs/metrics-server)).
+Because the Metrics API only serves instantaneous values, the web server accumulates the
+usage history in memory by scraping the API periodically (one cluster-wide query per interval).
+On clusters without metrics-server, the charts are hidden automatically and no configuration
+is required.
+
+The `scrapeInterval` option controls the collection cadence. The default of `60s` keeps
+the memory overhead small (roughly 2.5 KiB per pod). Lowering it towards the
+metrics-server resolution (`15s` by default) produces finer-grained charts at
+proportionally higher memory and API cost; the charts keep covering ~30 minutes
+regardless of the interval.
+
+Setting `disabled: true` turns the feature off entirely: the web server makes no
+Metrics API queries and the resource usage charts are hidden in the UI.
 
 ## Configuration Examples
 
