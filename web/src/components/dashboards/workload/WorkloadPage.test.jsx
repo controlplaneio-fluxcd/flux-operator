@@ -45,8 +45,11 @@ vi.mock('../resource/WorkloadDeleteAction', () => ({
 // Mocked to avoid uPlot canvas rendering in jsdom; the panel's own
 // behavior is covered by WorkloadMetricsPanel.test.jsx.
 vi.mock('./WorkloadMetricsPanel', () => ({
-  WorkloadMetricsPanel: () => (
-    <div data-testid="workload-metrics-panel-mock" />
+  WorkloadMetricsPanel: (props) => (
+    <div
+      data-testid="workload-metrics-panel-mock"
+      data-pods={props.pods ? props.pods.length : ''}
+    />
   )
 }))
 
@@ -198,8 +201,9 @@ describe('WorkloadPage component', () => {
     // ActionBar should receive reconciler props (not workload props)
     expect(screen.getByTestId('action-bar')).toHaveTextContent('ActionBar: Kustomization/flux-system/apps')
 
-    // The metrics panel is rendered for chart-capable workload kinds
-    expect(screen.getByTestId('workload-metrics-panel-mock')).toBeInTheDocument()
+    // The metrics panel is rendered for chart-capable workload kinds,
+    // receiving the pods for the per-pod usage bars
+    expect(screen.getByTestId('workload-metrics-panel-mock')).toHaveAttribute('data-pods', '2')
   })
 
   it('should hide the metrics panel for CronJobs', async () => {

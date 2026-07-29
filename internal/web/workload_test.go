@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
@@ -16,6 +17,9 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
@@ -2010,4 +2014,203 @@ func TestWorkloadHandler_MissingParameters(t *testing.T) {
 			g.Expect(rec.Body.String()).To(ContainSubstring("Missing required parameters"))
 		})
 	}
+}
+
+func TestGetRolledOutAt(t *testing.T) {
+	g := NewWithT(t)
+
+	handler := &Handler{kubeClient: kubeClient}
+
+	// getUnstructured fetches a workload the way GetWorkloadStatus does.
+	getUnstructured := func(kind, name string) *unstructured.Unstructured {
+		obj := &unstructured.Unstructured{}
+		obj.SetGroupVersionKind(getWorkloadGVK(kind))
+		g.Expect(testClient.Get(ctx, client.ObjectKey{Name: name, Namespace: "default"}, obj)).To(Succeed())
+		return obj
+	}
+
+	podTemplate := func(app string) corev1.PodTemplateSpec {
+		return corev1.PodTemplateSpec{
+			ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": app}},
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{Name: "nginx", Image: "nginx:latest"}},
+			},
+		}
+	}
+
+	t.Run("Deployment newest ReplicaSet by revision", func(t *testing.T) {
+		g := NewWithT(t)
+
+		deployment := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-rolledout-deploy", Namespace: "default"},
+			Spec: appsv1.DeploymentSpec{
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test-rolledout-deploy"}},
+				Template: podTemplate("test-rolledout-deploy"),
+			},
+		}
+		g.Expect(testClient.Create(ctx, deployment)).To(Succeed())
+		defer testClient.Delete(ctx, deployment)
+
+		ownerRef := metav1.OwnerReference{
+			APIVersion: "apps/v1",
+			Kind:       "Deployment",
+			Name:       deployment.Name,
+			UID:        deployment.UID,
+		}
+		var newest *appsv1.ReplicaSet
+		for i, revision := range []string{"1", "2"} {
+			rs := &appsv1.ReplicaSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            deployment.Name + []string{"-aaaaaaaaaa", "-bbbbbbbbbb"}[i],
+					Namespace:       "default",
+					Annotations:     map[string]string{"deployment.kubernetes.io/revision": revision},
+					OwnerReferences: []metav1.OwnerReference{ownerRef},
+				},
+				Spec: appsv1.ReplicaSetSpec{
+					Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test-rolledout-deploy"}},
+					Template: podTemplate("test-rolledout-deploy"),
+				},
+			}
+			g.Expect(testClient.Create(ctx, rs)).To(Succeed())
+			defer testClient.Delete(ctx, rs)
+			newest = rs
+		}
+
+		// A same-prefix ReplicaSet with a higher revision that is NOT
+		// owned by the Deployment must be ignored: pod references
+		// cannot probe sibling objects through the privileged reader.
+		forged := &appsv1.ReplicaSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        deployment.Name + "-cccccccccc",
+				Namespace:   "default",
+				Annotations: map[string]string{"deployment.kubernetes.io/revision": "99"},
+			},
+			Spec: appsv1.ReplicaSetSpec{
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test-rolledout-deploy"}},
+				Template: podTemplate("test-rolledout-deploy"),
+			},
+		}
+		g.Expect(testClient.Create(ctx, forged)).To(Succeed())
+		defer testClient.Delete(ctx, forged)
+
+		// Mid-rollout, the pods span both generations; the newest
+		// owned revision wins. The ReplicaSet names come from the
+		// pods' owner references.
+		pods := []WorkloadPodStatus{
+			{Name: "old-pod", revisionRef: deployment.Name + "-aaaaaaaaaa"},
+			{Name: "new-pod", revisionRef: deployment.Name + "-bbbbbbbbbb"},
+			{Name: "forged-pod", revisionRef: forged.Name},
+		}
+
+		obj := getUnstructured("Deployment", deployment.Name)
+		g.Expect(handler.getRolledOutAt(ctx, obj, pods)).
+			To(Equal(newest.CreationTimestamp.UTC().Format(time.RFC3339)))
+	})
+
+	t.Run("StatefulSet revision from status", func(t *testing.T) {
+		g := NewWithT(t)
+
+		sts := &appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-rolledout-sts", Namespace: "default"},
+			Spec: appsv1.StatefulSetSpec{
+				ServiceName: "test-rolledout-sts",
+				Selector:    &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test-rolledout-sts"}},
+				Template:    podTemplate("test-rolledout-sts"),
+			},
+		}
+		g.Expect(testClient.Create(ctx, sts)).To(Succeed())
+		defer testClient.Delete(ctx, sts)
+
+		cr := &appsv1.ControllerRevision{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-rolledout-sts-5d4f8b9c7",
+				Namespace: "default",
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: "apps/v1",
+					Kind:       "StatefulSet",
+					Name:       sts.Name,
+					UID:        sts.UID,
+				}},
+			},
+			Data:     runtime.RawExtension{Raw: []byte("{}")},
+			Revision: 1,
+		}
+		g.Expect(testClient.Create(ctx, cr)).To(Succeed())
+		defer testClient.Delete(ctx, cr)
+
+		sts.Status.UpdateRevision = cr.Name
+		g.Expect(testClient.Status().Update(ctx, sts)).To(Succeed())
+
+		// The revision is resolved from the status, no pods needed.
+		obj := getUnstructured("StatefulSet", sts.Name)
+		g.Expect(handler.getRolledOutAt(ctx, obj, nil)).
+			To(Equal(cr.CreationTimestamp.UTC().Format(time.RFC3339)))
+	})
+
+	t.Run("DaemonSet newest ControllerRevision", func(t *testing.T) {
+		g := NewWithT(t)
+
+		ds := &appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-rolledout-ds", Namespace: "default"},
+			Spec: appsv1.DaemonSetSpec{
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test-rolledout-ds"}},
+				Template: podTemplate("test-rolledout-ds"),
+			},
+		}
+		g.Expect(testClient.Create(ctx, ds)).To(Succeed())
+		defer testClient.Delete(ctx, ds)
+
+		cr := &appsv1.ControllerRevision{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-rolledout-ds-6c8d7f9b5",
+				Namespace: "default",
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: "apps/v1",
+					Kind:       "DaemonSet",
+					Name:       ds.Name,
+					UID:        ds.UID,
+				}},
+			},
+			Data:     runtime.RawExtension{Raw: []byte("{}")},
+			Revision: 1,
+		}
+		g.Expect(testClient.Create(ctx, cr)).To(Succeed())
+		defer testClient.Delete(ctx, cr)
+
+		// The ControllerRevision name is derived in GetWorkloadPods from
+		// the pods' controller-revision-hash label.
+		pods := []WorkloadPodStatus{{Name: "ds-pod", revisionRef: cr.Name}}
+
+		obj := getUnstructured("DaemonSet", ds.Name)
+		g.Expect(handler.getRolledOutAt(ctx, obj, pods)).
+			To(Equal(cr.CreationTimestamp.UTC().Format(time.RFC3339)))
+	})
+
+	t.Run("No generation info yields empty", func(t *testing.T) {
+		g := NewWithT(t)
+
+		deployment := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-rolledout-none", Namespace: "default"},
+			Spec: appsv1.DeploymentSpec{
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test-rolledout-none"}},
+				Template: podTemplate("test-rolledout-none"),
+			},
+		}
+		g.Expect(testClient.Create(ctx, deployment)).To(Succeed())
+		defer testClient.Delete(ctx, deployment)
+
+		obj := getUnstructured("Deployment", deployment.Name)
+
+		// No pods means no generation references.
+		g.Expect(handler.getRolledOutAt(ctx, obj, nil)).To(Equal(""))
+
+		// A pod referencing a deleted ReplicaSet resolves to nothing.
+		pods := []WorkloadPodStatus{{Name: "orphan", revisionRef: "test-rolledout-none-gone"}}
+		g.Expect(handler.getRolledOutAt(ctx, obj, pods)).To(Equal(""))
+
+		// CronJobs have no chartable generation.
+		cronObj := &unstructured.Unstructured{}
+		cronObj.SetGroupVersionKind(getWorkloadGVK("CronJob"))
+		g.Expect(handler.getRolledOutAt(ctx, cronObj, nil)).To(Equal(""))
+	})
 }

@@ -105,4 +105,79 @@ describe('UsageChart component', () => {
     const yAxis = uPlot.instances[0].opts.axes[1]
     expect(yAxis.values(null, [0, 0.1, 0.2])).toEqual(['0m', '100m', '200m'])
   })
+
+  it('registers a draw hook only when an annotation is set', () => {
+    render(
+      <UsageChart data={data} hasLimit={false} colorKey="cpu" formatValue={formatCores} testId="cpu-chart" />
+    )
+    expect(uPlot.instances[0].opts.hooks.draw).toBeUndefined()
+
+    render(
+      <UsageChart
+        data={data} hasLimit={false} colorKey="cpu" formatValue={formatCores}
+        annotation={{ time: 1753693230, label: 'rolled out' }} testId="cpu-chart"
+      />
+    )
+    expect(uPlot.instances[1].opts.hooks.draw).toHaveLength(1)
+  })
+
+  it('draws the annotation line inside the plot area', () => {
+    render(
+      <UsageChart
+        data={data} hasLimit={false} colorKey="cpu" formatValue={formatCores}
+        annotation={{ time: 1753693230, label: 'rolled out' }} testId="cpu-chart"
+      />
+    )
+
+    const ctx = {
+      save: vi.fn(), restore: vi.fn(), setLineDash: vi.fn(),
+      beginPath: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), stroke: vi.fn(),
+    }
+    const u = {
+      ctx,
+      scales: { x: { min: 1753693200, max: 1753693260 } },
+      bbox: { top: 10, height: 100 },
+      valToPos: vi.fn(() => 42),
+    }
+
+    uPlot.instances[0].opts.hooks.draw[0](u)
+    expect(u.valToPos).toHaveBeenCalledWith(1753693230, 'x', true)
+    expect(ctx.moveTo).toHaveBeenCalledWith(42, 10)
+    expect(ctx.lineTo).toHaveBeenCalledWith(42, 110)
+    expect(ctx.stroke).toHaveBeenCalledTimes(1)
+
+    // An annotation outside the visible range draws nothing.
+    u.scales.x = { min: 1753693240, max: 1753693260 }
+    ctx.stroke.mockClear()
+    uPlot.instances[0].opts.hooks.draw[0](u)
+    expect(ctx.stroke).not.toHaveBeenCalled()
+  })
+
+  it('names the annotation in the tooltip only on the nearest sample', () => {
+    // Irregular gaps (a failed scrape): the annotation at t=350 is
+    // nearest to the third sample despite being 50s away from it.
+    const irregular = [[100, 160, 400], [0.1, 0.2, 0.3]]
+    const { container } = render(
+      <UsageChart
+        data={irregular} hasLimit={false} colorKey="cpu" formatValue={formatCores}
+        annotation={{ time: 350, label: 'rolled out' }} testId="cpu-chart"
+      />
+    )
+
+    const setCursor = uPlot.instances[0].opts.hooks.setCursor[0]
+    const tooltip = container.querySelector('.usage-chart-tooltip')
+    const u = {
+      cursor: { idx: 2 },
+      data: irregular,
+      valToPos: () => 10,
+      over: { clientWidth: 300 },
+    }
+
+    setCursor(u)
+    expect(tooltip.textContent).toContain('rolled out')
+
+    u.cursor.idx = 1
+    setCursor(u)
+    expect(tooltip.textContent).not.toContain('rolled out')
+  })
 })

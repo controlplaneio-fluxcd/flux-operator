@@ -211,6 +211,76 @@ func TestMetricsCollector_Scrape(t *testing.T) {
 	g.Expect(working.Available()).To(BeFalse())
 }
 
+func TestMetricsCollector_IngestDuplicateTick(t *testing.T) {
+	g := NewWithT(t)
+
+	mc := NewMetricsCollector(nil, time.Minute)
+	now := time.Now().Truncate(time.Second)
+	list := &metricsv1beta1api.PodMetricsList{
+		Items: []metricsv1beta1api.PodMetrics{{
+			ObjectMeta: metav1.ObjectMeta{Name: "app-1", Namespace: "default"},
+			Containers: []metricsv1beta1api.ContainerMetrics{{
+				Name: "main",
+				Usage: corev1.ResourceList{
+					corev1.ResourceCPU:    *resource.NewMilliQuantity(100, resource.DecimalSI),
+					corev1.ResourceMemory: *resource.NewQuantity(64<<20, resource.BinarySI),
+				},
+			}},
+		}},
+	}
+
+	// Two scrapes landing within the same truncated second (a catch-up
+	// overlapping the ticker) keep a single sample for the tick, so the
+	// aggregation never double-counts.
+	mc.ingest(list, now)
+	mc.ingest(list, now.Add(500*time.Millisecond))
+
+	series := mc.PodSeries("default", "app-1")
+	g.Expect(series).To(HaveLen(1))
+	g.Expect(series[0].CPU).To(BeNumerically("~", 0.1, 1e-9))
+
+	// A later tick appends normally.
+	mc.ingest(list, now.Add(time.Minute))
+	g.Expect(mc.PodSeries("default", "app-1")).To(HaveLen(2))
+}
+
+func TestMetricsCollector_RequestScrape(t *testing.T) {
+	g := NewWithT(t)
+
+	scrapes := make(chan struct{}, 10)
+	mc := NewMetricsCollector(func(_ context.Context) (*metricsv1beta1api.PodMetricsList, error) {
+		scrapes <- struct{}{}
+		return &metricsv1beta1api.PodMetricsList{}, nil
+	}, time.Minute)
+
+	// Without a started collector (no context) requests are dropped.
+	mc.RequestScrape()
+	g.Expect(scrapes).NotTo(Receive())
+
+	// While the Metrics API is unavailable requests are dropped.
+	mc.ctx = context.Background()
+	mc.RequestScrape()
+	g.Expect(scrapes).NotTo(Receive())
+
+	mc.mu.Lock()
+	mc.available = true
+	mc.mu.Unlock()
+
+	// An overdue collector serves the catch-up request.
+	g.Expect(time.Since(mc.lastScrape)).To(BeNumerically(">", metricsCatchupInterval))
+	mc.RequestScrape()
+	g.Eventually(scrapes).Should(Receive())
+
+	// A second request right after is rate-limited.
+	g.Eventually(func() bool {
+		mc.mu.RLock()
+		defer mc.mu.RUnlock()
+		return mc.catchup
+	}).Should(BeFalse())
+	mc.RequestScrape()
+	g.Consistently(scrapes, 100*time.Millisecond).ShouldNot(Receive())
+}
+
 func TestMetricsCollector_WorkloadSeries(t *testing.T) {
 	g := NewWithT(t)
 

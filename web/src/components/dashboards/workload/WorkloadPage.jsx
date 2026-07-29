@@ -408,11 +408,6 @@ export function WorkloadPage({ kind, namespace, name }) {
               pods={workloadInfo?.pods}
             />
 
-            {/* Resource Usage Panel (hidden when the Metrics API is unavailable).
-                CronJobs are excluded: their short-lived pods produce a sparse
-                aggregate series, so only the inline pod usage is shown for them. */}
-            {kind !== 'CronJob' && <WorkloadMetricsPanel metrics={workloadInfo?.metrics} />}
-
             {/* Workload Detail Panel */}
             <WorkloadDetailPanel
               kind={kind}
@@ -427,6 +422,17 @@ export function WorkloadPage({ kind, namespace, name }) {
               onActionStart={handleActionStart}
               onActionComplete={fetchData}
             />
+
+            {/* Resource Usage Panel (hidden when the Metrics API is unavailable).
+                CronJobs are excluded: their short-lived pods produce a sparse
+                aggregate series, so only the inline pod usage is shown for them. */}
+            {kind !== 'CronJob' && (
+              <WorkloadMetricsPanel
+                metrics={workloadInfo?.metrics}
+                pods={workloadInfo?.pods}
+                rolledOutAt={workloadInfo?.rolledOutAt}
+              />
+            )}
 
             {/* Reconciler Panel */}
             {reconciler && (

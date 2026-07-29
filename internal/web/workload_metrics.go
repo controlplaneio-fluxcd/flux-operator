@@ -30,6 +30,11 @@ const (
 	// stalled aggregated API server cannot block the scrape loop or the
 	// synchronous initial scrape performed on handler startup.
 	metricsScrapeTimeout = 30 * time.Second
+
+	// metricsCatchupInterval is the minimum time between off-schedule
+	// scrapes requested by the handlers when pods are missing from the
+	// buffer, bounding the extra Metrics API load during rollouts.
+	metricsCatchupInterval = 15 * time.Second
 )
 
 // MetricsSample is a point-in-time CPU/Memory usage measurement.
@@ -75,8 +80,14 @@ type MetricsCollector struct {
 	retention  time.Duration
 
 	mu        sync.RWMutex
+	ctx       context.Context
 	available bool
 	pods      map[string]*podSeries
+
+	// lastScrape and catchup rate-limit the off-schedule scrapes
+	// requested via RequestScrape.
+	lastScrape time.Time
+	catchup    bool
 }
 
 // NewMetricsCollector creates a MetricsCollector that scrapes pod metrics
@@ -103,6 +114,10 @@ func NewMetricsCollector(lister PodMetricsLister, interval time.Duration) *Metri
 // server startup or configuration reloads.
 // It returns a channel that is closed when the goroutine stops.
 func (mc *MetricsCollector) Start(ctx context.Context) <-chan struct{} {
+	mc.mu.Lock()
+	mc.ctx = ctx
+	mc.mu.Unlock()
+
 	stopped := make(chan struct{})
 	go func() {
 		defer close(stopped)
@@ -134,10 +149,43 @@ func (mc *MetricsCollector) Available() bool {
 	return mc.available
 }
 
+// RequestScrape triggers one off-schedule scrape on a new goroutine.
+// Handlers call it when a served workload has running pods without a
+// fresh usage sample — typical right after a rollout, when waiting for
+// the next scheduled scrape would leave the new pods without metrics
+// for up to a full interval. Requests are dropped while a catch-up is
+// in flight, within metricsCatchupInterval of the last scrape, or when
+// the Metrics API is unavailable, so an abusive client cannot amplify
+// the Metrics API load.
+func (mc *MetricsCollector) RequestScrape() {
+	mc.mu.Lock()
+	if mc.ctx == nil || !mc.available || mc.catchup ||
+		time.Since(mc.lastScrape) < metricsCatchupInterval {
+		mc.mu.Unlock()
+		return
+	}
+	mc.catchup = true
+	ctx := mc.ctx
+	mc.mu.Unlock()
+
+	go func() {
+		defer func() {
+			mc.mu.Lock()
+			mc.catchup = false
+			mc.mu.Unlock()
+		}()
+		mc.scrape(ctx)
+	}()
+}
+
 // scrape queries the Metrics API and ingests the result. Failures mark the
 // collector unavailable until a subsequent scrape succeeds, which doubles
 // as feature detection for clusters without metrics-server.
 func (mc *MetricsCollector) scrape(ctx context.Context) {
+	mc.mu.Lock()
+	mc.lastScrape = time.Now()
+	mc.mu.Unlock()
+
 	ctx, cancel := context.WithTimeout(ctx, metricsScrapeTimeout)
 	defer cancel()
 
@@ -203,7 +251,14 @@ func (mc *MetricsCollector) ingest(list *metricsv1beta1api.PodMetricsList, now t
 				cs = &containerSeries{}
 				ps.containers[container.Name] = cs
 			}
-			cs.samples = append(cs.samples, sample)
+			// Concurrent scrapes (a catch-up overlapping the ticker) can
+			// land within the same truncated second; keeping one sample
+			// per tick prevents the aggregation from double-counting.
+			if n := len(cs.samples); n > 0 && !cs.samples[n-1].Time.Before(sample.Time) {
+				cs.samples[n-1] = sample
+			} else {
+				cs.samples = append(cs.samples, sample)
+			}
 			if len(cs.samples) > mc.maxSamples {
 				cs.samples = cs.samples[len(cs.samples)-mc.maxSamples:]
 			}

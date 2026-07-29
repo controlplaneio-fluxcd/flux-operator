@@ -45,6 +45,15 @@ const sourceControllerMetrics = buildMockMetrics({
   memoryLimits: 512 * 1024 * 1024
 })
 const metricsServerMetrics = buildMockMetrics({ cpuBase: 0.012, memBase: 48 * 1024 * 1024 })
+// zot-registry: three replicas with skewed per-pod usage (demoes the
+// per-pod bars) and a rollout restart mid-window (demoes the chart
+// annotation line).
+const zotRegistryMetrics = buildMockMetrics({
+  cpuBase: 0.09,
+  memBase: 230 * 1024 * 1024,
+  cpuRequests: 0.3,
+  memoryRequests: 384 * 1024 * 1024
+})
 
 // Mock workload data
 // Pod statuses use Kubernetes pod phases: Pending, Running, Succeeded, Failed, Unknown
@@ -388,18 +397,36 @@ const mockWorkloads = {
     name: 'zot-registry',
     namespace: 'registry',
     status: 'Current',
-    statusMessage: 'Replicas: 1',
+    statusMessage: 'Replicas: 3',
     createdAt: getTimestamp(60, 0, 0), // 60 days ago
+    restartedAt: getTimestamp(0, 0, 12), // Restarted 12 minutes ago
+    rolledOutAt: getTimestamp(0, 0, 12), // Current generation started 12 minutes ago (inside the metrics window)
     containerImages: [
       'ghcr.io/project-zot/zot:v2.1.11'
     ],
     userActions: ['deletePods', 'logs'],
+    metrics: zotRegistryMetrics,
     pods: [
       {
         name: 'zot-registry-0',
         status: 'Running',
-        statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
-        createdAt: getTimestamp(15, 10, 0)
+        statusMessage: 'Started at 2026-02-06 10:18:00 UTC',
+        createdAt: getTimestamp(0, 0, 11),
+        metrics: { t: getTimestamp(0, 0, 0), cpu: 0.052, memory: 112 * 1024 * 1024 }
+      },
+      {
+        name: 'zot-registry-1',
+        status: 'Running',
+        statusMessage: 'Started at 2026-02-06 10:19:00 UTC',
+        createdAt: getTimestamp(0, 0, 10),
+        metrics: { t: getTimestamp(0, 0, 0), cpu: 0.021, memory: 64 * 1024 * 1024 }
+      },
+      {
+        // No usage sample yet (fresh pod): shows the N/A gray bar.
+        name: 'zot-registry-2',
+        status: 'Running',
+        statusMessage: 'Started at 2026-02-06 10:20:00 UTC',
+        createdAt: getTimestamp(0, 0, 1)
       }
     ]
   },
@@ -597,6 +624,7 @@ function buildWorkloadDetailResponse(workload, reconciler) {
       statusMessage: workload.statusMessage,
       createdAt: workload.createdAt,
       restartedAt: workload.restartedAt,
+      rolledOutAt: workload.rolledOutAt,
       containerImages: workload.containerImages,
       userActions: workload.userActions,
       pods: workload.pods,

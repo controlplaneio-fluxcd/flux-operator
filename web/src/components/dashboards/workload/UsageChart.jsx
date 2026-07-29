@@ -57,9 +57,12 @@ function formatTime(ts) {
  * @param {Function} props.formatValue - Value formatter for ticks and tooltip
  * @param {Array<number>} [props.tickIncrs] - Optional y-axis tick increments
  *   (e.g. powers of two for byte values)
+ * @param {{time: number, label: string}} [props.annotation] - Optional
+ *   event marked with a dashed vertical line at the given epoch seconds
+ *   and named in the tooltip, e.g. {time, label: 'rolled out'}
  * @param {string} props.testId - data-testid for the chart container
  */
-export function UsageChart({ data, hasLimit, colorKey, formatValue, tickIncrs, testId }) {
+export function UsageChart({ data, hasLimit, colorKey, formatValue, tickIncrs, annotation, testId }) {
   const containerRef = useRef(null)
   const tooltipRef = useRef(null)
   const chartRef = useRef(null)
@@ -162,6 +165,24 @@ export function UsageChart({ data, hasLimit, colorKey, formatValue, tickIncrs, t
               limitEl.textContent = `limit ${formatValue(limitValue)}`
               tooltip.append(limitEl)
             }
+            // Name the annotation line when hovering the sample closest
+            // to it. The nearest sample is found by scanning: failed
+            // scrapes leave irregular gaps, so a fixed-gap heuristic
+            // would attribute the event to the wrong sample.
+            if (annotation != null) {
+              let nearest = 0
+              for (let i = 1; i < u.data[0].length; i++) {
+                if (Math.abs(u.data[0][i] - annotation.time) < Math.abs(u.data[0][nearest] - annotation.time)) {
+                  nearest = i
+                }
+              }
+              if (idx === nearest) {
+                const eventEl = document.createElement('div')
+                eventEl.className = 'usage-chart-tooltip-limit'
+                eventEl.textContent = `${annotation.label} ${formatTime(annotation.time)}`
+                tooltip.append(eventEl)
+              }
+            }
 
             // Position the tooltip near the cursor, clamped to the chart box.
             const left = u.valToPos(u.data[0][idx], 'x')
@@ -173,6 +194,28 @@ export function UsageChart({ data, hasLimit, colorKey, formatValue, tickIncrs, t
             tooltip.style.top = '4px'
           },
         ],
+        // Mark the annotated event (e.g. a rollout) with a dashed
+        // vertical line across the plot area.
+        ...(annotation != null
+          ? {
+            draw: [
+              u => {
+                if (annotation.time < u.scales.x.min || annotation.time > u.scales.x.max) return
+                const ctx = u.ctx
+                const x = u.valToPos(annotation.time, 'x', true)
+                ctx.save()
+                ctx.strokeStyle = themeColors.threshold
+                ctx.lineWidth = window.devicePixelRatio || 1
+                ctx.setLineDash([4, 4])
+                ctx.beginPath()
+                ctx.moveTo(x, u.bbox.top)
+                ctx.lineTo(x, u.bbox.top + u.bbox.height)
+                ctx.stroke()
+                ctx.restore()
+              },
+            ],
+          }
+          : {}),
       },
     }
 
@@ -198,7 +241,9 @@ export function UsageChart({ data, hasLimit, colorKey, formatValue, tickIncrs, t
       chart.destroy()
       chartRef.current = null
     }
-  }, [theme, hasLimit, colorKey, formatValue])
+    // Depend on the annotation fields rather than the object identity,
+    // which changes on every poll re-render.
+  }, [theme, hasLimit, colorKey, formatValue, annotation?.time, annotation?.label])
 
   // Push fresh data into the existing chart without recreating it.
   useEffect(() => {
