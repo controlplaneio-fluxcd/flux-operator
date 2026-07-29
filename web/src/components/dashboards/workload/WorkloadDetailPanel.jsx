@@ -7,6 +7,7 @@ import { formatTimestamp } from '../../../utils/time'
 import { getWorkloadStatusBadgeClass, formatWorkloadStatus, getEventBadgeClass, getContainerStateBadgeClass } from '../../../utils/status'
 import { formatScheduleMessage } from '../../../utils/cron'
 import { DashboardPanel, TabButton } from '../common/panel'
+import { formatCores, formatBytes } from '../../../utils/metrics'
 import { YamlBlock } from '../common/yaml'
 import { WorkloadDeleteAction } from '../resource/WorkloadDeleteAction'
 import { WorkloadLogsViewer } from './WorkloadLogsViewer'
@@ -516,6 +517,17 @@ export function WorkloadDetailPanel({
                         </svg>
                         <span class="text-xs text-gray-600 dark:text-gray-400">
                           Containers: {summary.readyCount}/{summary.totalCount} {summary.isCompleted ? 'completed' : 'ready'}
+                        </span>
+                      </div>
+                    )}
+                    {/* Current CPU/Memory usage line */}
+                    {pod.metrics && (
+                      <div class="flex items-center gap-1.5 mt-1" data-testid="pod-metrics">
+                        <svg class="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+                        </svg>
+                        <span class="text-xs text-gray-600 dark:text-gray-400">
+                          CPU: {formatCores(pod.metrics.cpu)} · Memory: {formatBytes(pod.metrics.memory)}
                         </span>
                       </div>
                     )}

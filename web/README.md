@@ -1,19 +1,13 @@
-# Flux Status Page
+# Flux Web UI
 
 **Mission control dashboard for Kubernetes app delivery powered by Flux CD**
 
-The **Flux Status Page** is a lightweight, mobile-friendly web interface providing real-time
-visibility into your GitOps pipelines. Embedded directly within the **Flux Operator**,
-it requires no additional installation steps.
+A lightweight, mobile-friendly web interface providing real-time visibility into your GitOps pipelines.
+Embedded directly within the Flux Operator, it requires no additional installation.
 
-Designed for DevOps engineers and platform teams, the Status Page offers direct insight
+Designed for DevOps engineers and platform teams, the Web UI offers direct insight
 into your Kubernetes clusters. It allows you to track app deployments, monitor
 controller readiness, and troubleshoot issues instantly, without needing to access the CLI.
-
-Built with security in mind, the interface is strictly read-only, ensuring it never
-interferes with Flux controllers or compromises cluster security.
-Together with the **Flux MCP Server**, it provides a comprehensive solution for
-on-call monitoring and Agentic AI incident response in production environments.
 
 ## Features
 
@@ -21,37 +15,51 @@ on-call monitoring and Agentic AI incident response in production environments.
 - **Monitor Reconciliation:** Track the sync state of GitOps pipelines across your cluster and infrastructure.
 - **Pinpoint Issues:** Quickly identify and troubleshoot failures within your app delivery pipelines.
 - **Navigate Efficiently:** Use advanced search and filtering to find specific resources instantly.
-- **Deep Dive:** Access dedicated dashboards for ResourceSets, HelmReleases, Kustomizations and Flux sources.
+- **Deep Dive:** Access dedicated dashboards for Flux resources (HelmReleases, ResourceSets, etc.) and Kubernetes Workloads (Deployments, StatefulSets, DaemonSets, CronJobs).
 - **Inspect Logs:** View the logs of workload pods directly from the browser, scoped to your RBAC permissions.
+- **Track Resource Usage:** Monitor CPU and memory usage of workloads with charts covering the last 30 minutes, including per-pod usage and utilization relative to the configured requests and limits (requires metrics-server). CronJobs show the current per-pod usage only, as their short-lived pods don't produce a meaningful usage history.
 - **Favorites:** Mark important resources as favorites for quick access and at-a-glance status monitoring.
 - **Mobile-Optimized:** Stay informed with a fully responsive interface designed for on-the-go checks.
 - **Adaptive Theming:** Toggle between dark and light modes to suit your environment and preference.
 
-## Accessing the Status Page
+## Dashboards
 
-The Flux Status Page is exposed on port `9080` by the `flux-operator` Kubernetes service.
+### Cluster Dashboard
 
-To access the Status Page, you can port-forward the service to your local machine:
+Get a complete overview of your Flux installation at a glance. The cluster dashboard displays the status of all Flux controllers, recent reconciliation activity, and quick stats about your GitOps resources including Kustomizations, HelmReleases, and source repositories.
 
-```bash
-kubectl -n flux-system port-forward svc/flux-operator 9080:9080
-```
+### Flux Resource Dashboard
 
-To expose the Status Page externally, you can create an Ingress or Gateway HTTPRoute resource
-pointing to the `flux-operator` service on port `9080`.
+Dive deep into individual Flux configurations. View the current state, revision history, applied values, and any conditions or errors. Trigger Flux actions such as reconcile, suspend and resume guarded by Kubernetes RBAC.
 
-> [!IMPORTANT]
-> Ensure you secure access to the Flux Status Page appropriately!
-> While the UI is read-only and doesn't show sensitive data from Kubernetes secrets,
-> it does expose details about your cluster's infrastructure and app deployments.
+### Workload Dashboard
 
-## Contributing
+Monitor all workloads managed by Flux with dedicated dashboards. Trace the delivery pipeline from source to running pods, drill into pod and container status, and trigger actions such as reconcile, rollout restart and log viewing guarded by Kubernetes RBAC.
 
-We welcome contributions to the Flux Status Page project via GitHub pull requests.
-Please see the [CONTRIBUTING](https://github.com/controlplaneio-fluxcd/flux-operator/blob/main/CONTRIBUTING.md)
-guide for details on how to set up your development environment and start contributing to the project.
+### Log Viewer
 
-## License
+Tail, filter and follow pod logs in a dedicated full-featured viewer. The builtin parser detects log levels and groups stack traces for popular logging frameworks across Go, Java, .NET, Python, Ruby, PHP and JSON formats. Search with exclusions, filter by pod, container and level, and download raw logs.
 
-The Flux Status Page is open-source and part of the [Flux Operator](https://github.com/controlplaneio-fluxcd/flux-operator)
-project licensed under the [AGPL-3.0 license](https://github.com/controlplaneio-fluxcd/flux-operator/blob/main/LICENSE).
+### Event Viewer
+
+Watch Kubernetes events issued by the Flux controllers in real-time across your cluster. Filter events by resource name with wildcard and exclusion support, by namespace, kind and severity to quickly spot reconciliation failures as they happen.
+
+### Advanced Search
+
+Find any resource instantly with the advanced search functionality. Filter by type, namespace, status, or name to quickly locate specific Kustomizations, HelmReleases, or source repositories.
+
+### Favorites
+
+Pin your most important resources for quick access. The favorites view provides an at-a-glance status of the resources you care about most, perfect for monitoring critical production deployments.
+
+### GitOps Graph
+
+Visualize your app delivery pipeline in an interactive graph. See real-time status updates as resources reconcile, trace dependencies from sources to deployments, and instantly spot issues as they occur.
+
+### Reconciliation History
+
+Track changes over time with the reconciliation history view. See when resources were updated, what changed, and identify patterns in your deployment pipeline.
+
+### Single Sign-On
+
+Secure access with your organization identity provider. The builtin OpenID Connect support allows seamless SSO integration, leveraging Kubernetes RBAC for fine-grained access control.

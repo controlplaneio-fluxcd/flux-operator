@@ -116,6 +116,23 @@
     }
   }
 
+  /* Tooltip for the CPU/Memory usage charts (uPlot). */
+  .usage-chart-tooltip {
+    @apply rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 py-1 shadow-sm;
+  }
+
+  .usage-chart-tooltip-time {
+    @apply text-xs text-gray-500 dark:text-gray-400;
+  }
+
+  .usage-chart-tooltip-value {
+    @apply text-xs font-medium text-gray-900 dark:text-white;
+  }
+
+  .usage-chart-tooltip-limit {
+    @apply text-xs text-gray-500 dark:text-gray-400;
+  }
+
   /* One-shot glow for the latest log line; color comes from --glow-color,
      set per log level by the viewer. */
   .log-glow {

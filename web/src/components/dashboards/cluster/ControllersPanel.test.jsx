@@ -16,16 +16,20 @@ describe('ControllersPanel', () => {
     {
       pod: 'source-controller-xyz',
       cpu: 0.1,
-      cpuLimit: 2.0,
+      cpuRequests: 0.05,
+      cpuLimits: 2.0,
       memory: 512 * 1024 * 1024, // 512 MiB
-      memoryLimit: 1024 * 1024 * 1024 // 1 GiB
+      memoryRequests: 256 * 1024 * 1024,
+      memoryLimits: 1024 * 1024 * 1024 // 1 GiB
     },
     {
       pod: 'helm-controller-abc',
       cpu: 0.05,
-      cpuLimit: 1.0,
+      cpuRequests: 0.05,
+      cpuLimits: 1.0,
       memory: 256 * 1024 * 1024,
-      memoryLimit: 512 * 1024 * 1024
+      memoryRequests: 128 * 1024 * 1024,
+      memoryLimits: 512 * 1024 * 1024
     }
   ]
 
@@ -63,10 +67,45 @@ describe('ControllersPanel', () => {
     const button = screen.getByText('source-controller').closest('button')
     await fireEvent.click(button)
 
-    // CPU: 0.100/2.0 cores (5%)
-    expect(screen.getByText(/0\.100\/2\.0 cores \(5%\)/)).toBeInTheDocument()
-    // Memory: 512/1024 MiB (50%)
-    expect(screen.getByText(/512\/1024 MiB \(50%\)/)).toBeInTheDocument()
+    // Absolute values first, percentages of the real requests/limits after.
+    expect(screen.getByText('100m')).toBeInTheDocument()
+    expect(screen.getByText(/200% of request · 5% of limit/)).toBeInTheDocument()
+    expect(screen.getByText('512 MiB')).toBeInTheDocument()
+    expect(screen.getByText(/200% of request · 50% of limit/)).toBeInTheDocument()
+  })
+
+  it('should sum usage across all pods of a scaled component', async () => {
+    const haMetrics = [
+      {
+        pod: 'source-controller-aaa',
+        cpu: 0.1,
+        cpuRequests: 0.1,
+        cpuLimits: 1.0,
+        memory: 128 * 1024 * 1024,
+        memoryRequests: 128 * 1024 * 1024,
+        memoryLimits: 512 * 1024 * 1024
+      },
+      {
+        pod: 'source-controller-bbb',
+        cpu: 0.3,
+        cpuRequests: 0.1,
+        cpuLimits: 1.0,
+        memory: 128 * 1024 * 1024,
+        memoryRequests: 128 * 1024 * 1024,
+        memoryLimits: 512 * 1024 * 1024
+      }
+    ]
+
+    render(<ControllersPanel components={mockComponents} metrics={haMetrics} />)
+
+    const button = screen.getByText('source-controller').closest('button')
+    await fireEvent.click(button)
+
+    // 0.4 cores of 0.2 requests and 2.0 limits, 256 MiB of 256 MiB requests and 1 GiB limits.
+    expect(screen.getByText('400m')).toBeInTheDocument()
+    expect(screen.getByText(/200% of request · 20% of limit/)).toBeInTheDocument()
+    expect(screen.getByText('256 MiB')).toBeInTheDocument()
+    expect(screen.getByText(/100% of request · 25% of limit/)).toBeInTheDocument()
   })
 
   it('should gracefully handle missing metrics', async () => {
@@ -125,15 +164,13 @@ describe('ControllersPanel', () => {
     expect(screen.getByText('CrashLoopBackOff')).toBeInTheDocument()
   })
 
-  it('should display resource requests/limits if available', async () => {
-    // Note: The component implementation might need to be updated to show this if it's not already
-    // For now, we check if it doesn't crash with complex metrics
+  it('should display the limit percentage without requests', async () => {
     const complexMetrics = [{
       pod: 'source-controller-xyz',
       cpu: 0.1,
       memory: 128 * 1024 * 1024,
-      cpuLimit: 0.2,
-      memoryLimit: 256 * 1024 * 1024
+      cpuLimits: 0.2,
+      memoryLimits: 256 * 1024 * 1024
     }]
 
     render(<ControllersPanel components={mockComponents} metrics={complexMetrics} />)
@@ -142,7 +179,10 @@ describe('ControllersPanel', () => {
     const button = screen.getByText('source-controller').closest('button')
     await fireEvent.click(button)
 
-    expect(screen.getByText(/0\.100\/0\.2 cores \(50%\)/)).toBeInTheDocument()
+    // Only the limit fragment is shown when requests are unset,
+    // on both the CPU and the Memory rows.
+    expect(screen.getAllByText(/^· 50% of limit$/)).toHaveLength(2)
+    expect(screen.queryByText(/of request/)).not.toBeInTheDocument()
   })
 
   it('should collapse and expand the panel', async () => {
@@ -289,13 +329,15 @@ describe('ControllersPanel', () => {
     expect(screen.getByText('3 controllers deployed')).toBeInTheDocument()
   })
 
-  it('should handle metrics with zero limits gracefully', async () => {
+  it('should show absolute values only when no requests/limits are set', async () => {
     const metricsWithZeroLimits = [{
       pod: 'source-controller-xyz',
       cpu: 0.1,
-      cpuLimit: 0,
+      cpuRequests: 0,
+      cpuLimits: 0,
       memory: 128 * 1024 * 1024,
-      memoryLimit: 0
+      memoryRequests: 0,
+      memoryLimits: 0
     }]
 
     const components = [
@@ -308,18 +350,20 @@ describe('ControllersPanel', () => {
     const button = screen.getByText('source-controller').closest('button')
     await fireEvent.click(button)
 
-    // Should show 0% when limit is 0 (avoid division by zero)
-    expect(screen.getByText(/0\.100\/0\.0 cores \(0%\)/)).toBeInTheDocument()
-    expect(screen.getByText(/128\/0 MiB \(0%\)/)).toBeInTheDocument()
+    // Absolute values without any percentage or progress bar.
+    expect(screen.getByText('100m')).toBeInTheDocument()
+    expect(screen.getByText('128 MiB')).toBeInTheDocument()
+    expect(screen.queryByText(/of request/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/of limit/)).not.toBeInTheDocument()
   })
 
   it('should handle negative memory values gracefully', async () => {
     const metricsWithNegative = [{
       pod: 'source-controller-xyz',
       cpu: 0.1,
-      cpuLimit: 1,
+      cpuLimits: 1,
       memory: -100,
-      memoryLimit: 1024 * 1024 * 1024
+      memoryLimits: 1024 * 1024 * 1024
     }]
 
     const components = [
@@ -332,18 +376,18 @@ describe('ControllersPanel', () => {
     const button = screen.getByText('source-controller').closest('button')
     await fireEvent.click(button)
 
-    // Should show 0 for negative memory (formatMemory handles this)
-    // Percentage is clamped to 0% for negative values
-    expect(screen.getByText(/0\/1024 MiB \(0%\)/)).toBeInTheDocument()
+    // Negative memory renders as 0 with a 0% limit percentage.
+    expect(screen.getByText('0')).toBeInTheDocument()
+    expect(screen.getByText(/^· 0% of limit$/)).toBeInTheDocument()
   })
 
   it('should handle metrics with no matching pod', async () => {
     const metricsNoMatch = [{
       pod: 'other-controller-xyz',
       cpu: 0.1,
-      cpuLimit: 1,
+      cpuLimits: 1,
       memory: 128 * 1024 * 1024,
-      memoryLimit: 256 * 1024 * 1024
+      memoryLimits: 256 * 1024 * 1024
     }]
 
     const components = [
@@ -364,9 +408,9 @@ describe('ControllersPanel', () => {
     const metricsPartialMatch = [{
       pod: 'source-controller', // No suffix like -xyz
       cpu: 0.1,
-      cpuLimit: 1,
+      cpuLimits: 1,
       memory: 128 * 1024 * 1024,
-      memoryLimit: 256 * 1024 * 1024
+      memoryLimits: 256 * 1024 * 1024
     }]
 
     const components = [
@@ -386,9 +430,9 @@ describe('ControllersPanel', () => {
   it('should handle metrics with undefined pod', async () => {
     const metricsUndefinedPod = [{
       cpu: 0.1,
-      cpuLimit: 1,
+      cpuLimits: 1,
       memory: 128 * 1024 * 1024,
-      memoryLimit: 256 * 1024 * 1024
+      memoryLimits: 256 * 1024 * 1024
     }]
 
     const components = [

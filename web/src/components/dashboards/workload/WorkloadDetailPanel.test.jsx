@@ -411,6 +411,31 @@ describe('WorkloadDetailPanel component', () => {
       expect(screen.getByText('No recent jobs')).toBeInTheDocument()
     })
 
+    it('should display current pod usage when metrics are present', async () => {
+      const user = userEvent.setup()
+      const infoWithMetrics = {
+        ...mockWorkloadInfo,
+        pods: [
+          {
+            name: 'nginx-abc-123',
+            status: 'Running',
+            createdAt: '2023-01-01T12:00:00Z',
+            metrics: { t: '2023-01-01T12:30:00Z', cpu: 0.12, memory: 128 * 1024 * 1024 }
+          },
+          { name: 'nginx-abc-456', status: 'Running', createdAt: '2023-01-01T11:00:00Z' }
+        ]
+      }
+
+      render(<WorkloadDetailPanel {...defaultProps} workloadInfo={infoWithMetrics} />)
+
+      await user.click(screen.getByText('Pods'))
+
+      // Only the pod carrying metrics shows the usage line.
+      const usage = screen.getAllByTestId('pod-metrics')
+      expect(usage).toHaveLength(1)
+      expect(usage[0]).toHaveTextContent('CPU: 120m · Memory: 128 MiB')
+    })
+
     it('should render delete buttons when deletePods action is available', async () => {
       const user = userEvent.setup()
 

@@ -42,6 +42,14 @@ vi.mock('../resource/WorkloadDeleteAction', () => ({
   )
 }))
 
+// Mocked to avoid uPlot canvas rendering in jsdom; the panel's own
+// behavior is covered by WorkloadMetricsPanel.test.jsx.
+vi.mock('./WorkloadMetricsPanel', () => ({
+  WorkloadMetricsPanel: () => (
+    <div data-testid="workload-metrics-panel-mock" />
+  )
+}))
+
 describe('WorkloadPage component', () => {
   const mockWorkloadData = {
     apiVersion: 'apps/v1',
@@ -189,6 +197,25 @@ describe('WorkloadPage component', () => {
 
     // ActionBar should receive reconciler props (not workload props)
     expect(screen.getByTestId('action-bar')).toHaveTextContent('ActionBar: Kustomization/flux-system/apps')
+
+    // The metrics panel is rendered for chart-capable workload kinds
+    expect(screen.getByTestId('workload-metrics-panel-mock')).toBeInTheDocument()
+  })
+
+  it('should hide the metrics panel for CronJobs', async () => {
+    fetchWithMock.mockResolvedValueOnce({
+      ...mockWorkloadData,
+      apiVersion: 'batch/v1',
+      kind: 'CronJob'
+    })
+
+    render(<WorkloadPage kind="CronJob" namespace="default" name="nginx" />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'nginx' })).toBeInTheDocument()
+    })
+
+    expect(screen.queryByTestId('workload-metrics-panel-mock')).not.toBeInTheDocument()
   })
 
   it('should toggle the workload favorite from the hero button', async () => {

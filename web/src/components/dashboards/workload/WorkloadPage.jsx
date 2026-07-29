@@ -14,6 +14,7 @@ import { WorkloadLogsAction } from './WorkloadLogsAction'
 import { WorkloadReconcilerPanel } from './WorkloadReconcilerPanel'
 import { WorkloadPipelinePanel } from './WorkloadPipelinePanel'
 import { WorkloadDetailPanel } from './WorkloadDetailPanel'
+import { WorkloadMetricsPanel } from './WorkloadMetricsPanel'
 import { useRegisterPageShortcuts } from '../../../utils/useRegisterPageShortcuts'
 
 // Polling intervals
@@ -406,6 +407,11 @@ export function WorkloadPage({ kind, namespace, name }) {
               workloadStatus={workloadStatus}
               pods={workloadInfo?.pods}
             />
+
+            {/* Resource Usage Panel (hidden when the Metrics API is unavailable).
+                CronJobs are excluded: their short-lived pods produce a sparse
+                aggregate series, so only the inline pod usage is shown for them. */}
+            {kind !== 'CronJob' && <WorkloadMetricsPanel metrics={workloadInfo?.metrics} />}
 
             {/* Workload Detail Panel */}
             <WorkloadDetailPanel

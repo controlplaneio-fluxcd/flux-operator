@@ -156,30 +156,34 @@ describe('InfoPanel', () => {
       const props = {
         ...baseProps,
         metrics: [
-          { cpu: 0.5, cpuLimit: 1.0, memory: 512 * 1024 ** 3, memoryLimit: 1024 * 1024 ** 3 },
-          { cpu: 0.3, cpuLimit: 1.0, memory: 256 * 1024 ** 3, memoryLimit: 512 * 1024 ** 3 }
+          { cpu: 0.5, cpuLimits: 1.0, memory: 512 * 1024 ** 3, memoryLimits: 1024 * 1024 ** 3 },
+          { cpu: 0.3, cpuLimits: 1.0, memory: 256 * 1024 ** 3, memoryLimits: 512 * 1024 ** 3 }
         ]
       }
 
       render(<InfoPanel {...props} />)
 
       expect(screen.getByText('Flux CPU Usage')).toBeInTheDocument()
-      expect(screen.getByText(/0.80\/2.00 cores/)).toBeInTheDocument()
+      // 0.8 of 2.0 cores limit: absolute value plus limit percentage.
+      expect(screen.getByText('800m')).toBeInTheDocument()
+      expect(screen.getByText(/40% of limit/)).toBeInTheDocument()
     })
 
     it('should render Memory usage when metrics available', () => {
       const props = {
         ...baseProps,
         metrics: [
-          { cpu: 0.5, cpuLimit: 1.0, memory: 512 * 1024 ** 3, memoryLimit: 1024 * 1024 ** 3 },
-          { cpu: 0.3, cpuLimit: 1.0, memory: 256 * 1024 ** 3, memoryLimit: 512 * 1024 ** 3 }
+          { cpu: 0.5, cpuLimits: 1.0, memory: 512 * 1024 ** 3, memoryLimits: 1024 * 1024 ** 3 },
+          { cpu: 0.3, cpuLimits: 1.0, memory: 256 * 1024 ** 3, memoryLimits: 512 * 1024 ** 3 }
         ]
       }
 
       render(<InfoPanel {...props} />)
 
       expect(screen.getByText('Flux Memory Usage')).toBeInTheDocument()
-      expect(screen.getByText(/768.00\/1536.00 GiB/)).toBeInTheDocument()
+      // 768 GiB of 1536 GiB limit: absolute value plus limit percentage.
+      expect(screen.getByText('768 GiB')).toBeInTheDocument()
+      expect(screen.getByText(/50% of limit/)).toBeInTheDocument()
     })
 
     it('should not render metrics section when metrics is empty', () => {
@@ -204,21 +208,21 @@ describe('InfoPanel', () => {
       const props = {
         ...baseProps,
         metrics: [
-          { cpu: 0.4, cpuLimit: 1.0, memory: 500 * 1024 ** 3, memoryLimit: 1000 * 1024 ** 3 }
+          { cpu: 0.4, cpuLimits: 1.0, memory: 500 * 1024 ** 3, memoryLimits: 1000 * 1024 ** 3 }
         ]
       }
 
       render(<InfoPanel {...props} />)
 
-      expect(screen.getByText(/40%/)).toBeInTheDocument() // CPU percentage
-      expect(screen.getByText(/50%/)).toBeInTheDocument() // Memory percentage
+      expect(screen.getByText(/40% of limit/)).toBeInTheDocument() // CPU percentage
+      expect(screen.getByText(/50% of limit/)).toBeInTheDocument() // Memory percentage
     })
 
     it('should use green progress bar for usage < 70%', () => {
       const props = {
         ...baseProps,
         metrics: [
-          { cpu: 0.5, cpuLimit: 1.0, memory: 500 * 1024 ** 3, memoryLimit: 1000 * 1024 ** 3 }
+          { cpu: 0.5, cpuLimits: 1.0, memory: 500 * 1024 ** 3, memoryLimits: 1000 * 1024 ** 3 }
         ]
       }
 
@@ -232,7 +236,7 @@ describe('InfoPanel', () => {
       const props = {
         ...baseProps,
         metrics: [
-          { cpu: 0.75, cpuLimit: 1.0, memory: 750 * 1024 ** 3, memoryLimit: 1000 * 1024 ** 3 }
+          { cpu: 0.75, cpuLimits: 1.0, memory: 750 * 1024 ** 3, memoryLimits: 1000 * 1024 ** 3 }
         ]
       }
 
@@ -246,7 +250,7 @@ describe('InfoPanel', () => {
       const props = {
         ...baseProps,
         metrics: [
-          { cpu: 0.9, cpuLimit: 1.0, memory: 900 * 1024 ** 3, memoryLimit: 1000 * 1024 ** 3 }
+          { cpu: 0.9, cpuLimits: 1.0, memory: 900 * 1024 ** 3, memoryLimits: 1000 * 1024 ** 3 }
         ]
       }
 
@@ -367,29 +371,32 @@ describe('InfoPanel', () => {
       const props = {
         ...baseProps,
         metrics: [
-          { cpu: null, cpuLimit: 1.0, memory: null, memoryLimit: 1000 * 1024 ** 3 }
+          { cpu: null, cpuLimits: 1.0, memory: null, memoryLimits: 1000 * 1024 ** 3 }
         ]
       }
 
       render(<InfoPanel {...props} />)
 
-      // Should render with 0 for missing values
+      // Should render with 0 for missing values on both rows.
       expect(screen.getByText('Flux CPU Usage')).toBeInTheDocument()
-      expect(screen.getByText(/0.00\/1.00 cores/)).toBeInTheDocument()
+      expect(screen.getByText('0m')).toBeInTheDocument()
+      expect(screen.getAllByText(/0% of limit/)).toHaveLength(2)
     })
 
-    it('should handle zero cpuLimit without division by zero', () => {
+    it('should show the absolute CPU value only when no limit is set', () => {
       const props = {
         ...baseProps,
         metrics: [
-          { cpu: 0.5, cpuLimit: 0, memory: 500 * 1024 ** 3, memoryLimit: 1000 * 1024 ** 3 }
+          { cpu: 0.5, cpuLimits: 0, memory: 500 * 1024 ** 3, memoryLimits: 1000 * 1024 ** 3 }
         ]
       }
 
       render(<InfoPanel {...props} />)
 
-      // Should show 0% when limit is 0 - check for the CPU usage specifically
-      expect(screen.getByText(/0\.50\/0\.00 cores \(0%\)/)).toBeInTheDocument()
+      // The CPU row shows the absolute value without a percentage.
+      expect(screen.getByText('500m')).toBeInTheDocument()
+      expect(screen.getByText(/50% of limit/)).toBeInTheDocument() // memory row only
+      expect(screen.queryByText(/of request/)).not.toBeInTheDocument()
     })
   })
 

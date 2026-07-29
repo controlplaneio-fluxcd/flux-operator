@@ -15,7 +15,8 @@
     "js-yaml": "^4.3.0",
     "preact": "^10.28.2",
     "preact-iso": "^2.11.1",
-    "prismjs": "^1.30.0"
+    "prismjs": "^1.30.0",
+    "uplot": "^1.6.32"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",

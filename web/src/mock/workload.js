@@ -11,6 +11,41 @@ const getTimestamp = (daysAgo, hoursAgo = 0, minutesAgo = 0, secondsAgo = 0) => 
   return time.toISOString()
 }
 
+/**
+ * Build a mock usage metrics object matching workloadInfo.metrics:
+ * ~30 one-minute samples with a gentle wave so the charts show a trend,
+ * plus the requests/limits sums (0 = unset, percentages omitted in the UI).
+ */
+const buildMockMetrics = ({ cpuBase, memBase, cpuRequests = 0, cpuLimits = 0, memoryRequests = 0, memoryLimits = 0 }) => {
+  const samples = []
+  for (let i = 29; i >= 0; i--) {
+    const t = new Date(now.getTime() - i * 60 * 1000).toISOString()
+    const cpu = Math.max(0.001, cpuBase * (1 + 0.25 * Math.sin((29 - i) / 4)))
+    const memory = Math.round(memBase * (1 + 0.08 * Math.sin((29 - i) / 6)))
+    samples.push({ t, cpu: Math.round(cpu * 1000) / 1000, memory })
+  }
+  return { samples, cpuRequests, cpuLimits, memoryRequests, memoryLimits }
+}
+
+/**
+ * Current usage of a pod (pod.metrics): the last sample of a mock series.
+ */
+const currentUsage = (metrics) => metrics.samples[metrics.samples.length - 1]
+
+// Usage series shared between workloadInfo.metrics and pod.metrics.
+// source-controller has requests and limits set (percentages shown, memory
+// limit close enough to the peak to draw the threshold line); metrics-server
+// has none (absolute values only, percentages omitted).
+const sourceControllerMetrics = buildMockMetrics({
+  cpuBase: 0.08,
+  memBase: 300 * 1024 * 1024,
+  cpuRequests: 0.1,
+  cpuLimits: 1,
+  memoryRequests: 256 * 1024 * 1024,
+  memoryLimits: 512 * 1024 * 1024
+})
+const metricsServerMetrics = buildMockMetrics({ cpuBase: 0.012, memBase: 48 * 1024 * 1024 })
+
 // Mock workload data
 // Pod statuses use Kubernetes pod phases: Pending, Running, Succeeded, Failed, Unknown
 const mockWorkloads = {
@@ -27,12 +62,14 @@ const mockWorkloads = {
       'ghcr.io/fluxcd/source-controller:v1.7.4@sha256:16f21ac1795528df80ddef51ccbb14a57b78ea26e66dc8551636ef9a3cec71b3'
     ],
     userActions: ['deletePods', 'logs'],
+    metrics: sourceControllerMetrics,
     pods: [
       {
         name: 'source-controller-5f76f5c549-wz2gk',
         status: 'Running',
         statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
         createdAt: getTimestamp(7, 2, 15), // 7 days, 2 hours, 15 minutes ago
+        metrics: currentUsage(sourceControllerMetrics),
         podStatus: {
           phase: 'Running',
           containerStatuses: [
@@ -316,12 +353,14 @@ const mockWorkloads = {
       'registry.k8s.io/metrics-server/metrics-server:v0.8.0'
     ],
     userActions: ['deletePods', 'logs'],
+    metrics: metricsServerMetrics,
     pods: [
       {
         name: 'metrics-server-57b56685f4-59gn2',
         status: 'Running',
         statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
-        createdAt: getTimestamp(14, 6, 30)
+        createdAt: getTimestamp(14, 6, 30),
+        metrics: currentUsage(metricsServerMetrics)
       }
     ]
   },
@@ -383,7 +422,10 @@ const mockWorkloads = {
         status: 'Running',
         statusMessage: 'Started at 2026-02-06 10:30:00 UTC',
         createdAt: getTimestamp(0, 0, 0, 10), // 10 seconds ago (recent, in progress)
-        createdBy: 'admin@example.com'
+        createdBy: 'admin@example.com',
+        // CronJobs report inline pod usage only, never workloadInfo.metrics
+        // (the charts panel is hidden for them).
+        metrics: currentUsage(buildMockMetrics({ cpuBase: 0.03, memBase: 24 * 1024 * 1024 }))
       }
     ]
   },
@@ -558,6 +600,7 @@ function buildWorkloadDetailResponse(workload, reconciler) {
       containerImages: workload.containerImages,
       userActions: workload.userActions,
       pods: workload.pods,
+      metrics: workload.metrics,
       reconciler: reconciler || undefined
     }
   }
