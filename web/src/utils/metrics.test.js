@@ -12,12 +12,16 @@ describe('formatCores', () => {
   it('formats sub-core values as millicores', () => {
     expect(formatCores(0.12)).toBe('120m')
     expect(formatCores(0.001)).toBe('1m')
-    expect(formatCores(0.9995)).toBe('1000m')
   })
 
   it('formats whole cores with decimals', () => {
     expect(formatCores(1.254)).toBe('1.25')
     expect(formatCores(12.34)).toBe('12.3')
+  })
+
+  it('formats values rounding up to a full core as cores', () => {
+    expect(formatCores(0.9995)).toBe('1.00')
+    expect(formatCores(0.9994)).toBe('999m')
   })
 
   it('handles zero and invalid input', () => {
@@ -213,13 +217,13 @@ describe('trimPodUsage', () => {
     expect(trimPodUsage(undefined)).toEqual([])
   })
 
-  it('keeps the extremes and collapses the middle into a range row', () => {
+  it('keeps the extremes and collapses the middle into an aggregate row', () => {
     const rows = trimPodUsage(measured(20))
     expect(rows).toHaveLength(7)
     // Top 4 by usage.
     expect(rows.slice(0, 4).map(r => r.name)).toEqual(['pod-0', 'pod-1', 'pod-2', 'pod-3'])
-    // The middle 14 pods collapse with their value range.
-    expect(rows[4]).toEqual({ type: 'elision', count: 14, min: 100 - 17, max: 100 - 4 })
+    // The middle 14 pods collapse with their value range and average.
+    expect(rows[4]).toEqual({ type: 'elision', count: 14, min: 100 - 17, max: 100 - 4, avg: 89.5 })
     // Bottom 2 stay visible (cold outliers).
     expect(rows.slice(5).map(r => r.name)).toEqual(['pod-18', 'pod-19'])
   })

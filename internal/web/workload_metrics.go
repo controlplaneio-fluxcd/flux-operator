@@ -16,24 +16,21 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/rest"
 	metricsv1beta1api "k8s.io/metrics/pkg/apis/metrics/v1beta1"
+	metricsclientset "k8s.io/metrics/pkg/client/clientset/versioned"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const (
 	// metricsWindow is the usage history span retained per container.
-	// The number of samples this amounts to depends on the configured
-	// scrape interval (30 samples at the default 60s).
 	metricsWindow = 30 * time.Minute
 
-	// metricsScrapeTimeout bounds a single Metrics API request so that a
-	// stalled aggregated API server cannot block the scrape loop or the
-	// synchronous initial scrape performed on handler startup.
+	// metricsScrapeTimeout bounds a single Metrics API request.
 	metricsScrapeTimeout = 30 * time.Second
 
 	// metricsCatchupInterval is the minimum time between off-schedule
-	// scrapes requested by the handlers when pods are missing from the
-	// buffer, bounding the extra Metrics API load during rollouts.
+	// scrapes requested via RequestScrape.
 	metricsCatchupInterval = 15 * time.Second
 )
 
@@ -52,15 +49,28 @@ type MetricsSample struct {
 // PodMetricsLister lists the current pod metrics cluster-wide.
 type PodMetricsLister func(ctx context.Context) (*metricsv1beta1api.PodMetricsList, error)
 
+// NewPodMetricsLister returns a PodMetricsLister that queries the Metrics
+// API cluster-wide with the given config. Protobuf encoding is requested
+// as it cuts the size and decode cost of the list compared to JSON.
+func NewPodMetricsLister(config *rest.Config) (PodMetricsLister, error) {
+	config = rest.CopyConfig(config)
+	config.ContentType = runtime.ContentTypeProtobuf
+	clientset, err := metricsclientset.NewForConfig(config)
+	if err != nil {
+		return nil, err
+	}
+	return func(ctx context.Context) (*metricsv1beta1api.PodMetricsList, error) {
+		return clientset.MetricsV1beta1().PodMetricses(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+	}, nil
+}
+
 // containerSeries holds the retained samples of a single container.
 type containerSeries struct {
 	samples []MetricsSample
 }
 
 // podSeries holds the retained samples of a pod's containers along with
-// the pod labels and the time the pod was last seen in a scrape. The
-// labels allow matching a workload's selector against pods that were
-// replaced by a rollout and no longer exist in the cluster.
+// the pod labels and the time the pod was last seen in a scrape.
 type podSeries struct {
 	containers map[string]*containerSeries
 	labels     map[string]string
@@ -69,20 +79,20 @@ type podSeries struct {
 
 // MetricsCollector maintains an in-memory ring buffer of CPU/Memory usage
 // samples for all pods in the cluster, populated by periodically querying
-// the Kubernetes Metrics API (metrics-server) with the privileged client.
-// The Metrics API only serves instantaneous values, so history must be
-// accumulated server-side. Lookups are pure in-memory reads and are safe
-// for concurrent use.
+// the Kubernetes Metrics API. Safe for concurrent use.
 type MetricsCollector struct {
-	lister     PodMetricsLister
-	interval   time.Duration
-	maxSamples int
-	retention  time.Duration
+	lister    PodMetricsLister
+	interval  time.Duration
+	retention time.Duration
 
-	mu        sync.RWMutex
-	ctx       context.Context
-	available bool
-	pods      map[string]*podSeries
+	mu   sync.RWMutex
+	ctx  context.Context
+	pods map[string]*podSeries
+
+	// lastSuccess is the time of the last successful scrape and failing
+	// tracks the failure state for transition logging.
+	lastSuccess time.Time
+	failing     bool
 
 	// lastScrape and catchup rate-limit the off-schedule scrapes
 	// requested via RequestScrape.
@@ -91,38 +101,30 @@ type MetricsCollector struct {
 }
 
 // NewMetricsCollector creates a MetricsCollector that scrapes pod metrics
-// using the given lister at the given interval. The retained sample count
-// is derived from the interval so the usage window stays ~30 minutes
-// regardless of the configured scrape cadence.
+// using the given lister at the given interval.
 func NewMetricsCollector(lister PodMetricsLister, interval time.Duration) *MetricsCollector {
 	return &MetricsCollector{
-		lister:   lister,
-		interval: interval,
-		// One extra sample so the retained span covers the full window:
-		// n samples are (n-1) intervals apart.
-		maxSamples: int(metricsWindow/interval) + 1,
-		// Keep evicting pods slightly later than the sample window so a
-		// single failed scrape does not drop otherwise fresh series.
+		lister:    lister,
+		interval:  interval,
 		retention: metricsWindow + 2*interval,
 		pods:      make(map[string]*podSeries),
 	}
 }
 
-// Start launches a background goroutine that scrapes immediately and then
-// at the collector's interval until the context is canceled. The initial
-// scrape runs on the goroutine so that a stalled Metrics API cannot delay
-// server startup or configuration reloads.
-// It returns a channel that is closed when the goroutine stops.
+// Start performs an initial synchronous scrape and then launches a
+// background goroutine that scrapes at the collector's interval until
+// the context is canceled. It returns a channel that is closed when the
+// goroutine stops.
 func (mc *MetricsCollector) Start(ctx context.Context) <-chan struct{} {
 	mc.mu.Lock()
 	mc.ctx = ctx
 	mc.mu.Unlock()
 
+	mc.scrape(ctx)
+
 	stopped := make(chan struct{})
 	go func() {
 		defer close(stopped)
-
-		mc.scrape(ctx)
 
 		ticker := time.NewTicker(mc.interval)
 		defer ticker.Stop()
@@ -140,32 +142,34 @@ func (mc *MetricsCollector) Start(ctx context.Context) <-chan struct{} {
 	return stopped
 }
 
-// Available reports whether the last scrape of the Metrics API succeeded.
-// It returns false when metrics-server is not installed, allowing the UI
-// to hide the metrics widgets.
+// Available reports whether the collector holds usable data: at least one
+// scrape of the Metrics API succeeded and the last success is recent.
+// Transient scrape failures do not hide the buffered history.
 func (mc *MetricsCollector) Available() bool {
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
-	return mc.available
+	return mc.availableLocked()
 }
 
-// RequestScrape triggers one off-schedule scrape on a new goroutine.
-// Handlers call it when a served workload has running pods without a
-// fresh usage sample — typical right after a rollout, when waiting for
-// the next scheduled scrape would leave the new pods without metrics
-// for up to a full interval. Requests are dropped while a catch-up is
-// in flight, within metricsCatchupInterval of the last scrape, or when
-// the Metrics API is unavailable, so an abusive client cannot amplify
-// the Metrics API load.
+// availableLocked implements Available; the caller must hold mc.mu.
+func (mc *MetricsCollector) availableLocked() bool {
+	return !mc.lastSuccess.IsZero() && time.Since(mc.lastSuccess) <= 3*mc.interval
+}
+
+// RequestScrape triggers one off-schedule scrape on a new goroutine,
+// used to pick up pods created after the last scheduled scrape.
+// Requests are dropped while a catch-up is in flight, within
+// metricsCatchupInterval of the last scrape, or when the Metrics API
+// is unavailable.
 func (mc *MetricsCollector) RequestScrape() {
 	mc.mu.Lock()
-	if mc.ctx == nil || !mc.available || mc.catchup ||
+	if mc.ctx == nil || !mc.availableLocked() || mc.catchup ||
 		time.Since(mc.lastScrape) < metricsCatchupInterval {
 		mc.mu.Unlock()
 		return
 	}
 	mc.catchup = true
-	ctx := mc.ctx
+	scrapeCtx := mc.ctx
 	mc.mu.Unlock()
 
 	go func() {
@@ -174,28 +178,32 @@ func (mc *MetricsCollector) RequestScrape() {
 			mc.catchup = false
 			mc.mu.Unlock()
 		}()
-		mc.scrape(ctx)
+		mc.scrape(scrapeCtx)
 	}()
 }
 
-// scrape queries the Metrics API and ingests the result. Failures mark the
-// collector unavailable until a subsequent scrape succeeds, which doubles
-// as feature detection for clusters without metrics-server.
+// scrape queries the Metrics API and ingests the result. Failures are
+// logged on the transition into the failing state, so a stalled or
+// missing Metrics API produces one diagnostic instead of one per tick.
 func (mc *MetricsCollector) scrape(ctx context.Context) {
 	mc.mu.Lock()
 	mc.lastScrape = time.Now()
 	mc.mu.Unlock()
 
-	ctx, cancel := context.WithTimeout(ctx, metricsScrapeTimeout)
+	scrapeCtx, cancel := context.WithTimeout(ctx, metricsScrapeTimeout)
 	defer cancel()
 
-	list, err := mc.lister(ctx)
+	list, err := mc.lister(scrapeCtx)
 	if err != nil {
+		// Stay silent only on shutdown, not on a scrape timeout.
+		if ctx.Err() != nil {
+			return
+		}
 		mc.mu.Lock()
-		wasAvailable := mc.available
-		mc.available = false
+		firstFailure := !mc.failing
+		mc.failing = true
 		mc.mu.Unlock()
-		if wasAvailable && ctx.Err() == nil {
+		if firstFailure {
 			log.FromContext(ctx).Error(err, "pod metrics collection failed, the Metrics API is unavailable")
 		}
 		return
@@ -205,25 +213,21 @@ func (mc *MetricsCollector) scrape(ctx context.Context) {
 
 // ingest appends one sample per container from the given list, trims each
 // series to the retention window and evicts pods missing from scrapes for
-// longer than the retention period.
-//
-// Samples are stamped with the scrape time rather than the per-pod
-// PodMetrics timestamp: a shared timestamp keeps the ticks of all pods
-// aligned so they can be summed per tick into workload-level series.
-// The Metrics API values may therefore be up to one metrics-server
-// resolution window older than the sample timestamp suggests.
+// longer than the retention period. Samples are stamped with the scrape
+// time rather than the per-pod PodMetrics timestamp, so the ticks of all
+// pods stay aligned and can be summed into workload-level series.
 func (mc *MetricsCollector) ingest(list *metricsv1beta1api.PodMetricsList, now time.Time) {
 	now = now.Truncate(time.Second)
 
-	// Samples older than the window are dropped even when the count-based
-	// trim retains them, so that a prolonged scrape outage cannot resurface
-	// hours-old data as part of a nominal 30-minute chart.
+	// Drop samples older than the window so a prolonged scrape outage
+	// cannot resurface stale data.
 	ageCutoff := now.Add(-(metricsWindow + mc.interval))
 
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
 
-	mc.available = true
+	mc.lastSuccess = now
+	mc.failing = false
 
 	for _, item := range list.Items {
 		key := podKey(item.Namespace, item.Name)
@@ -240,8 +244,7 @@ func (mc *MetricsCollector) ingest(list *metricsv1beta1api.PodMetricsList, now t
 			memQuantity := container.Usage[corev1.ResourceMemory]
 			sample := MetricsSample{
 				Time: now,
-				// AsApproximateFloat64 preserves sub-millicore usage,
-				// which MilliValue would round up to a full millicore.
+				// AsApproximateFloat64 preserves sub-millicore usage.
 				CPU:    cpuQuantity.AsApproximateFloat64(),
 				Memory: memQuantity.Value(),
 			}
@@ -251,16 +254,12 @@ func (mc *MetricsCollector) ingest(list *metricsv1beta1api.PodMetricsList, now t
 				cs = &containerSeries{}
 				ps.containers[container.Name] = cs
 			}
-			// Concurrent scrapes (a catch-up overlapping the ticker) can
-			// land within the same truncated second; keeping one sample
-			// per tick prevents the aggregation from double-counting.
+			// Overlapping scrapes can land within the same truncated
+			// second; keep one sample per tick.
 			if n := len(cs.samples); n > 0 && !cs.samples[n-1].Time.Before(sample.Time) {
 				cs.samples[n-1] = sample
 			} else {
 				cs.samples = append(cs.samples, sample)
-			}
-			if len(cs.samples) > mc.maxSamples {
-				cs.samples = cs.samples[len(cs.samples)-mc.maxSamples:]
 			}
 			for len(cs.samples) > 0 && cs.samples[0].Time.Before(ageCutoff) {
 				cs.samples = cs.samples[1:]
@@ -307,16 +306,9 @@ func (mc *MetricsCollector) PodSeries(namespace, name string) []MetricsSample {
 
 // WorkloadSeries returns the usage series of the given pods summed per
 // scrape timestamp. When a selector is provided, buffered pods in the
-// namespace whose labels match it are included as well: pods replaced by
-// a rollout keep matching their workload's selector, which preserves the
-// chart history across restarts even though the pod names have changed.
-// This relies on the Kubernetes convention that selectors of workloads
-// in the same namespace do not overlap; pods of a sibling workload with
-// an overlapping selector would be aggregated into the series.
-// All pod series are read under a single lock so the aggregate reflects
-// one collector generation, and the merged series is trimmed to the
-// newest maxSamples ticks so retained history of completed pods cannot
-// stretch the window beyond its intended span.
+// namespace whose labels match it are included as well, preserving the
+// chart history across rollouts. The merged series is trimmed to the
+// window span ending at the newest sample.
 func (mc *MetricsCollector) WorkloadSeries(namespace string, names []string, selector labels.Selector) []MetricsSample {
 	keys := make(map[string]bool, len(names))
 	for _, name := range names {
@@ -344,10 +336,31 @@ func (mc *MetricsCollector) WorkloadSeries(namespace string, names []string, sel
 	sum := sumSeries(seriesList...)
 	mc.mu.RUnlock()
 
-	if len(sum) > mc.maxSamples {
-		sum = sum[len(sum)-mc.maxSamples:]
+	if n := len(sum); n > 0 {
+		cutoff := sum[n-1].Time.Add(-metricsWindow)
+		i := 0
+		for i < n && sum[i].Time.Before(cutoff) {
+			i++
+		}
+		sum = sum[i:]
 	}
 	return sum
+}
+
+// LabeledPods returns the names of the buffered pods in the namespace
+// whose labels match the selector.
+func (mc *MetricsCollector) LabeledPods(namespace string, selector labels.Selector) []string {
+	prefix := namespace + "/"
+	mc.mu.RLock()
+	defer mc.mu.RUnlock()
+
+	var names []string
+	for key, ps := range mc.pods {
+		if strings.HasPrefix(key, prefix) && selector.Matches(labels.Set(ps.labels)) {
+			names = append(names, strings.TrimPrefix(key, prefix))
+		}
+	}
+	return names
 }
 
 // sumSeries merges multiple sample series into one by summing
@@ -401,8 +414,7 @@ func workloadPodSelector(obj *unstructured.Unstructured) labels.Selector {
 }
 
 // currentPodMetrics returns the latest usage sample of a pod when it is
-// recent enough to describe the pod's present state, guarding against
-// stale samples retained for pods that have completed or restarted.
+// recent enough to describe the pod's present state.
 func (h *Handler) currentPodMetrics(namespace, name string) *MetricsSample {
 	if h.metrics == nil || !h.metrics.Available() {
 		return nil
@@ -415,8 +427,7 @@ func (h *Handler) currentPodMetrics(namespace, name string) *MetricsSample {
 }
 
 // sumPodResources sums the CPU/Memory requests and limits of the pod
-// containers, including sidecar init containers as they consume
-// resources for the pod's whole lifetime.
+// containers, including sidecar init containers.
 func sumPodResources(pod *corev1.Pod) podResources {
 	var res podResources
 
@@ -447,19 +458,14 @@ func sumPodResources(pod *corev1.Pod) podResources {
 }
 
 // buildWorkloadMetrics computes the aggregated usage of a workload from
-// the retained series of its pods. The samples include the history of
-// completed and recently replaced pods (matched by the workload selector),
-// while the requests/limits are summed over the running pods only, as
-// they describe the present resource reservation. It returns nil when
-// no samples have been collected for the given pods.
+// the retained series of its pods, with the requests/limits summed over
+// the running pods only. It returns nil when no samples have been
+// collected for the given pods.
 func (h *Handler) buildWorkloadMetrics(obj *unstructured.Unstructured, pods []WorkloadPodStatus) *WorkloadMetrics {
 	if h.metrics == nil || !h.metrics.Available() {
 		return nil
 	}
 
-	// The workload pod selector preserves the chart history across
-	// rollouts (CronJobs have none; their completed pods are already
-	// part of the pod list).
 	selector := workloadPodSelector(obj)
 
 	names := make([]string, 0, len(pods))

@@ -172,13 +172,23 @@
     background-color: #0d9488;
   }
 
-  /* Neutral track for pods without a usage sample yet (value N/A). */
+  /* Neutral track for pods without a usage sample yet (value N/A)
+     and for the collapsed "+N pods" row. */
   .usage-bar-track-na {
     background-color: rgba(107, 114, 128, 0.15);
   }
 
   .dark .usage-bar-track-na {
     background-color: rgba(156, 163, 175, 0.15);
+  }
+
+  /* Muted fill for the collapsed "+N pods" row, drawn at the average. */
+  .usage-bar-fill-na {
+    background-color: #9ca3af;
+  }
+
+  .dark .usage-bar-fill-na {
+    background-color: #6b7280;
   }
 
   /* One-shot glow for the latest log line; color comes from --glow-color,

@@ -17,6 +17,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -210,8 +211,7 @@ func (h *Handler) buildReport(ctx context.Context) (*unstructured.Unstructured, 
 	}
 	report := &unstructured.Unstructured{Object: rawMap}
 
-	// Enrich the report with the Flux controllers usage read from the pod
-	// metrics collector (absent when collection is disabled or unavailable).
+	// Enrich the report with the Flux controllers usage.
 	if metrics := h.controllerMetrics(ctx); len(metrics) > 0 {
 		if spec, found := report.Object["spec"].(map[string]any); found {
 			spec["metrics"] = metrics
@@ -248,41 +248,62 @@ type ControllerMetrics struct {
 
 // controllerMetrics returns the current usage of the Flux controller pods
 // in the operator namespace, read from the pod metrics collector with the
-// requests/limits taken from the pod specs. We use the privileged client
-// as controller health is a cluster-wide concern surfaced to all users
-// regardless of their namespace access. Returns nil when pod metrics
-// collection is disabled or the Metrics API is unavailable.
+// requests/limits taken from the pod specs. When the pod list fails, the
+// usage of the buffered controller pods is returned without the
+// requests/limits. Returns nil when pod metrics collection is disabled
+// or the Metrics API is unavailable.
 func (h *Handler) controllerMetrics(ctx context.Context) []ControllerMetrics {
 	if h.metrics == nil || !h.metrics.Available() {
 		return nil
 	}
 
+	fluxSelector := labels.Set{"app.kubernetes.io/part-of": "flux"}
+
+	var result []ControllerMetrics
 	var podList corev1.PodList
 	if err := h.kubeClient.GetClient(ctx, kubeclient.WithPrivileges()).List(ctx, &podList,
 		client.InNamespace(h.namespace),
-		client.MatchingLabels{"app.kubernetes.io/part-of": "flux"}); err != nil {
+		client.MatchingLabelsSelector{Selector: fluxSelector.AsSelector()}); err != nil {
 		log.FromContext(ctx).Error(err, "failed to list Flux controller pods for metrics")
-		return nil
-	}
-
-	result := make([]ControllerMetrics, 0, len(podList.Items))
-	for i := range podList.Items {
-		pod := &podList.Items[i]
-		latest := h.currentPodMetrics(pod.Namespace, pod.Name)
-		if latest == nil {
-			continue
+		for _, name := range h.metrics.LabeledPods(h.namespace, fluxSelector.AsSelector()) {
+			if latest := h.currentPodMetrics(h.namespace, name); latest != nil {
+				result = append(result, ControllerMetrics{
+					Pod:       name,
+					Namespace: h.namespace,
+					CPU:       latest.CPU,
+					Memory:    latest.Memory,
+				})
+			}
 		}
-		res := sumPodResources(pod)
-		result = append(result, ControllerMetrics{
-			Pod:            pod.Name,
-			Namespace:      pod.Namespace,
-			CPU:            latest.CPU,
-			Memory:         latest.Memory,
-			CPURequests:    res.cpuRequests,
-			CPULimits:      res.cpuLimits,
-			MemoryRequests: res.memoryRequests,
-			MemoryLimits:   res.memoryLimits,
-		})
+	} else {
+		missing := false
+		for i := range podList.Items {
+			pod := &podList.Items[i]
+			if pod.Status.Phase != corev1.PodRunning {
+				continue
+			}
+			latest := h.currentPodMetrics(pod.Namespace, pod.Name)
+			if latest == nil {
+				missing = true
+				continue
+			}
+			res := sumPodResources(pod)
+			result = append(result, ControllerMetrics{
+				Pod:            pod.Name,
+				Namespace:      pod.Namespace,
+				CPU:            latest.CPU,
+				Memory:         latest.Memory,
+				CPURequests:    res.cpuRequests,
+				CPULimits:      res.cpuLimits,
+				MemoryRequests: res.memoryRequests,
+				MemoryLimits:   res.memoryLimits,
+			})
+		}
+		// Freshly rolled-out pods have no usage sample yet: request a
+		// catch-up scrape so the next report refresh picks them up.
+		if missing {
+			h.metrics.RequestScrape()
+		}
 	}
 
 	slices.SortFunc(result, func(a, b ControllerMetrics) int {

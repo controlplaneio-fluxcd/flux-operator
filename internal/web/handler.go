@@ -10,12 +10,8 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
-	metricsv1beta1api "k8s.io/metrics/pkg/apis/metrics/v1beta1"
-	metricsclientset "k8s.io/metrics/pkg/client/clientset/versioned"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
@@ -52,9 +48,11 @@ type Handler struct {
 // the report periodically. They run until the context
 // is canceled. The returned channel is closed when all
 // the goroutines have stopped.
+// The metrics collector is owned by the caller and may be nil
+// when pod metrics collection is disabled.
 func NewHandler(ctx context.Context, conf *fluxcdv1.WebConfigSpec, spaHandler http.Handler, kubeClient *kubeclient.Client,
-	version, statusManager, namespace string, reportInterval time.Duration, eventRecorder record.EventRecorder,
-	authMiddleware func(http.Handler) http.Handler, l logr.Logger) (http.Handler, <-chan struct{}) {
+	metrics *MetricsCollector, version, statusManager, namespace string, reportInterval time.Duration,
+	eventRecorder record.EventRecorder, authMiddleware func(http.Handler) http.Handler, l logr.Logger) (http.Handler, <-chan struct{}) {
 
 	// Build the Handler struct.
 	h := &Handler{
@@ -66,30 +64,7 @@ func NewHandler(ctx context.Context, conf *fluxcdv1.WebConfigSpec, spaHandler ht
 		namespace:     namespace,
 		searchIndex:   &SearchIndex{},
 		workloadIndex: &WorkloadIndex{},
-	}
-
-	// The pod metrics are read with the privileged client as they contain
-	// no sensitive information, following the same reasoning as the Flux
-	// controller metrics in the report. Access remains bounded because the
-	// workload endpoint fetches the workload with the user's client before
-	// attaching any metrics. When collection is disabled in the config,
-	// the collector stays nil and all enrichment paths are skipped.
-	if conf.MetricsEnabled() {
-		// Request protobuf encoding: the cluster-wide list is large on
-		// big clusters and protobuf cuts both the response size and the
-		// decode allocations several-fold compared to JSON. GetConfig
-		// returns a copy, so the mutation does not leak elsewhere. The
-		// clientset is created once so its transport is reused across
-		// scrapes.
-		config := kubeClient.GetConfig(ctx, kubeclient.WithPrivileges())
-		config.ContentType = runtime.ContentTypeProtobuf
-		if clientset, err := metricsclientset.NewForConfig(config); err != nil {
-			l.Error(err, "pod metrics collection disabled, failed to create metrics client")
-		} else {
-			h.metrics = NewMetricsCollector(func(ctx context.Context) (*metricsv1beta1api.PodMetricsList, error) {
-				return clientset.MetricsV1beta1().PodMetricses(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
-			}, conf.MetricsScrapeInterval())
-		}
+		metrics:       metrics,
 	}
 
 	// Create HTTP request multiplexer.
@@ -123,18 +98,8 @@ func NewHandler(ctx context.Context, conf *fluxcdv1.WebConfigSpec, spaHandler ht
 		GzipMiddleware(CacheControlMiddleware(MaxBodySizeMiddleware(1<<20)(
 			CrossOriginMiddleware(authMiddleware(mux)))))))
 
-	// Start the background goroutines and merge their stop channels.
-	reportStopped := h.startReportCache(ctx, reportInterval)
-	if h.metrics == nil {
-		return handler, reportStopped
-	}
-	metricsStopped := h.metrics.Start(ctx)
-	stopped := make(chan struct{})
-	go func() {
-		defer close(stopped)
-		<-reportStopped
-		<-metricsStopped
-	}()
+	// The report cache is the only goroutine.
+	stopped := h.startReportCache(ctx, reportInterval)
 
 	return handler, stopped
 }

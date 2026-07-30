@@ -6,11 +6,9 @@ import uPlot from 'uplot'
 import 'uplot/dist/uPlot.min.css'
 import { appliedTheme } from '../../../utils/theme'
 
-// Chart heights in CSS pixels.
+// Chart height in CSS pixels.
 const CHART_HEIGHT = 180
 
-// Theme parameters validated with the palette checks against the
-// card surfaces (white and gray-800).
 const CHART_THEMES = {
   light: {
     axis: '#6B7280',
@@ -28,7 +26,7 @@ const CHART_THEMES = {
   },
 }
 
-// Series colors per theme (validated: light #0066CC/#0D9488, dark #3B82F6/#0D9488).
+// Series colors per theme.
 export const CHART_COLORS = {
   cpu: {
     light: { stroke: '#0066CC', fill: 'rgba(0, 102, 204, 0.12)' },
@@ -56,10 +54,8 @@ function formatTime(ts) {
  * @param {string} props.colorKey - "cpu" or "memory", selects the series color
  * @param {Function} props.formatValue - Value formatter for ticks and tooltip
  * @param {Array<number>} [props.tickIncrs] - Optional y-axis tick increments
- *   (e.g. powers of two for byte values)
- * @param {{time: number, label: string}} [props.annotation] - Optional
- *   event marked with a dashed vertical line at the given epoch seconds
- *   and named in the tooltip, e.g. {time, label: 'rolled out'}
+ * @param {{time: number, label: string}} [props.annotation] - Optional event
+ *   marked with a dashed vertical line and named in the tooltip
  * @param {string} props.testId - data-testid for the chart container
  */
 export function UsageChart({ data, hasLimit, colorKey, formatValue, tickIncrs, annotation, testId }) {
@@ -121,11 +117,9 @@ export function UsageChart({ data, hasLimit, colorKey, formatValue, tickIncrs, a
           font: axisFont,
           grid: { show: false },
           ticks: { show: false },
-          // Single-line HH:MM labels; uPlot's default time formatter adds a
-          // second line with the date, which is noise for a ~30 min window.
+          // Single-line HH:MM labels without uPlot's default date line.
           values: (u, vals) => vals.map(ts => formatTime(ts)),
-          // Samples are one minute apart, so sub-minute ticks would render
-          // duplicate HH:MM labels on short series.
+          // Minute-aligned ticks so short series don't repeat HH:MM labels.
           incrs: [60, 120, 300, 600, 900, 1800, 3600],
         },
         {
@@ -165,10 +159,7 @@ export function UsageChart({ data, hasLimit, colorKey, formatValue, tickIncrs, a
               limitEl.textContent = `limit ${formatValue(limitValue)}`
               tooltip.append(limitEl)
             }
-            // Name the annotation line when hovering the sample closest
-            // to it. The nearest sample is found by scanning: failed
-            // scrapes leave irregular gaps, so a fixed-gap heuristic
-            // would attribute the event to the wrong sample.
+            // Name the annotation line when hovering the sample closest to it.
             if (annotation != null) {
               let nearest = 0
               for (let i = 1; i < u.data[0].length; i++) {
@@ -194,8 +185,7 @@ export function UsageChart({ data, hasLimit, colorKey, formatValue, tickIncrs, a
             tooltip.style.top = '4px'
           },
         ],
-        // Mark the annotated event (e.g. a rollout) with a dashed
-        // vertical line across the plot area.
+        // Mark the annotated event with a dashed vertical line.
         ...(annotation != null
           ? {
             draw: [

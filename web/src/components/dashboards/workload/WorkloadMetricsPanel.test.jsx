@@ -137,8 +137,33 @@ describe('WorkloadMetricsPanel component', () => {
     expect(cpuRows[4]).toHaveTextContent('app-18')
     expect(cpuRows[5]).toHaveTextContent('app-19')
 
-    // The middle collapses into a count + range row.
-    expect(screen.getByTestId('cpu-pod-bars-elision')).toHaveTextContent('… 14 pods, 83m – 96m')
+    // The middle collapses into an aggregate row: count label, muted bar
+    // and average value, with the range in the tooltip.
+    const elision = screen.getByTestId('cpu-pod-bars-elision')
+    expect(elision).toHaveTextContent('+14 pods')
+    expect(elision).toHaveTextContent('90m')
+    expect(elision).toHaveAttribute('title', '14 pods, 83m – 96m')
+    expect(elision.querySelector('.usage-bar-fill-na')).not.toBeNull()
+  })
+
+  it('collapses the elision tooltip range when the endpoints format equal', () => {
+    const pods = [
+      ...Array.from({ length: 4 }, (_, i) => ({
+        name: `hot-${i}`,
+        metrics: { cpu: 0.5 - i / 100, memory: 1024 },
+      })),
+      ...Array.from({ length: 4 }, (_, i) => ({
+        name: `mid-${i}`,
+        metrics: { cpu: 0.1, memory: 1024 },
+      })),
+      ...Array.from({ length: 2 }, (_, i) => ({
+        name: `cold-${i}`,
+        metrics: { cpu: 0.01, memory: 1024 },
+      })),
+    ]
+    render(<WorkloadMetricsPanel metrics={buildMetrics(10)} pods={pods} />)
+
+    expect(screen.getByTestId('cpu-pod-bars-elision')).toHaveAttribute('title', '4 pods, 100m each')
   })
 
   it('collapses many sampleless pods into a collecting row', () => {

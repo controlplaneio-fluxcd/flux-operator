@@ -126,11 +126,8 @@ type WorkloadStatus struct {
 	RestartedAt string `json:"restartedAt,omitempty"`
 
 	// RolledOutAt is the timestamp marking the start of the workload's
-	// current generation, regardless of what triggered it (version
-	// change, spec change or rollout restart). Derived from the newest
-	// ReplicaSet for Deployments and the newest ControllerRevision for
-	// StatefulSets and DaemonSets. Only populated for the workload
-	// detail endpoint.
+	// current generation, derived from the newest ReplicaSet or
+	// ControllerRevision. Only populated for the workload detail endpoint.
 	RolledOutAt string `json:"rolledOutAt,omitempty"`
 
 	// ContainerImages is the list of container images used by the workload.
@@ -175,10 +172,9 @@ type WorkloadPodStatus struct {
 	// the pod spec, used to compute the workload-level metrics.
 	resources podResources
 
-	// revisionRef names the generation object the pod belongs to:
-	// the owning ReplicaSet for Deployment pods and the ControllerRevision
-	// derived from the controller-revision-hash label for StatefulSet and
-	// DaemonSet pods. Used to resolve the workload's rollout time.
+	// revisionRef names the generation object the pod belongs to
+	// (ReplicaSet or ControllerRevision), used to resolve the
+	// workload's rollout time.
 	revisionRef string
 }
 
@@ -268,8 +264,6 @@ func (h *Handler) GetWorkloadStatus(ctx context.Context, kind, name, namespace s
 			return nil, fmt.Errorf("failed to get pods for workload %s/%s: %w", namespace, name, err)
 		}
 		workload.Pods = podsStatus
-
-		// Determine when the current workload generation was rolled out.
 		workload.RolledOutAt = h.getRolledOutAt(ctx, obj, workload.Pods)
 
 		// Check which actions the user can perform on this workload
@@ -368,10 +362,8 @@ func (h *Handler) GetWorkloadDetails(ctx context.Context, kind, name, namespace 
 		workloadInfo["rolledOutAt"] = ws.RolledOutAt
 	}
 
-	// Nudge the metrics collector when running pods have no usage sample
-	// yet — typical right after a rollout, when waiting for the next
-	// scheduled scrape would leave the replacement pods without metrics
-	// for up to a full scrape interval.
+	// Request an off-schedule scrape when running pods have no usage
+	// sample yet (typical right after a rollout).
 	if h.metrics != nil {
 		for _, pod := range ws.Pods {
 			if pod.Status == string(corev1.PodRunning) && pod.Metrics == nil {
@@ -411,7 +403,6 @@ func (h *Handler) GetWorkloadDetails(ctx context.Context, kind, name, namespace 
 		workloadInfo["userActions"] = ws.UserActions
 	}
 
-	// Attach the workload usage metrics when the Metrics API is available.
 	if wm := h.buildWorkloadMetrics(obj, ws.Pods); wm != nil {
 		workloadInfo["metrics"] = wm
 	}
@@ -437,8 +428,7 @@ func (h *Handler) GetWorkloadPods(ctx context.Context, obj *unstructured.Unstruc
 		return h.getCronJobPods(ctx, obj, detailed)
 	}
 
-	// Match pods on the full workload selector (matchLabels and
-	// matchExpressions), so expression-only selectors are supported.
+	// Match pods on the full workload selector (matchLabels and matchExpressions).
 	selector := workloadPodSelector(obj)
 	if selector == nil || selector.Empty() {
 		return nil, nil
@@ -471,8 +461,7 @@ func (h *Handler) GetWorkloadPods(ctx context.Context, obj *unstructured.Unstruc
 		if !isManaged {
 			continue
 		}
-		// DaemonSet pods carry the hash of their generation's
-		// ControllerRevision, which is named <workload>-<hash>.
+		// DaemonSet ControllerRevisions are named <workload>-<hash>.
 		if obj.GetKind() == workloadKindDaemonSet {
 			if hash := pod.Labels["controller-revision-hash"]; hash != "" {
 				revisionRef = obj.GetName() + "-" + hash
@@ -493,7 +482,10 @@ func (h *Handler) GetWorkloadPods(ctx context.Context, obj *unstructured.Unstruc
 		}
 		if detailed {
 			ps.PodStatus = &pod.Status
-			ps.Metrics = h.currentPodMetrics(pod.GetNamespace(), pod.GetName())
+			// Terminated pods consume no resources: no current usage.
+			if pod.Status.Phase == corev1.PodRunning {
+				ps.Metrics = h.currentPodMetrics(pod.GetNamespace(), pod.GetName())
+			}
 		}
 		podsStatus = append(podsStatus, ps)
 	}
@@ -565,7 +557,10 @@ func (h *Handler) getCronJobPods(ctx context.Context, cronJob *unstructured.Unst
 		}
 		if detailed {
 			ps.PodStatus = &pod.Status
-			ps.Metrics = h.currentPodMetrics(pod.GetNamespace(), pod.GetName())
+			// Terminated pods consume no resources: no current usage.
+			if pod.Status.Phase == corev1.PodRunning {
+				ps.Metrics = h.currentPodMetrics(pod.GetNamespace(), pod.GetName())
+			}
 		}
 		podsStatus = append(podsStatus, ps)
 	}
@@ -640,31 +635,18 @@ func extractRestartedAt(obj *unstructured.Unstructured) string {
 
 // getRolledOutAt returns the RFC 3339 creation time of the workload's
 // current generation: the newest ReplicaSet for Deployments and the
-// newest ControllerRevision for StatefulSets and DaemonSets. This marks
-// the last rollout regardless of its trigger, covering version changes
-// as well as rollout restarts.
-//
-// The generation objects are resolved from data already in hand — the
-// StatefulSet status names its revision, and the pods listed for the
-// workload name their ReplicaSet (owner reference) or ControllerRevision
-// (controller-revision-hash label) — so only one or two targeted
-// metadata-only reads are needed, mid-rollout at most one per active
-// generation. The reads bypass the cache (no informers are started) and
-// use the privileged reader: the user already has read access to the
-// workload, and its generation timestamps carry no sensitive data.
-// Returns an empty string when the generation cannot be determined.
-//
-// Known limitation: a rollback that reactivates an earlier generation
-// object reports that object's original creation time, as Kubernetes
-// keeps no timestamp for the reactivation itself.
+// newest ControllerRevision for StatefulSets and DaemonSets. The
+// generation objects are resolved from the workload status and pod
+// references, then fetched with metadata-only reads using the
+// privileged reader. Returns an empty string when the generation
+// cannot be determined. Note that a rollback reactivating an earlier
+// generation object reports that object's original creation time.
 func (h *Handler) getRolledOutAt(ctx context.Context, obj *unstructured.Unstructured, pods []WorkloadPodStatus) string {
 	reader := h.kubeClient.GetAPIReader(ctx, kubeclient.WithPrivileges())
 	namespace := obj.GetNamespace()
 
 	// getRevisionMetadata fetches the metadata of a single generation
-	// object by name (ReplicaSet or ControllerRevision). Only objects
-	// owned by the workload are eligible, so references forged on pod
-	// specs cannot probe sibling objects through the privileged reader.
+	// object by name, accepting only objects owned by the workload.
 	getRevisionMetadata := func(kind, name string) *metav1.PartialObjectMetadata {
 		rev := &metav1.PartialObjectMetadata{}
 		rev.SetGroupVersionKind(schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: kind})
@@ -680,10 +662,7 @@ func (h *Handler) getRolledOutAt(ctx context.Context, obj *unstructured.Unstruct
 	}
 
 	// revisionRefs returns the distinct generation object names of the
-	// workload pods: one name in steady state, one per active generation
-	// during a rollout. The count is capped well above what any real
-	// rollout produces, bounding the privileged reads a single request
-	// can trigger through crafted pod references.
+	// workload pods, capped to bound the privileged reads per request.
 	const maxRevisionRefs = 5
 	revisionRefs := func() []string {
 		var refs []string
@@ -702,7 +681,7 @@ func (h *Handler) getRolledOutAt(ctx context.Context, obj *unstructured.Unstruct
 	switch obj.GetKind() {
 	case workloadKindDeployment:
 		// The newest generation is the ReplicaSet with the highest
-		// deployment revision, stamped by the Deployment controller.
+		// deployment revision.
 		var newest *metav1.PartialObjectMetadata
 		var newestRevision int64 = -1
 		for _, name := range revisionRefs() {
@@ -736,8 +715,7 @@ func (h *Handler) getRolledOutAt(ctx context.Context, obj *unstructured.Unstruct
 		return cr.CreationTimestamp.UTC().Format(time.RFC3339)
 
 	case workloadKindDaemonSet:
-		// DaemonSets do not name their revision in the status; the
-		// newest ControllerRevision of the pods marks the current
+		// The newest ControllerRevision of the pods marks the current
 		// generation.
 		var newest *metav1.PartialObjectMetadata
 		for _, name := range revisionRefs() {

@@ -11,9 +11,12 @@
  * @returns {string} - Formatted value, e.g. "120m" or "1.25"
  */
 export function formatCores(cores) {
-  if (typeof cores !== 'number' || !isFinite(cores) || cores < 0) return '0m'
-  if (cores === 0) return '0m'
-  if (cores < 1) return `${Math.round(cores * 1000)}m`
+  if (typeof cores !== 'number' || !isFinite(cores) || cores <= 0) return '0m'
+  if (cores < 1) {
+    const millicores = Math.round(cores * 1000)
+    // Values rounding up to a full core fall through to the cores format.
+    if (millicores < 1000) return `${millicores}m`
+  }
   return cores >= 10 ? cores.toFixed(1) : cores.toFixed(2)
 }
 
@@ -37,8 +40,7 @@ export function formatBytes(bytes) {
 
 /**
  * Compute the percentage of a usage value relative to a denominator.
- * Returns null when the denominator is not set (zero), as inventing a
- * denominator would be misleading — the caller must omit the percentage.
+ * Returns null when the denominator is not set (zero).
  * @param {number} value - Usage value
  * @param {number} denominator - Requests or limits value, 0 when unset
  * @returns {number|null} - Rounded percentage or null
@@ -50,8 +52,8 @@ export function percentOf(value, denominator) {
 
 /**
  * Build the secondary percentage text for a usage value, e.g.
- * "12% of request · 6% of limit". Fragments with an unset denominator
- * are omitted; returns null when neither requests nor limits are set.
+ * "12% of request · 6% of limit". Returns null when neither
+ * requests nor limits are set.
  * @param {number} value - Current usage value
  * @param {number} requests - Requests sum, 0 when unset
  * @param {number} limits - Limits sum, 0 when unset
@@ -70,9 +72,8 @@ export function percentText(value, requests, limits) {
  * Convert metrics samples into uPlot aligned data for one value field.
  * @param {Array<{t: string, cpu: number, memory: number}>} samples - API samples
  * @param {string} field - "cpu" or "memory"
- * @param {number} limit - Limits sum, drawn as a threshold series when it
- *   is set and no further than 2x away from the peak usage (otherwise a
- *   far-off limit would flatten the usage curve)
+ * @param {number} limit - Limits sum, drawn as a threshold series when set
+ *   and within 2x of the peak usage
  * @returns {{data: Array<Array<number>>, hasLimit: boolean}} - uPlot aligned
  *   data: [timestamps (seconds), usage values, threshold values?]
  */
@@ -99,7 +100,7 @@ export function buildChartData(samples, field, limit) {
 
 /**
  * Tick increments for byte-valued chart axes: powers of two so the
- * y-axis lands on round binary values (128 MiB, 256 MiB, ...).
+ * y-axis lands on round binary values.
  */
 export const BINARY_TICK_INCRS = Array.from({ length: 44 }, (_, i) => 2 ** i)
 
@@ -115,8 +116,8 @@ export function latestSample(metrics) {
 }
 
 /**
- * Report whether the workload metrics carry enough samples to chart.
- * A single point cannot show a trend, so the charts require at least two.
+ * Report whether the workload metrics carry enough samples to chart
+ * (at least two).
  * @param {{samples?: Array}} metrics - workloadInfo.metrics object
  * @returns {boolean} - True when the metrics are chartable
  */
@@ -126,10 +127,8 @@ export function hasChartableMetrics(metrics) {
 
 /**
  * Build the per-pod usage list for one value field, sorted by usage
- * descending so replica skew is visible at a glance. Pods without a
- * current usage sample (typical right after a rollout, before the next
- * metrics scrape) are kept with a null value and sorted last, so a pod
- * never silently disappears from the usage view.
+ * descending. Pods without a current usage sample are kept with a
+ * null value and sorted last.
  * @param {Array<{name: string, metrics?: Object}>} pods - workloadInfo.pods
  * @param {string} field - "cpu" or "memory"
  * @returns {Array<{name: string, value: number|null}>} - Sorted usage list
@@ -152,9 +151,7 @@ export function podUsageSeries(pods, field) {
   })
 }
 
-// Row budget of the per-pod usage bars: workloads with more pods are
-// trimmed to the diagnostic extremes (hottest and coldest) with the
-// uninformative middle collapsed into a count + range row.
+// Row budget of the per-pod usage bars.
 const POD_BARS_BUDGET = 9
 const POD_BARS_TOP = 4
 const POD_BARS_BOTTOM = 2
@@ -162,16 +159,13 @@ const POD_BARS_NA_MAX = 2
 
 /**
  * Trim a per-pod usage list (podUsageSeries output) to a fixed row
- * budget. Workloads within the budget pass through unchanged. Larger
- * workloads keep the top and bottom pods by usage — the outliers carry
- * the signal — while the middle collapses into one row stating its
- * count and value range, so nothing is hidden silently. Pods without a
- * usage sample are kept individually up to a small count and collapse
- * into a single "collecting" row beyond it (mass rollouts).
+ * budget: the top and bottom pods by usage stay visible, the middle
+ * collapses into a single aggregate row, and sampleless pods beyond a
+ * small count collapse into a single "collecting" row.
  * @param {Array<{name: string, value: number|null}>} items - Sorted
  *   per-pod usage from podUsageSeries
  * @returns {Array<Object>} - Display rows: {type: 'pod', name, value},
- *   {type: 'elision', count, min, max} or {type: 'collecting', count}
+ *   {type: 'elision', count, min, max, avg} or {type: 'collecting', count}
  */
 export function trimPodUsage(items) {
   const list = items || []
@@ -199,6 +193,7 @@ export function trimPodUsage(items) {
       count: middle.length,
       min: middle[middle.length - 1].value,
       max: middle[0].value,
+      avg: middle.reduce((acc, item) => acc + item.value, 0) / middle.length,
     })
   }
   rows.push(...bottom.map(item => ({ type: 'pod', ...item })))
@@ -215,8 +210,7 @@ export function trimPodUsage(items) {
 /**
  * Resolve an event timestamp to a chart annotation time.
  * Returns the time in epoch seconds when it falls inside the sampled
- * window, or null: an event older than the window (or in the clock-skew
- * future) has no place on the chart.
+ * window, or null otherwise.
  * @param {{samples?: Array}} metrics - workloadInfo.metrics object
  * @param {string} at - Event timestamp (RFC 3339), e.g. rolledOutAt
  * @returns {number|null} - Annotation time in seconds or null

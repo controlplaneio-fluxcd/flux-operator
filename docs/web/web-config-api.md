@@ -143,9 +143,7 @@ spec:
     # queries are made and the resource usage charts are hidden in the UI.
     disabled: false # Optional, default is false.
     # Interval at which pod metrics are collected from the Kubernetes Metrics API.
-    # Lower values produce finer-grained usage charts at the cost of memory and
-    # API traffic; values below the metrics-server resolution (15s by default)
-    # add no information. Clamped to [15s, 10m].
+    # Clamped to [15s, 10m].
     scrapeInterval: 60s # Optional, default is 60s.
 ```
 

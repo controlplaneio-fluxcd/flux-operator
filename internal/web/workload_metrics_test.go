@@ -69,17 +69,6 @@ func TestMetricsCollector_IngestAndSeries(t *testing.T) {
 	g.Expect(ok).To(BeFalse())
 }
 
-func TestNewMetricsCollector_WindowSizing(t *testing.T) {
-	g := NewWithT(t)
-
-	// The sample count derives from the interval so the retained span
-	// covers ~30 minutes regardless of the configured cadence
-	// (n samples are n-1 intervals apart).
-	g.Expect(NewMetricsCollector(nil, time.Minute).maxSamples).To(Equal(31))
-	g.Expect(NewMetricsCollector(nil, 15*time.Second).maxSamples).To(Equal(121))
-	g.Expect(NewMetricsCollector(nil, 10*time.Minute).maxSamples).To(Equal(4))
-}
-
 func TestMetricsCollector_IngestAgePruning(t *testing.T) {
 	g := NewWithT(t)
 
@@ -120,8 +109,10 @@ func TestMetricsCollector_RetentionAndOrder(t *testing.T) {
 	mc := NewMetricsCollector(nil, time.Minute)
 	start := time.Now().Truncate(time.Second)
 
-	// Ingest more scrapes than the ring buffer retains, out of order for the last two.
-	for i := range mc.maxSamples + 5 {
+	// Ingest more scrapes than the retained window spans.
+	// The last scrape lands at start+35m, so the age cutoff
+	// (window + interval = 31m) drops the ticks before start+4m.
+	for i := range 36 {
 		list := &metricsv1beta1api.PodMetricsList{
 			Items: []metricsv1beta1api.PodMetrics{
 				{
@@ -142,10 +133,10 @@ func TestMetricsCollector_RetentionAndOrder(t *testing.T) {
 	}
 
 	series := mc.PodSeries("default", "app-1")
-	g.Expect(series).To(HaveLen(mc.maxSamples))
+	g.Expect(series).To(HaveLen(32))
 
 	// Oldest samples were dropped and the series is chronological.
-	g.Expect(series[0].Memory).To(Equal(int64(5)))
+	g.Expect(series[0].Memory).To(Equal(int64(4)))
 	for i := 1; i < len(series); i++ {
 		g.Expect(series[i].Time.After(series[i-1].Time)).To(BeTrue())
 	}
@@ -191,24 +182,40 @@ func TestMetricsCollector_Eviction(t *testing.T) {
 func TestMetricsCollector_Scrape(t *testing.T) {
 	g := NewWithT(t)
 
-	// A failing lister marks the collector unavailable.
+	// A collector that never scraped successfully is unavailable.
 	failing := NewMetricsCollector(func(_ context.Context) (*metricsv1beta1api.PodMetricsList, error) {
 		return nil, errors.New("the server could not find the requested resource")
 	}, time.Minute)
 	failing.scrape(context.Background())
 	g.Expect(failing.Available()).To(BeFalse())
+	g.Expect(failing.failing).To(BeTrue())
 
-	// A successful scrape flips it to available.
+	// A successful scrape makes it available.
 	working := NewMetricsCollector(func(_ context.Context) (*metricsv1beta1api.PodMetricsList, error) {
 		return &metricsv1beta1api.PodMetricsList{}, nil
 	}, time.Minute)
 	working.scrape(context.Background())
 	g.Expect(working.Available()).To(BeTrue())
 
-	// A later failure flips it back.
+	// A transient failure keeps the buffered data available.
 	working.lister = failing.lister
 	working.scrape(context.Background())
+	g.Expect(working.Available()).To(BeTrue())
+	g.Expect(working.failing).To(BeTrue())
+
+	// Availability expires when scrapes keep failing.
+	working.mu.Lock()
+	working.lastSuccess = time.Now().Add(-4 * time.Minute)
+	working.mu.Unlock()
 	g.Expect(working.Available()).To(BeFalse())
+
+	// A successful scrape clears the failure state.
+	working.lister = func(_ context.Context) (*metricsv1beta1api.PodMetricsList, error) {
+		return &metricsv1beta1api.PodMetricsList{}, nil
+	}
+	working.scrape(context.Background())
+	g.Expect(working.Available()).To(BeTrue())
+	g.Expect(working.failing).To(BeFalse())
 }
 
 func TestMetricsCollector_IngestDuplicateTick(t *testing.T) {
@@ -263,7 +270,7 @@ func TestMetricsCollector_RequestScrape(t *testing.T) {
 	g.Expect(scrapes).NotTo(Receive())
 
 	mc.mu.Lock()
-	mc.available = true
+	mc.lastSuccess = time.Now()
 	mc.mu.Unlock()
 
 	// An overdue collector serves the catch-up request.
@@ -303,9 +310,9 @@ func TestMetricsCollector_WorkloadSeries(t *testing.T) {
 	}
 
 	// A completed pod ("job") stops appearing in scrapes after tick 9,
-	// while a long-running pod ("app") keeps reporting. The union of their
-	// retained samples spans more ticks than the ring buffer window.
-	for i := range mc.maxSamples + 10 {
+	// while a long-running pod ("app") keeps reporting for 41 ticks. The
+	// union of their retained samples spans more than the usage window.
+	for i := range 41 {
 		items := []metricsv1beta1api.PodMetrics{item("app", int64(i))}
 		if i < 10 {
 			items = append(items, item("job", 100))
@@ -315,14 +322,17 @@ func TestMetricsCollector_WorkloadSeries(t *testing.T) {
 
 	series := mc.WorkloadSeries("default", []string{"app", "job", "missing"}, nil)
 
-	// The merged series is trimmed to the window size and stays chronological.
-	g.Expect(series).To(HaveLen(mc.maxSamples))
+	// The merged series is trimmed to the window span ending at the newest
+	// sample (ticks 10-40) and stays chronological.
+	g.Expect(series).To(HaveLen(31))
 	for i := 1; i < len(series); i++ {
 		g.Expect(series[i].Time.After(series[i-1].Time)).To(BeTrue())
 	}
 
-	// The newest tick carries only the running pod's usage.
-	g.Expect(series[len(series)-1].Memory).To(Equal(int64(mc.maxSamples + 9)))
+	// The completed pod's ticks fall outside the window and the newest
+	// tick carries only the running pod's usage.
+	g.Expect(series[0].Memory).To(Equal(int64(10)))
+	g.Expect(series[len(series)-1].Memory).To(Equal(int64(40)))
 
 	// Ticks where both pods reported carry the summed usage: the oldest
 	// retained tick is 10 (39-29), past the completed pod's last report,
@@ -393,6 +403,10 @@ func TestMetricsCollector_WorkloadSeries_Rollout(t *testing.T) {
 
 	// An unrelated namespace with the same labels yields nothing.
 	g.Expect(mc.WorkloadSeries("prod", []string{"backend-new-1"}, selector)).To(BeEmpty())
+
+	// LabeledPods matches buffered pods on their labels.
+	g.Expect(mc.LabeledPods("apps", selector)).To(ConsistOf("backend-old-1", "backend-new-1"))
+	g.Expect(mc.LabeledPods("prod", selector)).To(BeEmpty())
 }
 
 func TestSumPodResources(t *testing.T) {
@@ -785,6 +799,29 @@ func TestControllerMetrics(t *testing.T) {
 	g.Expect(testClient.Create(ctx, pod)).To(Succeed())
 	defer testClient.Delete(ctx, pod)
 
+	pod.Status.Phase = corev1.PodRunning
+	g.Expect(testClient.Status().Update(ctx, pod)).To(Succeed())
+
+	// A terminated controller pod must not contribute stale usage.
+	donePod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-ctrl-metrics-done",
+			Namespace: "default",
+			Labels:    map[string]string{"app.kubernetes.io/part-of": "flux"},
+		},
+		Spec: corev1.PodSpec{
+			RestartPolicy: corev1.RestartPolicyNever,
+			Containers: []corev1.Container{
+				{Name: "manager", Image: "ghcr.io/fluxcd/source-controller:v1.7.4"},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, donePod)).To(Succeed())
+	defer testClient.Delete(ctx, donePod)
+
+	donePod.Status.Phase = corev1.PodSucceeded
+	g.Expect(testClient.Status().Update(ctx, donePod)).To(Succeed())
+
 	mc := NewMetricsCollector(nil, time.Minute)
 	mc.ingest(&metricsv1beta1api.PodMetricsList{
 		Items: []metricsv1beta1api.PodMetrics{
@@ -796,6 +833,18 @@ func TestControllerMetrics(t *testing.T) {
 						Usage: corev1.ResourceList{
 							corev1.ResourceCPU:    *resource.NewMilliQuantity(50, resource.DecimalSI),
 							corev1.ResourceMemory: *resource.NewQuantity(32<<20, resource.BinarySI),
+						},
+					},
+				},
+			},
+			{
+				ObjectMeta: metav1.ObjectMeta{Name: donePod.Name, Namespace: donePod.Namespace},
+				Containers: []metricsv1beta1api.ContainerMetrics{
+					{
+						Name: "manager",
+						Usage: corev1.ResourceList{
+							corev1.ResourceCPU:    *resource.NewMilliQuantity(10, resource.DecimalSI),
+							corev1.ResourceMemory: *resource.NewQuantity(8<<20, resource.BinarySI),
 						},
 					},
 				},

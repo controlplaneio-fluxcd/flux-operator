@@ -14,7 +14,6 @@ import {
 /**
  * ChartHeader - Headline for one usage chart: metric name, current
  * absolute value and, when requests/limits are set, the usage percentage.
- * The percentage is omitted entirely when no denominator exists.
  */
 function ChartHeader({ label, value, percent, testId }) {
   return (
@@ -30,9 +29,8 @@ function ChartHeader({ label, value, percent, testId }) {
   )
 }
 
-// Class names are spelled out per metric: Tailwind drops @layer rules
-// whose classes never appear literally in the sources, so they must not
-// be assembled from fragments at runtime.
+// Class names are spelled out per metric: Tailwind drops classes that
+// never appear literally in the sources.
 const BAR_CLASSES = {
   cpu: {
     track: 'usage-bar-track usage-bar-track-cpu w-20 sm:w-24',
@@ -46,16 +44,10 @@ const BAR_CLASSES = {
 
 /**
  * PodUsageBars - Current usage of each pod as a horizontal bar, scaled
- * to the busiest pod so replica skew stands out. Rendered under a usage
- * chart for the same metric; the aggregate chart hides which replica is
- * doing the work, the bars show it. Pods without a usage sample yet
- * (typical right after a rollout) keep their row with a gray bar and an
- * N/A value instead of disappearing.
- *
- * Large workloads are trimmed to a fixed row budget (trimPodUsage): the
- * hottest and coldest pods stay visible while the middle collapses into
- * a count + range row, and mass-rollout sampleless pods collapse into a
- * single "collecting" row. The full list lives in the Pods tab.
+ * to the busiest pod. Pods without a usage sample yet show a gray bar
+ * with an N/A value. Large workloads are trimmed to a fixed row budget
+ * (trimPodUsage): the collapsed middle renders as a "+N pods" row with
+ * a muted bar at the average and the value range in its tooltip.
  *
  * @param {Object} props
  * @param {Array<{name: string, value: number|null}>} props.items -
@@ -71,10 +63,27 @@ function PodUsageBars({ items, colorKey, formatValue, testId }) {
     <div class="space-y-1" data-testid={testId}>
       {trimPodUsage(items).map(row => {
         if (row.type === 'elision') {
+          const rangeText = formatValue(row.min) === formatValue(row.max)
+            ? `${formatValue(row.min)} each`
+            : `${formatValue(row.min)} – ${formatValue(row.max)}`
           return (
-            <div key="elision" class="flex items-center gap-2" data-testid={`${testId}-elision`}>
+            <div
+              key="elision"
+              class="flex items-center gap-2"
+              data-testid={`${testId}-elision`}
+              title={`${row.count} pods, ${rangeText}`}
+            >
               <span class="flex-1 min-w-0 truncate text-xs text-gray-500 dark:text-gray-400">
-                … {row.count} pods, {formatValue(row.min)} – {formatValue(row.max)}
+                +{row.count} pods
+              </span>
+              <div class="usage-bar-track usage-bar-track-na w-20 sm:w-24">
+                <div
+                  class="usage-bar-fill usage-bar-fill-na"
+                  style={{ width: `${max > 0 && row.avg > 0 ? Math.max((row.avg / max) * 100, 2) : 0}%` }}
+                />
+              </div>
+              <span class="w-14 shrink-0 text-right text-xs tabular-nums text-gray-500 dark:text-gray-400">
+                {formatValue(row.avg)}
               </span>
             </div>
           )
@@ -122,14 +131,8 @@ function PodUsageBars({ items, colorKey, formatValue, testId }) {
 
 /**
  * WorkloadMetricsPanel - CPU and Memory usage charts for a workload,
- * fed by the ~30 minute usage window aggregated across the workload pods
- * (workloadInfo.metrics). Renders nothing when the Metrics API is
- * unavailable or fewer than two samples exist.
- *
- * A rollout inside the sampled window (version change or restart) is
- * marked on both charts with a dashed vertical line. When the workload
- * has more than one pod, per-pod bars below each chart break the
- * aggregate down by replica.
+ * with a rollout marker and per-pod usage bars. Renders nothing when
+ * fewer than two samples exist.
  *
  * @param {Object} props
  * @param {Object} props.metrics - workloadInfo.metrics object with samples
@@ -137,7 +140,6 @@ function PodUsageBars({ items, colorKey, formatValue, testId }) {
  * @param {Array} [props.pods] - workloadInfo.pods entries carrying the
  *   current per-pod usage in pod.metrics
  * @param {string} [props.rolledOutAt] - workloadInfo.rolledOutAt timestamp
- *   marking the start of the workload's current generation
  */
 export function WorkloadMetricsPanel({ metrics, pods, rolledOutAt }) {
   const chartable = hasChartableMetrics(metrics)

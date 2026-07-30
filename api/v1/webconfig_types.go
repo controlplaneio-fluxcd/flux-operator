@@ -372,9 +372,7 @@ type MetricsSpec struct {
 	Disabled bool `json:"disabled"`
 
 	// ScrapeInterval is the interval at which pod metrics are collected
-	// from the Kubernetes Metrics API. Lower values produce finer-grained
-	// charts at the cost of memory and API traffic; values below the
-	// metrics-server resolution (15s by default) add no information.
+	// from the Kubernetes Metrics API.
 	// Clamped to [15s, 10m]. Defaults to 60s.
 	// +kubebuilder:validation:Type=string
 	// +kubebuilder:validation:Pattern="^([0-9]+(\\.[0-9]+)?(ms|s|m|h))+$"

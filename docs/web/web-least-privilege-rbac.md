@@ -180,15 +180,13 @@ from the pod metrics collector and their resource requests/limits from the
 pod specs.
 
 **How it works:**
-When building the report, the operator looks up pods labeled
-`app.kubernetes.io/part-of=flux` in its own namespace and attaches their
-latest usage from the in-memory buffer maintained by the pod metrics
-collector (see the Workload Pod Metrics section) together with the
-requests/limits read from the pod specs. The privileged client is used
-for the pod list because it targets the operator's own namespace
-(typically `flux-system`), which users may not have access to. No
-separate Metrics API query is made for this feature, and it is subject
-to the same `spec.metrics` configuration as the workload metrics.
+When building the report, the operator lists pods labeled
+`app.kubernetes.io/part-of=flux` in its own namespace with the privileged
+client (users may not have access to `flux-system`) and attaches their
+latest usage from the pod metrics collector (see the Workload Pod Metrics
+section) together with the requests/limits read from the pod specs.
+The feature is subject to the same `spec.metrics` configuration as the
+workload metrics.
 
 **Least privilege benefit:**
 Flux controller health is a cluster-wide concern visible to all dashboard
@@ -209,33 +207,22 @@ cluster from the Kubernetes Metrics API into an in-memory ring buffer.
 **How it works:**
 A background collector queries the Metrics API (`metrics.k8s.io/v1beta1`)
 cluster-wide with the privileged client and retains a ~30 minute usage window
-per container in memory. The scrape interval defaults to one minute and is
-configurable via the Config API (`spec.metrics.scrapeInterval`), which also
-allows disabling the collection entirely (`spec.metrics.disabled`). The Metrics API only serves instantaneous
-values, so history must be accumulated server-side; per-request scraping with
-user credentials would provide no history and add one Metrics API round-trip
-per page view. When a user opens a workload dashboard, the backend first
-fetches the workload with the user's impersonated client — the access-control
-gate — and only then attaches the usage series of the workload's pods and the
-requests/limits summed from the pod specs it already read for the pod list.
-The series also includes buffered pods in the workload's namespace that match
-its label selector: pods replaced by a rollout keep matching the selector, so
-the usage history stays continuous across restarts. This reveals only the
-recent CPU/memory numbers of the workload's own former pods.
-
-When a served workload has running pods that are not in the buffer yet
-(typical right after a rollout), the handler requests one off-schedule scrape
-so the new pods show usage without waiting a full interval. These catch-up
-scrapes are rate-limited to at most one per 15 seconds regardless of request
-volume, so users cannot amplify the Metrics API load.
+per container in memory — the Metrics API only serves instantaneous values,
+so history must be accumulated server-side. The scrape interval defaults to
+one minute and is configurable via `spec.metrics.scrapeInterval`; collection
+can be disabled with `spec.metrics.disabled`. When a user opens a workload
+dashboard, the backend first fetches the workload with the user's
+impersonated client — the access-control gate — and only then attaches the
+usage series of the workload's pods, including buffered pods matching the
+workload's label selector so the history stays continuous across rollouts.
+Catch-up scrapes requested by the backend for pods not yet in the buffer
+are rate-limited to one per 15 seconds regardless of request volume.
 
 **Least privilege benefit:**
-Users see CPU/memory usage for exactly the workloads they can already view;
-the metrics endpoint exposes nothing for workloads outside their RBAC scope.
-The usage data itself (CPU cores, memory bytes per pod) contains no sensitive
-information. By scraping internally, administrators are not forced to grant
-every dashboard user cluster-wide read access on `metrics.k8s.io`, and clusters
-without metrics-server simply hide the feature.
+Users see CPU/memory usage only for workloads they can already view, and
+administrators are not forced to grant every dashboard user cluster-wide
+read access on `metrics.k8s.io`. The usage data contains no sensitive
+information, and clusters without metrics-server simply hide the feature.
 
 ---
 
@@ -250,25 +237,20 @@ ControllerRevisions (StatefulSets, DaemonSets) owned by a workload to
 determine when its current generation was rolled out.
 
 **How it works:**
-The rollout time of a workload's running generation is recorded on its
-generation objects, not on the workload itself: the newest ReplicaSet for a
-Deployment and the newest ControllerRevision for a StatefulSet or DaemonSet.
-After the workload has been fetched with the user's impersonated client — the
-access-control gate — the backend resolves the generation object names from
-data already in hand (the StatefulSet status names its revision; the
-workload's own pods name their ReplicaSet via owner references and their
-ControllerRevision via the controller-revision-hash label) and fetches only
-those named objects with the privileged API reader using metadata-only
-projections: one read in steady state, at most one per active generation
-during a rollout. Nothing is listed, no informer caches are created, and no
+The rollout time of a workload's current generation is recorded on its
+generation objects: the newest ReplicaSet for a Deployment and the newest
+ControllerRevision for a StatefulSet or DaemonSet. After the workload has
+been fetched with the user's impersonated client — the access-control gate —
+the backend resolves the generation object names from the workload status
+and pod references, then fetches only those named objects with the
+privileged API reader using metadata-only reads. Nothing is listed and no
 spec or data fields are read — the response yields a single timestamp
 (`rolledOutAt`).
 
 **Least privilege benefit:**
-Users get the rollout marker on the usage charts — correlating usage cliffs
-with deploys — without administrators granting every dashboard user read
-access on ReplicaSets and ControllerRevisions cluster-wide. Only a creation
-timestamp of the workload's own generation objects is revealed.
+Users get the rollout marker on the usage charts without administrators
+granting them read access on ReplicaSets and ControllerRevisions. Only the
+creation timestamp of the workload's own generation objects is revealed.
 
 ---
 

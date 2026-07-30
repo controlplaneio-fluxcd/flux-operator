@@ -58,8 +58,6 @@ func ValidateWebConfigSpec(c *fluxcdv1.WebConfigSpec) error {
 }
 
 // ValidateMetricsSpec validates the MetricsSpec configuration.
-// Positive out-of-range intervals are clamped rather than rejected,
-// but a negative interval is a configuration mistake and is refused.
 func ValidateMetricsSpec(m *fluxcdv1.MetricsSpec) error {
 	if m.ScrapeInterval != nil && m.ScrapeInterval.Duration < 0 {
 		return fmt.Errorf("scrapeInterval must be a positive duration")
