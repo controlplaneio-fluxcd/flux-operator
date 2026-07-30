@@ -169,8 +169,9 @@ type WorkloadPodStatus struct {
 	Metrics *MetricsSample `json:"metrics,omitempty"`
 
 	// resources holds the CPU/Memory requests and limits summed from
-	// the pod spec, used to compute the workload-level metrics.
-	resources podResources
+	// the pod spec, used to compute the workload-level metrics and
+	// exposed per pod on the workload detail endpoint.
+	resources PodResources
 
 	// revisionRef names the generation object the pod belongs to
 	// (ReplicaSet or ControllerRevision), used to resolve the
@@ -178,16 +179,21 @@ type WorkloadPodStatus struct {
 	revisionRef string
 }
 
-// podResources holds the resource requests and limits of a pod
-// summed across its containers.
-type podResources struct {
-	// cpuRequests and cpuLimits are expressed in cores.
-	cpuRequests float64
-	cpuLimits   float64
+// PodResources holds the resource requests and limits of a pod
+// summed across its containers. Zero means not set.
+type PodResources struct {
+	// CPURequests and CPULimits are expressed in cores.
+	CPURequests float64 `json:"cpuRequests,omitempty"`
+	CPULimits   float64 `json:"cpuLimits,omitempty"`
 
-	// memoryRequests and memoryLimits are expressed in bytes.
-	memoryRequests int64
-	memoryLimits   int64
+	// MemoryRequests and MemoryLimits are expressed in bytes.
+	MemoryRequests int64 `json:"memoryRequests,omitempty"`
+	MemoryLimits   int64 `json:"memoryLimits,omitempty"`
+}
+
+// IsZero reports whether the pod spec sets no requests and no limits.
+func (r PodResources) IsZero() bool {
+	return r == PodResources{}
 }
 
 // WorkloadMetrics represents the aggregated CPU/Memory usage of a
@@ -394,6 +400,9 @@ func (h *Handler) GetWorkloadDetails(ctx context.Context, kind, name, namespace 
 			}
 			if pod.Metrics != nil {
 				podMap["metrics"] = pod.Metrics
+			}
+			if !pod.resources.IsZero() {
+				podMap["resources"] = pod.resources
 			}
 			pods = append(pods, podMap)
 		}

@@ -9,6 +9,9 @@ import { appliedTheme } from '../../../utils/theme'
 // Chart height in CSS pixels.
 const CHART_HEIGHT = 180
 
+// Padding between the plot area and the container's right edge.
+const AXIS_RIGHT_PAD = 8
+
 const CHART_THEMES = {
   light: {
     axis: '#6B7280',
@@ -98,6 +101,11 @@ export function UsageChart({ data, hasLimit, colorKey, formatValue, tickIncrs, a
     const opts = {
       width: container.clientWidth || 300,
       height: CHART_HEIGHT,
+      // uPlot auto-pads the axis-less right side by ~25px to keep the
+      // last time label inside the plot; a small fixed pad lets the
+      // chart reach the panel edge instead, and the x-axis values
+      // callback hides a final label that would clip.
+      padding: [null, AXIS_RIGHT_PAD, null, null],
       legend: { show: false },
       cursor: {
         y: false,
@@ -115,17 +123,57 @@ export function UsageChart({ data, hasLimit, colorKey, formatValue, tickIncrs, a
         {
           stroke: themeColors.axis,
           font: axisFont,
+          // uPlot reserves 50px for the x-axis by default; a single line
+          // of 11px labels fits in half that, the rest reads as a gap
+          // between the chart and whatever renders below it.
+          size: 28,
           grid: { show: false },
           ticks: { show: false },
           // Single-line HH:MM labels without uPlot's default date line.
-          values: (u, vals) => vals.map(ts => formatTime(ts)),
+          // A final label centered on a tick close to the right edge
+          // would clip at the canvas boundary; hide it instead.
+          values: (u, vals) => {
+            const labels = vals.map(ts => formatTime(ts))
+            const last = labels.length - 1
+            if (last > 0) {
+              const scale = u.scales.x
+              const dpr = window.devicePixelRatio || 1
+              const plotWidth = u.bbox.width / dpr
+              if (plotWidth > 0 && scale.max > scale.min) {
+                u.ctx.font = u.axes[0].font[0]
+                const half = u.ctx.measureText(labels[last]).width / (2 * dpr)
+                const edgePx = ((scale.max - vals[last]) / (scale.max - scale.min)) * plotWidth
+                if (edgePx + AXIS_RIGHT_PAD < half) labels[last] = null
+              }
+            }
+            return labels
+          },
           // Minute-aligned ticks so short series don't repeat HH:MM labels.
           incrs: [60, 120, 300, 600, 900, 1800, 3600],
+          // A 12-hour label ("05:12 PM") is ~50px wide, the same as
+          // uPlot's default 50px minimum tick spacing, so on wide charts
+          // with short series the labels pack edge-to-edge. Require room
+          // for a label plus a readable gap.
+          space: 80,
         },
         {
           stroke: themeColors.axis,
           font: axisFont,
-          size: 52,
+          // Fit the axis to its widest tick label; a fixed width sized
+          // for "128 MiB" leaves a wide empty band next to short labels
+          // like "4m".
+          size: (u, values, axisIdx, cycleNum) => {
+            const axis = u.axes[axisIdx]
+            if (cycleNum > 1) return axis._size
+            let width = 0
+            if (values) {
+              u.ctx.font = axis.font[0]
+              for (const v of values) {
+                width = Math.max(width, u.ctx.measureText(v).width)
+              }
+            }
+            return Math.ceil(width / (window.devicePixelRatio || 1)) + axis.gap + 8
+          },
           grid: { stroke: themeColors.grid, width: 1 },
           ticks: { show: false },
           values: (u, vals) => vals.map(v => formatValue(v)),

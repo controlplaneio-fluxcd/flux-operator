@@ -218,21 +218,7 @@ describe('InfoPanel', () => {
       expect(screen.getByText(/50% of limit/)).toBeInTheDocument() // Memory percentage
     })
 
-    it('should use green progress bar for usage < 70%', () => {
-      const props = {
-        ...baseProps,
-        metrics: [
-          { cpu: 0.5, cpuLimits: 1.0, memory: 500 * 1024 ** 3, memoryLimits: 1000 * 1024 ** 3 }
-        ]
-      }
-
-      const { container } = render(<InfoPanel {...props} />)
-
-      const progressBars = container.querySelectorAll('.bg-green-500')
-      expect(progressBars.length).toBeGreaterThan(0)
-    })
-
-    it('should use yellow progress bar for usage 70-84%', () => {
+    it('should use green progress bar for usage < 80%', () => {
       const props = {
         ...baseProps,
         metrics: [
@@ -242,11 +228,25 @@ describe('InfoPanel', () => {
 
       const { container } = render(<InfoPanel {...props} />)
 
+      const progressBars = container.querySelectorAll('.bg-green-500')
+      expect(progressBars.length).toBeGreaterThan(0)
+    })
+
+    it('should use yellow progress bar for usage 80-89%', () => {
+      const props = {
+        ...baseProps,
+        metrics: [
+          { cpu: 0.85, cpuLimits: 1.0, memory: 850 * 1024 ** 3, memoryLimits: 1000 * 1024 ** 3 }
+        ]
+      }
+
+      const { container } = render(<InfoPanel {...props} />)
+
       const progressBars = container.querySelectorAll('.bg-yellow-500')
       expect(progressBars.length).toBeGreaterThan(0)
     })
 
-    it('should use red progress bar for usage >= 85%', () => {
+    it('should use red progress bar for usage >= 90%', () => {
       const props = {
         ...baseProps,
         metrics: [

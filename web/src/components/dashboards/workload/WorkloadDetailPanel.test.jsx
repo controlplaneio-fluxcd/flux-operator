@@ -430,10 +430,65 @@ describe('WorkloadDetailPanel component', () => {
 
       await user.click(screen.getByText('Pods'))
 
-      // Only the pod carrying metrics shows the usage line.
+      // Only the pod carrying metrics shows the usage line. Without
+      // limits in the pod spec, no percentages are shown.
       const usage = screen.getAllByTestId('pod-metrics')
       expect(usage).toHaveLength(1)
       expect(usage[0]).toHaveTextContent('CPU: 120m · Memory: 128 MiB')
+      expect(usage[0]).not.toHaveTextContent('of limit')
+    })
+
+    it('should display percent of limit when the pod spec sets limits', async () => {
+      const user = userEvent.setup()
+      const infoWithLimits = {
+        ...mockWorkloadInfo,
+        pods: [
+          {
+            name: 'nginx-abc-123',
+            status: 'Running',
+            createdAt: '2023-01-01T12:00:00Z',
+            metrics: { t: '2023-01-01T12:30:00Z', cpu: 0.12, memory: 128 * 1024 * 1024 },
+            resources: { cpuLimits: 0.5, memoryLimits: 512 * 1024 * 1024 }
+          }
+        ]
+      }
+
+      render(<WorkloadDetailPanel {...defaultProps} workloadInfo={infoWithLimits} />)
+
+      await user.click(screen.getByText('Pods'))
+
+      const usage = screen.getByTestId('pod-metrics')
+      expect(usage).toHaveTextContent('CPU: 120m (24% of limit)')
+      expect(usage).toHaveTextContent('Memory: 128 MiB (25% of limit)')
+      expect(usage.querySelector('.text-yellow-700')).toBeNull()
+      expect(usage.querySelector('.text-red-600')).toBeNull()
+    })
+
+    it('should color the percentages by proximity to the limits', async () => {
+      const user = userEvent.setup()
+      const infoAtRisk = {
+        ...mockWorkloadInfo,
+        pods: [
+          {
+            name: 'nginx-abc-123',
+            status: 'Running',
+            createdAt: '2023-01-01T12:00:00Z',
+            // CPU at 84% of limit (warn), memory at 95.7% (critical).
+            metrics: { t: '2023-01-01T12:30:00Z', cpu: 0.42, memory: 490 * 1024 * 1024 },
+            resources: { cpuLimits: 0.5, memoryLimits: 512 * 1024 * 1024 }
+          }
+        ]
+      }
+
+      render(<WorkloadDetailPanel {...defaultProps} workloadInfo={infoAtRisk} />)
+
+      await user.click(screen.getByText('Pods'))
+
+      const usage = screen.getByTestId('pod-metrics')
+      expect(usage).toHaveTextContent('(84% of limit)')
+      expect(usage).toHaveTextContent('(95% of limit)')
+      expect(usage.querySelector('.text-yellow-700')).toHaveTextContent('84% of limit')
+      expect(usage.querySelector('.text-red-600')).toHaveTextContent('95% of limit')
     })
 
     it('should render delete buttons when deletePods action is available', async () => {

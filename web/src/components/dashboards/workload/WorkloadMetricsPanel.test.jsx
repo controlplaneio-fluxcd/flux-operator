@@ -44,9 +44,37 @@ describe('WorkloadMetricsPanel component', () => {
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('renders nothing with a single sample', () => {
-    const { container } = render(<WorkloadMetricsPanel metrics={buildMetrics(1)} />)
+  it('renders nothing with an empty sample list', () => {
+    const { container } = render(<WorkloadMetricsPanel metrics={buildMetrics(0)} />)
     expect(container).toBeEmptyDOMElement()
+  })
+
+  it('shows the current usage with chart placeholders for a single sample', () => {
+    const pods = [
+      { name: 'pod-a', metrics: { cpu: 0.06, memory: 60 * 1024 * 1024 } },
+      { name: 'pod-b', metrics: { cpu: 0.04, memory: 40 * 1024 * 1024 } },
+    ]
+    render(
+      <WorkloadMetricsPanel
+        metrics={buildMetrics(1, { cpuLimits: 0.2, memoryLimits: 200 * 1024 * 1024 })}
+        pods={pods}
+      />
+    )
+
+    expect(screen.getByText('Resource Usage')).toBeInTheDocument()
+    expect(screen.getByTestId('cpu-usage-header')).toHaveTextContent('100m')
+    expect(screen.getByTestId('cpu-usage-header')).toHaveTextContent('50% of limit')
+    expect(screen.getByTestId('memory-usage-header')).toHaveTextContent('100 MiB')
+    expect(screen.getByTestId('memory-usage-header')).toHaveTextContent('50% of limit')
+
+    expect(screen.getByTestId('cpu-usage-chart-placeholder')).toHaveTextContent('Collecting usage data')
+    expect(screen.getByTestId('memory-usage-chart-placeholder')).toBeInTheDocument()
+    expect(screen.queryByTestId('cpu-usage-chart')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('memory-usage-chart')).not.toBeInTheDocument()
+
+    // The per-pod bars render on the single-sample path too.
+    expect(screen.getAllByTestId('cpu-pod-bars-row')).toHaveLength(2)
+    expect(screen.getByTestId('memory-pod-bars')).toBeInTheDocument()
   })
 
   it('renders CPU and Memory charts with current absolute values', () => {
@@ -110,7 +138,7 @@ describe('WorkloadMetricsPanel component', () => {
     expect(memoryRows[0]).toHaveTextContent('64 MiB')
   })
 
-  it('omits the per-pod bars for a single pod', () => {
+  it('shows the per-pod bar for a single pod', () => {
     render(
       <WorkloadMetricsPanel
         metrics={buildMetrics(10)}
@@ -118,8 +146,9 @@ describe('WorkloadMetricsPanel component', () => {
       />
     )
 
-    expect(screen.queryByTestId('cpu-pod-bars')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('memory-pod-bars')).not.toBeInTheDocument()
+    expect(screen.getAllByTestId('cpu-pod-bars-row')).toHaveLength(1)
+    expect(screen.getByTestId('cpu-pod-bars')).toHaveTextContent('app-1')
+    expect(screen.getAllByTestId('memory-pod-bars-row')).toHaveLength(1)
   })
 
   it('trims large workloads to the extremes with an elision row', () => {
@@ -129,30 +158,69 @@ describe('WorkloadMetricsPanel component', () => {
     }))
     render(<WorkloadMetricsPanel metrics={buildMetrics(10)} pods={pods} />)
 
-    // Top 4 and bottom 2 pods stay visible.
+    // Top 3 and bottom 2 pods stay visible.
     const cpuRows = screen.getAllByTestId('cpu-pod-bars-row')
-    expect(cpuRows).toHaveLength(6)
+    expect(cpuRows).toHaveLength(5)
     expect(cpuRows[0]).toHaveTextContent('app-00')
-    expect(cpuRows[3]).toHaveTextContent('app-03')
-    expect(cpuRows[4]).toHaveTextContent('app-18')
-    expect(cpuRows[5]).toHaveTextContent('app-19')
+    expect(cpuRows[2]).toHaveTextContent('app-02')
+    expect(cpuRows[3]).toHaveTextContent('app-18')
+    expect(cpuRows[4]).toHaveTextContent('app-19')
 
     // The middle collapses into an aggregate row: count label, muted bar
     // and average value, with the range in the tooltip.
     const elision = screen.getByTestId('cpu-pod-bars-elision')
-    expect(elision).toHaveTextContent('+14 pods')
+    expect(elision).toHaveTextContent('+15 pods')
     expect(elision).toHaveTextContent('90m')
-    expect(elision).toHaveAttribute('title', '14 pods, 83m – 96m')
+    expect(elision).toHaveAttribute('title', '15 pods, 83m – 97m')
     expect(elision.querySelector('.usage-bar-fill-na')).not.toBeNull()
+  })
+
+  it('colors the header limit percentage by proximity', () => {
+    // Latest sample: cpu 0.19 of 0.2 limit (95%, critical), memory
+    // 109 MiB of 128 MiB limit (85%, warn).
+    render(
+      <WorkloadMetricsPanel
+        metrics={buildMetrics(10, { cpuLimits: 0.2, memoryLimits: 128 * 1024 * 1024 })}
+      />
+    )
+
+    const cpuHeader = screen.getByTestId('cpu-usage-header')
+    expect(cpuHeader.querySelector('.text-red-600')).toHaveTextContent('95% of limit')
+    const memoryHeader = screen.getByTestId('memory-usage-header')
+    expect(memoryHeader.querySelector('.text-yellow-700')).toHaveTextContent('85% of limit')
+  })
+
+  it('colors the pod bars and adds a limit tooltip when limits are set', () => {
+    const pods = [
+      { name: 'app-hot', metrics: { cpu: 0.19, memory: 1024 }, resources: { cpuLimits: 0.2 } },
+      { name: 'app-warm', metrics: { cpu: 0.17, memory: 1024 }, resources: { cpuLimits: 0.2 } },
+      { name: 'app-cold', metrics: { cpu: 0.02, memory: 1024 }, resources: { cpuLimits: 0.2 } },
+    ]
+    render(<WorkloadMetricsPanel metrics={buildMetrics(10)} pods={pods} />)
+
+    const rows = screen.getAllByTestId('cpu-pod-bars-row')
+    // Sorted by usage: hot (95%, red), warm (85%, yellow), cold (10%, hue).
+    // The tooltip names the severity so it isn't conveyed by color alone.
+    expect(rows[0].querySelector('.usage-bar-fill-critical')).not.toBeNull()
+    expect(rows[0].querySelector('.usage-bar-track')).toHaveAttribute('title', '95% of limit (critical)')
+    expect(rows[1].querySelector('.usage-bar-fill-warn')).not.toBeNull()
+    expect(rows[1].querySelector('.usage-bar-track')).toHaveAttribute('title', '85% of limit (high)')
+    expect(rows[2].querySelector('.usage-bar-fill-cpu')).not.toBeNull()
+    expect(rows[2].querySelector('.usage-bar-track')).toHaveAttribute('title', '10% of limit')
+
+    // Without limits the bars keep the metric hue and have no tooltip.
+    const memoryRows = screen.getAllByTestId('memory-pod-bars-row')
+    expect(memoryRows[0].querySelector('.usage-bar-fill-memory')).not.toBeNull()
+    expect(memoryRows[0].querySelector('.usage-bar-track')).not.toHaveAttribute('title')
   })
 
   it('collapses the elision tooltip range when the endpoints format equal', () => {
     const pods = [
-      ...Array.from({ length: 4 }, (_, i) => ({
+      ...Array.from({ length: 3 }, (_, i) => ({
         name: `hot-${i}`,
         metrics: { cpu: 0.5 - i / 100, memory: 1024 },
       })),
-      ...Array.from({ length: 4 }, (_, i) => ({
+      ...Array.from({ length: 5 }, (_, i) => ({
         name: `mid-${i}`,
         metrics: { cpu: 0.1, memory: 1024 },
       })),
@@ -163,7 +231,7 @@ describe('WorkloadMetricsPanel component', () => {
     ]
     render(<WorkloadMetricsPanel metrics={buildMetrics(10)} pods={pods} />)
 
-    expect(screen.getByTestId('cpu-pod-bars-elision')).toHaveAttribute('title', '4 pods, 100m each')
+    expect(screen.getByTestId('cpu-pod-bars-elision')).toHaveAttribute('title', '5 pods, 100m each')
   })
 
   it('collapses many sampleless pods into a collecting row', () => {

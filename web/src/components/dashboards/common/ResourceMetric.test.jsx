@@ -19,13 +19,13 @@ describe('ResourceMetric', () => {
     expect(container.querySelector('.rounded-full')).toBeNull()
   })
 
-  it('colors the bar by utilization thresholds', () => {
+  it('colors the bar by the 80/90 utilization thresholds', () => {
     const bar = percent => {
       const { container } = render(<ResourceMetric label="CPU" value="1" barPercent={percent} />)
       return container.querySelector('.h-2.rounded-full > div').className
     }
-    expect(bar(50)).toContain('bg-green-500')
-    expect(bar(75)).toContain('bg-yellow-500')
+    expect(bar(75)).toContain('bg-green-500')
+    expect(bar(85)).toContain('bg-yellow-500')
     expect(bar(90)).toContain('bg-red-500')
   })
 })

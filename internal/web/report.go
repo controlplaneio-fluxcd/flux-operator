@@ -293,10 +293,10 @@ func (h *Handler) controllerMetrics(ctx context.Context) []ControllerMetrics {
 				Namespace:      pod.Namespace,
 				CPU:            latest.CPU,
 				Memory:         latest.Memory,
-				CPURequests:    res.cpuRequests,
-				CPULimits:      res.cpuLimits,
-				MemoryRequests: res.memoryRequests,
-				MemoryLimits:   res.memoryLimits,
+				CPURequests:    res.CPURequests,
+				CPULimits:      res.CPULimits,
+				MemoryRequests: res.MemoryRequests,
+				MemoryLimits:   res.MemoryLimits,
 			})
 		}
 		// Freshly rolled-out pods have no usage sample yet: request a

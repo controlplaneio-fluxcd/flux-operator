@@ -3,7 +3,7 @@
 
 import { describe, it, expect } from 'vitest'
 import {
-  formatCores, formatBytes, percentOf, percentText,
+  formatCores, formatBytes, percentOf, percentText, limitSeverity, percentSeverity,
   buildChartData, latestSample, hasChartableMetrics,
   podUsageSeries, trimPodUsage, usageAnnotation,
 } from './metrics'
@@ -53,14 +53,32 @@ describe('formatBytes', () => {
 })
 
 describe('percentOf', () => {
-  it('computes rounded percentages', () => {
+  it('computes truncated percentages', () => {
     expect(percentOf(0.05, 0.1)).toBe(50)
     expect(percentOf(1, 3)).toBe(33)
+  })
+
+  it('truncates so the display agrees with the severity thresholds', () => {
+    // 89.5% must not display as "90%" next to a non-critical color.
+    expect(percentOf(0.179, 0.2)).toBe(89)
+    expect(percentOf(0.1799, 0.2)).toBe(89)
+    // An exact threshold ratio is not floored away by double artifacts.
+    expect(percentOf(0.18, 0.2)).toBe(90)
+  })
+
+  it('clamps negative usage to zero', () => {
+    expect(percentOf(-100, 1024)).toBe(0)
   })
 
   it('returns null for unset denominators', () => {
     expect(percentOf(0.5, 0)).toBeNull()
     expect(percentOf(0.5, undefined)).toBeNull()
+  })
+
+  it('returns null for non-finite values', () => {
+    expect(percentOf(NaN, 1)).toBeNull()
+    expect(percentOf(Infinity, 1)).toBeNull()
+    expect(percentOf(0.5, NaN)).toBeNull()
   })
 })
 
@@ -73,6 +91,37 @@ describe('percentText', () => {
     expect(percentText(0.05, 0.1, 0)).toBe('50% of request')
     expect(percentText(0.05, 0, 0.5)).toBe('10% of limit')
     expect(percentText(0.05, 0, 0)).toBeNull()
+  })
+})
+
+describe('limitSeverity', () => {
+  it('classifies usage by proximity to the limit', () => {
+    expect(limitSeverity(0.5, 1)).toBeNull()
+    expect(limitSeverity(0.75, 1)).toBeNull()
+    expect(limitSeverity(0.8, 1)).toBe('warn')
+    expect(limitSeverity(0.9, 1)).toBe('critical')
+    expect(limitSeverity(1.2, 1)).toBe('critical')
+  })
+
+  it('returns null when no limit is set', () => {
+    expect(limitSeverity(0.9, 0)).toBeNull()
+    expect(limitSeverity(0.9, undefined)).toBeNull()
+    expect(limitSeverity(NaN, 1)).toBeNull()
+  })
+
+  it('classifies the exact ratio, not the rounded display percentage', () => {
+    expect(limitSeverity(0.795, 1)).toBeNull()
+    expect(limitSeverity(0.895, 1)).toBe('warn')
+  })
+})
+
+describe('percentSeverity', () => {
+  it('classifies percentages against the 80/90 thresholds', () => {
+    expect(percentSeverity(79)).toBeNull()
+    expect(percentSeverity(80)).toBe('warn')
+    expect(percentSeverity(89)).toBe('warn')
+    expect(percentSeverity(90)).toBe('critical')
+    expect(percentSeverity(null)).toBeNull()
   })
 })
 
@@ -149,28 +198,40 @@ describe('podUsageSeries', () => {
 
   it('sorts pods by usage descending with sampleless pods last', () => {
     expect(podUsageSeries(pods, 'cpu')).toEqual([
-      { name: 'app-2', value: 0.05 },
-      { name: 'app-1', value: 0.02 },
-      { name: 'app-3', value: null },
+      { name: 'app-2', value: 0.05, limit: 0 },
+      { name: 'app-1', value: 0.02, limit: 0 },
+      { name: 'app-3', value: null, limit: 0 },
     ])
     expect(podUsageSeries(pods, 'memory')).toEqual([
-      { name: 'app-1', value: 64 },
-      { name: 'app-2', value: 32 },
-      { name: 'app-3', value: null },
+      { name: 'app-1', value: 64, limit: 0 },
+      { name: 'app-2', value: 32, limit: 0 },
+      { name: 'app-3', value: null, limit: 0 },
+    ])
+  })
+
+  it('carries the pod spec limit for the field', () => {
+    const withLimits = [
+      { name: 'app-1', metrics: { cpu: 0.1, memory: 64 }, resources: { cpuLimits: 0.5, memoryLimits: 128 } },
+    ]
+    expect(podUsageSeries(withLimits, 'cpu')).toEqual([
+      { name: 'app-1', value: 0.1, limit: 0.5 },
+    ])
+    expect(podUsageSeries(withLimits, 'memory')).toEqual([
+      { name: 'app-1', value: 64, limit: 128 },
     ])
   })
 
   it('keeps pods without a usage sample or with invalid values as null', () => {
     expect(podUsageSeries([{ name: 'b', metrics: { cpu: NaN } }, { name: 'a' }], 'cpu')).toEqual([
-      { name: 'a', value: null },
-      { name: 'b', value: null },
+      { name: 'a', value: null, limit: 0 },
+      { name: 'b', value: null, limit: 0 },
     ])
     expect(podUsageSeries(undefined, 'cpu')).toEqual([])
   })
 
   it('keeps zero-usage pods in the list', () => {
     expect(podUsageSeries([{ name: 'idle', metrics: { cpu: 0 } }], 'cpu')).toEqual([
-      { name: 'idle', value: 0 },
+      { name: 'idle', value: 0, limit: 0 },
     ])
   })
 })
@@ -219,22 +280,22 @@ describe('trimPodUsage', () => {
 
   it('keeps the extremes and collapses the middle into an aggregate row', () => {
     const rows = trimPodUsage(measured(20))
-    expect(rows).toHaveLength(7)
-    // Top 4 by usage.
-    expect(rows.slice(0, 4).map(r => r.name)).toEqual(['pod-0', 'pod-1', 'pod-2', 'pod-3'])
-    // The middle 14 pods collapse with their value range and average.
-    expect(rows[4]).toEqual({ type: 'elision', count: 14, min: 100 - 17, max: 100 - 4, avg: 89.5 })
+    expect(rows).toHaveLength(6)
+    // Top 3 by usage.
+    expect(rows.slice(0, 3).map(r => r.name)).toEqual(['pod-0', 'pod-1', 'pod-2'])
+    // The middle 15 pods collapse with their value range and average.
+    expect(rows[3]).toEqual({ type: 'elision', count: 15, min: 100 - 17, max: 100 - 3, avg: 90 })
     // Bottom 2 stay visible (cold outliers).
-    expect(rows.slice(5).map(r => r.name)).toEqual(['pod-18', 'pod-19'])
+    expect(rows.slice(4).map(r => r.name)).toEqual(['pod-18', 'pod-19'])
   })
 
   it('shows a single middle pod instead of eliding it', () => {
-    // 4 top + 1 middle + 2 bottom = 7 measured, plus 3 N/A to exceed the budget.
-    const items = [...measured(7), ...['a', 'b', 'c'].map(n => ({ name: n, value: null }))]
+    // 3 top + 1 middle + 2 bottom = 6 measured, plus 4 N/A to exceed the budget.
+    const items = [...measured(6), ...['a', 'b', 'c', 'd'].map(n => ({ name: n, value: null }))]
     const rows = trimPodUsage(items)
     expect(rows.filter(r => r.type === 'elision')).toHaveLength(0)
-    expect(rows.filter(r => r.type === 'pod' && r.value !== null)).toHaveLength(7)
-    expect(rows[rows.length - 1]).toEqual({ type: 'collecting', count: 3 })
+    expect(rows.filter(r => r.type === 'pod' && r.value !== null)).toHaveLength(6)
+    expect(rows[rows.length - 1]).toEqual({ type: 'collecting', count: 4 })
   })
 
   it('keeps up to two sampleless pods as individual rows', () => {

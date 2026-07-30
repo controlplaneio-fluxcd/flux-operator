@@ -6,9 +6,13 @@ package web
 import (
 	"context"
 	"errors"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/go-logr/logr/funcr"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -17,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	metricsv1beta1api "k8s.io/metrics/pkg/apis/metrics/v1beta1"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func TestMetricsCollector_IngestAndSeries(t *testing.T) {
@@ -218,6 +223,111 @@ func TestMetricsCollector_Scrape(t *testing.T) {
 	g.Expect(working.failing).To(BeFalse())
 }
 
+func TestMetricsCollector_NextScrapeDelay(t *testing.T) {
+	g := NewWithT(t)
+
+	// A fresh collector warms up at the catch-up interval so the usage
+	// charts get their second sample seconds after startup.
+	mc := NewMetricsCollector(nil, time.Minute)
+	g.Expect(mc.nextScrapeDelay()).To(Equal(metricsCatchupInterval))
+	mc.ticks = 1
+	g.Expect(mc.nextScrapeDelay()).To(Equal(metricsCatchupInterval))
+
+	// Nominal operation scrapes at the configured interval.
+	mc.ticks = 2
+	g.Expect(mc.nextScrapeDelay()).To(Equal(time.Minute))
+
+	// While failing, retries are shortened to the catch-up interval so a
+	// transient error at startup does not delay metrics by a full interval.
+	mc.failing = true
+	g.Expect(mc.nextScrapeDelay()).To(Equal(metricsCatchupInterval))
+	mc.failing = false
+	g.Expect(mc.nextScrapeDelay()).To(Equal(time.Minute))
+
+	// The retry delay never exceeds the configured interval.
+	short := NewMetricsCollector(nil, 5*time.Second)
+	short.failing = true
+	g.Expect(short.nextScrapeDelay()).To(Equal(5 * time.Second))
+}
+
+func TestMetricsCollector_Start(t *testing.T) {
+	g := NewWithT(t)
+
+	var calls atomic.Int32
+	mc := NewMetricsCollector(func(_ context.Context) (*metricsv1beta1api.PodMetricsList, error) {
+		if calls.Add(1) <= 2 {
+			return nil, errors.New("metrics API down")
+		}
+		return &metricsv1beta1api.PodMetricsList{}, nil
+	}, 20*time.Millisecond)
+
+	var logMu sync.Mutex
+	failureLogs := 0
+	logger := funcr.New(func(_, args string) {
+		logMu.Lock()
+		defer logMu.Unlock()
+		if strings.Contains(args, "Metrics API is unavailable") {
+			failureLogs++
+		}
+	}, funcr.Options{})
+
+	startCtx, cancel := context.WithCancel(log.IntoContext(context.Background(), logger))
+	stopped := mc.Start(startCtx)
+
+	// The initial scrape runs synchronously and its failure leaves the
+	// collector unavailable.
+	g.Expect(calls.Load()).To(BeNumerically(">=", 1))
+	g.Expect(mc.Available()).To(BeFalse())
+
+	// The loop retries failures and recovers once the lister succeeds.
+	g.Eventually(mc.Available, time.Second, 5*time.Millisecond).Should(BeTrue())
+
+	// The consecutive failures produced a single transition log.
+	logMu.Lock()
+	g.Expect(failureLogs).To(Equal(1))
+	logMu.Unlock()
+
+	// Cancellation stops the scrape loop.
+	cancel()
+	g.Eventually(stopped, time.Second).Should(BeClosed())
+}
+
+func TestMetricsCollector_ScrapeOverlapGuard(t *testing.T) {
+	g := NewWithT(t)
+
+	entered := make(chan struct{}, 10)
+	release := make(chan struct{})
+	var calls atomic.Int32
+	mc := NewMetricsCollector(func(_ context.Context) (*metricsv1beta1api.PodMetricsList, error) {
+		calls.Add(1)
+		entered <- struct{}{}
+		<-release
+		return &metricsv1beta1api.PodMetricsList{}, nil
+	}, time.Minute)
+	mc.ctx = context.Background()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		mc.scrape(context.Background())
+	}()
+	g.Eventually(entered).Should(Receive())
+
+	// A scheduled tick overlapping the in-flight scrape is dropped.
+	mc.scrape(context.Background())
+
+	// So is a requested catch-up, even when otherwise eligible.
+	mc.mu.Lock()
+	mc.lastSuccess = time.Now()
+	mc.lastScrape = time.Time{}
+	mc.mu.Unlock()
+	mc.RequestScrape()
+
+	close(release)
+	g.Eventually(done).Should(BeClosed())
+	g.Consistently(calls.Load, 100*time.Millisecond).Should(Equal(int32(1)))
+}
+
 func TestMetricsCollector_IngestDuplicateTick(t *testing.T) {
 	g := NewWithT(t)
 
@@ -245,10 +355,12 @@ func TestMetricsCollector_IngestDuplicateTick(t *testing.T) {
 	series := mc.PodSeries("default", "app-1")
 	g.Expect(series).To(HaveLen(1))
 	g.Expect(series[0].CPU).To(BeNumerically("~", 0.1, 1e-9))
+	g.Expect(mc.ticks).To(Equal(1))
 
 	// A later tick appends normally.
 	mc.ingest(list, now.Add(time.Minute))
 	g.Expect(mc.PodSeries("default", "app-1")).To(HaveLen(2))
+	g.Expect(mc.ticks).To(Equal(2))
 }
 
 func TestMetricsCollector_RequestScrape(t *testing.T) {
@@ -282,7 +394,7 @@ func TestMetricsCollector_RequestScrape(t *testing.T) {
 	g.Eventually(func() bool {
 		mc.mu.RLock()
 		defer mc.mu.RUnlock()
-		return mc.catchup
+		return mc.scraping
 	}).Should(BeFalse())
 	mc.RequestScrape()
 	g.Consistently(scrapes, 100*time.Millisecond).ShouldNot(Receive())
@@ -409,6 +521,16 @@ func TestMetricsCollector_WorkloadSeries_Rollout(t *testing.T) {
 	g.Expect(mc.LabeledPods("prod", selector)).To(BeEmpty())
 }
 
+func TestPodResources_IsZero(t *testing.T) {
+	g := NewWithT(t)
+
+	g.Expect(PodResources{}.IsZero()).To(BeTrue())
+	g.Expect(PodResources{CPURequests: 0.1}.IsZero()).To(BeFalse())
+	g.Expect(PodResources{CPULimits: 1}.IsZero()).To(BeFalse())
+	g.Expect(PodResources{MemoryRequests: 1}.IsZero()).To(BeFalse())
+	g.Expect(PodResources{MemoryLimits: 1}.IsZero()).To(BeFalse())
+}
+
 func TestSumPodResources(t *testing.T) {
 	g := NewWithT(t)
 
@@ -457,10 +579,10 @@ func TestSumPodResources(t *testing.T) {
 	}
 
 	res := sumPodResources(pod)
-	g.Expect(res.cpuRequests).To(BeNumerically("~", 0.15, 1e-9))
-	g.Expect(res.cpuLimits).To(BeZero())
-	g.Expect(res.memoryRequests).To(Equal(int64(96 << 20)))
-	g.Expect(res.memoryLimits).To(Equal(int64(128 << 20)))
+	g.Expect(res.CPURequests).To(BeNumerically("~", 0.15, 1e-9))
+	g.Expect(res.CPULimits).To(BeZero())
+	g.Expect(res.MemoryRequests).To(Equal(int64(96 << 20)))
+	g.Expect(res.MemoryLimits).To(Equal(int64(128 << 20)))
 }
 
 func TestBuildWorkloadMetrics(t *testing.T) {
@@ -502,27 +624,27 @@ func TestBuildWorkloadMetrics(t *testing.T) {
 		{
 			Name:   "app-1",
 			Status: string(corev1.PodRunning),
-			resources: podResources{
-				cpuRequests:    0.1,
-				memoryRequests: 64 << 20,
-				memoryLimits:   128 << 20,
+			resources: PodResources{
+				CPURequests:    0.1,
+				MemoryRequests: 64 << 20,
+				MemoryLimits:   128 << 20,
 			},
 		},
 		{
 			Name:   "app-2",
 			Status: string(corev1.PodRunning),
-			resources: podResources{
-				cpuRequests:    0.1,
-				memoryRequests: 64 << 20,
-				memoryLimits:   128 << 20,
+			resources: PodResources{
+				CPURequests:    0.1,
+				MemoryRequests: 64 << 20,
+				MemoryLimits:   128 << 20,
 			},
 		},
 		{
 			// Completed pods contribute no requests/limits.
 			Name:   "app-done",
 			Status: string(corev1.PodSucceeded),
-			resources: podResources{
-				cpuRequests: 5,
+			resources: PodResources{
+				CPURequests: 5,
 			},
 		},
 	}
@@ -686,7 +808,7 @@ func TestGetWorkloadStatus_PodMetrics(t *testing.T) {
 	g.Expect(workload.Pods[0].Metrics).NotTo(BeNil())
 	g.Expect(workload.Pods[0].Metrics.CPU).To(BeNumerically("~", 0.05, 1e-9))
 	g.Expect(workload.Pods[0].Metrics.Memory).To(Equal(int64(32 << 20)))
-	g.Expect(workload.Pods[0].resources.cpuRequests).To(BeNumerically("~", 0.1, 1e-9))
+	g.Expect(workload.Pods[0].resources.CPURequests).To(BeNumerically("~", 0.1, 1e-9))
 
 	// The workload-level aggregation picks up the running pod.
 	depObj := &unstructured.Unstructured{Object: map[string]any{
@@ -826,7 +948,11 @@ func TestControllerMetrics(t *testing.T) {
 	mc.ingest(&metricsv1beta1api.PodMetricsList{
 		Items: []metricsv1beta1api.PodMetrics{
 			{
-				ObjectMeta: metav1.ObjectMeta{Name: pod.Name, Namespace: pod.Namespace},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      pod.Name,
+					Namespace: pod.Namespace,
+					Labels:    pod.Labels,
+				},
 				Containers: []metricsv1beta1api.ContainerMetrics{
 					{
 						Name: "manager",
@@ -838,7 +964,11 @@ func TestControllerMetrics(t *testing.T) {
 				},
 			},
 			{
-				ObjectMeta: metav1.ObjectMeta{Name: donePod.Name, Namespace: donePod.Namespace},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      donePod.Name,
+					Namespace: donePod.Namespace,
+					Labels:    donePod.Labels,
+				},
 				Containers: []metricsv1beta1api.ContainerMetrics{
 					{
 						Name: "manager",
@@ -868,6 +998,23 @@ func TestControllerMetrics(t *testing.T) {
 	g.Expect(metrics[0].CPULimits).To(BeZero())
 	g.Expect(metrics[0].MemoryRequests).To(Equal(int64(64 << 20)))
 	g.Expect(metrics[0].MemoryLimits).To(BeZero())
+
+	// A pod list failure falls back to the buffered labeled pods,
+	// serving usage without requests and limits.
+	failCtx, cancelFail := context.WithCancel(ctx)
+	cancelFail()
+	fallback := handler.controllerMetrics(failCtx)
+	g.Expect(fallback).To(HaveLen(2))
+	byPod := make(map[string]ControllerMetrics, len(fallback))
+	for _, m := range fallback {
+		byPod[m.Pod] = m
+	}
+	g.Expect(byPod).To(HaveKey(pod.Name))
+	g.Expect(byPod[pod.Name].CPU).To(BeNumerically("~", 0.05, 1e-9))
+	g.Expect(byPod[pod.Name].Memory).To(Equal(int64(32 << 20)))
+	g.Expect(byPod[pod.Name].CPURequests).To(BeZero())
+	g.Expect(byPod[pod.Name].MemoryRequests).To(BeZero())
+	g.Expect(byPod).To(HaveKey(donePod.Name))
 
 	// A disabled or unavailable collector produces no metrics.
 	g.Expect((&Handler{kubeClient: kubeClient, namespace: "default"}).controllerMetrics(ctx)).To(BeNil())

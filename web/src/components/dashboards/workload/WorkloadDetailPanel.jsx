@@ -7,7 +7,8 @@ import { formatTimestamp } from '../../../utils/time'
 import { getWorkloadStatusBadgeClass, formatWorkloadStatus, getEventBadgeClass, getContainerStateBadgeClass } from '../../../utils/status'
 import { formatScheduleMessage } from '../../../utils/cron'
 import { DashboardPanel, TabButton } from '../common/panel'
-import { formatCores, formatBytes } from '../../../utils/metrics'
+import { formatCores, formatBytes, percentOf, limitSeverity } from '../../../utils/metrics'
+import { severityTextClass } from '../common/ResourceMetric'
 import { YamlBlock } from '../common/yaml'
 import { WorkloadDeleteAction } from '../resource/WorkloadDeleteAction'
 import { WorkloadLogsViewer } from './WorkloadLogsViewer'
@@ -22,6 +23,18 @@ const WORKLOAD_TABS = ['overview', 'pods', 'events', 'spec', 'status']
 
 // Highlight threshold for recently changed pods
 const RECENT_POD_THRESHOLD = 30000  // 30 seconds
+
+/**
+ * LimitPercent - Percent-of-limit fragment for the pod usage line,
+ * colored by proximity to the limit. Renders nothing when the pod
+ * spec sets no limit.
+ */
+function LimitPercent({ value, limit }) {
+  const pct = percentOf(value, limit)
+  if (pct === null) return null
+  const colorClass = severityTextClass(limitSeverity(value, limit)) || 'text-gray-500 dark:text-gray-400'
+  return <span class={colorClass}> ({pct}% of limit)</span>
+}
 
 /**
  * Check if a timestamp is within the recent threshold
@@ -520,14 +533,17 @@ export function WorkloadDetailPanel({
                         </span>
                       </div>
                     )}
-                    {/* Current CPU/Memory usage line */}
+                    {/* Current CPU/Memory usage line with limit proximity */}
                     {pod.metrics && (
                       <div class="flex items-center gap-1.5 mt-1" data-testid="pod-metrics">
                         <svg class="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
                         </svg>
                         <span class="text-xs text-gray-600 dark:text-gray-400">
-                          CPU: {formatCores(pod.metrics.cpu)} · Memory: {formatBytes(pod.metrics.memory)}
+                          CPU: {formatCores(pod.metrics.cpu)}
+                          <LimitPercent value={pod.metrics.cpu} limit={pod.resources?.cpuLimits} />
+                          {' · '}Memory: {formatBytes(pod.metrics.memory)}
+                          <LimitPercent value={pod.metrics.memory} limit={pod.resources?.memoryLimits} />
                         </span>
                       </div>
                     )}

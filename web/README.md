@@ -17,7 +17,7 @@ controller readiness, and troubleshoot issues instantly, without needing to acce
 - **Navigate Efficiently:** Use advanced search and filtering to find specific resources instantly.
 - **Deep Dive:** Access dedicated dashboards for Flux resources (HelmReleases, ResourceSets, etc.) and Kubernetes Workloads (Deployments, StatefulSets, DaemonSets, CronJobs).
 - **Inspect Logs:** View the logs of workload pods directly from the browser, scoped to your RBAC permissions.
-- **Track Resource Usage:** Monitor CPU and memory usage of workloads with charts covering the last 30 minutes, including per-pod usage and utilization relative to the configured requests and limits (requires metrics-server). CronJobs show the current per-pod usage only, as their short-lived pods don't produce a meaningful usage history.
+- **Track Resource Usage:** Monitor CPU and memory usage of workloads with charts covering the last 30 minutes (requires metrics-server). Pods approaching their CPU or memory limits are highlighted to signal throttling and OOM risk.
 - **Favorites:** Mark important resources as favorites for quick access and at-a-glance status monitoring.
 - **Mobile-Optimized:** Stay informed with a fully responsive interface designed for on-the-go checks.
 - **Adaptive Theming:** Toggle between dark and light modes to suit your environment and preference.

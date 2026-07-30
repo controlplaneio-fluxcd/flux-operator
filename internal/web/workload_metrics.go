@@ -90,14 +90,17 @@ type MetricsCollector struct {
 	pods map[string]*podSeries
 
 	// lastSuccess is the time of the last successful scrape and failing
-	// tracks the failure state for transition logging.
+	// tracks the failure state for transition logging. ticks counts the
+	// distinct scrape timestamps ingested since the collector was created.
 	lastSuccess time.Time
 	failing     bool
+	ticks       int
 
-	// lastScrape and catchup rate-limit the off-schedule scrapes
-	// requested via RequestScrape.
+	// lastScrape rate-limits the off-schedule scrapes requested via
+	// RequestScrape; scraping guards against concurrent scrapes when a
+	// catch-up overlaps a scheduled tick.
 	lastScrape time.Time
-	catchup    bool
+	scraping   bool
 }
 
 // NewMetricsCollector creates a MetricsCollector that scrapes pod metrics
@@ -126,20 +129,35 @@ func (mc *MetricsCollector) Start(ctx context.Context) <-chan struct{} {
 	go func() {
 		defer close(stopped)
 
-		ticker := time.NewTicker(mc.interval)
-		defer ticker.Stop()
+		timer := time.NewTimer(mc.nextScrapeDelay())
+		defer timer.Stop()
 
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case <-ticker.C:
+			case <-timer.C:
 				mc.scrape(ctx)
+				timer.Reset(mc.nextScrapeDelay())
 			}
 		}
 	}()
 
 	return stopped
+}
+
+// nextScrapeDelay returns the delay until the next scheduled scrape:
+// the configured interval, shortened to the catch-up interval while the
+// collector is failing or holds fewer than two samples, so neither a
+// transient error nor a fresh start leaves the UI without usage charts
+// for a full interval.
+func (mc *MetricsCollector) nextScrapeDelay() time.Duration {
+	mc.mu.RLock()
+	defer mc.mu.RUnlock()
+	if mc.failing || mc.ticks < 2 {
+		return min(metricsCatchupInterval, mc.interval)
+	}
+	return mc.interval
 }
 
 // Available reports whether the collector holds usable data: at least one
@@ -158,37 +176,43 @@ func (mc *MetricsCollector) availableLocked() bool {
 
 // RequestScrape triggers one off-schedule scrape on a new goroutine,
 // used to pick up pods created after the last scheduled scrape.
-// Requests are dropped while a catch-up is in flight, within
+// Requests are dropped while a scrape is in flight, within
 // metricsCatchupInterval of the last scrape, or when the Metrics API
 // is unavailable.
 func (mc *MetricsCollector) RequestScrape() {
 	mc.mu.Lock()
-	if mc.ctx == nil || !mc.availableLocked() || mc.catchup ||
+	if mc.ctx == nil || !mc.availableLocked() || mc.scraping ||
 		time.Since(mc.lastScrape) < metricsCatchupInterval {
 		mc.mu.Unlock()
 		return
 	}
-	mc.catchup = true
 	scrapeCtx := mc.ctx
 	mc.mu.Unlock()
 
-	go func() {
-		defer func() {
-			mc.mu.Lock()
-			mc.catchup = false
-			mc.mu.Unlock()
-		}()
-		mc.scrape(scrapeCtx)
-	}()
+	go mc.scrape(scrapeCtx)
 }
 
-// scrape queries the Metrics API and ingests the result. Failures are
-// logged on the transition into the failing state, so a stalled or
-// missing Metrics API produces one diagnostic instead of one per tick.
+// scrape queries the Metrics API and ingests the result, dropping the
+// call when another scrape is already in flight so a catch-up
+// overlapping a scheduled tick cannot issue concurrent cluster-wide
+// queries. Failures are logged on the transition into the failing
+// state, so a stalled or missing Metrics API produces one diagnostic
+// instead of one per tick.
 func (mc *MetricsCollector) scrape(ctx context.Context) {
 	mc.mu.Lock()
+	if mc.scraping {
+		mc.mu.Unlock()
+		return
+	}
+	mc.scraping = true
 	mc.lastScrape = time.Now()
 	mc.mu.Unlock()
+
+	defer func() {
+		mc.mu.Lock()
+		mc.scraping = false
+		mc.mu.Unlock()
+	}()
 
 	scrapeCtx, cancel := context.WithTimeout(ctx, metricsScrapeTimeout)
 	defer cancel()
@@ -226,6 +250,10 @@ func (mc *MetricsCollector) ingest(list *metricsv1beta1api.PodMetricsList, now t
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
 
+	// Overlapping scrapes within the same truncated second share a tick.
+	if !mc.lastSuccess.Equal(now) {
+		mc.ticks++
+	}
 	mc.lastSuccess = now
 	mc.failing = false
 
@@ -428,8 +456,8 @@ func (h *Handler) currentPodMetrics(namespace, name string) *MetricsSample {
 
 // sumPodResources sums the CPU/Memory requests and limits of the pod
 // containers, including sidecar init containers.
-func sumPodResources(pod *corev1.Pod) podResources {
-	var res podResources
+func sumPodResources(pod *corev1.Pod) PodResources {
+	var res PodResources
 
 	containers := make([]corev1.Container, 0, len(pod.Spec.Containers)+len(pod.Spec.InitContainers))
 	containers = append(containers, pod.Spec.Containers...)
@@ -441,16 +469,16 @@ func sumPodResources(pod *corev1.Pod) podResources {
 
 	for _, c := range containers {
 		if q, ok := c.Resources.Requests[corev1.ResourceCPU]; ok {
-			res.cpuRequests += q.AsApproximateFloat64()
+			res.CPURequests += q.AsApproximateFloat64()
 		}
 		if q, ok := c.Resources.Limits[corev1.ResourceCPU]; ok {
-			res.cpuLimits += q.AsApproximateFloat64()
+			res.CPULimits += q.AsApproximateFloat64()
 		}
 		if q, ok := c.Resources.Requests[corev1.ResourceMemory]; ok {
-			res.memoryRequests += q.Value()
+			res.MemoryRequests += q.Value()
 		}
 		if q, ok := c.Resources.Limits[corev1.ResourceMemory]; ok {
-			res.memoryLimits += q.Value()
+			res.MemoryLimits += q.Value()
 		}
 	}
 
@@ -473,10 +501,10 @@ func (h *Handler) buildWorkloadMetrics(obj *unstructured.Unstructured, pods []Wo
 	for _, pod := range pods {
 		names = append(names, pod.Name)
 		if pod.Status == string(corev1.PodRunning) {
-			wm.CPURequests += pod.resources.cpuRequests
-			wm.CPULimits += pod.resources.cpuLimits
-			wm.MemoryRequests += pod.resources.memoryRequests
-			wm.MemoryLimits += pod.resources.memoryLimits
+			wm.CPURequests += pod.resources.CPURequests
+			wm.CPULimits += pod.resources.CPULimits
+			wm.MemoryRequests += pod.resources.MemoryRequests
+			wm.MemoryLimits += pod.resources.MemoryLimits
 		}
 	}
 

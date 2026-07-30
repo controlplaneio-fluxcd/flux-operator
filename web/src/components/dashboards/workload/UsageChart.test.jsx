@@ -95,6 +95,9 @@ describe('UsageChart component', () => {
     // Tick steps never go below one minute (the sample interval),
     // which would produce duplicate HH:MM labels.
     expect(Math.min(...xAxis.incrs)).toBe(60)
+    // Ticks must leave room for a ~50px "05:12 PM" label plus a gap;
+    // uPlot's default 50px spacing packs the labels edge-to-edge.
+    expect(xAxis.space).toBeGreaterThanOrEqual(80)
   })
 
   it('formats y-axis ticks with the provided formatter', () => {
@@ -104,6 +107,68 @@ describe('UsageChart component', () => {
 
     const yAxis = uPlot.instances[0].opts.axes[1]
     expect(yAxis.values(null, [0, 0.1, 0.2])).toEqual(['0m', '100m', '200m'])
+  })
+
+  it('sizes the y-axis to its widest tick label', () => {
+    render(
+      <UsageChart data={data} hasLimit={false} colorKey="cpu" formatValue={formatCores} testId="cpu-chart" />
+    )
+
+    const yAxis = uPlot.instances[0].opts.axes[1]
+    const u = {
+      axes: [null, { font: ['11px Inter'], gap: 5, _size: 40 }],
+      ctx: { measureText: vi.fn(s => ({ width: s.length * 10 })), font: '' },
+    }
+
+    // Widest label "200m": 40px wide + 5 gap + 8 pad.
+    expect(yAxis.size(u, ['0m', '100m', '200m'], 1, 1)).toBe(53)
+    // The pre-layout pass without values falls back to the minimum.
+    expect(yAxis.size(u, null, 1, 1)).toBe(13)
+    // Later layout cycles reuse the computed size to avoid loops.
+    expect(yAxis.size(u, ['0m'], 1, 2)).toBe(40)
+  })
+
+  it('divides the measured label width by the device pixel ratio', () => {
+    const original = window.devicePixelRatio
+    window.devicePixelRatio = 2
+    try {
+      render(
+        <UsageChart data={data} hasLimit={false} colorKey="cpu" formatValue={formatCores} testId="cpu-chart" />
+      )
+
+      const yAxis = uPlot.instances[0].opts.axes[1]
+      const u = {
+        axes: [null, { font: ['11px Inter'], gap: 5, _size: 40 }],
+        ctx: { measureText: vi.fn(() => ({ width: 40 })), font: '' },
+      }
+      // measureText reports canvas pixels: 40 / dpr 2 = 20 CSS px + 5 gap + 8 pad.
+      expect(yAxis.size(u, ['200m'], 1, 1)).toBe(33)
+    } finally {
+      window.devicePixelRatio = original
+    }
+  })
+
+  it('hides a final x-axis label that would clip at the right edge', () => {
+    render(
+      <UsageChart data={data} hasLimit={false} colorKey="cpu" formatValue={formatCores} testId="cpu-chart" />
+    )
+
+    const xAxis = uPlot.instances[0].opts.axes[0]
+    const u = {
+      scales: { x: { min: 0, max: 1800 } },
+      bbox: { width: 540 },
+      axes: [{ font: ['11px Inter'] }],
+      ctx: { measureText: vi.fn(() => ({ width: 52 })), font: '' },
+    }
+
+    // A tick 10s from the edge: 3px + 8 pad < 26 half-label -> hidden.
+    let labels = xAxis.values(u, [600, 1790])
+    expect(labels[1]).toBeNull()
+    expect(labels[0]).not.toBeNull()
+
+    // A tick 120s from the edge has room for the label.
+    labels = xAxis.values(u, [600, 1680])
+    expect(labels[1]).not.toBeNull()
   })
 
   it('registers a draw hook only when an annotation is set', () => {

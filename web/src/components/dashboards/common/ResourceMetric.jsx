@@ -1,16 +1,31 @@
 // Copyright 2026 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
+import { percentSeverity } from '../../../utils/metrics'
+
+/**
+ * severityTextClass returns the text color classes for a usage severity
+ * (percentSeverity output): red for critical, yellow for warn and an
+ * empty string otherwise.
+ */
+export function severityTextClass(severity) {
+  if (severity === 'critical') return 'text-red-600 dark:text-red-400 font-medium'
+  if (severity === 'warn') return 'text-yellow-700 dark:text-yellow-400 font-medium'
+  return ''
+}
+
 /**
  * ResourceMetric - CPU/Memory usage display: absolute value first, with
  * the request/limit percentages as secondary text and a progress bar only
- * when a real limit is set.
+ * when a real limit is set. The bar is colored by limit proximity
+ * (percentSeverity).
  */
 export function ResourceMetric({ label, value, percentLabel, barPercent }) {
+  const severity = percentSeverity(barPercent)
   let colorClass = 'bg-green-500'
-  if (barPercent >= 85) {
+  if (severity === 'critical') {
     colorClass = 'bg-red-500'
-  } else if (barPercent >= 70) {
+  } else if (severity === 'warn') {
     colorClass = 'bg-yellow-500'
   }
 

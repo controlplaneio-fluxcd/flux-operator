@@ -191,6 +191,16 @@
     background-color: #6b7280;
   }
 
+  /* Severity fills for pods approaching their limits, matching the
+     yellow/red of the ResourceMetric progress bars. */
+  .usage-bar-fill-warn {
+    background-color: #eab308;
+  }
+
+  .usage-bar-fill-critical {
+    background-color: #ef4444;
+  }
+
   /* One-shot glow for the latest log line; color comes from --glow-color,
      set per log level by the viewer. */
   .log-glow {

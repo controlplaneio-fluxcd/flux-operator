@@ -46,14 +46,23 @@ const sourceControllerMetrics = buildMockMetrics({
 })
 const metricsServerMetrics = buildMockMetrics({ cpuBase: 0.012, memBase: 48 * 1024 * 1024 })
 // zot-registry: three replicas with skewed per-pod usage (demoes the
-// per-pod bars) and a rollout restart mid-window (demoes the chart
-// annotation line).
+// per-pod bars), a rollout restart mid-window (demoes the chart
+// annotation line) and pods near their limits (demoes the yellow and
+// red limit percentages).
 const zotRegistryMetrics = buildMockMetrics({
   cpuBase: 0.09,
   memBase: 230 * 1024 * 1024,
   cpuRequests: 0.3,
-  memoryRequests: 384 * 1024 * 1024
+  cpuLimits: 0.6,
+  memoryRequests: 384 * 1024 * 1024,
+  memoryLimits: 384 * 1024 * 1024
 })
+const zotPodResources = {
+  cpuRequests: 0.1,
+  cpuLimits: 0.2,
+  memoryRequests: 128 * 1024 * 1024,
+  memoryLimits: 128 * 1024 * 1024
+}
 
 // Mock workload data
 // Pod statuses use Kubernetes pod phases: Pending, Running, Succeeded, Failed, Unknown
@@ -79,6 +88,12 @@ const mockWorkloads = {
         statusMessage: 'Started at 2026-01-26 09:45:00 UTC',
         createdAt: getTimestamp(7, 2, 15), // 7 days, 2 hours, 15 minutes ago
         metrics: currentUsage(sourceControllerMetrics),
+        resources: {
+          cpuRequests: 0.1,
+          cpuLimits: 1,
+          memoryRequests: 256 * 1024 * 1024,
+          memoryLimits: 512 * 1024 * 1024
+        },
         podStatus: {
           phase: 'Running',
           containerStatuses: [
@@ -408,25 +423,30 @@ const mockWorkloads = {
     metrics: zotRegistryMetrics,
     pods: [
       {
+        // CPU and memory at ~95% of the limits: red percentages.
         name: 'zot-registry-0',
         status: 'Running',
         statusMessage: 'Started at 2026-02-06 10:18:00 UTC',
         createdAt: getTimestamp(0, 0, 11),
-        metrics: { t: getTimestamp(0, 0, 0), cpu: 0.052, memory: 112 * 1024 * 1024 }
+        metrics: { t: getTimestamp(0, 0, 0), cpu: 0.19, memory: 122 * 1024 * 1024 },
+        resources: zotPodResources
       },
       {
         name: 'zot-registry-1',
         status: 'Running',
         statusMessage: 'Started at 2026-02-06 10:19:00 UTC',
         createdAt: getTimestamp(0, 0, 10),
-        metrics: { t: getTimestamp(0, 0, 0), cpu: 0.021, memory: 64 * 1024 * 1024 }
+        metrics: { t: getTimestamp(0, 0, 0), cpu: 0.021, memory: 64 * 1024 * 1024 },
+        resources: zotPodResources
       },
       {
-        // No usage sample yet (fresh pod): shows the N/A gray bar.
+        // CPU and memory in the 80-90% band: yellow percentages.
         name: 'zot-registry-2',
         status: 'Running',
         statusMessage: 'Started at 2026-02-06 10:20:00 UTC',
-        createdAt: getTimestamp(0, 0, 1)
+        createdAt: getTimestamp(0, 0, 1),
+        metrics: { t: getTimestamp(0, 0, 0), cpu: 0.17, memory: 108 * 1024 * 1024 },
+        resources: zotPodResources
       }
     ]
   },

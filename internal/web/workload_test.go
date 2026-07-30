@@ -16,6 +16,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -1796,6 +1797,45 @@ func TestWorkloadHandler_Success_WithParentReconciler(t *testing.T) {
 	g.Expect(testClient.Create(ctx, deployment)).To(Succeed())
 	defer func() { g.Expect(testClient.Delete(ctx, deployment)).To(Succeed()) }()
 
+	// Managed pods: one with partial requests/limits, one without any.
+	makePod := func(name string, resources corev1.ResourceRequirements) *corev1.Pod {
+		return &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: "default",
+				Labels:    map[string]string{"app": "test-wh-deploy"},
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion: "apps/v1",
+						Kind:       "ReplicaSet",
+						Name:       "test-wh-deploy-abc123",
+						UID:        "test-wh-uid",
+					},
+				},
+			},
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{
+					{Name: "nginx", Image: "nginx:1.25.0", Resources: resources},
+				},
+			},
+		}
+	}
+	podWithResources := makePod("test-wh-deploy-pod-a", corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("100m"),
+			corev1.ResourceMemory: resource.MustParse("64Mi"),
+		},
+		Limits: corev1.ResourceList{
+			corev1.ResourceMemory: resource.MustParse("128Mi"),
+		},
+	})
+	g.Expect(testClient.Create(ctx, podWithResources)).To(Succeed())
+	defer testClient.Delete(ctx, podWithResources)
+
+	podWithoutResources := makePod("test-wh-deploy-pod-b", corev1.ResourceRequirements{})
+	g.Expect(testClient.Create(ctx, podWithoutResources)).To(Succeed())
+	defer testClient.Delete(ctx, podWithoutResources)
+
 	handler := &Handler{
 		kubeClient:    kubeClient,
 		version:       "v1.0.0",
@@ -1842,6 +1882,28 @@ func TestWorkloadHandler_Success_WithParentReconciler(t *testing.T) {
 	g.Expect(ok).To(BeTrue())
 	g.Expect(reconcilerMeta["name"]).To(Equal("test-wh-parent"))
 	g.Expect(reconcilerMeta["namespace"]).To(Equal("default"))
+
+	// Verify the per-pod resources serialization: exact JSON field names,
+	// unset fields omitted, and the object absent when the pod spec sets
+	// no requests/limits at all. Pods are sorted by name.
+	pods, ok := workloadInfo["pods"].([]any)
+	g.Expect(ok).To(BeTrue(), "pods should be present in workloadInfo")
+	g.Expect(pods).To(HaveLen(2))
+
+	podA, ok := pods[0].(map[string]any)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(podA["name"]).To(Equal("test-wh-deploy-pod-a"))
+	resources, ok := podA["resources"].(map[string]any)
+	g.Expect(ok).To(BeTrue(), "resources should be present for the pod with requests/limits")
+	g.Expect(resources).To(HaveKeyWithValue("cpuRequests", BeNumerically("~", 0.1, 1e-9)))
+	g.Expect(resources).To(HaveKeyWithValue("memoryRequests", BeNumerically("==", 64<<20)))
+	g.Expect(resources).To(HaveKeyWithValue("memoryLimits", BeNumerically("==", 128<<20)))
+	g.Expect(resources).NotTo(HaveKey("cpuLimits"))
+
+	podB, ok := pods[1].(map[string]any)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(podB["name"]).To(Equal("test-wh-deploy-pod-b"))
+	g.Expect(podB).NotTo(HaveKey("resources"))
 }
 
 func TestWorkloadHandler_NotFluxManaged_ReturnsError(t *testing.T) {

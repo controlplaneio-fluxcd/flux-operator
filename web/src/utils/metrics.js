@@ -39,15 +39,30 @@ export function formatBytes(bytes) {
 }
 
 /**
+ * Percentage of a value relative to a denominator with double artifacts
+ * rounded away (0.18/0.2 evaluates to 89.999...96) and negative usage
+ * clamped to zero. Shared by the display and severity paths so the
+ * shown percentage and its color always agree.
+ */
+function ratioPercent(value, denominator) {
+  return Math.max(0, Math.round((value / denominator) * 100 * 1e6) / 1e6)
+}
+
+/**
  * Compute the percentage of a usage value relative to a denominator.
- * Returns null when the denominator is not set (zero).
+ * Returns null when the denominator is not set (zero) or either
+ * side is not a finite number. The percentage is truncated, not
+ * rounded, so the displayed value stays consistent with the severity
+ * thresholds: 89.5% must not display as "90%" next to a non-critical
+ * color.
  * @param {number} value - Usage value
  * @param {number} denominator - Requests or limits value, 0 when unset
- * @returns {number|null} - Rounded percentage or null
+ * @returns {number|null} - Truncated percentage or null
  */
 export function percentOf(value, denominator) {
-  if (typeof value !== 'number' || typeof denominator !== 'number' || denominator <= 0) return null
-  return Math.round((value / denominator) * 100)
+  if (typeof value !== 'number' || !isFinite(value)) return null
+  if (typeof denominator !== 'number' || !isFinite(denominator) || denominator <= 0) return null
+  return Math.floor(ratioPercent(value, denominator))
 }
 
 /**
@@ -66,6 +81,37 @@ export function percentText(value, requests, limits) {
   const limPct = percentOf(value, limits)
   if (limPct !== null) fragments.push(`${limPct}% of limit`)
   return fragments.length > 0 ? fragments.join(' · ') : null
+}
+
+/**
+ * Classify a usage percentage: 'critical' at >=90%, 'warn' at >=80%,
+ * null below that or when the percentage is unknown. The thresholds are
+ * deliberately conservative: memory at 70-85% of limit is healthy
+ * bin-packing, not a warning.
+ * @param {number|null} pct - Usage percentage
+ * @returns {string|null} - 'critical', 'warn' or null
+ */
+export function percentSeverity(pct) {
+  if (typeof pct !== 'number') return null
+  if (pct >= 90) return 'critical'
+  if (pct >= 80) return 'warn'
+  return null
+}
+
+/**
+ * Classify usage proximity to its limit (see percentSeverity), using
+ * the exact ratio so 89.5% does not classify as critical; percentOf
+ * truncates the same ratio for display, keeping the shown percentage
+ * and the color in agreement. Critical CPU means throttling, critical
+ * memory means OOM-kill risk.
+ * @param {number} value - Current usage value
+ * @param {number} limit - Limit, 0 when unset
+ * @returns {string|null} - 'critical', 'warn' or null
+ */
+export function limitSeverity(value, limit) {
+  if (typeof value !== 'number' || !isFinite(value)) return null
+  if (typeof limit !== 'number' || !isFinite(limit) || limit <= 0) return null
+  return percentSeverity(ratioPercent(value, limit))
 }
 
 /**
@@ -128,19 +174,23 @@ export function hasChartableMetrics(metrics) {
 /**
  * Build the per-pod usage list for one value field, sorted by usage
  * descending. Pods without a current usage sample are kept with a
- * null value and sorted last.
- * @param {Array<{name: string, metrics?: Object}>} pods - workloadInfo.pods
+ * null value and sorted last. Each entry carries the pod spec limit
+ * for the field (0 when unset).
+ * @param {Array<{name: string, metrics?: Object, resources?: Object}>} pods - workloadInfo.pods
  * @param {string} field - "cpu" or "memory"
- * @returns {Array<{name: string, value: number|null}>} - Sorted usage list
+ * @returns {Array<{name: string, value: number|null, limit: number}>} - Sorted usage list
  */
 export function podUsageSeries(pods, field) {
+  const limitField = field === 'cpu' ? 'cpuLimits' : 'memoryLimits'
   const items = []
   for (const pod of pods || []) {
     const value = pod?.metrics?.[field]
+    const rawLimit = pod?.resources?.[limitField]
+    const limit = typeof rawLimit === 'number' && isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 0
     if (typeof value === 'number' && isFinite(value) && value >= 0) {
-      items.push({ name: pod.name, value })
+      items.push({ name: pod.name, value, limit })
     } else {
-      items.push({ name: pod.name, value: null })
+      items.push({ name: pod.name, value: null, limit })
     }
   }
   return items.sort((a, b) => {
@@ -153,7 +203,7 @@ export function podUsageSeries(pods, field) {
 
 // Row budget of the per-pod usage bars.
 const POD_BARS_BUDGET = 9
-const POD_BARS_TOP = 4
+const POD_BARS_TOP = 3
 const POD_BARS_BOTTOM = 2
 const POD_BARS_NA_MAX = 2
 

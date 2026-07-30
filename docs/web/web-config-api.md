@@ -400,6 +400,12 @@ usage history in memory by scraping the API periodically (one cluster-wide query
 On clusters without metrics-server, the charts are hidden automatically and no configuration
 is required.
 
+At startup the first two samples are collected 15 seconds apart (or at the
+scrape interval, when configured shorter) so the usage charts render shortly
+after the web server starts. Failed scrapes are retried at the same cadence
+until the Metrics API recovers, so a transient error does not leave the
+dashboards without metrics for a full interval.
+
 The `scrapeInterval` option controls the collection cadence. The default of `60s` keeps
 the memory overhead small (roughly 2.5 KiB per pod). Lowering it towards the
 metrics-server resolution (`15s` by default) produces finer-grained charts at
