@@ -20,6 +20,11 @@ import (
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/install"
 )
 
+var (
+	resolveMCPInstallArtifact  = install.ResolveArtifactURL
+	downloadMCPInstallArtifact = install.DownloadFileFromArtifact
+)
+
 const (
 	// ToolInstallFluxInstance is the name of the install_flux_instance tool.
 	ToolInstallFluxInstance = "install_flux_instance"
@@ -87,7 +92,8 @@ func (m *Manager) HandleInstallFluxInstance(ctx context.Context, request *mcp.Ca
 		return NewToolResultErrorFromErr("failed to get Kubernetes client", err)
 	}
 
-	installer, err := install.NewInstaller(ctx, kubeClient.GetConfig())
+	installer, err := install.NewInstaller(ctx, kubeClient.GetConfig(),
+		install.WithArtifactURL(operatorArtifactURL(instance)))
 	if err != nil {
 		return NewToolResultErrorFromErr("failed to create installer", err)
 	}
@@ -163,16 +169,27 @@ func (m *Manager) fetchInstanceManifest(ctx context.Context, instanceURL string)
 	return instance, nil
 }
 
-// fetchOperatorManifest downloads and parses the Flux Operator manifest from the distribution artifact.
-func (m *Manager) fetchOperatorManifest(ctx context.Context, instance *fluxcdv1.FluxInstance) ([]*unstructured.Unstructured, error) {
-	artifactURL := install.DefaultArtifactURL
+// operatorArtifactURL returns the logical distribution artifact URL configured
+// on the instance, preserving its tag for automatic update tracking.
+func operatorArtifactURL(instance *fluxcdv1.FluxInstance) string {
 	if instance.Spec.Distribution.Artifact != "" {
-		artifactURL = instance.Spec.Distribution.Artifact
+		return instance.Spec.Distribution.Artifact
+	}
+	return install.DefaultArtifactURL
+}
+
+// fetchOperatorManifest resolves the distribution artifact once and downloads
+// the Flux Operator manifest from that immutable digest reference.
+func (m *Manager) fetchOperatorManifest(ctx context.Context, instance *fluxcdv1.FluxInstance) ([]*unstructured.Unstructured, error) {
+	artifactURL := operatorArtifactURL(instance)
+	pinnedURL, err := resolveMCPInstallArtifact(ctx, artifactURL, authn.DefaultKeychain)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve distribution artifact: %w", err)
 	}
 
-	data, err := install.DownloadFileFromArtifact(
+	data, err := downloadMCPInstallArtifact(
 		ctx,
-		artifactURL,
+		pinnedURL,
 		"flux-operator/install.yaml",
 		authn.DefaultKeychain,
 	)

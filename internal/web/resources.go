@@ -39,6 +39,11 @@ func (h *Handler) ResourcesHandler(w http.ResponseWriter, req *http.Request) {
 	namespace := queryParams.Get("namespace")
 	status := queryParams.Get("status")
 
+	if err := validateSearchFilters(kind, name, namespace); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	var resources []reporter.ResourceStatus
 	if h.conf.Search != nil && h.conf.Search.Cached {
 		// Use the cached search index instead of realtime cluster queries.
@@ -88,6 +93,13 @@ func defaultFluxKinds() []string {
 // If name and namespace filters are empty, it will return resources across all namespaces (subject to RBAC).
 func (h *Handler) GetLiveResources(ctx context.Context, kind, name, namespace, status string,
 	matchLimit int) ([]reporter.ResourceStatus, error) {
+
+	if err := validateSearchFilters(kind, name, namespace); err != nil {
+		return nil, err
+	}
+
+	nameIsPattern := isNamePattern(name)
+	nameMatcher := compileWildcardMatcher(name)
 
 	// Build kinds array based on query parameter
 	var kinds []string
@@ -144,6 +156,10 @@ func (h *Handler) GetLiveResources(ctx context.Context, kind, name, namespace, s
 		go func(kind string) {
 			defer wg.Done()
 
+			if ctx.Err() != nil {
+				return
+			}
+
 			gvk, err := h.preferredFluxGVK(ctx, kind)
 			if err != nil {
 				if strings.Contains(err.Error(), "no matches for kind") {
@@ -163,6 +179,10 @@ func (h *Handler) GetLiveResources(ctx context.Context, kind, name, namespace, s
 
 			var byKindResult []reporter.ResourceStatus
 			for _, ns := range namespacesToQuery {
+				if ctx.Err() != nil {
+					return
+				}
+
 				list := unstructured.UnstructuredList{
 					Object: map[string]any{
 						"apiVersion": gvk.Group + "/" + gvk.Version,
@@ -179,7 +199,7 @@ func (h *Handler) GetLiveResources(ctx context.Context, kind, name, namespace, s
 
 				// Add an exact-match field selector for a plain name; wildcard and
 				// negated ("!") patterns are matched in memory below.
-				if name != "" && !isNamePattern(name) {
+				if name != "" && !nameIsPattern {
 					listOpts = append(listOpts, client.MatchingFields{"metadata.name": name})
 				}
 
@@ -193,10 +213,14 @@ func (h *Handler) GetLiveResources(ctx context.Context, kind, name, namespace, s
 				}
 
 				for _, obj := range list.Items {
+					if ctx.Err() != nil {
+						return
+					}
+
 					// Filter by name using wildcard/negation matching if needed
-					if isNamePattern(name) {
+					if nameIsPattern {
 						objName, _, _ := unstructured.NestedString(obj.Object, "metadata", "name")
-						if !matchesWildcard(objName, name) {
+						if !nameMatcher.matches(objName) {
 							continue
 						}
 					}
@@ -204,6 +228,10 @@ func (h *Handler) GetLiveResources(ctx context.Context, kind, name, namespace, s
 					rs := reporter.NewResourceStatus(obj)
 					byKindResult = append(byKindResult, rs)
 				}
+			}
+
+			if ctx.Err() != nil {
+				return
 			}
 
 			mu.Lock()
@@ -220,6 +248,9 @@ func (h *Handler) GetLiveResources(ctx context.Context, kind, name, namespace, s
 	}
 
 	wg.Wait()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	// Filter by status if specified
 	if status != "" {

@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/preact'
 import { signal } from '@preact/signals'
-import { serializeFilters, urlWithParam } from './routing'
+import { serializeFilters, urlWithParam, parseDetailRoute, copyCurrentUrl } from './routing'
 
 describe('serializeFilters', () => {
   it('should serialize simple filter object to query string', () => {
@@ -59,6 +59,44 @@ describe('serializeFilters', () => {
   it('should handle numeric string values', () => {
     const filters = { limit: '10', offset: '0' }
     expect(serializeFilters(filters)).toBe('limit=10&offset=0')
+  })
+})
+
+describe('parseDetailRoute', () => {
+  it('parses resource detail routes', () => {
+    expect(parseDetailRoute('/resource/Kustomization/default/flux-system')).toEqual({
+      type: 'resource',
+      kind: 'Kustomization',
+      namespace: 'default',
+      name: 'flux-system',
+    })
+  })
+
+  it('parses workload detail routes', () => {
+    expect(parseDetailRoute('/workload/Deployment/default/my-app')).toEqual({
+      type: 'workload',
+      kind: 'Deployment',
+      namespace: 'default',
+      name: 'my-app',
+    })
+  })
+
+  it('returns null for non-detail routes', () => {
+    expect(parseDetailRoute('/resources')).toBeNull()
+    expect(parseDetailRoute('/resource/Kustomization/default')).toBeNull()
+  })
+})
+
+describe('copyCurrentUrl', () => {
+  it('copies the current page URL', async () => {
+    window.history.replaceState(null, '', '/resource/Kustomization/default/flux-system#overview')
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal('navigator', { clipboard: { writeText } })
+
+    await expect(copyCurrentUrl()).resolves.toBe(true)
+    expect(writeText).toHaveBeenCalledWith(window.location.href)
+
+    vi.unstubAllGlobals()
   })
 })
 

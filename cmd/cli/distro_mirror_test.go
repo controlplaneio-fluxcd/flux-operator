@@ -4,11 +4,14 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"testing"
 
 	"github.com/google/go-containerregistry/pkg/authn"
+	"github.com/google/go-containerregistry/pkg/crane"
 	"github.com/google/go-containerregistry/pkg/name"
+	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
 	. "github.com/onsi/gomega"
 
@@ -306,4 +309,105 @@ func TestDistroMirror_BuildKeychain(t *testing.T) {
 	otherCfg, err := otherAuth.Authorization()
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(otherCfg.Password).ToNot(Equal("secret"))
+}
+
+func TestDistroMirror_RunJobCopiesDigestPinnedSource(t *testing.T) {
+	const digest = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	job := mirrorJob{
+		srcRepo: "ghcr.io/fluxcd/source-controller",
+		dstRepo: "registry.example.com/flux/source-controller",
+		tag:     "v1.6.2",
+		digest:  digest,
+	}
+
+	originalHead := mirrorHead
+	originalDigest := mirrorDigest
+	originalCopy := mirrorCopy
+	defer func() {
+		mirrorHead = originalHead
+		mirrorDigest = originalDigest
+		mirrorCopy = originalCopy
+	}()
+
+	tests := []struct {
+		name       string
+		descriptor *v1.Descriptor
+		headErr    error
+		action     mirrorAction
+	}{
+		{
+			name:    "first copy",
+			headErr: &transport.Error{StatusCode: 404},
+			action:  mirrorCopied,
+		},
+		{
+			name: "mutable overwrite",
+			descriptor: &v1.Descriptor{Digest: v1.Hash{
+				Algorithm: "sha256",
+				Hex:       "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			}},
+			action: mirrorOverwritten,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			mirrorHead = func(string, ...crane.Option) (*v1.Descriptor, error) {
+				return tt.descriptor, tt.headErr
+			}
+			mirrorDigest = func(string, ...crane.Option) (string, error) {
+				return "", errors.New("pre-resolved digest must be reused")
+			}
+			var copiedSrc, copiedDst string
+			mirrorCopy = func(src, dst string, _ ...crane.Option) error {
+				copiedSrc, copiedDst = src, dst
+				return nil
+			}
+
+			result, err := runMirrorJob(job, false, false, nil)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(result.action).To(Equal(tt.action))
+			g.Expect(copiedSrc).To(Equal(job.srcByDigest()))
+			g.Expect(copiedDst).To(Equal(job.dst()))
+		})
+	}
+}
+
+func TestDistroMirror_VerifyJobsPinsEverySource(t *testing.T) {
+	g := NewWithT(t)
+	const (
+		digestA = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		digestB = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	)
+	jobs := []mirrorJob{
+		{srcRepo: "ghcr.io/fluxcd/source-controller", tag: "v1", digest: digestA},
+		{srcRepo: "ghcr.io/controlplaneio-fluxcd/flux-operator", tag: "v1"},
+	}
+
+	originalDigest := mirrorDigest
+	originalVerify := verifyMirrorArtifact
+	defer func() {
+		mirrorDigest = originalDigest
+		verifyMirrorArtifact = originalVerify
+	}()
+
+	mirrorDigest = func(ref string, _ ...crane.Option) (string, error) {
+		g.Expect(ref).To(Equal(jobs[1].src()))
+		return digestB, nil
+	}
+	var verifiedRefs []string
+	verifyMirrorArtifact = func(_ context.Context, ref, _, _, _ string, _ authn.Keychain) (string, error) {
+		verifiedRefs = append(verifiedRefs, ref)
+		return ref, nil
+	}
+
+	verifiedJobs, err := verifyMirrorJobs(context.Background(), jobs, authn.DefaultKeychain, nil)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(verifiedJobs[0].digest).To(Equal(digestA))
+	g.Expect(verifiedJobs[1].digest).To(Equal(digestB))
+	g.Expect(verifiedRefs).To(Equal([]string{
+		jobs[0].srcRepo + "@" + digestA,
+		jobs[1].srcRepo + "@" + digestB,
+	}))
 }

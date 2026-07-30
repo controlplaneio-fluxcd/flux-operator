@@ -4,6 +4,8 @@
 import { useState, useRef, useMemo, useEffect, useCallback } from 'preact/hooks'
 import { WorkloadLogsViewer } from './WorkloadLogsViewer'
 import { urlWithParam } from '../../../utils/routing'
+import { useRegisterPageShortcuts } from '../../../utils/useRegisterPageShortcuts'
+import { useWorkloadLogsOverlay } from '../../../utils/useWorkloadLogsOverlay'
 
 // LOGS_QUERY_PARAM carries the open viewer in the URL so a session is shareable:
 // a pod name, or ALL_PODS_VALUE for "All pods". Shared with WorkloadDetailPanel,
@@ -81,18 +83,25 @@ export function WorkloadLogsAction({ kind, namespace, name, pods = [], userActio
     setSession({ key: sessionKeyRef.current, pod: logs === ALL_PODS_VALUE ? null : logs })
   }, [])
 
-  if (!canViewLogs) {
-    return null
-  }
-
   // No pods to inspect (e.g. scaled to zero): the button is shown but disabled.
   const hasPods = logsPods.length > 0
 
   // Open the viewer on "All pods"; its pod selector narrows from there.
-  const openAllPods = () => {
+  const openAllPods = useCallback(() => {
+    if (logsPods.length === 0) {
+      return
+    }
     sessionKeyRef.current += 1
     setSession({ key: sessionKeyRef.current, pod: null })
     syncLogFilterToUrl(null)
+  }, [syncLogFilterToUrl, logsPods.length])
+
+  useRegisterPageShortcuts({ onOpenLogs: canViewLogs && hasPods ? openAllPods : undefined })
+
+  useWorkloadLogsOverlay(!!session)
+
+  if (!canViewLogs) {
+    return null
   }
 
   const closeSession = () => {

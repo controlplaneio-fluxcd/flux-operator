@@ -5,15 +5,50 @@ package gitprovider
 
 import (
 	"context"
+	"errors"
 	"os"
 	"regexp"
 	"testing"
 
 	"github.com/Masterminds/semver/v3"
+	git "github.com/microsoft/azure-devops-go-api/azuredevops/v7/git"
+	"github.com/microsoft/azure-devops-go-api/azuredevops/v7/webapi"
 	. "github.com/onsi/gomega"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/filtering"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/inputs"
 )
+
+// fakeAzureDevOpsClient provides configurable Azure DevOps responses for tests.
+type fakeAzureDevOpsClient struct {
+	getRefs         func(context.Context, git.GetRefsArgs) (*git.GetRefsResponseValue, error)
+	getAnnotatedTag func(context.Context, git.GetAnnotatedTagArgs) (*git.GitAnnotatedTag, error)
+	getBranches     func(context.Context, git.GetBranchesArgs) (*[]git.GitBranchStats, error)
+	getPullRequests func(context.Context, git.GetPullRequestsArgs) (*[]git.GitPullRequest, error)
+}
+
+// GetRefs calls the configured refs test function.
+func (f *fakeAzureDevOpsClient) GetRefs(ctx context.Context, args git.GetRefsArgs) (*git.GetRefsResponseValue, error) {
+	return f.getRefs(ctx, args)
+}
+
+// GetAnnotatedTag calls the configured annotated-tag test function.
+func (f *fakeAzureDevOpsClient) GetAnnotatedTag(ctx context.Context, args git.GetAnnotatedTagArgs) (*git.GitAnnotatedTag, error) {
+	if f.getAnnotatedTag == nil {
+		return nil, errors.New("not an annotated tag")
+	}
+	return f.getAnnotatedTag(ctx, args)
+}
+
+// GetBranches calls the configured branches test function.
+func (f *fakeAzureDevOpsClient) GetBranches(ctx context.Context, args git.GetBranchesArgs) (*[]git.GitBranchStats, error) {
+	return f.getBranches(ctx, args)
+}
+
+// GetPullRequests calls the configured pull-request test function.
+func (f *fakeAzureDevOpsClient) GetPullRequests(ctx context.Context, args git.GetPullRequestsArgs) (*[]git.GitPullRequest, error) {
+	return f.getPullRequests(ctx, args)
+}
 
 func TestAzureDevOpsProvider_ListTags(t *testing.T) {
 	newConstraint := func(s string) *semver.Constraints {
@@ -84,6 +119,16 @@ func TestAzureDevOpsProvider_ListTags(t *testing.T) {
 				},
 			},
 			want: []Result{},
+		},
+		{
+			name: "rejects excessive limit",
+			opts: Options{
+				URL: "https://dev.azure.com/stefanprodan/fluxcd-testing/_git/podinfo",
+				Filters: filtering.Filters{
+					Limit: maxGitProviderResults + 1,
+				},
+			},
+			wantErrMsg: "exceeds maximum",
 		},
 	}
 
@@ -164,6 +209,16 @@ func TestAzureDevOpsProvider_ListBranches(t *testing.T) {
 					Branch: "master",
 				},
 			},
+		},
+		{
+			name: "rejects excessive limit",
+			opts: Options{
+				URL: "https://dev.azure.com/stefanprodan/fluxcd-testing/_git/podinfo",
+				Filters: filtering.Filters{
+					Limit: maxGitProviderResults + 1,
+				},
+			},
+			wantErrMsg: "exceeds maximum",
 		},
 	}
 
@@ -315,6 +370,16 @@ func TestAzureDevOpsProvider_ListRequests(t *testing.T) {
 			},
 			wantErrMsg: "The user 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' is not authorized to access this resource.",
 		},
+		{
+			name: "rejects excessive limit",
+			opts: Options{
+				URL: "https://dev.azure.com/stefanprodan/fluxcd-testing/_git/podinfo",
+				Filters: filtering.Filters{
+					Limit: maxGitProviderResults + 1,
+				},
+			},
+			wantErrMsg: "exceeds maximum",
+		},
 	}
 
 	for _, tt := range tests {
@@ -335,4 +400,94 @@ func TestAzureDevOpsProvider_ListRequests(t *testing.T) {
 			g.Expect(got).To(BeEquivalentTo(tt.want))
 		})
 	}
+}
+
+func TestAzureDevOpsProvider_TagPagination(t *testing.T) {
+	t.Run("follows continuation tokens", func(t *testing.T) {
+		g := NewWithT(t)
+		var tokens []string
+		client := &fakeAzureDevOpsClient{
+			getRefs: func(_ context.Context, args git.GetRefsArgs) (*git.GetRefsResponseValue, error) {
+				g.Expect(args.Top).NotTo(BeNil())
+				g.Expect(*args.Top).To(Equal(gitProviderPageSize))
+				token := ""
+				if args.ContinuationToken != nil {
+					token = *args.ContinuationToken
+				}
+				tokens = append(tokens, token)
+				if token == "" {
+					return &git.GetRefsResponseValue{
+						Value: []git.GitRef{{
+							Name:     new("refs/tags/v1.0.0"),
+							ObjectId: new("sha-1"),
+						}},
+						ContinuationToken: "next",
+					}, nil
+				}
+				return &git.GetRefsResponseValue{
+					Value: []git.GitRef{{
+						Name:     new("refs/tags/v2.0.0"),
+						ObjectId: new("sha-2"),
+					}},
+				}, nil
+			},
+		}
+		provider := &AzureDevOpsProvider{Client: client, Project: "project", Repo: "repo"}
+
+		results, err := provider.ListTags(t.Context(), Options{Filters: filtering.Filters{Limit: 2}})
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(tokens).To(Equal([]string{"", "next"}))
+		g.Expect(results).To(Equal([]Result{
+			{ID: inputs.ID("v2.0.0"), SHA: "sha-2", Tag: "v2.0.0"},
+			{ID: inputs.ID("v1.0.0"), SHA: "sha-1", Tag: "v1.0.0"},
+		}))
+	})
+
+	t.Run("rejects repeated continuation tokens", func(t *testing.T) {
+		g := NewWithT(t)
+		var calls int
+		client := &fakeAzureDevOpsClient{
+			getRefs: func(_ context.Context, _ git.GetRefsArgs) (*git.GetRefsResponseValue, error) {
+				calls++
+				return &git.GetRefsResponseValue{ContinuationToken: "same"}, nil
+			},
+		}
+		provider := &AzureDevOpsProvider{Client: client, Project: "project", Repo: "repo"}
+
+		_, err := provider.ListTags(t.Context(), Options{})
+		g.Expect(err).To(MatchError(ContainSubstring("repeated continuation token")))
+		g.Expect(calls).To(Equal(2))
+	})
+}
+
+func TestAzureDevOpsProvider_PullRequestPagination(t *testing.T) {
+	g := NewWithT(t)
+	var skips []int
+	client := &fakeAzureDevOpsClient{
+		getPullRequests: func(_ context.Context, args git.GetPullRequestsArgs) (*[]git.GitPullRequest, error) {
+			g.Expect(args.Top).NotTo(BeNil())
+			g.Expect(*args.Top).To(Equal(gitProviderPageSize))
+			g.Expect(args.Skip).NotTo(BeNil())
+			skips = append(skips, *args.Skip)
+			if *args.Skip == 0 {
+				page := make([]git.GitPullRequest, gitProviderPageSize)
+				return &page, nil
+			}
+			page := []git.GitPullRequest{{
+				PullRequestId:         new(1),
+				SourceRefName:         new("refs/heads/feature"),
+				LastMergeSourceCommit: &git.GitCommitRef{CommitId: new("sha")},
+				Title:                 new("Feature"),
+				CreatedBy:             &webapi.IdentityRef{DisplayName: new("User")},
+			}}
+			return &page, nil
+		},
+	}
+	provider := &AzureDevOpsProvider{Client: client, Project: "project", Repo: "repo"}
+
+	results, err := provider.ListRequests(t.Context(), Options{Filters: filtering.Filters{Limit: 1}})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(skips).To(Equal([]int{0, gitProviderPageSize}))
+	g.Expect(results).To(HaveLen(1))
+	g.Expect(results[0].ID).To(Equal("1"))
 }

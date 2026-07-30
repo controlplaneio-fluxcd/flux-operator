@@ -41,7 +41,7 @@ func PullArtifact(ctx context.Context, ociURL, dstDir string, keyChain authn.Key
 		return "", fmt.Errorf("extracting layer from artifact %s failed: %w", ociURL, err)
 	}
 
-	if err = untar.Untar(blob, dstDir, untar.WithMaxUntarSize(-1)); err != nil {
+	if err = untar.Untar(blob, dstDir, untar.WithMaxUntarSize(untar.DefaultMaxUntarSize)); err != nil {
 		return "", fmt.Errorf("extracting layer from artifact %s failed: %w", ociURL, err)
 	}
 

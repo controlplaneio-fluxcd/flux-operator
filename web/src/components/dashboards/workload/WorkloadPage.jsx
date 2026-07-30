@@ -14,6 +14,7 @@ import { WorkloadLogsAction } from './WorkloadLogsAction'
 import { WorkloadReconcilerPanel } from './WorkloadReconcilerPanel'
 import { WorkloadPipelinePanel } from './WorkloadPipelinePanel'
 import { WorkloadDetailPanel } from './WorkloadDetailPanel'
+import { useRegisterPageShortcuts } from '../../../utils/useRegisterPageShortcuts'
 
 // Polling intervals
 const POLL_INTERVAL_MS = 10000  // 10 seconds (workloads change more frequently)
@@ -212,6 +213,8 @@ export function WorkloadPage({ kind, namespace, name }) {
     const interval = setInterval(fetchData, currentPollInterval)
     return () => clearInterval(interval)
   }, [kind, namespace, name, currentPollInterval])
+
+  useRegisterPageShortcuts({ onRefresh: fetchData })
 
   // Cleanup fast poll timeout on unmount
   useEffect(() => {

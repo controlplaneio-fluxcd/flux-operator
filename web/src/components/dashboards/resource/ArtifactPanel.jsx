@@ -1,11 +1,9 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
+import { useMemo } from 'preact/hooks'
 import { DashboardPanel, TabButton } from '../common/panel'
 import { useHashTab } from '../../../utils/hash'
-
-// Valid tabs for the ArtifactPanel
-const ARTIFACT_TABS = ['overview', 'metadata']
 
 /**
  * Get the source reference display string
@@ -71,18 +69,25 @@ function formatSize(bytes) {
  * ArtifactPanel - Displays artifact information for Flux source resources
  */
 export function ArtifactPanel({ resourceData }) {
+  const metadata = resourceData?.status?.artifact?.metadata
+  const hasMetadata = metadata && Object.keys(metadata).length > 0
+
+  const visibleTabs = useMemo(() => {
+    const tabs = ['overview']
+    if (hasMetadata) {
+      tabs.push('metadata')
+    }
+    return tabs
+  }, [hasMetadata])
+
   // Tab state synced with URL hash (e.g., #artifact-metadata)
-  const [activeTab, setActiveTab] = useHashTab('artifact', 'overview', ARTIFACT_TABS, 'artifact-panel')
+  const [activeTab, setActiveTab] = useHashTab('artifact', 'overview', visibleTabs, 'artifact-panel')
 
   // Extract data
   const kind = resourceData?.kind
   const namespace = resourceData?.metadata?.namespace
   const spec = resourceData?.spec
   const artifact = resourceData?.status?.artifact
-  const metadata = artifact?.metadata
-
-  // Check if metadata tab should be shown
-  const hasMetadata = metadata && Object.keys(metadata).length > 0
 
   // Source info
   const sourceUrl = spec?.url || spec?.endpoint

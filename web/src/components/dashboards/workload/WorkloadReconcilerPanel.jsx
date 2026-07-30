@@ -11,16 +11,25 @@ import { getStatusBadgeClass, getEventBadgeClass } from '../../../utils/status'
 import { FluxOperatorIcon } from '../../layout/Icons'
 import { useHashTab } from '../../../utils/hash'
 
-// Valid tabs for the WorkloadReconcilerPanel
-const RECONCILER_TABS = ['overview', 'source', 'events']
-
 /**
  * WorkloadReconcilerPanel - Displays reconciler info for a workload's parent Flux resource.
  * Owns tab state, events lazy-loading, and auto-refresh on workloadData changes.
  */
 export function WorkloadReconcilerPanel({ reconciler, workloadData }) {
+  const reconcilerRef = reconciler?.status?.reconcilerRef
+  const sourceRef = reconciler?.status?.sourceRef
+
+  const visibleTabs = useMemo(() => {
+    const tabs = ['overview']
+    if (sourceRef) {
+      tabs.push('source')
+    }
+    tabs.push('events')
+    return tabs
+  }, [sourceRef])
+
   // Tab state synced with URL hash
-  const [reconcilerTab, setReconcilerTab] = useHashTab('reconciler', 'overview', RECONCILER_TABS, 'reconciler-panel')
+  const [reconcilerTab, setReconcilerTab] = useHashTab('reconciler', 'overview', visibleTabs, 'reconciler-panel')
 
   // Events data state (lazy-loaded)
   const [eventsData, setEventsData] = useState([])
@@ -31,8 +40,6 @@ export function WorkloadReconcilerPanel({ reconciler, workloadData }) {
   const isInitialMount = useRef(true)
 
   // Derived data
-  const reconcilerRef = reconciler?.status?.reconcilerRef
-  const sourceRef = reconciler?.status?.sourceRef
   const reconcilerStatus = reconcilerRef?.status || 'Unknown'
   const reconcilerMessage = reconcilerRef?.message || reconciler?.status?.conditions?.[0]?.message || ''
   const reconcilerLastReconciled = reconcilerRef?.lastReconciled || reconciler?.status?.conditions?.[0]?.lastTransitionTime

@@ -18,6 +18,7 @@ import { ExportedInputsPanel } from './ExportedInputsPanel'
 import { InputsPanel } from './InputsPanel'
 import { isKindWithInventory, POLL_INTERVAL_MS, FAST_POLL_INTERVAL_MS, FAST_POLL_TIMEOUT_MS } from '../../../utils/constants'
 import { getDashboardUrl } from '../../../utils/routing'
+import { useRegisterPageShortcuts } from '../../../utils/useRegisterPageShortcuts'
 
 /**
  * Get loading status styling info with spinning refresh icon
@@ -202,6 +203,8 @@ export function ResourcePage({ kind, namespace, name }) {
     const interval = setInterval(fetchData, currentPollInterval)
     return () => clearInterval(interval)
   }, [kind, namespace, name, currentPollInterval])
+
+  useRegisterPageShortcuts({ onRefresh: fetchData })
 
   // Cleanup fast poll timeout on unmount
   useEffect(() => {

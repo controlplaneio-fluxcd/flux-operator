@@ -448,11 +448,10 @@ func capLogBytes(logs string, limit int) string {
 // WorkloadLogsHandler handles GET /api/v1/workload/logs requests and returns the
 // logs of a pod container managed by a Flux workload.
 //
-// Logs are read using the impersonated user's identity, so Kubernetes enforces
-// the native "get" verb on the "pods/log" subresource: a user can only view the
-// logs of pods they are explicitly granted access to. This is a read-only
-// endpoint and is therefore not gated by UserActionsEnabled; access is governed
-// entirely by RBAC.
+// Logs are only available when user actions are enabled. They are read using
+// the impersonated user's identity, so Kubernetes enforces the native "get"
+// verb on the "pods/log" subresource: a user can only view the logs of pods
+// they are explicitly granted access to.
 //
 // By default the last tailLines entries are returned. When the sinceTime query
 // parameter is set (an RFC3339 timestamp), only entries newer than that time are
@@ -478,6 +477,12 @@ func capLogBytes(logs string, limit int) string {
 func (h *Handler) WorkloadLogsHandler(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Check if actions are enabled before selecting a Kubernetes REST config.
+	if !h.conf.UserActionsEnabled() {
+		http.Error(w, "User actions are disabled", http.StatusMethodNotAllowed)
 		return
 	}
 

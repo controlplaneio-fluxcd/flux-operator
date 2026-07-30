@@ -7,21 +7,24 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 
 	"code.gitea.io/sdk/gitea"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/inputs"
 )
 
+// GiteaProvider implements Interface for a Gitea or Forgejo repository.
 type GiteaProvider struct {
 	Client *gitea.Client
 	Owner  string
 	Repo   string
+	mu     sync.Mutex
 }
 
+// NewGiteaProvider creates a Gitea provider from the given options.
 func NewGiteaProvider(ctx context.Context, opts Options) (*GiteaProvider, error) {
 	host, owner, repo, err := parseGiteaURL(opts.URL)
 	if err != nil {
@@ -30,19 +33,11 @@ func NewGiteaProvider(ctx context.Context, opts Options) (*GiteaProvider, error)
 
 	clientOpts := []gitea.ClientOption{
 		gitea.SetContext(ctx),
+		gitea.SetHTTPClient(newGitProviderHTTPClient(opts.TLSConfig)),
 	}
 
 	if opts.Token != "" {
 		clientOpts = append(clientOpts, gitea.SetToken(opts.Token))
-	}
-
-	if opts.TLSConfig != nil {
-		httpClient := &http.Client{
-			Transport: &http.Transport{
-				TLSClientConfig: opts.TLSConfig,
-			},
-		}
-		clientOpts = append(clientOpts, gitea.SetHTTPClient(httpClient))
 	}
 
 	client, err := gitea.NewClient(host, clientOpts...)
@@ -57,63 +52,69 @@ func NewGiteaProvider(ctx context.Context, opts Options) (*GiteaProvider, error)
 	}, nil
 }
 
+// ListTags returns filtered tags from the Gitea repository.
 func (p *GiteaProvider) ListTags(ctx context.Context, opts Options) ([]Result, error) {
-	giteaOpts := gitea.ListRepoTagsOptions{
-		ListOptions: gitea.ListOptions{
-			PageSize: 100,
-		},
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.Client.SetContext(ctx)
+	selector, err := newTagSelector(opts.Filters)
+	if err != nil {
+		return nil, err
 	}
+	giteaOpts := gitea.ListRepoTagsOptions{
+		ListOptions: gitea.ListOptions{PageSize: gitProviderPageSize},
+	}
+	guard := newGitProviderPaginationGuard("Gitea tags")
 
-	repoTags := make([]*gitea.Tag, 0)
 	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if err := guard.Visit(giteaOpts.Page); err != nil {
+			return nil, err
+		}
 		page, resp, err := p.Client.ListRepoTags(p.Owner, p.Repo, giteaOpts)
 		if err != nil {
 			return nil, fmt.Errorf("could not list tags: %v", err)
 		}
-		repoTags = append(repoTags, page...)
+		for _, tag := range page {
+			selector.Add(tag.Name, Result{
+				ID:  inputs.ID(tag.Name),
+				SHA: tag.Commit.SHA,
+				Tag: tag.Name,
+			})
+		}
 
 		if resp.NextPage == 0 {
 			break
 		}
 		giteaOpts.Page = resp.NextPage
 	}
-
-	tagMap := make(map[string]*gitea.Tag, len(repoTags))
-	tags := make([]string, 0, len(repoTags))
-	for _, tag := range repoTags {
-		tags = append(tags, tag.Name)
-		tagMap[tag.Name] = tag
-	}
-
-	results := make([]Result, 0)
-	for _, version := range opts.Filters.Tags(tags) {
-		tag, ok := tagMap[version]
-		if !ok {
-			return nil, fmt.Errorf("could not find tag %s", version)
-		}
-
-		results = append(results, Result{
-			ID:  inputs.ID(tag.Name),
-			SHA: tag.Commit.SHA,
-			Tag: tag.Name,
-		})
-
-		if opts.Filters.Limit > 0 && len(results) >= opts.Filters.Limit {
-			return results, nil
-		}
-	}
-	return results, nil
+	return selector.Results(), nil
 }
 
+// ListBranches returns filtered branches from the Gitea repository.
 func (p *GiteaProvider) ListBranches(ctx context.Context, opts Options) ([]Result, error) {
-	giteaOpts := gitea.ListRepoBranchesOptions{
-		ListOptions: gitea.ListOptions{
-			PageSize: 100,
-		},
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.Client.SetContext(ctx)
+	resultLimit, err := gitProviderResultLimit(opts.Filters)
+	if err != nil {
+		return nil, err
 	}
+	giteaOpts := gitea.ListRepoBranchesOptions{
+		ListOptions: gitea.ListOptions{PageSize: gitProviderPageSize},
+	}
+	guard := newGitProviderPaginationGuard("Gitea branches")
 
-	results := make([]Result, 0)
+	results := make([]Result, 0, resultLimit)
 	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if err := guard.Visit(giteaOpts.Page); err != nil {
+			return nil, err
+		}
 		branches, resp, err := p.Client.ListRepoBranches(p.Owner, p.Repo, giteaOpts)
 		if err != nil {
 			return nil, fmt.Errorf("could not list branches: %v", err)
@@ -130,7 +131,7 @@ func (p *GiteaProvider) ListBranches(ctx context.Context, opts Options) ([]Resul
 				Branch: branch.Name,
 			})
 
-			if opts.Filters.Limit > 0 && len(results) >= opts.Filters.Limit {
+			if len(results) >= resultLimit {
 				return results, nil
 			}
 		}
@@ -144,16 +145,29 @@ func (p *GiteaProvider) ListBranches(ctx context.Context, opts Options) ([]Resul
 	return results, nil
 }
 
+// ListRequests returns filtered pull requests from the Gitea repository.
 func (p *GiteaProvider) ListRequests(ctx context.Context, opts Options) ([]Result, error) {
-	giteaOpts := gitea.ListPullRequestsOptions{
-		State: gitea.StateOpen,
-		ListOptions: gitea.ListOptions{
-			PageSize: 100,
-		},
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.Client.SetContext(ctx)
+	resultLimit, err := gitProviderResultLimit(opts.Filters)
+	if err != nil {
+		return nil, err
 	}
+	giteaOpts := gitea.ListPullRequestsOptions{
+		State:       gitea.StateOpen,
+		ListOptions: gitea.ListOptions{PageSize: gitProviderPageSize},
+	}
+	guard := newGitProviderPaginationGuard("Gitea pull requests")
 
-	results := make([]Result, 0)
+	results := make([]Result, 0, resultLimit)
 	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if err := guard.Visit(giteaOpts.Page); err != nil {
+			return nil, err
+		}
 		prs, resp, err := p.Client.ListRepoPullRequests(p.Owner, p.Repo, giteaOpts)
 		if err != nil {
 			return nil, fmt.Errorf("could not list pull requests: %v", err)
@@ -182,7 +196,7 @@ func (p *GiteaProvider) ListRequests(ctx context.Context, opts Options) ([]Resul
 				Labels: prLabels,
 			})
 
-			if opts.Filters.Limit > 0 && len(results) >= opts.Filters.Limit {
+			if len(results) >= resultLimit {
 				return results, nil
 			}
 		}
@@ -196,6 +210,7 @@ func (p *GiteaProvider) ListRequests(ctx context.Context, opts Options) ([]Resul
 	return results, nil
 }
 
+// ListEnvironments reports that Gitea environments are unsupported.
 func (p *GiteaProvider) ListEnvironments(ctx context.Context, opts Options) ([]Result, error) {
 	return nil, errors.New("environments not supported by Gitea provider")
 }

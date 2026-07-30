@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 
 	"github.com/go-jose/go-jose/v4"
@@ -110,7 +111,8 @@ func distroDecryptManifestsCmdRun(cmd *cobra.Command, args []string) error {
 }
 
 // extractZipArchive extracts a zip archive from bytes to the specified directory.
-// Returns the list of extracted files.
+// Directory entries are normalized before root operations, and the list of
+// extracted files is returned.
 func extractZipArchive(zipData []byte, destDir string, overwrite bool) ([]string, error) {
 	reader := bytes.NewReader(zipData)
 	zipReader, err := zip.NewReader(reader, int64(len(zipData)))
@@ -128,21 +130,25 @@ func extractZipArchive(zipData []byte, destDir string, overwrite bool) ([]string
 	defer func() { _ = rootDir.Close() }()
 
 	for _, file := range zipReader.File {
-		// Check for file conflicts
-		if !overwrite {
-			if _, err := rootDir.Stat(file.Name); err == nil {
-				return nil, fmt.Errorf("file %s already exists (use --overwrite to replace)", file.Name)
-			}
-		}
-
 		if file.FileInfo().IsDir() {
-			// Create directory
-			err := rootDir.MkdirAll(file.Name, 0755)
+			// ZIP directory names use trailing slashes; os.Root expects clean names.
+			dirName := path.Clean(file.Name)
+			if dirName == "." {
+				continue
+			}
+			err := rootDir.MkdirAll(dirName, 0755)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create directory %s: %w", file.Name, err)
 			}
 			// Don't add directories to the extracted files list for counting
 		} else {
+			// Check for file conflicts
+			if !overwrite {
+				if _, err := rootDir.Stat(file.Name); err == nil {
+					return nil, fmt.Errorf("file %s already exists (use --overwrite to replace)", file.Name)
+				}
+			}
+
 			// Extract file
 			err := extractFileSecure(rootDir, file)
 			if err != nil {

@@ -191,7 +191,11 @@ func resetCmdArgs() {
 	patchInstanceArgs = patchInstanceFlags{version: "main", components: nil}
 	fluxControllerBaseURL = "https://github.com/fluxcd"
 	listRepositoryTags = func(ctx context.Context, owner, repo string) ([]string, error) {
-		return listGitHubRepositoryTags(ctx, newGitHubClient(ctx), owner, repo)
+		ghClient, err := newGitHubClient(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return listGitHubRepositoryTags(ctx, ghClient, owner, repo)
 	}
 
 	// Distro commands

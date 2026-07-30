@@ -3,7 +3,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { renderHook, act } from '@testing-library/preact'
-import { parseHash, buildHash, useHashTab, clearHash } from './hash'
+import { parseHash, buildHash, useHashTab, clearHash, registerHashPanel, clearHashPanelRegistry, cycleHashTab } from './hash'
 
 describe('parseHash', () => {
   it('should parse valid hash with panel and tab', () => {
@@ -225,6 +225,101 @@ describe('useHashTab', () => {
 
     // Hash doesn't match new panel, should reset to default
     expect(result.current[0]).toBe('overview')
+  })
+
+  it('should scroll into view on mount when hash matches, but not when validTabs identity changes', async () => {
+    window.location.hash = '#reconciler-events'
+
+    const scrollIntoView = vi.fn()
+    const panelEl = document.createElement('div')
+    panelEl.id = 'reconciler-panel'
+    panelEl.scrollIntoView = scrollIntoView
+    document.body.appendChild(panelEl)
+
+    const raf = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+      cb()
+      return 0
+    })
+
+    const { rerender } = renderHook(
+      ({ validTabs }) => useHashTab('reconciler', 'overview', validTabs, 'reconciler-panel'),
+      { initialProps: { validTabs: [...validTabs] } }
+    )
+
+    expect(scrollIntoView).toHaveBeenCalledTimes(1)
+
+    rerender({ validTabs: [...validTabs] })
+    expect(scrollIntoView).toHaveBeenCalledTimes(1)
+
+    await act(() => {
+      window.location.hash = '#reconciler-history'
+      window.dispatchEvent(new window.Event('hashchange'))
+    })
+    expect(scrollIntoView).toHaveBeenCalledTimes(2)
+
+    raf.mockRestore()
+    document.body.removeChild(panelEl)
+  })
+})
+
+describe('cycleHashTab', () => {
+  beforeEach(() => {
+    clearHashPanelRegistry()
+    Object.defineProperty(window, 'location', {
+      value: { hash: '#reconciler-overview', pathname: '/resource/Kustomization/default/flux' },
+      writable: true,
+      configurable: true,
+    })
+  })
+
+  afterEach(() => {
+    clearHashPanelRegistry()
+  })
+
+  it('cycles tabs in the panel from the current hash', () => {
+    const setActiveTab = vi.fn()
+    registerHashPanel('reconciler', {
+      getValidTabs: () => ['overview', 'events', 'spec'],
+      getActiveTab: () => 'overview',
+      setActiveTab,
+    })
+
+    expect(cycleHashTab(1)).toBe(true)
+    expect(setActiveTab).toHaveBeenCalledWith('events')
+
+    window.location.hash = '#reconciler-events'
+    expect(cycleHashTab(-1)).toBe(true)
+    expect(setActiveTab).toHaveBeenCalledWith('overview')
+  })
+
+  it('uses the first registered panel when the hash is missing', () => {
+    window.location.hash = ''
+    const setActiveTab = vi.fn()
+    registerHashPanel('reconciler', {
+      getValidTabs: () => ['overview', 'events'],
+      getActiveTab: () => 'overview',
+      setActiveTab,
+    })
+
+    expect(cycleHashTab(1)).toBe(true)
+    expect(setActiveTab).toHaveBeenCalledWith('events')
+  })
+
+  it('skips hidden panels with no visible tabs', () => {
+    const setActiveTab = vi.fn()
+    registerHashPanel('inventory', {
+      getValidTabs: () => [],
+      getActiveTab: () => 'overview',
+      setActiveTab,
+    })
+    registerHashPanel('reconciler', {
+      getValidTabs: () => ['overview', 'events'],
+      getActiveTab: () => 'overview',
+      setActiveTab,
+    })
+
+    expect(cycleHashTab(1)).toBe(true)
+    expect(setActiveTab).toHaveBeenCalledWith('events')
   })
 })
 

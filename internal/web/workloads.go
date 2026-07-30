@@ -6,13 +6,21 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
-	"sync"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
+)
+
+const (
+	// maxWorkloads bounds the number of workload statuses in a single request.
+	maxWorkloads = 2000
+
+	// workloadsWorkers is the number of concurrent workload status fetches.
+	workloadsWorkers = 4
 )
 
 // WorkloadItem represents a single workload request.
@@ -28,7 +36,7 @@ type WorkloadsRequest struct {
 }
 
 // WorkloadsHandler handles POST /api/v1/workloads requests and returns the status
-// of the specified workloads.
+// of the specified workloads. Requests are limited to maxWorkloads items.
 func (h *Handler) WorkloadsHandler(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -39,6 +47,12 @@ func (h *Handler) WorkloadsHandler(w http.ResponseWriter, req *http.Request) {
 	var wReq WorkloadsRequest
 	if err := json.NewDecoder(req.Body).Decode(&wReq); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if len(wReq.Workloads) > maxWorkloads {
+		http.Error(w, fmt.Sprintf("Workloads request exceeds the maximum of %d items", maxWorkloads),
+			http.StatusRequestEntityTooLarge)
 		return
 	}
 
@@ -61,63 +75,49 @@ func (h *Handler) WorkloadsHandler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-// GetWorkloadsStatus fetches the status for the specified workloads.
-// Workloads are queried in parallel with a concurrency limit of 4.
+// GetWorkloadsStatus fetches the status for at most maxWorkloads workloads.
+// Workloads are queried by a fixed pool of workloadsWorkers, so the number of
+// goroutines stays constant regardless of the request size. Results preserve
+// the input order.
 func (h *Handler) GetWorkloadsStatus(ctx context.Context, workloads []WorkloadItem) []WorkloadStatus {
-	result := make([]WorkloadStatus, len(workloads))
-
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-
-	// Semaphore to limit concurrent requests to 4
-	sem := make(chan struct{}, 4)
-
-	for i, item := range workloads {
-		wg.Add(1)
-		go func(i int, item WorkloadItem) {
-			defer wg.Done()
-
-			// Acquire semaphore
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
-			ws, err := h.GetWorkloadStatus(ctx, item.Kind, item.Name, item.Namespace, false)
-			if err != nil {
-				var statusMessage string
-				switch {
-				case errors.IsNotFound(err):
-					statusMessage = "Workload not found in the cluster"
-				case errors.IsForbidden(err):
-					statusMessage = "User does not have access to the workload"
-				default:
-					statusMessage = "Internal error while fetching workload"
-					log.FromContext(ctx).Error(err, "failed to get workload status",
-						"kind", item.Kind,
-						"name", item.Name,
-						"namespace", item.Namespace)
-				}
-
-				mu.Lock()
-				result[i] = WorkloadStatus{
-					Kind:          item.Kind,
-					Name:          item.Name,
-					Namespace:     item.Namespace,
-					Status:        "NotFound",
-					StatusMessage: statusMessage,
-				}
-				mu.Unlock()
-				return
-			}
-
-			mu.Lock()
-			result[i] = *ws
-			mu.Unlock()
-		}(i, item)
+	if len(workloads) > maxWorkloads {
+		log.FromContext(ctx).Info("workloads request truncated to the maximum batch size",
+			"requested", len(workloads), "limit", maxWorkloads)
 	}
 
-	wg.Wait()
+	return processBatch(workloads, maxWorkloads, workloadsWorkers, func(item WorkloadItem) WorkloadStatus {
+		return h.workloadStatus(ctx, item)
+	})
+}
 
-	return result
+// workloadStatus fetches and assembles the status for one workload item.
+func (h *Handler) workloadStatus(ctx context.Context, item WorkloadItem) WorkloadStatus {
+	ws, err := h.GetWorkloadStatus(ctx, item.Kind, item.Name, item.Namespace, false)
+	if err == nil {
+		return *ws
+	}
+
+	var statusMessage string
+	switch {
+	case errors.IsNotFound(err):
+		statusMessage = "Workload not found in the cluster"
+	case errors.IsForbidden(err):
+		statusMessage = "User does not have access to the workload"
+	default:
+		statusMessage = "Internal error while fetching workload"
+		log.FromContext(ctx).Error(err, "failed to get workload status",
+			"kind", item.Kind,
+			"name", item.Name,
+			"namespace", item.Namespace)
+	}
+
+	return WorkloadStatus{
+		Kind:          item.Kind,
+		Name:          item.Name,
+		Namespace:     item.Namespace,
+		Status:        "NotFound",
+		StatusMessage: statusMessage,
+	}
 }
 
 // WorkloadsListHandler handles GET /api/v1/workloads requests and returns the
@@ -136,6 +136,11 @@ func (h *Handler) WorkloadsListHandler(w http.ResponseWriter, req *http.Request)
 	kind := queryParams.Get("kind")
 	name := queryParams.Get("name")
 	namespace := queryParams.Get("namespace")
+
+	if err := validateSearchFilters(kind, name, namespace); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	// Query the cached workload index with RBAC filtering.
 	workloads := h.GetCachedWorkloads(req.Context(), kind, name, namespace, 2500)
@@ -163,6 +168,11 @@ func (h *Handler) WorkloadsSearchHandler(w http.ResponseWriter, req *http.Reques
 	name := queryParams.Get("name")
 	namespace := queryParams.Get("namespace")
 	kind := queryParams.Get("kind")
+
+	if err := validateSearchFilters(kind, name, namespace); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	// Wrap a plain term so it matches as a substring (preserving "!" negation).
 	if name != "" {

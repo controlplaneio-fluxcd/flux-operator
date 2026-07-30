@@ -19,6 +19,54 @@ two predefined roles: `flux-web-user` (read-only) and `flux-web-admin`
 [Role-Based Access Control](web-user-management.md#role-based-access-control) section
 for details on assigning roles to users and groups.
 
+## Access Modes
+
+The `.spec.userActions.access` field in the
+[Web Config API](web-config-api.md#access-mode) determines which Kubernetes
+identity performs user actions that use per-action RBAC verbs:
+
+- `Impersonated` (default): The Web UI checks that the user has the per-action
+  RBAC verb, then performs the action as that user. The user must also have
+  every native Kubernetes verb required by the operation.
+- `FineGrained`: The Web UI checks that the user has the per-action verb,
+  then performs the native Kubernetes operations using the Web UI service
+  account. The user does not need the corresponding native verbs unless the
+  action verb is itself native, as with `delete` for Pod deletion.
+
+In both modes, users still need read permissions to find and view resources in
+the Web UI. The access mode only changes the permissions used to perform an
+action. Viewing pod logs is a Web UI user action and is disabled when
+authentication is not configured. It has no per-action RBAC verb: the user must
+hold the native `get` verb on `pods/log` in either access mode, and the request
+is always performed with the user's identity.
+
+To enable fine-grained access with the Flux Operator Helm chart, configure:
+
+```yaml
+web:
+  config:
+    userActions:
+      access: FineGrained
+```
+
+For a [standalone Web UI deployment](web-standalone.md), also set the chart's
+`web.userActions.access` value so that the Web UI service account is granted the
+native permissions it needs:
+
+```yaml
+web:
+  config:
+    userActions:
+      access: FineGrained
+  userActions:
+    access: FineGrained
+```
+
+The embedded Web UI uses the Flux Operator service account, which already has
+the necessary cluster-wide permissions. If the standalone service account lacks
+a required permission, the action returns an internal error explaining that the
+Web UI application, rather than the user, needs additional RBAC.
+
 ## GitOps Actions
 
 GitOps actions operate on Flux resources such as Kustomizations, HelmReleases,
@@ -35,9 +83,14 @@ or the schedule hasn't elapsed.
 
 !!! note "RBAC"
 
-    Requires the `reconcile` and `patch` verbs on the target resource.
-    For example, to allow reconciling Kustomizations, the user needs
-    `reconcile` and `patch` on `kustomizations` in the `kustomize.toolkit.fluxcd.io` API group.
+    The user always needs the `reconcile` verb on the target resource.
+    With `Impersonated` access, the user also needs `get` and `patch`.
+    With `FineGrained` access, the Web UI service account needs `get` and
+    `patch` instead.
+
+    For example, to allow reconciling Kustomizations with fine-grained access,
+    grant the user `reconcile` on `kustomizations` in the
+    `kustomize.toolkit.fluxcd.io` API group.
 
 ### Pull
 
@@ -51,9 +104,10 @@ or when the source is an ExternalArtifact.
 
 !!! note "RBAC"
 
-    Requires the `reconcile` and `patch` verbs on the source resource.
-    For example, to pull a GitRepository, the user needs `reconcile` and `patch`
-    on `gitrepositories` in the `source.toolkit.fluxcd.io` API group.
+    The user always needs the `reconcile` verb on the source resource.
+    With `Impersonated` access, the user also needs `get` and `patch`.
+    With `FineGrained` access, the Web UI service account needs `get` and
+    `patch` instead.
 
 ### Suspend and Resume
 
@@ -66,8 +120,10 @@ reconciliation request. Resuming removes the suspension tracking annotation.
 
 !!! note "RBAC"
 
-    Requires the `suspend` and `patch` verbs to suspend, and the `resume` and `patch`
-    verbs to resume. These verbs apply to the target resource's API group and kind.
+    The user always needs `suspend` to suspend a resource and `resume` to
+    resume it. With `Impersonated` access, the user also needs `get` and
+    `patch` on the target resource. With `FineGrained` access, the Web UI
+    service account needs `get` and `patch` instead.
 
 ### Download Artifact
 
@@ -81,9 +137,14 @@ can be downloaded individually.
 
 !!! note "RBAC"
 
-    Requires the `download` verb on the source resource.
-    For example, to download an OCIRepository artifact, the user needs `download`
-    on `ocirepositories` in the `source.toolkit.fluxcd.io` API group.
+    The user always needs the `download` verb on the source resource.
+    With `Impersonated` access, the user also needs `get` so the Web UI can
+    read the artifact URL from the resource status. With `FineGrained` access,
+    the Web UI service account needs `get` instead.
+
+    For example, to download an OCIRepository artifact with fine-grained
+    access, grant the user `download` on `ocirepositories` in the
+    `source.toolkit.fluxcd.io` API group.
 
 ## Workload Actions
 
@@ -99,7 +160,11 @@ a "View logs" button that aggregates the logs of all the workload's pods.
 
 !!! note "RBAC"
 
-    Requires the `get` verb on the `pods/log` subresource in the core API group.
+    Authentication must be configured to enable the action, and the user must
+    have the `get` verb on the `pods/log` subresource in the core API group.
+    This requirement is the same for both access modes because viewing logs
+    does not use a custom RBAC verb and is not controlled by
+    `.spec.userActions.access`.
 
 ### Rollout Restart
 
@@ -110,9 +175,12 @@ to recreate all pods in a rolling fashion, similar to `kubectl rollout restart`.
 
 !!! note "RBAC"
 
-    Requires the `restart` and `patch` verbs on the workload resource.
-    For example, to restart a Deployment, the user needs
-    `restart` and `patch` on `deployments` in the `apps` API group.
+    The user always needs the `restart` verb on the workload resource.
+    With `Impersonated` access, the user also needs `patch`. With
+    `FineGrained` access, the Web UI service account needs `patch` instead.
+
+    For example, to restart a Deployment with fine-grained access, grant the
+    user `restart` on `deployments` in the `apps` API group.
 
 ### Run Job
 
@@ -124,8 +192,10 @@ created the Job.
 
 !!! note "RBAC"
 
-    Requires the `restart` verb on `cronjobs` and the `create` verb on `jobs`
-    in the `batch` API group.
+    The user always needs the `restart` verb on `cronjobs`. With
+    `Impersonated` access, the user also needs `get` on `cronjobs` and `create`
+    on `jobs`. With `FineGrained` access, the Web UI service account needs
+    those native permissions instead.
 
 ### Delete Pod
 
@@ -136,20 +206,25 @@ is performed.
 
 !!! note "RBAC"
 
-    Requires the `delete` verb on `pods` in the core API group.
+    Requires the `delete` verb on `pods` in the core API group in both access
+    modes. For this action, the action verb is also the native Kubernetes verb,
+    so granting it allows the user to delete pods directly with other
+    Kubernetes clients as well as through the Web UI.
 
 ## Audit
 
-The Web UI can generate audit events for user actions, providing a trail
-of who performed what action and when. Audit events are recorded as
-Kubernetes Events and forwarded to Flux's notification-controller,
-enabling integration with external notification systems.
+The Web UI can generate audit events for user actions that have per-action
+RBAC verbs, providing a trail of who performed what action and when. Audit
+events are recorded as Kubernetes Events and forwarded to Flux's
+notification-controller, enabling integration with external notification
+systems. Viewing pod logs is not audited because it relies only on the native
+`get` verb and is not part of the configurable audit actions.
 
 ### Enabling Audit
 
 To enable auditing, set `spec.userActions.audit` in the
 [web configuration](web-config-api.md) to a list of actions to audit.
-Use the special value `["*"]` to audit all actions.
+Use the special value `["*"]` to audit all actions that support auditing.
 
 ```yaml
 web:

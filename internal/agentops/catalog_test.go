@@ -47,6 +47,24 @@ func TestDefaultSkillsDir(t *testing.T) {
 		g.Expect(err.Error()).To(ContainSubstring("symlink"))
 	})
 
+	t.Run("errors on symlinked parent", func(t *testing.T) {
+		g := NewWithT(t)
+		projectDir := t.TempDir()
+		targetDir := t.TempDir()
+		g.Expect(os.MkdirAll(filepath.Join(targetDir, "skills"), 0o755)).To(Succeed())
+		g.Expect(os.Symlink(targetDir, filepath.Join(projectDir, ".agents"))).To(Succeed())
+
+		origDir, err := os.Getwd()
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(os.Chdir(projectDir)).To(Succeed())
+		t.Cleanup(func() { _ = os.Chdir(origDir) })
+
+		_, err = agentops.DefaultSkillsDir()
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("symlink"))
+		g.Expect(err.Error()).To(ContainSubstring(filepath.Join(projectDir, ".agents")))
+	})
+
 	t.Run("errors when path is a file", func(t *testing.T) {
 		g := NewWithT(t)
 		tmpDir := t.TempDir()

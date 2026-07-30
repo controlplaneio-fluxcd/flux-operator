@@ -4,6 +4,7 @@
 package web
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -929,4 +930,18 @@ func TestWorkloadsSearchHandler_WildcardExpansion(t *testing.T) {
 	workloads, ok := response["workloads"].([]any)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(workloads).To(HaveLen(2), "should match both podinfo and podinfo-cache")
+}
+
+func TestWorkloadsHandlerRejectsOversizedBatch(t *testing.T) {
+	g := NewWithT(t)
+	body, err := json.Marshal(WorkloadsRequest{
+		Workloads: make([]WorkloadItem, maxWorkloads+1),
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/workloads", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	new(Handler).WorkloadsHandler(rec, req)
+
+	g.Expect(rec.Code).To(Equal(http.StatusRequestEntityTooLarge))
 }

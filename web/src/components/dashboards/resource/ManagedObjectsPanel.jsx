@@ -10,30 +10,35 @@ import { InventoryTabContent } from './InventoryTabContent'
 import { GraphTabContent } from './GraphTabContent'
 import { useHashTab } from '../../../utils/hash'
 
-// Valid tabs for the ManagedObjectsPanel
-const INVENTORY_TABS = ['overview', 'graph', 'inventory']
-
 /**
  * ManagedObjectsPanel - Displays the managed objects for a Flux resource
  * Handles its own state management and statistics calculations
  */
 export function ManagedObjectsPanel({ resourceData, onNavigate }) {
+  const shouldShowPanel = isKindWithInventory(resourceData?.kind)
+  const hasInventory = resourceData?.status?.inventory && resourceData.status.inventory.length > 0
+
+  const visibleTabs = useMemo(() => {
+    if (!shouldShowPanel) {
+      return []
+    }
+    const tabs = ['overview', 'graph']
+    if (hasInventory) {
+      tabs.push('inventory')
+    }
+    return tabs
+  }, [shouldShowPanel, hasInventory])
+
   // Tab state synced with URL hash (e.g., #inventory-graph)
-  const [activeTab, setActiveTab] = useHashTab('inventory', 'overview', INVENTORY_TABS, 'inventory-panel')
+  const [activeTab, setActiveTab] = useHashTab('inventory', 'overview', visibleTabs, 'inventory-panel')
 
   // Inventory tab filter state, lifted to the panel so the category and search
   // query survive tab switches (the tab content unmounts while inactive).
   const [inventoryCategory, setInventoryCategory] = useState('all')
   const [inventoryQuery, setInventoryQuery] = useState('')
 
-  // Check if inventory exists
-  const hasInventory = resourceData?.status?.inventory && resourceData.status.inventory.length > 0
-
   // Check for inventory error
   const inventoryError = resourceData?.status?.inventoryError
-
-  // Check if this kind should have inventory panel
-  const shouldShowPanel = isKindWithInventory(resourceData?.kind)
 
   // Don't render if this kind doesn't support inventory
   if (!shouldShowPanel) {

@@ -354,12 +354,13 @@ func main() {
 		}
 
 		if err = (&controller.ResourceSetInputProviderReconciler{
-			Client:        mgr.GetClient(),
-			Scheme:        mgr.GetScheme(),
-			StatusManager: controllerName,
-			EventRecorder: mgr.GetEventRecorderFor(controllerName),
-			TokenCache:    tokenCache,
-			Version:       VERSION,
+			Client:                mgr.GetClient(),
+			Scheme:                mgr.GetScheme(),
+			StatusManager:         controllerName,
+			EventRecorder:         mgr.GetEventRecorderFor(controllerName),
+			DefaultServiceAccount: defaultServiceAccount,
+			TokenCache:            tokenCache,
+			Version:               VERSION,
 		}).SetupWithManager(mgr,
 			controller.ResourceSetInputProviderReconcilerOptions{
 				RateLimiter: runtimeCtrl.GetRateLimiter(rateLimiterOptions),

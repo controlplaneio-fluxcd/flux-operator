@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -159,8 +160,10 @@ func AppendGitMetadata(repoPath string, annotations map[string]string) {
 	}
 
 	if _, ok := annotations[AnnotationSource]; !ok {
-		if url, err := runGit("config", "--get", "remote.origin.url"); err == nil && url != "" {
-			annotations[AnnotationSource] = NormalizeGitURL(url)
+		if gitURL, err := runGit("config", "--get", "remote.origin.url"); err == nil && gitURL != "" {
+			if sourceURL := NormalizeGitURL(gitURL); sourceURL != "" {
+				annotations[AnnotationSource] = sourceURL
+			}
 		}
 	}
 
@@ -196,21 +199,31 @@ func resolveGitRevision(runGit func(args ...string) (string, error), sha string,
 	return fmt.Sprintf("sha1:%s", sha)
 }
 
-// NormalizeGitURL converts git URLs to HTTPS format.
-// It handles git://, git@host:path SSH URLs, and strips .git suffixes.
-func NormalizeGitURL(url string) string {
+// NormalizeGitURL converts git URLs to HTTPS format and removes userinfo.
+// It handles git:// and git@host:path SSH URLs, strips .git suffixes,
+// and returns an empty string for malformed URLs.
+func NormalizeGitURL(gitURL string) string {
 	// Handle git:// protocol.
-	url = strings.Replace(url, "git://", "https://", 1)
+	gitURL = strings.Replace(gitURL, "git://", "https://", 1)
 
 	// Handle git@host:path SSH URLs.
-	if strings.HasPrefix(url, "git@") {
-		url = strings.TrimPrefix(url, "git@")
-		url = strings.Replace(url, ":", "/", 1)
-		url = "https://" + url
+	if strings.HasPrefix(gitURL, "git@") {
+		gitURL = strings.TrimPrefix(gitURL, "git@")
+		gitURL = strings.Replace(gitURL, ":", "/", 1)
+		gitURL = "https://" + gitURL
 	}
 
-	// Strip .git suffix.
-	url = strings.TrimSuffix(url, ".git")
+	parsedURL, err := url.Parse(gitURL)
+	if err != nil || parsedURL.Opaque != "" {
+		return ""
+	}
 
-	return url
+	if parsedURL.Host == "" {
+		return ""
+	}
+
+	parsedURL.User = nil
+	parsedURL.Path = strings.TrimSuffix(parsedURL.Path, ".git")
+
+	return parsedURL.String()
 }

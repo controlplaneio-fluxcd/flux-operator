@@ -17,6 +17,8 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/inventory"
 )
 
 func makeHelmRelease(namespace, apiVersion, storageNs string, history []any, kubeConfig bool) *unstructured.Unstructured {
@@ -49,7 +51,7 @@ func makeHelmRelease(namespace, apiVersion, storageNs string, history []any, kub
 
 func encodeHelmStorage(t *testing.T, manifest string, useGzip bool) []byte {
 	t.Helper()
-	storage := HelmStorage{
+	storage := inventory.HelmStorage{
 		Name:     "test-release",
 		Manifest: manifest,
 	}
@@ -175,6 +177,22 @@ spec:
 			},
 			matchLen:    2,
 			matchImages: []string{"nginx:1.25", "busybox:1.36"},
+		},
+		{
+			testName: "rejects oversized helm storage",
+			objects: []client.Object{
+				makeHelmRelease(namespace, apiVersion, namespace, history, false),
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "sh.helm.release.v1.my-release.v1",
+						Namespace: namespace,
+					},
+					Data: map[string][]byte{
+						"release": bytes.Repeat([]byte("AAAA"), (1<<20)/4+1),
+					},
+				},
+			},
+			matchErr: "exceeds maximum encoded size",
 		},
 		{
 			testName:  "skips release with remote kubeConfig",

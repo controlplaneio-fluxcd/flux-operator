@@ -47,19 +47,29 @@ vi.mock('./components/dashboards/cluster/ClusterPage', () => ({
 vi.mock('./components/search/EventList', () => ({
   EventList: () => <div data-testid="event-list">EventList</div>,
   eventsData: { value: [] },
-  eventsLoading: { value: false }
+  eventsLoading: { value: false },
+  fetchEvents: vi.fn()
 }))
 
 vi.mock('./components/search/ResourceList', () => ({
   ResourceList: () => <div data-testid="resource-list">ResourceList</div>,
   resourcesData: { value: [] },
-  resourcesLoading: { value: false }
+  resourcesLoading: { value: false },
+  fetchResourcesStatus: vi.fn()
 }))
 
 vi.mock('./components/search/WorkloadList', () => ({
   WorkloadList: () => <div data-testid="workload-list">WorkloadList</div>,
   workloadsData: { value: [] },
-  workloadsLoading: { value: false }
+  workloadsLoading: { value: false },
+  fetchWorkloadsStatus: vi.fn()
+}))
+
+vi.mock('./components/favorites/FavoritesPage', () => ({
+  FavoritesPage: () => <div data-testid="favorites-page">FavoritesPage</div>,
+  favoritesData: { value: {} },
+  favoritesFetching: { value: false },
+  fetchFavoritesData: vi.fn()
 }))
 
 vi.mock('./components/dashboards/resource/ResourcePage', () => ({

@@ -1,7 +1,75 @@
 // Copyright 2025 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-import { useState, useEffect, useCallback } from 'preact/hooks'
+import { useState, useEffect, useCallback, useRef } from 'preact/hooks'
+
+/** @typedef {{ getValidTabs: () => string[], getActiveTab: () => string, setActiveTab: (tab: string) => void }} HashPanelHandlers */
+
+const hashPanelRegistry = new Map()
+
+/**
+ * Registers a hash-synced panel for keyboard tab cycling.
+ *
+ * @param {string} panel
+ * @param {HashPanelHandlers} handlers
+ */
+export function registerHashPanel(panel, handlers) {
+  hashPanelRegistry.set(panel, handlers)
+}
+
+/**
+ * Unregisters a hash-synced panel.
+ *
+ * @param {string} panel
+ */
+export function unregisterHashPanel(panel) {
+  hashPanelRegistry.delete(panel)
+}
+
+/** Clears all registered hash panels (for tests). */
+export function clearHashPanelRegistry() {
+  hashPanelRegistry.clear()
+}
+
+/**
+ * Cycles the active tab in the current or first visible hash panel.
+ *
+ * @param {number} direction - -1 for previous, 1 for next
+ * @returns {boolean} True when a tab was cycled
+ */
+export function cycleHashTab(direction) {
+  const parsed = parseHash(window.location.hash)
+  let panel = parsed?.panel
+  let entry = panel ? hashPanelRegistry.get(panel) : null
+
+  if (!entry || entry.getValidTabs().length === 0) {
+    for (const [name, handlers] of hashPanelRegistry) {
+      if (handlers.getValidTabs().length > 0) {
+        panel = name
+        entry = handlers
+        break
+      }
+    }
+  }
+
+  if (!entry) {
+    return false
+  }
+
+  const validTabs = entry.getValidTabs()
+  if (validTabs.length === 0) {
+    return false
+  }
+
+  const { getActiveTab, setActiveTab } = entry
+  const hashTab = parsed?.panel === panel ? parsed.tab : null
+  const activeTab = hashTab && validTabs.includes(hashTab) ? hashTab : getActiveTab()
+  const idx = validTabs.indexOf(activeTab)
+  const currentIdx = idx === -1 ? 0 : idx
+  const nextIdx = (currentIdx + direction + validTabs.length) % validTabs.length
+  setActiveTab(validTabs[nextIdx])
+  return true
+}
 
 /**
  * Parses a URL hash fragment into panel and tab parts
@@ -49,7 +117,8 @@ export function buildHash(panel, tab) {
  * - Updates URL hash when tab changes (using replaceState, not pushState)
  * - Listens for hashchange events (browser back/forward, manual URL edit)
  * - Only responds to hash changes matching the panel prefix
- * - Optionally scrolls the panel element into view when hash matches on load
+ * - Optionally scrolls the panel element into view on mount and hash navigation
+ *   (not when validTabs identity alone changes)
  *
  * @param {string} panel - Panel identifier (e.g., 'reconciler', 'inventory')
  * @param {string} defaultTab - Default tab when hash doesn't match this panel
@@ -75,9 +144,14 @@ export function useHashTab(panel, defaultTab, validTabs, scrollElementId) {
   }
 
   const [activeTab, setActiveTabState] = useState(getInitialTab)
+  const validTabsRef = useRef(validTabs)
+  validTabsRef.current = validTabs
 
   // Setter that also updates the URL hash
   const setActiveTab = useCallback((newTab) => {
+    if (!validTabsRef.current.includes(newTab)) {
+      return
+    }
     setActiveTabState(newTab)
 
     if (typeof window === 'undefined') return
@@ -97,7 +171,7 @@ export function useHashTab(panel, defaultTab, validTabs, scrollElementId) {
     const handleHashChange = () => {
       const parsed = parseHash(window.location.hash)
 
-      if (parsed && parsed.panel === panel && validTabs.includes(parsed.tab)) {
+      if (parsed && parsed.panel === panel && validTabsRef.current.includes(parsed.tab)) {
         // Hash matches our panel - update tab
         setActiveTabState(parsed.tab)
       }
@@ -106,32 +180,73 @@ export function useHashTab(panel, defaultTab, validTabs, scrollElementId) {
 
     window.addEventListener('hashchange', handleHashChange)
     return () => window.removeEventListener('hashchange', handleHashChange)
-  }, [panel, validTabs])
+  }, [panel])
 
-  // Sync with hash on mount and when panel/validTabs change
-  // This handles navigation to a different resource that has the same panel
+  // Sync tab state with hash on mount and when panel/validTabs change.
+  // Scroll is intentionally separate so poll-driven validTabs identity changes
+  // do not yank the viewport back to the hashed panel.
   useEffect(() => {
     if (typeof window === 'undefined') return
 
     const parsed = parseHash(window.location.hash)
     if (parsed && parsed.panel === panel && validTabs.includes(parsed.tab)) {
       setActiveTabState(parsed.tab)
-
-      // Scroll the panel element into view if scrollElementId is provided
-      if (scrollElementId) {
-        // Use requestAnimationFrame to ensure DOM is ready
-        window.requestAnimationFrame(() => {
-          const element = document.getElementById(scrollElementId)
-          if (element) {
-            element.scrollIntoView({ behavior: 'smooth', block: 'start' })
-          }
-        })
-      }
     } else {
       // Reset to default if hash doesn't match this panel
       setActiveTabState(defaultTab)
     }
-  }, [panel, defaultTab, validTabs, scrollElementId])
+  }, [panel, defaultTab, validTabs])
+
+  // Scroll into view only on initial mount and actual hash navigation.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !scrollElementId) return
+
+    const scrollIfHashMatches = () => {
+      const parsed = parseHash(window.location.hash)
+      if (!parsed || parsed.panel !== panel || !validTabsRef.current.includes(parsed.tab)) {
+        return
+      }
+      window.requestAnimationFrame(() => {
+        const element = document.getElementById(scrollElementId)
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }
+      })
+    }
+
+    scrollIfHashMatches()
+    window.addEventListener('hashchange', scrollIfHashMatches)
+    return () => window.removeEventListener('hashchange', scrollIfHashMatches)
+  }, [panel, scrollElementId])
+
+  const activeTabRef = useRef(activeTab)
+  activeTabRef.current = activeTab
+
+  useEffect(() => {
+    const tabs = validTabsRef.current
+    if (tabs.length === 0) {
+      unregisterHashPanel(panel)
+      return
+    }
+
+    if (!tabs.includes(activeTabRef.current)) {
+      const fallback = tabs.includes(defaultTab) ? defaultTab : tabs[0]
+      setActiveTab(fallback)
+    }
+  }, [validTabs, defaultTab, panel, setActiveTab])
+
+  useEffect(() => {
+    if (validTabsRef.current.length === 0) {
+      return
+    }
+
+    registerHashPanel(panel, {
+      getValidTabs: () => validTabsRef.current,
+      getActiveTab: () => activeTabRef.current,
+      setActiveTab,
+    })
+    return () => unregisterHashPanel(panel)
+  }, [panel, validTabs, setActiveTab])
 
   return [activeTab, setActiveTab]
 }

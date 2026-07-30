@@ -21,6 +21,45 @@ export function getDashboardUrl(kind, namespace, name) {
 }
 
 /**
+ * Parses a resource or workload detail route into its path segments.
+ *
+ * @param {string} path - Router path (e.g. `/resource/Kustomization/ns/name`)
+ * @returns {{ type: 'resource' | 'workload', kind: string, namespace: string, name: string } | null}
+ */
+export function parseDetailRoute(path) {
+  for (const [type, prefix] of [['resource', '/resource/'], ['workload', '/workload/']]) {
+    if (!path.startsWith(prefix)) {
+      continue
+    }
+    const parts = path.slice(prefix.length).split('/')
+    if (parts.length !== 3) {
+      return null
+    }
+    return {
+      type,
+      kind: decodeURIComponent(parts[0]),
+      namespace: decodeURIComponent(parts[1]),
+      name: decodeURIComponent(parts[2]),
+    }
+  }
+  return null
+}
+
+/**
+ * Copies the current page URL (path, query, and hash) to the clipboard.
+ *
+ * @returns {Promise<boolean>} True when the URL was copied successfully
+ */
+export async function copyCurrentUrl() {
+  const url = window.location.href
+  if (!window.navigator.clipboard?.writeText) {
+    return false
+  }
+  await window.navigator.clipboard.writeText(url)
+  return true
+}
+
+/**
  * Serializes filter object to URL query string
  * Omits empty/null/undefined values
  *

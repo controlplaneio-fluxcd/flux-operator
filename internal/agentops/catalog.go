@@ -40,8 +40,8 @@ func ProjectRoot() (string, error) {
 }
 
 // DefaultSkillsDir resolves the skills directory to an absolute path
-// relative to the current working directory. If the path exists, it
-// verifies that it is a real directory (not a symlink).
+// relative to the current working directory. It verifies that every existing
+// path component below the project root is a real directory, not a symlink.
 func DefaultSkillsDir() (string, error) {
 	cwd, err := ProjectRoot()
 	if err != nil {
@@ -49,20 +49,24 @@ func DefaultSkillsDir() (string, error) {
 	}
 
 	dir := filepath.Join(cwd, DefaultSkillsDirName)
+	current := cwd
+	for _, component := range strings.Split(filepath.Clean(DefaultSkillsDirName), string(filepath.Separator)) {
+		current = filepath.Join(current, component)
 
-	info, err := os.Lstat(dir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return dir, nil
+		info, err := os.Lstat(current)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return dir, nil
+			}
+			return "", fmt.Errorf("checking skills path component %s: %w", current, err)
 		}
-		return "", fmt.Errorf("checking skills directory: %w", err)
-	}
 
-	if info.Mode()&os.ModeSymlink != 0 {
-		return "", fmt.Errorf("skills directory %s is a symlink", dir)
-	}
-	if !info.IsDir() {
-		return "", fmt.Errorf("skills path %s is not a directory", dir)
+		if info.Mode()&os.ModeSymlink != 0 {
+			return "", fmt.Errorf("skills path component %s is a symlink", current)
+		}
+		if !info.IsDir() {
+			return "", fmt.Errorf("skills path %s is not a directory", current)
+		}
 	}
 
 	return dir, nil

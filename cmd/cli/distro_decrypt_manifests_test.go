@@ -502,6 +502,36 @@ func TestDistroDecryptManifestsCmd(t *testing.T) { //nolint:gocyclo
 	}
 }
 
+func TestExtractZipArchiveAllowsExistingDirectoriesWithoutOverwrite(t *testing.T) {
+	g := NewWithT(t)
+
+	tempDir := t.TempDir()
+	err := os.MkdirAll(filepath.Join(tempDir, "apps"), 0755)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	var buf bytes.Buffer
+	zipWriter := zip.NewWriter(&buf)
+
+	_, err = zipWriter.Create("apps/")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	configMap, err := zipWriter.Create("apps/configmap.yaml")
+	g.Expect(err).ToNot(HaveOccurred())
+	_, err = configMap.Write([]byte("apiVersion: v1\nkind: ConfigMap"))
+	g.Expect(err).ToNot(HaveOccurred())
+
+	err = zipWriter.Close()
+	g.Expect(err).ToNot(HaveOccurred())
+
+	extractedFiles, err := extractZipArchive(buf.Bytes(), tempDir, false)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(extractedFiles).To(Equal([]string{"apps/configmap.yaml"}))
+
+	content, err := os.ReadFile(filepath.Join(tempDir, "apps", "configmap.yaml"))
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(string(content)).To(Equal("apiVersion: v1\nkind: ConfigMap"))
+}
+
 func TestDistroDecryptManifestsCmdWithEnvVar(t *testing.T) {
 	g := NewWithT(t)
 

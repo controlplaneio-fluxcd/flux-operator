@@ -6,7 +6,6 @@ package main
 import (
 	"log"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -14,7 +13,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
-	"k8s.io/client-go/tools/clientcmd"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -78,8 +76,8 @@ func addKubeConfigFlags(cmd *cobra.Command) {
 	}
 	kubeconfigArgs.Namespace = &namespace
 
-	cmd.PersistentFlags().StringVar(kubeconfigArgs.KubeConfig, "kubeconfig", getCurrentKubeconfigPath(),
-		"Path to the kubeconfig file.")
+	cmd.PersistentFlags().StringVar(kubeconfigArgs.KubeConfig, "kubeconfig", "",
+		"Path to the kubeconfig file. If not set, the KUBECONFIG environment variable is used, with support for merging multiple kubeconfig files.")
 	cmd.PersistentFlags().StringVar(kubeconfigArgs.Context, "kube-context", "",
 		"The name of the kubeconfig context to use.")
 	cmd.PersistentFlags().StringVar(kubeconfigArgs.Impersonate, "kube-as", "",
@@ -104,34 +102,4 @@ func addKubeConfigFlags(cmd *cobra.Command) {
 		"if true, the Kubernetes API server's certificate will not be checked for validity. This will make your HTTPS connections insecure.")
 	cmd.PersistentFlags().StringVarP(kubeconfigArgs.Namespace, "namespace", "n",
 		*kubeconfigArgs.Namespace, "The the namespace scope for the operation.")
-}
-
-func getCurrentKubeconfigPath() string {
-	defaultPath := ""
-
-	kubeConfig := os.Getenv("KUBECONFIG")
-	if kubeConfig == "" {
-		return defaultPath
-	}
-
-	paths := filepath.SplitList(kubeConfig)
-	if len(paths) == 1 {
-		return paths[0]
-	}
-
-	var currentContext string
-	for _, path := range paths {
-		config, err := clientcmd.LoadFromFile(path)
-		if err != nil {
-			continue
-		}
-		if currentContext == "" {
-			currentContext = config.CurrentContext
-		}
-		_, ok := config.Contexts[currentContext]
-		if ok {
-			return path
-		}
-	}
-	return defaultPath
 }

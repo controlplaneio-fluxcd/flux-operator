@@ -7,24 +7,24 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"net/url"
 	"strings"
 
-	"github.com/google/go-github/v81/github"
+	"github.com/google/go-github/v87/github"
 	"golang.org/x/oauth2"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/inputs"
 )
 
+// GitHubProvider implements Interface for a GitHub repository.
 type GitHubProvider struct {
 	Client *github.Client
 	Owner  string
 	Repo   string
 }
 
+// NewGitHubProvider creates a GitHub provider from the given options.
 func NewGitHubProvider(ctx context.Context, opts Options) (*GitHubProvider, error) {
-	var client *github.Client
 	var ts oauth2.TokenSource
 
 	if opts.Token != "" {
@@ -36,26 +36,18 @@ func NewGitHubProvider(ctx context.Context, opts Options) (*GitHubProvider, erro
 		return nil, err
 	}
 
-	if host == "https://github.com" {
-		// Create a GitHub client for GitHub.com
-		client = github.NewClient(oauth2.NewClient(ctx, ts))
-	} else {
-		// Create a GitHub client for GitHub Enterprise with a custom cert pool.
-		var httpClient *http.Client
-		if opts.TLSConfig != nil {
-			tr := &http.Transport{
-				TLSClientConfig: opts.TLSConfig,
-			}
-			ctxCA := context.WithValue(ctx, oauth2.HTTPClient, &http.Client{Transport: tr})
-			httpClient = oauth2.NewClient(ctxCA, ts)
-		} else {
-			// Create OAuth2 client without custom cert pool
-			httpClient = oauth2.NewClient(ctx, ts)
-		}
-		client, err = github.NewClient(httpClient).WithEnterpriseURLs(host, host)
-		if err != nil {
-			return nil, fmt.Errorf("could not create enterprise GitHub client: %v", err)
-		}
+	httpClient := newGitProviderHTTPClient(opts.TLSConfig)
+	httpCtx := context.WithValue(ctx, oauth2.HTTPClient, httpClient)
+	clientOpts := []github.ClientOptionsFunc{
+		github.WithHTTPClient(oauth2.NewClient(httpCtx, ts)),
+	}
+	if host != "https://github.com" {
+		clientOpts = append(clientOpts, github.WithEnterpriseURLs(host, host))
+	}
+
+	client, err := github.NewClient(clientOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("could not create GitHub client: %w", err)
 	}
 
 	return &GitHubProvider{
@@ -65,61 +57,56 @@ func NewGitHubProvider(ctx context.Context, opts Options) (*GitHubProvider, erro
 	}, nil
 }
 
+// ListTags returns filtered tags from the GitHub repository.
 func (p *GitHubProvider) ListTags(ctx context.Context, opts Options) ([]Result, error) {
-	ghOpts := &github.ListOptions{
-		PerPage: 100,
+	selector, err := newTagSelector(opts.Filters)
+	if err != nil {
+		return nil, err
 	}
+	ghOpts := &github.ListOptions{PerPage: gitProviderPageSize}
+	guard := newGitProviderPaginationGuard("GitHub tags")
 
-	repoTags := make([]*github.RepositoryTag, 0)
 	for {
+		if err := guard.Visit(ghOpts.Page); err != nil {
+			return nil, err
+		}
 		page, resp, err := p.Client.Repositories.ListTags(ctx, p.Owner, p.Repo, ghOpts)
 		if err != nil {
 			return nil, fmt.Errorf("could not list tags: %v", err)
 		}
-		repoTags = append(repoTags, page...)
+		for _, tag := range page {
+			name := tag.GetName()
+			selector.Add(name, Result{
+				ID:  inputs.ID(name),
+				SHA: tag.GetCommit().GetSHA(),
+				Tag: name,
+			})
+		}
 
 		if resp.NextPage == 0 {
 			break
 		}
 		ghOpts.Page = resp.NextPage
 	}
-
-	tagMap := make(map[string]*github.RepositoryTag, len(repoTags))
-	tags := make([]string, 0, len(repoTags))
-	for _, tag := range repoTags {
-		tags = append(tags, tag.GetName())
-		tagMap[tag.GetName()] = tag
-	}
-
-	results := make([]Result, 0)
-	for _, version := range opts.Filters.Tags(tags) {
-		tag, ok := tagMap[version]
-		if !ok {
-			return nil, fmt.Errorf("could not find tag %s", version)
-		}
-
-		results = append(results, Result{
-			ID:  inputs.ID(tag.GetName()),
-			SHA: tag.GetCommit().GetSHA(),
-			Tag: tag.GetName(),
-		})
-
-		if opts.Filters.Limit > 0 && len(results) >= opts.Filters.Limit {
-			return results, nil
-		}
-	}
-	return results, nil
+	return selector.Results(), nil
 }
 
+// ListBranches returns filtered branches from the GitHub repository.
 func (p *GitHubProvider) ListBranches(ctx context.Context, opts Options) ([]Result, error) {
-	ghOpts := &github.BranchListOptions{
-		ListOptions: github.ListOptions{
-			PerPage: 100,
-		},
+	resultLimit, err := gitProviderResultLimit(opts.Filters)
+	if err != nil {
+		return nil, err
 	}
+	ghOpts := &github.BranchListOptions{
+		ListOptions: github.ListOptions{PerPage: gitProviderPageSize},
+	}
+	guard := newGitProviderPaginationGuard("GitHub branches")
 
-	results := make([]Result, 0)
+	results := make([]Result, 0, resultLimit)
 	for {
+		if err := guard.Visit(ghOpts.Page); err != nil {
+			return nil, err
+		}
 		branches, resp, err := p.Client.Repositories.ListBranches(ctx, p.Owner, p.Repo, ghOpts)
 		if err != nil {
 			return nil, fmt.Errorf("could not list branches: %v", err)
@@ -136,7 +123,7 @@ func (p *GitHubProvider) ListBranches(ctx context.Context, opts Options) ([]Resu
 				Branch: branch.GetName(),
 			})
 
-			if opts.Filters.Limit > 0 && len(results) >= opts.Filters.Limit {
+			if len(results) >= resultLimit {
 				return results, nil
 			}
 		}
@@ -150,16 +137,23 @@ func (p *GitHubProvider) ListBranches(ctx context.Context, opts Options) ([]Resu
 	return results, nil
 }
 
+// ListRequests returns filtered pull requests from the GitHub repository.
 func (p *GitHubProvider) ListRequests(ctx context.Context, opts Options) ([]Result, error) {
-	ghOpts := &github.PullRequestListOptions{
-		State: "open",
-		ListOptions: github.ListOptions{
-			PerPage: 100,
-		},
+	resultLimit, err := gitProviderResultLimit(opts.Filters)
+	if err != nil {
+		return nil, err
 	}
+	ghOpts := &github.PullRequestListOptions{
+		State:       "open",
+		ListOptions: github.ListOptions{PerPage: gitProviderPageSize},
+	}
+	guard := newGitProviderPaginationGuard("GitHub pull requests")
 
-	results := make([]Result, 0)
+	results := make([]Result, 0, resultLimit)
 	for {
+		if err := guard.Visit(ghOpts.Page); err != nil {
+			return nil, err
+		}
 		prs, resp, err := p.Client.PullRequests.List(ctx, p.Owner, p.Repo, ghOpts)
 		if err != nil {
 			return nil, fmt.Errorf("could not list pull requests: %v", err)
@@ -188,7 +182,7 @@ func (p *GitHubProvider) ListRequests(ctx context.Context, opts Options) ([]Resu
 				Labels: prLabels,
 			})
 
-			if opts.Filters.Limit > 0 && len(results) >= opts.Filters.Limit {
+			if len(results) >= resultLimit {
 				return results, nil
 			}
 		}
@@ -202,6 +196,7 @@ func (p *GitHubProvider) ListRequests(ctx context.Context, opts Options) ([]Resu
 	return results, nil
 }
 
+// ListEnvironments reports that GitHub environments are unsupported.
 func (p *GitHubProvider) ListEnvironments(ctx context.Context, opts Options) ([]Result, error) {
 	return nil, errors.New("environments not supported by GitHub provider")
 }

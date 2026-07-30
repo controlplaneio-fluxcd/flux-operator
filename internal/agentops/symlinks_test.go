@@ -92,6 +92,17 @@ func TestSyncAgentSymlinks(t *testing.T) {
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).To(ContainSubstring("not a symlink"))
 	})
+
+	t.Run("rejects invalid names before creating agent directory", func(t *testing.T) {
+		g := NewWithT(t)
+		root := t.TempDir()
+
+		err := SyncAgentSymlinks(root, []string{"claude-code"}, []string{"valid-skill", "../external-link"})
+		g.Expect(err).To(MatchError(ContainSubstring("invalid skill name")))
+
+		_, err = os.Stat(filepath.Join(root, ".claude"))
+		g.Expect(os.IsNotExist(err)).To(BeTrue())
+	})
 }
 
 func TestRemoveAgentSymlinks(t *testing.T) {
@@ -145,6 +156,23 @@ func TestRemoveAgentSymlinks(t *testing.T) {
 		// .claude dir should still exist (has settings.json).
 		_, err := os.Stat(filepath.Join(root, ".claude"))
 		g.Expect(err).ToNot(HaveOccurred())
+	})
+
+	t.Run("preserves external symlink for invalid name", func(t *testing.T) {
+		g := NewWithT(t)
+		sandbox := t.TempDir()
+		root := filepath.Join(sandbox, "project")
+		g.Expect(os.MkdirAll(filepath.Join(root, ".claude/skills"), 0o755)).To(Succeed())
+
+		outsideLink := filepath.Join(sandbox, "external-link")
+		g.Expect(os.Symlink("target", outsideLink)).To(Succeed())
+
+		err := RemoveAgentSymlinks(root, []string{"claude-code"}, []string{"../../../external-link"})
+		g.Expect(err).To(MatchError(ContainSubstring("invalid skill name")))
+
+		info, err := os.Lstat(outsideLink)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(info.Mode() & os.ModeSymlink).NotTo(BeZero())
 	})
 }
 

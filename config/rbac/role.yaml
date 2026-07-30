@@ -39,3 +39,11 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - source.toolkit.fluxcd.io
+  resources:
+  - externalartifacts
+  verbs:
+  - get
+  - list
+  - watch

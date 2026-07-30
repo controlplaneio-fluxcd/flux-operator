@@ -481,3 +481,266 @@ func TestSecurityHeadersMiddleware(t *testing.T) {
 		})
 	}
 }
+
+func TestCrossOriginMiddleware(t *testing.T) {
+	// Test handler that returns a simple response
+	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("content"))
+	})
+
+	const jsonBody = `{"action":"suspend"}`
+
+	for _, tt := range []struct {
+		name         string
+		method       string
+		secFetchSite string
+		contentType  string
+		body         string
+		expectedCode int
+	}{
+		{
+			name:         "allows same-origin JSON post",
+			method:       http.MethodPost,
+			secFetchSite: "same-origin",
+			contentType:  "application/json",
+			body:         jsonBody,
+			expectedCode: http.StatusOK,
+		},
+		{
+			name:         "allows JSON post with charset parameter",
+			method:       http.MethodPost,
+			secFetchSite: "same-origin",
+			contentType:  "application/json; charset=utf-8",
+			body:         jsonBody,
+			expectedCode: http.StatusOK,
+		},
+		{
+			name:         "allows user initiated request",
+			method:       http.MethodPost,
+			secFetchSite: "none",
+			contentType:  "application/json",
+			body:         jsonBody,
+			expectedCode: http.StatusOK,
+		},
+		{
+			name:         "allows client that sends no fetch metadata",
+			method:       http.MethodPost,
+			contentType:  "application/json",
+			body:         jsonBody,
+			expectedCode: http.StatusOK,
+		},
+		{
+			name:         "allows bodyless same-origin post",
+			method:       http.MethodPost,
+			secFetchSite: "same-origin",
+			expectedCode: http.StatusOK,
+		},
+		{
+			name:         "allows bodyless post without fetch metadata",
+			method:       http.MethodPost,
+			expectedCode: http.StatusOK,
+		},
+		{
+			name:         "denies cross-site post",
+			method:       http.MethodPost,
+			secFetchSite: "cross-site",
+			contentType:  "application/json",
+			body:         jsonBody,
+			expectedCode: http.StatusForbidden,
+		},
+		{
+			name:         "denies same-site post",
+			method:       http.MethodPost,
+			secFetchSite: "same-site",
+			contentType:  "application/json",
+			body:         jsonBody,
+			expectedCode: http.StatusForbidden,
+		},
+		{
+			name:         "denies bodyless cross-site post",
+			method:       http.MethodPost,
+			secFetchSite: "cross-site",
+			expectedCode: http.StatusForbidden,
+		},
+		{
+			name:         "denies cross-site delete",
+			method:       http.MethodDelete,
+			secFetchSite: "cross-site",
+			expectedCode: http.StatusForbidden,
+		},
+		{
+			name:         "allows delete carrying a JSON body",
+			method:       http.MethodDelete,
+			secFetchSite: "same-origin",
+			contentType:  "application/json",
+			body:         jsonBody,
+			expectedCode: http.StatusOK,
+		},
+		{
+			name:         "denies delete carrying a plain text body",
+			method:       http.MethodDelete,
+			contentType:  "text/plain",
+			body:         jsonBody,
+			expectedCode: http.StatusUnsupportedMediaType,
+		},
+		{
+			name:         "allows unrecognized fetch site with a JSON body",
+			method:       http.MethodPost,
+			secFetchSite: "unrecognized",
+			contentType:  "application/json",
+			body:         jsonBody,
+			expectedCode: http.StatusOK,
+		},
+		{
+			name:         "denies unrecognized fetch site with a plain text body",
+			method:       http.MethodPost,
+			secFetchSite: "unrecognized",
+			contentType:  "text/plain",
+			body:         jsonBody,
+			expectedCode: http.StatusUnsupportedMediaType,
+		},
+		{
+			name:         "denies cross-site put",
+			method:       http.MethodPut,
+			secFetchSite: "cross-site",
+			contentType:  "application/json",
+			body:         jsonBody,
+			expectedCode: http.StatusForbidden,
+		},
+		{
+			name:         "denies cross-site patch",
+			method:       http.MethodPatch,
+			secFetchSite: "cross-site",
+			contentType:  "application/json",
+			body:         jsonBody,
+			expectedCode: http.StatusForbidden,
+		},
+		{
+			name:         "denies plain text body",
+			method:       http.MethodPost,
+			contentType:  "text/plain",
+			body:         jsonBody,
+			expectedCode: http.StatusUnsupportedMediaType,
+		},
+		{
+			name:         "denies form encoded body",
+			method:       http.MethodPost,
+			contentType:  "application/x-www-form-urlencoded",
+			body:         jsonBody,
+			expectedCode: http.StatusUnsupportedMediaType,
+		},
+		{
+			name:         "denies multipart body",
+			method:       http.MethodPost,
+			contentType:  "multipart/form-data; boundary=x",
+			body:         jsonBody,
+			expectedCode: http.StatusUnsupportedMediaType,
+		},
+		{
+			name:         "denies body without a media type",
+			method:       http.MethodPost,
+			body:         jsonBody,
+			expectedCode: http.StatusUnsupportedMediaType,
+		},
+		{
+			name:         "denies body with a malformed media type",
+			method:       http.MethodPost,
+			contentType:  "application/json;;",
+			body:         jsonBody,
+			expectedCode: http.StatusUnsupportedMediaType,
+		},
+		{
+			name:         "does not screen cross-site get",
+			method:       http.MethodGet,
+			secFetchSite: "cross-site",
+			expectedCode: http.StatusOK,
+		},
+		{
+			name:         "does not screen cross-site head",
+			method:       http.MethodHead,
+			secFetchSite: "cross-site",
+			expectedCode: http.StatusOK,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			// Create request, leaving the body nil when the case has none
+			// so that ContentLength stays zero
+			var body io.Reader
+			if tt.body != "" {
+				body = strings.NewReader(tt.body)
+			}
+			req := httptest.NewRequest(tt.method, "/api/v1/resource/action", body)
+			if tt.secFetchSite != "" {
+				req.Header.Set("Sec-Fetch-Site", tt.secFetchSite)
+			}
+			if tt.contentType != "" {
+				req.Header.Set("Content-Type", tt.contentType)
+			}
+
+			// Create response recorder
+			rec := httptest.NewRecorder()
+
+			// Apply middleware
+			middleware := CrossOriginMiddleware(testHandler)
+			middleware.ServeHTTP(rec, req)
+
+			// Check status code
+			g.Expect(rec.Code).To(Equal(tt.expectedCode))
+
+			// Check the request only reached the handler when allowed
+			if tt.expectedCode == http.StatusOK {
+				g.Expect(rec.Body.String()).To(Equal("content"))
+			} else {
+				g.Expect(rec.Body.String()).NotTo(ContainSubstring("content"))
+			}
+		})
+	}
+}
+
+func TestCrossOriginMiddleware_UnknownBodyLength(t *testing.T) {
+	// Test handler that returns a simple response
+	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("content"))
+	})
+
+	for _, tt := range []struct {
+		name         string
+		contentType  string
+		expectedCode int
+	}{
+		{
+			name:         "allows JSON body of unknown length",
+			contentType:  "application/json",
+			expectedCode: http.StatusOK,
+		},
+		{
+			name:         "denies plain text body of unknown length",
+			contentType:  "text/plain",
+			expectedCode: http.StatusUnsupportedMediaType,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			// A reader of unknown size yields a negative ContentLength, which
+			// must still be treated as a body that declares its media type.
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action",
+				io.NopCloser(strings.NewReader(`{"action":"suspend"}`)))
+			req.Header.Set("Content-Type", tt.contentType)
+			g.Expect(req.ContentLength).To(Equal(int64(-1)))
+
+			// Create response recorder
+			rec := httptest.NewRecorder()
+
+			// Apply middleware
+			CrossOriginMiddleware(testHandler).ServeHTTP(rec, req)
+
+			// Check status code
+			g.Expect(rec.Code).To(Equal(tt.expectedCode))
+		})
+	}
+}

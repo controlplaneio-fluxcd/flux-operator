@@ -94,6 +94,13 @@ var distroMirrorArgs = distroMirrorFlags{
 	includeOperatorChart: true,
 }
 
+var (
+	mirrorHead           = crane.Head
+	mirrorDigest         = crane.Digest
+	mirrorCopy           = crane.Copy
+	verifyMirrorArtifact = cosign.VerifyArtifact
+)
+
 const (
 	distroMirrorSrcRegistry       = "ghcr.io"
 	distroMirrorManifestsArtifact = "oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests:latest"
@@ -204,25 +211,17 @@ func distroMirrorCmdRun(_ *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to extract component images: %w", err)
 	}
 
-	if distroMirrorArgs.verify {
-		rootCmd.Println(`◎`, "Verifying signatures...")
-		for _, img := range images {
-			pinnedRef := img.Repository + "@" + img.Digest
-			certIdentityRegexp := fmt.Sprintf(`^https://github\.com/%s/.*$`, agentops.DeriveGitHubOwner(img.Repository))
-			if err := cosign.VerifyArtifact(ctx, pinnedRef,
-				certIdentityRegexp,
-				cosign.DefaultCertOIDCIssuer,
-				"",
-				keychain); err != nil {
-				return fmt.Errorf("signature verification failed for %s: %w", pinnedRef, err)
-			}
-			rootCmd.Printf("✔ %s\n", pinnedRef)
-		}
-	}
-
 	jobs := buildMirrorJobs(images, dstPrefix,
 		distroMirrorArgs.includeOperatorImage,
 		distroMirrorArgs.includeOperatorChart)
+
+	if distroMirrorArgs.verify {
+		rootCmd.Println(`◎`, "Verifying signatures...")
+		jobs, err = verifyMirrorJobs(ctx, jobs, keychain, craneOpts)
+		if err != nil {
+			return err
+		}
+	}
 
 	rootCmd.Printf("◎ Mirroring Flux %s (%s) to %s\n", ver, distroMirrorArgs.variant, dstPrefix)
 
@@ -299,8 +298,9 @@ type mirrorJob struct {
 	digest  string // src digest (sha256:...) — empty when not pre-resolved
 }
 
-func (j mirrorJob) src() string { return j.srcRepo + ":" + j.tag }
-func (j mirrorJob) dst() string { return j.dstRepo + ":" + j.tag }
+func (j mirrorJob) src() string         { return j.srcRepo + ":" + j.tag }
+func (j mirrorJob) srcByDigest() string { return j.srcRepo + "@" + j.digest }
+func (j mirrorJob) dst() string         { return j.dstRepo + ":" + j.tag }
 
 // buildMirrorJobs constructs the ordered list of mirror jobs from the
 // extracted component images, optionally including the Flux Operator
@@ -358,61 +358,91 @@ type mirrorResult struct {
 	reason string // human-readable reason for skip
 }
 
+// verifyMirrorJobs resolves any missing source digest, verifies every job by
+// digest, and returns jobs carrying the exact digest that passed verification.
+func verifyMirrorJobs(ctx context.Context, jobs []mirrorJob, keychain authn.Keychain, craneOpts []crane.Option) ([]mirrorJob, error) {
+	verifiedJobs := slices.Clone(jobs)
+	for i := range verifiedJobs {
+		j := &verifiedJobs[i]
+		if j.digest == "" {
+			digest, err := mirrorDigest(j.src(), craneOpts...)
+			if err != nil {
+				return nil, fmt.Errorf("failed to resolve digest for %s: %w", j.src(), err)
+			}
+			j.digest = digest
+		}
+
+		pinnedRef := j.srcByDigest()
+		certIdentityRegexp := fmt.Sprintf(`^https://github\.com/%s/.*$`, agentops.DeriveGitHubOwner(j.srcRepo))
+		verifiedRef, err := verifyMirrorArtifact(ctx, pinnedRef,
+			certIdentityRegexp,
+			cosign.DefaultCertOIDCIssuer,
+			"",
+			keychain)
+		if err != nil {
+			return nil, fmt.Errorf("signature verification failed for %s: %w", pinnedRef, err)
+		}
+		if strings.TrimPrefix(verifiedRef, "oci://") != pinnedRef {
+			return nil, fmt.Errorf("signature verification returned unexpected reference %s for %s", verifiedRef, pinnedRef)
+		}
+		rootCmd.Printf("✔ %s\n", pinnedRef)
+	}
+	return verifiedJobs, nil
+}
+
 // runMirrorJob copies a single image to the destination registry, honoring the
-// immutable and dry-run flags. The function is idempotent: if the destination
-// already holds the source digest under the requested tag, the job is skipped.
-//
-// The source digest is resolved lazily: jobs that don't carry a pre-resolved
-// digest only pay the extra round trip when the destination tag exists and we
-// need to compare. The common first-mirror path (dst returns 404) avoids it.
+// immutable and dry-run flags. Every actual copy uses a digest-pinned source.
+// The function is idempotent: if the destination already holds the source
+// digest under the requested tag, the job is skipped.
 func runMirrorJob(j mirrorJob, immutable, dryRun bool, craneOpts []crane.Option) (mirrorResult, error) {
 	src, dst := j.src(), j.dst()
 	if dryRun {
 		return mirrorResult{action: mirrorDryRun, src: src, dst: dst}, nil
 	}
 
-	desc, err := crane.Head(dst, craneOpts...)
-	switch {
-	case isNotFound(err):
-		if err := crane.Copy(src, dst, craneOpts...); err != nil {
-			return mirrorResult{}, fmt.Errorf("failed to copy %s to %s: %w", src, dst, err)
-		}
-		return mirrorResult{action: mirrorCopied, src: src, dst: dst}, nil
-	case err != nil:
+	desc, err := mirrorHead(dst, craneOpts...)
+	if err != nil && !isNotFound(err) {
 		return mirrorResult{}, fmt.Errorf("failed to head %s: %w", dst, err)
 	}
+	dstNotFound := isNotFound(err)
 
-	srcDigest := j.digest
-	if srcDigest == "" {
-		d, err := crane.Digest(src, craneOpts...)
+	if j.digest == "" {
+		digest, err := mirrorDigest(src, craneOpts...)
 		if err != nil {
 			return mirrorResult{}, fmt.Errorf("failed to resolve digest for %s: %w", src, err)
 		}
-		srcDigest = d
+		j.digest = digest
+	}
+	srcByDigest := j.srcByDigest()
+
+	if dstNotFound {
+		if err := mirrorCopy(srcByDigest, dst, craneOpts...); err != nil {
+			return mirrorResult{}, fmt.Errorf("failed to copy %s to %s: %w", srcByDigest, dst, err)
+		}
+		return mirrorResult{action: mirrorCopied, src: srcByDigest, dst: dst}, nil
 	}
 
-	if desc.Digest.String() == srcDigest {
-		return mirrorResult{action: mirrorSkipped, src: src, dst: dst, reason: "up-to-date"}, nil
+	if desc.Digest.String() == j.digest {
+		return mirrorResult{action: mirrorSkipped, src: srcByDigest, dst: dst, reason: "up-to-date"}, nil
 	}
 
 	if !immutable {
-		if err := crane.Copy(src, dst, craneOpts...); err != nil {
-			return mirrorResult{}, fmt.Errorf("failed to copy %s to %s: %w", src, dst, err)
+		if err := mirrorCopy(srcByDigest, dst, craneOpts...); err != nil {
+			return mirrorResult{}, fmt.Errorf("failed to copy %s to %s: %w", srcByDigest, dst, err)
 		}
-		return mirrorResult{action: mirrorOverwritten, src: src, dst: dst}, nil
+		return mirrorResult{action: mirrorOverwritten, src: srcByDigest, dst: dst}, nil
 	}
 
 	// Immutable mode: don't touch the existing tag. Skip entirely if the
 	// source digest is already stored under any tag at the destination.
-	if _, err := crane.Digest(j.dstRepo+"@"+srcDigest, craneOpts...); err == nil {
-		return mirrorResult{action: mirrorSkipped, src: src, dst: dst, reason: "digest already present"}, nil
+	if _, err := mirrorDigest(j.dstRepo+"@"+j.digest, craneOpts...); err == nil {
+		return mirrorResult{action: mirrorSkipped, src: srcByDigest, dst: dst, reason: "digest already present"}, nil
 	} else if !isNotFound(err) {
-		return mirrorResult{}, fmt.Errorf("failed to check digest %s@%s: %w", j.dstRepo, srcDigest, err)
+		return mirrorResult{}, fmt.Errorf("failed to check digest %s@%s: %w", j.dstRepo, j.digest, err)
 	}
 
-	srcByDigest := j.srcRepo + "@" + srcDigest
 	uniqueDst := fmt.Sprintf("%s:%s-%d", j.dstRepo, j.tag, time.Now().Unix())
-	if err := crane.Copy(srcByDigest, uniqueDst, craneOpts...); err != nil {
+	if err := mirrorCopy(srcByDigest, uniqueDst, craneOpts...); err != nil {
 		return mirrorResult{}, fmt.Errorf("failed to copy %s to %s: %w", srcByDigest, uniqueDst, err)
 	}
 	return mirrorResult{action: mirrorByDigest, src: srcByDigest, dst: uniqueDst}, nil
