@@ -156,39 +156,19 @@ func ValidateOAuth2AuthenticationSpec(o *fluxcdv1.OAuth2AuthenticationSpec) erro
 func ValidateReverseProxyAuthenticationSpec(
 	r *fluxcdv1.ReverseProxyAuthenticationSpec,
 ) error {
-	if r.Headers.Username == "" {
-		return fmt.Errorf("username header must be set")
-	}
-
 	if len(r.TrustedProxies) == 0 {
 		return fmt.Errorf("at least one trusted proxy must be configured")
 	}
 
-	groups, err := sanitizeGroups(r.DefaultGroups)
-	if err != nil {
-		return fmt.Errorf("invalid defaultGroups: %w", err)
+	if err := ValidateClaimsProcessorSpec(&r.ClaimsProcessorSpec); err != nil {
+		return err
 	}
 
-	r.DefaultGroups = groups
+	if r.Impersonation == nil {
+		return fmt.Errorf("impersonation must be configured")
+	}
 
 	return nil
-}
-
-// sanitizeGroups trims whitespace from each group in the list, removes empty groups, and sorts the list.
-func sanitizeGroups(groups []string) ([]string, error) {
-	groups = slices.Clone(groups)
-
-	for i := range groups {
-		groups[i] = strings.TrimSpace(groups[i])
-		if groups[i] == "" {
-			return nil, fmt.Errorf("group[%d] is empty", i)
-		}
-	}
-
-	slices.Sort(groups)
-	groups = slices.Compact(groups)
-
-	return groups, nil
 }
 
 // ValidateClaimsProcessorSpec validates the ClaimsProcessorSpec configuration.

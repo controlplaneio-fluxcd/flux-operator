@@ -10,8 +10,6 @@ import (
 	"net/netip"
 	"strings"
 
-	"golang.org/x/exp/slices"
-
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/kubeclient"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
@@ -52,8 +50,9 @@ func newReverseProxyMiddlewareWithClientFactory(
 
 	cfg := conf.Authentication.ReverseProxy
 
-	if strings.TrimSpace(cfg.Headers.Username) == "" {
-		return nil, fmt.Errorf("reverse proxy username header must be configured")
+	processClaims, err := newClaimsProcessor(&cfg.ClaimsProcessorSpec)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create claims processor: %w", err)
 	}
 
 	trustedProxies, err := newTrustedProxySet(cfg.TrustedProxies)
@@ -82,56 +81,24 @@ func newReverseProxyMiddlewareWithClientFactory(
 				return
 			}
 
-			username := strings.TrimSpace(
-				r.Header.Get(cfg.Headers.Username),
-			)
-			if username == "" {
-				http.Error(
-					w,
-					"authenticated username header is missing",
-					http.StatusUnauthorized,
-				)
-				return
-			}
-
-			name := username
-			if cfg.Headers.Name != "" {
-				if headerName := strings.TrimSpace(
-					r.Header.Get(cfg.Headers.Name),
-				); headerName != "" {
-					name = headerName
+			claims := make(map[string]any, len(r.Header))
+			for name, values := range r.Header {
+				if len(values) > 0 {
+					claims[http.CanonicalHeaderKey(name)] = values[0]
 				}
 			}
 
-			groups := parseHeaderList(
-				r.Header.Values(cfg.Headers.Groups),
-				cfg.Groups,
-			)
-
-			if len(groups) == 0 {
-				groups = slices.Clone(cfg.DefaultGroups)
-			}
-
-			details := user.Details{
-				Profile: user.Profile{
-					Name: name,
-				},
-				Impersonation: user.Impersonation{
-					Username: username,
-					Groups:   groups,
-				},
-				Provider: map[string]any{
-					"type": fluxcdv1.AuthenticationTypeReverseProxy,
-				},
-			}
-
-			if err := details.Impersonation.SanitizeAndValidate(); err != nil {
+			details, err := processClaims(r.Context(), claims)
+			if err != nil {
 				http.Error(
 					w,
 					"invalid authenticated identity",
 					http.StatusUnauthorized,
 				)
 				return
+			}
+			details.Provider = map[string]any{
+				"type": fluxcdv1.AuthenticationTypeReverseProxy,
 			}
 
 			client, err := getUserClient(details.Impersonation)
@@ -148,7 +115,7 @@ func newReverseProxyMiddlewareWithClientFactory(
 
 			ctx := user.StoreSession(
 				r.Context(),
-				details,
+				*details,
 				client,
 			)
 
@@ -288,61 +255,4 @@ func remoteIP(remoteAddr string) (netip.Addr, error) {
 	}
 
 	return addr.Unmap(), nil
-}
-
-// parseHeaderList parses one or more HTTP header values into a normalized,
-// sorted and deduplicated list.
-//
-// For example:
-//
-//	X-Auth-Groups: platform,developers
-//	X-Auth-Groups: flux-admin
-//
-// becomes:
-//
-//	[]string{"developers", "flux-admin", "platform"}
-func parseHeaderList(headerValues []string,
-	cfg *fluxcdv1.HeaderListSpec) []string {
-	if len(headerValues) == 0 {
-		return nil
-	}
-
-	separator := ","
-	if cfg != nil && cfg.Separator != "" {
-		separator = cfg.Separator
-	}
-
-	seen := make(map[string]struct{})
-	values := make([]string, 0)
-
-	for _, headerValue := range headerValues {
-		var parts []string
-
-		if separator == "" {
-			parts = []string{headerValue}
-		} else {
-			parts = strings.Split(headerValue, separator)
-		}
-
-		for _, part := range parts {
-			part = strings.TrimSpace(part)
-			if part == "" {
-				continue
-			}
-
-			if _, exists := seen[part]; exists {
-				continue
-			}
-
-			seen[part] = struct{}{}
-			values = append(values, part)
-		}
-	}
-
-	if len(values) == 0 {
-		return nil
-	}
-
-	slices.Sort(values)
-	return values
 }

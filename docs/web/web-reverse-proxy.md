@@ -76,12 +76,21 @@ spec:
   authentication:
     type: ReverseProxy
     reverseProxy:
-      headers:
-        username: X-Remote-User
-        groups: X-Remote-Groups
       trustedProxies:
         - 10.244.0.0/16 # cluster pod CIDR, or the Nginx pod's specific IP
+      variables:
+        - name: username
+          expression: "claims['X-Remote-User']"
+      impersonation:
+        username: "variables.username"
+        groups: "'X-Remote-Groups' in claims ? claims['X-Remote-Groups'].split(',') : []"
 ```
+
+Reverse Proxy authentication uses the same CEL claims processor as OAuth2.
+Request headers are available by canonical name as single string values. CEL
+expressions can split group values using the separator emitted by the proxy, as
+shown above. You can also configure `validations` and `profile` using the same
+schema as the OAuth2 provider.
 
 If you're running Nginx as the `ingress-nginx` controller, find its pod IPs with
 `kubectl get pods -n ingress-nginx -o wide` and scope `trustedProxies` as tightly as

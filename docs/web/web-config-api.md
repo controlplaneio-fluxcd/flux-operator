@@ -121,24 +121,36 @@ spec:
 
     # Reverse Proxy authentication settings (when type=ReverseProxy)
     reverseProxy:
-      # Required: HTTP headers used to extract user identity
-      headers:
-        username: X-Remote-User
-        name: X-Remote-Name # Optional, falls back to username if unset
-        groups: X-Remote-Groups # Optional
-
-      # Optional: how to split multi-value group header entries. Default: ","
-      groups:
-        separator: ","
-
-      # Optional: groups assigned when the proxy sends no groups header
-      defaultGroups: # Optional
-        - flux-viewers
-
       # Required: only requests whose TCP peer IP matches one of these
       # IPs/CIDRs are trusted to assert identity via headers.
       trustedProxies:
         - 10.0.0.0/8
+
+      # HTTP headers are exposed to CEL as claims that can be assigned to variables.
+      # Ordering is important, variables are evaluated in declaration order.
+      variables:
+        - name: username
+          expression: "claims['X-Remote-User']"
+        - name: groups
+          expression: "claims['X-Remote-Groups']"
+        - name: name
+          expression: "'X-Remote-Name' in claims ? claims['X-Remote-Name'] : variables.username"
+
+      # Optional CEL validation.
+      validations:
+        - expression: "variables.username.endsWith('@example.com')"
+          message: "email domain not allowed"
+        - expression: "size(variables.groups) > 0"
+          message: "user must belong to at least one group"
+
+      # Optional display name. Defaults to the impersonated username.
+      profile:
+        name: "variables.name"
+
+      # Required Kubernetes RBAC identity.
+      impersonation:
+        username: "variables.username"
+        groups: "variables.groups.split(',')"
 
   # User actions (optional)
   userActions:
@@ -198,24 +210,31 @@ spec:
   authentication:
     type: ReverseProxy
     reverseProxy:
-      headers:
-        username: X-Remote-User
-        name: X-Remote-Name
-        groups: X-Remote-Groups
-      groups:
-        separator: ","
-      defaultGroups:
-        - flux-viewers
       trustedProxies:
         - 10.0.0.0/8
+      variables:
+        - name: username
+          expression: "claims['X-Remote-User']"
+      validations:
+        - expression: "variables.username.endsWith('@example.com')"
+          message: "email domain not allowed"
+      profile:
+        name: "'X-Remote-Name' in claims ? claims['X-Remote-Name'] : variables.username"
+      impersonation:
+        username: "variables.username"
+        groups: "'X-Remote-Groups' in claims ? claims['X-Remote-Groups'].split(',') : []"
 ```
 
-- `headers.username` (required): name of the HTTP header carrying the authenticated username.
-- `headers.name` (optional): name of the HTTP header carrying the user's display name. Falls back to the username if unset or blank.
-- `headers.groups` (optional): name of the HTTP header carrying the user's groups. Supports multiple header instances.
-- `groups.separator` (optional): delimiter used to split group header values. Default: `,`.
-- `defaultGroups` (optional): groups assigned when the proxy sends no groups header.
 - `trustedProxies` (required): list of IP addresses or CIDR ranges (IPv4 or IPv6) allowed to assert identity.
+- `variables` and `validations` (optional): the same CEL processing stages used by OAuth2.
+- `profile` (optional): CEL expressions for display information. The UI falls back to the impersonated username.
+- `impersonation` (required): CEL expressions that produce the Kubernetes RBAC username and groups.
+
+The `claims` map contains every request header under its canonical HTTP name as a
+single string value. Use bracket access for names containing hyphens, for example
+`claims['X-Remote-User']`. Header values are not split before CEL processing; use
+an expression such as `claims['X-Remote-Groups'].split(',')` when needed. CEL
+processing errors and failed validations return a generic unauthorized response.
 
 Only the direct TCP peer IP of the incoming request is checked against `trustedProxies` —
 forwardable headers such as `X-Forwarded-For` or `Forwarded` are never trusted for this
@@ -288,9 +307,10 @@ the ID token claims to create a user session. This session includes:
 
 #### Claims Processing with CEL
 
-The OIDC provider uses Common Expression Language (CEL) expressions to extract
-and validate information from ID token claims. This provides flexibility in
-mapping identity provider claims to Kubernetes RBAC identities.
+The OIDC and Reverse Proxy providers use Common Expression Language (CEL)
+expressions to extract and validate identity information. For OIDC, `claims`
+contains ID token claims. For Reverse Proxy authentication, it contains HTTP
+header values as described above.
 
 References for writing CEL expressions:
 - [CEL Language Reference](https://cel.dev/overview/cel-overview)
@@ -466,17 +486,17 @@ spec:
   authentication:
     type: ReverseProxy
     reverseProxy:
-      headers:
-        username: X-Remote-User
-        name: X-Remote-Name
-        groups: X-Remote-Groups
-      groups:
-        separator: ","
-      defaultGroups:
-        - flux-viewers
       trustedProxies:
         - 10.0.0.0/8
         - 192.168.1.10/32
+      variables:
+        - name: username
+          expression: "claims['X-Remote-User']"
+      profile:
+        name: "'X-Remote-Name' in claims ? claims['X-Remote-Name'] : variables.username"
+      impersonation:
+        username: "variables.username"
+        groups: "'X-Remote-Groups' in claims ? claims['X-Remote-Groups'].split(',') : []"
 ```
 
 ### Basic OIDC Authentication
