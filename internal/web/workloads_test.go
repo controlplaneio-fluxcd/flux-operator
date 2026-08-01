@@ -9,12 +9,16 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metricsv1beta1api "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
@@ -944,4 +948,144 @@ func TestWorkloadsHandlerRejectsOversizedBatch(t *testing.T) {
 	new(Handler).WorkloadsHandler(rec, req)
 
 	g.Expect(rec.Code).To(Equal(http.StatusRequestEntityTooLarge))
+}
+
+func TestGetWorkloadsStatus_Samples(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a Deployment whose selector matches the buffered pod below
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-workload-samples",
+			Namespace: "default",
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: new(int32(1)),
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "test-workload-samples"},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"app": "test-workload-samples"},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "nginx", Image: "nginx:latest"},
+					},
+				},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, deployment)).To(Succeed())
+	defer testClient.Delete(ctx, deployment)
+
+	cronJob := &batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-workload-samples-cron",
+			Namespace: "default",
+		},
+		Spec: batchv1.CronJobSpec{
+			Schedule: "0 * * * *",
+			JobTemplate: batchv1.JobTemplateSpec{
+				Spec: batchv1.JobSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							RestartPolicy: corev1.RestartPolicyOnFailure,
+							Containers: []corev1.Container{
+								{Name: "job", Image: "busybox:latest"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, cronJob)).To(Succeed())
+	defer testClient.Delete(ctx, cronJob)
+
+	// Buffer two scrapes for a pod matching the Deployment selector.
+	mc := NewMetricsCollector(nil, time.Minute)
+	now := time.Now().Truncate(time.Second)
+	list := &metricsv1beta1api.PodMetricsList{
+		Items: []metricsv1beta1api.PodMetrics{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workload-samples-pod",
+					Namespace: "default",
+					Labels:    map[string]string{"app": "test-workload-samples"},
+				},
+				Containers: []metricsv1beta1api.ContainerMetrics{
+					{
+						Name: "nginx",
+						Usage: corev1.ResourceList{
+							corev1.ResourceCPU:    *resource.NewMilliQuantity(100, resource.DecimalSI),
+							corev1.ResourceMemory: *resource.NewQuantity(64<<20, resource.BinarySI),
+						},
+					},
+				},
+			},
+		},
+	}
+	mc.ingest(list, now.Add(-time.Minute))
+	mc.ingest(list, now)
+
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		metrics:       mc,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	workloads := []WorkloadItem{
+		{Kind: "Deployment", Namespace: "default", Name: "test-workload-samples"},
+		{Kind: "CronJob", Namespace: "default", Name: "test-workload-samples-cron"},
+		{Kind: "Deployment", Namespace: "default", Name: "nonexistent-deployment"},
+	}
+	results := handler.GetWorkloadsStatus(ctx, workloads)
+	g.Expect(results).To(HaveLen(3))
+
+	// The selector-backed Deployment carries the pod series.
+	g.Expect(results[0].Samples).To(HaveLen(2))
+	g.Expect(results[0].Samples[1].CPU).To(BeNumerically("~", 0.1, 1e-9))
+	g.Expect(results[0].Samples[1].Memory).To(Equal(int64(64 << 20)))
+
+	// CronJobs have no pod selector, so no samples.
+	g.Expect(results[1].Status).NotTo(Equal("NotFound"))
+	g.Expect(results[1].Samples).To(BeEmpty())
+
+	// Missing workloads return the NotFound sentinel without samples.
+	g.Expect(results[2].Status).To(Equal("NotFound"))
+	g.Expect(results[2].Samples).To(BeEmpty())
+
+	// Without a metrics collector the samples stay empty.
+	noMetrics := &Handler{
+		kubeClient:    kubeClient,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+	results = noMetrics.GetWorkloadsStatus(ctx, workloads[:1])
+	g.Expect(results).To(HaveLen(1))
+	g.Expect(results[0].Samples).To(BeEmpty())
+
+	// A forbidden user gets the sentinel without samples even though the
+	// collector buffers matching pods: the impersonated workload GET is the
+	// access gate and must fail before any series is attached.
+	imp := user.Impersonation{
+		Username: "unprivileged-samples-user",
+		Groups:   []string{"unprivileged-group"},
+	}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+	userCtx := user.StoreSession(ctx, user.Details{
+		Profile:       user.Profile{Name: "Unprivileged User"},
+		Impersonation: imp,
+	}, userClient)
+
+	results = handler.GetWorkloadsStatus(userCtx, workloads[:1])
+	g.Expect(results).To(HaveLen(1))
+	g.Expect(results[0].Status).To(Equal("NotFound"))
+	g.Expect(results[0].StatusMessage).To(Equal("User does not have access to the workload"))
+	g.Expect(results[0].Samples).To(BeEmpty())
 }

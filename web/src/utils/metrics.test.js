@@ -5,7 +5,7 @@ import { describe, it, expect } from 'vitest'
 import {
   formatCores, formatBytes, percentOf, percentText, limitSeverity, percentSeverity,
   buildChartData, latestSample, hasChartableMetrics,
-  podUsageSeries, trimPodUsage, usageAnnotation,
+  usageSeries, trimPodUsage, usageAnnotation, sumSeries,
 } from './metrics'
 
 describe('formatCores', () => {
@@ -189,7 +189,7 @@ describe('hasChartableMetrics', () => {
   })
 })
 
-describe('podUsageSeries', () => {
+describe('usageSeries', () => {
   const pods = [
     { name: 'app-1', metrics: { cpu: 0.02, memory: 64 } },
     { name: 'app-2', metrics: { cpu: 0.05, memory: 32 } },
@@ -197,12 +197,12 @@ describe('podUsageSeries', () => {
   ]
 
   it('sorts pods by usage descending with sampleless pods last', () => {
-    expect(podUsageSeries(pods, 'cpu')).toEqual([
+    expect(usageSeries(pods, 'cpu')).toEqual([
       { name: 'app-2', value: 0.05, limit: 0 },
       { name: 'app-1', value: 0.02, limit: 0 },
       { name: 'app-3', value: null, limit: 0 },
     ])
-    expect(podUsageSeries(pods, 'memory')).toEqual([
+    expect(usageSeries(pods, 'memory')).toEqual([
       { name: 'app-1', value: 64, limit: 0 },
       { name: 'app-2', value: 32, limit: 0 },
       { name: 'app-3', value: null, limit: 0 },
@@ -213,25 +213,82 @@ describe('podUsageSeries', () => {
     const withLimits = [
       { name: 'app-1', metrics: { cpu: 0.1, memory: 64 }, resources: { cpuLimits: 0.5, memoryLimits: 128 } },
     ]
-    expect(podUsageSeries(withLimits, 'cpu')).toEqual([
+    expect(usageSeries(withLimits, 'cpu')).toEqual([
       { name: 'app-1', value: 0.1, limit: 0.5 },
     ])
-    expect(podUsageSeries(withLimits, 'memory')).toEqual([
+    expect(usageSeries(withLimits, 'memory')).toEqual([
       { name: 'app-1', value: 64, limit: 128 },
     ])
   })
 
   it('keeps pods without a usage sample or with invalid values as null', () => {
-    expect(podUsageSeries([{ name: 'b', metrics: { cpu: NaN } }, { name: 'a' }], 'cpu')).toEqual([
+    expect(usageSeries([{ name: 'b', metrics: { cpu: NaN } }, { name: 'a' }], 'cpu')).toEqual([
       { name: 'a', value: null, limit: 0 },
       { name: 'b', value: null, limit: 0 },
     ])
-    expect(podUsageSeries(undefined, 'cpu')).toEqual([])
+    expect(usageSeries(undefined, 'cpu')).toEqual([])
   })
 
   it('keeps zero-usage pods in the list', () => {
-    expect(podUsageSeries([{ name: 'idle', metrics: { cpu: 0 } }], 'cpu')).toEqual([
+    expect(usageSeries([{ name: 'idle', metrics: { cpu: 0 } }], 'cpu')).toEqual([
       { name: 'idle', value: 0, limit: 0 },
+    ])
+  })
+
+  it('carries kind and namespace through for workload items', () => {
+    const workloads = [
+      { kind: 'Deployment', namespace: 'apps', name: 'frontend', metrics: { cpu: 0.02, memory: 64 } },
+      { kind: 'StatefulSet', namespace: 'data', name: 'frontend' },
+    ]
+    expect(usageSeries(workloads, 'cpu')).toEqual([
+      { kind: 'Deployment', namespace: 'apps', name: 'frontend', value: 0.02, limit: 0 },
+      { kind: 'StatefulSet', namespace: 'data', name: 'frontend', value: null, limit: 0 },
+    ])
+  })
+
+  it('breaks usage ties on namespace/name', () => {
+    const workloads = [
+      { kind: 'Deployment', namespace: 'zoo', name: 'app', metrics: { cpu: 0.1, memory: 1 } },
+      { kind: 'Deployment', namespace: 'alpha', name: 'app', metrics: { cpu: 0.1, memory: 1 } },
+    ]
+    const sorted = usageSeries(workloads, 'cpu')
+    expect(sorted[0].namespace).toBe('alpha')
+    expect(sorted[1].namespace).toBe('zoo')
+    // Sampleless items compare namespace/name too.
+    const sampleless = usageSeries(
+      [
+        { namespace: 'zoo', name: 'app', kind: 'Deployment' },
+        { namespace: 'alpha', name: 'app', kind: 'Deployment' },
+      ],
+      'cpu',
+    )
+    expect(sampleless[0].namespace).toBe('alpha')
+  })
+})
+
+describe('sumSeries', () => {
+  it('sums values that share a timestamp and sorts chronologically', () => {
+    const a = [
+      { t: '2026-07-28T10:01:00Z', cpu: 0.1, memory: 100 },
+      { t: '2026-07-28T10:02:00Z', cpu: 0.2, memory: 200 },
+    ]
+    const b = [
+      { t: '2026-07-28T10:02:00Z', cpu: 0.3, memory: 300 },
+      { t: '2026-07-28T10:00:00Z', cpu: 0.4, memory: 400 },
+    ]
+    expect(sumSeries([a, b])).toEqual([
+      { t: '2026-07-28T10:00:00Z', cpu: 0.4, memory: 400 },
+      { t: '2026-07-28T10:01:00Z', cpu: 0.1, memory: 100 },
+      { t: '2026-07-28T10:02:00Z', cpu: 0.5, memory: 500 },
+    ])
+  })
+
+  it('tolerates missing and empty series', () => {
+    expect(sumSeries(undefined)).toEqual([])
+    expect(sumSeries([])).toEqual([])
+    expect(sumSeries([undefined, []])).toEqual([])
+    expect(sumSeries([[{ t: '2026-07-28T10:00:00Z', cpu: 0.1, memory: 1 }], undefined])).toEqual([
+      { t: '2026-07-28T10:00:00Z', cpu: 0.1, memory: 1 },
     ])
   })
 })
@@ -267,7 +324,7 @@ describe('usageAnnotation', () => {
 })
 
 describe('trimPodUsage', () => {
-  // Sorted descending, as podUsageSeries returns.
+  // Sorted descending, as usageSeries returns.
   const measured = (count, base = 100) =>
     Array.from({ length: count }, (_, i) => ({ name: `pod-${i}`, value: base - i }))
 

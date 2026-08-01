@@ -21,6 +21,21 @@ vi.mock('../../../utils/fetch', () => ({
   fetchWithMock: vi.fn(() => Promise.resolve({ objects: [] }))
 }))
 
+// Mock the usage tab content so this test asserts the panel's integration
+// contract (tab gating, the batch fetch and its lifecycle) rather than the
+// charts' DOM, which is owned and tested by UsageTabContent.test.jsx.
+vi.mock('./UsageTabContent', () => ({
+  UsageTabContent: ({ workloads, error }) => (
+    <div
+      data-testid="usage-tab-content"
+      data-loaded={workloads === null ? 'false' : 'true'}
+      data-error={error ? 'true' : 'false'}
+    >
+      UsageTabContent
+    </div>
+  )
+}))
+
 // Mock the inventory list so this test asserts the panel's integration contract
 // (tab visibility, switching, and the props handed to the list) rather than the
 // list's DOM, which is owned and tested by InventoryTabContent.test.jsx.
@@ -617,6 +632,144 @@ describe('ManagedObjectsPanel component', () => {
       expect(screen.queryByText('Deployment has minimum availability.')).not.toBeInTheDocument()
     })
     expect(screen.getAllByTestId('workload-status-computing').length).toBeGreaterThan(0)
+  })
+
+  describe('Resource Usage tab', () => {
+    it('shows the tab when the inventory has non-CronJob workloads', () => {
+      render(
+        <ManagedObjectsPanel resourceData={mockKustomizationData} onNavigate={mockOnNavigate} />
+      )
+      expect(screen.getByText('Resource Usage')).toBeInTheDocument()
+    })
+
+    it('hides the tab for a CronJob-only workload inventory', () => {
+      const cronJobOnly = {
+        ...mockKustomizationData,
+        status: {
+          inventory: [
+            { apiVersion: 'v1', kind: 'ConfigMap', namespace: 'production', name: 'app-config' },
+            { apiVersion: 'batch/v1', kind: 'CronJob', namespace: 'production', name: 'backup' }
+          ]
+        }
+      }
+      render(<ManagedObjectsPanel resourceData={cronJobOnly} onNavigate={mockOnNavigate} />)
+
+      expect(screen.getByText('Inventory')).toBeInTheDocument()
+      expect(screen.queryByText('Resource Usage')).not.toBeInTheDocument()
+      expect(screen.queryByText('Usage')).not.toBeInTheDocument()
+    })
+
+    it('fetches the workload usage only while the tab is active, excluding CronJobs', async () => {
+      const user = userEvent.setup()
+      const withCronJob = {
+        ...mockKustomizationData,
+        status: {
+          inventory: [
+            ...mockKustomizationData.status.inventory,
+            { apiVersion: 'batch/v1', kind: 'CronJob', namespace: 'production', name: 'backup' }
+          ]
+        }
+      }
+      fetchWithMock.mockResolvedValue({
+        workloads: [
+          { kind: 'Deployment', namespace: 'production', name: 'app', status: 'Current', samples: [] }
+        ]
+      })
+
+      render(<ManagedObjectsPanel resourceData={withCronJob} onNavigate={mockOnNavigate} />)
+
+      // An unopened tab costs nothing.
+      expect(fetchWithMock).not.toHaveBeenCalledWith(
+        expect.objectContaining({ endpoint: '/api/v1/workloads' })
+      )
+
+      await user.click(screen.getByText('Resource Usage'))
+      await waitFor(() => {
+        expect(screen.getByTestId('usage-tab-content')).toHaveAttribute('data-loaded', 'true')
+      })
+
+      // The batch POST covers the workload items minus the CronJob.
+      expect(fetchWithMock).toHaveBeenCalledWith(expect.objectContaining({
+        endpoint: '/api/v1/workloads',
+        method: 'POST',
+        body: {
+          workloads: [{ kind: 'Deployment', namespace: 'production', name: 'app' }]
+        }
+      }))
+    })
+
+    it('flags the error state when the usage fetch fails', async () => {
+      const user = userEvent.setup()
+      fetchWithMock.mockRejectedValueOnce(new Error('boom'))
+
+      render(
+        <ManagedObjectsPanel resourceData={mockKustomizationData} onNavigate={mockOnNavigate} />
+      )
+
+      await user.click(screen.getByText('Resource Usage'))
+      await waitFor(() => {
+        expect(screen.getByTestId('usage-tab-content')).toHaveAttribute('data-error', 'true')
+      })
+      expect(screen.getByTestId('usage-tab-content')).toHaveAttribute('data-loaded', 'false')
+    })
+
+    it('caps the batch request at the backend limit of 2000 workloads', async () => {
+      const user = userEvent.setup()
+      const oversized = {
+        ...mockKustomizationData,
+        status: {
+          inventory: Array.from({ length: 2001 }, (_, i) => ({
+            apiVersion: 'apps/v1',
+            kind: 'Deployment',
+            namespace: 'production',
+            name: `app-${i}`
+          }))
+        }
+      }
+      fetchWithMock.mockResolvedValue({ workloads: [] })
+
+      render(<ManagedObjectsPanel resourceData={oversized} onNavigate={mockOnNavigate} />)
+
+      await user.click(screen.getByText('Resource Usage'))
+      await waitFor(() => {
+        expect(fetchWithMock).toHaveBeenCalledWith(
+          expect.objectContaining({ endpoint: '/api/v1/workloads' })
+        )
+      })
+
+      const call = fetchWithMock.mock.calls.find(([args]) => args.endpoint === '/api/v1/workloads')
+      expect(call[0].body.workloads).toHaveLength(2000)
+    })
+
+    it('resets the fetched usage when the panel is reused for a different resource', async () => {
+      const user = userEvent.setup()
+      fetchWithMock.mockResolvedValueOnce({
+        workloads: [
+          { kind: 'Deployment', namespace: 'production', name: 'app', status: 'Current', samples: [] }
+        ]
+      })
+
+      const { rerender } = render(
+        <ManagedObjectsPanel resourceData={mockKustomizationData} onNavigate={mockOnNavigate} />
+      )
+
+      await user.click(screen.getByText('Resource Usage'))
+      await waitFor(() => {
+        expect(screen.getByTestId('usage-tab-content')).toHaveAttribute('data-loaded', 'true')
+      })
+
+      // Make the next fetch never resolve so the cleared state is observable.
+      fetchWithMock.mockReturnValueOnce(new Promise(() => {}))
+      const otherResource = {
+        ...mockKustomizationData,
+        metadata: { ...mockKustomizationData.metadata, name: 'apps-2' }
+      }
+      rerender(<ManagedObjectsPanel resourceData={otherResource} onNavigate={mockOnNavigate} />)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('usage-tab-content')).toHaveAttribute('data-loaded', 'false')
+      })
+    })
   })
 
   it('should show health checking as disabled for HelmRelease with disableWait=true', () => {

@@ -17,7 +17,7 @@ controller readiness, and troubleshoot issues instantly, without needing to acce
 - **Navigate Efficiently:** Use advanced search and filtering to find specific resources instantly.
 - **Deep Dive:** Access dedicated dashboards for Flux resources (HelmReleases, ResourceSets, etc.) and Kubernetes Workloads (Deployments, StatefulSets, DaemonSets, CronJobs).
 - **Inspect Logs:** View the logs of workload pods directly from the browser, scoped to your RBAC permissions.
-- **Track Resource Usage:** Monitor CPU and memory usage of workloads with charts covering the last 30 minutes (requires metrics-server). Pods approaching their CPU or memory limits are highlighted to signal throttling and OOM risk.
+- **Track Resource Usage:** Monitor CPU and memory usage of workloads with charts covering the last 30 minutes (requires metrics-server). Pods approaching their CPU or memory limits are highlighted to signal throttling and OOM risk. Flux resource dashboards aggregate the usage of all managed workloads, with per-workload breakdowns linking to the workload dashboards.
 - **Favorites:** Mark important resources as favorites for quick access and at-a-glance status monitoring.
 - **Mobile-Optimized:** Stay informed with a fully responsive interface designed for on-the-go checks.
 - **Adaptive Theming:** Toggle between dark and light modes to suit your environment and preference.
@@ -30,7 +30,7 @@ Get a complete overview of your Flux installation at a glance. The cluster dashb
 
 ### Flux Resource Dashboard
 
-Dive deep into individual Flux configurations. View the current state, revision history, applied values, and any conditions or errors. Trigger Flux actions such as reconcile, suspend and resume guarded by Kubernetes RBAC.
+Dive deep into individual Flux configurations. View the current state, revision history, applied values, and any conditions or errors. Track the aggregated CPU and memory usage of the managed workloads with the last reconciliation marked on the charts. Trigger Flux actions such as reconcile, suspend and resume guarded by Kubernetes RBAC.
 
 ### Workload Dashboard
 

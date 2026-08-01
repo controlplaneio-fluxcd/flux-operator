@@ -172,33 +172,61 @@ export function hasChartableMetrics(metrics) {
 }
 
 /**
- * Build the per-pod usage list for one value field, sorted by usage
- * descending. Pods without a current usage sample are kept with a
- * null value and sorted last. Each entry carries the pod spec limit
- * for the field (0 when unset).
- * @param {Array<{name: string, metrics?: Object, resources?: Object}>} pods - workloadInfo.pods
+ * Build the per-item (pod or workload) usage list for one value field,
+ * sorted by usage descending. Items without a current usage sample are
+ * kept with a null value and sorted last; ties compare the item's
+ * namespace/name. Each entry carries the item's spec limit for the
+ * field (0 when unset) and, for workload items, the kind and namespace
+ * so rows can be keyed and linked to their dashboard.
+ * @param {Array<{name: string, kind?: string, namespace?: string,
+ *   metrics?: Object, resources?: Object}>} list - workloadInfo.pods or
+ *   workload rows built from the workloads batch response
  * @param {string} field - "cpu" or "memory"
- * @returns {Array<{name: string, value: number|null, limit: number}>} - Sorted usage list
+ * @returns {Array<{name: string, value: number|null, limit: number,
+ *   kind?: string, namespace?: string}>} - Sorted usage list
  */
-export function podUsageSeries(pods, field) {
+export function usageSeries(list, field) {
   const limitField = field === 'cpu' ? 'cpuLimits' : 'memoryLimits'
   const items = []
-  for (const pod of pods || []) {
-    const value = pod?.metrics?.[field]
-    const rawLimit = pod?.resources?.[limitField]
+  for (const item of list || []) {
+    const value = item?.metrics?.[field]
+    const rawLimit = item?.resources?.[limitField]
     const limit = typeof rawLimit === 'number' && isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 0
+    const entry = { name: item.name, value: null, limit }
+    if (item.kind) entry.kind = item.kind
+    if (item.namespace) entry.namespace = item.namespace
     if (typeof value === 'number' && isFinite(value) && value >= 0) {
-      items.push({ name: pod.name, value, limit })
-    } else {
-      items.push({ name: pod.name, value: null, limit })
+      entry.value = value
     }
+    items.push(entry)
   }
+  const label = item => (item.namespace ? `${item.namespace}/${item.name}` : item.name)
   return items.sort((a, b) => {
-    if (a.value === null && b.value === null) return a.name.localeCompare(b.name)
+    if (a.value === null && b.value === null) return label(a).localeCompare(label(b))
     if (a.value === null) return 1
     if (b.value === null) return -1
-    return b.value - a.value
+    return (b.value - a.value) || label(a).localeCompare(label(b))
   })
+}
+
+/**
+ * Merge multiple sample series into one by summing the values that
+ * share a timestamp. The result is sorted chronologically. Mirror of
+ * the Go sumSeries used by the workload endpoints.
+ * @param {Array<Array<{t: string, cpu: number, memory: number}>>} seriesList - API sample arrays
+ * @returns {Array<{t: string, cpu: number, memory: number}>} - Merged series
+ */
+export function sumSeries(seriesList) {
+  const byTime = new Map()
+  for (const samples of seriesList || []) {
+    for (const s of samples || []) {
+      const agg = byTime.get(s.t) || { t: s.t, cpu: 0, memory: 0 }
+      agg.cpu += s.cpu
+      agg.memory += s.memory
+      byTime.set(s.t, agg)
+    }
+  }
+  return [...byTime.values()].sort((a, b) => Date.parse(a.t) - Date.parse(b.t))
 }
 
 // Row budget of the per-pod usage bars.
@@ -208,12 +236,12 @@ const POD_BARS_BOTTOM = 2
 const POD_BARS_NA_MAX = 2
 
 /**
- * Trim a per-pod usage list (podUsageSeries output) to a fixed row
+ * Trim a per-pod usage list (usageSeries output) to a fixed row
  * budget: the top and bottom pods by usage stay visible, the middle
  * collapses into a single aggregate row, and sampleless pods beyond a
  * small count collapse into a single "collecting" row.
  * @param {Array<{name: string, value: number|null}>} items - Sorted
- *   per-pod usage from podUsageSeries
+ *   per-pod usage from usageSeries
  * @returns {Array<Object>} - Display rows: {type: 'pod', name, value},
  *   {type: 'elision', count, min, max, avg} or {type: 'collecting', count}
  */

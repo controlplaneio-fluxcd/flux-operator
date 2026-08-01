@@ -689,6 +689,8 @@ export function getMockWorkload(endpoint) {
 
 /**
  * Get mock workloads for batch request (POST /api/v1/workloads)
+ * Mirrors the lightweight batch response: no pods or user actions, the
+ * usage series exposed as a top-level samples field.
  * @param {object} body - Request body with workloads array
  * @returns {object} - Mock response with workloads array
  */
@@ -703,7 +705,14 @@ export function getMockWorkloads(body) {
     const key = `${item.kind}/${item.namespace}/${item.name}`
     const workload = mockWorkloads[key]
     if (workload) {
-      results.push(workload)
+      const status = { ...workload }
+      delete status.pods
+      delete status.userActions
+      delete status.metrics
+      if (workload.metrics) {
+        status.samples = workload.metrics.samples
+      }
+      results.push(status)
     } else {
       // Return NotFound status for missing workloads
       results.push({

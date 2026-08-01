@@ -138,6 +138,12 @@ type WorkloadStatus struct {
 
 	// UserActions indicates which actions the user can perform on this workload.
 	UserActions []string `json:"userActions,omitempty"`
+
+	// Samples is the usage time series summed across the workload pods,
+	// matched by the workload's pod selector. Only populated for the
+	// workloads batch endpoint when the Metrics API is available; the
+	// workload detail endpoint carries the series in metrics.samples.
+	Samples []MetricsSample `json:"samples,omitempty"`
 }
 
 // WorkloadPodStatus represents the status of a pod managed by a workload.
@@ -225,7 +231,8 @@ func getWorkloadGVK(kind string) schema.GroupVersionKind {
 
 // GetWorkloadStatus returns the WorkloadStatus for the given workload.
 // When detailed is true, the managed pods (with their full Kubernetes PodStatus)
-// and the user-permitted actions are included.
+// and the user-permitted actions are included. When detailed is false and the
+// Metrics API is available, the workload usage series is included instead.
 func (h *Handler) GetWorkloadStatus(ctx context.Context, kind, name, namespace string, detailed bool) (*WorkloadStatus, error) {
 	// Create an unstructured object to fetch the resource
 	obj := &unstructured.Unstructured{}
@@ -262,6 +269,14 @@ func (h *Handler) GetWorkloadStatus(ctx context.Context, kind, name, namespace s
 
 	// Compute the workload status (kstatus + CronJob/apps refinements).
 	workload.Status, workload.StatusMessage = computeWorkloadStatus(obj, kind)
+
+	// Attach the usage series on the batch path only: the detail endpoint
+	// already returns it in metrics.samples via buildWorkloadMetrics.
+	// CronJobs have no spec.selector, so their selector is nil and the
+	// series stays empty.
+	if !detailed && h.metrics != nil && h.metrics.Available() {
+		workload.Samples = h.metrics.WorkloadSeries(namespace, nil, workloadPodSelector(obj))
+	}
 
 	if detailed {
 		// Get the pods managed by the workload

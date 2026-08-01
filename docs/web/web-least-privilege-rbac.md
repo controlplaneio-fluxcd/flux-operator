@@ -198,7 +198,8 @@ memory utilization of Flux controllers helps users understand whether Flux itsel
 ## 7. Workload Pod Metrics
 
 **Where:** The workload dashboard – Resource Usage charts and per-pod usage in
-the Pods tab.
+the Pods tab. The Flux resource dashboard – the Resource Usage tab aggregating
+the usage of the workloads listed in the resource inventory.
 
 **Internal operation:**
 The system periodically scrapes pod metrics (CPU, memory) for all pods in the
@@ -217,6 +218,14 @@ usage series of the workload's pods, including buffered pods matching the
 workload's label selector so the history stays continuous across rollouts.
 Catch-up scrapes requested by the backend for pods not yet in the buffer
 are rate-limited to one per 15 seconds regardless of request volume.
+
+The Flux resource dashboard reuses the same mechanism for its Resource Usage
+tab: the workloads batch endpoint fetches each inventoried workload with the
+user's impersonated client — the same access-control gate — and attaches the
+per-workload series matched by the workload's pod selector from the in-memory
+buffer. Workloads the user cannot read are reported without usage data, and
+no additional Kubernetes API calls are introduced beyond the workload GETs
+the dashboard already performs.
 
 **Least privilege benefit:**
 Users see CPU/memory usage only for workloads they can already view, and

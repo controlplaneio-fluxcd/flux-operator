@@ -8,6 +8,7 @@ import { fetchWithMock } from '../../../utils/fetch'
 import { DashboardPanel, TabButton } from '../common/panel'
 import { InventoryTabContent } from './InventoryTabContent'
 import { GraphTabContent } from './GraphTabContent'
+import { UsageTabContent } from './UsageTabContent'
 import { useHashTab } from '../../../utils/hash'
 
 /**
@@ -18,6 +19,16 @@ export function ManagedObjectsPanel({ resourceData, onNavigate }) {
   const shouldShowPanel = isKindWithInventory(resourceData?.kind)
   const hasInventory = resourceData?.status?.inventory && resourceData.status.inventory.length > 0
 
+  // Workloads whose usage the Resource Usage tab charts. CronJobs are
+  // excluded: they have no pod selector, so they can never produce a
+  // usage series, and a CronJob-only inventory must not show the tab.
+  const usageItems = useMemo(() => {
+    if (!hasInventory) return []
+    return resourceData.status.inventory.filter(
+      item => isWorkloadInventoryItem(item) && item.kind !== 'CronJob'
+    )
+  }, [resourceData, hasInventory])
+
   const visibleTabs = useMemo(() => {
     if (!shouldShowPanel) {
       return []
@@ -26,8 +37,11 @@ export function ManagedObjectsPanel({ resourceData, onNavigate }) {
     if (hasInventory) {
       tabs.push('inventory')
     }
+    if (usageItems.length > 0) {
+      tabs.push('usage')
+    }
     return tabs
-  }, [shouldShowPanel, hasInventory])
+  }, [shouldShowPanel, hasInventory, usageItems])
 
   // Tab state synced with URL hash (e.g., #inventory-graph)
   const [activeTab, setActiveTab] = useHashTab('inventory', 'overview', visibleTabs, 'inventory-panel')
@@ -112,6 +126,15 @@ export function ManagedObjectsPanel({ resourceData, onNavigate }) {
   // so the response carries status without the sanitized manifest.
   const [itemStatuses, setItemStatuses] = useState({})
 
+  // Workload statuses with usage samples for the Resource Usage tab, from
+  // the workloads batch endpoint. Owned here like the Graph statuses so
+  // the fetched series survives tab switches; null until the first fetch
+  // resolves so the tab can tell "loading" from "no data". A failed fetch
+  // sets the error flag so the tab doesn't sit on the loading state; data
+  // from an earlier successful fetch is kept.
+  const [usageWorkloads, setUsageWorkloads] = useState(null)
+  const [usageError, setUsageError] = useState(false)
+
   // The route reuses this component across resource navigations, so reset the
   // status map when the resource identity changes — otherwise a reused
   // kind/namespace/name key could briefly show the previous resource's status
@@ -120,6 +143,8 @@ export function ManagedObjectsPanel({ resourceData, onNavigate }) {
   const resourceId = `${resourceData.kind}/${resourceData.metadata?.namespace || ''}/${resourceData.metadata?.name}`
   useEffect(() => {
     setItemStatuses({})
+    setUsageWorkloads(null)
+    setUsageError(false)
   }, [resourceId])
 
   const tracksStatus = activeTab === 'graph'
@@ -168,6 +193,50 @@ export function ManagedObjectsPanel({ resourceData, onNavigate }) {
     return () => { cancelled = true }
   }, [tracksStatus, statusItems, resourceData])
 
+  // Fetch the workload usage series only while the Resource Usage tab is
+  // active, mirroring the Graph tab's gate: an unopened tab costs nothing.
+  // Refreshes when the inventory changes, which the parent resource poll
+  // drives, so no dedicated polling loop is needed.
+  const tracksUsage = activeTab === 'usage'
+  useEffect(() => {
+    if (!tracksUsage || usageItems.length === 0) {
+      return
+    }
+
+    let cancelled = false
+
+    const fetchUsage = async () => {
+      try {
+        // The backend rejects batches above 2000 items; cap the request so
+        // an oversized inventory degrades to partial data instead of a 413.
+        const workloads = usageItems.slice(0, 2000).map(item => ({
+          kind: item.kind,
+          namespace: item.namespace || resourceData.metadata.namespace,
+          name: item.name
+        }))
+
+        const response = await fetchWithMock({
+          endpoint: '/api/v1/workloads',
+          mockPath: '../mock/workload',
+          mockExport: 'getMockWorkloads',
+          method: 'POST',
+          body: { workloads }
+        })
+
+        if (!cancelled) {
+          setUsageWorkloads(response.workloads || [])
+          setUsageError(false)
+        }
+      } catch (err) {
+        console.error('Failed to fetch workload usage:', err)
+        if (!cancelled) setUsageError(true)
+      }
+    }
+
+    fetchUsage()
+    return () => { cancelled = true }
+  }, [tracksUsage, usageItems, resourceData])
+
   return (
     <DashboardPanel title="Managed Objects" id="inventory-panel">
       {/* Tab Navigation */}
@@ -183,6 +252,12 @@ export function ManagedObjectsPanel({ resourceData, onNavigate }) {
           {hasInventory && (
             <TabButton active={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')}>
               Inventory
+            </TabButton>
+          )}
+          {usageItems.length > 0 && (
+            <TabButton active={activeTab === 'usage'} onClick={() => setActiveTab('usage')}>
+              <span class="sm:hidden">Usage</span>
+              <span class="hidden sm:inline">Resource Usage</span>
             </TabButton>
           )}
         </nav>
@@ -289,6 +364,10 @@ export function ManagedObjectsPanel({ resourceData, onNavigate }) {
           query={inventoryQuery}
           onQueryChange={setInventoryQuery}
         />
+      )}
+
+      {activeTab === 'usage' && (
+        <UsageTabContent resourceData={resourceData} workloads={usageWorkloads} error={usageError} />
       )}
     </DashboardPanel>
   )

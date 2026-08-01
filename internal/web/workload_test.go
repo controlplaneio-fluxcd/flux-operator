@@ -20,6 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	metricsv1beta1api "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
@@ -207,6 +208,78 @@ func TestGetWorkloadStatus_Lightweight_SkipsPodsAndActions(t *testing.T) {
 	g.Expect(detailed.Pods).To(HaveLen(1))
 	g.Expect(detailed.Pods[0].Name).To(Equal("test-workload-lightweight-pod"))
 	g.Expect(detailed.UserActions).To(ContainElement(fluxcdv1.UserActionRestart))
+}
+
+func TestGetWorkloadStatus_SamplesOnlyOnBatchPath(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a Deployment whose selector matches the buffered pod below
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-workload-batch-samples",
+			Namespace: "default",
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: new(int32(1)),
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "test-workload-batch-samples"},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"app": "test-workload-batch-samples"},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "nginx", Image: "nginx:latest"},
+					},
+				},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, deployment)).To(Succeed())
+	defer testClient.Delete(ctx, deployment)
+
+	mc := NewMetricsCollector(nil, time.Minute)
+	list := &metricsv1beta1api.PodMetricsList{
+		Items: []metricsv1beta1api.PodMetrics{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workload-batch-samples-pod",
+					Namespace: "default",
+					Labels:    map[string]string{"app": "test-workload-batch-samples"},
+				},
+				Containers: []metricsv1beta1api.ContainerMetrics{
+					{
+						Name: "nginx",
+						Usage: corev1.ResourceList{
+							corev1.ResourceCPU:    *resource.NewMilliQuantity(100, resource.DecimalSI),
+							corev1.ResourceMemory: *resource.NewQuantity(64<<20, resource.BinarySI),
+						},
+					},
+				},
+			},
+		},
+	}
+	mc.ingest(list, time.Now().Truncate(time.Second))
+
+	handler := &Handler{
+		kubeClient:    kubeClient,
+		metrics:       mc,
+		version:       "v1.0.0",
+		statusManager: "test-status-manager",
+		namespace:     "flux-system",
+	}
+
+	// The batch path (detailed=false) carries the top-level series.
+	batch, err := handler.GetWorkloadStatus(ctx, "Deployment", "test-workload-batch-samples", "default", false)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(batch.Samples).To(HaveLen(1))
+
+	// The detail path (detailed=true) returns the series in metrics.samples
+	// via buildWorkloadMetrics and must not duplicate it at the top level.
+	detailed, err := handler.GetWorkloadStatus(ctx, "Deployment", "test-workload-batch-samples", "default", true)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(detailed.Samples).To(BeEmpty())
 }
 
 func TestGetWorkloadStatus_UnprivilegedUser_Forbidden(t *testing.T) {
