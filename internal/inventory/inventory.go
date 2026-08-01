@@ -111,13 +111,12 @@ func ListMetadata(inv *fluxcdv1.ResourceInventory) (object.ObjMetadataSet, error
 
 // Diff returns the slice of objects that do not exist in the target inventory.
 func Diff(inv *fluxcdv1.ResourceInventory, target *fluxcdv1.ResourceInventory) ([]*unstructured.Unstructured, error) {
-	versionOf := func(i *fluxcdv1.ResourceInventory, objMetadata object.ObjMetadata) string {
-		for _, entry := range i.Entries {
-			if entry.ID == objMetadata.String() {
-				return entry.Version
-			}
-		}
-		return ""
+	versionMap := make(map[string]string, len(inv.Entries))
+	for _, entry := range inv.Entries {
+		versionMap[entry.ID] = entry.Version
+	}
+	versionOf := func(objMetadata object.ObjMetadata) string {
+		return versionMap[objMetadata.String()]
 	}
 
 	objects := make([]*unstructured.Unstructured, 0)
@@ -141,7 +140,7 @@ func Diff(inv *fluxcdv1.ResourceInventory, target *fluxcdv1.ResourceInventory) (
 		u.SetGroupVersionKind(schema.GroupVersionKind{
 			Group:   metadata.GroupKind.Group,
 			Kind:    metadata.GroupKind.Kind,
-			Version: versionOf(inv, metadata),
+			Version: versionOf(metadata),
 		})
 		u.SetName(metadata.Name)
 		u.SetNamespace(metadata.Namespace)
