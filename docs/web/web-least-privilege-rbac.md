@@ -170,100 +170,68 @@ delivering a meaningful, isolated dashboard and workload search experience.
 
 ---
 
-## 6. Flux Controller Pod Metrics
+## 6. Pod Metrics and Workload Usage
 
-**Where:** The main dashboard – Flux controller resource usage display.
-
-**Internal operation:**
-The system reads the current pod usage (CPU, memory) of the Flux controllers
-from the pod metrics collector and their resource requests/limits from the
-pod specs.
-
-**How it works:**
-When building the report, the operator lists pods labeled
-`app.kubernetes.io/part-of=flux` in its own namespace with the privileged
-client (users may not have access to `flux-system`) and attaches their
-latest usage from the pod metrics collector (see the Workload Pod Metrics
-section) together with the requests/limits read from the pod specs.
-The feature is subject to the same `spec.metrics` configuration as the
-workload metrics.
-
-**Least privilege benefit:**
-Flux controller health is a cluster-wide concern visible to all dashboard
-users, regardless of their namespace-scoped permissions. Showing CPU and
-memory utilization of Flux controllers helps users understand whether Flux itself is under resource pressure. The metrics data contains no sensitive information. By fetching this internally, administrators are not forced to break namespace isolation by granting everyone read access to the `flux-system` namespace.
-
----
-
-## 7. Workload Pod Metrics
-
-**Where:** The workload dashboard – Resource Usage charts and per-pod usage in
-the Pods tab. The Flux resource dashboard – the Resource Usage tab aggregating
-the usage of the workloads listed in the resource inventory.
+**Where:** The main dashboard Flux controller resource usage display, the
+workload dashboard Resource Usage charts and per-pod usage in the Pods tab, and
+the Flux resource dashboard Resource Usage tab.
 
 **Internal operation:**
-The system periodically scrapes pod metrics (CPU, memory) for all pods in the
-cluster from the Kubernetes Metrics API into an in-memory ring buffer.
+The system collects current pod CPU/memory usage for all pods from the
+Kubernetes Metrics API into an in-memory ring buffer. It also reads Flux
+controller pod specs in the operator namespace for requests/limits and may read
+named workload generation object metadata to draw rollout markers on usage
+charts.
 
 **How it works:**
 A background collector queries the Metrics API (`metrics.k8s.io/v1beta1`)
 cluster-wide with the privileged client and retains a ~30 minute usage window
-per container in memory — the Metrics API only serves instantaneous values,
-so history must be accumulated server-side. The scrape interval defaults to
-one minute and is configurable via `spec.metrics.scrapeInterval`; collection
-can be disabled with `spec.metrics.disabled`. When a user opens a workload
-dashboard, the backend first fetches the workload with the user's
-impersonated client — the access-control gate — and only then attaches the
-usage series of the workload's pods, including buffered pods matching the
-workload's label selector so the history stays continuous across rollouts.
-Catch-up scrapes requested by the backend for pods not yet in the buffer
-are rate-limited to one per 15 seconds regardless of request volume.
+per container in memory. The Metrics API only serves instantaneous values, so
+history must be accumulated server-side. The scrape interval defaults to one
+minute and is configurable via `spec.metrics.scrapeInterval`; collection can be
+disabled with `spec.metrics.disabled`.
 
-The Flux resource dashboard reuses the same mechanism for its Resource Usage
-tab: the workloads batch endpoint fetches each inventoried workload with the
-user's impersonated client — the same access-control gate — and attaches the
-per-workload series matched by the workload's pod selector from the in-memory
-buffer. Workloads the user cannot read are reported without usage data, and
-no additional Kubernetes API calls are introduced beyond the workload GETs
-the dashboard already performs.
+When building the report, the operator lists pods labeled
+`app.kubernetes.io/part-of=flux` in its own namespace with the privileged
+client, attaches their latest usage from the pod metrics collector, and includes
+the requests/limits read from the pod specs.
+
+When a user opens a workload dashboard, the backend first fetches the workload
+with the user's impersonated client as the access-control gate. Only after that
+does it attach usage series for the workload's current pods and
+selector-matching buffered pods so the history stays continuous across rollouts.
+Off-schedule catch-up scrapes for running pods without a recent sample are
+rate-limited to one cluster-wide scrape per 15 seconds regardless of request
+volume.
+
+The Flux resource dashboard reuses the same cache for its Resource Usage tab:
+the workloads batch endpoint fetches each inventoried workload with the user's
+impersonated client and aggregates series from the in-memory buffer. Workloads
+the user cannot read are reported without usage data. This path does not add
+per-request Metrics API calls; metrics reads are performed by the background
+collector.
+
+The rollout marker uses a similarly gated path. After the workload has been
+fetched with the user's impersonated client, the backend resolves the current
+generation object names and fetches only those named objects' metadata with the
+privileged API reader: Deployments use the highest deployment revision among the
+workload's pod ReplicaSets, StatefulSets use `status.updateRevision`, and
+DaemonSets use the newest ControllerRevision referenced by the workload's pods.
+No generation objects are listed and no spec or data fields are read; the
+response yields a single timestamp (`rolledOutAt`).
 
 **Least privilege benefit:**
 Users see CPU/memory usage only for workloads they can already view, and
-administrators are not forced to grant every dashboard user cluster-wide
-read access on `metrics.k8s.io`. The usage data contains no sensitive
-information, and clusters without metrics-server simply hide the feature.
+controller usage without needing access to `flux-system` pod specs.
+Administrators are not forced to grant every dashboard user cluster-wide read
+access on `metrics.k8s.io`, ReplicaSets, or ControllerRevisions. The exposed data
+is limited to CPU/memory usage, Flux controller resource requests/limits, and
+the workload rollout timestamp. Clusters without metrics-server simply hide the
+usage features.
 
 ---
 
-## 8. Workload Rollout Timestamp
-
-**Where:** The workload dashboard – the "rolled out" marker on the Resource
-Usage charts.
-
-**Internal operation:**
-The system reads the metadata of the ReplicaSets (Deployments) or
-ControllerRevisions (StatefulSets, DaemonSets) owned by a workload to
-determine when its current generation was rolled out.
-
-**How it works:**
-The rollout time of a workload's current generation is recorded on its
-generation objects: the newest ReplicaSet for a Deployment and the newest
-ControllerRevision for a StatefulSet or DaemonSet. After the workload has
-been fetched with the user's impersonated client — the access-control gate —
-the backend resolves the generation object names from the workload status
-and pod references, then fetches only those named objects with the
-privileged API reader using metadata-only reads. Nothing is listed and no
-spec or data fields are read — the response yields a single timestamp
-(`rolledOutAt`).
-
-**Least privilege benefit:**
-Users get the rollout marker on the usage charts without administrators
-granting them read access on ReplicaSets and ControllerRevisions. Only the
-creation timestamp of the workload's own generation objects is revealed.
-
----
-
-## 9. Fine-Grained User Actions
+## 7. Fine-Grained User Actions
 
 **Where:** Flux resource actions, artifact downloads, workload restarts, CronJob
 job runs, and Pod deletions triggered through the Web UI when
@@ -314,7 +282,7 @@ is itself native, as with Pod deletion.
 
 ---
 
-## 10. Namespace Visibility
+## 8. Namespace Visibility
 
 **Where:** Namespace search filter dropdown and dashboard statistics filtering.
 
@@ -346,8 +314,6 @@ Users do not need cluster-wide `list` permissions on namespaces just to populate
 | 3 | Audit event recording                | System writes event                                  | None (server-side only)                                                                        |
 | 4 | Audit pod-owner resolution           | System reads owner chain                             | None (server-side only)                                                                        |
 | 5 | Dashboard report and workloads index | System scans Flux resources and applier inventories  | Aggregated stats and workload reference + parent reconciler status, filtered by user namespace |
-| 6 | Controller metrics                   | System reads metrics API                             | CPU/memory usage of Flux controllers                                                           |
-| 7 | Workload pod metrics                 | System scrapes metrics API cluster-wide              | CPU/memory usage of pods belonging to workloads the user can already view                      |
-| 8 | Workload rollout timestamp           | System reads generation object metadata              | Creation time of the workload's newest ReplicaSet/ControllerRevision                           |
-| 9 | Fine-grained user actions            | System performs native action operations             | Requested artifact for downloads; action result only otherwise                                 |
-| 10 | Namespace visibility                | Wrapper lists namespaces with privileged base client | Visible namespace names after RBAC filtering                                                   |
+| 6 | Pod metrics and workload usage       | System scrapes Metrics API cluster-wide and reads named generation metadata | CPU/memory usage for permitted workloads, Flux controller requests/limits, and workload rollout timestamp |
+| 7 | Fine-grained user actions            | System performs native action operations             | Requested artifact for downloads; action result only otherwise                                 |
+| 8 | Namespace visibility                 | Wrapper lists namespaces with privileged base client | Visible namespace names after RBAC filtering                                                   |
