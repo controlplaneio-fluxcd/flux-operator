@@ -3,60 +3,8 @@
 
 import { useSignal } from '@preact/signals'
 import { updateInfo } from '../../../utils/version'
-
-// Calculate aggregate resource usage from metrics
-function calculateTotalResources(metrics) {
-  if (!metrics || metrics.length === 0) return null
-
-  const totals = metrics.reduce((acc, m) => ({
-    cpu: acc.cpu + (m.cpu || 0),
-    cpuLimit: acc.cpuLimit + (m.cpuLimit || 0),
-    memory: acc.memory + (m.memory || 0),
-    memoryLimit: acc.memoryLimit + (m.memoryLimit || 0)
-  }), { cpu: 0, cpuLimit: 0, memory: 0, memoryLimit: 0 })
-
-  return {
-    cpu: totals.cpu,
-    cpuLimit: totals.cpuLimit,
-    cpuPercent: totals.cpuLimit > 0 ? (totals.cpu / totals.cpuLimit) * 100 : 0,
-    memory: totals.memory,
-    memoryLimit: totals.memoryLimit,
-    memoryPercent: totals.memoryLimit > 0 ? (totals.memory / totals.memoryLimit) * 100 : 0
-  }
-}
-
-// Format bytes to GiB
-function formatMemory(bytes) {
-  return (bytes / (1024 ** 3)).toFixed(2)
-}
-
-// Resource metric progress bar component
-function ResourceMetric({ label, value, limit, percent, unit }) {
-  // Color based on percentage
-  let colorClass = 'bg-green-500'
-  if (percent >= 85) {
-    colorClass = 'bg-red-500'
-  } else if (percent >= 70) {
-    colorClass = 'bg-yellow-500'
-  }
-
-  return (
-    <div class="space-y-1">
-      <div class="flex flex-col sm:flex-row sm:justify-between sm:items-baseline gap-1">
-        <span class="text-xs sm:text-sm text-gray-600 dark:text-gray-400">{label}</span>
-        <span class="text-xs sm:text-sm text-gray-900 dark:text-white">
-          {value}/{limit} {unit} ({Math.min(percent, 100).toFixed(0)}%)
-        </span>
-      </div>
-      <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-        <div
-          class={`${colorClass} h-2 rounded-full transition-all`}
-          style={`width: ${Math.min(percent, 100)}%`}
-        />
-      </div>
-    </div>
-  )
-}
+import { formatCores, formatBytes, percentOf, percentText } from '../../../utils/metrics'
+import { ResourceMetric, sumResourceUsage } from '../common/ResourceMetric'
 
 /**
  * InfoPanel component - Displays cluster and operator version information
@@ -76,7 +24,7 @@ export function InfoPanel({ cluster, distribution, operator, components, metrics
   const nodes = cluster?.nodes ?? 0
   const nodesText = nodes === 1 ? '1 node' : `${nodes} nodes`
 
-  const resources = calculateTotalResources(metrics)
+  const resources = sumResourceUsage(metrics)
 
   return (
     <div class="card p-0">
@@ -149,17 +97,15 @@ export function InfoPanel({ cluster, distribution, operator, components, metrics
               <div class="space-y-3 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 lg:flex-1 lg:mt-0 lg:pt-0 lg:border-t-0 lg:border-l lg:pl-8">
                 <ResourceMetric
                   label="Flux CPU Usage"
-                  value={resources.cpu.toFixed(2)}
-                  limit={resources.cpuLimit.toFixed(2)}
-                  percent={Math.max(0, resources.cpuPercent)}
-                  unit="cores"
+                  value={formatCores(resources.cpu)}
+                  percentLabel={percentText(resources.cpu, resources.cpuRequests, resources.cpuLimits)}
+                  barPercent={percentOf(resources.cpu, resources.cpuLimits)}
                 />
                 <ResourceMetric
                   label="Flux Memory Usage"
-                  value={formatMemory(resources.memory)}
-                  limit={formatMemory(resources.memoryLimit)}
-                  percent={Math.max(0, resources.memoryPercent)}
-                  unit="GiB"
+                  value={formatBytes(resources.memory)}
+                  percentLabel={percentText(resources.memory, resources.memoryRequests, resources.memoryLimits)}
+                  barPercent={percentOf(resources.memory, resources.memoryLimits)}
                 />
               </div>
             )}

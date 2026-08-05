@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-logr/logr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
 
@@ -105,6 +106,13 @@ func RunServer(ctx context.Context, c cluster.Cluster,
 	handlerStopped = ch
 	closeAuth = func(context.Context) error { return nil }
 
+	// Pod metrics collector state, preserved across configuration reloads
+	// so the usage history survives handler swaps.
+	var metricsCollector *MetricsCollector
+	var metricsInterval time.Duration
+	var cancelMetricsCtx context.CancelFunc
+	var metricsStopped <-chan struct{}
+
 	// Configure graceful shutdown procedure.
 	gracefulShutdown := func() error {
 		shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
@@ -134,8 +142,18 @@ func RunServer(ctx context.Context, c cluster.Cluster,
 		case <-shutdownCtx.Done():
 			return errGracefulShutdownDeadlineExceeded
 		case <-handlerStopped:
-			return nil
 		}
+
+		// Stop the pod metrics collector.
+		if metricsCollector != nil {
+			cancelMetricsCtx()
+			select {
+			case <-shutdownCtx.Done():
+				return errGracefulShutdownDeadlineExceeded
+			case <-metricsStopped:
+			}
+		}
+		return nil
 	}
 
 	// Listen for configuration updates.
@@ -183,10 +201,27 @@ func RunServer(ctx context.Context, c cluster.Cluster,
 		// Successfully created all components with the new configuration.
 		confVersion = conf.Version
 
+		// Reconcile the pod metrics collector with the new configuration.
+		// The collector outlives handler swaps so the usage history is
+		// preserved; it is only recreated when the metrics settings change.
+		if metricsCollector != nil && (!conf.MetricsEnabled() || conf.MetricsScrapeInterval() != metricsInterval) {
+			cancelMetricsCtx()
+			<-metricsStopped
+			metricsCollector = nil
+		}
+		if conf.MetricsEnabled() && metricsCollector == nil {
+			if lister, err := NewPodMetricsLister(c.GetConfig()); err != nil {
+				serverLog.Error(err, "pod metrics collection disabled, failed to create metrics client")
+			} else {
+				metricsInterval = conf.MetricsScrapeInterval()
+				metricsCollector, cancelMetricsCtx, metricsStopped = startMetricsCollector(lister, metricsInterval, serverLog)
+			}
+		}
+
 		// Create new handler.
 		newHandlerCtx, cancelNewHandlerCtx := context.WithCancel(context.Background())
 		newHandler, newHandlerStopped := NewHandler(newHandlerCtx, conf, spaHandler, kubeClient,
-			version, statusManager, namespace, reportInterval, eventRecorder, authMiddleware, serverLog)
+			metricsCollector, version, statusManager, namespace, reportInterval, eventRecorder, authMiddleware, serverLog)
 
 		conf = nil // Clear conf to receive a new one in the next iteration.
 
@@ -216,6 +251,16 @@ func RunServer(ctx context.Context, c cluster.Cluster,
 			// Context canceled, let the next iteration handle graceful shutdown.
 		}
 	}
+}
+
+// startMetricsCollector creates and starts a pod metrics collector on its
+// own cancelable context. Start performs the initial scrape synchronously
+// so the first cached report can carry controller metrics.
+func startMetricsCollector(lister PodMetricsLister, interval time.Duration, l logr.Logger) (*MetricsCollector, context.CancelFunc, <-chan struct{}) {
+	mc := NewMetricsCollector(lister, interval)
+	ctx, cancel := context.WithCancel(context.Background())
+	stopped := mc.Start(ctrl.LoggerInto(ctx, l))
+	return mc, cancel, stopped
 }
 
 // processBatch processes at most maxItems with a fixed number of workers.

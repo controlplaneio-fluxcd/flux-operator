@@ -37,6 +37,9 @@ type Handler struct {
 
 	// Workload index
 	workloadIndex *WorkloadIndex
+
+	// Pod metrics ring buffer
+	metrics *MetricsCollector
 }
 
 // NewHandler creates a new handler for the web server.
@@ -45,9 +48,11 @@ type Handler struct {
 // the report periodically. They run until the context
 // is canceled. The returned channel is closed when all
 // the goroutines have stopped.
+// The metrics collector is owned by the caller and may be nil
+// when pod metrics collection is disabled.
 func NewHandler(ctx context.Context, conf *fluxcdv1.WebConfigSpec, spaHandler http.Handler, kubeClient *kubeclient.Client,
-	version, statusManager, namespace string, reportInterval time.Duration, eventRecorder record.EventRecorder,
-	authMiddleware func(http.Handler) http.Handler, l logr.Logger) (http.Handler, <-chan struct{}) {
+	metrics *MetricsCollector, version, statusManager, namespace string, reportInterval time.Duration,
+	eventRecorder record.EventRecorder, authMiddleware func(http.Handler) http.Handler, l logr.Logger) (http.Handler, <-chan struct{}) {
 
 	// Build the Handler struct.
 	h := &Handler{
@@ -59,6 +64,7 @@ func NewHandler(ctx context.Context, conf *fluxcdv1.WebConfigSpec, spaHandler ht
 		namespace:     namespace,
 		searchIndex:   &SearchIndex{},
 		workloadIndex: &WorkloadIndex{},
+		metrics:       metrics,
 	}
 
 	// Create HTTP request multiplexer.

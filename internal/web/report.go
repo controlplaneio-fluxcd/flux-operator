@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"net/http"
 	goruntime "runtime"
+	"slices"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -17,8 +19,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
-	metricsv1beta1api "k8s.io/metrics/pkg/apis/metrics/v1beta1"
-	metricsclientset "k8s.io/metrics/pkg/client/clientset/versioned"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -211,21 +211,105 @@ func (h *Handler) buildReport(ctx context.Context) (*unstructured.Unstructured, 
 	}
 	report := &unstructured.Unstructured{Object: rawMap}
 
-	// Fetch metrics for Flux components (non-fatal if it fails)
-	// We pass WithPrivileges() here to ensure we can read metrics from all Flux controllers,
-	// even if the user querying the report has limited RBAC permissions. Our decision here
-	// is based on the same reasoning explained above for building the report.
-	if metrics, err := h.GetMetrics(ctx, "", h.namespace, "app.kubernetes.io/part-of=flux", 100, kubeclient.WithPrivileges()); err == nil {
-		// Extract the items array from metrics
-		if items, found := metrics.Object["items"]; found {
-			// Add metrics to the result under spec.metrics
-			if spec, found := report.Object["spec"].(map[string]any); found {
-				spec["metrics"] = items
-			}
+	// Enrich the report with the Flux controllers usage.
+	if metrics := h.controllerMetrics(ctx); len(metrics) > 0 {
+		if spec, found := report.Object["spec"].(map[string]any); found {
+			spec["metrics"] = metrics
 		}
 	}
 
 	return report, computeResult, nil
+}
+
+// ControllerMetrics holds the current CPU/Memory usage of a Flux
+// controller pod along with the resource requests and limits summed
+// from its spec (zero means not set).
+type ControllerMetrics struct {
+	// Pod is the name of the controller pod.
+	Pod string `json:"pod"`
+
+	// Namespace is the namespace of the controller pod.
+	Namespace string `json:"namespace"`
+
+	// CPU is the current usage in cores.
+	CPU float64 `json:"cpu"`
+
+	// Memory is the current usage in bytes.
+	Memory int64 `json:"memory"`
+
+	// CPURequests and CPULimits are expressed in cores.
+	CPURequests float64 `json:"cpuRequests"`
+	CPULimits   float64 `json:"cpuLimits"`
+
+	// MemoryRequests and MemoryLimits are expressed in bytes.
+	MemoryRequests int64 `json:"memoryRequests"`
+	MemoryLimits   int64 `json:"memoryLimits"`
+}
+
+// controllerMetrics returns the current usage of the Flux controller pods
+// in the operator namespace, read from the pod metrics collector with the
+// requests/limits taken from the pod specs. When the pod list fails, the
+// usage of the buffered controller pods is returned without the
+// requests/limits. Returns nil when pod metrics collection is disabled
+// or the Metrics API is unavailable.
+func (h *Handler) controllerMetrics(ctx context.Context) []ControllerMetrics {
+	if h.metrics == nil || !h.metrics.Available() {
+		return nil
+	}
+
+	fluxSelector := labels.Set{"app.kubernetes.io/part-of": "flux"}
+
+	var result []ControllerMetrics
+	var podList corev1.PodList
+	if err := h.kubeClient.GetClient(ctx, kubeclient.WithPrivileges()).List(ctx, &podList,
+		client.InNamespace(h.namespace),
+		client.MatchingLabelsSelector{Selector: fluxSelector.AsSelector()}); err != nil {
+		log.FromContext(ctx).Error(err, "failed to list Flux controller pods for metrics")
+		for _, name := range h.metrics.LabeledPods(h.namespace, fluxSelector.AsSelector()) {
+			if latest := h.currentPodMetrics(h.namespace, name); latest != nil {
+				result = append(result, ControllerMetrics{
+					Pod:       name,
+					Namespace: h.namespace,
+					CPU:       latest.CPU,
+					Memory:    latest.Memory,
+				})
+			}
+		}
+	} else {
+		missing := false
+		for i := range podList.Items {
+			pod := &podList.Items[i]
+			if pod.Status.Phase != corev1.PodRunning {
+				continue
+			}
+			latest := h.currentPodMetrics(pod.Namespace, pod.Name)
+			if latest == nil {
+				missing = true
+				continue
+			}
+			res := sumPodResources(pod)
+			result = append(result, ControllerMetrics{
+				Pod:            pod.Name,
+				Namespace:      pod.Namespace,
+				CPU:            latest.CPU,
+				Memory:         latest.Memory,
+				CPURequests:    res.CPURequests,
+				CPULimits:      res.CPULimits,
+				MemoryRequests: res.MemoryRequests,
+				MemoryLimits:   res.MemoryLimits,
+			})
+		}
+		// Freshly rolled-out pods have no usage sample yet: request a
+		// catch-up scrape so the next report refresh picks them up.
+		if missing {
+			h.metrics.RequestScrape()
+		}
+	}
+
+	slices.SortFunc(result, func(a, b ControllerMetrics) int {
+		return strings.Compare(a.Pod, b.Pod)
+	})
+	return result
 }
 
 func uninitialisedReport() *unstructured.Unstructured {
@@ -248,127 +332,4 @@ func uninitialisedReport() *unstructured.Unstructured {
 
 	rawMap, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
 	return &unstructured.Unstructured{Object: rawMap}
-}
-
-// GetMetrics retrieves the CPU and Memory metrics for a list of pods in the given namespace.
-func (h *Handler) GetMetrics(ctx context.Context, pod, namespace, labelSelector string, limit int, opts ...kubeclient.Option) (*unstructured.Unstructured, error) {
-	clientset, err := metricsclientset.NewForConfig(h.kubeClient.GetConfig(ctx, opts...))
-	if err != nil {
-		return nil, err
-	}
-
-	ls := labels.Everything()
-	if len(labelSelector) > 0 {
-		ls, err = labels.Parse(labelSelector)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	versionedMetrics := &metricsv1beta1api.PodMetricsList{}
-	if pod != "" {
-		m, err := clientset.MetricsV1beta1().
-			PodMetricses(namespace).
-			Get(ctx, pod, metav1.GetOptions{})
-		if err != nil {
-			return nil, err
-		}
-		versionedMetrics.Items = []metricsv1beta1api.PodMetrics{*m}
-	} else {
-		versionedMetrics, err = clientset.MetricsV1beta1().
-			PodMetricses(namespace).
-			List(ctx, metav1.ListOptions{LabelSelector: ls.String(), Limit: int64(limit)})
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if len(versionedMetrics.Items) == 0 {
-		return nil, fmt.Errorf("no metrics found for pods in namespace %s", namespace)
-	}
-
-	// Fetch pod specs to get resource limits
-	kubeClient := h.kubeClient.GetClient(ctx, opts...)
-	var podList corev1.PodList
-	if pod != "" {
-		p := &corev1.Pod{}
-		if err := kubeClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: pod}, p); err == nil {
-			podList.Items = []corev1.Pod{*p}
-		}
-	} else {
-		listOpts := []client.ListOption{
-			client.InNamespace(namespace),
-			client.MatchingLabelsSelector{Selector: ls},
-			client.Limit(int64(limit)),
-		}
-		if err := kubeClient.List(ctx, &podList, listOpts...); err != nil {
-			// Non-fatal: continue without limits if pod list fails
-			podList.Items = nil
-		}
-	}
-
-	// Create a map for quick pod lookup
-	podMap := make(map[string]*corev1.Pod)
-	for i := range podList.Items {
-		podMap[podList.Items[i].Name] = &podList.Items[i]
-	}
-
-	metrics := make([]map[string]any, 0, len(versionedMetrics.Items))
-	for _, item := range versionedMetrics.Items {
-		for _, container := range item.Containers {
-			if len(container.Usage) == 0 {
-				continue
-			}
-			memQuantity, ok := container.Usage[corev1.ResourceMemory]
-			if !ok || memQuantity.IsZero() {
-				continue
-			}
-
-			cpuQuantity := container.Usage[corev1.ResourceCPU]
-
-			// Convert CPU from millicores to cores (float) for easier UI parsing
-			cpuCores := float64(cpuQuantity.MilliValue()) / 1000.0
-
-			// Convert Memory to bytes (int64) for easier UI parsing
-			memBytes := memQuantity.Value()
-
-			metricEntry := map[string]any{
-				"pod":       item.Name,
-				"namespace": item.Namespace,
-				"container": container.Name,
-				"cpu":       cpuCores,
-				"memory":    memBytes,
-			}
-
-			// Default limits: 2x actual usage (fallback if no limits are set)
-			cpuLimit := cpuCores * 2.0
-			memLimit := memBytes * 2
-
-			// Try to get actual limits from pod spec
-			if podSpec, found := podMap[item.Name]; found {
-				for _, c := range podSpec.Spec.Containers {
-					if c.Name == container.Name {
-						if limit, ok := c.Resources.Limits[corev1.ResourceCPU]; ok {
-							cpuLimit = float64(limit.MilliValue()) / 1000.0
-						}
-						if limit, ok := c.Resources.Limits[corev1.ResourceMemory]; ok {
-							memLimit = limit.Value()
-						}
-						break
-					}
-				}
-			}
-
-			metricEntry["cpuLimit"] = cpuLimit
-			metricEntry["memoryLimit"] = memLimit
-
-			metrics = append(metrics, metricEntry)
-		}
-	}
-
-	return &unstructured.Unstructured{
-		Object: map[string]any{
-			"items": metrics,
-		},
-	}, nil
 }

@@ -36,6 +36,12 @@ func ValidateWebConfigSpec(c *fluxcdv1.WebConfigSpec) error {
 		}
 	}
 
+	if c.Metrics != nil {
+		if err := ValidateMetricsSpec(c.Metrics); err != nil {
+			return fmt.Errorf("invalid metrics configuration: %w", err)
+		}
+	}
+
 	if c.UserActions != nil {
 		if err := ValidateUserActionsSpec(c.UserActions); err != nil {
 			return fmt.Errorf("invalid user actions configuration: %w", err)
@@ -48,6 +54,14 @@ func ValidateWebConfigSpec(c *fluxcdv1.WebConfigSpec) error {
 		}
 	}
 
+	return nil
+}
+
+// ValidateMetricsSpec validates the MetricsSpec configuration.
+func ValidateMetricsSpec(m *fluxcdv1.MetricsSpec) error {
+	if m.ScrapeInterval != nil && m.ScrapeInterval.Duration < 0 {
+		return fmt.Errorf("scrapeInterval must be a positive duration")
+	}
 	return nil
 }
 

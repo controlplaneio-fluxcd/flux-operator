@@ -2,35 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { useSignal } from '@preact/signals'
-
-/**
- * ResourceMetric - Progress bar component for CPU/Memory display
- */
-function ResourceMetric({ label, value, limit, percent, unit }) {
-  let colorClass = 'bg-green-500'
-  if (percent >= 85) {
-    colorClass = 'bg-red-500'
-  } else if (percent >= 70) {
-    colorClass = 'bg-yellow-500'
-  }
-
-  return (
-    <div class="space-y-1">
-      <div class="flex flex-col sm:flex-row sm:justify-between sm:items-baseline gap-1">
-        <span class="text-xs sm:text-sm text-gray-600 dark:text-gray-400">{label}</span>
-        <span class="text-xs sm:text-sm text-gray-900 dark:text-white">
-          {value}/{limit} {unit} ({Math.min(percent, 100).toFixed(0)}%)
-        </span>
-      </div>
-      <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-        <div
-          class={`${colorClass} h-2 rounded-full transition-all`}
-          style={`width: ${Math.min(percent, 100)}%`}
-        />
-      </div>
-    </div>
-  )
-}
+import { formatCores, formatBytes, percentOf, percentText } from '../../../utils/metrics'
+import { ResourceMetric, sumResourceUsage } from '../common/ResourceMetric'
 
 /**
  * ComponentRow - Table row displaying a Flux controller component
@@ -120,17 +93,15 @@ function ComponentRow({component, metrics, isRowExpanded, toggleComponent}) {
                 <div class="flex-1 space-y-3 mt-4 md:mt-0 pt-4 md:pt-0 border-t md:border-t-0 md:border-l border-gray-200 dark:border-gray-600 md:pl-8">
                   <ResourceMetric
                     label="CPU"
-                    value={componentMetrics.cpu.toFixed(3)}
-                    limit={componentMetrics.cpuLimit.toFixed(1)}
-                    percent={componentMetrics.cpuLimit > 0 ? Math.max(0, (componentMetrics.cpu / componentMetrics.cpuLimit) * 100) : 0}
-                    unit="cores"
+                    value={formatCores(componentMetrics.cpu)}
+                    percentLabel={percentText(componentMetrics.cpu, componentMetrics.cpuRequests, componentMetrics.cpuLimits)}
+                    barPercent={percentOf(componentMetrics.cpu, componentMetrics.cpuLimits)}
                   />
                   <ResourceMetric
                     label="Memory"
-                    value={formatMemory(componentMetrics.memory)}
-                    limit={formatMemory(componentMetrics.memoryLimit)}
-                    percent={componentMetrics.memoryLimit > 0 ? Math.max(0, (componentMetrics.memory / componentMetrics.memoryLimit) * 100) : 0}
-                    unit="MiB"
+                    value={formatBytes(componentMetrics.memory)}
+                    percentLabel={percentText(componentMetrics.memory, componentMetrics.memoryRequests, componentMetrics.memoryLimits)}
+                    barPercent={percentOf(componentMetrics.memory, componentMetrics.memoryLimits)}
                   />
                 </div>
               )}
@@ -237,18 +208,9 @@ export function ControllersPanel({ components, metrics }) {
   )
 }
 
-// Find metrics for a component by matching pod name pattern
+// Find metrics for a component by matching the pod name pattern,
+// summing across all its pods so scaled controllers report full usage.
 function findComponentMetrics(componentName, metrics) {
   if (!metrics || metrics.length === 0) return null
-
-  return metrics.find(m => {
-    if (!m.pod) return false
-    return m.pod.startsWith(`${componentName}-`)
-  })
-}
-
-// Format bytes to MiB
-function formatMemory(bytes) {
-  if (typeof bytes !== 'number' || bytes < 0) return '0'
-  return (bytes / (1024 ** 2)).toFixed(0)
+  return sumResourceUsage(metrics.filter(m => m.pod && m.pod.startsWith(`${componentName}-`)))
 }

@@ -116,6 +116,91 @@
     }
   }
 
+  /* Tooltip for the CPU/Memory usage charts (uPlot). */
+  .usage-chart-tooltip {
+    @apply rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 py-1 shadow-sm;
+  }
+
+  .usage-chart-tooltip-time {
+    @apply text-xs text-gray-500 dark:text-gray-400;
+  }
+
+  .usage-chart-tooltip-value {
+    @apply text-xs font-medium text-gray-900 dark:text-white;
+  }
+
+  .usage-chart-tooltip-limit {
+    @apply text-xs text-gray-500 dark:text-gray-400;
+  }
+
+  /* Per-pod usage bars: 6px marks, square at the left baseline with a
+     4px rounded data-end; the track is the chart series fill (a lighter
+     step of the same hue) and the bar the series stroke. */
+  .usage-bar-track {
+    @apply h-1.5 shrink-0 rounded-r overflow-hidden;
+  }
+
+  .usage-bar-fill {
+    @apply h-full rounded-r;
+  }
+
+  .usage-bar-track-cpu {
+    background-color: rgba(0, 102, 204, 0.12);
+  }
+
+  .dark .usage-bar-track-cpu {
+    background-color: rgba(59, 130, 246, 0.16);
+  }
+
+  .usage-bar-fill-cpu {
+    background-color: #0066cc;
+  }
+
+  .dark .usage-bar-fill-cpu {
+    background-color: #3b82f6;
+  }
+
+  .usage-bar-track-memory {
+    background-color: rgba(13, 148, 136, 0.12);
+  }
+
+  .dark .usage-bar-track-memory {
+    background-color: rgba(13, 148, 136, 0.18);
+  }
+
+  .usage-bar-fill-memory {
+    background-color: #0d9488;
+  }
+
+  /* Neutral track for pods without a usage sample yet (value N/A)
+     and for the collapsed "+N pods" row. */
+  .usage-bar-track-na {
+    background-color: rgba(107, 114, 128, 0.15);
+  }
+
+  .dark .usage-bar-track-na {
+    background-color: rgba(156, 163, 175, 0.15);
+  }
+
+  /* Muted fill for the collapsed "+N pods" row, drawn at the average. */
+  .usage-bar-fill-na {
+    background-color: #9ca3af;
+  }
+
+  .dark .usage-bar-fill-na {
+    background-color: #6b7280;
+  }
+
+  /* Severity fills for pods approaching their limits, matching the
+     yellow/red of the ResourceMetric progress bars. */
+  .usage-bar-fill-warn {
+    background-color: #eab308;
+  }
+
+  .usage-bar-fill-critical {
+    background-color: #ef4444;
+  }
+
   /* One-shot glow for the latest log line; color comes from --glow-color,
      set per log level by the viewer. */
   .log-glow {

@@ -6,6 +6,7 @@ package v1
 import (
 	"maps"
 	"slices"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -139,6 +140,11 @@ type WebConfigSpec struct {
 	// +optional
 	Search *SearchSpec `json:"search"`
 
+	// Metrics holds the pod metrics collection configuration.
+	// Defaults to collecting pod metrics every 60 seconds.
+	// +optional
+	Metrics *MetricsSpec `json:"metrics"`
+
 	// UserActions holds the user actions configuration. Defaults to enabling all actions if not set.
 	// Note that, by default, actions are only available when authentication is configured with the
 	// OAuth2 type.
@@ -168,6 +174,22 @@ func (c *WebConfigSpec) UserActionsEnabled() bool {
 // performing the action originates from the Web UI application's own RBAC.
 func (c *WebConfigSpec) FineGrainedAccessEnabled() bool {
 	return c.UserActions != nil && c.UserActions.Access == UserActionsAccessFineGrained
+}
+
+// MetricsEnabled checks if pod metrics collection is enabled.
+// Metrics are collected by default when the spec is not set.
+func (c *WebConfigSpec) MetricsEnabled() bool {
+	return c == nil || c.Metrics == nil || !c.Metrics.Disabled
+}
+
+// MetricsScrapeInterval returns the pod metrics scrape interval,
+// defaulting to 60s and clamped to [15s, 10m].
+func (c *WebConfigSpec) MetricsScrapeInterval() time.Duration {
+	interval := time.Minute
+	if c != nil && c.Metrics != nil && c.Metrics.ScrapeInterval != nil && c.Metrics.ScrapeInterval.Duration > 0 {
+		interval = c.Metrics.ScrapeInterval.Duration
+	}
+	return min(max(interval, 15*time.Second), 10*time.Minute)
 }
 
 // AuthenticationSpec holds the Flux Status Page authentication configuration.
@@ -340,6 +362,22 @@ type ImpersonationSpec struct {
 	// Defaults to "has(claims.groups) ? claims.groups : []".
 	// +optional
 	Groups string `json:"groups"`
+}
+
+// MetricsSpec holds the pod metrics collection configuration.
+type MetricsSpec struct {
+	// Disabled turns off pod metrics collection. No Metrics API queries
+	// are made and the resource usage charts are hidden in the UI.
+	// +optional
+	Disabled bool `json:"disabled"`
+
+	// ScrapeInterval is the interval at which pod metrics are collected
+	// from the Kubernetes Metrics API.
+	// Clamped to [15s, 10m]. Defaults to 60s.
+	// +kubebuilder:validation:Type=string
+	// +kubebuilder:validation:Pattern="^([0-9]+(\\.[0-9]+)?(ms|s|m|h))+$"
+	// +optional
+	ScrapeInterval *metav1.Duration `json:"scrapeInterval"`
 }
 
 // SearchSpec holds the search configuration.

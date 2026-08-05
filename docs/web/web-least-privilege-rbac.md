@@ -170,25 +170,64 @@ delivering a meaningful, isolated dashboard and workload search experience.
 
 ---
 
-## 6. Flux Controller Pod Metrics
+## 6. Pod Metrics and Workload Usage
 
-**Where:** The main dashboard – Flux controller resource usage display.
+**Where:** The main dashboard Flux controller resource usage display, the
+workload dashboard Resource Usage charts and per-pod usage in the Pods tab, and
+the Flux resource dashboard Resource Usage tab.
 
 **Internal operation:**
-The system reads pod metrics (CPU, memory) from the Kubernetes Metrics API for Flux controller pods.
+The system collects current pod CPU/memory usage for all pods from the
+Kubernetes Metrics API into an in-memory ring buffer. It also reads Flux
+controller pod specs in the operator namespace for requests/limits and may read
+named workload generation object metadata to draw rollout markers on usage
+charts.
 
 **How it works:**
-The operator queries the Metrics API (`metrics.k8s.io/v1beta1`) for pods
-labeled `app.kubernetes.io/part-of=flux` in the operator's namespace. It
-also reads the pod specs to determine resource limits. The privileged
-client is used because the Metrics API call and the pod spec read target
-the operator's own namespace (typically `flux-system`), which users may
-not have access to.
+A background collector queries the Metrics API (`metrics.k8s.io/v1beta1`)
+cluster-wide with the privileged client and retains a ~30 minute usage window
+per container in memory. The Metrics API only serves instantaneous values, so
+history must be accumulated server-side. The scrape interval defaults to one
+minute and is configurable via `spec.metrics.scrapeInterval`; collection can be
+disabled with `spec.metrics.disabled`.
+
+When building the report, the operator lists pods labeled
+`app.kubernetes.io/part-of=flux` in its own namespace with the privileged
+client, attaches their latest usage from the pod metrics collector, and includes
+the requests/limits read from the pod specs.
+
+When a user opens a workload dashboard, the backend first fetches the workload
+with the user's impersonated client as the access-control gate. Only after that
+does it attach usage series for the workload's current pods and
+selector-matching buffered pods so the history stays continuous across rollouts.
+Off-schedule catch-up scrapes for running pods without a recent sample are
+rate-limited to one cluster-wide scrape per 15 seconds regardless of request
+volume.
+
+The Flux resource dashboard reuses the same cache for its Resource Usage tab:
+the workloads batch endpoint fetches each inventoried workload with the user's
+impersonated client and aggregates series from the in-memory buffer. Workloads
+the user cannot read are reported without usage data. This path does not add
+per-request Metrics API calls; metrics reads are performed by the background
+collector.
+
+The rollout marker uses a similarly gated path. After the workload has been
+fetched with the user's impersonated client, the backend resolves the current
+generation object names and fetches only those named objects' metadata with the
+privileged API reader: Deployments use the highest deployment revision among the
+workload's pod ReplicaSets, StatefulSets use `status.updateRevision`, and
+DaemonSets use the newest ControllerRevision referenced by the workload's pods.
+No generation objects are listed and no spec or data fields are read; the
+response yields a single timestamp (`rolledOutAt`).
 
 **Least privilege benefit:**
-Flux controller health is a cluster-wide concern visible to all dashboard
-users, regardless of their namespace-scoped permissions. Showing CPU and
-memory utilization of Flux controllers helps users understand whether Flux itself is under resource pressure. The metrics data contains no sensitive information. By fetching this internally, administrators are not forced to break namespace isolation by granting everyone read access to the `flux-system` namespace.
+Users see CPU/memory usage only for workloads they can already view, and
+controller usage without needing access to `flux-system` pod specs.
+Administrators are not forced to grant every dashboard user cluster-wide read
+access on `metrics.k8s.io`, ReplicaSets, or ControllerRevisions. The exposed data
+is limited to CPU/memory usage, Flux controller resource requests/limits, and
+the workload rollout timestamp. Clusters without metrics-server simply hide the
+usage features.
 
 ---
 
@@ -275,6 +314,6 @@ Users do not need cluster-wide `list` permissions on namespaces just to populate
 | 3 | Audit event recording                | System writes event                                  | None (server-side only)                                                                        |
 | 4 | Audit pod-owner resolution           | System reads owner chain                             | None (server-side only)                                                                        |
 | 5 | Dashboard report and workloads index | System scans Flux resources and applier inventories  | Aggregated stats and workload reference + parent reconciler status, filtered by user namespace |
-| 6 | Controller metrics                   | System reads metrics API                             | CPU/memory usage of Flux controllers                                                           |
+| 6 | Pod metrics and workload usage       | System scrapes Metrics API cluster-wide and reads named generation metadata | CPU/memory usage for permitted workloads, Flux controller requests/limits, and workload rollout timestamp |
 | 7 | Fine-grained user actions            | System performs native action operations             | Requested artifact for downloads; action result only otherwise                                 |
 | 8 | Namespace visibility                 | Wrapper lists namespaces with privileged base client | Visible namespace names after RBAC filtering                                                   |

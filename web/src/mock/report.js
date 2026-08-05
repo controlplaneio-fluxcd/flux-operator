@@ -172,65 +172,73 @@ export const mockReport = {
       {
         pod: 'helm-controller-77c6f47d9c-qn2hq',
         namespace: 'flux-system',
-        container: 'manager',
         cpu: 0.7485,
         memory: 912680550,
-        cpuLimit: 1.0,
-        memoryLimit: 1073741824
+        cpuRequests: 0.1,
+        cpuLimits: 1.0,
+        memoryRequests: 536870912,
+        memoryLimits: 1073741824
       },
       {
         pod: 'image-automation-controller-585ddb54cf-8cjdh',
         namespace: 'flux-system',
-        container: 'manager',
         cpu: 0.0021,
         memory: 650000000,
-        cpuLimit: 1.0,
-        memoryLimit: 1073741824
+        cpuRequests: 0.1,
+        cpuLimits: 1.0,
+        memoryRequests: 536870912,
+        memoryLimits: 1073741824
       },
       {
         pod: 'image-reflector-controller-66f965d7c4-htrkq',
         namespace: 'flux-system',
-        container: 'manager',
         cpu: 0.0458,
         memory: 750000000,
-        cpuLimit: 1.0,
-        memoryLimit: 1073741824
+        cpuRequests: 0.1,
+        cpuLimits: 1.0,
+        memoryRequests: 536870912,
+        memoryLimits: 1073741824
       },
       {
         pod: 'kustomize-controller-5cb6bb5948-tgmgz',
         namespace: 'flux-system',
-        container: 'manager',
         cpu: 0.8234,
         memory: 944892805,
-        cpuLimit: 1.0,
-        memoryLimit: 1073741824
+        cpuRequests: 0.1,
+        cpuLimits: 1.0,
+        memoryRequests: 536870912,
+        memoryLimits: 1073741824
       },
       {
         pod: 'notification-controller-79b4d898bd-n2n8n',
         namespace: 'flux-system',
-        container: 'manager',
         cpu: 0.0018,
         memory: 700000000,
-        cpuLimit: 1.0,
-        memoryLimit: 1073741824
+        cpuRequests: 0.1,
+        cpuLimits: 1.0,
+        memoryRequests: 536870912,
+        memoryLimits: 1073741824
       },
       {
         pod: 'source-controller-6c97954754-hglpv',
         namespace: 'flux-system',
-        container: 'manager',
         cpu: 0.0083,
         memory: 800000000,
-        cpuLimit: 1.0,
-        memoryLimit: 1073741824
+        cpuRequests: 0.1,
+        cpuLimits: 1.0,
+        memoryRequests: 536870912,
+        memoryLimits: 1073741824
       },
       {
+        // No requests/limits set: the UI shows absolute values only.
         pod: 'source-watcher-758b694c5d-7jg7m',
         namespace: 'flux-system',
-        container: 'manager',
         cpu: 0.0035,
         memory: 600000000,
-        cpuLimit: 1.0,
-        memoryLimit: 1073741824
+        cpuRequests: 0,
+        cpuLimits: 0,
+        memoryRequests: 0,
+        memoryLimits: 0
       }
     ],
     namespaces: [
