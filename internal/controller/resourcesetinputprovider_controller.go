@@ -752,7 +752,9 @@ func (r *ResourceSetInputProviderReconciler) getGiteaToken(
 	return password, err
 }
 
-// getAzureDevOpsToken returns the appropriate AzureDevOps token by reading the secrets in authData.
+// getAzureDevOpsToken returns the appropriate AzureDevOps token, either the personal
+// access token from the secrets in authData, or an Entra ID token issued through
+// workload identity federation.
 func (r *ResourceSetInputProviderReconciler) getAzureDevOpsToken(
 	ctx context.Context, obj *fluxcdv1.ResourceSetInputProvider,
 	authData map[string][]byte) (string, error) {
@@ -767,21 +769,14 @@ func (r *ResourceSetInputProviderReconciler) getAzureDevOpsToken(
 	// Handle workload identity.
 	default:
 
-		opts := []auth.Option{
-			auth.WithClient(r.Client),
-			auth.WithServiceAccountNamespace(obj.GetNamespace()),
-		}
+		opts := r.getAuthOptions(obj)
 
-		// Configure service account.
-		if s := obj.Spec.ServiceAccountName; s != "" {
-			opts = append(opts, auth.WithServiceAccountName(s))
+		// The auth package requires a Git URL
+		gitURL, err := url.Parse(obj.Spec.URL)
+		if err != nil {
+			return "", fmt.Errorf("failed to parse AzureDevOps URL: %w", err)
 		}
-
-		// Configure token cache.
-		if r.TokenCache != nil {
-			involvedObject := getInputProviderInvolvedObject(obj)
-			opts = append(opts, auth.WithCache(*r.TokenCache, involvedObject))
-		}
+		opts = append(opts, auth.WithGitURL(*gitURL))
 
 		// Get token.
 		t, err := authutils.GetGitCredentials(ctx, azure.ProviderName, opts...)
