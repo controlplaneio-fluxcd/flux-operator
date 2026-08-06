@@ -456,7 +456,7 @@ func (r *ResourceSetInputProviderReconciler) newGitProvider(ctx context.Context,
 			Token:     token,
 		})
 	case obj.Spec.Type == fluxcdv1.InputProviderAWSCodeCommitPullRequest:
-		credsProvider, region, err := r.getAWSCodeCommitAccessToken(ctx, obj)
+		credsProvider, region, err := r.getAWSCodeCommitCredentialsProvider(ctx, obj)
 		if err != nil {
 			return nil, err
 		}
@@ -465,7 +465,7 @@ func (r *ResourceSetInputProviderReconciler) newGitProvider(ctx context.Context,
 			TLSConfig: tlsConfig,
 		}, credsProvider, region, nil)
 	case strings.HasPrefix(obj.Spec.Type, "AWSCodeCommit"):
-		gitCreds, err := r.getAWSCodeCommitGitCredentials(ctx, obj)
+		gitCreds, err := r.getGitCredentials(ctx, obj, aws.ProviderName)
 		if err != nil {
 			return nil, err
 		}
@@ -768,22 +768,11 @@ func (r *ResourceSetInputProviderReconciler) getAzureDevOpsToken(
 
 	// Handle workload identity.
 	default:
-
-		opts := r.getAuthOptions(obj)
-
-		// The auth package requires a Git URL
-		gitURL, err := url.Parse(obj.Spec.URL)
-		if err != nil {
-			return "", fmt.Errorf("failed to parse AzureDevOps URL: %w", err)
-		}
-		opts = append(opts, auth.WithGitURL(*gitURL))
-
-		// Get token.
-		t, err := authutils.GetGitCredentials(ctx, azure.ProviderName, opts...)
+		gitCreds, err := r.getGitCredentials(ctx, obj, azure.ProviderName)
 		if err != nil {
 			return "", err
 		}
-		return t.BearerToken, nil
+		return gitCreds.BearerToken, nil
 	}
 }
 
@@ -801,28 +790,33 @@ func (r *ResourceSetInputProviderReconciler) getAuthOptions(obj *fluxcdv1.Resour
 
 	// Configure token cache.
 	if r.TokenCache != nil {
-		involvedObject := getInputProviderInvolvedObject(obj)
+		involvedObject := cache.InvolvedObject{
+			Kind:      fluxcdv1.ResourceSetInputProviderKind,
+			Name:      obj.GetName(),
+			Namespace: obj.GetNamespace(),
+			Operation: cache.OperationReconcile,
+		}
 		opts = append(opts, auth.WithCache(*r.TokenCache, involvedObject))
 	}
 
 	return opts
 }
 
-// getAWSCodeCommitGitCredentials returns the SigV4-signed Git credentials for AWSCodeCommit.
-func (r *ResourceSetInputProviderReconciler) getAWSCodeCommitGitCredentials(
-	ctx context.Context, obj *fluxcdv1.ResourceSetInputProvider) (*auth.GitCredentials, error) {
+// getGitCredentials returns Git credentials for the object.
+func (r *ResourceSetInputProviderReconciler) getGitCredentials(
+	ctx context.Context, obj *fluxcdv1.ResourceSetInputProvider,
+	provider string) (*auth.GitCredentials, error) {
 
 	opts := r.getAuthOptions(obj)
 
-	// Set the Git URL for SigV4 credential generation.
 	gitURL, err := url.Parse(obj.Spec.URL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse AWSCodeCommit URL: %w", err)
+		return nil, fmt.Errorf("failed to parse .spec.url: %w", err)
 	}
 	opts = append(opts, auth.WithGitURL(*gitURL))
 
 	// Get the SigV4-signed Git credentials.
-	gitCreds, err := authutils.GetGitCredentials(ctx, aws.ProviderName, opts...)
+	gitCreds, err := authutils.GetGitCredentials(ctx, provider, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -830,8 +824,8 @@ func (r *ResourceSetInputProviderReconciler) getAWSCodeCommitGitCredentials(
 	return gitCreds, nil
 }
 
-// getAWSCodeCommitAccessToken returns the AWS credentials provider for AWSCodeCommit.
-func (r *ResourceSetInputProviderReconciler) getAWSCodeCommitAccessToken(
+// getAWSCodeCommitCredentialsProvider returns the AWS credentials provider for AWSCodeCommit.
+func (r *ResourceSetInputProviderReconciler) getAWSCodeCommitCredentialsProvider(
 	ctx context.Context, obj *fluxcdv1.ResourceSetInputProvider) (awssdk.CredentialsProvider, string, error) {
 
 	opts := r.getAuthOptions(obj)
@@ -1210,21 +1204,7 @@ func (r *ResourceSetInputProviderReconciler) buildOCIOptions(ctx context.Context
 
 	// Configure workload identity for cloud providers.
 	case obj.Spec.Type != fluxcdv1.InputProviderOCIArtifactTag:
-		authOpts := []auth.Option{
-			auth.WithClient(r.Client),
-			auth.WithServiceAccountNamespace(obj.GetNamespace()),
-		}
-
-		// Configure service account.
-		if s := obj.Spec.ServiceAccountName; s != "" {
-			authOpts = append(authOpts, auth.WithServiceAccountName(s))
-		}
-
-		// Configure token cache.
-		if r.TokenCache != nil {
-			involvedObject := getInputProviderInvolvedObject(obj)
-			authOpts = append(authOpts, auth.WithCache(*r.TokenCache, involvedObject))
-		}
+		authOpts := r.getAuthOptions(obj)
 
 		// Build authenticator.
 		provider := inputProviderToCloudProvider[obj.Spec.Type]
@@ -1382,15 +1362,4 @@ func requeueAfterResourceSetInputProvider(obj *fluxcdv1.ResourceSetInputProvider
 	}
 
 	return ctrl.Result{RequeueAfter: requeueAfter}
-}
-
-// getInputProviderInvolvedObject returns the involved object for the input provider
-// for cache operations.
-func getInputProviderInvolvedObject(obj *fluxcdv1.ResourceSetInputProvider) cache.InvolvedObject {
-	return cache.InvolvedObject{
-		Kind:      fluxcdv1.ResourceSetInputProviderKind,
-		Name:      obj.GetName(),
-		Namespace: obj.GetNamespace(),
-		Operation: cache.OperationReconcile,
-	}
 }

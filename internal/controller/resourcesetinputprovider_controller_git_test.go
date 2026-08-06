@@ -1104,7 +1104,7 @@ func TestResouceSetInputProviderReconciler_getAzureDevOpsToken(t *testing.T) {
 			},
 		}, nil)
 		g.Expect(err).To(HaveOccurred())
-		g.Expect(err.Error()).To(ContainSubstring("failed to parse AzureDevOps URL"))
+		g.Expect(err.Error()).To(ContainSubstring("failed to parse .spec.url"))
 		g.Expect(res).To(BeEmpty())
 	})
 }
