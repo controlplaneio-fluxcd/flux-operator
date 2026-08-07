@@ -22,7 +22,7 @@ require (
 	github.com/fluxcd/pkg/ssa v0.77.0
 	github.com/fluxcd/pkg/tar v1.2.0
 	github.com/fluxcd/pkg/version v0.16.0
-	github.com/go-git/go-git/v5 v5.19.1
+	github.com/go-git/go-git/v5 v5.19.2
 	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/go-logr/logr v1.4.4
 	github.com/go-task/slim-sprig/v3 v3.0.0
