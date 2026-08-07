@@ -173,6 +173,40 @@ Triggers the reconciliation of a Flux HelmRelease.
 
 Confirmation message and instructions for verifying the reconciliation status.
 
+### reconcile_flux_chain
+
+Triggers the reconciliation of a Flux Kustomization and its entire dependency chain in the correct order.
+This tool walks the `dependsOn` references recursively to build a dependency graph, then reconciles
+each Kustomization from root dependencies (those with no dependencies) to the target.
+
+**Parameters:**
+
+- `name` (required): The name of the target Kustomization
+- `namespace` (required): The namespace of the target Kustomization
+- `with_source` (optional): Whether to also reconcile the source first (default: false)
+
+**Output:**
+
+A status report showing each layer in the dependency chain and whether reconciliation was triggered successfully.
+The output includes:
+- Layer number (0 for source, 1+ for Kustomizations in topological order)
+- Resource name and namespace
+- Status (reconciled or error)
+- Error message if applicable
+
+**Example:**
+
+For a Kustomization `apps` that depends on `infrastructure` which depends on `crds`:
+```
+Reconciliation triggered for 3 Kustomization(s) in dependency order:
+
+  [Layer 1] ✓ flux-system/crds
+  [Layer 2] ✓ flux-system/infrastructure
+  [Layer 3] ✓ flux-system/apps
+
+To verify, check that each Kustomization's status.lastHandledReconcileAt matches the requestedAt annotation.
+```
+
 ## Suspend/Resume Tools
 
 These tools allow for pausing and resuming the reconciliation of Flux resources.

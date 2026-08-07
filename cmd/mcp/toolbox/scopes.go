@@ -124,6 +124,10 @@ var scopesPerTool = map[string]toolScopes{
 		ownScopeDescription: "Allow setting the current kubeconfig context in the MCP server memory.",
 		extraScopes:         []string{ScopeReadOnly},
 	},
+	ToolReconcileFluxChain: {
+		ownScopeDescription: "Allow reconciling a Kustomization and its entire dependency chain.",
+		extraScopes:         []string{},
+	},
 }
 
 // GetToolScopes returns the scopes that grant access to the given tool.
