@@ -1045,18 +1045,66 @@ func TestResouceSetInputProviderReconciler_getAzureDevOpsToken(t *testing.T) {
 		g.Expect(res).To(Equal("pass"))
 	})
 
-	t.Run("with workload identity", func(t *testing.T) {
+	t.Run("with object-level workload identity", func(t *testing.T) {
+		g := NewWithT(t)
+
+		ns, err := testEnv.CreateNamespace(ctx, "test-azure-devops-wi")
+		g.Expect(err).NotTo(HaveOccurred())
+
+		// Create a ServiceAccount without the Azure workload identity annotations.
+		sa := &corev1.ServiceAccount{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-sa",
+				Namespace: ns.Name,
+			},
+		}
+		g.Expect(testEnv.Create(ctx, sa)).To(Succeed())
+
+		res, err := r.getAzureDevOpsToken(ctx, &fluxcdv1.ResourceSetInputProvider{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test",
+				Namespace: ns.Name,
+			},
+			Spec: fluxcdv1.ResourceSetInputProviderSpec{
+				Type:               "AzureDevOpsBranch",
+				URL:                "https://dev.azure.com/org/project/_git/repo",
+				ServiceAccountName: "test-sa",
+			},
+		}, nil)
+
+		// The Git URL must reach the auth package, otherwise the request is
+		// rejected before the Azure provider reads the ServiceAccount.
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).NotTo(ContainSubstring("a Git repository URL is required"))
+		g.Expect(err.Error()).To(ContainSubstring("azure tenant ID is not set in the service account annotation"))
+		g.Expect(res).To(BeEmpty())
+	})
+
+	t.Run("with controller-level workload identity", func(t *testing.T) {
 		g := NewWithT(t)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		res, err := r.getAzureDevOpsToken(ctx, &fluxcdv1.ResourceSetInputProvider{
 			Spec: fluxcdv1.ResourceSetInputProviderSpec{
 				Type: "AzureDevOpsBranch",
-				URL:  "https://dev.azure.com/org/repo",
+				URL:  "https://dev.azure.com/org/project/_git/repo",
 			},
 		}, nil)
 		g.Expect(err).To(HaveOccurred())
-		g.Expect(err.Error()).To(ContainSubstring("a Git repository URL is required for issuing Git credentials"))
+		g.Expect(err.Error()).NotTo(ContainSubstring("a Git repository URL is required"))
+		g.Expect(res).To(BeEmpty())
+	})
+
+	t.Run("with invalid URL", func(t *testing.T) {
+		g := NewWithT(t)
+		res, err := r.getAzureDevOpsToken(ctx, &fluxcdv1.ResourceSetInputProvider{
+			Spec: fluxcdv1.ResourceSetInputProviderSpec{
+				Type: "AzureDevOpsBranch",
+				URL:  "https://dev.azure.com/\x7f",
+			},
+		}, nil)
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("failed to parse .spec.url"))
 		g.Expect(res).To(BeEmpty())
 	})
 }
