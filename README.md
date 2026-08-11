@@ -1,5 +1,7 @@
 # flux-operator
 
+[![MCP Toplist](https://mcptoplist.com/badge/glama%2Fcontrolplaneio-fluxcd%2Fflux-operator.svg)](https://mcptoplist.com/server/glama%2Fcontrolplaneio-fluxcd%2Fflux-operator)
+
 [![release](https://img.shields.io/github/release/controlplaneio-fluxcd/flux-operator/all.svg)](https://github.com/controlplaneio-fluxcd/flux-operator/releases)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/flux-operator)](https://artifacthub.io/packages/helm/flux-operator/flux-operator)
 [![Operator Hub](https://img.shields.io/badge/Operator_Hub-flux--operator-9cf.svg)](https://operatorhub.io/operator/flux-operator)
