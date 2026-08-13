@@ -231,6 +231,22 @@ func TestFilters_Tags(t *testing.T) {
 				"release-1.0.0",
 				"master-main-ts45",
 			},
+			expected: []string{"master-main-ts123", "master-main-ts45"},
+		},
+		{
+			name: "pattern and extract with orderBy asc",
+			filters: &filtering.Filters{
+				Pattern: regexp.MustCompile(`^master-.+-ts(?P<ts>[0-9]+)$`),
+				Extract: "$ts",
+				Limit:   2,
+				OrderBy: filtering.OrderByAsc,
+			},
+			tags: []string{
+				"master-main-ts123",
+				"master-main-ts9",
+				"release-1.0.0",
+				"master-main-ts45",
+			},
 			expected: []string{"master-main-ts9", "master-main-ts45"},
 		},
 		{
@@ -242,6 +258,17 @@ func TestFilters_Tags(t *testing.T) {
 			},
 			tags:     []string{"release-v1.0.0", "release-v2.0.0", "release-v1.2.0"},
 			expected: []string{"release-v1.2.0", "release-v1.0.0"},
+		},
+		{
+			name: "pattern and extract with semver filter in ascending order",
+			filters: &filtering.Filters{
+				Pattern: regexp.MustCompile(`^release-(?P<ver>v[0-9]+\.[0-9]+\.[0-9]+)$`),
+				Extract: "$ver",
+				SemVer:  newConstraint(">= 1.0.0 < 2.0.0"),
+				OrderBy: filtering.OrderByAsc,
+			},
+			tags:     []string{"release-v1.0.0", "release-v2.0.0", "release-v1.2.0"},
+			expected: []string{"release-v1.0.0", "release-v1.2.0"},
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

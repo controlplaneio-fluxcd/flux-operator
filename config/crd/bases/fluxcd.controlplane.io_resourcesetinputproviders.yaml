@@ -143,6 +143,15 @@ spec:
                       extract a sortable value from them using Extract.
                       Supported only for tags.
                     type: string
+                  orderBy:
+                    description: |-
+                      OrderBy specifies the sort order for tags.
+                      Supported values are "desc" and "asc", defaults to "desc".
+                      Supported only for tags.
+                    enum:
+                    - desc
+                    - asc
+                    type: string
                   semver:
                     description: |-
                       Semver specifies a semantic version range to filter and sort the tags.
