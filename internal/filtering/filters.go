@@ -4,9 +4,11 @@
 package filtering
 
 import (
+	"math/big"
 	"regexp"
 	"slices"
 	"sort"
+	"strings"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/fluxcd/pkg/version"
@@ -16,6 +18,13 @@ import (
 
 // DefaultLimit is the default limit for the number of results returned by the filters.
 const DefaultLimit = 100
+
+const (
+	// OrderByDesc sorts tags in descending order.
+	OrderByDesc = "desc"
+	// OrderByAsc sorts tags in ascending order.
+	OrderByAsc = "asc"
+)
 
 // Filters holds the filters for the input provider responses.
 type Filters struct {
@@ -38,6 +47,10 @@ type Filters struct {
 	// Extract is the replacement template applied to Pattern matches to derive
 	// the sortable value for tags.
 	Extract string
+
+	// OrderBy determines whether tags are sorted in ascending or descending order.
+	// Supported values are "asc" and "desc". Defaults to "desc".
+	OrderBy string
 
 	// Limit is used to limit the number of results.
 	Limit int
@@ -83,7 +96,7 @@ func (f *Filters) Tags(tags []string) []string {
 			continue
 		}
 
-		key, ok := f.extractTagSortKey(tag)
+		key, ok := f.TagSortKey(tag)
 		if !ok {
 			continue
 		}
@@ -107,6 +120,12 @@ func (f *Filters) Tags(tags []string) []string {
 			}
 		}
 		sort.SliceStable(parsed, func(i, j int) bool {
+			if parsed[i].version.Equal(parsed[j].version) {
+				return false
+			}
+			if f.orderByAscending() {
+				return parsed[i].version.LessThan(parsed[j].version)
+			}
 			return parsed[i].version.GreaterThan(parsed[j].version)
 		})
 		filtered = filtered[:0]
@@ -115,7 +134,14 @@ func (f *Filters) Tags(tags []string) []string {
 		}
 	default:
 		sort.SliceStable(filtered, func(i, j int) bool {
-			return filtered[i].key > filtered[j].key
+			cmp := CompareTagSortKeys(filtered[i].key, filtered[j].key)
+			if cmp == 0 {
+				return false
+			}
+			if f.orderByAscending() {
+				return cmp < 0
+			}
+			return cmp > 0
 		})
 	}
 
@@ -132,10 +158,10 @@ func (f *Filters) Tags(tags []string) []string {
 	return res
 }
 
-// extractTagSortKey returns the sortable key for a tag.
+// TagSortKey returns the sortable key for a tag.
 // When Pattern is set, only matching tags are included. If Extract is set, the
 // sortable key is derived from the replacement template.
-func (f *Filters) extractTagSortKey(tag string) (string, bool) {
+func (f *Filters) TagSortKey(tag string) (string, bool) {
 	if f.Pattern == nil {
 		return tag, true
 	}
@@ -151,4 +177,19 @@ func (f *Filters) extractTagSortKey(tag string) (string, bool) {
 
 	key := f.Pattern.ExpandString(nil, f.Extract, tag, match)
 	return string(key), true
+}
+
+func (f *Filters) orderByAscending() bool {
+	return strings.EqualFold(f.OrderBy, OrderByAsc)
+}
+
+// CompareTagSortKeys compares two tag sort keys.
+// When both keys are base-10 integers, comparison is numeric; otherwise lexical.
+func CompareTagSortKeys(a, b string) int {
+	av, aok := new(big.Int).SetString(a, 10)
+	bv, bok := new(big.Int).SetString(b, 10)
+	if aok && bok {
+		return av.Cmp(bv)
+	}
+	return strings.Compare(a, b)
 }

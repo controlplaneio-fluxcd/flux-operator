@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"sync/atomic"
 	"testing"
 
@@ -53,6 +54,47 @@ func TestTagSelectorPreservesSemverOrdering(t *testing.T) {
 	g.Expect(results).To(HaveLen(3))
 	g.Expect([]string{results[0].Tag, results[1].Tag, results[2].Tag}).To(Equal(
 		[]string{"v10.0.0", "v3.0.0", "v2.0.0"}))
+}
+
+func TestTagSelectorHonorsAscendingOrder(t *testing.T) {
+	g := NewWithT(t)
+	constraint, err := semver.NewConstraint(">= 0.0.0")
+	g.Expect(err).NotTo(HaveOccurred())
+	selector, err := newTagSelector(filtering.Filters{
+		Limit:   3,
+		SemVer:  constraint,
+		OrderBy: filtering.OrderByAsc,
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	for _, tag := range []string{"v2.0.0", "v1.0.0", "v10.0.0", "v3.0.0"} {
+		selector.Add(tag, Result{Tag: tag})
+	}
+
+	results := selector.Results()
+	g.Expect(results).To(HaveLen(3))
+	g.Expect([]string{results[0].Tag, results[1].Tag, results[2].Tag}).To(Equal(
+		[]string{"v1.0.0", "v2.0.0", "v3.0.0"}))
+}
+
+func TestTagSelectorPatternExtractBeforeLimit(t *testing.T) {
+	g := NewWithT(t)
+	selector, err := newTagSelector(filtering.Filters{
+		Limit:   2,
+		Pattern: regexp.MustCompile(`^master-.+-ts(?P<ts>[0-9]+)$`),
+		Extract: "$ts",
+		OrderBy: filtering.OrderByDesc,
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	for _, tag := range []string{"master-main-ts123", "master-main-ts9", "release-1.0.0", "master-main-ts45"} {
+		selector.Add(tag, Result{Tag: tag})
+	}
+
+	results := selector.Results()
+	g.Expect(results).To(HaveLen(2))
+	g.Expect([]string{results[0].Tag, results[1].Tag}).To(Equal(
+		[]string{"master-main-ts123", "master-main-ts45"}))
 }
 
 func TestPaginationGuard(t *testing.T) {
