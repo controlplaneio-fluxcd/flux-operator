@@ -181,6 +181,19 @@ type ResourceSetInputFilter struct {
 	// +optional
 	ExcludeTag string `json:"excludeTag,omitempty"`
 
+	// Pattern specifies a regular expression used to match tags and optionally
+	// extract a sortable value from them using Extract.
+	// Supported only for tags.
+	// +optional
+	Pattern string `json:"pattern,omitempty"`
+
+	// Extract specifies the replacement template used with Pattern to extract a
+	// sortable value from a tag, e.g. "$ts" for a named capture group.
+	// This field requires Pattern to be set.
+	// Supported only for tags.
+	// +optional
+	Extract string `json:"extract,omitempty"`
+
 	// IncludeEnvironment specifies the regular expression to filter the environments
 	// that the input provider should include.
 	// +optional
