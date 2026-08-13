@@ -32,6 +32,13 @@ type Filters struct {
 	// Supported only for tags at the moment.
 	SemVer *semver.Constraints
 
+	// Pattern is used to match tags before sorting.
+	Pattern *regexp.Regexp
+
+	// Extract is the replacement template applied to Pattern matches to derive
+	// the sortable value for tags.
+	Extract string
+
 	// Limit is used to limit the number of results.
 	Limit int
 }
@@ -64,29 +71,39 @@ func (f *Filters) MatchString(s string) bool {
 // Tags applies all the filters supported for tags to a list of tags.
 // nolint:prealloc
 func (f *Filters) Tags(tags []string) []string {
-
-	var filtered []string
+	type parsedTag struct {
+		name string
+		key  string
+	}
+	filtered := make([]parsedTag, 0, len(tags))
 
 	// Apply include and exclude.
 	for _, tag := range tags {
-		if f.MatchString(tag) {
-			filtered = append(filtered, tag)
+		if !f.MatchString(tag) {
+			continue
 		}
+
+		key, ok := f.extractTagSortKey(tag)
+		if !ok {
+			continue
+		}
+
+		filtered = append(filtered, parsedTag{name: tag, key: key})
 	}
 
 	// Apply semver or sort in reverse alphabetical order. Keep input order
 	// stable for tags with equal semantic-version precedence.
 	switch {
 	case f.SemVer != nil:
-		type parsedTag struct {
+		type semverTag struct {
 			name    string
 			version *semver.Version
 		}
-		parsed := make([]parsedTag, 0, len(filtered))
+		parsed := make([]semverTag, 0, len(filtered))
 		for _, tag := range filtered {
-			parsedVersion, err := version.ParseVersion(tag)
+			parsedVersion, err := version.ParseVersion(tag.key)
 			if err == nil && f.SemVer.Check(parsedVersion) {
-				parsed = append(parsed, parsedTag{name: tag, version: parsedVersion})
+				parsed = append(parsed, semverTag{name: tag.name, version: parsedVersion})
 			}
 		}
 		sort.SliceStable(parsed, func(i, j int) bool {
@@ -94,11 +111,12 @@ func (f *Filters) Tags(tags []string) []string {
 		})
 		filtered = filtered[:0]
 		for _, tag := range parsed {
-			filtered = append(filtered, tag.name)
+			filtered = append(filtered, parsedTag{name: tag.name})
 		}
 	default:
-		slices.Sort(filtered)
-		slices.Reverse(filtered)
+		sort.SliceStable(filtered, func(i, j int) bool {
+			return filtered[i].key > filtered[j].key
+		})
 	}
 
 	// Apply limit.
@@ -107,5 +125,30 @@ func (f *Filters) Tags(tags []string) []string {
 		lim = f.Limit
 	}
 	lim = min(lim, len(filtered))
-	return slices.Clone(filtered[:lim])
+	res := make([]string, 0, lim)
+	for _, tag := range filtered[:lim] {
+		res = append(res, tag.name)
+	}
+	return res
+}
+
+// extractTagSortKey returns the sortable key for a tag.
+// When Pattern is set, only matching tags are included. If Extract is set, the
+// sortable key is derived from the replacement template.
+func (f *Filters) extractTagSortKey(tag string) (string, bool) {
+	if f.Pattern == nil {
+		return tag, true
+	}
+
+	match := f.Pattern.FindStringSubmatchIndex(tag)
+	if match == nil {
+		return "", false
+	}
+
+	if f.Extract == "" {
+		return tag, true
+	}
+
+	key := f.Pattern.ExpandString(nil, f.Extract, tag, match)
+	return string(key), true
 }
