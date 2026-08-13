@@ -547,6 +547,15 @@ func (r *ResourceSetInputProviderReconciler) makeFilters(
 	} else if obj.Spec.Filter.Extract != "" {
 		return nil, fmt.Errorf("extract requires pattern to be set")
 	}
+	if obj.Spec.Filter.OrderBy != "" {
+		switch obj.Spec.Filter.OrderBy {
+		case filtering.OrderByAsc, filtering.OrderByDesc:
+			filters.OrderBy = obj.Spec.Filter.OrderBy
+		default:
+			return nil, fmt.Errorf("invalid orderBy value %q: expected %q or %q",
+				obj.Spec.Filter.OrderBy, filtering.OrderByAsc, filtering.OrderByDesc)
+		}
+	}
 
 	// SemVer.
 	if obj.Spec.Filter.Semver != "" {

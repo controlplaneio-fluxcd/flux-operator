@@ -194,6 +194,13 @@ type ResourceSetInputFilter struct {
 	// +optional
 	Extract string `json:"extract,omitempty"`
 
+	// OrderBy specifies the sort order for tags.
+	// Supported values are "desc" and "asc", defaults to "desc".
+	// Supported only for tags.
+	// +kubebuilder:validation:Enum=desc;asc
+	// +optional
+	OrderBy string `json:"orderBy,omitempty"`
+
 	// IncludeEnvironment specifies the regular expression to filter the environments
 	// that the input provider should include.
 	// +optional

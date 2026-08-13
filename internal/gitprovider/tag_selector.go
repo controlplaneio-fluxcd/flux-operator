@@ -6,7 +6,6 @@ package gitprovider
 import (
 	"container/heap"
 	"sort"
-	"strings"
 
 	"github.com/Masterminds/semver/v3"
 	fluxversion "github.com/fluxcd/pkg/version"
@@ -17,6 +16,7 @@ import (
 // tagCandidate associates a provider result with its sortable tag metadata.
 type tagCandidate struct {
 	name     string
+	key      string
 	result   Result
 	version  *semver.Version
 	sequence uint64
@@ -26,6 +26,7 @@ type tagCandidate struct {
 type tagCandidateHeap struct {
 	items  []*tagCandidate
 	semver bool
+	asc    bool
 }
 
 // Len returns the number of retained tag candidates.
@@ -33,7 +34,7 @@ func (h tagCandidateHeap) Len() int { return len(h.items) }
 
 // Less reports whether the first candidate ranks below the second.
 func (h tagCandidateHeap) Less(i, j int) bool {
-	return compareTagCandidates(h.items[i], h.items[j], h.semver) < 0
+	return compareTagCandidates(h.items[i], h.items[j], h.semver, h.asc) < 0
 }
 
 // Swap exchanges two retained tag candidates.
@@ -72,7 +73,10 @@ func newTagSelector(filters filtering.Filters) (*tagSelector, error) {
 		filters:  filters,
 		limit:    limit,
 		selected: make(map[string][]*tagCandidate, limit),
-		heap:     tagCandidateHeap{semver: filters.SemVer != nil},
+		heap: tagCandidateHeap{
+			semver: filters.SemVer != nil,
+			asc:    filters.OrderBy == filtering.OrderByAsc,
+		},
 	}
 	heap.Init(&selector.heap)
 	return selector, nil
@@ -90,14 +94,20 @@ func (s *tagSelector) Add(name string, result Result) {
 		selected.result = result
 	}
 
+	key, ok := s.filters.TagSortKey(name)
+	if !ok {
+		return
+	}
+
 	candidate := &tagCandidate{
 		name:     name,
+		key:      key,
 		result:   result,
 		sequence: s.nextSequence,
 	}
 	s.nextSequence++
 	if s.filters.SemVer != nil {
-		parsed, err := fluxversion.ParseVersion(name)
+		parsed, err := fluxversion.ParseVersion(key)
 		if err != nil || !s.filters.SemVer.Check(parsed) {
 			return
 		}
@@ -108,7 +118,7 @@ func (s *tagSelector) Add(name string, result Result) {
 		s.push(candidate)
 		return
 	}
-	if compareTagCandidates(candidate, s.heap.items[0], s.heap.semver) <= 0 {
+	if compareTagCandidates(candidate, s.heap.items[0], s.heap.semver, s.heap.asc) <= 0 {
 		return
 	}
 
@@ -139,11 +149,11 @@ func (s *tagSelector) removeSelected(candidate *tagCandidate) {
 	}
 }
 
-// Results returns selected tags in descending semver or lexical order.
+// Results returns selected tags in semver or lexical order.
 func (s *tagSelector) Results() []Result {
 	selected := append([]*tagCandidate(nil), s.heap.items...)
 	sort.Slice(selected, func(i, j int) bool {
-		return compareTagCandidates(selected[i], selected[j], s.heap.semver) > 0
+		return compareTagCandidates(selected[i], selected[j], s.heap.semver, s.heap.asc) > 0
 	})
 	results := make([]Result, len(selected))
 	for i, candidate := range selected {
@@ -154,16 +164,21 @@ func (s *tagSelector) Results() []Result {
 
 // compareTagCandidates returns a negative value when a ranks below b, a
 // positive value when a ranks above b, and zero when they are equivalent.
-func compareTagCandidates(a, b *tagCandidate, useSemver bool) int {
+func compareTagCandidates(a, b *tagCandidate, useSemver, ascending bool) int {
+	sign := 1
+	if ascending {
+		sign = -1
+	}
+
 	if useSemver {
 		switch {
 		case a.version.LessThan(b.version):
-			return -1
+			return -1 * sign
 		case a.version.GreaterThan(b.version):
-			return 1
+			return sign
 		}
-	} else if nameOrder := strings.Compare(a.name, b.name); nameOrder != 0 {
-		return nameOrder
+	} else if keyOrder := filtering.CompareTagSortKeys(a.key, b.key); keyOrder != 0 {
+		return keyOrder * sign
 	}
 
 	switch {
