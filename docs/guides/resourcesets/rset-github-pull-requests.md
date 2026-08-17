@@ -107,7 +107,7 @@ spec:
 ### GitHub Webhook
 
 Optionally, we can create a Flux [Webhook Receiver](https://fluxcd.io/flux/components/notification/receivers/)
-that GitHub will call to notify the Flux Operator when a new PR is opened or updated: 
+that GitHub will call to notify the Flux Operator when a new PR is opened or updated:
 
 ```yaml
 apiVersion: notification.toolkit.fluxcd.io/v1
@@ -186,7 +186,7 @@ spec:
               - host: app-<< inputs.id >>.example.com
 ```
 
-The above `ResouceSet` will generate a Flux `GitRepository` and a `HelmRelease` for each opened PR.
+The above `ResourceSet` will generate a Flux `GitRepository` and a `HelmRelease` for each opened PR.
 The PR number passed as `<< inputs.id >>` is used as the name suffix for the Flux objects,
 and is also used to compose the Ingress host name where the app can be accessed.
 

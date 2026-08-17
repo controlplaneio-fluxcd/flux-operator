@@ -14,7 +14,7 @@ option if you need to create dynamic environments that are not linked to merge r
 
 ## Development workflow
 
-- A developer opens a Merge Requests with changes to the app code and Helm chart.
+- A developer opens a Merge Request with changes to the app code and Helm chart.
 - The CI builds and pushes the app container image to GitLab Container Registry. The image is tagged with the Git commit SHA.
 - Another developer reviews the changes and labels the Merge Request with the `deploy/flux-preview` label.
 - Flux Operator running in the preview cluster scans the GitLab project and finds the new MR using the label filter.
@@ -100,7 +100,7 @@ spec:
 ### GitLab Webhook
 
 Optionally, we can create a Flux [Webhook Receiver](https://fluxcd.io/flux/components/notification/receivers/)
-that GitLab will call to notify the Flux Operator when a new MR is opened or updated: 
+that GitLab will call to notify the Flux Operator when a new MR is opened or updated:
 
 ```yaml
 apiVersion: notification.toolkit.fluxcd.io/v1
@@ -178,7 +178,7 @@ spec:
               - host: app-<< inputs.id >>.example.com
 ```
 
-The above `ResouceSet` will generate a Flux `GitRepository` and a `HelmRelease` for each opened MR.
+The above `ResourceSet` will generate a Flux `GitRepository` and a `HelmRelease` for each opened MR.
 The MR number passed as `<< inputs.id >>` is used as the name suffix for the Flux objects,
 and is also used to compose the Ingress host name where the app can be accessed.
 

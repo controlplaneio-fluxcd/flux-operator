@@ -22,7 +22,7 @@ via the ResourceSetInputProvider
 - A developer creates a feature branch with a naming convention (e.g. `feat/` prefix) in the app repository.
 - The CI builds and pushes the app container image tagged with the Git commit SHA.
 - Flux Operator running in the preview cluster scans the repository and finds branches matching the configured pattern.
-- Flux Operator installs a Helm release for each matching branch to deploy the app changes in the cluster.
+- Flux Operator installs a Helm release for each matching branch to deploy the app changes on the cluster.
 - The app is accessible at a preview URL composed of the branch identifier and the app name.
 - The developers iterate over changes, with each push to the branch triggering a Helm release upgrade in the cluster.
 - The developers are notified of the deployment status via Slack and commit statuses on the Git provider.

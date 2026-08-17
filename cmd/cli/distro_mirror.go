@@ -37,8 +37,9 @@ running Flux in air-gapped or private-registry environments.
 The command performs the following steps:
   1. Pulls the Flux distribution manifests OCI artifact to read the image list.
   2. Resolves the requested version against the available distribution releases.
-  3. Mirrors every controller image and (optionally) the Flux Operator image
-     and Helm chart to the destination registry.
+  3. Mirrors every controller image and (optionally) the Flux Operator and
+     Flux Operator CLI images and the Flux Operator and Flux Instance Helm
+     charts to the destination registry.
 
 Authentication for the destination registry uses the local Docker config file.
 The source registry (ghcr.io) can be authenticated with --pull-token or
@@ -47,7 +48,7 @@ The source registry (ghcr.io) can be authenticated with --pull-token or
   flux-operator distro mirror registry.example.com/flux
 
   # Mirror a specific Flux version
-  flux-operator distro mirror registry.example.com/flux --version 2.8.x
+  flux-operator distro mirror registry.example.com/flux --version 2.9.x
 
   # Verify signatures and mirror the enterprise distroless variant
   echo "${GITHUB_TOKEN}" | flux-operator distro mirror registry.example.com/flux \
@@ -65,33 +66,39 @@ The source registry (ghcr.io) can be authenticated with --pull-token or
   # Mirror to an immutable registry (push by digest with a unique tag suffix)
   flux-operator distro mirror registry.example.com/flux --immutable
 
-  # Mirror without the Flux Operator image and chart (controllers only)
+  # Mirror without the Flux Operator images and charts (controllers only)
   flux-operator distro mirror registry.example.com/flux \
     --include-operator-image=false \
-    --include-operator-chart=false
+    --include-operator-cli-image=false \
+    --include-operator-chart=false \
+    --include-instance-chart=false
 `,
 	Args: cobra.ExactArgs(1),
 	RunE: distroMirrorCmdRun,
 }
 
 type distroMirrorFlags struct {
-	version              string
-	components           []string
-	variant              string
-	includeOperatorImage bool
-	includeOperatorChart bool
-	dryRun               bool
-	immutable            bool
-	pullToken            string
-	pullTokenStdin       bool
-	verify               bool
+	version                 string
+	components              []string
+	variant                 string
+	includeOperatorImage    bool
+	includeOperatorCLIImage bool
+	includeOperatorChart    bool
+	includeInstanceChart    bool
+	dryRun                  bool
+	immutable               bool
+	pullToken               string
+	pullTokenStdin          bool
+	verify                  bool
 }
 
 var distroMirrorArgs = distroMirrorFlags{
-	version:              "2.x",
-	variant:              builder.UpstreamAlpine,
-	includeOperatorImage: true,
-	includeOperatorChart: true,
+	version:                 "2.x",
+	variant:                 builder.UpstreamAlpine,
+	includeOperatorImage:    true,
+	includeOperatorCLIImage: true,
+	includeOperatorChart:    true,
+	includeInstanceChart:    true,
 }
 
 var (
@@ -105,7 +112,9 @@ const (
 	distroMirrorSrcRegistry       = "ghcr.io"
 	distroMirrorManifestsArtifact = "oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests:latest"
 	distroMirrorOperatorRepo      = "ghcr.io/controlplaneio-fluxcd/flux-operator"
+	distroMirrorOperatorCLIRepo   = "ghcr.io/controlplaneio-fluxcd/flux-operator-cli"
 	distroMirrorChartRepo         = "ghcr.io/controlplaneio-fluxcd/charts/flux-operator"
+	distroMirrorInstanceChartRepo = "ghcr.io/controlplaneio-fluxcd/charts/flux-instance"
 	// distroMirrorMinTimeout is the minimum operation timeout. The default
 	// rootArgs.timeout (1m) is too short to pull the manifests artifact and
 	// copy every controller image, so we floor it.
@@ -122,15 +131,19 @@ var distroMirrorVariantRegistry = map[string]string{
 
 func init() {
 	distroMirrorCmd.Flags().StringVar(&distroMirrorArgs.version, "version", distroMirrorArgs.version,
-		"Flux distribution version, e.g. 2.8.5 or 2.8.x")
+		"Flux distribution version, e.g. 2.8.8 or 2.9.x")
 	distroMirrorCmd.Flags().StringSliceVar(&distroMirrorArgs.components, "components", nil,
 		"comma-separated list of components to mirror (defaults to all controllers, plus source-watcher for Flux 2.7+)")
 	distroMirrorCmd.Flags().StringVar(&distroMirrorArgs.variant, "variant", distroMirrorArgs.variant,
 		"distribution variant: upstream-alpine, enterprise-alpine, enterprise-distroless, enterprise-distroless-fips")
 	distroMirrorCmd.Flags().BoolVar(&distroMirrorArgs.includeOperatorImage, "include-operator-image", distroMirrorArgs.includeOperatorImage,
 		"also mirror the Flux Operator container image")
+	distroMirrorCmd.Flags().BoolVar(&distroMirrorArgs.includeOperatorCLIImage, "include-operator-cli-image", distroMirrorArgs.includeOperatorCLIImage,
+		"also mirror the Flux Operator CLI container image")
 	distroMirrorCmd.Flags().BoolVar(&distroMirrorArgs.includeOperatorChart, "include-operator-chart", distroMirrorArgs.includeOperatorChart,
 		"also mirror the Flux Operator Helm chart")
+	distroMirrorCmd.Flags().BoolVar(&distroMirrorArgs.includeInstanceChart, "include-instance-chart", distroMirrorArgs.includeInstanceChart,
+		"also mirror the Flux Instance Helm chart")
 	distroMirrorCmd.Flags().BoolVar(&distroMirrorArgs.dryRun, "dry-run", false,
 		"list source→destination pairs without writing anything")
 	distroMirrorCmd.Flags().BoolVar(&distroMirrorArgs.immutable, "immutable", distroMirrorArgs.immutable,
@@ -213,7 +226,9 @@ func distroMirrorCmdRun(_ *cobra.Command, args []string) error {
 
 	jobs := buildMirrorJobs(images, dstPrefix,
 		distroMirrorArgs.includeOperatorImage,
-		distroMirrorArgs.includeOperatorChart)
+		distroMirrorArgs.includeOperatorCLIImage,
+		distroMirrorArgs.includeOperatorChart,
+		distroMirrorArgs.includeInstanceChart)
 
 	if distroMirrorArgs.verify {
 		rootCmd.Println(`◎`, "Verifying signatures...")
@@ -304,9 +319,11 @@ func (j mirrorJob) dst() string         { return j.dstRepo + ":" + j.tag }
 
 // buildMirrorJobs constructs the ordered list of mirror jobs from the
 // extracted component images, optionally including the Flux Operator
-// container image and Helm chart.
-func buildMirrorJobs(images []builder.ComponentImage, dstPrefix string, includeOperatorImage, includeOperatorChart bool) []mirrorJob {
-	jobs := make([]mirrorJob, 0, len(images)+2)
+// and Flux Operator CLI container images, the Flux Operator Helm chart
+// and the Flux Instance Helm chart. The CLI image and both charts are
+// released in lockstep with the operator and share its version.
+func buildMirrorJobs(images []builder.ComponentImage, dstPrefix string, includeOperatorImage, includeOperatorCLIImage, includeOperatorChart, includeInstanceChart bool) []mirrorJob {
+	jobs := make([]mirrorJob, 0, len(images)+4)
 	for _, img := range images {
 		jobs = append(jobs, mirrorJob{
 			srcRepo: img.Repository,
@@ -316,8 +333,8 @@ func buildMirrorJobs(images []builder.ComponentImage, dstPrefix string, includeO
 		})
 	}
 
-	// Operator image is published with a "v" prefix (e.g. v0.46.0),
-	// Helm chart is published without it (e.g. 0.46.0).
+	// Operator and CLI images are published with a "v" prefix (e.g. v0.46.0),
+	// Helm charts are published without it (e.g. 0.46.0).
 	bareVersion := strings.TrimPrefix(VERSION, "v")
 
 	if includeOperatorImage {
@@ -328,10 +345,26 @@ func buildMirrorJobs(images []builder.ComponentImage, dstPrefix string, includeO
 		})
 	}
 
+	if includeOperatorCLIImage {
+		jobs = append(jobs, mirrorJob{
+			srcRepo: distroMirrorOperatorCLIRepo,
+			dstRepo: dstPrefix + "/flux-operator-cli",
+			tag:     "v" + bareVersion,
+		})
+	}
+
 	if includeOperatorChart {
 		jobs = append(jobs, mirrorJob{
 			srcRepo: distroMirrorChartRepo,
 			dstRepo: dstPrefix + "/charts/flux-operator",
+			tag:     bareVersion,
+		})
+	}
+
+	if includeInstanceChart {
+		jobs = append(jobs, mirrorJob{
+			srcRepo: distroMirrorInstanceChartRepo,
+			dstRepo: dstPrefix + "/charts/flux-instance",
 			tag:     bareVersion,
 		})
 	}

@@ -19,7 +19,7 @@ work together to enable deployment rollouts based on container image updates.
 
 The [ResourceSet](resourceset.md) API allows you to define a set of Flux resources
 for deploying an application, while the [ResourceSetInputProvider](resourcesetinputprovider.md) API
-is used to provide inputs to the `ResourceSet`, such as Helm chart versions and container image tags
+provides inputs for the `ResourceSet`, such as Helm chart versions and container image tags
 that determine which configuration of the application should be deployed.
 
 ## GitOps Workflow
@@ -178,7 +178,7 @@ apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 spec:
   postRenderers:
-    - kustomize:            
+    - kustomize:
         images:
           - name: ghcr.io/stefanprodan/podinfo
             newTag: << inputs.podinfo_image.tag | quote >>

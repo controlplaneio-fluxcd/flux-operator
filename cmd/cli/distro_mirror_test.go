@@ -168,8 +168,8 @@ func TestDistroMirror_BuildJobs(t *testing.T) {
 	VERSION = "0.46.0"
 	defer func() { VERSION = origVersion }()
 
-	jobs := buildMirrorJobs(images, "registry.example.com/flux", true, true)
-	g.Expect(jobs).To(HaveLen(4)) // 2 controllers + operator + chart
+	jobs := buildMirrorJobs(images, "registry.example.com/flux", true, true, true, true)
+	g.Expect(jobs).To(HaveLen(6)) // 2 controllers + operator + cli + operator chart + instance chart
 
 	// Controllers
 	g.Expect(jobs[0].srcRepo).To(Equal("ghcr.io/fluxcd/source-controller"))
@@ -187,30 +187,54 @@ func TestDistroMirror_BuildJobs(t *testing.T) {
 	g.Expect(jobs[2].dst()).To(Equal("registry.example.com/flux/flux-operator:v0.46.0"))
 	g.Expect(jobs[2].digest).To(BeEmpty())
 
-	// Chart (published without the "v" prefix)
-	g.Expect(jobs[3].src()).To(Equal("ghcr.io/controlplaneio-fluxcd/charts/flux-operator:0.46.0"))
-	g.Expect(jobs[3].dst()).To(Equal("registry.example.com/flux/charts/flux-operator:0.46.0"))
-	g.Expect(jobs[3].tag).To(Equal("0.46.0"))
+	// Operator CLI (same "v"-prefixed tag as the operator image)
+	g.Expect(jobs[3].src()).To(Equal("ghcr.io/controlplaneio-fluxcd/flux-operator-cli:v0.46.0"))
+	g.Expect(jobs[3].dst()).To(Equal("registry.example.com/flux/flux-operator-cli:v0.46.0"))
+	g.Expect(jobs[3].tag).To(Equal("v0.46.0"))
 	g.Expect(jobs[3].digest).To(BeEmpty())
 
-	// Without chart
-	jobs = buildMirrorJobs(images, "registry.example.com/flux", true, false)
-	g.Expect(jobs).To(HaveLen(3))
+	// Operator chart (published without the "v" prefix)
+	g.Expect(jobs[4].src()).To(Equal("ghcr.io/controlplaneio-fluxcd/charts/flux-operator:0.46.0"))
+	g.Expect(jobs[4].dst()).To(Equal("registry.example.com/flux/charts/flux-operator:0.46.0"))
+	g.Expect(jobs[4].tag).To(Equal("0.46.0"))
+	g.Expect(jobs[4].digest).To(BeEmpty())
+
+	// Instance chart (same version as the operator chart)
+	g.Expect(jobs[5].src()).To(Equal("ghcr.io/controlplaneio-fluxcd/charts/flux-instance:0.46.0"))
+	g.Expect(jobs[5].dst()).To(Equal("registry.example.com/flux/charts/flux-instance:0.46.0"))
+	g.Expect(jobs[5].tag).To(Equal("0.46.0"))
+	g.Expect(jobs[5].digest).To(BeEmpty())
+
+	// Without charts
+	jobs = buildMirrorJobs(images, "registry.example.com/flux", true, true, false, false)
+	g.Expect(jobs).To(HaveLen(4)) // 2 controllers + operator + cli
 	for _, j := range jobs {
 		g.Expect(j.dst()).ToNot(ContainSubstring("/charts/"))
 	}
 
-	// Without operator image (chart only)
-	jobs = buildMirrorJobs(images, "registry.example.com/flux", false, true)
-	g.Expect(jobs).To(HaveLen(3)) // 2 controllers + chart
+	// Without operator images (charts only)
+	jobs = buildMirrorJobs(images, "registry.example.com/flux", false, false, true, true)
+	g.Expect(jobs).To(HaveLen(4)) // 2 controllers + 2 charts
 	for _, j := range jobs {
 		g.Expect(j.dst()).ToNot(Equal("registry.example.com/flux/flux-operator:v0.46.0"))
+		g.Expect(j.dst()).ToNot(Equal("registry.example.com/flux/flux-operator-cli:v0.46.0"))
 	}
 	g.Expect(jobs[2].dst()).To(Equal("registry.example.com/flux/charts/flux-operator:0.46.0"))
+	g.Expect(jobs[3].dst()).To(Equal("registry.example.com/flux/charts/flux-instance:0.46.0"))
+
+	// CLI image only
+	jobs = buildMirrorJobs(images, "registry.example.com/flux", false, true, false, false)
+	g.Expect(jobs).To(HaveLen(3)) // 2 controllers + cli
+	g.Expect(jobs[2].dst()).To(Equal("registry.example.com/flux/flux-operator-cli:v0.46.0"))
+
+	// Instance chart only
+	jobs = buildMirrorJobs(images, "registry.example.com/flux", false, false, false, true)
+	g.Expect(jobs).To(HaveLen(3)) // 2 controllers + instance chart
+	g.Expect(jobs[2].dst()).To(Equal("registry.example.com/flux/charts/flux-instance:0.46.0"))
 
 	// Controllers only
-	jobs = buildMirrorJobs(images, "registry.example.com/flux", false, false)
-	g.Expect(jobs).To(HaveLen(2)) // 2 controllers, no operator, no chart
+	jobs = buildMirrorJobs(images, "registry.example.com/flux", false, false, false, false)
+	g.Expect(jobs).To(HaveLen(2)) // 2 controllers, no operator images, no charts
 }
 
 func TestDistroMirror_BuildJobsHandlesNestedSourceRegistry(t *testing.T) {
@@ -231,7 +255,7 @@ func TestDistroMirror_BuildJobsHandlesNestedSourceRegistry(t *testing.T) {
 	VERSION = "0.46.0"
 	defer func() { VERSION = origVersion }()
 
-	jobs := buildMirrorJobs(images, "registry.example.com/flux", true, false)
+	jobs := buildMirrorJobs(images, "registry.example.com/flux", true, false, false, false)
 	g.Expect(jobs).To(HaveLen(2)) // 1 controller + operator
 	g.Expect(jobs[0].dst()).To(Equal("registry.example.com/flux/source-controller:v1.6.2"))
 }
@@ -245,10 +269,12 @@ func TestDistroMirror_OperatorTagStripsVPrefix(t *testing.T) {
 	// Both with and without "v" prefix should produce the same tag.
 	for _, v := range []string{"0.46.0", "v0.46.0"} {
 		VERSION = v
-		jobs := buildMirrorJobs(nil, "r.example.com", true, false)
-		g.Expect(jobs).To(HaveLen(1)) // operator only
+		jobs := buildMirrorJobs(nil, "r.example.com", true, true, false, false)
+		g.Expect(jobs).To(HaveLen(2)) // operator + cli
 		g.Expect(jobs[0].src()).To(Equal("ghcr.io/controlplaneio-fluxcd/flux-operator:v0.46.0"))
 		g.Expect(jobs[0].dst()).To(Equal("r.example.com/flux-operator:v0.46.0"))
+		g.Expect(jobs[1].src()).To(Equal("ghcr.io/controlplaneio-fluxcd/flux-operator-cli:v0.46.0"))
+		g.Expect(jobs[1].dst()).To(Equal("r.example.com/flux-operator-cli:v0.46.0"))
 	}
 }
 

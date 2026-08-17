@@ -25,7 +25,7 @@ work together to enable controlled deployments.
 
 The [ResourceSet](resourceset.md) API allows you to define a set of Flux resources
 for deploying an application, while the [ResourceSetInputProvider](resourcesetinputprovider.md) API
-is used to provide inputs to the `ResourceSet`, such as Git commit SHA and branch name or tag name,
+provides inputs for the `ResourceSet`, such as Git commit SHA and branch name or tag name,
 that determine what version of the application should be deployed.
 
 Instead of using a Flux `GitRepository` and `Kustomization` directly, we'll generate these
@@ -47,7 +47,7 @@ at the defined reconciliation schedule.
 ### ResourceSetInputProvider Definition
 
 Assuming the Kubernetes deployment manifests for an application are stored in a Git repository,
-you can define a input provider that scans a branch for changes
+you can define an input provider that scans a branch for changes
 and exports the commit SHA:
 
 ```yaml

@@ -366,13 +366,13 @@ flux-operator build rset -f my-resourceset.yaml
 # List all ResourceSets in the cluster
 flux-operator get rset --all-namespaces
 
-# Reconcile a ResourceSet 
+# Reconcile a ResourceSet
 flux-operator -n apps reconcile rset podinfo
 
-# Suspend a ResourceSet 
+# Suspend a ResourceSet
 flux-operator -n apps suspend rset podinfo
 
-# Resume a ResourceSet 
+# Resume a ResourceSet
 flux-operator -n apps resume rset podinfo
 ```
 
