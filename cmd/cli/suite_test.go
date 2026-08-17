@@ -221,5 +221,6 @@ func resetCmdArgs() {
 		variant:              "upstream-alpine",
 		includeOperatorImage: true,
 		includeOperatorChart: true,
+		includeInstanceChart: true,
 	}
 }

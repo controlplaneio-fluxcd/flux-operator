@@ -405,6 +405,7 @@ The source registry (`ghcr.io`) can be authenticated with `--pull-token` or
       `enterprise-distroless`, `enterprise-distroless-fips`). Default `upstream-alpine`.
     - `--include-operator-image`: Also mirror the Flux Operator container image (default `true`).
     - `--include-operator-chart`: Also mirror the Flux Operator Helm chart (default `true`).
+    - `--include-instance-chart`: Also mirror the Flux Instance Helm chart (default `true`).
     - `--immutable`: Treat destination tags as immutable (default `false`). When set,
       existing tags are never overwritten; new images are pushed under a unique tag
       suffix (`<tag>-<unix-timestamp>`).
