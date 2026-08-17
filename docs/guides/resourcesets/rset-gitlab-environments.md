@@ -3,7 +3,7 @@ title: Ephemeral Environments for GitLab Environments
 description: Flux Operator preview environments integration with GitLab using GitLab Environments
 ---
 
-# Ephemeral Environments for GitLab Environments 
+# Ephemeral Environments for GitLab Environments
 
 This guide demonstrates how to use the Flux Operator ResourceSet API to automate the deployment of
 [GitLab Environments](https://docs.gitlab.com/ci/environments/) to ephemeral environments for
@@ -16,7 +16,7 @@ also be used dynamic use cases other than merge requests.
 
 ## Development workflow
 
-- A developer opens a Merge Requests with changes to the app code and Helm chart.
+- A developer opens a Merge Request with changes to the app code and Helm chart.
 - The CI builds and pushes the app container image to GitLab Container Registry. The image is tagged with the Git commit SHA.
 - The CI or another developer after review creates a new GitLab Environment with a `review/` name prefix for the Merge Request.
 - Flux Operator running in the preview cluster scans the GitLab project and finds the new environment.
@@ -152,7 +152,7 @@ stop-review:
 ### GitLab Webhook
 
 As an alternative to the synchronous reconciliation, we can create a Flux [Webhook Receiver](https://fluxcd.io/flux/components/notification/receivers/)
-that GitLab will call to notify the Flux Operator when a deployment to an environment starts or gets stopped: 
+that GitLab will call to notify the Flux Operator when a deployment to an environment starts or gets stopped:
 
 ```yaml
 apiVersion: notification.toolkit.fluxcd.io/v1
@@ -228,7 +228,7 @@ spec:
               - host: app-<< inputs.slug >>.example.com
 ```
 
-The above `ResouceSet` will generate a Flux `GitRepository` and a `HelmRelease` for each available environment.
+The above `ResourceSet` will generate a Flux `GitRepository` and a `HelmRelease` for each available environment.
 The environment slug passed as `<< inputs.slug >>` is used as the name suffix for the Flux objects,
 and is also used to compose the Ingress host name where the app can be accessed.
 
