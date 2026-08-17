@@ -217,10 +217,11 @@ func resetCmdArgs() {
 		overwrite:  false,
 	}
 	distroMirrorArgs = distroMirrorFlags{
-		version:              "2.x",
-		variant:              "upstream-alpine",
-		includeOperatorImage: true,
-		includeOperatorChart: true,
-		includeInstanceChart: true,
+		version:                 "2.x",
+		variant:                 "upstream-alpine",
+		includeOperatorImage:    true,
+		includeOperatorCLIImage: true,
+		includeOperatorChart:    true,
+		includeInstanceChart:    true,
 	}
 }
