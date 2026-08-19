@@ -232,9 +232,12 @@ The following filters are supported:
 - `excludeBranch`: regular expression to exclude branches by name.
 - `includeTag`: regular expression to include tags by name.
 - `excludeTag`: regular expression to exclude tags by name.
+- `pattern`: regular expression used to match tags and optionally extract a sortable value.
+- `extract`: replacement template (e.g. `$ts`) used with `pattern` to extract the sortable value from a tag.
+- `orderBy`: sort order for tags, either `desc` (default) or `asc`.
 - `includeEnvironment`: regular expression to include environments by name.
 - `excludeEnvironment`: regular expression to exclude environments by name.
-- `semver`: sematic version range to filter and sort tags.
+- `semver`: semantic version range to filter and sort tags.
 
 Example of a filter configuration for change requests:
 
@@ -264,6 +267,25 @@ spec:
   filter:
     limit: 1
     semver: ">=1.0.0"
+```
+
+Example of a filter configuration for matching artifact tags and sorting by extracted timestamp:
+
+```yaml
+spec:
+  filter:
+    limit: 2
+    pattern: "^master-.+-ts(?P<ts>[0-9]+)$"
+    extract: "$ts"
+    orderBy: "desc"
+```
+
+Use `orderBy: "asc"` to return the oldest matching extracted values first.
+The filter pipeline is:
+1. match tags with `pattern`
+2. extract sort keys with `extract`
+3. sort by extracted value using `orderBy`
+4. apply `limit`
 ```
 
 ### Skip

@@ -486,6 +486,9 @@ func TestResourceSetInputProviderReconciler_makeFilters(t *testing.T) {
 			filter  *fluxcdv1.ResourceSetInputFilter
 			include string
 			exclude string
+			pattern string
+			extract string
+			orderBy string
 		}{
 			{
 				name: "branch",
@@ -506,10 +509,16 @@ func TestResourceSetInputProviderReconciler_makeFilters(t *testing.T) {
 					Labels:     []string{"env=production"},
 					IncludeTag: "^v[0-9]+\\.[0-9]+\\.[0-9]+$",
 					ExcludeTag: "^v[0-9]+\\.[0-9]+\\.[0-9]+-beta$",
+					Pattern:    "^release-(?P<ver>v[0-9]+\\.[0-9]+\\.[0-9]+)$",
+					Extract:    "$ver",
+					OrderBy:    "asc",
 					Semver:     ">=1.0.0 <2.0.0",
 				},
 				include: "^v[0-9]+\\.[0-9]+\\.[0-9]+$",
 				exclude: "^v[0-9]+\\.[0-9]+\\.[0-9]+-beta$",
+				pattern: "^release-(?P<ver>v[0-9]+\\.[0-9]+\\.[0-9]+)$",
+				extract: "$ver",
+				orderBy: "asc",
 			},
 		} {
 			t.Run(tt.name, func(t *testing.T) {
@@ -530,10 +539,50 @@ func TestResourceSetInputProviderReconciler_makeFilters(t *testing.T) {
 				g.Expect(filters.Include.String()).To(Equal(tt.include))
 				g.Expect(filters.Exclude).NotTo(BeNil())
 				g.Expect(filters.Exclude.String()).To(Equal(tt.exclude))
+				if tt.pattern != "" {
+					g.Expect(filters.Pattern).NotTo(BeNil())
+					g.Expect(filters.Pattern.String()).To(Equal(tt.pattern))
+					g.Expect(filters.Extract).To(Equal(tt.extract))
+					g.Expect(filters.OrderBy).To(Equal(tt.orderBy))
+				}
 				g.Expect(filters.SemVer).NotTo(BeNil())
 				g.Expect(filters.SemVer.String()).To(Equal(">=1.0.0 <2.0.0"))
 			})
 		}
+	})
+
+	t.Run("invalid extract without pattern", func(t *testing.T) {
+		g := NewWithT(t)
+
+		obj := &fluxcdv1.ResourceSetInputProvider{
+			Spec: fluxcdv1.ResourceSetInputProviderSpec{
+				Type: fluxcdv1.InputProviderOCIArtifactTag,
+				Filter: &fluxcdv1.ResourceSetInputFilter{
+					Extract: "$ts",
+				},
+			},
+		}
+
+		_, err := r.makeFilters(obj)
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("extract requires pattern"))
+	})
+
+	t.Run("invalid orderBy value", func(t *testing.T) {
+		g := NewWithT(t)
+
+		obj := &fluxcdv1.ResourceSetInputProvider{
+			Spec: fluxcdv1.ResourceSetInputProviderSpec{
+				Type: fluxcdv1.InputProviderOCIArtifactTag,
+				Filter: &fluxcdv1.ResourceSetInputFilter{
+					OrderBy: "descending",
+				},
+			},
+		}
+
+		_, err := r.makeFilters(obj)
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("invalid orderBy value"))
 	})
 }
 

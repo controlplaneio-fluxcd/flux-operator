@@ -102,6 +102,13 @@ spec:
                       ExcludeTag specifies the regular expression to filter the tags
                       that the input provider should exclude.
                     type: string
+                  extract:
+                    description: |-
+                      Extract specifies the replacement template used with Pattern to extract a
+                      sortable value from a tag, e.g. "$ts" for a named capture group.
+                      This field requires Pattern to be set.
+                      Supported only for tags.
+                    type: string
                   includeBranch:
                     description: |-
                       IncludeBranch specifies the regular expression to filter the branches
@@ -130,6 +137,21 @@ spec:
                       When not set, the default limit is 100.
                     maximum: 10000
                     type: integer
+                  pattern:
+                    description: |-
+                      Pattern specifies a regular expression used to match tags and optionally
+                      extract a sortable value from them using Extract.
+                      Supported only for tags.
+                    type: string
+                  orderBy:
+                    description: |-
+                      OrderBy specifies the sort order for tags.
+                      Supported values are "desc" and "asc", defaults to "desc".
+                      Supported only for tags.
+                    enum:
+                    - desc
+                    - asc
+                    type: string
                   semver:
                     description: |-
                       Semver specifies a semantic version range to filter and sort the tags.
