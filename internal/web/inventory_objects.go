@@ -10,8 +10,11 @@ import (
 	"net/http"
 
 	"github.com/fluxcd/cli-utils/pkg/kstatus/status"
+	"github.com/fluxcd/pkg/apis/kustomize"
+	"github.com/fluxcd/pkg/runtime/cel"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -37,6 +40,13 @@ type InventoryObjectsRequest struct {
 	// without the object body (e.g. the Graph tab) use this to avoid the manifest
 	// fetch overhead and payload.
 	StatusOnly bool `json:"statusOnly,omitempty"`
+
+	// Owner optionally identifies the Flux Kustomization or HelmRelease whose
+	// inventory the objects belong to. When set, the owner's
+	// spec.healthCheckExprs are evaluated for the objects they match, so the
+	// reported status agrees with the verdict the Flux controller computes for
+	// the owner's Ready condition.
+	Owner *InventoryObjectItem `json:"owner,omitempty"`
 }
 
 // InventoryObjectResult holds the status and sanitized manifest of one object,
@@ -66,7 +76,8 @@ func (h *Handler) InventoryObjectsHandler(w http.ResponseWriter, req *http.Reque
 		return
 	}
 
-	objects := h.GetInventoryObjects(req.Context(), oReq.Objects, oReq.StatusOnly)
+	evaluators := h.getOwnerHealthCheckEvaluators(req.Context(), oReq.Owner)
+	objects := h.GetInventoryObjects(req.Context(), oReq.Objects, oReq.StatusOnly, evaluators)
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(map[string]any{"objects": objects}); err != nil {
@@ -89,8 +100,10 @@ const (
 // inventoryObjectsWorkers, so the number of goroutines stays constant regardless
 // of the request size. A per-object failure is reported in its Error field
 // instead of failing the whole batch. When statusOnly is true, the sanitized
-// manifest is omitted and only the status and message are returned.
-func (h *Handler) GetInventoryObjects(ctx context.Context, items []InventoryObjectItem, statusOnly bool) []InventoryObjectResult {
+// manifest is omitted and only the status and message are returned. The
+// evaluators, built from the owner's spec.healthCheckExprs, take precedence
+// over the builtin status logic for the kinds they match.
+func (h *Handler) GetInventoryObjects(ctx context.Context, items []InventoryObjectItem, statusOnly bool, evaluators healthCheckEvaluators) []InventoryObjectResult {
 	// Cap the batch size so a large request cannot fan out into excessive API
 	// calls; the surplus items are dropped rather than queried.
 	if len(items) > maxInventoryObjects {
@@ -99,14 +112,105 @@ func (h *Handler) GetInventoryObjects(ctx context.Context, items []InventoryObje
 	}
 
 	return processBatch(items, maxInventoryObjects, inventoryObjectsWorkers, func(item InventoryObjectItem) InventoryObjectResult {
-		return h.inventoryObjectResult(ctx, item, statusOnly)
+		return h.inventoryObjectResult(ctx, item, statusOnly, evaluators)
 	})
+}
+
+// healthCheckEvaluators maps a GroupKind to the CEL status evaluator declared
+// for it in a Kustomization or HelmRelease spec.healthCheckExprs. A key with an
+// empty Kind matches every kind in the group, mirroring the Flux semantics.
+type healthCheckEvaluators map[schema.GroupKind]*cel.StatusEvaluator
+
+// lookup returns the evaluator matching the GroupKind, preferring an exact
+// kind match over a group-wide one, or nil when none is declared.
+func (e healthCheckEvaluators) lookup(gk schema.GroupKind) *cel.StatusEvaluator {
+	if ev, ok := e[gk]; ok {
+		return ev
+	}
+	return e[schema.GroupKind{Group: gk.Group}]
+}
+
+// getOwnerHealthCheckEvaluators fetches the owner with the caller's client and
+// compiles its spec.healthCheckExprs. It returns nil when no owner is given,
+// the owner is not a Flux Kustomization or HelmRelease (the only kinds that
+// declare health check expressions), or it cannot be read, so the caller
+// falls back to the builtin status logic.
+func (h *Handler) getOwnerHealthCheckEvaluators(ctx context.Context, owner *InventoryObjectItem) healthCheckEvaluators {
+	if owner == nil || !fluxcdv1.IsFluxAPI(owner.APIVersion) {
+		return nil
+	}
+	if owner.Kind != fluxcdv1.FluxKustomizationKind && owner.Kind != fluxcdv1.FluxHelmReleaseKind {
+		return nil
+	}
+
+	obj, err := h.getInventoryObject(ctx, *owner)
+	if err != nil {
+		if !errors.IsNotFound(err) && !errors.IsForbidden(err) {
+			log.FromContext(ctx).Error(err, "failed to get inventory owner",
+				"apiVersion", owner.APIVersion,
+				"kind", owner.Kind,
+				"name", owner.Name,
+				"namespace", owner.Namespace)
+		}
+		return nil
+	}
+
+	return newHealthCheckEvaluators(ctx, obj)
+}
+
+// newHealthCheckEvaluators compiles the spec.healthCheckExprs of a Kustomization
+// or HelmRelease into evaluators keyed by GroupKind. It returns nil when the
+// owner declares no expressions. An entry that cannot be decoded or compiled is
+// logged and skipped rather than failing the whole batch.
+func newHealthCheckEvaluators(ctx context.Context, owner *unstructured.Unstructured) healthCheckEvaluators {
+	raw, found, err := unstructured.NestedSlice(owner.Object, "spec", "healthCheckExprs")
+	if err != nil || !found || len(raw) == 0 {
+		return nil
+	}
+
+	evaluators := make(healthCheckEvaluators, len(raw))
+	for i, item := range raw {
+		var hc kustomize.CustomHealthCheck
+		m, ok := item.(map[string]any)
+		if !ok {
+			log.FromContext(ctx).Error(fmt.Errorf("expected an object, got %T", item),
+				"failed to decode owner health check expressions",
+				"kind", owner.GetKind(),
+				"name", owner.GetName(),
+				"namespace", owner.GetNamespace(),
+				"index", i)
+			continue
+		}
+		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(m, &hc); err != nil {
+			log.FromContext(ctx).Error(err, "failed to decode owner health check expressions",
+				"kind", owner.GetKind(),
+				"name", owner.GetName(),
+				"namespace", owner.GetNamespace(),
+				"index", i)
+			continue
+		}
+		ev, err := cel.NewStatusEvaluator(&hc.HealthCheckExpressions)
+		if err != nil {
+			log.FromContext(ctx).Error(err, "failed to compile owner health check expressions",
+				"kind", owner.GetKind(),
+				"name", owner.GetName(),
+				"namespace", owner.GetNamespace(),
+				"index", i)
+			continue
+		}
+		evaluators[schema.FromAPIVersionAndKind(hc.APIVersion, hc.Kind).GroupKind()] = ev
+	}
+
+	if len(evaluators) == 0 {
+		return nil
+	}
+	return evaluators
 }
 
 // inventoryObjectResult fetches and assembles the result for a single inventory
 // item, scoped to the caller's RBAC. A fetch failure is reported in the Error
 // field; a panic during status computation or sanitization is recovered.
-func (h *Handler) inventoryObjectResult(ctx context.Context, item InventoryObjectItem, statusOnly bool) (res InventoryObjectResult) {
+func (h *Handler) inventoryObjectResult(ctx context.Context, item InventoryObjectItem, statusOnly bool, evaluators healthCheckEvaluators) (res InventoryObjectResult) {
 	res = InventoryObjectResult{
 		APIVersion: item.APIVersion,
 		Kind:       item.Kind,
@@ -129,7 +233,7 @@ func (h *Handler) inventoryObjectResult(ctx context.Context, item InventoryObjec
 	obj, err := h.getInventoryObject(ctx, item)
 	switch {
 	case err == nil:
-		res.Status, res.StatusMessage = computeObjectStatus(obj)
+		res.Status, res.StatusMessage = computeObjectStatus(ctx, obj, evaluators)
 		if !statusOnly {
 			cleanObjectForExport(obj, true)
 			res.Object = obj.Object
@@ -169,11 +273,21 @@ func (h *Handler) getInventoryObject(ctx context.Context, item InventoryObjectIt
 }
 
 // computeObjectStatus returns an object's status and message, never failing:
+//   - Kinds matched by the owner's spec.healthCheckExprs use the CEL evaluator,
+//     taking precedence over the builtin logic as in the Flux controllers.
 //   - Flux and Flux Operator kinds use the Ready-condition reader.
 //   - Workloads (Deployment/StatefulSet/DaemonSet/CronJob) use the workload status
 //     logic (kstatus + CronJob/apps refinements), matching the Workloads tab.
 //   - Every other kind uses kstatus; an object it cannot assess yields "Unknown".
-func computeObjectStatus(obj *unstructured.Unstructured) (string, string) {
+func computeObjectStatus(ctx context.Context, obj *unstructured.Unstructured, evaluators healthCheckEvaluators) (string, string) {
+	if ev := evaluators.lookup(obj.GroupVersionKind().GroupKind()); ev != nil {
+		res, err := ev.Evaluate(ctx, obj)
+		if err != nil {
+			return reporter.StatusUnknown, fmt.Sprintf("Failed to compute status: %s", err.Error())
+		}
+		return string(res.Status), string(res.Status)
+	}
+
 	switch {
 	case fluxcdv1.IsFluxAPI(obj.GetAPIVersion()):
 		rs := reporter.NewResourceStatus(*obj)
