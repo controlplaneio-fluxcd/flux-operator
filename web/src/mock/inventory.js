@@ -82,7 +82,10 @@ function synthObject(item) {
  * Names containing "missing" simulate a pruned object (NotFound) so the detail
  * view's not-found state is reachable in dev mode.
  *
- * @param {object} body - Request body with an `objects` array
+ * The optional `owner` reference is accepted and ignored: the mock has no
+ * spec.healthCheckExprs to evaluate.
+ *
+ * @param {object} body - Request body with an `objects` array and optional `owner`
  * @returns {{objects: Array<object>}}
  */
 export function getMockInventoryObjects(body) {

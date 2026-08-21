@@ -273,3 +273,34 @@ export function cleanStatus(status) {
   const { exportedInputs, helmValues, helmValuesError, inputProviderRefs, inventory, inventoryError, reconcilerRef, sourceRef, userActions, ...clean } = status
   return clean
 }
+
+/**
+ * Derive the display status of a Flux controller component reported by the
+ * cluster status page. The backend reports `ready` (kstatus Current) and a
+ * `status` string prefixed with the kstatus status word, so a Deployment that
+ * is still rolling out (e.g. at bootstrap or during an upgrade) reads as
+ * `InProgress ...` and is Progressing rather than Failed.
+ * @param {{ready?: boolean, status?: string}} component - Component status
+ * @returns {'Ready'|'Progressing'|'Failed'} Display status
+ */
+export function getComponentStatus(component) {
+  if (component?.ready) return 'Ready'
+  if (component?.status?.startsWith('InProgress')) return 'Progressing'
+  return 'Failed'
+}
+
+/**
+ * Derive the display status of the cluster sync reported by the cluster status
+ * page. A sync whose Kustomization has not reported a Ready condition yet is
+ * still initializing (e.g. at bootstrap), so it is Progressing rather than
+ * Failed. The check is exact: when the source is failing its error is appended
+ * to the status and the sync is Failed.
+ * @param {{ready?: boolean, status?: string}} sync - Cluster sync status
+ * @returns {'Suspended'|'Synced'|'Progressing'|'Failed'} Display status
+ */
+export function getSyncStatus(sync) {
+  if (sync?.status?.startsWith('Suspended')) return 'Suspended'
+  if (sync?.ready) return 'Synced'
+  if (sync?.status === 'not initialized') return 'Progressing'
+  return 'Failed'
+}

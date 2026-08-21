@@ -15,7 +15,9 @@ import {
   getStatusBorderClass,
   getStatusDotClass,
   normalizeToFluxStatus,
-  cleanStatus
+  cleanStatus,
+  getComponentStatus,
+  getSyncStatus
 } from './status'
 
 describe('status utilities', () => {
@@ -413,6 +415,47 @@ describe('status utilities', () => {
       }
       const result = cleanStatus(status)
       expect(result).toEqual(status)
+    })
+  })
+
+  describe('getComponentStatus', () => {
+    it('returns Ready for a ready component', () => {
+      expect(getComponentStatus({ ready: true, status: 'Current Deployment is available. Replicas: 1' })).toBe('Ready')
+    })
+
+    it('returns Progressing while the deployment is rolling out', () => {
+      expect(getComponentStatus({ ready: false, status: 'InProgress Deployment not Available' })).toBe('Progressing')
+      expect(getComponentStatus({ ready: false, status: 'InProgress Replicas: 1/2' })).toBe('Progressing')
+    })
+
+    it('returns Failed for any other not-ready state', () => {
+      expect(getComponentStatus({ ready: false, status: 'Failed Deployment has failed' })).toBe('Failed')
+      expect(getComponentStatus({ ready: false, status: 'Unknown' })).toBe('Failed')
+      expect(getComponentStatus({ ready: false, status: 'Failed to compute status: boom' })).toBe('Failed')
+      expect(getComponentStatus({ ready: false })).toBe('Failed')
+      expect(getComponentStatus(undefined)).toBe('Failed')
+    })
+  })
+
+  describe('getSyncStatus', () => {
+    it('returns Suspended when the sync is suspended', () => {
+      expect(getSyncStatus({ ready: true, status: 'Suspended Applied revision: main@sha1:abc' })).toBe('Suspended')
+      expect(getSyncStatus({ ready: false, status: 'Suspended not initialized' })).toBe('Suspended')
+    })
+
+    it('returns Synced for a ready sync', () => {
+      expect(getSyncStatus({ ready: true, status: 'Applied revision: main@sha1:abc' })).toBe('Synced')
+    })
+
+    it('returns Progressing before the Kustomization reports a Ready condition', () => {
+      expect(getSyncStatus({ ready: false, status: 'not initialized' })).toBe('Progressing')
+    })
+
+    it('returns Failed when the sync or its source is failing', () => {
+      expect(getSyncStatus({ ready: false, status: 'kustomization path not found' })).toBe('Failed')
+      expect(getSyncStatus({ ready: false, status: 'not initialized\nfailed to checkout' })).toBe('Failed')
+      expect(getSyncStatus({ ready: false })).toBe('Failed')
+      expect(getSyncStatus(undefined)).toBe('Failed')
     })
   })
 })

@@ -40,11 +40,12 @@ vi.mock('./UsageTabContent', () => ({
 // (tab visibility, switching, and the props handed to the list) rather than the
 // list's DOM, which is owned and tested by InventoryTabContent.test.jsx.
 vi.mock('./InventoryTabContent', () => ({
-  InventoryTabContent: ({ inventory, category, onCategoryChange }) => (
+  InventoryTabContent: ({ inventory, owner, category, onCategoryChange }) => (
     <div
       data-testid="inventory-tab-content"
       data-count={inventory?.length ?? 0}
       data-category={category}
+      data-owner={owner ? `${owner.apiVersion}/${owner.kind}/${owner.namespace}/${owner.name}` : ''}
     >
       <button data-testid="set-category-workloads" onClick={() => onCategoryChange('workloads')}>
         set workloads
@@ -427,6 +428,9 @@ describe('ManagedObjectsPanel component', () => {
     const list = screen.getByTestId('inventory-tab-content')
     expect(list).toBeInTheDocument()
     expect(list).toHaveAttribute('data-count', '5')
+    // The owner reference is handed down so the list's status batch can apply
+    // the resource's spec.healthCheckExprs.
+    expect(list).toHaveAttribute('data-owner', 'kustomize.toolkit.fluxcd.io/v1/Kustomization/flux-system/apps')
   })
 
   it('persists the inventory filter across tab switches', async () => {
@@ -583,6 +587,14 @@ describe('ManagedObjectsPanel component', () => {
       method: 'POST',
       body: expect.objectContaining({
         statusOnly: true,
+        // The owner reference lets the backend apply the resource's
+        // spec.healthCheckExprs to the matching objects.
+        owner: {
+          apiVersion: 'kustomize.toolkit.fluxcd.io/v1',
+          kind: 'Kustomization',
+          namespace: 'flux-system',
+          name: 'apps'
+        },
         objects: expect.arrayContaining([
           { apiVersion: 'apps/v1', kind: 'Deployment', name: 'app', namespace: 'production' }
         ])

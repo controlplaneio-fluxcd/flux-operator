@@ -69,6 +69,16 @@ describe('InventoryTabContent', () => {
     expect(call.endpoint).toBe('/api/v1/inventory/objects')
     expect(call.method).toBe('POST')
     expect(call.body.objects).toHaveLength(4)
+    expect(call.body.owner).toBeUndefined()
+  })
+
+  it('sends the owner reference with the batch status request', () => {
+    const owner = { apiVersion: 'helm.toolkit.fluxcd.io/v2', kind: 'HelmRelease', namespace: 'apps', name: 'podinfo' }
+    render(<InventoryTabContent inventory={inventory} owner={owner} />)
+    expect(fetchWithMock).toHaveBeenCalledTimes(1)
+    const call = fetchWithMock.mock.calls[0][0]
+    expect(call.body.statusOnly).toBe(true)
+    expect(call.body.owner).toEqual(owner)
   })
 
   it('filters by the Flux category', () => {

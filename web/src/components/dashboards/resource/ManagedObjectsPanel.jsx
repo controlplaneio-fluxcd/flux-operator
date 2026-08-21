@@ -141,6 +141,22 @@ export function ManagedObjectsPanel({ resourceData, onNavigate }) {
   // until the new fetch resolves. Keyed on identity (stable across polls and tab
   // switches) so it never reintroduces the badge flicker those cases avoid.
   const resourceId = `${resourceData.kind}/${resourceData.metadata?.namespace || ''}/${resourceData.metadata?.name}`
+
+  // Owner reference sent with the inventory status batches so the backend can
+  // apply the resource's spec.healthCheckExprs (Kustomization and HelmRelease)
+  // to the objects they match, keeping the rows in agreement with the Ready
+  // condition the Flux controller derives from the same expressions. Memoized
+  // on identity so it does not retrigger the fetch effects on every poll.
+  const ownerApiVersion = resourceData.apiVersion
+  const ownerKind = resourceData.kind
+  const ownerNamespace = resourceData.metadata?.namespace || ''
+  const ownerName = resourceData.metadata?.name
+  const owner = useMemo(() => ({
+    apiVersion: ownerApiVersion,
+    kind: ownerKind,
+    namespace: ownerNamespace,
+    name: ownerName
+  }), [ownerApiVersion, ownerKind, ownerNamespace, ownerName])
   useEffect(() => {
     setItemStatuses({})
     setUsageWorkloads(null)
@@ -169,7 +185,7 @@ export function ManagedObjectsPanel({ resourceData, onNavigate }) {
           mockPath: '../mock/inventory',
           mockExport: 'getMockInventoryObjects',
           method: 'POST',
-          body: { objects, statusOnly: true }
+          body: { objects, statusOnly: true, owner }
         })
 
         const newStatuses = {}
@@ -191,7 +207,7 @@ export function ManagedObjectsPanel({ resourceData, onNavigate }) {
 
     fetchItemStatuses()
     return () => { cancelled = true }
-  }, [tracksStatus, statusItems, resourceData])
+  }, [tracksStatus, statusItems, resourceData, owner])
 
   // Fetch the workload usage series only while the Resource Usage tab is
   // active, mirroring the Graph tab's gate: an unopened tab costs nothing.
@@ -359,6 +375,7 @@ export function ManagedObjectsPanel({ resourceData, onNavigate }) {
       {activeTab === 'inventory' && (
         <InventoryTabContent
           inventory={resourceData.status?.inventory}
+          owner={owner}
           category={inventoryCategory}
           onCategoryChange={setInventoryCategory}
           query={inventoryQuery}

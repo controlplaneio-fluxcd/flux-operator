@@ -62,8 +62,10 @@ describe('LoginPage', () => {
     it('should render Flux logo', () => {
       render(<LoginPage />)
 
-      // FluxIcon renders an SVG with specific path
-      const logo = document.querySelector('svg[viewBox="0 0 64 64"]')
+      // FluxIcon renders an SVG with a 64x64 viewBox. Matched via getAttribute
+      // rather than an attribute-value selector, which jsdom's selector engine
+      // does not evaluate for mixed-case SVG attributes.
+      const logo = [...document.querySelectorAll('svg')].find(svg => svg.getAttribute('viewBox') === '0 0 64 64')
       expect(logo).toBeInTheDocument()
     })
 
@@ -383,7 +385,7 @@ describe('LoginPage', () => {
 
       await waitFor(() => {
         // Login icon has viewBox 0 0 20 20 and fill currentColor
-        const loginIcon = document.querySelector('button svg[viewBox="0 0 20 20"]')
+        const loginIcon = [...document.querySelectorAll('button svg')].find(svg => svg.getAttribute('viewBox') === '0 0 20 20')
         expect(loginIcon).toBeInTheDocument()
       })
     })

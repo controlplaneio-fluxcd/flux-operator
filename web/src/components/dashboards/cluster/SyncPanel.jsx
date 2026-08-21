@@ -3,6 +3,7 @@
 
 import { useSignal } from '@preact/signals'
 import { getDashboardUrl } from '../../../utils/routing'
+import { getSyncStatus, getStatusBadgeClass } from '../../../utils/status'
 
 /**
  * SyncPanel component - Displays cluster sync information
@@ -17,7 +18,8 @@ export function SyncPanel({ sync, namespace, namespaces }) {
   // Extract name from sync.id (e.g., "kustomization/flux-system" -> "flux-system")
   const syncName = sync.id ? sync.id.split('/').pop() : ''
   const isExpanded = useSignal(true)
-  const isSuspended = sync.status && sync.status.startsWith('Suspended')
+  const syncStatus = getSyncStatus(sync)
+  const isSuspended = syncStatus === 'Suspended'
 
   const getStatusInfo = () => {
     if (isSuspended) {
@@ -30,7 +32,7 @@ export function SyncPanel({ sync, namespace, namespaces }) {
         badge: 'status-badge status-warning',
         label: 'Suspended'
       }
-    } else if (sync.ready) {
+    } else if (syncStatus === 'Synced') {
       return {
         icon: (
           <svg class="w-5 h-5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -39,6 +41,17 @@ export function SyncPanel({ sync, namespace, namespaces }) {
         ),
         badge: 'status-badge status-ready',
         label: 'Synced'
+      }
+    } else if (syncStatus === 'Progressing') {
+      // The Kustomization has not reported a Ready condition yet (bootstrap).
+      return {
+        icon: (
+          <svg class="w-5 h-5 text-blue-600 dark:text-blue-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+        ),
+        badge: `status-badge ${getStatusBadgeClass('Progressing')}`,
+        label: 'Progressing'
       }
     } else {
       return {
@@ -64,10 +77,15 @@ export function SyncPanel({ sync, namespace, namespaces }) {
         <div class="flex items-center justify-between">
           <div>
             <h3 class="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">Cluster Sync</h3>
-            <div class="flex items-center space-x-4 mt-1">
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1">
               <span class="text-sm text-gray-600 dark:text-gray-400 break-words">{syncName}</span>
-              {!sync.ready && !isSuspended && (
-                <span class="status-badge status-not-ready text-xs sm:text-sm">
+              {syncStatus === 'Progressing' && (
+                <span class={`status-badge whitespace-nowrap text-xs sm:text-sm ${getStatusBadgeClass('Progressing')}`}>
+                  progressing
+                </span>
+              )}
+              {syncStatus === 'Failed' && (
+                <span class="status-badge whitespace-nowrap status-not-ready text-xs sm:text-sm">
                   failing
                 </span>
               )}

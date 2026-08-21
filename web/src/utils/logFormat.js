@@ -333,7 +333,7 @@ export function parseZap(text) {
   }
   let logger = ''
   let caller = ''
-  let msg = ''
+  let msg
   if (callerIdx !== -1) {
     caller = parts[callerIdx]
     logger = parts.slice(lo, callerIdx).join('\t')

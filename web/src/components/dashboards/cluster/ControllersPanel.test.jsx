@@ -60,6 +60,35 @@ describe('ControllersPanel', () => {
     expect(screen.getByText('Failing')).toBeInTheDocument()
   })
 
+  it('should render progressing badge while a component is rolling out', () => {
+    const components = [
+      { name: 'source-controller', ready: true, status: 'Current Deployment is available. Replicas: 1' },
+      { name: 'kustomize-controller', ready: false, status: 'InProgress Deployment not Available' }
+    ]
+
+    render(<ControllersPanel components={components} />)
+
+    expect(screen.getByText('Ready')).toBeInTheDocument()
+    expect(screen.getByText('Progressing')).toBeInTheDocument()
+    expect(screen.queryByText('Failing')).not.toBeInTheDocument()
+    // The header counts the rollout as progressing, not failing.
+    expect(screen.getByText('1 progressing')).toBeInTheDocument()
+    expect(screen.queryByText(/failing/)).not.toBeInTheDocument()
+  })
+
+  it('should count progressing and failing components separately', () => {
+    const components = [
+      { name: 'source-controller', ready: false, status: 'InProgress Deployment not Available' },
+      { name: 'kustomize-controller', ready: false, status: 'InProgress Deployment not Available' },
+      { name: 'helm-controller', ready: false, status: 'Failed Deployment has failed' }
+    ]
+
+    render(<ControllersPanel components={components} />)
+
+    expect(screen.getByText('2 progressing')).toBeInTheDocument()
+    expect(screen.getByText('1 failing')).toBeInTheDocument()
+  })
+
   it('should render resource metrics when available', async () => {
     render(<ControllersPanel components={mockComponents} metrics={mockMetrics} />)
 

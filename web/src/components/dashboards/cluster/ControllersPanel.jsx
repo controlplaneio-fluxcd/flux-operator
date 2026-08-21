@@ -4,6 +4,26 @@
 import { useSignal } from '@preact/signals'
 import { formatCores, formatBytes, percentOf, percentText } from '../../../utils/metrics'
 import { ResourceMetric, sumResourceUsage } from '../common/ResourceMetric'
+import { getComponentStatus, getStatusBadgeClass } from '../../../utils/status'
+
+/**
+ * ComponentStatusBadge - Status badge of a Flux controller component: Ready,
+ * Progressing (Deployment rolling out, e.g. at bootstrap or during an upgrade)
+ * or Failing.
+ *
+ * @param {Object} props
+ * @param {Object} props.component - Component object with ready status and status message
+ */
+function ComponentStatusBadge({ component }) {
+  const status = getComponentStatus(component)
+  if (status === 'Ready') {
+    return <span class="status-badge whitespace-nowrap status-ready text-xs sm:text-sm">Ready</span>
+  }
+  if (status === 'Progressing') {
+    return <span class={`status-badge whitespace-nowrap text-xs sm:text-sm ${getStatusBadgeClass('Progressing')}`}>Progressing</span>
+  }
+  return <span class="status-badge whitespace-nowrap status-not-ready text-xs sm:text-sm">Failing</span>
+}
 
 /**
  * ComponentRow - Table row displaying a Flux controller component
@@ -31,7 +51,7 @@ function ComponentRow({component, metrics, isRowExpanded, toggleComponent}) {
   return (
     <>
       <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-b border-gray-200 dark:border-gray-700">
-        <td class="px-6 py-4">
+        <td class="px-3 sm:px-6 py-4">
           <button
             onClick={() => toggleComponent(component.name)}
             class="flex items-center space-x-2 text-left w-full group"
@@ -48,20 +68,16 @@ function ComponentRow({component, metrics, isRowExpanded, toggleComponent}) {
               class="font-medium text-sm sm:text-base text-gray-900 dark:text-gray-100 group-hover:text-flux-blue dark:group-hover:text-blue-400">{component.name}</span>
           </button>
         </td>
-        <td class="px-6 py-4">
+        <td class="px-3 sm:px-6 py-4">
           <span class="text-xs sm:text-sm text-gray-700 dark:text-gray-300">{imageInfo.version}</span>
         </td>
-        <td class="px-6 py-4">
-          {component.ready ? (
-            <span class="status-badge status-ready text-xs sm:text-sm">Ready</span>
-          ) : (
-            <span class="status-badge status-not-ready text-xs sm:text-sm">Failing</span>
-          )}
+        <td class="px-3 sm:px-6 py-4">
+          <ComponentStatusBadge component={component} />
         </td>
       </tr>
       {isRowExpanded && (
         <tr class="bg-gray-50 dark:bg-gray-700/50">
-          <td colspan="3" class="px-6 py-4">
+          <td colspan="3" class="px-3 sm:px-6 py-4">
             <div class="flex flex-col md:flex-row md:gap-8">
               {/* Left: Image, Digest, Status */}
               <div class="flex-1 space-y-3">
@@ -121,7 +137,7 @@ function ComponentRow({component, metrics, isRowExpanded, toggleComponent}) {
  * @param {Array} props.metrics - Array of controller metrics objects (optional)
  *
  * Features:
- * - Displays component name and readiness status badge
+ * - Displays component name and status badge (Ready, Progressing while rolling out, Failing)
  * - Shows resource usage (CPU/Memory) if metrics are available
  * - Shows status message if not ready
  * - Sorts components alphabetically by name
@@ -144,7 +160,8 @@ export function ControllersPanel({ components, metrics }) {
     expandedComponentRows.value = newSet
   }
 
-  const totalFailing = components.filter(c => !c.ready).length
+  const totalFailing = components.filter(c => getComponentStatus(c) === 'Failed').length
+  const totalProgressing = components.filter(c => getComponentStatus(c) === 'Progressing').length
 
   return (
     <div class="card p-0">
@@ -155,10 +172,17 @@ export function ControllersPanel({ components, metrics }) {
         <div class="flex items-center justify-between">
           <div>
             <h3 class="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">Flux Components</h3>
-            <div class="flex items-center space-x-4 mt-1">
+            {/* Wraps on narrow screens so the count badges drop to their own line
+                instead of squeezing the text and breaking inside the pills. */}
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1">
               <p class="text-sm text-gray-600 dark:text-gray-400">{components.length} controllers deployed</p>
+              {totalProgressing > 0 && (
+                <span class={`status-badge whitespace-nowrap text-xs sm:text-sm ${getStatusBadgeClass('Progressing')}`}>
+                  {totalProgressing} progressing
+                </span>
+              )}
               {totalFailing > 0 && (
-                <span class="status-badge status-not-ready text-xs sm:text-sm">
+                <span class="status-badge whitespace-nowrap status-not-ready text-xs sm:text-sm">
                   {totalFailing} failing
                 </span>
               )}
@@ -179,13 +203,13 @@ export function ControllersPanel({ components, metrics }) {
           <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead class="bg-gray-50 dark:bg-gray-700/50">
               <tr>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                 Component
                 </th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                 Version
                 </th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                 Status
                 </th>
               </tr>

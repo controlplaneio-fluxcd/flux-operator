@@ -16,6 +16,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
@@ -50,7 +51,7 @@ func TestGetInventoryObjects_StatusAndManifest(t *testing.T) {
 	results := handler.GetInventoryObjects(ctx, []InventoryObjectItem{
 		{APIVersion: "v1", Kind: "ConfigMap", Namespace: "default", Name: "inv-config"},
 		{APIVersion: "apps/v1", Kind: "Deployment", Namespace: "default", Name: "inv-deploy"},
-	}, false)
+	}, false, nil)
 
 	g.Expect(results).To(HaveLen(2))
 
@@ -87,7 +88,7 @@ func TestGetInventoryObjects_StatusOnly(t *testing.T) {
 
 	results := handler.GetInventoryObjects(ctx, []InventoryObjectItem{
 		{APIVersion: "v1", Kind: "ConfigMap", Namespace: "default", Name: "inv-status-only"},
-	}, true)
+	}, true, nil)
 
 	g.Expect(results).To(HaveLen(1))
 	g.Expect(results[0].Error).To(BeEmpty())
@@ -107,7 +108,7 @@ func TestGetInventoryObjects_ClusterScoped(t *testing.T) {
 
 	results := handler.GetInventoryObjects(ctx, []InventoryObjectItem{
 		{APIVersion: "v1", Kind: "Namespace", Name: "inv-cluster-scoped"},
-	}, false)
+	}, false, nil)
 
 	g.Expect(results).To(HaveLen(1))
 	g.Expect(results[0].Error).To(BeEmpty())
@@ -128,7 +129,7 @@ func TestGetInventoryObjects_NotFoundPerItem(t *testing.T) {
 	results := handler.GetInventoryObjects(ctx, []InventoryObjectItem{
 		{APIVersion: "v1", Kind: "ConfigMap", Namespace: "default", Name: "inv-present"},
 		{APIVersion: "v1", Kind: "ConfigMap", Namespace: "default", Name: "inv-missing"},
-	}, false)
+	}, false, nil)
 
 	g.Expect(results).To(HaveLen(2))
 
@@ -160,7 +161,7 @@ func TestGetInventoryObjects_ForbiddenPerItem(t *testing.T) {
 
 	results := handler.GetInventoryObjects(userCtx, []InventoryObjectItem{
 		{APIVersion: "v1", Kind: "ConfigMap", Namespace: "default", Name: "inv-forbidden"},
-	}, false)
+	}, false, nil)
 
 	g.Expect(results).To(HaveLen(1))
 	g.Expect(results[0].Error).To(Equal("Forbidden"))
@@ -181,7 +182,7 @@ func TestComputeObjectStatus(t *testing.T) {
 			},
 		},
 	}}
-	st, msg := computeObjectStatus(fluxObj)
+	st, msg := computeObjectStatus(ctx, fluxObj, nil)
 	g.Expect(st).To(Equal(reporter.StatusReady))
 	g.Expect(msg).To(Equal("Applied revision"))
 
@@ -191,7 +192,7 @@ func TestComputeObjectStatus(t *testing.T) {
 		"kind":       "ConfigMap",
 		"metadata":   map[string]any{"name": "cfg", "namespace": "default"},
 	}}
-	st, _ = computeObjectStatus(cm)
+	st, _ = computeObjectStatus(ctx, cm, nil)
 	g.Expect(st).To(Equal(string(status.CurrentStatus)))
 
 	// CronJob → workload logic reports Idle with the schedule (not raw kstatus).
@@ -201,7 +202,7 @@ func TestComputeObjectStatus(t *testing.T) {
 		"metadata":   map[string]any{"name": "backup", "namespace": "default"},
 		"spec":       map[string]any{"schedule": "0 0 * * *"},
 	}}
-	st, msg = computeObjectStatus(cronJob)
+	st, msg = computeObjectStatus(ctx, cronJob, nil)
 	g.Expect(st).To(Equal("Idle"))
 	g.Expect(msg).To(Equal("0 0 * * *"))
 
@@ -212,7 +213,7 @@ func TestComputeObjectStatus(t *testing.T) {
 		"metadata":   map[string]any{"name": "backup", "namespace": "default"},
 		"spec":       map[string]any{"schedule": "0 0 * * *", "suspend": true},
 	}}
-	st, _ = computeObjectStatus(suspendedCronJob)
+	st, _ = computeObjectStatus(ctx, suspendedCronJob, nil)
 	g.Expect(st).To(Equal("Suspended"))
 }
 
@@ -258,5 +259,228 @@ func TestInventoryObjectsHandler(t *testing.T) {
 		g.Expect(resp.Objects).To(HaveLen(1))
 		g.Expect(resp.Objects[0].Name).To(Equal("inv-handler"))
 		g.Expect(resp.Objects[0].Object).NotTo(BeNil())
+	})
+}
+
+// newTestOwner returns an unstructured Flux object of the given kind declaring
+// the provided spec.healthCheckExprs entries.
+func newTestOwner(apiVersion, kind string, exprs ...map[string]any) *unstructured.Unstructured {
+	raw := make([]any, 0, len(exprs))
+	for _, e := range exprs {
+		raw = append(raw, e)
+	}
+	return &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": apiVersion,
+		"kind":       kind,
+		"metadata":   map[string]any{"name": "apps", "namespace": "flux-system"},
+		"spec":       map[string]any{"healthCheckExprs": raw},
+	}}
+}
+
+// newTestCustomResource returns an unstructured custom resource of the given
+// kind with the provided status fields.
+func newTestCustomResource(kind string, generation int64, objStatus map[string]any) *unstructured.Unstructured {
+	return &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "example.io/v1",
+		"kind":       kind,
+		"metadata":   map[string]any{"name": "demo", "namespace": "default", "generation": generation},
+		"status":     objStatus,
+	}}
+}
+
+func TestNewHealthCheckEvaluators(t *testing.T) {
+	phaseExprs := map[string]any{
+		"apiVersion": "example.io/v1",
+		"kind":       "Widget",
+		"inProgress": "status.phase == 'Pending'",
+		"failed":     "status.phase == 'Error'",
+		"current":    "status.phase == 'Ready'",
+	}
+
+	t.Run("returns nil without expressions", func(t *testing.T) {
+		g := NewWithT(t)
+		g.Expect(newHealthCheckEvaluators(ctx, newTestOwner("kustomize.toolkit.fluxcd.io/v1", "Kustomization"))).To(BeNil())
+
+		noSpec := &unstructured.Unstructured{Object: map[string]any{
+			"apiVersion": "helm.toolkit.fluxcd.io/v2",
+			"kind":       "HelmRelease",
+			"metadata":   map[string]any{"name": "apps", "namespace": "flux-system"},
+		}}
+		g.Expect(newHealthCheckEvaluators(ctx, noSpec)).To(BeNil())
+	})
+
+	t.Run("compiles Kustomization and HelmRelease expressions", func(t *testing.T) {
+		g := NewWithT(t)
+		gk := schema.GroupKind{Group: "example.io", Kind: "Widget"}
+
+		ks := newHealthCheckEvaluators(ctx, newTestOwner("kustomize.toolkit.fluxcd.io/v1", "Kustomization", phaseExprs))
+		g.Expect(ks).To(HaveLen(1))
+		g.Expect(ks.lookup(gk)).NotTo(BeNil())
+
+		hr := newHealthCheckEvaluators(ctx, newTestOwner("helm.toolkit.fluxcd.io/v2", "HelmRelease", phaseExprs))
+		g.Expect(hr).To(HaveLen(1))
+		g.Expect(hr.lookup(gk)).NotTo(BeNil())
+	})
+
+	t.Run("matches a whole group when kind is omitted", func(t *testing.T) {
+		g := NewWithT(t)
+		groupExprs := map[string]any{
+			"apiVersion": "example.io/v1",
+			"current":    "status.phase == 'Ready'",
+		}
+		evs := newHealthCheckEvaluators(ctx, newTestOwner("kustomize.toolkit.fluxcd.io/v1", "Kustomization", groupExprs))
+		g.Expect(evs).To(HaveLen(1))
+		g.Expect(evs.lookup(schema.GroupKind{Group: "example.io", Kind: "Widget"})).NotTo(BeNil())
+		g.Expect(evs.lookup(schema.GroupKind{Group: "example.io", Kind: "Gadget"})).NotTo(BeNil())
+		g.Expect(evs.lookup(schema.GroupKind{Group: "other.io", Kind: "Widget"})).To(BeNil())
+	})
+
+	t.Run("prefers the kind match over the group match", func(t *testing.T) {
+		g := NewWithT(t)
+		evs := newHealthCheckEvaluators(ctx, newTestOwner("kustomize.toolkit.fluxcd.io/v1", "Kustomization",
+			map[string]any{"apiVersion": "example.io/v1", "current": "status.phase == 'Ready'"},
+			map[string]any{"apiVersion": "example.io/v1", "kind": "Widget", "current": "status.phase == 'Done'"},
+		))
+		g.Expect(evs).To(HaveLen(2))
+
+		obj := newTestCustomResource("Widget", 1, map[string]any{"phase": "Done"})
+		st, _ := computeObjectStatus(ctx, obj, evs)
+		g.Expect(st).To(Equal(string(status.CurrentStatus)))
+
+		obj = newTestCustomResource("Gadget", 1, map[string]any{"phase": "Done"})
+		st, _ = computeObjectStatus(ctx, obj, evs)
+		g.Expect(st).To(Equal(string(status.InProgressStatus)))
+	})
+
+	t.Run("skips invalid entries", func(t *testing.T) {
+		g := NewWithT(t)
+		evs := newHealthCheckEvaluators(ctx, newTestOwner("kustomize.toolkit.fluxcd.io/v1", "Kustomization",
+			map[string]any{"apiVersion": "example.io/v1", "kind": "Broken", "current": "status.phase =="},
+			map[string]any{"apiVersion": "example.io/v1", "kind": "Missing"},
+			map[string]any{"apiVersion": "example.io/v1", "kind": map[string]any{"not": "a string"}, "current": "true"},
+			phaseExprs,
+		))
+		g.Expect(evs).To(HaveLen(1))
+		g.Expect(evs.lookup(schema.GroupKind{Group: "example.io", Kind: "Broken"})).To(BeNil())
+		g.Expect(evs.lookup(schema.GroupKind{Group: "example.io", Kind: "Missing"})).To(BeNil())
+		g.Expect(evs.lookup(schema.GroupKind{Group: "example.io", Kind: "Widget"})).NotTo(BeNil())
+
+		onlyBroken := newHealthCheckEvaluators(ctx, newTestOwner("kustomize.toolkit.fluxcd.io/v1", "Kustomization",
+			map[string]any{"apiVersion": "example.io/v1", "kind": "Broken", "current": "status.phase =="},
+		))
+		g.Expect(onlyBroken).To(BeNil())
+	})
+}
+
+func TestComputeObjectStatus_HealthCheckExprs(t *testing.T) {
+	evs := newHealthCheckEvaluators(ctx, newTestOwner("kustomize.toolkit.fluxcd.io/v1", "Kustomization",
+		map[string]any{
+			"apiVersion": "example.io/v1",
+			"kind":       "Widget",
+			"inProgress": "status.phase == 'Pending'",
+			"failed":     "status.phase == 'Error'",
+			"current":    "status.phase in ['Ready', 'Paused']",
+		},
+		map[string]any{
+			"apiVersion": "apps/v1",
+			"kind":       "Deployment",
+			"current":    "has(status.readyReplicas) && status.readyReplicas > 0",
+		},
+	))
+
+	t.Run("evaluates phase-based expressions", func(t *testing.T) {
+		g := NewWithT(t)
+		for phase, want := range map[string]string{
+			"Ready":   string(status.CurrentStatus),
+			"Paused":  string(status.CurrentStatus),
+			"Pending": string(status.InProgressStatus),
+			"Error":   string(status.FailedStatus),
+			"Other":   string(status.InProgressStatus),
+		} {
+			obj := newTestCustomResource("Widget", 3, map[string]any{"phase": phase, "observedGeneration": int64(3)})
+			st, msg := computeObjectStatus(ctx, obj, evs)
+			g.Expect(st).To(Equal(want), "phase %s", phase)
+			g.Expect(msg).To(Equal(want), "phase %s", phase)
+		}
+	})
+
+	t.Run("accepts a string observedGeneration", func(t *testing.T) {
+		g := NewWithT(t)
+		obj := newTestCustomResource("Widget", 12, map[string]any{"phase": "Paused", "observedGeneration": "12"})
+
+		// Without expressions kstatus cannot assess the object.
+		st, msg := computeObjectStatus(ctx, obj, nil)
+		g.Expect(st).To(Equal(reporter.StatusUnknown))
+		g.Expect(msg).To(HavePrefix("Failed to compute status"))
+
+		// With expressions the non-int64 field is skipped and the phase decides.
+		st, msg = computeObjectStatus(ctx, obj, evs)
+		g.Expect(st).To(Equal(string(status.CurrentStatus)))
+		g.Expect(msg).To(Equal(string(status.CurrentStatus)))
+	})
+
+	t.Run("reports InProgress on a stale int64 observedGeneration", func(t *testing.T) {
+		g := NewWithT(t)
+		obj := newTestCustomResource("Widget", 5, map[string]any{"phase": "Ready", "observedGeneration": int64(4)})
+		st, _ := computeObjectStatus(ctx, obj, evs)
+		g.Expect(st).To(Equal(string(status.InProgressStatus)))
+	})
+
+	t.Run("takes precedence over the builtin workload logic", func(t *testing.T) {
+		g := NewWithT(t)
+		deploy := &unstructured.Unstructured{Object: map[string]any{
+			"apiVersion": "apps/v1",
+			"kind":       "Deployment",
+			"metadata":   map[string]any{"name": "app", "namespace": "default", "generation": int64(1)},
+			"status":     map[string]any{"observedGeneration": int64(1), "readyReplicas": int64(2)},
+		}}
+		st, msg := computeObjectStatus(ctx, deploy, evs)
+		g.Expect(st).To(Equal(string(status.CurrentStatus)))
+		g.Expect(msg).To(Equal(string(status.CurrentStatus)))
+
+		// Kinds without expressions keep the builtin logic.
+		cm := &unstructured.Unstructured{Object: map[string]any{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"metadata":   map[string]any{"name": "cfg", "namespace": "default"},
+		}}
+		st, _ = computeObjectStatus(ctx, cm, evs)
+		g.Expect(st).To(Equal(string(status.CurrentStatus)))
+	})
+
+	t.Run("reports Unknown on an evaluation error", func(t *testing.T) {
+		g := NewWithT(t)
+		// The expression references a field the object does not have.
+		obj := newTestCustomResource("Widget", 1, map[string]any{"ready": true})
+		st, msg := computeObjectStatus(ctx, obj, evs)
+		g.Expect(st).To(Equal(reporter.StatusUnknown))
+		g.Expect(msg).To(HavePrefix("Failed to compute status"))
+	})
+}
+
+func TestGetOwnerHealthCheckEvaluators(t *testing.T) {
+	handler := &Handler{kubeClient: kubeClient, version: "v1.0.0", statusManager: "test", namespace: "flux-system"}
+
+	t.Run("returns nil without an owner", func(t *testing.T) {
+		g := NewWithT(t)
+		g.Expect(handler.getOwnerHealthCheckEvaluators(ctx, nil)).To(BeNil())
+	})
+
+	t.Run("returns nil for a non-Flux owner", func(t *testing.T) {
+		g := NewWithT(t)
+		owner := &InventoryObjectItem{APIVersion: "apps/v1", Kind: "Deployment", Namespace: "default", Name: "app"}
+		g.Expect(handler.getOwnerHealthCheckEvaluators(ctx, owner)).To(BeNil())
+	})
+
+	t.Run("returns nil for a Flux kind without health check expressions", func(t *testing.T) {
+		g := NewWithT(t)
+		owner := &InventoryObjectItem{APIVersion: "fluxcd.controlplane.io/v1", Kind: "ResourceSet", Namespace: "flux-system", Name: "apps"}
+		g.Expect(handler.getOwnerHealthCheckEvaluators(ctx, owner)).To(BeNil())
+	})
+
+	t.Run("returns nil when the owner cannot be read", func(t *testing.T) {
+		g := NewWithT(t)
+		owner := &InventoryObjectItem{APIVersion: "kustomize.toolkit.fluxcd.io/v1", Kind: "Kustomization", Namespace: "flux-system", Name: "missing"}
+		g.Expect(handler.getOwnerHealthCheckEvaluators(ctx, owner)).To(BeNil())
 	})
 }
