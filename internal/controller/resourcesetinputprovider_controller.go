@@ -115,7 +115,7 @@ func (r *ResourceSetInputProviderReconciler) Reconcile(ctx context.Context, req 
 	if !controllerutil.ContainsFinalizer(obj, fluxcdv1.Finalizer) {
 		log.Info("Adding finalizer", "finalizer", fluxcdv1.Finalizer)
 		initializeObjectStatus(obj)
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{Requeue: true}, nil //nolint:staticcheck // immediate rate-limited requeue is intended
 	}
 
 	// Pause reconciliation if the object has the reconcile annotation set to 'disabled'.

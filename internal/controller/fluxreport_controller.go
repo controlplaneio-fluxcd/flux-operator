@@ -56,7 +56,7 @@ func (r *FluxReportReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to initialize FluxReport: %w", err)
 			}
-			return ctrl.Result{Requeue: true}, nil
+			return ctrl.Result{Requeue: true}, nil //nolint:staticcheck // immediate rate-limited requeue is intended
 		}
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}

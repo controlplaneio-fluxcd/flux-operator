@@ -300,7 +300,7 @@ GOVULNCHECK ?= $(LOCALBIN)/govulncheck
 KUSTOMIZE_VERSION ?= v5.8.1
 CONTROLLER_TOOLS_VERSION ?= v0.21.0
 ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
-GOLANGCI_LINT_VERSION ?= v2.12.2
+GOLANGCI_LINT_VERSION ?= v2.13.1
 OPERATOR_SDK_VERSION ?= v1.41.1
 
 .PHONY: operator-sdk

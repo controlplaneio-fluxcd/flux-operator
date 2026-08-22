@@ -5,7 +5,7 @@ FROM ghcr.io/fluxcd/flux-mirror:v0.8.0@sha256:432117c67f83ae3c78d2fd63a4023876b5
 FROM registry.k8s.io/kubectl:v1.36.3@sha256:6e4fce3c83651edb91b74bc67701c5cd263dd8aa3cd4254b1798d6425a5ab789 AS kubectl
 
 # Build the Flux Operator CLI binary using Docker's Debian image.
-FROM --platform=${BUILDPLATFORM} golang:1.26 AS builder
+FROM --platform=${BUILDPLATFORM} golang:1.27 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 ARG VERSION
