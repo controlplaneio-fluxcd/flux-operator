@@ -105,10 +105,9 @@ Learning:
 - What is the role of the interval setting in a Flux Kustomization?  Search the latest docs.
 - How to trigger a Flux reconciliation with a webhook? Search the latest docs.
 
-## Predefined Prompts
+## Agent Skills
 
-The Flux MCP Server comes with a set of predefined prompts.
-These prompts are designed to help you quickly get started with common tasks such as
-troubleshooting Flux Kustomizations and Helm releases.
-
-For a complete list of predefined prompts, refer to the [MCP prompts](prompts.md) documentation.
+For guided troubleshooting of Flux Kustomizations, HelmReleases and their sources,
+install the [Flux Agent Skills](https://github.com/fluxcd/agent-skills) in your AI assistant.
+The `gitops-cluster-debug` skill provides a step-by-step debugging workflow
+that uses the Flux MCP Server tools to identify and resolve issues in your GitOps pipeline.

@@ -19,7 +19,7 @@ func TestManager_RegisterToolsDoesNotPanic(t *testing.T) {
 		Name:    "flux-operator-mcp",
 		Version: "test-version",
 	}, &mcp.ServerOptions{
-		HasTools: true,
+		Capabilities: &mcp.ServerCapabilities{Tools: &mcp.ToolCapabilities{}},
 	})
 
 	manager := NewManager(nil, 0, false, false, nil)
@@ -126,7 +126,7 @@ func TestManager_ToolSchemasIncludeProperties(t *testing.T) {
 		Name:    "flux-operator-mcp",
 		Version: "test-version",
 	}, &mcp.ServerOptions{
-		HasTools: true,
+		Capabilities: &mcp.ServerCapabilities{Tools: &mcp.ToolCapabilities{}},
 	})
 
 	manager := NewManager(nil, 0, false, false, nil)
@@ -196,7 +196,7 @@ func TestManager_RegisterSpecificTools(t *testing.T) {
 		Name:    "flux-operator-mcp",
 		Version: "test-version",
 	}, &mcp.ServerOptions{
-		HasTools: true,
+		Capabilities: &mcp.ServerCapabilities{Tools: &mcp.ToolCapabilities{}},
 	})
 
 	manager := NewManager(nil, 0, false, false, []string{
