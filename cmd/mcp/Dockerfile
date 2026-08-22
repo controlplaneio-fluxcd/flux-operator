@@ -1,5 +1,5 @@
 # Build the Flux MCP server binary using Docker's Debian image.
-FROM --platform=${BUILDPLATFORM} golang:1.26 AS builder
+FROM --platform=${BUILDPLATFORM} golang:1.27 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 ARG VERSION

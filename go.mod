@@ -1,6 +1,6 @@
 module github.com/controlplaneio-fluxcd/flux-operator
 
-go 1.26.0
+go 1.27.0
 
 require (
 	code.gitea.io/sdk/gitea v0.25.1
@@ -36,7 +36,7 @@ require (
 	github.com/gosimple/slug v1.15.0
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/microsoft/azure-devops-go-api/azuredevops/v7 v7.1.0
-	github.com/modelcontextprotocol/go-sdk v1.6.1
+	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/onsi/ginkgo/v2 v2.29.0
 	github.com/onsi/gomega v1.42.1

@@ -79,9 +79,7 @@ func seedManagedFields(ctx context.Context, g *WithT, obj client.Object, fields 
 			Operation:  f.operation,
 			APIVersion: "v1",
 			FieldsType: "FieldsV1",
-			FieldsV1: &metav1.FieldsV1{
-				Raw: []byte(`{"f:metadata":{"f:labels":{}}}`),
-			},
+			FieldsV1:   metav1.NewFieldsV1(`{"f:metadata":{"f:labels":{}}}`),
 		})
 	}
 	patch := []map[string]any{
