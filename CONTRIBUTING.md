@@ -128,7 +128,6 @@ The Flux Operator MCP Server is built using the [mcp-go](https://github.com/mark
 Packages:
 
 - [cmd/mcp/k8s](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/cmd/mcp/k8s/) - contains the Kubernetes client
-- [cmd/mcp/prompter](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/cmd/mcp/prompter/) - contains the MCP prompts
 - [cmd/mcp/toolbox](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/cmd/mcp/toolbox/) - contains the MCP tools
 - [cmd/mcp/main.go](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/cmd/mcp/main.go) - contains the server entrypoint
 
@@ -161,11 +160,11 @@ and `/path/to/.kube/config` with the absolute path to your kubeconfig file.
 
 After rebuilding the MCP Server binary, you need to restart the AI assistant app to test the new build.
 
-To run the MCP Server using SSE, use the following command:
+To run the MCP Server using Streamable HTTP, use the following command:
 
 ```shell
 export KUBECONFIG=$HOME/.kube/config
-./bin/flux-operator-mcp serve --transport sse --port 8080
+./bin/flux-operator-mcp serve --transport http --port 8080
 ```
 
 To connect to the server from VS Code, use the following configuration:
@@ -175,8 +174,8 @@ To connect to the server from VS Code, use the following configuration:
   "mcp": {
     "servers": {
       "flux-operator-mcp": {
-        "type": "sse",
-        "url": "http://localhost:8080/sse"
+        "type": "http",
+        "url": "http://localhost:8080/mcp"
       }
     }
   }
@@ -272,7 +271,7 @@ To contribute to the documentation, you can edit the Markdown files in the follo
 - [docs/guides/operator](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/docs/guides/operator) - Flux Operator installation, configuration, and migration guides
 - [docs/guides/instance](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/docs/guides/instance) - FluxInstance configuration guides
 - [docs/guides/resourcesets](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/docs/guides/resourcesets) - ResourceSet guides
-- [docs/mcp](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/docs/mcp) - MCP Server tools, prompts, and configuration documentation
+- [docs/mcp](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/docs/mcp) - MCP Server tools and configuration documentation
 - [docs/web](https://github.com/controlplaneio-fluxcd/flux-operator/tree/main/docs/web) - Flux Status Page configuration, SSO, and ingress documentation
 
 The documentation is automatically published to [fluxoperator.dev/docs](https://fluxoperator.dev/docs) after a new release.

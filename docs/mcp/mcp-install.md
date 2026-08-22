@@ -52,7 +52,6 @@ The Flux MCP Server is compatible with AI assistants that support the Model Cont
 using any of the following transport modes:
 
 - Standard Input/Output (`stdio`)
-- Server-Sent Events (`sse`)
 - Streamable HTTP (`http`)
 
 Add the following configuration to your AI assistant's settings to use the Flux MCP Server over stdio:
