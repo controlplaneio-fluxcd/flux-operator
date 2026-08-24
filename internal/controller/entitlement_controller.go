@@ -86,7 +86,7 @@ func (r *EntitlementReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 
 		// Requeue to verify the token.
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{Requeue: true}, nil //nolint:staticcheck // immediate rate-limited requeue is intended
 	}
 
 	// Verify the token and delete the secret if it is invalid.

@@ -31,7 +31,7 @@ spec:
         imagePullPolicy: IfNotPresent
         args:
           - serve
-          - --transport=sse
+          - --transport=http
           - --port=9090
         securityContext:
           runAsNonRoot: true

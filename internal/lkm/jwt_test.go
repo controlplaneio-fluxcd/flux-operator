@@ -290,11 +290,11 @@ func genTestKeys(t *testing.T) (*EdPublicKey, *EdPrivateKey) {
 	g.Expect(err).ToNot(HaveOccurred())
 
 	return &EdPublicKey{
-			Key:   publicKey,
-			KeyID: "test-key-id",
-		}, &EdPrivateKey{
-			Key:    privateKey,
-			KeyID:  "test-key-id",
-			Issuer: "test-issuer",
-		}
+		Key:   publicKey,
+		KeyID: "test-key-id",
+	}, &EdPrivateKey{
+		Key:    privateKey,
+		KeyID:  "test-key-id",
+		Issuer: "test-issuer",
+	}
 }

@@ -23,7 +23,6 @@ import (
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/k8s"
-	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/prompter"
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/toolbox"
 )
 
@@ -72,7 +71,7 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&rootArgs.readOnly, "read-only", false,
 		"Run the MCP server in read-only mode, disabling write and delete operations.")
 	rootCmd.PersistentFlags().StringVar(&rootArgs.transport, "transport", "stdio",
-		"The transport protocol to use for the MCP server. Options: [stdio, http, sse].")
+		"The transport protocol to use for the MCP server. Options: [stdio, http].")
 	rootCmd.PersistentFlags().IntVar(&rootArgs.port, "port", 8080,
 		"The port to use for the MCP server. This is only used when the transport is not 'stdio'.")
 	rootCmd.PersistentFlags().StringVar(&rootArgs.toolCallLogFile, "tool-call-log-file", "",
@@ -159,6 +158,27 @@ func getCurrentKubeconfigPath() string {
 	return defaultPath
 }
 
+// newHTTPHandler returns the HTTP handler serving the MCP server
+// over the Streamable HTTP transport at the /mcp path.
+// The server runs in stateless mode as required by the MCP specification
+// 2026-07-28: session IDs are ignored and no per-client state is kept,
+// so the server can be scaled horizontally without sticky sessions.
+// Clients using older protocol versions negotiate down automatically.
+func newHTTPHandler(mcpServer *mcp.Server) http.Handler {
+	handler := mcp.NewStreamableHTTPHandler(
+		func(*http.Request) *mcp.Server { return mcpServer },
+		&mcp.StreamableHTTPOptions{
+			Stateless: true,
+			// Cancel the tool handler context when the client aborts the
+			// HTTP request, so abandoned calls don't keep running.
+			PropagateRequestCancellation: true,
+		},
+	)
+	mux := http.NewServeMux()
+	mux.Handle("/mcp", handler)
+	return mux
+}
+
 var serveCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "Start the MCP server",
@@ -177,20 +197,18 @@ func serveCmdRun(cmd *cobra.Command, args []string) error {
 
 	// Create the MCP server
 	mcpServer := mcp.NewServer(mcpImpl, &mcp.ServerOptions{
-		HasTools:   true,
-		HasPrompts: true,
+		Capabilities: &mcp.ServerCapabilities{
+			Tools: &mcp.ToolCapabilities{},
+		},
 	})
 	if rootArgs.toolCallLogFile != "" {
 		mcpServer.AddReceivingMiddleware(toolCallLogMiddleware(rootArgs.toolCallLogFile))
 	}
 
-	// Register tools and prompts
+	// Register tools
 	kubeClient := k8s.NewClientFactory(kubeconfigArgs)
 	tm := toolbox.NewManager(kubeClient, rootArgs.timeout, rootArgs.maskSecrets, rootArgs.readOnly, nil)
 	tm.RegisterTools(mcpServer, inCluster)
-
-	pm := prompter.NewManager()
-	pm.RegisterPrompts(mcpServer)
 
 	// Start server based on transport type
 	var mcpHandler http.Handler
@@ -203,22 +221,9 @@ func serveCmdRun(cmd *cobra.Command, args []string) error {
 		}
 		return nil
 	case "http":
-		handler := mcp.NewStreamableHTTPHandler(
-			func(*http.Request) *mcp.Server { return mcpServer },
-			&mcp.StreamableHTTPOptions{},
-		)
-		mux := http.NewServeMux()
-		mux.Handle("/mcp", handler)
-		mcpHandler = mux
+		mcpHandler = newHTTPHandler(mcpServer)
 	case "sse":
-		log.Println("⚠️ The 'sse' transport is still supported but is now considered legacy. Please switch to the 'http' transport.")
-		handler := mcp.NewSSEHandler(
-			func(*http.Request) *mcp.Server { return mcpServer },
-			&mcp.SSEOptions{},
-		)
-		mux := http.NewServeMux()
-		mux.Handle("/sse", handler)
-		mcpHandler = mux
+		return errors.New("the 'sse' transport has been removed, use the 'http' transport instead")
 	default:
 		return fmt.Errorf("unknown transport: '%s'", rootArgs.transport)
 	}

@@ -60,7 +60,6 @@ and other assistants, please refer to the [documentation website](https://fluxcd
 - [Transport Modes and Security Configurations](https://fluxcd.control-plane.io/mcp/config/)
 - [Effective Prompting Guide](https://fluxcd.control-plane.io/mcp/prompt-engineering/)
 - [MCP Tools Reference](https://fluxcd.control-plane.io/mcp/tools/)
-- [MCP Prompts Reference](https://fluxcd.control-plane.io/mcp/prompts/)
 
 ## Contributing
 
