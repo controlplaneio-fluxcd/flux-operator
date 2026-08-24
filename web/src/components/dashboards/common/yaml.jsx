@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo } from 'preact/hooks'
 import { appliedTheme } from '../../../utils/theme'
-import yaml from 'js-yaml'
+import { dump as yamlDump } from 'js-yaml'
 import Prism from 'prismjs'
 import 'prismjs/components/prism-yaml'
 
@@ -92,7 +92,7 @@ export function usePrismTheme() {
 export function YamlBlock({ data, nested = false }) {
   const highlighted = useMemo(() => {
     if (!data) return ''
-    const yamlStr = yaml.dump(data, { indent: 2, lineWidth: -1 })
+    const yamlStr = yamlDump(data, { indent: 2, lineWidth: -1 })
     return Prism.highlight(yamlStr, Prism.languages.yaml, 'yaml')
   }, [data])
 

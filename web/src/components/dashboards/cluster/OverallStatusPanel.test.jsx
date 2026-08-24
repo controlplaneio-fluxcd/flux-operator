@@ -67,6 +67,90 @@ describe('OverallStatusPanel', () => {
     })
   })
 
+  describe('Status: Rollout in progress', () => {
+    it('should show initializing while controllers are rolling out', () => {
+      const report = {
+        distribution: { version: 'v2.4.0' },
+        components: [
+          { name: 'source-controller', ready: true, status: 'Current Deployment is available. Replicas: 1' },
+          { name: 'kustomize-controller', ready: false, status: 'InProgress Deployment not Available' }
+        ],
+        reconcilers: []
+      }
+
+      render(<OverallStatusPanel report={report} />)
+
+      expect(screen.getByText('System Initializing')).toBeInTheDocument()
+      expect(screen.getByText('Waiting for the Flux instance rollout to complete')).toBeInTheDocument()
+      expect(screen.queryByText('Partial Outage')).not.toBeInTheDocument()
+    })
+
+    it('should show initializing while every controller is rolling out', () => {
+      const report = {
+        distribution: { version: 'v2.4.0' },
+        components: [
+          { name: 'source-controller', ready: false, status: 'InProgress Deployment not Available' },
+          { name: 'kustomize-controller', ready: false, status: 'InProgress Deployment not Available' }
+        ],
+        reconcilers: []
+      }
+
+      render(<OverallStatusPanel report={report} />)
+
+      expect(screen.getByText('System Initializing')).toBeInTheDocument()
+      expect(screen.queryByText('Major Outage')).not.toBeInTheDocument()
+    })
+
+    it('should show initializing while the cluster sync is not initialized', () => {
+      const report = {
+        distribution: { version: 'v2.4.0' },
+        sync: { ready: false, status: 'not initialized' },
+        components: [
+          { name: 'source-controller', ready: true, status: 'Current Deployment is available. Replicas: 1' }
+        ],
+        reconcilers: []
+      }
+
+      render(<OverallStatusPanel report={report} />)
+
+      expect(screen.getByText('System Initializing')).toBeInTheDocument()
+      expect(screen.getByText('Waiting for the cluster sync to initialize')).toBeInTheDocument()
+      expect(screen.queryByText('Partial Outage')).not.toBeInTheDocument()
+    })
+
+    it('should still report an outage when a rollout coincides with a failure', () => {
+      const report = {
+        distribution: { version: 'v2.4.0' },
+        components: [
+          { name: 'source-controller', ready: false, status: 'InProgress Deployment not Available' },
+          { name: 'kustomize-controller', ready: false, status: 'Failed Deployment has failed' },
+          { name: 'helm-controller', ready: true, status: 'Current Deployment is available. Replicas: 1' }
+        ],
+        reconcilers: []
+      }
+
+      render(<OverallStatusPanel report={report} />)
+
+      expect(screen.getByText('Partial Outage')).toBeInTheDocument()
+      expect(screen.getByText('1 failure detected')).toBeInTheDocument()
+    })
+
+    it('should report an outage when the source fails before the sync is initialized', () => {
+      const report = {
+        distribution: { version: 'v2.4.0' },
+        sync: { ready: false, status: 'not initialized\nfailed to pull artifact' },
+        components: [
+          { name: 'source-controller', ready: true, status: 'Current Deployment is available. Replicas: 1' }
+        ],
+        reconcilers: []
+      }
+
+      render(<OverallStatusPanel report={report} />)
+
+      expect(screen.getByText('Partial Outage')).toBeInTheDocument()
+    })
+  })
+
   describe('Status: Maintenance', () => {
     it('should show maintenance status when sync is suspended', () => {
       const report = {

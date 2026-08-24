@@ -106,6 +106,40 @@ describe('SyncPanel', () => {
       expect(screen.getByText('failing')).toBeInTheDocument()
     })
 
+    it('should render progressing state before the sync is initialized', () => {
+      const props = {
+        sync: {
+          ...baseProps.sync,
+          ready: false,
+          status: 'not initialized'
+        }
+      }
+      const { container } = render(<SyncPanel {...props} />)
+
+      // Spinner instead of the danger icon
+      expect(container.querySelector('.animate-spin')).toBeInTheDocument()
+      expect(container.querySelector('.text-danger')).not.toBeInTheDocument()
+
+      // Progressing badge in the header, never "failing"
+      expect(screen.getByText('progressing')).toBeInTheDocument()
+      expect(screen.queryByText('failing')).not.toBeInTheDocument()
+    })
+
+    it('should render not synced when the source fails before the sync is initialized', () => {
+      const props = {
+        sync: {
+          ...baseProps.sync,
+          ready: false,
+          status: 'not initialized\nfailed to pull artifact'
+        }
+      }
+      const { container } = render(<SyncPanel {...props} />)
+
+      expect(container.querySelector('.text-danger')).toBeInTheDocument()
+      expect(screen.getByText('failing')).toBeInTheDocument()
+      expect(screen.queryByText('progressing')).not.toBeInTheDocument()
+    })
+
     it('should render suspended state correctly', () => {
       const props = {
         sync: {

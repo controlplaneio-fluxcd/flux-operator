@@ -68,6 +68,9 @@ function sortInventory(items) {
  *
  * @param {array} inventory - The resource's status.inventory items (each carries
  *   its own namespace, empty for cluster-scoped objects)
+ * @param {object} [owner] - Reference ({apiVersion, kind, namespace, name}) of the
+ *   resource owning the inventory, sent with the status batch so the backend can
+ *   apply its spec.healthCheckExprs to the matching objects
  * @param {string} [category] - Controlled category filter value
  * @param {function} [onCategoryChange] - Controlled category setter
  * @param {string} [query] - Controlled search query value
@@ -75,6 +78,7 @@ function sortInventory(items) {
  */
 export function InventoryTabContent({
   inventory,
+  owner,
   category: categoryProp,
   onCategoryChange,
   query: queryProp,
@@ -119,7 +123,7 @@ export function InventoryTabContent({
           method: 'POST',
           // Rows only render the status pill; the full manifest is fetched lazily
           // by ObjectDetailsView on expand, so skip it here.
-          body: { objects, statusOnly: true }
+          body: { objects, statusOnly: true, owner }
         })
         const next = {}
         for (const o of (data?.objects || [])) {
@@ -138,7 +142,7 @@ export function InventoryTabContent({
 
     fetchStatuses()
     return () => { cancelled = true }
-  }, [items])
+  }, [items, owner])
 
   // Apply the category filter, then the search matcher, then sort. Filter state is
   // independent of the inventory array, so polls never reset it.

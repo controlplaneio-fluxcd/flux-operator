@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { reportUpdatedAt } from '../../../app'
+import { getComponentStatus, getSyncStatus } from '../../../utils/status'
 import { StatusHeroCard } from '../common/StatusHeroCard'
 
 /**
@@ -11,7 +12,7 @@ import { StatusHeroCard } from '../common/StatusHeroCard'
  * @param {Object} props.report - FluxReport spec containing cluster status information
  *
  * Shows aggregate status metrics:
- * - Controller components (ready/failed count)
+ * - Controller components (ready/progressing/failed count)
  * - Flux reconcilers (total/failing count)
  * - Cluster sync status
  * - Last update timestamp
@@ -19,13 +20,17 @@ import { StatusHeroCard } from '../common/StatusHeroCard'
 export function OverallStatusPanel({ report }) {
   // Calculate counters
   const totalComponents = report.components?.length ?? 0
-  const failedComponents = report.components?.filter(c => !c.ready).length ?? 0
+  // Controllers still rolling out (bootstrap, upgrade) are progressing, not failed.
+  const failedComponents = report.components?.filter(c => getComponentStatus(c) === 'Failed').length ?? 0
+  const progressingComponents = report.components?.filter(c => getComponentStatus(c) === 'Progressing').length ?? 0
   const totalReconcilers = report.reconcilers?.length ?? 0
   const failingReconcilers = report.reconcilers?.reduce((sum, r) => sum + (r.stats.failing || 0), 0) ?? 0
   const allReconcilersFailing = totalReconcilers > 0 &&
     report.reconcilers?.every(r => (r.stats.failing || 0) > 0 && (r.stats.running || 0) === 0)
-  const failedClusterSync = report.sync && report.sync.ready !== true ? 1 : 0
-  const maintenanceMode = report.sync && report.sync.status && report.sync.status.startsWith('Suspended')
+  const syncStatus = report.sync ? getSyncStatus(report.sync) : null
+  const failedClusterSync = syncStatus === 'Failed' ? 1 : 0
+  const progressingClusterSync = syncStatus === 'Progressing'
+  const maintenanceMode = syncStatus === 'Suspended'
   const totalFailures = failedComponents + failingReconcilers
 
   const getStatusInfo = () => {
@@ -50,6 +55,23 @@ export function OverallStatusPanel({ report }) {
         borderColor: 'border-blue-500',
         title: 'Under Maintenance',
         message: 'Cluster reconciliation is currently suspended'
+      }
+    }
+
+    // System Initializing - controllers rolling out or the cluster sync not yet
+    // reporting, with nothing failing. Placed after the failure checks below
+    // would hide a real outage behind a rollout, so only a failure-free
+    // rollout lands here.
+    if (totalFailures === 0 && failedClusterSync === 0 && (progressingComponents > 0 || progressingClusterSync)) {
+      return {
+        status: 'initializing',
+        color: 'text-gray-600 dark:text-gray-400',
+        bgColor: 'bg-gray-50',
+        borderColor: 'border-gray-400',
+        title: 'System Initializing',
+        message: progressingComponents > 0
+          ? 'Waiting for the Flux instance rollout to complete'
+          : 'Waiting for the cluster sync to initialize'
       }
     }
 
