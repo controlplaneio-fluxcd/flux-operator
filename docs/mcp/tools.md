@@ -36,14 +36,33 @@ Retrieves Kubernetes resources from the cluster, including Flux custom resources
 - `namespace` (optional): The namespace to query
 - `selector` (optional): Label selector in the format `key1=value1,key2=value2`
 - `limit` (optional): Maximum number of resources to return
+- `fields` (optional): List of kubectl JSONPath expressions to include in the result, e.g. `spec.chart.spec.version`, `status.conditions[?(@.type=="Ready")].message` or `status.inventory`
 
 **Output:**
 
 Returns the requested resources in YAML format, including:
 - Resource specifications
 - Status conditions
-- Related events
+- Related events (`status.events`)
+- HelmRelease inventory (`status.inventory`)
 - Metadata including Flux source references
+
+When `fields` is set, each resource is reduced to its `apiVersion`, `kind`, `metadata.name`
+and `metadata.namespace`, along with the values selected by the expressions. For example, the fields
+`["spec.chart.spec.version", "status.conditions[?(@.type==\"Ready\")].message"]` return:
+
+```yaml
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: podinfo
+  namespace: apps
+spec.chart.spec.version: 6.x
+status.conditions[?(@.type=="Ready")].message: Helm upgrade succeeded for release apps/podinfo.v3 with chart podinfo@6.9.0
+```
+
+Use `fields` to reduce the size of the result when
+listing many resources or when only a few fields are relevant.
 
 ### get_kubernetes_logs
 

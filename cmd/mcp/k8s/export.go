@@ -25,12 +25,18 @@ import (
 
 // Export retrieves resources based on provided criteria and returns them as a YAML multi-document string.
 // Supports filtering by GroupVersionKind, name, namespace, labels, and limit.
-// Allows masking secrets and includes additional metadata for Flux resource types.
+// Allows masking secrets and includes additional metadata for Flux resource types:
+// the inventory for HelmRelease, the events for all Flux resources and the
+// controllers metrics for FluxReport.
+// When fieldPaths is set, each resource is projected to the values selected by
+// the given kubectl JSONPath expressions (see FieldPaths.Project) and the
+// additional metadata is included only when referenced by the expressions.
 func (k *Client) Export(ctx context.Context,
 	gvks []schema.GroupVersionKind,
 	name, namespace, labelSelector string,
 	limit int,
-	maskSecrets bool) (string, error) {
+	maskSecrets bool,
+	fieldPaths FieldPaths) (string, error) {
 	var strBuilder strings.Builder
 	for _, gvk := range gvks {
 		list := unstructured.UnstructuredList{
@@ -84,7 +90,7 @@ func (k *Client) Export(ctx context.Context,
 				}
 
 				// Add inventory for HelmRelease resources
-				if item.GetKind() == fluxcdv1.FluxHelmReleaseKind {
+				if item.GetKind() == fluxcdv1.FluxHelmReleaseKind && fieldPaths.Covers("status", "inventory") {
 					inventory, err := k.GetHelmInventory(ctx, item.GetAPIVersion(), ctrlclient.ObjectKey{
 						Namespace: item.GetNamespace(),
 						Name:      item.GetName(),
@@ -118,7 +124,7 @@ func (k *Client) Export(ctx context.Context,
 				}
 
 				// Add Kubernetes events for Flux resources
-				if fluxcdv1.IsFluxAPI(item.GetAPIVersion()) {
+				if fluxcdv1.IsFluxAPI(item.GetAPIVersion()) && fieldPaths.Covers("status", "events") {
 					events, err := k.GetEvents(ctx, item.GetKind(), item.GetName(), item.GetNamespace(), "ReconciliationSucceeded")
 					if err == nil && len(events) > 0 {
 						ev := make([]any, len(events))
@@ -133,15 +139,15 @@ func (k *Client) Export(ctx context.Context,
 					}
 				}
 
-				itemBytes, err := yaml.Marshal(item.Object)
+				itemBytes, err := yaml.Marshal(fieldPaths.Project(item.Object))
 				if err != nil {
 					return "", fmt.Errorf("error marshalling item: %w", err)
 				}
 				strBuilder.WriteString("---\n")
 				strBuilder.Write(itemBytes)
 
-				// Add CPU and Memory usage to Flux report
-				if item.GetKind() == fluxcdv1.FluxReportKind {
+				// Add CPU and Memory usage to Flux report unless the output is projected
+				if item.GetKind() == fluxcdv1.FluxReportKind && len(fieldPaths) == 0 {
 					if metrics, err := k.GetMetrics(ctx, "", item.GetNamespace(), "", 100); err == nil {
 						metricsBytes, err := yaml.Marshal(metrics.Object)
 						if err != nil {

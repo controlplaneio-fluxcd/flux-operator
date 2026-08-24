@@ -5,6 +5,7 @@ package k8s
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,7 +14,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
@@ -109,20 +112,84 @@ func TestExport(t *testing.T) {
 		},
 	}
 
+	mockEvent := &corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "flux.1",
+			Namespace: "flux-system",
+		},
+		InvolvedObject: corev1.ObjectReference{
+			Kind:      fluxcdv1.FluxInstanceKind,
+			Name:      "flux",
+			Namespace: "flux-system",
+		},
+		Type:    corev1.EventTypeWarning,
+		Reason:  "ReconciliationFailed",
+		Message: "Reconciliation failed with timeout",
+	}
+
+	mockHelmRelease := makeHelmRelease("flux-system", "helm.toolkit.fluxcd.io/v2", "flux-system", []any{
+		map[string]any{
+			"name":      "my-release",
+			"chartName": "podinfo",
+			"version":   int64(1),
+			"namespace": "flux-system",
+		},
+	}, false)
+
+	mockReport := &fluxcdv1.FluxReport{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "flux",
+			Namespace: "flux-system",
+		},
+		Spec: fluxcdv1.FluxReportSpec{
+			Distribution: fluxcdv1.FluxDistributionStatus{
+				Entitlement: "Unknown",
+				Status:      "Installed",
+				Version:     "v2.3.0",
+			},
+		},
+	}
+
+	// The fake client does not support the field selectors used to list events,
+	// so the events are served by an interceptor that also counts the lookups.
+	eventLookups := 0
+	listEvents := func(ctx context.Context, c ctrlclient.WithWatch, list ctrlclient.ObjectList, opts ...ctrlclient.ListOption) error {
+		if el, ok := list.(*corev1.EventList); ok {
+			eventLookups++
+			el.Items = []corev1.Event{*mockEvent}
+			return nil
+		}
+		return c.List(ctx, list, opts...)
+	}
+
+	// The Helm storage lookups are counted by intercepting the Secret reads.
+	helmLookups := 0
+	getSecret := func(ctx context.Context, c ctrlclient.WithWatch, key ctrlclient.ObjectKey, obj ctrlclient.Object, opts ...ctrlclient.GetOption) error {
+		if _, ok := obj.(*corev1.Secret); ok {
+			helmLookups++
+		}
+		return c.Get(ctx, key, obj, opts...)
+	}
+
 	kubeClient := Client{
 		Client: fake.NewClientBuilder().
 			WithScheme(NewTestScheme()).
-			WithObjects(mockNamespace, mockInstance, mockSecret).
+			WithObjects(mockNamespace, mockInstance, mockSecret, mockHelmRelease, mockReport).
 			WithStatusSubresource(&fluxcdv1.FluxInstance{}).
+			WithInterceptorFuncs(interceptor.Funcs{List: listEvents, Get: getSecret}).
 			Build(),
 	}
 
 	tests := []struct {
-		testName    string
-		matchResult string
-		missResults []string
-		matchErr    string
-		emptyResult bool
+		testName     string
+		matchResult  string
+		matchResults []string
+		missResults  []string
+		matchErr     string
+		emptyResult  bool
+		eventLookups int
+		helmLookups  int
+		docCount     int
 
 		apiVersion  string
 		kind        string
@@ -131,17 +198,20 @@ func TestExport(t *testing.T) {
 		selector    string
 		maskSecrets bool
 		limit       int
+		fields      []string
 	}{
 		{
-			testName:    "match kind",
-			matchResult: "1057d9a5afdbed028350a4a4921b6f9a81e567a85a5e2b133244511be578fc75",
+			testName:     "match kind",
+			eventLookups: 1,
+			matchResult:  "1057d9a5afdbed028350a4a4921b6f9a81e567a85a5e2b133244511be578fc75",
 
 			apiVersion: "fluxcd.controlplane.io/v1",
 			kind:       "FluxInstance",
 		},
 		{
-			testName:    "match selector",
-			matchResult: "161da425b16b64dda4b3cec2ba0f8d7442973aba29bb446db3b340626181a0bc",
+			testName:     "match selector",
+			eventLookups: 1,
+			matchResult:  "161da425b16b64dda4b3cec2ba0f8d7442973aba29bb446db3b340626181a0bc",
 
 			apiVersion: "fluxcd.controlplane.io/v1",
 			kind:       "FluxInstance",
@@ -172,6 +242,148 @@ func TestExport(t *testing.T) {
 			kind:       "Secret",
 		},
 		{
+			testName:     "include events by default",
+			eventLookups: 1,
+			matchResults: []string{"events:", "Reconciliation failed with timeout"},
+
+			apiVersion: "fluxcd.controlplane.io/v1",
+			kind:       "FluxInstance",
+		},
+		{
+			testName: "project fields",
+			matchResults: []string{
+				"apiVersion: fluxcd.controlplane.io/v1",
+				"kind: FluxInstance",
+				"name: flux",
+				"namespace: flux-system",
+				"version: 2.3.x",
+				"lastAppliedRevision:",
+			},
+			missResults: []string{
+				"components:",
+				"registry:",
+				"conditions:",
+				"lastAttemptedRevision:",
+				"events:",
+				"labels:",
+			},
+
+			apiVersion: "fluxcd.controlplane.io/v1",
+			kind:       "FluxInstance",
+			fields:     []string{"spec.distribution.version", "status.lastAppliedRevision"},
+		},
+		{
+			testName:     "project fields with prefix covering events",
+			eventLookups: 1,
+			matchResults: []string{"conditions:", "lastAttemptedRevision:", "events:", "Reconciliation failed with timeout"},
+			missResults:  []string{"spec:"},
+
+			apiVersion: "fluxcd.controlplane.io/v1",
+			kind:       "FluxInstance",
+			fields:     []string{"status"},
+		},
+		{
+			testName:     "project fields ignores unknown paths",
+			matchResults: []string{"kind: FluxInstance", "name: flux"},
+			missResults:  []string{"spec:", "status:"},
+
+			apiVersion: "fluxcd.controlplane.io/v1",
+			kind:       "FluxInstance",
+			fields:     []string{"spec.unknown", ".status.conditions.type"},
+		},
+		{
+			testName: "project fields with jsonpath filter and wildcard",
+			matchResults: []string{
+				"status.conditions[?(@.type==\"Ready\")].message: Reconciliation finished in 52s",
+				"status.components[*].name:",
+				"- source-controller",
+				"- kustomize-controller",
+				"- helm-controller",
+			},
+			missResults: []string{"events:", "repository:", "lastAppliedRevision:"},
+
+			apiVersion: "fluxcd.controlplane.io/v1",
+			kind:       "FluxInstance",
+			fields:     []string{"{.status.conditions[?(@.type==\"Ready\")].message}", ".status.components[*].name"},
+		},
+		{
+			testName:     "project fields with jsonpath index",
+			matchResults: []string{"status.components[0].repository: ghcr.io/fluxcd/source-controller"},
+			missResults:  []string{"kustomize-controller", "events:"},
+
+			apiVersion: "fluxcd.controlplane.io/v1",
+			kind:       "FluxInstance",
+			fields:     []string{"status.components[0].repository"},
+		},
+		{
+			testName:     "project fields with jsonpath on events",
+			eventLookups: 1,
+			matchResults: []string{"status.events[*].message: Reconciliation failed with timeout"},
+			missResults:  []string{"conditions:", "lastTimestamp:"},
+
+			apiVersion: "fluxcd.controlplane.io/v1",
+			kind:       "FluxInstance",
+			fields:     []string{"status.events[*].message"},
+		},
+		{
+			testName:     "project fields with recursive descent covers events",
+			eventLookups: 1,
+			matchResults: []string{"..message:", "- Reconciliation finished in 52s", "- Reconciliation failed with timeout"},
+			missResults:  []string{"events:", "conditions:"},
+
+			apiVersion: "fluxcd.controlplane.io/v1",
+			kind:       "FluxInstance",
+			fields:     []string{"..message"},
+		},
+		{
+			testName:     "project fields keeps secret masked",
+			matchResults: []string{"password: '****'", "username: '****'"},
+			missResults:  []string{"annotations:", "cGFzc3dvcmQ="},
+
+			apiVersion:  "v1",
+			kind:        "Secret",
+			maskSecrets: true,
+			fields:      []string{"data"},
+		},
+		{
+			testName:     "include helm inventory by default",
+			eventLookups: 1,
+			helmLookups:  1,
+			matchResults: []string{"kind: HelmRelease", "chartName: podinfo", "inventory: []"},
+
+			apiVersion: "helm.toolkit.fluxcd.io/v2",
+			kind:       "HelmRelease",
+		},
+		{
+			testName:     "project fields skips helm inventory",
+			matchResults: []string{"kind: HelmRelease", "chartName: podinfo"},
+			missResults:  []string{"inventory:", "events:", "storageNamespace:"},
+
+			apiVersion: "helm.toolkit.fluxcd.io/v2",
+			kind:       "HelmRelease",
+			fields:     []string{"status.history"},
+		},
+		{
+			testName:     "project fields includes helm inventory when covered",
+			helmLookups:  1,
+			matchResults: []string{"kind: HelmRelease", "inventory: []"},
+			missResults:  []string{"history:", "events:"},
+
+			apiVersion: "helm.toolkit.fluxcd.io/v2",
+			kind:       "HelmRelease",
+			fields:     []string{"status.inventory"},
+		},
+		{
+			testName:     "project fields skips report metrics",
+			docCount:     1,
+			matchResults: []string{"kind: FluxReport", "version: v2.3.0"},
+			missResults:  []string{"entitlement:", "events:"},
+
+			apiVersion: "fluxcd.controlplane.io/v1",
+			kind:       "FluxReport",
+			fields:     []string{"spec.distribution.version"},
+		},
+		{
 			testName:    "no match for kind",
 			emptyResult: true,
 
@@ -191,8 +403,13 @@ func TestExport(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.testName, func(t *testing.T) {
 			g := NewWithT(t)
+			eventLookups = 0
+			helmLookups = 0
 
 			gvk, err := kubeClient.ParseGroupVersionKind(tt.apiVersion, tt.kind)
+			g.Expect(err).NotTo(HaveOccurred())
+
+			fieldPaths, err := ParseFieldPaths(tt.fields)
 			g.Expect(err).NotTo(HaveOccurred())
 
 			result, err := kubeClient.Export(
@@ -203,6 +420,7 @@ func TestExport(t *testing.T) {
 				tt.selector,
 				tt.limit,
 				tt.maskSecrets,
+				fieldPaths,
 			)
 			if tt.matchErr != "" {
 				g.Expect(err).To(HaveOccurred())
@@ -210,6 +428,17 @@ func TestExport(t *testing.T) {
 			} else {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(result).To(ContainSubstring(tt.matchResult))
+			}
+
+			for _, matchResult := range tt.matchResults {
+				g.Expect(result).To(ContainSubstring(matchResult))
+			}
+
+			g.Expect(eventLookups).To(Equal(tt.eventLookups))
+			g.Expect(helmLookups).To(Equal(tt.helmLookups))
+
+			if tt.docCount > 0 {
+				g.Expect(strings.Count(result, "---\n")).To(Equal(tt.docCount))
 			}
 
 			for _, missResult := range tt.missResults {

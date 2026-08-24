@@ -49,7 +49,7 @@ func (m *Manager) HandleGetFluxInstance(ctx context.Context, request *mcp.CallTo
 			Version: fluxcdv1.GroupVersion.Version,
 			Kind:    fluxcdv1.FluxReportKind,
 		},
-	}, "", "", "", 1, true)
+	}, "", "", "", 1, true, nil)
 	if err != nil {
 		return NewToolResultErrorFromErr("Failed to determine the Flux status", err)
 	}

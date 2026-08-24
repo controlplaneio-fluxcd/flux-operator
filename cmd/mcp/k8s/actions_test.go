@@ -116,6 +116,7 @@ func TestAnnotateResource(t *testing.T) {
 					"app.kubernetes.io/name=flux",
 					0,
 					false,
+					nil,
 				)
 				g.Expect(rErr).NotTo(HaveOccurred())
 				g.Expect(result).To(ContainSubstring(tt.value))
@@ -217,6 +218,7 @@ func TestDeleteResource(t *testing.T) {
 					"app.kubernetes.io/name=flux",
 					0,
 					false,
+					nil,
 				)
 				g.Expect(rErr).NotTo(HaveOccurred())
 				g.Expect(result).NotTo(BeEmpty())
@@ -231,6 +233,7 @@ func TestDeleteResource(t *testing.T) {
 					"app.kubernetes.io/name=flux",
 					0,
 					false,
+					nil,
 				)
 				g.Expect(rErr).NotTo(HaveOccurred())
 				g.Expect(result).To(BeEmpty())

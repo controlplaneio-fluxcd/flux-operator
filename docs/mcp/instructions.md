@@ -39,6 +39,7 @@ For Flux API guidance, call the `search_flux_docs` tool with targeted questions.
 
 - When asked about the Flux installation status, call the `get_flux_instance` tool.
 - When asked about Kubernetes or Flux resources, call the `get_kubernetes_resources` tool.
+- When listing many resources or when only specific fields are relevant, set the `fields` parameter of the `get_kubernetes_resources` tool to kubectl JSONPath expressions (e.g. `spec.chart.spec.version`, `status.conditions[?(@.type=="Ready")].message`) to reduce the result size. Include `status.events` and `status.inventory` in `fields` when the events or the inventory are needed.
 - Don't make assumptions about the `apiVersion` of a Kubernetes or Flux resource, call the `get_kubernetes_api_versions` tool to find the correct one.
 - When asked to use a specific cluster, call the `get_kubeconfig_contexts` tool to find the cluster context before switching to it with the `set_kubeconfig_context` tool.
 - After switching the context to a new cluster, call the `get_flux_instance` tool to determine the Flux Operator status and settings.
