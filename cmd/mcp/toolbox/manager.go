@@ -89,7 +89,7 @@ func (m *Manager) RegisterTools(server *mcp.Server, inCluster bool) []string {
 		addTool(server, &recorder,
 			&mcp.Tool{
 				Name:        ToolInstallFluxInstance,
-				Description: "This tool installs Flux Operator and a Flux instance on the cluster from a manifest URL.",
+				Description: "Installs Flux Operator and a Flux instance on the cluster from a manifest URL.",
 			},
 			m.HandleInstallFluxInstance,
 		)
@@ -98,7 +98,7 @@ func (m *Manager) RegisterTools(server *mcp.Server, inCluster bool) []string {
 		addTool(server, &recorder,
 			&mcp.Tool{
 				Name:        ToolGetFluxInstance,
-				Description: "This tool retrieves the Flux instance installation and a detailed report about Flux controllers, CRDs and their status.",
+				Description: "Retrieves the Flux installation report with controllers, CRDs and their reconciliation status.",
 			},
 			m.HandleGetFluxInstance,
 		)
@@ -107,7 +107,7 @@ func (m *Manager) RegisterTools(server *mcp.Server, inCluster bool) []string {
 		addTool(server, &recorder,
 			&mcp.Tool{
 				Name:        ToolGetKubernetesAPIVersions,
-				Description: "This tool retrieves the Kubernetes CRDs registered on the cluster and returns the preferred apiVersion for each kind.",
+				Description: "Retrieves the CRDs registered on the cluster and their preferred apiVersion for each kind.",
 			},
 			m.HandleGetAPIVersions,
 		)
@@ -116,7 +116,7 @@ func (m *Manager) RegisterTools(server *mcp.Server, inCluster bool) []string {
 		addTool(server, &recorder,
 			&mcp.Tool{
 				Name:        ToolGetKubernetesLogs,
-				Description: "This tool retrieves logs from a Kubernetes pod.",
+				Description: "Retrieves logs from a Kubernetes pod.",
 			},
 			m.HandleGetKubernetesLogs,
 		)
@@ -125,7 +125,7 @@ func (m *Manager) RegisterTools(server *mcp.Server, inCluster bool) []string {
 		addTool(server, &recorder,
 			&mcp.Tool{
 				Name:        ToolGetKubernetesMetrics,
-				Description: "This tool retrieves metrics from a Kubernetes pod.",
+				Description: "Retrieves CPU and memory usage of pods.",
 			},
 			m.HandleGetKubernetesMetrics,
 		)
@@ -134,7 +134,7 @@ func (m *Manager) RegisterTools(server *mcp.Server, inCluster bool) []string {
 		addTool(server, &recorder,
 			&mcp.Tool{
 				Name:        ToolGetKubernetesResources,
-				Description: "This tool retrieves Kubernetes resources from the cluster.",
+				Description: "Retrieves Kubernetes resources from the cluster.",
 			},
 			m.HandleGetKubernetesResources,
 		)
@@ -143,7 +143,7 @@ func (m *Manager) RegisterTools(server *mcp.Server, inCluster bool) []string {
 		addTool(server, &recorder,
 			&mcp.Tool{
 				Name:        ToolSearchFluxDocs,
-				Description: "This tool searches the Flux documentation for a given query, using concise docs by default with complete API docs available on request.",
+				Description: "Searches the Flux documentation, returning matching sections with titles, links and excerpts. Concise by default, complete API docs on request.",
 			},
 			m.HandleSearchFluxDocs,
 		)
@@ -152,7 +152,7 @@ func (m *Manager) RegisterTools(server *mcp.Server, inCluster bool) []string {
 		addTool(server, &recorder,
 			&mcp.Tool{
 				Name:        ToolApplyKubernetesManifest,
-				Description: "This tool applies a Kubernetes YAML manifest on the cluster.",
+				Description: "Applies a Kubernetes YAML manifest on the cluster.",
 			},
 			m.HandleApplyKubernetesManifest,
 		)
@@ -161,7 +161,7 @@ func (m *Manager) RegisterTools(server *mcp.Server, inCluster bool) []string {
 		addTool(server, &recorder,
 			&mcp.Tool{
 				Name:        ToolDeleteKubernetesResource,
-				Description: "This tool deletes a Kubernetes resource from the cluster.",
+				Description: "Deletes a Kubernetes resource from the cluster.",
 			},
 			m.HandleDeleteKubernetesResource,
 		)
@@ -170,7 +170,7 @@ func (m *Manager) RegisterTools(server *mcp.Server, inCluster bool) []string {
 		addTool(server, &recorder,
 			&mcp.Tool{
 				Name:        ToolReconcileFluxSource,
-				Description: "This tool reconciles a Flux Source.",
+				Description: "Reconciles a Flux Source.",
 			},
 			m.HandleReconcileSource,
 		)
@@ -179,7 +179,7 @@ func (m *Manager) RegisterTools(server *mcp.Server, inCluster bool) []string {
 		addTool(server, &recorder,
 			&mcp.Tool{
 				Name:        ToolReconcileFluxKustomization,
-				Description: "This tool reconciles a Flux Kustomization.",
+				Description: "Reconciles a Flux Kustomization.",
 			},
 			m.HandleReconcileKustomization,
 		)
@@ -188,7 +188,7 @@ func (m *Manager) RegisterTools(server *mcp.Server, inCluster bool) []string {
 		addTool(server, &recorder,
 			&mcp.Tool{
 				Name:        ToolReconcileFluxHelmRelease,
-				Description: "This tool reconciles a Flux HelmRelease.",
+				Description: "Reconciles a Flux HelmRelease.",
 			},
 			m.HandleReconcileHelmRelease,
 		)
@@ -197,7 +197,7 @@ func (m *Manager) RegisterTools(server *mcp.Server, inCluster bool) []string {
 		addTool(server, &recorder,
 			&mcp.Tool{
 				Name:        ToolReconcileFluxResourceSet,
-				Description: "This tool reconciles a Flux ResourceSet.",
+				Description: "Reconciles a Flux ResourceSet.",
 			},
 			m.HandleReconcileResourceSet,
 		)
@@ -206,7 +206,7 @@ func (m *Manager) RegisterTools(server *mcp.Server, inCluster bool) []string {
 		addTool(server, &recorder,
 			&mcp.Tool{
 				Name:        ToolSuspendFluxReconciliation,
-				Description: "This tool suspends reconciliation for a Flux resource.",
+				Description: "Suspends reconciliation for a Flux resource.",
 			},
 			m.HandleSuspendReconciliation,
 		)
@@ -215,7 +215,7 @@ func (m *Manager) RegisterTools(server *mcp.Server, inCluster bool) []string {
 		addTool(server, &recorder,
 			&mcp.Tool{
 				Name:        ToolResumeFluxReconciliation,
-				Description: "This tool resumes reconciliation for a Flux resource.",
+				Description: "Resumes reconciliation for a Flux resource.",
 			},
 			m.HandleResumeReconciliation,
 		)
@@ -224,7 +224,7 @@ func (m *Manager) RegisterTools(server *mcp.Server, inCluster bool) []string {
 		addTool(server, &recorder,
 			&mcp.Tool{
 				Name:        ToolGetKubeConfigContexts,
-				Description: "This tool retrieves the Kubernetes clusters name and context found in the kubeconfig.",
+				Description: "Retrieves the cluster names and contexts found in the kubeconfig.",
 			},
 			m.HandleGetKubeconfigContexts,
 		)
@@ -233,7 +233,7 @@ func (m *Manager) RegisterTools(server *mcp.Server, inCluster bool) []string {
 		addTool(server, &recorder,
 			&mcp.Tool{
 				Name:        ToolSetKubeConfigContext,
-				Description: "This tool sets the current Kubernetes context in the kubeconfig.",
+				Description: "Sets the current kubeconfig context.",
 			},
 			m.HandleSetKubeconfigContext,
 		)

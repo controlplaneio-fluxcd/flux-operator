@@ -27,9 +27,9 @@ func init() {
 
 // searchFluxDocsInput defines the input parameters for searching Flux documentation.
 type searchFluxDocsInput struct {
-	Query  string  `json:"query" jsonschema:"The search query."`
-	Limit  float64 `json:"limit,omitempty" jsonschema:"The maximum number of matching documents to return. Default is 1."`
-	Format string  `json:"format,omitempty" jsonschema:"The documentation format to search. Allowed values are 'concise' and 'complete'. Default is 'concise'."`
+	Query  string  `json:"query" jsonschema:"Search query."`
+	Limit  float64 `json:"limit,omitempty" jsonschema:"Max matching documents. Default is 1."`
+	Format string  `json:"format,omitempty" jsonschema:"'concise' (default) or 'complete' for the full upstream API docs."`
 }
 
 // HandleSearchFluxDocs is the handler function for the search_flux_docs tool.

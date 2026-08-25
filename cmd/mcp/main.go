@@ -195,8 +195,11 @@ func serveCmdRun(cmd *cobra.Command, args []string) error {
 		return errors.New("KUBECONFIG environment variable is not set")
 	}
 
-	// Create the MCP server
+	// Create the MCP server with instructions tailored to the enabled tools
+	kubeClient := k8s.NewClientFactory(kubeconfigArgs)
+	tm := toolbox.NewManager(kubeClient, rootArgs.timeout, rootArgs.maskSecrets, rootArgs.readOnly, nil)
 	mcpServer := mcp.NewServer(mcpImpl, &mcp.ServerOptions{
+		Instructions: tm.Instructions(inCluster),
 		Capabilities: &mcp.ServerCapabilities{
 			Tools: &mcp.ToolCapabilities{},
 		},
@@ -206,8 +209,6 @@ func serveCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Register tools
-	kubeClient := k8s.NewClientFactory(kubeconfigArgs)
-	tm := toolbox.NewManager(kubeClient, rootArgs.timeout, rootArgs.maskSecrets, rootArgs.readOnly, nil)
 	tm.RegisterTools(mcpServer, inCluster)
 
 	// Start server based on transport type

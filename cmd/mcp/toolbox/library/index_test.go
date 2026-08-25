@@ -25,6 +25,8 @@ func TestConciseSearchIndexRelevance(t *testing.T) {
 		{query: "ImagePolicy semver", wantTitle: "Image Automation Reference"},
 		{query: "Receiver webhook hmac", wantTitle: "Notifications Reference"},
 		{query: "least privilege rbac web UI", wantTitle: "Flux Web UI Reference"},
+		{query: "ArtifactGenerator pathPattern monorepo", wantTitle: "Monorepo Delivery Reference"},
+		{query: "generate Kustomization per app directory", wantTitle: "Monorepo Delivery Reference"},
 	}
 
 	for _, tt := range tests {

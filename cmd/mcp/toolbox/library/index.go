@@ -348,6 +348,15 @@ var conciseDocsMetadata = []DocumentMetadata{
 		},
 	},
 	{
+		Title: "Monorepo Delivery Reference",
+		URL:   conciseDocsBaseURL + "/monorepo-delivery.md",
+		Keywords: []string{
+			"monorepo", "delivery", "pipeline", "ArtifactGenerator", "pathPattern", "source-watcher",
+			"ResourceSetInputProvider", "ResourceSet", "Kustomization", "apps", "environments",
+			"base", "overlay", "layered", "infra", "ordering", "multi-tenancy",
+		},
+	},
+	{
 		Title: "Notifications Reference",
 		URL:   conciseDocsBaseURL + "/notifications.md",
 		Keywords: []string{

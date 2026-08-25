@@ -24,11 +24,11 @@ func init() {
 
 // getKubernetesLogsInput defines the input parameters for retrieving pod logs.
 type getKubernetesLogsInput struct {
-	PodName       string  `json:"pod_name" jsonschema:"The name of the pod."`
-	ContainerName string  `json:"container_name" jsonschema:"The name of the container."`
-	PodNamespace  string  `json:"pod_namespace" jsonschema:"The namespace of the pod."`
-	Limit         float64 `json:"limit,omitempty" jsonschema:"The maximum number of log lines to return. Defaults to 100."`
-	Previous      bool    `json:"previous,omitempty" jsonschema:"Return logs from the previous container instance. Defaults to false."`
+	PodName       string  `json:"pod_name" jsonschema:"Pod name."`
+	ContainerName string  `json:"container_name" jsonschema:"Container name."`
+	PodNamespace  string  `json:"pod_namespace" jsonschema:"Namespace of the pod."`
+	Limit         float64 `json:"limit,omitempty" jsonschema:"Max log lines. Defaults to 100."`
+	Previous      bool    `json:"previous,omitempty" jsonschema:"Logs from the previously terminated container."`
 }
 
 // HandleGetKubernetesLogs is the handler function for the get_kubernetes_logs tool.
