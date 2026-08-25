@@ -53,6 +53,24 @@ func TestManager_HandleGetKubernetesResources(t *testing.T) {
 			matchErr: "kind is required",
 		},
 		{
+			testName: "fails with empty field path",
+			arguments: map[string]any{
+				"apiVersion": "apps/v1",
+				"kind":       "Deployment",
+				"fields":     []string{"spec", " "},
+			},
+			matchErr: "Invalid fields: field path must not be empty",
+		},
+		{
+			testName: "fails with invalid field path",
+			arguments: map[string]any{
+				"apiVersion": "apps/v1",
+				"kind":       "Deployment",
+				"fields":     []string{"{.spec"},
+			},
+			matchErr: "Invalid fields: invalid field path",
+		},
+		{
 			testName: "fails with invalid kubeconfig",
 			arguments: map[string]any{
 				"apiVersion": "apps/v1",

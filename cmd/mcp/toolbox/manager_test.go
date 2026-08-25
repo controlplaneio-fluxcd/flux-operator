@@ -73,7 +73,7 @@ func TestManager_ToolSchemasIncludeProperties(t *testing.T) {
 			required:   []string{"pod_namespace"},
 		},
 		ToolGetKubernetesResources: {
-			properties: []string{"apiVersion", "kind", "name", "namespace", "selector", "limit"},
+			properties: []string{"apiVersion", "kind", "name", "namespace", "selector", "limit", "fields"},
 			required:   []string{"apiVersion", "kind"},
 		},
 		ToolSearchFluxDocs: {

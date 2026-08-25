@@ -8,6 +8,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/k8s"
 )
 
 const (
@@ -24,12 +26,13 @@ func init() {
 
 // getKubernetesResourcesInput defines the input parameters for retrieving Kubernetes resources.
 type getKubernetesResourcesInput struct {
-	APIVersion string  `json:"apiVersion" jsonschema:"The apiVersion of the Kubernetes resource. Use the get_kubernetes_api_versions tool to get the available apiVersions."`
-	Kind       string  `json:"kind" jsonschema:"The kind of the Kubernetes resource. Use the get_kubernetes_api_versions tool to get the available kinds."`
-	Name       string  `json:"name,omitempty" jsonschema:"The name of the Kubernetes resource."`
-	Namespace  string  `json:"namespace,omitempty" jsonschema:"The namespace of the Kubernetes resource."`
-	Selector   string  `json:"selector,omitempty" jsonschema:"The label selector in the format key1=value1 key2=value2."`
-	Limit      float64 `json:"limit,omitempty" jsonschema:"The maximum number of resources to return."`
+	APIVersion string   `json:"apiVersion" jsonschema:"The apiVersion of the Kubernetes resource. Use the get_kubernetes_api_versions tool to get the available apiVersions."`
+	Kind       string   `json:"kind" jsonschema:"The kind of the Kubernetes resource. Use the get_kubernetes_api_versions tool to get the available kinds."`
+	Name       string   `json:"name,omitempty" jsonschema:"The name of the Kubernetes resource."`
+	Namespace  string   `json:"namespace,omitempty" jsonschema:"The namespace of the Kubernetes resource."`
+	Selector   string   `json:"selector,omitempty" jsonschema:"The label selector in the format key1=value1 key2=value2."`
+	Limit      float64  `json:"limit,omitempty" jsonschema:"The maximum number of resources to return."`
+	Fields     []string `json:"fields,omitempty" jsonschema:"The list of kubectl JSONPath expressions to include in the result to reduce its size e.g. spec.sourceRef.name or status.conditions[?(@.type=='Ready')].message."`
 }
 
 // HandleGetKubernetesResources is the handler function for the get_kubernetes_resources tool.
@@ -45,6 +48,11 @@ func (m *Manager) HandleGetKubernetesResources(ctx context.Context, request *mcp
 		return NewToolResultError("kind is required")
 	}
 	limit := int(input.Limit)
+
+	fieldPaths, err := k8s.ParseFieldPaths(input.Fields)
+	if err != nil {
+		return NewToolResultErrorFromErr("Invalid fields", err)
+	}
 
 	ctx, cancel := context.WithTimeout(ctx, m.timeout)
 	defer cancel()
@@ -65,7 +73,8 @@ func (m *Manager) HandleGetKubernetesResources(ctx context.Context, request *mcp
 		input.Namespace,
 		input.Selector,
 		limit,
-		m.maskSecrets)
+		m.maskSecrets,
+		fieldPaths)
 	if err != nil {
 		return NewToolResultErrorFromErr("Failed to export resources", err)
 	}
