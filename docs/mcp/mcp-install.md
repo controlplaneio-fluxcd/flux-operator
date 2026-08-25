@@ -5,7 +5,7 @@ description: FluxCD MCP Server installation guide
 
 # Flux MCP Server Installation
 
-This guide walks you through installing, configuring, and using the Flux MCP Server with various AI assistants.
+This guide walks you through installing, configuring, and using the Flux MCP Server with various AI Agents.
 
 ## Prerequisites
 
@@ -46,15 +46,39 @@ make mcp-build
 
 The `flux-operator-mcp` binary will be available in the `bin` directory relative to the repository root.
 
-## Configuration with AI Assistants
+## Configuration with AI Agents
 
-The Flux MCP Server is compatible with AI assistants that support the Model Context Protocol (MCP)
+The Flux MCP Server is compatible with AI Agents that support the Model Context Protocol (MCP)
 using any of the following transport modes:
 
 - Standard Input/Output (`stdio`)
-- Streamable HTTP (`http`)
+- Stateless Streamable HTTP (`http`)
 
-Add the following configuration to your AI assistant's settings to use the Flux MCP Server over stdio:
+For Claude Code:
+
+```shell
+claude mcp add flux-operator-mcp \
+  --env KUBECONFIG=$HOME/.kube/config \
+  -- flux-operator-mcp serve
+```
+
+For Codex:
+
+```shell
+codex mcp add flux-operator-mcp \
+  --env KUBECONFIG=$HOME/.kube/config \
+  -- flux-operator-mcp serve
+```
+
+For OpenCode:
+
+```shell
+opencode mcp add flux-operator-mcp \
+  --env KUBECONFIG=$HOME/.kube/config \
+  -- flux-operator-mcp serve
+```
+
+For Cursor, GitHub Copilot, and other agents that support `.mcp.json`:
 
 ```json
 {
@@ -73,26 +97,12 @@ Add the following configuration to your AI assistant's settings to use the Flux 
 Replace `/path/to/.kube/config` with the path to your kubeconfig file.
 To determine the correct path, you can run: `echo $HOME/.kube/config`.
 
-For Codex, you can run:
-
-```shell
-codex mcp add flux-operator-mcp \
-  --env KUBECONFIG=$HOME/.kube/config \
-  -- flux-operator-mcp serve
-```
-
 See the [Configuration Options](mcp-config.md) for more details on how to set up the server
 in different modes.
 
 ## Testing Your Installation
 
-Before using the Flux MCP Server, it is important to set up the AI instructions
-for your assistant. Copy the rules from the
-[instructions.md](https://raw.githubusercontent.com/controlplaneio-fluxcd/flux-operator/refs/heads/main/docs/mcp/instructions.md)
-file and place them into the appropriate settings for your assistant, for more details on how to do this
-see the [AI Instructions](mcp-prompting.md#ai-instructions) section.
-
-After the instructions are in place, you can test the installation with the following prompts:
+Test the installation with the following prompts:
 
 - "Which cluster contexts are available in my kubeconfig?"
 - "What version of Flux is running in my current cluster?"

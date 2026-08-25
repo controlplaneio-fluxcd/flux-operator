@@ -24,21 +24,25 @@ The `flux-operator-mcp serve` command accepts the following flags:
 
 ### Standard Input/Output (`stdio`)
 
-The MCP Server uses standard input/output (stdio) by default, which is compatible with most AI assistants.
+The MCP Server uses standard input/output (stdio) by default, which is compatible with most AI Agents.
 
 To start the server in this mode, use the following configuration:
 
 ```json
 {
-  "flux-operator-mcp":{
-    "command":"/path/to/flux-operator-mcp",
-    "args":["serve"],
-    "env":{
-      "KUBECONFIG":"/path/to/.kube/config"
+  "mcpServers": {
+    "flux-operator-mcp": {
+      "command": "flux-operator-mcp",
+      "args": ["serve"],
+      "env": {
+        "KUBECONFIG": "/path/to/.kube/config"
+      }
     }
   }
 }
 ```
+
+Replace `/path/to/.kube/config` with the absolute path to your kubeconfig file.
 
 ### Streamable HTTP (`http`)
 
@@ -64,12 +68,10 @@ To connect to the server over http, use the following configuration:
 
 ```json
 {
-  "mcp": {
-    "servers": {
-      "flux-operator-mcp": {
-        "type": "http",
-        "url": "http://localhost:8080/mcp"
-      }
+  "mcpServers": {
+    "flux-operator-mcp": {
+      "type": "http",
+      "url": "http://localhost:8080/mcp"
     }
   }
 }
@@ -84,7 +86,7 @@ In production environments, you can run the server in read-only mode to prevent 
 ```json
 {
   "flux-operator-mcp":{
-    "command":"/path/to/flux-operator-mcp",
+    "command":"flux-operator-mcp",
     "args":[
       "serve",
       "--read-only"
@@ -108,7 +110,7 @@ By default, the server masks sensitive values in Kubernetes Secrets. You can dis
 ```json
 {
   "flux-operator-mcp":{
-    "command":"/path/to/flux-operator-mcp",
+    "command":"flux-operator-mcp",
     "args":[
       "serve",
       "--mask-secrets=false"
@@ -132,7 +134,7 @@ For tighter security control, you can configure the server to impersonate a spec
 ```json
 {
   "flux-operator-mcp":{
-    "command":"/path/to/flux-operator-mcp",
+    "command":"flux-operator-mcp",
     "args":[
       "serve",
       "--kube-as=system:serviceaccount:my-namespace:my-service-account"
@@ -213,16 +215,14 @@ To connect to the server, start port forwarding with:
 kubectl port-forward -n flux-system svc/flux-operator-mcp 9090:9090
 ```
 
-Then, in your AI settings, add:
+Then, in your `.mcp.json`, add:
 
 ```json
 {
-  "mcp": {
-    "servers": {
-      "flux-operator-mcp": {
-        "type": "http",
-        "url": "http://localhost:9090/mcp"
-      }
+  "mcpServers": {
+    "flux-operator-mcp": {
+      "type": "http",
+      "url": "http://localhost:8080/mcp"
     }
   }
 }
