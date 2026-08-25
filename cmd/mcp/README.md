@@ -41,8 +41,9 @@ Add the following configuration to your AI assistant's MCP settings:
 Replace `/path/to/.kube/config` with the absolute path to your kubeconfig file,
 you can find it with: `echo $HOME/.kube/config`.
 
-Copy the AI rules from
-[instructions.md](https://raw.githubusercontent.com/controlplaneio-fluxcd/distribution/refs/heads/main/docs/mcp/instructions.md)
+The MCP Server advertises built-in instructions to the AI assistant during initialization.
+For step-by-step troubleshooting procedures, copy the AI rules from
+[instructions.md](https://raw.githubusercontent.com/controlplaneio-fluxcd/flux-operator/refs/heads/main/docs/mcp/instructions.md)
 and place them into the appropriate file for your assistant.
 
 Restart the AI assistant app and test the MCP Server with the following prompts:

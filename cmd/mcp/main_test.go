@@ -20,12 +20,13 @@ import (
 )
 
 func newTestServer() *mcp.Server {
+	tm := toolbox.NewManager(k8s.NewClientFactory(kubeconfigArgs), time.Minute, true, true, nil)
 	mcpServer := mcp.NewServer(mcpImpl, &mcp.ServerOptions{
+		Instructions: tm.Instructions(true),
 		Capabilities: &mcp.ServerCapabilities{
 			Tools: &mcp.ToolCapabilities{},
 		},
 	})
-	tm := toolbox.NewManager(k8s.NewClientFactory(kubeconfigArgs), time.Minute, true, true, nil)
 	tm.RegisterTools(mcpServer, true)
 	return mcpServer
 }
@@ -48,6 +49,10 @@ func TestHTTPHandler_Stateless(t *testing.T) {
 	// The server must negotiate the latest protocol version.
 	g.Expect(session.InitializeResult().ProtocolVersion).To(Equal("2026-07-28"))
 	g.Expect(session.InitializeResult().ServerInfo.Name).To(Equal(mcpImpl.Name))
+
+	// The server must advertise instructions naming the available tools.
+	g.Expect(session.InitializeResult().Instructions).To(ContainSubstring(toolbox.ToolGetFluxInstance))
+	g.Expect(session.InitializeResult().Instructions).ToNot(ContainSubstring(toolbox.ToolSetKubeConfigContext))
 
 	// Stateless servers don't issue session IDs.
 	g.Expect(session.ID()).To(BeEmpty())

@@ -19,9 +19,9 @@ The skills are designed to work together, and the agent automatically selects th
 - **gitops-repo-audit**: audits Flux GitOps repositories for structure, security,
   and operational best practices, and generates a report with prioritized recommendations.
 - **gitops-cluster-debug**: debugs and troubleshoots Flux on live Kubernetes clusters using
-  the Flux MCP Server. It inspects the Flux installation health, diagnoses HelmRelease and
-  Kustomization failures, analyzes pod logs, traces dependency chains, and produces
-  a root cause analysis report with prioritized remediation steps.
+  the Flux MCP Server. It inspects the Flux installation health, diagnoses HelmRelease,
+  Kustomization, and ResourceSet failures, analyzes pod logs, traces dependency chains,
+  and produces a root cause analysis report with prioritized remediation steps.
 
 The fastest way to install the skills is with the [Flux Operator CLI](cli.md).
 Navigate to your GitOps repository root and run:
@@ -41,15 +41,12 @@ the skills with the repository context to tailor the analysis and the generated 
 
 ## AI Instructions
 
-For AI assistants that don't support agent skills, we've created a set of
-[instructions](instructions.md) (1400 tokens) that guide the assistant when
-interacting with the Flux MCP Server tools.
+The Flux MCP Server advertises a concise set of built-in instructions (under 500 tokens)
+to the AI assistant during the MCP initialization handshake.
 
-Copy the rules from the
-[instructions.md](https://raw.githubusercontent.com/controlplaneio-fluxcd/flux-operator/refs/heads/main/docs/mcp/instructions.md)
-file and place them into the `AGENTS.md` or `CLAUDE.md` file at the root of your GitOps repository,
-or into the appropriate settings for your assistant, such as the `Project Instructions` in Claude Desktop,
-the `.cursor/rules` directory for Cursor, or the `.github/copilot-instructions.md` file for GitHub Copilot.
+For AI assistants that don't support agent skills, we've created an extended set of
+[instructions](instructions.md) (1400 tokens) with step-by-step troubleshooting
+procedures that guide the assistant when interacting with the Flux MCP Server tools.
 
 It is recommended to enhance the instructions with relevant information about your clusters,
 such as the Kubernetes distribution, cloud provider, deployed applications, and how secrets are managed.
