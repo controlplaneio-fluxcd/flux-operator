@@ -24,10 +24,10 @@ func init() {
 
 // getKubernetesMetricsInput defines the input parameters for retrieving pod metrics.
 type getKubernetesMetricsInput struct {
-	PodName      string  `json:"pod_name,omitempty" jsonschema:"The name of the pod when not specified all pods are selected."`
-	PodNamespace string  `json:"pod_namespace" jsonschema:"The namespace of the pods."`
-	PodSelector  string  `json:"pod_selector,omitempty" jsonschema:"The pod label selector in the format key1=value1 key2=value2."`
-	Limit        float64 `json:"limit,omitempty" jsonschema:"The maximum number of resources to return. Defaults to 100."`
+	PodName      string  `json:"pod_name,omitempty" jsonschema:"Pod name; omit to select all pods."`
+	PodNamespace string  `json:"pod_namespace" jsonschema:"Namespace of the pods."`
+	PodSelector  string  `json:"pod_selector,omitempty" jsonschema:"Label selector in the format key1=value1 key2=value2."`
+	Limit        float64 `json:"limit,omitempty" jsonschema:"Max resources. Defaults to 100."`
 }
 
 // HandleGetKubernetesMetrics is the handler function for the get_kubernetes_metrics tool.

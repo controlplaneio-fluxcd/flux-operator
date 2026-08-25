@@ -24,7 +24,7 @@ func init() {
 
 // setKubeconfigContextInput defines the input parameters for setting the kubeconfig context.
 type setKubeconfigContextInput struct {
-	Name string `json:"name" jsonschema:"The name of the kubeconfig context."`
+	Name string `json:"name" jsonschema:"Kubeconfig context name."`
 }
 
 // HandleSetKubeconfigContext is the handler function for the set_kubeconfig_context tool.
