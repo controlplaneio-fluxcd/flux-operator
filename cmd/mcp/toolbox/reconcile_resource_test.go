@@ -40,20 +40,19 @@ func TestManager_HandleReconcileResource(t *testing.T) {
 		matchErr  string
 	}{
 		{
-			testName: "fails without apiVersion",
+			testName: "fails with omitted apiVersion and invalid kubeconfig",
 			arguments: map[string]any{
 				"kind":      "Kustomization",
 				"name":      "test",
 				"namespace": "default",
 			},
-			matchErr: "apiVersion is required",
+			matchErr: "Failed to get Kubernetes client",
 		},
 		{
 			testName: "fails without kind",
 			arguments: map[string]any{
-				"apiVersion": "kustomize.toolkit.fluxcd.io/v1",
-				"name":       "test",
-				"namespace":  "default",
+				"name":      "test",
+				"namespace": "default",
 			},
 			matchErr: "kind is required",
 		},

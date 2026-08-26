@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/fluxcd/cli-utils/pkg/kstatus/polling"
@@ -117,6 +118,34 @@ func (k *Client) ParseGroupVersionKind(apiVersion, kind string) (schema.GroupVer
 		Group:   gv.Group,
 		Version: gv.Version,
 		Kind:    kind,
+	}
+	return gvk, nil
+}
+
+// ResolveGroupVersionKind returns the GroupVersionKind for the given apiVersion and kind.
+// When apiVersion is empty, the group is looked up from the Flux kind tables and the
+// version from the API server discovery; non-Flux kinds are resolved via discovery alone.
+func (k *Client) ResolveGroupVersionKind(apiVersion, kind string) (schema.GroupVersionKind, error) {
+	if kind == "" {
+		return schema.GroupVersionKind{}, errors.New("kind not specified")
+	}
+
+	if apiVersion != "" {
+		return k.ParseGroupVersionKind(apiVersion, kind)
+	}
+
+	gk, err := fluxcdv1.FluxGroupFor(kind)
+	if err == nil {
+		mapping, err := k.RESTMapper().RESTMapping(*gk)
+		if err != nil {
+			return schema.GroupVersionKind{}, fmt.Errorf("unable to resolve apiVersion for kind %s: %w", kind, err)
+		}
+		return mapping.GroupVersionKind, nil
+	}
+
+	gvk, err := k.RESTMapper().KindFor(schema.GroupVersionResource{Resource: strings.ToLower(kind)})
+	if err != nil {
+		return schema.GroupVersionKind{}, fmt.Errorf("unable to resolve apiVersion for kind %s, specify the apiVersion: %w", kind, err)
 	}
 	return gvk, nil
 }

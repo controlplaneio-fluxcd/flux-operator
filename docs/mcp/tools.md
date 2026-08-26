@@ -143,7 +143,7 @@ Triggers an on-demand reconciliation of a Flux resource and can optionally recon
 
 **Parameters:**
 
-- `apiVersion` (required): The API version of the Flux resource
+- `apiVersion` (optional): The API version of the Flux resource, resolved from the kind when omitted
 - `kind` (required): The kind of the Flux resource
 - `name` (required): The name of the Flux resource
 - `namespace` (required): The namespace of the Flux resource
@@ -170,7 +170,7 @@ Suspends the reconciliation of a Flux resource.
 
 **Parameters:**
 
-- `apiVersion` (required): The API version of the resource
+- `apiVersion` (optional): The API version of the Flux resource, resolved from the kind when omitted
 - `kind` (required): The kind of the resource
 - `name` (required): The name of the resource
 - `namespace` (required): The namespace of the resource
@@ -185,7 +185,7 @@ Resumes the reconciliation of a previously suspended Flux resource.
 
 **Parameters:**
 
-- `apiVersion` (required): The API version of the resource
+- `apiVersion` (optional): The API version of the Flux resource, resolved from the kind when omitted
 - `kind` (required): The kind of the resource
 - `name` (required): The name of the resource
 - `namespace` (required): The namespace of the resource

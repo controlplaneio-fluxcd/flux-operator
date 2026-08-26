@@ -30,7 +30,7 @@ func init() {
 
 // reconcileFluxResourceInput defines the input parameters for reconciling a Flux resource.
 type reconcileFluxResourceInput struct {
-	APIVersion string `json:"apiVersion" jsonschema:"The apiVersion of the Flux resource."`
+	APIVersion string `json:"apiVersion,omitempty" jsonschema:"The apiVersion of the Flux resource. Optional, when omitted it is resolved from the kind."`
 	Kind       string `json:"kind" jsonschema:"The kind of the Flux resource e.g. Kustomization, HelmRelease, ResourceSet, ResourceSetInputProvider, FluxInstance, GitRepository, OCIRepository, HelmRepository, HelmChart, Bucket, ImageRepository, ImagePolicy, ImageUpdateAutomation, Receiver."`
 	Name       string `json:"name" jsonschema:"The name of the Flux resource."`
 	Namespace  string `json:"namespace" jsonschema:"The namespace of the Flux resource."`
@@ -50,9 +50,6 @@ func (m *Manager) HandleReconcileResource(ctx context.Context, request *mcp.Call
 		return NewToolResultError(err.Error())
 	}
 
-	if input.APIVersion == "" {
-		return NewToolResultError("apiVersion is required")
-	}
 	if input.Kind == "" {
 		return NewToolResultError("kind is required")
 	}
@@ -71,9 +68,9 @@ func (m *Manager) HandleReconcileResource(ctx context.Context, request *mcp.Call
 		return NewToolResultErrorFromErr("Failed to get Kubernetes client", err)
 	}
 
-	gvk, err := kubeClient.ParseGroupVersionKind(input.APIVersion, input.Kind)
+	gvk, err := kubeClient.ResolveGroupVersionKind(input.APIVersion, input.Kind)
 	if err != nil {
-		return NewToolResultErrorFromErr("Failed to parse group version kind", err)
+		return NewToolResultErrorFromErr("Failed to resolve group version kind", err)
 	}
 
 	object := &unstructured.Unstructured{}

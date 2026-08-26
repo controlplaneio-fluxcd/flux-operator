@@ -38,16 +38,19 @@ func TestManager_HandleSuspendReconciliation(t *testing.T) {
 		matchErr  string
 	}{
 		{
-			testName: "fails without apiVersion",
+			testName: "fails with omitted apiVersion and invalid kubeconfig",
 			arguments: map[string]any{
-				"name": "test",
+				"kind":      "Deployment",
+				"name":      "test",
+				"namespace": "default",
 			},
-			matchErr: "apiVersion is required",
+			matchErr: "Failed to get Kubernetes client",
 		},
 		{
 			testName: "fails without kind",
 			arguments: map[string]any{
-				"apiVersion": "v1",
+				"name":      "test",
+				"namespace": "default",
 			},
 			matchErr: "kind is required",
 		},

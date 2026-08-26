@@ -186,15 +186,15 @@ func TestManager_ToolSchemasIncludeProperties(t *testing.T) {
 		},
 		ToolReconcileFluxResource: {
 			properties: []string{"apiVersion", "kind", "name", "namespace", "with_source"},
-			required:   []string{"apiVersion", "kind", "name", "namespace"},
+			required:   []string{"kind", "name", "namespace"},
 		},
 		ToolSuspendFluxReconciliation: {
 			properties: []string{"apiVersion", "kind", "name", "namespace"},
-			required:   []string{"apiVersion", "kind", "name", "namespace"},
+			required:   []string{"kind", "name", "namespace"},
 		},
 		ToolResumeFluxReconciliation: {
 			properties: []string{"apiVersion", "kind", "name", "namespace"},
-			required:   []string{"apiVersion", "kind", "name", "namespace"},
+			required:   []string{"kind", "name", "namespace"},
 		},
 		ToolGetKubeConfigContexts: {
 			properties: []string{},
