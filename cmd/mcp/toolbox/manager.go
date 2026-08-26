@@ -185,40 +185,13 @@ func (m *Manager) RegisterTools(server *mcp.Server, inCluster bool) []string {
 			m.HandleDeleteKubernetesResource,
 		)
 	}
-	if m.shouldRegisterTool(ToolReconcileFluxSource, inCluster) {
+	if m.shouldRegisterTool(ToolReconcileFluxResource, inCluster) {
 		addTool(server, &recorder,
 			&mcp.Tool{
-				Name:        ToolReconcileFluxSource,
-				Description: "Reconciles a Flux Source.",
+				Name:        ToolReconcileFluxResource,
+				Description: "Reconciles a Flux resource by triggering an on-demand reconciliation, optionally reconciling its source first.",
 			},
-			m.HandleReconcileSource,
-		)
-	}
-	if m.shouldRegisterTool(ToolReconcileFluxKustomization, inCluster) {
-		addTool(server, &recorder,
-			&mcp.Tool{
-				Name:        ToolReconcileFluxKustomization,
-				Description: "Reconciles a Flux Kustomization.",
-			},
-			m.HandleReconcileKustomization,
-		)
-	}
-	if m.shouldRegisterTool(ToolReconcileFluxHelmRelease, inCluster) {
-		addTool(server, &recorder,
-			&mcp.Tool{
-				Name:        ToolReconcileFluxHelmRelease,
-				Description: "Reconciles a Flux HelmRelease.",
-			},
-			m.HandleReconcileHelmRelease,
-		)
-	}
-	if m.shouldRegisterTool(ToolReconcileFluxResourceSet, inCluster) {
-		addTool(server, &recorder,
-			&mcp.Tool{
-				Name:        ToolReconcileFluxResourceSet,
-				Description: "Reconciles a Flux ResourceSet.",
-			},
-			m.HandleReconcileResourceSet,
+			m.HandleReconcileResource,
 		)
 	}
 	if m.shouldRegisterTool(ToolSuspendFluxReconciliation, inCluster) {

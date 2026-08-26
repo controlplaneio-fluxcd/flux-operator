@@ -92,20 +92,8 @@ var scopesPerTool = map[string]toolScopes{
 		ownScopeDescription: "Allow deleting Kubernetes resources.",
 		extraScopes:         []string{},
 	},
-	ToolReconcileFluxHelmRelease: {
-		ownScopeDescription: "Allow reconciling HelmRelease resources.",
-		extraScopes:         []string{},
-	},
-	ToolReconcileFluxKustomization: {
-		ownScopeDescription: "Allow reconciling Kustomization resources.",
-		extraScopes:         []string{},
-	},
-	ToolReconcileFluxResourceSet: {
-		ownScopeDescription: "Allow reconciling ResourceSet resources.",
-		extraScopes:         []string{},
-	},
-	ToolReconcileFluxSource: {
-		ownScopeDescription: "Allow reconciling Flux source resources.",
+	ToolReconcileFluxResource: {
+		ownScopeDescription: "Allow reconciling Flux resources.",
 		extraScopes:         []string{},
 	},
 	ToolResumeFluxReconciliation: {
