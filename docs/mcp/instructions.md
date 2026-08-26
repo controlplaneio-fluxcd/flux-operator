@@ -44,9 +44,41 @@ For Flux API guidance, call the `search_flux_docs` tool with targeted questions.
 - When asked to use a specific cluster, call the `get_kubeconfig_contexts` tool to find the cluster context before switching to it with the `set_kubeconfig_context` tool.
 - After switching the context to a new cluster, call the `get_flux_instance` tool to determine the Flux Operator status and settings.
 - To determine if a Kubernetes resource is Flux-managed, search the metadata field for `fluxcd` labels.
-- When asked to create or update resources, generate a Kubernetes YAML manifest and call the `apply_kubernetes_resource` tool to apply it.
+- When asked to create or update resources, generate a Kubernetes YAML manifest and call the `apply_kubernetes_manifest` tool to apply it.
 - Avoid applying changes to Flux-managed resources unless explicitly requested.
 - When asked about Flux CRDs, call the `search_flux_docs` tool with a targeted query. Prefer the default concise format; use `format: complete` only when the full upstream API docs are needed.
+
+## Previewing changes before committing
+
+Use `diff_kubernetes_manifest` as a pre-commit gate: build locally, send the complete build output,
+review the diff and header warnings, then commit. For large builds, write the output to a file and
+pass its absolute path in `yaml_path` (local `stdio` servers) instead of sending it in `yaml_content`.
+Build according to the owner type:
+
+- For a Kustomization, run `kustomize build <path> --load-restrictor=LoadRestrictionsNone`.
+- For a ResourceSet, run `flux envsubst` first, then `flux-operator build resourceset` with an
+  inputs file made from the live ResourceSetInputProvider `status.exportedInputs`.
+- For a HelmRelease, run
+  `helm template <releaseName> <chart> -n <releaseNamespace> --include-crds`, with `spec.values`
+  merged over the referenced `valuesFrom` values; `postRenderers` are applied by the tool.
+
+Always send the **complete** build output. The owner is the Flux object (Kustomization, HelmRelease,
+or ResourceSet) that applies the manifest, not the kind of the objects inside it. Only Flux-managed
+manifests need an owner; ad-hoc manifests need none. Skip the owner lookup when the user already
+names the owner, otherwise find it with `get_kubernetes_resources`, matching a Kustomization's
+`spec.path` and `sourceRef` to the repository directory, or use `flux operator tree`.
+
+If the owner is not found on the cluster, it is new. Compose its definition from the new repository content and
+pass it in `flux_object` with `metadata.namespace` set. For owners templated by a ResourceSet,
+render the template by hand; when an input provider has not exported an image tag yet, use a
+placeholder image. Preview a new application in two calls: first diff the parent Kustomization to
+show the new owner custom resource as `create`, then diff the application manifests with the new
+owner in `flux_object`. Prune is skipped for the second call because the owner is not yet in the cluster.
+
+Kustomize-controller generates a kustomization for directories without `kustomization.yaml`. For
+these directories, run `kustomize create --autodetect` in a copy before building, or concatenate
+the YAML files. Read all header warnings. Treat `delete` entries as objects that would be pruned
+only when the supplied manifest is complete.
 
 ## Kubernetes logs analysis
 
