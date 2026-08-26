@@ -672,6 +672,25 @@ spec:
 
 In the above example, the `ServiceAccount` resource is generated only for the `team1` tenant.
 
+#### Freezing a resource in-cluster
+
+The `fluxcd.controlplane.io/reconcile: disabled` annotation is also honored when set on a
+live object in the cluster. When the operator finds the annotation on an existing resource,
+it skips it from server-side apply and leaves any manual changes in place. 
+
+This allows freezing a single resource without suspending the whole ResourceSet:
+
+```shell
+kubectl annotate ocirepository/podinfo fluxcd.controlplane.io/reconcile=disabled
+```
+
+Removing the annotation resumes the reconciliation, and any manual changes are
+reverted on the next apply:
+
+```shell
+kubectl annotate ocirepository/podinfo fluxcd.controlplane.io/reconcile-
+```
+
 #### Built-in input fields
 
 When computing all the input sets for generating the resource matrix, the operator

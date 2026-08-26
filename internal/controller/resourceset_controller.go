@@ -545,6 +545,12 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 	applyOpts.ForceSelector = map[string]string{
 		fluxcdv1.ForceAnnotation: fluxcdv1.EnabledValue,
 	}
+	// Skip the in-cluster objects annotated with reconcile disabled,
+	// to allow users to freeze a resource managed by a ResourceSet
+	// without suspending the reconciliation of the whole set.
+	applyOpts.ExclusionSelector = map[string]string{
+		fluxcdv1.ReconcileAnnotation: fluxcdv1.DisabledValue,
+	}
 	applyOpts.Cleanup = ssa.ApplyCleanupOptions{
 		// Remove the kubectl and helm annotations.
 		Annotations: []string{
@@ -815,6 +821,15 @@ func (r *ResourceSetReconciler) deleteFailedJobs(ctx context.Context,
 
 		// Skip the Jobs which have not failed.
 		if !isJobFailed(job) {
+			continue
+		}
+
+		// Skip the Jobs frozen with the reconcile disabled annotation,
+		// as they are excluded from the server-side apply and would
+		// not be recreated after deletion.
+		if ssautil.AnyInMetadata(job, map[string]string{
+			fluxcdv1.ReconcileAnnotation: fluxcdv1.DisabledValue,
+		}) {
 			continue
 		}
 
