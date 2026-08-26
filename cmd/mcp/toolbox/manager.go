@@ -36,14 +36,13 @@ type Manager struct {
 	timeout     time.Duration
 	maskSecrets bool
 	readOnly    bool
-	enabled     []string
 	localFiles  bool
 }
 
 // NewManager initializes and returns a new Manager instance
 // with the provided configuration and settings.
 func NewManager(kubeClient *k8s.ClientFactory, timeout time.Duration,
-	maskSecrets bool, readOnly bool, enabled []string, localFiles bool) *Manager {
+	maskSecrets bool, readOnly bool, localFiles bool) *Manager {
 
 	return &Manager{
 		kubeconfig:  k8s.NewKubeConfig(),
@@ -51,7 +50,6 @@ func NewManager(kubeClient *k8s.ClientFactory, timeout time.Duration,
 		timeout:     timeout,
 		maskSecrets: maskSecrets,
 		readOnly:    readOnly,
-		enabled:     enabled,
 		localFiles:  localFiles,
 	}
 }
@@ -277,9 +275,6 @@ func (m *Manager) shouldRegisterTool(tool string, inCluster bool) bool {
 	}
 
 	// Check if should register tool.
-	if len(m.enabled) > 0 && !slices.Contains(m.enabled, tool) {
-		return false
-	}
 	if inCluster && !t.inCluster {
 		return false
 	}

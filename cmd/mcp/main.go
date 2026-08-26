@@ -197,7 +197,7 @@ func serveCmdRun(cmd *cobra.Command, args []string) error {
 
 	// Create the MCP server with instructions tailored to the enabled tools
 	kubeClient := k8s.NewClientFactory(kubeconfigArgs)
-	tm := toolbox.NewManager(kubeClient, rootArgs.timeout, rootArgs.maskSecrets, rootArgs.readOnly, nil,
+	tm := toolbox.NewManager(kubeClient, rootArgs.timeout, rootArgs.maskSecrets, rootArgs.readOnly,
 		rootArgs.transport == "stdio" && !inCluster)
 	mcpServer := mcp.NewServer(mcpImpl, &mcp.ServerOptions{
 		Instructions: tm.Instructions(inCluster),

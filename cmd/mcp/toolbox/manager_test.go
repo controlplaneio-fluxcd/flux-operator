@@ -22,7 +22,7 @@ func TestManager_RegisterToolsDoesNotPanic(t *testing.T) {
 		Capabilities: &mcp.ServerCapabilities{Tools: &mcp.ToolCapabilities{}},
 	})
 
-	manager := NewManager(nil, 0, false, false, nil, false)
+	manager := NewManager(nil, 0, false, false, false)
 	registeredTools := manager.RegisterTools(server, false)
 	g.Expect(registeredTools).To(Equal([]string{
 		"install_flux_instance",
@@ -64,7 +64,7 @@ func TestManager_RegisterDiffKubernetesManifestModes(t *testing.T) {
 				Name:    "flux-operator-mcp",
 				Version: "test-version",
 			}, nil)
-			manager := NewManager(nil, 0, false, tt.readOnly, nil, false)
+			manager := NewManager(nil, 0, false, tt.readOnly, false)
 			registeredTools := manager.RegisterTools(server, tt.inCluster)
 			g.Expect(registeredTools).To(ContainElement(ToolDiffKubernetesManifest))
 		})
@@ -90,7 +90,7 @@ func TestManager_DiffKubernetesManifestSchemaLocalFiles(t *testing.T) {
 			}, &mcp.ServerOptions{
 				Capabilities: &mcp.ServerCapabilities{Tools: &mcp.ToolCapabilities{}},
 			})
-			manager := NewManager(nil, 0, false, false, []string{ToolDiffKubernetesManifest}, tt.localFiles)
+			manager := NewManager(nil, 0, false, false, tt.localFiles)
 			manager.RegisterTools(server, false)
 
 			ctx := context.Background()
@@ -107,10 +107,18 @@ func TestManager_DiffKubernetesManifestSchemaLocalFiles(t *testing.T) {
 
 			result, err := session.ListTools(ctx, &mcp.ListToolsParams{})
 			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(result.Tools).To(HaveLen(1))
-			g.Expect(result.Tools[0].Name).To(Equal(ToolDiffKubernetesManifest))
+			g.Expect(result.Tools).NotTo(BeEmpty())
 
-			raw, err := json.Marshal(result.Tools[0].InputSchema)
+			var diffTool *mcp.Tool
+			for i := range result.Tools {
+				if result.Tools[i].Name == ToolDiffKubernetesManifest {
+					diffTool = result.Tools[i]
+					break
+				}
+			}
+			g.Expect(diffTool).NotTo(BeNil())
+
+			raw, err := json.Marshal(diffTool.InputSchema)
 			g.Expect(err).NotTo(HaveOccurred())
 			var schema struct {
 				Properties map[string]struct {
@@ -220,7 +228,7 @@ func TestManager_ToolSchemasIncludeProperties(t *testing.T) {
 		Capabilities: &mcp.ServerCapabilities{Tools: &mcp.ToolCapabilities{}},
 	})
 
-	manager := NewManager(nil, 0, false, false, nil, false)
+	manager := NewManager(nil, 0, false, false, false)
 	manager.RegisterTools(server, false)
 
 	ctx := context.Background()
@@ -278,25 +286,4 @@ func TestManager_ToolSchemasIncludeProperties(t *testing.T) {
 			"tool %s schema has unexpected required fields: %s",
 			tool.Name, string(raw))
 	}
-}
-
-func TestManager_RegisterSpecificTools(t *testing.T) {
-	g := NewWithT(t)
-
-	server := mcp.NewServer(&mcp.Implementation{
-		Name:    "flux-operator-mcp",
-		Version: "test-version",
-	}, &mcp.ServerOptions{
-		Capabilities: &mcp.ServerCapabilities{Tools: &mcp.ToolCapabilities{}},
-	})
-
-	manager := NewManager(nil, 0, false, false, []string{
-		"get_kubeconfig_contexts",
-		"set_kubeconfig_context",
-	}, false)
-	registeredTools := manager.RegisterTools(server, false)
-	g.Expect(registeredTools).To(Equal([]string{
-		"get_kubeconfig_contexts",
-		"set_kubeconfig_context",
-	}))
 }

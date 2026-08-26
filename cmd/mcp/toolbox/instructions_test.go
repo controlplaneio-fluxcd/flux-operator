@@ -15,23 +15,22 @@ func TestManager_Instructions(t *testing.T) {
 		name       string
 		readOnly   bool
 		inCluster  bool
-		enabled    []string
 		localFiles bool
 	}{
 		{name: "all tools"},
 		{name: "local files", localFiles: true},
-		{name: "local files without diff", readOnly: true, enabled: []string{ToolGetKubernetesResources}, localFiles: true},
+		{name: "local files without diff", readOnly: true, localFiles: true},
 		{name: "read-only", readOnly: true},
 		{name: "in-cluster", inCluster: true},
 		{name: "read-only in-cluster", readOnly: true, inCluster: true},
-		{name: "enabled subset", enabled: []string{ToolGetKubernetesResources, ToolReconcileFluxKustomization}},
+		{name: "enabled subset"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			manager := NewManager(nil, 0, false, tt.readOnly, tt.enabled, tt.localFiles)
+			manager := NewManager(nil, 0, false, tt.readOnly, tt.localFiles)
 			instructions := manager.Instructions(tt.inCluster)
 			g.Expect(instructions).To(HavePrefix("This server connects to Kubernetes API"))
 			g.Expect(instructions).ToNot(HaveSuffix("\n"))
