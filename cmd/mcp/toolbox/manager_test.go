@@ -22,7 +22,7 @@ func TestManager_RegisterToolsDoesNotPanic(t *testing.T) {
 		Capabilities: &mcp.ServerCapabilities{Tools: &mcp.ToolCapabilities{}},
 	})
 
-	manager := NewManager(nil, 0, false, false, nil)
+	manager := NewManager(nil, 0, false, false, nil, false)
 	registeredTools := manager.RegisterTools(server, false)
 	g.Expect(registeredTools).To(Equal([]string{
 		"install_flux_instance",
@@ -32,6 +32,7 @@ func TestManager_RegisterToolsDoesNotPanic(t *testing.T) {
 		"get_kubernetes_metrics",
 		"get_kubernetes_resources",
 		"search_flux_docs",
+		"diff_kubernetes_manifest",
 		"apply_kubernetes_manifest",
 		"delete_kubernetes_resource",
 		"reconcile_flux_source",
@@ -43,6 +44,92 @@ func TestManager_RegisterToolsDoesNotPanic(t *testing.T) {
 		"get_kubeconfig_contexts",
 		"set_kubeconfig_context",
 	}))
+}
+
+func TestManager_RegisterDiffKubernetesManifestModes(t *testing.T) {
+	tests := []struct {
+		name      string
+		readOnly  bool
+		inCluster bool
+	}{
+		{name: "read-only", readOnly: true},
+		{name: "in-cluster", inCluster: true},
+		{name: "read-only in-cluster", readOnly: true, inCluster: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			server := mcp.NewServer(&mcp.Implementation{
+				Name:    "flux-operator-mcp",
+				Version: "test-version",
+			}, nil)
+			manager := NewManager(nil, 0, false, tt.readOnly, nil, false)
+			registeredTools := manager.RegisterTools(server, tt.inCluster)
+			g.Expect(registeredTools).To(ContainElement(ToolDiffKubernetesManifest))
+		})
+	}
+}
+
+func TestManager_DiffKubernetesManifestSchemaLocalFiles(t *testing.T) {
+	tests := []struct {
+		name       string
+		localFiles bool
+		hasPath    bool
+	}{
+		{name: "local files disabled", localFiles: false, hasPath: false},
+		{name: "local files enabled", localFiles: true, hasPath: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			server := mcp.NewServer(&mcp.Implementation{
+				Name:    "flux-operator-mcp",
+				Version: "test-version",
+			}, &mcp.ServerOptions{
+				Capabilities: &mcp.ServerCapabilities{Tools: &mcp.ToolCapabilities{}},
+			})
+			manager := NewManager(nil, 0, false, false, []string{ToolDiffKubernetesManifest}, tt.localFiles)
+			manager.RegisterTools(server, false)
+
+			ctx := context.Background()
+			st, ct := mcp.NewInMemoryTransports()
+			_, err := server.Connect(ctx, st, nil)
+			g.Expect(err).NotTo(HaveOccurred())
+
+			client := mcp.NewClient(&mcp.Implementation{
+				Name:    "test-client",
+				Version: "test-version",
+			}, nil)
+			session, err := client.Connect(ctx, ct, nil)
+			g.Expect(err).NotTo(HaveOccurred())
+
+			result, err := session.ListTools(ctx, &mcp.ListToolsParams{})
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(result.Tools).To(HaveLen(1))
+			g.Expect(result.Tools[0].Name).To(Equal(ToolDiffKubernetesManifest))
+
+			raw, err := json.Marshal(result.Tools[0].InputSchema)
+			g.Expect(err).NotTo(HaveOccurred())
+			var schema struct {
+				Properties map[string]struct {
+					Description string `json:"description"`
+				} `json:"properties"`
+				Required []string `json:"required"`
+			}
+			err = json.Unmarshal(raw, &schema)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(schema.Properties["yaml_content"].Description).NotTo(ContainSubstring("yaml_path"))
+			g.Expect(schema.Required).NotTo(ContainElement("yaml_path"))
+
+			yamlPath, hasPath := schema.Properties["yaml_path"]
+			g.Expect(hasPath).To(Equal(tt.hasPath))
+			if tt.hasPath {
+				g.Expect(yamlPath.Description).To(Equal("Absolute path to a local multi-doc YAML file to diff."))
+			}
+		})
+	}
 }
 
 func TestManager_ToolSchemasIncludeProperties(t *testing.T) {
@@ -79,6 +166,10 @@ func TestManager_ToolSchemasIncludeProperties(t *testing.T) {
 		ToolSearchFluxDocs: {
 			properties: []string{"query", "limit", "format"},
 			required:   []string{"query"},
+		},
+		ToolDiffKubernetesManifest: {
+			properties: []string{"yaml_content", "flux_object", "owner_kind", "owner_name", "owner_namespace"},
+			required:   []string{},
 		},
 		ToolApplyKubernetesManifest: {
 			properties: []string{"yaml_content", "overwrite"},
@@ -129,7 +220,7 @@ func TestManager_ToolSchemasIncludeProperties(t *testing.T) {
 		Capabilities: &mcp.ServerCapabilities{Tools: &mcp.ToolCapabilities{}},
 	})
 
-	manager := NewManager(nil, 0, false, false, nil)
+	manager := NewManager(nil, 0, false, false, nil, false)
 	manager.RegisterTools(server, false)
 
 	ctx := context.Background()
@@ -202,7 +293,7 @@ func TestManager_RegisterSpecificTools(t *testing.T) {
 	manager := NewManager(nil, 0, false, false, []string{
 		"get_kubeconfig_contexts",
 		"set_kubeconfig_context",
-	})
+	}, false)
 	registeredTools := manager.RegisterTools(server, false)
 	g.Expect(registeredTools).To(Equal([]string{
 		"get_kubeconfig_contexts",

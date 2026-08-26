@@ -20,7 +20,7 @@ import (
 )
 
 func newTestServer() *mcp.Server {
-	tm := toolbox.NewManager(k8s.NewClientFactory(kubeconfigArgs), time.Minute, true, true, nil)
+	tm := toolbox.NewManager(k8s.NewClientFactory(kubeconfigArgs), time.Minute, true, true, nil, false)
 	mcpServer := mcp.NewServer(mcpImpl, &mcp.ServerOptions{
 		Instructions: tm.Instructions(true),
 		Capabilities: &mcp.ServerCapabilities{

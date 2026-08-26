@@ -37,12 +37,13 @@ type Manager struct {
 	maskSecrets bool
 	readOnly    bool
 	enabled     []string
+	localFiles  bool
 }
 
 // NewManager initializes and returns a new Manager instance
 // with the provided configuration and settings.
 func NewManager(kubeClient *k8s.ClientFactory, timeout time.Duration,
-	maskSecrets bool, readOnly bool, enabled []string) *Manager {
+	maskSecrets bool, readOnly bool, enabled []string, localFiles bool) *Manager {
 
 	return &Manager{
 		kubeconfig:  k8s.NewKubeConfig(),
@@ -51,6 +52,7 @@ func NewManager(kubeClient *k8s.ClientFactory, timeout time.Duration,
 		maskSecrets: maskSecrets,
 		readOnly:    readOnly,
 		enabled:     enabled,
+		localFiles:  localFiles,
 	}
 }
 
@@ -147,6 +149,25 @@ func (m *Manager) RegisterTools(server *mcp.Server, inCluster bool) []string {
 			},
 			m.HandleSearchFluxDocs,
 		)
+	}
+	if m.shouldRegisterTool(ToolDiffKubernetesManifest, inCluster) {
+		tool := &mcp.Tool{
+			Name:        ToolDiffKubernetesManifest,
+			Description: "Diffs a Kubernetes YAML manifest against the cluster using a server-side apply dry-run.",
+		}
+		if !m.localFiles {
+			inputType := reflect.TypeFor[diffKubernetesManifestInput]()
+			schema, err := jsonschema.ForType(inputType, &jsonschema.ForOptions{})
+			if err != nil {
+				panic(fmt.Sprintf("AddTool: tool %q: input schema: %v", tool.Name, err))
+			}
+			delete(schema.Properties, "yaml_path")
+			schema.Required = slices.DeleteFunc(schema.Required, func(field string) bool {
+				return field == "yaml_path"
+			})
+			tool.InputSchema = schema
+		}
+		addTool(server, &recorder, tool, m.HandleDiffKubernetesManifest)
 	}
 	if m.shouldRegisterTool(ToolApplyKubernetesManifest, inCluster) {
 		addTool(server, &recorder,

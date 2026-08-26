@@ -148,6 +148,28 @@ func TestGetToolScopes(t *testing.T) {
 			},
 		},
 		{
+			name:     "read-only diff tool",
+			tool:     ToolDiffKubernetesManifest,
+			readOnly: false,
+			expected: []Scope{
+				{
+					Name:        "toolbox:" + ToolDiffKubernetesManifest,
+					Description: "Allow diffing Kubernetes manifests against the cluster.",
+					Tools:       []string{ToolDiffKubernetesManifest},
+				},
+				{
+					Name:        "toolbox:read_write",
+					Description: "Allow all operations.",
+					Tools:       []string{ToolDiffKubernetesManifest},
+				},
+				{
+					Name:        "toolbox:read_only",
+					Description: "Allow all read-only operations.",
+					Tools:       []string{ToolDiffKubernetesManifest},
+				},
+			},
+		},
+		{
 			name:     "write tool without extra scopes",
 			tool:     ToolApplyKubernetesManifest,
 			readOnly: false,
