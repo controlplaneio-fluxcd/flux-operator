@@ -1,0 +1,39 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  creationTimestamp: "2026-08-25T18:31:15Z"
+  finalizers:
+  - finalizers.fluxcd.io
+  generation: 1
+  labels:
+    resourceset.fluxcd.controlplane.io/name: backend
+    resourceset.fluxcd.controlplane.io/namespace: apps-staging
+  name: backend
+  namespace: apps-staging
+  resourceVersion: "8541"
+  uid: 5661ff7d-6814-4714-99f0-57c7ee91b4ec
+spec:
+  force: false
+  images:
+  - digest: sha256:0a8aa037137c010a75aed8d3fe56931d0edd3bcd0e55acfb96db11e1e96397b1
+    name: backend
+    newName: flux-registry:5000/backend
+    newTag: 6.14.0
+  interval: 30m
+  path: ./envs/staging
+  postBuild:
+    substitute:
+      app_env: staging
+    substituteFrom:
+    - kind: ConfigMap
+      name: flux-vars
+      optional: false
+  prune: true
+  retryInterval: 5m
+  sourceRef:
+    kind: ExternalArtifact
+    name: backend-staging
+    namespace: flux-system
+  targetNamespace: apps-staging
+  timeout: 5m
+  wait: true

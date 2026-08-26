@@ -6,7 +6,6 @@ package k8s
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/fluxcd/pkg/ssa"
@@ -58,8 +57,8 @@ func (k *Client) Apply(ctx context.Context, manifest string, overwrite bool) (st
 	return changeSet.String(), nil
 }
 
-// IsManagedByFlux checks if a Kubernetes resource is managed by Flux by inspecting specific Flux-related labels.
-func (k *Client) IsManagedByFlux(ctx context.Context, gvk schema.GroupVersionKind, name, namespace string) bool {
+// GetFluxOwner returns the Flux owner encoded in the resource's ownership labels.
+func (k *Client) GetFluxOwner(ctx context.Context, gvk schema.GroupVersionKind, name, namespace string) (*DiffOwnerRef, bool) {
 	resource := &metav1.PartialObjectMetadata{}
 	resource.SetGroupVersionKind(gvk)
 
@@ -69,23 +68,53 @@ func (k *Client) IsManagedByFlux(ctx context.Context, gvk schema.GroupVersionKin
 	}
 
 	if err := k.Client.Get(ctx, objectKey, resource); err != nil {
+		return nil, false
+	}
+
+	return fluxOwnerFromLabels(resource.GetLabels())
+}
+
+// IsManagedByFlux checks if a Kubernetes resource is managed by Flux by inspecting specific Flux-related labels.
+func (k *Client) IsManagedByFlux(ctx context.Context, gvk schema.GroupVersionKind, name, namespace string) bool {
+	resource := &metav1.PartialObjectMetadata{}
+	resource.SetGroupVersionKind(gvk)
+	if err := k.Client.Get(ctx, ctrlclient.ObjectKey{Namespace: namespace, Name: name}, resource); err != nil {
 		return false
 	}
-
-	fluxLabels := []string{
-		"fluxcd.controlplane.io/namespace",
-		"resourceset.fluxcd.controlplane.io/namespace",
-		fluxcdv1.FluxKustomizeGroup + "/namespace",
-		fluxcdv1.FluxHelmGroup + "/namespace",
-	}
-
-	for key := range resource.GetLabels() {
-		if slices.Contains(fluxLabels, key) {
+	for _, group := range []string{
+		fluxcdv1.GroupVersion.Group,
+		fluxcdv1.GroupOwnerLabelResourceSet,
+		fluxcdv1.FluxKustomizeGroup,
+		fluxcdv1.FluxHelmGroup,
+	} {
+		if resource.GetLabels()[group+"/namespace"] != "" {
 			return true
 		}
 	}
-
 	return false
+}
+
+// fluxOwnerFromLabels returns the first recognized Flux owner reference from labels.
+func fluxOwnerFromLabels(labels map[string]string) (*DiffOwnerRef, bool) {
+	owners := []struct {
+		group string
+		kind  string
+	}{
+		{fluxcdv1.FluxKustomizeGroup, fluxcdv1.FluxKustomizationKind},
+		{fluxcdv1.GroupOwnerLabelResourceSet, fluxcdv1.ResourceSetKind},
+		{fluxcdv1.FluxHelmGroup, fluxcdv1.FluxHelmReleaseKind},
+		{fluxcdv1.GroupVersion.Group, "FluxInstance"},
+	}
+
+	for _, owner := range owners {
+		name := labels[owner.group+"/name"]
+		namespace := labels[owner.group+"/namespace"]
+		if name != "" && namespace != "" {
+			return &DiffOwnerRef{Kind: owner.kind, Name: name, Namespace: namespace}, true
+		}
+	}
+
+	return nil, false
 }
 
 // Annotate sets annotations on a Kubernetes resource identified by GroupVersionKind, name, and namespace.

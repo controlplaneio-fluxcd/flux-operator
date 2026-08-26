@@ -38,16 +38,22 @@ func init() {
 // extended functionality for interacting with Kubernetes resources.
 type Client struct {
 	ctrlclient.Client
-	cfg *rest.Config
-	rm  *ssa.ResourceManager
+	cfg    *rest.Config
+	poller *polling.StatusPoller
+	rm     *ssa.ResourceManager
 }
 
 // NewClient creates a new Kubernetes client using the provided objects.
 func NewClient(kubeClient ctrlclient.Client, cfg *rest.Config, restMapper meta.RESTMapper) *Client {
+	poller := polling.NewStatusPoller(kubeClient, restMapper, polling.Options{})
 	return &Client{
 		Client: kubeClient,
 		cfg:    cfg,
-		rm:     newResourceManager(kubeClient, restMapper),
+		poller: poller,
+		rm: newResourceManagerWithOwner(kubeClient, poller, ssa.Owner{
+			Field: "kubectl-flux-mcp",
+			Group: fluxcdv1.GroupVersion.Group,
+		}),
 	}
 }
 
@@ -72,19 +78,22 @@ func newClientFromFlags(flags *cli.ConfigFlags) (*Client, error) {
 		return nil, err
 	}
 
+	poller := polling.NewStatusPoller(kubeClient, restMapper, polling.Options{})
 	return &Client{
 		Client: ctrlclient.WithFieldOwner(kubeClient, "flux-operator-mcp"),
 		cfg:    cfg,
-		rm:     newResourceManager(kubeClient, restMapper),
+		poller: poller,
+		rm: newResourceManagerWithOwner(kubeClient, poller, ssa.Owner{
+			Field: "kubectl-flux-mcp",
+			Group: fluxcdv1.GroupVersion.Group,
+		}),
 	}, nil
 }
 
-func newResourceManager(kubeClient ctrlclient.Client, restMapper meta.RESTMapper) *ssa.ResourceManager {
-	kubePoller := polling.NewStatusPoller(kubeClient, restMapper, polling.Options{})
-	return ssa.NewResourceManager(kubeClient, kubePoller, ssa.Owner{
-		Field: "kubectl-flux-mcp",
-		Group: fluxcdv1.GroupVersion.Group,
-	})
+// newResourceManagerWithOwner creates an SSA manager with a call-specific owner
+// while reusing the client's status poller.
+func newResourceManagerWithOwner(kubeClient ctrlclient.Client, poller *polling.StatusPoller, owner ssa.Owner) *ssa.ResourceManager {
+	return ssa.NewResourceManager(kubeClient, poller, owner)
 }
 
 // GetConfig returns the REST config used by the Kubernetes client.

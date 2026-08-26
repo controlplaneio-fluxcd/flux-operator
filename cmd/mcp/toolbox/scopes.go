@@ -80,6 +80,10 @@ var scopesPerTool = map[string]toolScopes{
 		ownScopeDescription: "Allow getting Kubernetes resources.",
 		extraScopes:         []string{ScopeReadOnly},
 	},
+	ToolDiffKubernetesManifest: {
+		ownScopeDescription: "Allow diffing Kubernetes manifests against the cluster.",
+		extraScopes:         []string{ScopeReadOnly},
+	},
 	ToolApplyKubernetesManifest: {
 		ownScopeDescription: "Allow applying Kubernetes manifests.",
 		extraScopes:         []string{},

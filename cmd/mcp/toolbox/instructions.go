@@ -60,11 +60,29 @@ func (m *Manager) Instructions(inCluster bool) string {
 		}
 		b.WriteString(".\n")
 	}
+	if has(ToolDiffKubernetesManifest) {
+		line := "- Before committing GitOps changes, build the manifests locally (kustomize build <path> --load-restrictor=LoadRestrictionsNone, flux-operator build resourceset, helm template) and pass the COMPLETE output to " +
+			ToolDiffKubernetesManifest
+		if m.localFiles {
+			line += "; for large builds, write it to a file and pass the absolute path in yaml_path"
+		}
+		line += ". For manifests managed by Flux, identify the owner (Kustomization, HelmRelease or ResourceSet)"
+		if has(ToolGetKubernetesResources) {
+			line += " that matches spec.path/sourceRef with " + ToolGetKubernetesResources
+		}
+		line += " and set owner_kind/owner_name/owner_namespace, or pass its YAML in flux_object if it is new or not yet on the cluster." +
+			" Skip owner lookup when the user already names the owner; ad-hoc manifests need none."
+		b.WriteString(line + "\n")
+	}
 
 	var actions []string
 	if has(ToolApplyKubernetesManifest) {
-		actions = append(actions, "- To create or update resources, generate a Kubernetes multi-doc YAML and apply it with "+
-			ToolApplyKubernetesManifest+". Avoid changing Flux-managed resources directly unless explicitly asked.\n")
+		line := "- To create or update resources, generate a Kubernetes multi-doc YAML"
+		if has(ToolDiffKubernetesManifest) {
+			line += ", preview the changes with " + ToolDiffKubernetesManifest + " (no owner needed)"
+		}
+		actions = append(actions, line+" and apply it with "+ToolApplyKubernetesManifest+
+			". Avoid changing Flux-managed resources directly unless explicitly asked.\n")
 	}
 	var reconcilers []string
 	for _, tool := range []string{

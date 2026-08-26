@@ -226,6 +226,67 @@ Resumes the reconciliation of a previously suspended Flux resource.
 
 Confirmation message indicating the resource has been resumed.
 
+## Diff Tool
+
+This tool previews Kubernetes changes without mutating the cluster.
+
+### diff_kubernetes_manifest
+
+Diffs a multi-document YAML manifest against the cluster using server-side apply dry-run with
+the Flux controller's field manager. Use it to preview a direct apply or the effect of a GitOps
+commit before pushing it to the repo. The owner transforms are applied before the dry-run:
+Kustomization build options and `postBuild` substitutions, ResourceSet `copyFrom`, HelmRelease
+`postRenderers` and release metadata, and the `commonMetadata` and owner labels of all kinds.
+
+**Parameters:**
+
+When `yaml_path` is advertised, exactly one of `yaml_content` or `yaml_path` must be specified;
+otherwise, `yaml_content` must be specified.
+
+- `yaml_content` (optional): The complete multi-document YAML build output to diff
+- `yaml_path` (optional): The absolute path to a local multi-document YAML build output file;
+  mutually exclusive with `yaml_content`, advertised only when the server runs locally over the
+  `stdio` transport, with a 64 MiB file size limit
+- `flux_object` (optional): The YAML definition of the Kustomization, ResourceSet, or HelmRelease
+  that applies the manifest, as it will exist after the change
+- `owner_kind`, `owner_name`, `owner_namespace` (optional): A reference to an existing owner;
+  all three parameters must be specified together
+
+**Output:**
+
+Each manifest object is reported as `create`, `recreate`, `update`, `unchanged`, `skipped`, or
+`error`; inventory objects absent from the manifest are reported as `delete`. Updates include an
+RFC 6902 JSON patch in YAML form, with Secret values masked. The final summary line counts every
+state. For example:
+
+```text
+Diff for Kustomization/apps-staging/backend (field manager: kustomize-controller, prune: enabled)
+
+ConfigMap/apps-staging/backend-7f2k9c4mbt create
+Deployment/apps-staging/backend update
+- op: replace
+  path: /spec/template/spec/containers/0/envFrom/0/configMapRef/name
+  value: backend-7f2k9c4mbt
+Service/apps-staging/backend unchanged
+
+Not in the manifest (pruned if the manifest is complete):
+ConfigMap/apps-staging/backend-m759gh88kd delete
+
+Summary: 1 create, 1 update, 1 unchanged, 1 delete
+```
+
+**Limitations:**
+
+- Owners targeting remote clusters are not supported.
+- Kustomization `spec.components` is not applied.
+- ResourceSet `checksumFrom` and `convertKubeConfigFrom` are not resolved.
+- SOPS-encrypted objects are compared by key set only.
+- Kustomization `namePrefix` and `nameSuffix` are added to the names in the build output, while
+  kustomize-controller replaces the ones set in the source `kustomization.yaml`; when both are set,
+  the diff reports different names than the cluster.
+- Kustomization `buildMetadata` is not applied; the labels and annotations it adds are ignored.
+- Managed-fields cleanup is not simulated.
+
 ## Apply Tool
 
 This tool allows creating or updating Kubernetes resources in the cluster.

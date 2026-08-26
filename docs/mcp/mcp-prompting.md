@@ -72,6 +72,7 @@ Reporting and analysis:
 - Which images are deployed by Flux in the monitoring namespace?
 - List the Helm releases in the cluster with their chart version constraints and the versions currently deployed.
 - Perform a root cause analysis of the last failed deployment in the frontend namespace.
+- Preview what changing the staging app overlay would do on the cluster before committing it.
 
 Actions:
 

@@ -47,6 +47,9 @@ Replace `/path/to/.kube/config` with the absolute path to your kubeconfig file.
 ### Streamable HTTP (`http`)
 
 Web-based transport that allows the server to push updates to the client.
+The `diff_kubernetes_manifest` tool's `yaml_path` input is advertised only when the server runs
+locally over the `stdio` transport. It is not included in the tool schema for the `http` transport
+or in-cluster deployments; use `yaml_content` instead.
 The server implements the MCP specification `2026-07-28` and runs in stateless mode:
 no session state is kept between requests, so the server can be scaled horizontally
 behind a load balancer without sticky sessions. Clients using older versions of the
@@ -102,6 +105,11 @@ In production environments, you can run the server in read-only mode to prevent 
 
     In read-only mode, the MCP [tools](tools.md) that modify the cluster state
     (reconcile, suspend, resume, apply, delete) are disabled.
+
+The `diff_kubernetes_manifest` tool is available in read-only mode because it never mutates the
+cluster. Kubernetes authorizes server-side dry-run like a real apply, so the MCP identity needs
+`get` and `patch` on the manifest kinds, plus `get` on owner kinds and on ConfigMaps and Secrets
+used by `substituteFrom` or `copyFrom`. A view-only identity receives per-object forbidden errors.
 
 ### Secret Masking
 

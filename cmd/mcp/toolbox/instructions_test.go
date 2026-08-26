@@ -12,12 +12,15 @@ import (
 
 func TestManager_Instructions(t *testing.T) {
 	tests := []struct {
-		name      string
-		readOnly  bool
-		inCluster bool
-		enabled   []string
+		name       string
+		readOnly   bool
+		inCluster  bool
+		enabled    []string
+		localFiles bool
 	}{
 		{name: "all tools"},
+		{name: "local files", localFiles: true},
+		{name: "local files without diff", readOnly: true, enabled: []string{ToolGetKubernetesResources}, localFiles: true},
 		{name: "read-only", readOnly: true},
 		{name: "in-cluster", inCluster: true},
 		{name: "read-only in-cluster", readOnly: true, inCluster: true},
@@ -28,7 +31,7 @@ func TestManager_Instructions(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			manager := NewManager(nil, 0, false, tt.readOnly, tt.enabled)
+			manager := NewManager(nil, 0, false, tt.readOnly, tt.enabled, tt.localFiles)
 			instructions := manager.Instructions(tt.inCluster)
 			g.Expect(instructions).To(HavePrefix("This server connects to Kubernetes API"))
 			g.Expect(instructions).ToNot(HaveSuffix("\n"))
@@ -45,6 +48,26 @@ func TestManager_Instructions(t *testing.T) {
 				} else {
 					g.Expect(instructions).ToNot(ContainSubstring(tool), "expected %s to be omitted", tool)
 				}
+			}
+
+			if manager.shouldRegisterTool(ToolDiffKubernetesManifest, tt.inCluster) {
+				g.Expect(instructions).To(ContainSubstring("Before committing GitOps changes"))
+				g.Expect(instructions).To(ContainSubstring("COMPLETE output"))
+				g.Expect(instructions).To(ContainSubstring("owner_kind/owner_name/owner_namespace"))
+				g.Expect(instructions).To(ContainSubstring("pass its YAML in flux_object"))
+				g.Expect(instructions).To(ContainSubstring("ad-hoc manifests need none"))
+			}
+
+			localFilesInstruction := "pass the absolute path in yaml_path"
+			if tt.localFiles && manager.shouldRegisterTool(ToolDiffKubernetesManifest, tt.inCluster) {
+				g.Expect(instructions).To(ContainSubstring(localFilesInstruction))
+			} else {
+				g.Expect(instructions).ToNot(ContainSubstring(localFilesInstruction))
+			}
+
+			if manager.shouldRegisterTool(ToolDiffKubernetesManifest, tt.inCluster) &&
+				manager.shouldRegisterTool(ToolApplyKubernetesManifest, tt.inCluster) {
+				g.Expect(instructions).To(ContainSubstring("preview the changes with " + ToolDiffKubernetesManifest))
 			}
 
 			if tt.readOnly {

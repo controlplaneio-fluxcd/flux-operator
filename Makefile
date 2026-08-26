@@ -183,7 +183,7 @@ test-olm-e2e: build-olm-manifests operator-sdk ## Test OLM manifests for current
 CLI_IMG ?= ghcr.io/controlplaneio-fluxcd/flux-operator-cli:latest
 
 .PHONY: cli-test
-cli-test: tidy fmt vet ## Run CLI tests.
+cli-test: tidy fmt vet envtest ## Run CLI tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./cmd/cli/... -v
 
 .PHONY: cli-build
@@ -211,7 +211,7 @@ mcp-build-search-index: ## Build search database for MCP docs tool.
 	@echo "MCP search database built successfully"
 
 .PHONY: mcp-test
-mcp-test: tidy fmt vet ## Run MCP tests.
+mcp-test: tidy fmt vet envtest ## Run MCP tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./cmd/mcp/... -v
 
 .PHONY: mcp-build
