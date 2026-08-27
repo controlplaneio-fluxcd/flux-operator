@@ -147,13 +147,9 @@ Triggers an on-demand reconciliation of a Flux resource and can optionally recon
 - `kind` (required): The kind of the Flux resource
 - `name` (required): The name of the Flux resource
 - `namespace` (required): The namespace of the Flux resource
-- `with_source` (optional): Whether to reconcile `spec.chartRef` or `spec.sourceRef` first;
-  applies to Kustomization and HelmRelease (default: false)
+- `with_source` (optional): Whether to reconcile the referenced source first (default: false)
 
-Supported kinds include Kustomization, HelmRelease, ResourceSet, ResourceSetInputProvider,
-FluxInstance, GitRepository, OCIRepository, HelmRepository, HelmChart, Bucket,
-ImageRepository, ImagePolicy, ImageUpdateAutomation, and Receiver.
-HelmRelease and ResourceSetInputProvider receive a forced reconciliation.
+Note that HelmRelease and ResourceSetInputProvider receive a forced reconciliation.
 
 **Output:**
 

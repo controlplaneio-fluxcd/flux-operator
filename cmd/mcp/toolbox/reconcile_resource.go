@@ -34,7 +34,7 @@ type reconcileFluxResourceInput struct {
 	Kind       string `json:"kind" jsonschema:"The kind of the Flux resource e.g. Kustomization, HelmRelease, ResourceSet, ResourceSetInputProvider, FluxInstance, GitRepository, OCIRepository, HelmRepository, HelmChart, Bucket, ImageRepository, ImagePolicy, ImageUpdateAutomation, Receiver."`
 	Name       string `json:"name" jsonschema:"The name of the Flux resource."`
 	Namespace  string `json:"namespace" jsonschema:"The namespace of the Flux resource."`
-	WithSource bool   `json:"with_source,omitempty" jsonschema:"If true, the source referenced by the resource (spec.sourceRef or spec.chartRef) is reconciled first. Applies to Kustomization and HelmRelease."`
+	WithSource bool   `json:"with_source,omitempty" jsonschema:"If true, the source referenced by the resource (spec.sourceRef, spec.chartRef or spec.chart.spec.sourceRef) is reconciled first. Applies to Kustomization and HelmRelease."`
 }
 
 // fluxSourceReference identifies a Flux source referenced by another resource.
@@ -72,6 +72,9 @@ func (m *Manager) HandleReconcileResource(ctx context.Context, request *mcp.Call
 	if err != nil {
 		return NewToolResultErrorFromErr("Failed to resolve group version kind", err)
 	}
+	if err := checkReconcilableKind(gvk); err != nil {
+		return NewToolResultError(err.Error())
+	}
 
 	object := &unstructured.Unstructured{}
 	object.SetGroupVersionKind(gvk)
@@ -91,7 +94,10 @@ func (m *Manager) HandleReconcileResource(ctx context.Context, request *mcp.Call
 				if !isReconcilableSourceKind(ref.Kind) {
 					return NewToolResultError(fmt.Sprintf("Unknown source kind %s", ref.Kind))
 				}
-				sourceGVK := schema.GroupVersionKind{Group: fluxcdv1.FluxSourceGroup, Version: "v1", Kind: ref.Kind}
+				sourceGVK, err := kubeClient.ResolveGroupVersionKind("", ref.Kind)
+				if err != nil {
+					return NewToolResultErrorFromErr("Failed to resolve source kind", err)
+				}
 				if err := kubeClient.Annotate(ctx, sourceGVK, ref.Name, ref.Namespace,
 					[]string{meta.ReconcileRequestAnnotation}, ts); err != nil {
 					return NewToolResultErrorFromErr("Failed to reconcile source", err)
@@ -113,15 +119,32 @@ func (m *Manager) HandleReconcileResource(ctx context.Context, request *mcp.Call
 	return NewToolResultText(reconcileResourceResult(gvk.Kind, input.WithSource, sourceRef, sourceReconciled, forced))
 }
 
-// getFluxSourceReference returns the chartRef or sourceRef from a Flux resource, in that order.
+// checkReconcilableKind verifies that the kind belongs to a Flux API and supports on-demand reconciliation.
+func checkReconcilableKind(gvk schema.GroupVersionKind) error {
+	if !fluxcdv1.IsFluxAPI(gvk.Group) {
+		group := gvk.Group
+		if group == "" {
+			group = "core"
+		}
+		return fmt.Errorf("%s in group %s is not a Flux resource, only Flux resources can be reconciled", gvk.Kind, group)
+	}
+
+	if kindInfo, err := fluxcdv1.FindFluxKindInfo(gvk.Kind); err == nil && !kindInfo.Reconcilable {
+		return fmt.Errorf("%s does not support on-demand reconciliation", gvk.Kind)
+	}
+
+	return nil
+}
+
+// getFluxSourceReference returns the chartRef, sourceRef or inline chart sourceRef from a Flux resource, in that order.
 func getFluxSourceReference(object *unstructured.Unstructured) (fluxSourceReference, bool) {
-	for _, field := range []string{"chartRef", "sourceRef"} {
-		kind, found, err := unstructured.NestedString(object.Object, "spec", field, "kind")
+	for _, field := range [][]string{{"spec", "chartRef"}, {"spec", "sourceRef"}, {"spec", "chart", "spec", "sourceRef"}} {
+		kind, found, err := unstructured.NestedString(object.Object, append(field, "kind")...)
 		if err != nil || !found || kind == "" {
 			continue
 		}
-		name, _, _ := unstructured.NestedString(object.Object, "spec", field, "name")
-		namespace, _, _ := unstructured.NestedString(object.Object, "spec", field, "namespace")
+		name, _, _ := unstructured.NestedString(object.Object, append(field, "name")...)
+		namespace, _, _ := unstructured.NestedString(object.Object, append(field, "namespace")...)
 		if namespace == "" {
 			namespace = object.GetNamespace()
 		}

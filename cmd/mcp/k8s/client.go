@@ -20,6 +20,7 @@ import (
 	cli "k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/rest"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
@@ -59,7 +60,7 @@ func NewClient(kubeClient ctrlclient.Client, cfg *rest.Config, restMapper meta.R
 }
 
 // newClientFromFlags creates a new Kubernetes client using the provided cli.ConfigFlags,
-// configuring QPS, Burst, and custom schemes.
+// configuring QPS, Burst, a dynamic REST mapper, and custom schemes.
 func newClientFromFlags(flags *cli.ConfigFlags) (*Client, error) {
 	cfg, err := flags.ToRESTConfig()
 	if err != nil {
@@ -69,12 +70,18 @@ func newClientFromFlags(flags *cli.ConfigFlags) (*Client, error) {
 	cfg.QPS = 100.0
 	cfg.Burst = 300
 
-	restMapper, err := flags.ToRESTMapper()
+	httpClient, err := rest.HTTPClientFor(cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	kubeClient, err := ctrlclient.New(cfg, ctrlclient.Options{Mapper: restMapper, Scheme: Scheme})
+	// The dynamic RESTMapper reloads the API discovery data on unknown kinds.
+	restMapper, err := apiutil.NewDynamicRESTMapper(cfg, httpClient)
+	if err != nil {
+		return nil, err
+	}
+
+	kubeClient, err := ctrlclient.New(cfg, ctrlclient.Options{HTTPClient: httpClient, Mapper: restMapper, Scheme: Scheme})
 	if err != nil {
 		return nil, err
 	}
