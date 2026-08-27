@@ -157,8 +157,8 @@ func TestManager_ToolSchemasIncludeProperties(t *testing.T) {
 			required:   []string{},
 		},
 		ToolGetKubernetesLogs: {
-			properties: []string{"pod_name", "container_name", "pod_namespace", "limit", "previous"},
-			required:   []string{"pod_name", "container_name", "pod_namespace"},
+			properties: []string{"kind", "name", "namespace", "container", "limit", "previous"},
+			required:   []string{"name", "namespace"},
 		},
 		ToolGetKubernetesMetrics: {
 			properties: []string{"pod_name", "pod_namespace", "pod_selector", "limit"},

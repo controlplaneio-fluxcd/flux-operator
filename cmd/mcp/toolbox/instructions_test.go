@@ -49,6 +49,12 @@ func TestManager_Instructions(t *testing.T) {
 				}
 			}
 
+			if manager.shouldRegisterTool(ToolGetKubernetesLogs, tt.inCluster) {
+				g.Expect(instructions).To(ContainSubstring("directly with the workload kind, name and namespace"))
+				g.Expect(instructions).To(ContainSubstring("Omit container to read all regular containers"))
+				g.Expect(instructions).ToNot(ContainSubstring("list its pods using the matchLabels"))
+			}
+
 			if manager.shouldRegisterTool(ToolDiffKubernetesManifest, tt.inCluster) {
 				g.Expect(instructions).To(ContainSubstring("Before committing GitOps changes"))
 				g.Expect(instructions).To(ContainSubstring("COMPLETE output"))

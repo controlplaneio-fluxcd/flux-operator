@@ -38,33 +38,24 @@ func TestManager_HandleGetKubernetesLogs(t *testing.T) {
 		matchErr  string
 	}{
 		{
-			testName: "fails without pod name",
+			testName: "fails without name",
 			arguments: map[string]any{
 				"kind": "Pod",
 			},
-			matchErr: "pod name is required",
+			matchErr: "name is required",
 		},
 		{
-			testName: "fails without container name",
+			testName: "fails without namespace",
 			arguments: map[string]any{
-				"pod_name": "test",
+				"name": "test",
 			},
-			matchErr: "container name is required",
+			matchErr: "namespace is required",
 		},
 		{
-			testName: "fails without pod namespace",
+			testName: "accepts omitted kind and container before loading client",
 			arguments: map[string]any{
-				"pod_name":       "test",
-				"container_name": "test-container",
-			},
-			matchErr: "pod namespace is required",
-		},
-		{
-			testName: "fails with invalid kubeconfig",
-			arguments: map[string]any{
-				"pod_name":       "test",
-				"pod_namespace":  "default",
-				"container_name": "test-container",
+				"name":      "test",
+				"namespace": "default",
 			},
 			matchErr: "Failed to get Kubernetes client",
 		},

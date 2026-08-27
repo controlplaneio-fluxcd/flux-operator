@@ -82,12 +82,9 @@ only when the supplied manifest is complete.
 
 ## Kubernetes logs analysis
 
-When looking at logs, first you need to determine the pod name:
-
-- Get the Kubernetes deployment that manages the pods using the `get_kubernetes_resources` tool.
-- Look for the `matchLabels` and the container name in the deployment spec.
-- List the pods with the `get_kubernetes_resources` tool using the found `matchLabels` from the deployment spec.
-- Get the logs by calling the `get_kubernetes_logs` tool using the pod name and container name.
+Call `get_kubernetes_logs` directly with the workload `kind`, `name`, and `namespace` found in a
+Flux resource's inventory via `get_kubernetes_resources`. Omit `container` to read all regular
+containers. If the result is truncated, narrow the request with `container` and `limit`.
 
 ## Flux HelmRelease analysis
 

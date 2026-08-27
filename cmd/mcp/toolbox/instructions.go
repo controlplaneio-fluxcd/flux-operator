@@ -45,9 +45,10 @@ func (m *Manager) Instructions(inCluster bool) string {
 			"the Kustomization, HelmRelease or ResourceSet managing them.\n")
 	}
 	if has(ToolGetKubernetesLogs) {
-		b.WriteString("- To read pod logs, get the workload with " + ToolGetKubernetesResources +
-			", list its pods using the matchLabels from the workload spec, then call " +
-			ToolGetKubernetesLogs + " with the pod, container and namespace.\n")
+		b.WriteString("- To read application logs, call " + ToolGetKubernetesLogs +
+			" directly with the workload kind, name and namespace found in a Flux resource's inventory via " +
+			ToolGetKubernetesResources + ". Omit container to read all regular containers; if the result is truncated, " +
+			"narrow it with container and limit.\n")
 	}
 	if has(ToolGetKubernetesMetrics) {
 		b.WriteString("- To check the CPU and memory usage of pods, call " + ToolGetKubernetesMetrics + ".\n")
