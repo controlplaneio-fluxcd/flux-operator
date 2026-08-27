@@ -5,6 +5,7 @@ package k8s
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -450,4 +452,38 @@ func TestExport(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestExportReturnsListError(t *testing.T) {
+	g := NewWithT(t)
+	forbiddenErr := apierrors.NewForbidden(
+		schema.GroupResource{Resource: "secrets"},
+		"",
+		errors.New("list denied"),
+	)
+	kubeClient := Client{
+		Client: fake.NewClientBuilder().
+			WithScheme(NewTestScheme()).
+			WithInterceptorFuncs(interceptor.Funcs{
+				List: func(context.Context, ctrlclient.WithWatch, ctrlclient.ObjectList, ...ctrlclient.ListOption) error {
+					return forbiddenErr
+				},
+			}).
+			Build(),
+	}
+
+	result, err := kubeClient.Export(
+		context.Background(),
+		[]schema.GroupVersionKind{{Version: "v1", Kind: "Secret"}},
+		"",
+		"",
+		"",
+		0,
+		true,
+		nil,
+	)
+
+	g.Expect(result).To(BeEmpty())
+	g.Expect(err).To(MatchError(ContainSubstring("failed to list /v1, Kind=Secret")))
+	g.Expect(apierrors.IsForbidden(err)).To(BeTrue())
 }

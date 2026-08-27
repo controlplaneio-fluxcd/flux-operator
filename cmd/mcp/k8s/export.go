@@ -158,6 +158,8 @@ func (k *Client) Export(ctx context.Context,
 					}
 				}
 			}
+		} else {
+			return "", fmt.Errorf("failed to list %s: %w", gvk, err)
 		}
 	}
 
