@@ -173,6 +173,8 @@ type ResourceSetInputFilter struct {
 
 	// IncludeTag specifies the regular expression to filter the tags
 	// that the input provider should include.
+	// When used together with ExtractOrder or ExtractGroup, the regex capture
+	// groups are expanded to derive the sort and group keys.
 	// +optional
 	IncludeTag string `json:"includeTag,omitempty"`
 
@@ -181,23 +183,27 @@ type ResourceSetInputFilter struct {
 	// +optional
 	ExcludeTag string `json:"excludeTag,omitempty"`
 
-	// Pattern specifies a regular expression used to match tags and optionally
-	// extract a sortable value from them using Extract.
+	// ExtractOrder specifies a replacement template used with IncludeTag to
+	// extract the value used for ordering tags.
+	// When not specified, the tag itself is used for ordering.
 	// Supported only for tags.
 	// +optional
-	Pattern string `json:"pattern,omitempty"`
+	ExtractOrder string `json:"extractOrder,omitempty"`
 
-	// Extract specifies the replacement template used with Pattern to extract a
-	// sortable value from a tag, e.g. "$ts" for a named capture group.
-	// This field requires Pattern to be set.
+	// ExtractGroup specifies a replacement template used with IncludeTag to
+	// extract the group key used to partition tags.
+	// When not specified, all tags are placed in a single group.
 	// Supported only for tags.
 	// +optional
-	Extract string `json:"extract,omitempty"`
+	ExtractGroup string `json:"extractGroup,omitempty"`
 
 	// OrderBy specifies the sort order for tags.
-	// Supported values are "desc" and "asc", defaults to "desc".
+	// Supported values are "SemVer", "Alphabetical", "ReverseAlphabetical",
+	// "Numerical" and "ReverseNumerical".
+	// If not set, the controller defaults to "ReverseAlphabetical" unless a
+	// semver range is specified, in which case it defaults to "SemVer".
 	// Supported only for tags.
-	// +kubebuilder:validation:Enum=desc;asc
+	// +kubebuilder:validation:Enum=SemVer;Alphabetical;ReverseAlphabetical;Numerical;ReverseNumerical
 	// +optional
 	OrderBy string `json:"orderBy,omitempty"`
 

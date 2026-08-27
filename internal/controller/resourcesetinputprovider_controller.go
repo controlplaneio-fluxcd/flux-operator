@@ -537,26 +537,17 @@ func (r *ResourceSetInputProviderReconciler) makeFilters(
 		}
 		filters.Exclude = exRx
 	}
-	if obj.Spec.Filter.Pattern != "" {
-		patternRx, err := regexp.Compile(obj.Spec.Filter.Pattern)
+	if obj.Spec.Filter.IncludeTag != "" {
+		tagPatternRx, err := regexp.Compile(obj.Spec.Filter.IncludeTag)
 		if err != nil {
-			return nil, fmt.Errorf("invalid pattern regex: %w", err)
+			return nil, fmt.Errorf("invalid includeTag regex: %w", err)
 		}
-		filters.Pattern = patternRx
-		filters.Extract = obj.Spec.Filter.Extract
-	} else if obj.Spec.Filter.Extract != "" {
-		return nil, fmt.Errorf("extract requires pattern to be set")
+		filters.Include = tagPatternRx
+		filters.ExtractOrder = obj.Spec.Filter.ExtractOrder
+		filters.ExtractGroup = obj.Spec.Filter.ExtractGroup
+	} else if obj.Spec.Filter.ExtractOrder != "" || obj.Spec.Filter.ExtractGroup != "" {
+		return nil, fmt.Errorf("extractOrder and extractGroup require includeTag to be set")
 	}
-	if obj.Spec.Filter.OrderBy != "" {
-		switch obj.Spec.Filter.OrderBy {
-		case filtering.OrderByAsc, filtering.OrderByDesc:
-			filters.OrderBy = obj.Spec.Filter.OrderBy
-		default:
-			return nil, fmt.Errorf("invalid orderBy value %q: expected %q or %q",
-				obj.Spec.Filter.OrderBy, filtering.OrderByAsc, filtering.OrderByDesc)
-		}
-	}
-
 	// SemVer.
 	if obj.Spec.Filter.Semver != "" {
 		constraints, err := semver.NewConstraint(obj.Spec.Filter.Semver)
@@ -564,6 +555,32 @@ func (r *ResourceSetInputProviderReconciler) makeFilters(
 			return nil, fmt.Errorf("invalid semver expression: %w", err)
 		}
 		filters.SemVer = constraints
+	}
+
+	if obj.Spec.Filter.OrderBy != "" {
+		switch obj.Spec.Filter.OrderBy {
+		case filtering.OrderBySemVer, filtering.OrderByAlphabetical,
+			filtering.OrderByReverseAlphabetical, filtering.OrderByNumerical,
+			filtering.OrderByReverseNumerical:
+			filters.OrderBy = obj.Spec.Filter.OrderBy
+		case "asc":
+			filters.OrderBy = filtering.OrderByAlphabetical
+		case "desc":
+			filters.OrderBy = filtering.OrderByReverseAlphabetical
+		default:
+			return nil, fmt.Errorf("invalid orderBy value %q: expected one of %q, %q, %q, %q, %q",
+				obj.Spec.Filter.OrderBy, filtering.OrderBySemVer, filtering.OrderByAlphabetical,
+				filtering.OrderByReverseAlphabetical, filtering.OrderByNumerical,
+				filtering.OrderByReverseNumerical)
+		}
+	} else if obj.Spec.Filter.Semver != "" {
+		filters.OrderBy = filtering.OrderBySemVer
+	} else {
+		filters.OrderBy = filtering.OrderByReverseAlphabetical
+	}
+
+	if filters.SemVer != nil && filters.OrderBy != filtering.OrderBySemVer {
+		return nil, fmt.Errorf("semver requires orderBy to be %q", filtering.OrderBySemVer)
 	}
 
 	return filters, nil

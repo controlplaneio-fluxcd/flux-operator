@@ -232,9 +232,9 @@ The following filters are supported:
 - `excludeBranch`: regular expression to exclude branches by name.
 - `includeTag`: regular expression to include tags by name.
 - `excludeTag`: regular expression to exclude tags by name.
-- `pattern`: regular expression used to match tags and optionally extract a sortable value.
-- `extract`: replacement template (e.g. `$ts`) used with `pattern` to extract the sortable value from a tag.
-- `orderBy`: sort order for tags, either `desc` (default) or `asc`.
+- `extractOrder`: replacement template (e.g. `$ts`) used with `includeTag` to extract the sortable value from a tag.
+- `extractGroup`: replacement template (e.g. `$service`) used with `includeTag` to derive a group key.
+- `orderBy`: sort order for tags, either `ReverseAlphabetical` (default), `Alphabetical`, `ReverseNumerical`, `Numerical`, or `SemVer`.
 - `includeEnvironment`: regular expression to include environments by name.
 - `excludeEnvironment`: regular expression to exclude environments by name.
 - `semver`: semantic version range to filter and sort tags.
@@ -275,17 +275,28 @@ Example of a filter configuration for matching artifact tags and sorting by extr
 spec:
   filter:
     limit: 2
-    pattern: "^master-.+-ts(?P<ts>[0-9]+)$"
-    extract: "$ts"
-    orderBy: "desc"
+    includeTag: "^master-.+-ts(?P<ts>[0-9]+)$"
+    extractOrder: "$ts"
+    orderBy: ReverseNumerical
 ```
 
-Use `orderBy: "asc"` to return the oldest matching extracted values first.
+Use `orderBy: Alphabetical` or `Numerical` to sort in ascending order.
 The filter pipeline is:
-1. match tags with `pattern`
-2. extract sort keys with `extract`
+1. match tags with `includeTag`
+2. extract sort keys with `extractOrder`
 3. sort by extracted value using `orderBy`
 4. apply `limit`
+
+Example of a filter configuration for exporting one latest tag per group:
+
+```yaml
+spec:
+  filter:
+    limit: 1
+    includeTag: "^(?P<service>[a-z]+)-v(?P<version>v[0-9]+\\.[0-9]+\\.[0-9]+)-ts(?P<ts>[0-9]+)$"
+    extractGroup: "$service"
+    extractOrder: "$ts"
+    orderBy: ReverseNumerical
 ```
 
 ### Skip
