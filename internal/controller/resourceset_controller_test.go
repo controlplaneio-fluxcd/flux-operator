@@ -1528,6 +1528,131 @@ metadata:
 	g.Expect(err).ToNot(HaveOccurred())
 }
 
+func TestResourceSetReconciler_ReconcileDisabledOnLiveObject(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceSetReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	objDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: test
+  namespace: "%[1]s"
+spec:
+  resources:
+    - apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: frozen
+        namespace: "%[1]s"
+      data:
+        key: "from-template"
+    - apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: tracked
+        namespace: "%[1]s"
+      data:
+        key: "from-template"
+`, ns.Name)
+
+	obj := &fluxcdv1.ResourceSet{}
+	err = yaml.Unmarshal([]byte(objDef), obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize the resource set and apply the resources.
+	for range 2 {
+		_, err = reconciler.Reconcile(ctx, reconcile.Request{
+			NamespacedName: client.ObjectKeyFromObject(obj),
+		})
+		g.Expect(err).ToNot(HaveOccurred())
+	}
+
+	frozenKey := client.ObjectKey{Namespace: ns.Name, Name: "frozen"}
+	trackedKey := client.ObjectKey{Namespace: ns.Name, Name: "tracked"}
+
+	frozen := &corev1.ConfigMap{}
+	err = testClient.Get(ctx, frozenKey, frozen)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(frozen.Data).To(HaveKeyWithValue("key", "from-template"))
+
+	tracked := &corev1.ConfigMap{}
+	err = testClient.Get(ctx, trackedKey, tracked)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(tracked.Data).To(HaveKeyWithValue("key", "from-template"))
+
+	// Change both resources outside of the ResourceSet and mark
+	// only one of them with the reconcile disabled annotation.
+	frozenP := frozen.DeepCopy()
+	frozenP.SetAnnotations(map[string]string{
+		fluxcdv1.ReconcileAnnotation: fluxcdv1.DisabledValue,
+	})
+	frozenP.Data["key"] = "manual-edit"
+	err = testClient.Patch(ctx, frozenP, client.MergeFrom(frozen), client.FieldOwner("kubectl-edit"))
+	g.Expect(err).ToNot(HaveOccurred())
+
+	trackedP := tracked.DeepCopy()
+	trackedP.Data["key"] = "manual-edit"
+	err = testClient.Patch(ctx, trackedP, client.MergeFrom(tracked), client.FieldOwner("kubectl-edit"))
+	g.Expect(err).ToNot(HaveOccurred())
+
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Check that the annotated resource was skipped from apply,
+	// with both the manual change and the annotation left in place.
+	err = testClient.Get(ctx, frozenKey, frozen)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(frozen.Data).To(HaveKeyWithValue("key", "manual-edit"))
+	g.Expect(frozen.Annotations).To(HaveKeyWithValue(fluxcdv1.ReconcileAnnotation, fluxcdv1.DisabledValue))
+
+	// Check that the resources without the annotation are still
+	// reconciled and their drift is corrected.
+	err = testClient.Get(ctx, trackedKey, tracked)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(tracked.Data).To(HaveKeyWithValue("key", "from-template"))
+
+	// Check that the skipped resource is kept in the inventory,
+	// so that it is not subject to garbage collection.
+	result := &fluxcdv1.ResourceSet{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	testutils.LogObjectStatus(t, result)
+	g.Expect(result.Status.Inventory.Entries).To(ContainElement(
+		fluxcdv1.ResourceRef{
+			ID:      fmt.Sprintf("%s_frozen__ConfigMap", ns.Name),
+			Version: "v1",
+		},
+	))
+
+	// Remove the annotation from the live object and check that
+	// the resource is reconciled again.
+	frozenP = frozen.DeepCopy()
+	frozenP.SetAnnotations(map[string]string{})
+	err = testClient.Patch(ctx, frozenP, client.MergeFrom(frozen), client.FieldOwner("kubectl-edit"))
+	g.Expect(err).ToNot(HaveOccurred())
+
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	err = testClient.Get(ctx, frozenKey, frozen)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(frozen.Data).To(HaveKeyWithValue("key", "from-template"))
+}
+
 func getResourceSetReconciler(t *testing.T) *ResourceSetReconciler {
 	tmpDir := t.TempDir()
 	err := os.WriteFile(fmt.Sprintf("%s/kubeconfig", tmpDir), testKubeConfig, 0644)

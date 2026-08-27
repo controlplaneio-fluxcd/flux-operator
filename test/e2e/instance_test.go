@@ -106,6 +106,52 @@ var _ = Describe("FluxInstance", Ordered, func() {
 				ExpectWithOffset(2, err).ToNot(HaveOccurred())
 				ExpectWithOffset(2, output).To(ContainSubstring("Reconciliation finished"))
 
+				// Freeze a managed resource by annotating the live object,
+				// then change it and verify the operator leaves it alone.
+				cmd = exec.Command("kubectl", "annotate", "ocirepository/podinfo-team1",
+					"fluxcd.controlplane.io/reconcile=disabled", "--overwrite",
+				)
+				_, err = Run(cmd, "/test/e2e")
+				ExpectWithOffset(2, err).NotTo(HaveOccurred())
+
+				cmd = exec.Command("kubectl", "patch", "ocirepository/podinfo-team1",
+					"--type=json", `-p=[{"op": "replace", "path": "/spec/interval", "value":"20m"}]`,
+				)
+				_, err = Run(cmd, "/test/e2e")
+				ExpectWithOffset(2, err).NotTo(HaveOccurred())
+
+				cmd = exec.Command(cli, "reconcile", "rset", "podinfo")
+				_, err = Run(cmd, "/test/e2e")
+				ExpectWithOffset(2, err).NotTo(HaveOccurred())
+
+				cmd = exec.Command("kubectl", "get", "ocirepository/podinfo-team1", "-o=yaml")
+				output, err = Run(cmd, "/test/e2e")
+				ExpectWithOffset(2, err).NotTo(HaveOccurred())
+				ExpectWithOffset(2, output).To(ContainSubstring("interval: 20m"))
+				ExpectWithOffset(2, output).To(ContainSubstring("fluxcd.controlplane.io/reconcile: disabled"))
+
+				// The resources without the annotation are still reconciled.
+				cmd = exec.Command("kubectl", "get", "ocirepository/podinfo-team2", "-o=yaml")
+				output, err = Run(cmd, "/test/e2e")
+				ExpectWithOffset(2, err).NotTo(HaveOccurred())
+				ExpectWithOffset(2, output).To(ContainSubstring("interval: 10m"))
+
+				// Unfreeze the resource and verify the drift is corrected.
+				cmd = exec.Command("kubectl", "annotate", "ocirepository/podinfo-team1",
+					"fluxcd.controlplane.io/reconcile-",
+				)
+				_, err = Run(cmd, "/test/e2e")
+				ExpectWithOffset(2, err).NotTo(HaveOccurred())
+
+				cmd = exec.Command(cli, "reconcile", "rset", "podinfo")
+				_, err = Run(cmd, "/test/e2e")
+				ExpectWithOffset(2, err).NotTo(HaveOccurred())
+
+				cmd = exec.Command("kubectl", "get", "ocirepository/podinfo-team1", "-o=yaml")
+				output, err = Run(cmd, "/test/e2e")
+				ExpectWithOffset(2, err).NotTo(HaveOccurred())
+				ExpectWithOffset(2, output).To(ContainSubstring("interval: 10m"))
+
 				cmd = exec.Command(cli, "stats")
 				output, err = Run(cmd, "/test/e2e")
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())

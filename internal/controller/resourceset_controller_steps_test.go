@@ -1796,3 +1796,85 @@ spec:
 		}
 	}
 }
+
+func TestResourceSetReconciler_KeepsFrozenFailedJobs(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceSetReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	objDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: frozen-jobs
+  namespace: "%[1]s"
+spec:
+  resourcesTemplate: |
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: job-frozen
+      namespace: "%[1]s"
+      annotations:
+        fluxcd.controlplane.io/recreateOnFailure: enabled
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: main
+              image: busybox
+              command: ["true"]
+`, ns.Name)
+
+	obj := &fluxcdv1.ResourceSet{}
+	err = yaml.Unmarshal([]byte(objDef), obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize and reconcile the Job.
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	for range 2 {
+		_, err = reconciler.Reconcile(ctx, reconcile.Request{
+			NamespacedName: client.ObjectKeyFromObject(obj),
+		})
+		g.Expect(err).ToNot(HaveOccurred())
+	}
+
+	jobKey := client.ObjectKey{Name: "job-frozen", Namespace: ns.Name}
+	job := &batchv1.Job{}
+	err = testClient.Get(ctx, jobKey, job)
+	g.Expect(err).ToNot(HaveOccurred())
+	jobUID := string(job.UID)
+
+	// Mark the Job as failed, as no Job controller is running in envtest.
+	markJobFailed(ctx, g, job)
+
+	// Freeze the failed Job with the reconcile disabled annotation.
+	err = testClient.Get(ctx, jobKey, job)
+	g.Expect(err).ToNot(HaveOccurred())
+	jobP := job.DeepCopy()
+	jobP.SetAnnotations(map[string]string{
+		fluxcdv1.RecreateOnFailureAnnotation: fluxcdv1.EnabledValue,
+		fluxcdv1.ReconcileAnnotation:         fluxcdv1.DisabledValue,
+	})
+	err = testClient.Patch(ctx, jobP, client.MergeFrom(job), client.FieldOwner("kubectl-annotate"))
+	g.Expect(err).ToNot(HaveOccurred())
+
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Check that the frozen Job was not deleted for recreation.
+	err = testClient.Get(ctx, jobKey, job)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(job.DeletionTimestamp.IsZero()).To(BeTrue())
+	g.Expect(string(job.UID)).To(Equal(jobUID))
+	g.Expect(job.Annotations).To(HaveKeyWithValue(fluxcdv1.ReconcileAnnotation, fluxcdv1.DisabledValue))
+}
