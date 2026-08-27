@@ -20,10 +20,16 @@ import (
 const DefaultLimit = 100
 
 const (
-	// OrderByDesc sorts tags in descending order.
-	OrderByDesc = "desc"
-	// OrderByAsc sorts tags in ascending order.
-	OrderByAsc = "asc"
+	// OrderBySemVer sorts tags by semantic version precedence.
+	OrderBySemVer = "SemVer"
+	// OrderByAlphabetical sorts tags in ascending lexical order.
+	OrderByAlphabetical = "Alphabetical"
+	// OrderByReverseAlphabetical sorts tags in descending lexical order.
+	OrderByReverseAlphabetical = "ReverseAlphabetical"
+	// OrderByNumerical sorts tags in ascending numeric order.
+	OrderByNumerical = "Numerical"
+	// OrderByReverseNumerical sorts tags in descending numeric order.
+	OrderByReverseNumerical = "ReverseNumerical"
 )
 
 // Filters holds the filters for the input provider responses.
@@ -37,23 +43,34 @@ type Filters struct {
 	// Exclude is used for excluding tags or branches.
 	Exclude *regexp.Regexp
 
-	// SemVer is used for sorting and filtering tags.
+	// SemVer is used for filtering and sorting tags by semantic version
+	// precedence.
 	// Supported only for tags at the moment.
 	SemVer *semver.Constraints
 
-	// Pattern is used to match tags before sorting.
-	Pattern *regexp.Regexp
+	// ExtractOrder is the replacement template applied to Include matches to
+	// derive the sortable value for tags.
+	ExtractOrder string
 
-	// Extract is the replacement template applied to Pattern matches to derive
-	// the sortable value for tags.
-	Extract string
+	// ExtractGroup is the replacement template applied to Include matches to
+	// derive the group key for tags.
+	ExtractGroup string
 
-	// OrderBy determines whether tags are sorted in ascending or descending order.
-	// Supported values are "asc" and "desc". Defaults to "desc".
+	// OrderBy determines how tags are sorted.
+	// Supported values are SemVer, Alphabetical, ReverseAlphabetical, Numerical,
+	// and ReverseNumerical. Defaults to ReverseAlphabetical unless SemVer is set,
+	// in which case SemVer is used when OrderBy is empty.
 	OrderBy string
 
 	// Limit is used to limit the number of results.
 	Limit int
+}
+
+type tagSortValue struct {
+	name     string
+	orderKey string
+	groupKey string
+	version  *semver.Version
 }
 
 // MatchLabels returns true if the given labels include all the label filters.
@@ -84,11 +101,8 @@ func (f *Filters) MatchString(s string) bool {
 // Tags applies all the filters supported for tags to a list of tags.
 // nolint:prealloc
 func (f *Filters) Tags(tags []string) []string {
-	type parsedTag struct {
-		name string
-		key  string
-	}
-	filtered := make([]parsedTag, 0, len(tags))
+	filtered := make([]tagSortValue, 0, len(tags))
+	orderBy := f.effectiveOrderBy()
 
 	// Apply include and exclude.
 	for _, tag := range tags {
@@ -96,96 +110,134 @@ func (f *Filters) Tags(tags []string) []string {
 			continue
 		}
 
-		key, ok := f.TagSortKey(tag)
+		orderKey, groupKey, ok := f.TagKeys(tag)
 		if !ok {
 			continue
 		}
 
-		filtered = append(filtered, parsedTag{name: tag, key: key})
+		parsed := tagSortValue{name: tag, orderKey: orderKey, groupKey: groupKey}
+		if orderBy == OrderBySemVer {
+			parsedVersion, err := version.ParseVersion(orderKey)
+			if err != nil {
+				continue
+			}
+			if f.SemVer != nil && !f.SemVer.Check(parsedVersion) {
+				continue
+			}
+			parsed.version = parsedVersion
+		} else if f.SemVer != nil {
+			parsedVersion, err := version.ParseVersion(orderKey)
+			if err != nil || !f.SemVer.Check(parsedVersion) {
+				continue
+			}
+			parsed.version = parsedVersion
+		}
+		filtered = append(filtered, parsed)
 	}
 
-	// Apply semver or sort in reverse alphabetical order. Keep input order
-	// stable for tags with equal semantic-version precedence.
-	switch {
-	case f.SemVer != nil:
-		type semverTag struct {
-			name    string
-			version *semver.Version
-		}
-		parsed := make([]semverTag, 0, len(filtered))
-		for _, tag := range filtered {
-			parsedVersion, err := version.ParseVersion(tag.key)
-			if err == nil && f.SemVer.Check(parsedVersion) {
-				parsed = append(parsed, semverTag{name: tag.name, version: parsedVersion})
-			}
-		}
-		sort.SliceStable(parsed, func(i, j int) bool {
-			if parsed[i].version.Equal(parsed[j].version) {
-				return false
-			}
-			if f.orderByAscending() {
-				return parsed[i].version.LessThan(parsed[j].version)
-			}
-			return parsed[i].version.GreaterThan(parsed[j].version)
-		})
-		filtered = filtered[:0]
-		for _, tag := range parsed {
-			filtered = append(filtered, parsedTag{name: tag.name})
-		}
-	default:
-		sort.SliceStable(filtered, func(i, j int) bool {
-			cmp := CompareTagSortKeys(filtered[i].key, filtered[j].key)
-			if cmp == 0 {
-				return false
-			}
-			if f.orderByAscending() {
-				return cmp < 0
-			}
-			return cmp > 0
-		})
+	grouped := make(map[string][]tagSortValue)
+	for _, tag := range filtered {
+		grouped[tag.groupKey] = append(grouped[tag.groupKey], tag)
 	}
 
-	// Apply limit.
+	groupKeys := make([]string, 0, len(grouped))
+	for key := range grouped {
+		groupKeys = append(groupKeys, key)
+	}
+	sort.Strings(groupKeys)
+
 	lim := fluxcdv1.DefaultResourceSetInputProviderFilterLimit
 	if f.Limit > 0 {
 		lim = f.Limit
 	}
-	lim = min(lim, len(filtered))
-	res := make([]string, 0, lim)
-	for _, tag := range filtered[:lim] {
-		res = append(res, tag.name)
+	res := make([]string, 0, min(lim, len(filtered)))
+	for _, groupKey := range groupKeys {
+		tags := grouped[groupKey]
+		sort.SliceStable(tags, func(i, j int) bool {
+			cmp := compareTagSortValues(orderBy, tags[i], tags[j])
+			if cmp == 0 {
+				return false
+			}
+			return cmp > 0
+		})
+		limit := min(lim, len(tags))
+		for _, tag := range tags[:limit] {
+			res = append(res, tag.name)
+		}
 	}
 	return res
 }
 
-// TagSortKey returns the sortable key for a tag.
-// When Pattern is set, only matching tags are included. If Extract is set, the
-// sortable key is derived from the replacement template.
-func (f *Filters) TagSortKey(tag string) (string, bool) {
-	if f.Pattern == nil {
-		return tag, true
+// TagKeys returns the sortable and grouping keys for a tag.
+// When Include is set, only matching tags are included. If ExtractOrder or
+// ExtractGroup is set, the keys are derived from the replacement templates.
+func (f *Filters) TagKeys(tag string) (orderKey, groupKey string, ok bool) {
+	if f.Include == nil {
+		if f.ExtractOrder != "" || f.ExtractGroup != "" {
+			return "", "", false
+		}
+		return tag, "", true
 	}
 
-	match := f.Pattern.FindStringSubmatchIndex(tag)
+	match := f.Include.FindStringSubmatchIndex(tag)
 	if match == nil {
-		return "", false
+		return "", "", false
 	}
 
-	if f.Extract == "" {
-		return tag, true
+	orderKey = tag
+	if f.ExtractOrder != "" {
+		orderKey = string(f.Include.ExpandString(nil, f.ExtractOrder, tag, match))
 	}
-
-	key := f.Pattern.ExpandString(nil, f.Extract, tag, match)
-	return string(key), true
+	if f.ExtractGroup != "" {
+		groupKey = string(f.Include.ExpandString(nil, f.ExtractGroup, tag, match))
+	}
+	return orderKey, groupKey, true
 }
 
-func (f *Filters) orderByAscending() bool {
-	return strings.EqualFold(f.OrderBy, OrderByAsc)
+// TagSortKey returns the sortable key for a tag.
+// This is a legacy helper retained for internal callers.
+func (f *Filters) TagSortKey(tag string) (string, bool) {
+	key, _, ok := f.TagKeys(tag)
+	return key, ok
 }
 
-// CompareTagSortKeys compares two tag sort keys.
+func (f *Filters) effectiveOrderBy() string {
+	if f.OrderBy != "" {
+		return f.OrderBy
+	}
+	if f.SemVer != nil {
+		return OrderBySemVer
+	}
+	return OrderByReverseAlphabetical
+}
+
+func compareTagSortValues(orderBy string, a, b tagSortValue) int {
+	switch orderBy {
+	case OrderBySemVer:
+		switch {
+		case a.version.LessThan(b.version):
+			return -1
+		case a.version.GreaterThan(b.version):
+			return 1
+		default:
+			return 0
+		}
+	case OrderByAlphabetical:
+		return strings.Compare(b.orderKey, a.orderKey)
+	case OrderByReverseAlphabetical:
+		return strings.Compare(a.orderKey, b.orderKey)
+	case OrderByNumerical:
+		return CompareNumericKeys(b.orderKey, a.orderKey)
+	case OrderByReverseNumerical:
+		return CompareNumericKeys(a.orderKey, b.orderKey)
+	default:
+		return strings.Compare(a.orderKey, b.orderKey)
+	}
+}
+
+// CompareNumericKeys compares two tag sort keys.
 // When both keys are base-10 integers, comparison is numeric; otherwise lexical.
-func CompareTagSortKeys(a, b string) int {
+func CompareNumericKeys(a, b string) int {
 	av, aok := new(big.Int).SetString(a, 10)
 	bv, bok := new(big.Int).SetString(b, 10)
 	if aok && bok {
