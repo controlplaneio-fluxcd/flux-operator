@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/fluxcd/cli-utils/pkg/kstatus/polling"
@@ -19,6 +20,7 @@ import (
 	cli "k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/rest"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
@@ -58,7 +60,7 @@ func NewClient(kubeClient ctrlclient.Client, cfg *rest.Config, restMapper meta.R
 }
 
 // newClientFromFlags creates a new Kubernetes client using the provided cli.ConfigFlags,
-// configuring QPS, Burst, and custom schemes.
+// configuring QPS, Burst, a dynamic REST mapper, and custom schemes.
 func newClientFromFlags(flags *cli.ConfigFlags) (*Client, error) {
 	cfg, err := flags.ToRESTConfig()
 	if err != nil {
@@ -68,12 +70,18 @@ func newClientFromFlags(flags *cli.ConfigFlags) (*Client, error) {
 	cfg.QPS = 100.0
 	cfg.Burst = 300
 
-	restMapper, err := flags.ToRESTMapper()
+	httpClient, err := rest.HTTPClientFor(cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	kubeClient, err := ctrlclient.New(cfg, ctrlclient.Options{Mapper: restMapper, Scheme: Scheme})
+	// The dynamic RESTMapper reloads the API discovery data on unknown kinds.
+	restMapper, err := apiutil.NewDynamicRESTMapper(cfg, httpClient)
+	if err != nil {
+		return nil, err
+	}
+
+	kubeClient, err := ctrlclient.New(cfg, ctrlclient.Options{HTTPClient: httpClient, Mapper: restMapper, Scheme: Scheme})
 	if err != nil {
 		return nil, err
 	}
@@ -117,6 +125,34 @@ func (k *Client) ParseGroupVersionKind(apiVersion, kind string) (schema.GroupVer
 		Group:   gv.Group,
 		Version: gv.Version,
 		Kind:    kind,
+	}
+	return gvk, nil
+}
+
+// ResolveGroupVersionKind returns the GroupVersionKind for the given apiVersion and kind.
+// When apiVersion is empty, the group is looked up from the Flux kind tables and the
+// version from the API server discovery; non-Flux kinds are resolved via discovery alone.
+func (k *Client) ResolveGroupVersionKind(apiVersion, kind string) (schema.GroupVersionKind, error) {
+	if kind == "" {
+		return schema.GroupVersionKind{}, errors.New("kind not specified")
+	}
+
+	if apiVersion != "" {
+		return k.ParseGroupVersionKind(apiVersion, kind)
+	}
+
+	gk, err := fluxcdv1.FluxGroupFor(kind)
+	if err == nil {
+		mapping, err := k.RESTMapper().RESTMapping(*gk)
+		if err != nil {
+			return schema.GroupVersionKind{}, fmt.Errorf("unable to resolve apiVersion for kind %s: %w", kind, err)
+		}
+		return mapping.GroupVersionKind, nil
+	}
+
+	gvk, err := k.RESTMapper().KindFor(schema.GroupVersionResource{Resource: strings.ToLower(kind)})
+	if err != nil {
+		return schema.GroupVersionKind{}, fmt.Errorf("unable to resolve apiVersion for kind %s, specify the apiVersion: %w", kind, err)
 	}
 	return gvk, nil
 }

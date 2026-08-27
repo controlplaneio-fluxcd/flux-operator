@@ -35,10 +35,7 @@ func TestManager_RegisterToolsDoesNotPanic(t *testing.T) {
 		"diff_kubernetes_manifest",
 		"apply_kubernetes_manifest",
 		"delete_kubernetes_resource",
-		"reconcile_flux_source",
-		"reconcile_flux_kustomization",
-		"reconcile_flux_helmrelease",
-		"reconcile_flux_resourceset",
+		"reconcile_flux_resource",
 		"suspend_flux_reconciliation",
 		"resume_flux_reconciliation",
 		"get_kubeconfig_contexts",
@@ -187,29 +184,17 @@ func TestManager_ToolSchemasIncludeProperties(t *testing.T) {
 			properties: []string{"apiVersion", "kind", "name", "namespace"},
 			required:   []string{"apiVersion", "kind", "name"},
 		},
-		ToolReconcileFluxSource: {
-			properties: []string{"kind", "name", "namespace"},
+		ToolReconcileFluxResource: {
+			properties: []string{"apiVersion", "kind", "name", "namespace", "with_source"},
 			required:   []string{"kind", "name", "namespace"},
-		},
-		ToolReconcileFluxKustomization: {
-			properties: []string{"name", "namespace", "with_source"},
-			required:   []string{"name", "namespace"},
-		},
-		ToolReconcileFluxHelmRelease: {
-			properties: []string{"name", "namespace", "with_source"},
-			required:   []string{"name", "namespace"},
-		},
-		ToolReconcileFluxResourceSet: {
-			properties: []string{"name", "namespace"},
-			required:   []string{"name", "namespace"},
 		},
 		ToolSuspendFluxReconciliation: {
 			properties: []string{"apiVersion", "kind", "name", "namespace"},
-			required:   []string{"apiVersion", "kind", "name", "namespace"},
+			required:   []string{"kind", "name", "namespace"},
 		},
 		ToolResumeFluxReconciliation: {
 			properties: []string{"apiVersion", "kind", "name", "namespace"},
-			required:   []string{"apiVersion", "kind", "name", "namespace"},
+			required:   []string{"kind", "name", "namespace"},
 		},
 		ToolGetKubeConfigContexts: {
 			properties: []string{},

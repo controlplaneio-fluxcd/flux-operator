@@ -24,7 +24,7 @@ func init() {
 
 // resumeFluxReconciliationInput defines the input parameters for resuming the reconciliation of a Flux resource.
 type resumeFluxReconciliationInput struct {
-	APIVersion string `json:"apiVersion" jsonschema:"The apiVersion of the Flux resource."`
+	APIVersion string `json:"apiVersion,omitempty" jsonschema:"The apiVersion of the Flux resource. Optional, when omitted it is resolved from the kind."`
 	Kind       string `json:"kind" jsonschema:"The kind of the Flux resource."`
 	Name       string `json:"name" jsonschema:"The name of the Flux resource."`
 	Namespace  string `json:"namespace" jsonschema:"The namespace of the Flux resource."`
@@ -36,9 +36,6 @@ func (m *Manager) HandleResumeReconciliation(ctx context.Context, request *mcp.C
 		return NewToolResultError(err.Error())
 	}
 
-	if input.APIVersion == "" {
-		return NewToolResultError("apiVersion is required")
-	}
 	if input.Kind == "" {
 		return NewToolResultError("kind is required")
 	}
@@ -57,9 +54,9 @@ func (m *Manager) HandleResumeReconciliation(ctx context.Context, request *mcp.C
 		return NewToolResultErrorFromErr("Failed to get Kubernetes client", err)
 	}
 
-	gvk, err := kubeClient.ParseGroupVersionKind(input.APIVersion, input.Kind)
+	gvk, err := kubeClient.ResolveGroupVersionKind(input.APIVersion, input.Kind)
 	if err != nil {
-		return NewToolResultErrorFromErr("Failed to parse group version kind", err)
+		return NewToolResultErrorFromErr("Failed to resolve group version kind", err)
 	}
 
 	err = kubeClient.ToggleSuspension(ctx, gvk, input.Name, input.Namespace, false)

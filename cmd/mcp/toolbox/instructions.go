@@ -84,19 +84,8 @@ func (m *Manager) Instructions(inCluster bool) string {
 		actions = append(actions, line+" and apply it with "+ToolApplyKubernetesManifest+
 			". Avoid changing Flux-managed resources directly unless explicitly asked.\n")
 	}
-	var reconcilers []string
-	for _, tool := range []string{
-		ToolReconcileFluxSource,
-		ToolReconcileFluxKustomization,
-		ToolReconcileFluxHelmRelease,
-		ToolReconcileFluxResourceSet,
-	} {
-		if has(tool) {
-			reconcilers = append(reconcilers, tool)
-		}
-	}
-	if len(reconcilers) > 0 {
-		line := "- To trigger a sync, call " + joinOr(reconcilers)
+	if has(ToolReconcileFluxResource) {
+		line := "- To trigger a sync, call " + ToolReconcileFluxResource
 		if has(ToolGetKubernetesResources) {
 			line += ", then verify the outcome with " + ToolGetKubernetesResources
 		}
@@ -125,12 +114,4 @@ func (m *Manager) Instructions(inCluster bool) string {
 	}
 
 	return strings.TrimSpace(b.String())
-}
-
-// joinOr joins the items with commas and an "or" before the last one.
-func joinOr(items []string) string {
-	if len(items) < 2 {
-		return strings.Join(items, "")
-	}
-	return strings.Join(items[:len(items)-1], ", ") + " or " + items[len(items)-1]
 }

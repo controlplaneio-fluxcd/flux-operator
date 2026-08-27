@@ -133,64 +133,28 @@ Switches the current session to use a specific Kubernetes cluster context, witho
 
 Confirmation message indicating the context has been switched.
 
-## Reconciliation Tools
+## Reconciliation Tool
 
-These tools trigger reconciliation of Flux resources, causing Flux to synchronize the desired state with the current state.
+This tool triggers the reconciliation of Flux resources, causing Flux to synchronize the desired state with the current state.
 
-### reconcile_flux_resourceset
+### reconcile_flux_resource
 
-Triggers the reconciliation of a Flux ResourceSet.
-
-**Parameters:**
-
-- `name` (required): The name of the ResourceSet
-- `namespace` (required): The namespace of the ResourceSet
-
-**Output:**
-
-Confirmation message and instructions for verifying the reconciliation status.
-
-### reconcile_flux_source
-
-Triggers the reconciliation of Flux sources (GitRepository, OCIRepository, HelmRepository, HelmChart, Bucket).
+Triggers an on-demand reconciliation of a Flux resource and can optionally reconcile its source first.
 
 **Parameters:**
 
-- `kind` (required): The kind of Flux source
-- `name` (required): The name of the source
-- `namespace` (required): The namespace of the source
+- `apiVersion` (optional): The API version of the Flux resource, resolved from the kind when omitted
+- `kind` (required): The kind of the Flux resource
+- `name` (required): The name of the Flux resource
+- `namespace` (required): The namespace of the Flux resource
+- `with_source` (optional): Whether to reconcile the referenced source first (default: false)
+
+Note that HelmRelease and ResourceSetInputProvider receive a forced reconciliation.
 
 **Output:**
 
-Confirmation message and instructions for verifying the reconciliation status.
-
-### reconcile_flux_kustomization
-
-Triggers the reconciliation of a Flux Kustomization.
-
-**Parameters:**
-
-- `name` (required): The name of the Kustomization
-- `namespace` (required): The namespace of the Kustomization
-- `with_source` (optional): Whether to also reconcile the source (default: false)
-
-**Output:**
-
-Confirmation message and instructions for verifying the reconciliation status.
-
-### reconcile_flux_helmrelease
-
-Triggers the reconciliation of a Flux HelmRelease.
-
-**Parameters:**
-
-- `name` (required): The name of the HelmRelease
-- `namespace` (required): The namespace of the HelmRelease
-- `with_source` (optional): Whether to also reconcile the source (default: false)
-
-**Output:**
-
-Confirmation message and instructions for verifying the reconciliation status.
+Confirmation that reconciliation was triggered, whether a referenced source was reconciled or skipped,
+and instructions for verifying the reconciliation status.
 
 ## Suspend/Resume Tools
 
@@ -202,7 +166,7 @@ Suspends the reconciliation of a Flux resource.
 
 **Parameters:**
 
-- `apiVersion` (required): The API version of the resource
+- `apiVersion` (optional): The API version of the Flux resource, resolved from the kind when omitted
 - `kind` (required): The kind of the resource
 - `name` (required): The name of the resource
 - `namespace` (required): The namespace of the resource
@@ -217,7 +181,7 @@ Resumes the reconciliation of a previously suspended Flux resource.
 
 **Parameters:**
 
-- `apiVersion` (required): The API version of the resource
+- `apiVersion` (optional): The API version of the Flux resource, resolved from the kind when omitted
 - `kind` (required): The kind of the resource
 - `name` (required): The name of the resource
 - `namespace` (required): The namespace of the resource

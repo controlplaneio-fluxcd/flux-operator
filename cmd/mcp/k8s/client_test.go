@@ -57,3 +57,74 @@ func TestParseGroupVersionKind(t *testing.T) {
 	}
 
 }
+
+func TestResolveGroupVersionKind(t *testing.T) {
+	tests := []struct {
+		name       string
+		apiVersion string
+		kind       string
+		result     string
+		matchErr   string
+	}{
+		{
+			name:   "Kustomization preferred version",
+			kind:   "Kustomization",
+			result: "kustomize.toolkit.fluxcd.io/v1, Kind=Kustomization",
+		},
+		{
+			name:   "HelmRelease preferred version",
+			kind:   "HelmRelease",
+			result: "helm.toolkit.fluxcd.io/v2, Kind=HelmRelease",
+		},
+		{
+			name:   "ResourceSet preferred version",
+			kind:   "ResourceSet",
+			result: "fluxcd.controlplane.io/v1, Kind=ResourceSet",
+		},
+		{
+			name:   "OCIRepository preferred version",
+			kind:   "OCIRepository",
+			result: "source.toolkit.fluxcd.io/v1, Kind=OCIRepository",
+		},
+		{
+			name:   "ConfigMap preferred version",
+			kind:   "ConfigMap",
+			result: "/v1, Kind=ConfigMap",
+		},
+		{
+			name:   "Deployment preferred version",
+			kind:   "Deployment",
+			result: "apps/v1, Kind=Deployment",
+		},
+		{
+			name:     "unknown kind",
+			kind:     "UnknownKind",
+			matchErr: "specify the apiVersion",
+		},
+		{
+			name:     "empty kind",
+			matchErr: "kind not specified",
+		},
+		{
+			name:       "provided apiVersion",
+			apiVersion: "helm.toolkit.fluxcd.io/v2beta2",
+			kind:       "HelmRelease",
+			result:     "helm.toolkit.fluxcd.io/v2beta2, Kind=HelmRelease",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			gvk, err := testClient.ResolveGroupVersionKind(tt.apiVersion, tt.kind)
+			if tt.matchErr != "" {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.matchErr))
+			} else {
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(gvk.String()).To(Equal(tt.result))
+			}
+		})
+	}
+}

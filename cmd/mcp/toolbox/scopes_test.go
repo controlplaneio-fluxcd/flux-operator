@@ -204,70 +204,19 @@ func TestGetToolScopes(t *testing.T) {
 			},
 		},
 		{
-			name:     "reconcile HelmRelease tool",
-			tool:     ToolReconcileFluxHelmRelease,
+			name:     "reconcile Flux resource tool",
+			tool:     ToolReconcileFluxResource,
 			readOnly: false,
 			expected: []Scope{
 				{
-					Name:        "toolbox:" + ToolReconcileFluxHelmRelease,
-					Description: "Allow reconciling HelmRelease resources.",
-					Tools:       []string{ToolReconcileFluxHelmRelease},
+					Name:        "toolbox:" + ToolReconcileFluxResource,
+					Description: "Allow reconciling Flux resources.",
+					Tools:       []string{ToolReconcileFluxResource},
 				},
 				{
 					Name:        "toolbox:read_write",
 					Description: "Allow all operations.",
-					Tools:       []string{ToolReconcileFluxHelmRelease},
-				},
-			},
-		},
-		{
-			name:     "reconcile Kustomization tool",
-			tool:     ToolReconcileFluxKustomization,
-			readOnly: false,
-			expected: []Scope{
-				{
-					Name:        "toolbox:" + ToolReconcileFluxKustomization,
-					Description: "Allow reconciling Kustomization resources.",
-					Tools:       []string{ToolReconcileFluxKustomization},
-				},
-				{
-					Name:        "toolbox:read_write",
-					Description: "Allow all operations.",
-					Tools:       []string{ToolReconcileFluxKustomization},
-				},
-			},
-		},
-		{
-			name:     "reconcile ResourceSet tool",
-			tool:     ToolReconcileFluxResourceSet,
-			readOnly: false,
-			expected: []Scope{
-				{
-					Name:        "toolbox:" + ToolReconcileFluxResourceSet,
-					Description: "Allow reconciling ResourceSet resources.",
-					Tools:       []string{ToolReconcileFluxResourceSet},
-				},
-				{
-					Name:        "toolbox:read_write",
-					Description: "Allow all operations.",
-					Tools:       []string{ToolReconcileFluxResourceSet},
-				},
-			},
-		},
-		{
-			name:     "reconcile Source tool",
-			tool:     ToolReconcileFluxSource,
-			readOnly: false,
-			expected: []Scope{
-				{
-					Name:        "toolbox:" + ToolReconcileFluxSource,
-					Description: "Allow reconciling Flux source resources.",
-					Tools:       []string{ToolReconcileFluxSource},
-				},
-				{
-					Name:        "toolbox:read_write",
-					Description: "Allow all operations.",
-					Tools:       []string{ToolReconcileFluxSource},
+					Tools:       []string{ToolReconcileFluxResource},
 				},
 			},
 		},
