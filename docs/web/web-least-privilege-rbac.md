@@ -318,8 +318,3 @@ Users do not need cluster-wide `list` permissions on namespaces just to populate
 | 7 | Fine-grained user actions            | System performs native action operations             | Requested artifact for downloads; action result only otherwise                                 |
 | 8 | Namespace visibility                 | Wrapper lists namespaces with privileged base client | Visible namespace names after RBAC filtering                                                   |
 
-## Note
-
-Recent `ResourceSetInputProvider` tag filtering changes only reshape how tag
-lists are filtered, ordered, and grouped inside the controller. They do not add
-any new privileged backend path or require any extra Web UI RBAC grants.
