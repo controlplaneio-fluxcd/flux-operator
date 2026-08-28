@@ -6,6 +6,7 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"testing"
 	"time"
 
@@ -151,8 +152,11 @@ func TestResolveLogSelectionValidation(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "backend", Namespace: "apps"},
 			Spec:       appsv1.DeploymentSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "backend"}}},
 		}
-		_, err := resolveLogSelection(context.Background(), fake.NewSimpleClientset(deployment), "Deployment", "backend", "apps", "")
-		g.Expect(err).To(MatchError("no pods found for Deployment apps/backend"))
+		selection, err := resolveLogSelection(context.Background(), fake.NewSimpleClientset(deployment), "Deployment", "backend", "apps", "")
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(selection.kind).To(Equal("Deployment"))
+		g.Expect(selection.targets).To(BeEmpty())
+		g.Expect(selection.podsTotal).To(BeZero())
 	})
 
 	t.Run("missing named pod", func(t *testing.T) {
@@ -217,7 +221,7 @@ func TestGetLogsWithFakeClient(t *testing.T) {
 	g := NewWithT(t)
 	pod := testLogPod("backend", "default", time.Now(), nil, metav1.OwnerReference{}, "app")
 
-	result, err := getLogs(context.Background(), fake.NewSimpleClientset(pod), "", pod.Name, pod.Namespace, "", 100, false)
+	result, err := getLogs(context.Background(), fake.NewSimpleClientset(pod), LogsOptions{Name: pod.Name, Namespace: pod.Namespace, Limit: 100})
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(result.Kind).To(Equal("Pod"))
 	g.Expect(result.Name).To(Equal("backend"))
@@ -229,6 +233,83 @@ func TestGetLogsWithFakeClient(t *testing.T) {
 	g.Expect(result.Tagged).To(BeFalse())
 	g.Expect(result.Truncated).To(BeFalse())
 	g.Expect(result.Logs).To(Equal("fake logs\n"))
+}
+
+func TestGetLogsGrep(t *testing.T) {
+	pod := testLogPod("backend", "default", time.Now(), nil, metav1.OwnerReference{}, "app")
+
+	t.Run("keeps matching entries", func(t *testing.T) {
+		g := NewWithT(t)
+		result, err := getLogs(context.Background(), fake.NewSimpleClientset(pod),
+			LogsOptions{Name: pod.Name, Namespace: pod.Namespace, Limit: 100, Grep: regexp.MustCompile("(?i)FAKE")})
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(result.Logs).To(Equal("fake logs\n"))
+		g.Expect(result.Truncated).To(BeFalse())
+	})
+
+	t.Run("reports no matching entries", func(t *testing.T) {
+		g := NewWithT(t)
+		result, err := getLogs(context.Background(), fake.NewSimpleClientset(pod),
+			LogsOptions{Name: pod.Name, Namespace: pod.Namespace, Limit: 100, Grep: regexp.MustCompile("(?i)nothing")})
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(result.Logs).To(Equal("no log entries matching the grep expression"))
+		g.Expect(result.PodsStreamed).To(Equal(1))
+	})
+}
+
+func TestNoLogEntriesMessage(t *testing.T) {
+	g := NewWithT(t)
+	g.Expect(noLogEntriesMessage(LogsOptions{Since: 10 * time.Minute})).To(Equal("no log entries newer than 10m0s"))
+	g.Expect(noLogEntriesMessage(LogsOptions{Grep: regexp.MustCompile("x")})).To(Equal("no log entries matching the grep expression"))
+	g.Expect(noLogEntriesMessage(LogsOptions{Since: time.Hour, Grep: regexp.MustCompile("x")})).To(Equal("no log entries newer than 1h0m0s matching the grep expression"))
+}
+
+func TestPodLogOptions(t *testing.T) {
+	t.Run("uses the limit as tail without grep", func(t *testing.T) {
+		g := NewWithT(t)
+		opts := podLogOptions(LogsOptions{Limit: 50, Previous: true}, "app")
+		g.Expect(opts.Container).To(Equal("app"))
+		g.Expect(*opts.TailLines).To(Equal(int64(50)))
+		g.Expect(opts.Previous).To(BeTrue())
+		g.Expect(opts.Timestamps).To(BeTrue())
+		g.Expect(opts.SinceSeconds).To(BeNil())
+	})
+
+	t.Run("widens the tail with grep", func(t *testing.T) {
+		g := NewWithT(t)
+		opts := podLogOptions(LogsOptions{Limit: 50, Grep: regexp.MustCompile("error")}, "app")
+		g.Expect(*opts.TailLines).To(Equal(grepTailLines))
+
+		opts = podLogOptions(LogsOptions{Limit: grepTailLines + 1, Grep: regexp.MustCompile("error")}, "app")
+		g.Expect(*opts.TailLines).To(Equal(grepTailLines + 1))
+	})
+
+	t.Run("rounds since up to whole seconds", func(t *testing.T) {
+		g := NewWithT(t)
+		opts := podLogOptions(LogsOptions{Limit: 50, Since: 1500 * time.Millisecond}, "app")
+		g.Expect(*opts.SinceSeconds).To(Equal(int64(2)))
+	})
+}
+
+func TestGetLogsWorkloadWithoutPods(t *testing.T) {
+	g := NewWithT(t)
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "backend", Namespace: "apps"},
+		Spec:       appsv1.DeploymentSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "backend"}}},
+	}
+
+	result, err := getLogs(context.Background(), fake.NewSimpleClientset(deployment), LogsOptions{Kind: "deployment", Name: "backend", Namespace: "apps", Limit: 100})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(result.Kind).To(Equal("Deployment"))
+	g.Expect(result.Name).To(Equal("backend"))
+	g.Expect(result.Namespace).To(Equal("apps"))
+	g.Expect(result.Pods).To(BeEmpty())
+	g.Expect(result.Containers).To(BeEmpty())
+	g.Expect(result.PodsTotal).To(BeZero())
+	g.Expect(result.PodsStreamed).To(BeZero())
+	g.Expect(result.Tagged).To(BeFalse())
+	g.Expect(result.Truncated).To(BeFalse())
+	g.Expect(result.Logs).To(Equal("no pods found for Deployment apps/backend"))
 }
 func testLogPod(name, namespace string, created time.Time, podLabels map[string]string, owner metav1.OwnerReference, containers ...string) *corev1.Pod {
 	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{

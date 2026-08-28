@@ -77,18 +77,100 @@ application behavior and troubleshoot issues.
 - `namespace` (required): The namespace of the pod or workload.
 - `container` (optional): A regular container name. When omitted, logs are read from all
   `spec.containers`; init and ephemeral containers are excluded.
+- `since` (optional): Only return log entries newer than this Go duration, such as `10m` or `1h`.
+- `grep` (optional): Case-insensitive RE2 expression that keeps the log entries whose line matches.
 - `limit` (optional): Maximum number of merged log entries to return (default: 100).
 - `previous` (optional): Read logs from previously terminated container instances (default: false).
 
-For workloads, the tool resolves owned pods, orders them newest-first, and concurrently reads every
-selected pod and container stream. When multiple pods and containers are selected, log lines use
+For workloads, the tool resolves owned pods and orders them newest-first.
+When multiple pods and containers are selected, log lines use
 the `<pod> <container> <timestamp> <message>` format.
 
 **Output:**
 
 Returns YAML with `kind`, `name`, `namespace`, selected `pods`, de-duplicated `containers`,
 `podsTotal` (matches before the pod cap), `podsStreamed` (pods with a successful stream), `tagged`,
-`truncated` (a pod or stream cap dropped targets), and the merged `logs` payload.
+`truncated`, and the merged `logs` payload. `truncated` is set when the pod or stream cap dropped
+targets and, with `grep`, when more entries matched than `limit` or when the byte cap dropped
+older lines before the filter ran, so earlier matches may exist.
+
+For example, `kind: Deployment`, `name: backend`, `namespace: apps-staging` and `limit: 4` return:
+
+```yaml
+kind: Deployment
+name: backend
+namespace: apps-staging
+pods:
+- backend-567b7494c-ddddm
+- backend-567b7494c-2vxhm
+containers:
+- podinfod
+podsTotal: 2
+podsStreamed: 2
+tagged: true
+truncated: false
+logs: |
+  backend-567b7494c-2vxhm 2026-08-28T15:35:51Z {"level":"info","ts":"2026-08-28T15:35:51.199Z","caller":"podinfo/main.go:170","msg":"Starting podinfo","version":"6.14.0","revision":"a30fa3224289a3f3e413157104dee8844e329926","port":"9898"}
+  backend-567b7494c-2vxhm 2026-08-28T15:35:51Z {"level":"info","ts":"2026-08-28T15:35:51.199Z","caller":"http/server.go:273","msg":"Starting HTTP Server.","addr":":9898"}
+  backend-567b7494c-ddddm 2026-08-28T15:36:05Z {"level":"info","ts":"2026-08-28T15:36:05.911Z","caller":"podinfo/main.go:170","msg":"Starting podinfo","version":"6.14.0","revision":"a30fa3224289a3f3e413157104dee8844e329926","port":"9898"}
+  backend-567b7494c-ddddm 2026-08-28T15:36:05Z {"level":"info","ts":"2026-08-28T15:36:05.911Z","caller":"http/server.go:273","msg":"Starting HTTP Server.","addr":":9898"}
+```
+
+When a single container has no output, `logs` contains `no logs found for container <name>`.
+
+When a workload has no pods, `logs` contains `no pods found for <kind> <namespace>/<name>` and
+`podsTotal` is `0`.
+
+When `since` or `grep` leave no entries, `logs` describes the filters, for example
+`no log entries newer than 10m0s matching the grep expression`.
+
+### get_kubernetes_events
+
+Retrieves Kubernetes events for workloads and other Kubernetes objects, including Pods,
+Deployments, PersistentVolumeClaims, Nodes, and Flux resources. For a `Deployment`, `StatefulSet`,
+`DaemonSet`, `CronJob` or `Job`, the events of the workload, of the ReplicaSets or Jobs it owns,
+and of its newest 10 pods are returned together.
+
+**Parameters:**
+
+- `apiVersion` (optional): Exact API version of the involved object, such as `v1`, `apps/v1`,
+  or `helm.toolkit.fluxcd.io/v2`.
+- `kind` (optional): Exact, case-sensitive kind of the involved object. Workload kinds are
+  resolved to their owned objects when `name` and `namespace` are set.
+- `name` (optional): Exact name of the involved object.
+- `namespace` (optional): Namespace of the involved objects. When omitted, events are listed
+  across all namespaces.
+- `type` (optional): Event type, either `Normal` or `Warning`.
+- `since` (optional): Only return events newer than this Go duration, such as `10m` or `1h`.
+- `grep` (optional): Case-insensitive RE2 expression matched against the event reason, message,
+  and involved object rendered as `Kind/namespace/name` (`Kind/name` when cluster-scoped).
+- `limit` (optional): Maximum number of events to return after filtering and sorting
+  (default: 100).
+
+**Output:**
+
+Returns events newest-first in YAML, with the matched total before the requested limit and a
+`truncated` indicator when the limit drops entries, when the pod cap drops workload pods, or when
+more than 5,000 events matched the selectors; the cap inspects the first 5,000 in API order, so
+narrow the request with `namespace`, `kind` or `type` when `truncated` is set. The `events`
+value contains one event per line with space-separated `<time> <type> <reason> <object> [x<count>]
+<message>` columns. The object is rendered as `Kind/namespace/name`, or `Kind/name` for a
+cluster-scoped object, and the count is omitted when it is one.
+
+For example, `namespace: kube-system`, `kind: Pod`, `type: Warning`, `since: 1h` and `limit: 3` return:
+
+```yaml
+namespace: kube-system
+total: 6
+truncated: true
+events: |
+  2026-08-28T15:32:21Z Warning Unhealthy Pod/kube-system/coredns-589f44dc88-244lp Readiness probe failed: Get "http://10.244.0.4:8181/ready": dial tcp 10.244.0.4:8181: connect: connection refused
+  2026-08-28T15:32:21Z Warning Unhealthy Pod/kube-system/coredns-589f44dc88-km8w5 Readiness probe failed: Get "http://10.244.0.2:8181/ready": dial tcp 10.244.0.2:8181: connect: connection refused
+  2026-08-28T15:32:09Z Warning FailedScheduling Pod/kube-system/coredns-589f44dc88-244lp 0/1 nodes are available: 1 node(s) had untolerated taint(s). no new claims to deallocate, preemption: 0/1 nodes are available: 1 Preemption is not helpful for scheduling.
+```
+
+When no events match, the tool returns `No events found` as a normal text result, unless the
+cap was reached, in which case the YAML result is returned with `truncated: true`.
 
 ### get_kubernetes_metrics
 

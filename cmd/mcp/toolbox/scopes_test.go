@@ -104,6 +104,28 @@ func TestGetToolScopes(t *testing.T) {
 			},
 		},
 		{
+			name:     "read-only tool GetKubernetesEvents",
+			tool:     ToolGetKubernetesEvents,
+			readOnly: false,
+			expected: []Scope{
+				{
+					Name:        "toolbox:" + ToolGetKubernetesEvents,
+					Description: "Allow getting Kubernetes events.",
+					Tools:       []string{ToolGetKubernetesEvents},
+				},
+				{
+					Name:        "toolbox:read_write",
+					Description: "Allow all operations.",
+					Tools:       []string{ToolGetKubernetesEvents},
+				},
+				{
+					Name:        "toolbox:read_only",
+					Description: "Allow all read-only operations.",
+					Tools:       []string{ToolGetKubernetesEvents},
+				},
+			},
+		},
+		{
 			name:     "read-only tool GetKubernetesMetrics",
 			tool:     ToolGetKubernetesMetrics,
 			readOnly: false,

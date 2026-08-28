@@ -39,6 +39,8 @@ For Flux API guidance, call the `search_flux_docs` tool with targeted questions.
 
 - When asked about the Flux installation status, call the `get_flux_instance` tool.
 - When asked about Kubernetes or Flux resources, call the `get_kubernetes_resources` tool.
+- When troubleshooting workloads, call `get_kubernetes_events` with the workload `kind`, `name`
+  and `namespace`, and narrow with `type: Warning`, `since` and `grep`.
 - When listing many resources or when only specific fields are relevant, set the `fields` parameter of the `get_kubernetes_resources` tool to kubectl JSONPath expressions (e.g. `spec.chart.spec.version`, `status.conditions[?(@.type=="Ready")].message`) to reduce the result size. Include `status.events` and `status.inventory` in `fields` when the events or the inventory are needed.
 - Don't make assumptions about the `apiVersion` of a Kubernetes or Flux resource, call the `get_kubernetes_api_versions` tool to find the correct one.
 - When asked to use a specific cluster, call the `get_kubeconfig_contexts` tool to find the cluster context before switching to it with the `set_kubeconfig_context` tool.
@@ -80,11 +82,20 @@ these directories, run `kustomize create --autodetect` in a copy before building
 the YAML files. Read all header warnings. Treat `delete` entries as objects that would be pruned
 only when the supplied manifest is complete.
 
+## Kubernetes events analysis
+
+Call `get_kubernetes_events` with the workload `kind`, `name` and `namespace` found in a Flux
+resource's inventory before reading logs; the result covers the workload, its ReplicaSets or Jobs
+and its pods. Use `type: Warning`, `since` and `grep` (e.g. `BackOff|OOMKilled|FailedScheduling`)
+to narrow the result.
+
 ## Kubernetes logs analysis
 
 Call `get_kubernetes_logs` directly with the workload `kind`, `name`, and `namespace` found in a
 Flux resource's inventory via `get_kubernetes_resources`. Omit `container` to read all regular
-containers. If the result is truncated, narrow the request with `container` and `limit`.
+containers. Use `since` to focus on the incident window and `grep` to keep only the relevant
+entries, such as `error|panic|fatal|exception`. If the result is truncated, narrow the request
+with `container`, `since`, `grep` and `limit`.
 
 ## Flux HelmRelease analysis
 
@@ -98,6 +109,7 @@ When troubleshooting a HelmRelease, follow these steps:
 - Use the `get_kubernetes_resources` tool to get the HelmRelease source then analyze the source status and events.
 - If the HelmRelease is in a failed state or in progress, it may be due to failures in one of the managed resources found in the inventory.
 - Use the `get_kubernetes_resources` tool to get the managed resources and analyze their status.
+- Fetch Warning events for the managed resources with the `get_kubernetes_events` tool.
 - If the managed resources are in a failed state, analyze their logs using the `get_kubernetes_logs` tool.
 - If any issues were found, create a root cause analysis report for the user.
 - If no issues were found, create a report with the current status of the HelmRelease and its managed resources and container images.
@@ -114,6 +126,7 @@ When troubleshooting a Kustomization, follow these steps:
 - Use the `get_kubernetes_resources` tool to get the Kustomization source then analyze the source status and events.
 - If the Kustomization is in a failed state or in progress, it may be due to failures in one of the managed resources found in the inventory.
 - Use the `get_kubernetes_resources` tool to get the managed resources and analyze their status.
+- Fetch Warning events for the managed resources with the `get_kubernetes_events` tool.
 - If the managed resources are in a failed state, analyze their logs using the `get_kubernetes_logs` tool.
 - If any issues were found, create a root cause analysis report for the user.
 - If no issues were found, create a report with the current status of the Kustomization and its managed resources.

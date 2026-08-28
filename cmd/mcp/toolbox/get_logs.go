@@ -5,9 +5,14 @@ package toolbox
 
 import (
 	"context"
+	"fmt"
+	"regexp"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"sigs.k8s.io/yaml"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/k8s"
 )
 
 const (
@@ -28,6 +33,8 @@ type getKubernetesLogsInput struct {
 	Name      string  `json:"name"                jsonschema:"Name of the pod or workload."`
 	Namespace string  `json:"namespace"           jsonschema:"Namespace of the pod or workload."`
 	Container string  `json:"container,omitempty" jsonschema:"Container name; omit to read all containers."`
+	Since     string  `json:"since,omitempty"     jsonschema:"Only log entries newer than this Go duration, for example 10m or 1h."`
+	Grep      string  `json:"grep,omitempty"      jsonschema:"Case-insensitive RE2 expression; keeps the log entries whose line matches, including attached continuation lines."`
 	Limit     float64 `json:"limit,omitempty"     jsonschema:"Max log lines. Defaults to 100."`
 	Previous  bool    `json:"previous,omitempty"  jsonschema:"Logs from the previously terminated containers."`
 }
@@ -45,8 +52,29 @@ func (m *Manager) HandleGetKubernetesLogs(ctx context.Context, request *mcp.Call
 		return NewToolResultError("namespace is required")
 	}
 	limit := int64(input.Limit)
-	if limit == 0 {
+	if limit <= 0 {
 		limit = 100
+	}
+
+	var since time.Duration
+	if input.Since != "" {
+		parsed, err := time.ParseDuration(input.Since)
+		if err != nil {
+			return NewToolResultError(fmt.Sprintf("Invalid since: %v", err))
+		}
+		if parsed <= 0 {
+			return NewToolResultError("Invalid since: must be a positive duration")
+		}
+		since = parsed
+	}
+
+	var grep *regexp.Regexp
+	if input.Grep != "" {
+		var err error
+		grep, err = regexp.Compile("(?i)" + input.Grep)
+		if err != nil {
+			return NewToolResultError(fmt.Sprintf("Invalid grep: %v", err))
+		}
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, m.timeout)
@@ -57,7 +85,16 @@ func (m *Manager) HandleGetKubernetesLogs(ctx context.Context, request *mcp.Call
 		return NewToolResultErrorFromErr("Failed to get Kubernetes client", err)
 	}
 
-	result, err := kubeClient.GetLogs(ctx, input.Kind, input.Name, input.Namespace, input.Container, limit, input.Previous)
+	result, err := kubeClient.GetLogs(ctx, k8s.LogsOptions{
+		Kind:      input.Kind,
+		Name:      input.Name,
+		Namespace: input.Namespace,
+		Container: input.Container,
+		Limit:     limit,
+		Previous:  input.Previous,
+		Since:     since,
+		Grep:      grep,
+	})
 	if err != nil {
 		return NewToolResultError(err.Error())
 	}

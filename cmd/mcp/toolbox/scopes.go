@@ -72,6 +72,10 @@ var scopesPerTool = map[string]toolScopes{
 		ownScopeDescription: "Allow getting logs from pods.",
 		extraScopes:         []string{ScopeReadOnly},
 	},
+	ToolGetKubernetesEvents: {
+		ownScopeDescription: "Allow getting Kubernetes events.",
+		extraScopes:         []string{ScopeReadOnly},
+	},
 	ToolGetKubernetesMetrics: {
 		ownScopeDescription: "Allow getting metrics from the Kubernetes API.",
 		extraScopes:         []string{ScopeReadOnly},

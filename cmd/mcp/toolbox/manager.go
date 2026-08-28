@@ -121,6 +121,15 @@ func (m *Manager) RegisterTools(server *mcp.Server, inCluster bool) []string {
 			m.HandleGetKubernetesLogs,
 		)
 	}
+	if m.shouldRegisterTool(ToolGetKubernetesEvents, inCluster) {
+		addTool(server, &recorder,
+			&mcp.Tool{
+				Name:        ToolGetKubernetesEvents,
+				Description: "Retrieves Kubernetes events, optionally filtered by namespace, involved object, type, time window and regex.",
+			},
+			m.HandleGetKubernetesEvents,
+		)
+	}
 	if m.shouldRegisterTool(ToolGetKubernetesMetrics, inCluster) {
 		addTool(server, &recorder,
 			&mcp.Tool{
