@@ -82,13 +82,40 @@ application behavior and troubleshoot issues.
 
 For workloads, the tool resolves owned pods, orders them newest-first, and concurrently reads every
 selected pod and container stream. When multiple pods and containers are selected, log lines use
-the `<pod> <container> <timestamp> <message>` format.
+the `<pod> <container> <timestamp> <message>` format, where the timestamp is RFC 3339 at seconds precision.
 
 **Output:**
 
 Returns YAML with `kind`, `name`, `namespace`, selected `pods`, de-duplicated `containers`,
 `podsTotal` (matches before the pod cap), `podsStreamed` (pods with a successful stream), `tagged`,
 `truncated` (a pod or stream cap dropped targets), and the merged `logs` payload.
+
+For example, `kind: Deployment`, `name: backend`, `namespace: apps-staging` and `limit: 4` return:
+
+```yaml
+kind: Deployment
+name: backend
+namespace: apps-staging
+pods:
+- backend-567b7494c-ddddm
+- backend-567b7494c-2vxhm
+containers:
+- podinfod
+podsTotal: 2
+podsStreamed: 2
+tagged: true
+truncated: false
+logs: |
+  backend-567b7494c-2vxhm 2026-08-28T15:35:51Z {"level":"info","ts":"2026-08-28T15:35:51.199Z","caller":"podinfo/main.go:170","msg":"Starting podinfo","version":"6.14.0","revision":"a30fa3224289a3f3e413157104dee8844e329926","port":"9898"}
+  backend-567b7494c-2vxhm 2026-08-28T15:35:51Z {"level":"info","ts":"2026-08-28T15:35:51.199Z","caller":"http/server.go:273","msg":"Starting HTTP Server.","addr":":9898"}
+  backend-567b7494c-ddddm 2026-08-28T15:36:05Z {"level":"info","ts":"2026-08-28T15:36:05.911Z","caller":"podinfo/main.go:170","msg":"Starting podinfo","version":"6.14.0","revision":"a30fa3224289a3f3e413157104dee8844e329926","port":"9898"}
+  backend-567b7494c-ddddm 2026-08-28T15:36:05Z {"level":"info","ts":"2026-08-28T15:36:05.911Z","caller":"http/server.go:273","msg":"Starting HTTP Server.","addr":":9898"}
+```
+
+When a single container has no output, `logs` contains `no logs found for container <name>`.
+
+When a workload has no pods, `logs` contains `no pods found for <kind> <namespace>/<name>` and
+`podsTotal` is `0`.
 
 ### get_kubernetes_metrics
 

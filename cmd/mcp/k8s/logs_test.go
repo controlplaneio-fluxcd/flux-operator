@@ -151,8 +151,11 @@ func TestResolveLogSelectionValidation(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "backend", Namespace: "apps"},
 			Spec:       appsv1.DeploymentSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "backend"}}},
 		}
-		_, err := resolveLogSelection(context.Background(), fake.NewSimpleClientset(deployment), "Deployment", "backend", "apps", "")
-		g.Expect(err).To(MatchError("no pods found for Deployment apps/backend"))
+		selection, err := resolveLogSelection(context.Background(), fake.NewSimpleClientset(deployment), "Deployment", "backend", "apps", "")
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(selection.kind).To(Equal("Deployment"))
+		g.Expect(selection.targets).To(BeEmpty())
+		g.Expect(selection.podsTotal).To(BeZero())
 	})
 
 	t.Run("missing named pod", func(t *testing.T) {
@@ -229,6 +232,27 @@ func TestGetLogsWithFakeClient(t *testing.T) {
 	g.Expect(result.Tagged).To(BeFalse())
 	g.Expect(result.Truncated).To(BeFalse())
 	g.Expect(result.Logs).To(Equal("fake logs\n"))
+}
+
+func TestGetLogsWorkloadWithoutPods(t *testing.T) {
+	g := NewWithT(t)
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "backend", Namespace: "apps"},
+		Spec:       appsv1.DeploymentSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "backend"}}},
+	}
+
+	result, err := getLogs(context.Background(), fake.NewSimpleClientset(deployment), "deployment", "backend", "apps", "", 100, false)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(result.Kind).To(Equal("Deployment"))
+	g.Expect(result.Name).To(Equal("backend"))
+	g.Expect(result.Namespace).To(Equal("apps"))
+	g.Expect(result.Pods).To(BeEmpty())
+	g.Expect(result.Containers).To(BeEmpty())
+	g.Expect(result.PodsTotal).To(BeZero())
+	g.Expect(result.PodsStreamed).To(BeZero())
+	g.Expect(result.Tagged).To(BeFalse())
+	g.Expect(result.Truncated).To(BeFalse())
+	g.Expect(result.Logs).To(Equal("no pods found for Deployment apps/backend"))
 }
 func testLogPod(name, namespace string, created time.Time, podLabels map[string]string, owner metav1.OwnerReference, containers ...string) *corev1.Pod {
 	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{

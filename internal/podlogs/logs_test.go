@@ -114,11 +114,19 @@ func TestMergeLogStreams(t *testing.T) {
 		g.Expect(got).To(Equal("2026-01-01T00:00:00Z app a\n2026-01-01T00:00:01Z side a\n2026-01-01T00:00:02Z app b\n2026-01-01T00:00:03Z side b\n"))
 	})
 
-	t.Run("orders fractional timestamps numerically", func(t *testing.T) {
+	t.Run("keeps fractional timestamps by default", func(t *testing.T) {
 		g := NewWithT(t)
 		a := LogStream{Blob: "2026-01-01T00:00:00.1Z first\n"}
 		b := LogStream{Blob: "2026-01-01T00:00:00.12Z second\n"}
 		g.Expect(MergeLogStreams([]LogStream{b, a}, 0, false, false, byteLimit)).To(Equal("2026-01-01T00:00:00.1Z first\n2026-01-01T00:00:00.12Z second\n"))
+	})
+
+	t.Run("formats seconds while preserving fractional ordering", func(t *testing.T) {
+		g := NewWithT(t)
+		a := LogStream{Blob: "2026-01-01T00:00:00.100000001Z first\nstack frame\n"}
+		b := LogStream{Blob: "2026-01-01T00:00:00.100000002Z second\n"}
+		got := MergeLogStreams([]LogStream{b, a}, 0, false, false, byteLimit, WithSecondTimestamps())
+		g.Expect(got).To(Equal("2026-01-01T00:00:00Z first\nstack frame\n2026-01-01T00:00:00Z second\n"))
 	})
 
 	t.Run("keeps continuation lines attached", func(t *testing.T) {

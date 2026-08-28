@@ -116,12 +116,12 @@ func TestBuildWorkloadLogsResponse(t *testing.T) {
 		// One pod, two containers: ContainerTagged is set and each line is prefixed
 		// with its container so the client scopes folding per container.
 		targets := []podlogs.LogTarget{{Pod: "p1", Container: "app"}, {Pod: "p1", Container: "envoy"}}
-		fanOut := collectLogStreams(targets, []string{"2026-01-01T00:00:00Z a\n", "2026-01-01T00:00:01Z e\n"}, []error{nil, nil})
+		fanOut := collectLogStreams(targets, []string{"2026-01-01T00:00:00.123456789Z a\n", "2026-01-01T00:00:01.987654321Z e\n"}, []error{nil, nil})
 		resp := buildWorkloadLogsResponse([]string{"p1"}, []string{"app", "envoy"}, fanOut, 1, 1000, false, true, false)
 
 		g.Expect(resp.Tagged).To(BeFalse())
 		g.Expect(resp.ContainerTagged).To(BeTrue())
-		g.Expect(resp.Logs).To(Equal("app 2026-01-01T00:00:00Z a\nenvoy 2026-01-01T00:00:01Z e\n"))
+		g.Expect(resp.Logs).To(Equal("app 2026-01-01T00:00:00.123456789Z a\nenvoy 2026-01-01T00:00:01.987654321Z e\n"))
 	})
 }
 

@@ -42,6 +42,21 @@ type logEntry struct {
 	container string
 }
 
+// MergeOption configures MergeLogStreams output rendering.
+type MergeOption func(*mergeOptions)
+
+// mergeOptions contains optional MergeLogStreams rendering behavior.
+type mergeOptions struct {
+	secondTimestamps bool
+}
+
+// WithSecondTimestamps formats timestamped entries at RFC 3339 seconds precision.
+func WithSecondTimestamps() MergeOption {
+	return func(opts *mergeOptions) {
+		opts.secondTimestamps = true
+	}
+}
+
 // trimPartialLogLine drops a trailing partial log line from the payload.
 //
 // Container runtimes newline-terminate every emitted log line, so a payload
@@ -154,8 +169,14 @@ func parseLogEntries(blob, pod, container string) []logEntry {
 // MergeLogStreams interleaves streams chronologically, keeps the newest
 // tailLines entries, and caps the result to byteLimit bytes on a line boundary.
 // Timestamped lines are optionally tagged in pod-then-container order;
-// continuation lines remain attached and untagged.
-func MergeLogStreams(streams []LogStream, tailLines int, tagPod, tagContainer bool, byteLimit int) string {
+// continuation lines remain attached and untagged. Merge options only affect
+// output rendering and do not change chronological ordering.
+func MergeLogStreams(streams []LogStream, tailLines int, tagPod, tagContainer bool, byteLimit int, options ...MergeOption) string {
+	opts := mergeOptions{}
+	for _, option := range options {
+		option(&opts)
+	}
+
 	var entries []logEntry
 	for _, stream := range streams {
 		entries = append(entries, parseLogEntries(stream.Blob, stream.Pod, stream.Container)...)
@@ -179,7 +200,13 @@ func MergeLogStreams(streams []LogStream, tailLines int, tagPod, tagContainer bo
 				sb.WriteByte(' ')
 			}
 		}
-		sb.WriteString(entry.text)
+		text := entry.text
+		if opts.secondTimestamps && !entry.ts.IsZero() {
+			if _, rest, found := strings.Cut(text, " "); found {
+				text = entry.ts.UTC().Format(time.RFC3339) + " " + rest
+			}
+		}
+		sb.WriteString(text)
 		sb.WriteByte('\n')
 	}
 	return capLogBytes(sb.String(), byteLimit)

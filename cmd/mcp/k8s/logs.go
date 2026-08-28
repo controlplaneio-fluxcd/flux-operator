@@ -79,6 +79,16 @@ func getLogs(ctx context.Context, clientset kubernetes.Interface, kind, name, na
 	if err != nil {
 		return nil, err
 	}
+	if len(selection.targets) == 0 {
+		return &KubernetesLogs{
+			Kind:       selection.kind,
+			Name:       name,
+			Namespace:  namespace,
+			Pods:       []string{},
+			Containers: []string{},
+			Logs:       fmt.Sprintf("no pods found for %s %s/%s", selection.kind, namespace, name),
+		}, nil
+	}
 
 	perStreamBytes := max(maxLogBytes/len(selection.targets), minPerStreamLogBytes)
 	logsByTarget := make([]string, len(selection.targets))
@@ -121,7 +131,8 @@ func getLogs(ctx context.Context, clientset kubernetes.Interface, kind, name, na
 		return nil, firstErr
 	}
 
-	logs := podlogs.MergeLogStreams(streams, int(limit), selection.tagPod, selection.tagContainer, maxLogBytes)
+	logs := podlogs.MergeLogStreams(streams, int(limit), selection.tagPod, selection.tagContainer, maxLogBytes,
+		podlogs.WithSecondTimestamps())
 	if len(selection.targets) == 1 && logs == "" {
 		logs = fmt.Sprintf("no logs found for container %s", selection.targets[0].Container)
 	}
@@ -146,7 +157,8 @@ func getLogs(ctx context.Context, clientset kubernetes.Interface, kind, name, na
 }
 
 // resolveLogSelection resolves the named resource to newest-first pods and
-// builds the capped set of regular-container log streams.
+// builds the capped set of regular-container log streams. A workload that
+// exists but owns no pods yields a selection without targets.
 func resolveLogSelection(ctx context.Context, clientset kubernetes.Interface, kind, name, namespace, container string) (*logSelection, error) {
 	canonicalKind, err := canonicalLogKind(kind)
 	if err != nil {
@@ -158,7 +170,7 @@ func resolveLogSelection(ctx context.Context, clientset kubernetes.Interface, ki
 		return nil, err
 	}
 	if len(pods) == 0 {
-		return nil, fmt.Errorf("no pods found for %s %s/%s", canonicalKind, namespace, name)
+		return &logSelection{kind: canonicalKind}, nil
 	}
 
 	sort.SliceStable(pods, func(i, j int) bool {
