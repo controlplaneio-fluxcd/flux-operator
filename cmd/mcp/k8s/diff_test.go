@@ -23,7 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 )
 
-func TestDiffEnvtestEngine(t *testing.T) {
+func TestDiffEngine(t *testing.T) {
 	g := NewWithT(t)
 	ctx := context.Background()
 	namespace := createDiffNamespace(t)
@@ -178,7 +178,7 @@ data:
 	g.Expect(output).To(ContainSubstring("ConfigMap/" + namespace + "/immutable recreate (forced, not validated)"))
 }
 
-func TestDiffEnvtestHelmReleasePolish(t *testing.T) {
+func TestDiffHelmReleasePolish(t *testing.T) {
 	g := NewWithT(t)
 	ctx := context.Background()
 	namespace := createDiffNamespace(t)
@@ -233,7 +233,7 @@ metadata:
 	g.Expect(output).NotTo(ContainSubstring("app-v1.0.0"))
 }
 
-func TestDiffEnvtestDependentResourcesAndOwnership(t *testing.T) {
+func TestDiffDependentResourcesAndOwnership(t *testing.T) {
 	g := NewWithT(t)
 	ctx := context.Background()
 
@@ -386,7 +386,7 @@ metadata:
 	g.Expect(output).To(ContainSubstring("error: dry-run requires get and patch permission on ConfigMap/" + namespace + "/forbidden"))
 }
 
-func TestDiffEnvtestPruneFiltering(t *testing.T) {
+func TestDiffPruneFiltering(t *testing.T) {
 	g := NewWithT(t)
 	ctx := context.Background()
 	namespace := createDiffNamespace(t)
@@ -549,7 +549,7 @@ func setOwnerInventory(t *testing.T, owner *unstructured.Unstructured, objects .
 	g.Expect(testClient.Client.Status().Update(context.Background(), current)).To(Succeed())
 }
 
-func TestDiffEnvtestMonorepoConformance(t *testing.T) {
+func TestDiffMonorepoConformance(t *testing.T) {
 	g := NewWithT(t)
 	ctx := context.Background()
 
@@ -606,7 +606,7 @@ func TestDiffEnvtestMonorepoConformance(t *testing.T) {
 	g.Expect(output).To(ContainSubstring("Summary: 1 create, 1 update, 2 unchanged, 1 delete"))
 }
 
-func TestDiffEnvtestSOPSKeyComparison(t *testing.T) {
+func TestDiffSOPSKeyComparison(t *testing.T) {
 	g := NewWithT(t)
 	ctx := context.Background()
 	namespace := createDiffNamespace(t)
