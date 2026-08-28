@@ -66,19 +66,29 @@ listing many resources or when only a few fields are relevant.
 
 ### get_kubernetes_logs
 
-Retrieves logs from Kubernetes pods, allowing AI assistants to analyze application behavior and troubleshoot issues.
+Retrieves timestamped logs for workloads, allowing AI Agents to analyze
+application behavior and troubleshoot issues.
 
 **Parameters:**
 
-- `pod_name` (required): The name of the pod
-- `pod_namespace` (required): The namespace of the pod
-- `container_name` (required): The name of the container
-- `limit` (optional): Maximum number of log lines to return (default: 100)
-- `previous` (optional): Return logs from the previous container instance (default: false)
+- `kind` (optional): Resource kind. Supported values are `Pod` (the default), `Deployment`,
+  `StatefulSet`, `DaemonSet`, `CronJob`, and `Job` (case-insensitive).
+- `name` (required): The name of the pod or workload.
+- `namespace` (required): The namespace of the pod or workload.
+- `container` (optional): A regular container name. When omitted, logs are read from all
+  `spec.containers`; init and ephemeral containers are excluded.
+- `limit` (optional): Maximum number of merged log entries to return (default: 100).
+- `previous` (optional): Read logs from previously terminated container instances (default: false).
+
+For workloads, the tool resolves owned pods, orders them newest-first, and concurrently reads every
+selected pod and container stream. When multiple pods and containers are selected, log lines use
+the `<pod> <container> <timestamp> <message>` format.
 
 **Output:**
 
-Returns the specified number of log lines from the requested container, with timestamps and log levels preserved.
+Returns YAML with `kind`, `name`, `namespace`, selected `pods`, de-duplicated `containers`,
+`podsTotal` (matches before the pod cap), `podsStreamed` (pods with a successful stream), `tagged`,
+`truncated` (a pod or stream cap dropped targets), and the merged `logs` payload.
 
 ### get_kubernetes_metrics
 

@@ -20,6 +20,8 @@ import (
 	metricsv1beta1api "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	metricsclientset "k8s.io/metrics/pkg/client/clientset/versioned"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/podlogs"
 )
 
 const (
@@ -422,25 +424,6 @@ func podKey(namespace, name string) string {
 	return fmt.Sprintf("%s/%s", namespace, name)
 }
 
-// workloadPodSelector extracts the pod label selector (matchLabels and
-// matchExpressions) from a workload spec. Returns nil when the workload
-// has no selector or it cannot be parsed.
-func workloadPodSelector(obj *unstructured.Unstructured) labels.Selector {
-	sel, found, _ := unstructured.NestedMap(obj.Object, "spec", "selector")
-	if !found {
-		return nil
-	}
-	labelSelector := &metav1.LabelSelector{}
-	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(sel, labelSelector); err != nil {
-		return nil
-	}
-	s, err := metav1.LabelSelectorAsSelector(labelSelector)
-	if err != nil {
-		return nil
-	}
-	return s
-}
-
 // currentPodMetrics returns the latest usage sample of a pod when it is
 // recent enough to describe the pod's present state.
 func (h *Handler) currentPodMetrics(namespace, name string) *MetricsSample {
@@ -494,7 +477,7 @@ func (h *Handler) buildWorkloadMetrics(obj *unstructured.Unstructured, pods []Wo
 		return nil
 	}
 
-	selector := workloadPodSelector(obj)
+	selector := podlogs.WorkloadPodSelector(obj)
 
 	names := make([]string, 0, len(pods))
 	wm := &WorkloadMetrics{}

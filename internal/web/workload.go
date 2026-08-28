@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/podlogs"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/kubeclient"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
@@ -275,7 +276,7 @@ func (h *Handler) GetWorkloadStatus(ctx context.Context, kind, name, namespace s
 	// CronJobs have no spec.selector, so their selector is nil and the
 	// series stays empty.
 	if !detailed && h.metrics != nil && h.metrics.Available() {
-		workload.Samples = h.metrics.WorkloadSeries(namespace, nil, workloadPodSelector(obj))
+		workload.Samples = h.metrics.WorkloadSeries(namespace, nil, podlogs.WorkloadPodSelector(obj))
 	}
 
 	if detailed {
@@ -453,7 +454,7 @@ func (h *Handler) GetWorkloadPods(ctx context.Context, obj *unstructured.Unstruc
 	}
 
 	// Match pods on the full workload selector (matchLabels and matchExpressions).
-	selector := workloadPodSelector(obj)
+	selector := podlogs.WorkloadPodSelector(obj)
 	if selector == nil || selector.Empty() {
 		return nil, nil
 	}

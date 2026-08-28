@@ -22,13 +22,14 @@ func init() {
 	}
 }
 
-// getKubernetesLogsInput defines the input parameters for retrieving pod logs.
+// getKubernetesLogsInput defines the input parameters for retrieving pod or workload logs.
 type getKubernetesLogsInput struct {
-	PodName       string  `json:"pod_name" jsonschema:"Pod name."`
-	ContainerName string  `json:"container_name" jsonschema:"Container name."`
-	PodNamespace  string  `json:"pod_namespace" jsonschema:"Namespace of the pod."`
-	Limit         float64 `json:"limit,omitempty" jsonschema:"Max log lines. Defaults to 100."`
-	Previous      bool    `json:"previous,omitempty" jsonschema:"Logs from the previously terminated container."`
+	Kind      string  `json:"kind,omitempty"      jsonschema:"Kind of the resource: Pod (default), Deployment, StatefulSet, DaemonSet, CronJob or Job."`
+	Name      string  `json:"name"                jsonschema:"Name of the pod or workload."`
+	Namespace string  `json:"namespace"           jsonschema:"Namespace of the pod or workload."`
+	Container string  `json:"container,omitempty" jsonschema:"Container name; omit to read all containers."`
+	Limit     float64 `json:"limit,omitempty"     jsonschema:"Max log lines. Defaults to 100."`
+	Previous  bool    `json:"previous,omitempty"  jsonschema:"Logs from the previously terminated containers."`
 }
 
 // HandleGetKubernetesLogs is the handler function for the get_kubernetes_logs tool.
@@ -37,14 +38,11 @@ func (m *Manager) HandleGetKubernetesLogs(ctx context.Context, request *mcp.Call
 		return NewToolResultError(err.Error())
 	}
 
-	if input.PodName == "" {
-		return NewToolResultError("pod name is required")
+	if input.Name == "" {
+		return NewToolResultError("name is required")
 	}
-	if input.ContainerName == "" {
-		return NewToolResultError("container name is required")
-	}
-	if input.PodNamespace == "" {
-		return NewToolResultError("pod namespace is required")
+	if input.Namespace == "" {
+		return NewToolResultError("namespace is required")
 	}
 	limit := int64(input.Limit)
 	if limit == 0 {
@@ -59,7 +57,7 @@ func (m *Manager) HandleGetKubernetesLogs(ctx context.Context, request *mcp.Call
 		return NewToolResultErrorFromErr("Failed to get Kubernetes client", err)
 	}
 
-	result, err := kubeClient.GetLogs(ctx, input.PodName, input.ContainerName, input.PodNamespace, limit, input.Previous)
+	result, err := kubeClient.GetLogs(ctx, input.Kind, input.Name, input.Namespace, input.Container, limit, input.Previous)
 	if err != nil {
 		return NewToolResultError(err.Error())
 	}
