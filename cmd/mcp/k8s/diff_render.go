@@ -18,6 +18,7 @@ const (
 	diffStateCreate    diffState = "create"
 	diffStateUpdate    diffState = "update"
 	diffStateRecreate  diffState = "recreate"
+	diffStatePatched   diffState = "patched"
 	diffStateUnchanged diffState = "unchanged"
 	diffStateSkipped   diffState = "skipped"
 	diffStateDelete    diffState = "delete"

@@ -94,7 +94,7 @@ func (k *Client) Diff(ctx context.Context, req DiffRequest) (string, error) {
 	}
 
 	rm := k.rm
-	fieldManager := "kubectl-flux-mcp"
+	fieldManager := mcpFieldManager
 	diffOptions := ssa.DefaultDiffOptions()
 	if owner != nil {
 		fieldManager = owner.ssaOwner.Field
@@ -396,17 +396,23 @@ func diffErrorMessage(object *unstructured.Unstructured, err error, get bool) st
 		return fmt.Sprintf("dry-run requires get and patch permission on %s", ssautil.FmtUnstructured(object))
 	}
 	if object.GetAPIVersion() == "v1" && object.GetKind() == "Secret" {
-		for current := err; current != nil; current = errors.Unwrap(current) {
-			if reason := apierrors.ReasonForError(current); reason != metav1.StatusReasonUnknown && reason != "" {
-				return string(reason)
-			}
-		}
-		return "API error"
+		return apiErrorReason(err)
 	}
 	if get {
 		return fmt.Sprintf("unable to get live object: %v", err)
 	}
 	return err.Error()
+}
+
+// apiErrorReason reduces an API server error to its status reason so that
+// messages for Secret objects never carry field values.
+func apiErrorReason(err error) string {
+	for current := err; current != nil; current = errors.Unwrap(current) {
+		if reason := apierrors.ReasonForError(current); reason != metav1.StatusReasonUnknown && reason != "" {
+			return string(reason)
+		}
+	}
+	return "API error"
 }
 
 // skippedBy identifies the selector annotation or label responsible for a skipped dry-run.

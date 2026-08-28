@@ -185,6 +185,15 @@ func (m *Manager) RegisterTools(server *mcp.Server, inCluster bool) []string {
 			m.HandleApplyKubernetesManifest,
 		)
 	}
+	if m.shouldRegisterTool(ToolPatchKubernetesResource, inCluster) {
+		addTool(server, &recorder,
+			&mcp.Tool{
+				Name:        ToolPatchKubernetesResource,
+				Description: "Patches a Kubernetes resource on the cluster with a merge, JSON or strategic merge patch.",
+			},
+			m.HandlePatchKubernetesResource,
+		)
+	}
 	if m.shouldRegisterTool(ToolDeleteKubernetesResource, inCluster) {
 		addTool(server, &recorder,
 			&mcp.Tool{

@@ -47,6 +47,7 @@ For Flux API guidance, call the `search_flux_docs` tool with targeted questions.
 - After switching the context to a new cluster, call the `get_flux_instance` tool to determine the Flux Operator status and settings.
 - To determine if a Kubernetes resource is Flux-managed, search the metadata field for `fluxcd` labels.
 - When asked to create or update resources, generate a Kubernetes YAML manifest and call the `apply_kubernetes_manifest` tool to apply it.
+- To change fields of an existing resource in place (rollout restart, finalizer removal, scaling, annotations, a stuck status), call `patch_kubernetes_resource`; set `dry_run` to preview when unsure. Flux-managed resources need `overwrite`, and fields set by the Flux manifest are reverted on the next reconciliation, so fix the source for lasting changes.
 - Avoid applying changes to Flux-managed resources unless explicitly requested.
 - When asked about Flux CRDs, call the `search_flux_docs` tool with a targeted query. Prefer the default concise format; use `format: complete` only when the full upstream API docs are needed.
 
@@ -81,6 +82,50 @@ Kustomize-controller generates a kustomization for directories without `kustomiz
 these directories, run `kustomize create --autodetect` in a copy before building, or concatenate
 the YAML files. Read all header warnings. Treat `delete` entries as objects that would be pruned
 only when the supplied manifest is complete.
+
+## Patching resources
+
+Use `patch_kubernetes_resource` to change an existing object in place:
+
+- Rollout restart a Deployment, StatefulSet, or DaemonSet with a merge patch (Flux-managed
+  workloads need `overwrite: true`; the annotation is not in the Flux manifest, so the next
+  reconciliation leaves it in place and does not roll the pods again):
+
+  ```yaml
+  spec:
+    template:
+      metadata:
+        annotations:
+          kubectl.kubernetes.io/restartedAt: "<RFC3339 now>"
+  ```
+
+- Remove all finalizers with a merge patch:
+
+  ```yaml
+  metadata: {finalizers: null}
+  ```
+
+  To remove one finalizer, read the object to find its index, set `type: json`, and patch:
+
+  ```yaml
+  - op: remove
+    path: /metadata/finalizers/<index>
+  ```
+
+- Scale with a merge patch (Flux reverts this unless `replicas` is not set in the desired state or is ignored):
+
+  ```yaml
+  spec: {replicas: N}
+  ```
+
+- Fix a stuck status by setting `subresource: status` and merge patching the status fields:
+
+  ```yaml
+  status:
+    observedGeneration: 2
+  ```
+
+Use `dry_run: true` first when the effect is unclear; the result shows the RFC 6902 diff.
 
 ## Kubernetes events analysis
 

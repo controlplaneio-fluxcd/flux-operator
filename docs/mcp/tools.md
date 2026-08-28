@@ -362,6 +362,46 @@ Applies a YAML manifest on the cluster using Kubernetes server-side apply.
 
 The list of applied resources in the format `kind/namespace/name [created|updated|unchanged]`.
 
+## Patch Tool
+
+This tool changes fields of an existing Kubernetes resource in place.
+
+### patch_kubernetes_resource
+
+Patches a resource with a merge, JSON, or strategic merge patch.
+
+**Parameters:**
+
+- `apiVersion` (required): The API version of the resource
+- `kind` (required): The kind of the resource
+- `name` (required): The name of the resource
+- `namespace` (optional): The namespace; omit for cluster-scoped resources
+- `patch` (required): The patch body as a YAML or JSON string
+- `type` (optional): `merge` (RFC 7386, default), `json` (RFC 6902 operation list), or `strategic` (built-in kinds only)
+- `subresource` (optional): `status`
+- `dry_run` (optional): Preview without persisting the patch
+- `overwrite` (optional): Allow patching a Flux-managed resource
+
+**Output:**
+
+An RFC 6902 diff in YAML form, or `unchanged` when there is no difference:
+
+```text
+Deployment/apps-staging/backend patched
+- op: replace
+  path: /spec/replicas
+  value: 3
+- op: add
+  path: /metadata/annotations/example.com~1changed
+  value: "true"
+```
+
+**Limitations:**
+
+- The API server rejects strategic merge patches for custom resources.
+- Only the `status` subresource is supported.
+- Fields present in the Flux manifest are reverted on the next reconciliation; fields absent from it, such as a restart annotation, persist.
+
 ## Deletion Tool
 
 This tool enables the removal of resources from your cluster.
