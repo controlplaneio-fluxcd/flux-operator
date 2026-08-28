@@ -117,6 +117,54 @@ When a single container has no output, `logs` contains `no logs found for contai
 When a workload has no pods, `logs` contains `no pods found for <kind> <namespace>/<name>` and
 `podsTotal` is `0`.
 
+### get_kubernetes_events
+
+Retrieves Kubernetes events for workloads and other Kubernetes objects, including Pods,
+Deployments, PersistentVolumeClaims, Nodes, and Flux resources. For a `Deployment`, `StatefulSet`,
+`DaemonSet`, `CronJob` or `Job`, the events of the workload, of the ReplicaSets or Jobs it owns,
+and of its newest 10 pods are returned together.
+
+**Parameters:**
+
+- `apiVersion` (optional): Exact API version of the involved object, such as `v1`, `apps/v1`,
+  or `helm.toolkit.fluxcd.io/v2`.
+- `kind` (optional): Exact, case-sensitive kind of the involved object. Workload kinds are
+  resolved to their owned objects when `name` and `namespace` are set.
+- `name` (optional): Exact name of the involved object.
+- `namespace` (optional): Namespace of the involved objects. When omitted, events are listed
+  across all namespaces.
+- `type` (optional): Event type, either `Normal` or `Warning`.
+- `since` (optional): Only return events newer than this Go duration, such as `10m` or `1h`.
+- `grep` (optional): Case-insensitive RE2 expression matched against the event reason, message,
+  and involved object rendered as `Kind/namespace/name` (`Kind/name` when cluster-scoped).
+- `limit` (optional): Maximum number of events to return after filtering and sorting
+  (default: 100).
+
+**Output:**
+
+Returns events newest-first in YAML, with the matched total before the requested limit and a
+`truncated` indicator when the limit drops entries, when the pod cap drops workload pods, or when
+more than 5,000 events matched the selectors; the cap inspects the first 5,000 in API order, so
+narrow the request with `namespace`, `kind` or `type` when `truncated` is set. The `events`
+value contains one event per line with space-separated `<time> <type> <reason> <object> [x<count>]
+<message>` columns. The object is rendered as `Kind/namespace/name`, or `Kind/name` for a
+cluster-scoped object, and the count is omitted when it is one.
+
+For example, `namespace: kube-system`, `kind: Pod`, `type: Warning`, `since: 1h` and `limit: 3` return:
+
+```yaml
+namespace: kube-system
+total: 6
+truncated: true
+events: |
+  2026-08-28T15:32:21Z Warning Unhealthy Pod/kube-system/coredns-589f44dc88-244lp Readiness probe failed: Get "http://10.244.0.4:8181/ready": dial tcp 10.244.0.4:8181: connect: connection refused
+  2026-08-28T15:32:21Z Warning Unhealthy Pod/kube-system/coredns-589f44dc88-km8w5 Readiness probe failed: Get "http://10.244.0.2:8181/ready": dial tcp 10.244.0.2:8181: connect: connection refused
+  2026-08-28T15:32:09Z Warning FailedScheduling Pod/kube-system/coredns-589f44dc88-244lp 0/1 nodes are available: 1 node(s) had untolerated taint(s). no new claims to deallocate, preemption: 0/1 nodes are available: 1 Preemption is not helpful for scheduling.
+```
+
+When no events match, the tool returns `No events found` as a normal text result, unless the
+cap was reached, in which case the YAML result is returned with `truncated: true`.
+
 ### get_kubernetes_metrics
 
 Retrieves CPU and Memory usage for Kubernetes pods, allowing AI assistants to monitor resource consumption and performance.

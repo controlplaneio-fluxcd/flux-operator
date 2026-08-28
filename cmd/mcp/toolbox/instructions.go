@@ -44,6 +44,10 @@ func (m *Manager) Instructions(inCluster bool) string {
 		b.WriteString("- Resources managed by Flux carry labels containing fluxcd that identify " +
 			"the Kustomization, HelmRelease or ResourceSet managing them.\n")
 	}
+	if has(ToolGetKubernetesEvents) {
+		b.WriteString("- When troubleshooting workloads, call " + ToolGetKubernetesEvents +
+			" with the workload kind, name and namespace, and narrow with type Warning, since and grep.\n")
+	}
 	if has(ToolGetKubernetesLogs) {
 		b.WriteString("- To read application logs, call " + ToolGetKubernetesLogs +
 			" directly with the workload kind, name and namespace found in a Flux resource's inventory via " +
