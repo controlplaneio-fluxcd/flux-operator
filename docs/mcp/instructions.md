@@ -93,7 +93,9 @@ to narrow the result.
 
 Call `get_kubernetes_logs` directly with the workload `kind`, `name`, and `namespace` found in a
 Flux resource's inventory via `get_kubernetes_resources`. Omit `container` to read all regular
-containers. If the result is truncated, narrow the request with `container` and `limit`.
+containers. Use `since` to focus on the incident window and `grep` to keep only the relevant
+entries, such as `error|panic|fatal|exception`. If the result is truncated, narrow the request
+with `container`, `since`, `grep` and `limit`.
 
 ## Flux HelmRelease analysis
 

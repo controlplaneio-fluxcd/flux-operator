@@ -52,6 +52,43 @@ func TestManager_HandleGetKubernetesLogs(t *testing.T) {
 			matchErr: "namespace is required",
 		},
 		{
+			testName: "fails with invalid since",
+			arguments: map[string]any{
+				"name":      "test",
+				"namespace": "default",
+				"since":     "soon",
+			},
+			matchErr: "Invalid since",
+		},
+		{
+			testName: "fails with non-positive since",
+			arguments: map[string]any{
+				"name":      "test",
+				"namespace": "default",
+				"since":     "-5m",
+			},
+			matchErr: "Invalid since: must be a positive duration",
+		},
+		{
+			testName: "fails with invalid grep",
+			arguments: map[string]any{
+				"name":      "test",
+				"namespace": "default",
+				"grep":      "(",
+			},
+			matchErr: "Invalid grep",
+		},
+		{
+			testName: "accepts since and grep before loading client",
+			arguments: map[string]any{
+				"name":      "test",
+				"namespace": "default",
+				"since":     "10m",
+				"grep":      "error|panic",
+			},
+			matchErr: "Failed to get Kubernetes client",
+		},
+		{
 			testName: "accepts omitted kind and container before loading client",
 			arguments: map[string]any{
 				"name":      "test",

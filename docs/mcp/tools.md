@@ -77,18 +77,22 @@ application behavior and troubleshoot issues.
 - `namespace` (required): The namespace of the pod or workload.
 - `container` (optional): A regular container name. When omitted, logs are read from all
   `spec.containers`; init and ephemeral containers are excluded.
+- `since` (optional): Only return log entries newer than this Go duration, such as `10m` or `1h`.
+- `grep` (optional): Case-insensitive RE2 expression that keeps the log entries whose line matches.
 - `limit` (optional): Maximum number of merged log entries to return (default: 100).
 - `previous` (optional): Read logs from previously terminated container instances (default: false).
 
-For workloads, the tool resolves owned pods, orders them newest-first, and concurrently reads every
-selected pod and container stream. When multiple pods and containers are selected, log lines use
-the `<pod> <container> <timestamp> <message>` format, where the timestamp is RFC 3339 at seconds precision.
+For workloads, the tool resolves owned pods and orders them newest-first.
+When multiple pods and containers are selected, log lines use
+the `<pod> <container> <timestamp> <message>` format.
 
 **Output:**
 
 Returns YAML with `kind`, `name`, `namespace`, selected `pods`, de-duplicated `containers`,
 `podsTotal` (matches before the pod cap), `podsStreamed` (pods with a successful stream), `tagged`,
-`truncated` (a pod or stream cap dropped targets), and the merged `logs` payload.
+`truncated`, and the merged `logs` payload. `truncated` is set when the pod or stream cap dropped
+targets and, with `grep`, when more entries matched than `limit` or when the byte cap dropped
+older lines before the filter ran, so earlier matches may exist.
 
 For example, `kind: Deployment`, `name: backend`, `namespace: apps-staging` and `limit: 4` return:
 
@@ -116,6 +120,9 @@ When a single container has no output, `logs` contains `no logs found for contai
 
 When a workload has no pods, `logs` contains `no pods found for <kind> <namespace>/<name>` and
 `podsTotal` is `0`.
+
+When `since` or `grep` leave no entries, `logs` describes the filters, for example
+`no log entries newer than 10m0s matching the grep expression`.
 
 ### get_kubernetes_events
 

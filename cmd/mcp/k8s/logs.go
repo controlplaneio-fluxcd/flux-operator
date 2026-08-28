@@ -6,9 +6,12 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"math"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -35,7 +38,30 @@ const (
 
 	// minPerStreamLogBytes ensures every selected stream gets a useful tail.
 	minPerStreamLogBytes = 64 * 1024
+
+	// grepTailLines is the tail requested per stream when grep is set.
+	grepTailLines int64 = 1000
 )
+
+// LogsOptions configures a GetLogs request.
+type LogsOptions struct {
+	// Kind is the resource kind, Pod when empty.
+	Kind string
+	// Name is the pod or workload name.
+	Name string
+	// Namespace is the pod or workload namespace.
+	Namespace string
+	// Container restricts the streams to one container name.
+	Container string
+	// Limit caps the merged entries returned, keeping the newest.
+	Limit int64
+	// Previous reads the previously terminated container instances.
+	Previous bool
+	// Since keeps only the entries newer than this duration when positive.
+	Since time.Duration
+	// Grep keeps only the entries matching this expression when set.
+	Grep *regexp.Regexp
+}
 
 // KubernetesLogs is the YAML response returned by get_kubernetes_logs.
 type KubernetesLogs struct {
@@ -65,53 +91,49 @@ type logSelection struct {
 
 // GetLogs resolves a pod or workload, fetches its selected container streams,
 // and returns their timestamped logs merged chronologically.
-func (k *Client) GetLogs(ctx context.Context, kind, name, namespace, container string, limit int64, previous bool) (*KubernetesLogs, error) {
+func (k *Client) GetLogs(ctx context.Context, opts LogsOptions) (*KubernetesLogs, error) {
 	clientset, err := kubernetes.NewForConfig(k.cfg)
 	if err != nil {
 		return nil, err
 	}
-	return getLogs(ctx, clientset, kind, name, namespace, container, limit, previous)
+	return getLogs(ctx, clientset, opts)
 }
 
 // getLogs implements GetLogs with an injectable clientset for unit tests.
-func getLogs(ctx context.Context, clientset kubernetes.Interface, kind, name, namespace, container string, limit int64, previous bool) (*KubernetesLogs, error) {
-	selection, err := resolveLogSelection(ctx, clientset, kind, name, namespace, container)
+func getLogs(ctx context.Context, clientset kubernetes.Interface, opts LogsOptions) (*KubernetesLogs, error) {
+	selection, err := resolveLogSelection(ctx, clientset, opts.Kind, opts.Name, opts.Namespace, opts.Container)
 	if err != nil {
 		return nil, err
 	}
 	if len(selection.targets) == 0 {
 		return &KubernetesLogs{
 			Kind:       selection.kind,
-			Name:       name,
-			Namespace:  namespace,
+			Name:       opts.Name,
+			Namespace:  opts.Namespace,
 			Pods:       []string{},
 			Containers: []string{},
-			Logs:       fmt.Sprintf("no pods found for %s %s/%s", selection.kind, namespace, name),
+			Logs:       fmt.Sprintf("no pods found for %s %s/%s", selection.kind, opts.Namespace, opts.Name),
 		}, nil
 	}
 
 	perStreamBytes := max(maxLogBytes/len(selection.targets), minPerStreamLogBytes)
 	logsByTarget := make([]string, len(selection.targets))
+	cappedByTarget := make([]bool, len(selection.targets))
 	errsByTarget := make([]error, len(selection.targets))
 	var wg sync.WaitGroup
 	for i, target := range selection.targets {
 		wg.Add(1)
 		go func(i int, target podlogs.LogTarget) {
 			defer wg.Done()
-			opts := &corev1.PodLogOptions{
-				Container:  target.Container,
-				TailLines:  &limit,
-				Previous:   previous,
-				Timestamps: true,
-			}
-			logsByTarget[i], errsByTarget[i] = podlogs.FetchContainerLog(
-				ctx, clientset, namespace, target.Pod, opts, perStreamBytes)
+			logsByTarget[i], cappedByTarget[i], errsByTarget[i] = podlogs.FetchContainerLogWithStats(
+				ctx, clientset, opts.Namespace, target.Pod, podLogOptions(opts, target.Container), perStreamBytes)
 		}(i, target)
 	}
 	wg.Wait()
 
 	streams := make([]podlogs.LogStream, 0, len(selection.targets))
 	streamedPods := make(map[string]struct{})
+	streamCapped := false
 	var firstErr error
 	for i, target := range selection.targets {
 		if errsByTarget[i] != nil {
@@ -120,6 +142,7 @@ func getLogs(ctx context.Context, clientset kubernetes.Interface, kind, name, na
 			}
 			continue
 		}
+		streamCapped = streamCapped || cappedByTarget[i]
 		streams = append(streams, podlogs.LogStream{
 			Pod:       target.Pod,
 			Container: target.Container,
@@ -131,9 +154,21 @@ func getLogs(ctx context.Context, clientset kubernetes.Interface, kind, name, na
 		return nil, firstErr
 	}
 
-	logs := podlogs.MergeLogStreams(streams, int(limit), selection.tagPod, selection.tagContainer, maxLogBytes,
-		podlogs.WithSecondTimestamps())
-	if len(selection.targets) == 1 && logs == "" {
+	mergeOptions := []podlogs.MergeOption{podlogs.WithSecondTimestamps()}
+	if opts.Grep != nil {
+		mergeOptions = append(mergeOptions, podlogs.WithGrep(opts.Grep))
+	}
+	merged := podlogs.MergeLogStreamsWithStats(streams, int(opts.Limit), selection.tagPod, selection.tagContainer,
+		maxLogBytes, mergeOptions...)
+	logs := merged.Logs
+	truncated := selection.truncated
+	if opts.Grep != nil && (merged.Truncated || streamCapped) {
+		truncated = true
+	}
+	switch {
+	case merged.Entries == 0 && (opts.Grep != nil || opts.Since > 0):
+		logs = noLogEntriesMessage(opts)
+	case len(selection.targets) == 1 && logs == "":
 		logs = fmt.Sprintf("no logs found for container %s", selection.targets[0].Container)
 	}
 
@@ -144,16 +179,47 @@ func getLogs(ctx context.Context, clientset kubernetes.Interface, kind, name, na
 
 	return &KubernetesLogs{
 		Kind:         selection.kind,
-		Name:         name,
-		Namespace:    namespace,
+		Name:         opts.Name,
+		Namespace:    opts.Namespace,
 		Pods:         podNames,
 		Containers:   selection.containers,
 		PodsTotal:    selection.podsTotal,
 		PodsStreamed: len(streamedPods),
 		Tagged:       selection.tagPod || selection.tagContainer,
-		Truncated:    selection.truncated,
+		Truncated:    truncated,
 		Logs:         logs,
 	}, nil
+}
+
+// noLogEntriesMessage describes an empty result in terms of the active filters.
+func noLogEntriesMessage(opts LogsOptions) string {
+	message := "no log entries"
+	if opts.Since > 0 {
+		message += fmt.Sprintf(" newer than %s", opts.Since)
+	}
+	if opts.Grep != nil {
+		message += " matching the grep expression"
+	}
+	return message
+}
+
+// podLogOptions builds the kubelet request for one container stream.
+func podLogOptions(opts LogsOptions, container string) *corev1.PodLogOptions {
+	tailLines := opts.Limit
+	if opts.Grep != nil && tailLines < grepTailLines {
+		tailLines = grepTailLines
+	}
+	logOptions := &corev1.PodLogOptions{
+		Container:  container,
+		TailLines:  &tailLines,
+		Previous:   opts.Previous,
+		Timestamps: true,
+	}
+	if opts.Since > 0 {
+		sinceSeconds := int64(math.Ceil(opts.Since.Seconds()))
+		logOptions.SinceSeconds = &sinceSeconds
+	}
+	return logOptions
 }
 
 // resolveLogSelection resolves the named resource to newest-first pods and
