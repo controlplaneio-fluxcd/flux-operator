@@ -202,6 +202,7 @@ type InputProviderReference struct {
 }
 
 // Dependency defines a ResourceSet dependency on a Kubernetes resource.
+// +kubebuilder:validation:XValidation:rule="!has(self.readyExpr) || has(self.ready)", message="ready must be set when readyExpr is set"
 type Dependency struct {
 	// APIVersion of the resource to depend on.
 	// +required
