@@ -11,6 +11,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/marketplacemetering v1.40.1
 	github.com/cli/go-gh/v2 v2.13.0
 	github.com/coreos/go-oidc/v3 v3.20.0
+	github.com/evanphx/json-patch/v5 v5.9.11
 	github.com/fluxcd/cli-utils v1.2.2
 	github.com/fluxcd/pkg/apis/event v0.28.0
 	github.com/fluxcd/pkg/apis/kustomize v1.20.0
@@ -115,7 +116,6 @@ require (
 	github.com/docker/docker-credential-helpers v0.9.3 // indirect
 	github.com/elazarl/goproxy v1.8.0 // indirect
 	github.com/emicklei/go-restful/v3 v3.13.0 // indirect
-	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
 	github.com/exponent-io/jsonpath v0.0.0-20210407135951-1de76d718b3f // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/fluxcd/pkg/envsubst v1.7.0 // indirect

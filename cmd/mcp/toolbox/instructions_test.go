@@ -63,6 +63,11 @@ func TestManager_Instructions(t *testing.T) {
 				g.Expect(instructions).To(ContainSubstring("ad-hoc manifests need none"))
 			}
 
+			if manager.shouldRegisterTool(ToolPatchKubernetesResource, tt.inCluster) {
+				g.Expect(instructions).To(ContainSubstring("To change fields of an existing resource in place"))
+				g.Expect(instructions).To(ContainSubstring("set dry_run to preview when unsure"))
+			}
+
 			localFilesInstruction := "pass the absolute path in yaml_path"
 			if tt.localFiles && manager.shouldRegisterTool(ToolDiffKubernetesManifest, tt.inCluster) {
 				g.Expect(instructions).To(ContainSubstring(localFilesInstruction))

@@ -209,6 +209,23 @@ func TestGetToolScopes(t *testing.T) {
 			},
 		},
 		{
+			name:     "patch tool without extra scopes",
+			tool:     ToolPatchKubernetesResource,
+			readOnly: false,
+			expected: []Scope{
+				{
+					Name:        "toolbox:" + ToolPatchKubernetesResource,
+					Description: "Allow patching Kubernetes resources.",
+					Tools:       []string{ToolPatchKubernetesResource},
+				},
+				{
+					Name:        "toolbox:read_write",
+					Description: "Allow all operations.",
+					Tools:       []string{ToolPatchKubernetesResource},
+				},
+			},
+		},
+		{
 			name:     "delete tool without extra scopes",
 			tool:     ToolDeleteKubernetesResource,
 			readOnly: false,

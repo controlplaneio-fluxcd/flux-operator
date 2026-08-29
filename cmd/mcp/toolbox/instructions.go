@@ -20,7 +20,8 @@ func (m *Manager) Instructions(inCluster bool) string {
 	var b strings.Builder
 	if m.readOnly {
 		b.WriteString("This server connects to Kubernetes API to inspect and troubleshoot " +
-			"workloads and the GitOps pipelines run by Flux CD. It runs in read-only mode, only tools that read from the cluster are available.\n")
+			"workloads and the GitOps pipelines run by Flux CD. It runs in read-only mode, " +
+			"only tools that read from the cluster are available.\n")
 	} else {
 		b.WriteString("This server connects to Kubernetes API to inspect, troubleshoot and manage " +
 			"workloads and the GitOps pipelines run by Flux CD.\n")
@@ -67,7 +68,9 @@ func (m *Manager) Instructions(inCluster bool) string {
 		b.WriteString(".\n")
 	}
 	if has(ToolDiffKubernetesManifest) {
-		line := "- Before committing GitOps changes, build the manifests locally (kustomize build <path> --load-restrictor=LoadRestrictionsNone, flux-operator build resourceset, helm template) and pass the COMPLETE output to " +
+		line := "- Before committing GitOps changes, build the manifests locally " +
+			"(kustomize build <path> --load-restrictor=LoadRestrictionsNone, " +
+			"flux-operator build resourceset, helm template) and pass the COMPLETE output to " +
 			ToolDiffKubernetesManifest
 		if m.localFiles {
 			line += "; for large builds, write it to a file and pass the absolute path in yaml_path"
@@ -89,6 +92,11 @@ func (m *Manager) Instructions(inCluster bool) string {
 		}
 		actions = append(actions, line+" and apply it with "+ToolApplyKubernetesManifest+
 			". Avoid changing Flux-managed resources directly unless explicitly asked.\n")
+	}
+	if has(ToolPatchKubernetesResource) {
+		actions = append(actions, "- To change fields of an existing resource in place "+
+			"(rollout restart, finalizer removal, scaling, annotations), call "+ToolPatchKubernetesResource+"; "+
+			"set dry_run to preview when unsure. Flux-managed resources need overwrite.\n")
 	}
 	if has(ToolReconcileFluxResource) {
 		line := "- To trigger a sync, call " + ToolReconcileFluxResource

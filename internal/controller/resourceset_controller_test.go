@@ -18,6 +18,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/yaml"
@@ -659,6 +660,75 @@ func TestResourceSetInputStrategyValidation(t *testing.T) {
 	})
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("includeEmptyProviders only applies when name is Permute"))
+}
+
+func TestResourceSetDependsOnValidation(t *testing.T) {
+	g := NewWithT(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// readyExpr without ready is rejected by CEL.
+	err = testEnv.Create(ctx, &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "ready-expr-without-ready",
+			Namespace: ns.Name,
+		},
+		Spec: fluxcdv1.ResourceSetSpec{
+			DependsOn: []fluxcdv1.Dependency{{
+				APIVersion: "v1",
+				Kind:       "ConfigMap",
+				Name:       "gate",
+				ReadyExpr:  "data.gate == 'opened'",
+			}},
+			ResourcesTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\n  namespace: default\n",
+		},
+	})
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("ready must be set when readyExpr is set"))
+
+	// readyExpr with ready=true is accepted.
+	err = testEnv.Create(ctx, &fluxcdv1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "ready-expr-with-ready-true",
+			Namespace: ns.Name,
+		},
+		Spec: fluxcdv1.ResourceSetSpec{
+			DependsOn: []fluxcdv1.Dependency{{
+				APIVersion: "v1",
+				Kind:       "ConfigMap",
+				Name:       "gate",
+				Ready:      true,
+				ReadyExpr:  "data.gate == 'opened'",
+			}},
+			ResourcesTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\n  namespace: default\n",
+		},
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// readyExpr with ready=false is accepted, which disables both checks.
+	// An unstructured object is used since the typed Ready field is omitted when false.
+	obj := &unstructured.Unstructured{}
+	obj.SetAPIVersion(fluxcdv1.GroupVersion.String())
+	obj.SetKind(fluxcdv1.ResourceSetKind)
+	obj.SetName("ready-expr-with-ready-false")
+	obj.SetNamespace(ns.Name)
+	g.Expect(unstructured.SetNestedSlice(obj.Object, []any{
+		map[string]any{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"name":       "gate",
+			"ready":      false,
+			"readyExpr":  "data.gate == 'opened'",
+		},
+	}, "spec", "dependsOn")).To(Succeed())
+	g.Expect(unstructured.SetNestedField(obj.Object,
+		"apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\n  namespace: default\n",
+		"spec", "resourcesTemplate")).To(Succeed())
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).NotTo(HaveOccurred())
 }
 
 func TestResourceSetReconciler_LabelSelector(t *testing.T) {

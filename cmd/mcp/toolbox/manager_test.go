@@ -35,6 +35,7 @@ func TestManager_RegisterToolsDoesNotPanic(t *testing.T) {
 		"search_flux_docs",
 		"diff_kubernetes_manifest",
 		"apply_kubernetes_manifest",
+		"patch_kubernetes_resource",
 		"delete_kubernetes_resource",
 		"reconcile_flux_resource",
 		"suspend_flux_reconciliation",
@@ -184,6 +185,10 @@ func TestManager_ToolSchemasIncludeProperties(t *testing.T) {
 		ToolApplyKubernetesManifest: {
 			properties: []string{"yaml_content", "overwrite"},
 			required:   []string{"yaml_content"},
+		},
+		ToolPatchKubernetesResource: {
+			properties: []string{"apiVersion", "kind", "name", "namespace", "patch", "type", "subresource", "dry_run", "overwrite"},
+			required:   []string{"apiVersion", "kind", "name", "patch"},
 		},
 		ToolDeleteKubernetesResource: {
 			properties: []string{"apiVersion", "kind", "name", "namespace"},

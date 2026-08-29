@@ -92,6 +92,10 @@ var scopesPerTool = map[string]toolScopes{
 		ownScopeDescription: "Allow applying Kubernetes manifests.",
 		extraScopes:         []string{},
 	},
+	ToolPatchKubernetesResource: {
+		ownScopeDescription: "Allow patching Kubernetes resources.",
+		extraScopes:         []string{},
+	},
 	ToolDeleteKubernetesResource: {
 		ownScopeDescription: "Allow deleting Kubernetes resources.",
 		extraScopes:         []string{},

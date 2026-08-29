@@ -25,6 +25,16 @@ import (
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
+const (
+	// mcpFieldManager is the field manager name used by the MCP server for server-side apply.
+	// The kubectl prefix lets the Flux controllers take over the applied fields on their next reconciliation.
+	mcpFieldManager = "kubectl-flux-mcp"
+	// patchFieldManager is the field manager name used by the MCP server for patches.
+	// It has no kubectl prefix, so the Flux controllers leave patched fields that are
+	// absent from their manifests, such as a rollout restart annotation, in place.
+	patchFieldManager = "flux-mcp-patcher"
+)
+
 var (
 	// Scheme is the global scheme for Kubernetes resources required by the MCP server.
 	Scheme = apiruntime.NewScheme()
@@ -53,7 +63,7 @@ func NewClient(kubeClient ctrlclient.Client, cfg *rest.Config, restMapper meta.R
 		cfg:    cfg,
 		poller: poller,
 		rm: newResourceManagerWithOwner(kubeClient, poller, ssa.Owner{
-			Field: "kubectl-flux-mcp",
+			Field: mcpFieldManager,
 			Group: fluxcdv1.GroupVersion.Group,
 		}),
 	}
@@ -92,7 +102,7 @@ func newClientFromFlags(flags *cli.ConfigFlags) (*Client, error) {
 		cfg:    cfg,
 		poller: poller,
 		rm: newResourceManagerWithOwner(kubeClient, poller, ssa.Owner{
-			Field: "kubectl-flux-mcp",
+			Field: mcpFieldManager,
 			Group: fluxcdv1.GroupVersion.Group,
 		}),
 	}, nil

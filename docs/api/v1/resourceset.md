@@ -936,7 +936,7 @@ A dependency is a reference to a Kubernetes object with the following fields:
 - `name`: The name of the referred object (required).
 - `namespace`: The namespace of the referred object (optional).
 - `ready`: A boolean indicating if the referred object must have the `Ready` status condition set to `True` (optional, default is `false`).
-- `readyExpr`: A [CEL expression](#cel-readiness-expressions) that evaluates to a boolean indicating if the referred object is ready (optional).
+- `readyExpr`: A [CEL expression](#cel-readiness-expressions) that evaluates to a boolean replacing the default readiness check. (requires `ready: true`)
 
 Example of conditional reconciliation based on the existence of CustomResourceDefinitions
 and the readiness of a ResourceSet:
@@ -970,7 +970,7 @@ in log messages and Kubernetes events.
 
 The `readyExpr` field allows for more complex readiness checks and
 can be used for gating the reconciliation of a ResourceSet based on the evaluation
-of the [CEL](https://cel.dev) expression.
+of the [CEL](https://cel.dev) expression. Note that for `readyExpr` to take effect, it must be paired with `ready: true`.
 
 The expression is evaluated in the context of the referred object and has access to all the fields of the object,
 including the status conditions and the status subfields. The expression must evaluate to a boolean value, any syntax
