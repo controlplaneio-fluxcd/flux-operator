@@ -1,248 +1,243 @@
-// Copyright 2025 Stefan Prodan.
+// Copyright 2026 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
 package library
 
 import (
+	"os"
+	"strings"
 	"testing"
+
+	. "github.com/onsi/gomega"
 )
 
-func buildTestIndex() *SearchIndex {
-	docs := []SearchDocument{
-		{
-			ID:      "gitrepository",
-			Content: "GitRepository defines a source for Git repositories. Authentication with SSH keys and HTTPS tokens. Configure reconciliation retry logic for git operations. The retry mechanism handles transient failures.",
-			Metadata: DocumentMetadata{
-				Kind:  "GitRepository",
-				Group: "source.toolkit.fluxcd.io",
-			},
-		},
-		{
-			ID:      "helmrelease",
-			Content: "HelmRelease defines a Helm chart release. Configure drift detection and rollback. Set retry logic for failed deployments. The retry logic can be customized with intervals and backoff strategies.",
-			Metadata: DocumentMetadata{
-				Kind:  "HelmRelease",
-				Group: "helm.toolkit.fluxcd.io",
-			},
-		},
-		{
-			ID:      "kustomization",
-			Content: "Kustomization defines a kustomize overlay. Configure health checks and retry intervals. Prune resources automatically. Retry logic helps recover from temporary errors during reconciliation.",
-			Metadata: DocumentMetadata{
-				Kind:  "Kustomization",
-				Group: "kustomize.toolkit.fluxcd.io",
-			},
-		},
+func TestMain(m *testing.M) {
+	if err := Load(); err != nil {
+		panic(err)
 	}
-
-	index := &SearchIndex{
-		Documents: make([]SearchDocument, 0, len(docs)),
-		Terms:     make(map[string][]Posting),
-		TotalDocs: len(docs),
-	}
-
-	// Build the index
-	totalLength := 0
-	for docID, doc := range docs {
-		tokens := Tokenize(doc.Content)
-		doc.Length = len(tokens)
-		totalLength += len(tokens)
-
-		termFreq := make(map[string]int)
-		for _, token := range tokens {
-			termFreq[token]++
-		}
-
-		for term, freq := range termFreq {
-			index.Terms[term] = append(index.Terms[term], Posting{
-				DocID:     docID,
-				Frequency: freq,
-			})
-		}
-
-		index.Documents = append(index.Documents, doc)
-	}
-
-	index.AvgDocLength = float64(totalLength) / float64(len(docs))
-
-	return index
+	os.Exit(m.Run())
 }
 
-func TestSearch_BasicQuery(t *testing.T) {
-	index := buildTestIndex()
-
-	tests := []struct {
-		query         string
-		limit         int
-		expectedFirst string // Expected first result Kind
-		minResults    int
-	}{
-		{
-			query:         "GitRepository",
-			limit:         1,
-			expectedFirst: "GitRepository",
-			minResults:    1,
-		},
-		{
-			query:         "helm",
-			limit:         1,
-			expectedFirst: "HelmRelease",
-			minResults:    1,
-		},
-		{
-			query:         "retry logic",
-			limit:         2,
-			expectedFirst: "", // Multiple docs have "retry logic"
-			minResults:    2,
-		},
-		{
-			query:         "drift detection",
-			limit:         1,
-			expectedFirst: "HelmRelease",
-			minResults:    1,
-		},
-		{
-			query:         "authentication SSH",
-			limit:         1,
-			expectedFirst: "GitRepository",
-			minResults:    1,
-		},
+func TestSearchEmbeddedArtifactRelevance(t *testing.T) {
+	library, err := Get()
+	if err != nil {
+		t.Fatal(err)
 	}
-
+	tests := []struct {
+		query string
+		trail string
+	}{
+		{query: "HelmRelease valuesFrom", trail: "HelmRelease > Writing a HelmRelease spec > Values"},
+		{query: "scheduling deployment windows", trail: "Time-based delivery > Scheduling Configuration"},
+		{query: "helmrelease values from configmap", trail: "HelmRelease > Writing a HelmRelease spec > Values"},
+		{query: "ResourceSet dependsOn readyExpr", trail: "ResourceSet > Writing a ResourceSet spec > Dependency management"},
+		// Matches the public docs MCP server, which ranks the Alert example first.
+		{query: "Slack alerts", trail: "Alert > Example"},
+		{query: "scheduling", trail: "Time-based delivery > Scheduling Configuration"},
+		{query: "kustomizaton substituteFrom", trail: "Kustomization > Writing a Kustomization spec > Post build variable substitution"},
+	}
 	for _, tt := range tests {
 		t.Run(tt.query, func(t *testing.T) {
-			results := index.Search(tt.query, tt.limit)
-
-			if len(results) < tt.minResults {
-				t.Errorf("Search(%q, %d) returned %d results, want at least %d",
-					tt.query, tt.limit, len(results), tt.minResults)
-			}
-
-			if tt.expectedFirst != "" && len(results) > 0 {
-				if results[0].Document.Metadata.Kind != tt.expectedFirst {
-					t.Errorf("Search(%q) first result = %s, want %s",
-						tt.query, results[0].Document.Metadata.Kind, tt.expectedFirst)
-				}
-			}
-
-			// Check that results are sorted by score (descending)
-			for i := 1; i < len(results); i++ {
-				if results[i].Score > results[i-1].Score {
-					t.Errorf("Results not sorted by score: result[%d].Score=%f > result[%d].Score=%f",
-						i, results[i].Score, i-1, results[i-1].Score)
-				}
-			}
+			g := NewWithT(t)
+			hits := library.Search(tt.query, SearchOptions{Limit: 3})
+			g.Expect(hits).ToNot(BeEmpty())
+			g.Expect(hits[0].Chunk.HeadingTrail).To(Equal(tt.trail))
 		})
 	}
 }
 
-func TestSearch_EmptyQuery(t *testing.T) {
-	index := buildTestIndex()
+func TestSearchCamelCaseRoundTrip(t *testing.T) {
+	g := NewWithT(t)
+	library := newTestLibrary(
+		[]Doc{{Path: "/docs/test", Title: "Fields"}},
+		[]Chunk{
+			{ID: 0, DocPath: "/docs/test", HeadingTrail: "Fields > Camel", Text: "Configure valuesFrom on the release."},
+			{ID: 1, DocPath: "/docs/test", HeadingTrail: "Fields > Prose", Text: "Configure values from the release."},
+		},
+	)
+	g.Expect(library.Search("valuesFrom", SearchOptions{})).To(HaveLen(2))
+	g.Expect(library.Search("values from", SearchOptions{})).To(HaveLen(2))
+}
 
-	results := index.Search("", 5)
-	if results != nil {
-		t.Errorf("Search with empty query should return nil, got %d results", len(results))
+func TestSearchCamelCaseWordScoresAsOneTerm(t *testing.T) {
+	g := NewWithT(t)
+	library := newTestLibrary(
+		[]Doc{{Path: "/docs/test", Title: "Test"}},
+		[]Chunk{
+			{ID: 0, DocPath: "/docs/test", HeadingTrail: "Test > Plain", Text: "Kustomization cel"},
+			{ID: 1, DocPath: "/docs/test", HeadingTrail: "Test > Camel", Text: strings.Repeat("HelmRelease ", 3)},
+		},
+	)
+	// Two matched plain words must outrank one camelCase word, even though
+	// the camelCase word expands to three index terms.
+	hits := library.Search("Kustomization HelmRelease cel", SearchOptions{})
+	g.Expect(hits).To(HaveLen(2))
+	g.Expect(hits[0].Chunk.ID).To(Equal(0))
+}
+
+func TestSearchEmbeddedArtifactCamelCaseKindBalance(t *testing.T) {
+	g := NewWithT(t)
+	library, err := Get()
+	g.Expect(err).ToNot(HaveOccurred())
+
+	hits := library.Search("Kustomization HelmRelease CEL", SearchOptions{Limit: 8})
+	trails := make([]string, 0, len(hits))
+	for _, hit := range hits {
+		trails = append(trails, hit.Chunk.HeadingTrail)
+	}
+	g.Expect(trails).To(ContainElements(
+		"Kustomization > Writing a Kustomization spec > Dependencies",
+		"HelmRelease > Writing a HelmRelease spec > Dependencies",
+		"HelmRelease > Writing a HelmRelease spec > Health check expressions",
+	))
+}
+
+func TestSearchDocDescriptionIsIndexed(t *testing.T) {
+	g := NewWithT(t)
+	library := newTestLibrary(
+		[]Doc{
+			{Path: "/docs/described", Title: "Guide", Description: "Installing the operator on clusters"},
+			{Path: "/docs/plain", Title: "Guide"},
+		},
+		[]Chunk{
+			{ID: 0, DocPath: "/docs/plain", HeadingTrail: "Guide > Steps", Text: "Run the operator."},
+			{ID: 1, DocPath: "/docs/described", HeadingTrail: "Guide > Steps", Text: "Run the operator."},
+		},
+	)
+	hits := library.Search("operator clusters", SearchOptions{})
+	g.Expect(hits).To(HaveLen(2))
+	g.Expect(hits[0].Chunk.ID).To(Equal(1))
+	g.Expect(hits[0].Score).To(BeNumerically(">", hits[1].Score))
+}
+
+func TestSearchRepeatedQueryWordsCountOnce(t *testing.T) {
+	g := NewWithT(t)
+	library := newTestLibrary(
+		[]Doc{{Path: "/docs/test", Title: "Test"}},
+		[]Chunk{
+			{ID: 0, DocPath: "/docs/test", HeadingTrail: "Test > One", Text: "alpha alpha"},
+			{ID: 1, DocPath: "/docs/test", HeadingTrail: "Test > Two", Text: "beta gamma"},
+		},
+	)
+	// Nothing matches all three words, so both hits come from the OR fallback:
+	// chunk 1 matches two distinct words, chunk 0 matches one word twice.
+	hits := library.Search("alpha alpha beta gamma", SearchOptions{})
+	g.Expect(hits).To(HaveLen(2))
+	g.Expect([]int{hits[0].Chunk.ID, hits[1].Chunk.ID}).To(Equal([]int{1, 0}))
+}
+
+func TestSearchThreeCharacterTermsHaveNoFuzzyExpansion(t *testing.T) {
+	g := NewWithT(t)
+	library := newTestLibrary(
+		[]Doc{{Path: "/docs/test", Title: "Test"}},
+		[]Chunk{{ID: 0, DocPath: "/docs/test", Text: "car"}},
+	)
+	g.Expect(library.Search("cat", SearchOptions{})).To(BeEmpty())
+}
+
+func TestSearchExactPrefixAndFuzzyExpansions(t *testing.T) {
+	g := NewWithT(t)
+	library := newTestLibrary(
+		[]Doc{{Path: "/docs/test", Title: "Test"}},
+		[]Chunk{{ID: 0, DocPath: "/docs/test", Text: "alerm alert alerts"}},
+	)
+	expansions := library.index.expand("alert")
+	g.Expect(expansions).To(HaveLen(3))
+	g.Expect(expansions[0]).To(Equal(weightedTerm{term: "alert", weight: 1}))
+	want := prefixWeight * 6 / (6 + 0.3)
+	g.Expect(expansions[1].term).To(Equal("alerts"))
+	g.Expect(expansions[1].weight).To(BeNumerically("~", want, 1e-12))
+	g.Expect(expansions[2].term).To(Equal("alerm"))
+	g.Expect(expansions[2].weight).To(BeNumerically("~", fuzzyWeight*5/6.0, 1e-12))
+}
+
+func TestSearchDeterministicOrderingForEqualScores(t *testing.T) {
+	g := NewWithT(t)
+	library := newTestLibrary(
+		[]Doc{{Path: "/docs/test", Title: "Test"}},
+		[]Chunk{
+			{ID: 3, DocPath: "/docs/test", Text: "alpha"},
+			{ID: 1, DocPath: "/docs/test", Text: "alpha"},
+		},
+	)
+	hits := library.Search("alpha", SearchOptions{})
+	g.Expect(hits).To(HaveLen(2))
+	g.Expect([]int{hits[0].Chunk.ID, hits[1].Chunk.ID}).To(Equal([]int{1, 3}))
+}
+
+func TestSearchThreeTermANDIntersection(t *testing.T) {
+	g := NewWithT(t)
+	library := newTestLibrary(
+		[]Doc{{Path: "/docs/test", Title: "Test"}},
+		[]Chunk{
+			{ID: 0, DocPath: "/docs/test", Text: "alpha beta gamma"},
+			{ID: 1, DocPath: "/docs/test", Text: "alpha beta"},
+			{ID: 2, DocPath: "/docs/test", Text: "alpha gamma"},
+			{ID: 3, DocPath: "/docs/test", Text: "beta gamma"},
+		},
+	)
+	hits := library.Search("alpha beta gamma", SearchOptions{})
+	g.Expect(hits).To(HaveLen(4))
+	g.Expect(hits[0].Chunk.ID).To(Equal(0))
+}
+
+func TestSearchANDHitsComeBeforeORHits(t *testing.T) {
+	g := NewWithT(t)
+	library := newTestLibrary(
+		[]Doc{{Path: "/docs/test", Title: "Test"}},
+		[]Chunk{
+			{ID: 0, DocPath: "/docs/test", Text: "alpha beta"},
+			{ID: 1, DocPath: "/docs/test", Text: strings.Repeat("alpha ", 20)},
+		},
+	)
+	hits := library.Search("alpha beta", SearchOptions{})
+	g.Expect(hits).To(HaveLen(2))
+	g.Expect(hits[0].Chunk.ID).To(Equal(0))
+}
+
+func TestSearchFilterAndLimit(t *testing.T) {
+	g := NewWithT(t)
+	library, err := Get()
+	g.Expect(err).ToNot(HaveOccurred())
+	hits := library.Search("verification", SearchOptions{
+		Limit: 2,
+		Filter: func(chunk *Chunk) bool {
+			return strings.HasPrefix(chunk.DocPath, "/docs/crd/")
+		},
+	})
+	g.Expect(hits).To(HaveLen(2))
+	for _, hit := range hits {
+		g.Expect(hit.Chunk.DocPath).To(HavePrefix("/docs/crd/"))
+		g.Expect(hit.Chunk.DocPath).ToNot(HavePrefix("/docs/crds/"))
 	}
 }
 
-func TestSearch_NoMatches(t *testing.T) {
-	index := buildTestIndex()
-
-	results := index.Search("nonexistent xyz abc", 5)
-	if results != nil {
-		t.Errorf("Search with no matches should return nil, got %d results", len(results))
-	}
+func TestSearchEmptyQuery(t *testing.T) {
+	g := NewWithT(t)
+	library, err := Get()
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(library.Search("the and from", SearchOptions{})).To(BeEmpty())
 }
 
-func TestSearch_Limit(t *testing.T) {
-	index := buildTestIndex()
-
-	// Search for common term that appears in all docs
-	results := index.Search("configure", 2)
-
-	if len(results) > 2 {
-		t.Errorf("Search with limit=2 returned %d results, want at most 2", len(results))
+func newTestLibrary(docs []Doc, chunks []Chunk) *Library {
+	library := &Library{
+		docs:         make([]*Doc, 0, len(docs)),
+		chunks:       make([]*Chunk, 0, len(chunks)),
+		docsByPath:   make(map[string]*Doc, len(docs)),
+		chunksByPath: make(map[string][]*Chunk, len(docs)),
+		chunksByID:   make(map[int]*Chunk, len(chunks)),
 	}
-}
-
-func TestSearch_ScorePositive(t *testing.T) {
-	index := buildTestIndex()
-
-	results := index.Search("GitRepository authentication", 5)
-
-	for i, result := range results {
-		if result.Score <= 0 {
-			t.Errorf("Result[%d] has non-positive score: %f", i, result.Score)
-		}
+	for i := range docs {
+		doc := &docs[i]
+		library.docs = append(library.docs, doc)
+		library.docsByPath[doc.Path] = doc
 	}
-}
-
-func TestSearch_StopWordFiltering(t *testing.T) {
-	index := buildTestIndex()
-
-	// Query with all stop words should return nothing
-	results := index.Search("the and for with", 5)
-
-	if results != nil {
-		t.Errorf("Search with only stop words should return nil, got %d results", len(results))
+	for i := range chunks {
+		chunk := &chunks[i]
+		library.chunks = append(library.chunks, chunk)
+		library.chunksByPath[chunk.DocPath] = append(library.chunksByPath[chunk.DocPath], chunk)
+		library.chunksByID[chunk.ID] = chunk
 	}
-}
-
-func TestSearch_CaseInsensitive(t *testing.T) {
-	index := buildTestIndex()
-
-	// Use a term that exists in the content
-	resultsLower := index.Search("authentication", 1)
-	resultsUpper := index.Search("AUTHENTICATION", 1)
-	resultsMixed := index.Search("Authentication", 1)
-
-	if len(resultsLower) == 0 || len(resultsUpper) == 0 || len(resultsMixed) == 0 {
-		t.Errorf("Search should be case insensitive: lower=%d, upper=%d, mixed=%d",
-			len(resultsLower), len(resultsUpper), len(resultsMixed))
-		return
-	}
-
-	// All queries should return the same first result
-	if resultsLower[0].Document.ID != resultsUpper[0].Document.ID ||
-		resultsLower[0].Document.ID != resultsMixed[0].Document.ID {
-		t.Error("Case-insensitive searches should return same results")
-	}
-}
-
-func TestFindCandidates(t *testing.T) {
-	index := buildTestIndex()
-
-	queryTerms := []string{"git", "authentication"}
-	candidates := index.findCandidates(queryTerms)
-
-	// Should find at least one candidate
-	if len(candidates) == 0 {
-		t.Error("findCandidates should find at least one document")
-	}
-
-	// Each candidate should have matched terms
-	for docID, matches := range candidates {
-		if len(matches) == 0 {
-			t.Errorf("Candidate docID=%d has no matched terms", docID)
-		}
-	}
-}
-
-func TestSearchResult_MatchedTerms(t *testing.T) {
-	index := buildTestIndex()
-
-	results := index.Search("authentication retry", 5)
-
-	for i, result := range results {
-		if len(result.Matches) == 0 {
-			t.Errorf("Result[%d] has no matched terms", i)
-		}
-
-		// Matched terms should be from the query
-		for _, match := range result.Matches {
-			if match != "authentication" && match != "retry" {
-				t.Errorf("Result[%d] has unexpected matched term: %s", i, match)
-			}
-		}
-	}
+	library.index = buildInvertedIndex(library)
+	return library
 }

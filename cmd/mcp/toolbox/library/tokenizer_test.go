@@ -1,132 +1,62 @@
-// Copyright 2025 Stefan Prodan.
+// Copyright 2026 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
 package library
 
 import (
-	"reflect"
-	"sort"
 	"testing"
+
+	. "github.com/onsi/gomega"
 )
 
 func TestTokenize(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    string
-		expected []string
+		name string
+		text string
+		want []string
 	}{
-		{
-			name:     "simple text",
-			input:    "Hello World",
-			expected: []string{"hello", "world"},
-		},
-		{
-			name:     "with stop words",
-			input:    "The quick brown fox",
-			expected: []string{"quick", "brown", "fox"},
-		},
-		{
-			name:     "CamelCase splitting",
-			input:    "GitRepository HelmRelease",
-			expected: []string{"git", "repository", "helm", "release"},
-		},
-		{
-			name:     "version preservation",
-			input:    "v1 v2beta3 api",
-			expected: []string{"v1", "v2beta3", "api"},
-		},
-		{
-			name:     "hyphenated words",
-			input:    "kustomize-controller source-controller",
-			expected: []string{"kustomize-controller", "source-controller"},
-		},
-		{
-			name:     "Flux plurals stemming",
-			input:    "GitRepositories Kustomizations HelmReleases",
-			expected: []string{"git", "repository", "kustomization", "helm", "release"},
-		},
-		{
-			name:     "mixed case with punctuation",
-			input:    "How to configure retry logic for HelmReleases?",
-			expected: []string{"configure", "retry", "logic", "helm", "release"},
-		},
-		{
-			name:     "authentication keywords",
-			input:    "SSH authentication with private keys",
-			expected: []string{"ssh", "authentication", "private", "key"},
-		},
+		{name: "repetitions", text: "Flux flux FLUX", want: []string{"flux", "flux", "flux"}},
+		{name: "camelCase", text: "valuesFrom", want: []string{"valuesfrom", "values"}},
+		{name: "multi-part camelCase", text: "ResourceSetInputProvider", want: []string{"resourcesetinputprovider", "resource", "set", "input", "provider"}},
+		{name: "hyphen", text: "source-controller", want: []string{"source", "controller"}},
+		{name: "dot", text: "spec.chart.spec.version", want: []string{"spec", "chart", "spec", "version"}},
+		{name: "all punctuation", text: "source/controller_config:value", want: []string{"source", "controller", "config", "value"}},
+		{name: "version and one character", text: "v1 v2beta3 x", want: []string{"v1", "v2beta3"}},
+		{name: "stop words", text: "values from a ConfigMap", want: []string{"values", "configmap", "config", "map"}},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := Tokenize(tt.input)
-
-			// Sort both slices for comparison (order doesn't matter)
-			sort.Strings(result)
-			sort.Strings(tt.expected)
-
-			if !reflect.DeepEqual(result, tt.expected) {
-				t.Errorf("Tokenize(%q) = %v, want %v", tt.input, result, tt.expected)
-			}
+			g := NewWithT(t)
+			g.Expect(Tokenize(tt.text)).To(Equal(tt.want))
 		})
 	}
 }
 
-func TestStem(t *testing.T) {
+func TestTokenizeGroups(t *testing.T) {
 	tests := []struct {
-		input    string
-		expected string
+		name string
+		text string
+		want [][]string
 	}{
-		{"repositories", "repository"},
-		{"kustomizations", "kustomization"},
-		{"helmreleases", "helmrelease"},
-		{"helmrepositories", "helmrepository"},
-		{"gitrepositories", "gitrepository"},
-		{"reconciliations", "reconciliation"},
-		{"configurations", "configuration"},
-		{"authentications", "authentication"},
-		{"policies", "policy"},
-		{"releases", "release"},
-		{"fixes", "fix"},
-		{"pushes", "push"},
-		{"patches", "patch"},
-		// Words that shouldn't be stemmed
-		{"git", "git"},
-		{"flux", "flux"},
-		{"helm", "helm"},
+		{name: "plain words", text: "Kustomization cel", want: [][]string{{"kustomization"}, {"cel"}}},
+		{name: "camelCase keeps variants together", text: "Kustomization HelmRelease", want: [][]string{{"kustomization"}, {"helmrelease", "helm", "release"}}},
+		{name: "filtered variants and words", text: "values from a ConfigMap x", want: [][]string{{"values"}, {"configmap", "config", "map"}}},
+		{name: "only stop words", text: "the and from", want: [][]string{}},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			result := stem(tt.input)
-			if result != tt.expected {
-				t.Errorf("stem(%q) = %q, want %q", tt.input, result, tt.expected)
-			}
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			g.Expect(TokenizeGroups(tt.text)).To(Equal(tt.want))
 		})
 	}
 }
 
 func TestIsVersion(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected bool
-	}{
-		{"v1", true},
-		{"v2", true},
-		{"v2beta3", true},
-		{"v1alpha1", true},
-		{"version", false},
-		{"api", false},
-		{"", false},
-		{"1", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			result := isVersion(tt.input)
-			if result != tt.expected {
-				t.Errorf("isVersion(%q) = %v, want %v", tt.input, result, tt.expected)
-			}
-		})
-	}
+	g := NewWithT(t)
+	g.Expect(isVersion("v1")).To(BeTrue())
+	g.Expect(isVersion("v2beta3")).To(BeTrue())
+	g.Expect(isVersion("version")).To(BeFalse())
+	g.Expect(isVersion("1")).To(BeFalse())
 }

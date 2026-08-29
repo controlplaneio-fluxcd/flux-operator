@@ -60,6 +60,10 @@ var scopesPerTool = map[string]toolScopes{
 		ownScopeDescription: "Allow searching the Flux documentation.",
 		extraScopes:         []string{ScopeReadOnly},
 	},
+	ToolReadFluxDoc: {
+		ownScopeDescription: "Allow reading the Flux documentation.",
+		extraScopes:         []string{ScopeReadOnly, ScopesPrefix + ToolSearchFluxDocs},
+	},
 	ToolGetKubernetesAPIVersions: {
 		ownScopeDescription: "Allow getting available Kubernetes APIs.",
 		extraScopes:         []string{ScopeReadOnly},
@@ -139,7 +143,11 @@ func GetToolScopes(tool string, readOnly bool) []Scope {
 		extraScopes = []string{ScopeReadWrite}
 	}
 	for _, name := range append(extraScopes, ts.extraScopes...) {
-		scopes = append(scopes, Scope{name, scopeDescriptions[name], []string{tool}})
+		description := scopeDescriptions[name]
+		if description == "" && strings.HasPrefix(name, ScopesPrefix) {
+			description = scopesPerTool[strings.TrimPrefix(name, ScopesPrefix)].ownScopeDescription
+		}
+		scopes = append(scopes, Scope{name, description, []string{tool}})
 	}
 	return scopes
 }

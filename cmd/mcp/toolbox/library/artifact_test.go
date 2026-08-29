@@ -96,6 +96,20 @@ func TestValidate(t *testing.T) {
 			wantErr: `duplicate doc path "/docs/test"`,
 		},
 		{
+			name: "duplicate chunk ID",
+			mutate: func(artifact *Artifact) {
+				artifact.Chunks[1].ID = 0
+			},
+			wantErr: "chunk at position 1 has ID 0, want 1",
+		},
+		{
+			name: "chunk ID differs from position",
+			mutate: func(artifact *Artifact) {
+				artifact.Chunks[0].ID = 2
+			},
+			wantErr: "chunk at position 0 has ID 2, want 0",
+		},
+		{
 			name: "chunk references missing doc",
 			mutate: func(artifact *Artifact) {
 				artifact.Chunks[0].DocPath = "/docs/missing"

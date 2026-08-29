@@ -1,12 +1,12 @@
-// Copyright 2025 Stefan Prodan.
+// Copyright 2026 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
 package toolbox
 
 import (
 	"context"
-	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -27,9 +27,9 @@ func init() {
 
 // searchFluxDocsInput defines the input parameters for searching Flux documentation.
 type searchFluxDocsInput struct {
-	Query  string  `json:"query" jsonschema:"Search query."`
-	Limit  float64 `json:"limit,omitempty" jsonschema:"Max matching documents. Default is 1."`
-	Format string  `json:"format,omitempty" jsonschema:"'concise' (default) or 'complete' for the full upstream API docs."`
+	Query string  `json:"query" jsonschema:"Keywords naming the kind and field, e.g. HelmRelease valuesFrom (2-200 characters)."`
+	Path  string  `json:"path,omitempty" jsonschema:"Optional doc or section path (max 300 characters): /docs/guides, /docs/instance, /docs/resourcesets, /docs/web-ui, /docs/mcp, /docs/crd, /docs/controllers, /docs/charts."`
+	Limit float64 `json:"limit,omitempty" jsonschema:"Maximum sections to return (1-20). Default is 8."`
 }
 
 // HandleSearchFluxDocs is the handler function for the search_flux_docs tool.
@@ -38,44 +38,49 @@ func (m *Manager) HandleSearchFluxDocs(ctx context.Context, request *mcp.CallToo
 		return NewToolResultError(err.Error())
 	}
 
+	docs, err := library.Get()
+	if err != nil {
+		return NewToolResultError("search index not available. Run 'make mcp-build-search-index' to build it.")
+	}
+
+	queryLength := utf8.RuneCountInString(input.Query)
+	if queryLength < 2 || queryLength > 200 {
+		return NewToolResultError("query must be between 2 and 200 characters")
+	}
+	if utf8.RuneCountInString(input.Path) > 300 {
+		return NewToolResultError("path must not exceed 300 characters")
+	}
 	limit := int(input.Limit)
 	if limit == 0 {
-		limit = 1
+		limit = 8
+	}
+	if limit < 1 || limit > 20 || (input.Limit != 0 && input.Limit != float64(limit)) {
+		return NewToolResultError("limit must be an integer between 1 and 20")
 	}
 
-	format, err := library.ParseIndexFormat(input.Format)
-	if err != nil {
-		return NewToolResultError(err.Error())
-	}
-
-	// Use the embedded search index
-	index := library.GetSearchIndex(format)
-	if index == nil {
-		return NewToolResultError(fmt.Sprintf("%s search index not available. Run 'make mcp-build-search-index' to build it.", format))
-	}
-
-	results := index.Search(input.Query, limit)
-	if len(results) == 0 {
-		return NewToolResultError("No documents found")
-	}
-
-	// Format results
-	var content strings.Builder
-	for i, result := range results {
-		if i > 0 {
-			content.WriteString("\n\n---\n\n")
+	options := library.SearchOptions{Limit: limit}
+	if input.Path != "" {
+		if doc, found := docs.ResolveDoc(input.Path); found {
+			options.Filter = func(chunk *library.Chunk) bool {
+				return chunk.DocPath == doc.Path
+			}
+		} else if docs.IsSectionPrefix(input.Path) {
+			prefix := library.NormalizePath(input.Path) + "/"
+			options.Filter = func(chunk *library.Chunk) bool {
+				return strings.HasPrefix(chunk.DocPath, prefix)
+			}
+		} else {
+			return NewToolResultText(library.UnknownPathText(docs, input.Path))
 		}
-
-		// Add metadata header
-		content.WriteString(fmt.Sprintf("# %s\n\n", result.Document.Metadata.Label()))
-		content.WriteString(fmt.Sprintf("**URL:** %s\n\n",
-			result.Document.Metadata.URL))
-		content.WriteString(fmt.Sprintf("**Score:** %v\n\n",
-			result.Score))
-
-		// Add document content
-		content.WriteString(result.Document.Content)
 	}
 
-	return NewToolResultText(content.String())
+	hits := docs.Search(input.Query, options)
+	if len(hits) == 0 {
+		return NewToolResultText(library.NoResultsText(input.Query, docs.SectionPrefixes()))
+	}
+	texts := make([]string, len(hits))
+	for i, hit := range hits {
+		texts[i] = library.RenderSearchHit(hit)
+	}
+	return NewToolResultTexts(texts)
 }

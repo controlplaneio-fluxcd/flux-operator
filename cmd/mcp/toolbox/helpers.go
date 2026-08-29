@@ -16,6 +16,15 @@ func NewToolResultText(text string) (*mcp.CallToolResult, any, error) {
 	}, nil, nil
 }
 
+// NewToolResultTexts creates a new CallToolResult with one text content per string.
+func NewToolResultTexts(texts []string) (*mcp.CallToolResult, any, error) {
+	content := make([]mcp.Content, len(texts))
+	for i, text := range texts {
+		content[i] = &mcp.TextContent{Text: text}
+	}
+	return &mcp.CallToolResult{Content: content}, nil, nil
+}
+
 // NewToolResultError creates a new CallToolResult with an error message.
 // Any errors that originate from the tool SHOULD be reported inside the result object.
 func NewToolResultError(text string) (*mcp.CallToolResult, any, error) {

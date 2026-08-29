@@ -63,6 +63,8 @@ type Library struct {
 	chunks       []*Chunk
 	docsByPath   map[string]*Doc
 	chunksByPath map[string][]*Chunk
+	chunksByID   map[int]*Chunk
+	index        *invertedIndex
 }
 
 var loadedLibrary *Library
@@ -104,6 +106,9 @@ func Validate(artifact *Artifact) error {
 	chunksByPath := make(map[string][]*Chunk, len(artifact.Docs))
 	for i := range artifact.Chunks {
 		chunk := &artifact.Chunks[i]
+		if chunk.ID != i {
+			return fmt.Errorf("chunk at position %d has ID %d, want %d", i, chunk.ID, i)
+		}
 		if _, ok := docsByPath[chunk.DocPath]; !ok {
 			return fmt.Errorf("chunk %d references missing doc path %q", chunk.ID, chunk.DocPath)
 		}
@@ -184,6 +189,7 @@ func Load() error {
 		chunks:       make([]*Chunk, 0, len(artifact.Chunks)),
 		docsByPath:   make(map[string]*Doc, len(artifact.Docs)),
 		chunksByPath: make(map[string][]*Chunk, len(artifact.Docs)),
+		chunksByID:   make(map[int]*Chunk, len(artifact.Chunks)),
 	}
 	for i := range artifact.Docs {
 		doc := &artifact.Docs[i]
@@ -194,9 +200,10 @@ func Load() error {
 		chunk := &artifact.Chunks[i]
 		library.chunks = append(library.chunks, chunk)
 		library.chunksByPath[chunk.DocPath] = append(library.chunksByPath[chunk.DocPath], chunk)
+		library.chunksByID[chunk.ID] = chunk
 	}
 
-	// The inverted search index is built from library here in work unit 2.
+	library.index = buildInvertedIndex(library)
 	loadedLibrary = library
 	return nil
 }

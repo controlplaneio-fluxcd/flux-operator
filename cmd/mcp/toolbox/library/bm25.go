@@ -1,4 +1,4 @@
-// Copyright 2025 Stefan Prodan.
+// Copyright 2026 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
 package library
@@ -6,65 +6,17 @@ package library
 import "math"
 
 const (
-	// K1 is the term frequency saturation parameter for BM25
-	K1 = 1.2
-	// B is the length normalization parameter for BM25
-	B = 0.75
+	bm25K = 1.2
+	bm25B = 0.7
+	bm25D = 0.5
 )
 
-// Score calculates the BM25 score for a document given query terms.
-// BM25 formula:
-// score = Σ IDF(qi) × (f(qi,D) × (k1+1)) / (f(qi,D) + k1 × (1-b + b × |D|/avgdl))
-func (idx *SearchIndex) Score(queryTerms []string, docID int) float64 {
-	score := 0.0
-	doc := idx.Documents[docID]
-
-	for _, term := range queryTerms {
-		// Get term frequency in document
-		tf := idx.termFrequency(term, docID)
-		if tf == 0 {
-			continue
-		}
-
-		// Calculate IDF
-		idf := idx.IDF(term)
-
-		// BM25 formula
-		numerator := float64(tf) * (K1 + 1)
-		denominator := float64(tf) + K1*(1-B+B*float64(doc.Length)/idx.AvgDocLength)
-		score += idf * (numerator / denominator)
-	}
-
-	return score
-}
-
-// IDF calculates the inverse document frequency for a term.
-// IDF formula with smoothing:
-// IDF(qi) = log((N - df(qi) + 0.5) / (df(qi) + 0.5))
-func (idx *SearchIndex) IDF(term string) float64 {
-	postings, exists := idx.Terms[term]
-	if !exists {
-		return 0.0
-	}
-
-	df := float64(len(postings)) // document frequency
-	N := float64(idx.TotalDocs)
-
-	// IDF formula with smoothing
-	return math.Log((N - df + 0.5) / (df + 0.5))
-}
-
-// termFrequency returns the frequency of a term in a specific document.
-func (idx *SearchIndex) termFrequency(term string, docID int) int {
-	postings, exists := idx.Terms[term]
-	if !exists {
+func calcBM25Score(termFrequency, matchingCount, totalCount, fieldLength int, averageFieldLength float64) float64 {
+	if termFrequency <= 0 || matchingCount <= 0 || totalCount <= 0 || averageFieldLength <= 0 {
 		return 0
 	}
-
-	for _, posting := range postings {
-		if posting.DocID == docID {
-			return posting.Frequency
-		}
-	}
-	return 0
+	idf := math.Log(1 + (float64(totalCount-matchingCount)+0.5)/(float64(matchingCount)+0.5))
+	tf := float64(termFrequency)
+	normalization := tf + bm25K*(1-bm25B+bm25B*float64(fieldLength)/averageFieldLength)
+	return idf * (bm25D + tf*(bm25K+1)/normalization)
 }

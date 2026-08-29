@@ -206,7 +206,6 @@ MCP_IMG ?= ghcr.io/controlplaneio-fluxcd/flux-operator-mcp:latest
 mcp-build-search-index: ## Download the docs index from fluxoperator.dev for the MCP docs tool.
 	@echo "Downloading MCP docs index from fluxoperator.dev..."
 	@mkdir -p cmd/mcp/toolbox/library
-	@touch cmd/mcp/toolbox/library/index.db
 	@touch cmd/mcp/toolbox/library/index.json
 	@go run cmd/mcp/toolbox/indexer/main.go
 	@echo "MCP docs index downloaded successfully"
