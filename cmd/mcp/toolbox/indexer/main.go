@@ -4,154 +4,90 @@
 package main
 
 import (
-	"encoding/gob"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/toolbox/library"
 )
 
+const (
+	defaultIndexURL = "https://fluxoperator.dev/mcp/docs-index-main.json"
+	outputPath      = "cmd/mcp/toolbox/library/index.json"
+	maxIndexSize    = 10 * 1024 * 1024
+)
+
 func main() {
-	const outputPath = "cmd/mcp/toolbox/library/index.db"
-
-	corpora := []struct {
-		format   library.IndexFormat
-		metadata []library.DocumentMetadata
-	}{
-		{
-			format:   library.IndexFormatConcise,
-			metadata: library.GetConciseDocsMetadata(),
-		},
-		{
-			format:   library.IndexFormatComplete,
-			metadata: library.GetCompleteDocsMetadata(),
-		},
-	}
-
-	db := &library.SearchDatabase{
-		Indexes: make(map[library.IndexFormat]*library.SearchIndex, len(corpora)),
-	}
-
-	for _, corpus := range corpora {
-		fmt.Printf("Building %s search index for Flux documentation...\n", corpus.format)
-		fmt.Printf("Found %d documents to index\n", len(corpus.metadata))
-
-		index, err := buildIndex(corpus.metadata)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error building %s search index: %v\n", corpus.format, err)
-			os.Exit(1)
-		}
-
-		fmt.Printf("Successfully built %s search index with %d documents, %d unique terms\n",
-			corpus.format, index.TotalDocs, len(index.Terms))
-		fmt.Printf("Average document length: %.0f words\n\n", index.AvgDocLength)
-
-		db.Indexes[corpus.format] = index
-	}
-
-	if err := saveDatabase(db, outputPath); err != nil {
-		fmt.Fprintf(os.Stderr, "Error saving search database: %v\n", err)
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error building MCP docs index: %v\n", err)
 		os.Exit(1)
 	}
-
-	fmt.Printf("Search database saved to %s\n", outputPath)
 }
 
-// buildIndex downloads documents and creates the search index
-func buildIndex(metadata []library.DocumentMetadata) (*library.SearchIndex, error) {
-	index := &library.SearchIndex{
-		Terms:     make(map[string][]library.Posting),
-		Documents: make([]library.SearchDocument, 0, len(metadata)),
+func run() error {
+	source := os.Getenv("FLUX_DOCS_INDEX_URL")
+	if source == "" {
+		source = defaultIndexURL
 	}
 
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-
-	for _, meta := range metadata {
-		fmt.Printf("[%d/%d] Downloading %s...\n", len(index.Documents)+1, len(metadata), meta.Label())
-
-		// Download document
-		content, err := downloadMarkdown(client, meta.URL)
-		if err != nil {
-			return nil, fmt.Errorf("failed to download %s: %w", meta.URL, err)
-		}
-
-		// Create document
-		doc := library.SearchDocument{
-			ID:       meta.ID(),
-			Content:  content,
-			Metadata: meta,
-		}
-
-		// Tokenize
-		tokens := library.Tokenize(content)
-		doc.Length = len(tokens)
-
-		// Build term frequency map
-		termFreq := make(map[string]int)
-		for _, term := range tokens {
-			termFreq[term]++
-		}
-
-		// Add to inverted index
-		for term, freq := range termFreq {
-			index.Terms[term] = append(index.Terms[term], library.Posting{
-				DocID:     len(index.Documents),
-				Frequency: freq,
-			})
-		}
-
-		index.Documents = append(index.Documents, doc)
-		fmt.Printf("  Indexed %d words, %d unique terms\n", doc.Length, len(termFreq))
-	}
-
-	// Calculate average document length
-	totalLength := 0
-	for _, doc := range index.Documents {
-		totalLength += doc.Length
-	}
-	index.AvgDocLength = float64(totalLength) / float64(len(index.Documents))
-	index.TotalDocs = len(index.Documents)
-
-	return index, nil
-}
-
-// downloadMarkdown fetches markdown content from a URL
-func downloadMarkdown(client *http.Client, url string) (string, error) {
-	resp, err := client.Get(url)
+	data, err := readIndex(source)
 	if err != nil {
-		return "", err
+		return err
+	}
+
+	var artifact library.Artifact
+	if err := json.Unmarshal(data, &artifact); err != nil {
+		return fmt.Errorf("failed to parse docs index: %w", err)
+	}
+	if err := library.Validate(&artifact); err != nil {
+		return fmt.Errorf("failed to validate docs index: %w", err)
+	}
+
+	if err := os.WriteFile(outputPath, data, 0o644); err != nil {
+		return fmt.Errorf("failed to write docs index to %s: %w", outputPath, err)
+	}
+
+	fmt.Printf("docs=%d chunks=%d bytes=%d version=%q generatedAt=%q\n",
+		len(artifact.Docs), len(artifact.Chunks), len(data), artifact.Version, artifact.GeneratedAt)
+	return nil
+}
+
+func readIndex(source string) ([]byte, error) {
+	if !strings.HasPrefix(source, "http") {
+		data, err := os.ReadFile(source)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read docs index from %s: %w", source, err)
+		}
+		if len(data) > maxIndexSize {
+			return nil, fmt.Errorf("docs index from %s exceeds 10 MB", source)
+		}
+		return data, nil
+	}
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Get(source)
+	if err != nil {
+		return nil, fmt.Errorf("failed to download docs index from %s: %w", source, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return nil, fmt.Errorf("failed to download docs index from %s: unexpected status %s", source, resp.Status)
+	}
+	if resp.ContentLength > maxIndexSize {
+		return nil, fmt.Errorf("docs index from %s exceeds 10 MB", source)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxIndexSize+1))
 	if err != nil {
-		return "", fmt.Errorf("error reading response body: %w", err)
+		return nil, fmt.Errorf("failed to read docs index from %s: %w", source, err)
 	}
-
-	return string(body), nil
-}
-
-// saveDatabase serializes the search database to a file using gob encoding
-func saveDatabase(db *library.SearchDatabase, path string) error {
-	file, err := os.Create(path)
-	if err != nil {
-		return err
+	if len(data) > maxIndexSize {
+		return nil, fmt.Errorf("docs index from %s exceeds 10 MB", source)
 	}
-	defer file.Close()
-
-	encoder := gob.NewEncoder(file)
-	if err := encoder.Encode(db); err != nil {
-		return fmt.Errorf("failed to encode database: %w", err)
-	}
-
-	return nil
+	return data, nil
 }

@@ -42,12 +42,6 @@ func (d DocumentMetadata) Label() string {
 	return fmt.Sprintf("%s (%s)", d.Kind, d.Group)
 }
 
-// Library holds a collection of document references represented by the DocumentMetadata type.
-// It provides methods to search in the metadata and fetch the document content.
-type Library struct {
-	Documents []DocumentMetadata `json:"documents"`
-}
-
 func init() {
 	db, err := loadDatabase(embeddedDatabase)
 	if err != nil {
