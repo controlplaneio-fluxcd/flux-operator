@@ -32,6 +32,7 @@ func TestManager_RegisterToolsDoesNotPanic(t *testing.T) {
 		"get_kubernetes_events",
 		"get_kubernetes_metrics",
 		"get_kubernetes_resources",
+		"trace_kubernetes_resource",
 		"search_flux_docs",
 		"read_flux_doc",
 		"diff_kubernetes_manifest",
@@ -174,6 +175,10 @@ func TestManager_ToolSchemasIncludeProperties(t *testing.T) {
 		ToolGetKubernetesResources: {
 			properties: []string{"apiVersion", "kind", "name", "namespace", "selector", "limit", "fields"},
 			required:   []string{"apiVersion", "kind"},
+		},
+		ToolTraceKubernetesResource: {
+			properties: []string{"apiVersion", "kind", "name", "namespace"},
+			required:   []string{"apiVersion", "kind", "name"},
 		},
 		ToolSearchFluxDocs: {
 			properties: []string{"query", "path", "limit"},

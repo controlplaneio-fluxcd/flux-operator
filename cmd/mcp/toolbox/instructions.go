@@ -45,6 +45,10 @@ func (m *Manager) Instructions(inCluster bool) string {
 		b.WriteString("- Resources managed by Flux carry labels containing fluxcd that identify " +
 			"the Kustomization, HelmRelease or ResourceSet managing them.\n")
 	}
+	if has(ToolTraceKubernetesResource) {
+		b.WriteString("- To find the GitOps pipeline that delivers an object (pod, workload or Flux resource), call " +
+			ToolTraceKubernetesResource + "; it reports the Flux objects managing the object and their source.\n")
+	}
 	if has(ToolGetKubernetesEvents) {
 		b.WriteString("- When troubleshooting workloads, call " + ToolGetKubernetesEvents +
 			" with the workload kind, name and namespace, and narrow with type Warning, since and grep.\n")
