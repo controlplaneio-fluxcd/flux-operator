@@ -122,9 +122,10 @@ func (m *Manager) Instructions(inCluster bool) string {
 		}
 	}
 
-	if has(ToolSearchFluxDocs) {
-		b.WriteString("\nWhen generating or reviewing Flux resource definitions, call " + ToolSearchFluxDocs +
-			" with a query that names the kind (e.g. HelmRelease valuesFrom) to read the API docs.\n")
+	if has(ToolSearchFluxDocs) && has(ToolReadFluxDoc) {
+		b.WriteString("\nWhen generating or reviewing Flux resource definitions, call `" + ToolSearchFluxDocs +
+			"` with a query that names the kind and field (e.g. `HelmRelease valuesFrom`), then call `" +
+			ToolReadFluxDoc + "` with the returned `Path` and heading anchor to read the full section.\n")
 	}
 
 	return strings.TrimSpace(b.String())

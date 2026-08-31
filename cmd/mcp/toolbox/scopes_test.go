@@ -38,6 +38,33 @@ func TestGetToolScopes(t *testing.T) {
 			},
 		},
 		{
+			name:     "read docs tool accepts search scope",
+			tool:     ToolReadFluxDoc,
+			readOnly: false,
+			expected: []Scope{
+				{
+					Name:        "toolbox:" + ToolReadFluxDoc,
+					Description: "Allow reading the Flux documentation.",
+					Tools:       []string{ToolReadFluxDoc},
+				},
+				{
+					Name:        "toolbox:read_write",
+					Description: "Allow all operations.",
+					Tools:       []string{ToolReadFluxDoc},
+				},
+				{
+					Name:        "toolbox:read_only",
+					Description: "Allow all read-only operations.",
+					Tools:       []string{ToolReadFluxDoc},
+				},
+				{
+					Name:        "toolbox:" + ToolSearchFluxDocs,
+					Description: "Allow searching the Flux documentation.",
+					Tools:       []string{ToolReadFluxDoc},
+				},
+			},
+		},
+		{
 			name:     "read-only tool GetKubernetesAPIVersions",
 			tool:     ToolGetKubernetesAPIVersions,
 			readOnly: false,

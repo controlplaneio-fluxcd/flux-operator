@@ -68,6 +68,11 @@ func TestManager_Instructions(t *testing.T) {
 				g.Expect(instructions).To(ContainSubstring("set dry_run to preview when unsure"))
 			}
 
+			if manager.shouldRegisterTool(ToolSearchFluxDocs, tt.inCluster) &&
+				manager.shouldRegisterTool(ToolReadFluxDoc, tt.inCluster) {
+				g.Expect(instructions).To(ContainSubstring("then call `read_flux_doc` with the returned `Path` and heading anchor"))
+			}
+
 			localFilesInstruction := "pass the absolute path in yaml_path"
 			if tt.localFiles && manager.shouldRegisterTool(ToolDiffKubernetesManifest, tt.inCluster) {
 				g.Expect(instructions).To(ContainSubstring(localFilesInstruction))

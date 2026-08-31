@@ -33,7 +33,9 @@ Flux consists of the following Kubernetes controllers and custom resource defini
   - **ImagePolicy**: Selects the latest image tag based on policy
   - **ImageUpdateAutomation**: Updates Git repository with new image tags
 
-For Flux API guidance, call the `search_flux_docs` tool with targeted questions. Use the default concise format for normal troubleshooting and manifest guidance, and request `format: complete` only when the full upstream API documentation is needed.
+When generating or reviewing Flux resource definitions, call `search_flux_docs`
+with a query that names one or more kinds (e.g. `Kustomization HelmRelease CEL`),
+then call `read_flux_doc` with the returned `Path` and heading anchor to read the full section.
 
 ## General rules
 
@@ -49,7 +51,7 @@ For Flux API guidance, call the `search_flux_docs` tool with targeted questions.
 - When asked to create or update resources, generate a Kubernetes YAML manifest and call the `apply_kubernetes_manifest` tool to apply it.
 - To change fields of an existing resource in place (rollout restart, finalizer removal, scaling, annotations, a stuck status), call `patch_kubernetes_resource`; set `dry_run` to preview when unsure. Flux-managed resources need `overwrite`, and fields set by the Flux manifest are reverted on the next reconciliation, so fix the source for lasting changes.
 - Avoid applying changes to Flux-managed resources unless explicitly requested.
-- When asked about Flux CRDs, call the `search_flux_docs` tool with a targeted query. Prefer the default concise format; use `format: complete` only when the full upstream API docs are needed.
+- When asked about Flux CRDs or the Flux Operator APIs, call `search_flux_docs`, then `read_flux_doc` on the returned path and heading.
 
 ## Previewing changes before committing
 

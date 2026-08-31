@@ -456,20 +456,62 @@ The tool performs the following operations:
 - GitHub Repo: `https://github.com/org/repo/blob/main/clusters/dev/flux-system/flux-instance.yaml`
 - GitLab Repo: `https://gitlab.com/org/proj/-/blob/main/clusters/dev/flux-system/flux-instance.yaml`
 
-## Documentation Tool
+## Documentation Tools
 
-This tool provides access to Flux documentation in concise and complete formats.
+These tools search and read the Flux Operator and Flux CRD documentation.
 
 ### search_flux_docs
 
-Searches the Flux documentation for specific information. By default, the tool returns concise Flux reference documentation optimized for low agent context usage. Use the complete format only when the full upstream API documentation is needed.
+Searches the Flux Operator and Flux CRD documentation for the most relevant sections.
+Query with a few keywords naming the kind and field (e.g. `HelmRelease valuesFrom`,
+`CEL expression`) rather than a full question: lexical ranking rewards rare terms, and
+common words in a question dilute the results.
 
 **Parameters:**
 
-- `query` (required): The search query
-- `limit` (optional): Maximum number of results to return (default: 1)
-- `format` (optional): Documentation format, one of `concise` or `complete` (default: `concise`)
+- `query` (required): Keywords of 2–200 characters naming the kind and field
+- `path` (optional): Restrict results to a documentation page or section prefix, such as
+  `/docs/crd/helmrelease` or `/docs/crd`
+- `limit` (optional): Maximum number of matching sections to return, from 1–20 (default: 8)
 
 **Output:**
 
-Relevant Flux documentation that matches the search query. The `concise` format returns compact reference docs, while the `complete` format returns full upstream API docs.
+The tool returns one text item per matching section in this shape:
+
+```text
+Title: HelmRelease — Writing a HelmRelease spec > Values
+Path: /docs/crd/helmrelease
+Lines: 458-546 of 2339
+Content: <chunk markdown, ≤2,000 chars>
+```
+
+Long content is truncated at a line boundary and includes a `read_flux_doc` hint. If `path`
+does not identify a page or section, the result lists the five closest documentation paths.
+If no sections match, the result suggests changing the keywords or restricting the path.
+
+### read_flux_doc
+
+Reads a Flux Operator documentation page as Markdown using a path returned by `search_flux_docs`.
+
+**Parameters:**
+
+- `path` (required): Documentation path, such as `/docs/crd/helmrelease`; full
+  `https://fluxoperator.dev` URLs, `.md` suffixes, trailing slashes and any letter case are accepted
+- `heading` (optional): Heading anchor or text to read only that section; matching is case-insensitive
+- `offset` (optional): 1-based starting line, ignored when `heading` is set
+- `limit` (optional): Maximum lines to return, from 1–1000 (default: 400)
+
+**Output:**
+
+```text
+Path: /docs/crd/helmrelease   Title: HelmRelease
+Lines 458-546 of 2339. Next: offset=547.
+---
+<section markdown>
+```
+
+A heading slice ends before the next heading at the same or a higher level. Without a heading,
+use `offset` and `limit` to page through the document. Every response is capped at 30 KB and
+reports the next offset; the final slice reports `End of document.` instead. An ambiguous heading
+text match uses the first matching heading and reports the other anchors. An unknown path returns
+the closest paths, while an unknown heading returns the page outline with heading text and anchors.

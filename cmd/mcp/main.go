@@ -24,6 +24,7 @@ import (
 
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/k8s"
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/toolbox"
+	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/toolbox/docindex"
 )
 
 var (
@@ -193,6 +194,10 @@ func serveCmdRun(cmd *cobra.Command, args []string) error {
 
 	if os.Getenv("KUBECONFIG") == "" && !inCluster {
 		return errors.New("KUBECONFIG environment variable is not set")
+	}
+
+	if err := docindex.Load(); err != nil {
+		return fmt.Errorf("failed to load Flux documentation search index: %w", err)
 	}
 
 	// Create the MCP server with instructions tailored to the enabled tools

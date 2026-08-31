@@ -152,9 +152,18 @@ func (m *Manager) RegisterTools(server *mcp.Server, inCluster bool) []string {
 		addTool(server, &recorder,
 			&mcp.Tool{
 				Name:        ToolSearchFluxDocs,
-				Description: "Searches the Flux documentation, returning matching sections with titles, links and excerpts. Concise by default, complete API docs on request.",
+				Description: "Searches the Flux Operator and Flux CRD documentation, returning the most relevant sections with their path and line range. Query with 2-5 keywords naming the kind and field (e.g. HelmRelease valuesFrom, CEL expression), not a question. Pages are published at https://fluxoperator.dev{path}/.",
 			},
 			m.HandleSearchFluxDocs,
+		)
+	}
+	if m.shouldRegisterTool(ToolReadFluxDoc, inCluster) {
+		addTool(server, &recorder,
+			&mcp.Tool{
+				Name:        ToolReadFluxDoc,
+				Description: "Reads a Flux Operator documentation page as markdown. Use the path from search_flux_docs results. Long pages should be read in slices: pass heading to jump to a section, or offset and limit to page; the response reports the next offset. Output is capped at 30KB per call.",
+			},
+			m.HandleReadFluxDoc,
 		)
 	}
 	if m.shouldRegisterTool(ToolDiffKubernetesManifest, inCluster) {

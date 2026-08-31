@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -17,9 +18,13 @@ import (
 
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/k8s"
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/toolbox"
+	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/toolbox/docindex"
 )
 
-func newTestServer() *mcp.Server {
+func newTestServer() (*mcp.Server, []string) {
+	if err := docindex.Load(); err != nil {
+		panic(err)
+	}
 	tm := toolbox.NewManager(k8s.NewClientFactory(kubeconfigArgs), time.Minute, true, true, false)
 	mcpServer := mcp.NewServer(mcpImpl, &mcp.ServerOptions{
 		Instructions: tm.Instructions(true),
@@ -27,8 +32,8 @@ func newTestServer() *mcp.Server {
 			Tools: &mcp.ToolCapabilities{},
 		},
 	})
-	tm.RegisterTools(mcpServer, true)
-	return mcpServer
+	registered := tm.RegisterTools(mcpServer, true)
+	return mcpServer, registered
 }
 
 func TestHTTPHandler_Stateless(t *testing.T) {
@@ -36,7 +41,12 @@ func TestHTTPHandler_Stateless(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	httpServer := httptest.NewServer(newHTTPHandler(newTestServer()))
+	mcpServer, registeredTools := newTestServer()
+	searchIndex := slices.Index(registeredTools, toolbox.ToolSearchFluxDocs)
+	g.Expect(searchIndex).To(BeNumerically(">=", 0))
+	g.Expect(registeredTools[searchIndex+1]).To(Equal(toolbox.ToolReadFluxDoc))
+
+	httpServer := httptest.NewServer(newHTTPHandler(mcpServer))
 	defer httpServer.Close()
 
 	client := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "0.0.0"}, nil)
@@ -61,6 +71,11 @@ func TestHTTPHandler_Stateless(t *testing.T) {
 	tools, err := session.ListTools(ctx, nil)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(tools.Tools).ToNot(BeEmpty())
+	toolNames := make([]string, len(tools.Tools))
+	for i, tool := range tools.Tools {
+		toolNames[i] = tool.Name
+	}
+	g.Expect(toolNames).To(ContainElements(toolbox.ToolSearchFluxDocs, toolbox.ToolReadFluxDoc))
 
 	result, err := session.CallTool(ctx, &mcp.CallToolParams{
 		Name:      toolbox.ToolSearchFluxDocs,
@@ -84,7 +99,8 @@ func TestHTTPHandler_LegacyClient(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	httpServer := httptest.NewServer(newHTTPHandler(newTestServer()))
+	mcpServer, _ := newTestServer()
+	httpServer := httptest.NewServer(newHTTPHandler(mcpServer))
 	defer httpServer.Close()
 
 	// Clients on older protocol versions use the initialize handshake
