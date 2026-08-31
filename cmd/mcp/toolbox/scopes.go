@@ -88,6 +88,10 @@ var scopesPerTool = map[string]toolScopes{
 		ownScopeDescription: "Allow getting Kubernetes resources.",
 		extraScopes:         []string{ScopeReadOnly},
 	},
+	ToolTraceKubernetesResource: {
+		ownScopeDescription: "Allow tracing Kubernetes resources to the Flux objects managing them.",
+		extraScopes:         []string{ScopeReadOnly},
+	},
 	ToolDiffKubernetesManifest: {
 		ownScopeDescription: "Allow diffing Kubernetes manifests against the cluster.",
 		extraScopes:         []string{ScopeReadOnly},

@@ -148,6 +148,15 @@ func (m *Manager) RegisterTools(server *mcp.Server, inCluster bool) []string {
 			m.HandleGetKubernetesResources,
 		)
 	}
+	if m.shouldRegisterTool(ToolTraceKubernetesResource, inCluster) {
+		addTool(server, &recorder,
+			&mcp.Tool{
+				Name:        ToolTraceKubernetesResource,
+				Description: "Traces a Kubernetes resource up the GitOps delivery pipeline to the Flux objects managing it and their source.",
+			},
+			m.HandleTraceKubernetesResource,
+		)
+	}
 	if m.shouldRegisterTool(ToolSearchFluxDocs, inCluster) {
 		addTool(server, &recorder,
 			&mcp.Tool{

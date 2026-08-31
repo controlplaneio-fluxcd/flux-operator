@@ -197,6 +197,28 @@ func TestGetToolScopes(t *testing.T) {
 			},
 		},
 		{
+			name:     "read-only tool TraceKubernetesResource",
+			tool:     ToolTraceKubernetesResource,
+			readOnly: false,
+			expected: []Scope{
+				{
+					Name:        "toolbox:" + ToolTraceKubernetesResource,
+					Description: "Allow tracing Kubernetes resources to the Flux objects managing them.",
+					Tools:       []string{ToolTraceKubernetesResource},
+				},
+				{
+					Name:        "toolbox:read_write",
+					Description: "Allow all operations.",
+					Tools:       []string{ToolTraceKubernetesResource},
+				},
+				{
+					Name:        "toolbox:read_only",
+					Description: "Allow all read-only operations.",
+					Tools:       []string{ToolTraceKubernetesResource},
+				},
+			},
+		},
+		{
 			name:     "read-only diff tool",
 			tool:     ToolDiffKubernetesManifest,
 			readOnly: false,

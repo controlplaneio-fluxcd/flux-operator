@@ -64,6 +64,77 @@ status.conditions[?(@.type=="Ready")].message: Helm upgrade succeeded for releas
 Use `fields` to reduce the size of the result when
 listing many resources or when only a few fields are relevant.
 
+### trace_kubernetes_resource
+
+Traces a Kubernetes resource up the GitOps delivery pipeline to the Flux objects managing it
+and their source. Starting from any object (a Pod, a workload, or a Flux resource), the tool
+walks the owner references and the Flux ownership labels through the managing Kustomization,
+HelmRelease, ResourceSet or FluxInstance chain.
+
+**Parameters:**
+
+- `apiVersion` (required): The API version of the resource
+- `kind` (required): The kind of the resource
+- `name` (required): The name of the resource
+- `namespace` (optional): The namespace of the resource, omitted for cluster-scoped resources
+
+**Output:**
+
+Returns YAML with the traced object, the recursive `managedBy` chain of the Flux objects
+managing it, and the `source` feeding the delivery pipeline. Each object reports:
+
+- `object`: the identity rendered as `Kind/namespace/name`
+- `status`: the Ready condition reason for Flux objects, or the computed status for other kinds
+- `message`: the status description, set only when the object is not ready
+- `suspended`: set when the reconciliation of a Flux object is paused
+- `lastAppliedRevision`: the revision applied by a Flux applier
+- `url` and `revision`: the address and artifact revision of a Flux source
+
+For example, tracing an app pod delivered from a generated artifact returns:
+
+```yaml
+object: Pod/apps-staging/backend-fd698b8c7-ghzxl
+managedBy:
+  object: Deployment/apps-staging/backend
+  status: Current
+  managedBy:
+    object: Kustomization/apps-staging/backend
+    status: ReconciliationSucceeded
+    lastAppliedRevision: latest@sha256:4d91c1ed
+    managedBy:
+      object: ResourceSet/apps-staging/backend
+      status: ReconciliationSucceeded
+      lastAppliedRevision: sha256:349e3479
+      managedBy:
+        object: Kustomization/flux-system/apps-staging-reconcilers
+        status: ReconciliationSucceeded
+        lastAppliedRevision: dev@sha256:61df7bcc
+        managedBy:
+          object: Kustomization/flux-system/flux-system
+          status: ReconciliationSucceeded
+          lastAppliedRevision: dev@sha256:61df7bcc
+          managedBy:
+            object: FluxInstance/flux-system/flux
+            status: ReconciliationSucceeded
+            lastAppliedRevision: v2.9.4@sha256:9b886517
+source:
+  resolvedFor: Kustomization/apps-staging/backend
+  object: ExternalArtifact/flux-system/backend-staging
+  status: Succeeded
+  url: http://source-watcher.flux-system/backend-staging.tar.gz
+  revision: latest@sha256:4d91c1ed
+  producedBy:
+    object: ArtifactGenerator/flux-system/apps
+    status: Succeeded
+    builtFrom:
+      - object: OCIRepository/flux-system/flux-system
+        status: Succeeded
+        url: oci://flux-registry:5000/flux-cluster
+        revision: dev@sha256:61df7bcc
+```
+
+When no Flux ownership labels are found, the result reports `unmanaged: true`.
+
 ### get_kubernetes_logs
 
 Retrieves timestamped logs for workloads, allowing AI Agents to analyze

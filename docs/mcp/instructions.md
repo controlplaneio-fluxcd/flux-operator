@@ -43,6 +43,8 @@ then call `read_flux_doc` with the returned `Path` and heading anchor to read th
 - When asked about Kubernetes or Flux resources, call the `get_kubernetes_resources` tool.
 - When troubleshooting workloads, call `get_kubernetes_events` with the workload `kind`, `name`
   and `namespace`, and narrow with `type: Warning`, `since` and `grep`.
+- To find the GitOps pipeline that delivers an object (pod, workload or Flux resource), call
+  the `trace_kubernetes_resource` tool; it reports the Flux objects managing the object and their source.
 - When listing many resources or when only specific fields are relevant, set the `fields` parameter of the `get_kubernetes_resources` tool to kubectl JSONPath expressions (e.g. `spec.chart.spec.version`, `status.conditions[?(@.type=="Ready")].message`) to reduce the result size. Include `status.events` and `status.inventory` in `fields` when the events or the inventory are needed.
 - Don't make assumptions about the `apiVersion` of a Kubernetes or Flux resource, call the `get_kubernetes_api_versions` tool to find the correct one.
 - When asked to use a specific cluster, call the `get_kubeconfig_contexts` tool to find the cluster context before switching to it with the `set_kubeconfig_context` tool.
@@ -150,7 +152,7 @@ When troubleshooting a HelmRelease, follow these steps:
 
 - Use the `get_flux_instance` tool to check the helm-controller deployment status and the apiVersion of the HelmRelease kind.
 - Use the `get_kubernetes_resources` tool to get the HelmRelease, then analyze the spec, the status, inventory and events.
-- Determine which Flux object is managing the HelmRelease by looking at the annotations; it can be a Kustomization or a ResourceSet.
+- Determine which Flux object is managing the HelmRelease with the `trace_kubernetes_resource` tool; it can be a Kustomization or a ResourceSet.
 - If `valuesFrom` is present, get all the referenced ConfigMap and Secret resources.
 - Identify the HelmRelease source by looking at the `chartRef` or the `sourceRef` field.
 - Use the `get_kubernetes_resources` tool to get the HelmRelease source then analyze the source status and events.
@@ -167,7 +169,7 @@ When troubleshooting a Kustomization, follow these steps:
 
 - Use the `get_flux_instance` tool to check the kustomize-controller deployment status and the apiVersion of the Kustomization kind.
 - Use the `get_kubernetes_resources` tool to get the Kustomization, then analyze the spec, the status, inventory and events.
-- Determine which Flux object is managing the Kustomization by looking at the annotations; it can be another Kustomization or a ResourceSet.
+- Determine which Flux object is managing the Kustomization with the `trace_kubernetes_resource` tool; it can be another Kustomization or a ResourceSet.
 - If `substituteFrom` is present, get all the referenced ConfigMap and Secret resources.
 - Identify the Kustomization source by looking at the `sourceRef` field.
 - Use the `get_kubernetes_resources` tool to get the Kustomization source then analyze the source status and events.

@@ -1,14 +1,14 @@
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name: ocirepositories.source.toolkit.fluxcd.io
+  name: helmrepositories.source.toolkit.fluxcd.io
 spec:
   group: source.toolkit.fluxcd.io
   names:
-    kind: OCIRepository
-    listKind: OCIRepositoryList
-    plural: ocirepositories
-    singular: ocirepository
+    kind: HelmRepository
+    listKind: HelmRepositoryList
+    plural: helmrepositories
+    singular: helmrepository
   scope: Namespaced
   versions:
     - name: v1
