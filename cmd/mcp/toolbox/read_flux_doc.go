@@ -9,7 +9,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/toolbox/library"
+	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/toolbox/docindex"
 )
 
 const (
@@ -38,7 +38,7 @@ func (m *Manager) HandleReadFluxDoc(ctx context.Context, request *mcp.CallToolRe
 		return NewToolResultError(err.Error())
 	}
 
-	docs, err := library.Get()
+	docs, err := docindex.Get()
 	if err != nil {
 		return NewToolResultError("search index not available. Run 'make mcp-build-search-index' to build it.")
 	}
@@ -66,14 +66,14 @@ func (m *Manager) HandleReadFluxDoc(ctx context.Context, request *mcp.CallToolRe
 
 	doc, found := docs.ResolveDoc(input.Path)
 	if !found {
-		return NewToolResultText(library.UnknownPathText(docs, input.Path))
+		return NewToolResultText(docs.RenderUnknownPath(input.Path))
 	}
 	if input.Heading != "" {
-		heading, note, found := library.ResolveHeading(doc, input.Heading)
+		heading, note, found := docindex.ResolveHeading(doc, input.Heading)
 		if !found {
-			return NewToolResultText(library.OutlineText(doc, input.Heading))
+			return NewToolResultText(docindex.RenderOutline(doc, input.Heading))
 		}
-		return NewToolResultText(library.SliceDoc(doc, heading, offset, limit, note))
+		return NewToolResultText(docindex.RenderDoc(doc, heading, offset, limit, note))
 	}
-	return NewToolResultText(library.SliceDoc(doc, nil, offset, limit, ""))
+	return NewToolResultText(docindex.RenderDoc(doc, nil, offset, limit, ""))
 }

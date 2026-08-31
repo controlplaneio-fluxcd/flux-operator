@@ -1,7 +1,7 @@
 // Copyright 2026 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-package library
+package docindex
 
 import (
 	"encoding/json"
@@ -13,24 +13,24 @@ import (
 
 func TestArtifactLoad(t *testing.T) {
 	g := NewWithT(t)
-	resetLibrary()
+	resetIndex()
 
 	_, err := Get()
 	g.Expect(err).To(MatchError("search index not available"))
 
 	g.Expect(Load()).To(Succeed())
-	library, err := Get()
+	idx, err := Get()
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(library).ToNot(BeNil())
+	g.Expect(idx).ToNot(BeNil())
 
 	g.Expect(Load()).To(Succeed())
 	again, err := Get()
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(again).To(BeIdenticalTo(library))
-	g.Expect(library.Version()).To(Equal("main"))
-	g.Expect(library.GeneratedAt()).ToNot(BeEmpty())
+	g.Expect(again).To(BeIdenticalTo(idx))
+	g.Expect(idx.Version()).To(Equal("main"))
+	g.Expect(idx.GeneratedAt()).ToNot(BeEmpty())
 
-	docs := library.Docs()
+	docs := idx.Docs()
 	g.Expect(docs).ToNot(BeEmpty())
 	for _, doc := range docs {
 		g.Expect(textLineCount(doc.Body)).To(Equal(doc.LineCount), "doc %s body line count", doc.Path)
@@ -41,7 +41,7 @@ func TestArtifactLoad(t *testing.T) {
 		}
 
 		nextLine := 1
-		for _, chunk := range library.ChunksOf(doc) {
+		for _, chunk := range idx.ChunksOf(doc) {
 			g.Expect(chunk.StartLine).To(Equal(nextLine), "doc %s chunk %d order", doc.Path, chunk.ID)
 			nextLine = chunk.EndLine + 1
 			if chunk.Anchor != "" {
@@ -51,12 +51,12 @@ func TestArtifactLoad(t *testing.T) {
 		}
 		g.Expect(nextLine).To(Equal(doc.LineCount+1), "doc %s chunks tile body", doc.Path)
 	}
-	g.Expect(library.Chunks()).ToNot(BeEmpty())
+	g.Expect(idx.Chunks()).ToNot(BeEmpty())
 
-	doc, found := library.DocByPath("/docs/crd/helmrelease")
+	doc, found := idx.DocByPath("/docs/crd/helmrelease")
 	g.Expect(found).To(BeTrue())
 	g.Expect(doc).ToNot(BeNil())
-	_, found = library.DocByPath("/docs/does-not-exist")
+	_, found = idx.DocByPath("/docs/does-not-exist")
 	g.Expect(found).To(BeFalse())
 }
 

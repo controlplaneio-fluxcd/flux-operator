@@ -10,7 +10,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/toolbox/library"
+	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/toolbox/docindex"
 )
 
 const (
@@ -38,7 +38,7 @@ func (m *Manager) HandleSearchFluxDocs(ctx context.Context, request *mcp.CallToo
 		return NewToolResultError(err.Error())
 	}
 
-	docs, err := library.Get()
+	docs, err := docindex.Get()
 	if err != nil {
 		return NewToolResultError("search index not available. Run 'make mcp-build-search-index' to build it.")
 	}
@@ -58,29 +58,29 @@ func (m *Manager) HandleSearchFluxDocs(ctx context.Context, request *mcp.CallToo
 		return NewToolResultError("limit must be an integer between 1 and 20")
 	}
 
-	options := library.SearchOptions{Limit: limit}
+	options := docindex.SearchOptions{Limit: limit}
 	if input.Path != "" {
 		if doc, found := docs.ResolveDoc(input.Path); found {
-			options.Filter = func(chunk *library.Chunk) bool {
+			options.Filter = func(chunk *docindex.Chunk) bool {
 				return chunk.DocPath == doc.Path
 			}
 		} else if docs.IsSectionPrefix(input.Path) {
-			prefix := library.NormalizePath(input.Path) + "/"
-			options.Filter = func(chunk *library.Chunk) bool {
+			prefix := docindex.NormalizePath(input.Path) + "/"
+			options.Filter = func(chunk *docindex.Chunk) bool {
 				return strings.HasPrefix(chunk.DocPath, prefix)
 			}
 		} else {
-			return NewToolResultText(library.UnknownPathText(docs, input.Path))
+			return NewToolResultText(docs.RenderUnknownPath(input.Path))
 		}
 	}
 
 	hits := docs.Search(input.Query, options)
 	if len(hits) == 0 {
-		return NewToolResultText(library.NoResultsText(input.Query, docs.SectionPrefixes()))
+		return NewToolResultText(docs.RenderNoResults(input.Query))
 	}
 	texts := make([]string, len(hits))
 	for i, hit := range hits {
-		texts[i] = library.RenderSearchHit(hit)
+		texts[i] = docindex.RenderHit(hit)
 	}
 	return NewToolResultTexts(texts)
 }

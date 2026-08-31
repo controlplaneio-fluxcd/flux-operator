@@ -1,7 +1,7 @@
 // Copyright 2026 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-package library
+package docindex
 
 import (
 	"fmt"
@@ -11,17 +11,17 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func TestRenderSearchHitTitles(t *testing.T) {
+func TestRenderHitTitles(t *testing.T) {
 	g := NewWithT(t)
 	doc := &Doc{Path: "/docs/test", Title: "Test", LineCount: 10}
-	intro := RenderSearchHit(Hit{Doc: doc, Chunk: &Chunk{HeadingTrail: "Test", StartLine: 1, EndLine: 2, Text: "intro"}})
+	intro := RenderHit(Hit{Doc: doc, Chunk: &Chunk{HeadingTrail: "Test", StartLine: 1, EndLine: 2, Text: "intro"}})
 	g.Expect(intro).To(HavePrefix("Title: Test\nPath: /docs/test\nLines: 1-2 of 10\nContent: intro"))
-	nested := RenderSearchHit(Hit{Doc: doc, Chunk: &Chunk{HeadingTrail: "Test > Parent > Child", StartLine: 3, EndLine: 4, Text: "body"}})
+	nested := RenderHit(Hit{Doc: doc, Chunk: &Chunk{HeadingTrail: "Test > Parent > Child", StartLine: 3, EndLine: 4, Text: "body"}})
 	g.Expect(nested).To(HavePrefix("Title: Test — Parent > Child\n"))
 	g.Expect(nested).ToNot(ContainSubstring("Link:"))
 }
 
-func TestRenderSearchHitTruncatesAtLineBoundaryWithHeading(t *testing.T) {
+func TestRenderHitTruncatesAtLineBoundaryWithHeading(t *testing.T) {
 	g := NewWithT(t)
 	lines := make([]string, 0, 60)
 	for i := range 60 {
@@ -31,23 +31,23 @@ func TestRenderSearchHitTruncatesAtLineBoundaryWithHeading(t *testing.T) {
 		Doc:   &Doc{Path: "/docs/test", Title: "Test", LineCount: 60},
 		Chunk: &Chunk{HeadingTrail: "Test > Long", Anchor: "long", StartLine: 1, EndLine: 60, Text: strings.Join(lines, "\n")},
 	}
-	text := RenderSearchHit(hit)
+	text := RenderHit(hit)
 	g.Expect(text).To(ContainSubstring(`… [truncated — read_flux_doc path="/docs/test" heading="long" for the rest]`))
 	content := strings.SplitN(text, "Content: ", 2)[1]
 	g.Expect(len([]rune(strings.Split(content, "\n…")[0]))).To(BeNumerically("<=", searchSnippetChars))
 	g.Expect(content).ToNot(ContainSubstring("line-59"))
 }
 
-func TestRenderSearchHitTruncatesWithOffset(t *testing.T) {
+func TestRenderHitTruncatesWithOffset(t *testing.T) {
 	g := NewWithT(t)
 	hit := Hit{
 		Doc:   &Doc{Path: "/docs/test", Title: "Test", LineCount: 2},
 		Chunk: &Chunk{HeadingTrail: "Test", StartLine: 42, EndLine: 43, Text: strings.Repeat("x", searchSnippetChars+1)},
 	}
-	g.Expect(RenderSearchHit(hit)).To(ContainSubstring(`… [truncated — read_flux_doc path="/docs/test" offset=42 for the rest]`))
+	g.Expect(RenderHit(hit)).To(ContainSubstring(`… [truncated — read_flux_doc path="/docs/test" offset=42 for the rest]`))
 }
 
-func TestRenderSearchHitIncludesNewlineAtSnippetBoundary(t *testing.T) {
+func TestRenderHitIncludesNewlineAtSnippetBoundary(t *testing.T) {
 	g := NewWithT(t)
 	content := strings.Repeat("a", 1000) + "\n" + strings.Repeat("b", 999) + "\ntrailing"
 	hit := Hit{
@@ -55,21 +55,21 @@ func TestRenderSearchHitIncludesNewlineAtSnippetBoundary(t *testing.T) {
 		Chunk: &Chunk{HeadingTrail: "Test", StartLine: 1, EndLine: 3, Text: content},
 	}
 
-	rendered := RenderSearchHit(hit)
+	rendered := RenderHit(hit)
 	snippet := strings.SplitN(strings.SplitN(rendered, "Content: ", 2)[1], "\n…", 2)[0]
 	g.Expect([]rune(snippet)).To(HaveLen(searchSnippetChars))
 	g.Expect(snippet).To(HaveSuffix(strings.Repeat("b", 999)))
 }
 
-func TestSearchMissTexts(t *testing.T) {
+func TestRenderMissTexts(t *testing.T) {
 	g := NewWithT(t)
-	prefixes := []string{"/docs/guides", "/docs/crd"}
-	g.Expect(NoResultsText("nothing", prefixes)).To(Equal(
+	small := newTestIndex([]Doc{{Path: "/docs/guides/install"}, {Path: "/docs/crd/helmrelease"}}, nil)
+	g.Expect(small.RenderNoResults("nothing")).To(Equal(
 		`No results for "nothing". Try different keywords, or restrict with path to one of: /docs/guides, /docs/crd.`,
 	))
-	library, err := Get()
+	idx, err := Get()
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(UnknownPathText(library, "/docs/crd/helmreleas")).To(HavePrefix(
+	g.Expect(idx.RenderUnknownPath("/docs/crd/helmreleas")).To(HavePrefix(
 		`Doc path "/docs/crd/helmreleas" was not found. Closest paths: /docs/crd/helmrelease`,
 	))
 }
@@ -121,43 +121,43 @@ func TestResolveHeading(t *testing.T) {
 	g.Expect(ok).To(BeFalse())
 }
 
-func TestSliceDocHeadingSection(t *testing.T) {
+func TestRenderDocHeadingSection(t *testing.T) {
 	g := NewWithT(t)
 	doc := readTestDoc()
 
-	text := SliceDoc(doc, &doc.Headings[5], 1, 400, "")
+	text := RenderDoc(doc, &doc.Headings[5], 1, 400, "")
 	g.Expect(text).To(ContainSubstring("Lines 21-26 of 40. Next: offset=27."))
 	g.Expect(text).To(ContainSubstring("line 21"))
 	g.Expect(text).To(ContainSubstring("line 26"))
 	g.Expect(text).ToNot(ContainSubstring("line 27"))
 
-	text = SliceDoc(doc, &doc.Headings[4], 1, 400, "")
+	text = RenderDoc(doc, &doc.Headings[4], 1, 400, "")
 	g.Expect(text).To(ContainSubstring("Lines 18-34 of 40. Next: offset=35."))
 }
 
-func TestSliceDocOffsetPaging(t *testing.T) {
+func TestRenderDocOffsetPaging(t *testing.T) {
 	g := NewWithT(t)
 	doc := readTestDoc()
 
-	text := SliceDoc(doc, nil, 10, 5, "")
+	text := RenderDoc(doc, nil, 10, 5, "")
 	g.Expect(text).To(ContainSubstring("Lines 10-14 of 40. Next: offset=15."))
 
-	text = SliceDoc(doc, nil, 100, 5, "")
+	text = RenderDoc(doc, nil, 100, 5, "")
 	g.Expect(text).To(ContainSubstring("Lines 40-40 of 40. End of document."))
 	g.Expect(text).To(HaveSuffix("---\nline 40"))
 
-	text = SliceDoc(doc, nil, 1, 400, "")
+	text = RenderDoc(doc, nil, 1, 400, "")
 	g.Expect(text).To(ContainSubstring("Lines 1-40 of 40. End of document."))
 }
 
-func TestSliceDocThirtyKilobyteCap(t *testing.T) {
+func TestRenderDocThirtyKilobyteCap(t *testing.T) {
 	g := NewWithT(t)
 	lines := make([]string, 500)
 	for i := range lines {
 		lines[i] = fmt.Sprintf("%s %d", strings.Repeat("x", 100), i+1)
 	}
 	doc := &Doc{Path: "/docs/big", Title: "Big", LineCount: len(lines), Body: strings.Join(lines, "\n")}
-	text := SliceDoc(doc, nil, 1, 1000, "")
+	text := RenderDoc(doc, nil, 1, 1000, "")
 	var end, next int
 	_, err := fmt.Sscanf(strings.Split(text, "\n")[1], "Lines 1-%d of 500. Next: offset=%d.", &end, &next)
 	g.Expect(err).ToNot(HaveOccurred())
@@ -168,27 +168,27 @@ func TestSliceDocThirtyKilobyteCap(t *testing.T) {
 
 	longLine := strings.Repeat("y", readMaxBytes+100)
 	doc = &Doc{Path: "/docs/one", Title: "One", LineCount: 2, Body: longLine + "\ntail"}
-	text = SliceDoc(doc, nil, 1, 1000, "")
+	text = RenderDoc(doc, nil, 1, 1000, "")
 	g.Expect(text).To(ContainSubstring("Lines 1-1 of 2. Next: offset=2."))
 	g.Expect(text).To(HaveSuffix("---\n" + longLine))
 }
 
-func TestSliceDocAmbiguousHeadingNote(t *testing.T) {
+func TestRenderDocAmbiguousHeadingNote(t *testing.T) {
 	g := NewWithT(t)
 	doc := readTestDoc()
 	h, note, ok := ResolveHeading(doc, "Managed Identity")
 	g.Expect(ok).To(BeTrue())
-	g.Expect(SliceDoc(doc, h, 1, 400, note)).To(ContainSubstring(note + "\n---"))
+	g.Expect(RenderDoc(doc, h, 1, 400, note)).To(ContainSubstring(note + "\n---"))
 }
 
-func TestOutlineTextIndentation(t *testing.T) {
+func TestRenderOutlineIndentation(t *testing.T) {
 	g := NewWithT(t)
 	doc := readTestDoc()
-	outline := OutlineText(doc, "")
+	outline := RenderOutline(doc, "")
 	g.Expect(outline).To(HavePrefix("Headings in /docs/crd/provider (Provider):\nProviders — providers"))
 	g.Expect(outline).To(ContainSubstring("\n        Slack — slack"))
 
-	missing := OutlineText(doc, "nope")
+	missing := RenderOutline(doc, "nope")
 	g.Expect(missing).To(HavePrefix(`Heading "nope" was not found in /docs/crd/provider. Available headings (text — anchor):`))
 	g.Expect(missing).To(ContainSubstring("\n  Example — example"))
 }

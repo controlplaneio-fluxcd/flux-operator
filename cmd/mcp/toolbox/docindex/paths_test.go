@@ -1,7 +1,7 @@
 // Copyright 2026 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-package library
+package docindex
 
 import (
 	"strings"
@@ -24,14 +24,14 @@ func TestNormalizePath(t *testing.T) {
 
 func TestPathResolutionAndSectionPrefixes(t *testing.T) {
 	g := NewWithT(t)
-	library, err := Get()
+	idx, err := Get()
 	g.Expect(err).ToNot(HaveOccurred())
-	doc, found := library.ResolveDoc("https://fluxoperator.dev/docs/crd/HelmRelease.md/")
+	doc, found := idx.ResolveDoc("https://fluxoperator.dev/docs/crd/HelmRelease.md/")
 	g.Expect(found).To(BeTrue())
 	g.Expect(doc.Path).To(Equal("/docs/crd/helmrelease"))
-	g.Expect(library.IsSectionPrefix("/docs/crd")).To(BeTrue())
-	g.Expect(library.IsSectionPrefix("/docs/crds")).To(BeFalse())
-	g.Expect(library.SectionPrefixes()).To(Equal([]string{
+	g.Expect(idx.IsSectionPrefix("/docs/crd")).To(BeTrue())
+	g.Expect(idx.IsSectionPrefix("/docs/crds")).To(BeFalse())
+	g.Expect(idx.SectionPrefixes()).To(Equal([]string{
 		"/docs/guides", "/docs/instance", "/docs/resourcesets", "/docs/web-ui",
 		"/docs/mcp", "/docs/crd", "/docs/controllers", "/docs/charts",
 	}))
@@ -39,24 +39,24 @@ func TestPathResolutionAndSectionPrefixes(t *testing.T) {
 
 func TestClosePathMatches(t *testing.T) {
 	g := NewWithT(t)
-	library, err := Get()
+	idx, err := Get()
 	g.Expect(err).ToNot(HaveOccurred())
-	matches := library.ClosePathMatches("helmreleas")
+	matches := idx.ClosePathMatches("helmreleas")
 	g.Expect(matches).To(HaveLen(5))
 	g.Expect(matches[0]).To(Equal("/docs/crd/helmrelease"))
-	g.Expect(library.ClosePathMatches(strings.Repeat("x", 500))).To(HaveLen(5))
-	g.Expect(library.ClosePathMatches("")).To(HaveLen(5))
-	g.Expect(library.ClosePathMatches("/")).To(HaveLen(5))
+	g.Expect(idx.ClosePathMatches(strings.Repeat("x", 500))).To(HaveLen(5))
+	g.Expect(idx.ClosePathMatches("")).To(HaveLen(5))
+	g.Expect(idx.ClosePathMatches("/")).To(HaveLen(5))
 }
 
 func TestClosePathMatchesRanksSubstringsFirst(t *testing.T) {
 	g := NewWithT(t)
-	library := newTestLibrary(
+	idx := newTestIndex(
 		[]Doc{
 			{Path: "/docs/very/long/helm-guide"},
 			{Path: "/docs/hel"},
 		},
 		nil,
 	)
-	g.Expect(library.ClosePathMatches("helm")[0]).To(Equal("/docs/very/long/helm-guide"))
+	g.Expect(idx.ClosePathMatches("helm")[0]).To(Equal("/docs/very/long/helm-guide"))
 }

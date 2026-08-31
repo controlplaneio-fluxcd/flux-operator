@@ -1,7 +1,7 @@
 // Copyright 2026 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-package library
+package docindex
 
 import (
 	"math"
@@ -26,14 +26,14 @@ func TestCalcBM25ScoreIncludesDFloor(t *testing.T) {
 
 func TestIndexUsesUniqueRawTokenFieldLength(t *testing.T) {
 	g := NewWithT(t)
-	library := newTestLibrary(
+	idx := newTestIndex(
 		[]Doc{{Path: "/docs/test", Title: "Test"}},
 		[]Chunk{
 			{ID: 0, DocPath: "/docs/test", Text: "valuesFrom"},
 			{ID: 1, DocPath: "/docs/test", Text: "values from"},
 		},
 	)
-	textField := library.index.fields[2]
+	textField := idx.inverted.fields[2]
 	g.Expect(textField.fieldLengths[0]).To(Equal(1))
 	g.Expect(textField.fieldLengths[1]).To(Equal(2))
 	g.Expect(textField.averageFieldLength).To(Equal(1.5))
@@ -43,7 +43,7 @@ func TestIndexUsesUniqueRawTokenFieldLength(t *testing.T) {
 
 func TestQualityMultiplierRewardsDistinctTerms(t *testing.T) {
 	g := NewWithT(t)
-	library := newTestLibrary(
+	idx := newTestIndex(
 		[]Doc{{Path: "/docs/test", Title: "Test"}},
 		[]Chunk{
 			{ID: 0, DocPath: "/docs/test", Text: "alpha beta"},
@@ -54,7 +54,7 @@ func TestQualityMultiplierRewardsDistinctTerms(t *testing.T) {
 		0: {score: 2, matched: map[string]struct{}{"alpha": {}, "beta": {}}},
 		1: {score: 3, matched: map[string]struct{}{"alpha": {}}},
 	}
-	hits := library.rank(results)
+	hits := idx.rank(results)
 	g.Expect(hits[0].Chunk.ID).To(Equal(0))
 	g.Expect(hits[0].Score).To(Equal(4.0))
 	g.Expect(hits[1].Score).To(Equal(3.0))

@@ -12,11 +12,11 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	. "github.com/onsi/gomega"
 
-	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/toolbox/library"
+	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/toolbox/docindex"
 )
 
 func TestMain(m *testing.M) {
-	if err := library.Load(); err != nil {
+	if err := docindex.Load(); err != nil {
 		panic(err)
 	}
 	os.Exit(m.Run())

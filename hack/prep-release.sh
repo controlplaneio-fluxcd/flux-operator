@@ -77,7 +77,7 @@ bump_image ghcr.io/fluxcd/flux-mirror flux-mirror
 bump_image registry.k8s.io/kubectl kubectl
 
 info "Committing all config changes"
-git add --all "config/" "cmd/mcp/toolbox/library/" "cmd/cli/Dockerfile"
+git add --all "config/" "cmd/mcp/toolbox/docindex/" "cmd/cli/Dockerfile"
 
 if [[ -z $(git status --porcelain config/ cmd/cli/Dockerfile) ]]; then
     fatal "No changes to commit. Version may already be up to date."

@@ -1,7 +1,7 @@
 // Copyright 2026 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-package library
+package docindex
 
 import (
 	"os"
@@ -19,7 +19,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestSearchEmbeddedArtifactRelevance(t *testing.T) {
-	library, err := Get()
+	idx, err := Get()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func TestSearchEmbeddedArtifactRelevance(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.query, func(t *testing.T) {
 			g := NewWithT(t)
-			hits := library.Search(tt.query, SearchOptions{Limit: 3})
+			hits := idx.Search(tt.query, SearchOptions{Limit: 3})
 			g.Expect(hits).ToNot(BeEmpty())
 			g.Expect(hits[0].Chunk.HeadingTrail).To(Equal(tt.trail))
 		})
@@ -48,20 +48,20 @@ func TestSearchEmbeddedArtifactRelevance(t *testing.T) {
 
 func TestSearchCamelCaseRoundTrip(t *testing.T) {
 	g := NewWithT(t)
-	library := newTestLibrary(
+	idx := newTestIndex(
 		[]Doc{{Path: "/docs/test", Title: "Fields"}},
 		[]Chunk{
 			{ID: 0, DocPath: "/docs/test", HeadingTrail: "Fields > Camel", Text: "Configure valuesFrom on the release."},
 			{ID: 1, DocPath: "/docs/test", HeadingTrail: "Fields > Prose", Text: "Configure values from the release."},
 		},
 	)
-	g.Expect(library.Search("valuesFrom", SearchOptions{})).To(HaveLen(2))
-	g.Expect(library.Search("values from", SearchOptions{})).To(HaveLen(2))
+	g.Expect(idx.Search("valuesFrom", SearchOptions{})).To(HaveLen(2))
+	g.Expect(idx.Search("values from", SearchOptions{})).To(HaveLen(2))
 }
 
 func TestSearchCamelCaseWordScoresAsOneTerm(t *testing.T) {
 	g := NewWithT(t)
-	library := newTestLibrary(
+	idx := newTestIndex(
 		[]Doc{{Path: "/docs/test", Title: "Test"}},
 		[]Chunk{
 			{ID: 0, DocPath: "/docs/test", HeadingTrail: "Test > Plain", Text: "Kustomization cel"},
@@ -70,17 +70,17 @@ func TestSearchCamelCaseWordScoresAsOneTerm(t *testing.T) {
 	)
 	// Two matched plain words must outrank one camelCase word, even though
 	// the camelCase word expands to three index terms.
-	hits := library.Search("Kustomization HelmRelease cel", SearchOptions{})
+	hits := idx.Search("Kustomization HelmRelease cel", SearchOptions{})
 	g.Expect(hits).To(HaveLen(2))
 	g.Expect(hits[0].Chunk.ID).To(Equal(0))
 }
 
 func TestSearchEmbeddedArtifactCamelCaseKindBalance(t *testing.T) {
 	g := NewWithT(t)
-	library, err := Get()
+	idx, err := Get()
 	g.Expect(err).ToNot(HaveOccurred())
 
-	hits := library.Search("Kustomization HelmRelease CEL", SearchOptions{Limit: 8})
+	hits := idx.Search("Kustomization HelmRelease CEL", SearchOptions{Limit: 8})
 	trails := make([]string, 0, len(hits))
 	for _, hit := range hits {
 		trails = append(trails, hit.Chunk.HeadingTrail)
@@ -94,7 +94,7 @@ func TestSearchEmbeddedArtifactCamelCaseKindBalance(t *testing.T) {
 
 func TestSearchDocDescriptionIsIndexed(t *testing.T) {
 	g := NewWithT(t)
-	library := newTestLibrary(
+	idx := newTestIndex(
 		[]Doc{
 			{Path: "/docs/described", Title: "Guide", Description: "Installing the operator on clusters"},
 			{Path: "/docs/plain", Title: "Guide"},
@@ -104,7 +104,7 @@ func TestSearchDocDescriptionIsIndexed(t *testing.T) {
 			{ID: 1, DocPath: "/docs/described", HeadingTrail: "Guide > Steps", Text: "Run the operator."},
 		},
 	)
-	hits := library.Search("operator clusters", SearchOptions{})
+	hits := idx.Search("operator clusters", SearchOptions{})
 	g.Expect(hits).To(HaveLen(2))
 	g.Expect(hits[0].Chunk.ID).To(Equal(1))
 	g.Expect(hits[0].Score).To(BeNumerically(">", hits[1].Score))
@@ -112,7 +112,7 @@ func TestSearchDocDescriptionIsIndexed(t *testing.T) {
 
 func TestSearchRepeatedQueryWordsCountOnce(t *testing.T) {
 	g := NewWithT(t)
-	library := newTestLibrary(
+	idx := newTestIndex(
 		[]Doc{{Path: "/docs/test", Title: "Test"}},
 		[]Chunk{
 			{ID: 0, DocPath: "/docs/test", HeadingTrail: "Test > One", Text: "alpha alpha"},
@@ -121,27 +121,27 @@ func TestSearchRepeatedQueryWordsCountOnce(t *testing.T) {
 	)
 	// Nothing matches all three words, so both hits come from the OR fallback:
 	// chunk 1 matches two distinct words, chunk 0 matches one word twice.
-	hits := library.Search("alpha alpha beta gamma", SearchOptions{})
+	hits := idx.Search("alpha alpha beta gamma", SearchOptions{})
 	g.Expect(hits).To(HaveLen(2))
 	g.Expect([]int{hits[0].Chunk.ID, hits[1].Chunk.ID}).To(Equal([]int{1, 0}))
 }
 
 func TestSearchThreeCharacterTermsHaveNoFuzzyExpansion(t *testing.T) {
 	g := NewWithT(t)
-	library := newTestLibrary(
+	idx := newTestIndex(
 		[]Doc{{Path: "/docs/test", Title: "Test"}},
 		[]Chunk{{ID: 0, DocPath: "/docs/test", Text: "car"}},
 	)
-	g.Expect(library.Search("cat", SearchOptions{})).To(BeEmpty())
+	g.Expect(idx.Search("cat", SearchOptions{})).To(BeEmpty())
 }
 
 func TestSearchExactPrefixAndFuzzyExpansions(t *testing.T) {
 	g := NewWithT(t)
-	library := newTestLibrary(
+	idx := newTestIndex(
 		[]Doc{{Path: "/docs/test", Title: "Test"}},
 		[]Chunk{{ID: 0, DocPath: "/docs/test", Text: "alerm alert alerts"}},
 	)
-	expansions := library.index.expand("alert")
+	expansions := idx.inverted.expand("alert")
 	g.Expect(expansions).To(HaveLen(3))
 	g.Expect(expansions[0]).To(Equal(weightedTerm{term: "alert", weight: 1}))
 	want := prefixWeight * 6 / (6 + 0.3)
@@ -153,21 +153,21 @@ func TestSearchExactPrefixAndFuzzyExpansions(t *testing.T) {
 
 func TestSearchDeterministicOrderingForEqualScores(t *testing.T) {
 	g := NewWithT(t)
-	library := newTestLibrary(
+	idx := newTestIndex(
 		[]Doc{{Path: "/docs/test", Title: "Test"}},
 		[]Chunk{
 			{ID: 3, DocPath: "/docs/test", Text: "alpha"},
 			{ID: 1, DocPath: "/docs/test", Text: "alpha"},
 		},
 	)
-	hits := library.Search("alpha", SearchOptions{})
+	hits := idx.Search("alpha", SearchOptions{})
 	g.Expect(hits).To(HaveLen(2))
 	g.Expect([]int{hits[0].Chunk.ID, hits[1].Chunk.ID}).To(Equal([]int{1, 3}))
 }
 
 func TestSearchThreeTermANDIntersection(t *testing.T) {
 	g := NewWithT(t)
-	library := newTestLibrary(
+	idx := newTestIndex(
 		[]Doc{{Path: "/docs/test", Title: "Test"}},
 		[]Chunk{
 			{ID: 0, DocPath: "/docs/test", Text: "alpha beta gamma"},
@@ -176,30 +176,30 @@ func TestSearchThreeTermANDIntersection(t *testing.T) {
 			{ID: 3, DocPath: "/docs/test", Text: "beta gamma"},
 		},
 	)
-	hits := library.Search("alpha beta gamma", SearchOptions{})
+	hits := idx.Search("alpha beta gamma", SearchOptions{})
 	g.Expect(hits).To(HaveLen(4))
 	g.Expect(hits[0].Chunk.ID).To(Equal(0))
 }
 
 func TestSearchANDHitsComeBeforeORHits(t *testing.T) {
 	g := NewWithT(t)
-	library := newTestLibrary(
+	idx := newTestIndex(
 		[]Doc{{Path: "/docs/test", Title: "Test"}},
 		[]Chunk{
 			{ID: 0, DocPath: "/docs/test", Text: "alpha beta"},
 			{ID: 1, DocPath: "/docs/test", Text: strings.Repeat("alpha ", 20)},
 		},
 	)
-	hits := library.Search("alpha beta", SearchOptions{})
+	hits := idx.Search("alpha beta", SearchOptions{})
 	g.Expect(hits).To(HaveLen(2))
 	g.Expect(hits[0].Chunk.ID).To(Equal(0))
 }
 
 func TestSearchFilterAndLimit(t *testing.T) {
 	g := NewWithT(t)
-	library, err := Get()
+	idx, err := Get()
 	g.Expect(err).ToNot(HaveOccurred())
-	hits := library.Search("verification", SearchOptions{
+	hits := idx.Search("verification", SearchOptions{
 		Limit: 2,
 		Filter: func(chunk *Chunk) bool {
 			return strings.HasPrefix(chunk.DocPath, "/docs/crd/")
@@ -214,13 +214,13 @@ func TestSearchFilterAndLimit(t *testing.T) {
 
 func TestSearchEmptyQuery(t *testing.T) {
 	g := NewWithT(t)
-	library, err := Get()
+	idx, err := Get()
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(library.Search("the and from", SearchOptions{})).To(BeEmpty())
+	g.Expect(idx.Search("the and from", SearchOptions{})).To(BeEmpty())
 }
 
-func newTestLibrary(docs []Doc, chunks []Chunk) *Library {
-	library := &Library{
+func newTestIndex(docs []Doc, chunks []Chunk) *Index {
+	idx := &Index{
 		docs:         make([]*Doc, 0, len(docs)),
 		chunks:       make([]*Chunk, 0, len(chunks)),
 		docsByPath:   make(map[string]*Doc, len(docs)),
@@ -229,15 +229,15 @@ func newTestLibrary(docs []Doc, chunks []Chunk) *Library {
 	}
 	for i := range docs {
 		doc := &docs[i]
-		library.docs = append(library.docs, doc)
-		library.docsByPath[doc.Path] = doc
+		idx.docs = append(idx.docs, doc)
+		idx.docsByPath[doc.Path] = doc
 	}
 	for i := range chunks {
 		chunk := &chunks[i]
-		library.chunks = append(library.chunks, chunk)
-		library.chunksByPath[chunk.DocPath] = append(library.chunksByPath[chunk.DocPath], chunk)
-		library.chunksByID[chunk.ID] = chunk
+		idx.chunks = append(idx.chunks, chunk)
+		idx.chunksByPath[chunk.DocPath] = append(idx.chunksByPath[chunk.DocPath], chunk)
+		idx.chunksByID[chunk.ID] = chunk
 	}
-	library.index = buildInvertedIndex(library)
-	return library
+	idx.inverted = buildInvertedIndex(idx)
+	return idx
 }

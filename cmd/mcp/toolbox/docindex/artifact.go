@@ -1,7 +1,10 @@
 // Copyright 2026 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-package library
+// Package docindex embeds the fluxoperator.dev documentation search index
+// and implements the BM25 search, path resolution and rendering used by the
+// MCP docs tools.
+package docindex
 
 import (
 	_ "embed"
@@ -56,18 +59,18 @@ type Chunk struct {
 //go:embed index.json
 var embeddedArtifact []byte
 
-// Library provides access to the loaded documentation artifact.
-type Library struct {
+// Index provides access to the loaded documentation artifact.
+type Index struct {
 	artifact     *Artifact
 	docs         []*Doc
 	chunks       []*Chunk
 	docsByPath   map[string]*Doc
 	chunksByPath map[string][]*Chunk
 	chunksByID   map[int]*Chunk
-	index        *invertedIndex
+	inverted     *invertedIndex
 }
 
-var loadedLibrary *Library
+var loadedIndex *Index
 
 // Validate checks the artifact schema and reconstructs each Doc.Body from its chunks.
 func Validate(artifact *Artifact) error {
@@ -171,7 +174,7 @@ func Validate(artifact *Artifact) error {
 
 // Load parses and validates the embedded search artifact and makes it available through Get.
 func Load() error {
-	if loadedLibrary != nil {
+	if loadedIndex != nil {
 		return nil
 	}
 
@@ -183,7 +186,7 @@ func Load() error {
 		return fmt.Errorf("failed to validate embedded search index: %w", err)
 	}
 
-	library := &Library{
+	idx := &Index{
 		artifact:     &artifact,
 		docs:         make([]*Doc, 0, len(artifact.Docs)),
 		chunks:       make([]*Chunk, 0, len(artifact.Chunks)),
@@ -193,81 +196,81 @@ func Load() error {
 	}
 	for i := range artifact.Docs {
 		doc := &artifact.Docs[i]
-		library.docs = append(library.docs, doc)
-		library.docsByPath[doc.Path] = doc
+		idx.docs = append(idx.docs, doc)
+		idx.docsByPath[doc.Path] = doc
 	}
 	for i := range artifact.Chunks {
 		chunk := &artifact.Chunks[i]
-		library.chunks = append(library.chunks, chunk)
-		library.chunksByPath[chunk.DocPath] = append(library.chunksByPath[chunk.DocPath], chunk)
-		library.chunksByID[chunk.ID] = chunk
+		idx.chunks = append(idx.chunks, chunk)
+		idx.chunksByPath[chunk.DocPath] = append(idx.chunksByPath[chunk.DocPath], chunk)
+		idx.chunksByID[chunk.ID] = chunk
 	}
 
-	library.index = buildInvertedIndex(library)
-	loadedLibrary = library
+	idx.inverted = buildInvertedIndex(idx)
+	loadedIndex = idx
 	return nil
 }
 
-// Get returns the loaded documentation library.
-func Get() (*Library, error) {
-	if loadedLibrary == nil {
+// Get returns the loaded documentation index.
+func Get() (*Index, error) {
+	if loadedIndex == nil {
 		return nil, errors.New("search index not available")
 	}
-	return loadedLibrary, nil
+	return loadedIndex, nil
 }
 
 // Docs returns the documentation pages in manifest order.
-func (l *Library) Docs() []*Doc {
-	if l == nil {
+func (idx *Index) Docs() []*Doc {
+	if idx == nil {
 		return nil
 	}
-	return l.docs
+	return idx.docs
 }
 
 // DocByPath returns the documentation page whose Path exactly matches path.
-func (l *Library) DocByPath(path string) (*Doc, bool) {
-	if l == nil {
+func (idx *Index) DocByPath(path string) (*Doc, bool) {
+	if idx == nil {
 		return nil, false
 	}
-	doc, ok := l.docsByPath[path]
+	doc, ok := idx.docsByPath[path]
 	return doc, ok
 }
 
 // Chunks returns all documentation chunks in artifact order.
-func (l *Library) Chunks() []*Chunk {
-	if l == nil {
+func (idx *Index) Chunks() []*Chunk {
+	if idx == nil {
 		return nil
 	}
-	return l.chunks
+	return idx.chunks
 }
 
 // ChunksOf returns a document's chunks in artifact order.
-func (l *Library) ChunksOf(doc *Doc) []*Chunk {
-	if l == nil || doc == nil {
+func (idx *Index) ChunksOf(doc *Doc) []*Chunk {
+	if idx == nil || doc == nil {
 		return nil
 	}
-	return l.chunksByPath[doc.Path]
+	return idx.chunksByPath[doc.Path]
 }
 
 // Version returns the source version recorded in the artifact.
-func (l *Library) Version() string {
-	if l == nil || l.artifact == nil {
+func (idx *Index) Version() string {
+	if idx == nil || idx.artifact == nil {
 		return ""
 	}
-	return l.artifact.Version
+	return idx.artifact.Version
 }
 
 // GeneratedAt returns the artifact generation timestamp.
-func (l *Library) GeneratedAt() string {
-	if l == nil || l.artifact == nil {
+func (idx *Index) GeneratedAt() string {
+	if idx == nil || idx.artifact == nil {
 		return ""
 	}
-	return l.artifact.GeneratedAt
+	return idx.artifact.GeneratedAt
 }
 
-// resetLibrary clears the loaded library state for tests.
-func resetLibrary() {
-	loadedLibrary = nil
+// resetIndex clears the loaded index state for tests.
+func resetIndex() {
+	loadedIndex = nil
 }
 
 func textLineCount(text string) int {

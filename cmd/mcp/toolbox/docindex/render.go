@@ -1,7 +1,7 @@
 // Copyright 2026 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-package library
+package docindex
 
 import (
 	"fmt"
@@ -10,8 +10,8 @@ import (
 
 const searchSnippetChars = 2000
 
-// RenderSearchHit renders a search hit in the MCP search tool's four-line shape.
-func RenderSearchHit(hit Hit) string {
+// RenderHit renders a search hit in the MCP search tool's four-line shape.
+func RenderHit(hit Hit) string {
 	if hit.Chunk == nil || hit.Doc == nil {
 		return ""
 	}
@@ -41,16 +41,16 @@ func RenderSearchHit(hit Hit) string {
 		title, hit.Doc.Path, hit.Chunk.StartLine, hit.Chunk.EndLine, hit.Doc.LineCount, content)
 }
 
-// NoResultsText returns the normal search response for a query with no hits.
-func NoResultsText(query string, prefixes []string) string {
+// RenderNoResults renders the search response for a query with no hits.
+func (idx *Index) RenderNoResults(query string) string {
 	return fmt.Sprintf(`No results for "%s". Try different keywords, or restrict with path to one of: %s.`,
-		query, strings.Join(prefixes, ", "))
+		query, strings.Join(idx.SectionPrefixes(), ", "))
 }
 
-// UnknownPathText returns a path miss with the closest documentation paths.
-func UnknownPathText(library *Library, input string) string {
+// RenderUnknownPath renders a path miss with the closest documentation paths.
+func (idx *Index) RenderUnknownPath(input string) string {
 	return fmt.Sprintf(`Doc path "%s" was not found. Closest paths: %s.`,
-		input, strings.Join(library.ClosePathMatches(input), ", "))
+		input, strings.Join(idx.ClosePathMatches(input), ", "))
 }
 
 const readMaxBytes = 30 * 1024
@@ -89,8 +89,8 @@ func ResolveHeading(doc *Doc, heading string) (h *Heading, note string, ok bool)
 	return &doc.Headings[matches[0]], note, true
 }
 
-// OutlineText renders a document outline, optionally explaining that a heading was not found.
-func OutlineText(doc *Doc, heading string) string {
+// RenderOutline renders a document outline, optionally explaining that a heading was not found.
+func RenderOutline(doc *Doc, heading string) string {
 	if doc == nil {
 		return ""
 	}
@@ -111,8 +111,8 @@ func OutlineText(doc *Doc, heading string) string {
 	return b.String()
 }
 
-// SliceDoc renders a line-bounded document or heading section slice for the read tool.
-func SliceDoc(doc *Doc, heading *Heading, offset, limit int, note string) string {
+// RenderDoc renders a line-bounded document or heading section slice for the read tool.
+func RenderDoc(doc *Doc, heading *Heading, offset, limit int, note string) string {
 	if doc == nil {
 		return ""
 	}

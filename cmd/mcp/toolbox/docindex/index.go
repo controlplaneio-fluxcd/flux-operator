@@ -1,7 +1,7 @@
 // Copyright 2026 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-package library
+package docindex
 
 import "sort"
 
@@ -31,7 +31,7 @@ type invertedIndex struct {
 	totalChunks int
 }
 
-func buildInvertedIndex(library *Library) *invertedIndex {
+func buildInvertedIndex(idx *Index) *invertedIndex {
 	index := &invertedIndex{
 		fields: []fieldIndex{
 			{name: "title", boost: titleFieldBoost, postings: make(map[string][]posting), fieldLengths: make(map[int]int)},
@@ -39,12 +39,12 @@ func buildInvertedIndex(library *Library) *invertedIndex {
 			{name: "text", boost: textFieldBoost, postings: make(map[string][]posting), fieldLengths: make(map[int]int)},
 			{name: "description", boost: descriptionFieldBoost, postings: make(map[string][]posting), fieldLengths: make(map[int]int)},
 		},
-		totalChunks: len(library.chunks),
+		totalChunks: len(idx.chunks),
 	}
 	vocabulary := make(map[string]struct{})
 
-	for _, chunk := range library.chunks {
-		doc := library.docsByPath[chunk.DocPath]
+	for _, chunk := range idx.chunks {
+		doc := idx.docsByPath[chunk.DocPath]
 		values := []string{doc.Title, chunk.HeadingTrail, chunk.Text, doc.Description}
 		for fieldID, value := range values {
 			field := &index.fields[fieldID]

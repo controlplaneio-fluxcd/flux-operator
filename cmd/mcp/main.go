@@ -24,7 +24,7 @@ import (
 
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/k8s"
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/toolbox"
-	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/toolbox/library"
+	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/toolbox/docindex"
 )
 
 var (
@@ -196,7 +196,7 @@ func serveCmdRun(cmd *cobra.Command, args []string) error {
 		return errors.New("KUBECONFIG environment variable is not set")
 	}
 
-	if err := library.Load(); err != nil {
+	if err := docindex.Load(); err != nil {
 		return fmt.Errorf("failed to load Flux documentation search index: %w", err)
 	}
 

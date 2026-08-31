@@ -1,7 +1,7 @@
 // Copyright 2026 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-package library
+package docindex
 
 import (
 	"math"
@@ -40,8 +40,8 @@ type scoredChunk struct {
 }
 
 // Search returns documentation chunks ranked with MiniSearch-compatible field scoring.
-func (l *Library) Search(query string, opts SearchOptions) []Hit {
-	if l == nil || l.index == nil {
+func (idx *Index) Search(query string, opts SearchOptions) []Hit {
+	if idx == nil || idx.inverted == nil {
 		return nil
 	}
 	queryGroups := TokenizeGroups(query)
@@ -49,8 +49,8 @@ func (l *Library) Search(query string, opts SearchOptions) []Hit {
 		return nil
 	}
 
-	allowed := make(map[int]bool, len(l.chunks))
-	for _, chunk := range l.chunks {
+	allowed := make(map[int]bool, len(idx.chunks))
+	for _, chunk := range idx.chunks {
 		allowed[chunk.ID] = opts.Filter == nil || opts.Filter(chunk)
 	}
 
@@ -59,9 +59,9 @@ func (l *Library) Search(query string, opts SearchOptions) []Hit {
 		results := make(map[int]*scoredChunk)
 		for _, queryTerm := range group {
 			variantScores := make(map[int]float64)
-			for _, expansion := range l.index.expand(queryTerm) {
-				for fieldID := range l.index.fields {
-					field := &l.index.fields[fieldID]
+			for _, expansion := range idx.inverted.expand(queryTerm) {
+				for fieldID := range idx.inverted.fields {
+					field := &idx.inverted.fields[fieldID]
 					postings := field.postings[expansion.term]
 					matchingCount := len(postings)
 					for _, posting := range postings {
@@ -71,7 +71,7 @@ func (l *Library) Search(query string, opts SearchOptions) []Hit {
 						variantScores[posting.chunkID] += expansion.weight * field.boost * calcBM25Score(
 							posting.frequency,
 							matchingCount,
-							l.index.totalChunks,
+							idx.inverted.totalChunks,
 							field.fieldLengths[posting.chunkID],
 							field.averageFieldLength,
 						)
@@ -91,13 +91,13 @@ func (l *Library) Search(query string, opts SearchOptions) []Hit {
 	}
 
 	andResults := intersectResults(termResults)
-	andHits := l.rank(andResults)
+	andHits := idx.rank(andResults)
 	if len(andHits) >= 3 {
 		return limitHits(andHits, opts.Limit)
 	}
 
 	orResults := unionResults(termResults)
-	orHits := l.rank(orResults)
+	orHits := idx.rank(orResults)
 	seen := make(map[int]struct{}, len(andHits))
 	for _, hit := range andHits {
 		seen[hit.Chunk.ID] = struct{}{}
@@ -211,16 +211,16 @@ func mergeMatches(target, source map[string]struct{}) {
 	}
 }
 
-func (l *Library) rank(results map[int]*scoredChunk) []Hit {
+func (idx *Index) rank(results map[int]*scoredChunk) []Hit {
 	hits := make([]Hit, 0, len(results))
 	for chunkID, result := range results {
-		chunk := l.chunksByID[chunkID]
+		chunk := idx.chunksByID[chunkID]
 		if chunk == nil {
 			continue
 		}
 		hits = append(hits, Hit{
 			Chunk: chunk,
-			Doc:   l.docsByPath[chunk.DocPath],
+			Doc:   idx.docsByPath[chunk.DocPath],
 			Score: result.score * float64(len(result.matched)),
 		})
 	}

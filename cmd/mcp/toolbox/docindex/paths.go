@@ -1,7 +1,7 @@
 // Copyright 2026 Stefan Prodan.
 // SPDX-License-Identifier: AGPL-3.0
 
-package library
+package docindex
 
 import (
 	"sort"
@@ -24,21 +24,21 @@ func NormalizePath(input string) string {
 }
 
 // ResolveDoc resolves input to an exact documentation page.
-func (l *Library) ResolveDoc(input string) (*Doc, bool) {
-	if l == nil {
+func (idx *Index) ResolveDoc(input string) (*Doc, bool) {
+	if idx == nil {
 		return nil, false
 	}
-	doc, found := l.docsByPath[NormalizePath(input)]
+	doc, found := idx.docsByPath[NormalizePath(input)]
 	return doc, found
 }
 
 // IsSectionPrefix reports whether input is a segment-aware documentation section prefix.
-func (l *Library) IsSectionPrefix(input string) bool {
-	if l == nil {
+func (idx *Index) IsSectionPrefix(input string) bool {
+	if idx == nil {
 		return false
 	}
 	prefix := NormalizePath(input) + "/"
-	for _, doc := range l.docs {
+	for _, doc := range idx.docs {
 		if strings.HasPrefix(doc.Path, prefix) {
 			return true
 		}
@@ -47,8 +47,8 @@ func (l *Library) IsSectionPrefix(input string) bool {
 }
 
 // ClosePathMatches returns up to five likely documentation paths for input.
-func (l *Library) ClosePathMatches(input string) []string {
-	if l == nil {
+func (idx *Index) ClosePathMatches(input string) []string {
+	if idx == nil {
 		return nil
 	}
 	needle := []rune(NormalizePath(input))
@@ -62,8 +62,8 @@ func (l *Library) ClosePathMatches(input string) []string {
 		distance int
 		includes bool
 	}
-	candidates := make([]candidate, 0, len(l.docs))
-	for _, doc := range l.docs {
+	candidates := make([]candidate, 0, len(idx.docs))
+	for _, doc := range idx.docs {
 		candidates = append(candidates, candidate{
 			path:     doc.Path,
 			distance: levenshteinDistance(needleText, doc.Path),
@@ -88,13 +88,13 @@ func (l *Library) ClosePathMatches(input string) []string {
 }
 
 // SectionPrefixes returns distinct /docs/<section> prefixes in manifest order.
-func (l *Library) SectionPrefixes() []string {
-	if l == nil {
+func (idx *Index) SectionPrefixes() []string {
+	if idx == nil {
 		return nil
 	}
 	prefixes := make([]string, 0, 8)
 	seen := make(map[string]struct{})
-	for _, doc := range l.docs {
+	for _, doc := range idx.docs {
 		parts := strings.Split(strings.Trim(doc.Path, "/"), "/")
 		if len(parts) < 2 || parts[0] != "docs" {
 			continue

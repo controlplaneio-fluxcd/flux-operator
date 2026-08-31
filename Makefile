@@ -202,13 +202,9 @@ cli-ci-build: ## Build CLI binary for CI.
 
 MCP_IMG ?= ghcr.io/controlplaneio-fluxcd/flux-operator-mcp:latest
 
-.PHONY: mcp-build-search-index
-mcp-build-search-index: ## Download the docs index from fluxoperator.dev for the MCP docs tool.
-	@echo "Downloading MCP docs index from fluxoperator.dev..."
-	@mkdir -p cmd/mcp/toolbox/library
-	@touch cmd/mcp/toolbox/library/index.json
-	@go run cmd/mcp/toolbox/indexer/main.go
-	@echo "MCP docs index downloaded successfully"
+.PHONY: mcp-fetch-docs-index
+mcp-fetch-docs-index: ## Download the docs index from fluxoperator.dev for the MCP docs tools.
+	@./hack/fetch-docs-index.sh
 
 .PHONY: mcp-test
 mcp-test: tidy fmt vet envtest ## Run MCP tests.
@@ -270,7 +266,7 @@ docker-registry-down: ## Stop and remove the local docker registry if it exists.
 NEXT_VERSION ?= ""
 
 .PHONY: prep-release
-prep-release: mcp-build-search-index ## Create release PR for the next version (auto minor bump).
+prep-release: mcp-fetch-docs-index ## Create release PR for the next version (auto minor bump).
 	hack/vendor-flux-manifests.sh $(FLUX_VERSION)
 	hack/prep-release.sh $(NEXT_VERSION)
 
