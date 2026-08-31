@@ -299,6 +299,11 @@ spec:
     orderBy: ReverseNumerical
 ```
 
+When `extractGroup` is used, `limit` applies to each derived group rather than the whole result
+set. In practice, that means many groups can still produce many exported inputs. To keep the total
+output bounded, make `includeTag` and/or `excludeTag` as restrictive as possible so only the
+intended groups are matched.
+
 ### Skip
 
 The `.spec.skip` field is optional and specifies the skip criteria for skipping input updates.
