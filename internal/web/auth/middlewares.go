@@ -59,6 +59,14 @@ func NewMiddleware(conf *fluxcdv1.WebConfigSpec, kubeClient *kubeclient.Client,
 			return nil, nil, fmt.Errorf("failed to create OAuth2 authentication middleware: %w", err)
 		}
 		provider = fmt.Sprintf("%s/%s", fluxcdv1.AuthenticationTypeOAuth2, conf.Authentication.OAuth2.Provider)
+	case conf.Authentication.ReverseProxy != nil:
+		var err error
+		middleware, err = newReverseProxyMiddleware(conf, kubeClient)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create Reverse Proxy authentication middleware: %w", err)
+		}
+		closer = func(context.Context) error { return nil }
+		provider = fluxcdv1.AuthenticationTypeReverseProxy
 	default:
 		return nil, nil, fmt.Errorf("unsupported authentication method")
 	}

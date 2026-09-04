@@ -43,6 +43,21 @@ func TestValidateAuthenticationSpec(t *testing.T) {
 			wantErr: "",
 		},
 		{
+			name: "valid ReverseProxy authentication",
+			spec: &fluxcdv1.AuthenticationSpec{
+				Type: fluxcdv1.AuthenticationTypeReverseProxy,
+				ReverseProxy: &fluxcdv1.ReverseProxyAuthenticationSpec{
+					TrustedProxies: []string{"10.0.0.0/8"},
+					ClaimsProcessorSpec: fluxcdv1.ClaimsProcessorSpec{
+						Impersonation: &fluxcdv1.ImpersonationSpec{
+							Username: "claims['X-Remote-User']",
+						},
+					},
+				},
+			},
+			wantErr: "",
+		},
+		{
 			name: "invalid authentication type",
 			spec: &fluxcdv1.AuthenticationSpec{
 				Type: "InvalidType",
@@ -270,6 +285,66 @@ func TestValidateAnonymousAuthenticationSpec(t *testing.T) {
 			} else {
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr))
+			}
+		})
+	}
+}
+
+func TestValidateReverseProxyAuthenticationSpec(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		spec    *fluxcdv1.ReverseProxyAuthenticationSpec
+		wantErr string
+	}{
+		{
+			name:    "missing trusted proxies",
+			spec:    &fluxcdv1.ReverseProxyAuthenticationSpec{},
+			wantErr: "at least one trusted proxy must be configured",
+		},
+		{
+			name: "missing impersonation",
+			spec: &fluxcdv1.ReverseProxyAuthenticationSpec{
+				TrustedProxies: []string{"10.0.0.0/8"},
+			},
+			wantErr: "impersonation must be configured",
+		},
+		{
+			name: "invalid CEL expression",
+			spec: &fluxcdv1.ReverseProxyAuthenticationSpec{
+				TrustedProxies: []string{"10.0.0.0/8"},
+				ClaimsProcessorSpec: fluxcdv1.ClaimsProcessorSpec{
+					Impersonation: &fluxcdv1.ImpersonationSpec{
+						Username: "invalid[[[",
+					},
+				},
+			},
+			wantErr: "invalid impersonation",
+		},
+		{
+			name: "valid CEL processor",
+			spec: &fluxcdv1.ReverseProxyAuthenticationSpec{
+				TrustedProxies: []string{"10.0.0.0/8"},
+				ClaimsProcessorSpec: fluxcdv1.ClaimsProcessorSpec{
+					Variables: []fluxcdv1.VariableSpec{
+						{Name: "username", Expression: "claims['X-Remote-User']"},
+					},
+					Validations: []fluxcdv1.ValidationSpec{
+						{Expression: "variables.username != ''", Message: "username required"},
+					},
+					Impersonation: &fluxcdv1.ImpersonationSpec{
+						Username: "variables.username",
+					},
+				},
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			err := ValidateReverseProxyAuthenticationSpec(tt.spec)
+			if tt.wantErr == "" {
+				g.Expect(err).NotTo(HaveOccurred())
+			} else {
+				g.Expect(err).To(MatchError(ContainSubstring(tt.wantErr)))
 			}
 		})
 	}

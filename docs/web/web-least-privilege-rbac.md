@@ -23,6 +23,10 @@ these critical internal requirements without exposing sensitive data.
 By relying on the system to safely handle these internal operations,
 administrators can enforce a much stricter least-privilege posture.
 
+Authentication methods, including OAuth2 and Reverse Proxy CEL claims processing,
+only select the user identity that the backend impersonates. They do not grant
+permissions or introduce privileged Kubernetes API calls.
+
 ## Guiding Principles
 
 1. **Least privilege by default.** All resource reads and writes go through

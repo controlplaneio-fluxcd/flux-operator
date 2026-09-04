@@ -21,6 +21,9 @@ const (
 	// AuthenticationTypeOAuth2 is the name of the OAuth2 authentication type.
 	AuthenticationTypeOAuth2 = "OAuth2"
 
+	// AuthenticationTypeReverseProxy is the name of the Reverse Proxy authentication type.
+	AuthenticationTypeReverseProxy = "ReverseProxy"
+
 	// OAuth2ProviderOIDC is the name of the OIDC OAuth2 provider.
 	OAuth2ProviderOIDC = "OIDC"
 
@@ -195,7 +198,7 @@ func (c *WebConfigSpec) MetricsScrapeInterval() time.Duration {
 // AuthenticationSpec holds the Flux Status Page authentication configuration.
 type AuthenticationSpec struct {
 	// Type is the authentication type.
-	// +kubebuilder:validation:Enum=Anonymous;OAuth2
+	// +kubebuilder:validation:Enum=Anonymous;OAuth2;ReverseProxy
 	// +required
 	Type string `json:"type"`
 
@@ -206,6 +209,10 @@ type AuthenticationSpec struct {
 	// OAuth2 holds the OAuth2 authentication configuration.
 	// +optional
 	OAuth2 *OAuth2AuthenticationSpec `json:"oauth2"`
+
+	// ReverseProxy holds the Reverse Proxy authentication configuration.
+	// +optional
+	ReverseProxy *ReverseProxyAuthenticationSpec `json:"reverseProxy"`
 
 	// SessionDuration is the duration of the user session.
 	// Defaults to one week.
@@ -283,32 +290,48 @@ type OAuth2AuthenticationSpec struct {
 // Configured checks if the OAuth2AuthenticationSpec is configured.
 func (o *OAuth2AuthenticationSpec) Configured() bool { return o != nil }
 
+// ReverseProxyAuthenticationSpec holds the Reverse Proxy authentication configuration.
+type ReverseProxyAuthenticationSpec struct {
+	// TrustedProxies is a list of trusted proxy IP addresses or CIDR ranges.
+	// Requests from untrusted proxies will be rejected.
+	// +optional
+	TrustedProxies []string `json:"trustedProxies,omitempty"`
+
+	// ClaimsProcessorSpec holds the configuration for processing HTTP headers with CEL expressions.
+	// Impersonation must be configured.
+	// +optional
+	ClaimsProcessorSpec `json:",inline"`
+}
+
+// Configured checks if the ReverseProxyAuthenticationSpec is configured.
+func (r *ReverseProxyAuthenticationSpec) Configured() bool { return r != nil }
+
 // ClaimsProcessorSpec holds the configuration for processing claims with CEL expressions.
 type ClaimsProcessorSpec struct {
-	// Variables is a list of CEL expressions to extract information from the ID token claims
+	// Variables is a list of CEL expressions to extract information from the authentication claims
 	// into named variables that can be reused in other expressions, e.g. "variables.username".
 	// +optional
 	Variables []VariableSpec `json:"variables"`
 
-	// Validations is a list of CEL expressions that validate the ID token claims and extracted
+	// Validations is a list of CEL expressions that validate the authentication claims and extracted
 	// variables. Each expression must return the type bool. If the expression evaluates to false,
 	// the message is returned as an error.
 	// +optional
 	Validations []ValidationSpec `json:"validations"`
 
-	// Profile contains CEL expressions to extract user profile information from the ID token
+	// Profile contains CEL expressions to extract user profile information from the authentication
 	// claims and extracted variables for populating the user profile.
-	// Defaults to ProfileSpec{
+	// For OAuth2, defaults to ProfileSpec{
 	//   Name:  "has(claims.name) ? claims.name : (has(claims.email) ? claims.email : '')",
 	// }
 	// +optional
 	Profile *ProfileSpec `json:"profile"`
 
 	// Impersonation is a pair of CEL expressions that extract the username and groups
-	// from the ID token claims and extracted variables for Kubernetes RBAC impersonation.
+	// from the authentication claims and extracted variables for Kubernetes RBAC impersonation.
 	// The username expression must return the type string, while the groups expression
 	// must return the type []string.
-	// Defaults to ImpersonationSpec{
+	// For OAuth2, defaults to ImpersonationSpec{
 	//   Username: "has(claims.email) ? claims.email : ''",
 	//   Groups:   "has(claims.groups) ? claims.groups : []",
 	// }
@@ -341,9 +364,9 @@ type ValidationSpec struct {
 
 // ProfileSpec holds CEL expressions for extracting user profile information.
 type ProfileSpec struct {
-	// Name is a CEL expression that extracts the user's full name from the ID token claims
+	// Name is a CEL expression that extracts the user's full name from the authentication claims
 	// and extracted variables. This expression must return the type string.
-	// Defaults to "has(claims.name) ? claims.name : (has(claims.email) ? claims.email : '')".
+	// For OAuth2, defaults to "has(claims.name) ? claims.name : (has(claims.email) ? claims.email : '')".
 	// +optional
 	Name string `json:"name"`
 }
@@ -351,15 +374,15 @@ type ProfileSpec struct {
 // ImpersonationSpec holds CEL expressions for extracting Kubernetes RBAC impersonation information.
 // At least one of the fields must be set.
 type ImpersonationSpec struct {
-	// Username is a CEL expression that extracts the username from the ID token claims
+	// Username is a CEL expression that extracts the username from the authentication claims
 	// and extracted variables. This expression must return the type string.
-	// Defaults to "has(claims.email) ? claims.email : ''".
+	// For OAuth2, defaults to "has(claims.email) ? claims.email : ''".
 	// +optional
 	Username string `json:"username"`
 
-	// Groups is a CEL expression that extracts the groups from the ID token claims
+	// Groups is a CEL expression that extracts the groups from the authentication claims
 	// and extracted variables. This expression must return the type []string.
-	// Defaults to "has(claims.groups) ? claims.groups : []".
+	// For OAuth2, defaults to "has(claims.groups) ? claims.groups : []".
 	// +optional
 	Groups string `json:"groups"`
 }
