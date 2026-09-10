@@ -86,7 +86,7 @@ func TestNewClaimsProcessor(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
-			processor, err := newClaimsProcessor(tt.conf)
+			processor, err := newClaimsProcessor(&tt.conf.Authentication.OAuth2.ClaimsProcessorSpec)
 			if tt.wantErr == "" {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(processor).NotTo(BeNil())
@@ -164,6 +164,28 @@ func TestClaimsProcessorFunc(t *testing.T) {
 			wantProfileName: "Test User",
 			wantUsername:    "user@example.com",
 			wantGroups:      nil,
+		},
+		{
+			name: "splits string variable for impersonation groups",
+			conf: func() *fluxcdv1.WebConfigSpec {
+				c := validOAuth2ConfigSpec()
+				c.Authentication.OAuth2.Variables = []fluxcdv1.VariableSpec{
+					{Name: "groups", Expression: "claims.groups"},
+				}
+				c.Authentication.OAuth2.Validations = []fluxcdv1.ValidationSpec{
+					{Expression: "size(variables.groups) > 0", Message: "Groups required"},
+				}
+				c.Authentication.OAuth2.Impersonation.Groups = "variables.groups.split(',')"
+				return c
+			}(),
+			claims: map[string]any{
+				"email":  "user@example.com",
+				"name":   "Test User",
+				"groups": "platform,flux-admin",
+			},
+			wantProfileName: "Test User",
+			wantUsername:    "user@example.com",
+			wantGroups:      []string{"flux-admin", "platform"},
 		},
 		{
 			name: "validation fails with message when expression returns false",
@@ -288,7 +310,7 @@ func TestClaimsProcessorFunc(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			processor, err := newClaimsProcessor(tt.conf)
+			processor, err := newClaimsProcessor(&tt.conf.Authentication.OAuth2.ClaimsProcessorSpec)
 			g.Expect(err).NotTo(HaveOccurred())
 
 			details, err := processor(ctx, tt.claims)

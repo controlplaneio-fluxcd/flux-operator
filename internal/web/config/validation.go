@@ -77,6 +77,10 @@ func ValidateAuthenticationSpec(a *fluxcdv1.AuthenticationSpec) error {
 		if !a.OAuth2.Configured() {
 			return fmt.Errorf("authentication type '%s' is not configured", a.Type)
 		}
+	case fluxcdv1.AuthenticationTypeReverseProxy:
+		if !a.ReverseProxy.Configured() {
+			return fmt.Errorf("authentication type '%s' is not configured", a.Type)
+		}
 	default:
 		return fmt.Errorf("invalid authentication type '%s'", a.Type)
 	}
@@ -98,6 +102,14 @@ func ValidateAuthenticationSpec(a *fluxcdv1.AuthenticationSpec) error {
 				fluxcdv1.AuthenticationTypeOAuth2, err)
 		}
 		authConfigTypes = append(authConfigTypes, fluxcdv1.AuthenticationTypeOAuth2)
+	}
+
+	if a.ReverseProxy.Configured() {
+		if err := ValidateReverseProxyAuthenticationSpec(a.ReverseProxy); err != nil {
+			return fmt.Errorf("invalid %s authentication configuration: %w",
+				fluxcdv1.AuthenticationTypeReverseProxy, err)
+		}
+		authConfigTypes = append(authConfigTypes, fluxcdv1.AuthenticationTypeReverseProxy)
 	}
 
 	// Validate that only a single authentication configuration is provided.
@@ -149,6 +161,25 @@ func ValidateOAuth2AuthenticationSpec(o *fluxcdv1.OAuth2AuthenticationSpec) erro
 	default:
 		// TODO: when introducing more providers, validate that the OIDC-only fields are not set.
 		return fmt.Errorf("invalid OAuth2 provider: '%s'", o.Provider)
+	}
+
+	return nil
+}
+
+// ValidateReverseProxyAuthenticationSpec validates the ReverseProxyAuthenticationSpec configuration.
+func ValidateReverseProxyAuthenticationSpec(
+	r *fluxcdv1.ReverseProxyAuthenticationSpec,
+) error {
+	if len(r.TrustedProxies) == 0 {
+		return fmt.Errorf("at least one trusted proxy must be configured")
+	}
+
+	if err := ValidateClaimsProcessorSpec(&r.ClaimsProcessorSpec); err != nil {
+		return err
+	}
+
+	if r.Impersonation == nil {
+		return fmt.Errorf("impersonation must be configured")
 	}
 
 	return nil

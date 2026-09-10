@@ -41,7 +41,7 @@ type oidcProvider struct {
 // a background goroutine that periodically refreshes the OIDC
 // discovery configuration.
 func newOIDCProvider(conf *fluxcdv1.WebConfigSpec) (oauth2Provider, error) {
-	processClaims, err := newClaimsProcessor(conf)
+	processClaims, err := newClaimsProcessor(&conf.Authentication.OAuth2.ClaimsProcessorSpec)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create claims processor: %w", err)
 	}
