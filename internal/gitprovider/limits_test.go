@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"sync/atomic"
 	"testing"
 
@@ -53,6 +54,65 @@ func TestTagSelectorPreservesSemverOrdering(t *testing.T) {
 	g.Expect(results).To(HaveLen(3))
 	g.Expect([]string{results[0].Tag, results[1].Tag, results[2].Tag}).To(Equal(
 		[]string{"v10.0.0", "v3.0.0", "v2.0.0"}))
+}
+
+func TestTagSelectorHonorsAlphabeticalOrder(t *testing.T) {
+	g := NewWithT(t)
+	selector, err := newTagSelector(filtering.Filters{
+		Limit:   3,
+		OrderBy: filtering.OrderByAlphabetical,
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	for _, tag := range []string{"c", "a", "d", "b"} {
+		selector.Add(tag, Result{Tag: tag})
+	}
+
+	results := selector.Results()
+	g.Expect(results).To(HaveLen(3))
+	g.Expect([]string{results[0].Tag, results[1].Tag, results[2].Tag}).To(Equal(
+		[]string{"a", "b", "c"}))
+}
+
+func TestTagSelectorPatternExtractBeforeLimit(t *testing.T) {
+	g := NewWithT(t)
+	selector, err := newTagSelector(filtering.Filters{
+		Limit:        2,
+		Include:      regexp.MustCompile(`^master-.+-ts(?P<ts>[0-9]+)$`),
+		ExtractOrder: "$ts",
+		OrderBy:      filtering.OrderByReverseNumerical,
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	for _, tag := range []string{"master-main-ts123", "master-main-ts9", "release-1.0.0", "master-main-ts45"} {
+		selector.Add(tag, Result{Tag: tag})
+	}
+
+	results := selector.Results()
+	g.Expect(results).To(HaveLen(2))
+	g.Expect([]string{results[0].Tag, results[1].Tag}).To(Equal(
+		[]string{"master-main-ts123", "master-main-ts45"}))
+}
+
+func TestTagSelectorGroupsApplyLimitPerGroup(t *testing.T) {
+	g := NewWithT(t)
+	selector, err := newTagSelector(filtering.Filters{
+		Limit:        1,
+		Include:      regexp.MustCompile(`^(?P<service>[a-z]+)-ts(?P<ts>[0-9]+)$`),
+		ExtractOrder: "$ts",
+		ExtractGroup: "$service",
+		OrderBy:      filtering.OrderByReverseNumerical,
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	for _, tag := range []string{"api-ts1", "web-ts2", "api-ts5", "web-ts9"} {
+		selector.Add(tag, Result{Tag: tag})
+	}
+
+	results := selector.Results()
+	g.Expect(results).To(HaveLen(2))
+	g.Expect([]string{results[0].Tag, results[1].Tag}).To(Equal(
+		[]string{"api-ts5", "web-ts9"}))
 }
 
 func TestPaginationGuard(t *testing.T) {

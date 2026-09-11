@@ -173,6 +173,8 @@ type ResourceSetInputFilter struct {
 
 	// IncludeTag specifies the regular expression to filter the tags
 	// that the input provider should include.
+	// When used together with ExtractOrder or ExtractGroup, the regex capture
+	// groups are expanded to derive the sort and group keys.
 	// +optional
 	IncludeTag string `json:"includeTag,omitempty"`
 
@@ -180,6 +182,30 @@ type ResourceSetInputFilter struct {
 	// that the input provider should exclude.
 	// +optional
 	ExcludeTag string `json:"excludeTag,omitempty"`
+
+	// ExtractOrder specifies a replacement template used with IncludeTag to
+	// extract the value used for ordering tags.
+	// When not specified, the tag itself is used for ordering.
+	// Supported only for tags.
+	// +optional
+	ExtractOrder string `json:"extractOrder,omitempty"`
+
+	// ExtractGroup specifies a replacement template used with IncludeTag to
+	// extract the group key used to partition tags.
+	// When not specified, all tags are placed in a single group.
+	// Supported only for tags.
+	// +optional
+	ExtractGroup string `json:"extractGroup,omitempty"`
+
+	// OrderBy specifies the sort order for tags.
+	// Supported values are "SemVer", "Alphabetical", "ReverseAlphabetical",
+	// "Numerical" and "ReverseNumerical".
+	// If not set, the controller defaults to "ReverseAlphabetical" unless a
+	// semver range is specified, in which case it defaults to "SemVer".
+	// Supported only for tags.
+	// +kubebuilder:validation:Enum=SemVer;Alphabetical;ReverseAlphabetical;Numerical;ReverseNumerical
+	// +optional
+	OrderBy string `json:"orderBy,omitempty"`
 
 	// IncludeEnvironment specifies the regular expression to filter the environments
 	// that the input provider should include.
