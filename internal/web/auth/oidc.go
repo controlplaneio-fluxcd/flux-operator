@@ -80,12 +80,13 @@ func (o *oidcProvider) run(ctx context.Context) {
 // refresh fetches the OIDC discovery configuration and updates
 // the cached provider and verifier.
 func (o *oidcProvider) refresh(ctx context.Context) {
-	p, err := oidc.NewProvider(ctx, o.conf.Authentication.OAuth2.IssuerURL)
+	issuerURL := o.conf.Authentication.OAuth2.IssuerURL
+	p, err := oidc.NewProvider(ctx, issuerURL)
 	if err != nil {
 		// On failure: if already initialized, keep stale data.
 		// Only log if the context hasn't been canceled (clean shutdown).
 		if ctx.Err() == nil {
-			log.FromContext(ctx).Error(err, "failed to refresh OIDC provider")
+			log.FromContext(ctx).Error(err, "issuerURL", issuerURL, "failed to refresh OIDC provider")
 		}
 
 		o.mu.Lock()
