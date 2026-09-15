@@ -106,6 +106,10 @@ In production environments, you can run the server in read-only mode to prevent 
     In read-only mode, the MCP [tools](tools.md) that modify the cluster state
     (reconcile, suspend, resume, apply, delete) are disabled.
 
+The server advertises MCP `readOnlyHint`, `destructiveHint`, and `idempotentHint` annotations for
+all tools. These hints mirror the `--read-only` tool classification and help MCP clients distinguish
+read operations from write operations; server-side authorization remains authoritative.
+
 The `diff_kubernetes_manifest` tool is available in read-only mode because it never mutates the
 cluster. Kubernetes authorizes server-side dry-run like a real apply, so the MCP identity needs
 `get` and `patch` on the manifest kinds, plus `get` on owner kinds and on ConfigMaps and Secrets

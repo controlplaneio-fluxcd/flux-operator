@@ -47,6 +47,81 @@ func TestManager_RegisterToolsDoesNotPanic(t *testing.T) {
 	}))
 }
 
+func TestManager_ToolAnnotations(t *testing.T) {
+	g := NewWithT(t)
+
+	listTools := func(readOnly bool) []*mcp.Tool {
+		server := mcp.NewServer(&mcp.Implementation{
+			Name:    "flux-operator-mcp",
+			Version: "test-version",
+		}, &mcp.ServerOptions{
+			Capabilities: &mcp.ServerCapabilities{Tools: &mcp.ToolCapabilities{}},
+		})
+		manager := NewManager(nil, 0, false, readOnly, false)
+		manager.RegisterTools(server, false)
+
+		ctx := context.Background()
+		st, ct := mcp.NewInMemoryTransports()
+		_, err := server.Connect(ctx, st, nil)
+		g.Expect(err).NotTo(HaveOccurred())
+
+		client := mcp.NewClient(&mcp.Implementation{
+			Name:    "test-client",
+			Version: "test-version",
+		}, nil)
+		session, err := client.Connect(ctx, ct, nil)
+		g.Expect(err).NotTo(HaveOccurred())
+		defer session.Close()
+
+		result, err := session.ListTools(ctx, &mcp.ListToolsParams{})
+		g.Expect(err).NotTo(HaveOccurred())
+		return result.Tools
+	}
+
+	// Expected hints for the write tools.
+	writeTools := map[string]struct{ destructive, idempotent bool }{
+		ToolApplyKubernetesManifest:   {destructive: false, idempotent: true},
+		ToolPatchKubernetesResource:   {destructive: false, idempotent: true},
+		ToolReconcileFluxResource:     {destructive: false, idempotent: false},
+		ToolSuspendFluxReconciliation: {destructive: false, idempotent: true},
+		ToolResumeFluxReconciliation:  {destructive: false, idempotent: true},
+		ToolDeleteKubernetesResource:  {destructive: true, idempotent: true},
+		ToolInstallFluxInstance:       {destructive: false, idempotent: true},
+	}
+
+	allTools := listTools(false)
+	readOnlyRegisteredTools := listTools(true)
+	readOnlyAnnotatedNames := make([]string, 0, len(readOnlyRegisteredTools))
+	readOnlyRegisteredNames := make([]string, 0, len(readOnlyRegisteredTools))
+
+	for _, tool := range allTools {
+		st, ok := systemTools[tool.Name]
+		g.Expect(ok).To(BeTrue(), tool.Name)
+		g.Expect(tool.Annotations).NotTo(BeNil(), tool.Name)
+		g.Expect(tool.Annotations.ReadOnlyHint).To(Equal(st.readOnly), tool.Name)
+
+		if st.readOnly {
+			readOnlyAnnotatedNames = append(readOnlyAnnotatedNames, tool.Name)
+			g.Expect(tool.Annotations.DestructiveHint).To(BeNil(), tool.Name)
+			g.Expect(tool.Annotations.IdempotentHint).To(BeTrue(), tool.Name)
+		} else {
+			want, ok := writeTools[tool.Name]
+			g.Expect(ok).To(BeTrue(), tool.Name)
+			g.Expect(tool.Annotations.DestructiveHint).NotTo(BeNil(), tool.Name)
+			g.Expect(*tool.Annotations.DestructiveHint).To(Equal(want.destructive), tool.Name)
+			g.Expect(tool.Annotations.IdempotentHint).To(Equal(want.idempotent), tool.Name)
+		}
+	}
+
+	for _, tool := range readOnlyRegisteredTools {
+		readOnlyRegisteredNames = append(readOnlyRegisteredNames, tool.Name)
+	}
+
+	g.Expect(allTools).To(HaveLen(19))
+	g.Expect(readOnlyAnnotatedNames).To(HaveLen(len(allTools) - len(writeTools)))
+	g.Expect(readOnlyAnnotatedNames).To(ConsistOf(readOnlyRegisteredNames))
+}
+
 func TestManager_RegisterDiffKubernetesManifestModes(t *testing.T) {
 	tests := []struct {
 		name      string
