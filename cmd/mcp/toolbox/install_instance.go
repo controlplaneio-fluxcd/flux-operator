@@ -32,8 +32,10 @@ const (
 
 func init() {
 	systemTools[ToolInstallFluxInstance] = systemTool{
-		readOnly:  false,
-		inCluster: true,
+		readOnly:    false,
+		inCluster:   true,
+		destructive: false,
+		idempotent:  true,
 	}
 }
 

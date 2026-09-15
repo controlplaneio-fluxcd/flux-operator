@@ -16,8 +16,10 @@ const (
 
 func init() {
 	systemTools[ToolApplyKubernetesManifest] = systemTool{
-		readOnly:  false,
-		inCluster: true,
+		readOnly:    false,
+		inCluster:   true,
+		destructive: false,
+		idempotent:  true,
 	}
 }
 
