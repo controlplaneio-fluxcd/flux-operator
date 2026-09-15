@@ -6,6 +6,7 @@ package auth
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
@@ -80,6 +81,7 @@ func (o *oidcProvider) run(ctx context.Context) {
 // refresh fetches the OIDC discovery configuration and updates
 // the cached provider and verifier.
 func (o *oidcProvider) refresh(ctx context.Context) {
+	ctx = oidc.ClientContext(ctx, &http.Client{})
 	p, err := oidc.NewProvider(ctx, o.conf.Authentication.OAuth2.IssuerURL)
 	if err != nil {
 		// On failure: if already initialized, keep stale data.
