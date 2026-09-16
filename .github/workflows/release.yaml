@@ -74,7 +74,7 @@ jobs:
       - name: Setup Flux CLI
         uses: fluxcd/flux2/action@dd233c4fadef306a62b7893204f8e3817fecc2b2 #v2.9.5
       - name: Setup Flux Schema CLI
-        uses: fluxcd/flux-schema/actions/setup@3c02b4fbed04797116e127ac4ed4fd5b654c2dc4 # v0.12.1
+        uses: fluxcd/flux-schema/actions/setup@88c74c0294aaf472a8df920f92a2f28811a47d72 # v0.13.0
       - name: Setup Syft
         uses: anchore/sbom-action/download-syft@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
       - name: Prepare
