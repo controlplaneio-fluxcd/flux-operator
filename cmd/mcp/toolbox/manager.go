@@ -18,11 +18,14 @@ import (
 // systemTool defines registration availability and MCP behavioral annotations for a system tool.
 // All tools register these properties in init functions so RegisterTools can select tools and
 // addTool can advertise their behavior. Destructive and idempotent are meaningful only for writes.
+// Local marks the tools that do not talk to a cluster, so they take no context input in
+// multi-cluster mode.
 type systemTool struct {
 	readOnly    bool
 	inCluster   bool
 	destructive bool
 	idempotent  bool
+	local       bool
 }
 
 var (
@@ -32,32 +35,37 @@ var (
 // Manager manages Kubernetes configurations and operations,
 // providing MCP tools for context handling and resource management.
 type Manager struct {
-	kubeconfig  *k8s.KubeConfig
-	kubeClient  *k8s.ClientFactory
-	timeout     time.Duration
-	maskSecrets bool
-	readOnly    bool
-	localFiles  bool
+	kubeconfig   *k8s.KubeConfig
+	kubeClient   *k8s.ClientFactory
+	timeout      time.Duration
+	maskSecrets  bool
+	readOnly     bool
+	localFiles   bool
+	multiCluster bool
 }
 
 // NewManager initializes and returns a new Manager instance
 // with the provided configuration and settings.
 func NewManager(kubeClient *k8s.ClientFactory, timeout time.Duration,
-	maskSecrets bool, readOnly bool, localFiles bool) *Manager {
+	maskSecrets bool, readOnly bool, localFiles bool, multiCluster bool) *Manager {
 
 	return &Manager{
-		kubeconfig:  k8s.NewKubeConfig(),
-		kubeClient:  kubeClient,
-		timeout:     timeout,
-		maskSecrets: maskSecrets,
-		readOnly:    readOnly,
-		localFiles:  localFiles,
+		kubeconfig:   k8s.NewKubeConfig(),
+		kubeClient:   kubeClient,
+		timeout:      timeout,
+		maskSecrets:  maskSecrets,
+		readOnly:     readOnly,
+		localFiles:   localFiles,
+		multiCluster: multiCluster,
 	}
 }
 
-// toolRecorder records the tools added to the MCP server.
+// toolRecorder records the tools added to the MCP server and carries
+// the registration settings that addTool applies to every tool.
 type toolRecorder struct {
 	tools []string
+	// contextInput adds the optional context input to the tools that talk to a cluster.
+	contextInput bool
 }
 
 // addTool adds a tool to the MCP server and records it.
@@ -80,6 +88,15 @@ func addTool[In, Out any](s *mcp.Server, r *toolRecorder, t *mcp.Tool, h mcp.Too
 	if schema, ok := t.InputSchema.(*jsonschema.Schema); ok && schema.Properties == nil {
 		schema.Properties = map[string]*jsonschema.Schema{}
 	}
+	if r.contextInput && !systemTools[t.Name].local {
+		if schema, ok := t.InputSchema.(*jsonschema.Schema); ok {
+			schema.Properties[contextInputName] = &jsonschema.Schema{
+				Type: "string",
+				Description: "Kubeconfig context (cluster) to run this call against. " +
+					"Defaults to the current context; list them with " + ToolGetKubeConfigContexts + ".",
+			}
+		}
+	}
 	if t.Annotations == nil {
 		st := systemTools[t.Name]
 		t.Annotations = &mcp.ToolAnnotations{
@@ -96,7 +113,7 @@ func addTool[In, Out any](s *mcp.Server, r *toolRecorder, t *mcp.Tool, h mcp.Too
 
 // RegisterTools registers tools with the given server and returns the list of registered tool names.
 func (m *Manager) RegisterTools(server *mcp.Server, inCluster bool) []string {
-	var recorder toolRecorder
+	recorder := toolRecorder{contextInput: m.multiCluster}
 	if m.shouldRegisterTool(ToolInstallFluxInstance, inCluster) {
 		addTool(server, &recorder,
 			&mcp.Tool{
@@ -293,6 +310,17 @@ func (m *Manager) shouldRegisterTool(tool string, inCluster bool) bool {
 	// Ensure tool has also scopesPerTool entry.
 	if _, ok := scopesPerTool[tool]; !ok {
 		panic(fmt.Sprintf("tool %s not registered in scopesPerTool", tool))
+	}
+
+	// Per-call context selection replaces the server-wide current context,
+	// and the kubeconfig it selects from is listed wherever the server runs.
+	if m.multiCluster {
+		switch tool {
+		case ToolSetKubeConfigContext:
+			return false
+		case ToolGetKubeConfigContexts:
+			inCluster = false
+		}
 	}
 
 	// Check if should register tool.

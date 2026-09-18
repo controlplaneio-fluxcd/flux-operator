@@ -49,6 +49,7 @@ then call `read_flux_doc` with the returned `Path` and heading anchor to read th
 - Don't make assumptions about the `apiVersion` of a Kubernetes or Flux resource, call the `get_kubernetes_api_versions` tool to find the correct one.
 - When asked to use a specific cluster, call the `get_kubeconfig_contexts` tool to find the cluster context before switching to it with the `set_kubeconfig_context` tool.
 - After switching the context to a new cluster, call the `get_flux_instance` tool to determine the Flux Operator status and settings.
+- When the tools take a `context` parameter (multi-cluster mode), pass the context name from `get_kubeconfig_contexts` to each call instead of switching the context.
 - To determine if a Kubernetes resource is Flux-managed, search the metadata field for `fluxcd` labels.
 - When asked to create or update resources, generate a Kubernetes YAML manifest and call the `apply_kubernetes_manifest` tool to apply it.
 - To change fields of an existing resource in place (rollout restart, finalizer removal, scaling, annotations, a stuck status), call `patch_kubernetes_resource`; set `dry_run` to preview when unsure. Flux-managed resources need `overwrite`, and fields set by the Flux manifest are reverted on the next reconciliation, so fix the source for lasting changes.
@@ -185,7 +186,7 @@ When troubleshooting a Kustomization, follow these steps:
 When comparing a Flux resource between clusters, follow these steps:
 
 - Use the `get_kubeconfig_contexts` tool to get the cluster contexts.
-- Use the `set_kubeconfig_context` tool to switch to a specific cluster.
+- Use the `set_kubeconfig_context` tool to switch to a specific cluster, or pass the context name in the `context` parameter of each call when the tools take one.
 - Use the `get_flux_instance` tool to check the Flux Operator status and settings.
 - Use the `get_kubernetes_resources` tool to get the resource you want to compare.
 - If the Flux resource contains `valuesFrom` or `substituteFrom`, get all the referenced ConfigMap and Secret resources.

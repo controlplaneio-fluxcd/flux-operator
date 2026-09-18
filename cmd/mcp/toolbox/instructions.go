@@ -71,6 +71,11 @@ func (m *Manager) Instructions(inCluster bool) string {
 		}
 		b.WriteString(".\n")
 	}
+	if m.multiCluster && has(ToolGetKubeConfigContexts) {
+		b.WriteString("- Every tool that reads or changes a cluster accepts an optional " + contextInputName +
+			" input naming the kubeconfig context to run against; without it the current context is used. " +
+			"Call " + ToolGetKubeConfigContexts + " to list the contexts and the clusters they point to.\n")
+	}
 	if has(ToolDiffKubernetesManifest) {
 		line := "- Before committing GitOps changes, build the manifests locally " +
 			"(kustomize build <path> --load-restrictor=LoadRestrictionsNone, " +

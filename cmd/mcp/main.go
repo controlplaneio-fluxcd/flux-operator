@@ -55,6 +55,7 @@ type rootFlags struct {
 	transport       string
 	port            int
 	toolCallLogFile string
+	multiCluster    bool
 }
 
 var (
@@ -77,6 +78,9 @@ func init() {
 		"The port to use for the MCP server. This is only used when the transport is not 'stdio'.")
 	rootCmd.PersistentFlags().StringVar(&rootArgs.toolCallLogFile, "tool-call-log-file", "",
 		"Path to a JSONL file for appending MCP tool call inputs and outputs.")
+	rootCmd.PersistentFlags().BoolVar(&rootArgs.multiCluster, "multi-cluster", false,
+		"Select the kubeconfig context per tool call: the tools accept an optional context input, "+
+			"get_kubeconfig_contexts is available in-cluster and set_kubeconfig_context is disabled.")
 	addKubeConfigFlags(rootCmd)
 	rootCmd.SetOut(os.Stdout)
 	rootCmd.AddCommand(serveCmd)
@@ -195,6 +199,9 @@ func serveCmdRun(cmd *cobra.Command, args []string) error {
 	if os.Getenv("KUBECONFIG") == "" && !inCluster {
 		return errors.New("KUBECONFIG environment variable is not set")
 	}
+	if rootArgs.multiCluster && os.Getenv("KUBECONFIG") == "" {
+		return errors.New("--multi-cluster requires the KUBECONFIG environment variable")
+	}
 
 	if err := docindex.Load(); err != nil {
 		return fmt.Errorf("failed to load Flux documentation search index: %w", err)
@@ -203,7 +210,7 @@ func serveCmdRun(cmd *cobra.Command, args []string) error {
 	// Create the MCP server with instructions tailored to the enabled tools
 	kubeClient := k8s.NewClientFactory(kubeconfigArgs)
 	tm := toolbox.NewManager(kubeClient, rootArgs.timeout, rootArgs.maskSecrets, rootArgs.readOnly,
-		rootArgs.transport == "stdio" && !inCluster)
+		rootArgs.transport == "stdio" && !inCluster, rootArgs.multiCluster)
 	mcpServer := mcp.NewServer(mcpImpl, &mcp.ServerOptions{
 		Instructions: tm.Instructions(inCluster),
 		Capabilities: &mcp.ServerCapabilities{
@@ -212,6 +219,9 @@ func serveCmdRun(cmd *cobra.Command, args []string) error {
 	})
 	if rootArgs.toolCallLogFile != "" {
 		mcpServer.AddReceivingMiddleware(toolCallLogMiddleware(rootArgs.toolCallLogFile))
+	}
+	if rootArgs.multiCluster {
+		mcpServer.AddReceivingMiddleware(tm.ContextMiddleware())
 	}
 
 	// Register tools

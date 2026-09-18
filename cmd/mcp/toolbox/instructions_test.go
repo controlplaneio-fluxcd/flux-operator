@@ -12,10 +12,11 @@ import (
 
 func TestManager_Instructions(t *testing.T) {
 	tests := []struct {
-		name       string
-		readOnly   bool
-		inCluster  bool
-		localFiles bool
+		name         string
+		readOnly     bool
+		inCluster    bool
+		localFiles   bool
+		multiCluster bool
 	}{
 		{name: "all tools"},
 		{name: "local files", localFiles: true},
@@ -23,6 +24,8 @@ func TestManager_Instructions(t *testing.T) {
 		{name: "read-only", readOnly: true},
 		{name: "in-cluster", inCluster: true},
 		{name: "read-only in-cluster", readOnly: true, inCluster: true},
+		{name: "multi-cluster", multiCluster: true},
+		{name: "read-only multi-cluster in-cluster", readOnly: true, inCluster: true, multiCluster: true},
 		{name: "enabled subset"},
 	}
 
@@ -30,7 +33,7 @@ func TestManager_Instructions(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			manager := NewManager(nil, 0, false, tt.readOnly, tt.localFiles)
+			manager := NewManager(nil, 0, false, tt.readOnly, tt.localFiles, tt.multiCluster)
 			instructions := manager.Instructions(tt.inCluster)
 			g.Expect(instructions).To(HavePrefix("This server connects to Kubernetes API"))
 			g.Expect(instructions).ToNot(HaveSuffix("\n"))
@@ -66,6 +69,12 @@ func TestManager_Instructions(t *testing.T) {
 			if manager.shouldRegisterTool(ToolPatchKubernetesResource, tt.inCluster) {
 				g.Expect(instructions).To(ContainSubstring("To change fields of an existing resource in place"))
 				g.Expect(instructions).To(ContainSubstring("set dry_run to preview when unsure"))
+			}
+
+			if tt.multiCluster {
+				g.Expect(instructions).To(ContainSubstring("accepts an optional context input"))
+			} else {
+				g.Expect(instructions).ToNot(ContainSubstring("accepts an optional context input"))
 			}
 
 			if manager.shouldRegisterTool(ToolSearchFluxDocs, tt.inCluster) &&

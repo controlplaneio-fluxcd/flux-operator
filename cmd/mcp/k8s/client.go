@@ -212,3 +212,40 @@ func (f *ClientFactory) SetCurrentContext(contextName string) {
 	f.flags.Context = &contextName
 	f.mu.Unlock()
 }
+
+// GetClientForContext creates and returns a new Kubernetes client for the
+// named kubeconfig context, keeping every other configuration flag in effect.
+func (f *ClientFactory) GetClientForContext(contextName string) (*Client, error) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return newClientFromFlags(flagsForContext(f.flags, contextName))
+}
+
+// flagsForContext returns a copy of the flags that selects the named kubeconfig
+// context. ConfigFlags embeds locks, so the exported fields are copied one by one.
+func flagsForContext(flags *cli.ConfigFlags, contextName string) *cli.ConfigFlags {
+	c := cli.NewConfigFlags(false)
+	c.CacheDir = flags.CacheDir
+	c.KubeConfig = flags.KubeConfig
+	c.ClusterName = flags.ClusterName
+	c.AuthInfoName = flags.AuthInfoName
+	c.Context = &contextName
+	c.Namespace = flags.Namespace
+	c.APIServer = flags.APIServer
+	c.TLSServerName = flags.TLSServerName
+	c.Insecure = flags.Insecure
+	c.CertFile = flags.CertFile
+	c.KeyFile = flags.KeyFile
+	c.CAFile = flags.CAFile
+	c.BearerToken = flags.BearerToken
+	c.Impersonate = flags.Impersonate
+	c.ImpersonateUID = flags.ImpersonateUID
+	c.ImpersonateGroup = flags.ImpersonateGroup
+	c.ImpersonateUserExtra = flags.ImpersonateUserExtra
+	c.Username = flags.Username
+	c.Password = flags.Password
+	c.Timeout = flags.Timeout
+	c.DisableCompression = flags.DisableCompression
+	c.WrapConfigFn = flags.WrapConfigFn
+	return c
+}

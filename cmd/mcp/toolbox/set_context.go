@@ -19,6 +19,7 @@ func init() {
 	systemTools[ToolSetKubeConfigContext] = systemTool{
 		readOnly:  true,
 		inCluster: false,
+		local:     true,
 	}
 }
 

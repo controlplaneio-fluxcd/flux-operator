@@ -4,9 +4,13 @@
 package k8s
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	. "github.com/onsi/gomega"
+	cli "k8s.io/cli-runtime/pkg/genericclioptions"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -127,4 +131,65 @@ func TestResolveGroupVersionKind(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestClientFactory_GetClientForContext(t *testing.T) {
+	g := NewWithT(t)
+
+	kubeconfig := filepath.Join(t.TempDir(), "kubeconfig")
+	g.Expect(os.WriteFile(kubeconfig, []byte(`apiVersion: v1
+kind: Config
+clusters:
+  - cluster:
+      server: https://dev.example.com:6443
+      insecure-skip-tls-verify: true
+    name: kind-dev
+  - cluster:
+      server: https://staging.example.com:6443
+      insecure-skip-tls-verify: true
+    name: kind-staging
+contexts:
+  - context:
+      cluster: kind-dev
+      user: kind-dev
+    name: kind-dev
+  - context:
+      cluster: kind-staging
+      user: kind-staging
+    name: kind-staging
+current-context: kind-dev
+users:
+  - name: kind-dev
+    user:
+      token: dev
+  - name: kind-staging
+    user:
+      token: staging
+`), 0o600)).To(Succeed())
+
+	impersonate := "jane"
+	flags := cli.NewConfigFlags(false)
+	flags.KubeConfig = &kubeconfig
+	flags.Impersonate = &impersonate
+	factory := NewClientFactory(flags)
+
+	current, err := factory.GetClient(context.Background())
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(current.GetConfig().Host).To(Equal("https://dev.example.com:6443"))
+
+	staging, err := factory.GetClientForContext("kind-staging")
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(staging.GetConfig().Host).To(Equal("https://staging.example.com:6443"))
+	g.Expect(staging.GetConfig().BearerToken).To(Equal("staging"))
+	// The other flags stay in effect for the selected context.
+	g.Expect(staging.GetConfig().Impersonate.UserName).To(Equal("jane"))
+
+	// Selecting a context does not move the factory's current context.
+	current, err = factory.GetClient(context.Background())
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(current.GetConfig().Host).To(Equal("https://dev.example.com:6443"))
+
+	_, err = factory.GetClientForContext("kind-prod")
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("kind-prod"))
 }

@@ -12,13 +12,14 @@ including transport modes, security settings, and how to restrict access to your
 
 The `flux-operator-mcp serve` command accepts the following flags:
 
-| Flag             | Description                                 | Default |
-|------------------|---------------------------------------------|---------|
-| `--transport`    | The transport protocol (stdio or http)      | stdio   |
-| `--port`         | The port to listen on (for http)            | 8080    |
-| `--read-only`    | Run in read-only mode                       | false   |
-| `--mask-secrets` | Mask secret values                          | true    |
-| `--kube-as`      | Kubernetes account to impersonate           | none    |
+| Flag              | Description                                 | Default |
+|-------------------|---------------------------------------------|---------|
+| `--transport`     | The transport protocol (stdio or http)      | stdio   |
+| `--port`          | The port to listen on (for http)            | 8080    |
+| `--read-only`     | Run in read-only mode                       | false   |
+| `--mask-secrets`  | Mask secret values                          | true    |
+| `--kube-as`       | Kubernetes account to impersonate           | none    |
+| `--multi-cluster` | Select the kubeconfig context per tool call | false   |
 
 ## Transport Modes
 
@@ -79,6 +80,27 @@ To connect to the server over http, use the following configuration:
   }
 }
 ```
+
+## Multi-Cluster Mode
+
+By default, the server runs every tool call against the current kubeconfig context and offers
+`set_kubeconfig_context` to switch it, which changes the context for the whole server. With
+`--multi-cluster`, the context is selected per tool call instead:
+
+```shell
+export KUBECONFIG=$HOME/.kube/config
+flux-operator-mcp serve --transport http --port 8080 --multi-cluster
+```
+
+- Every tool that reads or changes a cluster accepts an optional `context` input naming the
+  kubeconfig context to run against. Without it, the current context is used.
+- `get_kubeconfig_contexts` lists the contexts, also when the server runs in-cluster.
+- `set_kubeconfig_context` is not available, since a server-wide current context and a
+  per-call context contradict each other.
+
+This mode suits a server shared by many clients over the `http` transport, such as an
+in-cluster deployment behind an AI gateway with a kubeconfig holding one context per cluster.
+The flag requires the `KUBECONFIG` environment variable.
 
 ## Security Options
 
@@ -244,5 +266,6 @@ Then, in your `.mcp.json`, add:
 
     Note that when running in-cluster, the kubeconfig context switching tools are disabled,
     the only context available is for the cluster where the MCP server is deployed. To
-    compare deployments across multiple clusters, you will need to deploy the MCP server
-    in each cluster and configure each one in your AI assistant.
+    compare deployments across multiple clusters, either mount a kubeconfig with one context
+    per cluster and start the server with `--multi-cluster` (see [Multi-Cluster Mode](#multi-cluster-mode)),
+    or deploy the MCP server in each cluster and configure each one in your AI assistant.

@@ -21,6 +21,7 @@ func init() {
 	systemTools[ToolReadFluxDoc] = systemTool{
 		readOnly:  true,
 		inCluster: true,
+		local:     true,
 	}
 }
 

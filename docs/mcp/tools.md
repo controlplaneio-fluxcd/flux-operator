@@ -274,6 +274,15 @@ which is essential for crafting valid API calls.
 
 These tools facilitate interaction with multiple Kubernetes clusters, enabling cross-cluster comparisons and operations.
 
+When the server runs with `--multi-cluster`, every tool that reads or changes a cluster takes an
+additional parameter instead of relying on the current context, so one server answers for several
+clusters without switching between them:
+
+- `context` (optional): The kubeconfig context to run the call against; defaults to the current context
+
+In that mode `get_kubeconfig_contexts` is available in-cluster as well, and `set_kubeconfig_context`
+is not registered. See the [configuration guide](mcp-config.md#multi-cluster-mode).
+
 ### get_kubeconfig_contexts
 
 Retrieves the available Kubernetes cluster contexts from the kubeconfig.

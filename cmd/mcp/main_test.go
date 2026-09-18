@@ -25,7 +25,7 @@ func newTestServer() (*mcp.Server, []string) {
 	if err := docindex.Load(); err != nil {
 		panic(err)
 	}
-	tm := toolbox.NewManager(k8s.NewClientFactory(kubeconfigArgs), time.Minute, true, true, false)
+	tm := toolbox.NewManager(k8s.NewClientFactory(kubeconfigArgs), time.Minute, true, true, false, false)
 	mcpServer := mcp.NewServer(mcpImpl, &mcp.ServerOptions{
 		Instructions: tm.Instructions(true),
 		Capabilities: &mcp.ServerCapabilities{

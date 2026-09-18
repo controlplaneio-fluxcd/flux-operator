@@ -22,6 +22,7 @@ func init() {
 	systemTools[ToolSearchFluxDocs] = systemTool{
 		readOnly:  true,
 		inCluster: true,
+		local:     true,
 	}
 }
 

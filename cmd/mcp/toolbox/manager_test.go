@@ -22,7 +22,7 @@ func TestManager_RegisterToolsDoesNotPanic(t *testing.T) {
 		Capabilities: &mcp.ServerCapabilities{Tools: &mcp.ToolCapabilities{}},
 	})
 
-	manager := NewManager(nil, 0, false, false, false)
+	manager := NewManager(nil, 0, false, false, false, false)
 	registeredTools := manager.RegisterTools(server, false)
 	g.Expect(registeredTools).To(Equal([]string{
 		"install_flux_instance",
@@ -57,7 +57,7 @@ func TestManager_ToolAnnotations(t *testing.T) {
 		}, &mcp.ServerOptions{
 			Capabilities: &mcp.ServerCapabilities{Tools: &mcp.ToolCapabilities{}},
 		})
-		manager := NewManager(nil, 0, false, readOnly, false)
+		manager := NewManager(nil, 0, false, readOnly, false, false)
 		manager.RegisterTools(server, false)
 
 		ctx := context.Background()
@@ -140,7 +140,7 @@ func TestManager_RegisterDiffKubernetesManifestModes(t *testing.T) {
 				Name:    "flux-operator-mcp",
 				Version: "test-version",
 			}, nil)
-			manager := NewManager(nil, 0, false, tt.readOnly, false)
+			manager := NewManager(nil, 0, false, tt.readOnly, false, false)
 			registeredTools := manager.RegisterTools(server, tt.inCluster)
 			g.Expect(registeredTools).To(ContainElement(ToolDiffKubernetesManifest))
 		})
@@ -166,7 +166,7 @@ func TestManager_DiffKubernetesManifestSchemaLocalFiles(t *testing.T) {
 			}, &mcp.ServerOptions{
 				Capabilities: &mcp.ServerCapabilities{Tools: &mcp.ToolCapabilities{}},
 			})
-			manager := NewManager(nil, 0, false, false, tt.localFiles)
+			manager := NewManager(nil, 0, false, false, tt.localFiles, false)
 			manager.RegisterTools(server, false)
 
 			ctx := context.Background()
@@ -308,7 +308,7 @@ func TestManager_ToolSchemasIncludeProperties(t *testing.T) {
 		Capabilities: &mcp.ServerCapabilities{Tools: &mcp.ToolCapabilities{}},
 	})
 
-	manager := NewManager(nil, 0, false, false, false)
+	manager := NewManager(nil, 0, false, false, false, false)
 	manager.RegisterTools(server, false)
 
 	ctx := context.Background()
@@ -365,5 +365,64 @@ func TestManager_ToolSchemasIncludeProperties(t *testing.T) {
 		g.Expect(required).To(ConsistOf(expectedSchema.required),
 			"tool %s schema has unexpected required fields: %s",
 			tool.Name, string(raw))
+	}
+}
+
+func TestManager_MultiCluster(t *testing.T) {
+	g := NewWithT(t)
+
+	server := mcp.NewServer(&mcp.Implementation{
+		Name:    "flux-operator-mcp",
+		Version: "test-version",
+	}, &mcp.ServerOptions{
+		Capabilities: &mcp.ServerCapabilities{Tools: &mcp.ToolCapabilities{}},
+	})
+	manager := NewManager(nil, 0, false, true, false, true)
+	registeredTools := manager.RegisterTools(server, true)
+
+	// The kubeconfig contexts are listed in-cluster too, while the
+	// server-wide context switch gives way to the per-call context input.
+	g.Expect(registeredTools).To(ContainElement(ToolGetKubeConfigContexts))
+	g.Expect(registeredTools).ToNot(ContainElement(ToolSetKubeConfigContext))
+
+	ctx := context.Background()
+	st, ct := mcp.NewInMemoryTransports()
+	_, err := server.Connect(ctx, st, nil)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	client := mcp.NewClient(&mcp.Implementation{
+		Name:    "test-client",
+		Version: "test-version",
+	}, nil)
+	session, err := client.Connect(ctx, ct, nil)
+	g.Expect(err).NotTo(HaveOccurred())
+	defer session.Close()
+
+	result, err := session.ListTools(ctx, &mcp.ListToolsParams{})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(result.Tools).To(HaveLen(len(registeredTools)))
+
+	for _, tool := range result.Tools {
+		raw, err := json.Marshal(tool.InputSchema)
+		g.Expect(err).NotTo(HaveOccurred(), tool.Name)
+		var schema struct {
+			Properties map[string]json.RawMessage `json:"properties"`
+			Required   []string                   `json:"required"`
+		}
+		g.Expect(json.Unmarshal(raw, &schema)).To(Succeed(), tool.Name)
+
+		// Every tool that talks to a cluster takes the optional context input.
+		rawContext, hasContext := schema.Properties[contextInputName]
+		g.Expect(hasContext).To(Equal(!systemTools[tool.Name].local), tool.Name)
+		g.Expect(schema.Required).NotTo(ContainElement(contextInputName), tool.Name)
+		if hasContext {
+			var contextInput struct {
+				Type        string `json:"type"`
+				Description string `json:"description"`
+			}
+			g.Expect(json.Unmarshal(rawContext, &contextInput)).To(Succeed(), tool.Name)
+			g.Expect(contextInput.Type).To(Equal("string"), tool.Name)
+			g.Expect(contextInput.Description).To(ContainSubstring(ToolGetKubeConfigContexts), tool.Name)
+		}
 	}
 }
