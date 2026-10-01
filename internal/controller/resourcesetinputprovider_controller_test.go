@@ -22,6 +22,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/filtering"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/inputs"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/schedule"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/testutils"
@@ -482,10 +483,13 @@ func TestResourceSetInputProviderReconciler_makeFilters(t *testing.T) {
 
 	t.Run("with branch filters", func(t *testing.T) {
 		for _, tt := range []struct {
-			name    string
-			filter  *fluxcdv1.ResourceSetInputFilter
-			include string
-			exclude string
+			name         string
+			filter       *fluxcdv1.ResourceSetInputFilter
+			include      string
+			exclude      string
+			extractOrder string
+			extractGroup string
+			orderBy      string
 		}{
 			{
 				name: "branch",
@@ -502,14 +506,20 @@ func TestResourceSetInputProviderReconciler_makeFilters(t *testing.T) {
 			{
 				name: "tag",
 				filter: &fluxcdv1.ResourceSetInputFilter{
-					Limit:      50,
-					Labels:     []string{"env=production"},
-					IncludeTag: "^v[0-9]+\\.[0-9]+\\.[0-9]+$",
-					ExcludeTag: "^v[0-9]+\\.[0-9]+\\.[0-9]+-beta$",
-					Semver:     ">=1.0.0 <2.0.0",
+					Limit:        50,
+					Labels:       []string{"env=production"},
+					IncludeTag:   "^release-(?P<ver>v[0-9]+\\.[0-9]+\\.[0-9]+)$",
+					ExcludeTag:   "^release-(?P<ver>v[0-9]+\\.[0-9]+\\.[0-9]+)-beta$",
+					ExtractOrder: "$ver",
+					ExtractGroup: "$ver",
+					OrderBy:      filtering.OrderBySemVer,
+					Semver:       ">=1.0.0 <2.0.0",
 				},
-				include: "^v[0-9]+\\.[0-9]+\\.[0-9]+$",
-				exclude: "^v[0-9]+\\.[0-9]+\\.[0-9]+-beta$",
+				include:      "^release-(?P<ver>v[0-9]+\\.[0-9]+\\.[0-9]+)$",
+				exclude:      "^release-(?P<ver>v[0-9]+\\.[0-9]+\\.[0-9]+)-beta$",
+				extractOrder: "$ver",
+				extractGroup: "$ver",
+				orderBy:      filtering.OrderBySemVer,
 			},
 		} {
 			t.Run(tt.name, func(t *testing.T) {
@@ -530,10 +540,49 @@ func TestResourceSetInputProviderReconciler_makeFilters(t *testing.T) {
 				g.Expect(filters.Include.String()).To(Equal(tt.include))
 				g.Expect(filters.Exclude).NotTo(BeNil())
 				g.Expect(filters.Exclude.String()).To(Equal(tt.exclude))
+				if tt.extractOrder != "" {
+					g.Expect(filters.ExtractOrder).To(Equal(tt.extractOrder))
+					g.Expect(filters.ExtractGroup).To(Equal(tt.extractGroup))
+					g.Expect(filters.OrderBy).To(Equal(tt.orderBy))
+				}
 				g.Expect(filters.SemVer).NotTo(BeNil())
 				g.Expect(filters.SemVer.String()).To(Equal(">=1.0.0 <2.0.0"))
 			})
 		}
+	})
+
+	t.Run("invalid extract without includeTag", func(t *testing.T) {
+		g := NewWithT(t)
+
+		obj := &fluxcdv1.ResourceSetInputProvider{
+			Spec: fluxcdv1.ResourceSetInputProviderSpec{
+				Type: fluxcdv1.InputProviderOCIArtifactTag,
+				Filter: &fluxcdv1.ResourceSetInputFilter{
+					ExtractOrder: "$ts",
+				},
+			},
+		}
+
+		_, err := r.makeFilters(obj)
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("extractOrder and extractGroup require includeTag"))
+	})
+
+	t.Run("invalid orderBy value", func(t *testing.T) {
+		g := NewWithT(t)
+
+		obj := &fluxcdv1.ResourceSetInputProvider{
+			Spec: fluxcdv1.ResourceSetInputProviderSpec{
+				Type: fluxcdv1.InputProviderOCIArtifactTag,
+				Filter: &fluxcdv1.ResourceSetInputFilter{
+					OrderBy: "descending",
+				},
+			},
+		}
+
+		_, err := r.makeFilters(obj)
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("invalid orderBy value"))
 	})
 }
 
