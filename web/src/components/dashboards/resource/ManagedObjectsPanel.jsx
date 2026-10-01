@@ -90,7 +90,13 @@ export function ManagedObjectsPanel({ resourceData, onNavigate }) {
 
   const healthCheckEnabled = useMemo(() => {
     const k = resourceData.kind
-    if (k === 'Kustomization' || k === 'FluxInstance' || k === 'ResourceSet') {
+    if (k === 'Kustomization') {
+      // kustomize-controller runs the health assessment when either wait is
+      // set or a healthChecks list is present; with wait=true the explicit
+      // healthChecks are ignored but health checking still applies.
+      return resourceData.spec?.wait === true || (resourceData.spec?.healthChecks?.length ?? 0) > 0
+    }
+    if (k === 'FluxInstance' || k === 'ResourceSet') {
       return resourceData.spec?.wait === true
     }
     if (k === 'HelmRelease') {
