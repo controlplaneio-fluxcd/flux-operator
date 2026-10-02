@@ -282,6 +282,60 @@ spec:
 			},
 		},
 		{
+			name: "reverse proxy with claims processor",
+			content: `apiVersion: web.fluxcd.controlplane.io/v1
+kind: Config
+spec:
+  authentication:
+    type: ReverseProxy
+    reverseProxy:
+      trustedProxies:
+        - 10.0.0.0/8
+      variables:
+        - name: username
+          expression: "claims['X-Remote-User']"
+        - name: groups
+          expression: "claims['X-Remote-Groups']"
+        - name: name
+          expression: "'X-Remote-Name' in claims ? claims['X-Remote-Name'] : variables.username"
+      validations:
+        - expression: "variables.username.endsWith('@example.com')"
+          message: "domain not allowed"
+        - expression: "size(variables.groups) > 0"
+          message: "groups required"
+      profile:
+        name: "variables.name"
+      impersonation:
+        username: "variables.username"
+        groups: "variables.groups.split(',')"
+`,
+			wantErr: "",
+			validate: func(g Gomega, spec *fluxcdv1.WebConfigSpec) {
+				g.Expect(spec.Authentication.ReverseProxy.Variables).To(HaveLen(3))
+				g.Expect(spec.Authentication.ReverseProxy.Validations).To(HaveLen(2))
+				g.Expect(spec.Authentication.ReverseProxy.Profile.Name).To(Equal("variables.name"))
+				g.Expect(spec.Authentication.ReverseProxy.Impersonation.Username).To(Equal("variables.username"))
+				g.Expect(spec.Authentication.ReverseProxy.Impersonation.Groups).To(Equal("variables.groups.split(',')"))
+			},
+		},
+		{
+			name: "reverse proxy legacy identity fields are rejected",
+			content: `apiVersion: web.fluxcd.controlplane.io/v1
+kind: Config
+spec:
+  authentication:
+    type: ReverseProxy
+    reverseProxy:
+      trustedProxies:
+        - 10.0.0.0/8
+      headers:
+        username: X-Remote-User
+      impersonation:
+        username: "claims['X-Remote-User']"
+`,
+			wantErr: "unknown fields: .spec.authentication.reverseProxy.headers",
+		},
+		{
 			name: "unknown field at root level",
 			content: `apiVersion: web.fluxcd.controlplane.io/v1
 kind: Config

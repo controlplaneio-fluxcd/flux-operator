@@ -17,15 +17,15 @@ import (
 type claimsProcessorFunc func(ctx context.Context, claims map[string]any) (*user.Details, error)
 
 // newClaimsProcessor creates a new claims processor for validating and
-// extracting relevant information from tokens and userinfo responses.
-func newClaimsProcessor(conf *fluxcdv1.WebConfigSpec) (claimsProcessorFunc, error) {
+// extracting relevant information from authentication claims.
+func newClaimsProcessor(spec *fluxcdv1.ClaimsProcessorSpec) (claimsProcessorFunc, error) {
 	// Build variable CEL expressions.
 	type variable struct {
 		name string
 		expr *cel.Expression
 	}
-	variableExprs := make([]variable, 0, len(conf.Authentication.OAuth2.Variables))
-	for _, v := range conf.Authentication.OAuth2.Variables {
+	variableExprs := make([]variable, 0, len(spec.Variables))
+	for _, v := range spec.Variables {
 		expr, err := cel.NewExpression(v.Expression)
 		if err != nil {
 			return nil, err
@@ -38,8 +38,8 @@ func newClaimsProcessor(conf *fluxcdv1.WebConfigSpec) (claimsProcessorFunc, erro
 		expr *cel.Expression
 		msg  string
 	}
-	validationExprs := make([]validation, 0, len(conf.Authentication.OAuth2.Validations))
-	for _, v := range conf.Authentication.OAuth2.Validations {
+	validationExprs := make([]validation, 0, len(spec.Validations))
+	for _, v := range spec.Validations {
 		expr, err := cel.NewExpression(v.Expression)
 		if err != nil {
 			return nil, err
@@ -52,7 +52,8 @@ func newClaimsProcessor(conf *fluxcdv1.WebConfigSpec) (claimsProcessorFunc, erro
 		name *cel.Expression
 	}
 	var profileExprs profile
-	if s := conf.Authentication.OAuth2.Profile.Name; s != "" {
+	if spec.Profile != nil && spec.Profile.Name != "" {
+		s := spec.Profile.Name
 		expr, err := cel.NewExpression(s)
 		if err != nil {
 			return nil, err
@@ -66,14 +67,16 @@ func newClaimsProcessor(conf *fluxcdv1.WebConfigSpec) (claimsProcessorFunc, erro
 		groups   *cel.Expression
 	}
 	var impersonationExprs impersonation
-	if s := conf.Authentication.OAuth2.Impersonation.Username; s != "" {
+	if spec.Impersonation != nil && spec.Impersonation.Username != "" {
+		s := spec.Impersonation.Username
 		expr, err := cel.NewExpression(s)
 		if err != nil {
 			return nil, err
 		}
 		impersonationExprs.username = expr
 	}
-	if s := conf.Authentication.OAuth2.Impersonation.Groups; s != "" {
+	if spec.Impersonation != nil && spec.Impersonation.Groups != "" {
+		s := spec.Impersonation.Groups
 		expr, err := cel.NewExpression(s)
 		if err != nil {
 			return nil, err
