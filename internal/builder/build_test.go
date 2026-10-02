@@ -35,7 +35,7 @@ func TestBuild(t *testing.T) {
 	options.Version = version
 	options.ShardingStorage = true
 	options.Shards = []string{"shard1", "shard2"}
-	options.Patches = profileClusterTypeOpenShift + GetProfileMultitenant("")
+	options.Patches = profileClusterTypeOpenShift + GetProfileMultitenant("", version)
 	options.ArtifactStorage = &ArtifactStorage{
 		Class: "standard",
 		Size:  "10Gi",
@@ -230,7 +230,7 @@ func TestBuild_ProfileClusterType(t *testing.T) {
 	g.Expect(err).NotTo(HaveOccurred())
 	options.ComponentImages = ci
 
-	options.Patches = GetProfileClusterType("openshift") + GetProfileMultitenant("")
+	options.Patches = GetProfileClusterType("openshift") + GetProfileMultitenant("", version)
 
 	result, err := Build(srcDir, dstDir, options)
 	g.Expect(err).NotTo(HaveOccurred())
@@ -824,7 +824,7 @@ func TestBuild_Sharding(t *testing.T) {
 	options := MakeDefaultOptions()
 	options.Version = version
 	options.Shards = []string{"shard1", "shard2"}
-	options.Patches = profileClusterTypeOpenShift + GetProfileMultitenant("")
+	options.Patches = profileClusterTypeOpenShift + GetProfileMultitenant("", version)
 	options.ArtifactStorage = &ArtifactStorage{
 		Class: "standard",
 		Size:  "10Gi",

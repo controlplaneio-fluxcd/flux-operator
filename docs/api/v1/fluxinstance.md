@@ -399,7 +399,8 @@ By default, it is `false` (disabled).
 
 The `.spec.cluster.tenantDefaultServiceAccount` is optional and specifies the default
 service account used by Flux when reconciling `Kustomization` and `HelmRelease`
-resources found in the tenant namespaces.
+resources found in the tenant namespaces. Starting with Flux v2.10.0, it is also
+used by `source-watcher` when reconciling `ExternalArtifact` resources.
 
 #### Cluster workload identity
 
@@ -456,8 +457,9 @@ for different controller operations:
 - `.spec.cluster.tenantDefaultServiceAccount` (optional): Default service account for
   `source-controller`, `notification-controller`, `image-reflector-controller`, and
   `image-automation-controller` operations. Defaults to `"default"`. (Also used by
-  `kustomize-controller` and `helm-controller` for Kubernetes API operations when
-  [`.spec.cluster.multitenant`](#cluster-multitenant) is set to `true`.)
+  `kustomize-controller`, `helm-controller`, and `source-watcher` (Flux v2.10.0 and later)
+  for Kubernetes API operations when [`.spec.cluster.multitenant`](#cluster-multitenant)
+  is set to `true`.)
 - `.spec.cluster.tenantDefaultDecryptionServiceAccount` (optional): Default service account
   for `kustomize-controller` SOPS decryption operations. Defaults to `"default"`.
 - `.spec.cluster.tenantDefaultKubeConfigServiceAccount` (optional): Default service account
