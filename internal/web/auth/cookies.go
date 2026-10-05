@@ -101,6 +101,18 @@ func setAuthProviderCookie(w http.ResponseWriter, provider, loginURL string, aut
 	})
 }
 
+// SetReverseProxyAuthProviderCookie tells the frontend that authentication
+// has already been performed by an upstream reverse proxy.
+func SetReverseProxyAuthProviderCookie(w http.ResponseWriter) {
+	setAuthProviderCookie(
+		w,
+		fluxcdv1.AuthenticationTypeReverseProxy,
+		"",
+		true,
+		false,
+	)
+}
+
 // SetAnonymousAuthProviderCookie sets the anonymous auth provider cookie in the response.
 func SetAnonymousAuthProviderCookie(w http.ResponseWriter) {
 	setAuthProviderCookie(w, fluxcdv1.AuthenticationTypeAnonymous, "", true, false)
