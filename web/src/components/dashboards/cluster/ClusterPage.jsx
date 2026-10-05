@@ -8,6 +8,7 @@ import { addToNavHistory } from '../../../utils/navHistory'
 import { OverallStatusPanel } from './OverallStatusPanel'
 import { InfoPanel } from './InfoPanel'
 import { SyncPanel } from './SyncPanel'
+import { NodesSummaryPanel } from './NodesSummaryPanel'
 import { ControllersPanel } from './ControllersPanel'
 import { ReconcilersPanel } from './ReconcilersPanel'
 import { Footer } from '../../layout/Footer'
@@ -88,6 +89,14 @@ export function ClusterPage({ spec, namespace }) {
               operator={spec.operator}
               components={spec.components}
               metrics={spec.metrics}
+            />
+          )}
+
+          {spec.nodes && (
+            <NodesSummaryPanel
+              summary={spec.nodes}
+              nodeCount={spec.cluster?.nodes}
+              canViewNodes={!!spec.userInfo?.canViewNodes}
             />
           )}
 

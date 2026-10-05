@@ -19,6 +19,10 @@ vi.mock('./SyncPanel', () => ({
   SyncPanel: ({ sync }) => <div data-testid="cluster-sync">ClusterSync: {sync.interval}</div>
 }))
 
+vi.mock('./NodesSummaryPanel', () => ({
+  NodesSummaryPanel: ({ nodeCount, canViewNodes }) => <div data-testid="nodes-summary">NodesSummary: {nodeCount} {String(canViewNodes)}</div>
+}))
+
 vi.mock('./ControllersPanel', () => ({
   ControllersPanel: ({ components }) => <div data-testid="component-list">ComponentList: {components.length} components</div>
 }))
@@ -123,6 +127,32 @@ describe('ClusterPage', () => {
       render(<ClusterPage spec={baseSpec} />)
 
       expect(screen.queryByTestId('cluster-sync')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('Conditional Components - NodesSummaryPanel', () => {
+    it('should render the nodes summary between ClusterInfo and ClusterSync', () => {
+      const spec = {
+        ...baseSpec,
+        cluster: { name: 'production', nodes: 20 },
+        operator: { version: 'v0.1.0' },
+        sync: { interval: '5m' },
+        nodes: { down: 0, findings: { critical: 0, warn: 0, info: 0, top: [] } },
+        userInfo: { canViewNodes: true }
+      }
+
+      render(<ClusterPage spec={spec} />)
+
+      expect(screen.getByText('NodesSummary: 20 true')).toBeInTheDocument()
+      const order = [...document.querySelectorAll('[data-testid]')].map(e => e.dataset.testid)
+      expect(order.indexOf('nodes-summary')).toBe(order.indexOf('cluster-info') + 1)
+      expect(order.indexOf('cluster-sync')).toBe(order.indexOf('nodes-summary') + 1)
+    })
+
+    it('should not render the nodes summary when spec.nodes is missing', () => {
+      render(<ClusterPage spec={baseSpec} />)
+
+      expect(screen.queryByTestId('nodes-summary')).not.toBeInTheDocument()
     })
   })
 

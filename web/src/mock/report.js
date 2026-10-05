@@ -4,6 +4,8 @@
 // Mock data for report endpoint (GET /api/v1/report)
 // Generated from real cluster API responses
 
+import { mockNodesScenario, mockNodesSummary, mockCanViewNodes } from './nodes'
+
 // Mock FluxReport resource
 export const mockReport = {
   apiVersion: 'fluxcd.controlplane.io/v1',
@@ -273,3 +275,9 @@ export const mockReport = {
     }
   }
 }
+
+// Name-less nodes summary and per-user access to the Nodes dashboard,
+// built from the same snapshot the /api/v1/nodes mock serves.
+mockReport.spec.nodes = mockNodesSummary()
+mockReport.spec.cluster.nodes = mockNodesScenario().nodes.length
+mockReport.spec.userInfo.canViewNodes = mockCanViewNodes()
