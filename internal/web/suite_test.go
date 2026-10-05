@@ -14,6 +14,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	authzv1 "k8s.io/api/authorization/v1"
 	batchv1 "k8s.io/api/batch/v1"
+	coordinationv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -46,6 +47,7 @@ func NewTestScheme() *runtime.Scheme {
 	utilruntime.Must(rbacv1.AddToScheme(s))
 	utilruntime.Must(appsv1.AddToScheme(s))
 	utilruntime.Must(batchv1.AddToScheme(s))
+	utilruntime.Must(coordinationv1.AddToScheme(s))
 	utilruntime.Must(authzv1.AddToScheme(s))
 	utilruntime.Must(fluxcdv1.AddToScheme(s))
 	return s
