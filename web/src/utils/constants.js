@@ -10,6 +10,9 @@ export const FAST_POLL_INTERVAL_MS = 5000
 // Timeout to revert to normal polling after last action (5 minutes)
 export const FAST_POLL_TIMEOUT_MS = 300000
 
+// Slow polling interval while the API denies access (1 minute)
+export const FORBIDDEN_POLL_INTERVAL_MS = 60000
+
 // Flux resource kinds and their metadata (ordered by group for display)
 export const fluxCRDs = [
   // Appliers
