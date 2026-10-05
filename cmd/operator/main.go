@@ -246,6 +246,20 @@ func main() {
 						"metadata.namespace": runtimeNamespace,
 					}),
 				},
+				// Pods are listed cluster-wide by the web server for the
+				// controller metrics and the nodes snapshot.
+				&corev1.Pod{}: {
+					Transform: ctrlcache.TransformStripManagedFields(),
+				},
+				// Nodes are read in full only by the web server nodes snapshot
+				// and readiness tracking, without the container images list.
+				// The reporter lists them as metadata. The cache config is
+				// per GVK, so the transform also applies to the metadata
+				// Node informer, a separate PartialObjectMetadata key
+				// would collide with this one.
+				&corev1.Node{}: {
+					Transform: web.TransformNode,
+				},
 			},
 		},
 	})

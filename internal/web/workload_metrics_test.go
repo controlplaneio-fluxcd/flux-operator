@@ -6,6 +6,7 @@ package web
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -14,12 +15,15 @@ import (
 
 	"github.com/go-logr/logr/funcr"
 	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/types"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	metricsv1beta1api "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -531,58 +535,222 @@ func TestPodResources_IsZero(t *testing.T) {
 	g.Expect(PodResources{MemoryLimits: 1}.IsZero()).To(BeFalse())
 }
 
-func TestSumPodResources(t *testing.T) {
-	g := NewWithT(t)
-
+func TestPodResourceViews(t *testing.T) {
 	sidecarPolicy := corev1.ContainerRestartPolicyAlways
-	pod := &corev1.Pod{
-		Spec: corev1.PodSpec{
-			InitContainers: []corev1.Container{
-				{
-					// Plain init containers are excluded from the totals.
-					Name: "init",
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")},
-					},
-				},
-				{
-					// Sidecar init containers are included.
-					Name:          "sidecar",
-					RestartPolicy: &sidecarPolicy,
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceCPU:    resource.MustParse("50m"),
-							corev1.ResourceMemory: resource.MustParse("32Mi"),
-						},
-					},
-				},
+	container := func(name, cpu, memory, memoryLimit string) corev1.Container {
+		c := corev1.Container{Name: name, Resources: corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse(cpu),
+				corev1.ResourceMemory: resource.MustParse(memory),
 			},
-			Containers: []corev1.Container{
-				{
-					Name: "main",
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceCPU:    resource.MustParse("100m"),
-							corev1.ResourceMemory: resource.MustParse("64Mi"),
-						},
-						Limits: corev1.ResourceList{
-							corev1.ResourceMemory: resource.MustParse("128Mi"),
-						},
-					},
-				},
-				{
-					// A container without resources contributes nothing.
-					Name: "noop",
-				},
+		}}
+		if memoryLimit != "" {
+			c.Resources.Limits = corev1.ResourceList{corev1.ResourceMemory: resource.MustParse(memoryLimit)}
+		}
+		return c
+	}
+	sidecar := func(name, cpu, memory, memoryLimit string) corev1.Container {
+		c := container(name, cpu, memory, memoryLimit)
+		c.RestartPolicy = &sidecarPolicy
+		return c
+	}
+	actuated := func(name, memory, memoryLimit string) corev1.ContainerStatus {
+		s := corev1.ContainerStatus{Name: name, Resources: &corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("100m"),
+				corev1.ResourceMemory: resource.MustParse(memory),
 			},
-		},
+		}}
+		if memoryLimit != "" {
+			s.Resources.Limits = corev1.ResourceList{corev1.ResourceMemory: resource.MustParse(memoryLimit)}
+		}
+		s.AllocatedResources = s.Resources.Requests
+		return s
 	}
 
-	res := sumPodResources(pod)
-	g.Expect(res.CPURequests).To(BeNumerically("~", 0.15, 1e-9))
-	g.Expect(res.CPULimits).To(BeZero())
-	g.Expect(res.MemoryRequests).To(Equal(int64(96 << 20)))
-	g.Expect(res.MemoryLimits).To(Equal(int64(128 << 20)))
+	tests := []struct {
+		name       string
+		pod        corev1.Pod
+		running    PodResources
+		limited    bool
+		scheduling PodResources
+	}{
+		{
+			// A regular init container runs before the app containers: it sets
+			// the scheduling requests when larger, but is not a running container.
+			name: "large init container",
+			pod: corev1.Pod{Spec: corev1.PodSpec{
+				InitContainers: []corev1.Container{container("init", "1", "1Gi", "")},
+				Containers:     []corev1.Container{container("main", "100m", "64Mi", "128Mi")},
+			}},
+			running:    PodResources{CPURequests: 0.1, MemoryRequests: 64 << 20, MemoryLimits: 128 << 20},
+			limited:    true,
+			scheduling: PodResources{CPURequests: 1, MemoryRequests: 1 << 30, MemoryLimits: 128 << 20},
+		},
+		{
+			// Sidecars started before and after a regular init container all
+			// run with the app containers. A container without resources
+			// contributes nothing to the sums but has no memory limit.
+			name: "sidecars",
+			pod: corev1.Pod{Spec: corev1.PodSpec{
+				InitContainers: []corev1.Container{
+					sidecar("proxy", "50m", "32Mi", ""),
+					container("init", "100m", "16Mi", ""),
+					sidecar("logs", "50m", "32Mi", ""),
+				},
+				Containers: []corev1.Container{container("main", "100m", "64Mi", "128Mi"), {Name: "noop"}},
+			}},
+			running:    PodResources{CPURequests: 0.2, MemoryRequests: 128 << 20, MemoryLimits: 128 << 20},
+			scheduling: PodResources{CPURequests: 0.2, MemoryRequests: 128 << 20, MemoryLimits: 128 << 20},
+		},
+		{
+			// The pod overhead is not part of the containers usage.
+			name: "pod overhead",
+			pod: corev1.Pod{Spec: corev1.PodSpec{
+				Containers: []corev1.Container{container("main", "100m", "64Mi", "128Mi")},
+				Overhead: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("10m"),
+					corev1.ResourceMemory: resource.MustParse("16Mi"),
+				},
+			}},
+			running:    PodResources{CPURequests: 0.1, MemoryRequests: 64 << 20, MemoryLimits: 128 << 20},
+			limited:    true,
+			scheduling: PodResources{CPURequests: 0.11, MemoryRequests: 80 << 20, MemoryLimits: 144 << 20},
+		},
+		{
+			// Pod-level resources replace the container sum per resource,
+			// and a pod-level memory limit bounds the pod.
+			name: "pod-level resources",
+			pod: corev1.Pod{Spec: corev1.PodSpec{
+				InitContainers: []corev1.Container{sidecar("proxy", "50m", "32Mi", "")},
+				Containers:     []corev1.Container{container("main", "100m", "64Mi", "")},
+				Resources: &corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("256Mi")},
+					Limits:   corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("512Mi")},
+				},
+			}},
+			running:    PodResources{CPURequests: 0.15, MemoryRequests: 256 << 20, MemoryLimits: 512 << 20},
+			limited:    true,
+			scheduling: PodResources{CPURequests: 0.15, MemoryRequests: 256 << 20, MemoryLimits: 512 << 20},
+		},
+		{
+			// Resize up: the desired resources are not yet actuated.
+			name: "resize up",
+			pod: corev1.Pod{
+				Spec: corev1.PodSpec{Containers: []corev1.Container{container("main", "100m", "256Mi", "512Mi")}},
+				Status: corev1.PodStatus{
+					ContainerStatuses: []corev1.ContainerStatus{actuated("main", "64Mi", "128Mi")},
+				},
+			},
+			running:    PodResources{CPURequests: 0.1, MemoryRequests: 256 << 20, MemoryLimits: 512 << 20},
+			limited:    true,
+			scheduling: PodResources{CPURequests: 0.1, MemoryRequests: 256 << 20, MemoryLimits: 512 << 20},
+		},
+		{
+			// Resize down: the containers keep their resources until actuated.
+			name: "resize down",
+			pod: corev1.Pod{
+				Spec: corev1.PodSpec{
+					InitContainers: []corev1.Container{sidecar("proxy", "50m", "32Mi", "64Mi")},
+					Containers:     []corev1.Container{container("main", "100m", "32Mi", "64Mi")},
+				},
+				Status: corev1.PodStatus{
+					InitContainerStatuses: []corev1.ContainerStatus{actuated("proxy", "64Mi", "128Mi")},
+					ContainerStatuses:     []corev1.ContainerStatus{actuated("main", "64Mi", "128Mi")},
+				},
+			},
+			running:    PodResources{CPURequests: 0.2, MemoryRequests: 128 << 20, MemoryLimits: 256 << 20},
+			limited:    true,
+			scheduling: PodResources{CPURequests: 0.2, MemoryRequests: 128 << 20, MemoryLimits: 256 << 20},
+		},
+		{
+			// Infeasible resize: the desired resources are not applied,
+			// both views count the actuated resources.
+			name: "infeasible resize",
+			pod: corev1.Pod{
+				Spec: corev1.PodSpec{Containers: []corev1.Container{container("main", "100m", "1Gi", "2Gi")}},
+				Status: corev1.PodStatus{
+					Conditions: []corev1.PodCondition{{
+						Type: corev1.PodResizePending, Status: corev1.ConditionTrue, Reason: corev1.PodReasonInfeasible,
+					}},
+					ContainerStatuses: []corev1.ContainerStatus{actuated("main", "64Mi", "128Mi")},
+				},
+			},
+			running:    PodResources{CPURequests: 0.1, MemoryRequests: 64 << 20, MemoryLimits: 128 << 20},
+			limited:    true,
+			scheduling: PodResources{CPURequests: 0.1, MemoryRequests: 64 << 20, MemoryLimits: 128 << 20},
+		},
+		{
+			// Infeasible resize that adds a memory limit to a container
+			// started without one: the limit is not applied, so the pod
+			// memory stays unbounded.
+			name: "infeasible resize adding a memory limit",
+			pod: corev1.Pod{
+				Spec: corev1.PodSpec{Containers: []corev1.Container{container("main", "100m", "1Gi", "2Gi")}},
+				Status: corev1.PodStatus{
+					Conditions: []corev1.PodCondition{{
+						Type: corev1.PodResizePending, Status: corev1.ConditionTrue, Reason: corev1.PodReasonInfeasible,
+					}},
+					ContainerStatuses: []corev1.ContainerStatus{actuated("main", "64Mi", "")},
+				},
+			},
+			running:    PodResources{CPURequests: 0.1, MemoryRequests: 64 << 20},
+			limited:    false,
+			scheduling: PodResources{CPURequests: 0.1, MemoryRequests: 64 << 20},
+		},
+		{
+			// Infeasible resize of a container without status resources:
+			// the running view falls back to the spec.
+			name: "infeasible resize without status resources",
+			pod: corev1.Pod{
+				Spec: corev1.PodSpec{Containers: []corev1.Container{container("main", "100m", "1Gi", "2Gi")}},
+				Status: corev1.PodStatus{
+					Conditions: []corev1.PodCondition{{
+						Type: corev1.PodResizePending, Status: corev1.ConditionTrue, Reason: corev1.PodReasonInfeasible,
+					}},
+					ContainerStatuses: []corev1.ContainerStatus{{Name: "main"}},
+				},
+			},
+			running:    PodResources{CPURequests: 0.1, MemoryRequests: 1 << 30, MemoryLimits: 2 << 30},
+			limited:    true,
+			scheduling: PodResources{CPURequests: 0.1, MemoryRequests: 1 << 30, MemoryLimits: 2 << 30},
+		},
+		{
+			// Deferred resize: the resize may still be applied, the running
+			// view keeps the larger of spec and status.
+			name: "deferred resize",
+			pod: corev1.Pod{
+				Spec: corev1.PodSpec{Containers: []corev1.Container{container("main", "100m", "1Gi", "2Gi")}},
+				Status: corev1.PodStatus{
+					Conditions: []corev1.PodCondition{{
+						Type: corev1.PodResizePending, Status: corev1.ConditionTrue, Reason: corev1.PodReasonDeferred,
+					}},
+					ContainerStatuses: []corev1.ContainerStatus{actuated("main", "64Mi", "128Mi")},
+				},
+			},
+			running:    PodResources{CPURequests: 0.1, MemoryRequests: 1 << 30, MemoryLimits: 2 << 30},
+			limited:    true,
+			scheduling: PodResources{CPURequests: 0.1, MemoryRequests: 1 << 30, MemoryLimits: 2 << 30},
+		},
+	}
+	approx := func(want PodResources) types.GomegaMatcher {
+		return SatisfyAll(
+			HaveField("CPURequests", BeNumerically("~", want.CPURequests, 1e-9)),
+			HaveField("CPULimits", BeNumerically("~", want.CPULimits, 1e-9)),
+			HaveField("MemoryRequests", Equal(want.MemoryRequests)),
+			HaveField("MemoryLimits", Equal(want.MemoryLimits)),
+		)
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			running, limited := podRunningResources(&tt.pod)
+			g.Expect(running).To(approx(tt.running))
+			g.Expect(limited).To(Equal(tt.limited))
+			g.Expect(sumPodResources(&tt.pod)).To(Equal(running))
+			g.Expect(podSchedulingResources(&tt.pod)).To(approx(tt.scheduling))
+		})
+	}
 }
 
 func TestBuildWorkloadMetrics(t *testing.T) {
@@ -1043,4 +1211,254 @@ func TestSumSeries(t *testing.T) {
 
 	g.Expect(sumSeries()).To(BeEmpty())
 	g.Expect(sumSeries(nil, nil)).To(BeEmpty())
+}
+
+func TestMetricsCollector_NodeSeries(t *testing.T) {
+	g := NewWithT(t)
+
+	mc := newTestCollector()
+	g.Expect(mc.NodesAvailable()).To(BeFalse())
+
+	start := time.Now().Truncate(time.Second)
+	mc.ingestNodes(nodeMetricsList(map[string][2]float64{"a": {1, 1}, "b": {2, 2}}), start)
+	mc.ingestNodes(nodeMetricsList(map[string][2]float64{"a": {3, 1}}), start.Add(time.Minute))
+
+	g.Expect(mc.NodesAvailable()).To(BeTrue())
+	g.Expect(mc.NodeLatestTick()).To(Equal(start.Add(time.Minute)))
+
+	// Only nodes in the latest scrape have a latest sample.
+	latest, ok := mc.NodeLatest("a")
+	g.Expect(ok).To(BeTrue())
+	g.Expect(latest.CPU).To(BeNumerically("~", 3, 1e-9))
+	_, ok = mc.NodeLatest("b")
+	g.Expect(ok).To(BeFalse())
+
+	// The cluster series is summed per tick over the given nodes; the
+	// second tick, missed by b, is incomplete and dropped.
+	series := mc.NodesSeries([]string{"a", "b", "unknown"})
+	g.Expect(series).To(HaveLen(1))
+	g.Expect(series[0].CPU).To(BeNumerically("~", 3, 1e-9))
+	g.Expect(mc.NodesSeries([]string{"a"})).To(HaveLen(2))
+	g.Expect(mc.NodesSeries([]string{"b"})).To(HaveLen(1))
+
+	// Nodes missing from scrapes past the retention are pruned.
+	mc.ingestNodes(nodeMetricsList(map[string][2]float64{"a": {1, 1}}), start.Add(mc.retention+2*time.Minute))
+	g.Expect(mc.NodesSeries([]string{"b"})).To(BeEmpty())
+	g.Expect(mc.nodeState.ticks).To(Equal(3))
+
+	// A collector without node lister never reports node metrics.
+	g.Expect(NewMetricsCollector(nil, time.Minute).NodesAvailable()).To(BeFalse())
+}
+
+func TestMetricsCollector_NodeSeriesIncompleteTicks(t *testing.T) {
+	g := NewWithT(t)
+
+	mc := newTestCollector()
+	start := time.Now().Truncate(time.Second)
+	tick := func(i int) time.Time { return start.Add(time.Duration(i) * time.Minute) }
+	ab := map[string][2]float64{"a": {1, 1}, "b": {2, 1}}
+	abc := map[string][2]float64{"a": {1, 1}, "b": {2, 1}, "c": {4, 1}}
+	mc.ingestNodes(nodeMetricsList(ab), tick(0))
+	// b misses one scrape: the tick is incomplete.
+	mc.ingestNodes(nodeMetricsList(map[string][2]float64{"a": {1, 1}}), tick(1))
+	mc.ingestNodes(nodeMetricsList(ab), tick(2))
+	// c joins with its first sample: the tick is complete.
+	mc.ingestNodes(nodeMetricsList(abc), tick(3))
+	mc.ingestNodes(nodeMetricsList(abc), tick(4))
+	// c stops for good: only its first missing tick is incomplete.
+	mc.ingestNodes(nodeMetricsList(ab), tick(5))
+	mc.ingestNodes(nodeMetricsList(ab), tick(6))
+
+	times := func(series []NodesTick) []time.Time {
+		result := make([]time.Time, 0, len(series))
+		for _, s := range series {
+			result = append(result, s.Time)
+		}
+		return result
+	}
+	series := mc.NodesSeries([]string{"a", "b", "c"})
+	g.Expect(times(series)).To(Equal([]time.Time{tick(0), tick(2), tick(3), tick(4), tick(6)}))
+	g.Expect(series[1].CPU).To(BeNumerically("~", 3, 1e-9))
+	g.Expect(series[2].CPU).To(BeNumerically("~", 7, 1e-9))
+	g.Expect(series[4].CPU).To(BeNumerically("~", 3, 1e-9))
+
+	// The latest tick missed by b is incomplete.
+	mc.ingestNodes(nodeMetricsList(map[string][2]float64{"a": {1, 1}}), tick(7))
+	series = mc.NodesSeries([]string{"a", "b", "c"})
+	g.Expect(series[len(series)-1].Time).To(Equal(tick(6)))
+
+	// Without b and c, every tick is complete.
+	g.Expect(mc.NodesSeries([]string{"a"})).To(HaveLen(8))
+}
+
+func TestMetricsCollector_PodsLatest(t *testing.T) {
+	g := NewWithT(t)
+
+	mc := NewMetricsCollector(nil, time.Minute)
+	start := time.Now().Truncate(time.Second)
+	mc.ingest(podMetricsList(map[[2]string]float64{{"apps", "a"}: 1, {"apps", "b"}: 1}), start)
+	mc.ingest(podMetricsList(map[[2]string]float64{{"apps", "a"}: 2}), start.Add(time.Minute))
+
+	latest := mc.PodsLatest()
+	g.Expect(latest).To(HaveLen(1))
+	g.Expect(latest["apps/a"].Memory).To(Equal(int64(2 << 30)))
+	g.Expect(mc.PodLatestTick()).To(Equal(start.Add(time.Minute)))
+}
+
+func TestMetricsCollector_NextScrapeDelayNodes(t *testing.T) {
+	g := NewWithT(t)
+
+	mc := newTestCollector()
+	mc.ticks = 5
+	mc.nodeState.ticks = 5
+	g.Expect(mc.nextScrapeDelay()).To(Equal(time.Minute))
+
+	// A failing node scrape alone triggers the catch-up retry.
+	mc.nodeState.failing = true
+	g.Expect(mc.nextScrapeDelay()).To(Equal(metricsCatchupInterval))
+
+	// So does a node series with fewer than two samples.
+	mc.nodeState.failing = false
+	mc.nodeState.ticks = 1
+	g.Expect(mc.nextScrapeDelay()).To(Equal(metricsCatchupInterval))
+
+	// Without a node lister, only the pod state counts.
+	mc.nodeLister = nil
+	g.Expect(mc.nextScrapeDelay()).To(Equal(time.Minute))
+}
+
+func TestMetricsCollector_NodeScrapeDisabled(t *testing.T) {
+	nodeGR := schema.GroupResource{Group: "metrics.k8s.io", Resource: "nodes"}
+	podsOK := func(context.Context) (*metricsv1beta1api.PodMetricsList, error) {
+		return &metricsv1beta1api.PodMetricsList{}, nil
+	}
+
+	tests := []struct {
+		name     string
+		err      error
+		disabled bool
+		delay    time.Duration
+	}{
+		{
+			name:     "forbidden",
+			err:      apierrors.NewForbidden(nodeGR, "", errors.New("access denied")),
+			disabled: true,
+			delay:    time.Minute,
+		},
+		{
+			name:     "not found",
+			err:      apierrors.NewNotFound(nodeGR, ""),
+			disabled: true,
+			delay:    time.Minute,
+		},
+		{
+			name:     "wrapped forbidden",
+			err:      fmt.Errorf("list failed: %w", apierrors.NewForbidden(nodeGR, "", errors.New("access denied"))),
+			disabled: true,
+			delay:    time.Minute,
+		},
+		{
+			name:     "service unavailable",
+			err:      apierrors.NewServiceUnavailable("the server is currently unable to handle the request"),
+			disabled: false,
+			delay:    metricsCatchupInterval,
+		},
+		{
+			name:     "generic error",
+			err:      errors.New("connection refused"),
+			disabled: false,
+			delay:    metricsCatchupInterval,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			mc := NewMetricsCollector(podsOK, time.Minute)
+			mc.ticks = 5
+			mc.nodeLister = func(context.Context) (*metricsv1beta1api.NodeMetricsList, error) {
+				return nil, tt.err
+			}
+
+			// The delay follows the pod state from the first node failure.
+			mc.scrape(context.Background())
+			g.Expect(mc.nodeState.failing).To(BeTrue())
+			g.Expect(mc.nodeState.disabled).To(Equal(tt.disabled))
+			g.Expect(mc.nextScrapeDelay()).To(Equal(tt.delay))
+
+			// A disabled node scrape does not hide the pod catch-up.
+			mc.ticks = 1
+			g.Expect(mc.nextScrapeDelay()).To(Equal(metricsCatchupInterval))
+		})
+	}
+}
+
+func TestMetricsCollector_NodeScrapeDisabledRecovery(t *testing.T) {
+	g := NewWithT(t)
+
+	nodeErr := apierrors.NewForbidden(schema.GroupResource{Group: "metrics.k8s.io", Resource: "nodes"}, "", errors.New("access denied"))
+	var denied atomic.Bool
+	denied.Store(true)
+
+	mc := NewMetricsCollector(func(context.Context) (*metricsv1beta1api.PodMetricsList, error) {
+		return &metricsv1beta1api.PodMetricsList{}, nil
+	}, time.Minute)
+	mc.ticks = 5
+	mc.nodeLister = func(context.Context) (*metricsv1beta1api.NodeMetricsList, error) {
+		if denied.Load() {
+			return nil, nodeErr
+		}
+		return &metricsv1beta1api.NodeMetricsList{}, nil
+	}
+
+	mc.scrape(context.Background())
+	g.Expect(mc.nodeState.disabled).To(BeTrue())
+	g.Expect(mc.nextScrapeDelay()).To(Equal(time.Minute))
+
+	// A successful node scrape clears the disabled state and the node
+	// warm-up applies again until the second node sample.
+	denied.Store(false)
+	mc.scrape(context.Background())
+	g.Expect(mc.nodeState.disabled).To(BeFalse())
+	g.Expect(mc.nodeState.failing).To(BeFalse())
+	g.Expect(mc.nodeState.ticks).To(Equal(1))
+	g.Expect(mc.nextScrapeDelay()).To(Equal(metricsCatchupInterval))
+
+	mc.ingestNodes(&metricsv1beta1api.NodeMetricsList{}, time.Now().Add(time.Minute))
+	g.Expect(mc.nextScrapeDelay()).To(Equal(time.Minute))
+
+	// A transient node error after recovery keeps the catch-up.
+	mc.nodeLister = func(context.Context) (*metricsv1beta1api.NodeMetricsList, error) {
+		return nil, errors.New("connection refused")
+	}
+	mc.scrape(context.Background())
+	g.Expect(mc.nodeState.disabled).To(BeFalse())
+	g.Expect(mc.nextScrapeDelay()).To(Equal(metricsCatchupInterval))
+}
+
+func TestMetricsCollector_NodesView(t *testing.T) {
+	g := NewWithT(t)
+
+	mc := newTestCollector()
+	now := time.Now().Truncate(time.Second)
+	mc.ingestNodes(nodeMetricsList(map[string][2]float64{"a": {1, 1}, "b": {2, 2}}), now)
+	mc.ingest(podMetricsList(map[[2]string]float64{{"apps", "x"}: 1}), now)
+
+	view := mc.NodesView([]string{"a"})
+	g.Expect(view.NodesAvailable).To(BeTrue())
+	g.Expect(view.PodsAvailable).To(BeTrue())
+	g.Expect(view.NodeTick).To(Equal(now))
+	g.Expect(view.PodTick).To(Equal(now))
+	g.Expect(view.Interval).To(Equal(time.Minute))
+	g.Expect(view.NodeLatest).To(HaveLen(2))
+	g.Expect(view.PodLatest).To(HaveKey("apps/x"))
+	g.Expect(view.Series).To(HaveLen(1))
+	g.Expect(view.Series[0].CPU).To(BeNumerically("~", 1, 1e-9))
+
+	// Nothing is returned for unavailable metrics.
+	view = NewMetricsCollector(nil, time.Minute).NodesView([]string{"a"})
+	g.Expect(view.NodesAvailable).To(BeFalse())
+	g.Expect(view.NodeLatest).To(BeNil())
+	g.Expect(view.PodLatest).To(BeNil())
 }

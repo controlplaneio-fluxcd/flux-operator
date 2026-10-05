@@ -5,6 +5,7 @@ package kubeclient_test
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1186,4 +1187,130 @@ func TestCanActOnResource_NamespaceScoped(t *testing.T) {
 	canActKubeSystem, err := kubeClient.CanActOnResource(userCtx, "reconcile", "fluxcd.controlplane.io", "resourcesets", "kube-system", "test")
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(canActKubeSystem).To(BeFalse(), "user should NOT be able to reconcile in kube-system namespace")
+}
+
+func TestCanListNodes(t *testing.T) {
+	g := NewWithT(t)
+
+	kubeClient, err := kubeclient.New(testClient, testClient, testEnvConf, testScheme, 100, 5*time.Minute)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Without a user session (authentication disabled), the check
+	// passes without calling the API, even with a canceled context.
+	canceledCtx, cancelCtx := context.WithCancel(ctx)
+	cancelCtx()
+	allowed, err := kubeClient.CanListNodes(canceledCtx)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(allowed).To(BeTrue())
+
+	imp := user.Impersonation{Username: "nodes-list-user"}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+	userCtx := user.StoreSession(ctx, user.Details{Impersonation: imp}, userClient)
+
+	// A failed access check returns false with the error and is not cached.
+	canceledUserCtx, cancelUserCtx := context.WithCancel(userCtx)
+	cancelUserCtx()
+	allowed, err = kubeClient.CanListNodes(canceledUserCtx)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(allowed).To(BeFalse())
+
+	// Grant list nodes to the user.
+	clusterRole := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-nodes-list"},
+		Rules: []rbacv1.PolicyRule{{
+			APIGroups: []string{""},
+			Resources: []string{"nodes"},
+			Verbs:     []string{"list"},
+		}},
+	}
+	g.Expect(testClient.Create(ctx, clusterRole)).To(Succeed())
+	t.Cleanup(func() { _ = testClient.Delete(context.Background(), clusterRole) })
+	binding := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-nodes-list-binding"},
+		Subjects:   []rbacv1.Subject{{Kind: "User", Name: imp.Username}},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     clusterRole.Name,
+		},
+	}
+	g.Expect(testClient.Create(ctx, binding)).To(Succeed())
+	t.Cleanup(func() { _ = testClient.Delete(context.Background(), binding) })
+
+	g.Eventually(func() bool {
+		allowed, err := kubeClient.CanListNodes(userCtx)
+		return err == nil && allowed
+	}, 10*time.Second, 100*time.Millisecond).Should(BeTrue())
+
+	// The result is cached per user: revoking the access
+	// is picked up only after the cache duration.
+	g.Expect(testClient.Delete(ctx, binding)).To(Succeed())
+	allowed, err = kubeClient.CanListNodes(userCtx)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(allowed).To(BeTrue())
+
+	// A user without the permission is denied.
+	otherImp := user.Impersonation{Username: "nodes-no-access-user"}
+	otherClient, err := kubeClient.GetUserClientFromCache(otherImp)
+	g.Expect(err).NotTo(HaveOccurred())
+	otherCtx := user.StoreSession(ctx, user.Details{Impersonation: otherImp}, otherClient)
+	allowed, err = kubeClient.CanListNodes(otherCtx)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(allowed).To(BeFalse())
+}
+
+func TestCanListNodes_SharedReview(t *testing.T) {
+	g := NewWithT(t)
+
+	kubeClient, err := kubeclient.New(testClient, testClient, testEnvConf, testScheme, 100, 5*time.Minute)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// The review blocks until released and records its context.
+	started := make(chan context.Context, 10)
+	release := make(chan struct{})
+	var calls atomic.Int32
+	kubeclient.SetNodesAccessReview(kubeClient, func(ctx context.Context, _ client.Client) (bool, error) {
+		calls.Add(1)
+		started <- ctx
+		<-release
+		return true, ctx.Err()
+	})
+
+	imp := user.Impersonation{Username: "nodes-shared-review-user"}
+	userClient, err := kubeClient.GetUserClientFromCache(imp)
+	g.Expect(err).NotTo(HaveOccurred())
+	userCtx := user.StoreSession(ctx, user.Details{Impersonation: imp}, userClient)
+
+	// The first caller starts the review, then is canceled.
+	firstCtx, cancelFirst := context.WithCancel(userCtx)
+	firstDone := make(chan error, 1)
+	go func() {
+		_, err := kubeClient.CanListNodes(firstCtx)
+		firstDone <- err
+	}()
+	var reviewCtx context.Context
+	g.Eventually(started, 5*time.Second).Should(Receive(&reviewCtx))
+
+	// A second caller joins the same review.
+	secondDone := make(chan bool, 1)
+	go func() {
+		allowed, err := kubeClient.CanListNodes(userCtx)
+		secondDone <- err == nil && allowed
+	}()
+
+	// The canceled caller returns at once, without failing the review.
+	cancelFirst()
+	g.Eventually(firstDone, 5*time.Second).Should(Receive(MatchError(context.Canceled)))
+	g.Expect(reviewCtx.Err()).NotTo(HaveOccurred())
+
+	close(release)
+	g.Eventually(secondDone, 5*time.Second).Should(Receive(BeTrue()))
+	g.Expect(calls.Load()).To(Equal(int32(1)))
+
+	// The result is cached.
+	allowed, err := kubeClient.CanListNodes(userCtx)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(allowed).To(BeTrue())
+	g.Expect(calls.Load()).To(Equal(int32(1)))
 }

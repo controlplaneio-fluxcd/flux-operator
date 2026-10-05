@@ -7,9 +7,11 @@ import (
 	"context"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-logr/logr"
+	"golang.org/x/sync/singleflight"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/tools/record"
 
@@ -32,6 +34,13 @@ type Handler struct {
 	reportCacheStatsByNamespace []reporter.ReconcilerStatsByNamespace
 	reportCacheMu               sync.RWMutex
 
+	// reportBuildFlight shares one report build among the requests
+	// that find the cache empty.
+	reportBuildFlight singleflight.Group
+
+	// buildReportHook replaces buildReport when set, used in tests.
+	buildReportHook func(ctx context.Context) (*unstructured.Unstructured, *reporter.FluxStatusReport, *NodesSnapshot, error)
+
 	// Search index
 	searchIndex *SearchIndex
 
@@ -40,6 +49,16 @@ type Handler struct {
 
 	// Pod metrics ring buffer
 	metrics *MetricsCollector
+
+	// Node Ready transitions tracker, may be nil.
+	nodeTransitions *ReadyTransitionTracker
+
+	// Nodes snapshot cache, refreshed with the report.
+	nodesSnapshot *NodesSnapshot
+
+	// nodeLeasesFailing is set while the node Leases can't be listed,
+	// so that the error is logged once per failure streak.
+	nodeLeasesFailing atomic.Bool
 }
 
 // NewHandler creates a new handler for the web server.
@@ -49,22 +68,24 @@ type Handler struct {
 // is canceled. The returned channel is closed when all
 // the goroutines have stopped.
 // The metrics collector is owned by the caller and may be nil
-// when pod metrics collection is disabled.
+// when pod metrics collection is disabled. The node Ready transitions
+// tracker is owned by the caller and may be nil.
 func NewHandler(ctx context.Context, conf *fluxcdv1.WebConfigSpec, spaHandler http.Handler, kubeClient *kubeclient.Client,
-	metrics *MetricsCollector, version, statusManager, namespace string, reportInterval time.Duration,
+	metrics *MetricsCollector, nodeTransitions *ReadyTransitionTracker, version, statusManager, namespace string, reportInterval time.Duration,
 	eventRecorder record.EventRecorder, authMiddleware func(http.Handler) http.Handler, l logr.Logger) (http.Handler, <-chan struct{}) {
 
 	// Build the Handler struct.
 	h := &Handler{
-		conf:          conf,
-		kubeClient:    kubeClient,
-		eventRecorder: eventRecorder,
-		version:       version,
-		statusManager: statusManager,
-		namespace:     namespace,
-		searchIndex:   &SearchIndex{},
-		workloadIndex: &WorkloadIndex{},
-		metrics:       metrics,
+		conf:            conf,
+		kubeClient:      kubeClient,
+		eventRecorder:   eventRecorder,
+		version:         version,
+		statusManager:   statusManager,
+		namespace:       namespace,
+		searchIndex:     &SearchIndex{},
+		workloadIndex:   &WorkloadIndex{},
+		metrics:         metrics,
+		nodeTransitions: nodeTransitions,
 	}
 
 	// Create HTTP request multiplexer.
@@ -78,6 +99,8 @@ func NewHandler(ctx context.Context, conf *fluxcdv1.WebConfigSpec, spaHandler ht
 	mux.HandleFunc("GET /api/v1/events", h.EventsHandler)
 	mux.HandleFunc("POST /api/v1/favorites", h.FavoritesHandler)
 	mux.HandleFunc("POST /api/v1/inventory/objects", h.InventoryObjectsHandler)
+	mux.HandleFunc("GET /api/v1/nodes", h.NodesHandler)
+	mux.HandleFunc("GET /api/v1/nodes/workloads", h.NodesWorkloadsHandler)
 	mux.HandleFunc("GET /api/v1/report", h.ReportHandler)
 	mux.HandleFunc("GET /api/v1/resource", h.ResourceHandler)
 	mux.HandleFunc("POST /api/v1/resource/action", h.ActionHandler)

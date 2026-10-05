@@ -106,6 +106,14 @@ func RunServer(ctx context.Context, c cluster.Cluster,
 	handlerStopped = ch
 	closeAuth = func(context.Context) error { return nil }
 
+	// Node Ready transitions tracker, registered once on the Node informer
+	// so the history survives handler swaps. Flapping detection is skipped
+	// when the informer can't be set up.
+	nodeTransitions, err := StartReadyTransitionTracker(ctx, c.GetCache())
+	if err != nil {
+		l.Error(err, "node readiness flapping detection disabled, failed to watch nodes")
+	}
+
 	// Pod metrics collector state, preserved across configuration reloads
 	// so the usage history survives handler swaps.
 	var metricsCollector *MetricsCollector
@@ -210,18 +218,24 @@ func RunServer(ctx context.Context, c cluster.Cluster,
 			metricsCollector = nil
 		}
 		if conf.MetricsEnabled() && metricsCollector == nil {
-			if lister, err := NewPodMetricsLister(c.GetConfig()); err != nil {
+			lister, err := NewPodMetricsLister(c.GetConfig())
+			if err != nil {
 				serverLog.Error(err, "pod metrics collection disabled, failed to create metrics client")
-			} else {
+			}
+			nodeLister, nodeErr := NewNodeMetricsLister(c.GetConfig())
+			if nodeErr != nil {
+				serverLog.Error(nodeErr, "node metrics collection disabled, failed to create metrics client")
+			}
+			if err == nil {
 				metricsInterval = conf.MetricsScrapeInterval()
-				metricsCollector, cancelMetricsCtx, metricsStopped = startMetricsCollector(lister, metricsInterval, serverLog)
+				metricsCollector, cancelMetricsCtx, metricsStopped = startMetricsCollector(lister, nodeLister, metricsInterval, serverLog)
 			}
 		}
 
 		// Create new handler.
 		newHandlerCtx, cancelNewHandlerCtx := context.WithCancel(context.Background())
 		newHandler, newHandlerStopped := NewHandler(newHandlerCtx, conf, spaHandler, kubeClient,
-			metricsCollector, version, statusManager, namespace, reportInterval, eventRecorder, authMiddleware, serverLog)
+			metricsCollector, nodeTransitions, version, statusManager, namespace, reportInterval, eventRecorder, authMiddleware, serverLog)
 
 		conf = nil // Clear conf to receive a new one in the next iteration.
 
@@ -253,11 +267,13 @@ func RunServer(ctx context.Context, c cluster.Cluster,
 	}
 }
 
-// startMetricsCollector creates and starts a pod metrics collector on its
-// own cancelable context. Start performs the initial scrape synchronously
-// so the first cached report can carry controller metrics.
-func startMetricsCollector(lister PodMetricsLister, interval time.Duration, l logr.Logger) (*MetricsCollector, context.CancelFunc, <-chan struct{}) {
+// startMetricsCollector creates and starts a pod and node metrics collector
+// on its own cancelable context. The node lister may be nil. Start performs
+// the initial scrape synchronously so the first cached report can carry
+// controller and node metrics.
+func startMetricsCollector(lister PodMetricsLister, nodeLister NodeMetricsLister, interval time.Duration, l logr.Logger) (*MetricsCollector, context.CancelFunc, <-chan struct{}) {
 	mc := NewMetricsCollector(lister, interval)
+	mc.nodeLister = nodeLister
 	ctx, cancel := context.WithCancel(context.Background())
 	stopped := mc.Start(ctrl.LoggerInto(ctx, l))
 	return mc, cancel, stopped
