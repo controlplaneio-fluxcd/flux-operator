@@ -398,7 +398,8 @@ sourced from the Kubernetes Metrics API ([metrics-server](https://github.com/kub
 Because the Metrics API only serves instantaneous values, the web server accumulates the
 usage history in memory by scraping the API periodically (one cluster-wide query per interval).
 On clusters without metrics-server, the charts are hidden automatically and no configuration
-is required.
+is required. The node usage shown on the Nodes dashboard is
+collected on the same interval, with one extra query for the node metrics.
 
 At startup the first two samples are collected 15 seconds apart (or at the
 scrape interval, when configured shorter) so the usage charts render shortly
@@ -413,7 +414,8 @@ proportionally higher memory and API cost; the charts keep covering ~30 minutes
 regardless of the interval.
 
 Setting `disabled: true` turns the feature off entirely: the web server makes no
-Metrics API queries and the resource usage charts are hidden in the UI.
+Metrics API queries and the resource usage charts are hidden in the UI. The Nodes dashboard
+then skips the usage checks.
 
 ## Configuration Examples
 
