@@ -186,7 +186,7 @@ func TestSessionKey(t *testing.T) {
 		g.Expect(s.Key()).To(Equal("privileged-user"))
 	})
 
-	t.Run("returns formatted key with username only", func(t *testing.T) {
+	t.Run("returns derived key with username only", func(t *testing.T) {
 		g := NewWithT(t)
 
 		s := &session{
@@ -197,10 +197,10 @@ func TestSessionKey(t *testing.T) {
 				},
 			},
 		}
-		g.Expect(s.Key()).To(Equal("username=test-user"))
+		g.Expect(s.Key()).To(Equal(Key(s.Impersonation)))
 	})
 
-	t.Run("returns formatted key with username and groups", func(t *testing.T) {
+	t.Run("returns derived key with username and groups", func(t *testing.T) {
 		g := NewWithT(t)
 
 		s := &session{
@@ -211,8 +211,7 @@ func TestSessionKey(t *testing.T) {
 				},
 			},
 		}
-		expected := "username=test-user\ngroup=group1\ngroup=group2"
-		g.Expect(s.Key()).To(Equal(expected))
+		g.Expect(s.Key()).To(Equal(Key(s.Impersonation)))
 	})
 }
 
@@ -236,10 +235,10 @@ func TestSessionKubeClient(t *testing.T) {
 }
 
 func TestKey(t *testing.T) {
+	seen := make(map[string]string)
 	for _, tt := range []struct {
-		name     string
-		imp      Impersonation
-		expected string
+		name string
+		imp  Impersonation
 	}{
 		{
 			name: "username only",
@@ -247,7 +246,6 @@ func TestKey(t *testing.T) {
 				Username: "user@example.com",
 				Groups:   []string{},
 			},
-			expected: "username=user@example.com",
 		},
 		{
 			name: "username with single group",
@@ -255,7 +253,6 @@ func TestKey(t *testing.T) {
 				Username: "user@example.com",
 				Groups:   []string{"admins"},
 			},
-			expected: "username=user@example.com\ngroup=admins",
 		},
 		{
 			name: "username with multiple groups",
@@ -263,7 +260,6 @@ func TestKey(t *testing.T) {
 				Username: "user@example.com",
 				Groups:   []string{"admins", "developers", "viewers"},
 			},
-			expected: "username=user@example.com\ngroup=admins\ngroup=developers\ngroup=viewers",
 		},
 		{
 			name: "empty username",
@@ -271,14 +267,30 @@ func TestKey(t *testing.T) {
 				Username: "",
 				Groups:   []string{"group1"},
 			},
-			expected: "username=\ngroup=group1",
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
-			g.Expect(Key(tt.imp)).To(Equal(tt.expected))
+			key := Key(tt.imp)
+			g.Expect(key).NotTo(BeEmpty())
+			g.Expect(seen).NotTo(HaveKey(key))
+			if tt.imp.Username != "" {
+				g.Expect(key).NotTo(ContainSubstring(tt.imp.Username))
+			}
+			for _, group := range tt.imp.Groups {
+				g.Expect(key).NotTo(ContainSubstring(group))
+			}
+			seen[key] = tt.name
 		})
 	}
+
+	t.Run("keys are unambiguous", func(t *testing.T) {
+		g := NewWithT(t)
+		usernameWithDelimiter := Impersonation{Username: "alice\ngroup=platform-admin"}
+		usernameAndGroup := Impersonation{Username: "alice", Groups: []string{"platform-admin"}}
+
+		g.Expect(Key(usernameWithDelimiter)).NotTo(Equal(Key(usernameAndGroup)))
+	})
 }
 
 func TestStoreAndLoadSession(t *testing.T) {

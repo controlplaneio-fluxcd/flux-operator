@@ -399,6 +399,8 @@ The source registry (`ghcr.io`) can be authenticated with `--pull-token` or
 - `flux-operator distro mirror <destination>`: Mirrors the Flux distribution to a destination registry.
   The destination is a positional argument, e.g. `registry.example.com/flux`.
     - `--version`: Flux distribution version, e.g. `2.8.5` or `2.8.x` (default `2.x`).
+    - `--distribution-artifact`: OCI artifact URL of the Flux distribution manifests
+      (default `oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests:latest`).
     - `--components`: Comma-separated list of components to mirror (defaults to all controllers,
       plus `source-watcher` for Flux 2.7+).
     - `--variant`: Distribution variant (`upstream-alpine`, `enterprise-alpine`,

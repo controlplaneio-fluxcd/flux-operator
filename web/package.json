@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@preact/signals": "^2.5.1",
-    "js-yaml": "^5.2.3",
+    "js-yaml": "^5.4.1",
     "preact": "^10.28.2",
     "preact-iso": "^2.11.1",
     "prismjs": "^1.30.0",
@@ -32,6 +32,6 @@
     "postcss": "^8.5.25",
     "tailwindcss": "^3.4.19",
     "vite": "^8.2.1",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   }
 }

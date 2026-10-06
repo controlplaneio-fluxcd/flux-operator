@@ -367,7 +367,7 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 	options.Patches += builder.GetProfileClusterSize(obj.GetCluster().Size)
 
 	if obj.GetCluster().Multitenant {
-		options.Patches += builder.GetProfileMultitenant(obj.GetCluster().TenantDefaultServiceAccount)
+		options.Patches += builder.GetProfileMultitenant(obj.GetCluster().TenantDefaultServiceAccount, ver)
 	}
 
 	if err := options.ValidateAndPatchComponents(); err != nil {

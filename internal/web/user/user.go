@@ -5,6 +5,8 @@ package user
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"slices"
@@ -83,11 +85,11 @@ func (u *session) KubeClient() any {
 // Key generates a unique key for the user based on username and groups.
 func Key(imp Impersonation) string {
 	var key strings.Builder
-	fmt.Fprintf(&key, "username=%s", imp.Username)
+	fmt.Fprintf(&key, "username=%s", base64.StdEncoding.EncodeToString([]byte(imp.Username)))
 	for _, group := range imp.Groups {
-		fmt.Fprintf(&key, "\ngroup=%s", group)
+		fmt.Fprintf(&key, "\ngroup=%s", base64.StdEncoding.EncodeToString([]byte(group)))
 	}
-	return key.String()
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(key.String())))
 }
 
 // sessionContextKey is the context key for storing session values.

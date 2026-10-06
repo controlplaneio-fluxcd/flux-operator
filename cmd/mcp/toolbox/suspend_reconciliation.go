@@ -17,8 +17,10 @@ const (
 
 func init() {
 	systemTools[ToolSuspendFluxReconciliation] = systemTool{
-		readOnly:  false,
-		inCluster: true,
+		readOnly:    false,
+		inCluster:   true,
+		destructive: false,
+		idempotent:  true,
 	}
 }
 

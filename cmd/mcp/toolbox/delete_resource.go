@@ -16,8 +16,10 @@ const (
 
 func init() {
 	systemTools[ToolDeleteKubernetesResource] = systemTool{
-		readOnly:  false,
-		inCluster: true,
+		readOnly:    false,
+		inCluster:   true,
+		destructive: true,
+		idempotent:  true,
 	}
 }
 
