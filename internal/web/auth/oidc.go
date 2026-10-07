@@ -81,7 +81,7 @@ func (o *oidcProvider) run(ctx context.Context) {
 // refresh fetches the OIDC discovery configuration and updates
 // the cached provider and verifier.
 func (o *oidcProvider) refresh(ctx context.Context) {
-	ctx = oidc.ClientContext(ctx, &http.Client{})
+	ctx = oidc.ClientContext(ctx, &http.Client{Transport: http.DefaultTransport.(*http.Transport).Clone()})
 	issuerURL := o.conf.Authentication.OAuth2.IssuerURL
 	p, err := oidc.NewProvider(ctx, issuerURL)
 	if err != nil {
