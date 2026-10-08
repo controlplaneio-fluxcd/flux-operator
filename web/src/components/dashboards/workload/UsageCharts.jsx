@@ -37,7 +37,7 @@ function HeaderPercent({ value, requests, limits }) {
  * ChartHeader - Headline for one usage chart: metric name, current
  * absolute value and, when requests/limits are set, the usage percentage.
  */
-function ChartHeader({ label, value, percent, testId }) {
+export function ChartHeader({ label, value, percent, testId }) {
   return (
     <div class="flex items-baseline justify-between flex-wrap gap-x-2" data-testid={testId}>
       <div class="flex items-baseline gap-2 min-w-0">

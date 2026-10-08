@@ -60,7 +60,7 @@ func (h *Handler) GetReport(ctx context.Context) (*unstructured.Unstructured, er
 	if cached, cachedStats := h.getCachedReport(); cached != nil {
 		report, statsByNamespace = cached, cachedStats
 	} else {
-		r, computeResult, err := h.buildReport(ctx)
+		r, computeResult, _, err := h.buildReport(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -86,6 +86,13 @@ func (h *Handler) GetReport(ctx context.Context) (*unstructured.Unstructured, er
 	if s := user.SessionStart(ctx); s != nil {
 		userInfo["sessionStart"] = s.Format(time.RFC3339)
 	}
+	// An access check failure hides the nodes dashboard link
+	// and never fails the report.
+	canViewNodes, err := h.kubeClient.CanListNodes(ctx)
+	if err != nil {
+		log.FromContext(ctx).Error(err, "failed to check the user access to nodes")
+	}
+	userInfo["canViewNodes"] = canViewNodes
 	spec["userInfo"] = userInfo
 
 	// Inject user-visible namespaces
@@ -129,9 +136,10 @@ func (h *Handler) startReportCache(ctx context.Context, reportInterval time.Dura
 	return stopped
 }
 
-// refreshReportCache builds a fresh report and updates the cache.
+// refreshReportCache builds a fresh report and nodes snapshot
+// and updates the cache.
 func (h *Handler) refreshReportCache(ctx context.Context) {
-	report, computeResult, err := h.buildReport(ctx)
+	report, computeResult, nodes, err := h.buildReport(ctx)
 	if err != nil {
 		if !errors.Is(err, context.Canceled) || ctx.Err() == nil {
 			log.FromContext(ctx).Error(err, "failed to refresh report cache")
@@ -142,6 +150,9 @@ func (h *Handler) refreshReportCache(ctx context.Context) {
 	h.reportCacheMu.Lock()
 	h.reportCache = report
 	h.reportCacheStatsByNamespace = computeResult.StatsByNamespace
+	// The snapshot is always from the same refresh as the report, so a
+	// failed snapshot is dropped along with the report spec.nodes.
+	h.nodesSnapshot = nodes
 	h.reportCacheMu.Unlock()
 
 	// Update the search index from the reporter's resource statuses.
@@ -167,9 +178,19 @@ func (h *Handler) getCachedReport() (*unstructured.Unstructured, []reporter.Reco
 	return &obj, statsByNamespace
 }
 
-// buildReport builds the FluxReport directly using the reporter package
-// and injects pod metrics into the report spec.
-func (h *Handler) buildReport(ctx context.Context) (*unstructured.Unstructured, *reporter.FluxStatusReport, error) {
+// getCachedNodesSnapshot returns the cached nodes snapshot if available.
+// The snapshot is replaced, never mutated, so it is safe to share.
+func (h *Handler) getCachedNodesSnapshot() *NodesSnapshot {
+	h.reportCacheMu.RLock()
+	defer h.reportCacheMu.RUnlock()
+	return h.nodesSnapshot
+}
+
+// buildReport builds the FluxReport directly using the reporter package,
+// injects pod metrics into the report spec and builds the nodes snapshot,
+// whose name-less summary is injected as spec.nodes. The snapshot is nil
+// and spec.nodes is left out when it fails to build.
+func (h *Handler) buildReport(ctx context.Context) (*unstructured.Unstructured, *reporter.FluxStatusReport, *NodesSnapshot, error) {
 	// The report client needs privileged access as it needs to access all
 	// resources in the cluster to build the report. The report information,
 	// however, is crunched in a way that does not expose sensitive information.
@@ -207,7 +228,7 @@ func (h *Handler) buildReport(ctx context.Context) (*unstructured.Unstructured, 
 	// Convert to unstructured
 	rawMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to convert report to unstructured: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to convert report to unstructured: %w", err)
 	}
 	report := &unstructured.Unstructured{Object: rawMap}
 
@@ -218,7 +239,21 @@ func (h *Handler) buildReport(ctx context.Context) (*unstructured.Unstructured, 
 		}
 	}
 
-	return report, computeResult, nil
+	// Build the nodes snapshot and enrich the report with its summary.
+	var serverVersion string
+	if computeResult.Spec.Cluster != nil {
+		serverVersion = computeResult.Spec.Cluster.ServerVersion
+	}
+	// The bursting workloads are matched against the Flux-managed workloads
+	// of the same report computation.
+	nodes, err := h.buildNodesSnapshot(ctx, serverVersion, computeResult.Workloads)
+	if err != nil {
+		log.FromContext(ctx).Error(err, "failed to build the nodes snapshot")
+	} else if spec, found := report.Object["spec"].(map[string]any); found {
+		spec["nodes"] = nodes.summary
+	}
+
+	return report, computeResult, nodes, nil
 }
 
 // ControllerMetrics holds the current CPU/Memory usage of a Flux

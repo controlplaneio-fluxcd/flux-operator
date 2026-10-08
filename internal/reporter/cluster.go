@@ -7,8 +7,7 @@ import (
 	"context"
 	"fmt"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
@@ -31,12 +30,9 @@ func (r *FluxStatusReporter) getClusterInfo(ctx context.Context) (*fluxcdv1.Clus
 		return nil, fmt.Errorf("failed to get server version: %w", err)
 	}
 
-	nodes := &metav1.PartialObjectMetadataList{}
-	nodes.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   "",
-		Version: "v1",
-		Kind:    "NodeList",
-	})
+	// Nodes are listed as typed objects so that the operator keeps a single
+	// Node informer, shared with the web server nodes snapshot.
+	nodes := &corev1.NodeList{}
 	if err := r.List(ctx, nodes); err != nil {
 		return nil, fmt.Errorf("failed to list nodes: %w", err)
 	}

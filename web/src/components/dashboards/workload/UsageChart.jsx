@@ -54,6 +54,7 @@ function formatTime(ts) {
  * @param {Object} props
  * @param {Array} props.data - uPlot aligned data: [timestamps, usage, threshold?]
  * @param {boolean} props.hasLimit - Whether data carries a threshold series
+ * @param {string} [props.limitLabel] - Tooltip label of the threshold series (default "limit")
  * @param {string} props.colorKey - "cpu" or "memory", selects the series color
  * @param {Function} props.formatValue - Value formatter for ticks and tooltip
  * @param {Array<number>} [props.tickIncrs] - Optional y-axis tick increments
@@ -61,7 +62,7 @@ function formatTime(ts) {
  *   marked with a dashed vertical line and named in the tooltip
  * @param {string} props.testId - data-testid for the chart container
  */
-export function UsageChart({ data, hasLimit, colorKey, formatValue, tickIncrs, annotation, testId }) {
+export function UsageChart({ data, hasLimit, limitLabel = 'limit', colorKey, formatValue, tickIncrs, annotation, testId }) {
   const containerRef = useRef(null)
   const tooltipRef = useRef(null)
   const chartRef = useRef(null)
@@ -204,7 +205,7 @@ export function UsageChart({ data, hasLimit, colorKey, formatValue, tickIncrs, a
             if (limitValue != null) {
               const limitEl = document.createElement('div')
               limitEl.className = 'usage-chart-tooltip-limit'
-              limitEl.textContent = `limit ${formatValue(limitValue)}`
+              limitEl.textContent = `${limitLabel} ${formatValue(limitValue)}`
               tooltip.append(limitEl)
             }
             // Name the annotation line when hovering the sample closest to it.
@@ -281,7 +282,7 @@ export function UsageChart({ data, hasLimit, colorKey, formatValue, tickIncrs, a
     }
     // Depend on the annotation fields rather than the object identity,
     // which changes on every poll re-render.
-  }, [theme, hasLimit, colorKey, formatValue, annotation?.time, annotation?.label])
+  }, [theme, hasLimit, limitLabel, colorKey, formatValue, annotation?.time, annotation?.label])
 
   // Push fresh data into the existing chart without recreating it.
   useEffect(() => {

@@ -18,6 +18,7 @@ import { ResourceList, resourcesData, resourcesLoading } from './components/sear
 import { WorkloadList, workloadsData, workloadsLoading } from './components/search/WorkloadList'
 import { ResourcePage } from './components/dashboards/resource/ResourcePage'
 import { WorkloadPage } from './components/dashboards/workload/WorkloadPage'
+import { NodesPage } from './components/dashboards/nodes/NodesPage'
 import { FavoritesPage } from './components/favorites/FavoritesPage'
 import { favorites } from './utils/favorites'
 import { ProfilePage } from './components/user/ProfilePage'
@@ -343,6 +344,7 @@ function AppContent({ spec, namespace }) {
         <Route path="/events" component={EventList} />
         <Route path="/resources" component={ResourceList} />
         <Route path="/workloads" component={WorkloadList} />
+        <Route path="/nodes" component={NodesPage} />
         <Route path="/resource/:kind/:namespace/:name" component={ResourcePage} />
         <Route path="/workload/:kind/:namespace/:name" component={WorkloadPage} />
         <Route path="/user/profile" component={ProfilePage} />
