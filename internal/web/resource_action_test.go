@@ -14,6 +14,7 @@ import (
 	. "github.com/onsi/gomega"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
@@ -119,30 +120,49 @@ func TestActionHandler_MissingFields(t *testing.T) {
 }
 
 func TestActionHandler_InvalidAction(t *testing.T) {
-	g := NewWithT(t)
-
+	conf := oauthConfig()
+	conf.UserActions.Audit = []string{"*"}
+	recorder := record.NewFakeRecorder(1)
 	handler := &Handler{
-		conf:          oauthConfig(),
-		kubeClient:    kubeClient,
+		conf:          conf,
+		kubeClient:    nil,
+		eventRecorder: recorder,
 		version:       "v1.0.0",
 		statusManager: "test-status-manager",
 		namespace:     "flux-system",
 	}
 
-	actionReq := ActionRequest{
-		Kind:      "ResourceSet",
-		Namespace: "default",
-		Name:      "test",
-		Action:    "invalid-action",
+	for _, action := range []string{
+		"invalid-action",
+		fluxcdv1.UserActionDownload,
+		fluxcdv1.UserActionRestart,
+		fluxcdv1.UserActionDelete,
+	} {
+		t.Run(action, func(t *testing.T) {
+			g := NewWithT(t)
+			actionReq := ActionRequest{
+				Kind:      "ResourceSet",
+				Namespace: "default",
+				Name:      "test",
+				Action:    action,
+			}
+			body, _ := json.Marshal(actionReq)
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
+			rec := httptest.NewRecorder()
+
+			g.Expect(func() {
+				handler.ActionHandler(rec, req)
+			}).NotTo(Panic())
+			g.Expect(rec.Code).To(Equal(http.StatusBadRequest))
+			g.Expect(rec.Body.String()).To(ContainSubstring("Invalid action"))
+
+			select {
+			case event := <-recorder.Events:
+				t.Fatalf("unexpected audit event for unsupported action: %s", event)
+			default:
+			}
+		})
 	}
-	body, _ := json.Marshal(actionReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/resource/action", bytes.NewBuffer(body))
-	rec := httptest.NewRecorder()
-
-	handler.ActionHandler(rec, req)
-
-	g.Expect(rec.Code).To(Equal(http.StatusBadRequest))
-	g.Expect(rec.Body.String()).To(ContainSubstring("Invalid action"))
 }
 
 func TestActionHandler_UnknownKind(t *testing.T) {

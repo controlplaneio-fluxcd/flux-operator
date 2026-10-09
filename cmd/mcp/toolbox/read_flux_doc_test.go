@@ -5,15 +5,44 @@ package toolbox
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	. "github.com/onsi/gomega"
+
+	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/toolbox/docindex"
 )
+
+// docSection returns the line bounds of a heading section and the total line
+// count of a doc from the embedded index, so that the read tool assertions
+// do not depend on the exact content of the docs at the time of writing.
+func docSection(t *testing.T, path, heading string) (start, end, total int) {
+	t.Helper()
+	g := NewWithT(t)
+	idx, err := docindex.Get()
+	g.Expect(err).ToNot(HaveOccurred())
+	doc, ok := idx.ResolveDoc(path)
+	g.Expect(ok).To(BeTrue())
+	h, _, ok := docindex.ResolveHeading(doc, heading)
+	g.Expect(ok).To(BeTrue())
+	total = len(strings.Split(doc.Body, "\n"))
+	start, end = h.Line, total
+	for _, next := range doc.Headings {
+		if next.Line > h.Line && next.Level <= h.Level {
+			end = next.Line - 1
+			break
+		}
+	}
+	return start, end, total
+}
 
 func TestManagerHandleReadFluxDoc(t *testing.T) {
 	request := &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{Name: ToolReadFluxDoc}}
 	manager := &Manager{}
+	start, end, total := docSection(t, "/docs/crd/helmrelease", "values")
+	singleLine := fmt.Sprintf("Lines %d-%d of %d.", start, start, total)
 	tests := []struct {
 		name     string
 		input    readFluxDocInput
@@ -23,12 +52,12 @@ func TestManagerHandleReadFluxDoc(t *testing.T) {
 		{
 			name:     "heading read",
 			input:    readFluxDocInput{Path: "/docs/crd/helmrelease", Heading: "values"},
-			contains: []string{"Path: /docs/crd/helmrelease   Title: HelmRelease", "Lines 458-546 of 2339. Next: offset=547.", "## Values"},
+			contains: []string{"Path: /docs/crd/helmrelease   Title: HelmRelease", fmt.Sprintf("Lines %d-%d of %d. Next: offset=%d.", start, end, total, end+1), "## Values"},
 		},
 		{
 			name:     "offset and limit read",
-			input:    readFluxDocInput{Path: "/docs/crd/helmrelease", Offset: 458, Limit: 20},
-			contains: []string{"Lines 458-477 of 2339. Next: offset=478.", "## Values"},
+			input:    readFluxDocInput{Path: "/docs/crd/helmrelease", Offset: float64(start), Limit: 20},
+			contains: []string{fmt.Sprintf("Lines %d-%d of %d. Next: offset=%d.", start, start+19, total, start+20), "## Values"},
 		},
 		{
 			name:     "unknown path",
@@ -73,7 +102,7 @@ func TestManagerHandleReadFluxDoc(t *testing.T) {
 		{
 			name:     "uppercase path",
 			input:    readFluxDocInput{Path: "/DOCS/CRD/HELMRELEASE", Heading: "values", Limit: 1},
-			contains: []string{"Path: /docs/crd/helmrelease", "Lines 458-458 of 2339."},
+			contains: []string{"Path: /docs/crd/helmrelease", singleLine},
 		},
 		{
 			name:     "hash heading returns outline",
@@ -83,17 +112,17 @@ func TestManagerHandleReadFluxDoc(t *testing.T) {
 		{
 			name:     "md suffix",
 			input:    readFluxDocInput{Path: "/docs/crd/helmrelease.md", Heading: "values", Limit: 1},
-			contains: []string{"Path: /docs/crd/helmrelease", "Lines 458-458 of 2339."},
+			contains: []string{"Path: /docs/crd/helmrelease", singleLine},
 		},
 		{
 			name:     "trailing slash",
 			input:    readFluxDocInput{Path: "/docs/crd/helmrelease/", Heading: "values", Limit: 1},
-			contains: []string{"Path: /docs/crd/helmrelease", "Lines 458-458 of 2339."},
+			contains: []string{"Path: /docs/crd/helmrelease", singleLine},
 		},
 		{
 			name:     "full URL",
 			input:    readFluxDocInput{Path: "https://fluxoperator.dev/docs/crd/helmrelease/", Heading: "values", Limit: 1},
-			contains: []string{"Path: /docs/crd/helmrelease", "Lines 458-458 of 2339."},
+			contains: []string{"Path: /docs/crd/helmrelease", singleLine},
 		},
 	}
 

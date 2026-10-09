@@ -142,7 +142,7 @@ func buildInstanceCmdRun(cmd *cobra.Command, args []string) error {
 	options.Patches += builder.GetProfileClusterSize(instance.GetCluster().Size)
 
 	if instance.GetCluster().Multitenant {
-		options.Patches += builder.GetProfileMultitenant(instance.GetCluster().TenantDefaultServiceAccount)
+		options.Patches += builder.GetProfileMultitenant(instance.GetCluster().TenantDefaultServiceAccount, ver)
 	}
 
 	if err := options.ValidateAndPatchComponents(); err != nil {

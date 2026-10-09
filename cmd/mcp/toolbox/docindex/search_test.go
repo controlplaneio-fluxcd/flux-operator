@@ -80,16 +80,13 @@ func TestSearchEmbeddedArtifactCamelCaseKindBalance(t *testing.T) {
 	idx, err := Get()
 	g.Expect(err).ToNot(HaveOccurred())
 
+	// A camelCase kind expands to several index terms, which must not let
+	// a section mentioning only HelmRelease outrank sections covering both kinds.
 	hits := idx.Search("Kustomization HelmRelease CEL", SearchOptions{Limit: 8})
-	trails := make([]string, 0, len(hits))
-	for _, hit := range hits {
-		trails = append(trails, hit.Chunk.HeadingTrail)
-	}
-	g.Expect(trails).To(ContainElements(
-		"Kustomization > Writing a Kustomization spec > Dependencies",
-		"HelmRelease > Writing a HelmRelease spec > Dependencies",
-		"HelmRelease > Writing a HelmRelease spec > Health check expressions",
-	))
+	g.Expect(hits).ToNot(BeEmpty())
+	top := strings.ToLower(hits[0].Chunk.HeadingTrail + " " + hits[0].Chunk.Text)
+	g.Expect(top).To(ContainSubstring("kustomization"), hits[0].Chunk.HeadingTrail)
+	g.Expect(top).To(ContainSubstring("helmrelease"), hits[0].Chunk.HeadingTrail)
 }
 
 func TestSearchDocDescriptionIsIndexed(t *testing.T) {

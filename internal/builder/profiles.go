@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Masterminds/semver/v3"
+
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
@@ -255,12 +257,21 @@ const profileClusterTypeOpenShift = `
 `
 
 // GetProfileMultitenant returns a patch to enable multitenancy in the Flux controllers.
-func GetProfileMultitenant(defaultSA string) string {
+func GetProfileMultitenant(defaultSA, version string) string {
 	if defaultSA == "" {
 		defaultSA = defaultServiceAccount
 	}
 
-	return fmt.Sprintf(profileClusterMultitenant, defaultSA)
+	// The source-watcher supports impersonating the tenant default service
+	// account starting with Flux 2.10.
+	controllers := "kustomize-controller|helm-controller"
+	if v, err := semver.NewVersion(version); err == nil {
+		if ok, _ := checkVersionAgainstConstraint(v, ">= 2.10.0"); ok {
+			controllers += "|source-watcher"
+		}
+	}
+
+	return fmt.Sprintf(profileClusterMultitenant, controllers, defaultSA)
 }
 
 const profileClusterMultitenant = `
@@ -280,11 +291,11 @@ const profileClusterMultitenant = `
       value: --no-remote-bases=true
 - target:
     kind: Deployment
-    name: "(kustomize-controller|helm-controller)"
+    name: "(%[1]s)"
   patch: |-
     - op: add
       path: /spec/template/spec/containers/0/args/-
-      value: --default-service-account=%s
+      value: --default-service-account=%[2]s
 - target:
     kind: Kustomization
   patch: |-

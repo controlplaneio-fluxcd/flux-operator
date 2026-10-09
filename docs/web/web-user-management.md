@@ -54,8 +54,8 @@ roleRef:
 ```
 
 Note that the `flux-web-admin` is a predefined role included with the Flux Operator
-that grants full access to Flux resources including the ability to perform actions.
-See the [Role-Based Access Control (RBAC)](#role-based-access-control) section
+that grants broad read-only permissions, as well as full access to Flux resources including
+the ability to perform actions. See the [Role-Based Access Control (RBAC)](#role-based-access-control) section
 for more information about predefined roles.
 
 ## Single Sign-On
@@ -153,6 +153,9 @@ The Web UI impersonates the authenticated user when making requests to the Kuber
 This means that the permissions granted to a user in the Web UI are determined by
 the Kubernetes RBAC policies assigned to that user or to the groups they belong to.
 
+Note that Kubernetes RBAC is the security boundary for the Web UI and the backend does not perform
+additional authorization checks based on whether a resource is managed by Flux.
+
 ### Namespace Filtering
 
 The Web UI fiters the list of namespaces a user can pick from the dropdowns
@@ -167,8 +170,9 @@ one namespace.
 The Flux Operator includes several predefined `ClusterRole` resources
 that can be used to grant specific permissions to users or groups.
 
-- `flux-web-user`: Grants read-only access to Flux resources and workloads.
-- `flux-web-admin`: Grants full access to Flux resources and workloads, including the ability to trigger actions.
+- `flux-web-user`: Grants read-only access to all API groups and resources.
+- `flux-web-admin`: Grants full access to Flux resources and workloads, including the ability to trigger actions,
+and read-only access to all API groups and resources.
 
 If you prefer to define custom permissions, you can create your own roles using the predefined roles as a reference.
 To disable the creation of the standard roles, set the following values in the Flux Operator
@@ -182,7 +186,7 @@ web:
 
 ### Flux Web User Role
 
-The `flux-web-user` role grants read-only access to Flux resources
+The `flux-web-user` role grants read-only access to all API groups and resources
 and is suitable for users who only need to view the state of their managed resources and workloads.
 
 ```yaml
@@ -203,9 +207,9 @@ rules:
 
 ### Flux Web Admin Role
 
-The `flux-web-admin` role grants full access to Flux resources,
-including the ability to perform actions such as triggering reconciliations,
-suspending/resuming resources, and restarting workloads.
+The `flux-web-admin` role grants the same broad read-only access as the `flux-web-user` role,
+as well as full access to Flux resources, including the ability to perform actions such as
+triggering reconciliations, suspending/resuming resources, and restarting workloads.
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1

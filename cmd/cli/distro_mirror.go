@@ -36,6 +36,7 @@ running Flux in air-gapped or private-registry environments.
 
 The command performs the following steps:
   1. Pulls the Flux distribution manifests OCI artifact to read the image list.
+     The artifact URL can be overridden with the --distribution-artifact flag.
   2. Resolves the requested version against the available distribution releases.
   3. Mirrors every controller image and (optionally) the Flux Operator and
      Flux Operator CLI images and the Flux Operator and Flux Instance Helm
@@ -49,6 +50,11 @@ The source registry (ghcr.io) can be authenticated with --pull-token or
 
   # Mirror a specific Flux version
   flux-operator distro mirror registry.example.com/flux --version 2.9.x
+
+  # Mirror the exact images shipped with a specific Flux Operator release
+  flux-operator distro mirror registry.example.com/flux \
+    --version 2.8.8 \
+    --distribution-artifact oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests:v0.59.0
 
   # Verify signatures and mirror the enterprise distroless variant
   echo "${GITHUB_TOKEN}" | flux-operator distro mirror registry.example.com/flux \
@@ -79,6 +85,7 @@ The source registry (ghcr.io) can be authenticated with --pull-token or
 
 type distroMirrorFlags struct {
 	version                 string
+	distributionArtifact    string
 	components              []string
 	variant                 string
 	includeOperatorImage    bool
@@ -94,6 +101,7 @@ type distroMirrorFlags struct {
 
 var distroMirrorArgs = distroMirrorFlags{
 	version:                 "2.x",
+	distributionArtifact:    distroMirrorManifestsArtifact,
 	variant:                 builder.UpstreamAlpine,
 	includeOperatorImage:    true,
 	includeOperatorCLIImage: true,
@@ -132,6 +140,8 @@ var distroMirrorVariantRegistry = map[string]string{
 func init() {
 	distroMirrorCmd.Flags().StringVar(&distroMirrorArgs.version, "version", distroMirrorArgs.version,
 		"Flux distribution version, e.g. 2.8.8 or 2.9.x")
+	distroMirrorCmd.Flags().StringVar(&distroMirrorArgs.distributionArtifact, "distribution-artifact", distroMirrorArgs.distributionArtifact,
+		"OCI artifact URL of the Flux distribution manifests")
 	distroMirrorCmd.Flags().StringSliceVar(&distroMirrorArgs.components, "components", nil,
 		"comma-separated list of components to mirror (defaults to all controllers, plus source-watcher for Flux 2.7+)")
 	distroMirrorCmd.Flags().StringVar(&distroMirrorArgs.variant, "variant", distroMirrorArgs.variant,
@@ -192,14 +202,14 @@ func distroMirrorCmdRun(_ *cobra.Command, args []string) error {
 		crane.WithAuthFromKeychain(keychain),
 	}
 
-	rootCmd.Println(`◎`, "Pulling distribution manifests from", distroMirrorManifestsArtifact)
+	rootCmd.Println(`◎`, "Pulling distribution manifests from", distroMirrorArgs.distributionArtifact)
 	tmpDir, err := builder.MkdirTempAbs("", "flux-mirror")
 	if err != nil {
 		return fmt.Errorf("failed to create tmp dir: %w", err)
 	}
 	defer os.RemoveAll(tmpDir)
 
-	if _, err := builder.PullArtifact(ctx, distroMirrorManifestsArtifact, tmpDir, keychain); err != nil {
+	if _, err := builder.PullArtifact(ctx, distroMirrorArgs.distributionArtifact, tmpDir, keychain); err != nil {
 		return fmt.Errorf("failed to pull distribution manifests: %w", err)
 	}
 

@@ -39,7 +39,21 @@ type ActionResponse struct {
 	Message string `json:"message"`
 }
 
+// isSupportedResourceAction reports whether action is handled by
+// POST /api/v1/resource/action.
+func isSupportedResourceAction(action string) bool {
+	switch action {
+	case fluxcdv1.UserActionReconcile,
+		fluxcdv1.UserActionSuspend,
+		fluxcdv1.UserActionResume:
+		return true
+	default:
+		return false
+	}
+}
+
 // ActionHandler handles POST /api/v1/resource/action requests to perform actions on Flux resources.
+// It accepts the reconcile, suspend, and resume actions.
 func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -65,8 +79,8 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Validate action type
-	if !fluxcdv1.IsUserAction(actionReq.Action) {
+	// Validate that the action is supported by this endpoint.
+	if !isSupportedResourceAction(actionReq.Action) {
 		http.Error(w, "Invalid action. Must be one of: reconcile, suspend, resume", http.StatusBadRequest)
 		return
 	}
@@ -132,6 +146,10 @@ func (h *Handler) ActionHandler(w http.ResponseWriter, req *http.Request) {
 	case fluxcdv1.UserActionResume:
 		obj, actionErr = h.setSuspension(ctx, *gvk, actionReq.Name, actionReq.Namespace, now, false)
 		message = fmt.Sprintf("Resumed %s/%s", actionReq.Namespace, actionReq.Name)
+
+	default:
+		http.Error(w, fmt.Sprintf("Unknown action: %s", actionReq.Action), http.StatusBadRequest)
+		return
 	}
 
 	if actionErr != nil {

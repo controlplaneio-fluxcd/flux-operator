@@ -15,13 +15,14 @@ import (
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/k8s"
 )
 
-// systemTool defines the common settings for MCP tools.
-// All tools should register the properties on init() functions
-// so RegisterTools can register them on the MCP server using
-// the properties defined in this struct.
+// systemTool defines registration availability and MCP behavioral annotations for a system tool.
+// All tools register these properties in init functions so RegisterTools can select tools and
+// addTool can advertise their behavior. Destructive and idempotent are meaningful only for writes.
 type systemTool struct {
-	readOnly  bool
-	inCluster bool
+	readOnly    bool
+	inCluster   bool
+	destructive bool
+	idempotent  bool
 }
 
 var (
@@ -61,7 +62,8 @@ type toolRecorder struct {
 
 // addTool adds a tool to the MCP server and records it.
 // InputSchema is inferred before registration so it can be normalized before
-// the server stores its copy of the tool.
+// the server stores its copy of the tool. When annotations are unset, addTool
+// derives read-only, destructive, and idempotent hints from systemTools.
 func addTool[In, Out any](s *mcp.Server, r *toolRecorder, t *mcp.Tool, h mcp.ToolHandlerFor[In, Out]) {
 	if t.InputSchema == nil {
 		inputType := reflect.TypeFor[In]()
@@ -77,6 +79,16 @@ func addTool[In, Out any](s *mcp.Server, r *toolRecorder, t *mcp.Tool, h mcp.Too
 	}
 	if schema, ok := t.InputSchema.(*jsonschema.Schema); ok && schema.Properties == nil {
 		schema.Properties = map[string]*jsonschema.Schema{}
+	}
+	if t.Annotations == nil {
+		st := systemTools[t.Name]
+		t.Annotations = &mcp.ToolAnnotations{
+			ReadOnlyHint:   st.readOnly,
+			IdempotentHint: st.readOnly || st.idempotent,
+		}
+		if !st.readOnly {
+			t.Annotations.DestructiveHint = &st.destructive
+		}
 	}
 	mcp.AddTool(s, t, h)
 	r.tools = append(r.tools, t.Name)
