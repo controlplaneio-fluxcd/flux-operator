@@ -420,15 +420,45 @@ spec:
 
 #### Secret-less
 
-The `.spec.serviceAccountName` field is optional and specifies the name of the Kubernetes
-ServiceAccount in the same namespace configured with workload identity to access a cloud
-provider service. This is called *object-level workload identity*. In order to force the
-use of object-level workload identity, the `--default-workload-identity-service-account`
-flag can be set in the operator. If this flag is specified and a ResourceSetInputProvider
-object does not have the field `.spec.serviceAccountName`, the operator will use the
-default service account specified by the flag for reconciling this object.
+When using a `.spec.type` that is linked to a cloud provider service that
+supports workload identity, if the operator is configured with workload
+identity then the ResourceSetInputProvider reconciliation will use it.
+We call this *controller-level workload identity*. In this scenario, the
+operator code uses the cloud provider SDKs to retrieve "application
+default credentials", i.e. credentials from the environment of the operator.
+Note that, in this model, every ResourceSetInputProvider object in the
+cluster is sharing the same cloud provider identity: the one linked to the
+operator.
 
-When installing the Flux Operator with Helm, you can change the default workload identity
+It's also possible to give a ResourceSetInputProvider object its own
+cloud provider identity, completely decoupled from the identity of the
+operator, by configuring the `.spec.serviceAccountName` field. This field
+points to a ServiceAccount object in the same namespace as the
+ResourceSetInputProvider object. The workload identity setup for this
+ServiceAccount is identical to the setup for any other ServiceAccount
+using workload identity in your cluster. This is called *object-level workload identity*.
+In this scenario, the operator code *does not* use the cloud SDKs to
+retrieve authentication from the environment. Instead, the code performs
+a *credential exchange*: it sends a token for the ServiceAccount and
+gets back from the cloud provider a native, temporary credential that
+allows access to the cloud provider service.
+
+Both *controller-level workload identity* and *object-level workload identity*
+are enabled by default in Flux Operator, there's no opt-in required.
+However, in multi-tenant clusters where isolation is necessary, we recommend
+forcing the use of *object-level workload identity* by blocking the use
+of *controller-level workload identity* entirely. In this mode, the
+operator refuses to use the cloud SDK code path to retrieve credentials
+from the environment, and every ResourceSetInputProvider is required
+to specify a `.spec.serviceAccountName` field, or use a *default*.
+Setting this default is what prevents controller-level workload identity,
+we call it *workload identity multi-tenancy lockdown*. To set this default,
+the `--default-workload-identity-service-account` flag can be set in the
+operator. If this flag is specified and a ResourceSetInputProvider
+object does not have the field `.spec.serviceAccountName`, the operator
+will consider that the field `.spec.serviceAccountName` has the value of
+the `--default-workload-identity-service-account` flag. When installing
+the Flux Operator with Helm, you can change the default workload identity
 service account name with:
 
 ```shell
@@ -457,7 +487,11 @@ The `.spec.serviceAccountName` field can only be used with the following provide
 - `ACRArtifactTag`
 - `ECRArtifactTag`
 - `GARArtifactTag`
-- `ExternalArtifact` (for impersonation while listing/getting custom resources)
+
+Note: It can also be set for the type `ExternalArtifact`, but in this case the ServiceAccount
+is not used for workload identity, as `ExternalArtifact` is about querying Flux ExternalArtifact
+objects inside the Kubernetes cluster. There's no access to a cloud provider service involving
+this type.
 
 When this field is not present and one of the types above is specified (and, in the case of Azure
 DevOps, [`.spec.secretRef`](#secret-based) is also not specified), the operator will attempt
