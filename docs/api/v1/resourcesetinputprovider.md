@@ -426,7 +426,7 @@ identity then the ResourceSetInputProvider reconciliation will use it.
 We call this *controller-level workload identity*. In this scenario, the
 operator code uses the cloud provider SDKs to retrieve "application
 default credentials", i.e. credentials from the environment of the operator.
-Note that, in this model, every ResourceSetInputProvider object in the
+Note that, in this mode, every ResourceSetInputProvider object in the
 cluster is sharing the same cloud provider identity: the one linked to the
 operator.
 
