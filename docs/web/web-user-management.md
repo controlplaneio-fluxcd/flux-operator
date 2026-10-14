@@ -83,6 +83,8 @@ web:
 For a complete guide on configuring SSO, see the [Flux SSO with Dex](web-sso-dex.md)
 or the [SSO with Keycloak](web-sso-keycloak.md) documentation.
 
+If authentication is already handled by an upstream reverse proxy, see the [Reverse Proxy Authentication](web-reverse-proxy.md) documentation.
+
 ### Claims Mapping to RBAC
 
 By default, the Flux Operator uses the `email` and `groups` claims from the identity provider
