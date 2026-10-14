@@ -11,6 +11,9 @@ subjects:
     name: flux-operator
     namespace: flux-system
 ---
+# FluxInstance and FluxReport are intentionally not writable through
+# aggregation: a FluxInstance drives a cluster-wide Flux installation
+# performed by the operator, and a FluxReport is written by the operator.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -45,6 +48,8 @@ rules:
     resources:
       - resourcesets
       - resourcesetinputproviders
+      - fluxinstances
+      - fluxreports
     verbs:
       - get
       - list
