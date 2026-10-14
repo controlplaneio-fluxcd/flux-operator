@@ -539,10 +539,11 @@ func TestSumPodResources(t *testing.T) {
 		Spec: corev1.PodSpec{
 			InitContainers: []corev1.Container{
 				{
-					// Plain init containers are excluded from the totals.
+					// Plain init containers run before the app containers, so they
+					// count only when they need more than the app containers.
 					Name: "init",
 					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")},
+						Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("100m")},
 					},
 				},
 				{
@@ -583,6 +584,31 @@ func TestSumPodResources(t *testing.T) {
 	g.Expect(res.CPULimits).To(BeZero())
 	g.Expect(res.MemoryRequests).To(Equal(int64(96 << 20)))
 	g.Expect(res.MemoryLimits).To(Equal(int64(128 << 20)))
+
+	// An init container larger than the app containers and the sidecars
+	// started before it sets the effective request, as the scheduler does.
+	pod.Spec.InitContainers[0].Resources.Requests[corev1.ResourceCPU] = resource.MustParse("1")
+	res = sumPodResources(pod)
+	g.Expect(res.CPURequests).To(BeNumerically("~", 1, 1e-9))
+
+	// Pod overhead is added to the requests and limits.
+	pod.Spec.InitContainers = nil
+	pod.Spec.Overhead = corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("16Mi")}
+	res = sumPodResources(pod)
+	g.Expect(res.MemoryRequests).To(Equal(int64(80 << 20)))
+	g.Expect(res.MemoryLimits).To(Equal(int64(144 << 20)))
+
+	// During an in-place resize, the larger of the desired and the
+	// actuated resources is used.
+	pod.Spec.Overhead = nil
+	pod.Status.ContainerStatuses = []corev1.ContainerStatus{{
+		Name: "main",
+		Resources: &corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("256Mi")},
+		},
+	}}
+	res = sumPodResources(pod)
+	g.Expect(res.MemoryRequests).To(Equal(int64(256 << 20)))
 }
 
 func TestBuildWorkloadMetrics(t *testing.T) {
@@ -1043,4 +1069,102 @@ func TestSumSeries(t *testing.T) {
 
 	g.Expect(sumSeries()).To(BeEmpty())
 	g.Expect(sumSeries(nil, nil)).To(BeEmpty())
+}
+
+func TestMetricsCollector_NodeSeries(t *testing.T) {
+	g := NewWithT(t)
+
+	mc := newTestCollector()
+	g.Expect(mc.NodesAvailable()).To(BeFalse())
+
+	start := time.Now().Truncate(time.Second)
+	mc.ingestNodes(nodeMetricsList(map[string][2]float64{"a": {1, 1}, "b": {2, 2}}), start)
+	mc.ingestNodes(nodeMetricsList(map[string][2]float64{"a": {3, 1}}), start.Add(time.Minute))
+
+	g.Expect(mc.NodesAvailable()).To(BeTrue())
+	g.Expect(mc.NodeLatestTick()).To(Equal(start.Add(time.Minute)))
+
+	// Only nodes in the latest scrape have a latest sample.
+	latest, ok := mc.NodeLatest("a")
+	g.Expect(ok).To(BeTrue())
+	g.Expect(latest.CPU).To(BeNumerically("~", 3, 1e-9))
+	_, ok = mc.NodeLatest("b")
+	g.Expect(ok).To(BeFalse())
+
+	// The cluster series is summed per tick over the given nodes.
+	series := mc.NodesSeries([]string{"a", "b", "unknown"})
+	g.Expect(series).To(HaveLen(2))
+	g.Expect(series[0].CPU).To(BeNumerically("~", 3, 1e-9))
+	g.Expect(series[1].CPU).To(BeNumerically("~", 3, 1e-9))
+	g.Expect(mc.NodesSeries([]string{"b"})).To(HaveLen(1))
+
+	// Nodes missing from scrapes past the retention are pruned.
+	mc.ingestNodes(nodeMetricsList(map[string][2]float64{"a": {1, 1}}), start.Add(mc.retention+2*time.Minute))
+	g.Expect(mc.NodesSeries([]string{"b"})).To(BeEmpty())
+	g.Expect(mc.nodeState.ticks).To(Equal(3))
+
+	// A collector without node lister never reports node metrics.
+	g.Expect(NewMetricsCollector(nil, time.Minute).NodesAvailable()).To(BeFalse())
+}
+
+func TestMetricsCollector_PodsLatest(t *testing.T) {
+	g := NewWithT(t)
+
+	mc := NewMetricsCollector(nil, time.Minute)
+	start := time.Now().Truncate(time.Second)
+	mc.ingest(podMetricsList(map[[2]string]float64{{"apps", "a"}: 1, {"apps", "b"}: 1}), start)
+	mc.ingest(podMetricsList(map[[2]string]float64{{"apps", "a"}: 2}), start.Add(time.Minute))
+
+	latest := mc.PodsLatest()
+	g.Expect(latest).To(HaveLen(1))
+	g.Expect(latest["apps/a"].Memory).To(Equal(int64(2 << 30)))
+	g.Expect(mc.PodLatestTick()).To(Equal(start.Add(time.Minute)))
+}
+
+func TestMetricsCollector_NextScrapeDelayNodes(t *testing.T) {
+	g := NewWithT(t)
+
+	mc := newTestCollector()
+	mc.ticks = 5
+	mc.nodeState.ticks = 5
+	g.Expect(mc.nextScrapeDelay()).To(Equal(time.Minute))
+
+	// A failing node scrape alone triggers the catch-up retry.
+	mc.nodeState.failing = true
+	g.Expect(mc.nextScrapeDelay()).To(Equal(metricsCatchupInterval))
+
+	// So does a node series with fewer than two samples.
+	mc.nodeState.failing = false
+	mc.nodeState.ticks = 1
+	g.Expect(mc.nextScrapeDelay()).To(Equal(metricsCatchupInterval))
+
+	// Without a node lister, only the pod state counts.
+	mc.nodeLister = nil
+	g.Expect(mc.nextScrapeDelay()).To(Equal(time.Minute))
+}
+
+func TestMetricsCollector_NodesView(t *testing.T) {
+	g := NewWithT(t)
+
+	mc := newTestCollector()
+	now := time.Now().Truncate(time.Second)
+	mc.ingestNodes(nodeMetricsList(map[string][2]float64{"a": {1, 1}, "b": {2, 2}}), now)
+	mc.ingest(podMetricsList(map[[2]string]float64{{"apps", "x"}: 1}), now)
+
+	view := mc.NodesView([]string{"a"})
+	g.Expect(view.NodesAvailable).To(BeTrue())
+	g.Expect(view.PodsAvailable).To(BeTrue())
+	g.Expect(view.NodeTick).To(Equal(now))
+	g.Expect(view.PodTick).To(Equal(now))
+	g.Expect(view.Interval).To(Equal(time.Minute))
+	g.Expect(view.NodeLatest).To(HaveLen(2))
+	g.Expect(view.PodLatest).To(HaveKey("apps/x"))
+	g.Expect(view.Series).To(HaveLen(1))
+	g.Expect(view.Series[0].CPU).To(BeNumerically("~", 1, 1e-9))
+
+	// Nothing is returned for unavailable metrics.
+	view = NewMetricsCollector(nil, time.Minute).NodesView([]string{"a"})
+	g.Expect(view.NodesAvailable).To(BeFalse())
+	g.Expect(view.NodeLatest).To(BeNil())
+	g.Expect(view.PodLatest).To(BeNil())
 }

@@ -25,6 +25,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/probes"
 	flag "github.com/spf13/pflag"
 	batchv1 "k8s.io/api/batch/v1"
+	coordinationv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -245,6 +246,21 @@ func main() {
 						"metadata.name":      fluxcdv1.DefaultInstanceName,
 						"metadata.namespace": runtimeNamespace,
 					}),
+				},
+				// Pods are listed cluster-wide by the web server for the
+				// controller metrics and the nodes snapshot.
+				&corev1.Pod{}: {
+					Transform: ctrlcache.TransformStripManagedFields(),
+				},
+				// Nodes are read in full by the reporter and the nodes
+				// snapshot, without the container images list.
+				&corev1.Node{}: {
+					Transform: web.TransformNode,
+				},
+				// Only the kubelet heartbeat Leases are read by the nodes snapshot.
+				&coordinationv1.Lease{}: {
+					Namespaces: map[string]ctrlcache.Config{web.NodeLeaseNamespace: {}},
+					Transform:  ctrlcache.TransformStripManagedFields(),
 				},
 			},
 		},

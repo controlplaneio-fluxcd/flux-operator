@@ -245,4 +245,22 @@ describe('UsageChart component', () => {
     setCursor(u)
     expect(tooltip.textContent).not.toContain('rolled out')
   })
+
+  it('labels the threshold in the tooltip, "limit" by default', () => {
+    const withLimit = [...data, [0.5, 0.5]]
+    const u = { cursor: { idx: 1 }, data: withLimit, valToPos: () => 10, over: { clientWidth: 300 } }
+
+    const first = render(
+      <UsageChart data={withLimit} hasLimit={true} colorKey="cpu" formatValue={formatCores} testId="cpu-chart" />
+    )
+    uPlot.instances[0].opts.hooks.setCursor[0](u)
+    expect(first.container.querySelector('.usage-chart-tooltip-limit').textContent).toBe('limit 500m')
+    first.unmount()
+
+    const second = render(
+      <UsageChart data={withLimit} hasLimit={true} limitLabel="allocatable" colorKey="cpu" formatValue={formatCores} testId="cpu-chart" />
+    )
+    uPlot.instances[1].opts.hooks.setCursor[0](u)
+    expect(second.container.querySelector('.usage-chart-tooltip-limit').textContent).toBe('allocatable 500m')
+  })
 })
