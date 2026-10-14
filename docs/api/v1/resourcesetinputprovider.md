@@ -423,6 +423,9 @@ spec:
 When using a `.spec.type` that is linked to a cloud provider service that
 supports workload identity, if the operator is configured with workload
 identity then the ResourceSetInputProvider reconciliation will use it.
+For setting up the required annotations and labels in the operator pod
+and ServiceAccount through Helm, you can use the values `commonAnnotations`
+and `commonLabels`, they are applied to both.
 We call this *controller-level workload identity*. In this scenario, the
 operator code uses the cloud provider SDKs to retrieve "application
 default credentials", i.e. credentials from the environment of the operator.
