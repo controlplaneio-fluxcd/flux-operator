@@ -3,7 +3,8 @@
 
 import { getWorkloadStatusBadgeClass, formatWorkloadStatus } from '../../utils/status'
 
-const PILL_BASE = 'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium'
+// Pill geometry, shared with other row pills (e.g. the nodes dashboard).
+export const PILL_BASE = 'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium'
 
 /**
  * StatusPill - the workload-status badge shown across the resource dashboard tabs:

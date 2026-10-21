@@ -166,6 +166,41 @@ describe('buildChartData', () => {
     expect(data).toEqual([[], []])
     expect(hasLimit).toBe(false)
   })
+
+  describe('with a per-sample limit', () => {
+    const varying = [
+      { t: '2026-07-28T10:00:00Z', cpu: 0.1, memory: 1000, allocatableCpu: 0.3 },
+      { t: '2026-07-28T10:01:00Z', cpu: 0.2, memory: 2000, allocatableCpu: 0.2 },
+      { t: '2026-07-28T10:02:00Z', cpu: 0.15, memory: 1500, allocatableCpu: 0.3 },
+    ]
+
+    it('builds a threshold series that follows the samples', () => {
+      const { data, hasLimit } = buildChartData(varying, 'cpu', 'allocatableCpu')
+      expect(hasLimit).toBe(true)
+      expect(data[1]).toEqual([0.1, 0.2, 0.15])
+      expect(data[2]).toEqual([0.3, 0.2, 0.3])
+    })
+
+    it('omits the threshold when its highest point is far off', () => {
+      const far = varying.map(s => ({ ...s, allocatableCpu: s.allocatableCpu * 10 }))
+      expect(buildChartData(far, 'cpu', 'allocatableCpu').hasLimit).toBe(false)
+    })
+
+    it('leaves a gap where a sample has no limit', () => {
+      const { data, hasLimit } = buildChartData(
+        [varying[0], { t: '2026-07-28T10:01:00Z', cpu: 0.2, memory: 2000 }],
+        'cpu', 'allocatableCpu',
+      )
+      expect(hasLimit).toBe(true)
+      expect(data[2]).toEqual([0.3, null])
+    })
+
+    it('omits the threshold when no sample has a limit', () => {
+      const { data, hasLimit } = buildChartData(samples, 'cpu', 'allocatableCpu')
+      expect(hasLimit).toBe(false)
+      expect(data).toHaveLength(2)
+    })
+  })
 })
 
 describe('latestSample', () => {

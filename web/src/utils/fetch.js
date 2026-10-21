@@ -69,11 +69,13 @@ export async function fetchWithMock({ endpoint, mockPath, mockExport, env, metho
         authRequired.value = true
       }
 
-      if (response.status === 403) {
-        throw new Error(err)
-      }
-
-      throw new Error(`HTTP error! status: ${response.status}, error: ${err}`)
+      // The status is attached so callers can tell an access denial apart
+      // from other failures (network, JSON parsing).
+      const error = response.status === 403
+        ? new Error(err)
+        : new Error(`HTTP error! status: ${response.status}, error: ${err}`)
+      error.status = response.status
+      throw error
     }
     return await response.json()
   }

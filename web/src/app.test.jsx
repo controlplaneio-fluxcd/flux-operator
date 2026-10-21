@@ -44,6 +44,10 @@ vi.mock('./components/dashboards/cluster/ClusterPage', () => ({
   ClusterPage: ({ spec }) => <div data-testid="dashboard-view">ClusterPage: {JSON.stringify(spec)}</div>
 }))
 
+vi.mock('./components/dashboards/nodes/NodesPage', () => ({
+  NodesPage: () => <div data-testid="nodes-dashboard-view">NodesPage</div>
+}))
+
 vi.mock('./components/search/EventList', () => ({
   EventList: () => <div data-testid="event-list">EventList</div>,
   eventsData: { value: [] },

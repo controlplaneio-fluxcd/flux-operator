@@ -31,6 +31,22 @@ func (r *FluxStatusReporter) getClusterInfo(ctx context.Context) (*fluxcdv1.Clus
 		return nil, fmt.Errorf("failed to get server version: %w", err)
 	}
 
+	nodes, err := r.countNodes(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return &fluxcdv1.ClusterInfo{
+		ServerVersion: sv.String(),
+		Platform:      sv.Platform,
+		Nodes:         nodes,
+	}, nil
+}
+
+// countNodes returns the number of nodes in the cluster. The nodes are
+// listed as metadata only, so that the operator doesn't cache full Node
+// objects when the web server is disabled.
+func (r *FluxStatusReporter) countNodes(ctx context.Context) (int, error) {
 	nodes := &metav1.PartialObjectMetadataList{}
 	nodes.SetGroupVersionKind(schema.GroupVersionKind{
 		Group:   "",
@@ -38,12 +54,7 @@ func (r *FluxStatusReporter) getClusterInfo(ctx context.Context) (*fluxcdv1.Clus
 		Kind:    "NodeList",
 	})
 	if err := r.List(ctx, nodes); err != nil {
-		return nil, fmt.Errorf("failed to list nodes: %w", err)
+		return 0, fmt.Errorf("failed to list nodes: %w", err)
 	}
-
-	return &fluxcdv1.ClusterInfo{
-		ServerVersion: sv.String(),
-		Platform:      sv.Platform,
-		Nodes:         len(nodes.Items),
-	}, nil
+	return len(nodes.Items), nil
 }
