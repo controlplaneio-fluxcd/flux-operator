@@ -173,9 +173,9 @@ delivering a meaningful, isolated dashboard and workload search experience.
 The report also carries a name-less nodes summary (`spec.nodes`, see
 section 9) built from cluster-wide aggregates: node counts by state,
 capacity totals, and finding counts that include unschedulable-pod and OOM
-kill counts from all tenants. It carries only codes and numbers, never node
-names, pools, zones, instance types, kubelet versions, condition types,
-messages, or taint keys.
+kill counts from all tenants. It carries only codes, counts, percentages and
+timestamps, never node names, pools, zones, instance types, kubelet versions,
+condition types, messages, or taint keys.
 
 ---
 
@@ -345,6 +345,9 @@ report and never fails it. When authentication is disabled, the whole UI runs as
 the operator, so nodes are treated like pod metrics (section 6): the access check
 is skipped, `canViewNodes` is `true` and the dashboard is open.
 
+The predefined `flux-web-user` role grants `list` on all resources, so users
+bound to it can list nodes and see the full dashboard.
+
 The dashboard returns per-node aggregates (sums and counts) and, for the pods
 without memory request or limit, namespace names with pod counts. These
 namespace names are cluster-wide and not filtered to the namespaces the user
@@ -372,8 +375,9 @@ backs the CronJob field index of section 1, so it adds no new watch. The default
 **Least privilege benefit:**
 Users who can list nodes do not need cluster-wide `pods` list, `metrics.k8s.io`
 nodes, or `leases` access to investigate node health and capacity. Tenants see
-whether the platform is healthy from the name-less summary without access to
-any node object or infrastructure detail.
+whether the platform is healthy from the aggregate summary without needing
+node access, although the summary does expose cluster capacity totals and
+finding counts.
 
 ---
 
