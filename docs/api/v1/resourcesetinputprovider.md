@@ -232,9 +232,12 @@ The following filters are supported:
 - `excludeBranch`: regular expression to exclude branches by name.
 - `includeTag`: regular expression to include tags by name.
 - `excludeTag`: regular expression to exclude tags by name.
+- `extractOrder`: replacement template (e.g. `$ts`) used with `includeTag` to extract the sortable value from a tag.
+- `extractGroup`: replacement template (e.g. `$service`) used with `includeTag` to derive a group key.
+- `orderBy`: sort order for tags, either `ReverseAlphabetical` (default), `Alphabetical`, `ReverseNumerical`, `Numerical`, or `SemVer`.
 - `includeEnvironment`: regular expression to include environments by name.
 - `excludeEnvironment`: regular expression to exclude environments by name.
-- `semver`: sematic version range to filter and sort tags.
+- `semver`: semantic version range to filter and sort tags.
 
 Example of a filter configuration for change requests:
 
@@ -265,6 +268,41 @@ spec:
     limit: 1
     semver: ">=1.0.0"
 ```
+
+Example of a filter configuration for matching artifact tags and sorting by extracted timestamp:
+
+```yaml
+spec:
+  filter:
+    limit: 2
+    includeTag: "^master-.+-ts(?P<ts>[0-9]+)$"
+    extractOrder: "$ts"
+    orderBy: ReverseNumerical
+```
+
+Use `orderBy: Alphabetical` or `Numerical` to sort in ascending order.
+The filter pipeline is:
+1. match tags with `includeTag`
+2. extract sort keys with `extractOrder`
+3. sort by extracted value using `orderBy`
+4. apply `limit`
+
+Example of a filter configuration for exporting one latest tag per group:
+
+```yaml
+spec:
+  filter:
+    limit: 1
+    includeTag: "^(?P<service>[a-z]+)-v(?P<version>v[0-9]+\\.[0-9]+\\.[0-9]+)-ts(?P<ts>[0-9]+)$"
+    extractGroup: "$service"
+    extractOrder: "$ts"
+    orderBy: ReverseNumerical
+```
+
+When `extractGroup` is used, `limit` applies to each derived group rather than the whole result
+set. In practice, that means many groups can still produce many exported inputs. To keep the total
+output bounded, make `includeTag` and/or `excludeTag` as restrictive as possible so only the
+intended groups are matched.
 
 ### Skip
 
