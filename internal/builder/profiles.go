@@ -351,9 +351,9 @@ const profileClusterMultitenantWorkloadIdentity = `
       value: --default-kubeconfig-service-account=%[3]s
 `
 
-// GetProfileObjectLevelWorkloadIdentity returns a patch to enable
-// object level workload identity in the Flux controllers through
-// the feature gate.
+// GetProfileObjectLevelWorkloadIdentity returns a patch to enable or disable
+// object level workload identity in the Flux controllers through the feature
+// gate. The feature gate was retired in Flux 2.10.
 func GetProfileObjectLevelWorkloadIdentity(controllers []string, enabled bool) string {
 	c := strings.Join(controllers, "|")
 

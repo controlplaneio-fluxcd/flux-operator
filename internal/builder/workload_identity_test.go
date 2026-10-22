@@ -19,6 +19,7 @@ func TestValidateAndApplyWorkloadIdentityConfig(t *testing.T) {
 		expectError                                   bool
 		expectErrorMsg                                string
 		expectRemovePermission                        bool
+		expectAddPermission                           bool
 		expectPatchContains                           string
 		expectPatchNotContains                        string
 		expectMultitenantWorkloadIdentityPatchApplied bool
@@ -106,6 +107,37 @@ func TestValidateAndApplyWorkloadIdentityConfig(t *testing.T) {
 			},
 			expectPatchContains: "custom-sa",
 		},
+		// Flux >= 2.10.0 tests.
+		{
+			name:                   "2.10.0 with defaults does not patch feature gate or permissions",
+			version:                "2.10.0",
+			expectPatchNotContains: "ObjectLevelWorkloadIdentity",
+		},
+		{
+			name:                   "2.10.0 objectLevel=true adds SA token permission without feature gate",
+			version:                "2.10.0",
+			cluster:                fluxcdv1.Cluster{ObjectLevelWorkloadIdentity: true},
+			expectAddPermission:    true,
+			expectPatchNotContains: "ObjectLevelWorkloadIdentity",
+		},
+		{
+			name:           "2.10.0 objectLevel=false multitenant=true returns error",
+			version:        "2.10.0",
+			cluster:        fluxcdv1.Cluster{MultitenantWorkloadIdentity: true},
+			expectError:    true,
+			expectErrorMsg: "objectLevelWorkloadIdentity must be set to true",
+		},
+		{
+			name:    "2.10.0 objectLevel=true multitenant=true adds permission and multitenant patch",
+			version: "2.10.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectLevelWorkloadIdentity: true,
+				MultitenantWorkloadIdentity: true,
+			},
+			expectAddPermission:                           true,
+			expectPatchNotContains:                        "ObjectLevelWorkloadIdentity",
+			expectMultitenantWorkloadIdentityPatchApplied: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -127,9 +159,8 @@ func TestValidateAndApplyWorkloadIdentityConfig(t *testing.T) {
 
 			g.Expect(err).NotTo(HaveOccurred())
 
-			if tt.expectRemovePermission {
-				g.Expect(opts.RemovePermissionForCreatingServiceAccountTokens).To(BeTrue())
-			}
+			g.Expect(opts.RemovePermissionForCreatingServiceAccountTokens).To(Equal(tt.expectRemovePermission))
+			g.Expect(opts.AddPermissionForCreatingServiceAccountTokens).To(Equal(tt.expectAddPermission))
 
 			if tt.expectPatchContains != "" {
 				g.Expect(opts.Patches).To(ContainSubstring(tt.expectPatchContains))

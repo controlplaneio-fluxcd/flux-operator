@@ -318,17 +318,29 @@ namespace: {{.Namespace}}
 resources:
   - rbac.yaml
 nameSuffix: -{{.Namespace}}
-{{- if .RemovePermissionForCreatingServiceAccountTokens }}
+{{- if or .RemovePermissionForCreatingServiceAccountTokens .AddPermissionForCreatingServiceAccountTokens }}
 patches:
   - target:
      kind: ClusterRole
      name: crd-controller
     patch: |-
+{{- if .RemovePermissionForCreatingServiceAccountTokens }}
      - op: remove
 {{- if le .VersionInfo.Minor 6 }}
        path: /rules/10
 {{- else }}
        path: /rules/11
+{{- end }}
+{{- else }}
+     - op: add
+       path: /rules/-
+       value:
+         apiGroups:
+         - ""
+         resources:
+         - serviceaccounts/token
+         verbs:
+         - create
 {{- end }}
 {{- end }}
 `
