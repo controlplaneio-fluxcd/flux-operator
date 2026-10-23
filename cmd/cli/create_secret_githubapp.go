@@ -30,6 +30,13 @@ var createSecretGitHubAppCmd = &cobra.Command{
   --app-private-key-file=./private-key.pem \
   --app-base-url=https://github.example.com/api/v3
 
+  # Create a secret using the GitHub App client ID instead of the app ID
+  flux-operator create secret githubapp github-app-auth \
+  --namespace=flux-system \
+  --app-client-id=Iv23liExample \
+  --app-installation-owner=my-org \
+  --app-private-key-file=./private-key.pem
+
   # Generate a secret and export it to a YAML file
   flux-operator -n apps create secret githubapp github-app \
   --app-id=123456 \
@@ -43,6 +50,7 @@ var createSecretGitHubAppCmd = &cobra.Command{
 
 type createSecretGitHubAppFlags struct {
 	appID             string
+	appClientID       string
 	installationOwner string
 	installationID    string
 	privateKeyFile    string
@@ -58,7 +66,9 @@ var createSecretGitHubAppArgs createSecretGitHubAppFlags
 
 func init() {
 	createSecretGitHubAppCmd.Flags().StringVar(&createSecretGitHubAppArgs.appID, "app-id", "",
-		"GitHub App ID (required)")
+		"GitHub App ID (required unless --app-client-id is set)")
+	createSecretGitHubAppCmd.Flags().StringVar(&createSecretGitHubAppArgs.appClientID, "app-client-id", "",
+		"GitHub App client ID (required unless --app-id is set)")
 	createSecretGitHubAppCmd.Flags().StringVar(&createSecretGitHubAppArgs.installationOwner, "app-installation-owner", "",
 		"GitHub App Installation Owner (organization or user) (optional)")
 	createSecretGitHubAppCmd.Flags().StringVar(&createSecretGitHubAppArgs.installationID, "app-installation-id", "",
@@ -92,7 +102,13 @@ func createSecretGitHubAppCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Build the secret
-	opts := []secrets.GitHubAppOption{secrets.WithGitHubAppID(createSecretGitHubAppArgs.appID)}
+	var opts []secrets.GitHubAppOption
+	if id := createSecretGitHubAppArgs.appID; id != "" {
+		opts = append(opts, secrets.WithGitHubAppID(id))
+	}
+	if clientID := createSecretGitHubAppArgs.appClientID; clientID != "" {
+		opts = append(opts, secrets.WithGitHubAppClientID(clientID))
+	}
 	if owner := createSecretGitHubAppArgs.installationOwner; owner != "" {
 		opts = append(opts, secrets.WithGitHubAppInstallationOwner(owner))
 	}

@@ -77,7 +77,13 @@ func (in *Installer) ApplyGitHubAppCredentials(ctx context.Context, secretName s
 		return nil, fmt.Errorf("GitHub App credentials are not configured")
 	}
 
-	opts := []secrets.GitHubAppOption{secrets.WithGitHubAppID(gha.AppID)}
+	var opts []secrets.GitHubAppOption
+	if gha.AppID != "" {
+		opts = append(opts, secrets.WithGitHubAppID(gha.AppID))
+	}
+	if gha.ClientID != "" {
+		opts = append(opts, secrets.WithGitHubAppClientID(gha.ClientID))
+	}
 	if gha.InstallationOwner != "" {
 		opts = append(opts, secrets.WithGitHubAppInstallationOwner(gha.InstallationOwner))
 	}
