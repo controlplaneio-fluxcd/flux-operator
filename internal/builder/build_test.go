@@ -476,6 +476,7 @@ func TestBuild_WorkloadIdentity_ValidateAndApplyConfig(t *testing.T) {
 		cluster            fluxcdv1.Cluster
 		expectedErr        string
 		expectRemoveTokens bool
+		expectAddTokens    bool
 	}{
 		// Pre-2.6.0 versions
 		{
@@ -563,6 +564,42 @@ func TestBuild_WorkloadIdentity_ValidateAndApplyConfig(t *testing.T) {
 			expectedErr: ".objectLevelWorkloadIdentity must be set to true when .multitenantWorkloadIdentity is set to true",
 		},
 
+		// >= 2.10.0 versions
+		{
+			name:    "2.10.0+ disabled",
+			version: "v2.10.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectLevelWorkloadIdentity: false,
+			},
+		},
+		{
+			name:    "2.10.0+ object level only",
+			version: "v2.10.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectLevelWorkloadIdentity: true,
+				MultitenantWorkloadIdentity: false,
+			},
+			expectAddTokens: true,
+		},
+		{
+			name:    "2.10.0+ multitenant enabled",
+			version: "v2.10.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectLevelWorkloadIdentity: true,
+				MultitenantWorkloadIdentity: true,
+			},
+			expectAddTokens: true,
+		},
+		{
+			name:    "2.10.0+ multitenant without object level",
+			version: "v2.10.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectLevelWorkloadIdentity: false,
+				MultitenantWorkloadIdentity: true,
+			},
+			expectedErr: ".objectLevelWorkloadIdentity must be set to true when .multitenantWorkloadIdentity is set to true",
+		},
+
 		// Invalid version
 		{
 			name:        "invalid version",
@@ -586,6 +623,7 @@ func TestBuild_WorkloadIdentity_ValidateAndApplyConfig(t *testing.T) {
 			} else {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(options.RemovePermissionForCreatingServiceAccountTokens).To(Equal(tc.expectRemoveTokens))
+				g.Expect(options.AddPermissionForCreatingServiceAccountTokens).To(Equal(tc.expectAddTokens))
 			}
 		})
 	}
@@ -600,7 +638,8 @@ func TestBuild_WorkloadIdentity_FeatureGateAndFlags(t *testing.T) {
 		expectedFeatureGate       string
 		controllersWithGate       []string
 		expectServiceAccountFlags bool
-		expectTokensRemoved       bool
+		expectTokens              bool
+		expectNoFeatureGate       bool
 	}{
 		{
 			name:                "2.6.0 object level enabled",
@@ -609,14 +648,14 @@ func TestBuild_WorkloadIdentity_FeatureGateAndFlags(t *testing.T) {
 			srcDir:              "v2.6.0",
 			expectedFeatureGate: "--feature-gates=ObjectLevelWorkloadIdentity=true",
 			controllersWithGate: []string{sourceController, "kustomize-controller", "notification-controller", "image-reflector-controller", "image-automation-controller"},
-			expectTokensRemoved: false,
+			expectTokens:        true,
 		},
 		{
-			name:                "2.6.0 object level disabled",
-			version:             "v2.6.0",
-			cluster:             fluxcdv1.Cluster{ObjectLevelWorkloadIdentity: false},
-			srcDir:              "v2.6.0",
-			expectTokensRemoved: true,
+			name:         "2.6.0 object level disabled",
+			version:      "v2.6.0",
+			cluster:      fluxcdv1.Cluster{ObjectLevelWorkloadIdentity: false},
+			srcDir:       "v2.6.0",
+			expectTokens: false,
 		},
 		{
 			name:                "2.7.0 object level enabled",
@@ -625,7 +664,7 @@ func TestBuild_WorkloadIdentity_FeatureGateAndFlags(t *testing.T) {
 			srcDir:              "v2.7.0",
 			expectedFeatureGate: "--feature-gates=ObjectLevelWorkloadIdentity=true",
 			controllersWithGate: []string{sourceController, "kustomize-controller", "helm-controller", "notification-controller", "image-reflector-controller", "image-automation-controller"},
-			expectTokensRemoved: false,
+			expectTokens:        true,
 		},
 		{
 			name:                "2.7.0 object level disabled",
@@ -634,7 +673,7 @@ func TestBuild_WorkloadIdentity_FeatureGateAndFlags(t *testing.T) {
 			srcDir:              "v2.7.0",
 			expectedFeatureGate: "--feature-gates=ObjectLevelWorkloadIdentity=false",
 			controllersWithGate: []string{sourceController, "kustomize-controller", "helm-controller", "notification-controller", "image-reflector-controller", "image-automation-controller"},
-			expectTokensRemoved: true,
+			expectTokens:        false,
 		},
 		{
 			name:    "2.7.0 multitenant enabled with defaults",
@@ -647,7 +686,7 @@ func TestBuild_WorkloadIdentity_FeatureGateAndFlags(t *testing.T) {
 			expectedFeatureGate:       "--feature-gates=ObjectLevelWorkloadIdentity=true",
 			controllersWithGate:       []string{sourceController, "kustomize-controller", "helm-controller", "notification-controller", "image-reflector-controller", "image-automation-controller"},
 			expectServiceAccountFlags: true,
-			expectTokensRemoved:       false,
+			expectTokens:              true,
 		},
 		{
 			name:    "2.7.0 multitenant enabled with custom service accounts",
@@ -663,7 +702,35 @@ func TestBuild_WorkloadIdentity_FeatureGateAndFlags(t *testing.T) {
 			expectedFeatureGate:       "--feature-gates=ObjectLevelWorkloadIdentity=true",
 			controllersWithGate:       []string{sourceController, "kustomize-controller", "helm-controller", "notification-controller", "image-reflector-controller", "image-automation-controller"},
 			expectServiceAccountFlags: true,
-			expectTokensRemoved:       false,
+			expectTokens:              true,
+		},
+		{
+			name:                "2.10.0 object level disabled",
+			version:             "v2.10.0",
+			cluster:             fluxcdv1.Cluster{ObjectLevelWorkloadIdentity: false},
+			srcDir:              "v2.10.0",
+			expectTokens:        false,
+			expectNoFeatureGate: true,
+		},
+		{
+			name:                "2.10.0 object level enabled adds SA token permission",
+			version:             "v2.10.0",
+			cluster:             fluxcdv1.Cluster{ObjectLevelWorkloadIdentity: true},
+			srcDir:              "v2.10.0",
+			expectTokens:        true,
+			expectNoFeatureGate: true,
+		},
+		{
+			name:    "2.10.0 multitenant enabled adds SA token permission and flags",
+			version: "v2.10.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectLevelWorkloadIdentity: true,
+				MultitenantWorkloadIdentity: true,
+			},
+			srcDir:                    "v2.10.0",
+			expectServiceAccountFlags: true,
+			expectTokens:              true,
+			expectNoFeatureGate:       true,
 		},
 	}
 
@@ -713,15 +780,24 @@ func TestBuild_WorkloadIdentity_FeatureGateAndFlags(t *testing.T) {
 				}
 			}
 
+			// Check that the retired feature gate is not passed to the controllers.
+			if tc.expectNoFeatureGate {
+				for _, obj := range result.Objects {
+					if obj.GetKind() == deploymentKind {
+						g.Expect(ssautil.ObjectToYAML(obj)).NotTo(ContainSubstring("ObjectLevelWorkloadIdentity"))
+					}
+				}
+			}
+
 			// Check service account tokens permission
 			found := false
 			for _, obj := range result.Objects {
 				if obj.GetName() == crdControllerFluxSystem && obj.GetKind() == clusterRole {
 					found = true
-					if tc.expectTokensRemoved {
-						g.Expect(ssautil.ObjectToYAML(obj)).NotTo(ContainSubstring("serviceaccounts/token"))
-					} else {
+					if tc.expectTokens {
 						g.Expect(ssautil.ObjectToYAML(obj)).To(ContainSubstring("serviceaccounts/token"))
+					} else {
+						g.Expect(ssautil.ObjectToYAML(obj)).NotTo(ContainSubstring("serviceaccounts/token"))
 					}
 				}
 			}

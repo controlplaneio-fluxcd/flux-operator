@@ -39,6 +39,10 @@ func (o *Options) ValidateAndApplyWorkloadIdentityConfig(cluster fluxcdv1.Cluste
 	if err != nil {
 		return err
 	}
+	lt210, err := checkVersionAgainstConstraint(version, "< 2.10.0")
+	if err != nil {
+		return err
+	}
 
 	switch {
 
@@ -76,8 +80,8 @@ func (o *Options) ValidateAndApplyWorkloadIdentityConfig(cluster fluxcdv1.Cluste
 		o.Patches += GetProfileObjectLevelWorkloadIdentity(firstControllersWithObjectLevelWorkloadIdentity, enabled)
 		return nil
 
-	// Handle >= 2.7.0 versions.
-	default:
+	// Handle >= 2.7.0 and < 2.10.0 versions.
+	case lt210:
 
 		// Perform checks specific to this version range.
 		if !cluster.ObjectLevelWorkloadIdentity && cluster.MultitenantWorkloadIdentity {
@@ -94,6 +98,34 @@ func (o *Options) ValidateAndApplyWorkloadIdentityConfig(cluster fluxcdv1.Cluste
 			o.RemovePermissionForCreatingServiceAccountTokens = true
 			return nil
 		}
+
+		// Nothing else to do if multitenant workload identity is disabled.
+		if !cluster.MultitenantWorkloadIdentity {
+			return nil
+		}
+
+		// Multi-tenancy is enabled. Append default service account controller flags.
+		o.Patches += GetProfileMultitenantWorkloadIdentity(cluster)
+		return nil
+
+	// Handle >= 2.10.0 versions.
+	default:
+
+		// Perform checks specific to this version range.
+		if !cluster.ObjectLevelWorkloadIdentity && cluster.MultitenantWorkloadIdentity {
+			return fmt.Errorf(".objectLevelWorkloadIdentity must be set to true when .multitenantWorkloadIdentity is set to true")
+		}
+
+		// The ObjectLevelWorkloadIdentity feature gate is retired, so it must
+		// not be passed to the controllers anymore. When object-level workload
+		// identity is disabled, there is nothing else to do.
+		if !cluster.ObjectLevelWorkloadIdentity {
+			return nil
+		}
+
+		// The RBAC for creating service account tokens is no longer part of the
+		// Flux distribution starting with 2.10, so we need to add it back.
+		o.AddPermissionForCreatingServiceAccountTokens = true
 
 		// Nothing else to do if multitenant workload identity is disabled.
 		if !cluster.MultitenantWorkloadIdentity {

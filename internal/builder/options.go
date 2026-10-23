@@ -34,6 +34,7 @@ type Options struct {
 	ShardName                                       string
 	SourceAPIVersion                                string
 	RemovePermissionForCreatingServiceAccountTokens bool
+	AddPermissionForCreatingServiceAccountTokens    bool
 }
 
 // MakeDefaultOptions returns the default builder configuration.
