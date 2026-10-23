@@ -11,6 +11,7 @@ import (
 	"slices"
 
 	"github.com/fluxcd/pkg/runtime/events"
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -44,7 +45,11 @@ func WithClient(c client.Client) Option {
 	}
 }
 
-func New(ctx context.Context, base record.EventRecorder, scheme *runtime.Scheme, opts ...Option) record.EventRecorder {
+// New returns an events.Recorder that records Kubernetes events with the
+// base recorder and forwards them to notification-controller when the
+// controller address can be resolved from the FluxInstance. If the address
+// can't be resolved, the events are only recorded in Kubernetes.
+func New(ctx context.Context, base record.EventRecorder, scheme *runtime.Scheme, opts ...Option) events.Recorder {
 	log := ctrl.LoggerFrom(ctx)
 
 	var o options
@@ -52,45 +57,65 @@ func New(ctx context.Context, base record.EventRecorder, scheme *runtime.Scheme,
 		opt(&o)
 	}
 
-	// Figure out the notification-controller address from the flux instance.
-	eventsAddr := os.Getenv("NOTIFICATION_CONTROLLER_ADDRESS")
-	if eventsAddr == "" && os.Getenv("NOTIFICATIONS_DISABLED") == "" {
-		fluxInstance := o.fluxInstance
-		if fluxInstance == nil {
-			if o.client == nil {
-				const msg = "flux instance object or client is required"
-				log.Error(errors.New(msg), msg)
-				return base
-			}
-			var instanceList fluxcdv1.FluxInstanceList
-			if err := o.client.List(ctx, &instanceList); err != nil {
-				log.Error(err, "failed to list flux instances")
-				return base
-			}
-			if len(instanceList.Items) == 0 {
-				const msg = "no flux instances found"
-				log.Error(errors.New(msg), msg)
-				return base
-			}
-			if len(instanceList.Items) > 1 {
-				const msg = "multiple flux instances found, only one is supported"
-				log.Error(errors.New(msg), msg)
-				return base
-			}
-			fluxInstance = &instanceList.Items[0]
-		}
-		if slices.Contains(fluxInstance.GetComponents(), "notification-controller") {
-			eventsAddr = Address(fluxInstance.GetNamespace(), fluxInstance.GetCluster().Domain)
-		}
-	}
-
-	// Create the event recorder.
-	const reportingController = "flux-operator"
-	er, err := events.NewRecorderForScheme(scheme, base, log, eventsAddr, reportingController)
+	eventsAddr := eventsAddress(ctx, o)
+	er, err := newRecorder(log, base, scheme, eventsAddr)
 	if err != nil {
 		log.Error(err, "failed to create event recorder")
-		return base
+		// Fall back to recording the events only in Kubernetes.
+		if er, err = newRecorder(log, base, scheme, ""); err != nil {
+			log.Error(err, "failed to create Kubernetes event recorder")
+			return events.NewNopRecorder()
+		}
 	}
 
 	return er
+}
+
+// newRecorder creates an events.Recorder that records core/v1 events with the
+// base recorder and posts them to the given notification-controller address.
+func newRecorder(log logr.Logger, base record.EventRecorder, scheme *runtime.Scheme, eventsAddr string) (events.Recorder, error) {
+	const reportingController = "flux-operator"
+	return events.NewRecorder(log, eventsAddr, reportingController,
+		events.WithScheme(scheme), events.WithLegacyEventRecorder(base))
+}
+
+// eventsAddress returns the notification-controller address from the
+// environment or from the FluxInstance. It returns an empty string if
+// notifications are disabled or the address can't be resolved.
+func eventsAddress(ctx context.Context, o options) string {
+	log := ctrl.LoggerFrom(ctx)
+
+	eventsAddr := os.Getenv("NOTIFICATION_CONTROLLER_ADDRESS")
+	if eventsAddr != "" || os.Getenv("NOTIFICATIONS_DISABLED") != "" {
+		return eventsAddr
+	}
+
+	fluxInstance := o.fluxInstance
+	if fluxInstance == nil {
+		if o.client == nil {
+			const msg = "flux instance object or client is required"
+			log.Error(errors.New(msg), msg)
+			return ""
+		}
+		var instanceList fluxcdv1.FluxInstanceList
+		if err := o.client.List(ctx, &instanceList); err != nil {
+			log.Error(err, "failed to list flux instances")
+			return ""
+		}
+		if len(instanceList.Items) == 0 {
+			const msg = "no flux instances found"
+			log.Error(errors.New(msg), msg)
+			return ""
+		}
+		if len(instanceList.Items) > 1 {
+			const msg = "multiple flux instances found, only one is supported"
+			log.Error(errors.New(msg), msg)
+			return ""
+		}
+		fluxInstance = &instanceList.Items[0]
+	}
+	if slices.Contains(fluxInstance.GetComponents(), "notification-controller") {
+		return Address(fluxInstance.GetNamespace(), fluxInstance.GetCluster().Domain)
+	}
+	return ""
 }

@@ -59,9 +59,7 @@ func TestNew_WithEnvAddress(t *testing.T) {
 
 	er := New(ctx, base, scheme)
 	g.Expect(er).NotTo(BeNil())
-	// When NOTIFICATION_CONTROLLER_ADDRESS is set, the recorder should be
-	// created regardless of flux instance presence.
-	g.Expect(er).NotTo(Equal(base))
+	g.Expect(eventsAddress(ctx, optionsFrom())).To(Equal("http://custom-address:9090/"))
 }
 
 func TestNew_NotificationsDisabled(t *testing.T) {
@@ -77,7 +75,7 @@ func TestNew_NotificationsDisabled(t *testing.T) {
 
 	er := New(ctx, base, scheme)
 	g.Expect(er).NotTo(BeNil())
-	// Events address is empty, so the recorder is still created (with empty webhook).
+	g.Expect(eventsAddress(ctx, optionsFrom())).To(Equal(""))
 }
 
 func TestNew_NoClientNoInstance(t *testing.T) {
@@ -89,9 +87,9 @@ func TestNew_NoClientNoInstance(t *testing.T) {
 	base := record.NewFakeRecorder(10)
 	ctx := context.Background()
 
-	// No client and no flux instance provided — should fall back to base.
 	er := New(ctx, base, scheme)
-	g.Expect(er).To(Equal(base))
+	g.Expect(er).NotTo(BeNil())
+	g.Expect(eventsAddress(ctx, optionsFrom())).To(Equal(""))
 }
 
 func TestNew_WithFluxInstance_HasNotificationController(t *testing.T) {
@@ -122,8 +120,7 @@ func TestNew_WithFluxInstance_HasNotificationController(t *testing.T) {
 
 	er := New(ctx, base, scheme, WithFluxInstance(instance))
 	g.Expect(er).NotTo(BeNil())
-	// With notification-controller present, should create an external recorder.
-	g.Expect(er).NotTo(Equal(base))
+	g.Expect(eventsAddress(ctx, optionsFrom(WithFluxInstance(instance)))).To(Equal("http://notification-controller.flux-system.svc.cluster.local./"))
 }
 
 func TestNew_WithFluxInstance_NoNotificationController(t *testing.T) {
@@ -150,8 +147,7 @@ func TestNew_WithFluxInstance_NoNotificationController(t *testing.T) {
 
 	er := New(ctx, base, scheme, WithFluxInstance(instance))
 	g.Expect(er).NotTo(BeNil())
-	// Without notification-controller, eventsAddr is empty.
-	// The recorder is created with an empty webhook address.
+	g.Expect(eventsAddress(ctx, optionsFrom(WithFluxInstance(instance)))).To(Equal(""))
 }
 
 func TestNew_WithClient_NoFluxInstances(t *testing.T) {
@@ -167,9 +163,9 @@ func TestNew_WithClient_NoFluxInstances(t *testing.T) {
 	base := record.NewFakeRecorder(10)
 	ctx := context.Background()
 
-	// Client provided but no FluxInstance objects exist — should fall back to base.
 	er := New(ctx, base, scheme, WithClient(kubeClient))
-	g.Expect(er).To(Equal(base))
+	g.Expect(er).NotTo(BeNil())
+	g.Expect(eventsAddress(ctx, optionsFrom(WithClient(kubeClient)))).To(Equal(""))
 }
 
 func TestNew_WithClient_SingleFluxInstance(t *testing.T) {
@@ -204,7 +200,7 @@ func TestNew_WithClient_SingleFluxInstance(t *testing.T) {
 
 	er := New(ctx, base, scheme, WithClient(kubeClient))
 	g.Expect(er).NotTo(BeNil())
-	g.Expect(er).NotTo(Equal(base))
+	g.Expect(eventsAddress(ctx, optionsFrom(WithClient(kubeClient)))).To(Equal("http://notification-controller.flux-system.svc.cluster.local./"))
 }
 
 func TestNew_WithClient_MultipleFluxInstances(t *testing.T) {
@@ -234,7 +230,15 @@ func TestNew_WithClient_MultipleFluxInstances(t *testing.T) {
 	base := record.NewFakeRecorder(10)
 	ctx := context.Background()
 
-	// Multiple instances — should fall back to base.
 	er := New(ctx, base, scheme, WithClient(kubeClient))
-	g.Expect(er).To(Equal(base))
+	g.Expect(er).NotTo(BeNil())
+	g.Expect(eventsAddress(ctx, optionsFrom(WithClient(kubeClient)))).To(Equal(""))
+}
+
+func optionsFrom(opts ...Option) options {
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
+	return o
 }

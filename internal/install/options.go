@@ -50,8 +50,11 @@ type Options struct {
 
 // GitHubAppCredentials holds the GitHub App credentials for authenticating to Git repositories.
 type GitHubAppCredentials struct {
-	// AppID is the GitHub App ID.
+	// AppID is the GitHub App ID. Mutually exclusive with ClientID.
 	AppID string
+
+	// ClientID is the GitHub App client ID. Mutually exclusive with AppID.
+	ClientID string
 
 	// InstallationID is the GitHub App Installation ID.
 	InstallationID string
@@ -142,8 +145,11 @@ func (o *Options) validate() error {
 		if o.credentials != "" {
 			return fmt.Errorf("credentials and GitHub App credentials are mutually exclusive")
 		}
-		if o.gitHubApp.AppID == "" {
-			return fmt.Errorf("GitHub App ID is required")
+		if o.gitHubApp.AppID == "" && o.gitHubApp.ClientID == "" {
+			return fmt.Errorf("GitHub App ID or client ID is required")
+		}
+		if o.gitHubApp.AppID != "" && o.gitHubApp.ClientID != "" {
+			return fmt.Errorf("GitHub App ID and client ID are mutually exclusive")
 		}
 		if o.gitHubApp.PrivateKey == "" {
 			return fmt.Errorf("GitHub App private key is required")

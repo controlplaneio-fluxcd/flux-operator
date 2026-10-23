@@ -152,7 +152,7 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 			meta.ReadyCondition,
 			meta.ArtifactFailedReason,
 			"%s", msg)
-		r.notify(ctx, obj, meta.ArtifactFailedReason, corev1.EventTypeWarning, msg)
+		r.notify(ctx, obj, fluxcdv1.ActionFetchDistribution, meta.ArtifactFailedReason, corev1.EventTypeWarning, msg)
 		return ctrl.Result{}, err
 	}
 
@@ -195,7 +195,7 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 			conditions.GetReason(obj, meta.ReadyCondition),
 			nil)
 
-		r.notify(ctx, obj, meta.BuildFailedReason, corev1.EventTypeWarning, msg)
+		r.notify(ctx, obj, fluxcdv1.ActionBuild, meta.BuildFailedReason, corev1.EventTypeWarning, msg)
 		return ctrl.Result{}, reconcile.TerminalError(err)
 	}
 
@@ -240,7 +240,7 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 				"flux": version,
 			})
 
-		r.notify(ctx, obj, meta.ReconciliationFailedReason, corev1.EventTypeWarning, msg)
+		r.notify(ctx, obj, fluxcdv1.ActionReconcile, meta.ReconciliationFailedReason, corev1.EventTypeWarning, msg)
 		return ctrl.Result{}, err
 	}
 
@@ -609,7 +609,7 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 		ver := strings.Split(buildResult.Revision, "@")[0]
 
 		msg := fmt.Sprintf("Flux %s %s\n%s", ver, action, applyLog)
-		r.notify(ctx, obj, meta.ReconciliationSucceededReason, corev1.EventTypeNormal, msg)
+		r.notify(ctx, obj, fluxcdv1.ActionReconcile, meta.ReconciliationSucceededReason, corev1.EventTypeNormal, msg)
 	}
 
 	return nil
@@ -681,12 +681,13 @@ func (r *FluxInstanceReconciler) recordMetrics(obj *fluxcdv1.FluxInstance) error
 	return nil
 }
 
-func (r *FluxInstanceReconciler) notify(ctx context.Context, obj *fluxcdv1.FluxInstance, reason, eventType, msg string) {
+func (r *FluxInstanceReconciler) notify(ctx context.Context, obj *fluxcdv1.FluxInstance,
+	action fluxcdv1.Action, reason, eventType, msg string) {
 	annotations := map[string]string{}
 	if obj.Status.LastAttemptedRevision != "" {
 		annotations[fluxcdv1.RevisionAnnotation] = obj.Status.LastAttemptedRevision
 	}
 	notifier.
 		New(ctx, r.EventRecorder, r.Scheme, notifier.WithFluxInstance(obj)).
-		AnnotatedEventf(obj, annotations, eventType, reason, "%s", msg)
+		AnnotatedEventf(obj, nil, annotations, eventType, reason, action.String(), "%s", msg)
 }

@@ -705,7 +705,7 @@ spec:
 }
 
 func TestResourceSetInputProviderReconciler_getGitHubToken_cached(t *testing.T) {
-	const key = "16b8b06786e2796aa1a04a57f4f74fa72ff7d8e481cf53905b6a741cf4c380e2"
+	const key = "4293bf0332e6fab80370b3a9b0c37ad613d5fde67201c2cb30415117ec8f5621"
 
 	g := NewWithT(t)
 
@@ -1073,10 +1073,12 @@ func TestResouceSetInputProviderReconciler_getAzureDevOpsToken(t *testing.T) {
 		}, nil)
 
 		// The Git URL must reach the auth package, otherwise the request is
-		// rejected before the Azure provider reads the ServiceAccount.
+		// rejected before the ServiceAccount is used. The auth package fails
+		// next on the missing controller token, which only exists in a Pod.
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).NotTo(ContainSubstring("a Git repository URL is required"))
-		g.Expect(err.Error()).To(ContainSubstring("azure tenant ID is not set in the service account annotation"))
+		g.Expect(err.Error()).To(ContainSubstring(
+			fmt.Sprintf("failed to create kubernetes token for service account '%s/test-sa'", ns.Name)))
 		g.Expect(res).To(BeEmpty())
 	})
 
