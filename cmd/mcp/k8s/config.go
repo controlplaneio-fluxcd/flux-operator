@@ -36,9 +36,14 @@ func NewKubeConfig() *KubeConfig {
 	}
 }
 
-// Load loads and updates Kubernetes configuration contexts based on the KUBECONFIG environment variable.
-// It ensures thread safety and preserves the current context if it exists in the new configuration.
-// Returns an error if KUBECONFIG is not set or if there is an issue loading the configuration.
+// Load loads and updates Kubernetes configuration contexts from all kubeconfig
+// files listed in the KUBECONFIG environment variable, following kubectl merge
+// semantics: earlier files take precedence for duplicate context names, and the
+// current context is the first one declared across the list. Files in the list
+// that do not exist are skipped. It ensures thread safety and preserves the
+// current context if it exists in the new configuration.
+// Returns an error if KUBECONFIG is not set or if a listed kubeconfig file
+// cannot be parsed.
 func (c *KubeConfig) Load() error {
 	c.mx.Lock()
 	defer c.mx.Unlock()
@@ -51,20 +56,40 @@ func (c *KubeConfig) Load() error {
 	paths := filepath.SplitList(configPaths)
 
 	newContexts := make([]KubeConfigContext, 0)
-	config, err := clientcmd.LoadFromFile(paths[0])
-	if err != nil {
-		return err
+	seen := make(map[string]bool)
+	currentContext := ""
+	for _, path := range paths {
+		config, err := clientcmd.LoadFromFile(path)
+		if err != nil {
+			// Match kubectl: entries in the list that don't exist are skipped.
+			if os.IsNotExist(err) {
+				continue
+			}
+			return err
+		}
+		if currentContext == "" {
+			currentContext = config.CurrentContext
+		}
+		for name, ct := range config.Contexts {
+			if seen[name] {
+				continue
+			}
+			seen[name] = true
+			kubeCtx := KubeConfigContext{
+				ContextName: name,
+				ClusterName: ct.Cluster,
+			}
+			newContexts = append(newContexts, kubeCtx)
+		}
 	}
 
-	for name, ct := range config.Contexts {
-		kubeCtx := KubeConfigContext{
-			ContextName: name,
-			ClusterName: ct.Cluster,
+	if currentContext != "" {
+		for i := range newContexts {
+			if newContexts[i].ContextName == currentContext {
+				newContexts[i].CurrentContext = true
+				break
+			}
 		}
-		if name == config.CurrentContext {
-			kubeCtx.CurrentContext = true
-		}
-		newContexts = append(newContexts, kubeCtx)
 	}
 
 	if len(c.contexts) > 0 {
