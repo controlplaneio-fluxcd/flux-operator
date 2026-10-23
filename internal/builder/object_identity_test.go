@@ -27,6 +27,7 @@ func TestValidateAndApplyWorkloadIdentityConfig(t *testing.T) {
 		expectPatchContains                            string
 		expectPatchNotContains                         string
 		expectMultitenantWorkloadIdentityPatchApplied  bool
+		objectIdentityViaSPIFFE                        bool
 		expectObjectLevelLegacyWarning                 bool
 		expectMultitenantWorkloadIdentityLegacyWarning bool
 	}{
@@ -113,7 +114,7 @@ func TestValidateAndApplyWorkloadIdentityConfig(t *testing.T) {
 			version:        "2.7.0",
 			cluster:        fluxcdv1.Cluster{MultitenantWorkloadIdentity: true},
 			expectError:    true,
-			expectErrorMsg: "objectIdentityRBAC must be set to true",
+			expectErrorMsg: "objectIdentityRBAC or .objectLevelWorkloadIdentity must be set to true",
 		},
 		{
 			name:                "2.7.0 objectLevel=true adds feature gate for all controllers",
@@ -181,7 +182,7 @@ func TestValidateAndApplyWorkloadIdentityConfig(t *testing.T) {
 			version:        "2.10.0",
 			cluster:        fluxcdv1.Cluster{MultitenantWorkloadIdentity: true},
 			expectError:    true,
-			expectErrorMsg: "objectIdentityRBAC must be set to true",
+			expectErrorMsg: "objectIdentityRBAC or .objectLevelWorkloadIdentity must be set to true",
 		},
 		{
 			name:    "2.10.0 objectLevel=true multitenant=true adds permission and multitenant patch",
@@ -219,6 +220,35 @@ func TestValidateAndApplyWorkloadIdentityConfig(t *testing.T) {
 			expectPatchNotContains:                        "ObjectLevelWorkloadIdentity",
 			expectMultitenantWorkloadIdentityPatchApplied: true,
 		},
+		{
+			name:    "2.10.0 object identity via SPIFFE allows multitenant object identity without RBAC",
+			version: "2.10.0",
+			cluster: fluxcdv1.Cluster{
+				MultitenantObjectIdentity: true,
+			},
+			objectIdentityViaSPIFFE:                       true,
+			expectMultitenantWorkloadIdentityPatchApplied: true,
+		},
+		{
+			name:    "2.10.0 object identity via SPIFFE does not relax legacy multitenant workload identity",
+			version: "2.10.0",
+			cluster: fluxcdv1.Cluster{
+				MultitenantWorkloadIdentity: true,
+			},
+			objectIdentityViaSPIFFE: true,
+			expectError:             true,
+			expectErrorMsg:          "objectIdentityRBAC or .objectLevelWorkloadIdentity must be set to true",
+		},
+		{
+			name:    "2.9.6 object identity via SPIFFE is rejected",
+			version: "2.9.6",
+			cluster: fluxcdv1.Cluster{
+				MultitenantObjectIdentity: true,
+			},
+			objectIdentityViaSPIFFE: true,
+			expectError:             true,
+			expectErrorMsg:          "objectIdentityRBAC must be set to true",
+		},
 	}
 
 	for _, tt := range tests {
@@ -239,7 +269,7 @@ func TestValidateAndApplyWorkloadIdentityConfig(t *testing.T) {
 			opts.Version = tt.version
 			opts.Logger = logger
 
-			err := opts.ValidateAndApplyWorkloadIdentityConfig(tt.cluster)
+			err := opts.ValidateAndApplyObjectIdentityConfig(tt.cluster, tt.objectIdentityViaSPIFFE)
 
 			if tt.expectError {
 				g.Expect(err).To(HaveOccurred())
@@ -301,8 +331,8 @@ func TestValidateAndApplyWorkloadIdentityConfig_LegacyWarningsLoggedOnce(t *test
 		MultitenantWorkloadIdentity: true,
 	}
 
-	g.Expect(opts.ValidateAndApplyWorkloadIdentityConfig(cluster)).To(Succeed())
-	g.Expect(opts.ValidateAndApplyWorkloadIdentityConfig(cluster)).To(Succeed())
+	g.Expect(opts.ValidateAndApplyObjectIdentityConfig(cluster, false)).To(Succeed())
+	g.Expect(opts.ValidateAndApplyObjectIdentityConfig(cluster, false)).To(Succeed())
 
 	g.Expect(strings.Count(logBuffer.String(), objectLevelWorkloadIdentityLegacyWarning)).To(Equal(1))
 	g.Expect(strings.Count(logBuffer.String(), multitenantWorkloadIdentityLegacyWarning)).To(Equal(1))

@@ -5,12 +5,14 @@ package web
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/netip"
 	"slices"
+	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -19,6 +21,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	internalspiffe "github.com/controlplaneio-fluxcd/flux-operator/internal/spiffe"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/kubeclient"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
 
@@ -63,6 +67,18 @@ var artifactHTTPClient = &http.Client{
 // rejectArtifactRedirect prevents an artifact URL from redirecting to another destination.
 func rejectArtifactRedirect(_ *http.Request, _ []*http.Request) error {
 	return http.ErrUseLastResponse
+}
+
+// artifactHTTPClientWithTLS returns a copy of the artifact HTTP client that
+// uses the given TLS configuration.
+func artifactHTTPClientWithTLS(tlsConfig *tls.Config) *http.Client {
+	httpClient := *artifactHTTPClient
+	if transport, ok := artifactHTTPClient.Transport.(*http.Transport); ok {
+		transport = transport.Clone()
+		transport.TLSClientConfig = tlsConfig
+		httpClient.Transport = transport
+	}
+	return &httpClient
 }
 
 // newArtifactDialContext returns a dialer that requires a DNS hostname, resolves and
@@ -210,6 +226,26 @@ func (h *Handler) DownloadHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Configure SPIFFE mTLS for the artifact server when enabled on the
+	// FluxInstance. The peer identities are derived at request time because
+	// they depend on the FluxInstance reconciliation state.
+	tlsConfig, err := internalspiffe.ArtifactTLSConfig(ctx,
+		h.kubeClient.GetClient(ctx, kubeclient.WithPrivileges()), h.spiffeSource, nil)
+	if err != nil {
+		log.FromContext(ctx).Error(err, "failed to configure SPIFFE mTLS for artifact download",
+			"kind", kind, "name", name, "namespace", namespace)
+		http.Error(w, "Failed to configure SPIFFE mTLS for artifact download", http.StatusBadGateway)
+		return
+	}
+
+	httpClient := artifactHTTPClient
+	if tlsConfig != nil {
+		httpClient = artifactHTTPClientWithTLS(tlsConfig)
+		if strings.HasPrefix(artifactURL, "http://") {
+			artifactURL = "https://" + strings.TrimPrefix(artifactURL, "http://")
+		}
+	}
+
 	// Fetch the artifact from the source-controller.
 	artifactReq, err := http.NewRequestWithContext(ctx, http.MethodGet, artifactURL, nil)
 	if err != nil {
@@ -219,7 +255,7 @@ func (h *Handler) DownloadHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	artifactResp, err := artifactHTTPClient.Do(artifactReq)
+	artifactResp, err := httpClient.Do(artifactReq)
 	if err != nil {
 		log.FromContext(ctx).Error(err, "failed to fetch artifact",
 			"kind", kind, "name", name, "namespace", namespace, "url", artifactURL)

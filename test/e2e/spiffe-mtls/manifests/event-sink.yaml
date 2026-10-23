@@ -1,0 +1,137 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: event-sink
+  namespace: flux-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: event-sink
+  template:
+    metadata:
+      labels:
+        app: event-sink
+    spec:
+      containers:
+        - name: event-sink
+          image: fluxcd/spiffe-testapp:e2e
+          imagePullPolicy: IfNotPresent
+          args:
+            - -addr=:8080
+          ports:
+            - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: event-sink
+  namespace: flux-system
+spec:
+  selector:
+    app: event-sink
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: notification.toolkit.fluxcd.io/v1
+kind: Provider
+metadata:
+  name: event-sink
+  namespace: flux-system
+spec:
+  type: generic
+  address: http://event-sink.flux-system.svc.cluster.local
+---
+apiVersion: notification.toolkit.fluxcd.io/v1
+kind: Alert
+metadata:
+  name: event-sink
+  namespace: flux-system
+spec:
+  providerRef:
+    name: event-sink
+  eventSeverity: info
+  eventSources:
+    - kind: GitRepository
+      name: "*"
+    - kind: OCIRepository
+      name: "*"
+    - kind: Bucket
+      name: "*"
+    - kind: HelmRepository
+      name: "*"
+    - kind: HelmChart
+      name: "*"
+    - kind: Kustomization
+      name: "*"
+    - kind: HelmRelease
+      name: "*"
+    - kind: ImageRepository
+      name: "*"
+    - kind: ImagePolicy
+      name: "*"
+    - kind: ImageUpdateAutomation
+      name: "*"
+    - kind: ArtifactGenerator
+      name: "*"
+    - kind: ExternalArtifact
+      name: "*"
+    - kind: ResourceSetInputProvider
+      name: "*"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: artifact-server
+  namespace: flux-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: artifact-server
+  template:
+    metadata:
+      labels:
+        app: artifact-server
+    spec:
+      containers:
+        - name: artifact-server
+          image: fluxcd/spiffe-testapp:e2e
+          imagePullPolicy: IfNotPresent
+          args:
+            - -artifact-addr=:8080
+          ports:
+            - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: artifact-server
+  namespace: flux-system
+spec:
+  selector:
+    app: artifact-server
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-envoy-spiffe-e2e
+  namespace: flux-system
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+      ports:
+        - protocol: TCP
+          port: 9080
+        - protocol: TCP
+          port: 8080

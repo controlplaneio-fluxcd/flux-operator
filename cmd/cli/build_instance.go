@@ -149,8 +149,13 @@ func buildInstanceCmdRun(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if err := options.ValidateAndApplyWorkloadIdentityConfig(instance.GetCluster()); err != nil {
-		return fmt.Errorf("failed to validate workload identity configuration: %w", err)
+	if err := options.ValidateAndApplySPIFFEConfig(&instance); err != nil {
+		return fmt.Errorf("failed to validate SPIFFE configuration: %w", err)
+	}
+
+	objectIdentityViaSPIFFE := instance.Spec.SPIFFE != nil && instance.Spec.SPIFFE.BrokerAPI != nil
+	if err := options.ValidateAndApplyObjectIdentityConfig(instance.GetCluster(), objectIdentityViaSPIFFE); err != nil {
+		return fmt.Errorf("failed to validate object identity configuration: %w", err)
 	}
 
 	if instance.Spec.Sharding != nil {

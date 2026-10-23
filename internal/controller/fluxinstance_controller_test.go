@@ -65,7 +65,56 @@ func TestFluxInstanceReconciler_CELValidation(t *testing.T) {
 					Spec: spec,
 				}
 			},
-			expectedErr: ".objectIdentityRBAC must be set to true when .multitenantObjectIdentity is set to true",
+			expectedErr: ".objectIdentityRBAC must be set to true when multitenant workload identity is enabled",
+		},
+		{
+			name: "can enable multitenant object identity with SPIFFE Broker API without object identity RBAC",
+			obj: func(t *testing.T) *fluxcdv1.FluxInstance {
+				spec := getDefaultFluxSpec(t)
+				spec.Cluster = &fluxcdv1.Cluster{
+					MultitenantObjectIdentity: true,
+				}
+				spec.SPIFFE = &fluxcdv1.SPIFFE{
+					WorkloadAPI: fluxcdv1.WorkloadAPI{
+						Endpoint: "unix:///spiffe-workload-api/agent.sock",
+					},
+					BrokerAPI: &fluxcdv1.BrokerAPI{
+						Endpoint: "dns:///spiffe-broker.example.com:443",
+						IDs:      []string{"spiffe://example.org/broker/"},
+					},
+				}
+				return &fluxcdv1.FluxInstance{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "flux",
+					},
+					Spec: spec,
+				}
+			},
+		},
+		{
+			name: "cannot disable object identity RBAC for legacy multitenant workload identity even with SPIFFE Broker API",
+			obj: func(t *testing.T) *fluxcdv1.FluxInstance {
+				spec := getDefaultFluxSpec(t)
+				spec.Cluster = &fluxcdv1.Cluster{
+					MultitenantWorkloadIdentity: true,
+				}
+				spec.SPIFFE = &fluxcdv1.SPIFFE{
+					WorkloadAPI: fluxcdv1.WorkloadAPI{
+						Endpoint: "unix:///spiffe-workload-api/agent.sock",
+					},
+					BrokerAPI: &fluxcdv1.BrokerAPI{
+						Endpoint: "dns:///spiffe-broker.example.com:443",
+						IDs:      []string{"spiffe://example.org/broker/"},
+					},
+				}
+				return &fluxcdv1.FluxInstance{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "flux",
+					},
+					Spec: spec,
+				}
+			},
+			expectedErr: ".objectIdentityRBAC must be set to true when multitenant workload identity is enabled",
 		},
 		{
 			name: "cannot enable both legacy object identity and object identity RBAC",
@@ -82,7 +131,7 @@ func TestFluxInstanceReconciler_CELValidation(t *testing.T) {
 					Spec: spec,
 				}
 			},
-			expectedErr: ".objectLevelWorkloadIdentity and .objectIdentityRBAC are mutually exclusive and equivalent, set only .objectIdentityRBAC",
+			expectedErr: "cannot set .objectIdentityRBAC together with a legacy object identity field",
 		},
 		{
 			name: "cannot enable both legacy multitenant object identity and multitenant object identity",
@@ -99,7 +148,7 @@ func TestFluxInstanceReconciler_CELValidation(t *testing.T) {
 					Spec: spec,
 				}
 			},
-			expectedErr: ".multitenantWorkloadIdentity and .multitenantObjectIdentity are mutually exclusive and equivalent, set only .multitenantObjectIdentity",
+			expectedErr: "cannot set .multitenantObjectIdentity together with a legacy multitenant object identity field",
 		},
 		{
 			name: "can enable object identity RBAC without lockdown",

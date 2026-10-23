@@ -21,6 +21,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/patch"
+	fluxspiffe "github.com/fluxcd/pkg/spiffe"
 	"github.com/fluxcd/pkg/ssa"
 	"github.com/fluxcd/pkg/ssa/normalize"
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
@@ -55,6 +56,7 @@ type ResourceSetReconciler struct {
 	APIReader     client.Reader
 	Scheme        *runtime.Scheme
 	ClusterReader engine.ClusterReaderFactory
+	SPIFFESource  fluxspiffe.TLSSource
 
 	StatusManager         string
 	DefaultServiceAccount string
@@ -1079,6 +1081,7 @@ func (r *ResourceSetReconciler) recordMetrics(obj *fluxcdv1.ResourceSet) error {
 func (r *ResourceSetReconciler) notify(ctx context.Context, obj *fluxcdv1.ResourceSet,
 	action fluxcdv1.Action, eventType, reason, message string) {
 	notifier.
-		New(ctx, r.EventRecorder, r.Scheme, notifier.WithClient(r.Client)).
+		New(ctx, r.EventRecorder, r.Scheme,
+			notifier.WithClient(r.Client), notifier.WithSPIFFESource(r.SPIFFESource)).
 		Eventf(obj, nil, eventType, reason, action.String(), "%s", message)
 }

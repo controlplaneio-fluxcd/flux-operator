@@ -5,6 +5,7 @@ package web
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	fluxspiffe "github.com/fluxcd/pkg/spiffe"
 	"github.com/go-logr/logr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
@@ -38,6 +40,62 @@ var (
 	errGracefulShutdownDeadlineExceeded = errors.New("graceful shutdown deadline exceeded")
 )
 
+// ServerOption configures the web server.
+type ServerOption func(*serverOptions)
+
+type serverOptions struct {
+	spiffeSource fluxspiffe.TLSSource
+	tlsConfig    *tls.Config
+}
+
+// WithSPIFFESource sets the SPIFFE Workload API source used by the web server.
+func WithSPIFFESource(source fluxspiffe.TLSSource) ServerOption {
+	return func(o *serverOptions) {
+		o.spiffeSource = source
+	}
+}
+
+// WithWebUITLSConfig sets the TLS configuration used by the web server.
+func WithWebUITLSConfig(tlsConfig *tls.Config) ServerOption {
+	return func(o *serverOptions) {
+		o.tlsConfig = tlsConfig
+	}
+}
+
+func newServerOptions(opts []ServerOption) serverOptions {
+	var so serverOptions
+	for _, opt := range opts {
+		opt(&so)
+	}
+	return so
+}
+
+func handlerOptions(so serverOptions) []HandlerOption {
+	if so.spiffeSource == nil {
+		return nil
+	}
+	return []HandlerOption{withSPIFFESource(so.spiffeSource)}
+}
+
+func startWebServer(s *http.Server, tlsConfig *tls.Config, l logr.Logger) <-chan struct{} {
+	serverStopped := make(chan struct{})
+	go func() {
+		defer close(serverStopped)
+		l.Info("starting web server", "tls", tlsConfig != nil)
+		var err error
+		if tlsConfig != nil {
+			err = s.ListenAndServeTLS("", "")
+		} else {
+			err = s.ListenAndServe()
+		}
+		if !errors.Is(err, http.ErrServerClosed) {
+			l.Error(err, "unable to start web server")
+			os.Exit(1)
+		}
+	}()
+	return serverStopped
+}
+
 // RunServer starts the web server and blocks
 // until the provided context is canceled.
 // Whenever a new configuration is received on the confChannel,
@@ -47,8 +105,10 @@ var (
 func RunServer(ctx context.Context, c cluster.Cluster,
 	confChannel <-chan *fluxcdv1.WebConfigSpec,
 	version, statusManager, namespace string,
-	gracefulShutdownTimeout time.Duration, port int) error {
+	gracefulShutdownTimeout time.Duration, port int,
+	opts ...ServerOption) error {
 
+	so := newServerOptions(opts)
 	l := ctrl.Log.WithName("web-server").WithValues("port", port)
 
 	// Get event recorder.
@@ -75,6 +135,7 @@ func RunServer(ctx context.Context, c cluster.Cluster,
 		ReadTimeout:  serverTimeout,
 		WriteTimeout: serverTimeout,
 		IdleTimeout:  serverTimeout,
+		TLSConfig:    so.tlsConfig,
 
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			handlerMu.RLock()
@@ -84,15 +145,7 @@ func RunServer(ctx context.Context, c cluster.Cluster,
 			h.ServeHTTP(w, r)
 		}),
 	}
-	serverStopped := make(chan struct{})
-	go func() {
-		defer close(serverStopped)
-		l.Info("starting web server")
-		if err := s.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
-			l.Error(err, "unable to start web server")
-			os.Exit(1)
-		}
-	}()
+	serverStopped := startWebServer(s, so.tlsConfig, l)
 
 	// Create management variables for the current handler.
 	var cancelHandlerCtx context.CancelFunc
@@ -235,7 +288,8 @@ func RunServer(ctx context.Context, c cluster.Cluster,
 		// Create new handler.
 		newHandlerCtx, cancelNewHandlerCtx := context.WithCancel(context.Background())
 		newHandler, newHandlerStopped := NewHandler(newHandlerCtx, conf, spaHandler, kubeClient,
-			metricsCollector, nodeTransitions, version, statusManager, namespace, reportInterval, eventRecorder, authMiddleware, serverLog)
+			metricsCollector, nodeTransitions, version, statusManager, namespace, reportInterval,
+			eventRecorder, authMiddleware, serverLog, handlerOptions(so)...)
 
 		conf = nil // Clear conf to receive a new one in the next iteration.
 

@@ -19,6 +19,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/patch"
+	fluxspiffe "github.com/fluxcd/pkg/spiffe"
 	"github.com/fluxcd/pkg/ssa"
 	"github.com/fluxcd/pkg/ssa/normalize"
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
@@ -51,6 +52,7 @@ type FluxInstanceReconciler struct {
 
 	Scheme        *runtime.Scheme
 	ClusterReader engine.ClusterReaderFactory
+	SPIFFESource  fluxspiffe.TLSSource
 
 	StatusManager         string
 	StoragePath           string
@@ -375,7 +377,12 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 		return nil, err
 	}
 
-	if err := options.ValidateAndApplyWorkloadIdentityConfig(obj.GetCluster()); err != nil {
+	if err := options.ValidateAndApplySPIFFEConfig(obj); err != nil {
+		return nil, err
+	}
+
+	objectIdentityViaSPIFFE := obj.Spec.SPIFFE != nil && obj.Spec.SPIFFE.BrokerAPI != nil
+	if err := options.ValidateAndApplyObjectIdentityConfig(obj.GetCluster(), objectIdentityViaSPIFFE); err != nil {
 		return nil, err
 	}
 
@@ -689,6 +696,7 @@ func (r *FluxInstanceReconciler) notify(ctx context.Context, obj *fluxcdv1.FluxI
 		annotations[fluxcdv1.RevisionAnnotation] = obj.Status.LastAttemptedRevision
 	}
 	notifier.
-		New(ctx, r.EventRecorder, r.Scheme, notifier.WithFluxInstance(obj)).
+		New(ctx, r.EventRecorder, r.Scheme,
+			notifier.WithFluxInstance(obj), notifier.WithSPIFFESource(r.SPIFFESource)).
 		AnnotatedEventf(obj, nil, annotations, eventType, reason, action.String(), "%s", msg)
 }

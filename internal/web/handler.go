@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	fluxspiffe "github.com/fluxcd/pkg/spiffe"
 	"github.com/go-logr/logr"
 	"golang.org/x/sync/singleflight"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -25,6 +26,7 @@ type Handler struct {
 	conf          *fluxcdv1.WebConfigSpec
 	kubeClient    *kubeclient.Client
 	eventRecorder record.EventRecorder
+	spiffeSource  fluxspiffe.TLSSource
 	version       string
 	statusManager string
 	namespace     string
@@ -61,6 +63,17 @@ type Handler struct {
 	nodeLeasesFailing atomic.Bool
 }
 
+// HandlerOption configures the web server Handler.
+type HandlerOption func(*Handler)
+
+// withSPIFFESource sets the SPIFFE Workload API source used to download
+// artifacts from Flux artifact servers when FluxInstance mTLS is enabled.
+func withSPIFFESource(source fluxspiffe.TLSSource) HandlerOption {
+	return func(h *Handler) {
+		h.spiffeSource = source
+	}
+}
+
 // NewHandler creates a new handler for the web server.
 // It also fires off goroutines to perform background
 // tasks required for handling requests, such as caching
@@ -72,7 +85,8 @@ type Handler struct {
 // tracker is owned by the caller and may be nil.
 func NewHandler(ctx context.Context, conf *fluxcdv1.WebConfigSpec, spaHandler http.Handler, kubeClient *kubeclient.Client,
 	metrics *MetricsCollector, nodeTransitions *ReadyTransitionTracker, version, statusManager, namespace string, reportInterval time.Duration,
-	eventRecorder record.EventRecorder, authMiddleware func(http.Handler) http.Handler, l logr.Logger) (http.Handler, <-chan struct{}) {
+	eventRecorder record.EventRecorder, authMiddleware func(http.Handler) http.Handler, l logr.Logger,
+	opts ...HandlerOption) (http.Handler, <-chan struct{}) {
 
 	// Build the Handler struct.
 	h := &Handler{
@@ -86,6 +100,9 @@ func NewHandler(ctx context.Context, conf *fluxcdv1.WebConfigSpec, spaHandler ht
 		workloadIndex:   &WorkloadIndex{},
 		metrics:         metrics,
 		nodeTransitions: nodeTransitions,
+	}
+	for _, opt := range opts {
+		opt(h)
 	}
 
 	// Create HTTP request multiplexer.

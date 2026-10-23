@@ -577,7 +577,7 @@ func TestBuild_WorkloadIdentity_ValidateAndApplyConfig(t *testing.T) {
 				ObjectLevelWorkloadIdentity: false,
 				MultitenantWorkloadIdentity: true,
 			},
-			expectedErr: ".objectIdentityRBAC must be set to true when .multitenantObjectIdentity is set to true",
+			expectedErr: ".objectIdentityRBAC or .objectLevelWorkloadIdentity must be set to true when .multitenantWorkloadIdentity is set to true",
 		},
 		{
 			name:    "2.7.0+ object identity RBAC only",
@@ -655,7 +655,7 @@ func TestBuild_WorkloadIdentity_ValidateAndApplyConfig(t *testing.T) {
 				ObjectLevelWorkloadIdentity: false,
 				MultitenantWorkloadIdentity: true,
 			},
-			expectedErr: ".objectIdentityRBAC must be set to true when .multitenantObjectIdentity is set to true",
+			expectedErr: ".objectIdentityRBAC or .objectLevelWorkloadIdentity must be set to true when .multitenantWorkloadIdentity is set to true",
 		},
 		{
 			name:    "2.10.0+ multitenant object identity without object identity RBAC",
@@ -682,7 +682,7 @@ func TestBuild_WorkloadIdentity_ValidateAndApplyConfig(t *testing.T) {
 			options := MakeDefaultOptions()
 			options.Version = tc.version
 
-			err := options.ValidateAndApplyWorkloadIdentityConfig(tc.cluster)
+			err := options.ValidateAndApplyObjectIdentityConfig(tc.cluster, false)
 
 			if tc.expectedErr != "" {
 				g.Expect(err).To(HaveOccurred())
@@ -860,7 +860,7 @@ func TestBuild_WorkloadIdentity_FeatureGateAndFlags(t *testing.T) {
 			g.Expect(err).NotTo(HaveOccurred())
 			options.ComponentImages = ci
 
-			err = options.ValidateAndApplyWorkloadIdentityConfig(tc.cluster)
+			err = options.ValidateAndApplyObjectIdentityConfig(tc.cluster, false)
 			g.Expect(err).NotTo(HaveOccurred())
 
 			result, err := Build(srcDir, dstDir, options)

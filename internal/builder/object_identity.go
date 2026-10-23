@@ -35,6 +35,19 @@ const multitenantWorkloadIdentityLegacyWarning = "warning: in Flux >=2.10, " +
 	"Flux feature, and workload identity refers only to identities assigned to " +
 	"the Flux controllers."
 
+// DefaultWorkloadIdentityServiceAccountLegacyWarning is logged when the legacy
+// default workload identity service account flag or environment variable is used.
+const DefaultWorkloadIdentityServiceAccountLegacyWarning = "warning: " +
+	"the --default-workload-identity-service-account flag and the " +
+	"DEFAULT_WORKLOAD_IDENTITY_SERVICE_ACCOUNT environment variable are now " +
+	"considered legacy and are redundant with the " +
+	"--default-object-identity-service-account flag and the " +
+	"DEFAULT_OBJECT_IDENTITY_SERVICE_ACCOUNT environment variable. " +
+	"their behavior is identical, so you can just change to the new flag or " +
+	"environment variable. this is to emphasize that object identity is the " +
+	"new name of the upstream Flux feature, and workload identity refers only " +
+	"to identities assigned to the Flux controllers and Operator."
+
 // objectLevelWorkloadIdentityOnce ensures the legacy warning for
 // ObjectLevelWorkloadIdentity is logged only once per process.
 var objectLevelWorkloadIdentityOnce sync.Once
@@ -43,23 +56,25 @@ var objectLevelWorkloadIdentityOnce sync.Once
 // MultitenantWorkloadIdentity is logged only once per process.
 var multitenantWorkloadIdentityOnce sync.Once
 
-// ValidateAndApplyWorkloadIdentityConfig validates and applies the workload identity options
+// ValidateAndApplyObjectIdentityConfig validates and applies the object identity options
 // based on the provided cluster configuration and Flux version in the Options struct.
-func (o *Options) ValidateAndApplyWorkloadIdentityConfig(cluster fluxcdv1.Cluster) error {
+// objectIdentityViaSPIFFE indicates that object identity is provided by the SPIFFE
+// Broker API instead of Kubernetes service account tokens.
+func (o *Options) ValidateAndApplyObjectIdentityConfig(cluster fluxcdv1.Cluster, objectIdentityViaSPIFFE bool) error {
 	logger := o.Logger
 	if logger.GetSink() == nil {
 		logger = logr.Discard()
 	}
 
-	firstControllersWithObjectLevelWorkloadIdentity := make([]string, 0, 6)
-	firstControllersWithObjectLevelWorkloadIdentity = append(firstControllersWithObjectLevelWorkloadIdentity,
+	firstControllersWithObjectIdentity := make([]string, 0, 6)
+	firstControllersWithObjectIdentity = append(firstControllersWithObjectIdentity,
 		"source-controller",
 		"kustomize-controller",
 		"notification-controller",
 		"image-reflector-controller",
 		"image-automation-controller",
 	)
-	allControllers := append(firstControllersWithObjectLevelWorkloadIdentity, "helm-controller")
+	allControllers := append(firstControllersWithObjectIdentity, "helm-controller")
 
 	// Parse Flux version.
 	version, err := semver.NewVersion(o.Version)
@@ -85,9 +100,14 @@ func (o *Options) ValidateAndApplyWorkloadIdentityConfig(cluster fluxcdv1.Cluste
 	// ObjectLevelWorkloadIdentity is kept for backwards compatibility.
 	objectIdentityEnabled := cluster.ObjectLevelWorkloadIdentity || cluster.ObjectIdentityRBAC
 
+	// The SPIFFE Broker API is only supported in Flux >= 2.10.
+	objectIdentityViaSPIFFE = objectIdentityViaSPIFFE && !lt210
+
 	// MultitenantObjectIdentity behaves the same as MultitenantWorkloadIdentity.
 	// MultitenantWorkloadIdentity is kept for backwards compatibility.
-	multitenantObjectIdentityEnabled := cluster.MultitenantWorkloadIdentity || cluster.MultitenantObjectIdentity
+	multitenantWorkloadIdentityEnabled := cluster.MultitenantWorkloadIdentity
+	multitenantObjectIdentityEnabled := cluster.MultitenantObjectIdentity
+	multitenantObjectIdentityAny := multitenantWorkloadIdentityEnabled || multitenantObjectIdentityEnabled
 
 	switch {
 
@@ -95,7 +115,7 @@ func (o *Options) ValidateAndApplyWorkloadIdentityConfig(cluster fluxcdv1.Cluste
 	case lt260:
 
 		// Perform checks specific to this version range.
-		if objectIdentityEnabled || multitenantObjectIdentityEnabled {
+		if objectIdentityEnabled || multitenantObjectIdentityAny {
 			return fmt.Errorf(".objectLevelWorkloadIdentity, .objectIdentityRBAC and .multitenantObjectIdentity are not supported in Flux versions < 2.6.0")
 		}
 
@@ -106,7 +126,7 @@ func (o *Options) ValidateAndApplyWorkloadIdentityConfig(cluster fluxcdv1.Cluste
 	case lt270:
 
 		// Perform checks specific to this version range.
-		if multitenantObjectIdentityEnabled {
+		if multitenantObjectIdentityAny {
 			return fmt.Errorf(".multitenantObjectIdentity is not supported in Flux versions 2.6.x")
 		}
 
@@ -122,13 +142,16 @@ func (o *Options) ValidateAndApplyWorkloadIdentityConfig(cluster fluxcdv1.Cluste
 		// If enabled, append the patch for enabling the
 		// ObjectLevelWorkloadIdentity feature gate.
 		const enabled = true
-		o.Patches += GetProfileObjectLevelWorkloadIdentity(firstControllersWithObjectLevelWorkloadIdentity, enabled)
+		o.Patches += GetProfileObjectLevelWorkloadIdentity(firstControllersWithObjectIdentity, enabled)
 		return nil
 
 	// Handle >= 2.7.0 and < 2.10.0 versions.
 	case lt210:
 
 		// Perform checks specific to this version range.
+		if !objectIdentityEnabled && multitenantWorkloadIdentityEnabled {
+			return fmt.Errorf(".objectIdentityRBAC or .objectLevelWorkloadIdentity must be set to true when .multitenantWorkloadIdentity is set to true")
+		}
 		if !objectIdentityEnabled && multitenantObjectIdentityEnabled {
 			return fmt.Errorf(".objectIdentityRBAC must be set to true when .multitenantObjectIdentity is set to true")
 		}
@@ -145,7 +168,7 @@ func (o *Options) ValidateAndApplyWorkloadIdentityConfig(cluster fluxcdv1.Cluste
 		}
 
 		// Nothing else to do if multitenant object identity is disabled.
-		if !multitenantObjectIdentityEnabled {
+		if !multitenantObjectIdentityAny {
 			return nil
 		}
 
@@ -157,8 +180,11 @@ func (o *Options) ValidateAndApplyWorkloadIdentityConfig(cluster fluxcdv1.Cluste
 	default:
 
 		// Perform checks specific to this version range.
-		if !objectIdentityEnabled && multitenantObjectIdentityEnabled {
-			return fmt.Errorf(".objectIdentityRBAC must be set to true when .multitenantObjectIdentity is set to true")
+		if !objectIdentityEnabled && multitenantWorkloadIdentityEnabled {
+			return fmt.Errorf(".objectIdentityRBAC or .objectLevelWorkloadIdentity must be set to true when .multitenantWorkloadIdentity is set to true")
+		}
+		if !objectIdentityEnabled && multitenantObjectIdentityEnabled && !objectIdentityViaSPIFFE {
+			return fmt.Errorf(".objectIdentityRBAC must be set to true when .multitenantObjectIdentity is set to true and object identity is not provided by the SPIFFE Broker API")
 		}
 
 		// Warn that the legacy fields are redundant with the new fields.
@@ -174,18 +200,15 @@ func (o *Options) ValidateAndApplyWorkloadIdentityConfig(cluster fluxcdv1.Cluste
 		}
 
 		// The ObjectLevelWorkloadIdentity feature gate is retired, so it must
-		// not be passed to the controllers anymore. When object identity is
-		// disabled, there is nothing else to do.
-		if !objectIdentityEnabled {
-			return nil
+		// not be passed to the controllers anymore.
+		if objectIdentityEnabled {
+			// The RBAC for creating service account tokens is no longer part of
+			// the Flux distribution starting with 2.10, so we need to add it back.
+			o.AddPermissionForCreatingServiceAccountTokens = true
 		}
 
-		// The RBAC for creating service account tokens is no longer part of the
-		// Flux distribution starting with 2.10, so we need to add it back.
-		o.AddPermissionForCreatingServiceAccountTokens = true
-
 		// Nothing else to do if multitenant object identity is disabled.
-		if !multitenantObjectIdentityEnabled {
+		if !multitenantObjectIdentityAny {
 			return nil
 		}
 

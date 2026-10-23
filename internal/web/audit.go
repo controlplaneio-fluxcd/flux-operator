@@ -90,7 +90,8 @@ func (h *Handler) sendAuditEvent(ctx context.Context, action string, obj client.
 		annotations[eventv1.Group+"/subject"] = subject
 	}
 
-	notifier.New(ctx, h.eventRecorder, h.kubeClient.GetScheme(), notifier.WithClient(kubeClient)).
+	notifier.New(ctx, h.eventRecorder, h.kubeClient.GetScheme(),
+		notifier.WithClient(kubeClient), notifier.WithSPIFFESource(h.spiffeSource)).
 		AnnotatedEventf(obj, nil, annotations, corev1.EventTypeNormal, auditEventReason, action,
 			"User '%s' performed action '%s' for '%s' on the web UI",
 			perms.Username,

@@ -59,7 +59,8 @@ func TestNew_WithEnvAddress(t *testing.T) {
 
 	er := New(ctx, base, scheme)
 	g.Expect(er).NotTo(BeNil())
-	g.Expect(eventsAddress(ctx, optionsFrom())).To(Equal("http://custom-address:9090/"))
+	_, addr := eventsAddress(ctx, optionsFrom())
+	g.Expect(addr).To(Equal("http://custom-address:9090/"))
 }
 
 func TestNew_NotificationsDisabled(t *testing.T) {
@@ -75,7 +76,8 @@ func TestNew_NotificationsDisabled(t *testing.T) {
 
 	er := New(ctx, base, scheme)
 	g.Expect(er).NotTo(BeNil())
-	g.Expect(eventsAddress(ctx, optionsFrom())).To(Equal(""))
+	_, addr := eventsAddress(ctx, optionsFrom())
+	g.Expect(addr).To(Equal(""))
 }
 
 func TestNew_NoClientNoInstance(t *testing.T) {
@@ -89,7 +91,8 @@ func TestNew_NoClientNoInstance(t *testing.T) {
 
 	er := New(ctx, base, scheme)
 	g.Expect(er).NotTo(BeNil())
-	g.Expect(eventsAddress(ctx, optionsFrom())).To(Equal(""))
+	_, addr := eventsAddress(ctx, optionsFrom())
+	g.Expect(addr).To(Equal(""))
 }
 
 func TestNew_WithFluxInstance_HasNotificationController(t *testing.T) {
@@ -120,7 +123,8 @@ func TestNew_WithFluxInstance_HasNotificationController(t *testing.T) {
 
 	er := New(ctx, base, scheme, WithFluxInstance(instance))
 	g.Expect(er).NotTo(BeNil())
-	g.Expect(eventsAddress(ctx, optionsFrom(WithFluxInstance(instance)))).To(Equal("http://notification-controller.flux-system.svc.cluster.local./"))
+	_, addr := eventsAddress(ctx, optionsFrom(WithFluxInstance(instance)))
+	g.Expect(addr).To(Equal("http://notification-controller.flux-system.svc.cluster.local./"))
 }
 
 func TestNew_WithFluxInstance_NoNotificationController(t *testing.T) {
@@ -147,7 +151,8 @@ func TestNew_WithFluxInstance_NoNotificationController(t *testing.T) {
 
 	er := New(ctx, base, scheme, WithFluxInstance(instance))
 	g.Expect(er).NotTo(BeNil())
-	g.Expect(eventsAddress(ctx, optionsFrom(WithFluxInstance(instance)))).To(Equal(""))
+	_, addr := eventsAddress(ctx, optionsFrom(WithFluxInstance(instance)))
+	g.Expect(addr).To(Equal(""))
 }
 
 func TestNew_WithClient_NoFluxInstances(t *testing.T) {
@@ -165,7 +170,8 @@ func TestNew_WithClient_NoFluxInstances(t *testing.T) {
 
 	er := New(ctx, base, scheme, WithClient(kubeClient))
 	g.Expect(er).NotTo(BeNil())
-	g.Expect(eventsAddress(ctx, optionsFrom(WithClient(kubeClient)))).To(Equal(""))
+	_, addr := eventsAddress(ctx, optionsFrom(WithClient(kubeClient)))
+	g.Expect(addr).To(Equal(""))
 }
 
 func TestNew_WithClient_SingleFluxInstance(t *testing.T) {
@@ -200,7 +206,8 @@ func TestNew_WithClient_SingleFluxInstance(t *testing.T) {
 
 	er := New(ctx, base, scheme, WithClient(kubeClient))
 	g.Expect(er).NotTo(BeNil())
-	g.Expect(eventsAddress(ctx, optionsFrom(WithClient(kubeClient)))).To(Equal("http://notification-controller.flux-system.svc.cluster.local./"))
+	_, addr := eventsAddress(ctx, optionsFrom(WithClient(kubeClient)))
+	g.Expect(addr).To(Equal("http://notification-controller.flux-system.svc.cluster.local./"))
 }
 
 func TestNew_WithClient_MultipleFluxInstances(t *testing.T) {
@@ -232,7 +239,8 @@ func TestNew_WithClient_MultipleFluxInstances(t *testing.T) {
 
 	er := New(ctx, base, scheme, WithClient(kubeClient))
 	g.Expect(er).NotTo(BeNil())
-	g.Expect(eventsAddress(ctx, optionsFrom(WithClient(kubeClient)))).To(Equal(""))
+	_, addr := eventsAddress(ctx, optionsFrom(WithClient(kubeClient)))
+	g.Expect(addr).To(Equal(""))
 }
 
 func optionsFrom(opts ...Option) options {
