@@ -711,9 +711,12 @@ func TestPodResourceViews(t *testing.T) {
 					ContainerStatuses: []corev1.ContainerStatus{{Name: "main"}},
 				},
 			},
-			running:    PodResources{CPURequests: 0.1, MemoryRequests: 1 << 30, MemoryLimits: 2 << 30},
-			limited:    true,
-			scheduling: PodResources{CPURequests: 0.1, MemoryRequests: 1 << 30, MemoryLimits: 2 << 30},
+			running: PodResources{CPURequests: 0.1, MemoryRequests: 1 << 30, MemoryLimits: 2 << 30},
+			limited: true,
+			// Since Kubernetes 1.37, the scheduler ignores the desired resources
+			// of an infeasible resize and counts only the allocated and actuated
+			// ones, which are not reported here.
+			scheduling: PodResources{},
 		},
 		{
 			// Deferred resize: the resize may still be applied, the running

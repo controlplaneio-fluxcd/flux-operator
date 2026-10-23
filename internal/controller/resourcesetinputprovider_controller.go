@@ -70,6 +70,10 @@ type ResourceSetInputProviderReconciler struct {
 	TokenCache            *cache.TokenCache
 	Version               string
 	DefaultServiceAccount string
+
+	// DefaultWorkloadIdentityServiceAccount is the ServiceAccount used for
+	// workload identity when the object does not specify one.
+	DefaultWorkloadIdentityServiceAccount string
 }
 
 // +kubebuilder:rbac:groups=fluxcd.controlplane.io,resources=resourcesetinputproviders,verbs=get;list;watch;create;update;patch;delete
@@ -145,7 +149,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 		conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidSchedule, "%s", errMsg)
 		conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidSchedule, "%s", errMsg)
 		log.Error(err, msgTerminalError)
-		r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSchedule, errMsg)
+		r.notify(ctx, obj, fluxcdv1.ActionSchedule, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSchedule, errMsg)
 		return ctrl.Result{}, nil
 	}
 
@@ -164,7 +168,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 		}
 
 		log.Info(msg)
-		r.notify(ctx, obj, corev1.EventTypeNormal, fluxcdv1.ReasonSkippedDueToSchedule, msg)
+		r.notify(ctx, obj, fluxcdv1.ActionSchedule, corev1.EventTypeNormal, fluxcdv1.ReasonSkippedDueToSchedule, msg)
 		return ctrl.Result{
 			RequeueAfter: next.Sub(reconcileStart),
 		}, nil
@@ -177,7 +181,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 		conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidDefaultValues, "%s", errMsg)
 		conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidDefaultValues, "%s", errMsg)
 		log.Error(err, msgTerminalError)
-		r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidDefaultValues, errMsg)
+		r.notify(ctx, obj, fluxcdv1.ActionValidate, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidDefaultValues, errMsg)
 		return ctrl.Result{}, nil
 	}
 
@@ -190,7 +194,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 			conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
 			conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
 			log.Error(err, msgTerminalError)
-			r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSpec, errMsg)
+			r.notify(ctx, obj, fluxcdv1.ActionValidate, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSpec, errMsg)
 			return ctrl.Result{}, nil
 		}
 		if strings.HasPrefix(obj.Spec.URL, "http://") && !obj.Spec.Insecure {
@@ -199,7 +203,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 			conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
 			conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
 			log.Error(err, msgTerminalError)
-			r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSpec, errMsg)
+			r.notify(ctx, obj, fluxcdv1.ActionValidate, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSpec, errMsg)
 			return ctrl.Result{}, nil
 		}
 	} else if obj.Spec.Type == fluxcdv1.InputProviderExternalArtifact {
@@ -209,7 +213,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 			conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
 			conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
 			log.Error(err, msgTerminalError)
-			r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSpec, errMsg)
+			r.notify(ctx, obj, fluxcdv1.ActionValidate, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSpec, errMsg)
 			return ctrl.Result{}, nil
 		}
 		if obj.Spec.URL != "" {
@@ -218,7 +222,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 			conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
 			conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
 			log.Error(err, msgTerminalError)
-			r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSpec, errMsg)
+			r.notify(ctx, obj, fluxcdv1.ActionValidate, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSpec, errMsg)
 			return ctrl.Result{}, nil
 		}
 	} else if obj.Spec.Insecure && obj.Spec.Type != fluxcdv1.InputProviderOCIArtifactTag {
@@ -227,7 +231,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 		conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
 		conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
 		log.Error(err, msgTerminalError)
-		r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSpec, errMsg)
+		r.notify(ctx, obj, fluxcdv1.ActionValidate, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSpec, errMsg)
 		return ctrl.Result{}, nil
 	}
 
@@ -240,7 +244,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 		conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
 		conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
 		log.Error(err, msgTerminalError)
-		r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSpec, errMsg)
+		r.notify(ctx, obj, fluxcdv1.ActionValidate, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSpec, errMsg)
 		return ctrl.Result{}, nil
 	}
 
@@ -260,7 +264,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 			conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidExportedInputs, "%s", errMsg)
 			conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidExportedInputs, "%s", errMsg)
 			log.Error(err, msgTerminalError)
-			r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidExportedInputs, errMsg)
+			r.notify(ctx, obj, fluxcdv1.ActionExportInputs, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidExportedInputs, errMsg)
 			return ctrl.Result{}, nil
 		}
 		exportedInputs = append(exportedInputs, exportedInput)
@@ -282,7 +286,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 				meta.ReadyCondition,
 				meta.ReconciliationFailedReason,
 				"%s", msg)
-			r.notify(ctx, obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
+			r.notify(ctx, obj, fluxcdv1.ActionReconcile, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
 			return ctrl.Result{}, err
 		}
 	}
@@ -295,7 +299,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 			meta.ReadyCondition,
 			meta.ReconciliationFailedReason,
 			"%s", msg)
-		r.notify(ctx, obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
+		r.notify(ctx, obj, fluxcdv1.ActionReconcile, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
 		return ctrl.Result{}, err
 	}
 	exportedRevision := digest.FromBytes(data).String()
@@ -319,7 +323,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 	if lastExportedRevision == exportedRevision {
 		r.EventRecorder.AnnotatedEventf(obj, annotations, corev1.EventTypeNormal, meta.ReconciliationSucceededReason, "%s", msgWithRevision)
 	} else {
-		r.notify(ctx, obj, corev1.EventTypeNormal, meta.ReconciliationSucceededReason, msgWithRevision, annotations)
+		r.notify(ctx, obj, fluxcdv1.ActionReconcile, corev1.EventTypeNormal, meta.ReconciliationSucceededReason, msgWithRevision, annotations)
 	}
 
 	reconcileEnd := time.Now()
@@ -706,11 +710,12 @@ func (r *ResourceSetInputProviderReconciler) getGitHubToken(
 	}
 
 	if r.TokenCache != nil {
-		opts = append(opts, githubapp.WithCache(r.TokenCache,
-			fluxcdv1.ResourceSetInputProviderKind,
-			obj.GetName(),
-			obj.GetNamespace(),
-			cache.OperationReconcile))
+		opts = append(opts, githubapp.WithCache(r.TokenCache, cache.InvolvedObject{
+			Kind:      fluxcdv1.ResourceSetInputProviderKind,
+			Name:      obj.GetName(),
+			Namespace: obj.GetNamespace(),
+			Operation: cache.OperationReconcile,
+		}))
 	}
 
 	ghc, err := githubapp.New(opts...)
@@ -780,23 +785,24 @@ func (r *ResourceSetInputProviderReconciler) getAzureDevOpsToken(
 func (r *ResourceSetInputProviderReconciler) getAuthOptions(obj *fluxcdv1.ResourceSetInputProvider) []auth.Option {
 	opts := []auth.Option{
 		auth.WithClient(r.Client),
-		auth.WithServiceAccountNamespace(obj.GetNamespace()),
+		auth.WithObject(fluxcdv1.GroupVersion.Group, fluxcdv1.ResourceSetInputProviderKind, obj),
 	}
 
-	// Configure service account.
-	if s := obj.Spec.ServiceAccountName; s != "" {
-		opts = append(opts, auth.WithServiceAccountName(s))
+	// Configure service account, applying the default workload identity
+	// ServiceAccount when the object does not specify one.
+	saName := obj.Spec.ServiceAccountName
+	if saName == "" {
+		saName = r.DefaultWorkloadIdentityServiceAccount
+	}
+	if saName != "" {
+		opts = append(opts, auth.WithServiceAccountName(saName))
 	}
 
 	// Configure token cache.
 	if r.TokenCache != nil {
-		involvedObject := cache.InvolvedObject{
-			Kind:      fluxcdv1.ResourceSetInputProviderKind,
-			Name:      obj.GetName(),
-			Namespace: obj.GetNamespace(),
-			Operation: cache.OperationReconcile,
-		}
-		opts = append(opts, auth.WithCache(*r.TokenCache, involvedObject))
+		opts = append(opts,
+			auth.WithCache(*r.TokenCache),
+			auth.WithCacheOperation(cache.OperationReconcile))
 	}
 
 	return opts
@@ -835,7 +841,7 @@ func (r *ResourceSetInputProviderReconciler) getAWSCodeCommitCredentialsProvider
 	if err != nil {
 		return nil, "", err
 	}
-	opts = append(opts, auth.WithSTSRegion(region))
+	opts = append(opts, auth.WithAWSRegion(region))
 
 	// Get the AWS credentials provider using the recommended abstraction.
 	credsProvider := aws.NewCredentialsProvider(ctx, opts...)
@@ -1230,7 +1236,14 @@ func (r *ResourceSetInputProviderReconciler) buildOCIOptions(ctx context.Context
 				Name:      obj.Spec.ServiceAccountName,
 				Namespace: obj.GetNamespace(),
 			}
-			s, err := secrets.PullSecretsFromServiceAccountRef(ctx, r.Client, key)
+			var sa corev1.ServiceAccount
+			if err := r.Client.Get(ctx, key, &sa); err != nil {
+				if apierrors.IsNotFound(err) {
+					return nil, fmt.Errorf("serviceaccount '%s' not found", key)
+				}
+				return nil, fmt.Errorf("failed to get serviceaccount '%s': %w", key, err)
+			}
+			s, err := secrets.PullSecretsFromServiceAccount(ctx, r.Client, &sa)
 			if err != nil {
 				return nil, err
 			}
@@ -1323,7 +1336,7 @@ func (r *ResourceSetInputProviderReconciler) recordMetrics(obj *fluxcdv1.Resourc
 //
 //nolint:unparam
 func (r *ResourceSetInputProviderReconciler) notify(ctx context.Context,
-	obj *fluxcdv1.ResourceSetInputProvider, eventType, reason, message string,
+	obj *fluxcdv1.ResourceSetInputProvider, action fluxcdv1.Action, eventType, reason, message string,
 	annotations ...map[string]string) {
 
 	var md map[string]string
@@ -1333,7 +1346,7 @@ func (r *ResourceSetInputProviderReconciler) notify(ctx context.Context,
 
 	notifier.
 		New(ctx, r.EventRecorder, r.Scheme, notifier.WithClient(r.Client)).
-		AnnotatedEventf(obj, md, eventType, reason, "%s", message)
+		AnnotatedEventf(obj, nil, md, eventType, reason, action.String(), "%s", message)
 }
 
 // requeueAfterResourceSetInputProvider returns a ctrl.Result with the requeue time set to the

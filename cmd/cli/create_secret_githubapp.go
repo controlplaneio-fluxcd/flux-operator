@@ -92,7 +92,7 @@ func createSecretGitHubAppCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Build the secret
-	var opts []secrets.GitHubAppOption
+	opts := []secrets.GitHubAppOption{secrets.WithGitHubAppID(createSecretGitHubAppArgs.appID)}
 	if owner := createSecretGitHubAppArgs.installationOwner; owner != "" {
 		opts = append(opts, secrets.WithGitHubAppInstallationOwner(owner))
 	}
@@ -105,7 +105,6 @@ func createSecretGitHubAppCmdRun(cmd *cobra.Command, args []string) error {
 	secret, err := secrets.MakeGitHubAppSecret(
 		name,
 		*kubeconfigArgs.Namespace,
-		createSecretGitHubAppArgs.appID,
 		string(privateKey),
 		opts...,
 	)

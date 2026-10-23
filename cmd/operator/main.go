@@ -15,7 +15,6 @@ import (
 	"github.com/fluxcd/cli-utils/pkg/kstatus/polling/clusterreader"
 	"github.com/fluxcd/cli-utils/pkg/kstatus/polling/engine"
 	"github.com/fluxcd/pkg/apis/meta"
-	"github.com/fluxcd/pkg/auth"
 	"github.com/fluxcd/pkg/cache"
 	runtimeCtrl "github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/jitter"
@@ -178,12 +177,6 @@ func main() {
 	}
 	if s := os.Getenv(overrideManagersEnvKey); s != "" {
 		overrideFieldManagers = strings.Split(s, ",")
-	}
-
-	// auth setup.
-	auth.EnableObjectLevelWorkloadIdentity()
-	if s := defaultWorkloadIdentityServiceAccount; s != "" {
-		auth.SetDefaultServiceAccount(s)
 	}
 
 	// Allow the reporting interval to be set by an environment variable.
@@ -368,13 +361,14 @@ func main() {
 		}
 
 		if err = (&controller.ResourceSetInputProviderReconciler{
-			Client:                mgr.GetClient(),
-			Scheme:                mgr.GetScheme(),
-			StatusManager:         controllerName,
-			EventRecorder:         mgr.GetEventRecorderFor(controllerName),
-			DefaultServiceAccount: defaultServiceAccount,
-			TokenCache:            tokenCache,
-			Version:               VERSION,
+			Client:                                mgr.GetClient(),
+			Scheme:                                mgr.GetScheme(),
+			StatusManager:                         controllerName,
+			EventRecorder:                         mgr.GetEventRecorderFor(controllerName),
+			DefaultServiceAccount:                 defaultServiceAccount,
+			DefaultWorkloadIdentityServiceAccount: defaultWorkloadIdentityServiceAccount,
+			TokenCache:                            tokenCache,
+			Version:                               VERSION,
 		}).SetupWithManager(mgr,
 			controller.ResourceSetInputProviderReconcilerOptions{
 				RateLimiter: runtimeCtrl.GetRateLimiter(rateLimiterOptions),
