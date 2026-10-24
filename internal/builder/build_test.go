@@ -493,7 +493,15 @@ func TestBuild_WorkloadIdentity_ValidateAndApplyConfig(t *testing.T) {
 			cluster: fluxcdv1.Cluster{
 				ObjectLevelWorkloadIdentity: true,
 			},
-			expectedErr: ".objectLevelWorkloadIdentity and .multitenantWorkloadIdentity are not supported in Flux versions < 2.6.0",
+			expectedErr: ".objectLevelWorkloadIdentity, .objectIdentityRBAC and .multitenantObjectIdentity are not supported in Flux versions < 2.6.0",
+		},
+		{
+			name:    "pre-2.6.0 multitenant object identity enabled",
+			version: "v2.5.0",
+			cluster: fluxcdv1.Cluster{
+				MultitenantObjectIdentity: true,
+			},
+			expectedErr: ".objectLevelWorkloadIdentity, .objectIdentityRBAC and .multitenantObjectIdentity are not supported in Flux versions < 2.6.0",
 		},
 		{
 			name:    "pre-2.6.0 multitenant enabled",
@@ -501,7 +509,7 @@ func TestBuild_WorkloadIdentity_ValidateAndApplyConfig(t *testing.T) {
 			cluster: fluxcdv1.Cluster{
 				MultitenantWorkloadIdentity: true,
 			},
-			expectedErr: ".objectLevelWorkloadIdentity and .multitenantWorkloadIdentity are not supported in Flux versions < 2.6.0",
+			expectedErr: ".objectLevelWorkloadIdentity, .objectIdentityRBAC and .multitenantObjectIdentity are not supported in Flux versions < 2.6.0",
 		},
 
 		// 2.6.x versions
@@ -526,7 +534,15 @@ func TestBuild_WorkloadIdentity_ValidateAndApplyConfig(t *testing.T) {
 			cluster: fluxcdv1.Cluster{
 				MultitenantWorkloadIdentity: true,
 			},
-			expectedErr: ".multitenantWorkloadIdentity is not supported in Flux versions 2.6.x",
+			expectedErr: ".multitenantObjectIdentity is not supported in Flux versions 2.6.x",
+		},
+		{
+			name:    "2.6.x multitenant object identity not supported",
+			version: "v2.6.0",
+			cluster: fluxcdv1.Cluster{
+				MultitenantObjectIdentity: true,
+			},
+			expectedErr: ".multitenantObjectIdentity is not supported in Flux versions 2.6.x",
 		},
 
 		// >= 2.7.0 versions
@@ -561,7 +577,22 @@ func TestBuild_WorkloadIdentity_ValidateAndApplyConfig(t *testing.T) {
 				ObjectLevelWorkloadIdentity: false,
 				MultitenantWorkloadIdentity: true,
 			},
-			expectedErr: ".objectLevelWorkloadIdentity must be set to true when .multitenantWorkloadIdentity is set to true",
+			expectedErr: ".objectIdentityRBAC must be set to true when .multitenantObjectIdentity is set to true",
+		},
+		{
+			name:    "2.7.0+ object identity RBAC only",
+			version: "v2.7.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectIdentityRBAC: true,
+			},
+		},
+		{
+			name:    "2.7.0+ multitenant object identity enabled",
+			version: "v2.7.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectIdentityRBAC:        true,
+				MultitenantObjectIdentity: true,
+			},
 		},
 
 		// >= 2.10.0 versions
@@ -582,6 +613,15 @@ func TestBuild_WorkloadIdentity_ValidateAndApplyConfig(t *testing.T) {
 			expectAddTokens: true,
 		},
 		{
+			name:    "2.10.0+ object identity RBAC only",
+			version: "v2.10.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectIdentityRBAC:          true,
+				MultitenantWorkloadIdentity: false,
+			},
+			expectAddTokens: true,
+		},
+		{
 			name:    "2.10.0+ multitenant enabled",
 			version: "v2.10.0",
 			cluster: fluxcdv1.Cluster{
@@ -591,13 +631,40 @@ func TestBuild_WorkloadIdentity_ValidateAndApplyConfig(t *testing.T) {
 			expectAddTokens: true,
 		},
 		{
-			name:    "2.10.0+ multitenant without object level",
+			name:    "2.10.0+ multitenant enabled with object identity RBAC",
+			version: "v2.10.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectIdentityRBAC:          true,
+				MultitenantWorkloadIdentity: true,
+			},
+			expectAddTokens: true,
+		},
+		{
+			name:    "2.10.0+ multitenant object identity enabled",
+			version: "v2.10.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectIdentityRBAC:        true,
+				MultitenantObjectIdentity: true,
+			},
+			expectAddTokens: true,
+		},
+		{
+			name:    "2.10.0+ multitenant without object level or object identity RBAC",
 			version: "v2.10.0",
 			cluster: fluxcdv1.Cluster{
 				ObjectLevelWorkloadIdentity: false,
 				MultitenantWorkloadIdentity: true,
 			},
-			expectedErr: ".objectLevelWorkloadIdentity must be set to true when .multitenantWorkloadIdentity is set to true",
+			expectedErr: ".objectIdentityRBAC must be set to true when .multitenantObjectIdentity is set to true",
+		},
+		{
+			name:    "2.10.0+ multitenant object identity without object identity RBAC",
+			version: "v2.10.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectLevelWorkloadIdentity: false,
+				MultitenantObjectIdentity:   true,
+			},
+			expectedErr: ".objectIdentityRBAC must be set to true when .multitenantObjectIdentity is set to true",
 		},
 
 		// Invalid version
@@ -689,6 +756,19 @@ func TestBuild_WorkloadIdentity_FeatureGateAndFlags(t *testing.T) {
 			expectTokens:              true,
 		},
 		{
+			name:    "2.7.0 multitenant object identity enabled with defaults",
+			version: "v2.7.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectIdentityRBAC:        true,
+				MultitenantObjectIdentity: true,
+			},
+			srcDir:                    "v2.7.0",
+			expectedFeatureGate:       "--feature-gates=ObjectLevelWorkloadIdentity=true",
+			controllersWithGate:       []string{sourceController, "kustomize-controller", "helm-controller", "notification-controller", "image-reflector-controller", "image-automation-controller"},
+			expectServiceAccountFlags: true,
+			expectTokens:              true,
+		},
+		{
 			name:    "2.7.0 multitenant enabled with custom service accounts",
 			version: "v2.7.0",
 			cluster: fluxcdv1.Cluster{
@@ -721,11 +801,43 @@ func TestBuild_WorkloadIdentity_FeatureGateAndFlags(t *testing.T) {
 			expectNoFeatureGate: true,
 		},
 		{
+			name:                "2.10.0 object identity RBAC enabled adds SA token permission",
+			version:             "v2.10.0",
+			cluster:             fluxcdv1.Cluster{ObjectIdentityRBAC: true},
+			srcDir:              "v2.10.0",
+			expectTokens:        true,
+			expectNoFeatureGate: true,
+		},
+		{
 			name:    "2.10.0 multitenant enabled adds SA token permission and flags",
 			version: "v2.10.0",
 			cluster: fluxcdv1.Cluster{
 				ObjectLevelWorkloadIdentity: true,
 				MultitenantWorkloadIdentity: true,
+			},
+			srcDir:                    "v2.10.0",
+			expectServiceAccountFlags: true,
+			expectTokens:              true,
+			expectNoFeatureGate:       true,
+		},
+		{
+			name:    "2.10.0 multitenant enabled with object identity RBAC adds SA token permission and flags",
+			version: "v2.10.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectIdentityRBAC:          true,
+				MultitenantWorkloadIdentity: true,
+			},
+			srcDir:                    "v2.10.0",
+			expectServiceAccountFlags: true,
+			expectTokens:              true,
+			expectNoFeatureGate:       true,
+		},
+		{
+			name:    "2.10.0 multitenant object identity enabled adds SA token permission and flags",
+			version: "v2.10.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectIdentityRBAC:        true,
+				MultitenantObjectIdentity: true,
 			},
 			srcDir:                    "v2.10.0",
 			expectServiceAccountFlags: true,

@@ -69,11 +69,18 @@ spec:
                     description: Multitenant enables the multitenancy lockdown. Defaults
                       to false.
                     type: boolean
+                  multitenantObjectIdentity:
+                    default: false
+                    description: |-
+                      MultitenantObjectIdentity enables the multitenancy lockdown for
+                      object identity. Defaults to false.
+                    type: boolean
                   multitenantWorkloadIdentity:
                     default: false
                     description: |-
-                      MultitenantWorkloadIdentity enables the multitenancy lockdown for
-                      workload identity. Defaults to false.
+                      MultitenantWorkloadIdentity is now legacy.
+
+                      Legacy: Use MultitenantObjectIdentity instead.
                     type: boolean
                   networkPolicy:
                     default: true
@@ -81,28 +88,28 @@ spec:
                       NetworkPolicy restricts network access to the current namespace.
                       Defaults to true.
                     type: boolean
+                  objectIdentityRBAC:
+                    description: |-
+                      ObjectIdentityRBAC configures the RBAC required for object identity
+                      using Kubernetes service account tokens. Object identity is the new
+                      name of the upstream Flux object-level workload identity feature.
+                      In Flux v2.6.0 to v2.9.x this enables the
+                      ObjectLevelWorkloadIdentity feature gate and leaves the RBAC for
+                      creating service account tokens in place. When disabled, the
+                      operator removes that RBAC from the Flux controllers' ClusterRole.
+                      Starting with Flux v2.10.0, the ObjectLevelWorkloadIdentity feature
+                      gate is retired and no longer changes behavior, so the operator no
+                      longer passes it to the controllers.
+                      Starting with Flux v2.10.0, the RBAC for creating service account
+                      tokens is removed from the Flux distribution, and this field
+                      controls whether the operator adds it.
+                      This feature is only available in Flux v2.6.0 and later.
+                    type: boolean
                   objectLevelWorkloadIdentity:
                     description: |-
-                      ObjectLevelWorkloadIdentity enables object-level workload identity
-                      using Kubernetes service account tokens, allowing Flux resources to
-                      specify their own service accounts via the spec.serviceAccountName
-                      field.
-                      In Flux v2.6.0 to v2.9.x this enables the
-                      ObjectLevelWorkloadIdentity feature gate, and when disabled the
-                      operator removes the RBAC for creating service account tokens from
-                      the Flux controllers' ClusterRole.
-                      Starting with Flux v2.10.0, the ObjectLevelWorkloadIdentity feature
-                      gate is retired and no longer changes behavior, the feature is always
-                      enabled, and the operator no longer passes the feature gate to the
-                      controllers. Since the RBAC for creating service account tokens is no
-                      longer included in the Flux distribution, this field controls whether
-                      the operator adds it.
-                      This field only controls object-level workload identity where a
-                      Kubernetes service account token is issued. Starting with Flux
-                      v2.10.0, SPIFFE-based object-level workload identity also uses a
-                      service account, but does not issue a Kubernetes service account
-                      token, and is configured separately.
-                      This feature is only available in Flux v2.6.0 and later.
+                      ObjectLevelWorkloadIdentity is now legacy.
+
+                      Legacy: Use ObjectIdentityRBAC instead.
                     type: boolean
                   size:
                     description: |-
@@ -118,7 +125,7 @@ spec:
                     description: |-
                       TenantDefaultDecryptionServiceAccount is the name of the service account
                       to use as default for kustomize-controller SOPS decryption when the
-                      multitenant lockdown for workload identity is enabled. Defaults to the
+                      multitenant lockdown for object identity is enabled. Defaults to the
                       'default' service account from the tenant namespace.
                     type: string
                   tenantDefaultKubeConfigServiceAccount:
@@ -126,7 +133,7 @@ spec:
                       TenantDefaultKubeConfigServiceAccount is the name of the service account
                       to use as default for kustomize-controller and helm-controller remote
                       cluster access via spec.kubeConfig.configMapRef when the multitenant
-                      lockdown for workload identity is enabled. Defaults to the 'default'
+                      lockdown for object identity is enabled. Defaults to the 'default'
                       service account from the tenant namespace.
                     type: string
                   tenantDefaultServiceAccount:
@@ -134,7 +141,7 @@ spec:
                       TenantDefaultServiceAccount is the name of the service account
                       to use as default when the multitenant lockdown is enabled, for
                       kustomize-controller and helm-controller.
-                      This field will also be used for multitenant workload identity
+                      This field will also be used for multitenant object identity
                       lockdown for source-controller, notification-controller,
                       image-reflector-controller and image-automation-controller.
                       Defaults to the 'default' service account from the tenant namespace.
@@ -153,10 +160,19 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-validations:
-                - message: .objectLevelWorkloadIdentity must be set to true when .multitenantWorkloadIdentity
+                - message: .objectLevelWorkloadIdentity and .objectIdentityRBAC are
+                    mutually exclusive and equivalent, set only .objectIdentityRBAC
+                  rule: '!(has(self.objectLevelWorkloadIdentity) && has(self.objectIdentityRBAC))'
+                - message: .multitenantWorkloadIdentity and .multitenantObjectIdentity
+                    are mutually exclusive and equivalent, set only .multitenantObjectIdentity
+                  rule: '!(has(self.multitenantWorkloadIdentity) && self.multitenantWorkloadIdentity
+                    && has(self.multitenantObjectIdentity) && self.multitenantObjectIdentity)'
+                - message: .objectIdentityRBAC must be set to true when .multitenantObjectIdentity
                     is set to true
                   rule: (has(self.objectLevelWorkloadIdentity) && self.objectLevelWorkloadIdentity)
-                    || !has(self.multitenantWorkloadIdentity) || !self.multitenantWorkloadIdentity
+                    || (has(self.objectIdentityRBAC) && self.objectIdentityRBAC) ||
+                    (!has(self.multitenantWorkloadIdentity) || !self.multitenantWorkloadIdentity)
+                    && (!has(self.multitenantObjectIdentity) || !self.multitenantObjectIdentity)
               commonMetadata:
                 description: |-
                   CommonMetadata specifies the common labels and annotations that are

@@ -51,7 +51,7 @@ func TestFluxInstanceReconciler_CELValidation(t *testing.T) {
 			expectedErr: "the only accepted name for a FluxInstance is 'flux'",
 		},
 		{
-			name: "cannot enable workload identity lockdown without also enabling object level",
+			name: "cannot enable multitenant object identity without also enabling object identity RBAC",
 			obj: func(t *testing.T) *fluxcdv1.FluxInstance {
 				spec := getDefaultFluxSpec(t)
 				spec.Cluster = &fluxcdv1.Cluster{
@@ -65,10 +65,92 @@ func TestFluxInstanceReconciler_CELValidation(t *testing.T) {
 					Spec: spec,
 				}
 			},
-			expectedErr: ".objectLevelWorkloadIdentity must be set to true when .multitenantWorkloadIdentity is set to true",
+			expectedErr: ".objectIdentityRBAC must be set to true when .multitenantObjectIdentity is set to true",
 		},
 		{
-			name: "can enable object level workload identity without lockdown",
+			name: "cannot enable both legacy object identity and object identity RBAC",
+			obj: func(t *testing.T) *fluxcdv1.FluxInstance {
+				spec := getDefaultFluxSpec(t)
+				spec.Cluster = &fluxcdv1.Cluster{
+					ObjectLevelWorkloadIdentity: true,
+					ObjectIdentityRBAC:          true,
+				}
+				return &fluxcdv1.FluxInstance{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "flux",
+					},
+					Spec: spec,
+				}
+			},
+			expectedErr: ".objectLevelWorkloadIdentity and .objectIdentityRBAC are mutually exclusive and equivalent, set only .objectIdentityRBAC",
+		},
+		{
+			name: "cannot enable both legacy multitenant object identity and multitenant object identity",
+			obj: func(t *testing.T) *fluxcdv1.FluxInstance {
+				spec := getDefaultFluxSpec(t)
+				spec.Cluster = &fluxcdv1.Cluster{
+					MultitenantWorkloadIdentity: true,
+					MultitenantObjectIdentity:   true,
+				}
+				return &fluxcdv1.FluxInstance{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "flux",
+					},
+					Spec: spec,
+				}
+			},
+			expectedErr: ".multitenantWorkloadIdentity and .multitenantObjectIdentity are mutually exclusive and equivalent, set only .multitenantObjectIdentity",
+		},
+		{
+			name: "can enable object identity RBAC without lockdown",
+			obj: func(t *testing.T) *fluxcdv1.FluxInstance {
+				spec := getDefaultFluxSpec(t)
+				spec.Cluster = &fluxcdv1.Cluster{
+					ObjectIdentityRBAC:          true,
+					MultitenantWorkloadIdentity: false,
+				}
+				return &fluxcdv1.FluxInstance{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "flux",
+					},
+					Spec: spec,
+				}
+			},
+		},
+		{
+			name: "can create a flux instance with workload identity lockdown and object identity RBAC",
+			obj: func(t *testing.T) *fluxcdv1.FluxInstance {
+				spec := getDefaultFluxSpec(t)
+				spec.Cluster = &fluxcdv1.Cluster{
+					ObjectIdentityRBAC:          true,
+					MultitenantWorkloadIdentity: true,
+				}
+				return &fluxcdv1.FluxInstance{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "flux",
+					},
+					Spec: spec,
+				}
+			},
+		},
+		{
+			name: "can create a flux instance with multitenant object identity and object identity RBAC",
+			obj: func(t *testing.T) *fluxcdv1.FluxInstance {
+				spec := getDefaultFluxSpec(t)
+				spec.Cluster = &fluxcdv1.Cluster{
+					ObjectIdentityRBAC:        true,
+					MultitenantObjectIdentity: true,
+				}
+				return &fluxcdv1.FluxInstance{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "flux",
+					},
+					Spec: spec,
+				}
+			},
+		},
+		{
+			name: "can enable legacy object identity without lockdown",
 			obj: func(t *testing.T) *fluxcdv1.FluxInstance {
 				spec := getDefaultFluxSpec(t)
 				spec.Cluster = &fluxcdv1.Cluster{
@@ -84,7 +166,7 @@ func TestFluxInstanceReconciler_CELValidation(t *testing.T) {
 			},
 		},
 		{
-			name: "can create a flux instance without any object level workload identity features",
+			name: "can create a flux instance without any object identity features",
 			obj: func(t *testing.T) *fluxcdv1.FluxInstance {
 				spec := getDefaultFluxSpec(t)
 				spec.Cluster = &fluxcdv1.Cluster{

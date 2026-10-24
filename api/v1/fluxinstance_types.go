@@ -140,7 +140,9 @@ type ComponentImage struct {
 }
 
 // Cluster is the specification for the Kubernetes cluster.
-// +kubebuilder:validation:XValidation:rule="(has(self.objectLevelWorkloadIdentity) && self.objectLevelWorkloadIdentity) || !has(self.multitenantWorkloadIdentity) || !self.multitenantWorkloadIdentity", message=".objectLevelWorkloadIdentity must be set to true when .multitenantWorkloadIdentity is set to true"
+// +kubebuilder:validation:XValidation:rule="!(has(self.objectLevelWorkloadIdentity) && has(self.objectIdentityRBAC))", message=".objectLevelWorkloadIdentity and .objectIdentityRBAC are mutually exclusive and equivalent, set only .objectIdentityRBAC"
+// +kubebuilder:validation:XValidation:rule="!(has(self.multitenantWorkloadIdentity) && self.multitenantWorkloadIdentity && has(self.multitenantObjectIdentity) && self.multitenantObjectIdentity)", message=".multitenantWorkloadIdentity and .multitenantObjectIdentity are mutually exclusive and equivalent, set only .multitenantObjectIdentity"
+// +kubebuilder:validation:XValidation:rule="(has(self.objectLevelWorkloadIdentity) && self.objectLevelWorkloadIdentity) || (has(self.objectIdentityRBAC) && self.objectIdentityRBAC) || (!has(self.multitenantWorkloadIdentity) || !self.multitenantWorkloadIdentity) && (!has(self.multitenantObjectIdentity) || !self.multitenantObjectIdentity)", message=".objectIdentityRBAC must be set to true when .multitenantObjectIdentity is set to true"
 type Cluster struct {
 	// Domain is the cluster domain used for generating the FQDN of services.
 	// Defaults to 'cluster.local'.
@@ -153,16 +155,23 @@ type Cluster struct {
 	// +optional
 	Multitenant bool `json:"multitenant,omitempty"`
 
-	// MultitenantWorkloadIdentity enables the multitenancy lockdown for
-	// workload identity. Defaults to false.
+	// MultitenantWorkloadIdentity is now legacy.
+	//
+	// Legacy: Use MultitenantObjectIdentity instead.
 	// +kubebuilder:default:=false
 	// +optional
 	MultitenantWorkloadIdentity bool `json:"multitenantWorkloadIdentity,omitempty"`
 
+	// MultitenantObjectIdentity enables the multitenancy lockdown for
+	// object identity. Defaults to false.
+	// +kubebuilder:default:=false
+	// +optional
+	MultitenantObjectIdentity bool `json:"multitenantObjectIdentity,omitempty"`
+
 	// TenantDefaultServiceAccount is the name of the service account
 	// to use as default when the multitenant lockdown is enabled, for
 	// kustomize-controller and helm-controller.
-	// This field will also be used for multitenant workload identity
+	// This field will also be used for multitenant object identity
 	// lockdown for source-controller, notification-controller,
 	// image-reflector-controller and image-automation-controller.
 	// Defaults to the 'default' service account from the tenant namespace.
@@ -171,7 +180,7 @@ type Cluster struct {
 
 	// TenantDefaultDecryptionServiceAccount is the name of the service account
 	// to use as default for kustomize-controller SOPS decryption when the
-	// multitenant lockdown for workload identity is enabled. Defaults to the
+	// multitenant lockdown for object identity is enabled. Defaults to the
 	// 'default' service account from the tenant namespace.
 	// +optional
 	TenantDefaultDecryptionServiceAccount string `json:"tenantDefaultDecryptionServiceAccount,omitempty"`
@@ -179,33 +188,33 @@ type Cluster struct {
 	// TenantDefaultKubeConfigServiceAccount is the name of the service account
 	// to use as default for kustomize-controller and helm-controller remote
 	// cluster access via spec.kubeConfig.configMapRef when the multitenant
-	// lockdown for workload identity is enabled. Defaults to the 'default'
+	// lockdown for object identity is enabled. Defaults to the 'default'
 	// service account from the tenant namespace.
 	// +optional
 	TenantDefaultKubeConfigServiceAccount string `json:"tenantDefaultKubeConfigServiceAccount,omitempty"`
 
-	// ObjectLevelWorkloadIdentity enables object-level workload identity
-	// using Kubernetes service account tokens, allowing Flux resources to
-	// specify their own service accounts via the spec.serviceAccountName
-	// field.
-	// In Flux v2.6.0 to v2.9.x this enables the
-	// ObjectLevelWorkloadIdentity feature gate, and when disabled the
-	// operator removes the RBAC for creating service account tokens from
-	// the Flux controllers' ClusterRole.
-	// Starting with Flux v2.10.0, the ObjectLevelWorkloadIdentity feature
-	// gate is retired and no longer changes behavior, the feature is always
-	// enabled, and the operator no longer passes the feature gate to the
-	// controllers. Since the RBAC for creating service account tokens is no
-	// longer included in the Flux distribution, this field controls whether
-	// the operator adds it.
-	// This field only controls object-level workload identity where a
-	// Kubernetes service account token is issued. Starting with Flux
-	// v2.10.0, SPIFFE-based object-level workload identity also uses a
-	// service account, but does not issue a Kubernetes service account
-	// token, and is configured separately.
-	// This feature is only available in Flux v2.6.0 and later.
+	// ObjectLevelWorkloadIdentity is now legacy.
+	//
+	// Legacy: Use ObjectIdentityRBAC instead.
 	// +optional
 	ObjectLevelWorkloadIdentity bool `json:"objectLevelWorkloadIdentity,omitempty"`
+
+	// ObjectIdentityRBAC configures the RBAC required for object identity
+	// using Kubernetes service account tokens. Object identity is the new
+	// name of the upstream Flux object-level workload identity feature.
+	// In Flux v2.6.0 to v2.9.x this enables the
+	// ObjectLevelWorkloadIdentity feature gate and leaves the RBAC for
+	// creating service account tokens in place. When disabled, the
+	// operator removes that RBAC from the Flux controllers' ClusterRole.
+	// Starting with Flux v2.10.0, the ObjectLevelWorkloadIdentity feature
+	// gate is retired and no longer changes behavior, so the operator no
+	// longer passes it to the controllers.
+	// Starting with Flux v2.10.0, the RBAC for creating service account
+	// tokens is removed from the Flux distribution, and this field
+	// controls whether the operator adds it.
+	// This feature is only available in Flux v2.6.0 and later.
+	// +optional
+	ObjectIdentityRBAC bool `json:"objectIdentityRBAC,omitempty"`
 
 	// NetworkPolicy restricts network access to the current namespace.
 	// Defaults to true.
