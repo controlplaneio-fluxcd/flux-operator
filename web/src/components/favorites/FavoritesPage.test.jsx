@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/preact'
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/preact'
 import { FavoritesPage, favoritesData, favoritesFetching, fetchFavoritesData } from './FavoritesPage'
 import { favorites, reorderFavorites, removeFavorite } from '../../utils/favorites'
 import { fetchWithMock } from '../../utils/fetch'
@@ -678,7 +678,7 @@ describe('FavoritesPage component', () => {
         expect(screen.getByTestId('header-loading')).toHaveTextContent('loaded')
       })
 
-      unmount()
+      act(() => unmount())
 
       expect(clearIntervalSpy).toHaveBeenCalled()
     })

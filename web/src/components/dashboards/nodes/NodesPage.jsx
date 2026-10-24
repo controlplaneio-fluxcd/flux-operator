@@ -190,7 +190,7 @@ export function NodesPage() {
   }
 
   return (
-    <main data-testid="nodes-dashboard-view" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
+    <main data-testid="nodes-dashboard-view" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 grow w-full">
       <div class="space-y-6">
         {content}
       </div>

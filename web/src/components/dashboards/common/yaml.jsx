@@ -98,7 +98,9 @@ export function YamlBlock({ data, nested = false }) {
 
   // Inline styles win over the Prism theme stylesheet, whose
   // `pre[class*="language-"]` rule sets its own background, padding, margin and
-  // radius. In nested mode we strip all of that so the YAML flows inside the
+  // radius. The Prism stylesheet is unlayered, so it also wins over Tailwind's
+  // layered utilities; the dark background is marked important to keep it.
+  // In nested mode we strip all of that so the YAML flows inside the
   // already-padded detail panel instead of nesting a second padded box. The
   // monospace YAML also reads visually larger than the surrounding 12px sans
   // text, so nested mode shrinks it to 11px to match the compact detail panel.
@@ -109,7 +111,7 @@ export function YamlBlock({ data, nested = false }) {
 
   return (
     <pre
-      class={`overflow-x-auto language-yaml${nested ? '' : ' p-3 bg-gray-50 dark:bg-gray-900 rounded-md'}`}
+      class={`overflow-x-auto language-yaml${nested ? '' : ' p-3 bg-gray-50 dark:bg-gray-900! rounded-md'}`}
       style={preStyle}
     >
       <code class="language-yaml" style={`font-size: ${fontSize}; background: transparent;`} dangerouslySetInnerHTML={{ __html: highlighted }} />

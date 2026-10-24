@@ -5,7 +5,7 @@ import { useRef, useEffect } from 'preact/hooks'
 import { keyboardShortcutsOpen } from '../../utils/keyboardShortcuts'
 import { useDismiss } from '../../utils/useDismiss'
 
-const KBD_CLS = 'px-1.5 py-0.5 text-xs font-medium bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded'
+const KBD_CLS = 'px-1.5 py-0.5 text-xs font-medium bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-sm'
 
 function Kbd({ children }) {
   return <kbd class={KBD_CLS}>{children}</kbd>
@@ -14,7 +14,7 @@ function Kbd({ children }) {
 function KeySequence({ keys, join }) {
   if (join === '+') {
     return (
-      <div class="flex items-center gap-1 flex-shrink-0">
+      <div class="flex items-center gap-1 shrink-0">
         {keys.map((key, index) => (
           <span key={`${key}-${index}`} class="inline-flex items-center gap-1">
             {index > 0 && <span class="text-xs text-gray-400">+</span>}
@@ -26,7 +26,7 @@ function KeySequence({ keys, join }) {
   }
 
   return (
-    <div class="inline-flex items-center gap-1 flex-shrink-0">
+    <div class="inline-flex items-center gap-1 shrink-0">
       {keys.map((key) => (
         <Kbd key={key}>{key}</Kbd>
       ))}
@@ -38,7 +38,7 @@ function ShortcutRow({ keys, description }) {
   return (
     <div class="flex items-center justify-between gap-4 py-1.5">
       <span class="text-sm text-gray-600 dark:text-gray-400">{description}</span>
-      <div class="flex items-center gap-1 flex-shrink-0">{keys}</div>
+      <div class="flex items-center gap-1 shrink-0">{keys}</div>
     </div>
   )
 }
@@ -149,7 +149,7 @@ export function KeyboardShortcutsModal() {
           <button
             type="button"
             onClick={handleClose}
-            class="inline-flex items-center p-1 rounded text-gray-400 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200"
+            class="inline-flex items-center p-1 rounded-sm text-gray-400 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200"
             aria-label="Close keyboard shortcuts"
             data-testid="keyboard-shortcuts-close"
           >

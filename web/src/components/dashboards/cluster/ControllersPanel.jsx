@@ -50,7 +50,7 @@ function ComponentRow({component, metrics, isRowExpanded, toggleComponent}) {
 
   return (
     <>
-      <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-b border-gray-200 dark:border-gray-700">
+      <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
         <td class="px-3 sm:px-6 py-4">
           <button
             onClick={() => toggleComponent(component.name)}

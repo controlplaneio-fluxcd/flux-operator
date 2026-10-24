@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render } from '@testing-library/preact'
+import { render, act } from '@testing-library/preact'
 import { UsageChart } from './UsageChart'
 import { formatCores } from '../../../utils/metrics'
 import uPlot from 'uplot'
@@ -78,7 +78,7 @@ describe('UsageChart component', () => {
       <UsageChart data={data} hasLimit={false} colorKey="cpu" formatValue={formatCores} testId="cpu-chart" />
     )
 
-    unmount()
+    act(() => unmount())
     expect(uPlot.instances[0].destroy).toHaveBeenCalledTimes(1)
   })
 
@@ -255,7 +255,7 @@ describe('UsageChart component', () => {
     )
     uPlot.instances[0].opts.hooks.setCursor[0](u)
     expect(first.container.querySelector('.usage-chart-tooltip-limit').textContent).toBe('limit 500m')
-    first.unmount()
+    act(() => first.unmount())
 
     const second = render(
       <UsageChart data={withLimit} hasLimit={true} limitLabel="allocatable" colorKey="cpu" formatValue={formatCores} testId="cpu-chart" />

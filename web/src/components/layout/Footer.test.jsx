@@ -285,11 +285,11 @@ describe('Footer', () => {
       })
     })
 
-    it('should have flex-shrink-0 on icons', () => {
+    it('should have shrink-0 on icons', () => {
       render(<Footer />)
 
       const documentIcon = screen.getByText('Documentation').closest('a').querySelector('svg')
-      expect(documentIcon).toHaveClass('flex-shrink-0')
+      expect(documentIcon).toHaveClass('shrink-0')
     })
 
     it('should have proper stroke attributes on paths', () => {

@@ -57,7 +57,7 @@ export function FavoriteCard({ favorite, resourceData, loading = false }) {
           {/* Favorite star button (unfavorite) */}
           <span
             onClick={handleUnfavorite}
-            class="w-4 h-4 rounded transition-colors text-yellow-500 hover:text-yellow-600 flex-shrink-0 cursor-pointer"
+            class="w-4 h-4 rounded-sm transition-colors text-yellow-500 hover:text-yellow-600 shrink-0 cursor-pointer"
             title="Remove from favorites"
           >
             <svg class="w-4 h-4" fill="currentColor" stroke="currentColor" viewBox="0 0 24 24">
@@ -83,11 +83,11 @@ export function FavoriteCard({ favorite, resourceData, loading = false }) {
           class="text-sm text-left flex items-center gap-1.5 max-w-full"
           title={name}
         >
-          <svg class="w-4 h-4 text-gray-400 dark:text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
           </svg>
           <span class="font-semibold text-gray-900 dark:text-gray-100 truncate">{name}</span>
-          <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="w-3.5 h-3.5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
           </svg>
         </div>
@@ -96,10 +96,10 @@ export function FavoriteCard({ favorite, resourceData, loading = false }) {
       {/* Not found message */}
       {notFound && (
         <div class="flex gap-1.5 text-sm text-yellow-600 dark:text-yellow-500">
-          <svg class="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="w-4 h-4 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
-          <span class="break-words">{message}</span>
+          <span class="wrap-break-word">{message}</span>
         </div>
       )}
 
@@ -108,7 +108,7 @@ export function FavoriteCard({ favorite, resourceData, loading = false }) {
         <div class="space-y-1">
           {/* Namespace */}
           <div class="flex items-center gap-1.5 text-sm text-gray-700 dark:text-gray-300" title={`Namespace: ${namespace}`}>
-            <svg class="w-4 h-4 text-gray-400 dark:text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
             </svg>
             <span class="truncate">{namespace}</span>
@@ -121,12 +121,12 @@ export function FavoriteCard({ favorite, resourceData, loading = false }) {
               {/* h-5 matches the text-sm line height of the real rows below, so the
                   card height is identical loading vs loaded (no jump on settle). */}
               <div class="flex items-center gap-1.5 h-5">
-                <div class="w-4 h-4 rounded bg-gray-200 dark:bg-gray-700 animate-pulse flex-shrink-0" />
-                <div class="h-3.5 w-24 rounded bg-gray-200 dark:bg-gray-700 animate-pulse" />
+                <div class="w-4 h-4 rounded-sm bg-gray-200 dark:bg-gray-700 animate-pulse shrink-0" />
+                <div class="h-3.5 w-24 rounded-sm bg-gray-200 dark:bg-gray-700 animate-pulse" />
               </div>
               <div class="flex items-center gap-1.5 h-5">
-                <div class="w-4 h-4 rounded bg-gray-200 dark:bg-gray-700 animate-pulse flex-shrink-0" />
-                <div class="h-3.5 w-32 rounded bg-gray-200 dark:bg-gray-700 animate-pulse" />
+                <div class="w-4 h-4 rounded-sm bg-gray-200 dark:bg-gray-700 animate-pulse shrink-0" />
+                <div class="h-3.5 w-32 rounded-sm bg-gray-200 dark:bg-gray-700 animate-pulse" />
               </div>
             </>
           )}
@@ -134,7 +134,7 @@ export function FavoriteCard({ favorite, resourceData, loading = false }) {
           {/* Last reconciled timestamp */}
           {!isLoading && lastReconciled && (
             <div class="flex items-center gap-1.5 text-sm text-gray-700 dark:text-gray-300">
-              <svg class="w-4 h-4 text-gray-400 dark:text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg class="w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
               {formatTimestamp(lastReconciled)}
@@ -144,7 +144,7 @@ export function FavoriteCard({ favorite, resourceData, loading = false }) {
           {/* Message - truncated */}
           {message && (
             <div class="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400" title={message}>
-              <svg class="w-4 h-4 text-gray-400 dark:text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg class="w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
               <span class="truncate">{message.charAt(0).toLowerCase() + message.slice(1)}</span>

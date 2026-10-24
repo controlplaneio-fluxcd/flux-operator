@@ -223,11 +223,11 @@ export function reconcileEntries(prevLines, prevEntries, lines, parse) {
 
 // Shared styling for the toolbar controls. Selects deliberately omit a chevron
 // and right padding: those come from the global `select` rule in index.css.
-const FIELD_CLASS = 'text-xs py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-flux-blue'
+const FIELD_CLASS = 'text-xs py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-flux-blue'
 const SELECT_CLASS = `${FIELD_CLASS} pl-2`
 const INPUT_CLASS = `${FIELD_CLASS} px-2 placeholder-gray-400 dark:placeholder-gray-500`
 // p-1 keeps the icon buttons the same height as the text-xs py-1 selects.
-const ICON_TOGGLE_CLASS = 'inline-flex items-center justify-center p-1 rounded-md border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-flux-blue'
+const ICON_TOGGLE_CLASS = 'inline-flex items-center justify-center p-1 rounded-md border transition-colors focus:outline-hidden focus-visible:ring-2 focus-visible:ring-flux-blue'
 const INACTIVE_CLASS = 'border-gray-300 text-gray-600 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700'
 const ACTIVE_CLASS = 'border-flux-blue text-flux-blue bg-blue-50 dark:bg-blue-900/30'
 const ACTION_CLASS = 'inline-flex items-center p-1 rounded-md text-gray-400 hover:text-flux-blue dark:text-gray-500 dark:hover:text-flux-blue disabled:cursor-not-allowed'
@@ -422,7 +422,7 @@ function LogGroup({ group, formatted, isLatest }) {
           <button
             type="button"
             onClick={() => setExpanded(v => !v)}
-            class="flex items-center gap-1 px-3 py-0.5 text-[11px] font-mono text-gray-500 hover:text-flux-blue dark:text-gray-400 dark:hover:text-flux-blue select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-flux-blue rounded"
+            class="flex items-center gap-1 px-3 py-0.5 text-[11px] font-mono text-gray-500 hover:text-flux-blue dark:text-gray-400 dark:hover:text-flux-blue select-none focus:outline-hidden focus-visible:ring-2 focus-visible:ring-flux-blue rounded-sm"
             data-testid="logs-group-fold"
             aria-expanded={expanded}
           >
@@ -1186,7 +1186,7 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
           </div>
           <button
             onClick={onClose}
-            class="inline-flex items-center p-1 rounded text-gray-400 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200 flex-shrink-0"
+            class="inline-flex items-center p-1 rounded-sm text-gray-400 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200 shrink-0"
             aria-label="Close logs viewer"
             data-testid="logs-close-button"
           >
@@ -1381,7 +1381,7 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
                 settings (see fieldExpr). */}
             {formatted && availableFields.length > 0 && (
               <div class="flex items-center gap-3">
-                <label for="logs-fields-input" class="text-xs font-medium text-gray-600 dark:text-gray-300 w-20 flex-shrink-0">Fields</label>
+                <label for="logs-fields-input" class="text-xs font-medium text-gray-600 dark:text-gray-300 w-20 shrink-0">Fields</label>
                 <input
                   id="logs-fields-input"
                   type="text"
@@ -1404,7 +1404,7 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
         {/* Body */}
         <div ref={bodyRef} onScroll={handleScroll} style={`--logs-font-size: ${fontSizePx}px`} class="flex-1 overflow-auto overscroll-contain bg-white dark:bg-gray-950" data-testid="logs-body">
           {error ? (
-            <div class="m-3 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-xs text-red-800 dark:text-red-200" data-testid="logs-error">
+            <div class="m-3 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-sm text-xs text-red-800 dark:text-red-200" data-testid="logs-error">
               {error}
             </div>
           ) : loading && !logs ? (
@@ -1432,11 +1432,11 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
               })}
               {followError && (
                 <div
-                  class="flex items-start gap-2 mx-3 mt-2 p-2 rounded border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 text-xs text-red-800 dark:text-red-200"
+                  class="flex items-start gap-2 mx-3 mt-2 p-2 rounded-sm border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 text-xs text-red-800 dark:text-red-200"
                   data-testid="logs-follow-error"
                   role="alert"
                 >
-                  <svg class="w-4 h-4 flex-shrink-0 mt-px" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg class="w-4 h-4 shrink-0 mt-px" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
                   </svg>
                   <span class="break-all">{followError}</span>
@@ -1444,11 +1444,11 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
               )}
               {podsGone && (
                 <div
-                  class="flex items-start gap-2 mx-3 mt-2 p-2 rounded border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 text-xs text-red-800 dark:text-red-200"
+                  class="flex items-start gap-2 mx-3 mt-2 p-2 rounded-sm border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 text-xs text-red-800 dark:text-red-200"
                   data-testid="logs-no-pods"
                   role="alert"
                 >
-                  <svg class="w-4 h-4 flex-shrink-0 mt-px" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg class="w-4 h-4 shrink-0 mt-px" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
                   </svg>
                   <span class="break-all">{NO_PODS_MESSAGE}</span>
@@ -1491,13 +1491,13 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
                 avoid a misleading "N of N". */}
             {partial && (
               <span
-                class="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 flex-shrink-0"
+                class="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 shrink-0"
                 data-testid="logs-partial"
                 title={partial.forbidden > 0
                   ? `${partial.forbidden} pod(s) not readable with your permissions`
                   : 'Some streams could not be shown'}
               >
-                <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
                 </svg>
                 {partial.streamed < partial.total
@@ -1511,12 +1511,12 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
               <button
                 type="button"
                 onClick={scrollToBottom}
-                class="inline-flex items-center gap-1 text-xs font-medium text-flux-blue hover:underline flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-flux-blue rounded"
+                class="inline-flex items-center gap-1 text-xs font-medium text-flux-blue hover:underline shrink-0 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-flux-blue rounded-sm"
                 data-testid="logs-appended-count"
                 aria-live="polite"
                 title="Scroll to latest logs"
               >
-                <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
                 </svg>
                 +{appendedCount} new
@@ -1525,7 +1525,7 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
           </div>
           {loading ? (
             <div
-              class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 flex-shrink-0"
+              class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 shrink-0"
               data-testid="logs-loader"
               role="status"
               aria-label="Loading logs"
@@ -1537,7 +1537,7 @@ export function WorkloadLogsViewer({ kind, namespace, workloadName, pods = [], i
             <button
               type="button"
               onClick={scrollToBottom}
-              class="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400 hover:text-flux-blue dark:hover:text-flux-blue flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-flux-blue rounded"
+              class="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400 hover:text-flux-blue dark:hover:text-flux-blue shrink-0 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-flux-blue rounded-sm"
               data-testid="logs-mode"
               title={`${follow ? 'Following live logs' : 'Snapshot'} — click to scroll to latest`}
               aria-label="Scroll to latest logs"

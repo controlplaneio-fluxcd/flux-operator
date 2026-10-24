@@ -30,7 +30,7 @@ export function ToggleGroup({ label, ariaLabel, options, value, onChange, testid
           key={o.value}
           type="button"
           onClick={() => onChange(o.value)}
-          class={`flex-1 px-3 py-1 text-xs text-center focus:outline-none focus-visible:ring-2 focus-visible:ring-flux-blue focus-visible:ring-inset ${
+          class={`flex-1 px-3 py-1 text-xs text-center focus:outline-hidden focus-visible:ring-2 focus-visible:ring-flux-blue focus-visible:ring-inset ${
             i > 0 ? 'border-l border-gray-300 dark:border-gray-600' : ''
           } ${
             value === o.value
@@ -52,7 +52,7 @@ export function ToggleGroup({ label, ariaLabel, options, value, onChange, testid
   // Labelled: settings-row layout with a fixed-width label column.
   return (
     <div class="flex items-center gap-3">
-      <span class="text-xs font-medium text-gray-600 dark:text-gray-300 w-20 flex-shrink-0">{label}</span>
+      <span class="text-xs font-medium text-gray-600 dark:text-gray-300 w-20 shrink-0">{label}</span>
       {group}
     </div>
   )

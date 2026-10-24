@@ -84,12 +84,12 @@ function ReconcilerCard({ crd, stats, isInstalled }) {
 
       <div class="flex flex-wrap gap-2">
         {!isInstalled && (
-          <span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400">
+          <span class="inline-flex items-center px-2 py-1 rounded-sm text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400">
             not installed
           </span>
         )}
         {isInstalled && total === 0 && (
-          <span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400">
+          <span class="inline-flex items-center px-2 py-1 rounded-sm text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400">
             no resources
           </span>
         )}
@@ -97,7 +97,7 @@ function ReconcilerCard({ crd, stats, isInstalled }) {
           <a
             href={getStatusUrl('Ready')}
             onClick={(e) => e.stopPropagation()}
-            class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-green-200 text-green-800 hover:bg-green-300 cursor-pointer transition-colors"
+            class="inline-flex items-center px-2 py-1 rounded-sm text-xs font-medium bg-green-200 text-green-800 hover:bg-green-300 cursor-pointer transition-colors"
           >
             {stats.running} running
           </a>
@@ -106,7 +106,7 @@ function ReconcilerCard({ crd, stats, isInstalled }) {
           <a
             href={getStatusUrl('Failed')}
             onClick={(e) => e.stopPropagation()}
-            class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-800 hover:bg-red-200 cursor-pointer transition-colors"
+            class="inline-flex items-center px-2 py-1 rounded-sm text-xs font-medium bg-red-100 text-red-800 hover:bg-red-200 cursor-pointer transition-colors"
           >
             {stats.failing} failing
           </a>
@@ -115,7 +115,7 @@ function ReconcilerCard({ crd, stats, isInstalled }) {
           <a
             href={getStatusUrl('Suspended')}
             onClick={(e) => e.stopPropagation()}
-            class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-yellow-100 text-yellow-800 hover:bg-yellow-200 cursor-pointer transition-colors"
+            class="inline-flex items-center px-2 py-1 rounded-sm text-xs font-medium bg-yellow-100 text-yellow-800 hover:bg-yellow-200 cursor-pointer transition-colors"
           >
             {stats.suspended} suspended
           </a>

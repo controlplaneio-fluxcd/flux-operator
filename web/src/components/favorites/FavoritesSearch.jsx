@@ -157,7 +157,7 @@ export function FavoritesSearch({ onFilter, onClose, namespaces = [], kinds = []
     <div class="relative flex-1">
       {/* Search Input Row */}
       <div class="flex items-center px-3 h-[38px] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md">
-        <svg class="w-4 h-4 text-gray-400 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg class="w-4 h-4 text-gray-400 mr-2 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
         </svg>
 
@@ -165,14 +165,14 @@ export function FavoritesSearch({ onFilter, onClose, namespaces = [], kinds = []
         {filterOrder.map(filter => {
           if (filter === 'namespace' && selectedNamespace) {
             return (
-              <span key="ns" class="inline-flex items-center px-2 py-0.5 mr-1.5 rounded text-xs font-medium bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200 flex-shrink-0">
+              <span key="ns" class="inline-flex items-center px-2 py-0.5 mr-1.5 rounded-sm text-xs font-medium bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200 shrink-0">
                 ns:{selectedNamespace}
               </span>
             )
           }
           if (filter === 'kind' && selectedKind) {
             return (
-              <span key="kind" class="inline-flex items-center px-2 py-0.5 mr-1.5 rounded text-xs font-medium bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200 flex-shrink-0">
+              <span key="kind" class="inline-flex items-center px-2 py-0.5 mr-1.5 rounded-sm text-xs font-medium bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200 shrink-0">
                 kind:{selectedKind}
               </span>
             )
@@ -187,12 +187,12 @@ export function FavoritesSearch({ onFilter, onClose, namespaces = [], kinds = []
           onInput={handleInputChange}
           onKeyDown={handleKeyDown}
           placeholder={(selectedNamespace || selectedKind) ? 'Search...' : 'Search... (filter with ns: or kind:)'}
-          class="flex-1 min-w-0 text-sm text-gray-900 dark:text-gray-100 bg-transparent placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none"
+          class="flex-1 min-w-0 text-sm text-gray-900 dark:text-gray-100 bg-transparent placeholder-gray-400 dark:placeholder-gray-500 focus:outline-hidden"
         />
 
         <button
           onClick={onClose}
-          class="ml-2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 focus:outline-none flex-shrink-0"
+          class="ml-2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 focus:outline-hidden shrink-0"
           aria-label="Close search"
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -212,7 +212,7 @@ export function FavoritesSearch({ onFilter, onClose, namespaces = [], kinds = []
               <li key={ns}>
                 <button
                   onClick={() => handleNamespaceSelect(ns)}
-                  class={`w-full text-left py-1.5 px-3 text-sm focus:outline-none transition-colors ${
+                  class={`w-full text-left py-1.5 px-3 text-sm focus:outline-hidden transition-colors ${
                     index === nsSelectedIndex
                       ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
                       : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
@@ -246,7 +246,7 @@ export function FavoritesSearch({ onFilter, onClose, namespaces = [], kinds = []
               <li key={kind}>
                 <button
                   onClick={() => handleKindSelect(kind)}
-                  class={`w-full text-left py-1.5 px-3 text-sm focus:outline-none transition-colors ${
+                  class={`w-full text-left py-1.5 px-3 text-sm focus:outline-hidden transition-colors ${
                     index === kindSelectedIndex
                       ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
                       : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'

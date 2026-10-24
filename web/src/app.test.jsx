@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/preact'
+import { render, screen, waitFor, act } from '@testing-library/preact'
 import {
   App,
   fetchFluxReport,
@@ -396,7 +396,7 @@ describe('app.jsx', () => {
         expect(fetchWithMock).toHaveBeenCalledTimes(1)
       })
 
-      unmount()
+      act(() => unmount())
 
       // Advance time by 30 seconds after unmount
       vi.advanceTimersByTime(POLL_INTERVAL_MS)
