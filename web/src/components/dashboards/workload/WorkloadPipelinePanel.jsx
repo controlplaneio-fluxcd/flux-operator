@@ -39,7 +39,7 @@ function PipelineNode({ kind, name, subtext, status, href }) {
 
   const card = (
     <div
-      class={`bg-white dark:bg-gray-800 rounded-lg p-3 shadow-sm ${borderClass} transition-all duration-300 ${
+      class={`bg-white dark:bg-gray-800 rounded-lg p-3 shadow-xs ${borderClass} transition-all duration-300 ${
         isClickable ? 'cursor-pointer hover:shadow-md' : ''
       }`}
       data-testid="pipeline-node"
@@ -114,9 +114,9 @@ function getConnectorClasses(status) {
 function HorizontalConnector({ status }) {
   const c = getConnectorClasses(status)
   return (
-    <div class="flex items-center flex-shrink-0" data-testid="pipeline-connector">
+    <div class="flex items-center shrink-0" data-testid="pipeline-connector">
       <div class={`h-px w-4 ${c.bg}`} />
-      <div class={`w-0 h-0 border-t-[4px] border-b-[4px] border-l-[5px] border-t-transparent border-b-transparent ${c.hArrow}`} />
+      <div class={`w-0 h-0 border-t-4 border-b-4 border-l-[5px] border-t-transparent border-b-transparent ${c.hArrow}`} />
     </div>
   )
 }
@@ -129,7 +129,7 @@ function VerticalConnector({ status }) {
   return (
     <div class="flex flex-col items-center" data-testid="pipeline-connector">
       <div class={`w-px h-6 ${c.bg}`} />
-      <div class={`w-0 h-0 border-l-[4px] border-r-[4px] border-t-[5px] border-l-transparent border-r-transparent ${c.vArrow}`} />
+      <div class={`w-0 h-0 border-l-4 border-r-4 border-t-[5px] border-l-transparent border-r-transparent ${c.vArrow}`} />
     </div>
   )
 }

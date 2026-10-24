@@ -37,7 +37,7 @@ function StatusLine({ findings, canViewNodes }) {
   const text = worst
     ? `${summaryTitle(worst)}${more > 0 ? ` · ${more} more ${more === 1 ? 'issue' : 'issues'}` : ''}`
     : 'All nodes healthy'
-  const icon = <span class="flex-shrink-0">{STATUS_ICONS[worst?.severity === 'critical' ? 'critical' : worst ? 'warn' : 'ok']}</span>
+  const icon = <span class="shrink-0">{STATUS_ICONS[worst?.severity === 'critical' ? 'critical' : worst ? 'warn' : 'ok']}</span>
   if (canViewNodes) {
     return (
       <a href="/nodes" class="flex items-center gap-2 text-sm text-flux-blue dark:text-blue-400 hover:underline" data-testid="nodes-summary-status">

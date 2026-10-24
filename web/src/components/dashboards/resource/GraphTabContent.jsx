@@ -218,7 +218,7 @@ function NodeCard({ kind, name, namespace, status, revision, version, url, messa
 
   return (
     <div
-      class={`bg-white dark:bg-gray-800 rounded-lg p-3 shadow-sm ${borderClass} ${animationClass} transition-all duration-300 ${
+      class={`bg-white dark:bg-gray-800 rounded-lg p-3 shadow-xs ${borderClass} ${animationClass} transition-all duration-300 ${
         isClickable ? 'cursor-pointer hover:shadow-md' : ''
       }`}
       onClick={isClickable ? onClick : undefined}
@@ -340,14 +340,14 @@ function GroupCard({ title, count, items, isItemList, onItemClick, getItemHref, 
                 )}
                 {itemStatus === undefined && isStatusTracked ? (
                   <div class="text-xs text-gray-400 dark:text-gray-500 truncate mt-0.5 flex items-center gap-1.5 animate-pulse" data-testid="workload-status-computing">
-                    <span class="inline-block w-2 h-2 rounded-full flex-shrink-0 bg-gray-300 dark:bg-gray-600" />
+                    <span class="inline-block w-2 h-2 rounded-full shrink-0 bg-gray-300 dark:bg-gray-600" />
                     computing...
                   </div>
                 ) : itemStatusLabel ? (
                   <div class="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5 flex items-center gap-1.5" title={itemStatusTitle} data-testid="workload-status-message">
                     {itemStatus !== undefined && (
                       <span
-                        class={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${getWorkloadDotClass(itemStatus)}`}
+                        class={`inline-block w-2 h-2 rounded-full shrink-0 ${getWorkloadDotClass(itemStatus)}`}
                         title={itemStatus}
                         data-testid="workload-status-dot"
                       />
@@ -389,7 +389,7 @@ function ConnectorLine() {
     <div class="flex flex-col items-center h-8">
       <div class="w-px h-6 bg-gray-300 dark:bg-gray-600" />
       <div
-        class="w-0 h-0 border-l-[4px] border-r-[4px] border-t-[5px] border-l-transparent border-r-transparent border-t-gray-300 dark:border-t-gray-600"
+        class="w-0 h-0 border-l-4 border-r-4 border-t-[5px] border-l-transparent border-r-transparent border-t-gray-300 dark:border-t-gray-600"
       />
     </div>
   )
@@ -425,7 +425,7 @@ function InventoryConnector({ targetCount, isProgressing }) {
       <div class="relative w-full h-8" data-testid="inventory-connector">
         <div class="absolute left-1/2 top-0 flex flex-col items-center -translate-x-1/2">
           <div class={`w-px h-6 ${lineBg}`} />
-          <div class={`w-0 h-0 border-l-[4px] border-r-[4px] border-t-[5px] border-l-transparent border-r-transparent ${arrowColor}`} />
+          <div class={`w-0 h-0 border-l-4 border-r-4 border-t-[5px] border-l-transparent border-r-transparent ${arrowColor}`} />
         </div>
       </div>
     )
@@ -452,18 +452,18 @@ function InventoryConnector({ targetCount, isProgressing }) {
       {targetCount === 3 && (
         <div class="absolute left-1/2 top-3 flex flex-col items-center -translate-x-1/2">
           <div class={`w-px h-3 ${lineBg}`} />
-          <div class={`w-0 h-0 border-l-[4px] border-r-[4px] border-t-[5px] border-l-transparent border-r-transparent ${arrowColor}`} />
+          <div class={`w-0 h-0 border-l-4 border-r-4 border-t-[5px] border-l-transparent border-r-transparent ${arrowColor}`} />
         </div>
       )}
 
       {/* Left arrow */}
       <div class="absolute flex flex-col items-center" style={{ left: targets[0], top: '23px', transform: 'translateX(-50%)' }}>
-        <div class={`w-0 h-0 border-l-[4px] border-r-[4px] border-t-[5px] border-l-transparent border-r-transparent ${arrowColor}`} />
+        <div class={`w-0 h-0 border-l-4 border-r-4 border-t-[5px] border-l-transparent border-r-transparent ${arrowColor}`} />
       </div>
 
       {/* Right arrow */}
       <div class="absolute flex flex-col items-center" style={{ left: targets[targets.length - 1], top: '23px', transform: 'translateX(-50%)' }}>
-        <div class={`w-0 h-0 border-l-[4px] border-r-[4px] border-t-[5px] border-l-transparent border-r-transparent ${arrowColor}`} />
+        <div class={`w-0 h-0 border-l-4 border-r-4 border-t-[5px] border-l-transparent border-r-transparent ${arrowColor}`} />
       </div>
     </div>
   )
@@ -483,7 +483,7 @@ function SourcesConnector({ sourceCount }) {
       <div class="relative w-full h-8">
         <div class="absolute left-1/2 top-0 flex flex-col items-center -translate-x-1/2">
           <div class="w-px h-6 bg-gray-300 dark:bg-gray-600" />
-          <div class="w-0 h-0 border-l-[4px] border-r-[4px] border-t-[5px] border-l-transparent border-r-transparent border-t-gray-300 dark:border-t-gray-600" />
+          <div class="w-0 h-0 border-l-4 border-r-4 border-t-[5px] border-l-transparent border-r-transparent border-t-gray-300 dark:border-t-gray-600" />
         </div>
       </div>
     )
@@ -528,7 +528,7 @@ function SourcesConnector({ sourceCount }) {
 
       {/* Center line down to reconciler with arrow */}
       <div class="absolute left-1/2 top-6 flex flex-col items-center -translate-x-1/2">
-        <div class="w-0 h-0 border-l-[4px] border-r-[4px] border-t-[5px] border-l-transparent border-r-transparent border-t-gray-300 dark:border-t-gray-600" />
+        <div class="w-0 h-0 border-l-4 border-r-4 border-t-[5px] border-l-transparent border-r-transparent border-t-gray-300 dark:border-t-gray-600" />
       </div>
     </div>
   )

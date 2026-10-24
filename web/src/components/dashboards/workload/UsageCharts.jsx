@@ -171,7 +171,7 @@ function UsageBars({ items, colorKey, formatValue, trim, testId }) {
             <a
               key={`${row.kind}/${row.namespace}/${row.name}`}
               href={getDashboardUrl(row.kind, row.namespace, row.name)}
-              class="group flex items-center gap-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700/30"
+              class="group flex items-center gap-2 rounded-sm hover:bg-gray-50 dark:hover:bg-gray-700/30"
               data-testid={`${testId}-row`}
               title={identity}
               aria-label={`${identity}: ${valueText}`}
@@ -208,7 +208,7 @@ function ChartPlaceholder({ testId }) {
   return (
     <div
       role="status"
-      class="h-[180px] flex items-center justify-center rounded border border-dashed border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400"
+      class="h-[180px] flex items-center justify-center rounded-sm border border-dashed border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400"
       data-testid={testId}
     >
       Collecting usage data…

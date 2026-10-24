@@ -143,7 +143,7 @@ export function LoginPage() {
           {(authError || cookieError) && (
             <div class="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
               <div class="flex items-start gap-3">
-                <svg class="w-5 h-5 text-red-500 dark:text-red-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-5 h-5 text-red-500 dark:text-red-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <div class="flex-1 min-w-0">
@@ -166,7 +166,7 @@ export function LoginPage() {
           <button
             onClick={handleLogin}
             disabled={!authProvider?.url || !originalPath || isLoading}
-            class={`w-full flex items-center justify-center gap-2 px-4 py-4 rounded-md text-base font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-flux-blue ${
+            class={`w-full flex items-center justify-center gap-2 px-4 py-4 rounded-md text-base font-medium transition-colors focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-flux-blue ${
               authProvider?.url && originalPath && !isLoading
                 ? 'bg-flux-blue text-white hover:bg-blue-600'
                 : 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'

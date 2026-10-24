@@ -311,7 +311,7 @@ export function SourcePanel({ resourceData }) {
                 href={getDashboardUrl(sourceRef.kind, sourceRef.namespace || namespace, sourceRef.name)}
                 class="flex items-center gap-2 text-sm text-flux-blue dark:text-blue-400 hover:underline"
               >
-                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                 </svg>
                 <span class="hidden md:inline break-all">{sourceRef.kind}/{sourceRef.namespace || namespace}/{sourceRef.name}</span>
@@ -436,7 +436,7 @@ export function SourcePanel({ resourceData }) {
                     href={getDashboardUrl('HelmChart', helmChartRef.namespace, helmChartRef.name)}
                     class="flex items-center gap-2 text-sm text-flux-blue dark:text-blue-400 hover:underline"
                   >
-                    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                     </svg>
                     <span class="hidden md:inline break-all">HelmChart/{helmChartRef.namespace}/{helmChartRef.name}</span>

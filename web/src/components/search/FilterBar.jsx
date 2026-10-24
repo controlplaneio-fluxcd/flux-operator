@@ -31,7 +31,7 @@ export function FilterBar({ count, label, loading, children, statusChart }) {
     // Sticky below the header+nav on desktop so the filters stay in view while
     // the list scrolls behind (the card background keeps it opaque). Normal flow
     // on mobile.
-    <div class="card px-3 py-2.5 sm:sticky sm:top-[var(--chrome-h)] sm:z-10">
+    <div class="card px-3 py-2.5 sm:sticky sm:top-(--chrome-h) sm:z-10">
       {/* Mobile: a single row with the count (or loader) + a filter toggle. The
           full filter form (and status chart) opens on demand. */}
       <div class="sm:hidden flex items-center justify-between">
@@ -59,11 +59,11 @@ export function FilterBar({ count, label, loading, children, statusChart }) {
       {/* Filters + status chart: always shown on desktop, toggled on mobile. The
           top margin only spaces this below the mobile bar; on desktop the bar is
           hidden, so the margin collapses and the card padding stays symmetric. */}
-      <div id="filter-panel" class={`${showFilters ? 'block' : 'hidden'} sm:block mt-2.5 sm:mt-0 space-y-2.5`}>
+      <div id="filter-panel" class={`${showFilters ? 'block' : 'hidden'} sm:block mt-2.5 sm:mt-0`}>
         {children}
         {/* Status chart is desktop-only — kept out of the mobile filter panel even
             when it is expanded. */}
-        {statusChart && <div class="hidden sm:block">{statusChart}</div>}
+        {statusChart && <div class="hidden sm:block mt-2.5">{statusChart}</div>}
       </div>
     </div>
   )

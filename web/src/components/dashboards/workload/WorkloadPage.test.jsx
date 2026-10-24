@@ -420,7 +420,7 @@ describe('WorkloadPage component', () => {
       })
 
       fetchWithMock.mockClear()
-      unmount()
+      act(() => unmount())
 
       vi.advanceTimersByTime(POLL_INTERVAL_MS)
 

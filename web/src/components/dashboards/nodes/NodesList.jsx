@@ -161,7 +161,7 @@ function NodeDetail({ node, badge, metricsAvailable, controlPlaneVersion, server
               const issue = nodeIssue(f, node, controlPlaneVersion)
               const chip = CHECK_CHIPS[f.severity] || CHECK_CHIPS.info
               return (
-                <div key={i} class="text-gray-700 dark:text-gray-300 break-words" data-testid="node-issue">
+                <div key={i} class="text-gray-700 dark:text-gray-300 wrap-break-word" data-testid="node-issue">
                   <StatusBadge status={chip.label} colorClass={chip.class} />{' '}
                   {issue.title}{issue.detail && <span class="text-gray-500 dark:text-gray-400"> · {issue.detail}</span>}
                 </div>
@@ -307,14 +307,14 @@ export function NodesList({ data, shortName }) {
                 onInput={(e) => query.value = e.currentTarget.value}
                 placeholder="Search by name, pool, zone or instance type"
                 aria-label="Search nodes"
-                class="w-full pl-8 pr-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-flux-blue"
+                class="w-full pl-8 pr-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-hidden focus:ring-2 focus:ring-flux-blue"
               />
             </div>
             <button
               onClick={clearFilters}
               title="Clear"
               aria-label="Clear filters"
-              class="inline-flex items-center p-1 rounded-md text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-flux-blue transition-colors"
+              class="inline-flex items-center p-1 rounded-md text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white focus:outline-hidden focus-visible:ring-2 focus-visible:ring-flux-blue transition-colors"
             >
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -343,7 +343,7 @@ export function NodesList({ data, shortName }) {
             <button
               type="button"
               onClick={() => setShowAll(true)}
-              class="text-sm text-flux-blue dark:text-blue-400 hover:underline focus:outline-none focus:ring-2 focus:ring-flux-blue rounded"
+              class="text-sm text-flux-blue dark:text-blue-400 hover:underline focus:outline-hidden focus:ring-2 focus:ring-flux-blue rounded-sm"
             >
               Show all {plural(sorted.length, 'node')}
             </button>

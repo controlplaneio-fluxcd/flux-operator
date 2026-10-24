@@ -326,7 +326,7 @@ export function FavoritesPage() {
   // accurate on the very first render without waiting for the status fetch.
   if (currentFavorites.length === 0) {
     return (
-      <main data-testid="favorites-page" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8 flex-grow w-full">
+      <main data-testid="favorites-page" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8 grow w-full">
         <div class="space-y-6">
           <div class="card py-12">
             <div class="text-center">
@@ -340,7 +340,7 @@ export function FavoritesPage() {
               <div class="mt-6">
                 <a
                   href="/resources"
-                  class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-flux-blue hover:bg-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flux-blue"
+                  class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-flux-blue hover:bg-blue-600 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-flux-blue"
                 >
                   Browse resources
                 </a>
@@ -356,7 +356,7 @@ export function FavoritesPage() {
   }
 
   return (
-    <main data-testid="favorites-page" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8 flex-grow w-full">
+    <main data-testid="favorites-page" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8 grow w-full">
       <div class="space-y-3">
         {/* Header with status bar and controls */}
         <FavoritesHeader
@@ -407,14 +407,14 @@ export function FavoritesPage() {
                 }`}
               >
                 {/* Drag handle */}
-                <svg class="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16" />
                 </svg>
                 {/* Resource info */}
-                <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase flex-shrink-0">
+                <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase shrink-0">
                   {fav.kind}
                 </span>
-                <span class="text-sm text-gray-900 dark:text-gray-100 truncate flex-grow">
+                <span class="text-sm text-gray-900 dark:text-gray-100 truncate grow">
                   {fav.namespace}/{fav.name}
                 </span>
                 {/* Delete button */}
@@ -424,7 +424,7 @@ export function FavoritesPage() {
                     removeFavorite(fav.kind, fav.namespace, fav.name)
                     setEditOrder(editOrder.filter((_, i) => i !== index))
                   }}
-                  class="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex-shrink-0"
+                  class="p-1 rounded-sm text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors shrink-0"
                   title="Remove from favorites"
                 >
                   <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

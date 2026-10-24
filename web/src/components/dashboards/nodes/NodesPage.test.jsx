@@ -277,7 +277,7 @@ describe('NodesPage', () => {
     respond()
     const { unmount } = render(<NodesPage />)
     await waitFor(() => expect(fetchWithMock).toHaveBeenCalledTimes(2))
-    unmount()
+    act(() => unmount())
     await act(async () => {
       vi.advanceTimersByTime(POLL_INTERVAL_MS * 2)
     })
