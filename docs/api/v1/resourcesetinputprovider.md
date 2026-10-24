@@ -437,25 +437,25 @@ It's also possible to give a ResourceSetInputProvider object its own
 cloud provider identity, completely decoupled from the identity of the
 operator, by configuring the `.spec.serviceAccountName` field. This field
 points to a ServiceAccount object in the same namespace as the
-ResourceSetInputProvider object. The workload identity setup for this
+ResourceSetInputProvider object. The identity federation setup for this
 ServiceAccount is identical to the setup for any other ServiceAccount
-using workload identity in your cluster. This is called *object-level workload identity*.
+using object identity in your cluster. This is called *object identity*.
 In this scenario, the operator code *does not* use the cloud SDKs to
 retrieve authentication from the environment. Instead, the code performs
 a *credential exchange*: it sends a token for the ServiceAccount and
 gets back from the cloud provider a native, temporary credential that
 allows access to the cloud provider service.
 
-Both *controller-level workload identity* and *object-level workload identity*
+Both *controller-level workload identity* and *object identity*
 are enabled by default in Flux Operator, there's no opt-in required.
 However, in multi-tenant clusters where isolation is necessary, we recommend
-forcing the use of *object-level workload identity* by blocking the use
+forcing the use of *object identity* by blocking the use
 of *controller-level workload identity* entirely. In this mode, the
 operator refuses to use the cloud SDK code path to retrieve credentials
 from the environment, and every ResourceSetInputProvider is required
 to specify a `.spec.serviceAccountName` field, or use a *default*.
 Setting this default is what prevents controller-level workload identity,
-we call it *workload identity multi-tenancy lockdown*. To set this default,
+we call it *object identity multi-tenancy lockdown*. To set this default,
 the `--default-workload-identity-service-account` flag can be set in the
 operator. If this flag is specified and a ResourceSetInputProvider
 object does not have the field `.spec.serviceAccountName`, the operator
@@ -479,7 +479,7 @@ environment variable using the OLM
 `.spec.config.env` field.
 
 The `.spec.serviceAccountName` field can only be used with the following provider
-[types](#type) for workload identity:
+[types](#type) for object identity:
 
 - `AzureDevOpsPullRequest`
 - `AzureDevOpsBranch`
@@ -492,7 +492,7 @@ The `.spec.serviceAccountName` field can only be used with the following provide
 - `GARArtifactTag`
 
 Note: It can also be set for the type `ExternalArtifact`, but in this case the ServiceAccount
-is not used for workload identity, as `ExternalArtifact` is about querying Flux ExternalArtifact
+is not used for object identity, as `ExternalArtifact` is about querying Flux ExternalArtifact
 objects inside the Kubernetes cluster. There's no access to a cloud provider service involving
 this type.
 
@@ -501,12 +501,12 @@ DevOps, [`.spec.secretRef`](#secret-based) is also not specified), the operator 
 to authenticate using the environment credentials, i.e. either the identity of the node or the
 operator ServiceAccount. This is called *controller-level workload identity*.
 
-For configuring a Kubernetes ServiceAccount with workload identity, see the following documentation:
+For configuring a Kubernetes ServiceAccount with cloud identity federation, see the following documentation:
 
-- [Azure](https://fluxcd.io/flux/integrations/azure/#with-workload-identity-federation)
-- [AWS (controller-level)](https://fluxcd.io/flux/integrations/aws/#with-eks-pod-identity)
-- [AWS (object-level)](https://fluxcd.io/flux/integrations/aws/#with-oidc-federation)
-- [GCP](https://fluxcd.io/flux/integrations/gcp/#with-workload-identity-federation)
+- [Workload identity with AWS)](https://fluxcd.io/flux/integrations/aws/#with-eks-pod-identity)
+- [Object identity with AWS](https://fluxcd.io/flux/integrations/aws/#with-oidc-federation)
+- [Object identity with Azure](https://fluxcd.io/flux/integrations/azure/#with-workload-identity-federation)
+- [Object identity with GCP](https://fluxcd.io/flux/integrations/gcp/#with-workload-identity-federation)
 
 For configuring the required permissions to access the cloud services, see the following documentation:
 

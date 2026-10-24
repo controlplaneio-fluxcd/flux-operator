@@ -305,8 +305,7 @@ const profileClusterMultitenant = `
 `
 
 // GetProfileMultitenantWorkloadIdentity returns a patch to enable
-// multitenant workload identity in the Flux controllers through
-// the feature gate.
+// multitenant object identity in the Flux controllers.
 func GetProfileMultitenantWorkloadIdentity(cluster fluxcdv1.Cluster) string {
 	defaultSA := cluster.TenantDefaultServiceAccount
 	if defaultSA == "" {
@@ -352,8 +351,8 @@ const profileClusterMultitenantWorkloadIdentity = `
 `
 
 // GetProfileObjectLevelWorkloadIdentity returns a patch to enable or disable
-// object level workload identity in the Flux controllers through the feature
-// gate. The feature gate was retired in Flux 2.10.
+// object identity in the Flux controllers through the ObjectLevelWorkloadIdentity
+// feature gate. The feature gate was retired in Flux 2.10.
 func GetProfileObjectLevelWorkloadIdentity(controllers []string, enabled bool) string {
 	c := strings.Join(controllers, "|")
 

@@ -1045,7 +1045,7 @@ func TestResouceSetInputProviderReconciler_getAzureDevOpsToken(t *testing.T) {
 		g.Expect(res).To(Equal("pass"))
 	})
 
-	t.Run("with object-level workload identity", func(t *testing.T) {
+	t.Run("with object identity", func(t *testing.T) {
 		g := NewWithT(t)
 
 		ns, err := testEnv.CreateNamespace(ctx, "test-azure-devops-wi")

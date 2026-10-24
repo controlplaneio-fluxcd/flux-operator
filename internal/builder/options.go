@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/go-logr/logr"
 )
 
 // Options defines the builder configuration.
@@ -35,6 +36,7 @@ type Options struct {
 	SourceAPIVersion                                string
 	RemovePermissionForCreatingServiceAccountTokens bool
 	AddPermissionForCreatingServiceAccountTokens    bool
+	Logger                                          logr.Logger
 }
 
 // MakeDefaultOptions returns the default builder configuration.
@@ -59,6 +61,7 @@ func MakeDefaultOptions() Options {
 		LogLevel:           "info",
 		ClusterDomain:      "cluster.local",
 		ShardingKey:        "sharding.fluxcd.io/key",
+		Logger:             logr.Discard(),
 	}
 }
 

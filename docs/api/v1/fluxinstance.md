@@ -348,8 +348,8 @@ spec:
     type: openshift
     size: medium
     multitenant: true
-    multitenantWorkloadIdentity: true
-    objectLevelWorkloadIdentity: true
+    multitenantObjectIdentity: true
+    objectIdentityRBAC: true
     tenantDefaultServiceAccount: "flux"
     tenantDefaultDecryptionServiceAccount: "flux-decryption"
     tenantDefaultKubeConfigServiceAccount: "flux-kubeconfig"
@@ -402,70 +402,61 @@ service account used by Flux when reconciling `Kustomization` and `HelmRelease`
 resources found in the tenant namespaces. Starting with Flux v2.10.0, it is also
 used by `source-watcher` when reconciling `ExternalArtifact` resources.
 
-#### Cluster workload identity
+#### Cluster object identity
 
-The workload identity configuration provides fine-grained control over service account
-usage across Flux controllers, enabling secure multi-tenant deployments in cloud environments.
+The object identity configuration allows enabling Flux object identity, which
+is best for multi-tenant scenarios where tenant isolation is a requirement.
+Object identity refers to identities assigned to Flux objects, while workload
+identity refers to identities assigned to the Flux controllers.
 
-##### Object-level workload identity
+##### Object identity RBAC
 
-The `.spec.cluster.objectLevelWorkloadIdentity` field is optional and specifies whether to
-enable object-level workload identity using Kubernetes service account tokens for the Flux
-controllers. This allows Flux resources to specify their own service accounts via the
-`.spec.serviceAccountName` field, and a Kubernetes service account token is issued for them.
+The `.spec.cluster.objectIdentityRBAC` field is optional and configures the RBAC required for
+object identity using Kubernetes service account tokens. Flux renamed the feature object-level
+workload identity to object identity after graduating it in Flux v2.10.0.
 
-In Flux v2.6.0 to v2.9.x, this enables the `ObjectLevelWorkloadIdentity` feature gate. When
-disabled, the operator removes the RBAC for creating service account tokens from the Flux
-controllers' ClusterRole.
+In Flux v2.6.0 to v2.9.x, this enables the `ObjectLevelWorkloadIdentity` feature gate and
+leaves the RBAC for creating service account tokens in place. When disabled, the operator
+removes that RBAC from the Flux controllers' ClusterRole.
 
 Starting with Flux v2.10.0, the `ObjectLevelWorkloadIdentity` feature gate is retired and no
-longer changes behavior, the feature is always enabled, and the operator no longer passes the
-feature gate to the controllers. Since the RBAC for creating service account tokens is no
-longer included in the Flux distribution, this field controls whether the operator adds it.
-
-This field only controls object-level workload identity where a Kubernetes service account
-token is issued. Starting with Flux v2.10.0, SPIFFE-based object-level workload identity also
-uses a service account, but does not issue a Kubernetes service account token, and is
-configured separately.
-
-Version requirements:
-
-- Flux v2.6.0 and later: Supported for `source-controller`, `kustomize-controller`,
-  `notification-controller`, `image-reflector-controller`, and `image-automation-controller`
-- Flux v2.7.0 and later: Additionally supported for `helm-controller`
+longer changes behavior, so the operator no longer passes it to the controllers. Also
+starting with Flux v2.10.0, the RBAC for creating service account tokens is removed from the
+Flux distribution, and this field controls whether the operator adds it.
 
 Example:
 
 ```yaml
 spec:
   cluster:
-    objectLevelWorkloadIdentity: true
+    objectIdentityRBAC: true
 ```
 
-##### Multitenant workload identity
+##### Multitenant object identity
 
-The `.spec.cluster.multitenantWorkloadIdentity` field is optional and enables workload identity
+The `.spec.cluster.multitenantObjectIdentity` field is optional and enables object identity
 multi-tenancy lockdown. When enabled, Flux controllers will use tenant-specific service accounts
-as defaults, preventing cross-tenant access in workload identity scenarios.
+as defaults, preventing tenants from sharing identities assigned to the Flux controllers.
 
 Requirements:
 
-- Requires `objectLevelWorkloadIdentity: true`
+- Requires `objectIdentityRBAC: true`
 - Available in Flux v2.7.0 and later
-- Designed for cloud environments with workload identity (AWS IRSA, Azure Workload Identity, GCP Workload Identity)
+- Designed for service providers supporting workload identity federation,
+  like cloud providers and opensource projects.
 
 Example:
 
 ```yaml
 spec:
   cluster:
-    objectLevelWorkloadIdentity: true
-    multitenantWorkloadIdentity: true
+    objectIdentityRBAC: true
+    multitenantObjectIdentity: true
 ```
 
 ##### Service account configuration
 
-When `multitenantWorkloadIdentity` is enabled, you can configure default service accounts
+When `multitenantObjectIdentity` is enabled, you can configure default service accounts
 for different controller operations:
 
 - `.spec.cluster.tenantDefaultServiceAccount` (optional): Default service account for
@@ -485,8 +476,8 @@ Complete example:
 ```yaml
 spec:
   cluster:
-    objectLevelWorkloadIdentity: true
-    multitenantWorkloadIdentity: true
+    objectIdentityRBAC: true
+    multitenantObjectIdentity: true
     tenantDefaultServiceAccount: "flux-tenant"
     tenantDefaultDecryptionServiceAccount: "flux-decryption"
     tenantDefaultKubeConfigServiceAccount: "flux-kubeconfig"
@@ -494,12 +485,12 @@ spec:
 
 Use cases:
 
-- **Cloud workload identity**: Each tenant namespace has service accounts bound to cloud IAM roles
+- **Cloud object identity**: Each tenant namespace has service accounts bound to cloud IAM roles
 - **Secret management**: Different service accounts for decryption operations (e.g. SOPS with cloud KMS)
 - **Multi-cluster**: Separate service accounts for accessing remote clusters via cloud IAM
-- **Least privilege**: Prevent controllers from accessing resources outside their intended scope
+- **Least privilege**: Preventing tenants from sharing identities assigned to the Flux controllers
 
-See the complete workload identity documentation for CNCF Flux
+See the complete object identity documentation for CNCF Flux
 [here](https://fluxcd.io/flux/integrations/).
 
 #### Cluster network policy
