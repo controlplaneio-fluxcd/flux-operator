@@ -94,7 +94,7 @@ export const mockReport = {
       {
         apiVersion: 'helm.toolkit.fluxcd.io/v2',
         kind: 'HelmRelease',
-        stats: { failing: 0, running: 4, suspended: 0 }
+        stats: { failing: 0, running: 5, suspended: 0 }
       },
       {
         apiVersion: 'image.toolkit.fluxcd.io/v1',
@@ -159,7 +159,7 @@ export const mockReport = {
       {
         apiVersion: 'source.toolkit.fluxcd.io/v1',
         kind: 'OCIRepository',
-        stats: { failing: 0, running: 3, suspended: 0, totalSize: '1.0 MiB' }
+        stats: { failing: 0, running: 4, suspended: 0, totalSize: '1.0 MiB' }
       }
     ],
     sync: {
@@ -244,6 +244,7 @@ export const mockReport = {
       }
     ],
     namespaces: [
+      'apps',
       'automation',
       'cert-manager',
       'default',

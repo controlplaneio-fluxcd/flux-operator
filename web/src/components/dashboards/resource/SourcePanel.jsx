@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect, useRef } from 'preact/hooks'
 import { fetchWithMock } from '../../../utils/fetch'
-import { getControllerName, getKindAlias } from '../../../utils/constants'
+import { getControllerName, getKindAlias, parseHelmChartRef } from '../../../utils/constants'
 import { getDashboardUrl } from '../../../utils/routing'
 import { formatTimestamp } from '../../../utils/time'
 import { DashboardPanel, TabButton } from '../common/panel'
@@ -36,7 +36,15 @@ export function SourcePanel({ resourceData }) {
   // Track initial mount to avoid refetching on first render
   const isInitialMount = useRef(true)
 
-  const hasHelmChart = resourceData?.kind === 'HelmRelease' && resourceData?.status?.helmChart
+  // Parse the HelmChart reference from status.helmChart; other kinds
+  // (e.g. a generated OCIRepository) are shown as the source instead
+  const helmChartRef = useMemo(() => {
+    if (resourceData?.kind !== 'HelmRelease') return null
+    const ref = parseHelmChartRef(resourceData?.status?.helmChart)
+    return ref?.kind === 'HelmChart' ? ref : null
+  }, [resourceData?.kind, resourceData?.status?.helmChart])
+
+  const hasHelmChart = helmChartRef !== null
 
   const visibleTabs = useMemo(() => {
     const tabs = ['overview']
@@ -175,13 +183,6 @@ export function SourcePanel({ resourceData }) {
 
     refetchSourceData()
   }, [resourceData])
-
-  // Parse HelmChart reference (format: "namespace/name")
-  const helmChartRef = useMemo(() => {
-    if (!hasHelmChart) return null
-    const [chartNamespace, chartName] = resourceData.status.helmChart.split('/')
-    return { namespace: chartNamespace, name: chartName }
-  }, [hasHelmChart, resourceData?.status?.helmChart])
 
   // Fetch HelmChart data on demand when Chart tab is clicked
   useEffect(() => {

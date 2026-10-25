@@ -261,3 +261,27 @@ const workloadKindAliases = { Deployment: 'deploy', StatefulSet: 'sts', DaemonSe
 export function getKindChipAlias(kind) {
   return fluxCRDs.find(c => c.kind === kind)?.alias || workloadKindAliases[kind] || kind
 }
+
+/**
+ * Parse the chart reference from a HelmRelease `status.helmChart` value.
+ *
+ * helm-controller writes `<namespace>/<name>` for a HelmChart and
+ * `<kind>/<namespace>/<name>` for any other kind (e.g. an OCIRepository
+ * generated from a `spec.chart.kind: OCIRepository` template).
+ *
+ * @param {string} value - The `status.helmChart` value
+ * @returns {{kind: string, namespace: string, name: string}|null} The parsed
+ *   reference, or null when the value is empty or malformed
+ */
+export function parseHelmChartRef(value) {
+  if (typeof value !== 'string' || value === '') return null
+  const parts = value.split('/')
+  if (parts.some(part => part === '')) return null
+  if (parts.length === 2) {
+    return { kind: 'HelmChart', namespace: parts[0], name: parts[1] }
+  }
+  if (parts.length === 3) {
+    return { kind: parts[0], namespace: parts[1], name: parts[2] }
+  }
+  return null
+}

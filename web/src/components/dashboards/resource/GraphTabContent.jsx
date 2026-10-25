@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { useMemo } from 'preact/hooks'
-import { fluxKinds, isFluxInventoryItem, isWorkloadInventoryItem } from '../../../utils/constants'
+import { fluxKinds, isFluxInventoryItem, isWorkloadInventoryItem, parseHelmChartRef } from '../../../utils/constants'
 import { getDashboardUrl } from '../../../utils/routing'
 
 /**
@@ -44,15 +44,14 @@ export function buildGraphData(resourceData) {
     })
 
     // Check for HelmChart when source is HelmRepository
-    if (resourceData.status.sourceRef.kind === 'HelmRepository' && resourceData.status?.helmChart) {
-      // helmChart is in format "namespace/name"
-      const [chartNamespace, chartName] = resourceData.status.helmChart.split('/')
+    const chartRef = parseHelmChartRef(resourceData.status?.helmChart)
+    if (resourceData.status.sourceRef.kind === 'HelmRepository' && chartRef?.kind === 'HelmChart') {
       const chartVersion = resourceData.spec?.chart?.spec?.version
 
       helmChart = {
         kind: 'HelmChart',
-        name: chartName,
-        namespace: chartNamespace,
+        name: chartRef.name,
+        namespace: chartRef.namespace,
         version: `semver ${chartVersion || '*'}`,
         isClickable: true
       }
