@@ -6,10 +6,12 @@ package toolbox
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
@@ -36,7 +38,7 @@ type reconcileFluxResourceInput struct {
 	Kind       string `json:"kind" jsonschema:"The kind of the Flux resource e.g. Kustomization, HelmRelease, ResourceSet, ResourceSetInputProvider, FluxInstance, GitRepository, OCIRepository, HelmRepository, HelmChart, Bucket, ImageRepository, ImagePolicy, ImageUpdateAutomation, Receiver."`
 	Name       string `json:"name" jsonschema:"The name of the Flux resource."`
 	Namespace  string `json:"namespace" jsonschema:"The namespace of the Flux resource."`
-	WithSource bool   `json:"with_source,omitempty" jsonschema:"If true, the source referenced by the resource (spec.sourceRef, spec.chartRef or spec.chart.spec.sourceRef) is reconciled first. Applies to Kustomization and HelmRelease."`
+	WithSource bool   `json:"with_source,omitempty" jsonschema:"If true, the source referenced by the resource (spec.sourceRef, spec.chartRef or spec.chart.spec.sourceRef) is reconciled first. For a HelmRelease with spec.chart.kind OCIRepository, the generated OCIRepository named <namespace>-<name> is reconciled, or skipped if it does not exist yet. Applies to Kustomization and HelmRelease."`
 }
 
 // fluxSourceReference identifies a Flux source referenced by another resource.
@@ -44,6 +46,10 @@ type fluxSourceReference struct {
 	Kind      string
 	Name      string
 	Namespace string
+	// Generated is true when the source is derived from the resource spec
+	// (e.g. the OCIRepository generated from a HelmRelease chart template)
+	// instead of being referenced explicitly, so it may not exist yet.
+	Generated bool
 }
 
 // HandleReconcileResource is the handler function for the reconcile_flux_resource tool.
@@ -100,11 +106,17 @@ func (m *Manager) HandleReconcileResource(ctx context.Context, request *mcp.Call
 				if err != nil {
 					return NewToolResultErrorFromErr("Failed to resolve source kind", err)
 				}
-				if err := kubeClient.Annotate(ctx, sourceGVK, ref.Name, ref.Namespace,
-					[]string{meta.ReconcileRequestAnnotation}, ts); err != nil {
+				err = kubeClient.Annotate(ctx, sourceGVK, ref.Name, ref.Namespace,
+					[]string{meta.ReconcileRequestAnnotation}, ts)
+				switch {
+				case err == nil:
+					sourceReconciled = true
+				case ref.Generated && apierrors.IsNotFound(err):
+					// The generated source is created by the controller on the first
+					// reconciliation, skip it and reconcile the resource only.
+				default:
 					return NewToolResultErrorFromErr("Failed to reconcile source", err)
 				}
-				sourceReconciled = true
 			}
 		}
 	}
@@ -138,12 +150,17 @@ func checkReconcilableKind(gvk schema.GroupVersionKind) error {
 	return nil
 }
 
-// getFluxSourceReference returns the chartRef, sourceRef or inline chart sourceRef from a Flux resource, in that order.
+// getFluxSourceReference returns the source of a Flux resource, looking up
+// spec.chartRef, spec.sourceRef, the OCIRepository generated from a HelmRelease
+// spec.chart with kind OCIRepository, and spec.chart.spec.sourceRef, in that order.
+// The generated OCIRepository is named <namespace>-<name> and lives in the
+// HelmRelease namespace (see HelmRelease.GetHelmChartTemplateReference), and
+// the returned reference is marked as Generated.
 func getFluxSourceReference(object *unstructured.Unstructured) (fluxSourceReference, bool) {
-	for _, field := range [][]string{{"spec", "chartRef"}, {"spec", "sourceRef"}, {"spec", "chart", "spec", "sourceRef"}} {
+	refAt := func(field ...string) (fluxSourceReference, bool) {
 		kind, found, err := unstructured.NestedString(object.Object, append(field, "kind")...)
 		if err != nil || !found || kind == "" {
-			continue
+			return fluxSourceReference{}, false
 		}
 		name, _, _ := unstructured.NestedString(object.Object, append(field, "name")...)
 		namespace, _, _ := unstructured.NestedString(object.Object, append(field, "namespace")...)
@@ -152,7 +169,21 @@ func getFluxSourceReference(object *unstructured.Unstructured) (fluxSourceRefere
 		}
 		return fluxSourceReference{Kind: kind, Name: name, Namespace: namespace}, true
 	}
-	return fluxSourceReference{}, false
+
+	for _, field := range [][]string{{"spec", "chartRef"}, {"spec", "sourceRef"}} {
+		if ref, ok := refAt(field...); ok {
+			return ref, true
+		}
+	}
+	if chartKind, _, _ := unstructured.NestedString(object.Object, "spec", "chart", "kind"); chartKind == fluxcdv1.FluxOCIRepositoryKind {
+		return fluxSourceReference{
+			Kind:      fluxcdv1.FluxOCIRepositoryKind,
+			Name:      strings.Join([]string{object.GetNamespace(), object.GetName()}, "-"),
+			Namespace: object.GetNamespace(),
+			Generated: true,
+		}, true
+	}
+	return refAt("spec", "chart", "spec", "sourceRef")
 }
 
 // isReconcilableSourceKind reports whether the source kind supports on-demand reconciliation.
@@ -180,6 +211,8 @@ func reconcileResourceResult(kind string, withSource bool, sourceRef *fluxSource
 			result += fmt.Sprintf(" The source ExternalArtifact/%s/%s is generated and cannot be reconciled on demand, only the resource itself was reconciled.", sourceRef.Namespace, sourceRef.Name)
 		case sourceReconciled:
 			result += fmt.Sprintf(" The source %s/%s/%s was reconciled first.", sourceRef.Kind, sourceRef.Namespace, sourceRef.Name)
+		case sourceRef.Generated:
+			result += fmt.Sprintf(" The generated source %s/%s/%s does not exist yet, only the resource itself was reconciled.", sourceRef.Kind, sourceRef.Namespace, sourceRef.Name)
 		}
 	}
 	if forced {

@@ -249,10 +249,14 @@ func fluxLabelsToValues(obj unstructured.Unstructured) prometheus.Labels {
 			labels["ref"] = sourceRef
 		}
 	case fluxcdv1.FluxHelmReleaseKind:
+		// helm-controller generates an OCIRepository named <namespace>-<name> for
+		// spec.chart.kind OCIRepository (see HelmRelease.GetHelmChartTemplateReference).
+		chartKind, _, _ := unstructured.NestedString(obj.Object, "spec", "chart", "kind")
 		if source, found, _ := unstructured.NestedString(obj.Object, "spec", "chartRef", "name"); found {
 			labels["source_name"] = source
-		}
-		if source, found, _ := unstructured.NestedString(obj.Object, "spec", "chart", "spec", "sourceRef", "name"); found {
+		} else if chartKind == fluxcdv1.FluxOCIRepositoryKind {
+			labels["source_name"] = strings.Join([]string{obj.GetNamespace(), obj.GetName()}, "-")
+		} else if source, found, _ := unstructured.NestedString(obj.Object, "spec", "chart", "spec", "sourceRef", "name"); found {
 			labels["source_name"] = source
 		}
 	case fluxcdv1.FluxHelmRepositoryKind:

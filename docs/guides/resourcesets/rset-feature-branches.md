@@ -112,7 +112,7 @@ The branch providers export the following inputs for use in the ResourceSet temp
 
 ### Webhook
 
-Optionally, we can create a Flux [Webhook Receiver](https://fluxcd.io/flux/components/notification/receivers/)
+Optionally, we can create a Flux [Webhook Receiver](https://fluxoperator.dev/docs/crd/receiver/)
 to notify the Flux Operator when a branch is created, updated or deleted:
 
 ```yaml
@@ -221,12 +221,12 @@ The `test-inputs.yaml` file should contain mock branch data e.g.:
 
 To receive notifications when a branch triggers a Helm release install,
 upgrade and uninstall (including any deploy errors),
-a Flux [Alert](https://fluxcd.io/flux/components/notification/alerts/)
+a Flux [Alert](https://fluxoperator.dev/docs/crd/alert/)
 can be created in the `app-preview` namespace:
 
 ```yaml
 ---
-apiVersion: notification.toolkit.fluxcd.io/v1beta3
+apiVersion: notification.toolkit.fluxcd.io/v1
 kind: Provider
 metadata:
   name: slack-bot
@@ -238,7 +238,7 @@ spec:
   secretRef:
     name: slack-bot-token
 ---
-apiVersion: notification.toolkit.fluxcd.io/v1beta3
+apiVersion: notification.toolkit.fluxcd.io/v1
 kind: Alert
 metadata:
   name: slack
@@ -259,13 +259,13 @@ spec:
 ### Commit status reporting
 
 To report the deployment status as a commit check on the Git provider,
-we can use the Flux [commit status providers](https://fluxcd.io/flux/components/notification/providers/#git-commit-status).
+we can use the Flux [commit status providers](https://fluxoperator.dev/docs/crd/provider/#git-commit-status).
 This requires the HelmRelease to be annotated with the `commit` metadata key
 as shown in the [ResourceSet template](#resourceset-template) above.
 
 ```yaml
 ---
-apiVersion: notification.toolkit.fluxcd.io/v1beta3
+apiVersion: notification.toolkit.fluxcd.io/v1
 kind: Provider
 metadata:
   name: commit-status
@@ -276,7 +276,7 @@ spec:
   secretRef:
     name: git-auth
 ---
-apiVersion: notification.toolkit.fluxcd.io/v1beta3
+apiVersion: notification.toolkit.fluxcd.io/v1
 kind: Alert
 metadata:
   name: commit-status

@@ -531,6 +531,102 @@ describe('buildGraphData function', () => {
     expect(result.helmChart).toBeNull()
   })
 
+  it('should not extract HelmChart for an OCIRepository chart template', () => {
+    const resourceData = {
+      kind: 'HelmRelease',
+      metadata: { name: 'podinfo', namespace: 'apps' },
+      spec: {
+        chart: {
+          kind: 'OCIRepository',
+          spec: { url: 'oci://ghcr.io/stefanprodan/charts/podinfo' }
+        }
+      },
+      status: {
+        reconcilerRef: { status: 'Ready' },
+        sourceRef: {
+          kind: 'OCIRepository',
+          name: 'apps-podinfo',
+          namespace: 'apps',
+          status: 'Ready',
+          url: 'oci://ghcr.io/stefanprodan/charts/podinfo'
+        },
+        helmChart: 'OCIRepository/apps/apps-podinfo',
+        inventory: []
+      }
+    }
+
+    const result = buildGraphData(resourceData)
+
+    expect(result.helmChart).toBeNull()
+    expect(result.sources).toHaveLength(1)
+    expect(result.sources[0]).toMatchObject({
+      kind: 'OCIRepository',
+      name: 'apps-podinfo',
+      namespace: 'apps'
+    })
+  })
+
+  it('should not extract HelmChart from a typed non-HelmChart reference with a HelmRepository source', () => {
+    const resourceData = {
+      kind: 'HelmRelease',
+      metadata: { name: 'podinfo', namespace: 'apps' },
+      status: {
+        reconcilerRef: { status: 'Ready' },
+        sourceRef: { kind: 'HelmRepository', name: 'podinfo', namespace: 'apps', status: 'Ready' },
+        helmChart: 'OCIRepository/apps/apps-podinfo',
+        inventory: []
+      }
+    }
+
+    const result = buildGraphData(resourceData)
+
+    expect(result.helmChart).toBeNull()
+  })
+
+  it('should extract HelmChart from a typed HelmChart reference', () => {
+    const resourceData = {
+      kind: 'HelmRelease',
+      metadata: { name: 'nginx', namespace: 'default' },
+      spec: { chart: { spec: { version: '1.x' } } },
+      status: {
+        reconcilerRef: { status: 'Ready' },
+        sourceRef: { kind: 'HelmRepository', name: 'bitnami', namespace: 'flux-system', status: 'Ready' },
+        helmChart: 'HelmChart/flux-system/default-nginx',
+        inventory: []
+      }
+    }
+
+    const result = buildGraphData(resourceData)
+
+    expect(result.helmChart).toMatchObject({
+      kind: 'HelmChart',
+      name: 'default-nginx',
+      namespace: 'flux-system'
+    })
+  })
+
+  it('should not extract HelmChart when helmChart is malformed', () => {
+    const resourceData = {
+      kind: 'HelmRelease',
+      metadata: { name: 'nginx', namespace: 'default' },
+      status: {
+        reconcilerRef: { status: 'Ready' },
+        sourceRef: {
+          kind: 'HelmRepository',
+          name: 'bitnami',
+          namespace: 'flux-system',
+          status: 'Ready'
+        },
+        helmChart: 'default-nginx',
+        inventory: []
+      }
+    }
+
+    const result = buildGraphData(resourceData)
+
+    expect(result.helmChart).toBeNull()
+  })
+
   it('should handle HelmChart without version in spec', () => {
     const resourceData = {
       kind: 'HelmRelease',

@@ -331,6 +331,14 @@ export const mockResources = {
       lastReconciled: getTimestamp(78)
     },
     {
+      name: "apps-podinfo",
+      kind: "OCIRepository",
+      namespace: "apps",
+      status: "Ready",
+      message: "stored artifact for digest '6.9.2@sha256:6f7a8ab3fb2d4b7e2c1a7bd0a1d28c4e1d0e9e9d6f0a8c5b3e2d1c0b9a8f7e6d'",
+      lastReconciled: getTimestamp(80)
+    },
+    {
       name: "zot-registry",
       kind: "HelmRepository",
       namespace: "registry",
@@ -393,6 +401,14 @@ export const mockResources = {
       status: "Ready",
       message: "Helm install succeeded for release tailscale/tailscale-operator.v1 with chart tailscale-operator@1.90.6+62f0e73f4f82",
       lastReconciled: getTimestamp(106)
+    },
+    {
+      name: "podinfo",
+      kind: "HelmRelease",
+      namespace: "apps",
+      status: "Ready",
+      message: "Helm install succeeded for release apps/podinfo-helm.v1 with chart podinfo@6.9.2+6f7a8ab3fb2d",
+      lastReconciled: getTimestamp(108)
     },
     {
       name: "zot-registry",

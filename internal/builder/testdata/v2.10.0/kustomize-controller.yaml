@@ -354,8 +354,7 @@ spec:
                   forces the controller to act on behalf of that Service Account at the
                   target cluster.
                   If the --default-service-account flag is set, its value will be used as
-                  a controller level fallback for when KustomizationSpec.ServiceAccountName
-                  is empty.
+                  the default for KustomizationSpec.ServiceAccountName when it is empty.
                 properties:
                   configMapRef:
                     description: |-
@@ -377,15 +376,15 @@ spec:
                       - `ca.crt`: the optional PEM-encoded CA certificate for the
                          Kubernetes API server. If not set, the controller will use the
                          CA certificate from the cluster resource.
-                      - `audiences`: the optional audiences as a list of
-                         line-break-separated strings for the Kubernetes ServiceAccount
-                         token. Defaults to the `address` for the `generic` provider, or
-                         to specific values for the other providers depending on the
-                         provider.
                       -  `serviceAccountName`: the optional name of the Kubernetes
                          ServiceAccount in the same namespace that should be used
                          for authentication. If not specified, the controller
                          ServiceAccount will be used.
+                      - `audiences`: the optional audiences as a list of string separated by
+                         commas and/or whitespaces/newlines for the Kubernetes ServiceAccount
+                         token. Defaults to the `address` for the `generic` provider, or
+                         to specific values for the other providers depending on the
+                         provider.
 
                       Mutually exclusive with SecretRef.
                     properties:
@@ -420,10 +419,7 @@ spec:
                 x-kubernetes-validations:
                 - message: exactly one of spec.kubeConfig.configMapRef or spec.kubeConfig.secretRef
                     must be specified
-                  rule: has(self.configMapRef) || has(self.secretRef)
-                - message: exactly one of spec.kubeConfig.configMapRef or spec.kubeConfig.secretRef
-                    must be specified
-                  rule: '!has(self.configMapRef) || !has(self.secretRef)'
+                  rule: has(self.configMapRef) != has(self.secretRef)
               namePrefix:
                 description: NamePrefix will prefix the names of all managed resources.
                 maxLength: 200
@@ -859,7 +855,7 @@ spec:
             resourceFieldRef:
               containerName: manager
               resource: limits.memory
-        image: fluxcd/kustomize-controller:v1.9.6
+        image: fluxcd/kustomize-controller:v1.10.0
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:

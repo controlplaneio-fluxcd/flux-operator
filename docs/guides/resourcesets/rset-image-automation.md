@@ -201,11 +201,11 @@ spec:
 ### Configure Notifications
 
 To get notified when the image update triggers a deployment, we can create
-a Flux [Alert](https://fluxcd.io/flux/components/notification/alerts/) that sends notifications to e.g. a Slack channel:
+a Flux [Alert](https://fluxoperator.dev/docs/crd/alert/) that sends notifications to e.g. a Slack channel:
 
 ```yaml
 ---
-apiVersion: notification.toolkit.fluxcd.io/v1beta3
+apiVersion: notification.toolkit.fluxcd.io/v1
 kind: Provider
 metadata:
   name: slack-bot
@@ -217,7 +217,7 @@ spec:
   secretRef:
     name: slack-bot-token
 ---
-apiVersion: notification.toolkit.fluxcd.io/v1beta3
+apiVersion: notification.toolkit.fluxcd.io/v1
 kind: Alert
 metadata:
   name: slack

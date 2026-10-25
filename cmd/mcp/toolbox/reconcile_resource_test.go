@@ -9,11 +9,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	. "github.com/onsi/gomega"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	cli "k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/client-go/rest"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/k8s"
@@ -114,6 +120,116 @@ func TestManager_HandleReconcileResource(t *testing.T) {
 
 			g.Expect(result.IsError).To(BeTrue())
 			g.Expect(textContent.Text).To(ContainSubstring(test.matchErr))
+		})
+	}
+}
+
+func TestManager_HandleReconcileResource_WithSource(t *testing.T) {
+	helmReleaseGVK := schema.GroupVersionKind{Group: "helm.toolkit.fluxcd.io", Version: "v2", Kind: fluxcdv1.FluxHelmReleaseKind}
+	ociRepositoryGVK := schema.GroupVersionKind{Group: "source.toolkit.fluxcd.io", Version: "v1", Kind: fluxcdv1.FluxOCIRepositoryKind}
+
+	newObject := func(gvk schema.GroupVersionKind, name string, spec map[string]any) *unstructured.Unstructured {
+		obj := &unstructured.Unstructured{Object: map[string]any{"spec": spec}}
+		obj.SetGroupVersionKind(gvk)
+		obj.SetName(name)
+		obj.SetNamespace("apps")
+		return obj
+	}
+	chartTemplate := map[string]any{
+		"chart": map[string]any{
+			"kind": fluxcdv1.FluxOCIRepositoryKind,
+			"spec": map[string]any{"url": "oci://ghcr.io/stefanprodan/charts/podinfo"},
+		},
+	}
+	chartRef := map[string]any{
+		"chartRef": map[string]any{"kind": fluxcdv1.FluxOCIRepositoryKind, "name": "podinfo"},
+	}
+
+	tests := []struct {
+		name           string
+		objects        []ctrlclient.Object
+		matchErr       string
+		matchText      string
+		sourceName     string
+		sourceAnnotate bool
+	}{
+		{
+			name: "chart template with missing generated source reconciles the HelmRelease",
+			objects: []ctrlclient.Object{
+				newObject(helmReleaseGVK, "podinfo", chartTemplate),
+			},
+			matchText: "The generated source OCIRepository/apps/apps-podinfo does not exist yet, only the resource itself was reconciled.",
+		},
+		{
+			name: "chart template with generated source reconciles both",
+			objects: []ctrlclient.Object{
+				newObject(helmReleaseGVK, "podinfo", chartTemplate),
+				newObject(ociRepositoryGVK, "apps-podinfo", map[string]any{}),
+			},
+			matchText:      "The source OCIRepository/apps/apps-podinfo was reconciled first.",
+			sourceName:     "apps-podinfo",
+			sourceAnnotate: true,
+		},
+		{
+			name: "chartRef with missing source fails",
+			objects: []ctrlclient.Object{
+				newObject(helmReleaseGVK, "podinfo", chartRef),
+			},
+			matchErr: "Failed to reconcile source",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			mapper := apimeta.NewDefaultRESTMapper([]schema.GroupVersion{
+				helmReleaseGVK.GroupVersion(), ociRepositoryGVK.GroupVersion(),
+			})
+			mapper.Add(helmReleaseGVK, apimeta.RESTScopeNamespace)
+			mapper.Add(ociRepositoryGVK, apimeta.RESTScopeNamespace)
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(runtime.NewScheme()).
+				WithRESTMapper(mapper).
+				WithObjects(test.objects...).
+				Build()
+			ctx := k8s.NewClient(fakeClient, &rest.Config{}, mapper).IntoContext(context.Background())
+
+			m := &Manager{
+				kubeClient: k8s.NewClientFactory(cli.NewConfigFlags(false)),
+				timeout:    time.Second,
+			}
+			result, _, err := m.HandleReconcileResource(ctx, &mcp.CallToolRequest{}, reconcileFluxResourceInput{
+				Kind:       fluxcdv1.FluxHelmReleaseKind,
+				Name:       "podinfo",
+				Namespace:  "apps",
+				WithSource: true,
+			})
+			g.Expect(err).ToNot(HaveOccurred())
+			textContent, ok := result.Content[0].(*mcp.TextContent)
+			g.Expect(ok).To(BeTrue())
+
+			hr := newObject(helmReleaseGVK, "podinfo", nil)
+			g.Expect(fakeClient.Get(ctx, ctrlclient.ObjectKeyFromObject(hr), hr)).To(Succeed())
+
+			if test.matchErr != "" {
+				g.Expect(result.IsError).To(BeTrue())
+				g.Expect(textContent.Text).To(ContainSubstring(test.matchErr))
+				g.Expect(hr.GetAnnotations()).ToNot(HaveKey(meta.ReconcileRequestAnnotation))
+				return
+			}
+
+			g.Expect(result.IsError).To(BeFalse(), textContent.Text)
+			g.Expect(textContent.Text).To(ContainSubstring(test.matchText))
+			g.Expect(hr.GetAnnotations()).To(HaveKey(meta.ReconcileRequestAnnotation))
+			g.Expect(hr.GetAnnotations()).To(HaveKey(meta.ForceRequestAnnotation))
+
+			if test.sourceAnnotate {
+				src := newObject(ociRepositoryGVK, test.sourceName, nil)
+				g.Expect(fakeClient.Get(ctx, ctrlclient.ObjectKeyFromObject(src), src)).To(Succeed())
+				g.Expect(src.GetAnnotations()).To(HaveKeyWithValue(meta.ReconcileRequestAnnotation,
+					hr.GetAnnotations()[meta.ReconcileRequestAnnotation]))
+			}
 		})
 	}
 }
@@ -256,6 +372,40 @@ func TestGetFluxSourceReference(t *testing.T) {
 			found:    true,
 		},
 		{
+			name: "OCIRepository chart template uses the generated source",
+			object: newHelmReleaseSourceReferenceObject(map[string]any{
+				"chart": map[string]any{
+					"kind": fluxcdv1.FluxOCIRepositoryKind,
+					"spec": map[string]any{"url": "oci://ghcr.io/stefanprodan/charts/podinfo"},
+				},
+			}),
+			expected: fluxSourceReference{Kind: fluxcdv1.FluxOCIRepositoryKind, Name: "apps-podinfo", Namespace: "apps", Generated: true},
+			found:    true,
+		},
+		{
+			name: "HelmChart template uses the chart sourceRef",
+			object: newHelmReleaseSourceReferenceObject(map[string]any{
+				"chart": map[string]any{
+					"kind": fluxcdv1.FluxHelmChartKind,
+					"spec": map[string]any{
+						"chart":     "podinfo",
+						"sourceRef": map[string]any{"kind": fluxcdv1.FluxHelmRepositoryKind, "name": "charts"},
+					},
+				},
+			}),
+			expected: fluxSourceReference{Kind: fluxcdv1.FluxHelmRepositoryKind, Name: "charts", Namespace: "apps"},
+			found:    true,
+		},
+		{
+			name: "chartRef takes precedence over OCIRepository chart template",
+			object: newHelmReleaseSourceReferenceObject(map[string]any{
+				"chartRef": map[string]any{"kind": fluxcdv1.FluxOCIRepositoryKind, "name": "charts"},
+				"chart":    map[string]any{"kind": fluxcdv1.FluxOCIRepositoryKind},
+			}),
+			expected: fluxSourceReference{Kind: fluxcdv1.FluxOCIRepositoryKind, Name: "charts", Namespace: "apps"},
+			found:    true,
+		},
+		{
 			name: "ExternalArtifact sourceRef",
 			object: newSourceReferenceObject(map[string]any{
 				"sourceRef": map[string]any{"kind": fluxcdv1.FluxExternalArtifactKind, "name": "generated"},
@@ -284,5 +434,12 @@ func TestGetFluxSourceReference(t *testing.T) {
 func newSourceReferenceObject(spec map[string]any) *unstructured.Unstructured {
 	object := &unstructured.Unstructured{Object: map[string]any{"spec": spec}}
 	object.SetNamespace("apps")
+	return object
+}
+
+func newHelmReleaseSourceReferenceObject(spec map[string]any) *unstructured.Unstructured {
+	object := newSourceReferenceObject(spec)
+	object.SetKind(fluxcdv1.FluxHelmReleaseKind)
+	object.SetName("podinfo")
 	return object
 }

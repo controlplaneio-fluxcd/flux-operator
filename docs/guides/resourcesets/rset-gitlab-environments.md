@@ -151,7 +151,7 @@ stop-review:
 
 ### GitLab Webhook
 
-As an alternative to the synchronous reconciliation, we can create a Flux [Webhook Receiver](https://fluxcd.io/flux/components/notification/receivers/)
+As an alternative to the synchronous reconciliation, we can create a Flux [Webhook Receiver](https://fluxoperator.dev/docs/crd/receiver/)
 that GitLab will call to notify the Flux Operator when a deployment to an environment starts or gets stopped:
 
 ```yaml
@@ -261,12 +261,12 @@ The `test-inputs.yaml` file should contain mock MR data e.g.:
 
 To receive notifications when a deployment triggers a Helm release install,
 upgrade and uninstall (including any deploy errors),
-a Flux [Alert](https://fluxcd.io/flux/components/notification/alerts/)
+a Flux [Alert](https://fluxoperator.dev/docs/crd/alert/)
 can be created in the `app-preview` namespace:
 
 ```yaml
 ---
-apiVersion: notification.toolkit.fluxcd.io/v1beta3
+apiVersion: notification.toolkit.fluxcd.io/v1
 kind: Provider
 metadata:
   name: msteams
@@ -276,7 +276,7 @@ spec:
   secretRef:
     name: msteams-webhook
 ---
-apiVersion: notification.toolkit.fluxcd.io/v1beta3
+apiVersion: notification.toolkit.fluxcd.io/v1
 kind: Alert
 metadata:
   name: msteams

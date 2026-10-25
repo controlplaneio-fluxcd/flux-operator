@@ -1379,6 +1379,178 @@ export const mockResourcesArray =
     "kind": "HelmRelease",
     "metadata": {
       "labels": {
+        "app.kubernetes.io/name": "podinfo"
+      },
+      "name": "podinfo",
+      "namespace": "apps"
+    },
+    "spec": {
+      "chart": {
+        "kind": "OCIRepository",
+        "spec": {
+          "interval": "10m",
+          "layerSelector": {
+            "mediaType": "application/vnd.cncf.helm.chart.content.v1.tar+gzip",
+            "operation": "copy"
+          },
+          "ref": {
+            "semver": "6.x"
+          },
+          "url": "oci://ghcr.io/stefanprodan/charts/podinfo"
+        }
+      },
+      "interval": "1h",
+      "releaseName": "podinfo-helm",
+      "values": {
+        "replicaCount": 2
+      }
+    },
+    "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "Helm install succeeded for release apps/podinfo-helm.v1 with chart podinfo@6.9.2+6f7a8ab3fb2d",
+        "lastReconciled": "2026-10-25T09:00:00Z",
+        "managedBy": "Kustomization/flux-system/apps"
+      },
+      "conditions": [
+        {
+          "lastTransitionTime": "2026-10-25T09:00:00Z",
+          "message": "Helm install succeeded for release apps/podinfo-helm.v1 with chart podinfo@6.9.2+6f7a8ab3fb2d",
+          "observedGeneration": 1,
+          "reason": "InstallSucceeded",
+          "status": "True",
+          "type": "Ready"
+        },
+        {
+          "lastTransitionTime": "2026-10-25T09:00:00Z",
+          "message": "Helm install succeeded for release apps/podinfo-helm.v1 with chart podinfo@6.9.2+6f7a8ab3fb2d",
+          "observedGeneration": 1,
+          "reason": "InstallSucceeded",
+          "status": "True",
+          "type": "Released"
+        }
+      ],
+      "helmChart": "OCIRepository/apps/apps-podinfo",
+      "history": [
+        {
+          "appVersion": "6.9.2",
+          "chartName": "podinfo",
+          "chartVersion": "6.9.2+6f7a8ab3fb2d",
+          "configDigest": "sha256:3c1d2b0e9f8a7c6b5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c",
+          "digest": "sha256:9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b",
+          "firstDeployed": "2026-10-25T09:00:00Z",
+          "lastDeployed": "2026-10-25T09:00:00Z",
+          "name": "podinfo-helm",
+          "namespace": "apps",
+          "ociDigest": "sha256:6f7a8ab3fb2d4b7e2c1a7bd0a1d28c4e1d0e9e9d6f0a8c5b3e2d1c0b9a8f7e6d",
+          "status": "deployed",
+          "version": 1
+        }
+      ],
+      "inventory": [
+        {
+          "apiVersion": "v1",
+          "kind": "Service",
+          "name": "podinfo-helm",
+          "namespace": "apps"
+        },
+        {
+          "apiVersion": "apps/v1",
+          "kind": "Deployment",
+          "name": "podinfo-helm",
+          "namespace": "apps"
+        }
+      ],
+      "lastAttemptedConfigDigest": "sha256:3c1d2b0e9f8a7c6b5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c",
+      "lastAttemptedGeneration": 1,
+      "lastAttemptedReleaseAction": "install",
+      "lastAttemptedReleaseActionDuration": "4.120384561s",
+      "lastAttemptedRevision": "6.9.2+6f7a8ab3fb2d",
+      "lastAttemptedRevisionDigest": "sha256:6f7a8ab3fb2d4b7e2c1a7bd0a1d28c4e1d0e9e9d6f0a8c5b3e2d1c0b9a8f7e6d",
+      "observedGeneration": 1,
+      "sourceRef": {
+        "kind": "OCIRepository",
+        "message": "stored artifact for digest '6.9.2@sha256:6f7a8ab3fb2d4b7e2c1a7bd0a1d28c4e1d0e9e9d6f0a8c5b3e2d1c0b9a8f7e6d'",
+        "name": "apps-podinfo",
+        "namespace": "apps",
+        "originRevision": "",
+        "originURL": "",
+        "status": "Ready",
+        "url": "oci://ghcr.io/stefanprodan/charts/podinfo"
+      },
+      "storageNamespace": "apps"
+    }
+  },
+  {
+    "apiVersion": "source.toolkit.fluxcd.io/v1",
+    "kind": "OCIRepository",
+    "metadata": {
+      "name": "apps-podinfo",
+      "namespace": "apps"
+    },
+    "spec": {
+      "interval": "10m",
+      "layerSelector": {
+        "mediaType": "application/vnd.cncf.helm.chart.content.v1.tar+gzip",
+        "operation": "copy"
+      },
+      "provider": "generic",
+      "ref": {
+        "semver": "6.x"
+      },
+      "timeout": "60s",
+      "url": "oci://ghcr.io/stefanprodan/charts/podinfo"
+    },
+    "status": {
+      "reconcilerRef": {
+        "status": "Ready",
+        "message": "stored artifact for digest '6.9.2@sha256:6f7a8ab3fb2d4b7e2c1a7bd0a1d28c4e1d0e9e9d6f0a8c5b3e2d1c0b9a8f7e6d'",
+        "lastReconciled": "2026-10-25T08:59:58Z",
+        "managedBy": ""
+      },
+      "artifact": {
+        "digest": "sha256:2e4f6a8c0b1d3f5a7c9e1b3d5f7a9c1e3b5d7f9a1c3e5b7d9f1a3c5e7b9d1f3a",
+        "lastUpdateTime": "2026-10-25T08:59:58Z",
+        "metadata": {
+          "org.opencontainers.image.source": "https://github.com/stefanprodan/podinfo",
+          "org.opencontainers.image.version": "6.9.2"
+        },
+        "path": "ocirepository/apps/apps-podinfo/sha256:6f7a8ab3fb2d4b7e2c1a7bd0a1d28c4e1d0e9e9d6f0a8c5b3e2d1c0b9a8f7e6d.tar.gz",
+        "revision": "6.9.2@sha256:6f7a8ab3fb2d4b7e2c1a7bd0a1d28c4e1d0e9e9d6f0a8c5b3e2d1c0b9a8f7e6d",
+        "size": 15234,
+        "url": "http://source-controller.flux-system.svc.cluster.local./ocirepository/apps/apps-podinfo/sha256:6f7a8ab3fb2d4b7e2c1a7bd0a1d28c4e1d0e9e9d6f0a8c5b3e2d1c0b9a8f7e6d.tar.gz"
+      },
+      "conditions": [
+        {
+          "lastTransitionTime": "2026-10-25T08:59:58Z",
+          "message": "stored artifact for digest '6.9.2@sha256:6f7a8ab3fb2d4b7e2c1a7bd0a1d28c4e1d0e9e9d6f0a8c5b3e2d1c0b9a8f7e6d'",
+          "observedGeneration": 1,
+          "reason": "Succeeded",
+          "status": "True",
+          "type": "Ready"
+        },
+        {
+          "lastTransitionTime": "2026-10-25T08:59:58Z",
+          "message": "stored artifact for digest '6.9.2@sha256:6f7a8ab3fb2d4b7e2c1a7bd0a1d28c4e1d0e9e9d6f0a8c5b3e2d1c0b9a8f7e6d'",
+          "observedGeneration": 1,
+          "reason": "Succeeded",
+          "status": "True",
+          "type": "ArtifactInStorage"
+        }
+      ],
+      "observedGeneration": 1,
+      "observedLayerSelector": {
+        "mediaType": "application/vnd.cncf.helm.chart.content.v1.tar+gzip",
+        "operation": "copy"
+      },
+      "url": "http://source-controller.flux-system.svc.cluster.local./ocirepository/apps/apps-podinfo/latest.tar.gz"
+    }
+  },
+  {
+    "apiVersion": "helm.toolkit.fluxcd.io/v2",
+    "kind": "HelmRelease",
+    "metadata": {
+      "labels": {
         "app.kubernetes.io/name": "zot"
       },
       "name": "zot-registry",
@@ -3857,7 +4029,7 @@ export const mockResourcesArray =
     }
   },
   {
-    "apiVersion": "notification.toolkit.fluxcd.io/v1beta3",
+    "apiVersion": "notification.toolkit.fluxcd.io/v1",
     "kind": "Alert",
     "metadata": {
       "name": "slack",
@@ -3894,7 +4066,7 @@ export const mockResourcesArray =
     }
   },
   {
-    "apiVersion": "notification.toolkit.fluxcd.io/v1beta3",
+    "apiVersion": "notification.toolkit.fluxcd.io/v1",
     "kind": "Provider",
     "metadata": {
       "name": "slack",
@@ -3963,7 +4135,7 @@ export const mockResourcesArray =
     }
   },
   {
-    "apiVersion": "notification.toolkit.fluxcd.io/v1beta3",
+    "apiVersion": "notification.toolkit.fluxcd.io/v1",
     "kind": "Alert",
     "metadata": {
       "name": "msteams",
@@ -3992,7 +4164,7 @@ export const mockResourcesArray =
     }
   },
   {
-    "apiVersion": "notification.toolkit.fluxcd.io/v1beta3",
+    "apiVersion": "notification.toolkit.fluxcd.io/v1",
     "kind": "Provider",
     "metadata": {
       "name": "msteams",
