@@ -493,7 +493,10 @@ spec:
               serviceAccountName:
                 description: |-
                   ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
-                  the image pull if the service account has attached pull secrets.
+                  the image pull, either with the pull secrets attached to the service account or with
+                  an object identity.
+                  For more information about object identity:
+                  https://fluxcd.io/flux/integrations/object-identity/
                 maxLength: 253
                 type: string
               suspend:
@@ -676,7 +679,7 @@ spec:
             resourceFieldRef:
               containerName: manager
               resource: limits.memory
-        image: fluxcd/image-reflector-controller:v1.2.5
+        image: fluxcd/image-reflector-controller:v1.3.0
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:

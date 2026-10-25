@@ -4,12 +4,14 @@
 package builder
 
 import (
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
 	"testing"
 
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/yaml"
 )
 
@@ -170,4 +172,51 @@ func TestValidateAndPatchComponents_NotificationCRDVersions(t *testing.T) {
 			assertVersions(receivers, tt.receiverVersions)
 		})
 	}
+}
+
+func TestBuild_NotificationCRDKinds(t *testing.T) {
+	g := NewWithT(t)
+	const version = "v2.10.0"
+	options := MakeDefaultOptions()
+	options.Version = version
+	options.Components = DefaultComponents
+	g.Expect(options.ValidateAndPatchComponents()).To(Succeed())
+
+	srcDir := filepath.Join("testdata", version)
+	dstDir, err := testTempDir(t)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	ci, err := ExtractComponentImages(srcDir, options)
+	g.Expect(err).NotTo(HaveOccurred())
+	options.ComponentImages = ci
+
+	result, err := Build(srcDir, dstDir, options)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	operatorKinds := []string{"FluxInstance", "ResourceSet", "ResourceSetInputProvider"}
+	enumPaths := map[string][]string{
+		"alerts.notification.toolkit.fluxcd.io":    {"spec", "eventSources", "items", "kind"},
+		"receivers.notification.toolkit.fluxcd.io": {"spec", "resources", "items", "kind"},
+	}
+
+	found := map[string][]string{}
+	for _, obj := range result.Objects {
+		path, ok := enumPaths[obj.GetName()]
+		if obj.GetKind() != "CustomResourceDefinition" || !ok {
+			continue
+		}
+		versions, _, err := unstructured.NestedSlice(obj.Object, "spec", "versions")
+		g.Expect(err).NotTo(HaveOccurred())
+		for _, v := range versions {
+			version := v.(map[string]any)
+			schema := []string{"schema", "openAPIV3Schema", "properties", path[0], "properties", path[1], path[2], "properties", path[3], "enum"}
+			enum, _, err := unstructured.NestedStringSlice(version, schema...)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(enum).To(ContainElements(operatorKinds), "%s %s", obj.GetName(), version["name"])
+			found[obj.GetName()] = append(found[obj.GetName()], version["name"].(string))
+		}
+	}
+
+	g.Expect(found["alerts.notification.toolkit.fluxcd.io"]).To(ConsistOf("v1", "v1beta3"))
+	g.Expect(found["receivers.notification.toolkit.fluxcd.io"]).To(ConsistOf("v1"))
 }

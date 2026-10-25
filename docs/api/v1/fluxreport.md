@@ -31,19 +31,19 @@ spec:
     serverVersion: v1.33.0
     nodes: 5
   components:
-    - image: ghcr.io/fluxcd/helm-controller:v1.7.0
+    - image: ghcr.io/fluxcd/helm-controller:v1.7.0@sha256:f413d99795ad2a5e85d6c215a8e9cfcad07fa6d6720b7bf13c5ab2cc8db6041b
       name: helm-controller
       ready: true
       status: 'Current Deployment is available. Replicas: 1'
-    - image: ghcr.io/fluxcd/kustomize-controller:v1.10.0
+    - image: ghcr.io/fluxcd/kustomize-controller:v1.10.0@sha256:7b6e1006a6ff5e34a0e2e9f33b73cbb01f74689bfb263872e10dcfb6d707be98
       name: kustomize-controller
       ready: true
       status: 'Current Deployment is available. Replicas: 1'
-    - image: ghcr.io/fluxcd/notification-controller:v1.10.0
+    - image: ghcr.io/fluxcd/notification-controller:v1.10.0@sha256:9f58b9532ec9d3ccf539cd3ccdf283477a5dcb7777b922db5477d8bbd4d3767c
       name: notification-controller
       ready: true
       status: 'Current Deployment is available. Replicas: 1'
-    - image: ghcr.io/fluxcd/source-controller:v1.10.0
+    - image: ghcr.io/fluxcd/source-controller:v1.10.0@sha256:df79f5cae810c4b63c2453712697f0c4ae4677d45e2b50bc4655417ee8701f4a
       name: source-controller
       ready: true
       status: 'Current Deployment is available. Replicas: 1'
@@ -224,11 +224,11 @@ Example:
 ```yaml
 spec:
   components:
-    - image: ghcr.io/fluxcd/kustomize-controller:v1.10.0
+    - image: ghcr.io/fluxcd/kustomize-controller:v1.10.0@sha256:7b6e1006a6ff5e34a0e2e9f33b73cbb01f74689bfb263872e10dcfb6d707be98
       name: kustomize-controller
       ready: true
       status: 'Current Deployment is available. Replicas: 1'
-    - image: ghcr.io/fluxcd/source-controller:v1.10.0
+    - image: ghcr.io/fluxcd/source-controller:v1.10.0@sha256:df79f5cae810c4b63c2453712697f0c4ae4677d45e2b50bc4655417ee8701f4a
       name: source-controller
       ready: true
       status: 'Current Deployment is available. Replicas: 1'

@@ -25,6 +25,148 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
+    name: v1
+    schema:
+      openAPIV3Schema:
+        description: Alert is the Schema for the alerts API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: AlertSpec defines an alerting rule for events involving a
+              list of objects.
+            properties:
+              eventMetadata:
+                additionalProperties:
+                  type: string
+                description: |-
+                  EventMetadata adds metadata to events. Sources, from lowest to highest precedence:
+                  `event.toolkit.fluxcd.io/` annotations on the involved object, Alert `.spec.eventMetadata`,
+                  and controller-defined `<controller group>.toolkit.fluxcd.io/` event metadata.
+                  Higher precedence wins; conflicts produce an info log and a Warning Event.
+                  See the Alert API docs (Event metadata section).
+                type: object
+              eventSeverity:
+                default: info
+                description: |-
+                  EventSeverity specifies how to filter events based on severity.
+                  If set to 'info' no events will be filtered.
+                enum:
+                - info
+                - error
+                type: string
+              eventSources:
+                description: |-
+                  EventSources specifies how to filter events based
+                  on the involved object kind, name and namespace.
+                items:
+                  description: |-
+                    CrossNamespaceObjectReference contains enough information to let you locate the
+                    typed referenced object at cluster level
+                  properties:
+                    apiVersion:
+                      description: API version of the referent
+                      type: string
+                    kind:
+                      description: Kind of the referent
+                      enum:
+                      - Bucket
+                      - GitRepository
+                      - Kustomization
+                      - HelmRelease
+                      - HelmChart
+                      - HelmRepository
+                      - ImageRepository
+                      - ImagePolicy
+                      - ImageUpdateAutomation
+                      - OCIRepository
+                      - ArtifactGenerator
+                      - ExternalArtifact
+                      type: string
+                    matchLabels:
+                      additionalProperties:
+                        type: string
+                      description: |-
+                        MatchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                        map is equivalent to an element of matchExpressions, whose key field is "key", the
+                        operator is "In", and the values array contains only "value". The requirements are ANDed.
+                        MatchLabels requires the name to be set to `*`.
+                      type: object
+                    name:
+                      description: |-
+                        Name of the referent
+                        If multiple resources are targeted `*` may be set.
+                      maxLength: 253
+                      minLength: 1
+                      type: string
+                    namespace:
+                      description: Namespace of the referent
+                      maxLength: 253
+                      minLength: 1
+                      type: string
+                  required:
+                  - kind
+                  - name
+                  type: object
+                type: array
+              exclusionList:
+                description: |-
+                  ExclusionList specifies a list of Golang regular expressions
+                  to be used for excluding messages.
+                items:
+                  type: string
+                type: array
+              inclusionList:
+                description: |-
+                  InclusionList specifies a list of Golang regular expressions
+                  to be used for including messages.
+                items:
+                  type: string
+                type: array
+              providerRef:
+                description: ProviderRef specifies which Provider this Alert should
+                  use.
+                properties:
+                  name:
+                    description: Name of the referent.
+                    type: string
+                required:
+                - name
+                type: object
+              suspend:
+                description: |-
+                  Suspend tells the controller to suspend subsequent
+                  events handling for this Alert.
+                type: boolean
+            required:
+            - eventSources
+            - providerRef
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources: {}
+  - additionalPrinterColumns:
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    deprecated: true
+    deprecationWarning: v1beta3 Alert is deprecated, upgrade to v1
     name: v1beta3
     schema:
       openAPIV3Schema:
@@ -165,7 +307,7 @@ spec:
             type: object
         type: object
     served: true
-    storage: true
+    storage: false
     subresources: {}
 ---
 apiVersion: apiextensions.k8s.io/v1
@@ -195,6 +337,182 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
+    name: v1
+    schema:
+      openAPIV3Schema:
+        description: Provider is the Schema for the providers API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ProviderSpec defines the desired state of the Provider.
+            properties:
+              address:
+                description: |-
+                  Address specifies the endpoint, in a generic sense, to where alerts are sent.
+                  What kind of endpoint depends on the specific Provider type being used.
+                  For the generic Provider, for example, this is an HTTP/S address.
+                  For other Provider types this could be a project ID or a namespace.
+                maxLength: 2048
+                type: string
+              certSecretRef:
+                description: |-
+                  CertSecretRef specifies the Secret containing TLS certificates
+                  for secure communication.
+
+                  Supported configurations:
+                  - CA-only: Server authentication (provide ca.crt only)
+                  - mTLS: Mutual authentication (provide ca.crt + tls.crt + tls.key)
+                  - Client-only: Client authentication with system CA (provide tls.crt + tls.key only)
+
+                  Legacy keys "caFile", "certFile", "keyFile" are supported but deprecated. Use "ca.crt", "tls.crt", "tls.key" instead.
+                properties:
+                  name:
+                    description: Name of the referent.
+                    type: string
+                required:
+                - name
+                type: object
+              channel:
+                description: Channel specifies the destination channel where events
+                  should be posted.
+                maxLength: 2048
+                type: string
+              commitStatusExpr:
+                description: |-
+                  CommitStatusExpr is a CEL expression that evaluates to a string value
+                  that can be used to generate a custom commit status message for use
+                  with eligible Provider types (github, gitlab, gitea, bitbucketserver,
+                  bitbucket, azuredevops). Supported variables are: event, provider,
+                  and alert.
+                type: string
+              proxySecretRef:
+                description: |-
+                  ProxySecretRef specifies the Secret containing the proxy configuration
+                  for this Provider. The Secret should contain an 'address' key with the
+                  HTTP/S address of the proxy server. Optional 'username' and 'password'
+                  keys can be provided for proxy authentication.
+                properties:
+                  name:
+                    description: Name of the referent.
+                    type: string
+                required:
+                - name
+                type: object
+              secretRef:
+                description: |-
+                  SecretRef specifies the Secret containing the authentication
+                  credentials for this Provider.
+                properties:
+                  name:
+                    description: Name of the referent.
+                    type: string
+                required:
+                - name
+                type: object
+              serviceAccountName:
+                description: |-
+                  ServiceAccountName is the name of the Kubernetes ServiceAccount used to
+                  authenticate with cloud provider services through object identity.
+                  This enables multi-tenant authentication without storing static credentials.
+
+                  Supported provider types: azureeventhub, azuredevops, googlepubsub
+
+                  When specified, the controller will:
+                  1. Create an OIDC token for the specified ServiceAccount
+                  2. Exchange it for cloud provider credentials via STS
+                  3. Use the obtained credentials for API authentication
+
+                  When unspecified, the controller's workload identity is used (single-tenant).
+
+                  An error is thrown if static credentials are also defined in SecretRef.
+                type: string
+              suspend:
+                description: |-
+                  Suspend tells the controller to suspend subsequent
+                  events handling for this Provider.
+                type: boolean
+              timeout:
+                description: Timeout for sending alerts to the Provider.
+                pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m))+$
+                type: string
+              type:
+                description: Type specifies which Provider implementation to use.
+                enum:
+                - slack
+                - discord
+                - msteams
+                - rocket
+                - generic
+                - generic-hmac
+                - github
+                - gitlab
+                - gitea
+                - giteapullrequestcomment
+                - bitbucketserver
+                - bitbucket
+                - azuredevops
+                - googlechat
+                - googlepubsub
+                - webex
+                - sentry
+                - azureeventhub
+                - telegram
+                - lark
+                - matrix
+                - opsgenie
+                - alertmanager
+                - grafana
+                - githubdispatch
+                - githubpullrequestcomment
+                - gitlabmergerequestcomment
+                - pagerduty
+                - datadog
+                - nats
+                - zulip
+                - otel
+                - zoom
+                - incident.io
+                - mastodon
+                type: string
+              username:
+                description: Username specifies the name under which events are posted.
+                maxLength: 2048
+                type: string
+            required:
+            - type
+            type: object
+            x-kubernetes-validations:
+            - message: spec.commitStatusExpr is only supported for the 'github', 'gitlab',
+                'gitea', 'bitbucketserver', 'bitbucket', 'azuredevops' provider types
+              rule: self.type == 'github' || self.type == 'gitlab' || self.type ==
+                'gitea' || self.type == 'bitbucketserver' || self.type == 'bitbucket'
+                || self.type == 'azuredevops' || !has(self.commitStatusExpr)
+        type: object
+    served: true
+    storage: true
+    subresources: {}
+  - additionalPrinterColumns:
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    deprecated: true
+    deprecationWarning: v1beta3 Provider is deprecated, upgrade to v1
     name: v1beta3
     schema:
       openAPIV3Schema:
@@ -312,7 +630,6 @@ spec:
                   When unspecified, controller-level authentication is used (single-tenant).
 
                   An error is thrown if static credentials are also defined in SecretRef.
-                  This field requires the ObjectLevelWorkloadIdentity feature gate to be enabled.
                 type: string
               suspend:
                 description: |-
@@ -358,6 +675,8 @@ spec:
                 - nats
                 - zulip
                 - otel
+                - zoom
+                - incident.io
                 type: string
               username:
                 description: Username specifies the name under which events are posted.
@@ -374,7 +693,7 @@ spec:
                 || self.type == 'azuredevops' || !has(self.commitStatusExpr)
         type: object
     served: true
-    storage: true
+    storage: false
     subresources: {}
 ---
 apiVersion: apiextensions.k8s.io/v1
@@ -774,6 +1093,10 @@ spec:
     port: 80
     protocol: TCP
     targetPort: http
+  - name: https
+    port: 443
+    protocol: TCP
+    targetPort: http
   selector:
     app: notification-controller
   type: ClusterIP
@@ -790,6 +1113,10 @@ spec:
   ports:
   - name: http
     port: 80
+    protocol: TCP
+    targetPort: http-webhook
+  - name: https
+    port: 443
     protocol: TCP
     targetPort: http-webhook
   selector:
@@ -835,7 +1162,7 @@ spec:
             resourceFieldRef:
               containerName: manager
               resource: limits.memory
-        image: fluxcd/notification-controller:v1.9.4
+        image: fluxcd/notification-controller:v1.10.0
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:

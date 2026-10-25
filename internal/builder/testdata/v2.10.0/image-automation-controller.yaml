@@ -227,6 +227,14 @@ spec:
                   run should be attempted.
                 pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m|h))+$
                 type: string
+              policyChangeDelay:
+                description: |-
+                  PolicyChangeDelay delays the run triggered by ImagePolicy changes, so
+                  that image updates arriving within the delay are committed together.
+                  If PolicySelector is also set, only changes to the selected policies
+                  trigger a run. By default, the automation runs as soon as a policy changes.
+                pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m|h))+$
+                type: string
               policySelector:
                 description: |-
                   PolicySelector allows to filter applied policies based on labels.
@@ -498,7 +506,7 @@ spec:
             resourceFieldRef:
               containerName: manager
               resource: limits.memory
-        image: fluxcd/image-automation-controller:v1.2.5
+        image: fluxcd/image-automation-controller:v1.3.0
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
