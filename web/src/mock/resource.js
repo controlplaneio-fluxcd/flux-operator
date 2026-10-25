@@ -4029,7 +4029,7 @@ export const mockResourcesArray =
     }
   },
   {
-    "apiVersion": "notification.toolkit.fluxcd.io/v1beta3",
+    "apiVersion": "notification.toolkit.fluxcd.io/v1",
     "kind": "Alert",
     "metadata": {
       "name": "slack",
@@ -4066,7 +4066,7 @@ export const mockResourcesArray =
     }
   },
   {
-    "apiVersion": "notification.toolkit.fluxcd.io/v1beta3",
+    "apiVersion": "notification.toolkit.fluxcd.io/v1",
     "kind": "Provider",
     "metadata": {
       "name": "slack",
@@ -4135,7 +4135,7 @@ export const mockResourcesArray =
     }
   },
   {
-    "apiVersion": "notification.toolkit.fluxcd.io/v1beta3",
+    "apiVersion": "notification.toolkit.fluxcd.io/v1",
     "kind": "Alert",
     "metadata": {
       "name": "msteams",
@@ -4164,7 +4164,7 @@ export const mockResourcesArray =
     }
   },
   {
-    "apiVersion": "notification.toolkit.fluxcd.io/v1beta3",
+    "apiVersion": "notification.toolkit.fluxcd.io/v1",
     "kind": "Provider",
     "metadata": {
       "name": "msteams",

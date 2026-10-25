@@ -104,14 +104,14 @@ export const fluxCRDs = [
   // Notifications
   {
     kind: "Alert",
-    apiVersion: "notification.toolkit.fluxcd.io/v1beta3",
+    apiVersion: "notification.toolkit.fluxcd.io/v1",
     alias: "alert",
     group: 'Notifications',
     docUrl: "https://fluxoperator.dev/docs/crd/alert/",
   },
   {
     kind: "Provider",
-    apiVersion: "notification.toolkit.fluxcd.io/v1beta3",
+    apiVersion: "notification.toolkit.fluxcd.io/v1",
     alias: "provider",
     group: 'Notifications',
     docUrl: "https://fluxoperator.dev/docs/crd/provider/",

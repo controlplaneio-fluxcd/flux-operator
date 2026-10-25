@@ -122,12 +122,12 @@ export const mockReport = {
         stats: { failing: 0, running: 2, suspended: 0 }
       },
       {
-        apiVersion: 'notification.toolkit.fluxcd.io/v1beta3',
+        apiVersion: 'notification.toolkit.fluxcd.io/v1',
         kind: 'Alert',
         stats: { failing: 0, running: 2, suspended: 0 }
       },
       {
-        apiVersion: 'notification.toolkit.fluxcd.io/v1beta3',
+        apiVersion: 'notification.toolkit.fluxcd.io/v1',
         kind: 'Provider',
         stats: { failing: 0, running: 2, suspended: 0 }
       },
