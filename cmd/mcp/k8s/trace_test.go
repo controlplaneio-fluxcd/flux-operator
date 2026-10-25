@@ -255,6 +255,79 @@ func TestTrace(t *testing.T) {
 		g.Expect(result.Source.Object).To(Equal("HelmRepository/" + fluxNS + "/charts"))
 	})
 
+	t.Run("resolves the generated source of a helmrelease oci chart template", func(t *testing.T) {
+		g := NewWithT(t)
+		createTraceObject(t, map[string]any{
+			"apiVersion": "source.toolkit.fluxcd.io/v1",
+			"kind":       "OCIRepository",
+			"metadata":   map[string]any{"name": appsNS + "-podinfo", "namespace": appsNS},
+			"spec":       map[string]any{"interval": "1m", "url": "oci://ghcr.io/stefanprodan/charts/podinfo"},
+		}, map[string]any{
+			"conditions": traceReadyCondition("True", "Succeeded", "stored artifact"),
+			"artifact":   map[string]any{"revision": "6.9.0@sha256:a1b2c3"},
+		})
+		createTraceObject(t, map[string]any{
+			"apiVersion": "helm.toolkit.fluxcd.io/v2",
+			"kind":       "HelmRelease",
+			"metadata":   map[string]any{"name": "podinfo", "namespace": appsNS},
+			"spec": map[string]any{
+				"interval": "1m",
+				"chart": map[string]any{
+					"kind": "OCIRepository",
+					"spec": map[string]any{"url": "oci://ghcr.io/stefanprodan/charts/podinfo"},
+				},
+			},
+		}, nil)
+
+		result, err := testClient.Trace(ctx, TraceOptions{
+			APIVersion: "helm.toolkit.fluxcd.io/v2", Kind: "HelmRelease", Name: "podinfo", Namespace: appsNS,
+		})
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(result.Source).NotTo(BeNil())
+		g.Expect(result.Source.ResolvedFor).To(Equal("HelmRelease/" + appsNS + "/podinfo"))
+		g.Expect(result.Source.Object).To(Equal("OCIRepository/" + appsNS + "/" + appsNS + "-podinfo"))
+		g.Expect(result.Source.URL).To(Equal("oci://ghcr.io/stefanprodan/charts/podinfo"))
+		g.Expect(result.Source.Revision).To(Equal("6.9.0@sha256:a1b2c3"))
+	})
+
+	t.Run("resolves the source of a helmrelease chart template with sourceRef", func(t *testing.T) {
+		g := NewWithT(t)
+		createTraceObject(t, map[string]any{
+			"apiVersion": "source.toolkit.fluxcd.io/v1",
+			"kind":       "HelmRepository",
+			"metadata":   map[string]any{"name": "tpl-charts", "namespace": fluxNS},
+			"spec":       map[string]any{"interval": "1m", "url": "https://tpl-charts.example.com"},
+		}, map[string]any{
+			"conditions": traceReadyCondition("True", "Succeeded", "stored artifact"),
+		})
+		createTraceObject(t, map[string]any{
+			"apiVersion": "helm.toolkit.fluxcd.io/v2",
+			"kind":       "HelmRelease",
+			"metadata":   map[string]any{"name": "tpl", "namespace": appsNS},
+			"spec": map[string]any{
+				"interval": "1m",
+				"chart": map[string]any{
+					"spec": map[string]any{
+						"chart": "tpl",
+						"sourceRef": map[string]any{
+							"kind":      "HelmRepository",
+							"name":      "tpl-charts",
+							"namespace": fluxNS,
+						},
+					},
+				},
+			},
+		}, nil)
+
+		result, err := testClient.Trace(ctx, TraceOptions{
+			APIVersion: "helm.toolkit.fluxcd.io/v2", Kind: "HelmRelease", Name: "tpl", Namespace: appsNS,
+		})
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(result.Source).NotTo(BeNil())
+		g.Expect(result.Source.Object).To(Equal("HelmRepository/" + fluxNS + "/tpl-charts"))
+		g.Expect(result.Source.URL).To(Equal("https://tpl-charts.example.com"))
+	})
+
 	t.Run("follows external artifact to its generator", func(t *testing.T) {
 		g := NewWithT(t)
 		createTraceObject(t, map[string]any{
