@@ -4,9 +4,13 @@
 package builder
 
 import (
+	"regexp"
+	"slices"
+	"strconv"
 	"testing"
 
 	. "github.com/onsi/gomega"
+	"sigs.k8s.io/yaml"
 )
 
 func TestValidateAndPatchComponents(t *testing.T) {
@@ -88,6 +92,82 @@ func TestValidateAndPatchComponents(t *testing.T) {
 			if tt.expectPatchContains != "" {
 				g.Expect(opts.Patches).To(ContainSubstring(tt.expectPatchContains))
 			}
+		})
+	}
+}
+
+func TestValidateAndPatchComponents_NotificationCRDVersions(t *testing.T) {
+	const (
+		alerts    = "alerts.notification.toolkit.fluxcd.io"
+		receivers = "receivers.notification.toolkit.fluxcd.io"
+	)
+	operatorKinds := []string{"FluxInstance", "ResourceSet", "ResourceSetInputProvider"}
+
+	tests := []struct {
+		version          string
+		alertVersions    []int
+		receiverVersions []int
+	}{
+		{version: "2.6.0", alertVersions: []int{0, 1, 2}, receiverVersions: []int{0, 1, 2}},
+		{version: "2.8.0", alertVersions: []int{0, 1}, receiverVersions: []int{0, 1}},
+		{version: "2.9.6", alertVersions: []int{0}, receiverVersions: []int{0}},
+		{version: "2.10.0", alertVersions: []int{0, 1}, receiverVersions: []int{0}},
+		{version: "2.11.0", alertVersions: []int{0, 1}, receiverVersions: []int{0}},
+	}
+
+	versionRe := regexp.MustCompile(`^/spec/versions/(\d+)/`)
+
+	for _, tt := range tests {
+		t.Run(tt.version, func(t *testing.T) {
+			g := NewWithT(t)
+
+			opts := MakeDefaultOptions()
+			opts.Version = tt.version
+			opts.Components = DefaultComponents
+			g.Expect(opts.ValidateAndPatchComponents()).To(Succeed())
+
+			var patches []struct {
+				Target struct {
+					Name string `json:"name"`
+				} `json:"target"`
+				Patch string `json:"patch"`
+			}
+			g.Expect(yaml.Unmarshal([]byte(opts.Patches), &patches)).To(Succeed())
+
+			// Map CRD name -> version index -> patched kinds.
+			patched := map[string]map[int][]string{}
+			for _, p := range patches {
+				if p.Target.Name != alerts && p.Target.Name != receivers {
+					continue
+				}
+				var ops []struct {
+					Path  string `json:"path"`
+					Value string `json:"value"`
+				}
+				g.Expect(yaml.Unmarshal([]byte(p.Patch), &ops)).To(Succeed())
+				for _, op := range ops {
+					m := versionRe.FindStringSubmatch(op.Path)
+					g.Expect(m).To(HaveLen(2), "unexpected patch path %s", op.Path)
+					idx, err := strconv.Atoi(m[1])
+					g.Expect(err).NotTo(HaveOccurred())
+					if patched[p.Target.Name] == nil {
+						patched[p.Target.Name] = map[int][]string{}
+					}
+					patched[p.Target.Name][idx] = append(patched[p.Target.Name][idx], op.Value)
+				}
+			}
+
+			assertVersions := func(crd string, expected []int) {
+				got := make([]int, 0, len(patched[crd]))
+				for idx, kinds := range patched[crd] {
+					got = append(got, idx)
+					g.Expect(kinds).To(ConsistOf(operatorKinds), "%s version %d", crd, idx)
+				}
+				slices.Sort(got)
+				g.Expect(got).To(Equal(expected), crd)
+			}
+			assertVersions(alerts, tt.alertVersions)
+			assertVersions(receivers, tt.receiverVersions)
 		})
 	}
 }
