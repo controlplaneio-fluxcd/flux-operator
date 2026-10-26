@@ -12,10 +12,108 @@ SPIRE_CHART_VERSION="${SPIRE_CHART_VERSION:-0.30.3}"
 SPIFFE_DOMAIN="example.org"
 ENVOY_ID="spiffe://${SPIFFE_DOMAIN}/ns/envoy-gateway-system/sa/envoy-gateway-proxy"
 STANDALONE_ID="spiffe://${SPIFFE_DOMAIN}/ns/${FLUX_NAMESPACE}/sa/standalone-web"
+PODINFO_ID="spiffe://${SPIFFE_DOMAIN}/ns/${FLUX_NAMESPACE}/sa/podinfo-spiffe"
+SOURCE_WATCHER_ID="spiffe://${SPIFFE_DOMAIN}/ns/${FLUX_NAMESPACE}/sa/source-watcher"
+OPERATOR_ID="spiffe://${SPIFFE_DOMAIN}/ns/${FLUX_NAMESPACE}/sa/flux-operator"
 
 log()  { printf '\n\033[1;34m==> %s\033[0m\n' "$*"; }
 info() { printf '    %s\n' "$*"; }
 fail() { printf '\033[1;31mFAIL: %s\033[0m\n' "$*" >&2; exit 1; }
+
+# events prints the Flux events received by the event sink, one JSON object per line.
+events() {
+    kubectl -n "${FLUX_NAMESPACE}" logs deploy/event-sink --tail=-1 2>/dev/null \
+        | jq -cR 'fromjson? | select(.msg == "payload received") | .payload' 2>/dev/null || true
+}
+
+# wait_event <jq condition> <failure message>
+wait_event() {
+    for _ in $(seq 1 60); do
+        events | jq -e "select($1)" >/dev/null && return 0
+        sleep 2
+    done
+    fail "$2"
+}
+
+# podinfo_requests prints the requests logged by podinfo-spiffe, one JSON object per line.
+podinfo_requests() {
+    kubectl -n "${FLUX_NAMESPACE}" logs deploy/podinfo-spiffe --tail=-1 2>/dev/null \
+        | jq -cR 'fromjson? | select(.msg == "request started")' 2>/dev/null || true
+}
+
+# wait_podinfo_artifact_request <client SPIFFE ID> <failure message>
+wait_podinfo_artifact_request() {
+    for _ in $(seq 1 30); do
+        podinfo_requests | jq -e --arg id "$1" \
+            'select(.uri == "/artifact" and .spiffe_id == $id)' >/dev/null && return 0
+        sleep 2
+    done
+    fail "$2"
+}
+
+# wait_podinfo_handshake_error <message substring> <failure message>
+wait_podinfo_handshake_error() {
+    for _ in $(seq 1 30); do
+        kubectl -n "${FLUX_NAMESPACE}" logs deploy/podinfo-spiffe --tail=-1 2>/dev/null \
+            | jq -eR --arg s "$1" 'fromjson? | select(.msg | startswith("http: TLS handshake error") and contains($s))' \
+            >/dev/null && return 0
+        sleep 2
+    done
+    fail "$2"
+}
+
+# expect_tls_rejection <url> <server name> fails unless a TLS client without
+# an SVID is rejected. Retries until the port-forward accepts connections.
+expect_tls_rejection() {
+    local rc
+    for _ in $(seq 1 30); do
+        rc=0
+        curl -k -sS --max-time 5 "$1" -o /dev/null 2>/dev/null || rc=$?
+        case "${rc}" in
+            0) fail "$2 accepted a TLS client without an SVID" ;;
+            7|28) sleep 1 ;;
+            *) return 0 ;;
+        esac
+    done
+    fail "$2 was not reachable for the TLS client check"
+}
+
+# wait_spiffeid <ClusterSPIFFEID name> waits for the entry to select at least one pod.
+wait_spiffeid() {
+    local selected
+    for _ in $(seq 1 60); do
+        selected=$(kubectl get clusterspiffeid "$1" -o jsonpath='{.status.stats.podsSelected}' 2>/dev/null || true)
+        [[ "${selected:-0}" -gt 0 ]] && return 0
+        sleep 2
+    done
+    fail "ClusterSPIFFEID $1 selected no pods"
+}
+
+# artifact_digest reads HTTP response headers from stdin and prints X-Artifact-Digest.
+artifact_digest() {
+    tr -d '\r' | awk -F': ' 'tolower($1)=="x-artifact-digest" {print $2}'
+}
+
+# static_external_artifact <name> <url> <digest> creates an ExternalArtifact with a Ready status.
+static_external_artifact() {
+    local last
+    last="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    kubectl apply -f - >/dev/null <<EOF
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: ExternalArtifact
+metadata:
+  name: $1
+  namespace: ${FLUX_NAMESPACE}
+spec: {}
+EOF
+    kubectl -n "${FLUX_NAMESPACE}" patch "externalartifact/$1" \
+        --subresource=status --type=merge -p "$(jq -n \
+            --arg url "$2" \
+            --arg digest "$3" \
+            --arg revision "spiffe-e2e" \
+            --arg last "${last}" \
+            '{status:{artifact:{url:$url,digest:$digest,revision:$revision,path:"artifact.tar.gz",lastUpdateTime:$last},conditions:[{type:"Ready",status:"True",reason:"Succeeded",message:"Static artifact for SPIFFE e2e",lastTransitionTime:$last}]}}')" >/dev/null
+}
 
 cleanup() {
     local code=$?
@@ -30,6 +128,8 @@ cleanup() {
         done
         kubectl -n "${FLUX_NAMESPACE}" logs deploy/event-sink --tail=80 || true
         kubectl -n "${FLUX_NAMESPACE}" logs deploy/artifact-server --tail=80 || true
+        kubectl -n "${FLUX_NAMESPACE}" logs deploy/podinfo-spiffe --tail=80 || true
+        kubectl get clusterspiffeids -o yaml || true
         kubectl -n "${FLUX_NAMESPACE}" logs deploy/standalone-web --tail=80 || true
         kubectl -n "${FLUX_NAMESPACE}" get gateway/receiver -o yaml || true
         kubectl -n "${FLUX_NAMESPACE}" get httproute,backendtlspolicy -o yaml || true
@@ -45,6 +145,9 @@ cleanup() {
     fi
     if [[ -n "${STANDALONE_PORT_FORWARD_PID:-}" ]]; then
         kill "${STANDALONE_PORT_FORWARD_PID}" >/dev/null 2>&1 || true
+    fi
+    if [[ -n "${PODINFO_PORT_FORWARD_PID:-}" ]]; then
+        kill "${PODINFO_PORT_FORWARD_PID}" >/dev/null 2>&1 || true
     fi
     exit "$code"
 }
@@ -73,16 +176,13 @@ helm upgrade --install spire spiffe/spire \
     --set global.spire.trustDomain="${SPIFFE_DOMAIN}" \
     --set global.spire.namespaces.create=false \
     --set spire-server.controllerManager.enabled=true \
+    --set spire-server.controllerManager.identities.clusterSPIFFEIDs.default.enabled=false \
     --set spire-agent.sds.enabled=true \
     --set spiffe-csi-driver.enabled=true \
     --set spiffe-oidc-discovery-provider.enabled=false \
     --wait --timeout 10m
 kubectl -n spire-system wait --for=condition=Ready pods --all --timeout=3m
 kubectl apply -f "${MANIFESTS_DIR}/spire.yaml"
-
-log "Building the event sink"
-docker build -t fluxcd/spiffe-testapp:e2e "${ROOT_DIR}/test/e2e/spiffe-mtls/testapp" >/dev/null
-kind load docker-image fluxcd/spiffe-testapp:e2e >/dev/null
 
 log "Building and deploying flux-operator"
 make -C "${ROOT_DIR}" docker-build IMG="${IMG}" >/dev/null
@@ -276,6 +376,7 @@ spec:
         - "${STANDALONE_ID}"
       extraArtifactServers:
         - "${ENVOY_ID}"
+        - "${PODINFO_ID}"
       extraNotifiers:
         - "${STANDALONE_ID}"
 EOF
@@ -292,10 +393,18 @@ kubectl -n envoy-gateway-system rollout status deployment/envoy-gateway --timeou
 kubectl apply -f "${MANIFESTS_DIR}/envoy-gateway.yaml" >/dev/null
 kubectl -n "${FLUX_NAMESPACE}" wait --for=condition=Accepted gateway/receiver --timeout=3m
 
-log "Deploying the event sink"
+log "Deploying the event sink and podinfo"
 kubectl apply -f "${MANIFESTS_DIR}/event-sink.yaml"
+kubectl apply -f "${MANIFESTS_DIR}/podinfo-spiffe.yaml"
 kubectl -n "${FLUX_NAMESPACE}" rollout status deployment/event-sink --timeout=2m
 kubectl -n "${FLUX_NAMESPACE}" rollout status deployment/artifact-server --timeout=2m
+kubectl -n "${FLUX_NAMESPACE}" rollout status deployment/podinfo-spiffe --timeout=3m
+
+log "Verifying the ClusterSPIFFEIDs select pods"
+for id in flux-controllers flux-operator standalone-web podinfo-spiffe; do
+    wait_spiffeid "${id}"
+done
+info "ClusterSPIFFEIDs selected pods"
 
 log "Running inter-controller traffic tests"
 kubectl apply -f "${MANIFESTS_DIR}/test-resources.yaml"
@@ -340,6 +449,7 @@ for _ in $(seq 1 60); do
 done
 kubectl -n envoy-gateway-system rollout status deployment \
     -l gateway.envoyproxy.io/owning-gateway-name=receiver --timeout=10m
+wait_spiffeid envoy-gateway-proxy
 
 ENVOY_SERVICE=$(kubectl -n envoy-gateway-system get service \
     -l gateway.envoyproxy.io/owning-gateway-name=receiver -o jsonpath='{.items[0].metadata.name}')
@@ -385,23 +495,14 @@ info "artifact download through the Web UI succeeded"
 log "Verifying the embedded Web UI rejects clients without an SVID"
 kubectl -n "${FLUX_NAMESPACE}" port-forward svc/flux-operator 9443:9080 >/dev/null 2>&1 &
 WEB_PORT_FORWARD_PID=$!
-sleep 2
-if curl -k -sS --max-time 5 https://127.0.0.1:9443/ -o /dev/null 2>/dev/null; then
-    fail "embedded Web UI accepted a TLS client without an SVID"
-fi
+expect_tls_rejection "https://127.0.0.1:9443/" "embedded Web UI"
 kill "${WEB_PORT_FORWARD_PID}" >/dev/null 2>&1 || true
 wait "${WEB_PORT_FORWARD_PID}" >/dev/null 2>&1 || true
 WEB_PORT_FORWARD_PID=
 info "web UI rejected a TLS client without an SVID"
 
-for _ in $(seq 1 60); do
-    logs=$(kubectl -n "${FLUX_NAMESPACE}" logs deploy/event-sink --tail=-1 2>/dev/null || true)
-    grep -q "reportingController=flux-operator .*kind=GitRepository .*name=podinfo .*reason=WebAction" <<<"${logs}" && break
-    sleep 2
-done
-logs=$(kubectl -n "${FLUX_NAMESPACE}" logs deploy/event-sink --tail=-1 2>/dev/null || true)
-grep -q "reportingController=flux-operator .*kind=GitRepository .*name=podinfo .*reason=WebAction" <<<"${logs}" \
-    || fail "event sink did not receive the Web UI download audit event"
+wait_event '.reportingController == "flux-operator" and .involvedObject.kind == "GitRepository" and .involvedObject.name == "podinfo" and .reason == "WebAction"' \
+    "event sink did not receive the Web UI download audit event"
 
 log "Downloading an artifact through the standalone Web UI over SPIFFE mTLS"
 STANDALONE_ARTIFACT="$(mktemp)"
@@ -414,48 +515,20 @@ info "artifact download through the standalone Web UI succeeded"
 log "Verifying the standalone Web UI rejects clients without an SVID"
 kubectl -n "${FLUX_NAMESPACE}" port-forward svc/standalone-web 9444:9080 >/dev/null 2>&1 &
 STANDALONE_PORT_FORWARD_PID=$!
-sleep 2
-if curl -k -sS --max-time 5 https://127.0.0.1:9444/ -o /dev/null 2>/dev/null; then
-    fail "standalone Web UI accepted a TLS client without an SVID"
-fi
+expect_tls_rejection "https://127.0.0.1:9444/" "standalone Web UI"
 kill "${STANDALONE_PORT_FORWARD_PID}" >/dev/null 2>&1 || true
 wait "${STANDALONE_PORT_FORWARD_PID}" >/dev/null 2>&1 || true
 STANDALONE_PORT_FORWARD_PID=
 info "standalone Web UI rejected a TLS client without an SVID"
 
-for _ in $(seq 1 60); do
-    logs=$(kubectl -n "${FLUX_NAMESPACE}" logs deploy/event-sink --tail=-1 2>/dev/null || true)
-    grep -q "reportingController=flux-operator .*kind=ExternalArtifact .*name=podinfo-split .*reason=WebAction" <<<"${logs}" && break
-    sleep 2
-done
-logs=$(kubectl -n "${FLUX_NAMESPACE}" logs deploy/event-sink --tail=-1 2>/dev/null || true)
-grep -q "reportingController=flux-operator .*kind=ExternalArtifact .*name=podinfo-split .*reason=WebAction" <<<"${logs}" \
-    || fail "event sink did not receive the standalone Web UI audit event"
+wait_event '.reportingController == "flux-operator" and .involvedObject.kind == "ExternalArtifact" and .involvedObject.name == "podinfo-split" and .reason == "WebAction"' \
+    "event sink did not receive the standalone Web UI audit event"
 
 log "Testing extraArtifactServers through Envoy Gateway"
-ARTIFACT_TMP="$(mktemp)"
-curl -fsS -o "${ARTIFACT_TMP}" "http://127.0.0.1:8080/artifact"
-ARTIFACT_DIGEST="sha256:$(sha256sum "${ARTIFACT_TMP}" | awk '{print $1}')"
-ARTIFACT_REVISION="spiffe-e2e"
-ARTIFACT_LAST="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-rm -f "${ARTIFACT_TMP}"
+ENVOY_ARTIFACT_DIGEST=$(curl -fsSI "http://127.0.0.1:8080/artifact" | artifact_digest)
+[[ "${ENVOY_ARTIFACT_DIGEST}" == sha256:* ]] || fail "artifact server returned no digest"
 ENVOY_ARTIFACT_URL="https://${ENVOY_SERVICE}.envoy-gateway-system.svc.cluster.local./artifact"
-
-kubectl apply -f - >/dev/null <<EOF
-apiVersion: source.toolkit.fluxcd.io/v1
-kind: ExternalArtifact
-metadata:
-  name: podinfo-via-envoy
-  namespace: ${FLUX_NAMESPACE}
-spec: {}
-EOF
-kubectl -n "${FLUX_NAMESPACE}" patch externalartifact/podinfo-via-envoy \
-    --subresource=status --type=merge -p "$(jq -n \
-        --arg url "${ENVOY_ARTIFACT_URL}" \
-        --arg digest "${ARTIFACT_DIGEST}" \
-        --arg revision "${ARTIFACT_REVISION}" \
-        --arg last "${ARTIFACT_LAST}" \
-        '{status:{artifact:{url:$url,digest:$digest,revision:$revision,path:"artifact.tar.gz",lastUpdateTime:$last},conditions:[{type:"Ready",status:"True",reason:"Succeeded",message:"Static artifact for SPIFFE e2e",lastTransitionTime:$last}]}}')" >/dev/null
+static_external_artifact podinfo-via-envoy "${ENVOY_ARTIFACT_URL}" "${ENVOY_ARTIFACT_DIGEST}"
 
 kubectl apply -f - >/dev/null <<EOF
 apiVersion: source.extensions.fluxcd.io/v1beta1
@@ -478,6 +551,71 @@ kubectl -n "${FLUX_NAMESPACE}" wait --for=condition=Ready artifactgenerator/podi
 kubectl -n "${FLUX_NAMESPACE}" wait --for=condition=Ready externalartifact/podinfo-via-envoy-split --timeout=3m
 info "artifact fetch through Envoy Gateway succeeded"
 
+log "Testing extraArtifactServers with a direct SPIFFE mTLS server"
+PODINFO_ARTIFACT_DIGEST=$(kubectl -n "${FLUX_NAMESPACE}" exec deploy/podinfo-spiffe -- \
+    curl -fsSI http://localhost:9898/artifact | artifact_digest)
+[[ "${PODINFO_ARTIFACT_DIGEST}" == sha256:* ]] || fail "podinfo returned no artifact digest"
+static_external_artifact podinfo-direct \
+    "https://podinfo-spiffe.${FLUX_NAMESPACE}.svc.cluster.local:9899/artifact" \
+    "${PODINFO_ARTIFACT_DIGEST}"
+
+kubectl apply -f - >/dev/null <<EOF
+apiVersion: source.extensions.fluxcd.io/v1beta1
+kind: ArtifactGenerator
+metadata:
+  name: podinfo-direct
+  namespace: ${FLUX_NAMESPACE}
+spec:
+  sources:
+    - alias: direct
+      kind: ExternalArtifact
+      name: podinfo-direct
+  artifacts:
+    - name: podinfo-direct-split
+      copy:
+        - from: "@direct/**"
+          to: "@artifact/"
+EOF
+kubectl -n "${FLUX_NAMESPACE}" wait --for=condition=Ready artifactgenerator/podinfo-direct --timeout=3m
+kubectl -n "${FLUX_NAMESPACE}" wait --for=condition=Ready externalartifact/podinfo-direct-split --timeout=3m
+wait_podinfo_artifact_request "${SOURCE_WATCHER_ID}" \
+    "podinfo did not serve the artifact to source-watcher over mTLS"
+info "artifact fetch from podinfo over SPIFFE mTLS succeeded"
+
+log "Downloading the direct artifact through the embedded Web UI"
+DIRECT_ARTIFACT="$(mktemp)"
+curl -fsS -o "${DIRECT_ARTIFACT}" \
+    "http://127.0.0.1:8080/api/v1/artifact/download?kind=ExternalArtifact&namespace=${FLUX_NAMESPACE}&name=podinfo-direct"
+tar -tzf "${DIRECT_ARTIFACT}" >/dev/null
+rm -f "${DIRECT_ARTIFACT}"
+wait_podinfo_artifact_request "${OPERATOR_ID}" \
+    "podinfo did not serve the artifact to flux-operator over mTLS"
+info "direct artifact download through the embedded Web UI succeeded"
+
+log "Verifying podinfo rejects SVIDs that are not authorized"
+STANDALONE_CODE=$(curl -s -o /dev/null -w '%{http_code}' \
+    "http://127.0.0.1:8080/standalone/api/v1/artifact/download?kind=ExternalArtifact&namespace=${FLUX_NAMESPACE}&name=podinfo-direct" || true)
+if [[ "${STANDALONE_CODE}" == 2* ]]; then
+    fail "standalone Web UI downloaded the artifact from podinfo with an unauthorized SVID"
+fi
+if podinfo_requests | jq -e --arg id "${STANDALONE_ID}" 'select(.spiffe_id == $id)' >/dev/null; then
+    fail "podinfo served a request from the standalone Web UI"
+fi
+wait_podinfo_handshake_error "unexpected ID \"${STANDALONE_ID}\"" \
+    "podinfo did not reject the standalone Web UI SVID"
+info "podinfo rejected the standalone Web UI SVID (download returned ${STANDALONE_CODE})"
+
+log "Verifying podinfo rejects clients without an SVID"
+kubectl -n "${FLUX_NAMESPACE}" port-forward svc/podinfo-spiffe 9445:9899 >/dev/null 2>&1 &
+PODINFO_PORT_FORWARD_PID=$!
+expect_tls_rejection "https://127.0.0.1:9445/artifact" "podinfo"
+wait_podinfo_handshake_error "client didn't provide a certificate" \
+    "podinfo did not reject the TLS client without an SVID"
+kill "${PODINFO_PORT_FORWARD_PID}" >/dev/null 2>&1 || true
+wait "${PODINFO_PORT_FORWARD_PID}" >/dev/null 2>&1 || true
+PODINFO_PORT_FORWARD_PID=
+info "podinfo rejected a TLS client without an SVID"
+
 log "Waiting for an event from every controller"
 expected_controllers=(
     source-controller
@@ -489,10 +627,10 @@ expected_controllers=(
 )
 missing=()
 for _ in $(seq 1 60); do
-    logs=$(kubectl -n "${FLUX_NAMESPACE}" logs deploy/event-sink --tail=-1 2>/dev/null || true)
+    reporters=$(events | jq -r '.reportingController' | sort -u)
     missing=()
     for controller in "${expected_controllers[@]}"; do
-        grep -q "reportingController=${controller} kind=" <<<"${logs}" || missing+=("${controller}")
+        grep -qx "${controller}" <<<"${reporters}" || missing+=("${controller}")
     done
     if [[ ${#missing[@]} -eq 0 ]]; then
         info "event sink received events from all controllers"
@@ -503,13 +641,7 @@ done
 [[ ${#missing[@]} -eq 0 ]] || fail "event sink is missing events from: ${missing[*]}"
 
 log "Waiting for the ResourceSetInputProvider notifier event"
-for _ in $(seq 1 60); do
-    logs=$(kubectl -n "${FLUX_NAMESPACE}" logs deploy/event-sink --tail=-1 2>/dev/null || true)
-    grep -q "reportingController=flux-operator .*kind=ResourceSetInputProvider .*name=spiffe-e2e .*reason=ReconciliationSucceeded" <<<"${logs}" && break
-    sleep 2
-done
-logs=$(kubectl -n "${FLUX_NAMESPACE}" logs deploy/event-sink --tail=-1 2>/dev/null || true)
-grep -q "reportingController=flux-operator .*kind=ResourceSetInputProvider .*name=spiffe-e2e .*reason=ReconciliationSucceeded" <<<"${logs}" \
-    || fail "event sink did not receive the ResourceSetInputProvider notifier event"
+wait_event '.reportingController == "flux-operator" and .involvedObject.kind == "ResourceSetInputProvider" and .involvedObject.name == "spiffe-e2e" and .reason == "ReconciliationSucceeded"' \
+    "event sink did not receive the ResourceSetInputProvider notifier event"
 
 log "SUCCESS: all inter-controller SPIFFE mTLS checks passed"

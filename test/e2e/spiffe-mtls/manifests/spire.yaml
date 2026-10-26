@@ -3,6 +3,7 @@ kind: ClusterSPIFFEID
 metadata:
   name: flux-controllers
 spec:
+  className: spire-system-spire
   spiffeIDTemplate: "spiffe://example.org/ns/{{ .PodMeta.Namespace }}/sa/{{ .PodSpec.ServiceAccountName }}"
   podSelector:
     matchLabels:
@@ -16,6 +17,7 @@ kind: ClusterSPIFFEID
 metadata:
   name: flux-operator
 spec:
+  className: spire-system-spire
   spiffeIDTemplate: "spiffe://example.org/ns/{{ .PodMeta.Namespace }}/sa/{{ .PodSpec.ServiceAccountName }}"
   podSelector:
     matchLabels:
@@ -29,6 +31,7 @@ kind: ClusterSPIFFEID
 metadata:
   name: envoy-gateway-proxy
 spec:
+  className: spire-system-spire
   spiffeIDTemplate: "spiffe://example.org/ns/{{ .PodMeta.Namespace }}/sa/{{ .PodSpec.ServiceAccountName }}"
   podSelector:
     matchLabels:
@@ -42,10 +45,25 @@ kind: ClusterSPIFFEID
 metadata:
   name: standalone-web
 spec:
+  className: spire-system-spire
   spiffeIDTemplate: "spiffe://example.org/ns/{{ .PodMeta.Namespace }}/sa/{{ .PodSpec.ServiceAccountName }}"
   podSelector:
     matchLabels:
       app.kubernetes.io/name: standalone-web
+  namespaceSelector:
+    matchLabels:
+      kubernetes.io/metadata.name: flux-system
+---
+apiVersion: spire.spiffe.io/v1alpha1
+kind: ClusterSPIFFEID
+metadata:
+  name: podinfo-spiffe
+spec:
+  className: spire-system-spire
+  spiffeIDTemplate: "spiffe://example.org/ns/{{ .PodMeta.Namespace }}/sa/{{ .PodSpec.ServiceAccountName }}"
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: podinfo-spiffe
   namespaceSelector:
     matchLabels:
       kubernetes.io/metadata.name: flux-system
