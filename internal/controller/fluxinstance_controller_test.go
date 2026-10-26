@@ -18,6 +18,9 @@ import (
 	"github.com/fluxcd/pkg/runtime/conditions"
 	kcheck "github.com/fluxcd/pkg/runtime/conditions/check"
 	. "github.com/onsi/gomega"
+	"github.com/spiffe/go-spiffe/v2/bundle/x509bundle"
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
+	"github.com/spiffe/go-spiffe/v2/svid/x509svid"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -770,6 +773,8 @@ func TestFluxInstanceReconciler_BuildFail(t *testing.T) {
 func TestFluxInstanceReconciler_SPIFFEStatus(t *testing.T) {
 	g := NewWithT(t)
 	reconciler := getFluxInstanceReconciler(t)
+	const operatorID = "spiffe://cluster.local/ns/flux-system/sa/flux-flux-operator"
+	reconciler.SPIFFESource = &testTLSSource{id: operatorID}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -777,13 +782,15 @@ func TestFluxInstanceReconciler_SPIFFEStatus(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 
 	const template = "spiffe://cluster.local/ns/flux-system/sa/{component}"
+	const extraServer = "spiffe://cluster.local/ns/envoy/sa/gateway"
 	spec := getDefaultFluxSpec(t)
 	spec.Distribution.Version = "2.10.x"
 	spec.SPIFFE = &fluxcdv1.SPIFFE{
 		WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
 		MTLS: &fluxcdv1.MTLS{
-			Enabled:             true,
-			ComponentIDTemplate: template,
+			Enabled:              true,
+			ComponentIDTemplate:  template,
+			ExtraArtifactServers: []string{extraServer},
 		},
 	}
 
@@ -819,10 +826,20 @@ func TestFluxInstanceReconciler_SPIFFEStatus(t *testing.T) {
 	checkInstanceReadiness(g, result)
 	g.Expect(result.Status.SPIFFE).To(Equal(&fluxcdv1.SPIFFEStatus{
 		MTLS: &fluxcdv1.MTLSStatus{
-			Enabled:             true,
-			ComponentIDTemplate: template,
+			Enabled:              true,
+			ComponentIDTemplate:  template,
+			ExtraArtifactServers: []string{extraServer},
 		},
 	}))
+
+	// Check if the operator is authorized with the ID of its X.509-SVID.
+	sc := &appsv1.Deployment{}
+	err = testClient.Get(ctx, types.NamespacedName{Name: "source-controller", Namespace: ns.Name}, sc)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(sc.Spec.Template.Spec.Containers[0].Args).To(ContainElement(
+		"--authorized-artifact-client-spiffe-id=" + operatorID))
+	g.Expect(sc.Spec.Template.Spec.Containers[0].Args).NotTo(ContainElement(
+		HaveSuffix("/sa/flux-operator")))
 
 	// Disable mTLS.
 	resultP := result.DeepCopy()
@@ -856,6 +873,70 @@ func TestFluxInstanceReconciler_SPIFFEStatus(t *testing.T) {
 
 	// Wait for CRDs to be fully deleted to prevent race conditions with subsequent tests.
 	waitForFluxCRDsDeletion(ctx, g)
+}
+
+func TestFluxInstanceReconciler_SPIFFEOperatorSVIDFail(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getFluxInstanceReconciler(t)
+	reconciler.SPIFFESource = &testTLSSource{err: errors.New("no SVID available")}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	spec := getDefaultFluxSpec(t)
+	spec.Distribution.Version = "2.10.x"
+	spec.SPIFFE = &fluxcdv1.SPIFFE{
+		WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+		MTLS: &fluxcdv1.MTLS{
+			Enabled:             true,
+			ComponentIDTemplate: "spiffe://cluster.local/ns/flux-system/sa/{component}",
+		},
+	}
+
+	obj := &fluxcdv1.FluxInstance{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "flux",
+			Namespace: ns.Name,
+		},
+		Spec: spec,
+	}
+
+	err = testClient.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize the instance.
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Try to install the instance.
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).To(HaveOccurred())
+
+	// Check if the build failed on the SVID read.
+	result := &fluxcdv1.FluxInstance{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).ToNot(HaveOccurred())
+	testutils.LogObjectStatus(t, result)
+	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.BuildFailedReason))
+	g.Expect(conditions.GetMessage(result, meta.ReadyCondition)).To(ContainSubstring("no SVID available"))
+	g.Expect(result.Status.SPIFFE).To(BeNil())
+
+	// Uninstall the instance.
+	err = testClient.Delete(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.IsZero()).To(BeTrue())
 }
 
 func TestFluxInstanceReconciler_SPIFFEStatusHealthCheckFail(t *testing.T) {
@@ -1689,4 +1770,24 @@ func waitForFluxCRDsDeletion(ctx context.Context, g *WithT) {
 		}
 		return true
 	}).WithTimeout(2 * time.Minute).WithPolling(time.Second).Should(BeTrue())
+}
+
+// testTLSSource is a TLSSource stub that returns an X.509-SVID with the
+// given SPIFFE ID, or the given error.
+type testTLSSource struct {
+	id  string
+	err error
+}
+
+// GetX509SVID returns an SVID with the configured ID.
+func (s *testTLSSource) GetX509SVID() (*x509svid.SVID, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return &x509svid.SVID{ID: spiffeid.RequireFromString(s.id)}, nil
+}
+
+// GetX509BundleForTrustDomain is not used by the tests.
+func (s *testTLSSource) GetX509BundleForTrustDomain(spiffeid.TrustDomain) (*x509bundle.Bundle, error) {
+	return nil, errors.New("not implemented")
 }

@@ -334,3 +334,86 @@ func TestIsSelfTrustDomainPeer(t *testing.T) {
 		})
 	}
 }
+
+func TestArtifactServers(t *testing.T) {
+	const template = "spiffe://cluster.local/ns/flux-system/sa/{component}"
+	extra := "spiffe://cluster.local/ns/envoy/sa/gateway"
+
+	testCases := []struct {
+		name       string
+		template   string
+		components []string
+		extras     []string
+		want       []string
+	}{
+		{
+			name:       "source-controller and source-watcher with extras",
+			template:   template,
+			components: []string{fluxcdv1.FluxSourceWatcher, fluxcdv1.FluxKustomizeController, fluxcdv1.FluxSourceController},
+			extras:     []string{extra},
+			want: []string{
+				"spiffe://cluster.local/ns/flux-system/sa/source-controller",
+				"spiffe://cluster.local/ns/flux-system/sa/source-watcher",
+				extra,
+			},
+		},
+		{
+			name:       "extras only",
+			template:   template,
+			components: []string{fluxcdv1.FluxKustomizeController},
+			extras:     []string{extra},
+			want:       []string{extra},
+		},
+		{
+			name:       "no artifact servers",
+			template:   template,
+			components: []string{fluxcdv1.FluxKustomizeController},
+		},
+		{
+			name:       "empty template",
+			components: []string{fluxcdv1.FluxSourceController},
+			extras:     []string{extra},
+			want:       []string{extra},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			g := NewWithT(t)
+			g.Expect(ArtifactServers(tc.template, tc.components, tc.extras)).To(Equal(tc.want))
+		})
+	}
+}
+
+func TestArtifactServerPeersExtraArtifactServers(t *testing.T) {
+	g := NewWithT(t)
+
+	extra := "spiffe://cluster.local/ns/envoy/sa/gateway"
+	instance := newTestInstance("flux", &fluxcdv1.MTLSStatus{
+		Enabled:              true,
+		ComponentIDTemplate:  "spiffe://cluster.local/ns/flux-system/sa/{component}",
+		ExtraArtifactServers: []string{extra},
+	}, fluxcdv1.FluxKustomizeController)
+	// Extras only in the spec are ignored.
+	instance.Spec.SPIFFE = &fluxcdv1.SPIFFE{
+		MTLS: &fluxcdv1.MTLS{
+			Enabled:              true,
+			ExtraArtifactServers: []string{extra, "spiffe://cluster.local/ns/other/sa/server"},
+		},
+	}
+
+	peers, err := ArtifactServerPeers(t.Context(), nil, testTLSSource{}, instance)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(peers).To(Equal([]string{extra}))
+}
+
+func TestComponentIDs(t *testing.T) {
+	g := NewWithT(t)
+
+	g.Expect(ComponentIDs("spiffe://cluster.local/ns/flux-system/sa/{component}",
+		fluxcdv1.FluxSourceController, fluxcdv1.FluxOperator)).To(Equal([]string{
+		"spiffe://cluster.local/ns/flux-system/sa/source-controller",
+		"spiffe://cluster.local/ns/flux-system/sa/flux-operator",
+	}))
+	g.Expect(ComponentIDs("spiffe://cluster.local/ns/flux-system/sa/{component}")).To(BeEmpty())
+}

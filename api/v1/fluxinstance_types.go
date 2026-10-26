@@ -317,8 +317,10 @@ type MTLS struct {
 
 	// ComponentIDTemplate is the SPIFFE ID template for the Flux controllers.
 	// The '{component}' placeholder is replaced with the name of each
-	// installed component, including 'flux-operator'. A trailing slash
-	// indicates a SPIFFE ID prefix.
+	// installed component. A trailing slash indicates a SPIFFE ID prefix.
+	// The flux-operator ID is the SPIFFE ID of the operator's X.509-SVID,
+	// or this template with 'flux-operator' when the operator has no
+	// Workload API source.
 	// The flux-operator ID is added to notification-controller as an
 	// authorized notifier. It is also added to source-controller and
 	// source-watcher as an authorized artifact client when the Web UI is
@@ -540,6 +542,11 @@ type MTLSStatus struct {
 	// ComponentIDTemplate is the SPIFFE ID template of the Flux controllers.
 	// +optional
 	ComponentIDTemplate string `json:"componentIDTemplate,omitempty"`
+
+	// ExtraArtifactServers is the list of additional SPIFFE IDs
+	// authorized as artifact servers.
+	// +optional
+	ExtraArtifactServers []string `json:"extraArtifactServers,omitempty"`
 }
 
 // GetDistribution returns the distribution specification with defaults.

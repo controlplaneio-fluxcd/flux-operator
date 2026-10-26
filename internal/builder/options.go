@@ -36,7 +36,10 @@ type Options struct {
 	SourceAPIVersion                                string
 	RemovePermissionForCreatingServiceAccountTokens bool
 	AddPermissionForCreatingServiceAccountTokens    bool
-	Logger                                          logr.Logger
+	// OperatorSPIFFEID is the operator SPIFFE ID authorized by the Flux
+	// controllers when mTLS is enabled, defaults to the template-derived ID.
+	OperatorSPIFFEID string
+	Logger           logr.Logger
 }
 
 // MakeDefaultOptions returns the default builder configuration.

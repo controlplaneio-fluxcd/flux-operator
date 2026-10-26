@@ -67,7 +67,35 @@ func AppliedComponentID(instance *fluxcdv1.FluxInstance, component string) (stri
 	if template == "" {
 		return "", false
 	}
-	return strings.ReplaceAll(template, componentPlaceholder, component), true
+	return ComponentID(template, component), true
+}
+
+// ComponentID returns the SPIFFE ID of the component from the ID template.
+func ComponentID(template, component string) string {
+	return strings.ReplaceAll(template, componentPlaceholder, component)
+}
+
+// ComponentIDs returns the SPIFFE IDs of the components from the ID template.
+func ComponentIDs(template string, components ...string) []string {
+	ids := make([]string, 0, len(components))
+	for _, component := range components {
+		ids = append(ids, ComponentID(template, component))
+	}
+	return ids
+}
+
+// ArtifactServers returns the SPIFFE IDs authorized as artifact servers:
+// the installed source-controller and source-watcher, then the extra servers.
+func ArtifactServers(template string, components, extras []string) []string {
+	var ids []string
+	if template != "" {
+		for _, component := range []string{fluxcdv1.FluxSourceController, fluxcdv1.FluxSourceWatcher} {
+			if slices.Contains(components, component) {
+				ids = append(ids, ComponentID(template, component))
+			}
+		}
+	}
+	return append(ids, extras...)
 }
 
 // AppliedComponents returns the component names in .status.components.
@@ -79,24 +107,13 @@ func AppliedComponents(instance *fluxcdv1.FluxInstance) []string {
 	return components
 }
 
-// ArtifactServerIDs returns the SPIFFE IDs of the applied source-controller
-// and source-watcher.
+// ArtifactServerIDs returns the SPIFFE IDs of the applied artifact servers.
 func ArtifactServerIDs(instance *fluxcdv1.FluxInstance) []string {
 	if !AppliedMTLSEnabled(instance) {
 		return nil
 	}
-
-	components := AppliedComponents(instance)
-	var ids []string
-	for _, component := range []string{fluxcdv1.FluxSourceController, fluxcdv1.FluxSourceWatcher} {
-		if !slices.Contains(components, component) {
-			continue
-		}
-		if id, ok := AppliedComponentID(instance, component); ok {
-			ids = append(ids, id)
-		}
-	}
-	return ids
+	mtls := instance.Status.SPIFFE.MTLS
+	return ArtifactServers(mtls.ComponentIDTemplate, AppliedComponents(instance), mtls.ExtraArtifactServers)
 }
 
 // NotificationServerID returns the SPIFFE ID of the applied

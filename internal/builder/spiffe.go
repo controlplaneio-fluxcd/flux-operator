@@ -6,12 +6,14 @@ package builder
 import (
 	"bytes"
 	"fmt"
+	"slices"
 	"strings"
 	"text/template"
 
 	"github.com/Masterminds/semver/v3"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	internalspiffe "github.com/controlplaneio-fluxcd/flux-operator/internal/spiffe"
 )
 
 const (
@@ -112,8 +114,13 @@ func (o *Options) ValidateAndApplySPIFFEConfig(instance *fluxcdv1.FluxInstance) 
 		data.DeploymentPatches = append(data.DeploymentPatches, spiffeBrokerAPIData(o.Components, *spiffe.BrokerAPI)...)
 	}
 	if spiffe.MTLS != nil && spiffe.MTLS.Enabled {
-		data.DeploymentPatches = append(data.DeploymentPatches, spiffeMTLSData(o.Components, *spiffe.MTLS)...)
+		data.DeploymentPatches = append(data.DeploymentPatches, spiffeMTLSData(o.Components, *spiffe.MTLS, o.OperatorSPIFFEID)...)
 	}
+
+	// Skip patches without args, as kustomize rejects an empty patch.
+	data.DeploymentPatches = slices.DeleteFunc(data.DeploymentPatches, func(p spiffeDeploymentPatchData) bool {
+		return len(p.Args) == 0
+	})
 
 	t, err := template.New("spiffe").Parse(spiffeTmpl)
 	if err != nil {
@@ -150,16 +157,19 @@ func spiffeBrokerAPIData(components []string, api fluxcdv1.BrokerAPI) []spiffeDe
 }
 
 // spiffeMTLSData returns the patches for the inter-controller SPIFFE mTLS
-// configuration.
-func spiffeMTLSData(components []string, mtls fluxcdv1.MTLS) []spiffeDeploymentPatchData {
+// configuration. The operator is authorized with operatorID, or with the
+// template-derived flux-operator ID when operatorID is empty.
+func spiffeMTLSData(components []string, mtls fluxcdv1.MTLS, operatorID string) []spiffeDeploymentPatchData {
 	var patches []spiffeDeploymentPatchData
 	componentIDTemplate := mtls.ComponentIDTemplate
-	operatorID := spiffeComponentID(componentIDTemplate, fluxcdv1.FluxOperator)
+	if operatorID == "" {
+		operatorID = internalspiffe.ComponentID(componentIDTemplate, fluxcdv1.FluxOperator)
+	}
 	has := func(component string) bool {
 		return containsComponent(components, component)
 	}
 	ids := func(names ...string) []string {
-		return spiffeComponentIDs(componentIDTemplate, names...)
+		return internalspiffe.ComponentIDs(componentIDTemplate, names...)
 	}
 
 	if has(fluxcdv1.FluxSourceController) {
@@ -186,8 +196,7 @@ func spiffeMTLSData(components []string, mtls fluxcdv1.MTLS) []spiffeDeploymentP
 		clients = append(clients, operatorID)
 		args := spiffeFlagArgs("--authorized-artifact-client-spiffe-id", clients)
 
-		servers := ids(installed(components, fluxcdv1.FluxSourceController, fluxcdv1.FluxSourceWatcher)...)
-		servers = append(servers, mtls.ExtraArtifactServers...)
+		servers := internalspiffe.ArtifactServers(componentIDTemplate, components, mtls.ExtraArtifactServers)
 		args = append(args, spiffeFlagArgs("--authorized-artifact-server-spiffe-id", servers)...)
 		if has(fluxcdv1.FluxNotificationController) {
 			args = append(args, spiffeFlagArgs("--authorized-event-server-spiffe-id", ids(fluxcdv1.FluxNotificationController))...)
@@ -202,8 +211,7 @@ func spiffeMTLSData(components []string, mtls fluxcdv1.MTLS) []spiffeDeploymentP
 		if !has(component) {
 			continue
 		}
-		servers := ids(installed(components, fluxcdv1.FluxSourceController, fluxcdv1.FluxSourceWatcher)...)
-		servers = append(servers, mtls.ExtraArtifactServers...)
+		servers := internalspiffe.ArtifactServers(componentIDTemplate, components, mtls.ExtraArtifactServers)
 		args := spiffeFlagArgs("--authorized-artifact-server-spiffe-id", servers)
 		if has(fluxcdv1.FluxNotificationController) {
 			args = append(args, spiffeFlagArgs("--authorized-event-server-spiffe-id", ids(fluxcdv1.FluxNotificationController))...)
@@ -239,20 +247,6 @@ func spiffeMTLSData(components []string, mtls fluxcdv1.MTLS) []spiffeDeploymentP
 	}
 
 	return patches
-}
-
-// spiffeComponentID returns the computed SPIFFE ID for a Flux component.
-func spiffeComponentID(componentIDTemplate, component string) string {
-	return strings.ReplaceAll(componentIDTemplate, "{component}", component)
-}
-
-// spiffeComponentIDs returns the computed SPIFFE IDs for the given components.
-func spiffeComponentIDs(componentIDTemplate string, components ...string) []string {
-	ids := make([]string, 0, len(components))
-	for _, component := range components {
-		ids = append(ids, spiffeComponentID(componentIDTemplate, component))
-	}
-	return ids
 }
 
 // spiffeFlagArgs returns the repeatable flag arguments with duplicate values

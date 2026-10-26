@@ -589,8 +589,7 @@ communication between the Flux controllers.
 - `.enabled` (required): Set to `true` to enable mTLS between the controllers.
 - `.componentIDTemplate` (required): The SPIFFE ID template for the Flux
   controllers. The `{component}` placeholder is replaced with the name of each
-  installed component, including `flux-operator`. A trailing slash indicates a
-  SPIFFE ID prefix.
+  installed component. A trailing slash indicates a SPIFFE ID prefix.
 - `.receivers` (optional): The SPIFFE IDs of external Ingress or Gateway
   controllers authorized to send webhook requests to the
   `notification-controller` receiver. Setting at least one ID makes the
@@ -602,6 +601,10 @@ communication between the Flux controllers.
   artifact servers.
 - `.extraNotifiers` (optional): Additional SPIFFE IDs added to
   `notification-controller` as authorized notifiers.
+
+The flux-operator is authorized with the SPIFFE ID of its own X.509-SVID. When
+the operator has no SPIFFE Workload API source, the ID is derived from
+`.componentIDTemplate` with `flux-operator` as the component name.
 
 The `flux-operator` SPIFFE ID is automatically added to the
 `notification-controller` authorized notifiers, which is needed for both the
@@ -1147,6 +1150,8 @@ fails. It is not set when `.spec.spiffe.mtls` is not configured.
 - `.enabled`: Whether the Flux controllers were deployed with mTLS.
 - `.componentIDTemplate`: The SPIFFE ID template of the Flux controllers,
   set when mTLS is enabled.
+- `.extraArtifactServers`: The additional SPIFFE IDs authorized as artifact
+  servers, set when mTLS is enabled.
 
 The flux-operator and the Web UI read this field and `.status.components`
 to decide whether to send events and download artifacts over mTLS.

@@ -5,6 +5,7 @@ package builder
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -175,6 +176,83 @@ func TestSPIFFE_MTLS_WithoutOptionalControllers(t *testing.T) {
 	g.Expect(service).To(BeNil())
 }
 
+func TestSPIFFE_MTLS_OperatorSPIFFEID(t *testing.T) {
+	g := NewWithT(t)
+	instance := spiffeTestInstance([]string{
+		fluxcdv1.FluxSourceController,
+		fluxcdv1.FluxKustomizeController,
+		fluxcdv1.FluxNotificationController,
+		fluxcdv1.FluxSourceWatcher,
+	}, &fluxcdv1.SPIFFE{
+		WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+		MTLS: &fluxcdv1.MTLS{
+			Enabled:             true,
+			ComponentIDTemplate: "spiffe://example.org/fluxcd/{component}",
+		},
+	})
+
+	const operatorID = "spiffe://example.org/fluxcd/flux-flux-operator"
+	result := buildSPIFFEWithOptions(t, instance, func(o *Options) {
+		o.OperatorSPIFFEID = operatorID
+	})
+
+	for _, name := range []string{fluxcdv1.FluxSourceController, fluxcdv1.FluxSourceWatcher} {
+		args := containerArgs(findObject(result.Objects, deploymentKind, name))
+		g.Expect(args).To(ContainElement("--authorized-artifact-client-spiffe-id="+operatorID), name)
+		g.Expect(args).NotTo(ContainElement(HaveSuffix("/fluxcd/flux-operator")), name)
+	}
+
+	notificationArgs := containerArgs(findObject(result.Objects, deploymentKind, fluxcdv1.FluxNotificationController))
+	g.Expect(notificationArgs).To(ContainElement("--authorized-notifier-spiffe-id=" + operatorID))
+	g.Expect(notificationArgs).NotTo(ContainElement(HaveSuffix("/fluxcd/flux-operator")))
+}
+
+func TestSPIFFE_MTLS_WithoutArtifactServers(t *testing.T) {
+	for _, components := range [][]string{
+		{fluxcdv1.FluxKustomizeController},
+		{fluxcdv1.FluxKustomizeController, fluxcdv1.FluxHelmController},
+	} {
+		t.Run(strings.Join(components, ","), func(t *testing.T) {
+			g := NewWithT(t)
+			instance := spiffeTestInstance(components, &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+				MTLS: &fluxcdv1.MTLS{
+					Enabled:             true,
+					ComponentIDTemplate: "spiffe://example.org/fluxcd/{component}",
+				},
+			})
+
+			result := buildSPIFFE(t, instance)
+
+			for _, name := range components {
+				deploy := findObject(result.Objects, deploymentKind, name)
+				g.Expect(deploy).NotTo(BeNil(), name)
+				g.Expect(containerArgs(deploy)).NotTo(ContainElement(ContainSubstring("--authorized-")), name)
+			}
+		})
+	}
+}
+
+func TestSPIFFE_MTLS_ExtraArtifactServersOnly(t *testing.T) {
+	g := NewWithT(t)
+	instance := spiffeTestInstance([]string{
+		fluxcdv1.FluxKustomizeController,
+	}, &fluxcdv1.SPIFFE{
+		WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+		MTLS: &fluxcdv1.MTLS{
+			Enabled:              true,
+			ComponentIDTemplate:  "spiffe://example.org/fluxcd/{component}",
+			ExtraArtifactServers: []string{"spiffe://example.org/fluxcd/external-source"},
+		},
+	})
+
+	result := buildSPIFFE(t, instance)
+
+	args := containerArgs(findObject(result.Objects, deploymentKind, fluxcdv1.FluxKustomizeController))
+	g.Expect(args).To(ContainElement("--authorized-artifact-server-spiffe-id=spiffe://example.org/fluxcd/external-source"))
+	g.Expect(args).NotTo(ContainElement(ContainSubstring("source-controller")))
+}
+
 func TestSPIFFE_BrokerAPI(t *testing.T) {
 	g := NewWithT(t)
 	instance := spiffeTestInstance(nil, &fluxcdv1.SPIFFE{
@@ -331,6 +409,13 @@ func spiffeTestInstance(components []string, spiffe *fluxcdv1.SPIFFE) *fluxcdv1.
 
 func buildSPIFFE(t *testing.T, instance *fluxcdv1.FluxInstance) *Result {
 	t.Helper()
+	return buildSPIFFEWithOptions(t, instance, nil)
+}
+
+// buildSPIFFEWithOptions builds the instance after applying setOptions
+// to the builder options.
+func buildSPIFFEWithOptions(t *testing.T, instance *fluxcdv1.FluxInstance, setOptions func(*Options)) *Result {
+	t.Helper()
 	g := NewWithT(t)
 
 	options := MakeDefaultOptions()
@@ -341,6 +426,10 @@ func buildSPIFFE(t *testing.T, instance *fluxcdv1.FluxInstance) *Result {
 	if instance.Spec.Sharding != nil {
 		options.ShardingKey = instance.Spec.Sharding.Key
 		options.Shards = instance.Spec.Sharding.Shards
+	}
+
+	if setOptions != nil {
+		setOptions(&options)
 	}
 
 	if err := options.ValidateAndApplySPIFFEConfig(instance); err != nil {

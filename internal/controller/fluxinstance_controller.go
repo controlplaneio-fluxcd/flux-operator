@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -377,6 +378,15 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 		return nil, err
 	}
 
+	if r.SPIFFESource != nil && obj.Spec.SPIFFE != nil &&
+		obj.Spec.SPIFFE.MTLS != nil && obj.Spec.SPIFFE.MTLS.Enabled {
+		svid, err := r.SPIFFESource.GetX509SVID()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get the operator SPIFFE X.509-SVID: %w", err)
+		}
+		options.OperatorSPIFFEID = svid.ID.String()
+	}
+
 	if err := options.ValidateAndApplySPIFFEConfig(obj); err != nil {
 		return nil, err
 	}
@@ -636,6 +646,7 @@ func appliedSPIFFEStatus(obj *fluxcdv1.FluxInstance) *fluxcdv1.SPIFFEStatus {
 	mtls := &fluxcdv1.MTLSStatus{Enabled: obj.Spec.SPIFFE.MTLS.Enabled}
 	if mtls.Enabled {
 		mtls.ComponentIDTemplate = obj.Spec.SPIFFE.MTLS.ComponentIDTemplate
+		mtls.ExtraArtifactServers = slices.Clone(obj.Spec.SPIFFE.MTLS.ExtraArtifactServers)
 	}
 	return &fluxcdv1.SPIFFEStatus{MTLS: mtls}
 }
