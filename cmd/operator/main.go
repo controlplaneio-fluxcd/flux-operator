@@ -4,7 +4,9 @@
 package main
 
 import (
+	"context"
 	"crypto/fips140"
+	"crypto/tls"
 	"errors"
 	"os"
 	"strconv"
@@ -22,7 +24,10 @@ import (
 	"github.com/fluxcd/pkg/runtime/logger"
 	"github.com/fluxcd/pkg/runtime/pprof"
 	"github.com/fluxcd/pkg/runtime/probes"
+	fluxspiffe "github.com/fluxcd/pkg/spiffe"
+	spiffebroker "github.com/fluxcd/pkg/spiffe/broker"
 	flag "github.com/spf13/pflag"
+	"github.com/spiffe/go-spiffe/v2/workloadapi"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -38,6 +43,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/builder"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/controller"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/entitlement"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
@@ -67,13 +73,18 @@ func main() {
 	const (
 		controllerName                              = "flux-operator"
 		defaultServiceAccountEnvKey                 = "DEFAULT_SERVICE_ACCOUNT"
-		defaultWorkloadIdentityServiceAccountEnvKey = "DEFAULT_WORKLOAD_IDENTITY_SERVICE_ACCOUNT"
+		defaultObjectIdentityServiceAccountEnvKey   = "DEFAULT_OBJECT_IDENTITY_SERVICE_ACCOUNT"
+		defaultWorkloadIdentityServiceAccountEnvKey = "DEFAULT_WORKLOAD_IDENTITY_SERVICE_ACCOUNT" // legacy alias
 		overrideManagersEnvKey                      = "OVERRIDE_MANAGERS"
 		reportingIntervalEnvKey                     = "REPORTING_INTERVAL"
 		runtimeNamespaceEnvKey                      = "RUNTIME_NAMESPACE"
 		webServerPortEnvKey                         = "WEB_SERVER_PORT"
 		webConfigSecretNameEnvKey                   = "WEB_CONFIG_SECRET_NAME"
+		spiffeBrokerEndpointEnvKey                  = "SPIFFE_BROKER_ENDPOINT"
+		spiffeBrokerIDsEnvKey                       = "SPIFFE_BROKER_IDS"
+		authorizedWebUIClientsEnvKey                = "AUTHORIZED_WEB_UI_CLIENT_SPIFFE_IDS"
 		tokenCacheDefaultMaxSize                    = 100
+		spiffeSourceTimeout                         = 30 * time.Second
 	)
 
 	var (
@@ -89,13 +100,17 @@ func main() {
 		intervalJitterOptions                 jitter.IntervalOptions
 		storagePath                           string
 		defaultServiceAccount                 string
-		defaultWorkloadIdentityServiceAccount string
+		defaultObjectIdentityServiceAccount   string
+		defaultWorkloadIdentityServiceAccount string // legacy alias
 		overrideFieldManagers                 []string
 		watchOptions                          runtimeCtrl.WatchOptions
 		webServerPort                         int
 		webServerOnly                         bool
 		webConfigFile                         string
 		webConfigSecretName                   string
+		spiffeBrokerEndpoint                  string
+		spiffeBrokerIDs                       []string
+		authorizedWebUIClients                []string
 	)
 
 	flag.IntVar(&concurrent, "concurrent", 10,
@@ -112,8 +127,10 @@ func main() {
 		"The local storage path.")
 	flag.StringVar(&defaultServiceAccount, "default-service-account", "",
 		"Default service account used for impersonation.")
+	flag.StringVar(&defaultObjectIdentityServiceAccount, "default-object-identity-service-account", "",
+		"Default service account to use for object identity when not specified in resources.")
 	flag.StringVar(&defaultWorkloadIdentityServiceAccount, "default-workload-identity-service-account", "",
-		"Default service account to use for workload identity when not specified in resources.")
+		"Legacy alias for --default-object-identity-service-account.")
 	flag.StringArrayVar(&overrideFieldManagers, "override-manager", []string{},
 		"Field manager disallowed to perform changes on managed resources.")
 	flag.CommandLine.StringVar(&watchOptions.ConfigsLabelSelector, "watch-configs-label-selector", meta.LabelKeyWatch+"="+meta.LabelValueWatchEnabled,
@@ -126,6 +143,12 @@ func main() {
 		"The path to the configuration file for the web server.")
 	flag.StringVar(&webConfigSecretName, "web-config-secret-name", "",
 		"The name of the Kubernetes Secret containing the web server configuration.")
+	flag.StringVar(&spiffeBrokerEndpoint, fluxspiffe.ControllerFlagSPIFFEBrokerEndpoint, "",
+		"The SPIFFE Broker API endpoint.")
+	flag.StringArrayVar(&spiffeBrokerIDs, fluxspiffe.ControllerFlagSPIFFEBrokerID, []string{},
+		"SPIFFE ID or prefix of the SPIFFE Broker API endpoint. Can be specified multiple times.")
+	flag.StringArrayVar(&authorizedWebUIClients, "authorized-web-ui-client-spiffe-id", []string{},
+		"SPIFFE ID or prefix of an authorized web UI client. Can be specified multiple times.")
 
 	tokenCacheOptions.BindFlags(flag.CommandLine, tokenCacheDefaultMaxSize)
 	logOptions.BindFlags(flag.CommandLine)
@@ -172,11 +195,38 @@ func main() {
 	if s := os.Getenv(defaultServiceAccountEnvKey); s != "" {
 		defaultServiceAccount = s
 	}
-	if s := os.Getenv(defaultWorkloadIdentityServiceAccountEnvKey); s != "" {
-		defaultWorkloadIdentityServiceAccount = s
+
+	// Resolve the default object identity ServiceAccount, preferring the new
+	// flag and environment variable over their legacy aliases.
+	objectIdentityFlagSet := flag.CommandLine.Changed("default-object-identity-service-account")
+	workloadIdentityFlagSet := flag.CommandLine.Changed("default-workload-identity-service-account")
+	objectIdentityEnv := os.Getenv(defaultObjectIdentityServiceAccountEnvKey)
+	workloadIdentityEnv := os.Getenv(defaultWorkloadIdentityServiceAccountEnvKey)
+	switch {
+	case objectIdentityEnv != "":
+		defaultObjectIdentityServiceAccount = objectIdentityEnv
+	case objectIdentityFlagSet:
+		// Keep the value set by the new flag.
+	case workloadIdentityEnv != "":
+		defaultObjectIdentityServiceAccount = workloadIdentityEnv
+	case workloadIdentityFlagSet:
+		defaultObjectIdentityServiceAccount = defaultWorkloadIdentityServiceAccount
 	}
+	if workloadIdentityFlagSet || workloadIdentityEnv != "" {
+		setupLog.Info(builder.DefaultWorkloadIdentityServiceAccountLegacyWarning)
+	}
+
 	if s := os.Getenv(overrideManagersEnvKey); s != "" {
 		overrideFieldManagers = strings.Split(s, ",")
+	}
+	if s := os.Getenv(spiffeBrokerEndpointEnvKey); s != "" {
+		spiffeBrokerEndpoint = s
+	}
+	if s := os.Getenv(spiffeBrokerIDsEnvKey); s != "" {
+		spiffeBrokerIDs = splitCommaSeparated(s)
+	}
+	if s := os.Getenv(authorizedWebUIClientsEnvKey); s != "" {
+		authorizedWebUIClients = splitCommaSeparated(s)
 	}
 
 	// Allow the reporting interval to be set by an environment variable.
@@ -201,6 +251,78 @@ func main() {
 	}
 
 	ctx := ctrl.SetupSignalHandler()
+
+	// Initialize the SPIFFE Workload API client when the go-spiffe endpoint
+	// is configured. The client is shared by the notifier, the web server and
+	// the ResourceSetInputProvider controller.
+	var spiffeSource *workloadapi.X509Source
+	if os.Getenv(workloadapi.SocketEnv) != "" {
+		sourceCtx, cancel := context.WithTimeout(ctx, spiffeSourceTimeout)
+		source, err := workloadapi.NewX509Source(sourceCtx)
+		cancel()
+		if err != nil {
+			setupLog.Error(err, "failed to initialize SPIFFE Workload API source")
+			os.Exit(1)
+		}
+		spiffeSource = source
+		defer func() {
+			if err := spiffeSource.Close(); err != nil {
+				setupLog.Error(err, "failed to close SPIFFE Workload API source")
+			}
+		}()
+	}
+	var spiffeTLSSource fluxspiffe.TLSSource
+	if spiffeSource != nil {
+		spiffeTLSSource = spiffeSource
+	}
+
+	// Build the TLS configuration for the web UI when authorized client
+	// identities are configured. Setting at least one client ID makes the
+	// web server require SPIFFE mTLS from Ingress or Gateway proxies.
+	var webUITLSConfig *tls.Config
+	if len(authorizedWebUIClients) > 0 {
+		if spiffeSource == nil {
+			setupLog.Error(errors.New("authorized web UI clients require a SPIFFE Workload API source"),
+				"invalid web UI SPIFFE configuration")
+			os.Exit(1)
+		}
+		tlsConfig, err := fluxspiffe.BuildTLSConfig(spiffeSource, authorizedWebUIClients...)
+		if err != nil {
+			setupLog.Error(err, "failed to initialize web UI SPIFFE TLS configuration")
+			os.Exit(1)
+		}
+		webUITLSConfig = tlsConfig
+	}
+
+	// Initialize the SPIFFE Broker API client for the ResourceSetInputProvider
+	// controller when the endpoint and IDs are configured. The web server in
+	// standalone mode only needs the Workload API.
+	var spiffeBroker spiffebroker.Interface
+	if !webServerOnly && (spiffeBrokerEndpoint != "" || len(spiffeBrokerIDs) > 0) {
+		switch {
+		case spiffeBrokerEndpoint == "" || len(spiffeBrokerIDs) == 0:
+			setupLog.Error(errors.New("SPIFFE Broker API endpoint and IDs must be set together"),
+				"invalid SPIFFE Broker API configuration")
+			os.Exit(1)
+		case spiffeSource == nil:
+			setupLog.Error(errors.New("SPIFFE Broker API requires a SPIFFE Workload API source"),
+				"invalid SPIFFE Broker API configuration")
+			os.Exit(1)
+		default:
+			brokerClient, err := spiffebroker.New(spiffeBrokerEndpoint, spiffeBrokerIDs, spiffeSource)
+			if err != nil {
+				setupLog.Error(err, "failed to initialize SPIFFE Broker API client")
+				os.Exit(1)
+			}
+			spiffeBroker = brokerClient
+			defer func() {
+				if err := brokerClient.Close(); err != nil {
+					setupLog.Error(err, "failed to close SPIFFE Broker API client")
+				}
+			}()
+		}
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
@@ -301,6 +423,7 @@ func main() {
 			Client:                mgr.GetClient(),
 			Scheme:                mgr.GetScheme(),
 			ClusterReader:         clusterReader,
+			SPIFFESource:          spiffeTLSSource,
 			StoragePath:           storagePath,
 			StatusManager:         controllerName,
 			OverrideFieldManagers: overrideFieldManagers,
@@ -346,6 +469,7 @@ func main() {
 			APIReader:             mgr.GetAPIReader(),
 			Scheme:                mgr.GetScheme(),
 			ClusterReader:         clusterReader,
+			SPIFFESource:          spiffeTLSSource,
 			StatusManager:         controllerName,
 			EventRecorder:         mgr.GetEventRecorderFor(controllerName),
 			DefaultServiceAccount: defaultServiceAccount,
@@ -361,14 +485,16 @@ func main() {
 		}
 
 		if err = (&controller.ResourceSetInputProviderReconciler{
-			Client:                                mgr.GetClient(),
-			Scheme:                                mgr.GetScheme(),
-			StatusManager:                         controllerName,
-			EventRecorder:                         mgr.GetEventRecorderFor(controllerName),
-			DefaultServiceAccount:                 defaultServiceAccount,
-			DefaultWorkloadIdentityServiceAccount: defaultWorkloadIdentityServiceAccount,
-			TokenCache:                            tokenCache,
-			Version:                               VERSION,
+			Client:                              mgr.GetClient(),
+			Scheme:                              mgr.GetScheme(),
+			StatusManager:                       controllerName,
+			EventRecorder:                       mgr.GetEventRecorderFor(controllerName),
+			DefaultServiceAccount:               defaultServiceAccount,
+			DefaultObjectIdentityServiceAccount: defaultObjectIdentityServiceAccount,
+			SPIFFESource:                        spiffeTLSSource,
+			SPIFFEBroker:                        spiffeBroker,
+			TokenCache:                          tokenCache,
+			Version:                             VERSION,
 		}).SetupWithManager(mgr,
 			controller.ResourceSetInputProviderReconcilerOptions{
 				RateLimiter: runtimeCtrl.GetRateLimiter(rateLimiterOptions),
@@ -455,7 +581,9 @@ func main() {
 				controllerName,
 				runtimeNamespace,
 				gracefulShutdownTimeout,
-				webServerPort)
+				webServerPort,
+				web.WithSPIFFESource(spiffeTLSSource),
+				web.WithWebUITLSConfig(webUITLSConfig))
 		}()
 
 		// Defer graceful shutdown. Will run after the manager stops.
@@ -498,4 +626,17 @@ func main() {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
+}
+
+// splitCommaSeparated splits a comma-separated list into non-empty,
+// whitespace-trimmed values.
+func splitCommaSeparated(value string) []string {
+	parts := strings.Split(value, ",")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if v := strings.TrimSpace(part); v != "" {
+			result = append(result, v)
+		}
+	}
+	return result
 }

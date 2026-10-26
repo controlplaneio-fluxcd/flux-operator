@@ -22,6 +22,7 @@ const (
 
 // FluxInstanceSpec defines the desired state of FluxInstance
 // +kubebuilder:validation:XValidation:rule="!has(self.sharding) || !has(self.sharding.storage) || self.sharding.storage != 'persistent' || has(self.storage)",message=".spec.storage must be set when .spec.sharding.storage is 'persistent'"
+// +kubebuilder:validation:XValidation:rule="!has(self.cluster) || !has(self.cluster.multitenantObjectIdentity) || !self.cluster.multitenantObjectIdentity || (has(self.cluster.objectIdentityRBAC) && self.cluster.objectIdentityRBAC) || (has(self.cluster.objectLevelWorkloadIdentity) && self.cluster.objectLevelWorkloadIdentity) || (has(self.spiffe) && has(self.spiffe.brokerAPI))",message=".spec.cluster.objectIdentityRBAC or .spec.spiffe.brokerAPI must be set when .spec.cluster.multitenantObjectIdentity is set to true"
 type FluxInstanceSpec struct {
 	// Distribution specifies the version and container registry to pull images from.
 	// +required
@@ -45,6 +46,16 @@ type FluxInstanceSpec struct {
 	// Cluster holds the specification of the Kubernetes cluster.
 	// +optional
 	Cluster *Cluster `json:"cluster,omitempty"`
+
+	// SPIFFE holds the configuration for the SPIFFE integration.
+	// When set, the operator configures the Flux controllers to use
+	// the SPIFFE Workload API and optionally enables object identity
+	// and mTLS between the controllers.
+	// The flux-operator pod must also be configured with the same Workload API
+	// and, when used, Broker API settings, but does not need the inter-controller
+	// flags.
+	// +optional
+	SPIFFE *SPIFFE `json:"spiffe,omitempty"`
 
 	// Sharding holds the specification of the sharding configuration.
 	// +optional
@@ -140,9 +151,9 @@ type ComponentImage struct {
 }
 
 // Cluster is the specification for the Kubernetes cluster.
-// +kubebuilder:validation:XValidation:rule="!(has(self.objectLevelWorkloadIdentity) && has(self.objectIdentityRBAC))", message=".objectLevelWorkloadIdentity and .objectIdentityRBAC are mutually exclusive and equivalent, set only .objectIdentityRBAC"
-// +kubebuilder:validation:XValidation:rule="!(has(self.multitenantWorkloadIdentity) && self.multitenantWorkloadIdentity && has(self.multitenantObjectIdentity) && self.multitenantObjectIdentity)", message=".multitenantWorkloadIdentity and .multitenantObjectIdentity are mutually exclusive and equivalent, set only .multitenantObjectIdentity"
-// +kubebuilder:validation:XValidation:rule="(has(self.objectLevelWorkloadIdentity) && self.objectLevelWorkloadIdentity) || (has(self.objectIdentityRBAC) && self.objectIdentityRBAC) || (!has(self.multitenantWorkloadIdentity) || !self.multitenantWorkloadIdentity) && (!has(self.multitenantObjectIdentity) || !self.multitenantObjectIdentity)", message=".objectIdentityRBAC must be set to true when .multitenantObjectIdentity is set to true"
+// +kubebuilder:validation:XValidation:rule="!(has(self.objectLevelWorkloadIdentity) && has(self.objectIdentityRBAC))", message="cannot set .objectIdentityRBAC together with a legacy object identity field"
+// +kubebuilder:validation:XValidation:rule="!(has(self.multitenantWorkloadIdentity) && self.multitenantWorkloadIdentity && has(self.multitenantObjectIdentity) && self.multitenantObjectIdentity)", message="cannot set .multitenantObjectIdentity together with a legacy multitenant object identity field"
+// +kubebuilder:validation:XValidation:rule="(has(self.objectLevelWorkloadIdentity) && self.objectLevelWorkloadIdentity) || (has(self.objectIdentityRBAC) && self.objectIdentityRBAC) || (!has(self.multitenantWorkloadIdentity) || !self.multitenantWorkloadIdentity)", message=".objectIdentityRBAC must be set to true when multitenant workload identity is enabled"
 type Cluster struct {
 	// Domain is the cluster domain used for generating the FQDN of services.
 	// Defaults to 'cluster.local'.
@@ -235,6 +246,139 @@ type Cluster struct {
 	// +kubebuilder:validation:Enum:=small;medium;large
 	// +optional
 	Size string `json:"size,omitempty"`
+}
+
+// SPIFFE holds the configuration for the SPIFFE integration.
+type SPIFFE struct {
+	// WorkloadAPI holds the configuration for the SPIFFE Workload API.
+	// It is required for enabling any of the SPIFFE features and is used
+	// to render the go-spiffe environment variable and the SPIFFE CSI volume.
+	// +required
+	WorkloadAPI WorkloadAPI `json:"workloadAPI"`
+
+	// BrokerAPI holds the configuration for the SPIFFE Broker API.
+	// When set, enables the object-level SPIFFE features.
+	// +optional
+	BrokerAPI *BrokerAPI `json:"brokerAPI,omitempty"`
+
+	// MTLS holds the configuration for mTLS between the Flux controllers.
+	// The flux-operator reads the controller SPIFFE IDs from .status.spiffe.
+	// +optional
+	MTLS *MTLS `json:"mtls,omitempty"`
+}
+
+// WorkloadAPI holds the configuration for the SPIFFE Workload API.
+// +kubebuilder:validation:XValidation:rule="!has(self.csiDriver) || ((self.endpoint.startsWith('unix:///spiffe-workload-api/') || self.endpoint.startsWith('unix:/spiffe-workload-api/')) && !self.endpoint.matches('(^|/)[.][.](/|$)'))",message="endpoint must be a unix socket under /spiffe-workload-api/ without '..' segments when csiDriver is set, as the CSI volume is mounted at /spiffe-workload-api"
+type WorkloadAPI struct {
+	// Endpoint is the address of the SPIFFE Workload API endpoint,
+	// in the form 'unix:///<absolute path>', 'unix:/<absolute path>'
+	// or 'tcp://<ip>:<port>',
+	// e.g. 'unix:///spiffe-workload-api/agent.sock'.
+	// The flux-operator pod must be configured with the same endpoint
+	// through the SPIFFE_ENDPOINT_SOCKET environment variable.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=1024
+	// +kubebuilder:validation:Pattern="^(?:unix:(?:///[!$&->@-~]+|/[!$&-.0->@-~][!$&->@-~]*)|tcp://(?:[0-9]{1,3}(?:\\.[0-9]{1,3}){3}|\\[[0-9a-fA-F:.]+\\]):[0-9]{1,5})$"
+	// +required
+	Endpoint string `json:"endpoint"`
+
+	// CSIDriver is the name of the SPIFFE CSI driver used to mount
+	// the Workload API socket into the Flux controller pods.
+	// When set, the operator mounts the CSI volume at /spiffe-workload-api
+	// and the endpoint must be a unix socket under that path.
+	// When omitted, no CSI volume is configured.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern="^[a-zA-Z0-9](?:[-a-zA-Z0-9]*[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[-a-zA-Z0-9]*[a-zA-Z0-9])?)*$"
+	// +optional
+	CSIDriver string `json:"csiDriver,omitempty"`
+}
+
+// BrokerAPI holds the configuration for the SPIFFE Broker API.
+type BrokerAPI struct {
+	// Endpoint is the address of the SPIFFE Broker API endpoint,
+	// e.g. 'dns:///spiffe-broker.example.com:443'.
+	// The flux-operator pod accepts the same --spiffe-broker-endpoint flag
+	// as the Flux controllers. For OLM installations, the endpoint can be
+	// set with the SPIFFE_BROKER_ENDPOINT environment variable.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=1024
+	// +kubebuilder:validation:Pattern="^[!-~]+$"
+	// +required
+	Endpoint string `json:"endpoint"`
+
+	// IDs is the list of SPIFFE IDs or SPIFFE ID prefixes authorized
+	// for the SPIFFE Broker API endpoint. SPIFFE IDs ending with a slash
+	// are treated as prefixes.
+	// The flux-operator pod accepts the same repeatable --spiffe-broker-id
+	// flag as the Flux controllers. For OLM installations, the IDs can be
+	// set with the SPIFFE_BROKER_IDS environment variable as a comma-separated
+	// list.
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=64
+	// +kubebuilder:validation:items:MaxLength=2048
+	// +kubebuilder:validation:items:Pattern="^(?:spiffe://[a-z0-9._-]{1,255}|spiffe://[a-z0-9._-]{1,255}(?:/(?:[a-zA-Z0-9_-]|[.][a-zA-Z0-9_-])[a-zA-Z0-9._-]*)+(?:/)?)$"
+	// +required
+	IDs []string `json:"ids"`
+}
+
+// MTLS holds the configuration for mTLS between the Flux controllers.
+type MTLS struct {
+	// Enabled enables mTLS between the Flux controllers.
+	// +required
+	Enabled bool `json:"enabled"`
+
+	// ComponentIDTemplate is the SPIFFE ID template for the Flux controllers.
+	// The '{component}' placeholder is replaced with the name of each
+	// installed component. A trailing slash indicates a SPIFFE ID prefix.
+	// The flux-operator ID is the SPIFFE ID of the operator's X.509-SVID,
+	// or this template with 'flux-operator' when the operator has no
+	// Workload API source.
+	// The flux-operator ID is always added to notification-controller as an
+	// authorized notifier, and to source-controller and source-watcher as an
+	// authorized artifact client for the Web UI artifact downloads.
+	// For a standalone Web UI, use ExtraArtifactClients and ExtraNotifiers.
+	// +kubebuilder:validation:MaxLength=2048
+	// +kubebuilder:validation:Pattern="^spiffe://[a-z0-9._-]{1,255}(?:/(?:[a-zA-Z0-9_-]|[.][a-zA-Z0-9_-]|[{]component[}])[a-zA-Z0-9._-]*(?:[{]component[}][a-zA-Z0-9._-]*)*)+(?:/)?$"
+	// +kubebuilder:validation:XValidation:rule="self.contains('{component}')",message="componentIDTemplate must contain the '{component}' placeholder"
+	// +required
+	ComponentIDTemplate string `json:"componentIDTemplate"`
+
+	// Receivers is the list of SPIFFE IDs of external Ingress or Gateway
+	// controllers authorized to send webhook requests to notification-controller.
+	// Setting at least one ID makes the receiver accept only SPIFFE mTLS clients.
+	// +kubebuilder:validation:MaxItems=64
+	// +kubebuilder:validation:items:MaxLength=2048
+	// +kubebuilder:validation:items:Pattern="^(?:spiffe://[a-z0-9._-]{1,255}|spiffe://[a-z0-9._-]{1,255}(?:/(?:[a-zA-Z0-9_-]|[.][a-zA-Z0-9_-])[a-zA-Z0-9._-]*)+(?:/)?)$"
+	// +optional
+	Receivers []string `json:"receivers,omitempty"`
+
+	// ExtraArtifactClients is a list of additional SPIFFE IDs added to
+	// source-controller and source-watcher as authorized artifact clients,
+	// e.g. the standalone Web UI or the Flux MCP Server.
+	// +kubebuilder:validation:MaxItems=64
+	// +kubebuilder:validation:items:MaxLength=2048
+	// +kubebuilder:validation:items:Pattern="^(?:spiffe://[a-z0-9._-]{1,255}|spiffe://[a-z0-9._-]{1,255}(?:/(?:[a-zA-Z0-9_-]|[.][a-zA-Z0-9_-])[a-zA-Z0-9._-]*)+(?:/)?)$"
+	// +optional
+	ExtraArtifactClients []string `json:"extraArtifactClients,omitempty"`
+
+	// ExtraArtifactServers is a list of additional SPIFFE IDs added to
+	// kustomize-controller, helm-controller and source-watcher as authorized
+	// artifact servers, e.g. an external source controller.
+	// +kubebuilder:validation:MaxItems=64
+	// +kubebuilder:validation:items:MaxLength=2048
+	// +kubebuilder:validation:items:Pattern="^(?:spiffe://[a-z0-9._-]{1,255}|spiffe://[a-z0-9._-]{1,255}(?:/(?:[a-zA-Z0-9_-]|[.][a-zA-Z0-9_-])[a-zA-Z0-9._-]*)+(?:/)?)$"
+	// +optional
+	ExtraArtifactServers []string `json:"extraArtifactServers,omitempty"`
+
+	// ExtraNotifiers is a list of additional SPIFFE IDs added to
+	// notification-controller as authorized notifiers, e.g. the standalone
+	// Web UI or the Flux MCP Server.
+	// +kubebuilder:validation:MaxItems=64
+	// +kubebuilder:validation:items:MaxLength=2048
+	// +kubebuilder:validation:items:Pattern="^(?:spiffe://[a-z0-9._-]{1,255}|spiffe://[a-z0-9._-]{1,255}(?:/(?:[a-zA-Z0-9_-]|[.][a-zA-Z0-9_-])[a-zA-Z0-9._-]*)+(?:/)?)$"
+	// +optional
+	ExtraNotifiers []string `json:"extraNotifiers,omitempty"`
 }
 
 type Sharding struct {
@@ -384,9 +528,36 @@ type FluxInstanceStatus struct {
 	// +optional
 	Inventory *ResourceInventory `json:"inventory,omitempty"`
 
+	// SPIFFE holds the SPIFFE settings of the last applied distribution.
+	// +optional
+	SPIFFE *SPIFFEStatus `json:"spiffe,omitempty"`
+
 	// History contains the reconciliation history of the FluxInstance
 	// as a list of snapshots ordered by the last reconciled time.
 	History History `json:"history,omitempty"`
+}
+
+// SPIFFEStatus holds the SPIFFE settings of the last applied distribution.
+type SPIFFEStatus struct {
+	// MTLS holds the applied mTLS settings.
+	// +optional
+	MTLS *MTLSStatus `json:"mtls,omitempty"`
+}
+
+// MTLSStatus holds the applied mTLS settings.
+type MTLSStatus struct {
+	// Enabled is true when the Flux controllers were deployed with mTLS.
+	// +required
+	Enabled bool `json:"enabled"`
+
+	// ComponentIDTemplate is the SPIFFE ID template of the Flux controllers.
+	// +optional
+	ComponentIDTemplate string `json:"componentIDTemplate,omitempty"`
+
+	// ExtraArtifactServers is the list of additional SPIFFE IDs
+	// authorized as artifact servers.
+	// +optional
+	ExtraArtifactServers []string `json:"extraArtifactServers,omitempty"`
 }
 
 // GetDistribution returns the distribution specification with defaults.

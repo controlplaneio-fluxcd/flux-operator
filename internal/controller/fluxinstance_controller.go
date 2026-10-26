@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/patch"
+	fluxspiffe "github.com/fluxcd/pkg/spiffe"
 	"github.com/fluxcd/pkg/ssa"
 	"github.com/fluxcd/pkg/ssa/normalize"
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
@@ -51,6 +53,7 @@ type FluxInstanceReconciler struct {
 
 	Scheme        *runtime.Scheme
 	ClusterReader engine.ClusterReaderFactory
+	SPIFFESource  fluxspiffe.TLSSource
 
 	StatusManager         string
 	StoragePath           string
@@ -375,7 +378,21 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 		return nil, err
 	}
 
-	if err := options.ValidateAndApplyWorkloadIdentityConfig(obj.GetCluster()); err != nil {
+	if r.SPIFFESource != nil && obj.Spec.SPIFFE != nil &&
+		obj.Spec.SPIFFE.MTLS != nil && obj.Spec.SPIFFE.MTLS.Enabled {
+		svid, err := r.SPIFFESource.GetX509SVID()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get the operator SPIFFE X.509-SVID: %w", err)
+		}
+		options.OperatorSPIFFEID = svid.ID.String()
+	}
+
+	if err := options.ValidateAndApplySPIFFEConfig(obj); err != nil {
+		return nil, err
+	}
+
+	objectIdentityViaSPIFFE := obj.Spec.SPIFFE != nil && obj.Spec.SPIFFE.BrokerAPI != nil
+	if err := options.ValidateAndApplyObjectIdentityConfig(obj.GetCluster(), objectIdentityViaSPIFFE); err != nil {
 		return nil, err
 	}
 
@@ -538,6 +555,10 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 		}
 	}
 
+	// Record the applied SPIFFE settings before the health checks: the
+	// controllers run with them even if an unrelated resource isn't ready.
+	obj.Status.SPIFFE = appliedSPIFFEStatus(obj)
+
 	// Detect stale resources which are subject to garbage collection.
 	staleObjects, err := inventory.Diff(oldInventory, newInventory)
 	if err != nil {
@@ -616,6 +637,20 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 	return nil
 }
 
+// appliedSPIFFEStatus returns the SPIFFE status of the distribution built
+// from the spec, or nil when mTLS is not configured.
+func appliedSPIFFEStatus(obj *fluxcdv1.FluxInstance) *fluxcdv1.SPIFFEStatus {
+	if obj.Spec.SPIFFE == nil || obj.Spec.SPIFFE.MTLS == nil {
+		return nil
+	}
+	mtls := &fluxcdv1.MTLSStatus{Enabled: obj.Spec.SPIFFE.MTLS.Enabled}
+	if mtls.Enabled {
+		mtls.ComponentIDTemplate = obj.Spec.SPIFFE.MTLS.ComponentIDTemplate
+		mtls.ExtraArtifactServers = slices.Clone(obj.Spec.SPIFFE.MTLS.ExtraArtifactServers)
+	}
+	return &fluxcdv1.SPIFFEStatus{MTLS: mtls}
+}
+
 // finalizeStatus updates the object status and conditions.
 func (r *FluxInstanceReconciler) finalizeStatus(ctx context.Context,
 	obj *fluxcdv1.FluxInstance,
@@ -689,6 +724,7 @@ func (r *FluxInstanceReconciler) notify(ctx context.Context, obj *fluxcdv1.FluxI
 		annotations[fluxcdv1.RevisionAnnotation] = obj.Status.LastAttemptedRevision
 	}
 	notifier.
-		New(ctx, r.EventRecorder, r.Scheme, notifier.WithFluxInstance(obj)).
+		New(ctx, r.EventRecorder, r.Scheme,
+			notifier.WithFluxInstance(obj), notifier.WithSPIFFESource(r.SPIFFESource)).
 		AnnotatedEventf(obj, nil, annotations, eventType, reason, action.String(), "%s", msg)
 }

@@ -440,9 +440,11 @@ as defaults, preventing tenants from sharing identities assigned to the Flux con
 
 Requirements:
 
-- Requires `objectIdentityRBAC: true`
+- Requires `objectIdentityRBAC: true` for object identity via Kubernetes
+  service account tokens, or `.spec.spiffe.brokerAPI` for object identity via
+  the SPIFFE Broker API
 - Available in Flux v2.7.0 and later
-- Designed for service providers supporting workload identity federation,
+- Designed for service providers supporting identity federation,
   like cloud providers and opensource projects.
 
 Example:
@@ -491,7 +493,7 @@ Use cases:
 - **Least privilege**: Preventing tenants from sharing identities assigned to the Flux controllers
 
 See the complete object identity documentation for CNCF Flux
-[here](https://fluxcd.io/flux/integrations/).
+[here](https://fluxcd.io/flux/integrations/object-identity/).
 
 #### Cluster network policy
 
@@ -502,6 +504,156 @@ to the Flux namespace from other namespaces. By default, network policy is enabl
 
 The `.spec.cluster.domain` field is optional and specifies the cluster internal domain name.
 By default, the domain is set to `cluster.local`.
+
+### SPIFFE configuration
+
+The `.spec.spiffe` field is optional and enables the
+[SPIFFE](https://spiffe.io/) integration for the Flux controllers.
+This feature requires Flux v2.10.0 or later.
+
+The configuration has the following sections:
+
+- `workloadAPI` (required when `.spec.spiffe` is set): Configures access to the
+  SPIFFE Workload API.
+- `brokerAPI` (optional): Enables object-level SPIFFE features.
+- `mtls` (optional): Enables mTLS between the Flux controllers.
+
+Example:
+
+```yaml
+spec:
+  spiffe:
+    workloadAPI:
+      endpoint: "unix:///spiffe-workload-api/agent.sock"
+      csiDriver: "csi.spiffe.io"
+    brokerAPI:
+      endpoint: "dns:///spiffe-broker.example.com:443"
+      ids:
+        - "spiffe://example.org/broker/"
+    mtls:
+      enabled: true
+      componentIDTemplate: "spiffe://example.org/fluxcd/{component}"
+      receivers:
+        - "spiffe://example.org/my-gateway"
+      extraArtifactClients:
+        - "spiffe://example.org/fluxcd/web-ui"
+      extraArtifactServers:
+        - "spiffe://example.org/fluxcd/my-source-controller"
+      extraNotifiers:
+        - "spiffe://example.org/fluxcd/web-ui"
+```
+
+#### Workload API configuration
+
+The `.spec.spiffe.workloadAPI` field is required when `.spec.spiffe` is set.
+The operator configures the installed Flux controllers with the Workload API
+endpoint, for example through the `SPIFFE_ENDPOINT_SOCKET` environment variable.
+
+- `.endpoint` (required): The address of the SPIFFE Workload API endpoint,
+  in the form `unix:///<absolute path>`, `unix:/<absolute path>` or
+  `tcp://<ip>:<port>`, e.g. `unix:///spiffe-workload-api/agent.sock`. Unix
+  socket paths must be printable ASCII without spaces, `%`, `"`, `#` or `?`.
+- `.csiDriver` (optional): The name of the SPIFFE CSI driver used to mount
+  the Workload API socket into the Flux controller pods, e.g. `csi.spiffe.io`.
+  This field is opt-in. When set, the operator mounts the CSI volume at
+  `/spiffe-workload-api` and the endpoint must be a unix socket under that
+  path, without `..` segments, e.g.
+  `unix:///spiffe-workload-api/agent.sock`. When omitted, no CSI volume is
+  configured.
+
+When using the CSI driver, the SPIFFE CSI driver must be installed in the
+cluster before Flux is deployed.
+
+The flux-operator pod must also be configured with the same endpoint through
+the `SPIFFE_ENDPOINT_SOCKET` environment variable.
+
+#### Broker API configuration
+
+The `.spec.spiffe.brokerAPI` field is optional and enables the object-level
+SPIFFE features. When set, Flux objects configured with SPIFFE annotations
+acquire SVIDs for the object itself through the SPIFFE Broker API.
+
+- `.endpoint` (required): The gRPC target of the SPIFFE Broker API endpoint,
+  e.g. `dns:///spiffe-broker.example.com:443`. It must be printable ASCII
+  without spaces.
+- `.ids` (required): The list of SPIFFE IDs or SPIFFE ID prefixes authorized
+  for the Broker API endpoint. At least one ID is required.
+
+The flux-operator pod must be configured with the same endpoint and IDs using
+the same `--spiffe-broker-endpoint` and `--spiffe-broker-id` flags as the Flux
+controllers. For OLM installations, use the `SPIFFE_BROKER_ENDPOINT` and
+`SPIFFE_BROKER_IDS` environment variables instead. `SPIFFE_BROKER_IDS` is a
+comma-separated list of SPIFFE IDs or prefixes.
+
+The Broker API is not required for enabling mTLS between the Flux controllers.
+
+#### mTLS configuration
+
+The `.spec.spiffe.mtls` field is optional and configures SPIFFE mTLS for the
+communication between the Flux controllers.
+
+- `.enabled` (required): Set to `true` to enable mTLS between the controllers.
+- `.componentIDTemplate` (required): The SPIFFE ID template for the Flux
+  controllers. The `{component}` placeholder is replaced with the name of each
+  installed component. A trailing slash indicates a SPIFFE ID prefix.
+- `.receivers` (optional): The SPIFFE IDs of external Ingress or Gateway
+  controllers authorized to send webhook requests to the
+  `notification-controller` receiver. Setting at least one ID makes the
+  receiver accept only SPIFFE mTLS clients.
+- `.extraArtifactClients` (optional): Additional SPIFFE IDs added to
+  `source-controller` and `source-watcher` as authorized artifact clients.
+- `.extraArtifactServers` (optional): Additional SPIFFE IDs added to
+  `kustomize-controller`, `helm-controller` and `source-watcher` as authorized
+  artifact servers.
+- `.extraNotifiers` (optional): Additional SPIFFE IDs added to
+  `notification-controller` as authorized notifiers.
+
+The flux-operator is authorized with the SPIFFE ID of its own X.509-SVID. When
+the operator has no SPIFFE Workload API source, the ID is derived from
+`.componentIDTemplate` with `flux-operator` as the component name.
+
+The `flux-operator` SPIFFE ID is always added to the `notification-controller`
+authorized notifiers, used by the operator events and the Web UI audit events,
+and to the `source-controller` and `source-watcher` authorized artifact
+clients, used by the Web UI artifact downloads. For a standalone Web UI, add
+its SPIFFE ID to `.extraArtifactClients` and `.extraNotifiers`.
+
+The flux-operator pod does not need the `--authorized-*` inter-controller
+flags. It reads the Flux controller SPIFFE IDs from the
+[SPIFFE status](#spiffe-status) when downloading artifacts and sending events,
+so it uses mTLS only once the controllers are deployed with it. To require
+SPIFFE mTLS from Ingress or Gateway proxies that access the Web UI, use the
+operator's repeatable `--authorized-web-ui-client-spiffe-id` flag.
+
+##### SPIFFE ID syntax
+
+The `.spec.spiffe.brokerAPI.ids`, `.spec.spiffe.mtls.receivers`,
+`.spec.spiffe.mtls.extraArtifactClients`,
+`.spec.spiffe.mtls.extraArtifactServers` and
+`.spec.spiffe.mtls.extraNotifiers` fields accept exact SPIFFE IDs, trust
+domains and prefixes:
+
+- `spiffe://example.org` matches any SPIFFE ID in the `example.org` trust domain.
+- `spiffe://example.org/workload` is an exact SPIFFE ID.
+- `spiffe://example.org/workload/` is a SPIFFE ID prefix. A prefix must include
+  at least one path segment.
+- `spiffe://self` refers to the trust domain of the local X509-SVID.
+  `spiffe://self/<path>` and `spiffe://self/<path>/` are also supported.
+
+The `.spec.spiffe.mtls.componentIDTemplate` field uses the same syntax, with
+the `{component}` placeholder allowed in the path.
+
+Values must use a lowercase trust domain and valid path segments, are limited
+to 2048 bytes, and must not contain a query, fragment, port or user information.
+Trailing slashes are only valid for prefixes.
+
+The SPIFFE ID template must be based on the namespace and ServiceAccount
+assigned to each controller, not on pod labels. Shards reuse the main
+controller ServiceAccount and therefore the same SPIFFE ID, so no
+shard-specific entries are needed.
+
+Enabling `.spec.spiffe` with a distribution version older than v2.10.0 fails
+the FluxInstance reconciliation.
 
 ### Storage configuration
 
@@ -567,6 +719,11 @@ e.g.: `sharding.fluxcd.io/key: shard1`. Flux resources that reference each other
 use the same shard value, including `ImagePolicy` resources with their `ImageRepository`,
 `ImageUpdateAutomation` resources with their source `GitRepository`, and `ArtifactGenerator`
 resources with their source objects.
+
+When SPIFFE mTLS is enabled, shards reuse the ServiceAccount of the main
+controller and therefore share its SPIFFE identity. No shard-specific entries
+are needed in the authorized SPIFFE ID lists. The SPIRE ID template must be
+namespace and ServiceAccount based for this to hold.
 
 #### Sharding key
 
@@ -984,6 +1141,32 @@ Status:
     Name:        kustomize-controller
     Repository:  ghcr.io/fluxcd/kustomize-controller
     Tag:         v1.3.0
+```
+
+### SPIFFE status
+
+The `.status.spiffe.mtls` field holds the SPIFFE mTLS settings of the last
+applied distribution. It is updated when the apply succeeds, even if the
+health checks fail afterwards, and left unchanged when the build or apply
+fails. It is not set when `.spec.spiffe.mtls` is not configured.
+
+- `.enabled`: Whether the Flux controllers were deployed with mTLS.
+- `.componentIDTemplate`: The SPIFFE ID template of the Flux controllers,
+  set when mTLS is enabled.
+- `.extraArtifactServers`: The additional SPIFFE IDs authorized as artifact
+  servers, set when mTLS is enabled.
+
+The flux-operator and the Web UI read this field and `.status.components`
+to decide whether to send events and download artifacts over mTLS.
+
+Example:
+
+```yaml
+status:
+  spiffe:
+    mtls:
+      enabled: true
+      componentIDTemplate: spiffe://cluster.local/ns/flux-system/sa/{component}
 ```
 
 ### Inventory Status

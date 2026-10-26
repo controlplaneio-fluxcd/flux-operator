@@ -14,8 +14,8 @@ The following flags are available:
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--concurrent` | `10` | The number of concurrent resource reconciles |
+| `--default-object-identity-service-account` | | Default service account to use for object identity when not specified in resources |
 | `--default-service-account` | | Default service account used for impersonation |
-| `--default-workload-identity-service-account` | | Default service account to use for workload identity when not specified in resources |
 | `--enable-leader-election` | `true` | Enable leader election for controller manager |
 | `--health-addr` | `:8081` | The address the health endpoint binds to |
 | `--interval-jitter-percentage` | `5` | Percentage of jitter to apply to interval durations |
@@ -29,8 +29,11 @@ The following flags are available:
 | `--metrics-addr` | `:8080` | The address the metric endpoint binds to |
 | `--min-retry-delay` | `750ms` | The minimum amount of time for which an object being reconciled will have to wait before a retry |
 | `--override-manager` | | Field manager disallowed to perform changes on managed resources (repeatable) |
+| `--authorized-web-ui-client-spiffe-id` | | SPIFFE ID or prefix of an authorized web UI client (repeatable) |
 | `--reporting-interval` | `5m` | The interval at which the report is computed |
 | `--requeue-dependency` | `5s` | The interval at which failing dependencies are reevaluated |
+| `--spiffe-broker-endpoint` | | The SPIFFE Broker API endpoint |
+| `--spiffe-broker-id` | | SPIFFE ID or prefix of the Broker API endpoint (repeatable) |
 | `--storage-path` | `/data` | The local storage path |
 | `--token-cache-max-duration` | `1h` | The maximum duration a token is cached |
 | `--token-cache-max-size` | `100` | The maximum size of the cache in number of tokens |
@@ -41,7 +44,8 @@ The following flags are available:
 | `--web-server-port` | `9080` | The port for the web server to listen on (0 to disable) |
 
 The flags can be passed to the operator container using the
-[Helm chart](https://github.com/controlplaneio-fluxcd/charts/tree/main/charts/flux-operator) values `extraArgs`.
+[Helm chart](https://github.com/controlplaneio-fluxcd/charts/tree/main/charts/flux-operator)
+values `extraArgs`, and the environment variables using `extraEnvs`.
 
 ## Environment Variables
 
@@ -49,12 +53,27 @@ The following environment variables are available:
 
 | Env Var | Description |
 |---------|-------------|
+| `AUTHORIZED_WEB_UI_CLIENT_SPIFFE_IDS` | Comma-separated SPIFFE IDs or prefixes of authorized web UI clients |
+| `DEFAULT_OBJECT_IDENTITY_SERVICE_ACCOUNT` | Default service account for object identity |
 | `DEFAULT_SERVICE_ACCOUNT` | Default service account used for impersonation |
-| `DEFAULT_WORKLOAD_IDENTITY_SERVICE_ACCOUNT` | Default service account for workload identity |
 | `OVERRIDE_MANAGERS` | Comma-separated field managers disallowed to perform changes |
 | `REPORTING_INTERVAL` | The interval at which the report is computed |
+| `SPIFFE_BROKER_ENDPOINT` | The SPIFFE Broker API endpoint |
+| `SPIFFE_BROKER_IDS` | Comma-separated SPIFFE IDs or prefixes of the Broker API endpoint |
+| `SPIFFE_ENDPOINT_SOCKET` | The SPIFFE Workload API endpoint (standard go-spiffe variable) |
 | `WEB_SERVER_PORT` | The port for the web server |
 | `WEB_CONFIG_SECRET_NAME` | Secret name for web server configuration |
 
 The environment variables are intended for Operator Lifecycle Manager (OLM) installations
 and can be set in the `Subscription` manifest using the `config.env` field.
+The `SPIFFE_ENDPOINT_SOCKET` variable is also the standard go-spiffe configuration
+and is not specific to OLM.
+
+The SPIFFE flags and environment variables are only required when the FluxInstance
+uses the SPIFFE Workload API or Broker API, and must match the settings in the
+FluxInstance `.spec.spiffe` field. The operator does not use the Flux controllers'
+inter-controller `--authorized-*` flags.
+
+Setting `--authorized-web-ui-client-spiffe-id` or
+`AUTHORIZED_WEB_UI_CLIENT_SPIFFE_IDS` makes the web server require SPIFFE mTLS
+from the configured Ingress or Gateway proxies.

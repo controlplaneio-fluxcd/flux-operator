@@ -1040,7 +1040,7 @@ func TestResouceSetInputProviderReconciler_getAzureDevOpsToken(t *testing.T) {
 		res, err := r.getAzureDevOpsToken(ctx, nil, map[string][]byte{
 			"username": []byte("user"),
 			"password": []byte("pass"),
-		})
+		}, nil, nil)
 		g.Expect(err).NotTo(HaveOccurred())
 		g.Expect(res).To(Equal("pass"))
 	})
@@ -1070,7 +1070,7 @@ func TestResouceSetInputProviderReconciler_getAzureDevOpsToken(t *testing.T) {
 				URL:                "https://dev.azure.com/org/project/_git/repo",
 				ServiceAccountName: "test-sa",
 			},
-		}, nil)
+		}, nil, nil, nil)
 
 		// The Git URL must reach the auth package, otherwise the request is
 		// rejected before the ServiceAccount is used. The auth package fails
@@ -1082,7 +1082,7 @@ func TestResouceSetInputProviderReconciler_getAzureDevOpsToken(t *testing.T) {
 		g.Expect(res).To(BeEmpty())
 	})
 
-	t.Run("with controller-level workload identity", func(t *testing.T) {
+	t.Run("with workload identity", func(t *testing.T) {
 		g := NewWithT(t)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
@@ -1091,7 +1091,7 @@ func TestResouceSetInputProviderReconciler_getAzureDevOpsToken(t *testing.T) {
 				Type: "AzureDevOpsBranch",
 				URL:  "https://dev.azure.com/org/project/_git/repo",
 			},
-		}, nil)
+		}, nil, nil, nil)
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).NotTo(ContainSubstring("a Git repository URL is required"))
 		g.Expect(res).To(BeEmpty())
@@ -1104,7 +1104,7 @@ func TestResouceSetInputProviderReconciler_getAzureDevOpsToken(t *testing.T) {
 				Type: "AzureDevOpsBranch",
 				URL:  "https://dev.azure.com/\x7f",
 			},
-		}, nil)
+		}, nil, nil, nil)
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).To(ContainSubstring("failed to parse .spec.url"))
 		g.Expect(res).To(BeEmpty())

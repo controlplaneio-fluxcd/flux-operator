@@ -5,12 +5,21 @@ package web
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"errors"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	. "github.com/onsi/gomega"
+	"github.com/spiffe/go-spiffe/v2/bundle/x509bundle"
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
+	"github.com/spiffe/go-spiffe/v2/svid/x509svid"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -30,6 +39,200 @@ func TestArtifactHTTPClientRejectsRedirects(t *testing.T) {
 	g := NewWithT(t)
 
 	g.Expect(artifactHTTPClient.CheckRedirect(nil, nil)).To(Equal(http.ErrUseLastResponse))
+}
+
+func TestArtifactHTTPClientWithTLSKeepsBaseSettings(t *testing.T) {
+	g := NewWithT(t)
+
+	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS13}
+	httpClient := artifactHTTPClientWithTLS(tlsConfig)
+	g.Expect(httpClient).NotTo(BeIdenticalTo(artifactHTTPClient))
+	g.Expect(httpClient.Timeout).To(Equal(artifactHTTPClient.Timeout))
+	g.Expect(httpClient.CheckRedirect(nil, nil)).To(Equal(http.ErrUseLastResponse))
+
+	transport, ok := httpClient.Transport.(*http.Transport)
+	g.Expect(ok).To(BeTrue())
+	base := artifactHTTPClient.Transport.(*http.Transport)
+	g.Expect(transport).NotTo(BeIdenticalTo(base))
+	g.Expect(transport.TLSClientConfig).To(BeIdenticalTo(tlsConfig))
+	g.Expect(transport.DialContext).NotTo(BeNil())
+	g.Expect(transport.IdleConnTimeout).To(Equal(90 * time.Second))
+	g.Expect(transport.TLSHandshakeTimeout).To(Equal(base.TLSHandshakeTimeout))
+	g.Expect(transport.ResponseHeaderTimeout).To(Equal(base.ResponseHeaderTimeout))
+}
+
+func TestArtifactMTLSClientCache(t *testing.T) {
+	g := NewWithT(t)
+
+	var built [][]string
+	cache := &artifactMTLSClientCache{
+		buildClient: func(peers []string) (*http.Client, error) {
+			built = append(built, peers)
+			return artifactHTTPClientWithTLS(&tls.Config{MinVersion: tls.VersionTLS13}), nil
+		},
+	}
+
+	sourceID := "spiffe://cluster.local/ns/flux-system/sa/source-controller"
+	watcherID := "spiffe://cluster.local/ns/flux-system/sa/source-watcher"
+
+	first, err := cache.get(nil, []string{sourceID, watcherID})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Same peer set in a different order returns the cached client.
+	second, err := cache.get(nil, []string{watcherID, sourceID})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(second).To(BeIdenticalTo(first))
+	g.Expect(built).To(HaveLen(1))
+	g.Expect(built[0]).To(Equal([]string{sourceID, watcherID}))
+
+	// A different peer set builds a new client.
+	third, err := cache.get(nil, []string{sourceID})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(third).NotTo(BeIdenticalTo(first))
+	g.Expect(built).To(HaveLen(2))
+
+	fourth, err := cache.get(nil, []string{sourceID})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(fourth).To(BeIdenticalTo(third))
+	g.Expect(built).To(HaveLen(2))
+}
+
+// testTLSSource returns an SVID in a configurable trust domain.
+type testTLSSource struct {
+	trustDomain string
+	err         error
+}
+
+// GetX509SVID returns an SVID in the configured trust domain.
+func (s *testTLSSource) GetX509SVID() (*x509svid.SVID, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return &x509svid.SVID{ID: spiffeid.RequireFromPath(spiffeid.RequireTrustDomainFromString(s.trustDomain), "/flux-operator")}, nil
+}
+
+// GetX509BundleForTrustDomain is not used by the tests.
+func (s *testTLSSource) GetX509BundleForTrustDomain(spiffeid.TrustDomain) (*x509bundle.Bundle, error) {
+	return nil, errors.New("not implemented")
+}
+
+func TestArtifactMTLSClientCacheSelfTrustDomain(t *testing.T) {
+	g := NewWithT(t)
+
+	builds := 0
+	cache := &artifactMTLSClientCache{
+		buildClient: func([]string) (*http.Client, error) {
+			builds++
+			return artifactHTTPClientWithTLS(&tls.Config{MinVersion: tls.VersionTLS13}), nil
+		},
+	}
+	source := &testTLSSource{trustDomain: "cluster.local"}
+
+	selfPeers := []string{"spiffe://self/ns/flux-system/sa/source-controller"}
+	first, err := cache.get(source, selfPeers)
+	g.Expect(err).NotTo(HaveOccurred())
+	second, err := cache.get(source, selfPeers)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(second).To(BeIdenticalTo(first))
+	g.Expect(builds).To(Equal(1))
+
+	// A trust domain change builds a new client for self-form peers.
+	source.trustDomain = "example.org"
+	third, err := cache.get(source, selfPeers)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(third).NotTo(BeIdenticalTo(first))
+	g.Expect(builds).To(Equal(2))
+
+	// The SVID read error is returned for self-form peers.
+	source.err = errors.New("no SVID")
+	_, err = cache.get(source, selfPeers)
+	g.Expect(err).To(MatchError(ContainSubstring("no SVID")))
+	source.err = nil
+
+	// Explicit peers ignore the trust domain of the local SVID.
+	explicitPeers := []string{"spiffe://cluster.local/ns/flux-system/sa/source-controller"}
+	fourth, err := cache.get(source, explicitPeers)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(builds).To(Equal(3))
+	source.trustDomain = "cluster.local"
+	source.err = errors.New("no SVID")
+	fifth, err := cache.get(source, explicitPeers)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(fifth).To(BeIdenticalTo(fourth))
+	g.Expect(builds).To(Equal(3))
+}
+
+func TestArtifactMTLSClientCacheBuildError(t *testing.T) {
+	g := NewWithT(t)
+
+	cache := &artifactMTLSClientCache{
+		buildClient: func([]string) (*http.Client, error) {
+			return nil, io.ErrUnexpectedEOF
+		},
+	}
+
+	httpClient, err := cache.get(nil, []string{"spiffe://cluster.local/ns/flux-system/sa/source-controller"})
+	g.Expect(err).To(MatchError(io.ErrUnexpectedEOF))
+	g.Expect(httpClient).To(BeNil())
+	g.Expect(cache.client).To(BeNil())
+}
+
+func TestArtifactMTLSClientCacheReusesConnections(t *testing.T) {
+	g := NewWithT(t)
+
+	var newConns, closedConns atomic.Int32
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("artifact"))
+	}))
+	server.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+		switch state {
+		case http.StateNew:
+			newConns.Add(1)
+		case http.StateClosed:
+			closedConns.Add(1)
+		}
+	}
+	server.StartTLS()
+	defer server.Close()
+
+	roots := x509.NewCertPool()
+	roots.AddCert(server.Certificate())
+
+	// The base dialer rejects loopback, so dial the test server directly.
+	cache := &artifactMTLSClientCache{
+		buildClient: func([]string) (*http.Client, error) {
+			httpClient := artifactHTTPClientWithTLS(&tls.Config{
+				RootCAs:    roots,
+				ServerName: "example.com",
+				MinVersion: tls.VersionTLS12,
+			})
+			httpClient.Transport.(*http.Transport).DialContext = (&net.Dialer{}).DialContext
+			return httpClient, nil
+		},
+	}
+
+	peers := []string{"spiffe://cluster.local/ns/flux-system/sa/source-controller"}
+	download := func(peers []string) {
+		httpClient, err := cache.get(nil, peers)
+		g.Expect(err).NotTo(HaveOccurred())
+		resp, err := httpClient.Get(server.URL)
+		g.Expect(err).NotTo(HaveOccurred())
+		body, err := io.ReadAll(resp.Body)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(resp.Body.Close()).To(Succeed())
+		g.Expect(string(body)).To(Equal("artifact"))
+	}
+
+	for range 20 {
+		download(peers)
+	}
+
+	g.Expect(newConns.Load()).To(Equal(int32(1)))
+
+	// Changing the peer set closes the idle connections of the previous client.
+	download([]string{"spiffe://cluster.local/ns/flux-system/sa/source-watcher"})
+	g.Eventually(closedConns.Load, 5*time.Second, 50*time.Millisecond).Should(Equal(int32(1)))
+	g.Expect(newConns.Load()).To(Equal(int32(2)))
 }
 
 func TestArtifactDialContextRejectsLiteralIPHostnames(t *testing.T) {

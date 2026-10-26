@@ -31,11 +31,11 @@ spec:
     serverVersion: v1.33.0
     nodes: 5
   components:
-    - image: ghcr.io/fluxcd/helm-controller:v1.7.0@sha256:f413d99795ad2a5e85d6c215a8e9cfcad07fa6d6720b7bf13c5ab2cc8db6041b
+    - image: ghcr.io/fluxcd/helm-controller:v1.7.1@sha256:54526cc6ed1202d71d44c310676448065664f3255ad671d9a69ac26f904e617a
       name: helm-controller
       ready: true
       status: 'Current Deployment is available. Replicas: 1'
-    - image: ghcr.io/fluxcd/kustomize-controller:v1.10.0@sha256:7b6e1006a6ff5e34a0e2e9f33b73cbb01f74689bfb263872e10dcfb6d707be98
+    - image: ghcr.io/fluxcd/kustomize-controller:v1.10.1@sha256:37db29b25dae35b881a5e064acedb0cc954442da453a39eaa0eab7a90dbecc4e
       name: kustomize-controller
       ready: true
       status: 'Current Deployment is available. Replicas: 1'
@@ -43,7 +43,7 @@ spec:
       name: notification-controller
       ready: true
       status: 'Current Deployment is available. Replicas: 1'
-    - image: ghcr.io/fluxcd/source-controller:v1.10.0@sha256:df79f5cae810c4b63c2453712697f0c4ae4677d45e2b50bc4655417ee8701f4a
+    - image: ghcr.io/fluxcd/source-controller:v1.10.1@sha256:611b6bca3eae95bcff471414d1fb14a4ab83d7f14e609cccef2bd389c121f37e
       name: source-controller
       ready: true
       status: 'Current Deployment is available. Replicas: 1'
@@ -224,11 +224,11 @@ Example:
 ```yaml
 spec:
   components:
-    - image: ghcr.io/fluxcd/kustomize-controller:v1.10.0@sha256:7b6e1006a6ff5e34a0e2e9f33b73cbb01f74689bfb263872e10dcfb6d707be98
+    - image: ghcr.io/fluxcd/kustomize-controller:v1.10.1@sha256:37db29b25dae35b881a5e064acedb0cc954442da453a39eaa0eab7a90dbecc4e
       name: kustomize-controller
       ready: true
       status: 'Current Deployment is available. Replicas: 1'
-    - image: ghcr.io/fluxcd/source-controller:v1.10.0@sha256:df79f5cae810c4b63c2453712697f0c4ae4677d45e2b50bc4655417ee8701f4a
+    - image: ghcr.io/fluxcd/source-controller:v1.10.1@sha256:611b6bca3eae95bcff471414d1fb14a4ab83d7f14e609cccef2bd389c121f37e
       name: source-controller
       ready: true
       status: 'Current Deployment is available. Replicas: 1'
