@@ -268,18 +268,28 @@ type SPIFFE struct {
 }
 
 // WorkloadAPI holds the configuration for the SPIFFE Workload API.
+// +kubebuilder:validation:XValidation:rule="!has(self.csiDriver) || ((self.endpoint.startsWith('unix:///spiffe-workload-api/') || self.endpoint.startsWith('unix:/spiffe-workload-api/')) && !self.endpoint.matches('(^|/)[.][.](/|$)'))",message="endpoint must be a unix socket under /spiffe-workload-api/ without '..' segments when csiDriver is set, as the CSI volume is mounted at /spiffe-workload-api"
 type WorkloadAPI struct {
 	// Endpoint is the address of the SPIFFE Workload API endpoint,
+	// in the form 'unix:///<absolute path>', 'unix:/<absolute path>'
+	// or 'tcp://<ip>:<port>',
 	// e.g. 'unix:///spiffe-workload-api/agent.sock'.
 	// The flux-operator pod must be configured with the same endpoint
 	// through the SPIFFE_ENDPOINT_SOCKET environment variable.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=1024
+	// +kubebuilder:validation:Pattern="^(?:unix:(?:///[!$&->@-~]+|/[!$&-.0->@-~][!$&->@-~]*)|tcp://(?:[0-9]{1,3}(?:\\.[0-9]{1,3}){3}|\\[[0-9a-fA-F:.]+\\]):[0-9]{1,5})$"
 	// +required
 	Endpoint string `json:"endpoint"`
 
 	// CSIDriver is the name of the SPIFFE CSI driver used to mount
 	// the Workload API socket into the Flux controller pods.
-	// When set, the operator configures the CSI volume and mount.
-	// When empty, no CSI volume is configured.
+	// When set, the operator mounts the CSI volume at /spiffe-workload-api
+	// and the endpoint must be a unix socket under that path.
+	// When omitted, no CSI volume is configured.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern="^[a-zA-Z0-9](?:[-a-zA-Z0-9]*[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[-a-zA-Z0-9]*[a-zA-Z0-9])?)*$"
 	// +optional
 	CSIDriver string `json:"csiDriver,omitempty"`
 }
@@ -291,6 +301,9 @@ type BrokerAPI struct {
 	// The flux-operator pod accepts the same --spiffe-broker-endpoint flag
 	// as the Flux controllers. For OLM installations, the endpoint can be
 	// set with the SPIFFE_BROKER_ENDPOINT environment variable.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=1024
+	// +kubebuilder:validation:Pattern="^[!-~]+$"
 	// +required
 	Endpoint string `json:"endpoint"`
 
@@ -321,12 +334,10 @@ type MTLS struct {
 	// The flux-operator ID is the SPIFFE ID of the operator's X.509-SVID,
 	// or this template with 'flux-operator' when the operator has no
 	// Workload API source.
-	// The flux-operator ID is added to notification-controller as an
-	// authorized notifier. It is also added to source-controller and
-	// source-watcher as an authorized artifact client when the Web UI is
-	// enabled and authentication is configured, which enables artifact
-	// downloads from the embedded Web UI. For a standalone Web UI, use
-	// ExtraArtifactClients instead.
+	// The flux-operator ID is always added to notification-controller as an
+	// authorized notifier, and to source-controller and source-watcher as an
+	// authorized artifact client for the Web UI artifact downloads.
+	// For a standalone Web UI, use ExtraArtifactClients and ExtraNotifiers.
 	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:Pattern="^spiffe://[a-z0-9._-]{1,255}(?:/(?:[a-zA-Z0-9_-]|[.][a-zA-Z0-9_-]|[{]component[}])[a-zA-Z0-9._-]*(?:[{]component[}][a-zA-Z0-9._-]*)*)+(?:/)?$"
 	// +kubebuilder:validation:XValidation:rule="self.contains('{component}')",message="componentIDTemplate must contain the '{component}' placeholder"

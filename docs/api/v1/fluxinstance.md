@@ -550,11 +550,16 @@ The operator configures the installed Flux controllers with the Workload API
 endpoint, for example through the `SPIFFE_ENDPOINT_SOCKET` environment variable.
 
 - `.endpoint` (required): The address of the SPIFFE Workload API endpoint,
-  e.g. `unix:///spiffe-workload-api/agent.sock`.
+  in the form `unix:///<absolute path>`, `unix:/<absolute path>` or
+  `tcp://<ip>:<port>`, e.g. `unix:///spiffe-workload-api/agent.sock`. Unix
+  socket paths must be printable ASCII without spaces, `%`, `"`, `#` or `?`.
 - `.csiDriver` (optional): The name of the SPIFFE CSI driver used to mount
   the Workload API socket into the Flux controller pods, e.g. `csi.spiffe.io`.
-  This field is opt-in. When set, the operator configures the CSI volume and
-  mount. When empty, no CSI volume is configured.
+  This field is opt-in. When set, the operator mounts the CSI volume at
+  `/spiffe-workload-api` and the endpoint must be a unix socket under that
+  path, without `..` segments, e.g.
+  `unix:///spiffe-workload-api/agent.sock`. When omitted, no CSI volume is
+  configured.
 
 When using the CSI driver, the SPIFFE CSI driver must be installed in the
 cluster before Flux is deployed.
@@ -568,8 +573,9 @@ The `.spec.spiffe.brokerAPI` field is optional and enables the object-level
 SPIFFE features. When set, Flux objects configured with SPIFFE annotations
 acquire SVIDs for the object itself through the SPIFFE Broker API.
 
-- `.endpoint` (required): The address of the SPIFFE Broker API endpoint,
-  e.g. `dns:///spiffe-broker.example.com:443`.
+- `.endpoint` (required): The gRPC target of the SPIFFE Broker API endpoint,
+  e.g. `dns:///spiffe-broker.example.com:443`. It must be printable ASCII
+  without spaces.
 - `.ids` (required): The list of SPIFFE IDs or SPIFFE ID prefixes authorized
   for the Broker API endpoint. At least one ID is required.
 
@@ -606,14 +612,11 @@ The flux-operator is authorized with the SPIFFE ID of its own X.509-SVID. When
 the operator has no SPIFFE Workload API source, the ID is derived from
 `.componentIDTemplate` with `flux-operator` as the component name.
 
-The `flux-operator` SPIFFE ID is automatically added to the
-`notification-controller` authorized notifiers, which is needed for both the
-operator controllers and the Web UI audit events. It is also automatically
-added to `source-controller` and `source-watcher` as an authorized artifact
-client when the Web UI is enabled and authentication is configured, which is
-the combination that enables artifact downloads from the embedded Web UI. For
-a standalone Web UI, add its SPIFFE ID to `.extraArtifactClients` and
-`.extraNotifiers`.
+The `flux-operator` SPIFFE ID is always added to the `notification-controller`
+authorized notifiers, used by the operator events and the Web UI audit events,
+and to the `source-controller` and `source-watcher` authorized artifact
+clients, used by the Web UI artifact downloads. For a standalone Web UI, add
+its SPIFFE ID to `.extraArtifactClients` and `.extraNotifiers`.
 
 The flux-operator pod does not need the `--authorized-*` inter-controller
 flags. It reads the Flux controller SPIFFE IDs from the

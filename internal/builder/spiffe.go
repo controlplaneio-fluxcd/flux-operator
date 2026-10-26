@@ -6,7 +6,10 @@ package builder
 import (
 	"bytes"
 	"fmt"
+	"net"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -14,6 +17,18 @@ import (
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	internalspiffe "github.com/controlplaneio-fluxcd/flux-operator/internal/spiffe"
+)
+
+// The patterns and limits match the FluxInstance CRD validation.
+var (
+	spiffeWorkloadAPIEndpointRegexp = regexp.MustCompile(`^(?:unix:(?:///[!$&->@-~]+|/[!$&-.0->@-~][!$&->@-~]*)|tcp://(?:[0-9]{1,3}(?:\.[0-9]{1,3}){3}|\[[0-9a-fA-F:.]+\]):[0-9]{1,5})$`)
+	spiffeCSIDriverRegexp           = regexp.MustCompile(`^[a-zA-Z0-9](?:[-a-zA-Z0-9]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[-a-zA-Z0-9]*[a-zA-Z0-9])?)*$`)
+	spiffeBrokerAPIEndpointRegexp   = regexp.MustCompile(`^[!-~]+$`)
+)
+
+const (
+	spiffeEndpointMaxLength  = 1024
+	spiffeCSIDriverMaxLength = 63
 )
 
 const (
@@ -44,20 +59,20 @@ const spiffeTmpl = `
     group: apps
     version: v1
     kind: Deployment
-    name: "{{ .WorkloadAPI.Components }}"
+    name: {{ quote .WorkloadAPI.Components }}
   patch: |-
     - op: add
       path: /spec/template/spec/containers/0/env/-
       value:
         name: SPIFFE_ENDPOINT_SOCKET
-        value: {{ .WorkloadAPI.Endpoint }}
+        value: {{ quote .WorkloadAPI.Endpoint }}
 {{- if .WorkloadAPI.CSIDriver }}
     - op: add
       path: /spec/template/spec/volumes/-
       value:
         name: spiffe-workload-api
         csi:
-          driver: {{ .WorkloadAPI.CSIDriver }}
+          driver: {{ quote .WorkloadAPI.CSIDriver }}
           readOnly: true
     - op: add
       path: /spec/template/spec/containers/0/volumeMounts/-
@@ -72,12 +87,12 @@ const spiffeTmpl = `
     group: apps
     version: v1
     kind: Deployment
-    name: "{{ .Name }}"
+    name: {{ quote .Name }}
   patch: |-
 {{- range .Args }}
     - op: add
       path: /spec/template/spec/containers/0/args/-
-      value: {{ . }}
+      value: {{ quote . }}
 {{- end }}
 {{- end }}
 `
@@ -103,6 +118,10 @@ func (o *Options) ValidateAndApplySPIFFEConfig(instance *fluxcdv1.FluxInstance) 
 		return fmt.Errorf(".spec.spiffe requires Flux >= 2.10.0, please remove .spec.spiffe before using an older Flux version")
 	}
 
+	if err := validateSPIFFE(spiffe); err != nil {
+		return err
+	}
+
 	data := spiffePatchData{
 		WorkloadAPI: spiffeWorkloadAPIData{
 			Components: strings.Join(o.Components, "|"),
@@ -122,7 +141,7 @@ func (o *Options) ValidateAndApplySPIFFEConfig(instance *fluxcdv1.FluxInstance) 
 		return len(p.Args) == 0
 	})
 
-	t, err := template.New("spiffe").Parse(spiffeTmpl)
+	t, err := template.New("spiffe").Funcs(template.FuncMap{"quote": yamlQuote}).Parse(spiffeTmpl)
 	if err != nil {
 		return fmt.Errorf("failed to parse SPIFFE template: %w", err)
 	}
@@ -133,6 +152,57 @@ func (o *Options) ValidateAndApplySPIFFEConfig(instance *fluxcdv1.FluxInstance) 
 	}
 	o.Patches += buf.String()
 	return nil
+}
+
+// validateSPIFFE validates the SPIFFE endpoints and CSI driver.
+func validateSPIFFE(spiffe *fluxcdv1.SPIFFE) error {
+	api := spiffe.WorkloadAPI
+	if len(api.Endpoint) > spiffeEndpointMaxLength || !spiffeWorkloadAPIEndpointRegexp.MatchString(api.Endpoint) {
+		return fmt.Errorf(".spec.spiffe.workloadAPI.endpoint '%s' must be in the form 'unix:///<path>', 'unix:/<path>' or 'tcp://<ip>:<port>'", api.Endpoint)
+	}
+	if hostPort, ok := strings.CutPrefix(api.Endpoint, "tcp://"); ok {
+		if err := validateSPIFFETCPAddress(hostPort); err != nil {
+			return fmt.Errorf(".spec.spiffe.workloadAPI.endpoint '%s' is invalid: %w", api.Endpoint, err)
+		}
+	}
+	if api.CSIDriver != "" {
+		if len(api.CSIDriver) > spiffeCSIDriverMaxLength || !spiffeCSIDriverRegexp.MatchString(api.CSIDriver) {
+			return fmt.Errorf(".spec.spiffe.workloadAPI.csiDriver '%s' is not a valid CSI driver name", api.CSIDriver)
+		}
+		underMount := strings.HasPrefix(api.Endpoint, "unix://"+spiffeVolumeMountPath+"/") ||
+			strings.HasPrefix(api.Endpoint, "unix:"+spiffeVolumeMountPath+"/")
+		if !underMount || slices.Contains(strings.Split(api.Endpoint, "/"), "..") {
+			return fmt.Errorf(".spec.spiffe.workloadAPI.endpoint must be a unix socket under %s/ "+
+				"without '..' segments when csiDriver is set", spiffeVolumeMountPath)
+		}
+	}
+	if broker := spiffe.BrokerAPI; broker != nil &&
+		(len(broker.Endpoint) > spiffeEndpointMaxLength || !spiffeBrokerAPIEndpointRegexp.MatchString(broker.Endpoint)) {
+		return fmt.Errorf(".spec.spiffe.brokerAPI.endpoint '%s' must be non-empty printable ASCII without spaces", broker.Endpoint)
+	}
+	return nil
+}
+
+// validateSPIFFETCPAddress checks that hostPort is an IP address
+// and a port between 1 and 65535.
+func validateSPIFFETCPAddress(hostPort string) error {
+	host, port, err := net.SplitHostPort(hostPort)
+	if err != nil {
+		return err
+	}
+	if net.ParseIP(host) == nil {
+		return fmt.Errorf("host '%s' is not an IP address", host)
+	}
+	if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 {
+		return fmt.Errorf("port '%s' is not between 1 and 65535", port)
+	}
+	return nil
+}
+
+// yamlQuote returns the value as a double-quoted YAML scalar with
+// non-ASCII and control characters escaped.
+func yamlQuote(value string) string {
+	return strconv.QuoteToASCII(value)
 }
 
 // spiffeBrokerAPIData returns the patches that configure the SPIFFE Broker API

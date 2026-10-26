@@ -344,6 +344,237 @@ func TestFluxInstanceReconciler_CELValidation(t *testing.T) {
 	}
 }
 
+func TestFluxInstanceReconciler_SPIFFEValidation(t *testing.T) {
+	const brokerID = "spiffe://example.org/broker/"
+	for _, tt := range []struct {
+		name        string
+		spiffe      *fluxcdv1.SPIFFE
+		expectedErr string
+	}{
+		{
+			name:        "empty workload API endpoint",
+			spiffe:      &fluxcdv1.SPIFFE{},
+			expectedErr: "spec.spiffe.workloadAPI.endpoint",
+		},
+		{
+			name: "unsupported workload API scheme",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "dns:///spire-agent:8081"},
+			},
+			expectedErr: "spec.spiffe.workloadAPI.endpoint",
+		},
+		{
+			name: "tcp endpoint with hostname",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "tcp://spire-agent:8081"},
+			},
+			expectedErr: "spec.spiffe.workloadAPI.endpoint",
+		},
+		{
+			name: "CSI driver with endpoint outside the mount path",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{
+					Endpoint:  "unix:///run/spire/sockets/agent.sock",
+					CSIDriver: "csi.spiffe.io",
+				},
+			},
+			expectedErr: "endpoint must be a unix socket under /spiffe-workload-api/ without '..' segments when csiDriver is set",
+		},
+		{
+			name: "CSI driver with tcp endpoint",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{
+					Endpoint:  "tcp://127.0.0.1:8081",
+					CSIDriver: "csi.spiffe.io",
+				},
+			},
+			expectedErr: "endpoint must be a unix socket under /spiffe-workload-api/ without '..' segments when csiDriver is set",
+		},
+		{
+			name: "invalid CSI driver name",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{
+					Endpoint:  "unix:///spiffe-workload-api/agent.sock",
+					CSIDriver: "-csi.spiffe.io",
+				},
+			},
+			expectedErr: "spec.spiffe.workloadAPI.csiDriver",
+		},
+		{
+			name: "empty broker API endpoint",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+				BrokerAPI:   &fluxcdv1.BrokerAPI{IDs: []string{brokerID}},
+			},
+			expectedErr: "spec.spiffe.brokerAPI.endpoint",
+		},
+		{
+			name: "broker API endpoint with whitespace",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+				BrokerAPI: &fluxcdv1.BrokerAPI{
+					Endpoint: "dns:///spiffe-broker.example.com:443 --x",
+					IDs:      []string{brokerID},
+				},
+			},
+			expectedErr: "spec.spiffe.brokerAPI.endpoint",
+		},
+		{
+			name: "unix endpoint with host",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix://host/agent.sock"},
+			},
+			expectedErr: "spec.spiffe.workloadAPI.endpoint",
+		},
+		{
+			name: "workload API endpoint too long",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///" + strings.Repeat("a", 1024)},
+			},
+			expectedErr: "spec.spiffe.workloadAPI.endpoint",
+		},
+		{
+			name: "CSI driver with parent segment",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/../run/agent.sock", CSIDriver: "csi.spiffe.io"},
+			},
+			expectedErr: "endpoint must be a unix socket under /spiffe-workload-api/ without '..' segments when csiDriver is set",
+		},
+		{
+			name: "CSI driver with percent-encoding",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/%2e%2e/agent.sock", CSIDriver: "csi.spiffe.io"},
+			},
+			expectedErr: "spec.spiffe.workloadAPI.endpoint",
+		},
+		{
+			name: "CSI driver name with empty label",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock", CSIDriver: "csi..spiffe.io"},
+			},
+			expectedErr: "spec.spiffe.workloadAPI.csiDriver",
+		},
+		{
+			name: "CSI driver name with label starting with dash",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock", CSIDriver: "csi.-spiffe.io"},
+			},
+			expectedErr: "spec.spiffe.workloadAPI.csiDriver",
+		},
+		{
+			name: "CSI driver name too long",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock", CSIDriver: strings.Repeat("a", 64)},
+			},
+			expectedErr: "spec.spiffe.workloadAPI.csiDriver",
+		},
+		{
+			name: "broker API endpoint with vertical tab",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+				BrokerAPI:   &fluxcdv1.BrokerAPI{Endpoint: "dns:///broker\v:443", IDs: []string{brokerID}},
+			},
+			expectedErr: "spec.spiffe.brokerAPI.endpoint",
+		},
+		{
+			name: "broker API endpoint with non-ASCII",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+				BrokerAPI:   &fluxcdv1.BrokerAPI{Endpoint: "dns:///bröker:443", IDs: []string{brokerID}},
+			},
+			expectedErr: "spec.spiffe.brokerAPI.endpoint",
+		},
+		{
+			name: "CSI driver with trailing parent segment",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent/..", CSIDriver: "csi.spiffe.io"},
+			},
+			expectedErr: "without '..' segments when csiDriver is set",
+		},
+		{
+			name: "CSI driver with dot-prefixed directory",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/..data/agent.sock", CSIDriver: "csi.spiffe.io"},
+			},
+		},
+		{
+			name: "unix endpoint with percent-encoding",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///run/spire/agent%2esock"},
+			},
+			expectedErr: "spec.spiffe.workloadAPI.endpoint",
+		},
+		{
+			name: "single slash unix endpoint with CSI driver",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:/spiffe-workload-api/agent.sock", CSIDriver: "csi.spiffe.io"},
+			},
+		},
+		{
+			name: "single slash unix endpoint without CSI driver",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:/run/spire/sockets/agent.sock"},
+			},
+		},
+		{
+			name: "unix endpoint with CSI driver",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{
+					Endpoint:  "unix:///spiffe-workload-api/agent.sock",
+					CSIDriver: "csi.spiffe.io",
+				},
+				BrokerAPI: &fluxcdv1.BrokerAPI{
+					Endpoint: "dns:///spiffe-broker.example.com:443",
+					IDs:      []string{brokerID},
+				},
+			},
+		},
+		{
+			name: "unix endpoint without CSI driver",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///run/spire/sockets/agent.sock"},
+			},
+		},
+		{
+			name: "tcp endpoint without CSI driver",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "tcp://10.0.0.1:8081"},
+			},
+		},
+		{
+			name: "tcp IPv6 endpoint without CSI driver",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "tcp://[::1]:8081"},
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			defer cancel()
+
+			ns, err := testEnv.CreateNamespace(ctx, "test")
+			g.Expect(err).NotTo(HaveOccurred())
+
+			spec := getDefaultFluxSpec(t)
+			spec.SPIFFE = tt.spiffe
+			obj := &fluxcdv1.FluxInstance{
+				ObjectMeta: metav1.ObjectMeta{Name: "flux", Namespace: ns.Name},
+				Spec:       spec,
+			}
+
+			err = testEnv.Create(ctx, obj)
+			if tt.expectedErr != "" {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.expectedErr))
+			} else {
+				g.Expect(err).NotTo(HaveOccurred())
+			}
+		})
+	}
+}
+
 func TestFluxInstanceReconciler_InitDisabled(t *testing.T) {
 	g := NewWithT(t)
 	reconciler := getFluxInstanceReconciler(t)

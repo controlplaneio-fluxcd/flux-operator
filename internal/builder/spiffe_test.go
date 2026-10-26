@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
+	"go.yaml.in/yaml/v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
@@ -288,6 +289,317 @@ func TestSPIFFE_BrokerAPI(t *testing.T) {
 	result = buildSPIFFE(t, instance)
 	g.Expect(containerArgs(findObject(result.Objects, deploymentKind, fluxcdv1.FluxSourceWatcher))).
 		NotTo(ContainElement(ContainSubstring("--spiffe-broker-endpoint")))
+}
+
+func TestSPIFFE_Validation(t *testing.T) {
+	testCases := []struct {
+		name    string
+		spiffe  *fluxcdv1.SPIFFE
+		wantErr string
+	}{
+		{
+			name:    "empty workload API endpoint",
+			spiffe:  &fluxcdv1.SPIFFE{},
+			wantErr: ".spec.spiffe.workloadAPI.endpoint",
+		},
+		{
+			name: "unsupported workload API scheme",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "dns:///spire-agent:8081"},
+			},
+			wantErr: ".spec.spiffe.workloadAPI.endpoint",
+		},
+		{
+			name: "tcp endpoint with hostname",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "tcp://spire-agent:8081"},
+			},
+			wantErr: ".spec.spiffe.workloadAPI.endpoint",
+		},
+		{
+			name: "CSI driver with endpoint outside the mount path",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{
+					Endpoint:  "unix:///run/spire/sockets/agent.sock",
+					CSIDriver: "csi.spiffe.io",
+				},
+			},
+			wantErr: "must be a unix socket under /spiffe-workload-api/",
+		},
+		{
+			name: "invalid CSI driver name",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{
+					Endpoint:  "unix:///spiffe-workload-api/agent.sock",
+					CSIDriver: "csi.spiffe.io: true",
+				},
+			},
+			wantErr: ".spec.spiffe.workloadAPI.csiDriver",
+		},
+		{
+			name: "empty broker API endpoint",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+				BrokerAPI:   &fluxcdv1.BrokerAPI{IDs: []string{"spiffe://example.org/broker"}},
+			},
+			wantErr: ".spec.spiffe.brokerAPI.endpoint",
+		},
+		{
+			name: "invalid tcp IPv4 address",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "tcp://999.999.999.999:8081"},
+			},
+			wantErr: "is invalid",
+		},
+		{
+			name: "invalid tcp IPv6 address",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "tcp://[:::]:8081"},
+			},
+			wantErr: "is invalid",
+		},
+		{
+			name: "invalid percent-encoding",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///socket%zz"},
+			},
+			wantErr: ".spec.spiffe.workloadAPI.endpoint",
+		},
+		{
+			name: "workload API endpoint too long",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///" + strings.Repeat("a", 1024)},
+			},
+			wantErr: ".spec.spiffe.workloadAPI.endpoint",
+		},
+		{
+			name: "CSI driver with parent segment",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/../run/agent.sock", CSIDriver: "csi.spiffe.io"},
+			},
+			wantErr: "without '..' segments",
+		},
+		{
+			name: "CSI driver with percent-encoding",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/%2e%2e/agent.sock", CSIDriver: "csi.spiffe.io"},
+			},
+			wantErr: ".spec.spiffe.workloadAPI.endpoint",
+		},
+		{
+			name: "CSI driver name with empty label",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock", CSIDriver: "csi..spiffe.io"},
+			},
+			wantErr: ".spec.spiffe.workloadAPI.csiDriver",
+		},
+		{
+			name: "CSI driver name with label starting with dash",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock", CSIDriver: "csi.-spiffe.io"},
+			},
+			wantErr: ".spec.spiffe.workloadAPI.csiDriver",
+		},
+		{
+			name: "CSI driver name too long",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock", CSIDriver: strings.Repeat("a", 64)},
+			},
+			wantErr: ".spec.spiffe.workloadAPI.csiDriver",
+		},
+		{
+			name: "broker API endpoint with vertical tab",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+				BrokerAPI:   &fluxcdv1.BrokerAPI{Endpoint: "dns:///broker\v:443", IDs: []string{"spiffe://example.org/broker"}},
+			},
+			wantErr: ".spec.spiffe.brokerAPI.endpoint",
+		},
+		{
+			name: "broker API endpoint with non-ASCII",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+				BrokerAPI:   &fluxcdv1.BrokerAPI{Endpoint: "dns:///bröker:443", IDs: []string{"spiffe://example.org/broker"}},
+			},
+			wantErr: ".spec.spiffe.brokerAPI.endpoint",
+		},
+		{
+			name: "broker API endpoint too long",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+				BrokerAPI:   &fluxcdv1.BrokerAPI{Endpoint: "dns:///" + strings.Repeat("a", 1024), IDs: []string{"spiffe://example.org/broker"}},
+			},
+			wantErr: ".spec.spiffe.brokerAPI.endpoint",
+		},
+		{
+			name: "tcp port out of range",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "tcp://127.0.0.1:99999"},
+			},
+			wantErr: "is invalid",
+		},
+		{
+			name: "tcp port zero",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "tcp://127.0.0.1:0"},
+			},
+			wantErr: "is invalid",
+		},
+		{
+			name: "CSI driver with trailing parent segment",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent/..", CSIDriver: "csi.spiffe.io"},
+			},
+			wantErr: "without '..' segments",
+		},
+		{
+			name: "CSI driver with dot-prefixed directory",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/..data/agent.sock", CSIDriver: "csi.spiffe.io"},
+			},
+		},
+		{
+			name: "tcp IPv6 endpoint",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "tcp://[::1]:8081"},
+			},
+		},
+		{
+			name: "single slash unix endpoint with CSI driver",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:/spiffe-workload-api/agent.sock", CSIDriver: "csi.spiffe.io"},
+			},
+		},
+		{
+			name: "single slash unix endpoint without CSI driver",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:/run/spire/sockets/agent.sock"},
+			},
+		},
+		{
+			name: "tcp endpoint without CSI driver",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "tcp://127.0.0.1:8081"},
+				BrokerAPI: &fluxcdv1.BrokerAPI{
+					Endpoint: "dns:///spiffe-broker.example.com:443",
+					IDs:      []string{"spiffe://example.org/broker"},
+				},
+			},
+		},
+		{
+			name: "unix endpoint without CSI driver",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///run/spire/sockets/agent.sock"},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			g := NewWithT(t)
+			instance := spiffeTestInstance(nil, tc.spiffe)
+
+			options := MakeDefaultOptions()
+			options.Version = "v2.10.0"
+			options.Components = instance.GetComponents()
+
+			err := options.ValidateAndApplySPIFFEConfig(instance)
+			if tc.wantErr != "" {
+				g.Expect(err).To(MatchError(ContainSubstring(tc.wantErr)))
+				return
+			}
+			g.Expect(err).NotTo(HaveOccurred())
+		})
+	}
+}
+
+func TestSPIFFE_QuotedValues(t *testing.T) {
+	g := NewWithT(t)
+	const client = "spiffe://example.org/clients/web#ui: x"
+	instance := spiffeTestInstance([]string{
+		fluxcdv1.FluxSourceController,
+		fluxcdv1.FluxKustomizeController,
+	}, &fluxcdv1.SPIFFE{
+		WorkloadAPI: fluxcdv1.WorkloadAPI{
+			Endpoint:  "unix:///spiffe-workload-api/agent.sock",
+			CSIDriver: "csi.spiffe.io",
+		},
+		MTLS: &fluxcdv1.MTLS{
+			Enabled:              true,
+			ComponentIDTemplate:  "spiffe://example.org/fluxcd/{component}",
+			ExtraArtifactClients: []string{client},
+		},
+	})
+
+	result := buildSPIFFE(t, instance)
+
+	deploy := findObject(result.Objects, deploymentKind, fluxcdv1.FluxSourceController)
+	g.Expect(containerArgs(deploy)).To(ContainElement("--authorized-artifact-client-spiffe-id=" + client))
+	g.Expect(containerEnv(deploy)).To(ContainElement(envVar{
+		Name:  "SPIFFE_ENDPOINT_SOCKET",
+		Value: "unix:///spiffe-workload-api/agent.sock",
+	}))
+	g.Expect(deployVolumes(deploy)).To(ContainElement(spiffeVolume()))
+}
+
+func TestSPIFFE_QuotedControlCharacters(t *testing.T) {
+	g := NewWithT(t)
+	clients := []string{
+		"spiffe://example.org/a\u0085b",
+		"spiffe://example.org/a\u009fb",
+		"spiffe://example.org/a\tb",
+		"spiffe://example.org/web-é",
+	}
+	instance := spiffeTestInstance([]string{fluxcdv1.FluxSourceController}, &fluxcdv1.SPIFFE{
+		WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+		MTLS: &fluxcdv1.MTLS{
+			Enabled:              true,
+			ComponentIDTemplate:  "spiffe://example.org/fluxcd/{component}",
+			ExtraArtifactClients: clients,
+		},
+	})
+
+	options := MakeDefaultOptions()
+	options.Version = "v2.10.0"
+	options.Components = instance.GetComponents()
+	g.Expect(options.ValidateAndApplySPIFFEConfig(instance)).To(Succeed())
+
+	// Parse the rendered kustomize patches and their JSON6902 operations.
+	var patches []struct {
+		Patch string `yaml:"patch"`
+	}
+	g.Expect(yaml.Unmarshal([]byte(options.Patches), &patches)).To(Succeed())
+	var values []string
+	for _, patch := range patches {
+		var ops []struct {
+			Value any `yaml:"value"`
+		}
+		g.Expect(yaml.Unmarshal([]byte(patch.Patch), &ops)).To(Succeed())
+		for _, op := range ops {
+			if v, ok := op.Value.(string); ok {
+				values = append(values, v)
+			}
+		}
+	}
+	for _, client := range clients {
+		g.Expect(values).To(ContainElement("--authorized-artifact-client-spiffe-id="+client), client)
+	}
+}
+
+func TestYAMLQuote(t *testing.T) {
+	g := NewWithT(t)
+
+	// Plain ASCII values render as before.
+	for _, value := range []string{
+		"unix:///spiffe-workload-api/agent.sock",
+		"csi.spiffe.io",
+		"source-controller|kustomize-controller",
+		"--authorized-artifact-client-spiffe-id=spiffe://example.org/fluxcd/flux-operator",
+	} {
+		g.Expect(yamlQuote(value)).To(Equal(`"` + value + `"`))
+	}
+
+	g.Expect(yamlQuote("a\u0085b\tc")).To(Equal(`"a\u0085b\tc"`))
 }
 
 func TestSPIFFE_VersionGate(t *testing.T) {
