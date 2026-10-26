@@ -767,6 +767,273 @@ func TestFluxInstanceReconciler_BuildFail(t *testing.T) {
 	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 }
 
+func TestFluxInstanceReconciler_SPIFFEStatus(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getFluxInstanceReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	const template = "spiffe://cluster.local/ns/flux-system/sa/{component}"
+	spec := getDefaultFluxSpec(t)
+	spec.Distribution.Version = "2.10.x"
+	spec.SPIFFE = &fluxcdv1.SPIFFE{
+		WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+		MTLS: &fluxcdv1.MTLS{
+			Enabled:             true,
+			ComponentIDTemplate: template,
+		},
+	}
+
+	obj := &fluxcdv1.FluxInstance{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "flux",
+			Namespace: ns.Name,
+		},
+		Spec: spec,
+	}
+
+	err = testClient.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize the instance.
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Install the instance with mTLS enabled.
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Check if the applied mTLS settings were recorded.
+	result := &fluxcdv1.FluxInstance{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).ToNot(HaveOccurred())
+	testutils.LogObjectStatus(t, result)
+	checkInstanceReadiness(g, result)
+	g.Expect(result.Status.SPIFFE).To(Equal(&fluxcdv1.SPIFFEStatus{
+		MTLS: &fluxcdv1.MTLSStatus{
+			Enabled:             true,
+			ComponentIDTemplate: template,
+		},
+	}))
+
+	// Disable mTLS.
+	resultP := result.DeepCopy()
+	resultP.Spec.SPIFFE.MTLS.Enabled = false
+	err = testClient.Patch(ctx, resultP, client.MergeFrom(result))
+	g.Expect(err).ToNot(HaveOccurred())
+
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Check if the disabled mTLS settings were recorded.
+	result = &fluxcdv1.FluxInstance{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).ToNot(HaveOccurred())
+	checkInstanceReadiness(g, result)
+	g.Expect(result.Status.SPIFFE).To(Equal(&fluxcdv1.SPIFFEStatus{
+		MTLS: &fluxcdv1.MTLSStatus{Enabled: false},
+	}))
+
+	// Uninstall the instance.
+	err = testClient.Delete(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.IsZero()).To(BeTrue())
+
+	// Wait for CRDs to be fully deleted to prevent race conditions with subsequent tests.
+	waitForFluxCRDsDeletion(ctx, g)
+}
+
+func TestFluxInstanceReconciler_SPIFFEStatusHealthCheckFail(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getFluxInstanceReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	const template = "spiffe://cluster.local/ns/flux-system/sa/{component}"
+	spec := getDefaultFluxSpec(t)
+	spec.Distribution.Version = "2.10.x"
+	spec.SPIFFE = &fluxcdv1.SPIFFE{
+		WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+		MTLS: &fluxcdv1.MTLS{
+			Enabled:             false,
+			ComponentIDTemplate: template,
+		},
+	}
+
+	obj := &fluxcdv1.FluxInstance{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "flux",
+			Namespace: ns.Name,
+			Annotations: map[string]string{
+				fluxcdv1.ReconcileTimeoutAnnotation: "4s",
+			},
+		},
+		Spec: spec,
+	}
+
+	err = testClient.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize the instance.
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Install the instance with mTLS disabled.
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	result := &fluxcdv1.FluxInstance{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(result.Status.SPIFFE).To(Equal(&fluxcdv1.SPIFFEStatus{
+		MTLS: &fluxcdv1.MTLSStatus{Enabled: false},
+	}))
+
+	// Enable mTLS and wait; Deployments never become ready in envtest.
+	resultP := result.DeepCopy()
+	resultP.Spec.Wait = new(true)
+	resultP.Spec.SPIFFE.MTLS.Enabled = true
+	err = testClient.Patch(ctx, resultP, client.MergeFrom(result))
+	g.Expect(err).ToNot(HaveOccurred())
+
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("timeout waiting"))
+
+	// Check that the applied mTLS settings were recorded.
+	result = &fluxcdv1.FluxInstance{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).ToNot(HaveOccurred())
+	testutils.LogObjectStatus(t, result)
+	g.Expect(conditions.IsReady(result)).To(BeFalse())
+	g.Expect(result.Status.SPIFFE).To(Equal(&fluxcdv1.SPIFFEStatus{
+		MTLS: &fluxcdv1.MTLSStatus{
+			Enabled:             true,
+			ComponentIDTemplate: template,
+		},
+	}))
+
+	// Uninstall the instance.
+	err = testClient.Delete(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.IsZero()).To(BeTrue())
+
+	// Wait for CRDs to be fully deleted to prevent race conditions with subsequent tests.
+	waitForFluxCRDsDeletion(ctx, g)
+}
+
+func TestFluxInstanceReconciler_SPIFFEStatusBuildFail(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getFluxInstanceReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	spec := getDefaultFluxSpec(t)
+	spec.Distribution.Version = "2.9.x"
+
+	obj := &fluxcdv1.FluxInstance{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "flux",
+			Namespace: ns.Name,
+		},
+		Spec: spec,
+	}
+
+	err = testClient.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize the instance.
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Install the instance without SPIFFE.
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	result := &fluxcdv1.FluxInstance{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).ToNot(HaveOccurred())
+	checkInstanceReadiness(g, result)
+	g.Expect(result.Status.SPIFFE).To(BeNil())
+
+	// Enable mTLS on a Flux version that does not support it.
+	resultP := result.DeepCopy()
+	resultP.Spec.SPIFFE = &fluxcdv1.SPIFFE{
+		WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+		MTLS: &fluxcdv1.MTLS{
+			Enabled:             true,
+			ComponentIDTemplate: "spiffe://cluster.local/ns/flux-system/sa/{component}",
+		},
+	}
+	err = testClient.Patch(ctx, resultP, client.MergeFrom(result))
+	g.Expect(err).ToNot(HaveOccurred())
+
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).To(HaveOccurred())
+
+	// Check that the applied mTLS settings are unchanged.
+	result = &fluxcdv1.FluxInstance{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).ToNot(HaveOccurred())
+	testutils.LogObjectStatus(t, result)
+	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.BuildFailedReason))
+	g.Expect(conditions.GetMessage(result, meta.ReadyCondition)).To(ContainSubstring("requires Flux >= 2.10.0"))
+	g.Expect(result.Status.SPIFFE).To(BeNil())
+
+	// Uninstall the instance.
+	err = testClient.Delete(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.IsZero()).To(BeTrue())
+
+	// Wait for CRDs to be fully deleted to prevent race conditions with subsequent tests.
+	waitForFluxCRDsDeletion(ctx, g)
+}
+
 func TestFluxInstanceReconciler_BuildUsesArtifactPatchForEmbeddedMinor(t *testing.T) {
 	g := NewWithT(t)
 	const fakeDigest = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"

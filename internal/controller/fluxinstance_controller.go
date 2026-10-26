@@ -545,6 +545,10 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 		}
 	}
 
+	// Record the applied SPIFFE settings before the health checks: the
+	// controllers run with them even if an unrelated resource isn't ready.
+	obj.Status.SPIFFE = appliedSPIFFEStatus(obj)
+
 	// Detect stale resources which are subject to garbage collection.
 	staleObjects, err := inventory.Diff(oldInventory, newInventory)
 	if err != nil {
@@ -621,6 +625,19 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 	}
 
 	return nil
+}
+
+// appliedSPIFFEStatus returns the SPIFFE status of the distribution built
+// from the spec, or nil when mTLS is not configured.
+func appliedSPIFFEStatus(obj *fluxcdv1.FluxInstance) *fluxcdv1.SPIFFEStatus {
+	if obj.Spec.SPIFFE == nil || obj.Spec.SPIFFE.MTLS == nil {
+		return nil
+	}
+	mtls := &fluxcdv1.MTLSStatus{Enabled: obj.Spec.SPIFFE.MTLS.Enabled}
+	if mtls.Enabled {
+		mtls.ComponentIDTemplate = obj.Spec.SPIFFE.MTLS.ComponentIDTemplate
+	}
+	return &fluxcdv1.SPIFFEStatus{MTLS: mtls}
 }
 
 // finalizeStatus updates the object status and conditions.

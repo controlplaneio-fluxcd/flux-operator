@@ -97,8 +97,7 @@ func TestArtifactMTLSClientCache(t *testing.T) {
 	g.Expect(built).To(HaveLen(2))
 }
 
-// testTLSSource is a TLSSource stub that returns an SVID in a configurable
-// trust domain.
+// testTLSSource returns an SVID in a configurable trust domain.
 type testTLSSource struct {
 	trustDomain string
 	err         error
@@ -199,8 +198,7 @@ func TestArtifactMTLSClientCacheReusesConnections(t *testing.T) {
 	roots := x509.NewCertPool()
 	roots.AddCert(server.Certificate())
 
-	// Clone the base artifact client and dial the test server directly,
-	// since the base dialer rejects loopback addresses.
+	// The base dialer rejects loopback, so dial the test server directly.
 	cache := &artifactMTLSClientCache{
 		buildClient: func([]string) (*http.Client, error) {
 			httpClient := artifactHTTPClientWithTLS(&tls.Config{

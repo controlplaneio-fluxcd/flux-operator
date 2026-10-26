@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 // Package spiffe provides helpers for deriving the SPIFFE configuration of
-// the Flux controllers from a FluxInstance.
+// the Flux controllers from a FluxInstance. The mTLS helpers read the
+// applied settings from the FluxInstance status.
 package spiffe
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"slices"
@@ -49,60 +49,74 @@ func GetFluxInstance(ctx context.Context, c client.Client,
 	}
 }
 
-// MTLSEnabled reports whether SPIFFE mTLS is enabled for the given
-// FluxInstance.
-func MTLSEnabled(instance *fluxcdv1.FluxInstance) bool {
+// AppliedMTLSEnabled reports whether .status.spiffe.mtls has mTLS enabled.
+func AppliedMTLSEnabled(instance *fluxcdv1.FluxInstance) bool {
 	return instance != nil &&
-		instance.Spec.SPIFFE != nil &&
-		instance.Spec.SPIFFE.MTLS != nil &&
-		instance.Spec.SPIFFE.MTLS.Enabled
+		instance.Status.SPIFFE != nil &&
+		instance.Status.SPIFFE.MTLS != nil &&
+		instance.Status.SPIFFE.MTLS.Enabled
 }
 
-// ComponentID returns the SPIFFE ID of the given Flux component.
-func ComponentID(instance *fluxcdv1.FluxInstance, component string) (string, bool) {
-	if !MTLSEnabled(instance) {
+// AppliedComponentID returns the SPIFFE ID of the component from the applied
+// ID template, or false when mTLS is not applied.
+func AppliedComponentID(instance *fluxcdv1.FluxInstance, component string) (string, bool) {
+	if !AppliedMTLSEnabled(instance) {
 		return "", false
 	}
-	template := instance.Spec.SPIFFE.MTLS.ComponentIDTemplate
+	template := instance.Status.SPIFFE.MTLS.ComponentIDTemplate
 	if template == "" {
 		return "", false
 	}
 	return strings.ReplaceAll(template, componentPlaceholder, component), true
 }
 
-// ArtifactServerIDs returns the SPIFFE IDs of the source-controller and
-// source-watcher artifact servers.
+// AppliedComponents returns the component names in .status.components.
+func AppliedComponents(instance *fluxcdv1.FluxInstance) []string {
+	components := make([]string, 0, len(instance.Status.Components))
+	for _, c := range instance.Status.Components {
+		components = append(components, c.Name)
+	}
+	return components
+}
+
+// ArtifactServerIDs returns the SPIFFE IDs of the applied source-controller
+// and source-watcher.
 func ArtifactServerIDs(instance *fluxcdv1.FluxInstance) []string {
-	if !MTLSEnabled(instance) {
+	if !AppliedMTLSEnabled(instance) {
 		return nil
 	}
 
-	components := instance.GetComponents()
+	components := AppliedComponents(instance)
 	var ids []string
 	for _, component := range []string{fluxcdv1.FluxSourceController, fluxcdv1.FluxSourceWatcher} {
 		if !slices.Contains(components, component) {
 			continue
 		}
-		if id, ok := ComponentID(instance, component); ok {
+		if id, ok := AppliedComponentID(instance, component); ok {
 			ids = append(ids, id)
 		}
 	}
 	return ids
 }
 
-// NotificationServerID returns the SPIFFE ID of the notification-controller
-// event server.
+// NotificationServerID returns the SPIFFE ID of the applied
+// notification-controller.
 func NotificationServerID(instance *fluxcdv1.FluxInstance) (string, bool) {
-	if !slices.Contains(instance.GetComponents(), fluxcdv1.FluxNotificationController) {
+	if !slices.Contains(AppliedComponents(instance), fluxcdv1.FluxNotificationController) {
 		return "", false
 	}
-	return ComponentID(instance, fluxcdv1.FluxNotificationController)
+	return AppliedComponentID(instance, fluxcdv1.FluxNotificationController)
 }
 
-// ArtifactServerPeers returns the SPIFFE IDs authorized to serve artifacts
-// when mTLS is enabled on the FluxInstance. It returns nil when mTLS is
-// disabled or no FluxInstance exists. The FluxInstance is fetched when
-// instance is nil.
+// IsSelfTrustDomainPeer reports whether the peer is a spiffe://self form,
+// which refers to the local trust domain.
+func IsSelfTrustDomainPeer(peer string) bool {
+	return peer == "spiffe://self" || strings.HasPrefix(peer, "spiffe://self/")
+}
+
+// ArtifactServerPeers returns the artifact server SPIFFE IDs when mTLS is
+// applied, or nil when it isn't or no FluxInstance exists.
+// The FluxInstance is fetched when instance is nil.
 func ArtifactServerPeers(ctx context.Context, c client.Client, source fluxspiffe.TLSSource,
 	instance *fluxcdv1.FluxInstance) ([]string, error) {
 	instance, err := GetFluxInstance(ctx, c, instance)
@@ -112,7 +126,7 @@ func ArtifactServerPeers(ctx context.Context, c client.Client, source fluxspiffe
 	if err != nil {
 		return nil, err
 	}
-	if !MTLSEnabled(instance) {
+	if !AppliedMTLSEnabled(instance) {
 		return nil, nil
 	}
 	if source == nil {
@@ -126,19 +140,19 @@ func ArtifactServerPeers(ctx context.Context, c client.Client, source fluxspiffe
 	return peers, nil
 }
 
-// EventTLSConfig returns the TLS configuration for sending events to the
-// notification-controller event server. It returns nil when mTLS is disabled.
-func EventTLSConfig(source fluxspiffe.TLSSource, instance *fluxcdv1.FluxInstance) (*tls.Config, error) {
-	if !MTLSEnabled(instance) {
-		return nil, nil
+// EventServerPeer returns the notification-controller SPIFFE ID when mTLS
+// is applied, or an empty string when it isn't.
+func EventServerPeer(source fluxspiffe.TLSSource, instance *fluxcdv1.FluxInstance) (string, error) {
+	if !AppliedMTLSEnabled(instance) {
+		return "", nil
 	}
 	if source == nil {
-		return nil, errors.New("SPIFFE mTLS is enabled but the SPIFFE Workload API source is not configured")
+		return "", errors.New("SPIFFE mTLS is enabled but the SPIFFE Workload API source is not configured")
 	}
 
 	id, ok := NotificationServerID(instance)
 	if !ok {
-		return nil, errors.New("SPIFFE mTLS is enabled but notification-controller is not installed")
+		return "", errors.New("SPIFFE mTLS is enabled but notification-controller is not installed")
 	}
-	return fluxspiffe.BuildTLSConfig(source, id)
+	return id, nil
 }

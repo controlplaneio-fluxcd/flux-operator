@@ -262,8 +262,7 @@ type SPIFFE struct {
 	BrokerAPI *BrokerAPI `json:"brokerAPI,omitempty"`
 
 	// MTLS holds the configuration for mTLS between the Flux controllers.
-	// The flux-operator pod does not need the inter-controller flags; it reads
-	// the Flux controller SPIFFE identities from this configuration.
+	// The flux-operator reads the controller SPIFFE IDs from .status.spiffe.
 	// +optional
 	MTLS *MTLS `json:"mtls,omitempty"`
 }
@@ -516,9 +515,31 @@ type FluxInstanceStatus struct {
 	// +optional
 	Inventory *ResourceInventory `json:"inventory,omitempty"`
 
+	// SPIFFE holds the SPIFFE settings of the last applied distribution.
+	// +optional
+	SPIFFE *SPIFFEStatus `json:"spiffe,omitempty"`
+
 	// History contains the reconciliation history of the FluxInstance
 	// as a list of snapshots ordered by the last reconciled time.
 	History History `json:"history,omitempty"`
+}
+
+// SPIFFEStatus holds the SPIFFE settings of the last applied distribution.
+type SPIFFEStatus struct {
+	// MTLS holds the applied mTLS settings.
+	// +optional
+	MTLS *MTLSStatus `json:"mtls,omitempty"`
+}
+
+// MTLSStatus holds the applied mTLS settings.
+type MTLSStatus struct {
+	// Enabled is true when the Flux controllers were deployed with mTLS.
+	// +required
+	Enabled bool `json:"enabled"`
+
+	// ComponentIDTemplate is the SPIFFE ID template of the Flux controllers.
+	// +optional
+	ComponentIDTemplate string `json:"componentIDTemplate,omitempty"`
 }
 
 // GetDistribution returns the distribution specification with defaults.

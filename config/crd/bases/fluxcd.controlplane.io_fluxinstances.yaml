@@ -397,8 +397,7 @@ spec:
                   mtls:
                     description: |-
                       MTLS holds the configuration for mTLS between the Flux controllers.
-                      The flux-operator pod does not need the inter-controller flags; it reads
-                      the Flux controller SPIFFE identities from this configuration.
+                      The flux-operator reads the controller SPIFFE IDs from .status.spiffe.
                     properties:
                       componentIDTemplate:
                         description: |-
@@ -803,6 +802,25 @@ spec:
                   reconcile request value, so a change of the annotation value
                   can be detected.
                 type: string
+              spiffe:
+                description: SPIFFE holds the SPIFFE settings of the last applied
+                  distribution.
+                properties:
+                  mtls:
+                    description: MTLS holds the applied mTLS settings.
+                    properties:
+                      componentIDTemplate:
+                        description: ComponentIDTemplate is the SPIFFE ID template
+                          of the Flux controllers.
+                        type: string
+                      enabled:
+                        description: Enabled is true when the Flux controllers were
+                          deployed with mTLS.
+                        type: boolean
+                    required:
+                    - enabled
+                    type: object
+                type: object
             type: object
         type: object
         x-kubernetes-validations:

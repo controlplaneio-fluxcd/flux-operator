@@ -84,31 +84,29 @@ func artifactHTTPClientWithTLS(tlsConfig *tls.Config) *http.Client {
 	return &httpClient
 }
 
-// artifactMTLSClientCache holds a single artifact HTTP client configured for
-// SPIFFE mTLS, keyed by the set of authorized artifact server IDs. Reusing one
-// client lets connections be pooled across downloads. The zero value is ready
-// to use.
+// artifactMTLSClientCache holds one SPIFFE mTLS client keyed by the
+// authorized artifact server IDs, so downloads share connections.
+// The zero value is ready to use.
 type artifactMTLSClientCache struct {
 	mu     sync.Mutex
 	key    string
 	client *http.Client
 
-	// buildClient replaces the default client builder when set, used in tests.
+	// buildClient overrides the client builder in tests.
 	buildClient func(peers []string) (*http.Client, error)
 }
 
-// get returns the cached client when the peer set is unchanged, otherwise it
-// builds a new client, replaces the cached one and closes the idle connections
-// of the previous client. The SVID and trust bundle are read from the source on
-// every handshake, so their rotation needs no new client. Peers in the
-// `spiffe://self` forms are resolved to the trust domain of the local SVID when
-// the client is built, so a trust domain change builds a new client.
+// get returns the cached client for the peers, or builds a new one and
+// closes the idle connections of the old one. SVID and bundle rotations
+// need no rebuild, as they are read on every handshake. spiffe://self peers
+// are bound to the local trust domain at build time, so a trust domain
+// change rebuilds the client.
 func (c *artifactMTLSClientCache) get(source fluxspiffe.TLSSource, peers []string) (*http.Client, error) {
 	sorted := slices.Clone(peers)
 	slices.Sort(sorted)
 	key := strings.Join(sorted, ",")
 
-	if slices.ContainsFunc(sorted, isSelfTrustDomainPeer) {
+	if slices.ContainsFunc(sorted, internalspiffe.IsSelfTrustDomainPeer) {
 		svid, err := source.GetX509SVID()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get SPIFFE X.509-SVID: %w", err)
@@ -144,12 +142,6 @@ func (c *artifactMTLSClientCache) get(source fluxspiffe.TLSSource, peers []strin
 	c.key = key
 	c.client = httpClient
 	return httpClient, nil
-}
-
-// isSelfTrustDomainPeer reports whether the peer uses the `spiffe://self`
-// forms, which refer to the trust domain of the local SVID.
-func isSelfTrustDomainPeer(peer string) bool {
-	return peer == "spiffe://self" || strings.HasPrefix(peer, "spiffe://self/")
 }
 
 // newArtifactDialContext returns a dialer that requires a DNS hostname, resolves and

@@ -613,10 +613,11 @@ a standalone Web UI, add its SPIFFE ID to `.extraArtifactClients` and
 `.extraNotifiers`.
 
 The flux-operator pod does not need the `--authorized-*` inter-controller
-flags. It reads the Flux controller SPIFFE identities from this configuration
-when downloading artifacts and sending events. To require SPIFFE mTLS from
-Ingress or Gateway proxies that access the Web UI, use the operator's
-repeatable `--authorized-web-ui-client-spiffe-id` flag.
+flags. It reads the Flux controller SPIFFE IDs from the
+[SPIFFE status](#spiffe-status) when downloading artifacts and sending events,
+so it uses mTLS only once the controllers are deployed with it. To require
+SPIFFE mTLS from Ingress or Gateway proxies that access the Web UI, use the
+operator's repeatable `--authorized-web-ui-client-spiffe-id` flag.
 
 ##### SPIFFE ID syntax
 
@@ -1134,6 +1135,30 @@ Status:
     Name:        kustomize-controller
     Repository:  ghcr.io/fluxcd/kustomize-controller
     Tag:         v1.3.0
+```
+
+### SPIFFE status
+
+The `.status.spiffe.mtls` field holds the SPIFFE mTLS settings of the last
+applied distribution. It is updated when the apply succeeds, even if the
+health checks fail afterwards, and left unchanged when the build or apply
+fails. It is not set when `.spec.spiffe.mtls` is not configured.
+
+- `.enabled`: Whether the Flux controllers were deployed with mTLS.
+- `.componentIDTemplate`: The SPIFFE ID template of the Flux controllers,
+  set when mTLS is enabled.
+
+The flux-operator and the Web UI read this field and `.status.components`
+to decide whether to send events and download artifacts over mTLS.
+
+Example:
+
+```yaml
+status:
+  spiffe:
+    mtls:
+      enabled: true
+      componentIDTemplate: spiffe://cluster.local/ns/flux-system/sa/{component}
 ```
 
 ### Inventory Status
