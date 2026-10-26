@@ -31,6 +31,9 @@ type Handler struct {
 	statusManager string
 	namespace     string
 
+	// artifactClients caches the SPIFFE mTLS client for artifact downloads.
+	artifactClients artifactMTLSClientCache
+
 	// Report cache
 	reportCache                 *unstructured.Unstructured
 	reportCacheStatsByNamespace []reporter.ReconcilerStatsByNamespace

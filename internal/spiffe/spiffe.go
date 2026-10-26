@@ -99,11 +99,12 @@ func NotificationServerID(instance *fluxcdv1.FluxInstance) (string, bool) {
 	return ComponentID(instance, fluxcdv1.FluxNotificationController)
 }
 
-// ArtifactTLSConfig returns the TLS configuration for downloading artifacts
-// from the Flux artifact servers. It returns nil when mTLS is disabled.
-// The FluxInstance is fetched when instance is nil.
-func ArtifactTLSConfig(ctx context.Context, c client.Client, source fluxspiffe.TLSSource,
-	instance *fluxcdv1.FluxInstance) (*tls.Config, error) {
+// ArtifactServerPeers returns the SPIFFE IDs authorized to serve artifacts
+// when mTLS is enabled on the FluxInstance. It returns nil when mTLS is
+// disabled or no FluxInstance exists. The FluxInstance is fetched when
+// instance is nil.
+func ArtifactServerPeers(ctx context.Context, c client.Client, source fluxspiffe.TLSSource,
+	instance *fluxcdv1.FluxInstance) ([]string, error) {
 	instance, err := GetFluxInstance(ctx, c, instance)
 	if errors.Is(err, ErrNoFluxInstance) {
 		return nil, nil
@@ -122,7 +123,7 @@ func ArtifactTLSConfig(ctx context.Context, c client.Client, source fluxspiffe.T
 	if len(peers) == 0 {
 		return nil, errors.New("SPIFFE mTLS is enabled but no artifact server SPIFFE IDs were found")
 	}
-	return fluxspiffe.BuildTLSConfig(source, peers...)
+	return peers, nil
 }
 
 // EventTLSConfig returns the TLS configuration for sending events to the

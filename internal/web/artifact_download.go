@@ -13,8 +13,10 @@ import (
 	"net/netip"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
+	fluxspiffe "github.com/fluxcd/pkg/spiffe"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -59,6 +61,7 @@ var artifactHTTPClient = &http.Client{
 		}).DialContext),
 		TLSHandshakeTimeout:   10 * time.Second,
 		ResponseHeaderTimeout: 30 * time.Second,
+		IdleConnTimeout:       90 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 	},
 	CheckRedirect: rejectArtifactRedirect,
@@ -79,6 +82,74 @@ func artifactHTTPClientWithTLS(tlsConfig *tls.Config) *http.Client {
 		httpClient.Transport = transport
 	}
 	return &httpClient
+}
+
+// artifactMTLSClientCache holds a single artifact HTTP client configured for
+// SPIFFE mTLS, keyed by the set of authorized artifact server IDs. Reusing one
+// client lets connections be pooled across downloads. The zero value is ready
+// to use.
+type artifactMTLSClientCache struct {
+	mu     sync.Mutex
+	key    string
+	client *http.Client
+
+	// buildClient replaces the default client builder when set, used in tests.
+	buildClient func(peers []string) (*http.Client, error)
+}
+
+// get returns the cached client when the peer set is unchanged, otherwise it
+// builds a new client, replaces the cached one and closes the idle connections
+// of the previous client. The SVID and trust bundle are read from the source on
+// every handshake, so their rotation needs no new client. Peers in the
+// `spiffe://self` forms are resolved to the trust domain of the local SVID when
+// the client is built, so a trust domain change builds a new client.
+func (c *artifactMTLSClientCache) get(source fluxspiffe.TLSSource, peers []string) (*http.Client, error) {
+	sorted := slices.Clone(peers)
+	slices.Sort(sorted)
+	key := strings.Join(sorted, ",")
+
+	if slices.ContainsFunc(sorted, isSelfTrustDomainPeer) {
+		svid, err := source.GetX509SVID()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get SPIFFE X.509-SVID: %w", err)
+		}
+		key = svid.ID.TrustDomain().String() + "|" + key
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.client != nil && c.key == key {
+		return c.client, nil
+	}
+
+	build := c.buildClient
+	if build == nil {
+		build = func(peers []string) (*http.Client, error) {
+			tlsConfig, err := fluxspiffe.BuildTLSConfig(source, peers...)
+			if err != nil {
+				return nil, err
+			}
+			return artifactHTTPClientWithTLS(tlsConfig), nil
+		}
+	}
+	httpClient, err := build(sorted)
+	if err != nil {
+		return nil, err
+	}
+
+	if c.client != nil {
+		c.client.CloseIdleConnections()
+	}
+	c.key = key
+	c.client = httpClient
+	return httpClient, nil
+}
+
+// isSelfTrustDomainPeer reports whether the peer uses the `spiffe://self`
+// forms, which refer to the trust domain of the local SVID.
+func isSelfTrustDomainPeer(peer string) bool {
+	return peer == "spiffe://self" || strings.HasPrefix(peer, "spiffe://self/")
 }
 
 // newArtifactDialContext returns a dialer that requires a DNS hostname, resolves and
@@ -229,7 +300,7 @@ func (h *Handler) DownloadHandler(w http.ResponseWriter, req *http.Request) {
 	// Configure SPIFFE mTLS for the artifact server when enabled on the
 	// FluxInstance. The peer identities are derived at request time because
 	// they depend on the FluxInstance reconciliation state.
-	tlsConfig, err := internalspiffe.ArtifactTLSConfig(ctx,
+	peers, err := internalspiffe.ArtifactServerPeers(ctx,
 		h.kubeClient.GetClient(ctx, kubeclient.WithPrivileges()), h.spiffeSource, nil)
 	if err != nil {
 		log.FromContext(ctx).Error(err, "failed to configure SPIFFE mTLS for artifact download",
@@ -239,8 +310,14 @@ func (h *Handler) DownloadHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	httpClient := artifactHTTPClient
-	if tlsConfig != nil {
-		httpClient = artifactHTTPClientWithTLS(tlsConfig)
+	if len(peers) > 0 {
+		httpClient, err = h.artifactClients.get(h.spiffeSource, peers)
+		if err != nil {
+			log.FromContext(ctx).Error(err, "failed to configure SPIFFE mTLS for artifact download",
+				"kind", kind, "name", name, "namespace", namespace)
+			http.Error(w, "Failed to configure SPIFFE mTLS for artifact download", http.StatusBadGateway)
+			return
+		}
 		if strings.HasPrefix(artifactURL, "http://") {
 			artifactURL = "https://" + strings.TrimPrefix(artifactURL, "http://")
 		}
