@@ -177,13 +177,12 @@ func TestSPIFFE_MTLS_WithoutOptionalControllers(t *testing.T) {
 	g.Expect(service).To(BeNil())
 }
 
-func TestSPIFFE_MTLS_OperatorSPIFFEID(t *testing.T) {
+func TestSPIFFE_MTLS_WebUIDisabled(t *testing.T) {
 	g := NewWithT(t)
 	instance := spiffeTestInstance([]string{
 		fluxcdv1.FluxSourceController,
-		fluxcdv1.FluxKustomizeController,
-		fluxcdv1.FluxNotificationController,
 		fluxcdv1.FluxSourceWatcher,
+		fluxcdv1.FluxNotificationController,
 	}, &fluxcdv1.SPIFFE{
 		WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
 		MTLS: &fluxcdv1.MTLS{
@@ -192,20 +191,46 @@ func TestSPIFFE_MTLS_OperatorSPIFFEID(t *testing.T) {
 		},
 	})
 
-	const operatorID = "spiffe://example.org/fluxcd/flux-flux-operator"
+	const operatorID = "spiffe://example.org/fluxcd/flux-operator"
 	result := buildSPIFFEWithOptions(t, instance, func(o *Options) {
-		o.OperatorSPIFFEID = operatorID
+		o.WebUIEnabled = false
 	})
 
 	for _, name := range []string{fluxcdv1.FluxSourceController, fluxcdv1.FluxSourceWatcher} {
 		args := containerArgs(findObject(result.Objects, deploymentKind, name))
-		g.Expect(args).To(ContainElement("--authorized-artifact-client-spiffe-id="+operatorID), name)
-		g.Expect(args).NotTo(ContainElement(HaveSuffix("/fluxcd/flux-operator")), name)
+		g.Expect(args).NotTo(ContainElement("--authorized-artifact-client-spiffe-id="+operatorID), name)
 	}
 
 	notificationArgs := containerArgs(findObject(result.Objects, deploymentKind, fluxcdv1.FluxNotificationController))
 	g.Expect(notificationArgs).To(ContainElement("--authorized-notifier-spiffe-id=" + operatorID))
-	g.Expect(notificationArgs).NotTo(ContainElement(HaveSuffix("/fluxcd/flux-operator")))
+}
+
+func TestSPIFFE_MTLS_OperatorMTLSDisabled(t *testing.T) {
+	g := NewWithT(t)
+	instance := spiffeTestInstance([]string{
+		fluxcdv1.FluxSourceController,
+		fluxcdv1.FluxSourceWatcher,
+		fluxcdv1.FluxNotificationController,
+	}, &fluxcdv1.SPIFFE{
+		WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+		MTLS: &fluxcdv1.MTLS{
+			Enabled:             true,
+			ComponentIDTemplate: "spiffe://example.org/fluxcd/{component}",
+		},
+	})
+
+	result := buildSPIFFEWithOptions(t, instance, func(o *Options) {
+		o.OperatorMTLSEnabled = false
+	})
+
+	for _, name := range []string{
+		fluxcdv1.FluxSourceController,
+		fluxcdv1.FluxSourceWatcher,
+		fluxcdv1.FluxNotificationController,
+	} {
+		args := containerArgs(findObject(result.Objects, deploymentKind, name))
+		g.Expect(args).NotTo(ContainElement(ContainSubstring("flux-operator")), name)
+	}
 }
 
 func TestSPIFFE_MTLS_WithoutArtifactServers(t *testing.T) {
@@ -735,6 +760,10 @@ func buildSPIFFEWithOptions(t *testing.T, instance *fluxcdv1.FluxInstance, setOp
 	options.Components = instance.GetComponents()
 	options.Namespace = instance.GetNamespace()
 	options.ClusterDomain = instance.GetCluster().Domain
+	// Assume the operator has a SPIFFE Workload API source and the embedded
+	// Web UI is enabled unless the test overrides them.
+	options.OperatorMTLSEnabled = true
+	options.WebUIEnabled = true
 	if instance.Spec.Sharding != nil {
 		options.ShardingKey = instance.Spec.Sharding.Key
 		options.Shards = instance.Spec.Sharding.Shards

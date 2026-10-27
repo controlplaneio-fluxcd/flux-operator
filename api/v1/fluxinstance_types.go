@@ -331,12 +331,16 @@ type MTLS struct {
 	// ComponentIDTemplate is the SPIFFE ID template for the Flux controllers.
 	// The '{component}' placeholder is replaced with the name of each
 	// installed component. A trailing slash indicates a SPIFFE ID prefix.
-	// The flux-operator ID is the SPIFFE ID of the operator's X.509-SVID,
-	// or this template with 'flux-operator' when the operator has no
-	// Workload API source.
-	// The flux-operator ID is always added to notification-controller as an
-	// authorized notifier, and to source-controller and source-watcher as an
-	// authorized artifact client for the Web UI artifact downloads.
+	// The flux-operator ID is derived from this template with 'flux-operator'
+	// as the component name, and is only authorized when the operator has a
+	// SPIFFE Workload API source. The template must resolve to the operator
+	// pod's actual SPIFFE ID.
+	// When the operator has a SPIFFE Workload API source, its ID is added to
+	// notification-controller as an authorized notifier. When the operator's
+	// embedded Web UI is enabled, it is also added to source-controller and
+	// source-watcher as an authorized artifact client for the Web UI artifact
+	// downloads. Enabling or disabling the embedded Web UI changes these
+	// controller arguments and rolls out the affected controllers.
 	// For a standalone Web UI, use ExtraArtifactClients and ExtraNotifiers.
 	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:Pattern="^spiffe://[a-z0-9._-]{1,255}(?:/(?:[a-zA-Z0-9_-]|[.][a-zA-Z0-9_-]|[{]component[}])[a-zA-Z0-9._-]*(?:[{]component[}][a-zA-Z0-9._-]*)*)+(?:/)?$"

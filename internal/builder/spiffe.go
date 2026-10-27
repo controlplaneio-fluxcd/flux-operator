@@ -133,7 +133,8 @@ func (o *Options) ValidateAndApplySPIFFEConfig(instance *fluxcdv1.FluxInstance) 
 		data.DeploymentPatches = append(data.DeploymentPatches, spiffeBrokerAPIData(o.Components, *spiffe.BrokerAPI)...)
 	}
 	if spiffe.MTLS != nil && spiffe.MTLS.Enabled {
-		data.DeploymentPatches = append(data.DeploymentPatches, spiffeMTLSData(o.Components, *spiffe.MTLS, o.OperatorSPIFFEID)...)
+		data.DeploymentPatches = append(data.DeploymentPatches,
+			spiffeMTLSData(o.Components, *spiffe.MTLS, o.OperatorMTLSEnabled, o.WebUIEnabled)...)
 	}
 
 	// Skip patches without args, as kustomize rejects an empty patch.
@@ -227,12 +228,17 @@ func spiffeBrokerAPIData(components []string, api fluxcdv1.BrokerAPI) []spiffeDe
 }
 
 // spiffeMTLSData returns the patches for the inter-controller SPIFFE mTLS
-// configuration. The operator is authorized with operatorID, or with the
-// template-derived flux-operator ID when operatorID is empty.
-func spiffeMTLSData(components []string, mtls fluxcdv1.MTLS, operatorID string) []spiffeDeploymentPatchData {
+// configuration. When operatorMTLSEnabled is true, the operator is authorized
+// with the stable SPIFFE ID derived from the component ID template. The
+// operator ID is authorized as a notifier of notification-controller, and as
+// an artifact client of source-controller and source-watcher only when
+// webUIEnabled is true. Enabling or disabling the embedded Web UI changes
+// these controller arguments and rolls out the affected controllers.
+func spiffeMTLSData(components []string, mtls fluxcdv1.MTLS, operatorMTLSEnabled, webUIEnabled bool) []spiffeDeploymentPatchData {
 	var patches []spiffeDeploymentPatchData
 	componentIDTemplate := mtls.ComponentIDTemplate
-	if operatorID == "" {
+	var operatorID string
+	if operatorMTLSEnabled {
 		operatorID = internalspiffe.ComponentID(componentIDTemplate, fluxcdv1.FluxOperator)
 	}
 	has := func(component string) bool {
@@ -245,7 +251,9 @@ func spiffeMTLSData(components []string, mtls fluxcdv1.MTLS, operatorID string) 
 	if has(fluxcdv1.FluxSourceController) {
 		clients := ids(installed(components, fluxcdv1.FluxKustomizeController, fluxcdv1.FluxHelmController, fluxcdv1.FluxSourceWatcher)...)
 		clients = append(clients, mtls.ExtraArtifactClients...)
-		clients = append(clients, operatorID)
+		if operatorMTLSEnabled && webUIEnabled {
+			clients = append(clients, operatorID)
+		}
 		args := spiffeFlagArgs("--authorized-artifact-client-spiffe-id", clients)
 		if has(fluxcdv1.FluxNotificationController) {
 			args = append(args, spiffeFlagArgs("--authorized-event-server-spiffe-id", ids(fluxcdv1.FluxNotificationController))...)
@@ -263,7 +271,9 @@ func spiffeMTLSData(components []string, mtls fluxcdv1.MTLS, operatorID string) 
 	if has(fluxcdv1.FluxSourceWatcher) {
 		clients := ids(installed(components, fluxcdv1.FluxKustomizeController, fluxcdv1.FluxHelmController, fluxcdv1.FluxSourceWatcher)...)
 		clients = append(clients, mtls.ExtraArtifactClients...)
-		clients = append(clients, operatorID)
+		if operatorMTLSEnabled && webUIEnabled {
+			clients = append(clients, operatorID)
+		}
 		args := spiffeFlagArgs("--authorized-artifact-client-spiffe-id", clients)
 
 		servers := internalspiffe.ArtifactServers(componentIDTemplate, components, mtls.ExtraArtifactServers)
@@ -294,7 +304,9 @@ func spiffeMTLSData(components []string, mtls fluxcdv1.MTLS, operatorID string) 
 
 	if has(fluxcdv1.FluxNotificationController) {
 		notifiers := ids(components...)
-		notifiers = append(notifiers, operatorID)
+		if operatorMTLSEnabled {
+			notifiers = append(notifiers, operatorID)
+		}
 		notifiers = append(notifiers, mtls.ExtraNotifiers...)
 		args := spiffeFlagArgs("--authorized-notifier-spiffe-id", notifiers)
 		args = append(args, spiffeFlagArgs("--authorized-receiver-spiffe-id", mtls.Receivers)...)
