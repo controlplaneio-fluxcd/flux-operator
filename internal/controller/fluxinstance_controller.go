@@ -54,6 +54,12 @@ type FluxInstanceReconciler struct {
 	Scheme        *runtime.Scheme
 	ClusterReader engine.ClusterReaderFactory
 	SPIFFESource  fluxspiffe.TLSSource
+	// WebUIEnabled indicates that the operator's embedded Web UI is enabled.
+	// It controls whether the operator SPIFFE ID is authorized as an artifact
+	// client of the Flux source controllers. Enabling or disabling the Web UI
+	// changes the generated controller arguments and rolls out the affected
+	// controllers.
+	WebUIEnabled bool
 
 	StatusManager         string
 	StoragePath           string
@@ -361,6 +367,8 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 	options.Namespace = obj.GetNamespace()
 	options.Components = obj.GetComponents()
 	options.NetworkPolicy = obj.GetCluster().NetworkPolicy
+	options.OperatorMTLSEnabled = r.SPIFFESource != nil
+	options.WebUIEnabled = r.WebUIEnabled
 	options.Logger = log
 
 	if obj.GetCluster().Domain != "" {
@@ -376,15 +384,6 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 
 	if err := options.ValidateAndPatchComponents(); err != nil {
 		return nil, err
-	}
-
-	if r.SPIFFESource != nil && obj.Spec.SPIFFE != nil &&
-		obj.Spec.SPIFFE.MTLS != nil && obj.Spec.SPIFFE.MTLS.Enabled {
-		svid, err := r.SPIFFESource.GetX509SVID()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get the operator SPIFFE X.509-SVID: %w", err)
-		}
-		options.OperatorSPIFFEID = svid.ID.String()
 	}
 
 	if err := options.ValidateAndApplySPIFFEConfig(obj); err != nil {

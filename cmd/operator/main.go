@@ -229,6 +229,16 @@ func main() {
 		authorizedWebUIClients = splitCommaSeparated(s)
 	}
 
+	// Allow the web server port to be set by an environment variable.
+	if s := os.Getenv(webServerPortEnvKey); s != "" {
+		port, err := strconv.Atoi(s)
+		if err != nil {
+			setupLog.Error(err, "unable to parse web server port", "value", s)
+			os.Exit(1)
+		}
+		webServerPort = port
+	}
+
 	// Allow the reporting interval to be set by an environment variable.
 	reportingIntervalEnv := os.Getenv(reportingIntervalEnvKey)
 	if reportingIntervalEnv != "" {
@@ -424,6 +434,7 @@ func main() {
 			Scheme:                mgr.GetScheme(),
 			ClusterReader:         clusterReader,
 			SPIFFESource:          spiffeTLSSource,
+			WebUIEnabled:          webServerPort > 0,
 			StoragePath:           storagePath,
 			StatusManager:         controllerName,
 			OverrideFieldManagers: overrideFieldManagers,
@@ -506,15 +517,6 @@ func main() {
 	// +kubebuilder:scaffold:builder
 
 	probes.SetupChecks(mgr, setupLog)
-
-	if s := os.Getenv(webServerPortEnvKey); s != "" {
-		port, err := strconv.Atoi(s)
-		if err != nil {
-			setupLog.Error(err, "unable to parse web server port", "value", s)
-			os.Exit(1)
-		}
-		webServerPort = port
-	}
 
 	// Start web server.
 	if webServerPort > 0 {

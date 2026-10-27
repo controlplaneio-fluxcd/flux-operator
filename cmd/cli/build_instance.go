@@ -55,6 +55,7 @@ var buildInstanceCmd = &cobra.Command{
 type buildInstanceFlags struct {
 	filename             string
 	distributionArtifact string
+	operatorWebUIEnabled bool
 }
 
 var buildInstanceArgs buildInstanceFlags
@@ -62,6 +63,8 @@ var buildInstanceArgs buildInstanceFlags
 func init() {
 	buildInstanceCmd.Flags().StringVarP(&buildInstanceArgs.filename, "filename", "f", "", "Path to the FluxInstance YAML manifest.")
 	buildInstanceCmd.Flags().StringVar(&buildInstanceArgs.distributionArtifact, "distribution-artifact", "", "OCI artifact URL of the Flux distribution, takes precedence over the FluxInstance spec.")
+	buildInstanceCmd.Flags().BoolVar(&buildInstanceArgs.operatorWebUIEnabled, "operator-web-ui-enabled", false,
+		"Assume the operator's embedded Web UI is enabled and authorize the operator SPIFFE ID as an artifact client of the Flux source controllers.")
 
 	buildCmd.AddCommand(buildInstanceCmd)
 }
@@ -137,6 +140,7 @@ func buildInstanceCmdRun(cmd *cobra.Command, args []string) error {
 	options.Components = instance.GetComponents()
 	options.NetworkPolicy = instance.GetCluster().NetworkPolicy
 	options.ClusterDomain = instance.GetCluster().Domain
+	options.WebUIEnabled = buildInstanceArgs.operatorWebUIEnabled
 
 	options.Patches += builder.GetProfileClusterType(instance.GetCluster().Type)
 	options.Patches += builder.GetProfileClusterSize(instance.GetCluster().Size)

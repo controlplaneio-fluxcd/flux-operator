@@ -275,10 +275,13 @@ the source's status over plain HTTP, or over SPIFFE mTLS when the FluxInstance
 status reports it as applied (`.status.spiffe.mtls`). The backend reads the
 FluxInstance with its privileged client to derive the artifact server SPIFFE
 IDs: the applied source-controller and source-watcher, plus the applied
-`.extraArtifactServers`. The operator's SPIFFE ID is always authorized as an
-artifact client of source-controller and source-watcher. This fetch is not a
-Kubernetes API call, so it runs with the backend pod's own network identity in
-either access mode.
+`.extraArtifactServers`. When the operator has a SPIFFE Workload API source and
+the embedded Web UI is enabled, the operator's SPIFFE ID, derived from the
+applied `.componentIDTemplate`, is authorized as an artifact client of
+source-controller and source-watcher. Enabling or disabling the embedded Web UI
+changes these controller arguments and rolls out the affected controllers.
+This fetch is not a Kubernetes API call, so it runs with the backend pod's own
+network identity in either access mode.
 To keep the fetch scoped to Flux artifact servers, the backend does not follow
 redirects and requires DNS hostnames; literal IPv4 and IPv6 hostnames are
 rejected. It resolves every destination address, rejects the request if any

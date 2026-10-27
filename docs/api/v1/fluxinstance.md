@@ -608,15 +608,20 @@ communication between the Flux controllers.
 - `.extraNotifiers` (optional): Additional SPIFFE IDs added to
   `notification-controller` as authorized notifiers.
 
-The flux-operator is authorized with the SPIFFE ID of its own X.509-SVID. When
-the operator has no SPIFFE Workload API source, the ID is derived from
-`.componentIDTemplate` with `flux-operator` as the component name.
+The flux-operator is authorized with the stable SPIFFE ID derived from
+`.componentIDTemplate` using `flux-operator` as the component name. The ID is
+only authorized when the operator has a SPIFFE Workload API source; otherwise
+the operator does not participate in mTLS. The template must resolve to the
+operator pod's actual SPIFFE ID.
 
-The `flux-operator` SPIFFE ID is always added to the `notification-controller`
-authorized notifiers, used by the operator events and the Web UI audit events,
-and to the `source-controller` and `source-watcher` authorized artifact
-clients, used by the Web UI artifact downloads. For a standalone Web UI, add
-its SPIFFE ID to `.extraArtifactClients` and `.extraNotifiers`.
+When the operator has a SPIFFE Workload API source, its SPIFFE ID is added to
+the `notification-controller` authorized notifiers, used by the operator events
+and the Web UI audit events. When the embedded operator Web UI is enabled, it is
+also added to the `source-controller` and `source-watcher` authorized artifact
+clients, used by the Web UI artifact downloads. Enabling or disabling the
+embedded Web UI changes these controller arguments and rolls out the affected
+controllers. For a standalone Web UI, add its SPIFFE ID to
+`.extraArtifactClients` and `.extraNotifiers`.
 
 The flux-operator pod does not need the `--authorized-*` inter-controller
 flags. It reads the Flux controller SPIFFE IDs from the
