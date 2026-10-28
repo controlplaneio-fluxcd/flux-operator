@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { renderHook, cleanup } from '@testing-library/preact'
+import { renderHook, cleanup, act } from '@testing-library/preact'
 import { usePrismTheme } from './yaml'
 import { appliedTheme } from '../../../utils/theme'
 
@@ -72,7 +72,7 @@ describe('usePrismTheme', () => {
 
     expect(document.getElementById(LINK_ID)).not.toBeNull()
 
-    unmount()
+    act(() => unmount())
 
     expect(document.getElementById(LINK_ID)).toBeNull()
   })
@@ -84,11 +84,11 @@ describe('usePrismTheme', () => {
     expect(document.getElementById(LINK_ID)).not.toBeNull()
 
     // Unmounting one must NOT remove the link the other still relies on.
-    first.unmount()
+    act(() => first.unmount())
     expect(document.getElementById(LINK_ID)).not.toBeNull()
 
     // Removed only once the last consumer unmounts.
-    second.unmount()
+    act(() => second.unmount())
     expect(document.getElementById(LINK_ID)).toBeNull()
   })
 

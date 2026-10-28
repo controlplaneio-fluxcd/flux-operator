@@ -48,8 +48,10 @@ The system reads Jobs and Pods created by a CronJob on behalf of a user who only
 CronJob ownership is cascading (CronJob → Job → Pod). The operator's
 controller-runtime cache maintains a server-side field index
 (`metadata.ownerReferences.cronJob`) that maps Jobs to their owning
-CronJob. This index is only available on the privileged cached client
-because it was registered at startup with the operator's own credentials.
+CronJob. The index lives on a cluster-wide Job informer, so the operator
+needs list/watch on `jobs` (`batch`). This index is only available on the
+privileged cached client because it was registered at startup with the
+operator's own credentials.
 The privileged client is used solely to query this index for Jobs owned
 by the CronJob; the resulting Pod statuses (name, phase, timestamps) are
 returned to the user without exposing any sensitive pod spec data.
@@ -168,6 +170,13 @@ response based on the user's namespace access, we avoid granting users
 cluster-wide read access or `apps`/`batch` read permissions while still
 delivering a meaningful, isolated dashboard and workload search experience.
 
+The report also carries a name-less nodes summary (`spec.nodes`, see
+section 9) built from cluster-wide aggregates: node counts by state,
+capacity totals, and finding counts that include unschedulable-pod and OOM
+kill counts from all tenants. It carries only codes, counts, percentages and
+timestamps, never node names, pools, zones, instance types, kubelet versions,
+condition types, messages, or taint keys.
+
 ---
 
 ## 6. Pod Metrics and Workload Usage
@@ -194,7 +203,8 @@ disabled with `spec.metrics.disabled`.
 When building the report, the operator lists pods labeled
 `app.kubernetes.io/part-of=flux` in its own namespace with the privileged
 client, attaches their latest usage from the pod metrics collector, and includes
-the requests/limits read from the pod specs.
+the requests/limits of the running containers (app containers and sidecars),
+from the pod specs and the actuated status.
 
 When a user opens a workload dashboard, the backend first fetches the workload
 with the user's impersonated client as the access-control gate. Only after that
@@ -261,8 +271,17 @@ either access mode.
 
 **Artifact fetch hardening:**
 The artifact download action retrieves the artifact from the URL advertised in
-the source's status over plain HTTP. This fetch is not a Kubernetes API call,
-so it runs with the backend pod's own network identity in either access mode.
+the source's status over plain HTTP, or over SPIFFE mTLS when the FluxInstance
+status reports it as applied (`.status.spiffe.mtls`). The backend reads the
+FluxInstance with its privileged client to derive the artifact server SPIFFE
+IDs: the applied source-controller and source-watcher, plus the applied
+`.extraArtifactServers`. When the operator has a SPIFFE Workload API source and
+the embedded Web UI is enabled, the operator's SPIFFE ID, derived from the
+applied `.componentIDTemplate`, is authorized as an artifact client of
+source-controller and source-watcher. Enabling or disabling the embedded Web UI
+changes these controller arguments and rolls out the affected controllers.
+This fetch is not a Kubernetes API call, so it runs with the backend pod's own
+network identity in either access mode.
 To keep the fetch scoped to Flux artifact servers, the backend does not follow
 redirects and requires DNS hostnames; literal IPv4 and IPv6 hostnames are
 rejected. It resolves every destination address, rejects the request if any
@@ -305,6 +324,72 @@ Users do not need cluster-wide `list` permissions on namespaces just to populate
 
 ---
 
+## 9. Nodes Dashboard and Summary
+
+**Where:** The Cluster Nodes summary panel on the main dashboard (all users)
+and the Nodes dashboard at `/nodes` (users who can list nodes).
+
+**Internal operation:**
+On every report refresh, the system reads all Nodes and all Pods cluster-wide
+from the operator cache, lists the kubelet heartbeat Leases in `kube-node-lease`
+directly from the API server (uncached, paged), and reads
+the node usage from the Metrics API (`nodes` in `metrics.k8s.io`), to build a
+nodes snapshot. It also uses the latest pod usage from the pod metrics collector
+(section 6) for the memory used above requests, and reads Jobs from the
+operator cache to map Job pods to their CronJob for the bursting workloads
+ranking. The snapshot holds the per-node requests, limits, pod slots, OOM
+kills, conditions, taints and usage, the unschedulable pods, and the health
+findings. A Node informer
+event handler records the Ready transitions per node for flapping detection.
+
+**How it works:**
+The snapshot is built with the privileged client and cached next to the report.
+Its name-less summary is injected into the report for all users (see section 5).
+The `/api/v1/nodes` and `/api/v1/nodes/workloads` endpoints are gated on the
+user being allowed to `list` `nodes` (core group), checked with a
+`SelfSubjectAccessReview` using the user's impersonated client and cached per
+user like namespace visibility; users without it get `403`. The report carries
+the result as `userInfo.canViewNodes`; a failed check yields `false` in the
+report and never fails it. When authentication is disabled, the whole UI runs as
+the operator, so nodes are treated like pod metrics (section 6): the access check
+is skipped, `canViewNodes` is `true` and the dashboard is open.
+
+The predefined `flux-web-user` role grants `list` on all resources, so users
+bound to it can list nodes and see the full dashboard.
+
+The dashboard returns per-node aggregates (sums and counts) and, for the pods
+without memory request or limit, namespace names with pod counts. These
+namespace names are cluster-wide and not filtered to the namespaces the user
+can access, so granting `list` on `nodes` reveals them. It never returns pod
+names or specs. The bursting workloads ranking names workloads: it
+lists only the Flux-managed workloads found in the applier inventories (the
+workloads index of section 5), never bare or static pods, and its rows are
+filtered to the namespaces the user can access (section 8).
+
+The operator cache keeps full Node objects without `status.images` and managed
+fields, and Pods without managed fields. Full Node objects are read only by the
+nodes snapshot and the Ready transitions tracking; the FluxReport reporter lists
+Nodes as metadata only, also without managed fields. The Pod informer is cluster-wide, so
+its memory grows with the number of pods in the cluster. The Leases are not
+cached: they are listed once per report refresh in pages of 500 under a 10s
+timeout. When the list fails, the heartbeat check is skipped for that refresh.
+
+**Operator permissions:** list/watch `nodes`, list/watch `pods` cluster-wide,
+list `leases` (`coordination.k8s.io`) in `kube-node-lease`, list
+`nodes` in `metrics.k8s.io`, and get/list/watch `jobs` (`batch`): the Job
+lookup is served by the operator's cluster-wide Job informer, the same one that
+backs the CronJob field index of section 1, so it adds no new watch. The default installation binds the operator to
+`cluster-admin`, which covers them.
+
+**Least privilege benefit:**
+Users who can list nodes do not need cluster-wide `pods` list, `metrics.k8s.io`
+nodes, or `leases` access to investigate node health and capacity. Tenants see
+whether the platform is healthy from the aggregate summary without needing
+node access, although the summary does expose cluster capacity totals and
+finding counts.
+
+---
+
 ## Summary
 
 | # | Feature                              | Internal Operation                                   | Data Exposed to User                                                                           |
@@ -317,3 +402,4 @@ Users do not need cluster-wide `list` permissions on namespaces just to populate
 | 6 | Pod metrics and workload usage       | System scrapes Metrics API cluster-wide and reads named generation metadata | CPU/memory usage for permitted workloads, Flux controller requests/limits, and workload rollout timestamp |
 | 7 | Fine-grained user actions            | System performs native action operations             | Requested artifact for downloads; action result only otherwise                                 |
 | 8 | Namespace visibility                 | Wrapper lists namespaces with privileged base client | Visible namespace names after RBAC filtering                                                   |
+| 9 | Nodes dashboard and summary          | System reads Nodes, Pods, Jobs (cached informer), node Leases (uncached list) and node metrics cluster-wide | Name-less counts and totals for all users; node details and cluster-wide namespace pod counts (not filtered by user namespace) to users who can list nodes; bursting workloads filtered by user namespace |

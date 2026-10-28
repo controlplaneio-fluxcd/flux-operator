@@ -69,11 +69,18 @@ spec:
                     description: Multitenant enables the multitenancy lockdown. Defaults
                       to false.
                     type: boolean
+                  multitenantObjectIdentity:
+                    default: false
+                    description: |-
+                      MultitenantObjectIdentity enables the multitenancy lockdown for
+                      object identity. Defaults to false.
+                    type: boolean
                   multitenantWorkloadIdentity:
                     default: false
                     description: |-
-                      MultitenantWorkloadIdentity enables the multitenancy lockdown for
-                      workload identity. Defaults to false.
+                      MultitenantWorkloadIdentity is now legacy.
+
+                      Legacy: Use MultitenantObjectIdentity instead.
                     type: boolean
                   networkPolicy:
                     default: true
@@ -81,11 +88,28 @@ spec:
                       NetworkPolicy restricts network access to the current namespace.
                       Defaults to true.
                     type: boolean
+                  objectIdentityRBAC:
+                    description: |-
+                      ObjectIdentityRBAC configures the RBAC required for object identity
+                      using Kubernetes service account tokens. Object identity is the new
+                      name of the upstream Flux object-level workload identity feature.
+                      In Flux v2.6.0 to v2.9.x this enables the
+                      ObjectLevelWorkloadIdentity feature gate and leaves the RBAC for
+                      creating service account tokens in place. When disabled, the
+                      operator removes that RBAC from the Flux controllers' ClusterRole.
+                      Starting with Flux v2.10.0, the ObjectLevelWorkloadIdentity feature
+                      gate is retired and no longer changes behavior, so the operator no
+                      longer passes it to the controllers.
+                      Starting with Flux v2.10.0, the RBAC for creating service account
+                      tokens is removed from the Flux distribution, and this field
+                      controls whether the operator adds it.
+                      This feature is only available in Flux v2.6.0 and later.
+                    type: boolean
                   objectLevelWorkloadIdentity:
                     description: |-
-                      ObjectLevelWorkloadIdentity enables the feature gate
-                      required for object-level workload identity.
-                      This feature is only available in Flux v2.6.0 and later.
+                      ObjectLevelWorkloadIdentity is now legacy.
+
+                      Legacy: Use ObjectIdentityRBAC instead.
                     type: boolean
                   size:
                     description: |-
@@ -101,7 +125,7 @@ spec:
                     description: |-
                       TenantDefaultDecryptionServiceAccount is the name of the service account
                       to use as default for kustomize-controller SOPS decryption when the
-                      multitenant lockdown for workload identity is enabled. Defaults to the
+                      multitenant lockdown for object identity is enabled. Defaults to the
                       'default' service account from the tenant namespace.
                     type: string
                   tenantDefaultKubeConfigServiceAccount:
@@ -109,7 +133,7 @@ spec:
                       TenantDefaultKubeConfigServiceAccount is the name of the service account
                       to use as default for kustomize-controller and helm-controller remote
                       cluster access via spec.kubeConfig.configMapRef when the multitenant
-                      lockdown for workload identity is enabled. Defaults to the 'default'
+                      lockdown for object identity is enabled. Defaults to the 'default'
                       service account from the tenant namespace.
                     type: string
                   tenantDefaultServiceAccount:
@@ -117,7 +141,7 @@ spec:
                       TenantDefaultServiceAccount is the name of the service account
                       to use as default when the multitenant lockdown is enabled, for
                       kustomize-controller and helm-controller.
-                      This field will also be used for multitenant workload identity
+                      This field will also be used for multitenant object identity
                       lockdown for source-controller, notification-controller,
                       image-reflector-controller and image-automation-controller.
                       Defaults to the 'default' service account from the tenant namespace.
@@ -136,10 +160,18 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-validations:
-                - message: .objectLevelWorkloadIdentity must be set to true when .multitenantWorkloadIdentity
-                    is set to true
+                - message: cannot set .objectIdentityRBAC together with a legacy object
+                    identity field
+                  rule: '!(has(self.objectLevelWorkloadIdentity) && has(self.objectIdentityRBAC))'
+                - message: cannot set .multitenantObjectIdentity together with a legacy
+                    multitenant object identity field
+                  rule: '!(has(self.multitenantWorkloadIdentity) && self.multitenantWorkloadIdentity
+                    && has(self.multitenantObjectIdentity) && self.multitenantObjectIdentity)'
+                - message: .objectIdentityRBAC must be set to true when multitenant
+                    workload identity is enabled
                   rule: (has(self.objectLevelWorkloadIdentity) && self.objectLevelWorkloadIdentity)
-                    || !has(self.multitenantWorkloadIdentity) || !self.multitenantWorkloadIdentity
+                    || (has(self.objectIdentityRBAC) && self.objectIdentityRBAC) ||
+                    (!has(self.multitenantWorkloadIdentity) || !self.multitenantWorkloadIdentity)
               commonMetadata:
                 description: |-
                   CommonMetadata specifies the common labels and annotations that are
@@ -319,6 +351,173 @@ spec:
                 required:
                 - shards
                 type: object
+              spiffe:
+                description: |-
+                  SPIFFE holds the configuration for the SPIFFE integration.
+                  When set, the operator configures the Flux controllers to use
+                  the SPIFFE Workload API and optionally enables object identity
+                  and mTLS between the controllers.
+                  The flux-operator pod must also be configured with the same Workload API
+                  and, when used, Broker API settings, but does not need the inter-controller
+                  flags.
+                properties:
+                  brokerAPI:
+                    description: |-
+                      BrokerAPI holds the configuration for the SPIFFE Broker API.
+                      When set, enables the object-level SPIFFE features.
+                    properties:
+                      endpoint:
+                        description: |-
+                          Endpoint is the address of the SPIFFE Broker API endpoint,
+                          e.g. 'dns:///spiffe-broker.example.com:443'.
+                          The flux-operator pod accepts the same --spiffe-broker-endpoint flag
+                          as the Flux controllers. For OLM installations, the endpoint can be
+                          set with the SPIFFE_BROKER_ENDPOINT environment variable.
+                        maxLength: 1024
+                        minLength: 1
+                        pattern: ^[!-~]+$
+                        type: string
+                      ids:
+                        description: |-
+                          IDs is the list of SPIFFE IDs or SPIFFE ID prefixes authorized
+                          for the SPIFFE Broker API endpoint. SPIFFE IDs ending with a slash
+                          are treated as prefixes.
+                          The flux-operator pod accepts the same repeatable --spiffe-broker-id
+                          flag as the Flux controllers. For OLM installations, the IDs can be
+                          set with the SPIFFE_BROKER_IDS environment variable as a comma-separated
+                          list.
+                        items:
+                          maxLength: 2048
+                          pattern: ^(?:spiffe://[a-z0-9._-]{1,255}|spiffe://[a-z0-9._-]{1,255}(?:/(?:[a-zA-Z0-9_-]|[.][a-zA-Z0-9_-])[a-zA-Z0-9._-]*)+(?:/)?)$
+                          type: string
+                        maxItems: 64
+                        minItems: 1
+                        type: array
+                    required:
+                    - endpoint
+                    - ids
+                    type: object
+                  mtls:
+                    description: |-
+                      MTLS holds the configuration for mTLS between the Flux controllers.
+                      The flux-operator reads the controller SPIFFE IDs from .status.spiffe.
+                    properties:
+                      componentIDTemplate:
+                        description: |-
+                          ComponentIDTemplate is the SPIFFE ID template for the Flux controllers.
+                          The '{component}' placeholder is replaced with the name of each
+                          installed component. A trailing slash indicates a SPIFFE ID prefix.
+                          The flux-operator ID is derived from this template with 'flux-operator'
+                          as the component name, and is only authorized when the operator has a
+                          SPIFFE Workload API source. The template must resolve to the operator
+                          pod's actual SPIFFE ID.
+                          When the operator has a SPIFFE Workload API source, its ID is added to
+                          notification-controller as an authorized notifier. When the operator's
+                          embedded Web UI is enabled, it is also added to source-controller and
+                          source-watcher as an authorized artifact client for the Web UI artifact
+                          downloads. Enabling or disabling the embedded Web UI changes these
+                          controller arguments and rolls out the affected controllers.
+                          For a standalone Web UI, use ExtraArtifactClients and ExtraNotifiers.
+                        maxLength: 2048
+                        pattern: ^spiffe://[a-z0-9._-]{1,255}(?:/(?:[a-zA-Z0-9_-]|[.][a-zA-Z0-9_-]|[{]component[}])[a-zA-Z0-9._-]*(?:[{]component[}][a-zA-Z0-9._-]*)*)+(?:/)?$
+                        type: string
+                        x-kubernetes-validations:
+                        - message: componentIDTemplate must contain the '{component}'
+                            placeholder
+                          rule: self.contains('{component}')
+                      enabled:
+                        description: Enabled enables mTLS between the Flux controllers.
+                        type: boolean
+                      extraArtifactClients:
+                        description: |-
+                          ExtraArtifactClients is a list of additional SPIFFE IDs added to
+                          source-controller and source-watcher as authorized artifact clients,
+                          e.g. the standalone Web UI or the Flux MCP Server.
+                        items:
+                          maxLength: 2048
+                          pattern: ^(?:spiffe://[a-z0-9._-]{1,255}|spiffe://[a-z0-9._-]{1,255}(?:/(?:[a-zA-Z0-9_-]|[.][a-zA-Z0-9_-])[a-zA-Z0-9._-]*)+(?:/)?)$
+                          type: string
+                        maxItems: 64
+                        type: array
+                      extraArtifactServers:
+                        description: |-
+                          ExtraArtifactServers is a list of additional SPIFFE IDs added to
+                          kustomize-controller, helm-controller and source-watcher as authorized
+                          artifact servers, e.g. an external source controller.
+                        items:
+                          maxLength: 2048
+                          pattern: ^(?:spiffe://[a-z0-9._-]{1,255}|spiffe://[a-z0-9._-]{1,255}(?:/(?:[a-zA-Z0-9_-]|[.][a-zA-Z0-9_-])[a-zA-Z0-9._-]*)+(?:/)?)$
+                          type: string
+                        maxItems: 64
+                        type: array
+                      extraNotifiers:
+                        description: |-
+                          ExtraNotifiers is a list of additional SPIFFE IDs added to
+                          notification-controller as authorized notifiers, e.g. the standalone
+                          Web UI or the Flux MCP Server.
+                        items:
+                          maxLength: 2048
+                          pattern: ^(?:spiffe://[a-z0-9._-]{1,255}|spiffe://[a-z0-9._-]{1,255}(?:/(?:[a-zA-Z0-9_-]|[.][a-zA-Z0-9_-])[a-zA-Z0-9._-]*)+(?:/)?)$
+                          type: string
+                        maxItems: 64
+                        type: array
+                      receivers:
+                        description: |-
+                          Receivers is the list of SPIFFE IDs of external Ingress or Gateway
+                          controllers authorized to send webhook requests to notification-controller.
+                          Setting at least one ID makes the receiver accept only SPIFFE mTLS clients.
+                        items:
+                          maxLength: 2048
+                          pattern: ^(?:spiffe://[a-z0-9._-]{1,255}|spiffe://[a-z0-9._-]{1,255}(?:/(?:[a-zA-Z0-9_-]|[.][a-zA-Z0-9_-])[a-zA-Z0-9._-]*)+(?:/)?)$
+                          type: string
+                        maxItems: 64
+                        type: array
+                    required:
+                    - componentIDTemplate
+                    - enabled
+                    type: object
+                  workloadAPI:
+                    description: |-
+                      WorkloadAPI holds the configuration for the SPIFFE Workload API.
+                      It is required for enabling any of the SPIFFE features and is used
+                      to render the go-spiffe environment variable and the SPIFFE CSI volume.
+                    properties:
+                      csiDriver:
+                        description: |-
+                          CSIDriver is the name of the SPIFFE CSI driver used to mount
+                          the Workload API socket into the Flux controller pods.
+                          When set, the operator mounts the CSI volume at /spiffe-workload-api
+                          and the endpoint must be a unix socket under that path.
+                          When omitted, no CSI volume is configured.
+                        maxLength: 63
+                        minLength: 1
+                        pattern: ^[a-zA-Z0-9](?:[-a-zA-Z0-9]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[-a-zA-Z0-9]*[a-zA-Z0-9])?)*$
+                        type: string
+                      endpoint:
+                        description: |-
+                          Endpoint is the address of the SPIFFE Workload API endpoint,
+                          in the form 'unix:///<absolute path>', 'unix:/<absolute path>'
+                          or 'tcp://<ip>:<port>',
+                          e.g. 'unix:///spiffe-workload-api/agent.sock'.
+                          The flux-operator pod must be configured with the same endpoint
+                          through the SPIFFE_ENDPOINT_SOCKET environment variable.
+                        maxLength: 1024
+                        minLength: 1
+                        pattern: ^(?:unix:(?:///[!$&->@-~]+|/[!$&-.0->@-~][!$&->@-~]*)|tcp://(?:[0-9]{1,3}(?:\.[0-9]{1,3}){3}|\[[0-9a-fA-F:.]+\]):[0-9]{1,5})$
+                        type: string
+                    required:
+                    - endpoint
+                    type: object
+                    x-kubernetes-validations:
+                    - message: endpoint must be a unix socket under /spiffe-workload-api/
+                        without '..' segments when csiDriver is set, as the CSI volume
+                        is mounted at /spiffe-workload-api
+                      rule: '!has(self.csiDriver) || ((self.endpoint.startsWith(''unix:///spiffe-workload-api/'')
+                        || self.endpoint.startsWith(''unix:/spiffe-workload-api/''))
+                        && !self.endpoint.matches(''(^|/)[.][.](/|$)''))'
+                required:
+                - workloadAPI
+                type: object
               storage:
                 description: |-
                   Storage holds the specification of the source-controller
@@ -427,6 +626,14 @@ spec:
             - message: .spec.storage must be set when .spec.sharding.storage is 'persistent'
               rule: '!has(self.sharding) || !has(self.sharding.storage) || self.sharding.storage
                 != ''persistent'' || has(self.storage)'
+            - message: .spec.cluster.objectIdentityRBAC or .spec.spiffe.brokerAPI
+                must be set when .spec.cluster.multitenantObjectIdentity is set to
+                true
+              rule: '!has(self.cluster) || !has(self.cluster.multitenantObjectIdentity)
+                || !self.cluster.multitenantObjectIdentity || (has(self.cluster.objectIdentityRBAC)
+                && self.cluster.objectIdentityRBAC) || (has(self.cluster.objectLevelWorkloadIdentity)
+                && self.cluster.objectLevelWorkloadIdentity) || (has(self.spiffe)
+                && has(self.spiffe.brokerAPI))'
           status:
             description: FluxInstanceStatus defines the observed state of FluxInstance
             properties:
@@ -618,6 +825,32 @@ spec:
                   reconcile request value, so a change of the annotation value
                   can be detected.
                 type: string
+              spiffe:
+                description: SPIFFE holds the SPIFFE settings of the last applied
+                  distribution.
+                properties:
+                  mtls:
+                    description: MTLS holds the applied mTLS settings.
+                    properties:
+                      componentIDTemplate:
+                        description: ComponentIDTemplate is the SPIFFE ID template
+                          of the Flux controllers.
+                        type: string
+                      enabled:
+                        description: Enabled is true when the Flux controllers were
+                          deployed with mTLS.
+                        type: boolean
+                      extraArtifactServers:
+                        description: |-
+                          ExtraArtifactServers is the list of additional SPIFFE IDs
+                          authorized as artifact servers.
+                        items:
+                          type: string
+                        type: array
+                    required:
+                    - enabled
+                    type: object
+                type: object
             type: object
         type: object
         x-kubernetes-validations:

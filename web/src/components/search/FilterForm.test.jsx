@@ -3,6 +3,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/preact'
+import userEvent from '@testing-library/user-event'
 import { signal } from '@preact/signals'
 import { FilterForm } from './FilterForm'
 import { fluxKinds, eventSeverities, resourceStatuses, workloadKinds } from '../../utils/constants'
@@ -231,9 +232,29 @@ describe('FilterForm', () => {
       )
 
       const nameInput = screen.getByPlaceholderText(/Resource name/)
-      fireEvent.change(nameInput, { target: { value: 'flux-system' } })
+      fireEvent.input(nameInput, { target: { value: 'flux-system' } })
 
       expect(nameSignal.value).toBe('flux-system')
+    })
+
+    it('should update nameSignal on every keystroke', async () => {
+      const user = userEvent.setup()
+      const seen = []
+      nameSignal.subscribe((v) => seen.push(v))
+
+      render(
+        <FilterForm
+          kindSignal={kindSignal}
+          nameSignal={nameSignal}
+          namespaceSignal={namespaceSignal}
+          namespaces={mockNamespaces}
+          onClear={onClear}
+        />
+      )
+
+      await user.type(screen.getByPlaceholderText(/Resource name/), 'flux')
+
+      expect(seen).toEqual(['', 'f', 'fl', 'flu', 'flux'])
     })
 
     it('should update namespaceSignal when namespace dropdown changes', () => {

@@ -5,6 +5,7 @@ package web
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	fluxspiffe "github.com/fluxcd/pkg/spiffe"
 	"github.com/go-logr/logr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
@@ -38,6 +40,62 @@ var (
 	errGracefulShutdownDeadlineExceeded = errors.New("graceful shutdown deadline exceeded")
 )
 
+// ServerOption configures the web server.
+type ServerOption func(*serverOptions)
+
+type serverOptions struct {
+	spiffeSource fluxspiffe.TLSSource
+	tlsConfig    *tls.Config
+}
+
+// WithSPIFFESource sets the SPIFFE Workload API source used by the web server.
+func WithSPIFFESource(source fluxspiffe.TLSSource) ServerOption {
+	return func(o *serverOptions) {
+		o.spiffeSource = source
+	}
+}
+
+// WithWebUITLSConfig sets the TLS configuration used by the web server.
+func WithWebUITLSConfig(tlsConfig *tls.Config) ServerOption {
+	return func(o *serverOptions) {
+		o.tlsConfig = tlsConfig
+	}
+}
+
+func newServerOptions(opts []ServerOption) serverOptions {
+	var so serverOptions
+	for _, opt := range opts {
+		opt(&so)
+	}
+	return so
+}
+
+func handlerOptions(so serverOptions) []HandlerOption {
+	if so.spiffeSource == nil {
+		return nil
+	}
+	return []HandlerOption{withSPIFFESource(so.spiffeSource)}
+}
+
+func startWebServer(s *http.Server, tlsConfig *tls.Config, l logr.Logger) <-chan struct{} {
+	serverStopped := make(chan struct{})
+	go func() {
+		defer close(serverStopped)
+		l.Info("starting web server", "tls", tlsConfig != nil)
+		var err error
+		if tlsConfig != nil {
+			err = s.ListenAndServeTLS("", "")
+		} else {
+			err = s.ListenAndServe()
+		}
+		if !errors.Is(err, http.ErrServerClosed) {
+			l.Error(err, "unable to start web server")
+			os.Exit(1)
+		}
+	}()
+	return serverStopped
+}
+
 // RunServer starts the web server and blocks
 // until the provided context is canceled.
 // Whenever a new configuration is received on the confChannel,
@@ -47,8 +105,10 @@ var (
 func RunServer(ctx context.Context, c cluster.Cluster,
 	confChannel <-chan *fluxcdv1.WebConfigSpec,
 	version, statusManager, namespace string,
-	gracefulShutdownTimeout time.Duration, port int) error {
+	gracefulShutdownTimeout time.Duration, port int,
+	opts ...ServerOption) error {
 
+	so := newServerOptions(opts)
 	l := ctrl.Log.WithName("web-server").WithValues("port", port)
 
 	// Get event recorder.
@@ -75,6 +135,7 @@ func RunServer(ctx context.Context, c cluster.Cluster,
 		ReadTimeout:  serverTimeout,
 		WriteTimeout: serverTimeout,
 		IdleTimeout:  serverTimeout,
+		TLSConfig:    so.tlsConfig,
 
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			handlerMu.RLock()
@@ -84,15 +145,7 @@ func RunServer(ctx context.Context, c cluster.Cluster,
 			h.ServeHTTP(w, r)
 		}),
 	}
-	serverStopped := make(chan struct{})
-	go func() {
-		defer close(serverStopped)
-		l.Info("starting web server")
-		if err := s.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
-			l.Error(err, "unable to start web server")
-			os.Exit(1)
-		}
-	}()
+	serverStopped := startWebServer(s, so.tlsConfig, l)
 
 	// Create management variables for the current handler.
 	var cancelHandlerCtx context.CancelFunc
@@ -105,6 +158,14 @@ func RunServer(ctx context.Context, c cluster.Cluster,
 	close(ch)
 	handlerStopped = ch
 	closeAuth = func(context.Context) error { return nil }
+
+	// Node Ready transitions tracker, registered once on the Node informer
+	// so the history survives handler swaps. Flapping detection is skipped
+	// when the informer can't be set up.
+	nodeTransitions, err := StartReadyTransitionTracker(ctx, c.GetCache())
+	if err != nil {
+		l.Error(err, "node readiness flapping detection disabled, failed to watch nodes")
+	}
 
 	// Pod metrics collector state, preserved across configuration reloads
 	// so the usage history survives handler swaps.
@@ -210,18 +271,25 @@ func RunServer(ctx context.Context, c cluster.Cluster,
 			metricsCollector = nil
 		}
 		if conf.MetricsEnabled() && metricsCollector == nil {
-			if lister, err := NewPodMetricsLister(c.GetConfig()); err != nil {
+			lister, err := NewPodMetricsLister(c.GetConfig())
+			if err != nil {
 				serverLog.Error(err, "pod metrics collection disabled, failed to create metrics client")
-			} else {
+			}
+			nodeLister, nodeErr := NewNodeMetricsLister(c.GetConfig())
+			if nodeErr != nil {
+				serverLog.Error(nodeErr, "node metrics collection disabled, failed to create metrics client")
+			}
+			if err == nil {
 				metricsInterval = conf.MetricsScrapeInterval()
-				metricsCollector, cancelMetricsCtx, metricsStopped = startMetricsCollector(lister, metricsInterval, serverLog)
+				metricsCollector, cancelMetricsCtx, metricsStopped = startMetricsCollector(lister, nodeLister, metricsInterval, serverLog)
 			}
 		}
 
 		// Create new handler.
 		newHandlerCtx, cancelNewHandlerCtx := context.WithCancel(context.Background())
 		newHandler, newHandlerStopped := NewHandler(newHandlerCtx, conf, spaHandler, kubeClient,
-			metricsCollector, version, statusManager, namespace, reportInterval, eventRecorder, authMiddleware, serverLog)
+			metricsCollector, nodeTransitions, version, statusManager, namespace, reportInterval,
+			eventRecorder, authMiddleware, serverLog, handlerOptions(so)...)
 
 		conf = nil // Clear conf to receive a new one in the next iteration.
 
@@ -253,11 +321,13 @@ func RunServer(ctx context.Context, c cluster.Cluster,
 	}
 }
 
-// startMetricsCollector creates and starts a pod metrics collector on its
-// own cancelable context. Start performs the initial scrape synchronously
-// so the first cached report can carry controller metrics.
-func startMetricsCollector(lister PodMetricsLister, interval time.Duration, l logr.Logger) (*MetricsCollector, context.CancelFunc, <-chan struct{}) {
+// startMetricsCollector creates and starts a pod and node metrics collector
+// on its own cancelable context. The node lister may be nil. Start performs
+// the initial scrape synchronously so the first cached report can carry
+// controller and node metrics.
+func startMetricsCollector(lister PodMetricsLister, nodeLister NodeMetricsLister, interval time.Duration, l logr.Logger) (*MetricsCollector, context.CancelFunc, <-chan struct{}) {
 	mc := NewMetricsCollector(lister, interval)
+	mc.nodeLister = nodeLister
 	ctx, cancel := context.WithCancel(context.Background())
 	stopped := mc.Start(ctrl.LoggerInto(ctx, l))
 	return mc, cancel, stopped

@@ -20,6 +20,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
+	cryptov1 "github.com/fluxcd/pkg/apis/crypto/v1"
 	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/auth"
@@ -32,6 +33,8 @@ import (
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/runtime/secrets"
+	fluxspiffe "github.com/fluxcd/pkg/spiffe"
+	spiffebroker "github.com/fluxcd/pkg/spiffe/broker"
 	kauth "github.com/google/go-containerregistry/pkg/authn/kubernetes"
 	"github.com/google/go-containerregistry/pkg/crane"
 	"github.com/hashicorp/go-retryablehttp"
@@ -70,6 +73,15 @@ type ResourceSetInputProviderReconciler struct {
 	TokenCache            *cache.TokenCache
 	Version               string
 	DefaultServiceAccount string
+
+	// DefaultObjectIdentityServiceAccount is the ServiceAccount used for
+	// object identity when the object does not specify one.
+	DefaultObjectIdentityServiceAccount string
+
+	// SPIFFESource is used only by the event notifier. Object identity
+	// credentials are acquired through the pre-built SPIFFEBroker client.
+	SPIFFESource fluxspiffe.TLSSource
+	SPIFFEBroker spiffebroker.Interface
 }
 
 // +kubebuilder:rbac:groups=fluxcd.controlplane.io,resources=resourcesetinputproviders,verbs=get;list;watch;create;update;patch;delete
@@ -145,7 +157,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 		conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidSchedule, "%s", errMsg)
 		conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidSchedule, "%s", errMsg)
 		log.Error(err, msgTerminalError)
-		r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSchedule, errMsg)
+		r.notify(ctx, obj, fluxcdv1.ActionSchedule, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSchedule, errMsg)
 		return ctrl.Result{}, nil
 	}
 
@@ -164,7 +176,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 		}
 
 		log.Info(msg)
-		r.notify(ctx, obj, corev1.EventTypeNormal, fluxcdv1.ReasonSkippedDueToSchedule, msg)
+		r.notify(ctx, obj, fluxcdv1.ActionSchedule, corev1.EventTypeNormal, fluxcdv1.ReasonSkippedDueToSchedule, msg)
 		return ctrl.Result{
 			RequeueAfter: next.Sub(reconcileStart),
 		}, nil
@@ -177,7 +189,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 		conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidDefaultValues, "%s", errMsg)
 		conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidDefaultValues, "%s", errMsg)
 		log.Error(err, msgTerminalError)
-		r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidDefaultValues, errMsg)
+		r.notify(ctx, obj, fluxcdv1.ActionValidate, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidDefaultValues, errMsg)
 		return ctrl.Result{}, nil
 	}
 
@@ -190,7 +202,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 			conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
 			conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
 			log.Error(err, msgTerminalError)
-			r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSpec, errMsg)
+			r.notify(ctx, obj, fluxcdv1.ActionValidate, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSpec, errMsg)
 			return ctrl.Result{}, nil
 		}
 		if strings.HasPrefix(obj.Spec.URL, "http://") && !obj.Spec.Insecure {
@@ -199,7 +211,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 			conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
 			conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
 			log.Error(err, msgTerminalError)
-			r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSpec, errMsg)
+			r.notify(ctx, obj, fluxcdv1.ActionValidate, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSpec, errMsg)
 			return ctrl.Result{}, nil
 		}
 	} else if obj.Spec.Type == fluxcdv1.InputProviderExternalArtifact {
@@ -209,7 +221,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 			conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
 			conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
 			log.Error(err, msgTerminalError)
-			r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSpec, errMsg)
+			r.notify(ctx, obj, fluxcdv1.ActionValidate, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSpec, errMsg)
 			return ctrl.Result{}, nil
 		}
 		if obj.Spec.URL != "" {
@@ -218,7 +230,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 			conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
 			conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
 			log.Error(err, msgTerminalError)
-			r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSpec, errMsg)
+			r.notify(ctx, obj, fluxcdv1.ActionValidate, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSpec, errMsg)
 			return ctrl.Result{}, nil
 		}
 	} else if obj.Spec.Insecure && obj.Spec.Type != fluxcdv1.InputProviderOCIArtifactTag {
@@ -227,7 +239,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 		conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
 		conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
 		log.Error(err, msgTerminalError)
-		r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSpec, errMsg)
+		r.notify(ctx, obj, fluxcdv1.ActionValidate, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSpec, errMsg)
 		return ctrl.Result{}, nil
 	}
 
@@ -240,7 +252,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 		conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
 		conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidSpec, "%s", errMsg)
 		log.Error(err, msgTerminalError)
-		r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSpec, errMsg)
+		r.notify(ctx, obj, fluxcdv1.ActionValidate, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidSpec, errMsg)
 		return ctrl.Result{}, nil
 	}
 
@@ -260,7 +272,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 			conditions.MarkFalse(obj, meta.ReadyCondition, fluxcdv1.ReasonInvalidExportedInputs, "%s", errMsg)
 			conditions.MarkStalled(obj, fluxcdv1.ReasonInvalidExportedInputs, "%s", errMsg)
 			log.Error(err, msgTerminalError)
-			r.notify(ctx, obj, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidExportedInputs, errMsg)
+			r.notify(ctx, obj, fluxcdv1.ActionExportInputs, corev1.EventTypeWarning, fluxcdv1.ReasonInvalidExportedInputs, errMsg)
 			return ctrl.Result{}, nil
 		}
 		exportedInputs = append(exportedInputs, exportedInput)
@@ -282,7 +294,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 				meta.ReadyCondition,
 				meta.ReconciliationFailedReason,
 				"%s", msg)
-			r.notify(ctx, obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
+			r.notify(ctx, obj, fluxcdv1.ActionReconcile, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
 			return ctrl.Result{}, err
 		}
 	}
@@ -295,7 +307,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 			meta.ReadyCondition,
 			meta.ReconciliationFailedReason,
 			"%s", msg)
-		r.notify(ctx, obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
+		r.notify(ctx, obj, fluxcdv1.ActionReconcile, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
 		return ctrl.Result{}, err
 	}
 	exportedRevision := digest.FromBytes(data).String()
@@ -319,7 +331,7 @@ func (r *ResourceSetInputProviderReconciler) reconcile(ctx context.Context,
 	if lastExportedRevision == exportedRevision {
 		r.EventRecorder.AnnotatedEventf(obj, annotations, corev1.EventTypeNormal, meta.ReconciliationSucceededReason, "%s", msgWithRevision)
 	} else {
-		r.notify(ctx, obj, corev1.EventTypeNormal, meta.ReconciliationSucceededReason, msgWithRevision, annotations)
+		r.notify(ctx, obj, fluxcdv1.ActionReconcile, corev1.EventTypeNormal, meta.ReconciliationSucceededReason, msgWithRevision, annotations)
 	}
 
 	reconcileEnd := time.Now()
@@ -362,6 +374,13 @@ func (r *ResourceSetInputProviderReconciler) callExternalProvider(
 		}
 	}
 
+	// Build the validated authentication specification from the object type
+	// and the ServiceAccount annotations.
+	cryptoSpec, sa, err := r.buildCryptoSpec(ctx, obj)
+	if err != nil {
+		return nil, err
+	}
+
 	// Create the provider context with timeout.
 	providerCtx, cancel := context.WithTimeout(ctx, obj.GetTimeout())
 	defer cancel()
@@ -372,7 +391,7 @@ func (r *ResourceSetInputProviderReconciler) callExternalProvider(
 	// Handle Git providers.
 	case strings.HasPrefix(obj.Spec.Type, "Git") || strings.HasPrefix(obj.Spec.Type, "AzureDevOps") || strings.HasPrefix(obj.Spec.Type, "AWSCodeCommit"):
 		// Create the provider based on the object type.
-		provider, err := r.newGitProvider(providerCtx, obj, tlsConfig, authData)
+		provider, err := r.newGitProvider(providerCtx, obj, tlsConfig, authData, cryptoSpec, sa)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create Git provider: %w", err)
 		}
@@ -385,7 +404,7 @@ func (r *ResourceSetInputProviderReconciler) callExternalProvider(
 	// Handle OCI providers.
 	case strings.HasSuffix(obj.Spec.Type, "ArtifactTag"):
 		var err error
-		exportedInputs, err = r.callOCIProvider(providerCtx, obj, tlsConfig, authSecret, defaults)
+		exportedInputs, err = r.callOCIProvider(providerCtx, obj, tlsConfig, authSecret, defaults, cryptoSpec, sa)
 		if err != nil {
 			return nil, fmt.Errorf("failed to call OCI provider: %w", err)
 		}
@@ -412,7 +431,9 @@ func (r *ResourceSetInputProviderReconciler) callExternalProvider(
 func (r *ResourceSetInputProviderReconciler) newGitProvider(ctx context.Context,
 	obj *fluxcdv1.ResourceSetInputProvider,
 	tlsConfig *tls.Config,
-	authData map[string][]byte) (gitprovider.Interface, error) {
+	authData map[string][]byte,
+	cryptoSpec *cryptov1.Spec,
+	sa *corev1.ServiceAccount) (gitprovider.Interface, error) {
 
 	switch {
 	case strings.HasPrefix(obj.Spec.Type, "GitHub"):
@@ -436,7 +457,7 @@ func (r *ResourceSetInputProviderReconciler) newGitProvider(ctx context.Context,
 			Token:     token,
 		})
 	case strings.HasPrefix(obj.Spec.Type, "AzureDevOps"):
-		token, err := r.getAzureDevOpsToken(ctx, obj, authData)
+		token, err := r.getAzureDevOpsToken(ctx, obj, authData, cryptoSpec, sa)
 		if err != nil {
 			return nil, err
 		}
@@ -456,7 +477,7 @@ func (r *ResourceSetInputProviderReconciler) newGitProvider(ctx context.Context,
 			Token:     token,
 		})
 	case obj.Spec.Type == fluxcdv1.InputProviderAWSCodeCommitPullRequest:
-		credsProvider, region, err := r.getAWSCodeCommitCredentialsProvider(ctx, obj)
+		credsProvider, region, err := r.getAWSCodeCommitCredentialsProvider(ctx, obj, cryptoSpec, sa)
 		if err != nil {
 			return nil, err
 		}
@@ -465,7 +486,7 @@ func (r *ResourceSetInputProviderReconciler) newGitProvider(ctx context.Context,
 			TLSConfig: tlsConfig,
 		}, credsProvider, region, nil)
 	case strings.HasPrefix(obj.Spec.Type, "AWSCodeCommit"):
-		gitCreds, err := r.getGitCredentials(ctx, obj, aws.ProviderName)
+		gitCreds, err := r.getGitCredentials(ctx, obj, aws.ProviderName, cryptoSpec, sa)
 		if err != nil {
 			return nil, err
 		}
@@ -742,11 +763,12 @@ func (r *ResourceSetInputProviderReconciler) getGitHubToken(
 	}
 
 	if r.TokenCache != nil {
-		opts = append(opts, githubapp.WithCache(r.TokenCache,
-			fluxcdv1.ResourceSetInputProviderKind,
-			obj.GetName(),
-			obj.GetNamespace(),
-			cache.OperationReconcile))
+		opts = append(opts, githubapp.WithCache(r.TokenCache, cache.InvolvedObject{
+			Kind:      fluxcdv1.ResourceSetInputProviderKind,
+			Name:      obj.GetName(),
+			Namespace: obj.GetNamespace(),
+			Operation: cache.OperationReconcile,
+		}))
 	}
 
 	ghc, err := githubapp.New(opts...)
@@ -793,7 +815,9 @@ func (r *ResourceSetInputProviderReconciler) getGiteaToken(
 // workload identity federation.
 func (r *ResourceSetInputProviderReconciler) getAzureDevOpsToken(
 	ctx context.Context, obj *fluxcdv1.ResourceSetInputProvider,
-	authData map[string][]byte) (string, error) {
+	authData map[string][]byte,
+	cryptoSpec *cryptov1.Spec,
+	sa *corev1.ServiceAccount) (string, error) {
 
 	switch {
 
@@ -804,7 +828,7 @@ func (r *ResourceSetInputProviderReconciler) getAzureDevOpsToken(
 
 	// Handle workload identity.
 	default:
-		gitCreds, err := r.getGitCredentials(ctx, obj, azure.ProviderName)
+		gitCreds, err := r.getGitCredentials(ctx, obj, azure.ProviderName, cryptoSpec, sa)
 		if err != nil {
 			return "", err
 		}
@@ -812,38 +836,135 @@ func (r *ResourceSetInputProviderReconciler) getAzureDevOpsToken(
 	}
 }
 
-// getAuthOptions returns the common authentication options for Git providers.
-func (r *ResourceSetInputProviderReconciler) getAuthOptions(obj *fluxcdv1.ResourceSetInputProvider) []auth.Option {
+// inputProviderServiceProvider returns the cryptov1 service provider for the
+// given ResourceSetInputProvider type. It returns an empty string for types
+// that do not use object identity.
+func inputProviderServiceProvider(providerType string) string {
+	switch {
+	case strings.HasPrefix(providerType, "AzureDevOps"):
+		return cryptov1.ProviderAzure
+	case strings.HasPrefix(providerType, "AWSCodeCommit"):
+		return cryptov1.ProviderAWS
+	case providerType == fluxcdv1.InputProviderOCIArtifactTag:
+		return cryptov1.ProviderGeneric
+	case providerType == fluxcdv1.InputProviderACRArtifactTag:
+		return cryptov1.ProviderAzure
+	case providerType == fluxcdv1.InputProviderECRArtifactTag:
+		return cryptov1.ProviderAWS
+	case providerType == fluxcdv1.InputProviderGARArtifactTag:
+		return cryptov1.ProviderGCP
+	default:
+		return ""
+	}
+}
+
+// serviceAccountName returns the ServiceAccount name for the input provider,
+// falling back to the default object identity ServiceAccount.
+func (r *ResourceSetInputProviderReconciler) serviceAccountName(
+	obj *fluxcdv1.ResourceSetInputProvider) string {
+	if obj.Spec.ServiceAccountName != "" {
+		return obj.Spec.ServiceAccountName
+	}
+	return r.DefaultObjectIdentityServiceAccount
+}
+
+// getServiceAccountForAuth returns the ServiceAccount referenced by the input
+// provider or nil when no ServiceAccount is configured.
+func (r *ResourceSetInputProviderReconciler) getServiceAccountForAuth(
+	ctx context.Context, obj *fluxcdv1.ResourceSetInputProvider) (*corev1.ServiceAccount, error) {
+	saName := r.serviceAccountName(obj)
+	if saName == "" {
+		return nil, nil
+	}
+
+	key := types.NamespacedName{
+		Namespace: obj.GetNamespace(),
+		Name:      saName,
+	}
+	sa := &corev1.ServiceAccount{}
+	if err := r.Get(ctx, key, sa); err != nil {
+		return nil, fmt.Errorf("failed to get service account '%s': %w", key, err)
+	}
+	return sa, nil
+}
+
+// buildCryptoSpec builds the cryptov1 specification from the input provider
+// type and the referenced ServiceAccount annotations.
+func (r *ResourceSetInputProviderReconciler) buildCryptoSpec(
+	ctx context.Context, obj *fluxcdv1.ResourceSetInputProvider) (*cryptov1.Spec, *corev1.ServiceAccount, error) {
+	provider := inputProviderServiceProvider(obj.Spec.Type)
+	if provider == "" {
+		return nil, nil, nil
+	}
+
+	sa, err := r.getServiceAccountForAuth(ctx, obj)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	buildOpts := []cryptov1.Option{
+		cryptov1.WithServiceProvider(provider),
+	}
+	if sa != nil {
+		buildOpts = append(buildOpts, cryptov1.WithAnnotations(sa.Annotations))
+	}
+	if strings.HasSuffix(obj.Spec.Type, "ArtifactTag") {
+		buildOpts = append(buildOpts, cryptov1.WithOCI())
+		if sa != nil && len(sa.ImagePullSecrets) > 0 {
+			buildOpts = append(buildOpts, cryptov1.WithImagePullSecrets())
+		}
+	}
+	if obj.Spec.SecretRef != nil {
+		buildOpts = append(buildOpts, cryptov1.WithSecretRefAuth())
+	}
+	if obj.Spec.CertSecretRef != nil {
+		buildOpts = append(buildOpts, cryptov1.WithCertSecretRef())
+	}
+
+	spec, err := cryptov1.BuildSpec(buildOpts...)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to validate authentication configuration: %w", err)
+	}
+	return spec, sa, nil
+}
+
+// getAuthOptions returns the common authentication options for the input
+// provider credentials.
+func (r *ResourceSetInputProviderReconciler) getAuthOptions(
+	obj *fluxcdv1.ResourceSetInputProvider, cryptoSpec *cryptov1.Spec,
+	sa *corev1.ServiceAccount) []auth.Option {
 	opts := []auth.Option{
 		auth.WithClient(r.Client),
-		auth.WithServiceAccountNamespace(obj.GetNamespace()),
+		auth.WithObject(fluxcdv1.GroupVersion.Group, fluxcdv1.ResourceSetInputProviderKind, obj),
+		auth.WithSPIFFEBroker(r.SPIFFEBroker),
+	}
+	if cryptoSpec != nil {
+		opts = append(opts, auth.OptionsFromSpec(cryptoSpec.Auth)...)
 	}
 
-	// Configure service account.
-	if s := obj.Spec.ServiceAccountName; s != "" {
-		opts = append(opts, auth.WithServiceAccountName(s))
+	// Configure the service account used for object identity. Prefer the
+	// ServiceAccount fetched by buildCryptoSpec, but fall back to the object
+	// reference or the configured default when it is not available.
+	saName := r.serviceAccountName(obj)
+	if sa != nil && sa.Name != "" {
+		saName = sa.Name
 	}
-
-	// Configure token cache.
+	if saName != "" {
+		opts = append(opts, auth.WithServiceAccountName(saName))
+	}
 	if r.TokenCache != nil {
-		involvedObject := cache.InvolvedObject{
-			Kind:      fluxcdv1.ResourceSetInputProviderKind,
-			Name:      obj.GetName(),
-			Namespace: obj.GetNamespace(),
-			Operation: cache.OperationReconcile,
-		}
-		opts = append(opts, auth.WithCache(*r.TokenCache, involvedObject))
+		opts = append(opts, auth.WithCache(*r.TokenCache), auth.WithCacheOperation(cache.OperationReconcile))
 	}
-
 	return opts
 }
 
 // getGitCredentials returns Git credentials for the object.
 func (r *ResourceSetInputProviderReconciler) getGitCredentials(
 	ctx context.Context, obj *fluxcdv1.ResourceSetInputProvider,
-	provider string) (*auth.GitCredentials, error) {
+	provider string, cryptoSpec *cryptov1.Spec,
+	sa *corev1.ServiceAccount) (*auth.GitCredentials, error) {
 
-	opts := r.getAuthOptions(obj)
+	opts := r.getAuthOptions(obj, cryptoSpec, sa)
 
 	gitURL, err := url.Parse(obj.Spec.URL)
 	if err != nil {
@@ -862,16 +983,18 @@ func (r *ResourceSetInputProviderReconciler) getGitCredentials(
 
 // getAWSCodeCommitCredentialsProvider returns the AWS credentials provider for AWSCodeCommit.
 func (r *ResourceSetInputProviderReconciler) getAWSCodeCommitCredentialsProvider(
-	ctx context.Context, obj *fluxcdv1.ResourceSetInputProvider) (awssdk.CredentialsProvider, string, error) {
+	ctx context.Context, obj *fluxcdv1.ResourceSetInputProvider,
+	cryptoSpec *cryptov1.Spec,
+	sa *corev1.ServiceAccount) (awssdk.CredentialsProvider, string, error) {
 
-	opts := r.getAuthOptions(obj)
+	opts := r.getAuthOptions(obj, cryptoSpec, sa)
 
 	// Extract region from URL for STS region option.
 	region, err := gitprovider.ParseAWSCodeCommitRegion(obj.Spec.URL)
 	if err != nil {
 		return nil, "", err
 	}
-	opts = append(opts, auth.WithSTSRegion(region))
+	opts = append(opts, auth.WithAWSRegion(region))
 
 	// Get the AWS credentials provider using the recommended abstraction.
 	credsProvider := aws.NewCredentialsProvider(ctx, opts...)
@@ -883,12 +1006,14 @@ func (r *ResourceSetInputProviderReconciler) getAWSCodeCommitCredentialsProvider
 // and returns the list of ResourceSetInput objects.
 func (r *ResourceSetInputProviderReconciler) callOCIProvider(ctx context.Context,
 	obj *fluxcdv1.ResourceSetInputProvider, tlsConfig *tls.Config,
-	authSecret *corev1.Secret, defaults map[string]any) ([]fluxcdv1.ResourceSetInput, error) {
+	authSecret *corev1.Secret, defaults map[string]any,
+	cryptoSpec *cryptov1.Spec,
+	sa *corev1.ServiceAccount) ([]fluxcdv1.ResourceSetInput, error) {
 
 	repo := strings.TrimPrefix(obj.Spec.URL, "oci://")
 
 	// Build options.
-	opts, err := r.buildOCIOptions(ctx, obj, repo, tlsConfig, authSecret)
+	opts, err := r.buildOCIOptions(ctx, obj, repo, tlsConfig, authSecret, cryptoSpec, sa)
 	if err != nil {
 		return nil, err
 	}
@@ -1230,7 +1355,8 @@ var inputProviderToCloudProvider = map[string]string{
 // configuring authentication and TLS settings.
 func (r *ResourceSetInputProviderReconciler) buildOCIOptions(ctx context.Context,
 	obj *fluxcdv1.ResourceSetInputProvider, repo string, tlsConfig *tls.Config,
-	authSecret *corev1.Secret) ([]crane.Option, error) {
+	authSecret *corev1.Secret, cryptoSpec *cryptov1.Spec,
+	sa *corev1.ServiceAccount) ([]crane.Option, error) {
 
 	opts := []crane.Option{
 		crane.WithContext(ctx),
@@ -1240,7 +1366,7 @@ func (r *ResourceSetInputProviderReconciler) buildOCIOptions(ctx context.Context
 
 	// Configure workload identity for cloud providers.
 	case obj.Spec.Type != fluxcdv1.InputProviderOCIArtifactTag:
-		authOpts := r.getAuthOptions(obj)
+		authOpts := r.getAuthOptions(obj, cryptoSpec, sa)
 
 		// Build authenticator.
 		provider := inputProviderToCloudProvider[obj.Spec.Type]
@@ -1261,12 +1387,19 @@ func (r *ResourceSetInputProviderReconciler) buildOCIOptions(ctx context.Context
 		}
 
 		// Add pull secrets from the service account.
-		if obj.Spec.ServiceAccountName != "" {
+		if saName := r.serviceAccountName(obj); saName != "" {
 			key := types.NamespacedName{
-				Name:      obj.Spec.ServiceAccountName,
+				Name:      saName,
 				Namespace: obj.GetNamespace(),
 			}
-			s, err := secrets.PullSecretsFromServiceAccountRef(ctx, r.Client, key)
+			var sa corev1.ServiceAccount
+			if err := r.Client.Get(ctx, key, &sa); err != nil {
+				if apierrors.IsNotFound(err) {
+					return nil, fmt.Errorf("serviceaccount '%s' not found", key)
+				}
+				return nil, fmt.Errorf("failed to get serviceaccount '%s': %w", key, err)
+			}
+			s, err := secrets.PullSecretsFromServiceAccount(ctx, r.Client, &sa)
 			if err != nil {
 				return nil, err
 			}
@@ -1280,6 +1413,16 @@ func (r *ResourceSetInputProviderReconciler) buildOCIOptions(ctx context.Context
 				return nil, fmt.Errorf("failed to create OCI keychain: %w", err)
 			}
 			opts = append(opts, crane.WithAuthFromKeychain(keychain))
+		} else if cryptoSpec != nil && cryptoSpec.Auth != nil && cryptoSpec.Auth.OptedIn() {
+			// Configure object identity for the generic provider.
+			authOpts := r.getAuthOptions(obj, cryptoSpec, sa)
+			authenticator, err := authutils.GetArtifactRegistryCredentials(ctx,
+				cryptov1.ProviderGeneric, repo, authOpts...)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get artifact registry credentials for '%s', provider '%s': %w",
+					repo, cryptov1.ProviderGeneric, err)
+			}
+			opts = append(opts, crane.WithAuth(authenticator))
 		}
 
 		// Configure TLS or insecure connections.
@@ -1359,7 +1502,7 @@ func (r *ResourceSetInputProviderReconciler) recordMetrics(obj *fluxcdv1.Resourc
 //
 //nolint:unparam
 func (r *ResourceSetInputProviderReconciler) notify(ctx context.Context,
-	obj *fluxcdv1.ResourceSetInputProvider, eventType, reason, message string,
+	obj *fluxcdv1.ResourceSetInputProvider, action fluxcdv1.Action, eventType, reason, message string,
 	annotations ...map[string]string) {
 
 	var md map[string]string
@@ -1368,8 +1511,9 @@ func (r *ResourceSetInputProviderReconciler) notify(ctx context.Context,
 	}
 
 	notifier.
-		New(ctx, r.EventRecorder, r.Scheme, notifier.WithClient(r.Client)).
-		AnnotatedEventf(obj, md, eventType, reason, "%s", message)
+		New(ctx, r.EventRecorder, r.Scheme,
+			notifier.WithClient(r.Client), notifier.WithSPIFFESource(r.SPIFFESource)).
+		AnnotatedEventf(obj, nil, md, eventType, reason, action.String(), "%s", message)
 }
 
 // requeueAfterResourceSetInputProvider returns a ctrl.Result with the requeue time set to the

@@ -109,7 +109,7 @@ function ResourceRow({ resource }) {
           <NameLink href={dashboardUrl} namespace={resource.namespace} name={resource.name} />
           <span class="hidden sm:block flex-1 min-w-0 truncate text-xs text-gray-500 dark:text-gray-400">{resource.message}</span>
           <span class="hidden sm:block shrink-0 text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap tabular-nums">{formatTimestamp(resource.lastReconciled)}</span>
-          <button onClick={d.toggle} class="shrink-0 rounded p-0.5 text-gray-400 hover:text-flux-blue" title="Details" aria-label="Toggle details">{d.loading ? <Spinner /> : <Chevron open={d.open} />}</button>
+          <button onClick={d.toggle} class="shrink-0 rounded-sm p-0.5 text-gray-400 hover:text-flux-blue" title="Details" aria-label="Toggle details">{d.loading ? <Spinner /> : <Chevron open={d.open} />}</button>
         </div>
         {/* Mobile-only second line: colored kind pill + status word + timestamp. */}
         <div class="sm:hidden mt-1 pl-[30px] flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
@@ -189,7 +189,7 @@ export function ResourceList() {
   }
 
   return (
-    <main data-testid="resource-list" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8 flex-grow w-full">
+    <main data-testid="resource-list" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8 grow w-full">
       <div class="space-y-3">
         {/* Toolbar: count + mobile Filters toggle, FilterForm, desktop StatusChart */}
         <FilterBar
@@ -266,7 +266,7 @@ export function ResourceList() {
               <div class="flex justify-center py-4">
                 <button
                   onClick={loadMore}
-                  class="px-4 py-2 bg-flux-blue text-white rounded-md hover:bg-blue-600 transition-colors focus:outline-none focus:ring-2 focus:ring-flux-blue focus:ring-offset-2"
+                  class="px-4 py-2 bg-flux-blue text-white rounded-md hover:bg-blue-600 transition-colors focus:outline-hidden focus:ring-2 focus:ring-flux-blue focus:ring-offset-2"
                 >
                   Load more resources ({resourcesData.value.length - visibleCount} remaining)
                 </button>

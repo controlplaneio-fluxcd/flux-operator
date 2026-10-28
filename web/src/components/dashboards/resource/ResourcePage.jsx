@@ -277,7 +277,7 @@ export function ResourcePage({ kind, namespace, name }) {
   }
 
   return (
-    <main data-testid="resource-dashboard-view" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
+    <main data-testid="resource-dashboard-view" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 grow w-full">
       <div class="space-y-6">
 
         {/* Header */}
@@ -292,7 +292,7 @@ export function ResourcePage({ kind, namespace, name }) {
           titleAction={
             <button
               onClick={handleFavoriteClick}
-              class={`flex-shrink-0 transition-colors focus:outline-none focus:ring-2 focus:ring-flux-blue focus:ring-offset-1 rounded ${
+              class={`shrink-0 transition-colors focus:outline-hidden focus:ring-2 focus:ring-flux-blue focus:ring-offset-1 rounded-sm ${
                 isFavorited
                   ? 'text-yellow-500 hover:text-yellow-600'
                   : 'text-gray-300 dark:text-gray-600 hover:text-yellow-500'

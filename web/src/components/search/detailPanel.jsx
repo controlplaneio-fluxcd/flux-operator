@@ -35,7 +35,7 @@ const RAIL = 'sm:w-[84px]'
 // Base: a rounded pill on mobile; on desktop the pill rounding is dropped and a
 // constant 1px border (transparent until active) keeps the rail layout stable.
 const TAB_BASE =
-  'text-left whitespace-nowrap select-none px-2.5 py-1.5 text-xs font-medium focus:outline-none rounded-md sm:rounded-none sm:border sm:border-transparent'
+  'text-left whitespace-nowrap select-none px-2.5 py-1.5 text-xs font-medium focus:outline-hidden rounded-md sm:rounded-none sm:border sm:border-transparent'
 // Active marker: shares the panel background (`bg-gray-100`, asserted by tests).
 // Mobile = filled pill; desktop adds the folder-nub border + overlap.
 const TAB_ACTIVE =
@@ -116,7 +116,7 @@ export function Field({ label, children }) {
   return (
     <div>
       <span class="text-gray-500 dark:text-gray-400">{label}</span>{' '}
-      <span class="text-gray-900 dark:text-gray-100 break-words">{children}</span>
+      <span class="text-gray-900 dark:text-gray-100 wrap-break-word">{children}</span>
     </div>
   )
 }

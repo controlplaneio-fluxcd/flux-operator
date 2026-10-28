@@ -318,17 +318,29 @@ namespace: {{.Namespace}}
 resources:
   - rbac.yaml
 nameSuffix: -{{.Namespace}}
-{{- if .RemovePermissionForCreatingServiceAccountTokens }}
+{{- if or .RemovePermissionForCreatingServiceAccountTokens .AddPermissionForCreatingServiceAccountTokens }}
 patches:
   - target:
      kind: ClusterRole
      name: crd-controller
     patch: |-
+{{- if .RemovePermissionForCreatingServiceAccountTokens }}
      - op: remove
 {{- if le .VersionInfo.Minor 6 }}
        path: /rules/10
 {{- else }}
        path: /rules/11
+{{- end }}
+{{- else }}
+     - op: add
+       path: /rules/-
+       value:
+         apiGroups:
+         - ""
+         resources:
+         - serviceaccounts/token
+         verbs:
+         - create
 {{- end }}
 {{- end }}
 `
@@ -466,6 +478,9 @@ spec:
     name: {{$name}}
 `
 
+// notificationPatchTmpl adds the Flux Operator kinds to the Alert and Receiver
+// kind enums of every served CRD version. The Alert CRD ships v1beta3 only in
+// Flux 2.9 and v1 plus v1beta3 from Flux 2.10 onwards.
 var notificationPatchTmpl = `
 - target:
     kind: CustomResourceDefinition
@@ -474,7 +489,7 @@ var notificationPatchTmpl = `
     - op: add
       path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
       value: FluxInstance
-{{- if le .VersionInfo.Minor 8 }}
+{{- if or (le .VersionInfo.Minor 8) (ge .VersionInfo.Minor 10) }}
     - op: add
       path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
       value: FluxInstance
@@ -487,7 +502,7 @@ var notificationPatchTmpl = `
     - op: add
       path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
       value: ResourceSet
-{{- if le .VersionInfo.Minor 8 }}
+{{- if or (le .VersionInfo.Minor 8) (ge .VersionInfo.Minor 10) }}
     - op: add
       path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
       value: ResourceSet
@@ -500,7 +515,7 @@ var notificationPatchTmpl = `
     - op: add
       path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
       value: ResourceSetInputProvider
-{{- if le .VersionInfo.Minor 8 }}
+{{- if or (le .VersionInfo.Minor 8) (ge .VersionInfo.Minor 10) }}
     - op: add
       path: /spec/versions/1/schema/openAPIV3Schema/properties/spec/properties/eventSources/items/properties/kind/enum/-
       value: ResourceSetInputProvider

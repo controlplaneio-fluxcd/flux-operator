@@ -122,12 +122,12 @@ function WorkloadRow({ workload }) {
           {/* Desktop: parent reconciler reference with a status dot. The status
               belongs to the reconciler, never the workload itself. */}
           <span class="hidden sm:flex flex-1 min-w-0 items-center gap-1.5 truncate text-xs text-gray-500 dark:text-gray-400" title={reconcilerTitle}>
-            <span class="text-gray-400 dark:text-gray-500 flex-shrink-0">managed by</span>
-            <span class={`w-2 h-2 rounded-full flex-shrink-0 ${getStatusDotClass(workload.reconcilerStatus)}`} />
+            <span class="text-gray-400 dark:text-gray-500 shrink-0">managed by</span>
+            <span class={`w-2 h-2 rounded-full shrink-0 ${getStatusDotClass(workload.reconcilerStatus)}`} />
             <span class="truncate min-w-0">{workload.reconcilerKind}/{workload.reconcilerNamespace}/{workload.reconcilerName}</span>
           </span>
           <span class="hidden sm:block shrink-0 text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap tabular-nums">{formatTimestamp(workload.lastReconciled)}</span>
-          <button onClick={d.toggle} class="shrink-0 rounded p-0.5 text-gray-400 hover:text-flux-blue" title="Details" aria-label="Toggle details">{d.loading ? <Spinner /> : <Chevron open={d.open} />}</button>
+          <button onClick={d.toggle} class="shrink-0 rounded-sm p-0.5 text-gray-400 hover:text-flux-blue" title="Details" aria-label="Toggle details">{d.loading ? <Spinner /> : <Chevron open={d.open} />}</button>
         </div>
         {/* Mobile-only second line: neutral kind pill + reconciled time. A workload
             has no status of its own in the list, so we state the reconcile time
@@ -209,7 +209,7 @@ export function WorkloadList() {
   }
 
   return (
-    <main data-testid="workload-list" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8 flex-grow w-full">
+    <main data-testid="workload-list" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8 grow w-full">
       <div class="space-y-3">
         {/* Filters - mobile-collapsing toolbar; no status chart for workloads */}
         <FilterBar count={workloadsData.value.length} label="workloads" loading={workloadsLoading.value}>
@@ -270,7 +270,7 @@ export function WorkloadList() {
               <div class="flex justify-center py-4">
                 <button
                   onClick={loadMore}
-                  class="px-4 py-2 bg-flux-blue text-white rounded-md hover:bg-blue-600 transition-colors focus:outline-none focus:ring-2 focus:ring-flux-blue focus:ring-offset-2"
+                  class="px-4 py-2 bg-flux-blue text-white rounded-md hover:bg-blue-600 transition-colors focus:outline-hidden focus:ring-2 focus:ring-flux-blue focus:ring-offset-2"
                 >
                   Load more workloads ({workloadsData.value.length - visibleCount} remaining)
                 </button>

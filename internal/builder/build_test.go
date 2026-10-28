@@ -35,7 +35,7 @@ func TestBuild(t *testing.T) {
 	options.Version = version
 	options.ShardingStorage = true
 	options.Shards = []string{"shard1", "shard2"}
-	options.Patches = profileClusterTypeOpenShift + GetProfileMultitenant("")
+	options.Patches = profileClusterTypeOpenShift + GetProfileMultitenant("", version)
 	options.ArtifactStorage = &ArtifactStorage{
 		Class: "standard",
 		Size:  "10Gi",
@@ -230,7 +230,7 @@ func TestBuild_ProfileClusterType(t *testing.T) {
 	g.Expect(err).NotTo(HaveOccurred())
 	options.ComponentImages = ci
 
-	options.Patches = GetProfileClusterType("openshift") + GetProfileMultitenant("")
+	options.Patches = GetProfileClusterType("openshift") + GetProfileMultitenant("", version)
 
 	result, err := Build(srcDir, dstDir, options)
 	g.Expect(err).NotTo(HaveOccurred())
@@ -476,6 +476,7 @@ func TestBuild_WorkloadIdentity_ValidateAndApplyConfig(t *testing.T) {
 		cluster            fluxcdv1.Cluster
 		expectedErr        string
 		expectRemoveTokens bool
+		expectAddTokens    bool
 	}{
 		// Pre-2.6.0 versions
 		{
@@ -492,7 +493,15 @@ func TestBuild_WorkloadIdentity_ValidateAndApplyConfig(t *testing.T) {
 			cluster: fluxcdv1.Cluster{
 				ObjectLevelWorkloadIdentity: true,
 			},
-			expectedErr: ".objectLevelWorkloadIdentity and .multitenantWorkloadIdentity are not supported in Flux versions < 2.6.0",
+			expectedErr: ".objectLevelWorkloadIdentity, .objectIdentityRBAC and .multitenantObjectIdentity are not supported in Flux versions < 2.6.0",
+		},
+		{
+			name:    "pre-2.6.0 multitenant object identity enabled",
+			version: "v2.5.0",
+			cluster: fluxcdv1.Cluster{
+				MultitenantObjectIdentity: true,
+			},
+			expectedErr: ".objectLevelWorkloadIdentity, .objectIdentityRBAC and .multitenantObjectIdentity are not supported in Flux versions < 2.6.0",
 		},
 		{
 			name:    "pre-2.6.0 multitenant enabled",
@@ -500,7 +509,7 @@ func TestBuild_WorkloadIdentity_ValidateAndApplyConfig(t *testing.T) {
 			cluster: fluxcdv1.Cluster{
 				MultitenantWorkloadIdentity: true,
 			},
-			expectedErr: ".objectLevelWorkloadIdentity and .multitenantWorkloadIdentity are not supported in Flux versions < 2.6.0",
+			expectedErr: ".objectLevelWorkloadIdentity, .objectIdentityRBAC and .multitenantObjectIdentity are not supported in Flux versions < 2.6.0",
 		},
 
 		// 2.6.x versions
@@ -525,7 +534,15 @@ func TestBuild_WorkloadIdentity_ValidateAndApplyConfig(t *testing.T) {
 			cluster: fluxcdv1.Cluster{
 				MultitenantWorkloadIdentity: true,
 			},
-			expectedErr: ".multitenantWorkloadIdentity is not supported in Flux versions 2.6.x",
+			expectedErr: ".multitenantObjectIdentity is not supported in Flux versions 2.6.x",
+		},
+		{
+			name:    "2.6.x multitenant object identity not supported",
+			version: "v2.6.0",
+			cluster: fluxcdv1.Cluster{
+				MultitenantObjectIdentity: true,
+			},
+			expectedErr: ".multitenantObjectIdentity is not supported in Flux versions 2.6.x",
 		},
 
 		// >= 2.7.0 versions
@@ -560,7 +577,94 @@ func TestBuild_WorkloadIdentity_ValidateAndApplyConfig(t *testing.T) {
 				ObjectLevelWorkloadIdentity: false,
 				MultitenantWorkloadIdentity: true,
 			},
-			expectedErr: ".objectLevelWorkloadIdentity must be set to true when .multitenantWorkloadIdentity is set to true",
+			expectedErr: ".objectIdentityRBAC or .objectLevelWorkloadIdentity must be set to true when .multitenantWorkloadIdentity is set to true",
+		},
+		{
+			name:    "2.7.0+ object identity RBAC only",
+			version: "v2.7.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectIdentityRBAC: true,
+			},
+		},
+		{
+			name:    "2.7.0+ multitenant object identity enabled",
+			version: "v2.7.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectIdentityRBAC:        true,
+				MultitenantObjectIdentity: true,
+			},
+		},
+
+		// >= 2.10.0 versions
+		{
+			name:    "2.10.0+ disabled",
+			version: "v2.10.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectLevelWorkloadIdentity: false,
+			},
+		},
+		{
+			name:    "2.10.0+ object level only",
+			version: "v2.10.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectLevelWorkloadIdentity: true,
+				MultitenantWorkloadIdentity: false,
+			},
+			expectAddTokens: true,
+		},
+		{
+			name:    "2.10.0+ object identity RBAC only",
+			version: "v2.10.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectIdentityRBAC:          true,
+				MultitenantWorkloadIdentity: false,
+			},
+			expectAddTokens: true,
+		},
+		{
+			name:    "2.10.0+ multitenant enabled",
+			version: "v2.10.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectLevelWorkloadIdentity: true,
+				MultitenantWorkloadIdentity: true,
+			},
+			expectAddTokens: true,
+		},
+		{
+			name:    "2.10.0+ multitenant enabled with object identity RBAC",
+			version: "v2.10.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectIdentityRBAC:          true,
+				MultitenantWorkloadIdentity: true,
+			},
+			expectAddTokens: true,
+		},
+		{
+			name:    "2.10.0+ multitenant object identity enabled",
+			version: "v2.10.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectIdentityRBAC:        true,
+				MultitenantObjectIdentity: true,
+			},
+			expectAddTokens: true,
+		},
+		{
+			name:    "2.10.0+ multitenant without object level or object identity RBAC",
+			version: "v2.10.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectLevelWorkloadIdentity: false,
+				MultitenantWorkloadIdentity: true,
+			},
+			expectedErr: ".objectIdentityRBAC or .objectLevelWorkloadIdentity must be set to true when .multitenantWorkloadIdentity is set to true",
+		},
+		{
+			name:    "2.10.0+ multitenant object identity without object identity RBAC",
+			version: "v2.10.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectLevelWorkloadIdentity: false,
+				MultitenantObjectIdentity:   true,
+			},
+			expectedErr: ".objectIdentityRBAC must be set to true when .multitenantObjectIdentity is set to true",
 		},
 
 		// Invalid version
@@ -578,7 +682,7 @@ func TestBuild_WorkloadIdentity_ValidateAndApplyConfig(t *testing.T) {
 			options := MakeDefaultOptions()
 			options.Version = tc.version
 
-			err := options.ValidateAndApplyWorkloadIdentityConfig(tc.cluster)
+			err := options.ValidateAndApplyObjectIdentityConfig(tc.cluster, false)
 
 			if tc.expectedErr != "" {
 				g.Expect(err).To(HaveOccurred())
@@ -586,6 +690,7 @@ func TestBuild_WorkloadIdentity_ValidateAndApplyConfig(t *testing.T) {
 			} else {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(options.RemovePermissionForCreatingServiceAccountTokens).To(Equal(tc.expectRemoveTokens))
+				g.Expect(options.AddPermissionForCreatingServiceAccountTokens).To(Equal(tc.expectAddTokens))
 			}
 		})
 	}
@@ -600,7 +705,8 @@ func TestBuild_WorkloadIdentity_FeatureGateAndFlags(t *testing.T) {
 		expectedFeatureGate       string
 		controllersWithGate       []string
 		expectServiceAccountFlags bool
-		expectTokensRemoved       bool
+		expectTokens              bool
+		expectNoFeatureGate       bool
 	}{
 		{
 			name:                "2.6.0 object level enabled",
@@ -609,14 +715,14 @@ func TestBuild_WorkloadIdentity_FeatureGateAndFlags(t *testing.T) {
 			srcDir:              "v2.6.0",
 			expectedFeatureGate: "--feature-gates=ObjectLevelWorkloadIdentity=true",
 			controllersWithGate: []string{sourceController, "kustomize-controller", "notification-controller", "image-reflector-controller", "image-automation-controller"},
-			expectTokensRemoved: false,
+			expectTokens:        true,
 		},
 		{
-			name:                "2.6.0 object level disabled",
-			version:             "v2.6.0",
-			cluster:             fluxcdv1.Cluster{ObjectLevelWorkloadIdentity: false},
-			srcDir:              "v2.6.0",
-			expectTokensRemoved: true,
+			name:         "2.6.0 object level disabled",
+			version:      "v2.6.0",
+			cluster:      fluxcdv1.Cluster{ObjectLevelWorkloadIdentity: false},
+			srcDir:       "v2.6.0",
+			expectTokens: false,
 		},
 		{
 			name:                "2.7.0 object level enabled",
@@ -625,7 +731,7 @@ func TestBuild_WorkloadIdentity_FeatureGateAndFlags(t *testing.T) {
 			srcDir:              "v2.7.0",
 			expectedFeatureGate: "--feature-gates=ObjectLevelWorkloadIdentity=true",
 			controllersWithGate: []string{sourceController, "kustomize-controller", "helm-controller", "notification-controller", "image-reflector-controller", "image-automation-controller"},
-			expectTokensRemoved: false,
+			expectTokens:        true,
 		},
 		{
 			name:                "2.7.0 object level disabled",
@@ -634,7 +740,7 @@ func TestBuild_WorkloadIdentity_FeatureGateAndFlags(t *testing.T) {
 			srcDir:              "v2.7.0",
 			expectedFeatureGate: "--feature-gates=ObjectLevelWorkloadIdentity=false",
 			controllersWithGate: []string{sourceController, "kustomize-controller", "helm-controller", "notification-controller", "image-reflector-controller", "image-automation-controller"},
-			expectTokensRemoved: true,
+			expectTokens:        false,
 		},
 		{
 			name:    "2.7.0 multitenant enabled with defaults",
@@ -647,7 +753,20 @@ func TestBuild_WorkloadIdentity_FeatureGateAndFlags(t *testing.T) {
 			expectedFeatureGate:       "--feature-gates=ObjectLevelWorkloadIdentity=true",
 			controllersWithGate:       []string{sourceController, "kustomize-controller", "helm-controller", "notification-controller", "image-reflector-controller", "image-automation-controller"},
 			expectServiceAccountFlags: true,
-			expectTokensRemoved:       false,
+			expectTokens:              true,
+		},
+		{
+			name:    "2.7.0 multitenant object identity enabled with defaults",
+			version: "v2.7.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectIdentityRBAC:        true,
+				MultitenantObjectIdentity: true,
+			},
+			srcDir:                    "v2.7.0",
+			expectedFeatureGate:       "--feature-gates=ObjectLevelWorkloadIdentity=true",
+			controllersWithGate:       []string{sourceController, "kustomize-controller", "helm-controller", "notification-controller", "image-reflector-controller", "image-automation-controller"},
+			expectServiceAccountFlags: true,
+			expectTokens:              true,
 		},
 		{
 			name:    "2.7.0 multitenant enabled with custom service accounts",
@@ -663,7 +782,67 @@ func TestBuild_WorkloadIdentity_FeatureGateAndFlags(t *testing.T) {
 			expectedFeatureGate:       "--feature-gates=ObjectLevelWorkloadIdentity=true",
 			controllersWithGate:       []string{sourceController, "kustomize-controller", "helm-controller", "notification-controller", "image-reflector-controller", "image-automation-controller"},
 			expectServiceAccountFlags: true,
-			expectTokensRemoved:       false,
+			expectTokens:              true,
+		},
+		{
+			name:                "2.10.0 object level disabled",
+			version:             "v2.10.0",
+			cluster:             fluxcdv1.Cluster{ObjectLevelWorkloadIdentity: false},
+			srcDir:              "v2.10.0",
+			expectTokens:        false,
+			expectNoFeatureGate: true,
+		},
+		{
+			name:                "2.10.0 object level enabled adds SA token permission",
+			version:             "v2.10.0",
+			cluster:             fluxcdv1.Cluster{ObjectLevelWorkloadIdentity: true},
+			srcDir:              "v2.10.0",
+			expectTokens:        true,
+			expectNoFeatureGate: true,
+		},
+		{
+			name:                "2.10.0 object identity RBAC enabled adds SA token permission",
+			version:             "v2.10.0",
+			cluster:             fluxcdv1.Cluster{ObjectIdentityRBAC: true},
+			srcDir:              "v2.10.0",
+			expectTokens:        true,
+			expectNoFeatureGate: true,
+		},
+		{
+			name:    "2.10.0 multitenant enabled adds SA token permission and flags",
+			version: "v2.10.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectLevelWorkloadIdentity: true,
+				MultitenantWorkloadIdentity: true,
+			},
+			srcDir:                    "v2.10.0",
+			expectServiceAccountFlags: true,
+			expectTokens:              true,
+			expectNoFeatureGate:       true,
+		},
+		{
+			name:    "2.10.0 multitenant enabled with object identity RBAC adds SA token permission and flags",
+			version: "v2.10.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectIdentityRBAC:          true,
+				MultitenantWorkloadIdentity: true,
+			},
+			srcDir:                    "v2.10.0",
+			expectServiceAccountFlags: true,
+			expectTokens:              true,
+			expectNoFeatureGate:       true,
+		},
+		{
+			name:    "2.10.0 multitenant object identity enabled adds SA token permission and flags",
+			version: "v2.10.0",
+			cluster: fluxcdv1.Cluster{
+				ObjectIdentityRBAC:        true,
+				MultitenantObjectIdentity: true,
+			},
+			srcDir:                    "v2.10.0",
+			expectServiceAccountFlags: true,
+			expectTokens:              true,
+			expectNoFeatureGate:       true,
 		},
 	}
 
@@ -681,7 +860,7 @@ func TestBuild_WorkloadIdentity_FeatureGateAndFlags(t *testing.T) {
 			g.Expect(err).NotTo(HaveOccurred())
 			options.ComponentImages = ci
 
-			err = options.ValidateAndApplyWorkloadIdentityConfig(tc.cluster)
+			err = options.ValidateAndApplyObjectIdentityConfig(tc.cluster, false)
 			g.Expect(err).NotTo(HaveOccurred())
 
 			result, err := Build(srcDir, dstDir, options)
@@ -713,15 +892,24 @@ func TestBuild_WorkloadIdentity_FeatureGateAndFlags(t *testing.T) {
 				}
 			}
 
+			// Check that the retired feature gate is not passed to the controllers.
+			if tc.expectNoFeatureGate {
+				for _, obj := range result.Objects {
+					if obj.GetKind() == deploymentKind {
+						g.Expect(ssautil.ObjectToYAML(obj)).NotTo(ContainSubstring("ObjectLevelWorkloadIdentity"))
+					}
+				}
+			}
+
 			// Check service account tokens permission
 			found := false
 			for _, obj := range result.Objects {
 				if obj.GetName() == crdControllerFluxSystem && obj.GetKind() == clusterRole {
 					found = true
-					if tc.expectTokensRemoved {
-						g.Expect(ssautil.ObjectToYAML(obj)).NotTo(ContainSubstring("serviceaccounts/token"))
-					} else {
+					if tc.expectTokens {
 						g.Expect(ssautil.ObjectToYAML(obj)).To(ContainSubstring("serviceaccounts/token"))
+					} else {
+						g.Expect(ssautil.ObjectToYAML(obj)).NotTo(ContainSubstring("serviceaccounts/token"))
 					}
 				}
 			}
@@ -824,7 +1012,7 @@ func TestBuild_Sharding(t *testing.T) {
 	options := MakeDefaultOptions()
 	options.Version = version
 	options.Shards = []string{"shard1", "shard2"}
-	options.Patches = profileClusterTypeOpenShift + GetProfileMultitenant("")
+	options.Patches = profileClusterTypeOpenShift + GetProfileMultitenant("", version)
 	options.ArtifactStorage = &ArtifactStorage{
 		Class: "standard",
 		Size:  "10Gi",

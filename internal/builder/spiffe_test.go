@@ -1,0 +1,910 @@
+// Copyright 2026 Stefan Prodan.
+// SPDX-License-Identifier: AGPL-3.0
+
+package builder
+
+import (
+	"path/filepath"
+	"strings"
+	"testing"
+
+	. "github.com/onsi/gomega"
+	"go.yaml.in/yaml/v3"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+)
+
+func TestSPIFFE_WorkloadAPI(t *testing.T) {
+	g := NewWithT(t)
+	instance := spiffeTestInstance(nil, &fluxcdv1.SPIFFE{
+		WorkloadAPI: fluxcdv1.WorkloadAPI{
+			Endpoint:  "unix:///spiffe-workload-api/agent.sock",
+			CSIDriver: "csi.spiffe.io",
+		},
+	})
+
+	result := buildSPIFFE(t, instance)
+
+	for _, component := range instance.GetComponents() {
+		deploy := findObject(result.Objects, deploymentKind, component)
+		g.Expect(deploy).NotTo(BeNil(), component)
+		g.Expect(containerEnv(deploy)).To(ContainElement(envVar{
+			Name:  "SPIFFE_ENDPOINT_SOCKET",
+			Value: "unix:///spiffe-workload-api/agent.sock",
+		}), component)
+		g.Expect(deployVolumes(deploy)).To(ContainElement(spiffeVolume()), component)
+		g.Expect(containerVolumeMounts(deploy)).To(ContainElement(spiffeVolumeMount()), component)
+		g.Expect(containerArgs(deploy)).NotTo(ContainElement(ContainSubstring("--authorized-")))
+	}
+}
+
+func TestSPIFFE_WorkloadAPI_WithoutCSIDriver(t *testing.T) {
+	g := NewWithT(t)
+	instance := spiffeTestInstance(nil, &fluxcdv1.SPIFFE{
+		WorkloadAPI: fluxcdv1.WorkloadAPI{
+			Endpoint: "unix:///custom/agent.sock",
+		},
+	})
+
+	result := buildSPIFFE(t, instance)
+
+	deploy := findObject(result.Objects, deploymentKind, fluxcdv1.FluxSourceController)
+	g.Expect(containerEnv(deploy)).To(ContainElement(envVar{
+		Name:  "SPIFFE_ENDPOINT_SOCKET",
+		Value: "unix:///custom/agent.sock",
+	}))
+	g.Expect(deployVolumes(deploy)).NotTo(ContainElement(HaveKeyWithValue("name", spiffeVolumeName)))
+}
+
+func TestSPIFFE_MTLS(t *testing.T) {
+	g := NewWithT(t)
+	instance := spiffeTestInstance([]string{
+		fluxcdv1.FluxSourceController,
+		fluxcdv1.FluxKustomizeController,
+		fluxcdv1.FluxHelmController,
+		fluxcdv1.FluxNotificationController,
+		fluxcdv1.FluxSourceWatcher,
+	}, &fluxcdv1.SPIFFE{
+		WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+		MTLS: &fluxcdv1.MTLS{
+			Enabled:             true,
+			ComponentIDTemplate: "spiffe://example.org/fluxcd/{component}",
+			Receivers:           []string{"spiffe://example.org/gateway/receiver"},
+			ExtraArtifactClients: []string{
+				"spiffe://example.org/fluxcd/standalone-web",
+			},
+			ExtraArtifactServers: []string{
+				"spiffe://example.org/fluxcd/external-source",
+			},
+			ExtraNotifiers: []string{
+				"spiffe://example.org/fluxcd/standalone-web",
+			},
+		},
+	})
+
+	result := buildSPIFFE(t, instance)
+
+	sourceArgs := containerArgs(findObject(result.Objects, deploymentKind, fluxcdv1.FluxSourceController))
+	g.Expect(sourceArgs).To(ContainElements(
+		"--authorized-artifact-client-spiffe-id=spiffe://example.org/fluxcd/kustomize-controller",
+		"--authorized-artifact-client-spiffe-id=spiffe://example.org/fluxcd/helm-controller",
+		"--authorized-artifact-client-spiffe-id=spiffe://example.org/fluxcd/source-watcher",
+		"--authorized-artifact-client-spiffe-id=spiffe://example.org/fluxcd/flux-operator",
+		"--authorized-artifact-client-spiffe-id=spiffe://example.org/fluxcd/standalone-web",
+		"--authorized-event-server-spiffe-id=spiffe://example.org/fluxcd/notification-controller",
+	))
+
+	watcherArgs := containerArgs(findObject(result.Objects, deploymentKind, fluxcdv1.FluxSourceWatcher))
+	g.Expect(watcherArgs).To(ContainElements(
+		"--authorized-artifact-client-spiffe-id=spiffe://example.org/fluxcd/kustomize-controller",
+		"--authorized-artifact-client-spiffe-id=spiffe://example.org/fluxcd/source-watcher",
+		"--authorized-artifact-client-spiffe-id=spiffe://example.org/fluxcd/flux-operator",
+		"--authorized-artifact-server-spiffe-id=spiffe://example.org/fluxcd/source-controller",
+		"--authorized-artifact-server-spiffe-id=spiffe://example.org/fluxcd/source-watcher",
+		"--authorized-artifact-server-spiffe-id=spiffe://example.org/fluxcd/external-source",
+		"--authorized-event-server-spiffe-id=spiffe://example.org/fluxcd/notification-controller",
+	))
+
+	for _, component := range []string{fluxcdv1.FluxKustomizeController, fluxcdv1.FluxHelmController} {
+		args := containerArgs(findObject(result.Objects, deploymentKind, component))
+		g.Expect(args).To(ContainElements(
+			"--authorized-artifact-server-spiffe-id=spiffe://example.org/fluxcd/source-controller",
+			"--authorized-artifact-server-spiffe-id=spiffe://example.org/fluxcd/source-watcher",
+			"--authorized-artifact-server-spiffe-id=spiffe://example.org/fluxcd/external-source",
+			"--authorized-event-server-spiffe-id=spiffe://example.org/fluxcd/notification-controller",
+		), component)
+	}
+
+	notificationArgs := containerArgs(findObject(result.Objects, deploymentKind, fluxcdv1.FluxNotificationController))
+	g.Expect(notificationArgs).To(ContainElements(
+		"--authorized-notifier-spiffe-id=spiffe://example.org/fluxcd/source-controller",
+		"--authorized-notifier-spiffe-id=spiffe://example.org/fluxcd/kustomize-controller",
+		"--authorized-notifier-spiffe-id=spiffe://example.org/fluxcd/helm-controller",
+		"--authorized-notifier-spiffe-id=spiffe://example.org/fluxcd/notification-controller",
+		"--authorized-notifier-spiffe-id=spiffe://example.org/fluxcd/source-watcher",
+		"--authorized-notifier-spiffe-id=spiffe://example.org/fluxcd/flux-operator",
+		"--authorized-notifier-spiffe-id=spiffe://example.org/fluxcd/standalone-web",
+		"--authorized-receiver-spiffe-id=spiffe://example.org/gateway/receiver",
+	))
+
+	for _, name := range []string{
+		fluxcdv1.FluxSourceController,
+		fluxcdv1.FluxSourceWatcher,
+		fluxcdv1.FluxNotificationController,
+	} {
+		assertServicePort(t, result, name, "https", 443, "http")
+	}
+	assertServicePort(t, result, "webhook-receiver", "https", 443, "http-webhook")
+
+	for _, name := range []string{fluxcdv1.FluxSourceController, fluxcdv1.FluxSourceWatcher} {
+		deploy := findObject(result.Objects, deploymentKind, name)
+		assertReadinessProbe(t, deploy)
+	}
+}
+
+func TestSPIFFE_MTLS_WithoutOptionalControllers(t *testing.T) {
+	g := NewWithT(t)
+	instance := spiffeTestInstance([]string{
+		fluxcdv1.FluxSourceController,
+		fluxcdv1.FluxKustomizeController,
+		fluxcdv1.FluxHelmController,
+	}, &fluxcdv1.SPIFFE{
+		WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+		MTLS: &fluxcdv1.MTLS{
+			Enabled:             true,
+			ComponentIDTemplate: "spiffe://example.org/fluxcd/{component}",
+		},
+	})
+
+	result := buildSPIFFE(t, instance)
+
+	sourceArgs := containerArgs(findObject(result.Objects, deploymentKind, fluxcdv1.FluxSourceController))
+	g.Expect(sourceArgs).To(ContainElement("--authorized-artifact-client-spiffe-id=spiffe://example.org/fluxcd/flux-operator"))
+	g.Expect(sourceArgs).To(ContainElement("--authorized-artifact-client-spiffe-id=spiffe://example.org/fluxcd/kustomize-controller"))
+	g.Expect(sourceArgs).To(ContainElement("--authorized-artifact-client-spiffe-id=spiffe://example.org/fluxcd/helm-controller"))
+	g.Expect(sourceArgs).NotTo(ContainElement(ContainSubstring("source-watcher")))
+	g.Expect(sourceArgs).NotTo(ContainElement(ContainSubstring("--authorized-event-server-spiffe-id")))
+	g.Expect(findObject(result.Objects, deploymentKind, fluxcdv1.FluxSourceWatcher)).To(BeNil())
+	g.Expect(findObject(result.Objects, deploymentKind, fluxcdv1.FluxNotificationController)).To(BeNil())
+
+	kustomizeArgs := containerArgs(findObject(result.Objects, deploymentKind, fluxcdv1.FluxKustomizeController))
+	g.Expect(kustomizeArgs).To(ContainElement("--authorized-artifact-server-spiffe-id=spiffe://example.org/fluxcd/source-controller"))
+	g.Expect(kustomizeArgs).NotTo(ContainElement(ContainSubstring("source-watcher")))
+
+	service := findObject(result.Objects, "Service", "webhook-receiver")
+	g.Expect(service).To(BeNil())
+}
+
+func TestSPIFFE_MTLS_WebUIDisabled(t *testing.T) {
+	g := NewWithT(t)
+	instance := spiffeTestInstance([]string{
+		fluxcdv1.FluxSourceController,
+		fluxcdv1.FluxSourceWatcher,
+		fluxcdv1.FluxNotificationController,
+	}, &fluxcdv1.SPIFFE{
+		WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+		MTLS: &fluxcdv1.MTLS{
+			Enabled:             true,
+			ComponentIDTemplate: "spiffe://example.org/fluxcd/{component}",
+		},
+	})
+
+	const operatorID = "spiffe://example.org/fluxcd/flux-operator"
+	result := buildSPIFFEWithOptions(t, instance, func(o *Options) {
+		o.WebUIEnabled = false
+	})
+
+	for _, name := range []string{fluxcdv1.FluxSourceController, fluxcdv1.FluxSourceWatcher} {
+		args := containerArgs(findObject(result.Objects, deploymentKind, name))
+		g.Expect(args).NotTo(ContainElement("--authorized-artifact-client-spiffe-id="+operatorID), name)
+	}
+
+	notificationArgs := containerArgs(findObject(result.Objects, deploymentKind, fluxcdv1.FluxNotificationController))
+	g.Expect(notificationArgs).To(ContainElement("--authorized-notifier-spiffe-id=" + operatorID))
+}
+
+func TestSPIFFE_MTLS_OperatorMTLSDisabled(t *testing.T) {
+	g := NewWithT(t)
+	instance := spiffeTestInstance([]string{
+		fluxcdv1.FluxSourceController,
+		fluxcdv1.FluxSourceWatcher,
+		fluxcdv1.FluxNotificationController,
+	}, &fluxcdv1.SPIFFE{
+		WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+		MTLS: &fluxcdv1.MTLS{
+			Enabled:             true,
+			ComponentIDTemplate: "spiffe://example.org/fluxcd/{component}",
+		},
+	})
+
+	result := buildSPIFFEWithOptions(t, instance, func(o *Options) {
+		o.OperatorMTLSEnabled = false
+	})
+
+	for _, name := range []string{
+		fluxcdv1.FluxSourceController,
+		fluxcdv1.FluxSourceWatcher,
+		fluxcdv1.FluxNotificationController,
+	} {
+		args := containerArgs(findObject(result.Objects, deploymentKind, name))
+		g.Expect(args).NotTo(ContainElement(ContainSubstring("flux-operator")), name)
+	}
+}
+
+func TestSPIFFE_MTLS_WithoutArtifactServers(t *testing.T) {
+	for _, components := range [][]string{
+		{fluxcdv1.FluxKustomizeController},
+		{fluxcdv1.FluxKustomizeController, fluxcdv1.FluxHelmController},
+	} {
+		t.Run(strings.Join(components, ","), func(t *testing.T) {
+			g := NewWithT(t)
+			instance := spiffeTestInstance(components, &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+				MTLS: &fluxcdv1.MTLS{
+					Enabled:             true,
+					ComponentIDTemplate: "spiffe://example.org/fluxcd/{component}",
+				},
+			})
+
+			result := buildSPIFFE(t, instance)
+
+			for _, name := range components {
+				deploy := findObject(result.Objects, deploymentKind, name)
+				g.Expect(deploy).NotTo(BeNil(), name)
+				g.Expect(containerArgs(deploy)).NotTo(ContainElement(ContainSubstring("--authorized-")), name)
+			}
+		})
+	}
+}
+
+func TestSPIFFE_MTLS_ExtraArtifactServersOnly(t *testing.T) {
+	g := NewWithT(t)
+	instance := spiffeTestInstance([]string{
+		fluxcdv1.FluxKustomizeController,
+	}, &fluxcdv1.SPIFFE{
+		WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+		MTLS: &fluxcdv1.MTLS{
+			Enabled:              true,
+			ComponentIDTemplate:  "spiffe://example.org/fluxcd/{component}",
+			ExtraArtifactServers: []string{"spiffe://example.org/fluxcd/external-source"},
+		},
+	})
+
+	result := buildSPIFFE(t, instance)
+
+	args := containerArgs(findObject(result.Objects, deploymentKind, fluxcdv1.FluxKustomizeController))
+	g.Expect(args).To(ContainElement("--authorized-artifact-server-spiffe-id=spiffe://example.org/fluxcd/external-source"))
+	g.Expect(args).NotTo(ContainElement(ContainSubstring("source-controller")))
+}
+
+func TestSPIFFE_BrokerAPI(t *testing.T) {
+	g := NewWithT(t)
+	instance := spiffeTestInstance(nil, &fluxcdv1.SPIFFE{
+		WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+		BrokerAPI: &fluxcdv1.BrokerAPI{
+			Endpoint: "dns:///spiffe-broker.example.com:443",
+			IDs:      []string{"spiffe://example.org/broker/"},
+		},
+	})
+
+	result := buildSPIFFE(t, instance)
+
+	for _, component := range instance.GetComponents() {
+		args := containerArgs(findObject(result.Objects, deploymentKind, component))
+		g.Expect(args).To(ContainElements(
+			"--spiffe-broker-endpoint=dns:///spiffe-broker.example.com:443",
+			"--spiffe-broker-id=spiffe://example.org/broker/",
+		), component)
+	}
+
+	instance = spiffeTestInstance([]string{
+		fluxcdv1.FluxSourceController,
+		fluxcdv1.FluxSourceWatcher,
+		fluxcdv1.FluxKustomizeController,
+	}, &fluxcdv1.SPIFFE{
+		WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+		BrokerAPI: &fluxcdv1.BrokerAPI{
+			Endpoint: "dns:///spiffe-broker.example.com:443",
+			IDs:      []string{"spiffe://example.org/broker/"},
+		},
+	})
+
+	result = buildSPIFFE(t, instance)
+	g.Expect(containerArgs(findObject(result.Objects, deploymentKind, fluxcdv1.FluxSourceWatcher))).
+		NotTo(ContainElement(ContainSubstring("--spiffe-broker-endpoint")))
+}
+
+func TestSPIFFE_Validation(t *testing.T) {
+	testCases := []struct {
+		name    string
+		spiffe  *fluxcdv1.SPIFFE
+		wantErr string
+	}{
+		{
+			name:    "empty workload API endpoint",
+			spiffe:  &fluxcdv1.SPIFFE{},
+			wantErr: ".spec.spiffe.workloadAPI.endpoint",
+		},
+		{
+			name: "unsupported workload API scheme",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "dns:///spire-agent:8081"},
+			},
+			wantErr: ".spec.spiffe.workloadAPI.endpoint",
+		},
+		{
+			name: "tcp endpoint with hostname",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "tcp://spire-agent:8081"},
+			},
+			wantErr: ".spec.spiffe.workloadAPI.endpoint",
+		},
+		{
+			name: "CSI driver with endpoint outside the mount path",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{
+					Endpoint:  "unix:///run/spire/sockets/agent.sock",
+					CSIDriver: "csi.spiffe.io",
+				},
+			},
+			wantErr: "must be a unix socket under /spiffe-workload-api/",
+		},
+		{
+			name: "invalid CSI driver name",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{
+					Endpoint:  "unix:///spiffe-workload-api/agent.sock",
+					CSIDriver: "csi.spiffe.io: true",
+				},
+			},
+			wantErr: ".spec.spiffe.workloadAPI.csiDriver",
+		},
+		{
+			name: "empty broker API endpoint",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+				BrokerAPI:   &fluxcdv1.BrokerAPI{IDs: []string{"spiffe://example.org/broker"}},
+			},
+			wantErr: ".spec.spiffe.brokerAPI.endpoint",
+		},
+		{
+			name: "invalid tcp IPv4 address",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "tcp://999.999.999.999:8081"},
+			},
+			wantErr: "is invalid",
+		},
+		{
+			name: "invalid tcp IPv6 address",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "tcp://[:::]:8081"},
+			},
+			wantErr: "is invalid",
+		},
+		{
+			name: "invalid percent-encoding",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///socket%zz"},
+			},
+			wantErr: ".spec.spiffe.workloadAPI.endpoint",
+		},
+		{
+			name: "workload API endpoint too long",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///" + strings.Repeat("a", 1024)},
+			},
+			wantErr: ".spec.spiffe.workloadAPI.endpoint",
+		},
+		{
+			name: "CSI driver with parent segment",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/../run/agent.sock", CSIDriver: "csi.spiffe.io"},
+			},
+			wantErr: "without '..' segments",
+		},
+		{
+			name: "CSI driver with percent-encoding",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/%2e%2e/agent.sock", CSIDriver: "csi.spiffe.io"},
+			},
+			wantErr: ".spec.spiffe.workloadAPI.endpoint",
+		},
+		{
+			name: "CSI driver name with empty label",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock", CSIDriver: "csi..spiffe.io"},
+			},
+			wantErr: ".spec.spiffe.workloadAPI.csiDriver",
+		},
+		{
+			name: "CSI driver name with label starting with dash",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock", CSIDriver: "csi.-spiffe.io"},
+			},
+			wantErr: ".spec.spiffe.workloadAPI.csiDriver",
+		},
+		{
+			name: "CSI driver name too long",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock", CSIDriver: strings.Repeat("a", 64)},
+			},
+			wantErr: ".spec.spiffe.workloadAPI.csiDriver",
+		},
+		{
+			name: "broker API endpoint with vertical tab",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+				BrokerAPI:   &fluxcdv1.BrokerAPI{Endpoint: "dns:///broker\v:443", IDs: []string{"spiffe://example.org/broker"}},
+			},
+			wantErr: ".spec.spiffe.brokerAPI.endpoint",
+		},
+		{
+			name: "broker API endpoint with non-ASCII",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+				BrokerAPI:   &fluxcdv1.BrokerAPI{Endpoint: "dns:///bröker:443", IDs: []string{"spiffe://example.org/broker"}},
+			},
+			wantErr: ".spec.spiffe.brokerAPI.endpoint",
+		},
+		{
+			name: "broker API endpoint too long",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+				BrokerAPI:   &fluxcdv1.BrokerAPI{Endpoint: "dns:///" + strings.Repeat("a", 1024), IDs: []string{"spiffe://example.org/broker"}},
+			},
+			wantErr: ".spec.spiffe.brokerAPI.endpoint",
+		},
+		{
+			name: "tcp port out of range",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "tcp://127.0.0.1:99999"},
+			},
+			wantErr: "is invalid",
+		},
+		{
+			name: "tcp port zero",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "tcp://127.0.0.1:0"},
+			},
+			wantErr: "is invalid",
+		},
+		{
+			name: "CSI driver with trailing parent segment",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent/..", CSIDriver: "csi.spiffe.io"},
+			},
+			wantErr: "without '..' segments",
+		},
+		{
+			name: "CSI driver with dot-prefixed directory",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/..data/agent.sock", CSIDriver: "csi.spiffe.io"},
+			},
+		},
+		{
+			name: "tcp IPv6 endpoint",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "tcp://[::1]:8081"},
+			},
+		},
+		{
+			name: "single slash unix endpoint with CSI driver",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:/spiffe-workload-api/agent.sock", CSIDriver: "csi.spiffe.io"},
+			},
+		},
+		{
+			name: "single slash unix endpoint without CSI driver",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:/run/spire/sockets/agent.sock"},
+			},
+		},
+		{
+			name: "tcp endpoint without CSI driver",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "tcp://127.0.0.1:8081"},
+				BrokerAPI: &fluxcdv1.BrokerAPI{
+					Endpoint: "dns:///spiffe-broker.example.com:443",
+					IDs:      []string{"spiffe://example.org/broker"},
+				},
+			},
+		},
+		{
+			name: "unix endpoint without CSI driver",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///run/spire/sockets/agent.sock"},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			g := NewWithT(t)
+			instance := spiffeTestInstance(nil, tc.spiffe)
+
+			options := MakeDefaultOptions()
+			options.Version = "v2.10.0"
+			options.Components = instance.GetComponents()
+
+			err := options.ValidateAndApplySPIFFEConfig(instance)
+			if tc.wantErr != "" {
+				g.Expect(err).To(MatchError(ContainSubstring(tc.wantErr)))
+				return
+			}
+			g.Expect(err).NotTo(HaveOccurred())
+		})
+	}
+}
+
+func TestSPIFFE_QuotedValues(t *testing.T) {
+	g := NewWithT(t)
+	const client = "spiffe://example.org/clients/web#ui: x"
+	instance := spiffeTestInstance([]string{
+		fluxcdv1.FluxSourceController,
+		fluxcdv1.FluxKustomizeController,
+	}, &fluxcdv1.SPIFFE{
+		WorkloadAPI: fluxcdv1.WorkloadAPI{
+			Endpoint:  "unix:///spiffe-workload-api/agent.sock",
+			CSIDriver: "csi.spiffe.io",
+		},
+		MTLS: &fluxcdv1.MTLS{
+			Enabled:              true,
+			ComponentIDTemplate:  "spiffe://example.org/fluxcd/{component}",
+			ExtraArtifactClients: []string{client},
+		},
+	})
+
+	result := buildSPIFFE(t, instance)
+
+	deploy := findObject(result.Objects, deploymentKind, fluxcdv1.FluxSourceController)
+	g.Expect(containerArgs(deploy)).To(ContainElement("--authorized-artifact-client-spiffe-id=" + client))
+	g.Expect(containerEnv(deploy)).To(ContainElement(envVar{
+		Name:  "SPIFFE_ENDPOINT_SOCKET",
+		Value: "unix:///spiffe-workload-api/agent.sock",
+	}))
+	g.Expect(deployVolumes(deploy)).To(ContainElement(spiffeVolume()))
+}
+
+func TestSPIFFE_QuotedControlCharacters(t *testing.T) {
+	g := NewWithT(t)
+	clients := []string{
+		"spiffe://example.org/a\u0085b",
+		"spiffe://example.org/a\u009fb",
+		"spiffe://example.org/a\tb",
+		"spiffe://example.org/web-é",
+	}
+	instance := spiffeTestInstance([]string{fluxcdv1.FluxSourceController}, &fluxcdv1.SPIFFE{
+		WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+		MTLS: &fluxcdv1.MTLS{
+			Enabled:              true,
+			ComponentIDTemplate:  "spiffe://example.org/fluxcd/{component}",
+			ExtraArtifactClients: clients,
+		},
+	})
+
+	options := MakeDefaultOptions()
+	options.Version = "v2.10.0"
+	options.Components = instance.GetComponents()
+	g.Expect(options.ValidateAndApplySPIFFEConfig(instance)).To(Succeed())
+
+	// Parse the rendered kustomize patches and their JSON6902 operations.
+	var patches []struct {
+		Patch string `yaml:"patch"`
+	}
+	g.Expect(yaml.Unmarshal([]byte(options.Patches), &patches)).To(Succeed())
+	var values []string
+	for _, patch := range patches {
+		var ops []struct {
+			Value any `yaml:"value"`
+		}
+		g.Expect(yaml.Unmarshal([]byte(patch.Patch), &ops)).To(Succeed())
+		for _, op := range ops {
+			if v, ok := op.Value.(string); ok {
+				values = append(values, v)
+			}
+		}
+	}
+	for _, client := range clients {
+		g.Expect(values).To(ContainElement("--authorized-artifact-client-spiffe-id="+client), client)
+	}
+}
+
+func TestYAMLQuote(t *testing.T) {
+	g := NewWithT(t)
+
+	// Plain ASCII values render as before.
+	for _, value := range []string{
+		"unix:///spiffe-workload-api/agent.sock",
+		"csi.spiffe.io",
+		"source-controller|kustomize-controller",
+		"--authorized-artifact-client-spiffe-id=spiffe://example.org/fluxcd/flux-operator",
+	} {
+		g.Expect(yamlQuote(value)).To(Equal(`"` + value + `"`))
+	}
+
+	g.Expect(yamlQuote("a\u0085b\tc")).To(Equal(`"a\u0085b\tc"`))
+}
+
+func TestSPIFFE_VersionGate(t *testing.T) {
+	g := NewWithT(t)
+	instance := spiffeTestInstance(nil, &fluxcdv1.SPIFFE{
+		WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+	})
+
+	options := MakeDefaultOptions()
+	options.Version = "v2.9.6"
+	options.Components = instance.GetComponents()
+
+	err := options.ValidateAndApplySPIFFEConfig(instance)
+	g.Expect(err).To(MatchError(ContainSubstring(".spec.spiffe requires Flux >= 2.10.0")))
+}
+
+func TestSPIFFE_Sharding(t *testing.T) {
+	g := NewWithT(t)
+	instance := spiffeTestInstance([]string{
+		fluxcdv1.FluxSourceController,
+		fluxcdv1.FluxKustomizeController,
+		fluxcdv1.FluxNotificationController,
+	}, &fluxcdv1.SPIFFE{
+		WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+		MTLS: &fluxcdv1.MTLS{
+			Enabled:             true,
+			ComponentIDTemplate: "spiffe://example.org/fluxcd/{component}",
+		},
+	})
+	instance.Spec.Sharding = &fluxcdv1.Sharding{
+		Shards: []string{"apps"},
+	}
+
+	result := buildSPIFFE(t, instance)
+
+	shardSource := findObject(result.Objects, deploymentKind, "source-controller-apps")
+	g.Expect(shardSource).NotTo(BeNil())
+	g.Expect(containerArgs(shardSource)).To(ContainElement(
+		"--authorized-artifact-client-spiffe-id=spiffe://example.org/fluxcd/flux-operator"))
+	g.Expect(containerEnv(shardSource)).To(ContainElement(envVar{
+		Name:  "SPIFFE_ENDPOINT_SOCKET",
+		Value: "unix:///spiffe-workload-api/agent.sock",
+	}))
+	assertServicePort(t, result, "source-controller-apps", "https", 443, "http")
+}
+
+func TestSPIFFE_Idempotent(t *testing.T) {
+	g := NewWithT(t)
+	instance := spiffeTestInstance([]string{
+		fluxcdv1.FluxSourceController,
+		fluxcdv1.FluxKustomizeController,
+		fluxcdv1.FluxHelmController,
+		fluxcdv1.FluxNotificationController,
+		fluxcdv1.FluxSourceWatcher,
+	}, &fluxcdv1.SPIFFE{
+		WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+		MTLS: &fluxcdv1.MTLS{
+			Enabled:             true,
+			ComponentIDTemplate: "spiffe://example.org/fluxcd/{component}",
+		},
+	})
+
+	result := buildSPIFFE(t, instance)
+
+	for _, name := range []string{fluxcdv1.FluxSourceController, fluxcdv1.FluxSourceWatcher} {
+		assertReadinessProbe(t, findObject(result.Objects, deploymentKind, name))
+	}
+
+	for _, name := range []string{fluxcdv1.FluxSourceController, fluxcdv1.FluxSourceWatcher, fluxcdv1.FluxNotificationController} {
+		service := findObject(result.Objects, "Service", name)
+		ports, found, err := unstructured.NestedSlice(service.Object, "spec", "ports")
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(found).To(BeTrue())
+
+		var httpsCount int
+		for _, port := range ports {
+			portMap := port.(map[string]any)
+			if portMap["name"] != "https" {
+				continue
+			}
+			httpsCount++
+			g.Expect(portMap["port"]).To(Equal(int64(443)))
+			g.Expect(portMap["protocol"]).To(Equal("TCP"))
+			g.Expect(portMap["targetPort"]).To(Equal("http"))
+		}
+		g.Expect(httpsCount).To(Equal(1), name)
+	}
+}
+
+type envVar struct {
+	Name  string
+	Value string
+}
+
+func spiffeTestInstance(components []string, spiffe *fluxcdv1.SPIFFE) *fluxcdv1.FluxInstance {
+	var comps []fluxcdv1.Component
+	if components != nil {
+		comps = make([]fluxcdv1.Component, len(components))
+		for i, component := range components {
+			comps[i] = fluxcdv1.Component(component)
+		}
+	}
+
+	return &fluxcdv1.FluxInstance{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fluxcdv1.DefaultInstanceName,
+			Namespace: "flux-system",
+		},
+		Spec: fluxcdv1.FluxInstanceSpec{
+			Distribution: fluxcdv1.Distribution{
+				Version:  "2.10.x",
+				Registry: "ghcr.io/fluxcd",
+			},
+			Components: comps,
+			SPIFFE:     spiffe,
+		},
+	}
+}
+
+func buildSPIFFE(t *testing.T, instance *fluxcdv1.FluxInstance) *Result {
+	t.Helper()
+	return buildSPIFFEWithOptions(t, instance, nil)
+}
+
+// buildSPIFFEWithOptions builds the instance after applying setOptions
+// to the builder options.
+func buildSPIFFEWithOptions(t *testing.T, instance *fluxcdv1.FluxInstance, setOptions func(*Options)) *Result {
+	t.Helper()
+	g := NewWithT(t)
+
+	options := MakeDefaultOptions()
+	options.Version = "v2.10.0"
+	options.Components = instance.GetComponents()
+	options.Namespace = instance.GetNamespace()
+	options.ClusterDomain = instance.GetCluster().Domain
+	// Assume the operator has a SPIFFE Workload API source and the embedded
+	// Web UI is enabled unless the test overrides them.
+	options.OperatorMTLSEnabled = true
+	options.WebUIEnabled = true
+	if instance.Spec.Sharding != nil {
+		options.ShardingKey = instance.Spec.Sharding.Key
+		options.Shards = instance.Spec.Sharding.Shards
+	}
+
+	if setOptions != nil {
+		setOptions(&options)
+	}
+
+	if err := options.ValidateAndApplySPIFFEConfig(instance); err != nil {
+		t.Fatalf("failed to apply SPIFFE config: %v", err)
+	}
+
+	srcDir := filepath.Join("testdata", options.Version)
+	dstDir, err := testTempDir(t)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	ci, err := ExtractComponentImages(srcDir, options)
+	g.Expect(err).NotTo(HaveOccurred())
+	options.ComponentImages = ci
+
+	result, err := Build(srcDir, dstDir, options)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(result.Objects).NotTo(BeEmpty())
+	return result
+}
+
+func containerEnv(obj *unstructured.Unstructured) []envVar {
+	containers, _, _ := unstructured.NestedSlice(obj.Object, "spec", "template", "spec", "containers")
+	if len(containers) == 0 {
+		return nil
+	}
+	container, ok := containers[0].(map[string]any)
+	if !ok {
+		return nil
+	}
+	rawEnv, ok := container["env"].([]any)
+	if !ok {
+		return nil
+	}
+	env := make([]envVar, 0, len(rawEnv))
+	for _, ev := range rawEnv {
+		m, ok := ev.(map[string]any)
+		if !ok {
+			continue
+		}
+		name, _ := m["name"].(string)
+		value, _ := m["value"].(string)
+		env = append(env, envVar{Name: name, Value: value})
+	}
+	return env
+}
+
+func deployVolumes(obj *unstructured.Unstructured) []map[string]any {
+	raw, _, _ := unstructured.NestedSlice(obj.Object, "spec", "template", "spec", "volumes")
+	volumes := make([]map[string]any, 0, len(raw))
+	for _, v := range raw {
+		if m, ok := v.(map[string]any); ok {
+			volumes = append(volumes, m)
+		}
+	}
+	return volumes
+}
+
+func spiffeVolume() map[string]any {
+	return map[string]any{
+		"name": spiffeVolumeName,
+		"csi": map[string]any{
+			"driver":   "csi.spiffe.io",
+			"readOnly": true,
+		},
+	}
+}
+
+func containerVolumeMounts(obj *unstructured.Unstructured) []map[string]any {
+	containers, _, _ := unstructured.NestedSlice(obj.Object, "spec", "template", "spec", "containers")
+	if len(containers) == 0 {
+		return nil
+	}
+	container, ok := containers[0].(map[string]any)
+	if !ok {
+		return nil
+	}
+	raw, ok := container["volumeMounts"].([]any)
+	if !ok {
+		return nil
+	}
+	mounts := make([]map[string]any, 0, len(raw))
+	for _, v := range raw {
+		if m, ok := v.(map[string]any); ok {
+			mounts = append(mounts, m)
+		}
+	}
+	return mounts
+}
+
+func spiffeVolumeMount() map[string]any {
+	return map[string]any{
+		"name":      spiffeVolumeName,
+		"mountPath": spiffeVolumeMountPath,
+		"readOnly":  true,
+	}
+}
+
+func assertReadinessProbe(t *testing.T, deploy *unstructured.Unstructured) {
+	t.Helper()
+	g := NewWithT(t)
+	g.Expect(deploy).NotTo(BeNil())
+
+	containers, found, err := unstructured.NestedSlice(deploy.Object, "spec", "template", "spec", "containers")
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(found).To(BeTrue())
+	g.Expect(containers).NotTo(BeEmpty())
+	container, ok := containers[0].(map[string]any)
+	g.Expect(ok).To(BeTrue())
+
+	probe, ok := container["readinessProbe"].(map[string]any)
+	g.Expect(ok).To(BeTrue())
+	httpGet, ok := probe["httpGet"].(map[string]any)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(httpGet["path"]).To(Equal("/readyz"))
+	g.Expect(httpGet["port"]).To(Equal("healthz"))
+}
+
+func assertServicePort(t *testing.T, result *Result, serviceName, portName string, port int64, targetPort string) {
+	t.Helper()
+	g := NewWithT(t)
+	service := findObject(result.Objects, "Service", serviceName)
+	g.Expect(service).NotTo(BeNil(), serviceName)
+	ports, found, err := unstructured.NestedSlice(service.Object, "spec", "ports")
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(found).To(BeTrue())
+	for _, p := range ports {
+		portMap := p.(map[string]any)
+		if portMap["name"] != portName {
+			continue
+		}
+		g.Expect(portMap["port"]).To(Equal(port))
+		g.Expect(portMap["protocol"]).To(Equal("TCP"))
+		g.Expect(portMap["targetPort"]).To(Equal(targetPort))
+		return
+	}
+	t.Fatalf("port %s not found in service %s", portName, serviceName)
+}

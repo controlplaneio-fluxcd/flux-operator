@@ -458,15 +458,55 @@ spec:
 
 #### Secret-less
 
-The `.spec.serviceAccountName` field is optional and specifies the name of the Kubernetes
-ServiceAccount in the same namespace configured with workload identity to access a cloud
-provider service. This is called *object-level workload identity*. In order to force the
-use of object-level workload identity, the `--default-workload-identity-service-account`
-flag can be set in the operator. If this flag is specified and a ResourceSetInputProvider
-object does not have the field `.spec.serviceAccountName`, the operator will use the
-default service account specified by the flag for reconciling this object.
+When using a `.spec.type` that is linked to a service provider that supports
+identity federation, if the operator is configured with workload identity then
+the ResourceSetInputProvider reconciliation will use it.
+For setting up the required annotations and labels in the operator pod
+and ServiceAccount through Helm, you can use the values `commonAnnotations`
+and `commonLabels`, they are applied to both.
+We call this *workload identity*. In this scenario, the
+operator code uses the service provider SDKs to retrieve "application
+default credentials", i.e. credentials from the environment of the operator.
+Note that, in this mode, every ResourceSetInputProvider object in the
+cluster is sharing the same service provider identity: the one linked to the
+operator.
 
-When installing the Flux Operator with Helm, you can change the default workload identity
+It's also possible to give a ResourceSetInputProvider object its own service
+provider identity, completely decoupled from the identity of the operator, by
+configuring the `.spec.serviceAccountName` field. This field points to a
+ServiceAccount object in the same namespace as the ResourceSetInputProvider
+object. The identity federation setup for this ServiceAccount is identical to
+the setup for any other ServiceAccount using object identity in your cluster.
+This is called *object identity*. In this scenario, the operator code *does
+not* use the service provider SDKs to retrieve authentication from the
+environment. Instead, the code performs a *credential exchange*: it sends a
+token for the ServiceAccount and gets back from the service provider a native,
+temporary credential that allows access to the service provider.
+
+The `OCIArtifactTag` type supports object identity for generic OCI registries
+in addition to the cloud provider types.
+
+For a complete guide to the ServiceAccount annotations used for object
+identity, including the `spiffe` credential provider, see the
+[Object Identity](https://fluxcd.io/flux/integrations/object-identity/)
+docs.
+
+Both *workload identity* and *object identity*
+are enabled by default in Flux Operator, there's no opt-in required.
+However, in multi-tenant clusters where isolation is necessary, we recommend
+forcing the use of *object identity* by blocking the use
+of *workload identity* entirely. In this mode, the
+operator refuses to use the cloud SDK code path to retrieve credentials
+from the environment, and every ResourceSetInputProvider is required
+to specify a `.spec.serviceAccountName` field, or use a *default*.
+Setting this default is what prevents workload identity,
+we call it *object identity multi-tenancy lockdown*. To set this default,
+the `--default-object-identity-service-account` flag can be set in the
+operator. If this flag is specified and a ResourceSetInputProvider
+object does not have the field `.spec.serviceAccountName`, the operator
+will consider that the field `.spec.serviceAccountName` has the value of
+the `--default-object-identity-service-account` flag. When installing
+the Flux Operator with Helm, you can change the default object identity
 service account name with:
 
 ```shell
@@ -477,14 +517,14 @@ helm install flux-operator oci://ghcr.io/controlplaneio-fluxcd/charts/flux-opera
   --set multitenancy.defaultWorkloadIdentityServiceAccount=flux-operator
 ```
 
-When installing the Flux Operator on OpenShift from OperatorHub, the default workload identity
-service account name can be changed by setting the `DEFAULT_WORKLOAD_IDENTITY_SERVICE_ACCOUNT`
+When installing the Flux Operator on OpenShift from OperatorHub, the default object identity
+service account name can be changed by setting the `DEFAULT_OBJECT_IDENTITY_SERVICE_ACCOUNT`
 environment variable using the OLM
 [Subscription](https://github.com/operator-framework/operator-lifecycle-manager/blob/master/doc/design/subscription-config.md)
 `.spec.config.env` field.
 
 The `.spec.serviceAccountName` field can only be used with the following provider
-[types](#type) for workload identity:
+[types](#type) for object identity:
 
 - `AzureDevOpsPullRequest`
 - `AzureDevOpsBranch`
@@ -492,22 +532,26 @@ The `.spec.serviceAccountName` field can only be used with the following provide
 - `AWSCodeCommitPullRequest`
 - `AWSCodeCommitBranch`
 - `AWSCodeCommitTag`
+- `OCIArtifactTag`
 - `ACRArtifactTag`
 - `ECRArtifactTag`
 - `GARArtifactTag`
-- `ExternalArtifact` (for impersonation while listing/getting custom resources)
+
+Note: It can also be set for the type `ExternalArtifact`, but in this case the ServiceAccount
+is not used for object identity, as `ExternalArtifact` is about querying Flux ExternalArtifact
+objects inside the Kubernetes cluster. There's no access to an external service provider
+involving this type.
 
 When this field is not present and one of the types above is specified (and, in the case of Azure
 DevOps, [`.spec.secretRef`](#secret-based) is also not specified), the operator will attempt
 to authenticate using the environment credentials, i.e. either the identity of the node or the
-operator ServiceAccount. This is called *controller-level workload identity*.
+operator ServiceAccount. This is called *workload identity*.
 
-For configuring a Kubernetes ServiceAccount with workload identity, see the following documentation:
+For configuring a Kubernetes ServiceAccount with object identity, see the following documentation:
 
-- [Azure](https://fluxcd.io/flux/integrations/azure/#with-workload-identity-federation)
-- [AWS (controller-level)](https://fluxcd.io/flux/integrations/aws/#with-eks-pod-identity)
-- [AWS (object-level)](https://fluxcd.io/flux/integrations/aws/#with-oidc-federation)
-- [GCP](https://fluxcd.io/flux/integrations/gcp/#with-workload-identity-federation)
+- [Object identity with AWS](https://fluxcd.io/flux/integrations/aws/#object-identity)
+- [Object identity with Azure](https://fluxcd.io/flux/integrations/azure/#object-identity)
+- [Object identity with GCP](https://fluxcd.io/flux/integrations/gcp/#object-identity)
 
 For configuring the required permissions to access the cloud services, see the following documentation:
 
@@ -517,12 +561,12 @@ For configuring the required permissions to access the cloud services, see the f
 - [Amazon Elastic Container Registry Public](https://fluxcd.io/flux/integrations/aws/#for-amazon-public-elastic-container-registry)
 - [Google Artifact Registry](https://fluxcd.io/flux/integrations/gcp/#for-google-cloud-artifact-registry)
 
-For configuring the operator to use controller-level workload identity, patches like
+For configuring the operator to use workload identity, patches like
 the ones described in the documentation below can be applied to the operator deployment:
 
-- [Azure](https://fluxcd.io/flux/integrations/azure/#at-the-controller-level)
-- [AWS](https://fluxcd.io/flux/integrations/aws/#at-the-controller-level)
-- [GCP](https://fluxcd.io/flux/integrations/gcp/#at-the-controller-level)
+- [AWS](https://fluxcd.io/flux/integrations/aws/#workload-identity)
+- [Azure](https://fluxcd.io/flux/integrations/azure/#workload-identity)
+- [GCP](https://fluxcd.io/flux/integrations/gcp/#workload-identity)
 
 For configuring the identity of your nodes to access container registry services, see the
 following documentation:

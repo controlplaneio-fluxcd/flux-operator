@@ -4,6 +4,8 @@
 // Mock data for report endpoint (GET /api/v1/report)
 // Generated from real cluster API responses
 
+import { mockNodesScenario, mockNodesSummary, mockCanViewNodes } from './nodes'
+
 // Mock FluxReport resource
 export const mockReport = {
   apiVersion: 'fluxcd.controlplane.io/v1',
@@ -92,7 +94,7 @@ export const mockReport = {
       {
         apiVersion: 'helm.toolkit.fluxcd.io/v2',
         kind: 'HelmRelease',
-        stats: { failing: 0, running: 4, suspended: 0 }
+        stats: { failing: 0, running: 5, suspended: 0 }
       },
       {
         apiVersion: 'image.toolkit.fluxcd.io/v1',
@@ -120,12 +122,12 @@ export const mockReport = {
         stats: { failing: 0, running: 2, suspended: 0 }
       },
       {
-        apiVersion: 'notification.toolkit.fluxcd.io/v1beta3',
+        apiVersion: 'notification.toolkit.fluxcd.io/v1',
         kind: 'Alert',
         stats: { failing: 0, running: 2, suspended: 0 }
       },
       {
-        apiVersion: 'notification.toolkit.fluxcd.io/v1beta3',
+        apiVersion: 'notification.toolkit.fluxcd.io/v1',
         kind: 'Provider',
         stats: { failing: 0, running: 2, suspended: 0 }
       },
@@ -157,7 +159,7 @@ export const mockReport = {
       {
         apiVersion: 'source.toolkit.fluxcd.io/v1',
         kind: 'OCIRepository',
-        stats: { failing: 0, running: 3, suspended: 0, totalSize: '1.0 MiB' }
+        stats: { failing: 0, running: 4, suspended: 0, totalSize: '1.0 MiB' }
       }
     ],
     sync: {
@@ -242,6 +244,7 @@ export const mockReport = {
       }
     ],
     namespaces: [
+      'apps',
       'automation',
       'cert-manager',
       'default',
@@ -273,3 +276,9 @@ export const mockReport = {
     }
   }
 }
+
+// Name-less nodes summary and per-user access to the Nodes dashboard,
+// built from the same snapshot the /api/v1/nodes mock serves.
+mockReport.spec.nodes = mockNodesSummary()
+mockReport.spec.cluster.nodes = mockNodesScenario().nodes.length
+mockReport.spec.userInfo.canViewNodes = mockCanViewNodes()

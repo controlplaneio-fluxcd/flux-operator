@@ -105,7 +105,7 @@ export function HistoryTimeline({ history, kind }) {
             <div class="flex items-center gap-4 mb-2">
               <div class="relative flex flex-col items-center">
                 {/* Dot */}
-                <div class={`w-3 h-3 rounded-full flex-shrink-0 ${getHistoryDotClass(status)} ring-4 ring-white dark:ring-gray-800`} />
+                <div class={`w-3 h-3 rounded-full shrink-0 ${getHistoryDotClass(status)} ring-4 ring-white dark:ring-gray-800`} />
               </div>
               {/* Status badge */}
               <span class={`inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium ${getHistoryStatusBadgeClass(status)}`}>
@@ -177,7 +177,7 @@ export function HistoryTimeline({ history, kind }) {
       {/* Timeline start marker */}
       <div class="relative flex">
         <div class="relative flex flex-col items-center mr-4 pt-0.5">
-          <div class="w-3 h-3 rounded-full flex-shrink-0 bg-gray-300 dark:bg-gray-600 ring-4 ring-white dark:ring-gray-800" />
+          <div class="w-3 h-3 rounded-full shrink-0 bg-gray-300 dark:bg-gray-600 ring-4 ring-white dark:ring-gray-800" />
         </div>
         <div class="flex-1" />
       </div>

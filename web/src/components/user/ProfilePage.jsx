@@ -75,13 +75,13 @@ export function ProfilePage() {
   }, [logSettings.value])
 
   return (
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 grow w-full">
       <div class="space-y-6">
         {/* Header Card */}
-        <div class="card bg-blue-50 dark:bg-opacity-20 border-2 border-flux-blue">
+        <div class="card bg-blue-50 dark:bg-gray-800/20 border-2 border-flux-blue">
           <div class="flex items-center gap-4">
             {/* User icon in circle */}
-            <div class="w-16 h-16 rounded-full flex items-center justify-center flex-shrink-0 bg-flux-blue/10 dark:bg-flux-blue/20">
+            <div class="w-16 h-16 rounded-full flex items-center justify-center shrink-0 bg-flux-blue/10 dark:bg-flux-blue/20">
               <svg class="w-8 h-8 text-flux-blue dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
               </svg>
@@ -96,7 +96,7 @@ export function ProfilePage() {
             </div>
             {/* Session Started - only show when present */}
             {userInfo?.sessionStart && (
-              <div class="hidden md:block text-right flex-shrink-0">
+              <div class="hidden md:block text-right shrink-0">
                 <div class="text-sm text-gray-600 dark:text-gray-400">Session Started</div>
                 <div class="text-lg font-semibold text-gray-900 dark:text-white">{formatTimestamp(userInfo.sessionStart)}</div>
               </div>
@@ -160,7 +160,7 @@ export function ProfilePage() {
                 <KubernetesIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
                 <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Impersonation config</span>
               </div>
-              <pre class="p-3 bg-gray-50 dark:bg-gray-900 rounded-md overflow-x-auto language-json" style="font-size: 12px; line-height: 1.5;">
+              <pre class="p-3 bg-gray-50 dark:bg-gray-900! rounded-md overflow-x-auto language-json" style="font-size: 12px; line-height: 1.5;">
                 <code class="language-json" style="font-size: 12px;" dangerouslySetInnerHTML={{ __html: highlightedImpersonation }} />
               </pre>
             </div>
@@ -172,7 +172,7 @@ export function ProfilePage() {
                 <OpenIDIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
                 <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Provider claims</span>
               </div>
-              <pre class="p-3 bg-gray-50 dark:bg-gray-900 rounded-md overflow-x-auto language-json" style="font-size: 12px; line-height: 1.5;">
+              <pre class="p-3 bg-gray-50 dark:bg-gray-900! rounded-md overflow-x-auto language-json" style="font-size: 12px; line-height: 1.5;">
                 <code class="language-json" style="font-size: 12px;" dangerouslySetInnerHTML={{ __html: highlightedProvider }} />
               </pre>
             </div>

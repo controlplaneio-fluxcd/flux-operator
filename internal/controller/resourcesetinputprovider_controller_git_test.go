@@ -705,7 +705,7 @@ spec:
 }
 
 func TestResourceSetInputProviderReconciler_getGitHubToken_cached(t *testing.T) {
-	const key = "16b8b06786e2796aa1a04a57f4f74fa72ff7d8e481cf53905b6a741cf4c380e2"
+	const key = "4293bf0332e6fab80370b3a9b0c37ad613d5fde67201c2cb30415117ec8f5621"
 
 	g := NewWithT(t)
 
@@ -1040,12 +1040,12 @@ func TestResouceSetInputProviderReconciler_getAzureDevOpsToken(t *testing.T) {
 		res, err := r.getAzureDevOpsToken(ctx, nil, map[string][]byte{
 			"username": []byte("user"),
 			"password": []byte("pass"),
-		})
+		}, nil, nil)
 		g.Expect(err).NotTo(HaveOccurred())
 		g.Expect(res).To(Equal("pass"))
 	})
 
-	t.Run("with object-level workload identity", func(t *testing.T) {
+	t.Run("with object identity", func(t *testing.T) {
 		g := NewWithT(t)
 
 		ns, err := testEnv.CreateNamespace(ctx, "test-azure-devops-wi")
@@ -1070,17 +1070,19 @@ func TestResouceSetInputProviderReconciler_getAzureDevOpsToken(t *testing.T) {
 				URL:                "https://dev.azure.com/org/project/_git/repo",
 				ServiceAccountName: "test-sa",
 			},
-		}, nil)
+		}, nil, nil, nil)
 
 		// The Git URL must reach the auth package, otherwise the request is
-		// rejected before the Azure provider reads the ServiceAccount.
+		// rejected before the ServiceAccount is used. The auth package fails
+		// next on the missing controller token, which only exists in a Pod.
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).NotTo(ContainSubstring("a Git repository URL is required"))
-		g.Expect(err.Error()).To(ContainSubstring("azure tenant ID is not set in the service account annotation"))
+		g.Expect(err.Error()).To(ContainSubstring(
+			fmt.Sprintf("failed to create kubernetes token for service account '%s/test-sa'", ns.Name)))
 		g.Expect(res).To(BeEmpty())
 	})
 
-	t.Run("with controller-level workload identity", func(t *testing.T) {
+	t.Run("with workload identity", func(t *testing.T) {
 		g := NewWithT(t)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
@@ -1089,7 +1091,7 @@ func TestResouceSetInputProviderReconciler_getAzureDevOpsToken(t *testing.T) {
 				Type: "AzureDevOpsBranch",
 				URL:  "https://dev.azure.com/org/project/_git/repo",
 			},
-		}, nil)
+		}, nil, nil, nil)
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).NotTo(ContainSubstring("a Git repository URL is required"))
 		g.Expect(res).To(BeEmpty())
@@ -1102,7 +1104,7 @@ func TestResouceSetInputProviderReconciler_getAzureDevOpsToken(t *testing.T) {
 				Type: "AzureDevOpsBranch",
 				URL:  "https://dev.azure.com/\x7f",
 			},
-		}, nil)
+		}, nil, nil, nil)
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).To(ContainSubstring("failed to parse .spec.url"))
 		g.Expect(res).To(BeEmpty())

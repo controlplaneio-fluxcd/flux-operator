@@ -431,7 +431,7 @@ describe('ResourcePage component', () => {
       fetchWithMock.mockClear()
 
       // Unmount component
-      unmount()
+      act(() => unmount())
 
       // Fast-forward time - should NOT trigger fetch
       vi.advanceTimersByTime(POLL_INTERVAL_MS)

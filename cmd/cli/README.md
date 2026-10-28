@@ -71,6 +71,7 @@ The following commands are available:
 - `flux-operator build instance`: Generates the Flux Kubernetes manifests from a FluxInstance definition.
     - `-f, --file`: Path to the FluxInstance YAML manifest (required).
     - `--distribution-artifact`: OCI artifact URL of the Flux distribution, takes precedence over the FluxInstance spec.
+    - `--operator-web-ui-enabled`: Assume the operator's embedded Web UI is enabled and authorize the operator SPIFFE ID as an artifact client of the Flux source controllers.
 - `flux-operator build rset`: Generates the Kubernetes manifests from a ResourceSet definition.
   For a ResourceSet using `.spec.steps`, the manifests are printed in step order, with each step's
   objects preceded by a `# step: <name>` comment line.
@@ -293,7 +294,8 @@ The following commands are available:
   - `--password`: Set the password for basic authentication (required if --password-stdin is not used).
   - `--password-stdin`: Read the password from stdin.
 - `flux-operator create secret githubapp`: Create a Kubernetes Secret containing GitHub App credentials.
-  - `--app-id`: GitHub App ID (required).
+  - `--app-id`: GitHub App ID (required unless `--app-client-id` is set).
+  - `--app-client-id`: GitHub App client ID (required unless `--app-id` is set).
   - `--app-installation-id`: GitHub App Installation ID (required).
   - `--app-private-key-file`: Path to GitHub App private key file (required).
   - `--app-base-url`: GitHub base URL for GitHub Enterprise Server (optional).
@@ -450,7 +452,8 @@ it is recommended to follow the [installation guide](https://fluxcd.control-plan
     - `--instance-sync-ref`: Source reference for cluster sync (Git ref name or OCI tag).
     - `--instance-sync-path`: Path to the manifests directory in the source.
     - `--instance-sync-creds`: Credentials for the source in the format `username:token`.
-    - `--instance-sync-gha-app-id`: GitHub App ID for the sync source credentials.
+    - `--instance-sync-gha-app-id`: GitHub App ID for the sync source credentials (mutually exclusive with `--instance-sync-gha-app-client-id`).
+    - `--instance-sync-gha-app-client-id`: GitHub App client ID for the sync source credentials (mutually exclusive with `--instance-sync-gha-app-id`).
     - `--instance-sync-gha-installation-id`: GitHub App Installation ID (optional).
     - `--instance-sync-gha-installation-owner`: GitHub App Installation Owner (optional).
     - `--instance-sync-gha-private-key-file`: Path to GitHub App private key file.

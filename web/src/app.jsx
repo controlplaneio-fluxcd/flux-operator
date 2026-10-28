@@ -18,6 +18,7 @@ import { ResourceList, resourcesData, resourcesLoading } from './components/sear
 import { WorkloadList, workloadsData, workloadsLoading } from './components/search/WorkloadList'
 import { ResourcePage } from './components/dashboards/resource/ResourcePage'
 import { WorkloadPage } from './components/dashboards/workload/WorkloadPage'
+import { NodesPage } from './components/dashboards/nodes/NodesPage'
 import { FavoritesPage } from './components/favorites/FavoritesPage'
 import { favorites } from './utils/favorites'
 import { ProfilePage } from './components/user/ProfilePage'
@@ -131,7 +132,7 @@ function TabNavigation() {
                 currentPath === tab.href
                   ? 'border-flux-blue text-flux-blue dark:text-blue-400'
                   : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-              } -mb-px whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm focus:outline-none transition-colors`}
+              } -mb-px whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm focus:outline-hidden transition-colors`}
             >
               {tab.label}
             </a>
@@ -343,6 +344,7 @@ function AppContent({ spec, namespace }) {
         <Route path="/events" component={EventList} />
         <Route path="/resources" component={ResourceList} />
         <Route path="/workloads" component={WorkloadList} />
+        <Route path="/nodes" component={NodesPage} />
         <Route path="/resource/:kind/:namespace/:name" component={ResourcePage} />
         <Route path="/workload/:kind/:namespace/:name" component={WorkloadPage} />
         <Route path="/user/profile" component={ProfilePage} />

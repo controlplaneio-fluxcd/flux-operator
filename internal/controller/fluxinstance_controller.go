@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/patch"
+	fluxspiffe "github.com/fluxcd/pkg/spiffe"
 	"github.com/fluxcd/pkg/ssa"
 	"github.com/fluxcd/pkg/ssa/normalize"
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
@@ -51,6 +53,13 @@ type FluxInstanceReconciler struct {
 
 	Scheme        *runtime.Scheme
 	ClusterReader engine.ClusterReaderFactory
+	SPIFFESource  fluxspiffe.TLSSource
+	// WebUIEnabled indicates that the operator's embedded Web UI is enabled.
+	// It controls whether the operator SPIFFE ID is authorized as an artifact
+	// client of the Flux source controllers. Enabling or disabling the Web UI
+	// changes the generated controller arguments and rolls out the affected
+	// controllers.
+	WebUIEnabled bool
 
 	StatusManager         string
 	StoragePath           string
@@ -152,7 +161,7 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 			meta.ReadyCondition,
 			meta.ArtifactFailedReason,
 			"%s", msg)
-		r.notify(ctx, obj, meta.ArtifactFailedReason, corev1.EventTypeWarning, msg)
+		r.notify(ctx, obj, fluxcdv1.ActionFetchDistribution, meta.ArtifactFailedReason, corev1.EventTypeWarning, msg)
 		return ctrl.Result{}, err
 	}
 
@@ -195,7 +204,7 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 			conditions.GetReason(obj, meta.ReadyCondition),
 			nil)
 
-		r.notify(ctx, obj, meta.BuildFailedReason, corev1.EventTypeWarning, msg)
+		r.notify(ctx, obj, fluxcdv1.ActionBuild, meta.BuildFailedReason, corev1.EventTypeWarning, msg)
 		return ctrl.Result{}, reconcile.TerminalError(err)
 	}
 
@@ -240,7 +249,7 @@ func (r *FluxInstanceReconciler) reconcile(ctx context.Context,
 				"flux": version,
 			})
 
-		r.notify(ctx, obj, meta.ReconciliationFailedReason, corev1.EventTypeWarning, msg)
+		r.notify(ctx, obj, fluxcdv1.ActionReconcile, meta.ReconciliationFailedReason, corev1.EventTypeWarning, msg)
 		return ctrl.Result{}, err
 	}
 
@@ -358,6 +367,9 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 	options.Namespace = obj.GetNamespace()
 	options.Components = obj.GetComponents()
 	options.NetworkPolicy = obj.GetCluster().NetworkPolicy
+	options.OperatorMTLSEnabled = r.SPIFFESource != nil
+	options.WebUIEnabled = r.WebUIEnabled
+	options.Logger = log
 
 	if obj.GetCluster().Domain != "" {
 		options.ClusterDomain = obj.GetCluster().Domain
@@ -367,14 +379,19 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 	options.Patches += builder.GetProfileClusterSize(obj.GetCluster().Size)
 
 	if obj.GetCluster().Multitenant {
-		options.Patches += builder.GetProfileMultitenant(obj.GetCluster().TenantDefaultServiceAccount)
+		options.Patches += builder.GetProfileMultitenant(obj.GetCluster().TenantDefaultServiceAccount, ver)
 	}
 
 	if err := options.ValidateAndPatchComponents(); err != nil {
 		return nil, err
 	}
 
-	if err := options.ValidateAndApplyWorkloadIdentityConfig(obj.GetCluster()); err != nil {
+	if err := options.ValidateAndApplySPIFFEConfig(obj); err != nil {
+		return nil, err
+	}
+
+	objectIdentityViaSPIFFE := obj.Spec.SPIFFE != nil && obj.Spec.SPIFFE.BrokerAPI != nil
+	if err := options.ValidateAndApplyObjectIdentityConfig(obj.GetCluster(), objectIdentityViaSPIFFE); err != nil {
 		return nil, err
 	}
 
@@ -537,6 +554,10 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 		}
 	}
 
+	// Record the applied SPIFFE settings before the health checks: the
+	// controllers run with them even if an unrelated resource isn't ready.
+	obj.Status.SPIFFE = appliedSPIFFEStatus(obj)
+
 	// Detect stale resources which are subject to garbage collection.
 	staleObjects, err := inventory.Diff(oldInventory, newInventory)
 	if err != nil {
@@ -609,10 +630,24 @@ func (r *FluxInstanceReconciler) apply(ctx context.Context,
 		ver := strings.Split(buildResult.Revision, "@")[0]
 
 		msg := fmt.Sprintf("Flux %s %s\n%s", ver, action, applyLog)
-		r.notify(ctx, obj, meta.ReconciliationSucceededReason, corev1.EventTypeNormal, msg)
+		r.notify(ctx, obj, fluxcdv1.ActionReconcile, meta.ReconciliationSucceededReason, corev1.EventTypeNormal, msg)
 	}
 
 	return nil
+}
+
+// appliedSPIFFEStatus returns the SPIFFE status of the distribution built
+// from the spec, or nil when mTLS is not configured.
+func appliedSPIFFEStatus(obj *fluxcdv1.FluxInstance) *fluxcdv1.SPIFFEStatus {
+	if obj.Spec.SPIFFE == nil || obj.Spec.SPIFFE.MTLS == nil {
+		return nil
+	}
+	mtls := &fluxcdv1.MTLSStatus{Enabled: obj.Spec.SPIFFE.MTLS.Enabled}
+	if mtls.Enabled {
+		mtls.ComponentIDTemplate = obj.Spec.SPIFFE.MTLS.ComponentIDTemplate
+		mtls.ExtraArtifactServers = slices.Clone(obj.Spec.SPIFFE.MTLS.ExtraArtifactServers)
+	}
+	return &fluxcdv1.SPIFFEStatus{MTLS: mtls}
 }
 
 // finalizeStatus updates the object status and conditions.
@@ -681,12 +716,14 @@ func (r *FluxInstanceReconciler) recordMetrics(obj *fluxcdv1.FluxInstance) error
 	return nil
 }
 
-func (r *FluxInstanceReconciler) notify(ctx context.Context, obj *fluxcdv1.FluxInstance, reason, eventType, msg string) {
+func (r *FluxInstanceReconciler) notify(ctx context.Context, obj *fluxcdv1.FluxInstance,
+	action fluxcdv1.Action, reason, eventType, msg string) {
 	annotations := map[string]string{}
 	if obj.Status.LastAttemptedRevision != "" {
 		annotations[fluxcdv1.RevisionAnnotation] = obj.Status.LastAttemptedRevision
 	}
 	notifier.
-		New(ctx, r.EventRecorder, r.Scheme, notifier.WithFluxInstance(obj)).
-		AnnotatedEventf(obj, annotations, eventType, reason, "%s", msg)
+		New(ctx, r.EventRecorder, r.Scheme,
+			notifier.WithFluxInstance(obj), notifier.WithSPIFFESource(r.SPIFFESource)).
+		AnnotatedEventf(obj, nil, annotations, eventType, reason, action.String(), "%s", msg)
 }

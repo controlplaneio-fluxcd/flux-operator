@@ -6,7 +6,9 @@ package lkm
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/base64"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -351,8 +353,14 @@ func TestEdKeySetFromJSON(t *testing.T) {
 
 	t.Run("fails on private key set with multiple keys", func(t *testing.T) {
 		g := NewWithT(t)
-		multiKeyJSON := []byte(`{"issuer": "test", "keys": [{"kty": "OKP", "crv": "Ed25519", "x": "test", "kid": "key1"}, {"kty": "OKP", "crv": "Ed25519", "x": "test", "kid": "key2"}]}`)
-		_, err := EdKeySetFromJSON(multiKeyJSON)
+		pub1, _, err := ed25519.GenerateKey(rand.Reader)
+		g.Expect(err).ToNot(HaveOccurred())
+		pub2, _, err := ed25519.GenerateKey(rand.Reader)
+		g.Expect(err).ToNot(HaveOccurred())
+		x1 := base64.RawURLEncoding.EncodeToString(pub1)
+		x2 := base64.RawURLEncoding.EncodeToString(pub2)
+		multiKeyJSON := fmt.Appendf(nil, `{"issuer": "test", "keys": [{"kty": "OKP", "crv": "Ed25519", "x": %q, "kid": "key1"}, {"kty": "OKP", "crv": "Ed25519", "x": %q, "kid": "key2"}]}`, x1, x2)
+		_, err = EdKeySetFromJSON(multiKeyJSON)
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).To(ContainSubstring("cannot contain multiple keys"))
 	})

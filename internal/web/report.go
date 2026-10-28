@@ -28,6 +28,13 @@ import (
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
 
+// reportBuildTimeout bounds a report build started by a request when the
+// cache is empty. The build is detached from the requests that wait on it,
+// so it is capped at the server write timeout, the longest a request can
+// wait for it; it covers the nodes snapshot, whose metrics scrape alone may
+// take up to metricsScrapeTimeout.
+const reportBuildTimeout = serverTimeout
+
 // ReportHandler handles GET /api/v1/report requests and returns the FluxReport from the cluster.
 func (h *Handler) ReportHandler(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodGet {
@@ -52,19 +59,21 @@ func (h *Handler) ReportHandler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-// GetReport returns the cached FluxReport. If the cache is empty, it falls back to
-// building a fresh report (this should only happen during initial startup).
+// GetReport returns a copy of the cached FluxReport with the user info,
+// the user-visible namespaces and the reconciler stats filtered to those
+// namespaces injected into the spec. If the cache is empty, it builds the
+// report and fills the cache first (this should only happen when the
+// startup build failed). Concurrent cold calls share one build, which runs
+// detached from the requests; each caller stops waiting when its own
+// context is done.
 func (h *Handler) GetReport(ctx context.Context) (*unstructured.Unstructured, error) {
-	var report *unstructured.Unstructured
-	var statsByNamespace []reporter.ReconcilerStatsByNamespace
-	if cached, cachedStats := h.getCachedReport(); cached != nil {
-		report, statsByNamespace = cached, cachedStats
-	} else {
-		r, computeResult, err := h.buildReport(ctx)
+	report, statsByNamespace := h.getCachedReport()
+	if report == nil {
+		var err error
+		report, statsByNamespace, err = h.buildCachedReport(ctx)
 		if err != nil {
 			return nil, err
 		}
-		report, statsByNamespace = r, computeResult.StatsByNamespace
 	}
 
 	// Get and modify the report spec
@@ -86,6 +95,13 @@ func (h *Handler) GetReport(ctx context.Context) (*unstructured.Unstructured, er
 	if s := user.SessionStart(ctx); s != nil {
 		userInfo["sessionStart"] = s.Format(time.RFC3339)
 	}
+	// An access check failure hides the nodes dashboard link
+	// and never fails the report.
+	canViewNodes, err := h.kubeClient.CanListNodes(ctx)
+	if err != nil {
+		log.FromContext(ctx).Error(err, "failed to check the user access to nodes")
+	}
+	userInfo["canViewNodes"] = canViewNodes
 	spec["userInfo"] = userInfo
 
 	// Inject user-visible namespaces
@@ -129,9 +145,10 @@ func (h *Handler) startReportCache(ctx context.Context, reportInterval time.Dura
 	return stopped
 }
 
-// refreshReportCache builds a fresh report and updates the cache.
+// refreshReportCache builds a fresh report and nodes snapshot
+// and updates the cache.
 func (h *Handler) refreshReportCache(ctx context.Context) {
-	report, computeResult, err := h.buildReport(ctx)
+	report, computeResult, nodes, err := h.runBuildReport(ctx)
 	if err != nil {
 		if !errors.Is(err, context.Canceled) || ctx.Err() == nil {
 			log.FromContext(ctx).Error(err, "failed to refresh report cache")
@@ -139,16 +156,91 @@ func (h *Handler) refreshReportCache(ctx context.Context) {
 		return
 	}
 
+	h.storeReport(report, computeResult, nodes, false)
+}
+
+// buildCachedReport fills the empty report cache and returns a private copy
+// of the cached report along with the reconciler stats. Concurrent callers
+// share one build, which runs on a context detached from any single request
+// with reportBuildTimeout, so a canceled request never fails the others.
+// Each caller waits on its own context. The built report is stored only if
+// the cache is still empty, so it never replaces a newer refresh, and it is
+// never handed to a caller.
+func (h *Handler) buildCachedReport(ctx context.Context) (*unstructured.Unstructured, []reporter.ReconcilerStatsByNamespace, error) {
+	buildCtx := context.WithoutCancel(ctx)
+	result := h.reportBuildFlight.DoChan("report", func() (any, error) {
+		// A refresh may have filled the cache while this caller was queued.
+		if h.hasCachedReport() {
+			return nil, nil
+		}
+		buildCtx, cancel := context.WithTimeout(buildCtx, reportBuildTimeout)
+		defer cancel()
+		report, computeResult, nodes, err := h.runBuildReport(buildCtx)
+		if err != nil {
+			return nil, err
+		}
+		h.storeReport(report, computeResult, nodes, true)
+		return nil, nil
+	})
+	select {
+	case <-ctx.Done():
+		return nil, nil, ctx.Err()
+	case r := <-result:
+		if r.Err != nil {
+			return nil, nil, r.Err
+		}
+	}
+
+	report, statsByNamespace := h.getCachedReport()
+	if report == nil {
+		return nil, nil, fmt.Errorf("report cache is empty")
+	}
+	return report, statsByNamespace, nil
+}
+
+// runBuildReport builds the report with the buildReportHook when set,
+// or with buildReport otherwise.
+func (h *Handler) runBuildReport(ctx context.Context) (*unstructured.Unstructured, *reporter.FluxStatusReport, *NodesSnapshot, error) {
+	if h.buildReportHook != nil {
+		return h.buildReportHook(ctx)
+	}
+	return h.buildReport(ctx)
+}
+
+// storeReport writes the report, its reconciler stats and the nodes snapshot
+// to the cache and updates the search and workload indexes from the same
+// computation, all under reportCacheMu, so concurrent stores never mix the
+// cache of one computation with the indexes of another. With onlyIfEmpty,
+// nothing is written when the cache is already set, so older data never
+// replaces a newer refresh. It returns whether the report was stored.
+func (h *Handler) storeReport(report *unstructured.Unstructured, computeResult *reporter.FluxStatusReport,
+	nodes *NodesSnapshot, onlyIfEmpty bool) bool {
 	h.reportCacheMu.Lock()
+	defer h.reportCacheMu.Unlock()
+	if onlyIfEmpty && h.reportCache != nil {
+		return false
+	}
 	h.reportCache = report
 	h.reportCacheStatsByNamespace = computeResult.StatsByNamespace
-	h.reportCacheMu.Unlock()
+	// The snapshot is always from the same refresh as the report, so a
+	// failed snapshot is dropped along with the report spec.nodes.
+	h.nodesSnapshot = nodes
 
 	// Update the search index from the reporter's resource statuses.
+	// The indexes take their own locks and never take reportCacheMu.
 	h.searchIndex.Update(computeResult.Resources)
 
 	// Update the workload index from the reporter's inventory-derived workloads.
 	h.workloadIndex.Update(computeResult.Workloads)
+
+	return true
+}
+
+// hasCachedReport returns whether the report cache is set.
+func (h *Handler) hasCachedReport() bool {
+	h.reportCacheMu.RLock()
+	defer h.reportCacheMu.RUnlock()
+	return h.reportCache != nil
 }
 
 // getCachedReport returns the cached report if available.
@@ -167,9 +259,19 @@ func (h *Handler) getCachedReport() (*unstructured.Unstructured, []reporter.Reco
 	return &obj, statsByNamespace
 }
 
-// buildReport builds the FluxReport directly using the reporter package
-// and injects pod metrics into the report spec.
-func (h *Handler) buildReport(ctx context.Context) (*unstructured.Unstructured, *reporter.FluxStatusReport, error) {
+// getCachedNodesSnapshot returns the cached nodes snapshot if available.
+// The snapshot is replaced, never mutated, so it is safe to share.
+func (h *Handler) getCachedNodesSnapshot() *NodesSnapshot {
+	h.reportCacheMu.RLock()
+	defer h.reportCacheMu.RUnlock()
+	return h.nodesSnapshot
+}
+
+// buildReport builds the FluxReport directly using the reporter package,
+// injects pod metrics into the report spec and builds the nodes snapshot,
+// whose name-less summary is injected as spec.nodes. The snapshot is nil
+// and spec.nodes is left out when it fails to build.
+func (h *Handler) buildReport(ctx context.Context) (*unstructured.Unstructured, *reporter.FluxStatusReport, *NodesSnapshot, error) {
 	// The report client needs privileged access as it needs to access all
 	// resources in the cluster to build the report. The report information,
 	// however, is crunched in a way that does not expose sensitive information.
@@ -207,7 +309,7 @@ func (h *Handler) buildReport(ctx context.Context) (*unstructured.Unstructured, 
 	// Convert to unstructured
 	rawMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to convert report to unstructured: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to convert report to unstructured: %w", err)
 	}
 	report := &unstructured.Unstructured{Object: rawMap}
 
@@ -218,12 +320,27 @@ func (h *Handler) buildReport(ctx context.Context) (*unstructured.Unstructured, 
 		}
 	}
 
-	return report, computeResult, nil
+	// Build the nodes snapshot and enrich the report with its summary.
+	var serverVersion string
+	if computeResult.Spec.Cluster != nil {
+		serverVersion = computeResult.Spec.Cluster.ServerVersion
+	}
+	// The bursting workloads are matched against the Flux-managed workloads
+	// of the same report computation.
+	nodes, err := h.buildNodesSnapshot(ctx, serverVersion, computeResult.Workloads)
+	if err != nil {
+		log.FromContext(ctx).Error(err, "failed to build the nodes snapshot")
+	} else if spec, found := report.Object["spec"].(map[string]any); found {
+		spec["nodes"] = nodes.summary
+	}
+
+	return report, computeResult, nodes, nil
 }
 
 // ControllerMetrics holds the current CPU/Memory usage of a Flux
-// controller pod along with the resource requests and limits summed
-// from its spec (zero means not set).
+// controller pod along with the requests and limits of its running
+// containers (app containers and sidecars), from the spec and the actuated
+// status (zero means not set).
 type ControllerMetrics struct {
 	// Pod is the name of the controller pod.
 	Pod string `json:"pod"`
@@ -248,7 +365,8 @@ type ControllerMetrics struct {
 
 // controllerMetrics returns the current usage of the Flux controller pods
 // in the operator namespace, read from the pod metrics collector with the
-// requests/limits taken from the pod specs. When the pod list fails, the
+// requests/limits of the running containers (app containers and sidecars),
+// from the spec and the actuated status. When the pod list fails, the
 // usage of the buffered controller pods is returned without the
 // requests/limits. Returns nil when pod metrics collection is disabled
 // or the Metrics API is unavailable.
@@ -261,7 +379,9 @@ func (h *Handler) controllerMetrics(ctx context.Context) []ControllerMetrics {
 
 	var result []ControllerMetrics
 	var podList corev1.PodList
+	// The items point into the informer cache and must not be modified.
 	if err := h.kubeClient.GetClient(ctx, kubeclient.WithPrivileges()).List(ctx, &podList,
+		client.UnsafeDisableDeepCopy,
 		client.InNamespace(h.namespace),
 		client.MatchingLabelsSelector{Selector: fluxSelector.AsSelector()}); err != nil {
 		log.FromContext(ctx).Error(err, "failed to list Flux controller pods for metrics")

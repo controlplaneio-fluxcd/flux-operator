@@ -445,8 +445,8 @@ export function WorkloadDetailPanel({
                 return (
                   <div
                     key={pod.name}
-                    class={`rounded px-3 py-2 border border-gray-200 dark:border-gray-700 ${
-                      isRecent ? 'ring-2 ring-blue-400 dark:ring-blue-500 ring-opacity-50' : ''
+                    class={`rounded-sm px-3 py-2 border border-gray-200 dark:border-gray-700 ${
+                      isRecent ? 'ring-2 ring-blue-400/50 dark:ring-blue-500' : ''
                     }`}
                     data-testid={isRecent ? 'recent-pod' : undefined}
                   >
@@ -467,9 +467,9 @@ export function WorkloadDetailPanel({
                         })
                       }}
                     >
-                      <div class="flex items-center flex-grow mr-2 min-w-0">
+                      <div class="flex items-center grow mr-2 min-w-0">
                         {hasPodStatus && (
-                          <svg class={`w-3 h-3 mr-1.5 flex-shrink-0 text-gray-400 dark:text-gray-500 transition-transform ${isExpanded ? 'rotate-90' : ''}`} data-testid="pod-chevron" fill="currentColor" viewBox="0 0 20 20">
+                          <svg class={`w-3 h-3 mr-1.5 shrink-0 text-gray-400 dark:text-gray-500 transition-transform ${isExpanded ? 'rotate-90' : ''}`} data-testid="pod-chevron" fill="currentColor" viewBox="0 0 20 20">
                             <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
                           </svg>
                         )}
@@ -477,14 +477,14 @@ export function WorkloadDetailPanel({
                           {pod.name}
                         </span>
                       </div>
-                      <div class="flex items-center gap-1.5 flex-shrink-0">
+                      <div class="flex items-center gap-1.5 shrink-0">
                         <span class={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getWorkloadStatusBadgeClass(displayStatus)}`}>
                           {formatWorkloadStatus(displayStatus)}
                         </span>
                         {canViewLogs && hasPodStatus && (
                           <button
                             onClick={(e) => { e.stopPropagation(); openLogs(pod.name) }}
-                            class="inline-flex items-center p-1 rounded transition-colors focus:outline-none text-gray-400 hover:text-blue-500 dark:text-gray-500 dark:hover:text-blue-400"
+                            class="inline-flex items-center p-1 rounded-sm transition-colors focus:outline-hidden text-gray-400 hover:text-blue-500 dark:text-gray-500 dark:hover:text-blue-400"
                             data-testid="logs-pod-button"
                             title={`View logs for pod ${pod.name}`}
                           >
@@ -508,7 +508,7 @@ export function WorkloadDetailPanel({
                     </div>
                     {pod.statusMessage && (
                       <div class="flex items-start gap-1.5 mt-1">
-                        <svg class="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 flex-shrink-0 mt-px" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg class="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 shrink-0 mt-px" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                         <span class="text-xs text-gray-600 dark:text-gray-400 break-all">{pod.statusMessage}</span>
@@ -516,7 +516,7 @@ export function WorkloadDetailPanel({
                     )}
                     {pod.createdBy && (
                       <div class="flex items-center gap-1.5 mt-1" data-testid="pod-created-by">
-                        <svg class="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg class="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                         </svg>
                         <span class="text-xs text-gray-500 dark:text-gray-400">Triggered by {pod.createdBy}</span>
@@ -525,7 +525,7 @@ export function WorkloadDetailPanel({
                     {/* Container summary line */}
                     {summary && (
                       <div class="flex items-center gap-1.5 mt-1" data-testid="pod-container-summary">
-                        <svg class="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg class="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                         </svg>
                         <span class="text-xs text-gray-600 dark:text-gray-400">
@@ -536,7 +536,7 @@ export function WorkloadDetailPanel({
                     {/* Current CPU/Memory usage line with limit proximity */}
                     {pod.metrics && (
                       <div class="flex items-center gap-1.5 mt-1" data-testid="pod-metrics">
-                        <svg class="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg class="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
                         </svg>
                         <span class="text-xs text-gray-600 dark:text-gray-400">
@@ -560,7 +560,7 @@ export function WorkloadDetailPanel({
                             const stateInfo = getContainerStateBadge(cs.state)
                             const rawImage = cs.image && !cs.image.startsWith('sha256:') ? cs.image : (cs.imageID || '').replace(/^docker-pullable:\/\//, '')
                             return (
-                              <div key={cs.name} class="bg-gray-50 dark:bg-gray-900 rounded px-3 py-2 text-xs" data-testid="container-status">
+                              <div key={cs.name} class="bg-gray-50 dark:bg-gray-900 rounded-sm px-3 py-2 text-xs" data-testid="container-status">
                                 <div class="flex items-center justify-between">
                                   <div class="flex items-center gap-1.5 min-w-0">
                                     <span class="text-gray-900 dark:text-white font-medium truncate">
@@ -570,7 +570,7 @@ export function WorkloadDetailPanel({
                                       <span class="text-gray-500 dark:text-gray-500">({cs.restartCount} restarts)</span>
                                     )}
                                   </div>
-                                  <span class={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium ${stateInfo.badgeClass} ml-2 flex-shrink-0`}>
+                                  <span class={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium ${stateInfo.badgeClass} ml-2 shrink-0`}>
                                     {stateInfo.label}
                                   </span>
                                 </div>

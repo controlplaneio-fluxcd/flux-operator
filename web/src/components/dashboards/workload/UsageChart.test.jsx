@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render } from '@testing-library/preact'
+import { render, act } from '@testing-library/preact'
 import { UsageChart } from './UsageChart'
 import { formatCores } from '../../../utils/metrics'
 import uPlot from 'uplot'
@@ -78,7 +78,7 @@ describe('UsageChart component', () => {
       <UsageChart data={data} hasLimit={false} colorKey="cpu" formatValue={formatCores} testId="cpu-chart" />
     )
 
-    unmount()
+    act(() => unmount())
     expect(uPlot.instances[0].destroy).toHaveBeenCalledTimes(1)
   })
 
@@ -244,5 +244,23 @@ describe('UsageChart component', () => {
     u.cursor.idx = 1
     setCursor(u)
     expect(tooltip.textContent).not.toContain('rolled out')
+  })
+
+  it('labels the threshold in the tooltip, "limit" by default', () => {
+    const withLimit = [...data, [0.5, 0.5]]
+    const u = { cursor: { idx: 1 }, data: withLimit, valToPos: () => 10, over: { clientWidth: 300 } }
+
+    const first = render(
+      <UsageChart data={withLimit} hasLimit={true} colorKey="cpu" formatValue={formatCores} testId="cpu-chart" />
+    )
+    uPlot.instances[0].opts.hooks.setCursor[0](u)
+    expect(first.container.querySelector('.usage-chart-tooltip-limit').textContent).toBe('limit 500m')
+    act(() => first.unmount())
+
+    const second = render(
+      <UsageChart data={withLimit} hasLimit={true} limitLabel="allocatable" colorKey="cpu" formatValue={formatCores} testId="cpu-chart" />
+    )
+    uPlot.instances[1].opts.hooks.setCursor[0](u)
+    expect(second.container.querySelector('.usage-chart-tooltip-limit').textContent).toBe('allocatable 500m')
   })
 })
