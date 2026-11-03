@@ -63,6 +63,7 @@ The following environment variables are available:
 | `SPIFFE_ENDPOINT_SOCKET` | The SPIFFE Workload API endpoint (standard go-spiffe variable) |
 | `WEB_SERVER_PORT` | The port for the web server |
 | `WEB_CONFIG_SECRET_NAME` | Secret name for web server configuration |
+| `WATCH_CONFIGS_LABEL_SELECTOR` | Label selector for watching ConfigMaps and Secrets |
 
 The environment variables are intended for Operator Lifecycle Manager (OLM) installations
 and can be set in the `Subscription` manifest using the `config.env` field.

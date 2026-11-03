@@ -83,6 +83,7 @@ func main() {
 		spiffeBrokerEndpointEnvKey                  = "SPIFFE_BROKER_ENDPOINT"
 		spiffeBrokerIDsEnvKey                       = "SPIFFE_BROKER_IDS"
 		authorizedWebUIClientsEnvKey                = "AUTHORIZED_WEB_UI_CLIENT_SPIFFE_IDS"
+		watchConfigsLabelSelectorEnvKey             = "WATCH_CONFIGS_LABEL_SELECTOR"
 		tokenCacheDefaultMaxSize                    = 100
 		spiffeSourceTimeout                         = 30 * time.Second
 	)
@@ -182,6 +183,10 @@ func main() {
 	if err := intervalJitterOptions.SetGlobalJitter(nil); err != nil {
 		setupLog.Error(err, "unable to set global jitter")
 		os.Exit(1)
+	}
+
+	if v, ok := os.LookupEnv(watchConfigsLabelSelectorEnvKey); ok {
+		watchOptions.ConfigsLabelSelector = v
 	}
 
 	watchConfigsPredicate, err := runtimeCtrl.GetWatchConfigsPredicate(watchOptions)
