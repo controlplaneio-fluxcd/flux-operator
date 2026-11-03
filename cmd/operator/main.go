@@ -25,7 +25,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/pprof"
 	"github.com/fluxcd/pkg/runtime/probes"
 	fluxspiffe "github.com/fluxcd/pkg/spiffe"
-	spiffebroker "github.com/fluxcd/pkg/spiffe/broker"
+	spiffebroker "github.com/fluxcd/pkg/spiffe/brokerapi"
 	flag "github.com/spf13/pflag"
 	"github.com/spiffe/go-spiffe/v2/workloadapi"
 	batchv1 "k8s.io/api/batch/v1"
