@@ -34,7 +34,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/runtime/secrets"
 	fluxspiffe "github.com/fluxcd/pkg/spiffe"
-	spiffebroker "github.com/fluxcd/pkg/spiffe/broker"
+	spiffebroker "github.com/fluxcd/pkg/spiffe/brokerapi"
 	kauth "github.com/google/go-containerregistry/pkg/authn/kubernetes"
 	"github.com/google/go-containerregistry/pkg/crane"
 	"github.com/hashicorp/go-retryablehttp"
@@ -900,7 +900,7 @@ func (r *ResourceSetInputProviderReconciler) getAuthOptions(
 	opts := []auth.Option{
 		auth.WithClient(r.Client),
 		auth.WithObject(fluxcdv1.GroupVersion.Group, fluxcdv1.ResourceSetInputProviderKind, obj),
-		auth.WithSPIFFEBroker(r.SPIFFEBroker),
+		auth.WithSPIFFEBrokerAPI(r.SPIFFEBroker),
 	}
 	if cryptoSpec != nil {
 		opts = append(opts, auth.OptionsFromSpec(cryptoSpec.Auth)...)
