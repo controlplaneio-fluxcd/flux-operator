@@ -6,6 +6,7 @@ package k8s
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -116,6 +117,121 @@ func TestKubeConfigLoad(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestKubeConfigLoadMergesPathList(t *testing.T) {
+	g := NewWithT(t)
+
+	prodConfig := clientcmdapi.Config{
+		CurrentContext: "production",
+		Clusters: map[string]*clientcmdapi.Cluster{
+			"prod-cluster": {Server: "https://prod:6443"},
+		},
+		Contexts: map[string]*clientcmdapi.Context{
+			"production": {Cluster: "prod-cluster", AuthInfo: "default"},
+		},
+		AuthInfos: map[string]*clientcmdapi.AuthInfo{
+			"default": {},
+		},
+	}
+	devConfig := clientcmdapi.Config{
+		CurrentContext: "development",
+		Clusters: map[string]*clientcmdapi.Cluster{
+			"dev-cluster": {Server: "https://dev:6443"},
+		},
+		Contexts: map[string]*clientcmdapi.Context{
+			"development": {Cluster: "dev-cluster", AuthInfo: "default"},
+		},
+		AuthInfos: map[string]*clientcmdapi.AuthInfo{
+			"default": {},
+		},
+	}
+
+	prodPath := writeTestKubeconfig(t, prodConfig)
+	devPath := writeTestKubeconfig(t, devConfig)
+	t.Setenv("KUBECONFIG", strings.Join([]string{prodPath, devPath}, string(os.PathListSeparator)))
+
+	kc := NewKubeConfig()
+	err := kc.Load()
+	g.Expect(err).NotTo(HaveOccurred())
+
+	contexts := kc.Contexts()
+	g.Expect(contexts).To(HaveLen(2))
+
+	var current *KubeConfigContext
+	for i := range contexts {
+		if contexts[i].CurrentContext {
+			current = &contexts[i]
+		}
+	}
+	// The current context is the first one declared in the list.
+	g.Expect(current).NotTo(BeNil())
+	g.Expect(current.ContextName).To(Equal("production"))
+}
+
+func TestKubeConfigLoadMergesCrossFileCurrentContext(t *testing.T) {
+	g := NewWithT(t)
+
+	// The current context is declared in the first file but only
+	// defined in the second one.
+	prodConfig := clientcmdapi.Config{
+		CurrentContext: "production",
+	}
+	devConfig := clientcmdapi.Config{
+		Clusters: map[string]*clientcmdapi.Cluster{
+			"prod-cluster": {Server: "https://prod:6443"},
+		},
+		Contexts: map[string]*clientcmdapi.Context{
+			"production": {Cluster: "prod-cluster", AuthInfo: "default"},
+			"staging":    {Cluster: "prod-cluster", AuthInfo: "default"},
+		},
+		AuthInfos: map[string]*clientcmdapi.AuthInfo{
+			"default": {},
+		},
+	}
+
+	prodPath := writeTestKubeconfig(t, prodConfig)
+	devPath := writeTestKubeconfig(t, devConfig)
+	t.Setenv("KUBECONFIG", strings.Join([]string{prodPath, devPath}, string(os.PathListSeparator)))
+
+	kc := NewKubeConfig()
+	err := kc.Load()
+	g.Expect(err).NotTo(HaveOccurred())
+
+	contexts := kc.Contexts()
+	g.Expect(contexts).To(HaveLen(2))
+
+	for _, ctx := range contexts {
+		if ctx.CurrentContext {
+			g.Expect(ctx.ContextName).To(Equal("production"))
+		}
+	}
+}
+
+func TestKubeConfigLoadSkipsMissingFilesInList(t *testing.T) {
+	g := NewWithT(t)
+
+	config := clientcmdapi.Config{
+		CurrentContext: "staging",
+		Clusters: map[string]*clientcmdapi.Cluster{
+			"staging-cluster": {Server: "https://staging:6443"},
+		},
+		Contexts: map[string]*clientcmdapi.Context{
+			"staging": {Cluster: "staging-cluster", AuthInfo: "default"},
+		},
+		AuthInfos: map[string]*clientcmdapi.AuthInfo{
+			"default": {},
+		},
+	}
+
+	path := writeTestKubeconfig(t, config)
+	missing := filepath.Join(t.TempDir(), "does-not-exist")
+	t.Setenv("KUBECONFIG", strings.Join([]string{missing, path}, string(os.PathListSeparator)))
+
+	kc := NewKubeConfig()
+	err := kc.Load()
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(kc.Contexts()).To(HaveLen(1))
 }
 
 func TestKubeConfigLoadPreservesCurrentContext(t *testing.T) {
