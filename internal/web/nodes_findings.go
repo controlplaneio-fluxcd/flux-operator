@@ -305,7 +305,8 @@ func nodeFindings(n *NodeDetail) []NodeFinding {
 	for i := range n.Conditions {
 		c := &n.Conditions[i]
 		if c.Status != string(corev1.ConditionTrue) ||
-			slices.Contains(standardConditions, corev1.NodeConditionType(c.Type)) {
+			slices.Contains(standardConditions, corev1.NodeConditionType(c.Type)) ||
+			slices.Contains(healthyTrueConditions, corev1.NodeConditionType(c.Type)) {
 			continue
 		}
 		f := conditionFinding(CodeNodeCondition, health(SeverityWarn), c)
