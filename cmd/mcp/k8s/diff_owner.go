@@ -298,6 +298,9 @@ func prepareDiffObjects(ctx context.Context, kubeClient ctrlclient.Client, objec
 	if err := applyDeferredOwnerTransforms(ctx, kubeClient, objects, owner); err != nil {
 		return err
 	}
+	if err := clearClusterScopedNamespaces(kubeClient, *objects); err != nil {
+		return err
+	}
 
 	labels, annotations, err := commonMetadata(owner.object)
 	if err != nil {
@@ -678,6 +681,33 @@ func applyHelmReleaseMetadata(kubeClient ctrlclient.Client, objects []*unstructu
 		}
 		if namespaced {
 			object.SetNamespace(releaseNamespace)
+		}
+	}
+	return nil
+}
+
+// clearClusterScopedNamespaces removes the namespace from cluster-scoped objects.
+// Kustomize sets the target namespace on kinds missing from its built-in schema,
+// such as GatewayClass, while the API server ignores it for cluster-scoped kinds.
+func clearClusterScopedNamespaces(kubeClient ctrlclient.Client, objects []*unstructured.Unstructured) error {
+	crdScopes := manifestCRDScopes(objects)
+	for _, object := range objects {
+		if object.GetNamespace() == "" {
+			continue
+		}
+		namespaced, err := apiutil.IsObjectNamespaced(object, kubeClient.Scheme(), kubeClient.RESTMapper())
+		if err != nil {
+			if !meta.IsNoMatchError(err) {
+				return fmt.Errorf("failed to determine if %s is namespace scoped: %w", object.GetKind(), err)
+			}
+			var found bool
+			namespaced, found = crdScopes[object.GroupVersionKind().Group+"/"+object.GetKind()]
+			if !found {
+				continue
+			}
+		}
+		if !namespaced {
+			object.SetNamespace("")
 		}
 	}
 	return nil

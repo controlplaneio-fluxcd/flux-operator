@@ -93,6 +93,45 @@ func TestKustomizationBuildTransforms(t *testing.T) {
 	g.Expect(objects[1].GetNamespace()).To(BeEmpty())
 }
 
+func TestKustomizationTargetNamespaceClusterScopedKinds(t *testing.T) {
+	g := NewWithT(t)
+	mapper := meta.NewDefaultRESTMapper([]schema.GroupVersion{{Version: "v1"}, {Group: "gateway.networking.k8s.io", Version: "v1"}})
+	mapper.Add(schema.GroupVersionKind{Version: "v1", Kind: "ConfigMap"}, meta.RESTScopeNamespace)
+	mapper.Add(schema.GroupVersionKind{Group: "gateway.networking.k8s.io", Version: "v1", Kind: "GatewayClass"}, meta.RESTScopeRoot)
+	kubeClient := fake.NewClientBuilder().WithScheme(NewTestScheme()).WithRESTMapper(mapper).Build()
+	ownerObject := ownerObject("Kustomization", "gateway", "network", false)
+	ownerObject.Object["spec"].(map[string]any)["targetNamespace"] = "network"
+	owner, err := newDiffOwner(ownerObject)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	objects := []*unstructured.Unstructured{
+		{Object: map[string]any{
+			"apiVersion": "gateway.networking.k8s.io/v1", "kind": "GatewayClass", "metadata": map[string]any{"name": "envoy"},
+			"spec": map[string]any{"controllerName": "gateway.envoyproxy.io/gatewayclass-controller"},
+		}},
+		{Object: map[string]any{
+			"apiVersion": "apiextensions.k8s.io/v1", "kind": "CustomResourceDefinition",
+			"metadata": map[string]any{"name": "clusterwidgets.example.com"},
+			"spec":     map[string]any{"group": "example.com", "scope": "Cluster", "names": map[string]any{"kind": "ClusterWidget"}},
+		}},
+		{Object: map[string]any{"apiVersion": "example.com/v1", "kind": "ClusterWidget", "metadata": map[string]any{"name": "app"}}},
+		{Object: map[string]any{"apiVersion": "v1", "kind": "ConfigMap", "metadata": map[string]any{"name": "app"}}},
+	}
+	rm := newResourceManagerWithOwner(kubeClient, nil, owner.ssaOwner)
+	g.Expect(prepareDiffObjects(context.Background(), kubeClient, &objects, owner, rm)).To(Succeed())
+
+	namespaces := map[string]string{}
+	for _, object := range objects {
+		namespaces[object.GetKind()+"/"+object.GetName()] = object.GetNamespace()
+	}
+	g.Expect(namespaces).To(Equal(map[string]string{
+		"GatewayClass/envoy": "",
+		"CustomResourceDefinition/clusterwidgets.example.com": "",
+		"ClusterWidget/app": "",
+		"ConfigMap/app":     "network",
+	}))
+}
+
 func TestKustomizationBuildMetadataIgnoreRules(t *testing.T) {
 	g := NewWithT(t)
 	ctx := context.Background()
