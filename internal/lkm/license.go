@@ -23,7 +23,7 @@ type License struct {
 
 // NewLicense creates a new License for the given issuer, subject,
 // audience, expiry time duration, and capabilities.
-// The subject is anonymized and stored in the license key as 'c-<adler32checksum>'.
+// The subject is anonymized and stored in the license key as 'c-<hex(sha256(subject)[:8])>'.
 // It generates a unique and chronologically sortable ID for the license key using UUID v6.
 func NewLicense(issuer, subject, audience string, expiry time.Duration, capabilities []string) (*License, error) {
 	// Validate input parameters
