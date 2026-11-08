@@ -96,6 +96,14 @@ var (
 		corev1.NodePIDPressure,
 		corev1.NodeNetworkUnavailable,
 	}
+
+	// healthyTrueConditions are conditions set by Kubernetes distributions
+	// where status True is the healthy state, unlike the node-problem-detector
+	// conditions where True reports a problem. For example, k3s and RKE2 set
+	// EtcdIsVoter to True on etcd members that are voting members.
+	healthyTrueConditions = []corev1.NodeConditionType{
+		"EtcdIsVoter",
+	}
 )
 
 // NodesSnapshot is the state of the cluster nodes served by GET /api/v1/nodes,
