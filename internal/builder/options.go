@@ -51,7 +51,10 @@ type Options struct {
 	// Enabling or disabling the embedded Web UI changes these controller
 	// arguments and rolls out the affected controllers.
 	WebUIEnabled bool
-	Logger       logr.Logger
+	// SourceWatcherNamespaceManager indicates that the source-watcher
+	// namespace manager RBAC must be added to the installation.
+	SourceWatcherNamespaceManager bool
+	Logger                        logr.Logger
 }
 
 // MakeDefaultOptions returns the default builder configuration.

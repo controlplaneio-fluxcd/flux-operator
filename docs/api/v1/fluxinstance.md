@@ -495,6 +495,37 @@ Use cases:
 See the complete object identity documentation for CNCF Flux
 [here](https://fluxcd.io/flux/integrations/object-identity/).
 
+#### Cluster source-watcher
+
+The `.spec.cluster.sourceWatcher.namespaceManager` field is optional and enables the
+RBAC required by the `source-watcher` component to manage Kubernetes Namespaces on
+behalf of `ArtifactGenerator` resources. It is disabled by default.
+
+When enabled, the operator adds a dedicated `ClusterRole` and `ClusterRoleBinding`
+that grant the `source-watcher` service account cluster-wide permissions to create,
+update, patch and delete Namespaces. This is required when using the ArtifactGenerator
+[namespace management](https://fluxcd.io/flux/components/source/artifactgenerators/#namespace-management)
+feature.
+
+The `source-watcher` component must be enabled in `.spec.components`.
+When `source-watcher` is not enabled, the `.spec.cluster.sourceWatcher` field
+must be omitted.
+
+Example:
+
+```yaml
+spec:
+  components:
+    - source-controller
+    - kustomize-controller
+    - helm-controller
+    - notification-controller
+    - source-watcher
+  cluster:
+    sourceWatcher:
+      namespaceManager: true
+```
+
 #### Cluster network policy
 
 The `.spec.cluster.networkPolicy` field is optional and specifies whether to restrict network access

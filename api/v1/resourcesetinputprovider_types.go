@@ -147,6 +147,7 @@ type ResourceSetInputProviderSpec struct {
 
 // ExternalArtifactSelector defines a selector for discovering ExternalArtifact objects.
 // +kubebuilder:validation:XValidation:rule="!has(self.name) || (!has(self.matchLabels) && !has(self.matchExpressions))", message="name is mutually exclusive with matchLabels and matchExpressions"
+// +kubebuilder:validation:XValidation:rule="!(has(self.namespace) && has(self.namespaceSelector))", message="namespace and namespaceSelector are mutually exclusive"
 type ExternalArtifactSelector struct {
 	metav1.LabelSelector `json:",inline"`
 
@@ -160,8 +161,17 @@ type ExternalArtifactSelector struct {
 	// When set to "*", ExternalArtifacts are listed across all namespaces by
 	// omitting the namespace option from List().
 	// Otherwise, ExternalArtifacts are listed only in the specified namespace.
+	// This field is mutually exclusive with NamespaceSelector.
 	// +optional
 	Namespace string `json:"namespace,omitempty"`
+
+	// NamespaceSelector selects the namespaces where ExternalArtifacts are
+	// discovered based on their labels. An empty selector matches all
+	// namespaces. When both Namespace and NamespaceSelector are empty,
+	// ExternalArtifacts are listed in the ResourceSetInputProvider namespace.
+	// This field is mutually exclusive with Namespace.
+	// +optional
+	NamespaceSelector *metav1.LabelSelector `json:"namespaceSelector,omitempty"`
 }
 
 // ResourceSetInputFilter defines the filter to apply to the input provider response.

@@ -23,6 +23,7 @@ const (
 // FluxInstanceSpec defines the desired state of FluxInstance
 // +kubebuilder:validation:XValidation:rule="!has(self.sharding) || !has(self.sharding.storage) || self.sharding.storage != 'persistent' || has(self.storage)",message=".spec.storage must be set when .spec.sharding.storage is 'persistent'"
 // +kubebuilder:validation:XValidation:rule="!has(self.cluster) || !has(self.cluster.multitenantObjectIdentity) || !self.cluster.multitenantObjectIdentity || (has(self.cluster.objectIdentityRBAC) && self.cluster.objectIdentityRBAC) || (has(self.cluster.objectLevelWorkloadIdentity) && self.cluster.objectLevelWorkloadIdentity) || (has(self.spiffe) && has(self.spiffe.brokerAPI))",message=".spec.cluster.objectIdentityRBAC or .spec.spiffe.brokerAPI must be set when .spec.cluster.multitenantObjectIdentity is set to true"
+// +kubebuilder:validation:XValidation:rule="!has(self.cluster) || !has(self.cluster.sourceWatcher) || (has(self.components) && self.components.exists(c, c == 'source-watcher'))",message=".spec.cluster.sourceWatcher requires source-watcher in .spec.components"
 type FluxInstanceSpec struct {
 	// Distribution specifies the version and container registry to pull images from.
 	// +required
@@ -246,6 +247,21 @@ type Cluster struct {
 	// +kubebuilder:validation:Enum:=small;medium;large
 	// +optional
 	Size string `json:"size,omitempty"`
+
+	// SourceWatcher configures the source-watcher component.
+	// +optional
+	SourceWatcher *SourceWatcher `json:"sourceWatcher,omitempty"`
+}
+
+// SourceWatcher configures the source-watcher component.
+type SourceWatcher struct {
+	// NamespaceManager enables the RBAC required by source-watcher to manage
+	// Namespaces on behalf of ArtifactGenerator resources. This grants the
+	// source-watcher service account cluster-wide permissions to create,
+	// update, patch and delete Namespaces. The source-watcher component must
+	// be enabled in .spec.components.
+	// +optional
+	NamespaceManager bool `json:"namespaceManager,omitempty"`
 }
 
 // SPIFFE holds the configuration for the SPIFFE integration.

@@ -316,9 +316,14 @@ Each selector can specify:
   - When empty/omitted, discovery is scoped to the `ResourceSetInputProvider`'s namespace.
   - When set to `*`, discovery is scoped across all namespaces in the cluster.
   - Otherwise, discovery is scoped only to the specified namespace.
+- `namespaceSelector`: selects the namespaces to search using a Kubernetes label selector.
+  - An empty selector matches all namespaces.
+  - Mutually exclusive with `namespace`.
 
 > [!IMPORTANT]
 > When using `namespace: "*"` (all namespaces), the ServiceAccount used by the operator (or the one specified via `.spec.serviceAccountName`) must have cluster-wide list permissions on `ExternalArtifact` resources. Otherwise, reconciliation will fail with a forbidden error.
+>
+> When using `namespaceSelector`, the ServiceAccount must have cluster-wide list permissions on `Namespace` resources to evaluate the selector, and list permissions on `ExternalArtifact` resources in each matched namespace.
 
 Example:
 
@@ -341,6 +346,12 @@ spec:
       name: auth-prod
     # Match across all namespaces in the cluster
     - namespace: "*"
+      matchLabels:
+        generated-by: source-watcher
+    # Match across namespaces selected by labels
+    - namespaceSelector:
+        matchLabels:
+          environment: prod
       matchLabels:
         generated-by: source-watcher
 ```

@@ -7,6 +7,7 @@ import (
 	"context"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
@@ -20,6 +21,8 @@ import (
 	ctrlcache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
@@ -80,6 +83,24 @@ func (r *ResourceSetInputProviderReconciler) SetupWithManager(mgr ctrl.Manager, 
 		},
 	))
 
+	// Watch Namespace changes to enqueue ResourceSetInputProviders that select
+	// namespaces by labels through spec.selectors[].namespaceSelector.
+	b = b.Watches(
+		&corev1.Namespace{},
+		handler.Funcs{
+			CreateFunc: func(ctx context.Context, e event.TypedCreateEvent[client.Object], q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+				r.enqueueNamespace(ctx, q, e.Object)
+			},
+			UpdateFunc: func(ctx context.Context, e event.TypedUpdateEvent[client.Object], q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+				r.enqueueNamespace(ctx, q, e.ObjectOld) // catches label changes away from selector
+				r.enqueueNamespace(ctx, q, e.ObjectNew)
+			},
+			DeleteFunc: func(ctx context.Context, e event.TypedDeleteEvent[client.Object], q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+				r.enqueueNamespace(ctx, q, e.Object)
+			},
+		},
+	)
+
 	return b.WithOptions(controller.Options{
 		RateLimiter: opts.RateLimiter,
 	}).Complete(r)
@@ -99,6 +120,76 @@ func (r *ResourceSetInputProviderReconciler) enqueueExternalArtifact(
 			q.Add(req)
 		}
 	}
+}
+
+// enqueueNamespace handles DeletedFinalStateUnknown tombstones and enqueues
+// mapped ResourceSetInputProviders.
+func (r *ResourceSetInputProviderReconciler) enqueueNamespace(
+	ctx context.Context,
+	q workqueue.TypedRateLimitingInterface[reconcile.Request],
+	obj any,
+) {
+	if d, ok := obj.(toolscache.DeletedFinalStateUnknown); ok {
+		obj = d.Obj
+	}
+	if o, ok := obj.(client.Object); ok {
+		for _, req := range r.requestsForNamespace(ctx, o) {
+			q.Add(req)
+		}
+	}
+}
+
+// requestsForNamespace maps a Namespace change event to reconcile requests
+// for ResourceSetInputProviders whose namespaceSelector matches the Namespace.
+func (r *ResourceSetInputProviderReconciler) requestsForNamespace(
+	ctx context.Context, obj client.Object,
+) []reconcile.Request {
+	log := ctrl.LoggerFrom(ctx)
+
+	var list fluxcdv1.ResourceSetInputProviderList
+	listOpts := []client.ListOption{
+		client.UnsafeDisableDeepCopy,
+	}
+	if err := r.List(ctx, &list, listOpts...); err != nil {
+		log.Error(err, "failed to list ResourceSetInputProviders for Namespace change")
+		return nil
+	}
+
+	objLabels := labels.Set(obj.GetLabels())
+
+	var reqs []reconcile.Request
+	for _, rsip := range list.Items {
+		if rsip.Spec.Type != fluxcdv1.InputProviderExternalArtifact {
+			continue
+		}
+
+		matched := false
+		for _, sel := range rsip.Spec.Selectors {
+			if sel.NamespaceSelector == nil {
+				continue
+			}
+			selector, err := metav1.LabelSelectorAsSelector(sel.NamespaceSelector)
+			if err != nil {
+				log.Error(err, "failed to convert namespace selector from ResourceSetInputProvider spec.selectors",
+					"name", rsip.Name, "namespace", rsip.Namespace)
+				continue
+			}
+			if selector.Matches(objLabels) {
+				matched = true
+				break
+			}
+		}
+
+		if matched {
+			reqs = append(reqs, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      rsip.Name,
+					Namespace: rsip.Namespace,
+				},
+			})
+		}
+	}
+	return reqs
 }
 
 // requestsForExternalArtifacts maps an ExternalArtifact change event to reconcile requests for
@@ -131,13 +222,8 @@ func (r *ResourceSetInputProviderReconciler) requestsForExternalArtifacts(
 
 		matched := false
 		for _, sel := range rsip.Spec.Selectors {
-			ns := sel.Namespace
-			if ns == "" {
-				ns = rsip.GetNamespace()
-			}
-
 			// Namespace boundary check
-			if ns != "*" && ns != obj.GetNamespace() {
+			if !r.externalArtifactSelectorMatchesNamespace(ctx, rsip.GetNamespace(), sel, obj.GetNamespace()) {
 				continue
 			}
 
@@ -171,4 +257,35 @@ func (r *ResourceSetInputProviderReconciler) requestsForExternalArtifacts(
 		}
 	}
 	return reqs
+}
+
+// externalArtifactSelectorMatchesNamespace returns true when the given
+// ExternalArtifact namespace satisfies the namespace scope of the selector.
+// NamespaceSelector is evaluated against the in-cluster Namespace labels,
+// while an explicit Namespace is matched by name.
+func (r *ResourceSetInputProviderReconciler) externalArtifactSelectorMatchesNamespace(
+	ctx context.Context,
+	providerNamespace string,
+	sel fluxcdv1.ExternalArtifactSelector,
+	namespace string,
+) bool {
+	if sel.NamespaceSelector == nil {
+		ns := sel.Namespace
+		if ns == "" {
+			ns = providerNamespace
+		}
+		return ns == "*" || ns == namespace
+	}
+
+	selector, err := metav1.LabelSelectorAsSelector(sel.NamespaceSelector)
+	if err != nil {
+		ctrl.LoggerFrom(ctx).Error(err, "failed to convert namespace selector from ResourceSetInputProvider spec.selectors")
+		return false
+	}
+
+	ns := &corev1.Namespace{}
+	if err := r.Get(ctx, client.ObjectKey{Name: namespace}, ns); err != nil {
+		return false
+	}
+	return selector.Matches(labels.Set(ns.GetLabels()))
 }
