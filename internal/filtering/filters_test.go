@@ -213,10 +213,66 @@ func TestFilters_Tags(t *testing.T) {
 		{
 			name: "calver works with alphabetical sorting",
 			filters: &filtering.Filters{
-				Limit: 1,
+				OrderBy: filtering.OrderByAlphabetical,
+				Limit:   1,
 			},
 			tags:     []string{"2024.01.01", "2024.01.02", "2024.01.03"},
-			expected: []string{"2024.01.03"},
+			expected: []string{"2024.01.01"},
+		},
+		{
+			name: "extract order and group sorts and limits per group",
+			filters: &filtering.Filters{
+				Include:      regexp.MustCompile(`^(?P<service>[a-z]+)-v[0-9]+\.[0-9]+\.[0-9]+-ts(?P<ts>[0-9]+)$`),
+				ExtractOrder: "$ts",
+				ExtractGroup: "$service",
+				OrderBy:      filtering.OrderByReverseNumerical,
+				Limit:        1,
+			},
+			tags: []string{
+				"api-v1.0.0-ts123",
+				"web-v1.0.0-ts9",
+				"api-v1.0.0-ts45",
+				"release-1.0.0",
+				"web-v1.0.0-ts120",
+			},
+			expected: []string{"api-v1.0.0-ts123", "web-v1.0.0-ts120"},
+		},
+		{
+			name: "extract order with semver range",
+			filters: &filtering.Filters{
+				Include:      regexp.MustCompile(`^release-(?P<ver>v[0-9]+\.[0-9]+\.[0-9]+)$`),
+				ExtractOrder: "$ver",
+				SemVer:       newConstraint(">= 1.0.0 < 2.0.0"),
+				Limit:        2,
+			},
+			tags: []string{
+				"release-v1.0.0",
+				"release-v2.0.0",
+				"release-v1.2.0",
+			},
+			expected: []string{"release-v1.2.0", "release-v1.0.0"},
+		},
+		{
+			name: "order by semver",
+			filters: &filtering.Filters{
+				Include:      regexp.MustCompile(`^release-(?P<ver>v[0-9]+\.[0-9]+\.[0-9]+)$`),
+				ExtractOrder: "$ver",
+				OrderBy:      filtering.OrderBySemVer,
+				Limit:        2,
+			},
+			tags:     []string{"release-v1.0.0", "release-v2.0.0", "release-v1.2.0"},
+			expected: []string{"release-v2.0.0", "release-v1.2.0"},
+		},
+		{
+			name: "order by numerical",
+			filters: &filtering.Filters{
+				Include:      regexp.MustCompile(`^ts-(?P<ts>[0-9]+)$`),
+				ExtractOrder: "$ts",
+				OrderBy:      filtering.OrderByNumerical,
+				Limit:        3,
+			},
+			tags:     []string{"ts-10", "ts-2", "ts-1", "ts-20"},
+			expected: []string{"ts-1", "ts-2", "ts-10"},
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
