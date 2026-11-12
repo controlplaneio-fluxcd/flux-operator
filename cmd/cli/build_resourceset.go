@@ -162,11 +162,11 @@ func buildResourceSetCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	if rset.Spec.CommonMetadata != nil {
-		ssautil.SetCommonMetadata(objects, rset.Spec.CommonMetadata.Labels, rset.Spec.CommonMetadata.Annotations)
+		builder.SetCommonMetadata(objects, rset.Spec.CommonMetadata.Labels, rset.Spec.CommonMetadata.Annotations)
 	}
 
 	ownerGroup := fmt.Sprintf("resourceset.%s", fluxcdv1.GroupVersion.Group)
-	ssautil.SetCommonMetadata(objects, map[string]string{
+	ssautil.SetCommonMetadata(builder.FilterArtifactGeneratorExternalFinalizerNamespaces(objects), map[string]string{
 		fmt.Sprintf("%s/name", ownerGroup):      rset.GetName(),
 		fmt.Sprintf("%s/namespace", ownerGroup): rset.GetNamespace(),
 	}, nil)

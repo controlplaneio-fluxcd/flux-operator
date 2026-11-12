@@ -319,6 +319,42 @@ func TestFluxInstanceReconciler_CELValidation(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "source-watcher configuration requires source-watcher component",
+			obj: func(t *testing.T) *fluxcdv1.FluxInstance {
+				spec := getDefaultFluxSpec(t)
+				spec.Cluster = &fluxcdv1.Cluster{
+					SourceWatcher: &fluxcdv1.SourceWatcher{},
+				}
+				return &fluxcdv1.FluxInstance{
+					ObjectMeta: metav1.ObjectMeta{Name: "flux"},
+					Spec:       spec,
+				}
+			},
+			expectedErr: ".spec.cluster.sourceWatcher requires source-watcher in .spec.components",
+		},
+		{
+			name: "source-watcher namespace manager with source-watcher component",
+			obj: func(t *testing.T) *fluxcdv1.FluxInstance {
+				spec := getDefaultFluxSpec(t)
+				spec.Components = []fluxcdv1.Component{
+					fluxcdv1.FluxSourceController,
+					fluxcdv1.FluxKustomizeController,
+					fluxcdv1.FluxHelmController,
+					fluxcdv1.FluxNotificationController,
+					fluxcdv1.FluxSourceWatcher,
+				}
+				spec.Cluster = &fluxcdv1.Cluster{
+					SourceWatcher: &fluxcdv1.SourceWatcher{
+						NamespaceManager: true,
+					},
+				}
+				return &fluxcdv1.FluxInstance{
+					ObjectMeta: metav1.ObjectMeta{Name: "flux"},
+					Spec:       spec,
+				}
+			},
+		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)

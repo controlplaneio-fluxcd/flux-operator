@@ -113,6 +113,15 @@ const (
 
 	FluxSourceExtensionsGroup = "source.extensions.fluxcd.io"
 	FluxArtifactGeneratorKind = "ArtifactGenerator"
+
+	// ArtifactGeneratorExternalFinalizerAnnotation is the annotation used by ArtifactGenerator
+	// to hand over the finalization of a Namespace to an external object.
+	ArtifactGeneratorExternalFinalizerAnnotation = FluxSourceExtensionsGroup + "/externalFinalizer"
+
+	// ArtifactGeneratorExternalFinalizerSelfValue is the placeholder value that a ResourceSet
+	// replaces with its own fully qualified object reference before applying
+	// a Namespace annotated with ArtifactGeneratorExternalFinalizerAnnotation.
+	ArtifactGeneratorExternalFinalizerSelfValue = "self"
 )
 
 // Flux controller names.

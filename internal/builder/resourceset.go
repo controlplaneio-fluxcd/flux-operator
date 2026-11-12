@@ -101,7 +101,93 @@ func BuildResourceSet(yamlTemplate string, templates []*apix.JSON, combinedInput
 		}
 	}
 
+	if err := validateArtifactGeneratorExternalFinalizerNamespaces(objects); err != nil {
+		return nil, err
+	}
+
 	return objects, nil
+}
+
+// validateArtifactGeneratorExternalFinalizerNamespaces validates the Namespace manifests that
+// delegate their finalization to an external object. Such a manifest must set
+// the ArtifactGeneratorExternalFinalizerAnnotation to ArtifactGeneratorExternalFinalizerSelfValue and must not
+// define any field besides metadata.name and the annotation, so that the
+// namespace lifecycle remains owned by the ArtifactGenerator.
+func validateArtifactGeneratorExternalFinalizerNamespaces(objects []*unstructured.Unstructured) error {
+	for _, object := range objects {
+		if !IsArtifactGeneratorExternalFinalizerNamespace(object) {
+			continue
+		}
+
+		if value := object.GetAnnotations()[fluxcdv1.ArtifactGeneratorExternalFinalizerAnnotation]; value != fluxcdv1.ArtifactGeneratorExternalFinalizerSelfValue {
+			return fmt.Errorf("namespace %q: annotation %q value must be %q",
+				object.GetName(), fluxcdv1.ArtifactGeneratorExternalFinalizerAnnotation, fluxcdv1.ArtifactGeneratorExternalFinalizerSelfValue)
+		}
+
+		for key := range object.Object {
+			switch key {
+			case "apiVersion", "kind", "metadata":
+			default:
+				return invalidArtifactGeneratorExternalFinalizerNamespace(object)
+			}
+		}
+
+		metadata, ok := object.Object["metadata"].(map[string]any)
+		if !ok {
+			return invalidArtifactGeneratorExternalFinalizerNamespace(object)
+		}
+		for key := range metadata {
+			switch key {
+			case "name", "annotations":
+			default:
+				return invalidArtifactGeneratorExternalFinalizerNamespace(object)
+			}
+		}
+
+		if len(object.GetAnnotations()) != 1 {
+			return invalidArtifactGeneratorExternalFinalizerNamespace(object)
+		}
+	}
+	return nil
+}
+
+// invalidArtifactGeneratorExternalFinalizerNamespace returns the error for a Namespace manifest
+// that combines the external finalizer annotation with fields the ResourceSet
+// is not allowed to manage.
+func invalidArtifactGeneratorExternalFinalizerNamespace(object *unstructured.Unstructured) error {
+	return fmt.Errorf("namespace %q: manifests annotated with %q must only set metadata.name and the annotation",
+		object.GetName(), fluxcdv1.ArtifactGeneratorExternalFinalizerAnnotation)
+}
+
+// IsArtifactGeneratorExternalFinalizerNamespace returns true if the given object is a Namespace
+// annotated with ArtifactGeneratorExternalFinalizerAnnotation.
+func IsArtifactGeneratorExternalFinalizerNamespace(object *unstructured.Unstructured) bool {
+	if object.GetAPIVersion() != "v1" || object.GetKind() != "Namespace" {
+		return false
+	}
+	_, found := object.GetAnnotations()[fluxcdv1.ArtifactGeneratorExternalFinalizerAnnotation]
+	return found
+}
+
+// SetCommonMetadata adds the given labels and annotations to the objects,
+// skipping the Namespaces that delegate their finalization to an external
+// object. The metadata of such namespaces is managed by the ArtifactGenerator.
+func SetCommonMetadata(objects []*unstructured.Unstructured, labels, annotations map[string]string) {
+	ssautil.SetCommonMetadata(FilterArtifactGeneratorExternalFinalizerNamespaces(objects), labels, annotations)
+}
+
+// FilterArtifactGeneratorExternalFinalizerNamespaces returns the given objects
+// without the Namespaces that delegate their finalization to an external
+// object. The ResourceSet must not manage the metadata of such namespaces.
+func FilterArtifactGeneratorExternalFinalizerNamespaces(objects []*unstructured.Unstructured) []*unstructured.Unstructured {
+	filtered := make([]*unstructured.Unstructured, 0, len(objects))
+	for _, object := range objects {
+		if IsArtifactGeneratorExternalFinalizerNamespace(object) {
+			continue
+		}
+		filtered = append(filtered, object)
+	}
+	return filtered
 }
 
 // StepBuildResult holds the objects built for a single ResourceSet step.

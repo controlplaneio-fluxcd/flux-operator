@@ -117,6 +117,13 @@ func generate(base string, options Options) error {
 		return fmt.Errorf("generate rbac failed: %w", err)
 	}
 
+	if options.SourceWatcherNamespaceManager {
+		if err := execTemplate(options, sourceWatcherNamespaceManagerRBACTmpl,
+			path.Join(base, "roles", "source-watcher-namespace-manager.yaml")); err != nil {
+			return fmt.Errorf("generate source-watcher namespace manager rbac failed: %w", err)
+		}
+	}
+
 	if err := execTemplate(options, kustomizationRolesTmpl, path.Join(base, "roles", "kustomization.yaml")); err != nil {
 		return fmt.Errorf("generate roles kustomization failed: %w", err)
 	}

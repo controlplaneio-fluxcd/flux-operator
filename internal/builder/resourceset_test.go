@@ -152,6 +152,153 @@ func TestBuildResourceSet_Error(t *testing.T) {
 	}
 }
 
+func TestBuildResourceSet_ArtifactGeneratorExternalFinalizer(t *testing.T) {
+	tests := []struct {
+		name     string
+		manifest string
+		matchErr string
+	}{
+		{
+			name: "accepts the self placeholder",
+			manifest: `
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tenant
+  annotations:
+    source.extensions.fluxcd.io/externalFinalizer: self
+`,
+		},
+		{
+			name: "rejects a value other than self",
+			manifest: `
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tenant
+  annotations:
+    source.extensions.fluxcd.io/externalFinalizer: fluxcd.controlplane.io/v1/ResourceSet/flux-system/tenants/6d7c0f20-9d1e-4a4d-9d3c-1c0e0e2f4b1a
+`,
+			matchErr: `annotation "source.extensions.fluxcd.io/externalFinalizer" value must be "self"`,
+		},
+		{
+			name: "rejects extra labels",
+			manifest: `
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tenant
+  labels:
+    team: platform
+  annotations:
+    source.extensions.fluxcd.io/externalFinalizer: self
+`,
+			matchErr: `must only set metadata.name and the annotation`,
+		},
+		{
+			name: "rejects extra annotations",
+			manifest: `
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tenant
+  annotations:
+    source.extensions.fluxcd.io/externalFinalizer: self
+    owner: platform
+`,
+			matchErr: `must only set metadata.name and the annotation`,
+		},
+		{
+			name: "rejects a namespace field",
+			manifest: `
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tenant
+  namespace: flux-system
+  annotations:
+    source.extensions.fluxcd.io/externalFinalizer: self
+`,
+			matchErr: `must only set metadata.name and the annotation`,
+		},
+		{
+			name: "rejects extra spec fields",
+			manifest: `
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tenant
+  annotations:
+    source.extensions.fluxcd.io/externalFinalizer: self
+spec:
+  finalizers:
+    - kubernetes
+`,
+			matchErr: `must only set metadata.name and the annotation`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			objects, err := BuildResourceSet(tt.manifest, nil, nil)
+			if tt.matchErr != "" {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.matchErr))
+				return
+			}
+
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(objects).To(HaveLen(1))
+			g.Expect(objects[0].GetAnnotations()).To(Equal(map[string]string{
+				v1.ArtifactGeneratorExternalFinalizerAnnotation: v1.ArtifactGeneratorExternalFinalizerSelfValue,
+			}))
+			g.Expect(objects[0].GetLabels()).To(BeEmpty())
+		})
+	}
+}
+
+func TestSetCommonMetadata_ArtifactGeneratorExternalFinalizer(t *testing.T) {
+	g := NewWithT(t)
+
+	objects, err := BuildResourceSet(`
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tenant
+  annotations:
+    source.extensions.fluxcd.io/externalFinalizer: self
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app
+  namespace: tenant
+`, nil, nil)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(objects).To(HaveLen(2))
+
+	SetCommonMetadata(objects,
+		map[string]string{"app.kubernetes.io/name": "podinfo"},
+		map[string]string{"owner": "platform"})
+
+	namespace := objects[0]
+	g.Expect(namespace.GetKind()).To(Equal("Namespace"))
+	g.Expect(namespace.GetLabels()).To(BeEmpty())
+	g.Expect(namespace.GetAnnotations()).To(Equal(map[string]string{
+		v1.ArtifactGeneratorExternalFinalizerAnnotation: v1.ArtifactGeneratorExternalFinalizerSelfValue,
+	}))
+
+	configMap := objects[1]
+	g.Expect(configMap.GetLabels()).To(Equal(map[string]string{
+		"app.kubernetes.io/name": "podinfo",
+	}))
+	g.Expect(configMap.GetAnnotations()).To(Equal(map[string]string{
+		"owner": "platform",
+	}))
+}
+
 func TestBuildResourceSetSteps(t *testing.T) {
 	testdataRoot := filepath.Join("testdata", "resourceset")
 

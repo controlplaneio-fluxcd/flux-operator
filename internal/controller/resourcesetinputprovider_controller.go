@@ -1146,6 +1146,50 @@ func (r *ResourceSetInputProviderReconciler) callExternalServiceProvider(
 	return res, nil
 }
 
+// externalArtifactSelectorNamespaces returns the namespaces scoped by the
+// given ExternalArtifact selector. When the selector uses Namespace "*", the
+// allNamespaces result is true and the namespaces slice is nil. When the
+// selector uses NamespaceSelector, the namespaces are listed with the given
+// Kubernetes client so that RBAC and multi-tenancy boundaries are enforced.
+func (r *ResourceSetInputProviderReconciler) externalArtifactSelectorNamespaces(
+	ctx context.Context,
+	kubeClient client.Client,
+	obj *fluxcdv1.ResourceSetInputProvider,
+	sel fluxcdv1.ExternalArtifactSelector,
+) (namespaces []string, allNamespaces bool, err error) {
+	if sel.NamespaceSelector != nil {
+		selector, err := metav1.LabelSelectorAsSelector(sel.NamespaceSelector)
+		if err != nil {
+			return nil, false, fmt.Errorf("invalid namespace selector: %w", err)
+		}
+
+		list := &corev1.NamespaceList{}
+		if err := kubeClient.List(ctx, list, client.MatchingLabelsSelector{Selector: selector}); err != nil {
+			if apierrors.IsForbidden(err) {
+				return nil, false, fmt.Errorf("impersonated service account '%s' lacks permissions to list Namespaces for selector: %w",
+					obj.Spec.ServiceAccountName, err)
+			}
+			return nil, false, fmt.Errorf("failed to list Namespaces for selector: %w", err)
+		}
+
+		namespaces = make([]string, 0, len(list.Items))
+		for _, namespace := range list.Items {
+			namespaces = append(namespaces, namespace.Name)
+		}
+		slices.Sort(namespaces)
+		return namespaces, false, nil
+	}
+
+	ns := sel.Namespace
+	if ns == "" {
+		ns = obj.GetNamespace()
+	}
+	if ns == "*" {
+		return nil, true, nil
+	}
+	return []string{ns}, false, nil
+}
+
 // callExternalArtifactProvider lists ExternalArtifact resources in-cluster
 // matching spec.selectors and converts them into ResourceSetInput objects.
 // It uses the unstructured client to avoid importing source-controller/api as a
@@ -1172,13 +1216,13 @@ func (r *ResourceSetInputProviderReconciler) callExternalArtifactProvider(
 	var matches []*unstructured.Unstructured
 
 	for _, sel := range obj.Spec.Selectors {
-		ns := sel.Namespace
-		if ns == "" {
-			ns = obj.GetNamespace()
+		namespaces, allNamespaces, err := r.externalArtifactSelectorNamespaces(ctx, kubeClient, obj, sel)
+		if err != nil {
+			return nil, err
 		}
 
 		if sel.Name != "" {
-			if ns == "*" {
+			if allNamespaces {
 				// List all namespaces and filter by name in Go
 				list := &unstructured.UnstructuredList{}
 				list.SetGroupVersionKind(externalArtifactListGVK)
@@ -1194,8 +1238,10 @@ func (r *ResourceSetInputProviderReconciler) callExternalArtifactProvider(
 						matches = append(matches, &list.Items[i])
 					}
 				}
-			} else {
-				// Single namespace Get
+				continue
+			}
+
+			for _, ns := range namespaces {
 				ea := &unstructured.Unstructured{}
 				ea.SetGroupVersionKind(schema.GroupVersionKind{
 					Group:   "source.toolkit.fluxcd.io",
@@ -1215,25 +1261,35 @@ func (r *ResourceSetInputProviderReconciler) callExternalArtifactProvider(
 				}
 				matches = append(matches, ea)
 			}
-		} else {
-			// Label selector search
-			labelSel, err := metav1.LabelSelectorAsSelector(&sel.LabelSelector)
-			if err != nil {
-				return nil, fmt.Errorf("invalid label selector: %w", err)
+			continue
+		}
+
+		// Label selector search
+		labelSel, err := metav1.LabelSelectorAsSelector(&sel.LabelSelector)
+		if err != nil {
+			return nil, fmt.Errorf("invalid label selector: %w", err)
+		}
+		if allNamespaces {
+			namespaces = []string{""}
+		}
+		for _, ns := range namespaces {
+			scope := ns
+			if scope == "" {
+				scope = "*"
 			}
 			list := &unstructured.UnstructuredList{}
 			list.SetGroupVersionKind(externalArtifactListGVK)
 			var listOpts []client.ListOption
-			if ns != "*" {
+			if ns != "" {
 				listOpts = append(listOpts, client.InNamespace(ns))
 			}
 			listOpts = append(listOpts, client.MatchingLabelsSelector{Selector: labelSel}, client.UnsafeDisableDeepCopy)
 			if err := kubeClient.List(ctx, list, listOpts...); err != nil {
 				if apierrors.IsForbidden(err) {
 					return nil, fmt.Errorf("impersonated service account '%s' lacks permissions to list ExternalArtifacts in namespace '%s': %w",
-						obj.Spec.ServiceAccountName, ns, err)
+						obj.Spec.ServiceAccountName, scope, err)
 				}
-				return nil, fmt.Errorf("failed to list ExternalArtifacts in namespace '%s': %w", ns, err)
+				return nil, fmt.Errorf("failed to list ExternalArtifacts in namespace '%s': %w", scope, err)
 			}
 			for i := range list.Items {
 				matches = append(matches, &list.Items[i])

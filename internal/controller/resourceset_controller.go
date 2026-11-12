@@ -462,6 +462,31 @@ func (r *ResourceSetReconciler) getInputs(ctx context.Context,
 	return inputs.Combine(obj, providerMap)
 }
 
+// artifactGeneratorExternalFinalizerRef returns the fully qualified reference
+// of the given ResourceSet used by ArtifactGenerator for namespace
+// finalization delegation.
+func artifactGeneratorExternalFinalizerRef(obj *fluxcdv1.ResourceSet) string {
+	return fmt.Sprintf("%s/%s/%s/%s/%s",
+		fluxcdv1.GroupVersion.String(), fluxcdv1.ResourceSetKind,
+		obj.GetNamespace(), obj.GetName(), obj.GetUID())
+}
+
+// stampArtifactGeneratorExternalFinalizer replaces the ArtifactGeneratorExternalFinalizerSelfValue placeholder
+// with the fully qualified reference of the given ResourceSet on all the
+// Namespaces that delegate their finalization to an external object.
+func stampArtifactGeneratorExternalFinalizer(obj *fluxcdv1.ResourceSet, objects []*unstructured.Unstructured) {
+	ref := artifactGeneratorExternalFinalizerRef(obj)
+
+	for _, res := range objects {
+		if !builder.IsArtifactGeneratorExternalFinalizerNamespace(res) {
+			continue
+		}
+		annotations := res.GetAnnotations()
+		annotations[fluxcdv1.ArtifactGeneratorExternalFinalizerAnnotation] = ref
+		res.SetAnnotations(annotations)
+	}
+}
+
 // apply reconciles the resources in the cluster by performing
 // a server-side apply of each step in order, waiting for the
 // non-final step resources to become ready before starting the
@@ -511,10 +536,19 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 		Field: r.StatusManager,
 		Group: fluxcdv1.GroupOwnerLabelResourceSet,
 	})
-	resourceManager.SetOwnerLabels(objects, obj.GetName(), obj.GetNamespace())
+	// Namespaces that delegate their finalization to an external object are
+	// not labeled as owned by the ResourceSet, as the ArtifactGenerator
+	// remains responsible for their metadata.
+	resourceManager.SetOwnerLabels(
+		builder.FilterArtifactGeneratorExternalFinalizerNamespaces(objects),
+		obj.GetName(), obj.GetNamespace())
+
+	// Replace the external finalizer placeholder of the namespaces with the
+	// fully qualified reference of this ResourceSet before applying them.
+	stampArtifactGeneratorExternalFinalizer(obj, objects)
 
 	if cm := obj.Spec.CommonMetadata; cm != nil {
-		ssautil.SetCommonMetadata(objects, cm.Labels, cm.Annotations)
+		builder.SetCommonMetadata(objects, cm.Labels, cm.Annotations)
 	}
 
 	if err := r.copyResources(ctx, kubeClient, objects); err != nil {
@@ -673,12 +707,30 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 			},
 		}
 
+		// Namespaces with a delegated finalization are not labeled as owned
+		// by the ResourceSet, so they are deleted separately without the
+		// owner label selector once they are removed from the rendered set.
+		// Namespaces that delegated finalization to another object are kept
+		// out of the garbage collection set.
+		externalFinalizerNamespaces, staleObjects := splitArtifactGeneratorExternalFinalizerNamespaces(
+			ctx, kubeClient, staleObjects, artifactGeneratorExternalFinalizerRef(obj))
+
 		deleteSet, err := r.deleteAllStaged(ctx, resourceManager, staleObjects, deleteOpts)
 		if err != nil {
 			// Keep the old and new inventory union in status so the
 			// undeleted stale objects stay tracked and their deletion
 			// is retried on the next reconciliation.
 			return "", err
+		}
+
+		if len(externalFinalizerNamespaces) > 0 {
+			nsOpts := deleteOpts
+			nsOpts.Inclusions = nil
+			nsChangeSet, err := resourceManager.DeleteAll(ctx, externalFinalizerNamespaces, nsOpts)
+			if err != nil {
+				return "", err
+			}
+			deleteSet.Append(nsChangeSet.Entries)
 		}
 
 		if len(deleteSet.Entries) > 0 {
@@ -922,6 +974,74 @@ func (r *ResourceSetReconciler) deleteAllStaged(ctx context.Context,
 	return changeSet, nil
 }
 
+// splitArtifactGeneratorExternalFinalizerNamespaces separates the objects into
+// the Namespaces whose external finalizer annotation matches exactly the given
+// ResourceSet reference and the rest of the objects. Namespaces whose
+// annotation references another object are excluded from both results so that
+// this ResourceSet never deletes them.
+func splitArtifactGeneratorExternalFinalizerNamespaces(ctx context.Context,
+	kubeClient client.Client,
+	objects []*unstructured.Unstructured,
+	ref string) (matching, others []*unstructured.Unstructured) {
+	for _, res := range objects {
+		resRef, found := artifactGeneratorExternalFinalizerRefOf(ctx, kubeClient, res)
+		switch {
+		case found && resRef == ref:
+			matching = append(matching, res)
+		case found:
+			// Finalization is delegated to another object, leave it alone.
+		default:
+			others = append(others, res)
+		}
+	}
+	return matching, others
+}
+
+// artifactGeneratorExternalFinalizerRefOf returns the external finalizer
+// annotation value of the in-cluster representation of the given object. The
+// boolean result is false when the object is not a Namespace, does not exist,
+// or does not carry the annotation.
+func artifactGeneratorExternalFinalizerRefOf(ctx context.Context,
+	kubeClient client.Client,
+	res *unstructured.Unstructured) (string, bool) {
+	if res.GetAPIVersion() != "v1" || res.GetKind() != "Namespace" {
+		return "", false
+	}
+
+	namespace := &unstructured.Unstructured{}
+	namespace.SetGroupVersionKind(res.GroupVersionKind())
+	if err := kubeClient.Get(ctx, client.ObjectKeyFromObject(res), namespace); err != nil {
+		return "", false
+	}
+
+	ref, found := namespace.GetAnnotations()[fluxcdv1.ArtifactGeneratorExternalFinalizerAnnotation]
+	return ref, found
+}
+
+// releaseArtifactGeneratorExternalFinalizerNamespaces removes the external
+// finalizer annotation from the given namespaces so that the ArtifactGenerator
+// regains control of their lifecycle. The annotation is removed by applying an
+// empty Namespace manifest with the ResourceSet field manager, the same manager
+// that stamped the annotation. The namespaces themselves are not deleted.
+func (r *ResourceSetReconciler) releaseArtifactGeneratorExternalFinalizerNamespaces(ctx context.Context,
+	rm *ssa.ResourceManager,
+	namespaces []*unstructured.Unstructured) (*ssa.ChangeSet, error) {
+	if len(namespaces) == 0 {
+		return ssa.NewChangeSet(), nil
+	}
+
+	objects := make([]*unstructured.Unstructured, 0, len(namespaces))
+	for _, namespace := range namespaces {
+		desired := &unstructured.Unstructured{}
+		desired.SetAPIVersion("v1")
+		desired.SetKind("Namespace")
+		desired.SetName(namespace.GetName())
+		objects = append(objects, desired)
+	}
+
+	return rm.ApplyAll(ctx, objects, ssa.DefaultApplyOptions())
+}
+
 // finalizeStatus updates the object status and conditions.
 func (r *ResourceSetReconciler) finalizeStatus(ctx context.Context,
 	obj *fluxcdv1.ResourceSet,
@@ -978,9 +1098,24 @@ func (r *ResourceSetReconciler) uninstall(ctx context.Context,
 
 		objects, _ := inventory.List(obj.Status.Inventory)
 
+		// Namespaces whose external finalizer annotation exactly matches this
+		// ResourceSet are not deleted. Instead, the annotation is removed so
+		// that the ArtifactGenerator regains control of their lifecycle.
+		// Annotations referencing other objects are left untouched.
+		externalFinalizerNamespaces, objects := splitArtifactGeneratorExternalFinalizerNamespaces(
+			ctx, kubeClient, objects, artifactGeneratorExternalFinalizerRef(obj))
+
 		changeSet, err := r.deleteAllStaged(ctx, resourceManager, objects, opts)
 		if err != nil {
 			log.Error(err, "pruning for deleted resource failed")
+		}
+
+		releaseSet, releaseErr := r.releaseArtifactGeneratorExternalFinalizerNamespaces(
+			ctx, resourceManager, externalFinalizerNamespaces)
+		if releaseErr != nil {
+			log.Error(releaseErr, "failed to release namespace finalization")
+		} else {
+			changeSet.Append(releaseSet.Entries)
 		}
 
 		msg := uninstallMessage(reconcileStart)

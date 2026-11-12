@@ -1723,6 +1723,310 @@ spec:
 	g.Expect(frozen.Data).To(HaveKeyWithValue("key", "from-template"))
 }
 
+func TestResourceSetReconciler_ArtifactGeneratorExternalFinalizer(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceSetReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	tenantNS := "tenant-finalizer"
+	objDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: tenants
+  namespace: "%[1]s"
+spec:
+  commonMetadata:
+    labels:
+      team: platform
+    annotations:
+      owner: platform
+  resources:
+    - apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: %[2]s
+        annotations:
+          source.extensions.fluxcd.io/externalFinalizer: self
+`, ns.Name, tenantNS)
+
+	obj := &fluxcdv1.ResourceSet{}
+	err = yaml.Unmarshal([]byte(objDef), obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize the instance.
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Reconcile the resources.
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	result := &fluxcdv1.ResourceSet{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.ReconciliationSucceededReason))
+
+	resultNS := &corev1.Namespace{}
+	err = testClient.Get(ctx, client.ObjectKey{Name: tenantNS}, resultNS)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	expectedRef := fmt.Sprintf("%s/%s/%s/%s/%s",
+		fluxcdv1.GroupVersion.String(), fluxcdv1.ResourceSetKind,
+		ns.Name, result.Name, result.UID)
+	g.Expect(resultNS.Annotations).To(HaveKeyWithValue(fluxcdv1.ArtifactGeneratorExternalFinalizerAnnotation, expectedRef))
+	g.Expect(resultNS.Annotations).ToNot(HaveKey("owner"))
+
+	// The namespace metadata is owned by the ArtifactGenerator, neither the
+	// common metadata nor the ResourceSet owner labels are applied.
+	g.Expect(resultNS.Labels).ToNot(HaveKey("team"))
+	g.Expect(resultNS.Labels).ToNot(HaveKey("resourceset." + fluxcdv1.GroupVersion.Group + "/name"))
+	g.Expect(resultNS.Labels).ToNot(HaveKey("resourceset." + fluxcdv1.GroupVersion.Group + "/namespace"))
+
+	// Delete the ResourceSet and verify the namespace is retained and the
+	// finalization is handed back to the ArtifactGenerator.
+	err = testClient.Delete(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	err = testClient.Get(ctx, client.ObjectKey{Name: tenantNS}, resultNS)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(resultNS.DeletionTimestamp).To(BeNil())
+	g.Expect(resultNS.Annotations).ToNot(HaveKey(fluxcdv1.ArtifactGeneratorExternalFinalizerAnnotation))
+}
+
+func TestResourceSetReconciler_ArtifactGeneratorExternalFinalizerMismatch(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceSetReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	tenantNS := "tenant-finalizer-mismatch"
+	objDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: tenants
+  namespace: "%[1]s"
+spec:
+  resources:
+    - apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: %[2]s
+        annotations:
+          source.extensions.fluxcd.io/externalFinalizer: self
+`, ns.Name, tenantNS)
+
+	obj := &fluxcdv1.ResourceSet{}
+	err = yaml.Unmarshal([]byte(objDef), obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	for range 2 {
+		_, err = reconciler.Reconcile(ctx, reconcile.Request{
+			NamespacedName: client.ObjectKeyFromObject(obj),
+		})
+		g.Expect(err).ToNot(HaveOccurred())
+	}
+
+	resultNS := &corev1.Namespace{}
+	err = testClient.Get(ctx, client.ObjectKey{Name: tenantNS}, resultNS)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Simulate the namespace being handed over to another object.
+	mismatchedRef := "fluxcd.controlplane.io/v1/ResourceSet/other/tenants/00000000-0000-0000-0000-000000000000"
+	resultNS.Annotations[fluxcdv1.ArtifactGeneratorExternalFinalizerAnnotation] = mismatchedRef
+	err = testClient.Update(ctx, resultNS)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Deleting the ResourceSet must not remove an annotation owned by another object.
+	err = testClient.Delete(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	err = testClient.Get(ctx, client.ObjectKey{Name: tenantNS}, resultNS)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(resultNS.Annotations).To(HaveKeyWithValue(
+		fluxcdv1.ArtifactGeneratorExternalFinalizerAnnotation, mismatchedRef))
+}
+
+func TestResourceSetReconciler_ArtifactGeneratorExternalFinalizerMismatchPrune(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceSetReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	tenantNS := "tenant-finalizer-mismatch-prune"
+	objDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: tenants
+  namespace: "%[1]s"
+spec:
+  resources:
+    - apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: %[2]s
+        annotations:
+          source.extensions.fluxcd.io/externalFinalizer: self
+`, ns.Name, tenantNS)
+
+	obj := &fluxcdv1.ResourceSet{}
+	err = yaml.Unmarshal([]byte(objDef), obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	for range 2 {
+		_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(obj)})
+		g.Expect(err).ToNot(HaveOccurred())
+	}
+
+	resultNS := &corev1.Namespace{}
+	err = testClient.Get(ctx, client.ObjectKey{Name: tenantNS}, resultNS)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Simulate a namespace handed over to another object, including the
+	// owner labels applied by older ResourceSet versions.
+	ownerGroup := "resourceset." + fluxcdv1.GroupVersion.Group
+	mismatchedRef := "fluxcd.controlplane.io/v1/ResourceSet/other/tenants/00000000-0000-0000-0000-000000000000"
+	resultNS.Annotations[fluxcdv1.ArtifactGeneratorExternalFinalizerAnnotation] = mismatchedRef
+	resultNS.Labels = map[string]string{
+		ownerGroup + "/name":      obj.Name,
+		ownerGroup + "/namespace": obj.Namespace,
+	}
+	err = testClient.Update(ctx, resultNS)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Remove the namespace from the rendered manifests. The annotation
+	// references another object, so the stale namespace must not be deleted.
+	result := &fluxcdv1.ResourceSet{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).ToNot(HaveOccurred())
+	result.Spec.Resources = nil
+	result.Spec.ResourcesTemplate = fmt.Sprintf(`
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keep
+  namespace: %s
+`, ns.Name)
+	err = testClient.Update(ctx, result)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(obj)})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	err = testClient.Get(ctx, client.ObjectKey{Name: tenantNS}, resultNS)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(resultNS.DeletionTimestamp).To(BeNil())
+	g.Expect(resultNS.Annotations).To(HaveKeyWithValue(
+		fluxcdv1.ArtifactGeneratorExternalFinalizerAnnotation, mismatchedRef))
+}
+
+func TestResourceSetReconciler_ArtifactGeneratorExternalFinalizerPrune(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceSetReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	tenantNS := "tenant-finalizer-prune"
+	objDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: tenants
+  namespace: "%[1]s"
+spec:
+  resources:
+    - apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: %[2]s
+        annotations:
+          source.extensions.fluxcd.io/externalFinalizer: self
+`, ns.Name, tenantNS)
+
+	obj := &fluxcdv1.ResourceSet{}
+	err = yaml.Unmarshal([]byte(objDef), obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	err = testEnv.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize the instance and reconcile its resources.
+	for range 2 {
+		_, err = reconciler.Reconcile(ctx, reconcile.Request{
+			NamespacedName: client.ObjectKeyFromObject(obj),
+		})
+		g.Expect(err).ToNot(HaveOccurred())
+	}
+
+	resultNS := &corev1.Namespace{}
+	err = testClient.Get(ctx, client.ObjectKey{Name: tenantNS}, resultNS)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(resultNS.GetAnnotations()).To(HaveKey(fluxcdv1.ArtifactGeneratorExternalFinalizerAnnotation))
+
+	// Remove the namespace from the rendered manifests and verify it is
+	// garbage collected during reconciliation.
+	result := &fluxcdv1.ResourceSet{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).ToNot(HaveOccurred())
+	result.Spec.Resources = nil
+	result.Spec.ResourcesTemplate = fmt.Sprintf(`
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keep
+  namespace: %s
+`, ns.Name)
+	err = testClient.Update(ctx, result)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	err = testClient.Get(ctx, client.ObjectKey{Name: tenantNS}, resultNS)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(resultNS.DeletionTimestamp).ToNot(BeNil())
+}
+
 func getResourceSetReconciler(t *testing.T) *ResourceSetReconciler {
 	tmpDir := t.TempDir()
 	err := os.WriteFile(fmt.Sprintf("%s/kubeconfig", tmpDir), testKubeConfig, 0644)
