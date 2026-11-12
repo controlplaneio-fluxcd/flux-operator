@@ -170,6 +170,52 @@ spec:
 	err = testEnv.Create(ctx, objOK)
 	g.Expect(err).NotTo(HaveOccurred())
 
+	// ExternalArtifact with namespaceSelector must be accepted.
+	objDefNamespaceSelector := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSetInputProvider
+metadata:
+  name: test-ea-valid-namespace-selector
+  namespace: "%[1]s"
+spec:
+  type: ExternalArtifact
+  selectors:
+  - namespaceSelector:
+      matchLabels:
+        environment: prod
+    matchLabels:
+      env: dev
+`, ns.Name)
+	objNamespaceSelector := &fluxcdv1.ResourceSetInputProvider{}
+	err = yaml.Unmarshal([]byte(objDefNamespaceSelector), objNamespaceSelector)
+	g.Expect(err).NotTo(HaveOccurred())
+	err = testEnv.Create(ctx, objNamespaceSelector)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Selector with both namespace and namespaceSelector must be rejected.
+	objDefNamespaceMutEx := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSetInputProvider
+metadata:
+  name: test-ea-namespace-mut-ex
+  namespace: "%[1]s"
+spec:
+  type: ExternalArtifact
+  selectors:
+  - namespace: "%[1]s"
+    namespaceSelector:
+      matchLabels:
+        environment: prod
+    matchLabels:
+      env: dev
+`, ns.Name)
+	objNamespaceMutEx := &fluxcdv1.ResourceSetInputProvider{}
+	err = yaml.Unmarshal([]byte(objDefNamespaceMutEx), objNamespaceMutEx)
+	g.Expect(err).NotTo(HaveOccurred())
+	err = testEnv.Create(ctx, objNamespaceMutEx)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("namespace and namespaceSelector are mutually exclusive"))
+
 	// ExternalArtifact with url must be rejected.
 	objDefWithURL := fmt.Sprintf(`
 apiVersion: fluxcd.controlplane.io/v1
@@ -560,6 +606,80 @@ func TestResourceSetInputProviderReconciler_ExternalArtifact_Watch(t *testing.T)
 	g.Expect(reqsNonMatching).To(BeEmpty())
 }
 
+func TestResourceSetInputProviderReconciler_ExternalArtifact_NamespaceSelector_Watch(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceSetInputProviderReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ensureExternalArtifactCRD(ctx, t)
+
+	ns, err := testEnv.CreateNamespace(ctx, "test-ea-ns-selector-watch")
+	g.Expect(err).ToNot(HaveOccurred())
+	nsProd, err := testEnv.CreateNamespace(ctx, "test-ea-ns-selector-watch-prod")
+	g.Expect(err).ToNot(HaveOccurred())
+	nsDev, err := testEnv.CreateNamespace(ctx, "test-ea-ns-selector-watch-dev")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	for namespace, environment := range map[string]string{
+		nsProd.Name: "prod",
+		nsDev.Name:  "dev",
+	} {
+		result := &corev1.Namespace{}
+		g.Expect(testClient.Get(ctx, client.ObjectKey{Name: namespace}, result)).To(Succeed())
+		result.Labels = map[string]string{"watch-selector": environment}
+		g.Expect(testClient.Update(ctx, result)).To(Succeed())
+	}
+
+	rsip := &fluxcdv1.ResourceSetInputProvider{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "watcher-rsip-ns-selector",
+			Namespace: ns.Name,
+		},
+		Spec: fluxcdv1.ResourceSetInputProviderSpec{
+			Type: fluxcdv1.InputProviderExternalArtifact,
+			Selectors: []fluxcdv1.ExternalArtifactSelector{
+				{
+					NamespaceSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{"watch-selector": "prod"},
+					},
+					LabelSelector: metav1.LabelSelector{
+						MatchLabels: map[string]string{"env": "dev"},
+					},
+				},
+			},
+		},
+	}
+	g.Expect(testEnv.Create(ctx, rsip)).To(Succeed())
+
+	matchingArtifact := newExternalArtifact("match", nsProd.Name, map[string]string{"env": "dev"}, "sha256:111")
+	nonMatchingNamespaceArtifact := newExternalArtifact("no-match-ns", nsDev.Name, map[string]string{"env": "dev"}, "sha256:222")
+	nonMatchingLabelsArtifact := newExternalArtifact("no-match-labels", nsProd.Name, map[string]string{"env": "prod"}, "sha256:333")
+
+	reqsMatching := reconciler.requestsForExternalArtifacts(ctx, matchingArtifact)
+	g.Expect(reqsMatching).To(HaveLen(1))
+	g.Expect(reqsMatching[0].Name).To(Equal("watcher-rsip-ns-selector"))
+	g.Expect(reqsMatching[0].Namespace).To(Equal(ns.Name))
+
+	g.Expect(reconciler.requestsForExternalArtifacts(ctx, nonMatchingNamespaceArtifact)).To(BeEmpty())
+	g.Expect(reconciler.requestsForExternalArtifacts(ctx, nonMatchingLabelsArtifact)).To(BeEmpty())
+
+	namespaceRequest := reconcile.Request{
+		NamespacedName: client.ObjectKey{
+			Name:      "watcher-rsip-ns-selector",
+			Namespace: ns.Name,
+		},
+	}
+
+	nsProdObj := &corev1.Namespace{}
+	g.Expect(testClient.Get(ctx, client.ObjectKey{Name: nsProd.Name}, nsProdObj)).To(Succeed())
+	g.Expect(reconciler.requestsForNamespace(ctx, nsProdObj)).To(ContainElement(namespaceRequest))
+
+	nsDevObj := &corev1.Namespace{}
+	g.Expect(testClient.Get(ctx, client.ObjectKey{Name: nsDev.Name}, nsDevObj)).To(Succeed())
+	g.Expect(reconciler.requestsForNamespace(ctx, nsDevObj)).ToNot(ContainElement(namespaceRequest))
+}
+
 func TestResourceSetInputProviderReconciler_ExternalArtifact_MultiSelector_Reconcile(t *testing.T) {
 	g := NewWithT(t)
 	reconciler := getResourceSetInputProviderReconciler(t)
@@ -635,6 +755,92 @@ spec:
 	g.Expect(exportedMap[fmt.Sprintf("%s/auth-dev", ns.Name)]["id"]).To(Equal(inputs.ID(fmt.Sprintf("%s/auth-dev", ns.Name))))
 }
 
+func TestResourceSetInputProviderReconciler_ExternalArtifact_NamespaceSelector_Reconcile(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceSetInputProviderReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ensureExternalArtifactCRD(ctx, t)
+
+	ns, err := testEnv.CreateNamespace(ctx, "test-ea-ns-selector")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	nsProd, err := testEnv.CreateNamespace(ctx, "test-ea-ns-selector-prod")
+	g.Expect(err).ToNot(HaveOccurred())
+	nsDev, err := testEnv.CreateNamespace(ctx, "test-ea-ns-selector-dev")
+	g.Expect(err).ToNot(HaveOccurred())
+	nsOther, err := testEnv.CreateNamespace(ctx, "test-ea-ns-selector-other")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	for namespace, lbs := range map[string]map[string]string{
+		nsProd.Name:  {"environment": "prod", "team": "platform"},
+		nsDev.Name:   {"environment": "dev", "team": "platform"},
+		nsOther.Name: {"environment": "prod", "team": "other"},
+	} {
+		result := &corev1.Namespace{}
+		g.Expect(testClient.Get(ctx, client.ObjectKey{Name: namespace}, result)).To(Succeed())
+		result.Labels = lbs
+		g.Expect(testClient.Update(ctx, result)).To(Succeed())
+	}
+
+	g.Expect(testClient.Create(ctx, newExternalArtifact("prod-match", nsProd.Name, map[string]string{"app": "web"}, "sha256:111"))).To(Succeed())
+	g.Expect(testClient.Create(ctx, newExternalArtifact("dev-match", nsDev.Name, map[string]string{"app": "web"}, "sha256:222"))).To(Succeed())
+	g.Expect(testClient.Create(ctx, newExternalArtifact("prod-other", nsOther.Name, map[string]string{"app": "web"}, "sha256:333"))).To(Succeed())
+
+	objDef := fmt.Sprintf(`
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSetInputProvider
+metadata:
+  name: test-ea-namespace-selector
+  namespace: "%[1]s"
+spec:
+  type: ExternalArtifact
+  selectors:
+  - namespaceSelector:
+      matchLabels:
+        environment: prod
+      matchExpressions:
+        - key: team
+          operator: In
+          values: [platform]
+    matchLabels:
+      app: web
+  - namespaceSelector:
+      matchLabels:
+        environment: dev
+    name: dev-match
+`, ns.Name)
+
+	obj := &fluxcdv1.ResourceSetInputProvider{}
+	err = yaml.Unmarshal([]byte(objDef), obj)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(testEnv.Create(ctx, obj)).To(Succeed())
+
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(obj)})
+	g.Expect(err).ToNot(HaveOccurred())
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(obj)})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	result := &fluxcdv1.ResourceSetInputProvider{}
+	g.Expect(testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)).To(Succeed())
+	g.Expect(conditions.IsReady(result)).To(BeTrue())
+	g.Expect(result.Status.ExportedInputs).To(HaveLen(2))
+
+	exportedMap := make(map[string]map[string]any)
+	for _, ei := range result.Status.ExportedInputs {
+		raw, merr := yaml.Marshal(ei)
+		g.Expect(merr).NotTo(HaveOccurred())
+		var parsed map[string]any
+		g.Expect(yaml.Unmarshal(raw, &parsed)).To(Succeed())
+		exportedMap[fmt.Sprintf("%s/%s", parsed["namespace"], parsed["name"])] = parsed
+	}
+
+	g.Expect(exportedMap).To(HaveKey(fmt.Sprintf("%s/prod-match", nsProd.Name)))
+	g.Expect(exportedMap).To(HaveKey(fmt.Sprintf("%s/dev-match", nsDev.Name)))
+	g.Expect(exportedMap).ToNot(HaveKey(fmt.Sprintf("%s/prod-other", nsOther.Name)))
+}
+
 func TestResourceSetInputProviderReconciler_ExternalArtifact_Impersonation(t *testing.T) {
 	g := NewWithT(t)
 	reconciler := getResourceSetInputProviderReconciler(t)
@@ -694,6 +900,44 @@ func TestResourceSetInputProviderReconciler_ExternalArtifact_Impersonation(t *te
 		},
 	}
 	g.Expect(testClient.Create(ctx, roleBinding)).To(Succeed())
+
+	// Allow the ServiceAccount to list Namespaces for the namespaceSelector tests.
+	namespaceReader := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{Name: "namespace-reader"},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"namespaces"},
+				Verbs:     []string{"get", "list"},
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, namespaceReader)).To(Succeed())
+	g.Expect(testClient.Create(ctx, &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{Name: "namespace-reader"},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "test-sa",
+				Namespace: nsAllowed.Name,
+			},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     "namespace-reader",
+		},
+	})).To(Succeed())
+
+	for namespace, environment := range map[string]string{
+		nsAllowed.Name: "allowed",
+		nsDenied.Name:  "denied",
+	} {
+		result := &corev1.Namespace{}
+		g.Expect(testClient.Get(ctx, client.ObjectKey{Name: namespace}, result)).To(Succeed())
+		result.Labels = map[string]string{"environment": environment}
+		g.Expect(testClient.Update(ctx, result)).To(Succeed())
+	}
 
 	// Create ExternalArtifact objects in both namespaces.
 	eaAllowed := newExternalArtifact("ea-allowed", nsAllowed.Name, map[string]string{"env": "dev"}, "sha256:111")
@@ -765,6 +1009,76 @@ func TestResourceSetInputProviderReconciler_ExternalArtifact_Impersonation(t *te
 	g.Expect(err).NotTo(HaveOccurred())
 	_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(objDenied)})
 	// Reconciliation should return the error because of forbidden access to nsDenied.
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("lacks permissions to list ExternalArtifacts in namespace"))
+
+	// Test Case 3: namespaceSelector selects a namespace where the ServiceAccount
+	// has permissions (should succeed).
+	objNamespaceSelectorAllowed := &fluxcdv1.ResourceSetInputProvider{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "rsip-ns-selector-allowed",
+			Namespace: nsAllowed.Name,
+		},
+		Spec: fluxcdv1.ResourceSetInputProviderSpec{
+			Type:               fluxcdv1.InputProviderExternalArtifact,
+			ServiceAccountName: "test-sa",
+			Selectors: []fluxcdv1.ExternalArtifactSelector{
+				{
+					NamespaceSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{"environment": "allowed"},
+					},
+					LabelSelector: metav1.LabelSelector{
+						MatchLabels: map[string]string{"env": "dev"},
+					},
+				},
+			},
+		},
+	}
+	g.Expect(testEnv.Create(ctx, objNamespaceSelectorAllowed)).To(Succeed())
+
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(objNamespaceSelectorAllowed)})
+	g.Expect(err).NotTo(HaveOccurred())
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(objNamespaceSelectorAllowed)})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	resultNamespaceSelectorAllowed := &fluxcdv1.ResourceSetInputProvider{}
+	g.Expect(testClient.Get(ctx, client.ObjectKeyFromObject(objNamespaceSelectorAllowed), resultNamespaceSelectorAllowed)).To(Succeed())
+	g.Expect(conditions.IsReady(resultNamespaceSelectorAllowed)).To(BeTrue())
+	g.Expect(resultNamespaceSelectorAllowed.Status.ExportedInputs).To(HaveLen(1))
+
+	// Test Case 4: namespaceSelector selects a namespace where the ServiceAccount
+	// lacks permissions (should fail).
+	objNamespaceSelectorDenied := &fluxcdv1.ResourceSetInputProvider{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "rsip-ns-selector-denied",
+			Namespace: nsAllowed.Name,
+		},
+		Spec: fluxcdv1.ResourceSetInputProviderSpec{
+			Type:               fluxcdv1.InputProviderExternalArtifact,
+			ServiceAccountName: "test-sa",
+			Selectors: []fluxcdv1.ExternalArtifactSelector{
+				{
+					NamespaceSelector: &metav1.LabelSelector{
+						MatchExpressions: []metav1.LabelSelectorRequirement{
+							{
+								Key:      "environment",
+								Operator: metav1.LabelSelectorOpIn,
+								Values:   []string{"allowed", "denied"},
+							},
+						},
+					},
+					LabelSelector: metav1.LabelSelector{
+						MatchLabels: map[string]string{"env": "dev"},
+					},
+				},
+			},
+		},
+	}
+	g.Expect(testEnv.Create(ctx, objNamespaceSelectorDenied)).To(Succeed())
+
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(objNamespaceSelectorDenied)})
+	g.Expect(err).NotTo(HaveOccurred())
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(objNamespaceSelectorDenied)})
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("lacks permissions to list ExternalArtifacts in namespace"))
 }
