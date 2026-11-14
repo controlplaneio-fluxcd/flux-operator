@@ -70,6 +70,10 @@ func ensureExternalArtifactCRD(ctx context.Context, t *testing.T) {
 													},
 												},
 											},
+											"exportedInputs": {
+												Type:                   "object",
+												XPreserveUnknownFields: new(true),
+											},
 										},
 									},
 								},
@@ -87,7 +91,10 @@ func ensureExternalArtifactCRD(ctx context.Context, t *testing.T) {
 	})
 }
 
-func newExternalArtifact(name, namespace string, labels map[string]string, revision string) *unstructured.Unstructured {
+// newExternalArtifact creates an unstructured ExternalArtifact for tests.
+// An optional exportedInputs map is written to status.exportedInputs to
+// simulate the field produced by Flux >= 2.10.
+func newExternalArtifact(name, namespace string, labels map[string]string, revision string, exportedInputs ...map[string]any) *unstructured.Unstructured {
 	ea := &unstructured.Unstructured{}
 	ea.SetGroupVersionKind(schema.GroupVersionKind{
 		Group:   "source.toolkit.fluxcd.io",
@@ -99,6 +106,9 @@ func newExternalArtifact(name, namespace string, labels map[string]string, revis
 	ea.SetLabels(labels)
 	if revision != "" {
 		_ = unstructured.SetNestedField(ea.Object, revision, "status", "artifact", "revision")
+	}
+	if len(exportedInputs) > 0 && exportedInputs[0] != nil {
+		_ = unstructured.SetNestedMap(ea.Object, exportedInputs[0], "status", "exportedInputs")
 	}
 	return ea
 }
@@ -420,6 +430,97 @@ spec:
 	result2 := &fluxcdv1.ResourceSetInputProvider{}
 	g.Expect(testClient.Get(ctx, client.ObjectKeyFromObject(obj), result2)).To(Succeed())
 	g.Expect(result2.Status.LastExportedRevision).To(Equal(lastRevision))
+}
+
+func TestResourceSetInputProviderReconciler_ExternalArtifact_StatusExportedInputs(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getResourceSetInputProviderReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ensureExternalArtifactCRD(ctx, t)
+
+	ns, err := testEnv.CreateNamespace(ctx, "test-ea-exported-inputs")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	ea := newExternalArtifact("dev-apps-auth", ns.Name, map[string]string{"env": "dev", "app": "auth"}, "sha256:abc123", map[string]any{
+		// These must be overridden by the inputs computed by the operator.
+		"id":        "from-external-artifact",
+		"name":      "from-external-artifact",
+		"namespace": "from-external-artifact",
+		"revision":  "from-external-artifact",
+		"env":       "from-external-artifact",
+		// These must be preserved in the exported inputs.
+		"team":        "platform",
+		"version":     "1.2.3",
+		"enabled":     true,
+		"description": "exported by the ExternalArtifact controller",
+		"metadata": map[string]any{
+			"commit": "abc123",
+			"author": "jane",
+		},
+		"tags": []any{"api", "backend"},
+	})
+	g.Expect(testClient.Create(ctx, ea)).To(Succeed())
+
+	obj := &fluxcdv1.ResourceSetInputProvider{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-ea-exported-inputs",
+			Namespace: ns.Name,
+		},
+		Spec: fluxcdv1.ResourceSetInputProviderSpec{
+			Type: fluxcdv1.InputProviderExternalArtifact,
+			Selectors: []fluxcdv1.ExternalArtifactSelector{
+				{
+					LabelSelector: metav1.LabelSelector{
+						MatchLabels: map[string]string{"env": "dev"},
+					},
+				},
+			},
+		},
+	}
+	g.Expect(testEnv.Create(ctx, obj)).To(Succeed())
+
+	// Initialize (adds finalizer).
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Second reconcile: should produce exported inputs.
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(r.Requeue).To(BeFalse())
+
+	result := &fluxcdv1.ResourceSetInputProvider{}
+	g.Expect(testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)).To(Succeed())
+	g.Expect(conditions.IsReady(result)).To(BeTrue())
+	g.Expect(result.Status.ExportedInputs).To(HaveLen(1))
+
+	raw, err := yaml.Marshal(result.Status.ExportedInputs[0])
+	g.Expect(err).NotTo(HaveOccurred())
+	var input map[string]any
+	g.Expect(yaml.Unmarshal(raw, &input)).To(Succeed())
+
+	// Inputs computed by the operator take precedence over the ones
+	// exported by the ExternalArtifact.
+	g.Expect(input["id"]).To(Equal(inputs.ID(fmt.Sprintf("%s/%s", ns.Name, "dev-apps-auth"))))
+	g.Expect(input["name"]).To(Equal("dev-apps-auth"))
+	g.Expect(input["namespace"]).To(Equal(ns.Name))
+	g.Expect(input["revision"]).To(Equal("sha256:abc123"))
+	g.Expect(input["env"]).To(Equal("dev"))
+	g.Expect(input["app"]).To(Equal("auth"))
+
+	// Inputs exported by the ExternalArtifact are preserved.
+	g.Expect(input["team"]).To(Equal("platform"))
+	g.Expect(input["version"]).To(Equal("1.2.3"))
+	g.Expect(input["enabled"]).To(BeTrue())
+	g.Expect(input["description"]).To(Equal("exported by the ExternalArtifact controller"))
+	g.Expect(input["metadata"]).To(Equal(map[string]any{"commit": "abc123", "author": "jane"}))
+	g.Expect(input["tags"]).To(Equal([]any{"api", "backend"}))
 }
 
 func TestResourceSetInputProviderReconciler_ExternalArtifact_EdgeCases(t *testing.T) {
