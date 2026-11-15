@@ -81,7 +81,7 @@ export function FavoritesHeader({
   // Edit mode: show Save and Cancel icon buttons
   if (editMode) {
     return (
-      <div class="card px-3 py-2.5 sm:sticky sm:top-[var(--chrome-h)] sm:z-10">
+      <div class="card px-3 py-2.5 sm:sticky sm:top-(--chrome-h) sm:z-10">
         <div class="flex items-center justify-between">
           <div class="text-sm text-gray-600 dark:text-gray-400">
             Drag to reorder favorites
@@ -90,7 +90,7 @@ export function FavoritesHeader({
             {/* Cancel button */}
             <button
               onClick={onCancelEdit}
-              class="inline-flex items-center justify-center p-1 text-gray-600 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors focus:outline-none focus:ring-2 focus:ring-flux-blue rounded-md"
+              class="inline-flex items-center justify-center p-1 text-gray-600 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors focus:outline-hidden focus:ring-2 focus:ring-flux-blue rounded-md"
               title="Cancel"
             >
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -100,7 +100,7 @@ export function FavoritesHeader({
             {/* Save button */}
             <button
               onClick={onSaveOrder}
-              class="inline-flex items-center justify-center p-1 text-gray-600 dark:text-gray-400 hover:text-green-500 dark:hover:text-green-400 transition-colors focus:outline-none focus:ring-2 focus:ring-flux-blue rounded-md"
+              class="inline-flex items-center justify-center p-1 text-gray-600 dark:text-gray-400 hover:text-green-500 dark:hover:text-green-400 transition-colors focus:outline-hidden focus:ring-2 focus:ring-flux-blue rounded-md"
               title="Save"
             >
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -116,7 +116,7 @@ export function FavoritesHeader({
   // Search mode: show search input
   if (searchMode) {
     return (
-      <div class="card px-3 py-2.5 sm:sticky sm:top-[var(--chrome-h)] sm:z-10">
+      <div class="card px-3 py-2.5 sm:sticky sm:top-(--chrome-h) sm:z-10">
         <FavoritesSearch
           onFilter={onFilter}
           onClose={handleSearchClose}
@@ -131,7 +131,7 @@ export function FavoritesHeader({
   // Sized to match the shared compact FilterBar (px-3 py-2.5 + a 28px row) at every
   // breakpoint, so the favorites toolbar is no taller than the other search pages.
   return (
-    <div class="card px-3 py-2.5 sm:sticky sm:top-[var(--chrome-h)] sm:z-10">
+    <div class="card px-3 py-2.5 sm:sticky sm:top-(--chrome-h) sm:z-10">
       {/* Status bar with buttons on the right */}
       <div class="flex items-center gap-3">
         {/* Status bar - takes remaining space (28px, matching the FilterBar row) */}
@@ -183,14 +183,14 @@ export function FavoritesHeader({
         </div>
 
         {/* Right: Edit order and Search buttons */}
-        <div class="flex items-center gap-1 flex-shrink-0">
+        <div class="flex items-center gap-1 shrink-0">
           {/* Edit order button */}
           <button
             onClick={onEditModeToggle}
-            class="inline-flex items-center justify-center p-1 text-gray-600 dark:text-gray-400 hover:text-flux-blue dark:hover:text-blue-400 transition-colors focus:outline-none focus:ring-2 focus:ring-flux-blue rounded-md"
+            class="inline-flex items-center justify-center p-1 text-gray-600 dark:text-gray-400 hover:text-flux-blue dark:hover:text-blue-400 transition-colors focus:outline-hidden focus:ring-2 focus:ring-flux-blue rounded-md"
             title="Edit order"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4.5h14.25M3 9h9.75M3 13.5h9.75m4.5-4.5v12m0 0-3.75-3.75M17.25 21 21 17.25" />
             </svg>
           </button>
@@ -198,10 +198,10 @@ export function FavoritesHeader({
           {/* Search button */}
           <button
             onClick={handleSearchOpen}
-            class="inline-flex items-center justify-center p-1 text-gray-600 dark:text-gray-400 hover:text-flux-blue dark:hover:text-blue-400 transition-colors focus:outline-none focus:ring-2 focus:ring-flux-blue rounded-md"
+            class="inline-flex items-center justify-center p-1 text-gray-600 dark:text-gray-400 hover:text-flux-blue dark:hover:text-blue-400 transition-colors focus:outline-hidden focus:ring-2 focus:ring-flux-blue rounded-md"
             title="Search favorites"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
           </button>

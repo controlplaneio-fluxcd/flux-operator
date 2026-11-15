@@ -2,6 +2,13 @@
 
 // Import jest-dom matchers for DOM assertions
 import '@testing-library/jest-dom/vitest'
+import { act, cleanup } from '@testing-library/preact'
+
+// Unmount rendered trees inside act() after each test. Preact runs useEffect
+// cleanups of unmounted components after paint, so without act() they would
+// fire later, during the next test. Registered after the testing-library
+// auto-cleanup hook, so it runs first (afterEach hooks run in reverse order).
+afterEach(() => act(() => cleanup()))
 
 // Mock localStorage globally before any modules are imported
 const localStorageMock = {

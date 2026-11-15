@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 import { describe, it, expect } from 'vitest'
-import { getKindAlias, getKindChipAlias } from './constants'
+import { getKindAlias, getKindChipAlias, parseHelmChartRef } from './constants'
 
 describe('getKindAlias', () => {
   it('returns the Flux CRD alias for known kinds', () => {
@@ -34,5 +34,45 @@ describe('getKindChipAlias', () => {
   it('falls back to the full kind when no alias is known', () => {
     expect(getKindChipAlias('Pod')).toBe('Pod')
     expect(getKindChipAlias('Unknown')).toBe('Unknown')
+  })
+})
+
+describe('parseHelmChartRef', () => {
+  it('parses namespace/name as a HelmChart', () => {
+    expect(parseHelmChartRef('flux-system/flux-system-podinfo')).toEqual({
+      kind: 'HelmChart',
+      namespace: 'flux-system',
+      name: 'flux-system-podinfo'
+    })
+  })
+
+  it('parses kind/namespace/name', () => {
+    expect(parseHelmChartRef('OCIRepository/apps/apps-podinfo')).toEqual({
+      kind: 'OCIRepository',
+      namespace: 'apps',
+      name: 'apps-podinfo'
+    })
+  })
+
+  it('parses an explicit HelmChart kind', () => {
+    expect(parseHelmChartRef('HelmChart/apps/apps-podinfo')).toEqual({
+      kind: 'HelmChart',
+      namespace: 'apps',
+      name: 'apps-podinfo'
+    })
+  })
+
+  it('returns null for empty values', () => {
+    expect(parseHelmChartRef('')).toBeNull()
+    expect(parseHelmChartRef(undefined)).toBeNull()
+    expect(parseHelmChartRef(null)).toBeNull()
+  })
+
+  it('returns null for malformed values', () => {
+    expect(parseHelmChartRef('podinfo')).toBeNull()
+    expect(parseHelmChartRef('a/b/c/d')).toBeNull()
+    expect(parseHelmChartRef('/podinfo')).toBeNull()
+    expect(parseHelmChartRef('apps/')).toBeNull()
+    expect(parseHelmChartRef('OCIRepository//podinfo')).toBeNull()
   })
 })

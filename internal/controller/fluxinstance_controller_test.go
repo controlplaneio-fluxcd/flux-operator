@@ -18,6 +18,9 @@ import (
 	"github.com/fluxcd/pkg/runtime/conditions"
 	kcheck "github.com/fluxcd/pkg/runtime/conditions/check"
 	. "github.com/onsi/gomega"
+	"github.com/spiffe/go-spiffe/v2/bundle/x509bundle"
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
+	"github.com/spiffe/go-spiffe/v2/svid/x509svid"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -51,7 +54,7 @@ func TestFluxInstanceReconciler_CELValidation(t *testing.T) {
 			expectedErr: "the only accepted name for a FluxInstance is 'flux'",
 		},
 		{
-			name: "cannot enable workload identity lockdown without also enabling object level",
+			name: "cannot enable multitenant object identity without also enabling object identity RBAC",
 			obj: func(t *testing.T) *fluxcdv1.FluxInstance {
 				spec := getDefaultFluxSpec(t)
 				spec.Cluster = &fluxcdv1.Cluster{
@@ -65,10 +68,141 @@ func TestFluxInstanceReconciler_CELValidation(t *testing.T) {
 					Spec: spec,
 				}
 			},
-			expectedErr: ".objectLevelWorkloadIdentity must be set to true when .multitenantWorkloadIdentity is set to true",
+			expectedErr: ".objectIdentityRBAC must be set to true when multitenant workload identity is enabled",
 		},
 		{
-			name: "can enable object level workload identity without lockdown",
+			name: "can enable multitenant object identity with SPIFFE Broker API without object identity RBAC",
+			obj: func(t *testing.T) *fluxcdv1.FluxInstance {
+				spec := getDefaultFluxSpec(t)
+				spec.Cluster = &fluxcdv1.Cluster{
+					MultitenantObjectIdentity: true,
+				}
+				spec.SPIFFE = &fluxcdv1.SPIFFE{
+					WorkloadAPI: fluxcdv1.WorkloadAPI{
+						Endpoint: "unix:///spiffe-workload-api/agent.sock",
+					},
+					BrokerAPI: &fluxcdv1.BrokerAPI{
+						Endpoint: "dns:///spiffe-broker.example.com:443",
+						IDs:      []string{"spiffe://example.org/broker/"},
+					},
+				}
+				return &fluxcdv1.FluxInstance{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "flux",
+					},
+					Spec: spec,
+				}
+			},
+		},
+		{
+			name: "cannot disable object identity RBAC for legacy multitenant workload identity even with SPIFFE Broker API",
+			obj: func(t *testing.T) *fluxcdv1.FluxInstance {
+				spec := getDefaultFluxSpec(t)
+				spec.Cluster = &fluxcdv1.Cluster{
+					MultitenantWorkloadIdentity: true,
+				}
+				spec.SPIFFE = &fluxcdv1.SPIFFE{
+					WorkloadAPI: fluxcdv1.WorkloadAPI{
+						Endpoint: "unix:///spiffe-workload-api/agent.sock",
+					},
+					BrokerAPI: &fluxcdv1.BrokerAPI{
+						Endpoint: "dns:///spiffe-broker.example.com:443",
+						IDs:      []string{"spiffe://example.org/broker/"},
+					},
+				}
+				return &fluxcdv1.FluxInstance{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "flux",
+					},
+					Spec: spec,
+				}
+			},
+			expectedErr: ".objectIdentityRBAC must be set to true when multitenant workload identity is enabled",
+		},
+		{
+			name: "cannot enable both legacy object identity and object identity RBAC",
+			obj: func(t *testing.T) *fluxcdv1.FluxInstance {
+				spec := getDefaultFluxSpec(t)
+				spec.Cluster = &fluxcdv1.Cluster{
+					ObjectLevelWorkloadIdentity: true,
+					ObjectIdentityRBAC:          true,
+				}
+				return &fluxcdv1.FluxInstance{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "flux",
+					},
+					Spec: spec,
+				}
+			},
+			expectedErr: "cannot set .objectIdentityRBAC together with a legacy object identity field",
+		},
+		{
+			name: "cannot enable both legacy multitenant object identity and multitenant object identity",
+			obj: func(t *testing.T) *fluxcdv1.FluxInstance {
+				spec := getDefaultFluxSpec(t)
+				spec.Cluster = &fluxcdv1.Cluster{
+					MultitenantWorkloadIdentity: true,
+					MultitenantObjectIdentity:   true,
+				}
+				return &fluxcdv1.FluxInstance{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "flux",
+					},
+					Spec: spec,
+				}
+			},
+			expectedErr: "cannot set .multitenantObjectIdentity together with a legacy multitenant object identity field",
+		},
+		{
+			name: "can enable object identity RBAC without lockdown",
+			obj: func(t *testing.T) *fluxcdv1.FluxInstance {
+				spec := getDefaultFluxSpec(t)
+				spec.Cluster = &fluxcdv1.Cluster{
+					ObjectIdentityRBAC:          true,
+					MultitenantWorkloadIdentity: false,
+				}
+				return &fluxcdv1.FluxInstance{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "flux",
+					},
+					Spec: spec,
+				}
+			},
+		},
+		{
+			name: "can create a flux instance with workload identity lockdown and object identity RBAC",
+			obj: func(t *testing.T) *fluxcdv1.FluxInstance {
+				spec := getDefaultFluxSpec(t)
+				spec.Cluster = &fluxcdv1.Cluster{
+					ObjectIdentityRBAC:          true,
+					MultitenantWorkloadIdentity: true,
+				}
+				return &fluxcdv1.FluxInstance{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "flux",
+					},
+					Spec: spec,
+				}
+			},
+		},
+		{
+			name: "can create a flux instance with multitenant object identity and object identity RBAC",
+			obj: func(t *testing.T) *fluxcdv1.FluxInstance {
+				spec := getDefaultFluxSpec(t)
+				spec.Cluster = &fluxcdv1.Cluster{
+					ObjectIdentityRBAC:        true,
+					MultitenantObjectIdentity: true,
+				}
+				return &fluxcdv1.FluxInstance{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "flux",
+					},
+					Spec: spec,
+				}
+			},
+		},
+		{
+			name: "can enable legacy object identity without lockdown",
 			obj: func(t *testing.T) *fluxcdv1.FluxInstance {
 				spec := getDefaultFluxSpec(t)
 				spec.Cluster = &fluxcdv1.Cluster{
@@ -84,7 +218,7 @@ func TestFluxInstanceReconciler_CELValidation(t *testing.T) {
 			},
 		},
 		{
-			name: "can create a flux instance without any object level workload identity features",
+			name: "can create a flux instance without any object identity features",
 			obj: func(t *testing.T) *fluxcdv1.FluxInstance {
 				spec := getDefaultFluxSpec(t)
 				spec.Cluster = &fluxcdv1.Cluster{
@@ -198,6 +332,237 @@ func TestFluxInstanceReconciler_CELValidation(t *testing.T) {
 			g.Expect(err).NotTo(HaveOccurred())
 
 			obj.Namespace = ns.Name
+
+			err = testEnv.Create(ctx, obj)
+			if tt.expectedErr != "" {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.expectedErr))
+			} else {
+				g.Expect(err).NotTo(HaveOccurred())
+			}
+		})
+	}
+}
+
+func TestFluxInstanceReconciler_SPIFFEValidation(t *testing.T) {
+	const brokerID = "spiffe://example.org/broker/"
+	for _, tt := range []struct {
+		name        string
+		spiffe      *fluxcdv1.SPIFFE
+		expectedErr string
+	}{
+		{
+			name:        "empty workload API endpoint",
+			spiffe:      &fluxcdv1.SPIFFE{},
+			expectedErr: "spec.spiffe.workloadAPI.endpoint",
+		},
+		{
+			name: "unsupported workload API scheme",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "dns:///spire-agent:8081"},
+			},
+			expectedErr: "spec.spiffe.workloadAPI.endpoint",
+		},
+		{
+			name: "tcp endpoint with hostname",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "tcp://spire-agent:8081"},
+			},
+			expectedErr: "spec.spiffe.workloadAPI.endpoint",
+		},
+		{
+			name: "CSI driver with endpoint outside the mount path",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{
+					Endpoint:  "unix:///run/spire/sockets/agent.sock",
+					CSIDriver: "csi.spiffe.io",
+				},
+			},
+			expectedErr: "endpoint must be a unix socket under /spiffe-workload-api/ without '..' segments when csiDriver is set",
+		},
+		{
+			name: "CSI driver with tcp endpoint",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{
+					Endpoint:  "tcp://127.0.0.1:8081",
+					CSIDriver: "csi.spiffe.io",
+				},
+			},
+			expectedErr: "endpoint must be a unix socket under /spiffe-workload-api/ without '..' segments when csiDriver is set",
+		},
+		{
+			name: "invalid CSI driver name",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{
+					Endpoint:  "unix:///spiffe-workload-api/agent.sock",
+					CSIDriver: "-csi.spiffe.io",
+				},
+			},
+			expectedErr: "spec.spiffe.workloadAPI.csiDriver",
+		},
+		{
+			name: "empty broker API endpoint",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+				BrokerAPI:   &fluxcdv1.BrokerAPI{IDs: []string{brokerID}},
+			},
+			expectedErr: "spec.spiffe.brokerAPI.endpoint",
+		},
+		{
+			name: "broker API endpoint with whitespace",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+				BrokerAPI: &fluxcdv1.BrokerAPI{
+					Endpoint: "dns:///spiffe-broker.example.com:443 --x",
+					IDs:      []string{brokerID},
+				},
+			},
+			expectedErr: "spec.spiffe.brokerAPI.endpoint",
+		},
+		{
+			name: "unix endpoint with host",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix://host/agent.sock"},
+			},
+			expectedErr: "spec.spiffe.workloadAPI.endpoint",
+		},
+		{
+			name: "workload API endpoint too long",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///" + strings.Repeat("a", 1024)},
+			},
+			expectedErr: "spec.spiffe.workloadAPI.endpoint",
+		},
+		{
+			name: "CSI driver with parent segment",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/../run/agent.sock", CSIDriver: "csi.spiffe.io"},
+			},
+			expectedErr: "endpoint must be a unix socket under /spiffe-workload-api/ without '..' segments when csiDriver is set",
+		},
+		{
+			name: "CSI driver with percent-encoding",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/%2e%2e/agent.sock", CSIDriver: "csi.spiffe.io"},
+			},
+			expectedErr: "spec.spiffe.workloadAPI.endpoint",
+		},
+		{
+			name: "CSI driver name with empty label",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock", CSIDriver: "csi..spiffe.io"},
+			},
+			expectedErr: "spec.spiffe.workloadAPI.csiDriver",
+		},
+		{
+			name: "CSI driver name with label starting with dash",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock", CSIDriver: "csi.-spiffe.io"},
+			},
+			expectedErr: "spec.spiffe.workloadAPI.csiDriver",
+		},
+		{
+			name: "CSI driver name too long",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock", CSIDriver: strings.Repeat("a", 64)},
+			},
+			expectedErr: "spec.spiffe.workloadAPI.csiDriver",
+		},
+		{
+			name: "broker API endpoint with vertical tab",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+				BrokerAPI:   &fluxcdv1.BrokerAPI{Endpoint: "dns:///broker\v:443", IDs: []string{brokerID}},
+			},
+			expectedErr: "spec.spiffe.brokerAPI.endpoint",
+		},
+		{
+			name: "broker API endpoint with non-ASCII",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+				BrokerAPI:   &fluxcdv1.BrokerAPI{Endpoint: "dns:///bröker:443", IDs: []string{brokerID}},
+			},
+			expectedErr: "spec.spiffe.brokerAPI.endpoint",
+		},
+		{
+			name: "CSI driver with trailing parent segment",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent/..", CSIDriver: "csi.spiffe.io"},
+			},
+			expectedErr: "without '..' segments when csiDriver is set",
+		},
+		{
+			name: "CSI driver with dot-prefixed directory",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/..data/agent.sock", CSIDriver: "csi.spiffe.io"},
+			},
+		},
+		{
+			name: "unix endpoint with percent-encoding",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///run/spire/agent%2esock"},
+			},
+			expectedErr: "spec.spiffe.workloadAPI.endpoint",
+		},
+		{
+			name: "single slash unix endpoint with CSI driver",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:/spiffe-workload-api/agent.sock", CSIDriver: "csi.spiffe.io"},
+			},
+		},
+		{
+			name: "single slash unix endpoint without CSI driver",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:/run/spire/sockets/agent.sock"},
+			},
+		},
+		{
+			name: "unix endpoint with CSI driver",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{
+					Endpoint:  "unix:///spiffe-workload-api/agent.sock",
+					CSIDriver: "csi.spiffe.io",
+				},
+				BrokerAPI: &fluxcdv1.BrokerAPI{
+					Endpoint: "dns:///spiffe-broker.example.com:443",
+					IDs:      []string{brokerID},
+				},
+			},
+		},
+		{
+			name: "unix endpoint without CSI driver",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///run/spire/sockets/agent.sock"},
+			},
+		},
+		{
+			name: "tcp endpoint without CSI driver",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "tcp://10.0.0.1:8081"},
+			},
+		},
+		{
+			name: "tcp IPv6 endpoint without CSI driver",
+			spiffe: &fluxcdv1.SPIFFE{
+				WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "tcp://[::1]:8081"},
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			defer cancel()
+
+			ns, err := testEnv.CreateNamespace(ctx, "test")
+			g.Expect(err).NotTo(HaveOccurred())
+
+			spec := getDefaultFluxSpec(t)
+			spec.SPIFFE = tt.spiffe
+			obj := &fluxcdv1.FluxInstance{
+				ObjectMeta: metav1.ObjectMeta{Name: "flux", Namespace: ns.Name},
+				Spec:       spec,
+			}
 
 			err = testEnv.Create(ctx, obj)
 			if tt.expectedErr != "" {
@@ -634,6 +999,370 @@ func TestFluxInstanceReconciler_BuildFail(t *testing.T) {
 	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+}
+
+func TestFluxInstanceReconciler_SPIFFEStatus(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getFluxInstanceReconciler(t)
+	reconciler.SPIFFESource = &testTLSSource{}
+	reconciler.WebUIEnabled = true
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	const template = "spiffe://cluster.local/ns/flux-system/sa/{component}"
+	const operatorID = "spiffe://cluster.local/ns/flux-system/sa/flux-operator"
+	const extraServer = "spiffe://cluster.local/ns/envoy/sa/gateway"
+	spec := getDefaultFluxSpec(t)
+	spec.Distribution.Version = "2.10.x"
+	spec.SPIFFE = &fluxcdv1.SPIFFE{
+		WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+		MTLS: &fluxcdv1.MTLS{
+			Enabled:              true,
+			ComponentIDTemplate:  template,
+			ExtraArtifactServers: []string{extraServer},
+		},
+	}
+
+	obj := &fluxcdv1.FluxInstance{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "flux",
+			Namespace: ns.Name,
+		},
+		Spec: spec,
+	}
+
+	err = testClient.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize the instance.
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Install the instance with mTLS enabled.
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Check if the applied mTLS settings were recorded.
+	result := &fluxcdv1.FluxInstance{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).ToNot(HaveOccurred())
+	testutils.LogObjectStatus(t, result)
+	checkInstanceReadiness(g, result)
+	g.Expect(result.Status.SPIFFE).To(Equal(&fluxcdv1.SPIFFEStatus{
+		MTLS: &fluxcdv1.MTLSStatus{
+			Enabled:              true,
+			ComponentIDTemplate:  template,
+			ExtraArtifactServers: []string{extraServer},
+		},
+	}))
+
+	// Check if the operator is authorized with the stable template-derived ID.
+	sc := &appsv1.Deployment{}
+	err = testClient.Get(ctx, types.NamespacedName{Name: "source-controller", Namespace: ns.Name}, sc)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(sc.Spec.Template.Spec.Containers[0].Args).To(ContainElement(
+		"--authorized-artifact-client-spiffe-id=" + operatorID))
+
+	// Disable mTLS.
+	resultP := result.DeepCopy()
+	resultP.Spec.SPIFFE.MTLS.Enabled = false
+	err = testClient.Patch(ctx, resultP, client.MergeFrom(result))
+	g.Expect(err).ToNot(HaveOccurred())
+
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Check if the disabled mTLS settings were recorded.
+	result = &fluxcdv1.FluxInstance{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).ToNot(HaveOccurred())
+	checkInstanceReadiness(g, result)
+	g.Expect(result.Status.SPIFFE).To(Equal(&fluxcdv1.SPIFFEStatus{
+		MTLS: &fluxcdv1.MTLSStatus{Enabled: false},
+	}))
+
+	// Uninstall the instance.
+	err = testClient.Delete(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.IsZero()).To(BeTrue())
+
+	// Wait for CRDs to be fully deleted to prevent race conditions with subsequent tests.
+	waitForFluxCRDsDeletion(ctx, g)
+}
+
+func TestFluxInstanceReconciler_SPIFFENoWorkloadAPI(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getFluxInstanceReconciler(t)
+	// SPIFFESource is nil: the operator has no Workload API source and must
+	// not authorize its SPIFFE ID in the Flux controllers.
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	spec := getDefaultFluxSpec(t)
+	spec.Distribution.Version = "2.10.x"
+	spec.Components = []fluxcdv1.Component{
+		fluxcdv1.FluxSourceController,
+		fluxcdv1.FluxSourceWatcher,
+		fluxcdv1.FluxKustomizeController,
+		fluxcdv1.FluxHelmController,
+		fluxcdv1.FluxNotificationController,
+	}
+	spec.SPIFFE = &fluxcdv1.SPIFFE{
+		WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+		MTLS: &fluxcdv1.MTLS{
+			Enabled:             true,
+			ComponentIDTemplate: "spiffe://cluster.local/ns/flux-system/sa/{component}",
+		},
+	}
+
+	obj := &fluxcdv1.FluxInstance{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "flux",
+			Namespace: ns.Name,
+		},
+		Spec: spec,
+	}
+
+	err = testClient.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize the instance.
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Install the instance.
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	result := &fluxcdv1.FluxInstance{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).ToNot(HaveOccurred())
+	checkInstanceReadiness(g, result)
+
+	// Check that the operator SPIFFE ID is not authorized anywhere.
+	for _, name := range []string{
+		fluxcdv1.FluxSourceController,
+		fluxcdv1.FluxSourceWatcher,
+		fluxcdv1.FluxNotificationController,
+	} {
+		deploy := &appsv1.Deployment{}
+		err = testClient.Get(ctx, types.NamespacedName{Name: name, Namespace: ns.Name}, deploy)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(deploy.Spec.Template.Spec.Containers[0].Args).NotTo(
+			ContainElement(ContainSubstring("flux-operator")), name)
+	}
+
+	// Uninstall the instance.
+	err = testClient.Delete(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.IsZero()).To(BeTrue())
+
+	// Wait for CRDs to be fully deleted to prevent race conditions with subsequent tests.
+	waitForFluxCRDsDeletion(ctx, g)
+}
+
+func TestFluxInstanceReconciler_SPIFFEStatusHealthCheckFail(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getFluxInstanceReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	const template = "spiffe://cluster.local/ns/flux-system/sa/{component}"
+	spec := getDefaultFluxSpec(t)
+	spec.Distribution.Version = "2.10.x"
+	spec.SPIFFE = &fluxcdv1.SPIFFE{
+		WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+		MTLS: &fluxcdv1.MTLS{
+			Enabled:             false,
+			ComponentIDTemplate: template,
+		},
+	}
+
+	obj := &fluxcdv1.FluxInstance{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "flux",
+			Namespace: ns.Name,
+			Annotations: map[string]string{
+				fluxcdv1.ReconcileTimeoutAnnotation: "4s",
+			},
+		},
+		Spec: spec,
+	}
+
+	err = testClient.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize the instance.
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Install the instance with mTLS disabled.
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	result := &fluxcdv1.FluxInstance{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(result.Status.SPIFFE).To(Equal(&fluxcdv1.SPIFFEStatus{
+		MTLS: &fluxcdv1.MTLSStatus{Enabled: false},
+	}))
+
+	// Enable mTLS and wait; Deployments never become ready in envtest.
+	resultP := result.DeepCopy()
+	resultP.Spec.Wait = new(true)
+	resultP.Spec.SPIFFE.MTLS.Enabled = true
+	err = testClient.Patch(ctx, resultP, client.MergeFrom(result))
+	g.Expect(err).ToNot(HaveOccurred())
+
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("timeout waiting"))
+
+	// Check that the applied mTLS settings were recorded.
+	result = &fluxcdv1.FluxInstance{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).ToNot(HaveOccurred())
+	testutils.LogObjectStatus(t, result)
+	g.Expect(conditions.IsReady(result)).To(BeFalse())
+	g.Expect(result.Status.SPIFFE).To(Equal(&fluxcdv1.SPIFFEStatus{
+		MTLS: &fluxcdv1.MTLSStatus{
+			Enabled:             true,
+			ComponentIDTemplate: template,
+		},
+	}))
+
+	// Uninstall the instance.
+	err = testClient.Delete(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.IsZero()).To(BeTrue())
+
+	// Wait for CRDs to be fully deleted to prevent race conditions with subsequent tests.
+	waitForFluxCRDsDeletion(ctx, g)
+}
+
+func TestFluxInstanceReconciler_SPIFFEStatusBuildFail(t *testing.T) {
+	g := NewWithT(t)
+	reconciler := getFluxInstanceReconciler(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	spec := getDefaultFluxSpec(t)
+	spec.Distribution.Version = "2.9.x"
+
+	obj := &fluxcdv1.FluxInstance{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "flux",
+			Namespace: ns.Name,
+		},
+		Spec: spec,
+	}
+
+	err = testClient.Create(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Initialize the instance.
+	r, err := reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.Requeue).To(BeTrue())
+
+	// Install the instance without SPIFFE.
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	result := &fluxcdv1.FluxInstance{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).ToNot(HaveOccurred())
+	checkInstanceReadiness(g, result)
+	g.Expect(result.Status.SPIFFE).To(BeNil())
+
+	// Enable mTLS on a Flux version that does not support it.
+	resultP := result.DeepCopy()
+	resultP.Spec.SPIFFE = &fluxcdv1.SPIFFE{
+		WorkloadAPI: fluxcdv1.WorkloadAPI{Endpoint: "unix:///spiffe-workload-api/agent.sock"},
+		MTLS: &fluxcdv1.MTLS{
+			Enabled:             true,
+			ComponentIDTemplate: "spiffe://cluster.local/ns/flux-system/sa/{component}",
+		},
+	}
+	err = testClient.Patch(ctx, resultP, client.MergeFrom(result))
+	g.Expect(err).ToNot(HaveOccurred())
+
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).To(HaveOccurred())
+
+	// Check that the applied mTLS settings are unchanged.
+	result = &fluxcdv1.FluxInstance{}
+	err = testClient.Get(ctx, client.ObjectKeyFromObject(obj), result)
+	g.Expect(err).ToNot(HaveOccurred())
+	testutils.LogObjectStatus(t, result)
+	g.Expect(conditions.GetReason(result, meta.ReadyCondition)).To(BeIdenticalTo(meta.BuildFailedReason))
+	g.Expect(conditions.GetMessage(result, meta.ReadyCondition)).To(ContainSubstring("requires Flux >= 2.10.0"))
+	g.Expect(result.Status.SPIFFE).To(BeNil())
+
+	// Uninstall the instance.
+	err = testClient.Delete(ctx, obj)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	r, err = reconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: client.ObjectKeyFromObject(obj),
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(r.IsZero()).To(BeTrue())
+
+	// Wait for CRDs to be fully deleted to prevent race conditions with subsequent tests.
+	waitForFluxCRDsDeletion(ctx, g)
 }
 
 func TestFluxInstanceReconciler_BuildUsesArtifactPatchForEmbeddedMinor(t *testing.T) {
@@ -1291,4 +2020,19 @@ func waitForFluxCRDsDeletion(ctx context.Context, g *WithT) {
 		}
 		return true
 	}).WithTimeout(2 * time.Minute).WithPolling(time.Second).Should(BeTrue())
+}
+
+// testTLSSource is a TLSSource stub used to indicate that the operator has a
+// SPIFFE Workload API source. The SVID ID is not used by the controller; the
+// operator ID is derived from the FluxInstance component template.
+type testTLSSource struct{}
+
+// GetX509SVID returns a placeholder SVID.
+func (testTLSSource) GetX509SVID() (*x509svid.SVID, error) {
+	return &x509svid.SVID{ID: spiffeid.RequireFromString("spiffe://example.org/flux-operator")}, nil
+}
+
+// GetX509BundleForTrustDomain is not used by the tests.
+func (s *testTLSSource) GetX509BundleForTrustDomain(spiffeid.TrustDomain) (*x509bundle.Bundle, error) {
+	return nil, errors.New("not implemented")
 }

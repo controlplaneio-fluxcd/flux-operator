@@ -178,7 +178,7 @@ export function InventoryTabContent({
               placeholder="Search by name, namespace, kind or API"
               aria-label="Search objects"
               data-testid="inventory-search"
-              class="w-full pl-8 pr-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-flux-blue"
+              class="w-full pl-8 pr-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-hidden focus:ring-2 focus:ring-flux-blue"
             />
           </div>
           {/* Clear all filters: same icon button as the search pages' FilterForm. */}
@@ -187,7 +187,7 @@ export function InventoryTabContent({
             title="Clear"
             aria-label="Clear filters"
             data-testid="inventory-clear"
-            class="inline-flex items-center p-1 rounded-md text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white focus:outline-none transition-colors"
+            class="inline-flex items-center p-1 rounded-md text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white focus:outline-hidden transition-colors"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />

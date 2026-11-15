@@ -30,7 +30,7 @@ describe('ReconcilersPanel', () => {
     },
     {
       kind: 'Alert',
-      apiVersion: 'notification.toolkit.fluxcd.io/v1beta3',
+      apiVersion: 'notification.toolkit.fluxcd.io/v1',
       stats: { running: 1, failing: 0, suspended: 0 }
     },
     {
@@ -141,6 +141,53 @@ describe('ReconcilersPanel', () => {
 
       expect(screen.getByText('Kustomization')).toBeInTheDocument()
       expect(screen.getByText('kustomize.toolkit.fluxcd.io/v1')).toBeInTheDocument()
+    })
+
+    it('should display the apiVersion reported by the cluster', () => {
+      const reconcilers = [
+        {
+          kind: 'Alert',
+          apiVersion: 'notification.toolkit.fluxcd.io/v1beta3',
+          stats: { running: 1, failing: 0, suspended: 0 }
+        }
+      ]
+
+      render(<ReconcilersPanel reconcilers={reconcilers} />)
+
+      const alertCard = screen.getByText('Alert').closest('a')
+      expect(alertCard).toHaveTextContent('notification.toolkit.fluxcd.io/v1beta3')
+    })
+
+    it('should fall back to the constant apiVersion for kinds missing from the report', () => {
+      const reconcilers = [
+        {
+          kind: 'Alert',
+          apiVersion: 'notification.toolkit.fluxcd.io/v1beta3',
+          stats: { running: 1, failing: 0, suspended: 0 }
+        }
+      ]
+
+      render(<ReconcilersPanel reconcilers={reconcilers} />)
+
+      const providerCRD = fluxCRDs.find(crd => crd.kind === 'Provider')
+      const providerCard = screen.getByText('Provider').closest('a')
+      expect(providerCard).toHaveTextContent(providerCRD.apiVersion)
+      expect(providerCRD.apiVersion).toBe('notification.toolkit.fluxcd.io/v1')
+    })
+
+    it('should fall back to the constant apiVersion when the report entry has none', () => {
+      const reconcilers = [
+        {
+          kind: 'Alert',
+          stats: { running: 1, failing: 0, suspended: 0 }
+        }
+      ]
+
+      render(<ReconcilersPanel reconcilers={reconcilers} />)
+
+      const alertCard = screen.getByText('Alert').closest('a')
+      expect(alertCard).toHaveTextContent('notification.toolkit.fluxcd.io/v1')
+      expect(alertCard).not.toHaveTextContent('v1beta3')
     })
 
     it('should display total resource count for each reconciler', () => {
@@ -359,17 +406,17 @@ describe('ReconcilersPanel', () => {
       const reconcilers = [
         {
           kind: 'Receiver',
-          apiVersion: 'notification.toolkit.fluxcd.io/v1beta3',
+          apiVersion: 'notification.toolkit.fluxcd.io/v1',
           stats: { running: 1, failing: 0, suspended: 0 }
         },
         {
           kind: 'Alert',
-          apiVersion: 'notification.toolkit.fluxcd.io/v1beta3',
+          apiVersion: 'notification.toolkit.fluxcd.io/v1',
           stats: { running: 2, failing: 0, suspended: 0 }
         },
         {
           kind: 'Provider',
-          apiVersion: 'notification.toolkit.fluxcd.io/v1beta3',
+          apiVersion: 'notification.toolkit.fluxcd.io/v1',
           stats: { running: 3, failing: 0, suspended: 0 }
         }
       ]

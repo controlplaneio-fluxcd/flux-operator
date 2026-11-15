@@ -132,7 +132,7 @@ export function UserMenu() {
         aria-label="User menu"
         aria-expanded={userMenuOpen.value}
         aria-haspopup="true"
-        class="inline-flex items-center justify-center p-1.5 border rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-flux-blue border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+        class="inline-flex items-center justify-center p-1.5 border rounded-md transition-colors focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-flux-blue border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
       >
         {/* User icon */}
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -146,7 +146,7 @@ export function UserMenu() {
           {/* User info - Avatar, Username and Role, with close button on mobile */}
           <div class="px-4 py-3 flex items-center gap-3">
             {/* User avatar in circle - OpenID logo when authenticated, Kubernetes logo when not */}
-            <div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-flux-blue/10 dark:bg-flux-blue/20">
+            <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-flux-blue/10 dark:bg-flux-blue/20">
               {isOIDCAuthenticated ? (
                 <OpenIDIcon className="w-5 h-5 text-flux-blue dark:text-blue-400" />
               ) : (

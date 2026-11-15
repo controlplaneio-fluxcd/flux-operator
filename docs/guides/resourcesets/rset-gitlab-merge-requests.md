@@ -99,7 +99,7 @@ spec:
 
 ### GitLab Webhook
 
-Optionally, we can create a Flux [Webhook Receiver](https://fluxcd.io/flux/components/notification/receivers/)
+Optionally, we can create a Flux [Webhook Receiver](https://fluxoperator.dev/docs/crd/receiver/)
 that GitLab will call to notify the Flux Operator when a new MR is opened or updated:
 
 ```yaml
@@ -211,12 +211,12 @@ The `test-inputs.yaml` file should contain mock MR data e.g.:
 
 To receive notifications when a MR triggers a Helm release install,
 upgrade and uninstall (including any deploy errors),
-a Flux [Alert](https://fluxcd.io/flux/components/notification/alerts/)
+a Flux [Alert](https://fluxoperator.dev/docs/crd/alert/)
 can be created in the `app-preview` namespace:
 
 ```yaml
 ---
-apiVersion: notification.toolkit.fluxcd.io/v1beta3
+apiVersion: notification.toolkit.fluxcd.io/v1
 kind: Provider
 metadata:
   name: msteams
@@ -226,7 +226,7 @@ spec:
   secretRef:
     name: msteams-webhook
 ---
-apiVersion: notification.toolkit.fluxcd.io/v1beta3
+apiVersion: notification.toolkit.fluxcd.io/v1
 kind: Alert
 metadata:
   name: msteams
@@ -248,8 +248,8 @@ spec:
 
 To notify the developers of the preview deployment status directly on the Merge Request page,
 we can use the Flux notification providers for
-[GitLab MR comments](https://fluxcd.io/flux/components/notification/providers/#gitlab-merge-request-comment)
-and [GitLab commit statuses](https://fluxcd.io/flux/components/notification/providers/#gitlab-commit-status).
+[GitLab MR comments](https://fluxoperator.dev/docs/crd/provider/#gitlab-merge-request-comment)
+and [GitLab commit statuses](https://fluxoperator.dev/docs/crd/provider/#gitlab-commit-status).
 
 The `gitlabmergerequestcomment` provider posts a comment on the MR page with the deployment status
 and metadata. The comment is automatically updated on subsequent events, so it doesn't spam the MR
@@ -262,7 +262,7 @@ requires the `commit` annotation, both set on the HelmRelease as shown in the
 
 ```yaml
 ---
-apiVersion: notification.toolkit.fluxcd.io/v1beta3
+apiVersion: notification.toolkit.fluxcd.io/v1
 kind: Provider
 metadata:
   name: gitlab-mr-comment
@@ -273,7 +273,7 @@ spec:
   secretRef:
     name: gitlab-token-readonly
 ---
-apiVersion: notification.toolkit.fluxcd.io/v1beta3
+apiVersion: notification.toolkit.fluxcd.io/v1
 kind: Alert
 metadata:
   name: gitlab-mr-comment
@@ -286,7 +286,7 @@ spec:
     - kind: HelmRelease
       name: '*'
 ---
-apiVersion: notification.toolkit.fluxcd.io/v1beta3
+apiVersion: notification.toolkit.fluxcd.io/v1
 kind: Provider
 metadata:
   name: gitlab-commit-status
@@ -297,7 +297,7 @@ spec:
   secretRef:
     name: gitlab-token-readonly
 ---
-apiVersion: notification.toolkit.fluxcd.io/v1beta3
+apiVersion: notification.toolkit.fluxcd.io/v1
 kind: Alert
 metadata:
   name: gitlab-commit-status

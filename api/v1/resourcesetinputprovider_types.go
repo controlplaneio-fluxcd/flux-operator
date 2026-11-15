@@ -79,10 +79,15 @@ type ResourceSetInputProviderSpec struct {
 	URL string `json:"url,omitempty"`
 
 	// ServiceAccountName specifies the name of the Kubernetes ServiceAccount
-	// used for authentication with AWS, Azure or GCP services through
-	// workload identity federation features. If not specified, the
-	// authentication for these cloud providers will use the ServiceAccount
-	// of the operator (or any other environment authentication configuration).
+	// used for authentication with external services using object identity.
+	// If not specified, the default object identity ServiceAccount configured
+	// with the --default-object-identity-service-account flag or the
+	// DEFAULT_OBJECT_IDENTITY_SERVICE_ACCOUNT environment variable is used.
+	// This field can also be set for the ExternalArtifact type, where it is
+	// used only for impersonation and its annotations are ignored.
+	// For a complete guide to the ServiceAccount annotations used for
+	// object identity, including the spiffe credential provider, see:
+	// https://fluxcd.io/flux/integrations/object-identity/
 	// +optional
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 

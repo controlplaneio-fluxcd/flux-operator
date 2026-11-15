@@ -129,6 +129,83 @@ kubectl apply -f https://github.com/controlplaneio-fluxcd/flux-operator/releases
     This method is intended for development and testing purposes. On production environments,
     it is recommended to use [Helm](#helm) or [Terraform](#terraform).
 
+## SPIFFE configuration
+
+When the FluxInstance enables the SPIFFE Workload API or Broker API, the
+flux-operator pod must be configured with the same endpoints. The operator
+uses these APIs to download artifacts and send events.
+
+These settings configure the flux-operator pod only. The Flux controllers are
+configured through the FluxInstance `.spec.spiffe` field.
+
+The operator does not need the `--authorized-*` inter-controller flags. It
+reads the Flux controller SPIFFE identities from the FluxInstance.
+
+### Helm
+
+The Flux Operator Helm chart exposes the SPIFFE settings under the `spiffe`
+value:
+
+```yaml
+spiffe:
+  workloadAPI:
+    endpoint: "unix:///spiffe-workload-api/agent.sock"
+    csiDriver: "csi.spiffe.io"
+  brokerAPI:
+    endpoint: "dns:///spiffe-broker.example.com:443"
+    ids:
+      - "spiffe://example.org/broker/"
+```
+
+The chart configures the `SPIFFE_ENDPOINT_SOCKET` environment variable, the
+`--spiffe-broker-endpoint` and `--spiffe-broker-id` flags, and, when
+`csiDriver` is set, the SPIFFE CSI volume and mount.
+
+The `csiDriver` field is optional and opt-in. Omit it when the Workload API
+socket is mounted into the operator pod by other means.
+
+To require SPIFFE mTLS from Ingress or Gateway proxies that access the Web UI,
+set the Helm chart value `web.authorizedClientSPIFFEIDs` to the list of
+authorized client IDs. This renders the repeatable
+`--authorized-web-ui-client-spiffe-id` flag. Setting at least one client ID
+makes the web server accept only clients presenting an authorized SPIFFE
+identity.
+
+### OLM
+
+For OLM installations, set the equivalent environment variables in the
+`Subscription`:
+
+```yaml
+spec:
+  config:
+    env:
+      - name: SPIFFE_ENDPOINT_SOCKET
+        value: "unix:///spiffe-workload-api/agent.sock"
+      - name: SPIFFE_BROKER_ENDPOINT
+        value: "dns:///spiffe-broker.example.com:443"
+      - name: SPIFFE_BROKER_IDS
+        value: "spiffe://example.org/broker/,spiffe://example.org/backup-broker/"
+      - name: AUTHORIZED_WEB_UI_CLIENT_SPIFFE_IDS
+        value: "spiffe://example.org/my-gateway/"
+    volumes:
+      - name: spiffe-workload-api
+        csi:
+          driver: csi.spiffe.io
+          readOnly: true
+    volumeMounts:
+      - name: spiffe-workload-api
+        mountPath: /spiffe-workload-api
+        readOnly: true
+```
+
+`SPIFFE_BROKER_IDS` is a comma-separated list of SPIFFE IDs or prefixes.
+The `--spiffe-broker-id` flag is repeatable, while the OLM environment
+variable accepts the same values in a single comma-separated string.
+
+The `SPIFFE_ENDPOINT_SOCKET` environment variable is the standard go-spiffe
+variable read by the operator.
+
 ## Upgrade
 
 The recommended way to upgrade the Flux Operator is using GitOps, by managing the operator's

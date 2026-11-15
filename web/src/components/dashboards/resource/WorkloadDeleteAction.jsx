@@ -59,7 +59,7 @@ export function WorkloadDeleteAction({ namespace, name, isPendingDeletion, onAct
       <button
         onClick={handleDelete}
         disabled={isDeleting}
-        class={`inline-flex items-center p-1 rounded transition-colors focus:outline-none ${
+        class={`inline-flex items-center p-1 rounded-sm transition-colors focus:outline-hidden ${
           isDeleting
             ? 'text-gray-300 cursor-not-allowed dark:text-gray-600'
             : 'text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400'
@@ -79,7 +79,7 @@ export function WorkloadDeleteAction({ namespace, name, isPendingDeletion, onAct
         )}
       </button>
       {error && (
-        <div class="w-full mt-1 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-xs text-red-800 dark:text-red-200 flex items-center justify-between gap-2" data-testid="delete-pod-error">
+        <div class="w-full mt-1 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-sm text-xs text-red-800 dark:text-red-200 flex items-center justify-between gap-2" data-testid="delete-pod-error">
           <span>{error}</span>
           <button
             onClick={(e) => { e.stopPropagation(); clearError() }}

@@ -120,7 +120,7 @@ export function Star({ active, onClick }) {
   return (
     <button
       onClick={onClick}
-      class={`shrink-0 rounded p-0.5 transition-colors ${active ? 'text-yellow-500' : 'text-gray-300 hover:text-gray-400 dark:text-gray-600 dark:hover:text-gray-400'}`}
+      class={`shrink-0 rounded-sm p-0.5 transition-colors ${active ? 'text-yellow-500' : 'text-gray-300 hover:text-gray-400 dark:text-gray-600 dark:hover:text-gray-400'}`}
       title={active ? 'Remove from favorites' : 'Add to favorites'}
     >
       <svg class="w-4 h-4" fill={active ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
@@ -132,7 +132,7 @@ export function Star({ active, onClick }) {
 
 // Shared chip geometry: fixed width so chips align into a column regardless of
 // the alias length.
-export const CHIP_BASE = 'shrink-0 w-[74px] text-center rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide'
+export const CHIP_BASE = 'shrink-0 w-[74px] text-center rounded-sm px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide'
 
 // Neutral chip palette, used for workloads whose own status is unknown in the
 // list (the index only carries the reconciler's status, not the workload's).

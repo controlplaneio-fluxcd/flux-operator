@@ -168,3 +168,65 @@ func TestMakeOptions_ValidateCredentials(t *testing.T) {
 		})
 	}
 }
+
+func TestMakeOptions_ValidateGitHubApp(t *testing.T) {
+	tests := []struct {
+		name    string
+		gha     *GitHubAppCredentials
+		creds   string
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "app ID",
+			gha:  &GitHubAppCredentials{AppID: "123456", PrivateKey: "key"},
+		},
+		{
+			name: "client ID",
+			gha:  &GitHubAppCredentials{ClientID: "Iv23liExample", PrivateKey: "key"},
+		},
+		{
+			name:    "app ID and client ID",
+			gha:     &GitHubAppCredentials{AppID: "123456", ClientID: "Iv23liExample", PrivateKey: "key"},
+			wantErr: true,
+			errMsg:  "GitHub App ID and client ID are mutually exclusive",
+		},
+		{
+			name:    "no app ID or client ID",
+			gha:     &GitHubAppCredentials{PrivateKey: "key"},
+			wantErr: true,
+			errMsg:  "GitHub App ID or client ID is required",
+		},
+		{
+			name:    "no private key",
+			gha:     &GitHubAppCredentials{ClientID: "Iv23liExample"},
+			wantErr: true,
+			errMsg:  "GitHub App private key is required",
+		},
+		{
+			name:    "credentials and GitHub App",
+			gha:     &GitHubAppCredentials{ClientID: "Iv23liExample", PrivateKey: "key"},
+			creds:   "user:token",
+			wantErr: true,
+			errMsg:  "mutually exclusive",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			_, err := MakeOptions(
+				WithArtifactURL(DefaultArtifactURL),
+				WithCredentials(tt.creds),
+				WithGitHubAppCredentials(tt.gha),
+			)
+			if tt.wantErr {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.errMsg))
+			} else {
+				g.Expect(err).NotTo(HaveOccurred())
+			}
+		})
+	}
+}

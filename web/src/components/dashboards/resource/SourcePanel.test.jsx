@@ -972,6 +972,84 @@ describe('SourcePanel component', () => {
       expect(screen.queryByText('Chart')).not.toBeInTheDocument()
     })
 
+    it('should NOT show Chart tab for a HelmRelease with an OCIRepository chart template', async () => {
+      fetchWithMock.mockResolvedValue({
+        apiVersion: 'source.toolkit.fluxcd.io/v1',
+        kind: 'OCIRepository',
+        metadata: { name: 'apps-podinfo', namespace: 'apps' },
+        spec: { interval: '10m', url: 'oci://ghcr.io/stefanprodan/charts/podinfo' },
+        status: {}
+      })
+
+      render(
+        <SourcePanel
+          resourceData={{
+            kind: 'HelmRelease',
+            metadata: { name: 'podinfo', namespace: 'apps' },
+            spec: {
+              chart: {
+                kind: 'OCIRepository',
+                spec: { url: 'oci://ghcr.io/stefanprodan/charts/podinfo' }
+              }
+            },
+            status: {
+              helmChart: 'OCIRepository/apps/apps-podinfo',
+              sourceRef: {
+                kind: 'OCIRepository',
+                name: 'apps-podinfo',
+                namespace: 'apps',
+                status: 'Ready',
+                url: 'oci://ghcr.io/stefanprodan/charts/podinfo'
+              }
+            }
+          }}
+        />
+      )
+
+      await waitFor(() => {
+        expect(fetchWithMock).toHaveBeenCalledWith({
+          endpoint: '/api/v1/resource?kind=OCIRepository&name=apps-podinfo&namespace=apps',
+          mockPath: '../mock/resource',
+          mockExport: 'getMockResource'
+        })
+        expect(screen.getByText('Overview')).toBeInTheDocument()
+      })
+
+      expect(screen.queryByText('Chart')).not.toBeInTheDocument()
+    })
+
+    it('should fetch HelmChart data for a kind/namespace/name HelmChart reference', async () => {
+      fetchWithMock.mockResolvedValueOnce(mockHelmRepoSourceData)
+      const user = userEvent.setup()
+
+      render(
+        <SourcePanel
+          resourceData={{
+            ...mockHelmReleaseResourceData,
+            status: {
+              ...mockHelmReleaseResourceData.status,
+              helmChart: 'HelmChart/tailscale/tailscale-tailscale-operator'
+            }
+          }}
+        />
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText('Chart')).toBeInTheDocument()
+      })
+
+      fetchWithMock.mockResolvedValueOnce(mockHelmChartData)
+      await user.click(screen.getByText('Chart'))
+
+      await waitFor(() => {
+        expect(fetchWithMock).toHaveBeenCalledWith({
+          endpoint: '/api/v1/resource?kind=HelmChart&name=tailscale-tailscale-operator&namespace=tailscale',
+          mockPath: '../mock/resource',
+          mockExport: 'getMockResource'
+        })
+      })
+    })
+
     it('should show Chart tab when resourceData is HelmRelease with helmChart status', async () => {
       fetchWithMock.mockResolvedValue(mockHelmRepoSourceData)
 

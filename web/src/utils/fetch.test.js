@@ -131,6 +131,19 @@ describe('fetchWithMock', () => {
       ).rejects.toThrow('Forbidden access')
     })
 
+    it('should attach the HTTP status to thrown errors', async () => {
+      const env = { MODE: 'production', VITE_USE_MOCK_DATA: 'false' }
+      global.fetch.mockResolvedValue({ ok: false, status: 403, text: () => Promise.resolve('denied') })
+      await expect(
+        fetchWithMock({ endpoint: '/api/v1/nodes', mockPath: '../mock/report.js', mockExport: 'mockReport', env })
+      ).rejects.toMatchObject({ status: 403, message: 'denied' })
+
+      global.fetch.mockResolvedValue({ ok: false, status: 500, text: () => Promise.resolve('boom') })
+      await expect(
+        fetchWithMock({ endpoint: '/api/v1/nodes', mockPath: '../mock/report.js', mockExport: 'mockReport', env })
+      ).rejects.toMatchObject({ status: 500 })
+    })
+
     it('should throw error on non-200 response', async () => {
       const mockResponse = {
         ok: false,

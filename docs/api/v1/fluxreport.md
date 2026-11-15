@@ -31,19 +31,19 @@ spec:
     serverVersion: v1.33.0
     nodes: 5
   components:
-    - image: ghcr.io/fluxcd/helm-controller:v1.0.1@sha256:a67a037faa850220ff94d8090253732079589ad9ff10b6ddf294f3b7cd0f3424
+    - image: ghcr.io/fluxcd/helm-controller:v1.7.1@sha256:54526cc6ed1202d71d44c310676448065664f3255ad671d9a69ac26f904e617a
       name: helm-controller
       ready: true
       status: 'Current Deployment is available. Replicas: 1'
-    - image: ghcr.io/fluxcd/kustomize-controller:v1.3.0@sha256:48a032574dd45c39750ba0f1488e6f1ae36756a38f40976a6b7a588d83acefc1
+    - image: ghcr.io/fluxcd/kustomize-controller:v1.10.1@sha256:37db29b25dae35b881a5e064acedb0cc954442da453a39eaa0eab7a90dbecc4e
       name: kustomize-controller
       ready: true
       status: 'Current Deployment is available. Replicas: 1'
-    - image: ghcr.io/fluxcd/notification-controller:v1.3.0@sha256:c0fab940c7e578ea519097d36c040238b0cc039ce366fdb753947428bbf0c3d6
+    - image: ghcr.io/fluxcd/notification-controller:v1.10.0@sha256:9f58b9532ec9d3ccf539cd3ccdf283477a5dcb7777b922db5477d8bbd4d3767c
       name: notification-controller
       ready: true
       status: 'Current Deployment is available. Replicas: 1'
-    - image: ghcr.io/fluxcd/source-controller:v1.3.0@sha256:161da425b16b64dda4b3cec2ba0f8d7442973aba29bb446db3b340626181a0bc
+    - image: ghcr.io/fluxcd/source-controller:v1.10.1@sha256:611b6bca3eae95bcff471414d1fb14a4ab83d7f14e609cccef2bd389c121f37e
       name: source-controller
       ready: true
       status: 'Current Deployment is available. Replicas: 1'
@@ -51,11 +51,11 @@ spec:
     entitlement: Issued by controlplane
     managedBy: flux-operator
     status: Installed
-    version: v2.3.0
+    version: v2.10.0
   operator:
     apiVersion: fluxcd.controlplane.io/v1
     platform: linux/arm64
-    version: v0.24.0
+    version: v0.62.0
   reconcilers:
     - apiVersion: fluxcd.controlplane.io/v1
       kind: ResourceSet
@@ -87,13 +87,13 @@ spec:
         failing: 0
         running: 1
         suspended: 0
-    - apiVersion: notification.toolkit.fluxcd.io/v1beta3
+    - apiVersion: notification.toolkit.fluxcd.io/v1
       kind: Alert
       stats:
         failing: 0
         running: 1
         suspended: 0
-    - apiVersion: notification.toolkit.fluxcd.io/v1beta3
+    - apiVersion: notification.toolkit.fluxcd.io/v1
       kind: Provider
       stats:
         failing: 0
@@ -120,13 +120,13 @@ spec:
         running: 7
         suspended: 3
         totalSize: 40.5 MiB
-    - apiVersion: source.toolkit.fluxcd.io/v1beta2
+    - apiVersion: source.toolkit.fluxcd.io/v1
       kind: Bucket
       stats:
         failing: 0
         running: 0
         suspended: 0
-    - apiVersion: source.toolkit.fluxcd.io/v1beta2
+    - apiVersion: source.toolkit.fluxcd.io/v1
       kind: OCIRepository
       stats:
         failing: 0
@@ -210,7 +210,7 @@ spec:
     entitlement: Issued by controlplane
     managedBy: 'flux bootstrap'
     status: Installed
-    version: v2.3.0
+    version: v2.10.0
 ```
 
 ### Components information
@@ -224,11 +224,11 @@ Example:
 ```yaml
 spec:
   components:
-    - image: ghcr.io/fluxcd/kustomize-controller:v1.3.0@sha256:48a032574dd45c39750ba0f1488e6f1ae36756a38f40976a6b7a588d83acefc1
+    - image: ghcr.io/fluxcd/kustomize-controller:v1.10.1@sha256:37db29b25dae35b881a5e064acedb0cc954442da453a39eaa0eab7a90dbecc4e
       name: kustomize-controller
       ready: true
       status: 'Current Deployment is available. Replicas: 1'
-    - image: ghcr.io/fluxcd/source-controller:v1.3.0@sha256:161da425b16b64dda4b3cec2ba0f8d7442973aba29bb446db3b340626181a0bc
+    - image: ghcr.io/fluxcd/source-controller:v1.10.1@sha256:611b6bca3eae95bcff471414d1fb14a4ab83d7f14e609cccef2bd389c121f37e
       name: source-controller
       ready: true
       status: 'Current Deployment is available. Replicas: 1'

@@ -233,7 +233,7 @@ func TestResourceSetInputProviderReconciler_buildOCIOptions(t *testing.T) {
 				},
 			}
 
-			opts, err := r.buildOCIOptions(ctx, obj, repo, tlsConfig, authSecret)
+			opts, err := r.buildOCIOptions(ctx, obj, repo, tlsConfig, authSecret, nil, nil)
 			g.Expect(err).NotTo(HaveOccurred())
 
 			o := crane.GetOptions(opts...)
@@ -414,7 +414,7 @@ func TestResourceSetInputProviderReconciler_OCIArtifactTag_InsecureOption(t *tes
 
 	const repo = "example.com/stefanprodan/podinfo"
 
-	opts, err := r.buildOCIOptions(ctx, obj, repo, nil, nil)
+	opts, err := r.buildOCIOptions(ctx, obj, repo, nil, nil, nil, nil)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	o := crane.GetOptions(opts...)
@@ -456,7 +456,7 @@ func TestResourceSetInputProviderReconciler_OCIArtifactTag_CertSecretTakesPreced
 		ServerName: "server.example.com",
 	}
 
-	opts, err := r.buildOCIOptions(ctx, obj, repo, tlsConfig, nil)
+	opts, err := r.buildOCIOptions(ctx, obj, repo, tlsConfig, nil, nil, nil)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	o := crane.GetOptions(opts...)

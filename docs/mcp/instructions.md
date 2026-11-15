@@ -154,7 +154,7 @@ When troubleshooting a HelmRelease, follow these steps:
 - Use the `get_kubernetes_resources` tool to get the HelmRelease, then analyze the spec, the status, inventory and events.
 - Determine which Flux object is managing the HelmRelease with the `trace_kubernetes_resource` tool; it can be a Kustomization or a ResourceSet.
 - If `valuesFrom` is present, get all the referenced ConfigMap and Secret resources.
-- Identify the HelmRelease source by looking at the `chartRef` or the `sourceRef` field.
+- Identify the HelmRelease source by looking at the `chartRef` or the `chart.spec.sourceRef` field. When `chart.kind` is `OCIRepository`, the source is the OCIRepository named `<namespace>-<name>` generated in the HelmRelease namespace.
 - Use the `get_kubernetes_resources` tool to get the HelmRelease source then analyze the source status and events.
 - If the HelmRelease is in a failed state or in progress, it may be due to failures in one of the managed resources found in the inventory.
 - Use the `get_kubernetes_resources` tool to get the managed resources and analyze their status.

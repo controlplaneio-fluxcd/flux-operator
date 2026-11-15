@@ -58,7 +58,7 @@ The Flux Operator integrates with notification-controller. To receive notificati
 events issued by the operator, you can configure alerting as follows:
 
 ```yaml
-apiVersion: notification.toolkit.fluxcd.io/v1beta3
+apiVersion: notification.toolkit.fluxcd.io/v1
 kind: Provider
 metadata:
   name: slack-bot
@@ -70,7 +70,7 @@ spec:
   secretRef:
     name: slack-bot-token
 ---
-apiVersion: notification.toolkit.fluxcd.io/v1beta3
+apiVersion: notification.toolkit.fluxcd.io/v1
 kind: Alert
 metadata:
   name: flux-operator
@@ -85,7 +85,7 @@ spec:
 ```
 
 Besides Slack, the notification-controller supports other providers like Microsoft Teams, Datadog, Grafana, etc.,
-for more information see the [alert provider documentation](https://fluxcd.io/flux/components/notification/providers/).
+for more information see the [alert provider documentation](https://fluxoperator.dev/docs/crd/provider/).
 
 ## Prometheus Metrics
 

@@ -505,7 +505,9 @@ to watch for changes.
 An alternative to labeling every ConfigMap or Secret is
 setting the `--watch-configs-label-selector=owner!=helm`
 flag in flux-operator, which allows watching all ConfigMaps
-and Secrets except for Helm storage Secrets.
+and Secrets except for Helm storage Secrets. For OLM
+installations, use the environment variable
+`WATCH_CONFIGS_LABEL_SELECTOR`.
 
 #### Converting kubeconfig data from Secrets
 

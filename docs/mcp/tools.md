@@ -310,7 +310,7 @@ Triggers an on-demand reconciliation of a Flux resource and can optionally recon
 - `kind` (required): The kind of the Flux resource
 - `name` (required): The name of the Flux resource
 - `namespace` (required): The namespace of the Flux resource
-- `with_source` (optional): Whether to reconcile the referenced source first (default: false)
+- `with_source` (optional): Whether to reconcile the referenced source first (default: false). For a HelmRelease with `chart.kind: OCIRepository`, the generated OCIRepository named `<namespace>-<name>` is reconciled, or skipped if it does not exist yet
 
 Note that HelmRelease and ResourceSetInputProvider receive a forced reconciliation.
 

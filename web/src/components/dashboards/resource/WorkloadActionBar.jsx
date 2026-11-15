@@ -118,7 +118,7 @@ export function WorkloadActionBar({ kind, namespace, name, status, restartedAt, 
   }
 
   // Base button styles
-  const baseButtonClass = 'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-gray-900'
+  const baseButtonClass = 'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-sm border transition-colors focus:outline-hidden focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-gray-900'
   const disabledClass = 'border-gray-300 text-gray-400 cursor-not-allowed dark:border-gray-600 dark:text-gray-500'
 
   return (
@@ -169,7 +169,7 @@ export function WorkloadActionBar({ kind, namespace, name, status, restartedAt, 
 
       {/* Error message */}
       {error && (
-        <div class="w-full mt-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-xs text-red-800 dark:text-red-200 flex items-center justify-between gap-2" data-testid="workload-action-error">
+        <div class="w-full mt-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-sm text-xs text-red-800 dark:text-red-200 flex items-center justify-between gap-2" data-testid="workload-action-error">
           <span>{error}</span>
           <button
             onClick={clearError}

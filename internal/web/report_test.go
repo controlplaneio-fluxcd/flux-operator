@@ -6,6 +6,9 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -13,8 +16,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
+	"github.com/controlplaneio-fluxcd/flux-operator/internal/reporter"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
 
@@ -58,6 +63,8 @@ func TestGetReport_Privileged(t *testing.T) {
 		version:       "v1.0.0",
 		statusManager: "test-status-manager",
 		namespace:     "flux-system",
+		searchIndex:   &SearchIndex{},
+		workloadIndex: &WorkloadIndex{},
 	}
 
 	// Call GetReport without any user session (privileged)
@@ -79,6 +86,8 @@ func TestGetReport_WithUnprivilegedUser_ReportStillBuilt(t *testing.T) {
 		version:       "v1.0.0",
 		statusManager: "test-status-manager",
 		namespace:     "flux-system",
+		searchIndex:   &SearchIndex{},
+		workloadIndex: &WorkloadIndex{},
 	}
 
 	// Create an unprivileged user session (no RBAC permissions)
@@ -174,6 +183,8 @@ func TestGetReport_WithUserRBAC_NamespacesPopulated(t *testing.T) {
 		version:       "v1.0.0",
 		statusManager: "test-status-manager",
 		namespace:     "flux-system",
+		searchIndex:   &SearchIndex{},
+		workloadIndex: &WorkloadIndex{},
 	}
 
 	// Create a user session with resourcesets access (which grants namespace visibility)
@@ -291,6 +302,8 @@ func TestGetReport_WithUserRBAC_SingleNamespaceAccess(t *testing.T) {
 		version:       "v1.0.0",
 		statusManager: "test-status-manager",
 		namespace:     "flux-system",
+		searchIndex:   &SearchIndex{},
+		workloadIndex: &WorkloadIndex{},
 	}
 
 	// Create a user session with access only in the default namespace
@@ -363,6 +376,8 @@ func TestGetReport_InjectsUserInfo(t *testing.T) {
 		version:       "v1.0.0",
 		statusManager: "test-status-manager",
 		namespace:     "flux-system",
+		searchIndex:   &SearchIndex{},
+		workloadIndex: &WorkloadIndex{},
 	}
 
 	t.Run("at least one group", func(t *testing.T) {
@@ -449,6 +464,8 @@ func TestGetReport_InjectsUserInfoWithRole(t *testing.T) {
 		version:       "v1.0.0",
 		statusManager: "test-status-manager",
 		namespace:     "flux-system",
+		searchIndex:   &SearchIndex{},
+		workloadIndex: &WorkloadIndex{},
 	}
 
 	// Create a user session without name but with groups (role comes from groups when name is empty)
@@ -486,6 +503,8 @@ func TestGetReport_InjectsUserInfoWithProvider(t *testing.T) {
 		version:       "v1.0.0",
 		statusManager: "test-status-manager",
 		namespace:     "flux-system",
+		searchIndex:   &SearchIndex{},
+		workloadIndex: &WorkloadIndex{},
 	}
 
 	// Create provider details (simulating OIDC claims)
@@ -533,6 +552,8 @@ func TestGetReport_UserInfoProviderIsNilWhenNotSet(t *testing.T) {
 		version:       "v1.0.0",
 		statusManager: "test-status-manager",
 		namespace:     "flux-system",
+		searchIndex:   &SearchIndex{},
+		workloadIndex: &WorkloadIndex{},
 	}
 
 	// Create a user session without provider details
@@ -572,6 +593,8 @@ func TestGetReport_NoAuthConfigured_UserInfoOnlyContainsUsername(t *testing.T) {
 		version:       "v1.0.0",
 		statusManager: "test-status-manager",
 		namespace:     "flux-system",
+		searchIndex:   &SearchIndex{},
+		workloadIndex: &WorkloadIndex{},
 	}
 
 	// Call GetReport with a plain context (no user session stored).
@@ -610,6 +633,8 @@ func TestGetReport_InjectsUserInfoWithSessionStart(t *testing.T) {
 		version:       "v1.0.0",
 		statusManager: "test-status-manager",
 		namespace:     "flux-system",
+		searchIndex:   &SearchIndex{},
+		workloadIndex: &WorkloadIndex{},
 	}
 
 	// Create a session start time
@@ -652,6 +677,8 @@ func TestGetReport_UserInfoSessionStartIsNilWhenNotSet(t *testing.T) {
 		version:       "v1.0.0",
 		statusManager: "test-status-manager",
 		namespace:     "flux-system",
+		searchIndex:   &SearchIndex{},
+		workloadIndex: &WorkloadIndex{},
 	}
 
 	// Create a user session without session start time
@@ -681,4 +708,275 @@ func TestGetReport_UserInfoSessionStartIsNilWhenNotSet(t *testing.T) {
 	g.Expect(userInfo["username"]).To(Equal("No Session Start Test User"))
 	_, hasSessionStart := userInfo["sessionStart"]
 	g.Expect(hasSessionStart).To(BeFalse(), "userInfo should NOT contain 'sessionStart' when not set")
+}
+
+// gatedReportBuild is a report build hook that blocks until the gate is
+// closed. It counts the builds and signals each start on started.
+type gatedReportBuild struct {
+	gate    chan struct{}
+	started chan struct{}
+	builds  atomic.Int32
+	name    string
+}
+
+// newGatedReportBuild returns a gated build whose report, search index
+// resource and workload are named after name.
+func newGatedReportBuild(name string) *gatedReportBuild {
+	return &gatedReportBuild{
+		gate:    make(chan struct{}),
+		started: make(chan struct{}, 100),
+		name:    name,
+	}
+}
+
+// build waits for the gate and returns a clean report. It fails if its
+// context is done, which the cold path must prevent by detaching it.
+func (b *gatedReportBuild) build(ctx context.Context) (*unstructured.Unstructured, *reporter.FluxStatusReport, *NodesSnapshot, error) {
+	b.builds.Add(1)
+	b.started <- struct{}{}
+	<-b.gate
+	if err := ctx.Err(); err != nil {
+		return nil, nil, nil, err
+	}
+	return testReport(b.name)
+}
+
+// testReport returns a clean report, its computation and a nodes snapshot,
+// all named after name.
+func testReport(name string) (*unstructured.Unstructured, *reporter.FluxStatusReport, *NodesSnapshot, error) {
+	report := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": fluxcdv1.GroupVersion.String(),
+		"kind":       fluxcdv1.FluxReportKind,
+		"metadata":   map[string]any{"name": name},
+		"spec":       map[string]any{"distribution": map[string]any{"version": "v2.7.0"}},
+	}}
+	computeResult := &reporter.FluxStatusReport{
+		Resources: []reporter.ResourceStatus{{Name: name, Kind: "Kustomization", Namespace: "flux-system"}},
+		Workloads: []reporter.WorkloadRef{{Name: name, Kind: "Deployment", Namespace: "flux-system", APIVersion: "apps/v1"}},
+	}
+	nodes := &NodesSnapshot{Nodes: []*NodeDetail{readyNode(name)}}
+	return report, computeResult, nodes, nil
+}
+
+// newColdReportHandler returns a handler with an empty report cache
+// whose builds go through the given gated build.
+func newColdReportHandler(b *gatedReportBuild) *Handler {
+	return &Handler{
+		kubeClient:      kubeClient,
+		namespace:       "flux-system",
+		searchIndex:     &SearchIndex{},
+		workloadIndex:   &WorkloadIndex{},
+		buildReportHook: b.build,
+	}
+}
+
+// reportResult holds the outcome of a GetReport call.
+type reportResult struct {
+	report *unstructured.Unstructured
+	err    error
+}
+
+// getReportAsync calls GetReport on a goroutine and returns its result channel.
+func getReportAsync(h *Handler, reqCtx context.Context) <-chan reportResult {
+	ch := make(chan reportResult, 1)
+	go func() {
+		r, err := h.GetReport(reqCtx)
+		ch <- reportResult{report: r, err: err}
+	}()
+	return ch
+}
+
+func TestGetReport_ColdConcurrentCallsShareOneBuild(t *testing.T) {
+	g := NewWithT(t)
+
+	b := newGatedReportBuild("cold-shared")
+	handler := newColdReportHandler(b)
+
+	const callers = 10
+	results := make([]<-chan reportResult, callers)
+	for i := range callers {
+		results[i] = getReportAsync(handler, ctx)
+	}
+
+	// The cache stays empty while the build is gated.
+	<-b.started
+	g.Expect(handler.hasCachedReport()).To(BeFalse())
+
+	close(b.gate)
+	for _, ch := range results {
+		r := <-ch
+		g.Expect(r.err).NotTo(HaveOccurred())
+		g.Expect(r.report.GetName()).To(Equal("cold-shared"))
+	}
+	g.Expect(b.builds.Load()).To(Equal(int32(1)))
+
+	// The indexes are filled from the same build.
+	g.Expect(handler.searchIndex.resources).To(HaveLen(1))
+	g.Expect(handler.searchIndex.resources[0].Name).To(Equal("cold-shared"))
+	g.Expect(handler.workloadIndex.workloads).To(HaveLen(1))
+	g.Expect(handler.workloadIndex.workloads[0].Name).To(Equal("cold-shared"))
+}
+
+func TestGetReport_ColdPerUserFieldsStayOutOfCache(t *testing.T) {
+	g := NewWithT(t)
+
+	b := newGatedReportBuild("cold-per-user")
+	handler := newColdReportHandler(b)
+
+	// One caller without authentication sees every namespace,
+	// the other one has no access and sees none.
+	userCtx := userSession(g, kubeClient, "cold-report-user")
+	adminCh := getReportAsync(handler, ctx)
+	userCh := getReportAsync(handler, userCtx)
+	<-b.started
+	close(b.gate)
+
+	admin := <-adminCh
+	g.Expect(admin.err).NotTo(HaveOccurred())
+	userRes := <-userCh
+	g.Expect(userRes.err).NotTo(HaveOccurred())
+
+	adminSpec := admin.report.Object["spec"].(map[string]any)
+	userSpec := userRes.report.Object["spec"].(map[string]any)
+	g.Expect(adminSpec["userInfo"].(map[string]any)["username"]).NotTo(Equal("cold-report-user"))
+	g.Expect(userSpec["userInfo"].(map[string]any)["username"]).To(Equal("cold-report-user"))
+	g.Expect(adminSpec["namespaces"]).To(ContainElement("default"))
+	g.Expect(userSpec["namespaces"]).To(BeEmpty())
+
+	// The cached report is the clean build output.
+	handler.reportCacheMu.RLock()
+	cachedSpec := handler.reportCache.Object["spec"].(map[string]any)
+	g.Expect(cachedSpec).NotTo(HaveKey("userInfo"))
+	g.Expect(cachedSpec).NotTo(HaveKey("namespaces"))
+	g.Expect(cachedSpec).NotTo(HaveKey("reconcilers"))
+	handler.reportCacheMu.RUnlock()
+}
+
+func TestGetReport_ColdCanceledCallerDoesNotFailOthers(t *testing.T) {
+	g := NewWithT(t)
+
+	b := newGatedReportBuild("cold-cancel")
+	handler := newColdReportHandler(b)
+
+	// The first caller starts the build, then cancels while it is gated.
+	firstCtx, cancelFirst := context.WithCancel(ctx)
+	defer cancelFirst()
+	firstCh := getReportAsync(handler, firstCtx)
+	<-b.started
+	secondCh := getReportAsync(handler, ctx)
+
+	cancelFirst()
+	first := <-firstCh
+	g.Expect(first.err).To(MatchError(context.Canceled))
+
+	close(b.gate)
+	second := <-secondCh
+	g.Expect(second.err).NotTo(HaveOccurred())
+	g.Expect(second.report.GetName()).To(Equal("cold-cancel"))
+	g.Expect(b.builds.Load()).To(Equal(int32(1)))
+}
+
+func TestGetReport_ColdFillsNodesSnapshot(t *testing.T) {
+	g := NewWithT(t)
+
+	b := newGatedReportBuild("cold-nodes")
+	close(b.gate)
+	handler := newColdReportHandler(b)
+
+	// Before any build, the nodes dashboard is unavailable.
+	serveNodes := func() int {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/nodes", nil).WithContext(ctx)
+		rec := httptest.NewRecorder()
+		handler.NodesHandler(rec, req)
+		return rec.Code
+	}
+	g.Expect(serveNodes()).To(Equal(http.StatusServiceUnavailable))
+
+	_, err := handler.GetReport(ctx)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(handler.getCachedNodesSnapshot()).NotTo(BeNil())
+	g.Expect(serveNodes()).To(Equal(http.StatusOK))
+}
+
+func TestGetReport_ColdBuildDoesNotReplaceNewerRefresh(t *testing.T) {
+	g := NewWithT(t)
+
+	b := newGatedReportBuild("cold-stale")
+	handler := newColdReportHandler(b)
+
+	ch := getReportAsync(handler, ctx)
+	<-b.started
+
+	// A refresh stores newer data while the cold build is gated.
+	report, computeResult, nodes, err := testReport("refreshed")
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(handler.storeReport(report, computeResult, nodes, false)).To(BeTrue())
+
+	close(b.gate)
+	r := <-ch
+	g.Expect(r.err).NotTo(HaveOccurred())
+	g.Expect(r.report.GetName()).To(Equal("refreshed"))
+
+	// The cache, the snapshot and the indexes keep the newer data.
+	handler.reportCacheMu.RLock()
+	g.Expect(handler.reportCache.GetName()).To(Equal("refreshed"))
+	handler.reportCacheMu.RUnlock()
+	g.Expect(handler.getCachedNodesSnapshot().Nodes[0].Name).To(Equal("refreshed"))
+	g.Expect(handler.searchIndex.resources[0].Name).To(Equal("refreshed"))
+	g.Expect(handler.workloadIndex.workloads[0].Name).To(Equal("refreshed"))
+
+	// A store with onlyIfEmpty is skipped once the cache is set.
+	report, computeResult, nodes, err = testReport("stale")
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(handler.storeReport(report, computeResult, nodes, true)).To(BeFalse())
+	g.Expect(handler.searchIndex.resources[0].Name).To(Equal("refreshed"))
+}
+
+func TestStoreReport_IndexesPublishedWithReport(t *testing.T) {
+	g := NewWithT(t)
+
+	handler := &Handler{
+		searchIndex:   &SearchIndex{},
+		workloadIndex: &WorkloadIndex{},
+	}
+
+	// Hold the search index lock so the cold store stops at its index update.
+	handler.searchIndex.mu.Lock()
+
+	report, computeResult, nodes, err := testReport("cold")
+	g.Expect(err).NotTo(HaveOccurred())
+	coldDone := make(chan bool, 1)
+	go func() {
+		coldDone <- handler.storeReport(report, computeResult, nodes, true)
+	}()
+
+	// The cold store holds the report cache lock while it waits on the index.
+	reportCacheLocked := func() bool {
+		if handler.reportCacheMu.TryRLock() {
+			handler.reportCacheMu.RUnlock()
+			return false
+		}
+		return true
+	}
+	g.Eventually(reportCacheLocked).Should(BeTrue())
+	g.Consistently(reportCacheLocked, 100*time.Millisecond).Should(BeTrue(),
+		"the report cache must stay locked until the indexes are updated")
+
+	// A refresh started now runs after the cold store has published everything.
+	newReport, newResult, newNodes, err := testReport("refreshed")
+	g.Expect(err).NotTo(HaveOccurred())
+	refreshDone := make(chan bool, 1)
+	go func() {
+		refreshDone <- handler.storeReport(newReport, newResult, newNodes, false)
+	}()
+
+	handler.searchIndex.mu.Unlock()
+	g.Expect(<-coldDone).To(BeTrue())
+	g.Expect(<-refreshDone).To(BeTrue())
+
+	handler.reportCacheMu.RLock()
+	g.Expect(handler.reportCache.GetName()).To(Equal("refreshed"))
+	handler.reportCacheMu.RUnlock()
+	g.Expect(handler.searchIndex.resources[0].Name).To(Equal("refreshed"))
+	g.Expect(handler.workloadIndex.workloads[0].Name).To(Equal("refreshed"))
 }

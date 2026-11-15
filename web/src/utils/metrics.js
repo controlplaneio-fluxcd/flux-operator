@@ -118,15 +118,19 @@ export function limitSeverity(value, limit) {
  * Convert metrics samples into uPlot aligned data for one value field.
  * @param {Array<{t: string, cpu: number, memory: number}>} samples - API samples
  * @param {string} field - "cpu" or "memory"
- * @param {number} limit - Limits sum, drawn as a threshold series when set
- *   and within 2x of the peak usage
+ * @param {number|string} limit - Limits sum, or the name of the sample field
+ *   holding a per-sample limit. Drawn as a threshold series when set and,
+ *   at its highest, within 2x of the peak usage
  * @returns {{data: Array<Array<number>>, hasLimit: boolean}} - uPlot aligned
  *   data: [timestamps (seconds), usage values, threshold values?]
  */
 export function buildChartData(samples, field, limit) {
+  const perSample = typeof limit === 'string'
   const xs = []
   const ys = []
+  const limits = []
   let max = 0
+  let maxLimit = perSample ? 0 : limit
   for (const s of samples || []) {
     const ts = Date.parse(s.t)
     const value = s[field]
@@ -134,12 +138,17 @@ export function buildChartData(samples, field, limit) {
     xs.push(Math.floor(ts / 1000))
     ys.push(value)
     if (value > max) max = value
+    if (perSample) {
+      const l = typeof s[limit] === 'number' ? s[limit] : null
+      limits.push(l)
+      if (l > maxLimit) maxLimit = l
+    }
   }
 
-  const hasLimit = typeof limit === 'number' && limit > 0 && max > 0 && limit <= max * 2
+  const hasLimit = typeof maxLimit === 'number' && maxLimit > 0 && max > 0 && maxLimit <= max * 2
   const data = [xs, ys]
   if (hasLimit) {
-    data.push(xs.map(() => limit))
+    data.push(perSample ? limits : xs.map(() => limit))
   }
   return { data, hasLimit }
 }

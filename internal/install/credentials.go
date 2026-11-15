@@ -78,6 +78,12 @@ func (in *Installer) ApplyGitHubAppCredentials(ctx context.Context, secretName s
 	}
 
 	var opts []secrets.GitHubAppOption
+	if gha.AppID != "" {
+		opts = append(opts, secrets.WithGitHubAppID(gha.AppID))
+	}
+	if gha.ClientID != "" {
+		opts = append(opts, secrets.WithGitHubAppClientID(gha.ClientID))
+	}
 	if gha.InstallationOwner != "" {
 		opts = append(opts, secrets.WithGitHubAppInstallationOwner(gha.InstallationOwner))
 	}
@@ -91,7 +97,6 @@ func (in *Installer) ApplyGitHubAppCredentials(ctx context.Context, secretName s
 	secret, err := secrets.MakeGitHubAppSecret(
 		secretName,
 		in.options.namespace,
-		gha.AppID,
 		gha.PrivateKey,
 		opts...,
 	)

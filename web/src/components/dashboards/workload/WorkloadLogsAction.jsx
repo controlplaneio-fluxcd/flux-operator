@@ -109,7 +109,7 @@ export function WorkloadLogsAction({ kind, namespace, name, pods = [], userActio
     window.history.replaceState(null, '', urlWithParam(LOGS_QUERY_PARAM, null))
   }
 
-  const baseButtonClass = 'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border transition-colors focus:outline-none'
+  const baseButtonClass = 'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-sm border transition-colors focus:outline-hidden'
   const buttonClass = hasPods
     ? `${baseButtonClass} border-teal-500 text-teal-600 hover:bg-teal-50 dark:border-teal-400 dark:text-teal-400 dark:hover:bg-teal-900/30 focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-gray-900 focus:ring-teal-500`
     : `${baseButtonClass} border-gray-300 text-gray-400 cursor-not-allowed dark:border-gray-600 dark:text-gray-500`

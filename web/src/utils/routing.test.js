@@ -533,7 +533,7 @@ describe('useSyncFiltersToUrl', () => {
     rerender()
 
     // Unmount before debounce completes
-    unmount()
+    act(() => unmount())
 
     expect(clearTimeoutSpy).toHaveBeenCalled()
   })

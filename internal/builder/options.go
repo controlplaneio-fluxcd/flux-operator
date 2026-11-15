@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/go-logr/logr"
 )
 
 // Options defines the builder configuration.
@@ -34,6 +35,23 @@ type Options struct {
 	ShardName                                       string
 	SourceAPIVersion                                string
 	RemovePermissionForCreatingServiceAccountTokens bool
+	AddPermissionForCreatingServiceAccountTokens    bool
+	// OperatorMTLSEnabled indicates that the operator has a SPIFFE Workload
+	// API source and participates in mTLS. When true, the flux-operator SPIFFE
+	// ID derived from ComponentIDTemplate with 'flux-operator' as the
+	// component name is authorized as a notifier of notification-controller,
+	// and as an artifact client of source-controller and source-watcher only
+	// when WebUIEnabled is true.
+	OperatorMTLSEnabled bool
+	// WebUIEnabled indicates that the operator's embedded Web UI is enabled.
+	// When true, the operator SPIFFE ID is authorized as an artifact client
+	// of source-controller and source-watcher for Web UI artifact downloads.
+	// The operator ID is authorized as a notifier of notification-controller
+	// when OperatorMTLSEnabled is true, regardless of this setting.
+	// Enabling or disabling the embedded Web UI changes these controller
+	// arguments and rolls out the affected controllers.
+	WebUIEnabled bool
+	Logger       logr.Logger
 }
 
 // MakeDefaultOptions returns the default builder configuration.
@@ -58,6 +76,13 @@ func MakeDefaultOptions() Options {
 		LogLevel:           "info",
 		ClusterDomain:      "cluster.local",
 		ShardingKey:        "sharding.fluxcd.io/key",
+		// Assume the operator has a SPIFFE Workload API source when SPIFFE
+		// mTLS is configured. The embedded Web UI setting must be provided
+		// explicitly. The controller overrides both values with its runtime
+		// configuration.
+		OperatorMTLSEnabled: true,
+		WebUIEnabled:        false,
+		Logger:              logr.Discard(),
 	}
 }
 
