@@ -557,7 +557,7 @@ export function QuickSearch() {
           <button
             onClick={handleSearchClick}
             title="Search (press /)"
-            class="sm:hidden inline-flex items-center justify-center p-1.5 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-flux-blue"
+            class="sm:hidden inline-flex items-center justify-center p-1.5 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-flux-blue"
             aria-label="Open search"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -568,14 +568,14 @@ export function QuickSearch() {
           <button
             onClick={handleSearchClick}
             title="Search (press /)"
-            class="hidden sm:inline-flex items-center gap-2 min-w-[160px] px-2.5 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-400 dark:hover:border-gray-500 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-flux-blue"
+            class="hidden sm:inline-flex items-center gap-2 min-w-[160px] px-2.5 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-400 dark:hover:border-gray-500 transition-colors focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-flux-blue"
             aria-label="Open search"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
             <span class="text-sm">Search</span>
-            <kbd class="ml-auto px-1.5 py-0.5 text-xs font-medium bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded">/</kbd>
+            <kbd class="ml-auto px-1.5 py-0.5 text-xs font-medium bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-sm">/</kbd>
           </button>
         </>
       )}
@@ -585,7 +585,7 @@ export function QuickSearch() {
         <div class="animate-slide-in-right">
           {/* Search Input Row - inline in header */}
           <div class="flex items-center h-[30px] px-2 border border-gray-300 dark:border-gray-600 rounded-md">
-            <svg class="w-4 h-4 text-gray-400 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-4 h-4 text-gray-400 mr-2 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
 
@@ -593,14 +593,14 @@ export function QuickSearch() {
             {filterOrder.map(filter => {
               if (filter === 'namespace' && selectedNamespace) {
                 return (
-                  <span key="ns" class="inline-flex items-center px-2 py-0.5 mr-1.5 rounded text-xs font-medium bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200 flex-shrink-0">
+                  <span key="ns" class="inline-flex items-center px-2 py-0.5 mr-1.5 rounded-sm text-xs font-medium bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200 shrink-0">
                     ns:{selectedNamespace}
                   </span>
                 )
               }
               if (filter === 'kind' && selectedKind) {
                 return (
-                  <span key="kind" class="inline-flex items-center px-2 py-0.5 mr-1.5 rounded text-xs font-medium bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200 flex-shrink-0">
+                  <span key="kind" class="inline-flex items-center px-2 py-0.5 mr-1.5 rounded-sm text-xs font-medium bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200 shrink-0">
                     kind:{selectedKind}
                   </span>
                 )
@@ -615,12 +615,12 @@ export function QuickSearch() {
               onInput={handleInputChange}
               onKeyDown={handleKeyDown}
               placeholder={(selectedNamespace || selectedKind) ? 'Search...' : 'Search appliers & workloads...'}
-              class="flex-1 min-w-0 text-sm text-gray-900 dark:text-gray-100 bg-transparent placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none"
+              class="flex-1 min-w-0 text-sm text-gray-900 dark:text-gray-100 bg-transparent placeholder-gray-400 dark:placeholder-gray-500 focus:outline-hidden"
             />
 
             <button
               onClick={handleClose}
-              class="ml-2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 focus:outline-none flex-shrink-0"
+              class="ml-2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 focus:outline-hidden shrink-0"
               aria-label="Close search"
             >
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -643,7 +643,7 @@ export function QuickSearch() {
                       <li key={ns}>
                         <button
                           onClick={() => handleNamespaceSelect(ns)}
-                          class={`w-full text-left py-1.5 px-3 text-sm focus:outline-none transition-colors ${
+                          class={`w-full text-left py-1.5 px-3 text-sm focus:outline-hidden transition-colors ${
                             index === nsSelectedIndex
                               ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
                               : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
@@ -674,7 +674,7 @@ export function QuickSearch() {
                       <li key={kind}>
                         <button
                           onClick={() => handleKindSelect(kind)}
-                          class={`w-full text-left py-1.5 px-3 text-sm focus:outline-none transition-colors ${
+                          class={`w-full text-left py-1.5 px-3 text-sm focus:outline-hidden transition-colors ${
                             index === kindSelectedIndex
                               ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
                               : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
@@ -709,14 +709,14 @@ export function QuickSearch() {
                     <a
                       href={resource.url}
                       onClick={handleClose}
-                      class={`block w-full text-left py-1 px-2 focus:outline-none transition-colors ${
+                      class={`block w-full text-left py-1 px-2 focus:outline-hidden transition-colors ${
                         index === selectedIndex
                           ? 'bg-gray-100 dark:bg-gray-700'
                           : 'hover:bg-gray-50 dark:hover:bg-gray-700'
                       }`}
                     >
                       <div class="flex items-center gap-1.5">
-                        <span class={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${getStatusDotClass(resource.status)}`} />
+                        <span class={`w-1.5 h-1.5 rounded-full shrink-0 ${getStatusDotClass(resource.status)}`} />
                         <span class="text-sm text-gray-900 dark:text-gray-100 break-all">
                           <span class="text-gray-500 dark:text-gray-400">{resource.kind}/</span>{resource.namespace}/{resource.name}
                         </span>
@@ -735,14 +735,14 @@ export function QuickSearch() {
                   <a
                     href="/resources"
                     onClick={handleClose}
-                    class="inline-block text-flux-blue hover:underline focus:outline-none"
+                    class="inline-block text-flux-blue hover:underline focus:outline-hidden"
                   >
                     Browse all resources →
                   </a>
                   <a
                     href="/workloads"
                     onClick={handleClose}
-                    class="inline-block text-flux-blue hover:underline focus:outline-none"
+                    class="inline-block text-flux-blue hover:underline focus:outline-hidden"
                   >
                     Browse all workloads →
                   </a>
@@ -764,7 +764,7 @@ export function QuickSearch() {
                           inputRef.current.focus()
                         }
                       }}
-                      class="text-flux-blue hover:underline focus:outline-none"
+                      class="text-flux-blue hover:underline focus:outline-hidden"
                     >
                       ns:
                     </button>
@@ -776,7 +776,7 @@ export function QuickSearch() {
                           inputRef.current.focus()
                         }
                       }}
-                      class="text-flux-blue hover:underline focus:outline-none"
+                      class="text-flux-blue hover:underline focus:outline-hidden"
                     >
                       kind:
                     </button>
@@ -793,7 +793,7 @@ export function QuickSearch() {
                           <a
                             href={getHistoryUrl(entry)}
                             onClick={handleClose}
-                            class={`w-full text-left py-1 px-1 -mx-1 rounded focus:outline-none transition-colors flex items-center gap-1.5 ${
+                            class={`w-full text-left py-1 px-1 -mx-1 rounded-sm focus:outline-hidden transition-colors flex items-center gap-1.5 ${
                               index === historySelectedIndex
                                 ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
                                 : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
@@ -801,11 +801,11 @@ export function QuickSearch() {
                           >
                             {/* Home icon for FluxReport, cube icon for other resources */}
                             {isHomePage(entry.kind) ? (
-                              <svg class="w-3.5 h-3.5 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg class="w-3.5 h-3.5 shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                               </svg>
                             ) : (
-                              <svg class="w-3.5 h-3.5 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg class="w-3.5 h-3.5 shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                               </svg>
                             )}

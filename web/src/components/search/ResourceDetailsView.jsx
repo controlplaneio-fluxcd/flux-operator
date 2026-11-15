@@ -69,7 +69,7 @@ function InventoryItem({ item }) {
       <div class="py-1 px-2 text-xs break-all">
         <a
           href={dashboardUrl}
-          class="text-left hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flux-blue rounded inline-block group"
+          class="text-left hover:opacity-80 transition-opacity focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-flux-blue rounded-sm inline-block group"
         >
           <span class="text-gray-600 dark:text-gray-400">{item.kind}/</span>{item.namespace && <span class="text-gray-500 dark:text-gray-400">{item.namespace}/</span>}<span class="text-gray-900 dark:text-gray-100 group-hover:text-flux-blue dark:group-hover:text-blue-400">{item.name}</span><svg class="w-3 h-3 text-gray-400 group-hover:text-flux-blue dark:group-hover:text-blue-400 transition-colors ml-1 inline-block align-middle" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
         </a>
@@ -101,7 +101,7 @@ function InventoryGroupByApiVersion({ apiVersion, items }) {
         <span class="text-xs font-semibold text-gray-800 dark:text-gray-200 break-all">
           {apiVersion}
         </span>
-        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+        <span class="inline-flex items-center px-2 py-0.5 rounded-sm text-xs bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
           {items.length}
         </span>
       </div>
@@ -330,7 +330,7 @@ export function ResourceDetailsView({ kind, name, namespace, isExpanded, status,
                   {rLast && (
                     <div class="text-gray-500 dark:text-gray-400">Last action <span class="text-gray-900 dark:text-gray-100">{formatTimestamp(rLast)}</span></div>
                   )}
-                  <pre class="whitespace-pre-wrap break-words font-sans leading-relaxed text-gray-700 dark:text-gray-300">{rMessage}</pre>
+                  <pre class="whitespace-pre-wrap wrap-break-word font-sans leading-relaxed text-gray-700 dark:text-gray-300">{rMessage}</pre>
                 </div>
               )}
             </div>

@@ -21,6 +21,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/patch"
+	fluxspiffe "github.com/fluxcd/pkg/spiffe"
 	"github.com/fluxcd/pkg/ssa"
 	"github.com/fluxcd/pkg/ssa/normalize"
 	ssautil "github.com/fluxcd/pkg/ssa/utils"
@@ -55,6 +56,7 @@ type ResourceSetReconciler struct {
 	APIReader     client.Reader
 	Scheme        *runtime.Scheme
 	ClusterReader engine.ClusterReaderFactory
+	SPIFFESource  fluxspiffe.TLSSource
 
 	StatusManager         string
 	DefaultServiceAccount string
@@ -117,7 +119,7 @@ func (r *ResourceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		errMsg := fmt.Sprintf("%s: %v", msgTerminalError, err)
 		conditions.MarkFalse(obj, meta.ReadyCondition, meta.InvalidCELExpressionReason, "%s", errMsg)
 		conditions.MarkStalled(obj, meta.InvalidCELExpressionReason, "%s", errMsg)
-		r.notify(ctx, obj, corev1.EventTypeWarning, meta.InvalidCELExpressionReason, errMsg)
+		r.notify(ctx, obj, fluxcdv1.ActionCheckDependencies, corev1.EventTypeWarning, meta.InvalidCELExpressionReason, errMsg)
 		return ctrl.Result{}, reconcile.TerminalError(err)
 	}
 
@@ -126,7 +128,7 @@ func (r *ResourceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		msg := fmt.Sprintf("Retrying dependency check: %s", err.Error())
 		if conditions.GetReason(obj, meta.ReadyCondition) != meta.DependencyNotReadyReason {
 			log.Error(err, "dependency check failed")
-			r.notify(ctx, obj, corev1.EventTypeNormal, meta.DependencyNotReadyReason, msg)
+			r.notify(ctx, obj, fluxcdv1.ActionCheckDependencies, corev1.EventTypeNormal, meta.DependencyNotReadyReason, msg)
 		}
 		conditions.MarkFalse(obj,
 			meta.ReadyCondition,
@@ -221,7 +223,7 @@ func (r *ResourceSetReconciler) reconcile(ctx context.Context,
 			historyMetadata)
 
 		// Emit warning event and return an error to retry with backoff the reconciliation.
-		r.notify(ctx, obj, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
+		r.notify(ctx, obj, fluxcdv1.ActionReconcile, corev1.EventTypeWarning, meta.ReconciliationFailedReason, msg)
 		return ctrl.Result{}, err
 	}
 
@@ -279,7 +281,7 @@ func (r *ResourceSetReconciler) stallWithTerminalError(ctx context.Context,
 		nil)
 
 	// Emit warning event and return a terminal error.
-	r.notify(ctx, obj, corev1.EventTypeWarning, meta.BuildFailedReason, msg)
+	r.notify(ctx, obj, fluxcdv1.ActionBuild, corev1.EventTypeWarning, meta.BuildFailedReason, msg)
 	return ctrl.Result{}, reconcile.TerminalError(err)
 }
 
@@ -638,6 +640,7 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 		// Emit the step apply event only if the server-side apply resulted in changes.
 		if stepLog.Len() > 0 {
 			r.notify(ctx, obj,
+				fluxcdv1.ActionApply,
 				corev1.EventTypeNormal,
 				"ApplySucceeded",
 				fmt.Sprintf("step %q: %s", step.Name, strings.TrimSuffix(stepLog.String(), "\n")))
@@ -695,6 +698,7 @@ func (r *ResourceSetReconciler) apply(ctx context.Context,
 	applyLog := strings.TrimSuffix(changeSetLog.String(), "\n")
 	if applyLog != "" {
 		r.notify(ctx, obj,
+			fluxcdv1.ActionApply,
 			corev1.EventTypeNormal,
 			"ApplySucceeded",
 			applyLog)
@@ -1074,8 +1078,10 @@ func (r *ResourceSetReconciler) recordMetrics(obj *fluxcdv1.ResourceSet) error {
 	return nil
 }
 
-func (r *ResourceSetReconciler) notify(ctx context.Context, obj *fluxcdv1.ResourceSet, eventType, reason, message string) {
+func (r *ResourceSetReconciler) notify(ctx context.Context, obj *fluxcdv1.ResourceSet,
+	action fluxcdv1.Action, eventType, reason, message string) {
 	notifier.
-		New(ctx, r.EventRecorder, r.Scheme, notifier.WithClient(r.Client)).
-		Event(obj, eventType, reason, message)
+		New(ctx, r.EventRecorder, r.Scheme,
+			notifier.WithClient(r.Client), notifier.WithSPIFFESource(r.SPIFFESource)).
+		Eventf(obj, nil, eventType, reason, action.String(), "%s", message)
 }

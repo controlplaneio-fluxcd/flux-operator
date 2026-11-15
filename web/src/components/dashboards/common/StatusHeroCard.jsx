@@ -4,17 +4,18 @@
 import { formatTime } from '../../../utils/time'
 
 // Map each pale card tint to a one-step-darker shade for the status icon disc, so
-// the circle reads as a filled disc against the card in both themes. Written as
+// the circle reads as a filled disc against the card in both themes (dark mode
+// uses the same shade at 30% opacity). Written as
 // literal class strings (not derived from bgColor) so Tailwind bundles every
 // shade — including bg-orange-100, which is not used anywhere else. Unmapped
 // colors fall back to the card tint.
 const ICON_DISC_BG = {
-  'bg-green-50': 'bg-green-100',
-  'bg-blue-50': 'bg-blue-100',
-  'bg-red-50': 'bg-red-100',
-  'bg-yellow-50': 'bg-yellow-100',
-  'bg-orange-50': 'bg-orange-100',
-  'bg-gray-50': 'bg-gray-100'
+  'bg-green-50': 'bg-green-100 dark:bg-green-100/30',
+  'bg-blue-50': 'bg-blue-100 dark:bg-blue-100/30',
+  'bg-red-50': 'bg-red-100 dark:bg-red-100/30',
+  'bg-yellow-50': 'bg-yellow-100 dark:bg-yellow-100/30',
+  'bg-orange-50': 'bg-orange-100 dark:bg-orange-100/30',
+  'bg-gray-50': 'bg-gray-100 dark:bg-gray-100/30'
 }
 
 /**
@@ -53,21 +54,21 @@ export function StatusHeroCard({
 }) {
   const iconBg = ICON_DISC_BG[bgColor] || bgColor
 
-  const cardClass = `card ${bgColor} dark:bg-opacity-20 border-2 ${borderColor}`
+  const cardClass = `card ${bgColor} dark:bg-gray-800/20 border-2 ${borderColor}`
   const Wrapper = href ? 'a' : 'div'
   const wrapperProps = href
-    ? { href, class: `${cardClass} w-full text-left cursor-pointer hover:shadow-lg transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flux-blue block` }
+    ? { href, class: `${cardClass} w-full text-left cursor-pointer hover:shadow-lg transition-shadow focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-flux-blue block` }
     : { class: cardClass }
 
   return (
     <Wrapper {...wrapperProps}>
-      <div class="flex items-center space-x-4">
-        <div class="flex-shrink-0">
-          <div class={`w-16 h-16 rounded-full ${iconBg} dark:bg-opacity-30 flex items-center justify-center`}>
+      <div class="flex items-center gap-4">
+        <div class="shrink-0">
+          <div class={`w-16 h-16 rounded-full ${iconBg} flex items-center justify-center`}>
             {icon}
           </div>
         </div>
-        <div class="flex-grow min-w-0">
+        <div class="grow min-w-0">
           {name != null ? (
             <>
               <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">{kind}</span>
@@ -80,7 +81,7 @@ export function StatusHeroCard({
           ) : children}
         </div>
         {lastUpdatedAt != null && (
-          <div class="hidden md:block text-right flex-shrink-0">
+          <div class="hidden md:block text-right shrink-0">
             <div class="text-sm text-gray-600 dark:text-gray-400">Last Updated</div>
             <div class="text-lg font-semibold text-gray-900 dark:text-white">{formatTime(lastUpdatedAt)}</div>
           </div>

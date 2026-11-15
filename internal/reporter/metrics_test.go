@@ -149,6 +149,63 @@ func TestRecordMetrics_FluxResource(t *testing.T) {
 	g.Expect(metricFamilies).To(BeEmpty())
 }
 
+func TestFluxLabelsToValues_HelmReleaseSourceName(t *testing.T) {
+	tests := []struct {
+		name     string
+		spec     map[string]any
+		expected string
+	}{
+		{
+			name: "chartRef",
+			spec: map[string]any{
+				"chartRef": map[string]any{"kind": "OCIRepository", "name": "podinfo-chart"},
+			},
+			expected: "podinfo-chart",
+		},
+		{
+			name: "OCIRepository chart template",
+			spec: map[string]any{
+				"chart": map[string]any{
+					"kind": "OCIRepository",
+					"spec": map[string]any{"url": "oci://ghcr.io/stefanprodan/charts/podinfo"},
+				},
+			},
+			expected: "apps-podinfo",
+		},
+		{
+			name: "HelmChart template with sourceRef",
+			spec: map[string]any{
+				"chart": map[string]any{
+					"spec": map[string]any{
+						"chart":     "podinfo",
+						"sourceRef": map[string]any{"kind": "HelmRepository", "name": "charts"},
+					},
+				},
+			},
+			expected: "charts",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			hr := unstructured.Unstructured{
+				Object: map[string]any{
+					"apiVersion": "helm.toolkit.fluxcd.io/v2",
+					"kind":       "HelmRelease",
+					"metadata": map[string]any{
+						"name":      "podinfo",
+						"namespace": "apps",
+					},
+					"spec": tt.spec,
+				},
+			}
+			labels := fluxLabelsToValues(hr)
+			g.Expect(labels["source_name"]).To(Equal(tt.expected))
+		})
+	}
+}
+
 func TestRecordMetrics_ResourceSet(t *testing.T) {
 	g := NewWithT(t)
 	reg := prometheus.NewRegistry()

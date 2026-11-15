@@ -9,6 +9,7 @@ import { fluxCRDs } from '../../../utils/constants'
  *
  * @param {Object} props
  * @param {Object} props.crd - CRD metadata from constants (kind, apiVersion, docUrl)
+ * @param {string} [props.apiVersion] - API version reported by the cluster, falls back to crd.apiVersion
  * @param {Object} props.stats - Resource statistics (running, failing, suspended)
  * @param {boolean} props.isInstalled - Whether the CRD is installed in the cluster
  *
@@ -21,7 +22,7 @@ import { fluxCRDs } from '../../../utils/constants'
  * - Color-coded border based on resource health (gray if not installed)
  * - Docs icon link opens documentation in new tab
  */
-function ReconcilerCard({ crd, stats, isInstalled }) {
+function ReconcilerCard({ crd, apiVersion, stats, isInstalled }) {
   // Running already includes failing resources (failing is a subset of running),
   // so the total is running + suspended to avoid double-counting failures.
   const total = (stats.running || 0) + (stats.suspended || 0)
@@ -47,7 +48,7 @@ function ReconcilerCard({ crd, stats, isInstalled }) {
       <div class="mb-3 flex items-start justify-between">
         <div>
           <h4 class="font-semibold text-gray-900 dark:text-white text-md">{crd.kind}</h4>
-          <p class="text-xs text-gray-500 dark:text-gray-400">{crd.apiVersion}</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400">{apiVersion || crd.apiVersion}</p>
         </div>
         {crd.docUrl && (
           (isInstalled && total > 0) ? (
@@ -84,12 +85,12 @@ function ReconcilerCard({ crd, stats, isInstalled }) {
 
       <div class="flex flex-wrap gap-2">
         {!isInstalled && (
-          <span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400">
+          <span class="inline-flex items-center px-2 py-1 rounded-sm text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400">
             not installed
           </span>
         )}
         {isInstalled && total === 0 && (
-          <span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400">
+          <span class="inline-flex items-center px-2 py-1 rounded-sm text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400">
             no resources
           </span>
         )}
@@ -97,7 +98,7 @@ function ReconcilerCard({ crd, stats, isInstalled }) {
           <a
             href={getStatusUrl('Ready')}
             onClick={(e) => e.stopPropagation()}
-            class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-green-200 text-green-800 hover:bg-green-300 cursor-pointer transition-colors"
+            class="inline-flex items-center px-2 py-1 rounded-sm text-xs font-medium bg-green-200 text-green-800 hover:bg-green-300 cursor-pointer transition-colors"
           >
             {stats.running} running
           </a>
@@ -106,7 +107,7 @@ function ReconcilerCard({ crd, stats, isInstalled }) {
           <a
             href={getStatusUrl('Failed')}
             onClick={(e) => e.stopPropagation()}
-            class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-800 hover:bg-red-200 cursor-pointer transition-colors"
+            class="inline-flex items-center px-2 py-1 rounded-sm text-xs font-medium bg-red-100 text-red-800 hover:bg-red-200 cursor-pointer transition-colors"
           >
             {stats.failing} failing
           </a>
@@ -115,7 +116,7 @@ function ReconcilerCard({ crd, stats, isInstalled }) {
           <a
             href={getStatusUrl('Suspended')}
             onClick={(e) => e.stopPropagation()}
-            class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-yellow-100 text-yellow-800 hover:bg-yellow-200 cursor-pointer transition-colors"
+            class="inline-flex items-center px-2 py-1 rounded-sm text-xs font-medium bg-yellow-100 text-yellow-800 hover:bg-yellow-200 cursor-pointer transition-colors"
           >
             {stats.suspended} suspended
           </a>
@@ -154,9 +155,10 @@ function ReconcilerCard({ crd, stats, isInstalled }) {
  * @param {string} props.title - Group title (e.g., "Appliers", "Sources")
  * @param {Array} props.groupCrds - Array of CRDs in this group (from constants)
  * @param {Object} props.statsMap - Map of kind to stats object
+ * @param {Object} props.versionMap - Map of kind to the API version reported by the cluster
  * @param {Set} props.installedKinds - Set of kinds that are installed in the cluster
  */
-function ReconcilerGroup({ title, groupCrds, statsMap, installedKinds }) {
+function ReconcilerGroup({ title, groupCrds, statsMap, versionMap, installedKinds }) {
   if (groupCrds.length === 0) return null
 
   return (
@@ -167,6 +169,7 @@ function ReconcilerGroup({ title, groupCrds, statsMap, installedKinds }) {
           <ReconcilerCard
             key={`${crd.apiVersion}/${crd.kind}`}
             crd={crd}
+            apiVersion={versionMap[crd.kind]}
             stats={statsMap[crd.kind] || { running: 0, failing: 0, suspended: 0 }}
             isInstalled={installedKinds.has(crd.kind)}
           />
@@ -197,6 +200,12 @@ export function ReconcilersPanel({ reconcilers }) {
   // Build a map of kind -> stats from the API response
   const statsMap = reconcilers.reduce((map, r) => {
     map[r.kind] = r.stats
+    return map
+  }, {})
+
+  // Build a map of kind -> apiVersion (CRD storage version) from the API response
+  const versionMap = reconcilers.reduce((map, r) => {
+    if (r.apiVersion) map[r.kind] = r.apiVersion
     return map
   }, {})
 
@@ -249,10 +258,10 @@ export function ReconcilersPanel({ reconcilers }) {
       </button>
       {isExpanded.value && (
         <div>
-          <ReconcilerGroup title="Appliers" groupCrds={appliers} statsMap={statsMap} installedKinds={installedKinds} />
-          <ReconcilerGroup title="Sources" groupCrds={sources} statsMap={statsMap} installedKinds={installedKinds} />
-          <ReconcilerGroup title="Notifications" groupCrds={notifications} statsMap={statsMap} installedKinds={installedKinds} />
-          <ReconcilerGroup title="Image Automation" groupCrds={imageAutomation} statsMap={statsMap} installedKinds={installedKinds} />
+          <ReconcilerGroup title="Appliers" groupCrds={appliers} statsMap={statsMap} versionMap={versionMap} installedKinds={installedKinds} />
+          <ReconcilerGroup title="Sources" groupCrds={sources} statsMap={statsMap} versionMap={versionMap} installedKinds={installedKinds} />
+          <ReconcilerGroup title="Notifications" groupCrds={notifications} statsMap={statsMap} versionMap={versionMap} installedKinds={installedKinds} />
+          <ReconcilerGroup title="Image Automation" groupCrds={imageAutomation} statsMap={statsMap} versionMap={versionMap} installedKinds={installedKinds} />
         </div>
       )}
     </div>

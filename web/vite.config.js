@@ -1,11 +1,12 @@
 import { defineConfig } from 'vite'
 import preact from '@preact/preset-vite'
+import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig(() => {
   const useMockData = process.env.VITE_USE_MOCK_DATA === 'true'
 
   return {
-    plugins: [preact()],
+    plugins: [preact(), tailwindcss()],
     test: {
       globals: true,
       environment: 'jsdom',

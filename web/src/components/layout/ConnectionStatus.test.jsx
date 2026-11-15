@@ -96,7 +96,7 @@ describe('ConnectionStatus', () => {
 
       const gradient = container.querySelector('.animate-pulse')
       expect(gradient).toBeInTheDocument()
-      expect(gradient).toHaveClass('bg-gradient-to-r')
+      expect(gradient).toHaveClass('bg-linear-to-r')
       expect(gradient).toHaveClass('from-transparent')
       expect(gradient).toHaveClass('via-white')
       expect(gradient).toHaveClass('to-transparent')

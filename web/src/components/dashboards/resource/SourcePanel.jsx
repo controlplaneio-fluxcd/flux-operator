@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect, useRef } from 'preact/hooks'
 import { fetchWithMock } from '../../../utils/fetch'
-import { getControllerName, getKindAlias } from '../../../utils/constants'
+import { getControllerName, getKindAlias, parseHelmChartRef } from '../../../utils/constants'
 import { getDashboardUrl } from '../../../utils/routing'
 import { formatTimestamp } from '../../../utils/time'
 import { DashboardPanel, TabButton } from '../common/panel'
@@ -36,7 +36,15 @@ export function SourcePanel({ resourceData }) {
   // Track initial mount to avoid refetching on first render
   const isInitialMount = useRef(true)
 
-  const hasHelmChart = resourceData?.kind === 'HelmRelease' && resourceData?.status?.helmChart
+  // Parse the HelmChart reference from status.helmChart; other kinds
+  // (e.g. a generated OCIRepository) are shown as the source instead
+  const helmChartRef = useMemo(() => {
+    if (resourceData?.kind !== 'HelmRelease') return null
+    const ref = parseHelmChartRef(resourceData?.status?.helmChart)
+    return ref?.kind === 'HelmChart' ? ref : null
+  }, [resourceData?.kind, resourceData?.status?.helmChart])
+
+  const hasHelmChart = helmChartRef !== null
 
   const visibleTabs = useMemo(() => {
     const tabs = ['overview']
@@ -176,13 +184,6 @@ export function SourcePanel({ resourceData }) {
     refetchSourceData()
   }, [resourceData])
 
-  // Parse HelmChart reference (format: "namespace/name")
-  const helmChartRef = useMemo(() => {
-    if (!hasHelmChart) return null
-    const [chartNamespace, chartName] = resourceData.status.helmChart.split('/')
-    return { namespace: chartNamespace, name: chartName }
-  }, [hasHelmChart, resourceData?.status?.helmChart])
-
   // Fetch HelmChart data on demand when Chart tab is clicked
   useEffect(() => {
     if (sourceTab === 'chart' && helmChartRef && !chartLoaded && !chartLoading) {
@@ -311,7 +312,7 @@ export function SourcePanel({ resourceData }) {
                 href={getDashboardUrl(sourceRef.kind, sourceRef.namespace || namespace, sourceRef.name)}
                 class="flex items-center gap-2 text-sm text-flux-blue dark:text-blue-400 hover:underline"
               >
-                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                 </svg>
                 <span class="hidden md:inline break-all">{sourceRef.kind}/{sourceRef.namespace || namespace}/{sourceRef.name}</span>
@@ -436,7 +437,7 @@ export function SourcePanel({ resourceData }) {
                     href={getDashboardUrl('HelmChart', helmChartRef.namespace, helmChartRef.name)}
                     class="flex items-center gap-2 text-sm text-flux-blue dark:text-blue-400 hover:underline"
                   >
-                    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                     </svg>
                     <span class="hidden md:inline break-all">HelmChart/{helmChartRef.namespace}/{helmChartRef.name}</span>

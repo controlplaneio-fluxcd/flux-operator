@@ -117,6 +117,7 @@ type installFlags struct {
 	syncPath                 string
 	syncCreds                string
 	syncGHAAppID             string
+	syncGHAAppClientID       string
 	syncGHAInstallationID    string
 	syncGHAInstallationOwner string
 	syncGHAPrivateKeyFile    string
@@ -163,7 +164,9 @@ func init() {
 	installCmd.Flags().StringVar(&installArgs.syncCreds, "instance-sync-creds", "",
 		"credentials for the source in the format username:token (creates a Secret named 'flux-system')")
 	installCmd.Flags().StringVar(&installArgs.syncGHAAppID, "instance-sync-gha-app-id", "",
-		"GitHub App ID for the sync source credentials")
+		"GitHub App ID for the sync source credentials (mutually exclusive with --instance-sync-gha-app-client-id)")
+	installCmd.Flags().StringVar(&installArgs.syncGHAAppClientID, "instance-sync-gha-app-client-id", "",
+		"GitHub App client ID for the sync source credentials (mutually exclusive with --instance-sync-gha-app-id)")
 	installCmd.Flags().StringVar(&installArgs.syncGHAInstallationID, "instance-sync-gha-installation-id", "",
 		"GitHub App Installation ID (optional)")
 	installCmd.Flags().StringVar(&installArgs.syncGHAInstallationOwner, "instance-sync-gha-installation-owner", "",
@@ -233,6 +236,7 @@ func installCmdRun(cmd *cobra.Command, args []string) error {
 		}
 		installerOpts = append(installerOpts, install.WithGitHubAppCredentials(&install.GitHubAppCredentials{
 			AppID:             installArgs.syncGHAAppID,
+			ClientID:          installArgs.syncGHAAppClientID,
 			InstallationID:    installArgs.syncGHAInstallationID,
 			InstallationOwner: installArgs.syncGHAInstallationOwner,
 			PrivateKey:        string(privateKey),
@@ -576,7 +580,7 @@ func printVersionInfo(ctx context.Context) error {
 	return nil
 }
 
-// hasSyncGHA returns true if GitHub App credentials flags are set.
+// hasSyncGHA returns true if the GitHub App ID or client ID flag is set.
 func (f *installFlags) hasSyncGHA() bool {
-	return f.syncGHAAppID != ""
+	return f.syncGHAAppID != "" || f.syncGHAAppClientID != ""
 }

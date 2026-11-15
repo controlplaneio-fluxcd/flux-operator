@@ -9,10 +9,10 @@ const crdGroups = [...new Set(fluxCRDs.map(crd => crd.group))]
 
 // Compact field styling shared by the name input and the dropdowns. Selects get
 // their chevron + right padding from the global `select` rule in index.css.
-const FIELD = 'w-full px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-flux-blue'
+const FIELD = 'w-full px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-hidden focus:ring-2 focus:ring-flux-blue'
 
 // Compact icon button styling for the clear/refresh actions.
-const ICON_BTN = 'inline-flex items-center p-1 rounded-md text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white focus:outline-none transition-colors'
+const ICON_BTN = 'inline-flex items-center p-1 rounded-md text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white focus:outline-hidden transition-colors'
 
 /**
  * FilterForm component - Reusable filter form for Events and Resources
@@ -60,7 +60,7 @@ export function FilterForm({ kindSignal, nameSignal, namespaceSignal, namespaces
             name="name"
             type="text"
             value={nameSignal.value}
-            onChange={(e) => nameSignal.value = e.target.value}
+            onInput={(e) => nameSignal.value = e.target.value}
             placeholder="Resource name (* wildcard, ! exclude)"
             class={FIELD}
           />

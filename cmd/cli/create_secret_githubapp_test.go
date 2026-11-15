@@ -197,3 +197,65 @@ func TestCreateSecretGitHubAppCmd(t *testing.T) {
 		})
 	}
 }
+
+func TestCreateSecretGitHubAppCmd_ClientID(t *testing.T) {
+	gt := NewWithT(t)
+	ns, err := testEnv.CreateNamespace(context.Background(), "test-githubapp-client-id")
+	gt.Expect(err).ToNot(HaveOccurred())
+
+	tmpDir := t.TempDir()
+	keyFile := filepath.Join(tmpDir, "private-key.pem")
+	gt.Expect(os.WriteFile(keyFile, []byte("test-private-key-content"), 0600)).To(Succeed())
+
+	t.Run("create github app secret with client ID", func(t *testing.T) {
+		g := NewWithT(t)
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+
+		kubeconfigArgs.Namespace = &ns.Name
+		_, err := executeCommand([]string{
+			"create", "secret", "githubapp", "test-secret-client-id",
+			"--app-client-id=Iv23liExample",
+			"--app-installation-owner=my-org",
+			"--app-private-key-file=" + keyFile,
+		})
+		g.Expect(err).ToNot(HaveOccurred())
+
+		secret := &corev1.Secret{}
+		secretKey := types.NamespacedName{Name: "test-secret-client-id", Namespace: ns.Name}
+		g.Expect(testClient.Get(ctx, secretKey, secret)).To(Succeed())
+		defer func() {
+			_ = testClient.Delete(ctx, secret)
+		}()
+
+		g.Expect(string(secret.Data["githubAppClientID"])).To(Equal("Iv23liExample"))
+		g.Expect(secret.Data).NotTo(HaveKey("githubAppID"))
+		g.Expect(string(secret.Data["githubAppInstallationOwner"])).To(Equal("my-org"))
+	})
+
+	t.Run("fails with both app ID and client ID", func(t *testing.T) {
+		g := NewWithT(t)
+		kubeconfigArgs.Namespace = &ns.Name
+		_, err := executeCommand([]string{
+			"create", "secret", "githubapp", "test-secret-both",
+			"--app-id=123456",
+			"--app-client-id=Iv23liExample",
+			"--app-installation-owner=my-org",
+			"--app-private-key-file=" + keyFile,
+			"--export",
+		})
+		g.Expect(err).To(HaveOccurred())
+	})
+
+	t.Run("fails without app ID and client ID", func(t *testing.T) {
+		g := NewWithT(t)
+		kubeconfigArgs.Namespace = &ns.Name
+		_, err := executeCommand([]string{
+			"create", "secret", "githubapp", "test-secret-none",
+			"--app-installation-owner=my-org",
+			"--app-private-key-file=" + keyFile,
+			"--export",
+		})
+		g.Expect(err).To(HaveOccurred())
+	})
+}

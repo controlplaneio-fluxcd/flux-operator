@@ -219,7 +219,7 @@ export function WorkloadDetailsView({ kind, name, namespace, reconcilerKind, rec
                   <Field label="Created">{workloadInfo?.createdAt ? formatTimestamp(workloadInfo.createdAt) : null}</Field>
                   <Field label="Last action">{lastActionTime ? formatTimestamp(lastActionTime) : null}</Field>
                   {workloadInfo?.statusMessage && (
-                    <pre class="whitespace-pre-wrap break-words font-sans leading-relaxed text-gray-700 dark:text-gray-300">{formatScheduleMessage(workloadInfo.statusMessage)}</pre>
+                    <pre class="whitespace-pre-wrap wrap-break-word font-sans leading-relaxed text-gray-700 dark:text-gray-300">{formatScheduleMessage(workloadInfo.statusMessage)}</pre>
                   )}
                 </div>
               )}

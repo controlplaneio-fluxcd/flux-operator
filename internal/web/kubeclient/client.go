@@ -17,10 +17,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
 	"github.com/fluxcd/pkg/cache"
+	"golang.org/x/sync/singleflight"
 
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 	"github.com/controlplaneio-fluxcd/flux-operator/internal/web/user"
 )
+
+// nodesAccessReviewTimeout bounds the shared list nodes access review.
+const nodesAccessReviewTimeout = 30 * time.Second
 
 // FieldOwner is the field manager name used
 // for actions performed by the Web UI users.
@@ -35,6 +39,9 @@ type Client struct {
 	scheme                 *runtime.Scheme
 	userClientCache        *cache.LRU[*userClient]
 	userNamespacesCache    *cache.LRU[*userNamespaces]
+	userNodesAccessCache   *cache.LRU[*userNodesAccess]
+	userNodesAccessFlight  singleflight.Group
+	nodesAccessReview      func(ctx context.Context, kubeClient client.Client) (bool, error)
 	namespaceCacheDuration time.Duration
 }
 
@@ -52,6 +59,13 @@ type userNamespaces struct {
 	namespaces    []string
 	timestamp     time.Time
 	allNamespaces bool
+}
+
+// userNodesAccess holds the result of the list nodes
+// access check along with the timestamp it was cached at.
+type userNodesAccess struct {
+	allowed   bool
+	timestamp time.Time
 }
 
 // Option defines a functional option for calling the
@@ -85,6 +99,11 @@ func New(reader client.Reader, kClient client.Client, config *rest.Config, schem
 		return nil, fmt.Errorf("failed to create user namespace cache: %w", err)
 	}
 
+	userNodesAccessCache, err := cache.NewLRU[*userNodesAccess](userCacheSize)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create user nodes access cache: %w", err)
+	}
+
 	return &Client{
 		reader:                 reader,
 		client:                 kClient,
@@ -92,6 +111,8 @@ func New(reader client.Reader, kClient client.Client, config *rest.Config, schem
 		scheme:                 scheme,
 		userClientCache:        userClientCache,
 		userNamespacesCache:    userNamespacesCache,
+		userNodesAccessCache:   userNodesAccessCache,
+		nodesAccessReview:      reviewListNodes,
 		namespaceCacheDuration: namespaceCacheDuration,
 	}, nil
 }
@@ -305,6 +326,78 @@ func (c *Client) filterNamespacesByAccess(ctx context.Context, namespaces []stri
 	}
 
 	return filteredNamespaces, false, nil
+}
+
+// CanListNodes checks if the user can list the cluster nodes by performing
+// a SelfSubjectAccessReview for the "list" verb on the "nodes" resource.
+// When authentication is disabled, the privileged client is used for every
+// request and the check always passes. The result is cached per user with
+// the same key and duration as the user namespaces; errors are not cached.
+// Concurrent cache misses for the same user share one review, which runs
+// detached from the requests; each caller stops waiting when its own
+// context is done.
+func (c *Client) CanListNodes(ctx context.Context) (bool, error) {
+	kubeClient := c.GetClient(ctx)
+	if kubeClient == c.client {
+		// Privileged client can list nodes.
+		return true, nil
+	}
+
+	key := user.LoadSession(ctx).Key()
+	if access, err := c.userNodesAccessCache.Get(key); err == nil &&
+		time.Since(access.timestamp) < c.namespaceCacheDuration {
+		return access.allowed, nil
+	}
+
+	// A canceled request returns at once.
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+
+	// Concurrent cache misses for the same user share one access review.
+	// It runs on a context detached from any single request, so a canceled
+	// request never fails the others, and each caller waits on its own
+	// context.
+	reviewCtx := context.WithoutCancel(ctx)
+	result := c.userNodesAccessFlight.DoChan(key, func() (any, error) {
+		reviewCtx, cancel := context.WithTimeout(reviewCtx, nodesAccessReviewTimeout)
+		defer cancel()
+		allowed, err := c.nodesAccessReview(reviewCtx, kubeClient)
+		if err != nil {
+			return false, err
+		}
+		_ = c.userNodesAccessCache.Set(key, &userNodesAccess{
+			allowed:   allowed,
+			timestamp: time.Now(),
+		})
+		return allowed, nil
+	})
+	select {
+	case <-ctx.Done():
+		return false, ctx.Err()
+	case r := <-result:
+		if r.Err != nil {
+			return false, r.Err
+		}
+		return r.Val.(bool), nil
+	}
+}
+
+// reviewListNodes performs a SelfSubjectAccessReview for
+// the "list" verb on the "nodes" resource.
+func reviewListNodes(ctx context.Context, kubeClient client.Client) (bool, error) {
+	ssar := &authzv1.SelfSubjectAccessReview{
+		Spec: authzv1.SelfSubjectAccessReviewSpec{
+			ResourceAttributes: &authzv1.ResourceAttributes{
+				Verb:     "list",
+				Resource: "nodes",
+			},
+		},
+	}
+	if err := kubeClient.Create(ctx, ssar); err != nil {
+		return false, fmt.Errorf("failed to create SelfSubjectAccessReview: %w", err)
+	}
+	return ssar.Status.Allowed, nil
 }
 
 // CanActOnResource checks if the user has permission to perform a specific action on a

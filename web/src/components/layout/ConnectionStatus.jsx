@@ -50,7 +50,7 @@ export function ConnectionStatus() {
     <div class="fixed top-0 left-0 right-0 z-50">
       <div class={`${barColor} ${barHeight} w-full transition-colors duration-300`}>
         {showLoading.value && (
-          <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-30 animate-pulse"></div>
+          <div class="absolute inset-0 bg-linear-to-r from-transparent via-white to-transparent opacity-30 animate-pulse"></div>
         )}
       </div>
       {isDisconnected && (

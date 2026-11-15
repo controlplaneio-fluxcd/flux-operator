@@ -332,7 +332,7 @@ describe('useInfiniteScroll', () => {
     })
     expect(observeMock).toHaveBeenCalled()
 
-    unmount()
+    act(() => unmount())
 
     expect(disconnectMock).toHaveBeenCalled()
   })
