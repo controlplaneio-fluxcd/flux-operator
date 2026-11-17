@@ -65,34 +65,60 @@ var _ = BeforeSuite(func() {
 	_, err = utils.Run(cmd, "/test/olm")
 	ExpectWithOffset(1, err).NotTo(HaveOccurred())
 
-	By("validating that the flux-operator is installed")
-	verifyInstallPlan := func() error {
+	By("waiting for the flux-operator install plan")
+	var installPlanName string
+	EventuallyWithOffset(1, func() error {
 		cmd = exec.Command("kubectl", "get",
 			"installplan", "-o", "jsonpath={.items[].metadata.name}",
 			"-n", namespace,
 		)
-		installPlanName, err := utils.Run(cmd, "/test/olm")
+		output, err := utils.Run(cmd, "/test/olm")
 		if err != nil {
 			return fmt.Errorf("failed to get installplan, please check the subscription, %w", err)
 		}
-		if !strings.Contains(string(installPlanName), "install") {
-			return fmt.Errorf("expect installplan to be in installed state")
+		name := strings.TrimSpace(string(output))
+		if !strings.HasPrefix(name, "install") {
+			return fmt.Errorf("expect installplan to be created")
 		}
-
-		cmd = exec.Command("kubectl", "wait", "--for=condition=Installed=true",
-			"installplan/"+string(installPlanName), "-n", namespace)
-		_, err = utils.Run(cmd, "/test/olm")
-		ExpectWithOffset(1, err).NotTo(HaveOccurred())
-
+		installPlanName = name
 		return nil
+	}, 5*time.Minute, 10*time.Second).Should(Succeed())
+
+	By("validating that the flux-operator is installed")
+	// OLM marks the install plan as installed only after the bundle unpack
+	// job completes, which pulls images from the network. Relying on the
+	// kubectl wait default timeout of 30s makes this step flaky on CI.
+	cmd = exec.Command("kubectl", "wait", "--for=condition=Installed=true",
+		"--timeout=5m", "installplan/"+installPlanName, "-n", namespace)
+	if _, err = utils.Run(cmd, "/test/olm"); err != nil {
+		dumpInstallDiagnostics()
 	}
-	EventuallyWithOffset(1, verifyInstallPlan, 5*time.Minute, 10*time.Second).Should(Succeed())
+	ExpectWithOffset(1, err).NotTo(HaveOccurred())
 
 	By("validating that the flux-operator is running")
-	exec.Command("kubectl", "wait", "--for=condition=Ready=true", "pod",
-		"-lapp.kubernetes.io/name=flux-operator ", "-n", namespace)
+	cmd = exec.Command("kubectl", "wait", "--for=condition=Ready=true", "pod",
+		"-l", "app.kubernetes.io/name=flux-operator", "-n", namespace, "--timeout=5m")
+	if _, err = utils.Run(cmd, "/test/olm"); err != nil {
+		dumpInstallDiagnostics()
+	}
 	ExpectWithOffset(1, err).NotTo(HaveOccurred())
 })
+
+// dumpInstallDiagnostics prints the state of the OLM resources and the
+// flux-operator pod to the Ginkgo writer, to ease debugging failed installs.
+func dumpInstallDiagnostics() {
+	commands := [][]string{
+		{"get", "installplan,csv,pods", "-n", namespace, "-o", "wide"},
+		{"describe", "installplan", "-n", namespace},
+		{"describe", "csv", "-n", namespace},
+		{"get", "events", "-n", namespace, "--sort-by=.lastTimestamp"},
+		{"logs", "-n", namespace, "-l", "app.kubernetes.io/name=flux-operator", "--tail=100"},
+	}
+	for _, args := range commands {
+		output, _ := utils.Run(exec.Command("kubectl", args...), "/test/olm")
+		fmt.Fprintf(GinkgoWriter, "$ kubectl %s\n%s\n", strings.Join(args, " "), output) //nolint:errcheck
+	}
+}
 
 // Delete the flux-operator CRDs, deployment and namespace.
 var _ = AfterSuite(func() {
