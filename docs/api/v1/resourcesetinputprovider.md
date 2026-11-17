@@ -175,7 +175,12 @@ For ExternalArtifact the [exported inputs](#exported-inputs-status) structure is
 - `namespace`: the namespace of the ExternalArtifact (type string).
 - `revision`: the revision of the artifact as defined in the status `.status.artifact.revision` (type string, optional).
 
-Additionally, all labels defined on the matched `ExternalArtifact` resource are exported as key-value pairs at the root of the input.
+Additionally, all labels defined on the matched `ExternalArtifact` resource are exported as key-value pairs at the root of the input,
+and all entries of the ExternalArtifact `.status.exportedInputs` field (Flux v2.10 and later) are exported as well.
+This can be used, for example, to propagate a `dependsOn` list from the ExternalArtifact producer to the
+generated `Kustomization` resources.
+When the same key is present in both sources, the inputs computed by the operator (`id`, `name`, `namespace`, `revision`)
+and the ExternalArtifact labels take precedence over the values from `.status.exportedInputs`.
 
 For ExternalService the [exported inputs](#exported-inputs-status) structure is user-defined.
 The external service API must return a JSON object with an `inputs` array, where each element
@@ -875,12 +880,18 @@ status:
     name: dev-apps-auth
     namespace: flux-system
     revision: sha256:abc1234567890def
+    dependsOn: # from ExternalArtifact .status.exportedInputs
+    - name: infra
+      namespace: flux-system
   - app: payments
     env: dev
     id: "123456789"
     name: dev-apps-payments
     namespace: flux-system
     revision: sha256:def4567890abc123
+    dependsOn: # from ExternalArtifact .status.exportedInputs
+    - name: infra
+      namespace: flux-system
 ```
 
 Example for ExternalService:

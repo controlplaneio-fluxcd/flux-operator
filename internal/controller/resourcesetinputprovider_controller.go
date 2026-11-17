@@ -1332,9 +1332,18 @@ func (r *ResourceSetInputProviderReconciler) callExternalArtifactProvider(
 		revision, _, _ := unstructured.NestedString(ea.Object,
 			"status", "artifact", "revision")
 
-		// Build the base input map. Start with all labels on the ExternalArtifact
-		// so named captures (e.g. app, env) become template variables.
-		inputMap := make(map[string]any, len(ea.GetLabels())+4)
+		// Extract status.exportedInputs, which may carry structured data
+		// produced by the ExternalArtifact controller (Flux >= 2.10).
+		exportedInputs, _, _ := unstructured.NestedMap(ea.Object,
+			"status", "exportedInputs")
+
+		// Build the base input map. Start with the values exported by the
+		// ExternalArtifact and then set the inputs computed by the operator,
+		// giving them precedence over the ExternalArtifact values.
+		inputMap := make(map[string]any, len(exportedInputs)+len(ea.GetLabels())+4)
+		for k, v := range exportedInputs {
+			inputMap[k] = v
+		}
 		for k, v := range ea.GetLabels() {
 			inputMap[k] = v
 		}
