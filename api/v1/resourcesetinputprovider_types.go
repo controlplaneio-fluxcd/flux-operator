@@ -145,9 +145,12 @@ type ResourceSetInputProviderSpec struct {
 	Selectors []ExternalArtifactSelector `json:"selectors,omitempty"`
 }
 
+// NOTE: `namespace` is a reserved keyword in the CEL language, so it must be
+// referenced as `self.__namespace__` in validation rules.
+
 // ExternalArtifactSelector defines a selector for discovering ExternalArtifact objects.
 // +kubebuilder:validation:XValidation:rule="!has(self.name) || (!has(self.matchLabels) && !has(self.matchExpressions))", message="name is mutually exclusive with matchLabels and matchExpressions"
-// +kubebuilder:validation:XValidation:rule="!(has(self.namespace) && has(self.namespaceSelector))", message="namespace and namespaceSelector are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="!(has(self.__namespace__) && has(self.namespaceSelector))", message="namespace and namespaceSelector are mutually exclusive"
 type ExternalArtifactSelector struct {
 	metav1.LabelSelector `json:",inline"`
 
