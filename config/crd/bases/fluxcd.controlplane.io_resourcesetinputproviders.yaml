@@ -307,7 +307,7 @@ spec:
                   - message: name is mutually exclusive with matchLabels and matchExpressions
                     rule: '!has(self.name) || (!has(self.matchLabels) && !has(self.matchExpressions))'
                   - message: namespace and namespaceSelector are mutually exclusive
-                    rule: '!(has(self.namespace) && has(self.namespaceSelector))'
+                    rule: '!(has(self.__namespace__) && has(self.namespaceSelector))'
                 type: array
               serviceAccountName:
                 description: |-
