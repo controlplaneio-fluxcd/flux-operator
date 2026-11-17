@@ -386,6 +386,10 @@ func (r *FluxInstanceReconciler) build(ctx context.Context,
 		return nil, err
 	}
 
+	if err := options.ValidateAndApplySourceWatcherConfig(obj.GetCluster().SourceWatcher); err != nil {
+		return nil, err
+	}
+
 	if err := options.ValidateAndApplySPIFFEConfig(obj); err != nil {
 		return nil, err
 	}

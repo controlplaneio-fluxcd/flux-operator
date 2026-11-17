@@ -317,6 +317,9 @@ kind: Kustomization
 namespace: {{.Namespace}}
 resources:
   - rbac.yaml
+{{- if .SourceWatcherNamespaceManager }}
+  - source-watcher-namespace-manager.yaml
+{{- end }}
 nameSuffix: -{{.Namespace}}
 {{- if or .RemovePermissionForCreatingServiceAccountTokens .AddPermissionForCreatingServiceAccountTokens }}
 patches:
@@ -343,6 +346,39 @@ patches:
          - create
 {{- end }}
 {{- end }}
+`
+
+var sourceWatcherNamespaceManagerRBACTmpl = `---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: source-watcher-namespace-manager
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: source-watcher-namespace-manager
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: source-watcher-namespace-manager
+subjects:
+  - kind: ServiceAccount
+    name: source-watcher
+    namespace: {{ .Namespace }}
 `
 
 var nodeSelectorTmpl = `---
