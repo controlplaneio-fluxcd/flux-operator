@@ -1,0 +1,383 @@
+# Sample normalized from monitoring/kube-prometheus-stack on the staging cluster.
+# The test rewrites metadata.name, metadata.namespace and metadata.uid.
+# status.inventory is in the stored {id, v} shape so the reporter exercises
+# workload extraction; the MCP tool expands it from the Helm storage secret.
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  annotations:
+    reconcile.fluxcd.io/forceAt: '2026-05-16T18:18:32.803507213Z'
+    reconcile.fluxcd.io/requestedAt: '2026-05-16T18:18:32.803507213Z'
+  labels:
+    resourceset.fluxcd.controlplane.io/name: kube-prometheus-stack
+    resourceset.fluxcd.controlplane.io/namespace: monitoring
+  name: kube-prometheus-stack
+  namespace: monitoring
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: kube-prometheus-stack
+  driftDetection:
+    ignore:
+    - paths:
+      - /metadata/annotations/prometheus-operator-validated
+      target:
+        kind: PrometheusRule
+    mode: enabled
+  install:
+    crds: Create
+    timeout: 9m
+  interval: 1h
+  postRenderers:
+  - kustomize:
+      patches:
+      - patch: "- op: add\n  path: \"/metadata/labels/app.fluxcd.io~1component\"\n\
+          \  value: \"metrics\"\n- op: add\n  path: \"/metadata/labels/d2.fluxcd.controlplane.io~1scrape\"\
+          \n  value: \"Enabled\"\n"
+        target:
+          kind: ServiceMonitor
+  serviceAccountName: flux
+  upgrade:
+    crds: CreateReplace
+    timeout: 9m
+  values:
+    alertmanager:
+      enabled: false
+    grafana:
+      assertNoLeakedSecrets: false
+      defaultDashboardsEnabled: false
+      grafana.ini:
+        auth.generic_oauth:
+          api_url: https://dex.staging.flux-d2.com/userinfo
+          auth_url: https://dex.staging.flux-d2.com/auth
+          auto_login: true
+          enabled: true
+          name: Dex
+          role_attribute_path: contains(groups, 'controlplaneio-fluxcd:maintainers')
+            && 'Editor' || 'Viewer'
+          scopes: openid offline_access email profile groups
+          token_url: https://dex.staging.flux-d2.com/token
+          use_refresh_token: true
+        server:
+          root_url: https://grafana.staging.flux-d2.com
+        users:
+          allow_sign_up: false
+          auto_assign_org: true
+          auto_assign_org_role: Viewer
+      route:
+        main:
+          enabled: true
+          hostnames:
+          - grafana.staging.flux-d2.com
+          parentRefs:
+          - name: cluster
+            namespace: ingress
+            sectionName: https
+    prometheus:
+      prometheusSpec:
+        affinity:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+              - matchExpressions:
+                - key: app.fluxcd.io/role
+                  operator: In
+                  values:
+                  - control-plane
+        podMonitorNamespaceSelector: {}
+        podMonitorSelector:
+          matchLabels:
+            d2.fluxcd.controlplane.io/scrape: Enabled
+        resources:
+          requests:
+            cpu: 1000m
+            memory: 1Gi
+        retention: 24h
+        serviceMonitorNamespaceSelector: {}
+        serviceMonitorSelector:
+          matchLabels:
+            d2.fluxcd.controlplane.io/scrape: Enabled
+        storageSpec:
+          volumeClaimTemplate:
+            spec:
+              accessModes:
+              - ReadWriteOnce
+              resources:
+                requests:
+                  storage: 100Gi
+        tolerations:
+        - effect: NoSchedule
+          key: app.fluxcd.io/role
+          operator: Equal
+          value: control-plane
+  valuesFrom:
+  - kind: Secret
+    name: grafana
+status:
+  conditions:
+  - lastTransitionTime: '2026-11-19T05:03:25Z'
+    message: Helm upgrade succeeded for release monitoring/kube-prometheus-stack.v178
+      with chart kube-prometheus-stack@93.3.0+12b96b769049
+    observedGeneration: 50
+    reason: UpgradeSucceeded
+    status: 'True'
+    type: Ready
+  - lastTransitionTime: '2026-06-17T22:26:54Z'
+    message: No drift detected against the cluster state
+    observedGeneration: 50
+    reason: NoDriftDetected
+    status: 'False'
+    type: Drifted
+  - lastTransitionTime: '2026-11-16T09:02:48Z'
+    message: Helm upgrade succeeded for release monitoring/kube-prometheus-stack.v178
+      with chart kube-prometheus-stack@93.3.0+12b96b769049
+    observedGeneration: 50
+    reason: UpgradeSucceeded
+    status: 'True'
+    type: Released
+  history:
+  - action: upgrade
+    apiVersion: v2
+    appVersion: v0.95.2
+    chartName: kube-prometheus-stack
+    chartVersion: 93.3.0+12b96b769049
+    configDigest: sha256:668c9a1467ef4d2f7d7320ac57a1b01d64fd1b453e08d12b4f5ffcd8058992eb
+    digest: sha256:7e6e3648f04d96147c1ce45820ace04553634b175acbbbb5ff288390c3353521
+    firstDeployed: '2025-07-24T00:34:10Z'
+    lastDeployed: '2026-11-16T09:01:22Z'
+    name: kube-prometheus-stack
+    namespace: monitoring
+    ociDigest: sha256:12b96b769049bbac5021d1bf544476ed3b1f42df7216d8eb7a70e98007a655a1
+    status: deployed
+    version: 178
+  - apiVersion: v2
+    appVersion: v0.95.1
+    chartName: kube-prometheus-stack
+    chartVersion: 93.1.0+5c1d607dd2a6
+    configDigest: sha256:668c9a1467ef4d2f7d7320ac57a1b01d64fd1b453e08d12b4f5ffcd8058992eb
+    digest: sha256:d9a1c89e1636cce8e4f17f6ec898e7c6d22fad457b729500b399f73aa23b41ba
+    firstDeployed: '2025-07-24T00:34:10Z'
+    lastDeployed: '2026-11-09T10:44:07Z'
+    name: kube-prometheus-stack
+    namespace: monitoring
+    ociDigest: sha256:5c1d607dd2a6891a573bf7de58ff08e1312311b1d225575d9d3e83e6fa6480fc
+    status: superseded
+    version: 177
+  - apiVersion: v2
+    appVersion: v0.95.1
+    chartName: kube-prometheus-stack
+    chartVersion: 93.0.0+62db957cc555
+    configDigest: sha256:668c9a1467ef4d2f7d7320ac57a1b01d64fd1b453e08d12b4f5ffcd8058992eb
+    digest: sha256:28577147d783d18981e35a7970043158627c1490b71dd60108480bfa53c16b5e
+    firstDeployed: '2025-07-24T00:34:10Z'
+    lastDeployed: '2026-11-07T18:50:06Z'
+    name: kube-prometheus-stack
+    namespace: monitoring
+    ociDigest: sha256:62db957cc555c0638874c5d33da5ccf638b2154b140aa6457f1ceb8cf420c2e6
+    status: superseded
+    version: 176
+  - apiVersion: v2
+    appVersion: v0.94.2
+    chartName: kube-prometheus-stack
+    chartVersion: 92.22.0+f3987a327638
+    configDigest: sha256:668c9a1467ef4d2f7d7320ac57a1b01d64fd1b453e08d12b4f5ffcd8058992eb
+    digest: sha256:4ae5ccaaa1af5804e9240405e9f479dc41acc78b2352fe4fce4350d446c095a6
+    firstDeployed: '2025-07-24T00:34:10Z'
+    lastDeployed: '2026-11-07T01:14:36Z'
+    name: kube-prometheus-stack
+    namespace: monitoring
+    ociDigest: sha256:f3987a327638427f4a4a514f2dd2f1065b8c1f89669ea8517627b67a56790601
+    status: superseded
+    version: 175
+  - apiVersion: v2
+    appVersion: v0.94.2
+    chartName: kube-prometheus-stack
+    chartVersion: 92.20.0+003508779e41
+    configDigest: sha256:668c9a1467ef4d2f7d7320ac57a1b01d64fd1b453e08d12b4f5ffcd8058992eb
+    digest: sha256:d53b13f7aa494261b63f65116c10f355772e90bf658bc7ad8a28de495b663350
+    firstDeployed: '2025-07-24T00:34:10Z'
+    lastDeployed: '2026-11-05T13:30:51Z'
+    name: kube-prometheus-stack
+    namespace: monitoring
+    ociDigest: sha256:003508779e419de1a21b50b4dc1fa8d0759f88a0aaf2d59d6a007530b8d823d3
+    status: superseded
+    version: 174
+  inventory:
+    entries:
+    - id: monitoring_kube-prometheus-stack-grafana__ServiceAccount
+      v: v1
+    - id: monitoring_kube-prometheus-stack-kube-state-metrics__ServiceAccount
+      v: v1
+    - id: monitoring_kube-prometheus-stack-prometheus-node-exporter__ServiceAccount
+      v: v1
+    - id: monitoring_kube-prometheus-stack-operator__ServiceAccount
+      v: v1
+    - id: monitoring_kube-prometheus-stack-prometheus__ServiceAccount
+      v: v1
+    - id: monitoring_kube-prometheus-stack-grafana__Secret
+      v: v1
+    - id: monitoring_kube-prometheus-stack-prometheus-token__Secret
+      v: v1
+    - id: monitoring_kube-prometheus-stack-grafana-config-dashboards__ConfigMap
+      v: v1
+    - id: monitoring_kube-prometheus-stack-grafana__ConfigMap
+      v: v1
+    - id: monitoring_kube-prometheus-stack-grafana-datasource__ConfigMap
+      v: v1
+    - id: _kube-prometheus-stack-grafana-clusterrole_rbac.authorization.k8s.io_ClusterRole
+      v: v1
+    - id: _kube-prometheus-stack-kube-state-metrics_rbac.authorization.k8s.io_ClusterRole
+      v: v1
+    - id: _kube-prometheus-stack-operator_rbac.authorization.k8s.io_ClusterRole
+      v: v1
+    - id: _kube-prometheus-stack-prometheus_rbac.authorization.k8s.io_ClusterRole
+      v: v1
+    - id: _kube-prometheus-stack-grafana-clusterrolebinding_rbac.authorization.k8s.io_ClusterRoleBinding
+      v: v1
+    - id: _kube-prometheus-stack-kube-state-metrics_rbac.authorization.k8s.io_ClusterRoleBinding
+      v: v1
+    - id: _kube-prometheus-stack-operator_rbac.authorization.k8s.io_ClusterRoleBinding
+      v: v1
+    - id: _kube-prometheus-stack-prometheus_rbac.authorization.k8s.io_ClusterRoleBinding
+      v: v1
+    - id: monitoring_kube-prometheus-stack-grafana__Service
+      v: v1
+    - id: monitoring_kube-prometheus-stack-kube-state-metrics__Service
+      v: v1
+    - id: monitoring_kube-prometheus-stack-prometheus-node-exporter__Service
+      v: v1
+    - id: kube-system_kube-prometheus-stack-coredns__Service
+      v: v1
+    - id: kube-system_kube-prometheus-stack-kube-controller-manager__Service
+      v: v1
+    - id: kube-system_kube-prometheus-stack-kube-etcd__Service
+      v: v1
+    - id: kube-system_kube-prometheus-stack-kube-proxy__Service
+      v: v1
+    - id: kube-system_kube-prometheus-stack-kube-scheduler__Service
+      v: v1
+    - id: monitoring_kube-prometheus-stack-operator__Service
+      v: v1
+    - id: monitoring_kube-prometheus-stack-prometheus__Service
+      v: v1
+    - id: monitoring_kube-prometheus-stack-prometheus-node-exporter_apps_DaemonSet
+      v: v1
+    - id: monitoring_kube-prometheus-stack-grafana_apps_Deployment
+      v: v1
+    - id: monitoring_kube-prometheus-stack-kube-state-metrics_apps_Deployment
+      v: v1
+    - id: monitoring_kube-prometheus-stack-operator_apps_Deployment
+      v: v1
+    - id: _kube-prometheus-stack-admission_admissionregistration.k8s.io_MutatingWebhookConfiguration
+      v: v1
+    - id: _kube-prometheus-stack-admission_admissionregistration.k8s.io_ValidatingWebhookConfiguration
+      v: v1
+    - id: monitoring_kube-prometheus-stack-grafana_gateway.networking.k8s.io_HTTPRoute
+      v: v1
+    - id: monitoring_kube-prometheus-stack-prometheus_monitoring.coreos.com_Prometheus
+      v: v1
+    - id: monitoring_kube-prometheus-stack-alertmanager.rules_monitoring.coreos.com_PrometheusRule
+      v: v1
+    - id: monitoring_kube-prometheus-stack-config-reloaders_monitoring.coreos.com_PrometheusRule
+      v: v1
+    - id: monitoring_kube-prometheus-stack-etcd_monitoring.coreos.com_PrometheusRule
+      v: v1
+    - id: monitoring_kube-prometheus-stack-general.rules_monitoring.coreos.com_PrometheusRule
+      v: v1
+    - id: monitoring_kube-prometheus-stack-k8s.rules.container-cpu-usage-seconds-tot_monitoring.coreos.com_PrometheusRule
+      v: v1
+    - id: monitoring_kube-prometheus-stack-k8s.rules.container-memory-cache_monitoring.coreos.com_PrometheusRule
+      v: v1
+    - id: monitoring_kube-prometheus-stack-k8s.rules.container-memory-rss_monitoring.coreos.com_PrometheusRule
+      v: v1
+    - id: monitoring_kube-prometheus-stack-k8s.rules.container-memory-swap_monitoring.coreos.com_PrometheusRule
+      v: v1
+    - id: monitoring_kube-prometheus-stack-k8s.rules.container-memory-working-set-by_monitoring.coreos.com_PrometheusRule
+      v: v1
+    - id: monitoring_kube-prometheus-stack-k8s.rules.container-resource_monitoring.coreos.com_PrometheusRule
+      v: v1
+    - id: monitoring_kube-prometheus-stack-k8s.rules.pod-owner_monitoring.coreos.com_PrometheusRule
+      v: v1
+    - id: monitoring_kube-prometheus-stack-kube-apiserver-availability.rules_monitoring.coreos.com_PrometheusRule
+      v: v1
+    - id: monitoring_kube-prometheus-stack-kube-apiserver-burnrate.rules_monitoring.coreos.com_PrometheusRule
+      v: v1
+    - id: monitoring_kube-prometheus-stack-kube-apiserver-histogram.rules_monitoring.coreos.com_PrometheusRule
+      v: v1
+    - id: monitoring_kube-prometheus-stack-kube-apiserver-slos_monitoring.coreos.com_PrometheusRule
+      v: v1
+    - id: monitoring_kube-prometheus-stack-kube-prometheus-general.rules_monitoring.coreos.com_PrometheusRule
+      v: v1
+    - id: monitoring_kube-prometheus-stack-kube-prometheus-node-recording.rules_monitoring.coreos.com_PrometheusRule
+      v: v1
+    - id: monitoring_kube-prometheus-stack-kube-scheduler.rules_monitoring.coreos.com_PrometheusRule
+      v: v1
+    - id: monitoring_kube-prometheus-stack-kube-state-metrics_monitoring.coreos.com_PrometheusRule
+      v: v1
+    - id: monitoring_kube-prometheus-stack-kubelet.rules_monitoring.coreos.com_PrometheusRule
+      v: v1
+    - id: monitoring_kube-prometheus-stack-kubernetes-apps_monitoring.coreos.com_PrometheusRule
+      v: v1
+    - id: monitoring_kube-prometheus-stack-kubernetes-resources_monitoring.coreos.com_PrometheusRule
+      v: v1
+    - id: monitoring_kube-prometheus-stack-kubernetes-storage_monitoring.coreos.com_PrometheusRule
+      v: v1
+    - id: monitoring_kube-prometheus-stack-kubernetes-system-apiserver_monitoring.coreos.com_PrometheusRule
+      v: v1
+    - id: monitoring_kube-prometheus-stack-kubernetes-system-controller-manager_monitoring.coreos.com_PrometheusRule
+      v: v1
+    - id: monitoring_kube-prometheus-stack-kubernetes-system-kube-proxy_monitoring.coreos.com_PrometheusRule
+      v: v1
+    - id: monitoring_kube-prometheus-stack-kubernetes-system-kubelet_monitoring.coreos.com_PrometheusRule
+      v: v1
+    - id: monitoring_kube-prometheus-stack-kubernetes-system-scheduler_monitoring.coreos.com_PrometheusRule
+      v: v1
+    - id: monitoring_kube-prometheus-stack-kubernetes-system_monitoring.coreos.com_PrometheusRule
+      v: v1
+    - id: monitoring_kube-prometheus-stack-node-exporter.rules_monitoring.coreos.com_PrometheusRule
+      v: v1
+    - id: monitoring_kube-prometheus-stack-node-exporter_monitoring.coreos.com_PrometheusRule
+      v: v1
+    - id: monitoring_kube-prometheus-stack-node-network_monitoring.coreos.com_PrometheusRule
+      v: v1
+    - id: monitoring_kube-prometheus-stack-node.rules_monitoring.coreos.com_PrometheusRule
+      v: v1
+    - id: monitoring_kube-prometheus-stack-prometheus-operator_monitoring.coreos.com_PrometheusRule
+      v: v1
+    - id: monitoring_kube-prometheus-stack-prometheus_monitoring.coreos.com_PrometheusRule
+      v: v1
+    - id: monitoring_kube-prometheus-stack-grafana_monitoring.coreos.com_ServiceMonitor
+      v: v1
+    - id: monitoring_kube-prometheus-stack-kube-state-metrics_monitoring.coreos.com_ServiceMonitor
+      v: v1
+    - id: monitoring_kube-prometheus-stack-prometheus-node-exporter_monitoring.coreos.com_ServiceMonitor
+      v: v1
+    - id: monitoring_kube-prometheus-stack-coredns_monitoring.coreos.com_ServiceMonitor
+      v: v1
+    - id: monitoring_kube-prometheus-stack-apiserver_monitoring.coreos.com_ServiceMonitor
+      v: v1
+    - id: monitoring_kube-prometheus-stack-kube-controller-manager_monitoring.coreos.com_ServiceMonitor
+      v: v1
+    - id: monitoring_kube-prometheus-stack-kube-etcd_monitoring.coreos.com_ServiceMonitor
+      v: v1
+    - id: monitoring_kube-prometheus-stack-kube-proxy_monitoring.coreos.com_ServiceMonitor
+      v: v1
+    - id: monitoring_kube-prometheus-stack-kube-scheduler_monitoring.coreos.com_ServiceMonitor
+      v: v1
+    - id: monitoring_kube-prometheus-stack-kubelet_monitoring.coreos.com_ServiceMonitor
+      v: v1
+    - id: monitoring_kube-prometheus-stack-operator_monitoring.coreos.com_ServiceMonitor
+      v: v1
+    - id: monitoring_kube-prometheus-stack-prometheus_monitoring.coreos.com_ServiceMonitor
+      v: v1
+  lastAttemptedConfigDigest: sha256:668c9a1467ef4d2f7d7320ac57a1b01d64fd1b453e08d12b4f5ffcd8058992eb
+  lastAttemptedGeneration: 50
+  lastAttemptedReleaseAction: upgrade
+  lastAttemptedReleaseActionDuration: 1m34.341934827s
+  lastAttemptedRevision: 93.3.0+12b96b769049
+  lastAttemptedRevisionDigest: sha256:12b96b769049bbac5021d1bf544476ed3b1f42df7216d8eb7a70e98007a655a1
+  lastHandledForceAt: '2026-05-16T18:18:32.803507213Z'
+  lastHandledReconcileAt: '2026-05-16T18:18:32.803507213Z'
+  observedGeneration: 50
+  observedPostRenderersDigest: sha256:49b943d8556e70009cb783931d1a7a19e2b6a4d91bfbe9ae9e5844e83e2e987b
+  storageNamespace: monitoring

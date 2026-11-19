@@ -48,6 +48,25 @@ jobs:
             echo 'run make test and commit changes'
             exit 1
           fi
+  large-scale-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Disk Cleanup
+        uses: ./.github/actions/runner-cleanup
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: 1.27.x
+          cache-dependency-path: |
+            **/go.sum
+            **/go.mod
+      - name: Run large-scale memory tests
+        run: make test-scale
+        env:
+          FLUX_OPERATOR_LARGE_SCALE_MAX_PEAK_MIB: 512
   e2e-tests:
     runs-on: ubuntu-latest
     steps:

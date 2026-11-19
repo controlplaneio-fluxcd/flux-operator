@@ -23,6 +23,10 @@ import (
 	fluxcdv1 "github.com/controlplaneio-fluxcd/flux-operator/api/v1"
 )
 
+// listPageSize is the number of resources fetched per list call. Paging keeps
+// the memory used to decode large collections of Flux resources bounded.
+const listPageSize = 500
+
 type reconcilerStats struct {
 	total     int
 	suspended int
@@ -71,6 +75,47 @@ func FilterReconcilerStatsByNamespaces(statsByNamespace []ReconcilerStatsByNames
 	return stats
 }
 
+// listFluxResources lists all resources for the given apiVersion and kind in
+// pages, calling fn for each page. Processing each page before fetching the
+// next keeps the memory used by the decoded list bounded.
+//
+// The Flux CRDs are not registered in the manager scheme, so these lists are
+// served directly by the API server and support continue tokens.
+func (r *FluxStatusReporter) listFluxResources(ctx context.Context, apiVersion, kind string, fn func([]unstructured.Unstructured)) error {
+	continueToken := ""
+	for {
+		list := unstructured.UnstructuredList{
+			Object: map[string]any{
+				"apiVersion": apiVersion,
+				"kind":       kind,
+			},
+		}
+
+		listOpts := []client.ListOption{
+			client.InNamespace(""),
+			client.Limit(listPageSize),
+		}
+		if continueToken != "" {
+			listOpts = append(listOpts, client.Continue(continueToken))
+		}
+
+		if err := r.List(ctx, &list, listOpts...); err != nil {
+			return err
+		}
+
+		if len(list.Items) == 0 {
+			return nil
+		}
+
+		fn(list.Items)
+
+		continueToken = list.GetContinue()
+		if continueToken == "" {
+			return nil
+		}
+	}
+}
+
 func (r *FluxStatusReporter) getReconcilersStatus(ctx context.Context,
 	crds []metav1.GroupVersionKind) ([]fluxcdv1.FluxReconcilerStatus, []ReconcilerStatsByNamespace, []ResourceStatus, []WorkloadRef, error) {
 
@@ -91,16 +136,9 @@ func (r *FluxStatusReporter) getReconcilersStatus(ctx context.Context,
 
 		var globalStats reconcilerStats
 
-		list := unstructured.UnstructuredList{
-			Object: map[string]any{
-				"apiVersion": apiVersion,
-				"kind":       gvk.Kind,
-			},
-		}
-
-		if err := r.List(ctx, &list, client.InNamespace("")); err == nil {
-			globalStats.total = len(list.Items)
-			for _, item := range list.Items {
+		processPage := func(items []unstructured.Unstructured) {
+			for _, item := range items {
+				globalStats.total++
 				metricList = append(metricList, fluxLabelsToValues(item))
 				rs := NewResourceStatus(item)
 				resources = append(resources, rs)
@@ -140,7 +178,9 @@ func (r *FluxStatusReporter) getReconcilersStatus(ctx context.Context,
 					nsStats.totalSize += size
 				}
 			}
-		} else {
+		}
+
+		if err := r.listFluxResources(ctx, apiVersion, gvk.Kind, processPage); err != nil {
 			multiErr = kerrors.NewAggregate([]error{multiErr, err})
 		}
 
@@ -206,6 +246,8 @@ func (r *FluxStatusReporter) getOperatorReconcilersStatus(
 
 		var globalStats reconcilerStats
 
+		// The operator reconcilers are cached by the manager and their
+		// object count is small, so they are listed in a single request.
 		list := unstructured.UnstructuredList{
 			Object: map[string]any{
 				"apiVersion": apiVersion,
