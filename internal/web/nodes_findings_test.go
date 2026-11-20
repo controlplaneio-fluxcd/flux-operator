@@ -430,7 +430,8 @@ func TestNodeFindings_NetworkAndConditions(t *testing.T) {
 		withCondition(corev1.NodeNetworkUnavailable, corev1.ConditionTrue),
 		withCondition("ReadonlyFilesystem", corev1.ConditionTrue),
 		withCondition("KernelDeadlock", corev1.ConditionTrue),
-		withCondition("FrequentKubeletRestart", corev1.ConditionFalse))
+		withCondition("FrequentKubeletRestart", corev1.ConditionFalse),
+		withCondition("EtcdIsVoter", corev1.ConditionTrue))
 	other := readyNode("node-2", withCondition(corev1.NodeNetworkUnavailable, corev1.ConditionFalse))
 	snap := evaluate(n, other)
 
