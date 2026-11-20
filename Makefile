@@ -53,6 +53,10 @@ tidy: ## Run go mod tidy.
 test: tidy generate fmt vet envtest ## Run all unit tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v -e /e2e -e /olm) $(GO_TEST_ARGS) -coverprofile cover.out
 
+.PHONY: test-scale
+test-scale: envtest ## Run the opt-in large-scale memory tests.
+	FLUX_OPERATOR_LARGE_SCALE_TESTS=1 KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./internal/controller -run 'TestLargeScale' -v -timeout 60m
+
 .PHONY: test-e2e
 test-e2e: ## Run the e2e tests on the Kind cluster.
 	go test ./test/e2e/ -v -ginkgo.v
