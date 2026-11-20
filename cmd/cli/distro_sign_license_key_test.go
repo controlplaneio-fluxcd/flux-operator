@@ -192,7 +192,7 @@ func TestDistroSignLicenseKeyCmd(t *testing.T) {
 			licenseString := string(licenseData)
 
 			// Parse the JWT using go-jose
-			jws, err := jose.ParseSigned(licenseString, []jose.SignatureAlgorithm{jose.EdDSA})
+			jws, err := jose.ParseSignedCompact(licenseString, []jose.SignatureAlgorithm{jose.EdDSA})
 			g.Expect(err).ToNot(HaveOccurred(), "license key should be a valid JWT")
 			g.Expect(jws.Signatures).To(HaveLen(1), "should have exactly one signature")
 			g.Expect(jws.Signatures[0].Header.Algorithm).To(Equal("EdDSA"), "signature should use EdDSA algorithm")
@@ -262,7 +262,7 @@ func TestDistroSignLicenseKeyCmdCapabilities(t *testing.T) {
 
 	// Parse the JWT using go-jose
 	licenseString := string(licenseData)
-	jws, err := jose.ParseSigned(licenseString, []jose.SignatureAlgorithm{jose.EdDSA})
+	jws, err := jose.ParseSignedCompact(licenseString, []jose.SignatureAlgorithm{jose.EdDSA})
 	g.Expect(err).ToNot(HaveOccurred(), "license key should be a valid JWT")
 
 	// Verify payload contains capabilities

@@ -5,6 +5,7 @@ package lkm
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/go-jose/go-jose/v4"
 )
@@ -89,7 +90,7 @@ func DecryptTokenWithKeySet(jweData []byte, keySet *jose.JSONWebKeySet) ([]byte,
 	}
 
 	// Parse the JWE token
-	jwe, err := jose.ParseEncrypted(string(jweData), []jose.KeyAlgorithm{jose.ECDH_ES_A128KW}, []jose.ContentEncryption{jose.A128GCM})
+	jwe, err := jose.ParseEncryptedCompact(strings.TrimSpace(string(jweData)), []jose.KeyAlgorithm{jose.ECDH_ES_A128KW}, []jose.ContentEncryption{jose.A128GCM})
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrParseJWE, err)
 	}

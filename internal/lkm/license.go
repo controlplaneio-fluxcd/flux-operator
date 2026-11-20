@@ -191,7 +191,7 @@ func GetLicenseFromToken(jwtData []byte, publicKey *EdPublicKey) (*License, erro
 		return nil, ErrPublicKeyRequired
 	}
 
-	jws, err := jose.ParseSigned(string(jwtData), []jose.SignatureAlgorithm{jose.EdDSA})
+	jws, err := jose.ParseSignedCompact(strings.TrimSpace(string(jwtData)), []jose.SignatureAlgorithm{jose.EdDSA})
 	if err != nil {
 		return nil, InvalidLicenseKeyError(ErrParseToken)
 	}

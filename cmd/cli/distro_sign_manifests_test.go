@@ -167,7 +167,7 @@ data:
 			sigString := string(sigData)
 
 			// Parse the JWT using go-jose
-			jws, err := jose.ParseSigned(sigString, []jose.SignatureAlgorithm{jose.EdDSA})
+			jws, err := jose.ParseSignedCompact(sigString, []jose.SignatureAlgorithm{jose.EdDSA})
 			g.Expect(err).ToNot(HaveOccurred(), "signature should be a valid JWT")
 			g.Expect(jws.Signatures).To(HaveLen(1), "should have exactly one signature")
 			g.Expect(jws.Signatures[0].Header.Algorithm).To(Equal("EdDSA"), "signature should use EdDSA algorithm")
@@ -234,7 +234,7 @@ spec:
 
 	// Verify JWT format using go-jose
 	sigString := string(sigData)
-	jws, err := jose.ParseSigned(sigString, []jose.SignatureAlgorithm{jose.EdDSA})
+	jws, err := jose.ParseSignedCompact(sigString, []jose.SignatureAlgorithm{jose.EdDSA})
 	g.Expect(err).ToNot(HaveOccurred(), "signature should be a valid JWT")
 	g.Expect(jws.Signatures).To(HaveLen(1), "should have exactly one signature")
 	g.Expect(jws.Signatures[0].Header.Algorithm).To(Equal("EdDSA"), "signature should use EdDSA algorithm")
@@ -274,7 +274,7 @@ metadata:
 	// Extract checksum from first signature JWT
 	sigData1, err := os.ReadFile(signatureFile)
 	g.Expect(err).ToNot(HaveOccurred())
-	jws1, err := jose.ParseSigned(string(sigData1), []jose.SignatureAlgorithm{jose.EdDSA})
+	jws1, err := jose.ParseSignedCompact(string(sigData1), []jose.SignatureAlgorithm{jose.EdDSA})
 	g.Expect(err).ToNot(HaveOccurred())
 	var claims1 map[string]any
 	err = json.Unmarshal(jws1.UnsafePayloadWithoutVerification(), &claims1)
@@ -290,7 +290,7 @@ metadata:
 	// Extract checksum from second signature JWT
 	sigData2, err := os.ReadFile(signatureFile)
 	g.Expect(err).ToNot(HaveOccurred())
-	jws2, err := jose.ParseSigned(string(sigData2), []jose.SignatureAlgorithm{jose.EdDSA})
+	jws2, err := jose.ParseSignedCompact(string(sigData2), []jose.SignatureAlgorithm{jose.EdDSA})
 	g.Expect(err).ToNot(HaveOccurred())
 	var claims2 map[string]any
 	err = json.Unmarshal(jws2.UnsafePayloadWithoutVerification(), &claims2)
