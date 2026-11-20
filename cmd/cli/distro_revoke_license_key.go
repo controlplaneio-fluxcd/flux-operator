@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/go-jose/go-jose/v4"
 	"github.com/spf13/cobra"
@@ -82,7 +83,7 @@ func distroRevokeLicenseKeyCmdRun(cmd *cobra.Command, args []string) error {
 // without verifying the signature. This is used for revocation purposes.
 func extractLicenseIDFromToken(jwtData []byte) (string, string, error) {
 	// Parse the JWT using go-jose to get the payload without verification
-	jws, err := jose.ParseSigned(string(jwtData), []jose.SignatureAlgorithm{jose.EdDSA})
+	jws, err := jose.ParseSignedCompact(strings.TrimSpace(string(jwtData)), []jose.SignatureAlgorithm{jose.EdDSA})
 	if err != nil {
 		return "", "", fmt.Errorf("invalid JWT format: %w", err)
 	}

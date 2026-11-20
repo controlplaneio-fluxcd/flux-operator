@@ -5,6 +5,7 @@ package lkm
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/go-jose/go-jose/v4"
 )
@@ -53,7 +54,7 @@ func GenerateSignedToken(payload []byte, privateKey *EdPrivateKey) (string, erro
 // or an error if verification fails.
 func VerifySignedToken(jwtData []byte, jwksData []byte) ([]byte, error) {
 	// Parse the signed JWT token
-	jws, err := jose.ParseSigned(string(jwtData), []jose.SignatureAlgorithm{jose.EdDSA})
+	jws, err := jose.ParseSignedCompact(strings.TrimSpace(string(jwtData)), []jose.SignatureAlgorithm{jose.EdDSA})
 	if err != nil {
 		return nil, ErrParseToken
 	}
@@ -84,7 +85,7 @@ func VerifySignedToken(jwtData []byte, jwksData []byte) ([]byte, error) {
 
 // GetKeyIDFromToken extracts the KID header from a signed JWT token.
 func GetKeyIDFromToken(jwtData []byte) (string, error) {
-	jws, err := jose.ParseSigned(string(jwtData), []jose.SignatureAlgorithm{jose.EdDSA})
+	jws, err := jose.ParseSignedCompact(strings.TrimSpace(string(jwtData)), []jose.SignatureAlgorithm{jose.EdDSA})
 	if err != nil {
 		return "", ErrParseToken
 	}

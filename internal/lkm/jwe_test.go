@@ -36,6 +36,19 @@ func TestEncryptDecryptToken(t *testing.T) {
 		gt.Expect(decryptedPayload).To(Equal(testPayload))
 	})
 
+	t.Run("decrypts token with surrounding whitespace", func(t *testing.T) {
+		gt := NewWithT(t)
+
+		testPayload := []byte("test-payload")
+
+		jweToken, err := EncryptTokenWithKeySet(testPayload, publicKeySet, "")
+		gt.Expect(err).ToNot(HaveOccurred())
+
+		decryptedPayload, err := DecryptTokenWithKeySet([]byte(" "+jweToken+"\n"), privateKeySet)
+		gt.Expect(err).ToNot(HaveOccurred())
+		gt.Expect(decryptedPayload).To(Equal(testPayload))
+	})
+
 	t.Run("handles large payload", func(t *testing.T) {
 		gt := NewWithT(t)
 

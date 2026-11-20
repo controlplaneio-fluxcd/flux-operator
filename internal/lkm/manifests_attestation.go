@@ -130,7 +130,7 @@ func (m *ManifestsAttestation) Verify(jwtData []byte, publicKey *EdPublicKey, di
 	}
 
 	// Parse the JWT token to extract the claims and verify the signature.
-	jws, err := jose.ParseSigned(string(jwtData), []jose.SignatureAlgorithm{jose.EdDSA})
+	jws, err := jose.ParseSignedCompact(strings.TrimSpace(string(jwtData)), []jose.SignatureAlgorithm{jose.EdDSA})
 	if err != nil {
 		return nil, InvalidAttestationError(ErrParseToken)
 	}

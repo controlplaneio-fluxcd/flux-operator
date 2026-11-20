@@ -36,6 +36,25 @@ func TestVerifyToken(t *testing.T) {
 		g.Expect(string(verifiedPayload)).To(Equal(payload))
 	})
 
+	t.Run("verifies token with surrounding whitespace", func(t *testing.T) {
+		g := NewWithT(t)
+		publicKey, privateKey := genTestKeys(t)
+		payload := `{"iss":"test-issuer","sub":"test-subject","aud":"test-audience","iat":1735686000}`
+
+		token, err := GenerateSignedToken([]byte(payload), privateKey)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		keySet := NewPublicKeySet()
+		err = keySet.AddPublicKey(publicKey.Key, publicKey.KeyID)
+		g.Expect(err).ToNot(HaveOccurred())
+		jwksData, err := keySet.ToJSON()
+		g.Expect(err).ToNot(HaveOccurred())
+
+		verifiedPayload, err := VerifySignedToken([]byte(" "+token+"\n"), jwksData)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(string(verifiedPayload)).To(Equal(payload))
+	})
+
 	t.Run("fails with invalid JWT token", func(t *testing.T) {
 		g := NewWithT(t)
 		publicKey, _ := genTestKeys(t)
