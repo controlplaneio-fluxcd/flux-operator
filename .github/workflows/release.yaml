@@ -67,14 +67,14 @@ jobs:
       - name: Disk Cleanup
         uses: ./.github/actions/runner-cleanup
       - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: 1.27.x
           cache: false
       - name: Setup Flux CLI
-        uses: fluxcd/flux2/action@3fa784edd773d56630bb9f62645e08f70c2cff0a #v2.10.0
+        uses: fluxcd/flux2/action@23dcfe98fe672acdf44ecd9c60cbac41b57f5de8 #v2.10.1
       - name: Setup Flux Schema CLI
-        uses: fluxcd/flux-schema/actions/setup@4c71b2098ba84b738d811877463f5a2b2bfe443f # v0.17.0
+        uses: fluxcd/flux-schema/actions/setup@f4ef1813dc8e5388c0f56bc16d7fe16ecfc0e023 # v0.18.0
       - name: Setup Syft
         uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
       - name: Prepare
