@@ -23,7 +23,10 @@ The skills are designed to work together, and the agent automatically selects th
   Kustomization, and ResourceSet failures, analyzes pod logs, traces dependency chains,
   and produces a root cause analysis report with prioritized remediation steps.
 
-The fastest way to install the skills is with the [Flux Operator CLI](cli.md).
+The Flux MCP Server also serves these skills as `skill://` resources
+with the [MCP Skills extension](skills.md).
+
+The fastest way to install the skills locally is with the [Flux Operator CLI](cli.md).
 Navigate to your GitOps repository root and run:
 
 ```shell
@@ -41,7 +44,7 @@ the skills with the repository context to tailor the analysis and the generated 
 
 ## AI Instructions
 
-The Flux MCP Server advertises a concise set of built-in instructions (under 500 tokens)
+The Flux MCP Server advertises a concise set of built-in instructions
 to the AI assistant during the MCP initialization handshake.
 
 For AI assistants that don't support agent skills, we've created an extended set of

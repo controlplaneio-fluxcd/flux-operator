@@ -51,6 +51,11 @@ Restart the AI assistant app and test the MCP Server with the following prompts:
 - "Which cluster contexts are available in my kubeconfig?"
 - "What version of Flux is running in my current cluster?"
 
+The MCP Server also serves the [Flux Agent Skills](https://github.com/fluxcd/agent-skills)
+(`gitops-knowledge`, `gitops-cluster-debug` and `gitops-repo-audit`) as `skill://` resources,
+implementing the [MCP Skills extension](https://modelcontextprotocol.io/extensions/skills/overview).
+The skills are embedded in the binary from the latest agent-skills release at the time of the Flux Operator release.
+
 For more information on how to use the MCP Server with Claude, Cursor, GitHub Copilot,
 and other assistants, please refer to the [documentation website](https://fluxcd.control-plane.io/mcp/).
 
@@ -61,6 +66,7 @@ and other assistants, please refer to the [documentation website](https://fluxcd
 - [Transport Modes and Security Configurations](https://fluxcd.control-plane.io/mcp/config/)
 - [Effective Prompting Guide](https://fluxcd.control-plane.io/mcp/prompt-engineering/)
 - [MCP Tools Reference](https://fluxcd.control-plane.io/mcp/tools/)
+- [MCP Skills Reference](https://github.com/controlplaneio-fluxcd/flux-operator/blob/main/docs/mcp/skills.md)
 
 ## Contributing
 
