@@ -2016,6 +2016,7 @@ func getFluxInstanceReconciler(t *testing.T) *FluxInstanceReconciler {
 
 	return &FluxInstanceReconciler{
 		Client:        testClient,
+		APIReader:     testClient,
 		Scheme:        NewTestScheme(),
 		StoragePath:   filepath.Join("..", "..", "config", "data"),
 		StatusManager: controllerName,

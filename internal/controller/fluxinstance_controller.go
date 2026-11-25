@@ -51,6 +51,8 @@ type FluxInstanceReconciler struct {
 	client.Client
 	kuberecorder.EventRecorder
 
+	// APIReader reads directly from the API server, for the paginated lists the cache cannot serve.
+	APIReader     client.Reader
 	Scheme        *runtime.Scheme
 	ClusterReader engine.ClusterReaderFactory
 	SPIFFESource  fluxspiffe.TLSSource
