@@ -23,6 +23,7 @@ import (
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/k8s"
+	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/skills"
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/toolbox"
 	"github.com/controlplaneio-fluxcd/flux-operator/cmd/mcp/toolbox/docindex"
 )
@@ -180,6 +181,24 @@ func newHTTPHandler(mcpServer *mcp.Server) http.Handler {
 	return mux
 }
 
+// newMCPServer returns the MCP server with the tools of the manager
+// and the skills of the catalog registered.
+func newMCPServer(tm *toolbox.Manager, catalog *skills.Catalog, inCluster bool) (*mcp.Server, []string, error) {
+	caps := &mcp.ServerCapabilities{
+		Tools: &mcp.ToolCapabilities{},
+	}
+	skills.AddCapabilities(caps)
+	mcpServer := mcp.NewServer(mcpImpl, &mcp.ServerOptions{
+		Instructions: tm.Instructions(inCluster) + "\n\n" + catalog.Instructions(),
+		Capabilities: caps,
+	})
+	if err := catalog.Register(mcpServer); err != nil {
+		return nil, nil, fmt.Errorf("failed to register agent skills: %w", err)
+	}
+	registered := tm.RegisterTools(mcpServer, inCluster)
+	return mcpServer, registered, nil
+}
+
 var serveCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "Start the MCP server",
@@ -200,22 +219,22 @@ func serveCmdRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to load Flux documentation search index: %w", err)
 	}
 
-	// Create the MCP server with instructions tailored to the enabled tools
+	skillCatalog, err := skills.LoadEmbedded()
+	if err != nil {
+		return fmt.Errorf("failed to load Flux agent skills: %w", err)
+	}
+
+	// Create the MCP server with instructions tailored to the enabled tools and skills
 	kubeClient := k8s.NewClientFactory(kubeconfigArgs)
 	tm := toolbox.NewManager(kubeClient, rootArgs.timeout, rootArgs.maskSecrets, rootArgs.readOnly,
 		rootArgs.transport == "stdio" && !inCluster)
-	mcpServer := mcp.NewServer(mcpImpl, &mcp.ServerOptions{
-		Instructions: tm.Instructions(inCluster),
-		Capabilities: &mcp.ServerCapabilities{
-			Tools: &mcp.ToolCapabilities{},
-		},
-	})
+	mcpServer, _, err := newMCPServer(tm, skillCatalog, inCluster)
+	if err != nil {
+		return err
+	}
 	if rootArgs.toolCallLogFile != "" {
 		mcpServer.AddReceivingMiddleware(toolCallLogMiddleware(rootArgs.toolCallLogFile))
 	}
-
-	// Register tools
-	tm.RegisterTools(mcpServer, inCluster)
 
 	// Start server based on transport type
 	var mcpHandler http.Handler

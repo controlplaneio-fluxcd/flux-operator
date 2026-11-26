@@ -210,6 +210,10 @@ MCP_IMG ?= ghcr.io/controlplaneio-fluxcd/flux-operator-mcp:latest
 mcp-fetch-docs-index: ## Download the docs index from fluxoperator.dev for the MCP docs tools.
 	@./hack/fetch-docs-index.sh
 
+.PHONY: mcp-fetch-skills
+mcp-fetch-skills: ## Download the latest Flux agent skills from GitHub for the MCP server.
+	@./hack/fetch-agent-skills.sh
+
 .PHONY: mcp-test
 mcp-test: tidy fmt vet envtest ## Run MCP tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./cmd/mcp/... -v
@@ -270,7 +274,7 @@ docker-registry-down: ## Stop and remove the local docker registry if it exists.
 NEXT_VERSION ?= ""
 
 .PHONY: prep-release
-prep-release: mcp-fetch-docs-index ## Create release PR for the next version (auto minor bump).
+prep-release: mcp-fetch-docs-index mcp-fetch-skills ## Create release PR for the next version (auto minor bump).
 	hack/vendor-flux-manifests.sh $(FLUX_VERSION)
 	hack/prep-release.sh $(NEXT_VERSION)
 
