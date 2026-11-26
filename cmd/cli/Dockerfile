@@ -2,7 +2,7 @@
 FROM ghcr.io/fluxcd/flux-cli:v2.10.1@sha256:0253c5c82a8d98858f33dfe722afdfde83aa17dce05571f5846c26ea40d71b50 AS flux-cli
 FROM ghcr.io/fluxcd/flux-schema:v0.18.0@sha256:b8141bd409b4def6d3e5d908239fbf167fef78533367012a015dad2b78c58477 AS flux-schema
 FROM ghcr.io/fluxcd/flux-mirror:v0.17.0@sha256:295d2afd15c8d631f86ac0b2aedba8e4f06e0d04a600473b8660e12d9fe8b5bc AS flux-mirror
-FROM registry.k8s.io/kubectl:v1.37.2@sha256:fe049faa65ae483ac200009a949a68fa4c9985daea12c9cb1195c9c7965301fc AS kubectl
+FROM registry.k8s.io/kubectl:v1.37.3@sha256:82f06779a0dcd86225ffdb96c005418b9716093a39907a5ecf686d7a22e6b788 AS kubectl
 
 # Build the Flux Operator CLI binary using Docker's Debian image.
 FROM --platform=${BUILDPLATFORM} golang:1.27 AS builder
