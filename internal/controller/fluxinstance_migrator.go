@@ -117,7 +117,9 @@ func (r *FluxInstanceReconciler) migrateCR(ctx context.Context, crd *apiextensio
 
 // migrateCRPages migrates the given resource pages, skipping the objects that
 // were already patched in a previous attempt. It reports whether any object
-// was patched before the list expired.
+// was patched before the list expired. The pages are listed with the APIReader,
+// because the cache does not support continue tokens and listing through it
+// would start a cluster-wide metadata informer for the resource kind.
 func (r *FluxInstanceReconciler) migrateCRPages(ctx context.Context, gvk schema.GroupVersionKind,
 	apiVersion string, patched map[types.NamespacedName]struct{}) (bool, error) {
 
@@ -138,7 +140,7 @@ func (r *FluxInstanceReconciler) migrateCRPages(ctx context.Context, gvk schema.
 			listOpts = append(listOpts, client.Continue(continueToken))
 		}
 
-		if err := r.Client.List(ctx, list, listOpts...); err != nil {
+		if err := r.APIReader.List(ctx, list, listOpts...); err != nil {
 			return progressed, err
 		}
 

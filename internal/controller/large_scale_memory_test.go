@@ -147,6 +147,7 @@ func TestLargeScaleMigrateResources(t *testing.T) {
 	recorder := &patchRecorderClient{Client: kc, patchTypes: make(map[types.PatchType]int)}
 	r := &FluxInstanceReconciler{
 		Client:        recorder,
+		APIReader:     kc,
 		Scheme:        NewTestScheme(),
 		StatusManager: controllerName,
 		EventRecorder: testEnv.GetEventRecorderFor(controllerName),

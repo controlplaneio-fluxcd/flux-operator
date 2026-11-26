@@ -8,11 +8,13 @@ import (
 	"fmt"
 	"strconv"
 	"testing"
+	"time"
 
 	. "github.com/onsi/gomega"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -115,7 +117,7 @@ func TestMigrateCRPaginatesMetadataAndRestartsOnExpiry(t *testing.T) {
 			{item("hr-3")},
 		},
 	}
-	r := &FluxInstanceReconciler{Client: kc}
+	r := &FluxInstanceReconciler{Client: kc, APIReader: kc}
 	crd := &apiextensionsv1.CustomResourceDefinition{
 		Spec: apiextensionsv1.CustomResourceDefinitionSpec{
 			Group: fluxcdv1.FluxHelmGroup,
@@ -134,4 +136,107 @@ func TestMigrateCRPaginatesMetadataAndRestartsOnExpiry(t *testing.T) {
 	g.Expect(kc.listCalls).To(Equal(3))
 	g.Expect(kc.patched).To(ConsistOf("apps/hr-1", "apps/hr-2", "apps/hr-3"))
 	g.Expect(kc.patchTypes).To(ConsistOf(types.JSONPatchType, types.JSONPatchType, types.JSONPatchType))
+}
+
+func TestMigrateCRDWithCachedClient(t *testing.T) {
+	g := NewWithT(t)
+	ctx, cancel := context.WithTimeout(testCtx, timeout)
+	defer cancel()
+
+	group := "migration.fluxcd.controlplane.io"
+	preserveUnknown := true
+	crdVersion := func(name string, storage bool) apiextensionsv1.CustomResourceDefinitionVersion {
+		return apiextensionsv1.CustomResourceDefinitionVersion{
+			Name:    name,
+			Served:  true,
+			Storage: storage,
+			Schema: &apiextensionsv1.CustomResourceValidation{
+				OpenAPIV3Schema: &apiextensionsv1.JSONSchemaProps{
+					Type:                   "object",
+					XPreserveUnknownFields: &preserveUnknown,
+				},
+			},
+		}
+	}
+	crd := &apiextensionsv1.CustomResourceDefinition{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "migrationtests." + group,
+		},
+		Spec: apiextensionsv1.CustomResourceDefinitionSpec{
+			Group: group,
+			Names: apiextensionsv1.CustomResourceDefinitionNames{
+				Kind:   "MigrationTest",
+				Plural: "migrationtests",
+			},
+			Scope: apiextensionsv1.NamespaceScoped,
+			Versions: []apiextensionsv1.CustomResourceDefinitionVersion{
+				crdVersion("v1beta1", false),
+				crdVersion("v1", true),
+			},
+		},
+	}
+	g.Expect(testClient.Create(ctx, crd)).To(Succeed())
+	defer func() {
+		_ = testClient.Delete(context.Background(), crd)
+	}()
+
+	g.Eventually(func() bool {
+		if err := testClient.Get(ctx, client.ObjectKeyFromObject(crd), crd); err != nil {
+			return false
+		}
+		for _, cond := range crd.Status.Conditions {
+			if cond.Type == apiextensionsv1.Established && cond.Status == apiextensionsv1.ConditionTrue {
+				return true
+			}
+		}
+		return false
+	}, timeout, time.Second).Should(BeTrue())
+
+	ns, err := testEnv.CreateNamespace(ctx, "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Create the objects with v1beta1, so that their managed fields reference it.
+	names := []string{"test-1", "test-2", "test-3"}
+	for _, name := range names {
+		obj := &unstructured.Unstructured{}
+		obj.SetAPIVersion(group + "/v1beta1")
+		obj.SetKind("MigrationTest")
+		obj.SetName(name)
+		obj.SetNamespace(ns.Name)
+		g.Expect(unstructured.SetNestedField(obj.Object, name, "spec", "value")).To(Succeed())
+		g.Expect(testClient.Create(ctx, obj)).To(Succeed())
+	}
+
+	crd.Status.StoredVersions = []string{"v1beta1", "v1"}
+	g.Expect(testClient.Status().Update(ctx, crd)).To(Succeed())
+
+	// migrateCRD reads the CRD from the cache and returns early on a stale copy.
+	g.Eventually(func() []string {
+		cached := &apiextensionsv1.CustomResourceDefinition{}
+		if err := testEnv.Get(ctx, client.ObjectKeyFromObject(crd), cached); err != nil {
+			return nil
+		}
+		return cached.Status.StoredVersions
+	}, timeout, time.Second).Should(HaveLen(2))
+
+	// Use the manager cached client as the operator does.
+	r := &FluxInstanceReconciler{
+		Client:    testEnv.GetClient(),
+		APIReader: testClient,
+	}
+	g.Expect(r.migrateCRD(ctx, crd.Name, false)).To(Succeed())
+
+	result := &apiextensionsv1.CustomResourceDefinition{}
+	g.Expect(testClient.Get(ctx, client.ObjectKeyFromObject(crd), result)).To(Succeed())
+	g.Expect(result.Status.StoredVersions).To(Equal([]string{"v1"}))
+
+	for _, name := range names {
+		obj := &metav1.PartialObjectMetadata{}
+		obj.SetGroupVersionKind(schema.GroupVersionKind{Group: group, Version: "v1", Kind: "MigrationTest"})
+		g.Expect(testClient.Get(ctx, client.ObjectKey{Namespace: ns.Name, Name: name}, obj)).To(Succeed())
+		g.Expect(obj.GetManagedFields()).ToNot(BeEmpty())
+		for _, entry := range obj.GetManagedFields() {
+			g.Expect(entry.APIVersion).To(Equal(group+"/v1"), "object %s manager %s", name, entry.Manager)
+		}
+	}
 }

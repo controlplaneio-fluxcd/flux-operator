@@ -72,6 +72,7 @@ func TestMain(m *testing.M) {
 	// Setup the FluxInstance controller with the manager.
 	if err := (&controller.FluxInstanceReconciler{
 		Client:        testEnv,
+		APIReader:     testEnv.GetAPIReader(),
 		Scheme:        NewTestScheme(),
 		ClusterReader: clusterReader,
 		StoragePath:   filepath.Join("..", "..", "..", "config", "data"),

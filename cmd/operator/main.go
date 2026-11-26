@@ -436,6 +436,7 @@ func main() {
 
 		if err = (&controller.FluxInstanceReconciler{
 			Client:                mgr.GetClient(),
+			APIReader:             mgr.GetAPIReader(),
 			Scheme:                mgr.GetScheme(),
 			ClusterReader:         clusterReader,
 			SPIFFESource:          spiffeTLSSource,
