@@ -61,7 +61,7 @@ most memory above their requests. Available to users allowed to list nodes, from
 | Disk pressure         | critical                                     | `DiskPressure` condition `True`                                                                       |
 | PID pressure          | critical                                     | `PIDPressure` condition `True`                                                                        |
 | Network               | critical                                     | `NetworkUnavailable` condition `True`                                                                 |
-| Node conditions       | warning                                      | Any other node condition `True`, e.g. `KernelDeadlock` from node-problem-detector                     |
+| Node conditions       | warning                                      | Any other condition `True`, e.g. `KernelDeadlock`, or `*Ready` condition `False`, e.g. `KernelReady`  |
 | Memory usage          | warning at 80%, critical at 90%              | Node memory working set                                                                               |
 | CPU usage             | warning at 80%, critical at 95%              | Node CPU usage                                                                                        |
 | Memory overcommitment | warning or advisory                          | Memory limits above 100%; warning when the node uses 70% with 10% above requests, advisory at 150%    |
@@ -81,7 +81,8 @@ Percentages are shares of the node allocatable capacity. Cordoned nodes count as
 Cordoned, control-plane and not ready nodes are left out of the capacity totals. The cluster usage
 percentages cover the nodes in the latest node metrics scrape, and each point of the usage charts
 is drawn against the allocatable of the nodes sampled at that point. Without metrics-server the usage
-checks are skipped.
+checks are skipped. The node conditions check skips `EtcdIsVoter` (k3s, RKE2) and the GKE informational
+conditions `SysctlChanged`, `DPv2MigrationUnsupportedCNI` and `KubeletConfigChanged`.
 
 ### Log Viewer
 

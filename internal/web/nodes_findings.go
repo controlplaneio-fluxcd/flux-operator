@@ -272,6 +272,22 @@ func conditionFinding(code, severity string, c *NodeConditionInfo) NodeFinding {
 	return f
 }
 
+// failingCondition reports whether a non-standard node condition is failing.
+// Conditions in ignoredConditions never fail. A condition whose type ends in
+// Ready, such as KernelReady from the EKS node monitoring agent, fails when
+// False. Any other condition, such as KernelDeadlock or FooNotReady from
+// node-problem-detector, fails when True. Unknown never fails.
+func failingCondition(c *NodeConditionInfo) bool {
+	if slices.Contains(standardConditions, corev1.NodeConditionType(c.Type)) ||
+		slices.Contains(ignoredConditions, c.Type) {
+		return false
+	}
+	if strings.HasSuffix(c.Type, "Ready") && !strings.HasSuffix(c.Type, "NotReady") {
+		return c.Status == string(corev1.ConditionFalse)
+	}
+	return c.Status == string(corev1.ConditionTrue)
+}
+
 // nodeFindings evaluates the per-node rules. A cordoned node is expected to
 // go away (drain, autoscaler), so its health findings are capped at info,
 // like the kubernetes-mixin alerts, and the usage, requests and overcommit
@@ -301,11 +317,11 @@ func nodeFindings(n *NodeDetail) []NodeFinding {
 		findings = append(findings, conditionFinding(CodeNetworkUnavailable, health(SeverityCritical), c))
 	}
 
-	// Conditions reported by node-problem-detector and similar agents.
+	// Conditions reported by node-problem-detector and similar agents,
+	// see failingCondition for how their status is read.
 	for i := range n.Conditions {
 		c := &n.Conditions[i]
-		if c.Status != string(corev1.ConditionTrue) ||
-			slices.Contains(standardConditions, corev1.NodeConditionType(c.Type)) {
+		if !failingCondition(c) {
 			continue
 		}
 		f := conditionFinding(CodeNodeCondition, health(SeverityWarn), c)

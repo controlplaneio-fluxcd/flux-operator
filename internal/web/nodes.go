@@ -96,6 +96,15 @@ var (
 		corev1.NodePIDPressure,
 		corev1.NodeNetworkUnavailable,
 	}
+
+	// ignoredConditions are non-standard conditions that are True on
+	// healthy nodes or are informational, so they are never findings.
+	ignoredConditions = []string{
+		"EtcdIsVoter",                 // k3s and RKE2: the node is a voting etcd member.
+		"SysctlChanged",               // GKE node-problem-detector: a sysctl differs from the defaults.
+		"DPv2MigrationUnsupportedCNI", // GKE node-problem-detector: the CNI does not support the Dataplane V2 migration.
+		"KubeletConfigChanged",        // GKE node-problem-detector: the kubelet config differs from the defaults.
+	}
 )
 
 // NodesSnapshot is the state of the cluster nodes served by GET /api/v1/nodes,

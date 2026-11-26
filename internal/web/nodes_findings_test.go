@@ -457,6 +457,66 @@ func TestNodeFindings_NetworkAndConditions(t *testing.T) {
 	g.Expect(types).To(ConsistOf("ReadonlyFilesystem", "KernelDeadlock"))
 }
 
+func TestNodeFindings_ConditionPolarity(t *testing.T) {
+	tests := []struct {
+		name          string
+		conditionType corev1.NodeConditionType
+		status        corev1.ConditionStatus
+		failing       bool
+	}{
+		{name: "etcd voter is ignored", conditionType: "EtcdIsVoter", status: corev1.ConditionTrue},
+		{name: "sysctl changed is ignored", conditionType: "SysctlChanged", status: corev1.ConditionTrue},
+		{name: "dpv2 migration is ignored", conditionType: "DPv2MigrationUnsupportedCNI", status: corev1.ConditionTrue},
+		{name: "kubelet config changed is ignored", conditionType: "KubeletConfigChanged", status: corev1.ConditionTrue},
+		{name: "ready condition true", conditionType: "KernelReady", status: corev1.ConditionTrue},
+		{name: "ready condition false", conditionType: "KernelReady", status: corev1.ConditionFalse, failing: true},
+		{name: "ready condition unknown", conditionType: "KernelReady", status: corev1.ConditionUnknown},
+		{name: "not ready condition true", conditionType: "FooNotReady", status: corev1.ConditionTrue, failing: true},
+		{name: "not ready condition false", conditionType: "FooNotReady", status: corev1.ConditionFalse},
+		{name: "problem condition true", conditionType: "KubeletProblem", status: corev1.ConditionTrue, failing: true},
+		{name: "problem condition unknown", conditionType: "KubeletProblem", status: corev1.ConditionUnknown},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			n := readyNode("node-1", withCondition(tt.conditionType, tt.status))
+			snap := evaluate(n)
+
+			f := findNodeFinding(n, CodeNodeCondition)
+			if !tt.failing {
+				g.Expect(f).To(BeNil())
+				g.Expect(findLine(snap, CodeNodeCondition)).To(BeNil())
+				return
+			}
+			g.Expect(f).NotTo(BeNil())
+			g.Expect(f.Severity).To(Equal(SeverityWarn))
+			g.Expect(f.ConditionType).To(Equal(string(tt.conditionType)))
+			g.Expect(findLine(snap, CodeNodeCondition).Nodes).To(Equal(1))
+		})
+	}
+}
+
+func TestNodeFindings_HealthyPlatformConditions(t *testing.T) {
+	g := NewWithT(t)
+
+	// k3s, EKS and GKE conditions on a healthy node raise no condition finding.
+	n := readyNode("node-1",
+		withCondition("EtcdIsVoter", corev1.ConditionTrue),
+		withCondition("NetworkingReady", corev1.ConditionTrue),
+		withCondition("KernelReady", corev1.ConditionTrue),
+		withCondition("StorageReady", corev1.ConditionTrue),
+		withCondition("ContainerRuntimeReady", corev1.ConditionTrue),
+		withCondition("AcceleratedHardwareReady", corev1.ConditionUnknown),
+		withCondition("SysctlChanged", corev1.ConditionTrue),
+		withCondition("DPv2MigrationUnsupportedCNI", corev1.ConditionTrue),
+		withCondition("KubeletConfigChanged", corev1.ConditionTrue))
+	snap := evaluate(n)
+
+	g.Expect(findNodeFinding(n, CodeNodeCondition)).To(BeNil())
+	g.Expect(findLine(snap, CodeNodeCondition)).To(BeNil())
+}
+
 func TestNodeFindings_PodCapacityAndOOM(t *testing.T) {
 	g := NewWithT(t)
 
