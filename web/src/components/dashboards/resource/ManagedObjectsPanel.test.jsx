@@ -373,6 +373,31 @@ describe('ManagedObjectsPanel component', () => {
     expect(textContent).toContain('Disabled')
   })
 
+  it('should show health checking as enabled for Kustomization with wait=false and healthChecks', () => {
+    const dataWithHealthChecks = {
+      ...mockKustomizationData,
+      spec: {
+        ...mockKustomizationData.spec,
+        wait: false,
+        healthChecks: [
+          { apiVersion: 'apps/v1', kind: 'Deployment', name: 'app', namespace: 'production' }
+        ]
+      }
+    }
+
+    render(
+      <ManagedObjectsPanel
+        resourceData={dataWithHealthChecks}
+        onNavigate={mockOnNavigate}
+      />
+    )
+
+    const textContent = document.body.textContent
+    expect(textContent).toContain('Health checking')
+    const healthRow = screen.getByText('Health checking').closest('div')
+    expect(healthRow.textContent).toContain('Enabled')
+  })
+
   it('should show secret decryption as enabled for Kustomization with decryption', () => {
     render(
       <ManagedObjectsPanel
